@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "env.d.ts", "vite-env.d.ts"]
+}

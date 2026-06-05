@@ -1,0 +1,18 @@
+{
+  "--begin--": "该设备为随机生成，丢失后不能得到原先配置",
+  "product": "ICQQ-DC115",
+  "device": "01A4A",
+  "board": "01F2B",
+  "brand": "3BF7",
+  "model": "ICQQ 35AC",
+  "wifi_ssid": "HUAWEI-a201521",
+  "bootloader": "U-boot",
+  "display": "IC.2419204.2289",
+  "boot_id": "bd33afb2-4b52-77ab-191c-b3b70f09d496",
+  "proc_version": "Linux version 5.10.101-android10-436cd1a8",
+  "mac_address": "02:00:00:00:00:00",
+  "ip_address": "192.168.44.18",
+  "android_id": "c0a7e2675519ee41",
+  "incremental": "1749464077",
+  "--end--": "修改后可能需要重新验证设备。"
+}

@@ -1,0 +1,76 @@
+
+import os
+
+def w(f, s):
+    f.write(s + "\n")
+
+path = r"D:\桌面\跟进项目\U-Ai\backend\internal\system\handler.go"
+with open(path, "w", encoding="utf-8") as f:
+    w(f, 'package system')
+    w(f, '')
+    w(f, 'import (')
+    w(f, '\t"bytes"')
+    w(f, '\t"encoding/json"')
+    w(f, '\t"fmt"')
+    w(f, '\t"io"')
+    w(f, '\t"net/http"')
+    w(f, '\t"os"')
+    w(f, '\t"path/filepath"')
+    w(f, '\t"strconv"')
+    w(f, '\t"strings"')
+    w(f, '\t"sync/atomic"')
+    w(f, '\t"time"')
+    w(f, '')
+    w(f, '\t"github.com/gin-gonic/gin"')
+    w(f, '\t"github.com/google/uuid"')
+    w(f, '\t"github.com/u-ai/backend/pkg/comment/response"')
+    w(f, '\t"github.com/u-ai/backend/pkg/util"')
+    w(f, '\t"gorm.io/gorm"')
+    w(f, ')')
+    w(f, '')
+    
+    # Handler struct
+    w(f, 'type Handler struct {')
+    w(f, '\tservice     Service')
+    w(f, '\tdb          *gorm.DB')
+    w(f, '\tversionInfo atomic.Value')
+    w(f, '}')
+    w(f, '')
+    
+    # NewHandler
+    w(f, 'func NewHandler(srv Service, db *gorm.DB) *Handler {')
+    w(f, '\th := &Handler{service: srv, db: db}')
+    w(f, '\th.versionInfo.Store(map[string]interface{}{')
+    w(f, '\t\t"version":    "1.0.0-go",')
+    w(f, '\t\t"buildTime":  "",')
+    w(f, '\t\t"goVersion":  "go1.21+",')
+    w(f, '\t\t"deployMode": "desktop-local",')
+    w(f, '\t})')
+    w(f, '\treturn h')
+    w(f, '}')
+    w(f, '')
+    
+    w(f, '// ======================== 核心诊断 ========================')
+    w(f, '')
+    
+    w(f, 'func (h *Handler) Health(c *gin.Context)            { util.SuccessResponse(c, h.service.Health()) }')
+    w(f, 'func (h *Handler) Diagnostics(c *gin.Context)        { util.SuccessResponse(c, h.service.Diagnostics()) }')
+    w(f, 'func (h *Handler) RunDiagnostics(c *gin.Context)      { util.SuccessResponse(c, h.service.RunDiagnostics()) }')
+    w(f, 'func (h *Handler) AppConfig(c *gin.Context)           { util.SuccessResponse(c, h.service.AppConfig()) }')
+    w(f, 'func (h *Handler) SetupStatus(c *gin.Context)         { util.SuccessResponse(c, h.service.SetupStatus()) }')
+    w(f, 'func (h *Handler) OnboardingStatus(c *gin.Context)    { util.SuccessResponse(c, h.service.OnboardingStatus()) }')
+    w(f, 'func (h *Handler) GetTheme(c *gin.Context)            { util.SuccessResponse(c, h.service.GetTheme()) }')
+    w(f, 'func (h *Handler) GetLLMConfig(c *gin.Context)        { util.SuccessResponse(c, h.service.GetLLMConfig()) }')
+    w(f, 'func (h *Handler) CurrentSession(c *gin.Context)      { token := c.GetHeader("Authorization"); util.SuccessResponse(c, h.service.GetCurrentSession(token)) }')
+    w(f, 'func (h *Handler) LoginHistory(c *gin.Context)        { util.SuccessResponse(c, h.service.GetLoginHistory()) }')
+    w(f, 'func (h *Handler) RecoveryCodesStatus(c *gin.Context) { util.SuccessResponse(c, h.service.GetRecoveryCodesStatus()) }')
+    w(f, 'func (h *Handler) SessionSettings(c *gin.Context)     { util.SuccessResponse(c, h.service.GetSessionSettings()) }')
+    w(f, 'func (h *Handler) RuntimeHealth(c *gin.Context)       { util.SuccessResponse(c, h.service.GetRuntimeHealth()) }')
+    w(f, 'func (h *Handler) CheckDBIntegrity(c *gin.Context)    { util.SuccessResponse(c, h.service.CheckDBIntegrity()) }')
+    w(f, 'func (h *Handler) ValidateMode(c *gin.Context)        { util.SuccessResponse(c, h.service.ValidateMode()) }')
+    w(f, 'func (h *Handler) AuditActions(c *gin.Context)        { util.SuccessResponse(c, h.service.GetAuditActions()) }')
+    w(f, 'func (h *Handler) AuditSettings(c *gin.Context)       { util.SuccessResponse(c, h.service.GetAuditSettings()) }')
+    w(f, 'func (h *Handler) AuditStats(c *gin.Context)          { util.SuccessResponse(c, h.service.GetAuditStats()) }')
+    w(f, 'func (h *Handler) WechatBridgeStatus(c *gin.Context)  { util.SuccessResponse(c, h.service.GetWechatBridgeStatus()) }')
+    
+    print("Phase 1 done")

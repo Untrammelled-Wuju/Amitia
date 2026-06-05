@@ -1,0 +1,30 @@
+*** Begin Patch
+*** Update File: D:\桌面\跟进项目\U-Ai\backend\cmd\server\environment.go
+@@
+ 	if runtime.GOOS == "windows" {
+ 		sidecarCmd = "cmd"
+ 		sidecarArgs = []string{"/c", "npx.cmd", "tsx", "src/index.ts"}
+ 	}
+ 	env.AddService(
+ 		"backend/sidecar",
+ 		"backend/sidecar",
+ 		sidecarCmd, sidecarArgs,
+ 		9876,
+ 	)
++	
++	// QQ Lagrange OneBot sidecar
++	qqSidecarCmd := "npx"
++	qqSidecarArgs := []string{"tsx", "src/index.ts"}
++	if runtime.GOOS == "windows" {
++		qqSidecarCmd = "cmd"
++		qqSidecarArgs = []string{"/c", "npx.cmd", "tsx", "src/index.ts"}
++	}
++	env.AddService(
++		"qq-sidecar",
++		"backend/qq-sidecar",
++		qqSidecarCmd, qqSidecarArgs,
++		9877,
++	)
++
+ 	env.SetupSignalHandler()
+*** End Patch

@@ -1,0 +1,202 @@
+/* ============================================================
+   AI Companion - Design Tokens
+   Warm green accent on clean neutral base
+   ============================================================ */
+
+:root {
+  /* ---- Primary Palette: warm green ---- */
+  --ac-color-primary: var(--tp-primary, #7DAA84);
+  --ac-color-primary-light: var(--tp-primary-soft, #9BC1A1);
+  --ac-color-primary-dark: var(--tp-primary, #6C9873);
+  --ac-color-primary-bg: var(--tp-primary-bg, rgba(125,170,132,0.08));
+  --ac-color-primary-border: var(--tp-primary-border, rgba(125,170,132,0.2));
+
+  /* ---- Neutral Palette (original) ---- */
+  --ac-color-bg: var(--tp-bg, #F8FAF4);
+  --ac-color-bg-secondary: var(--tp-bg-secondary, #F0F3EC);
+  --ac-color-surface: var(--tp-surface, #FFFFFF);
+  --ac-color-surface-hover: var(--tp-surface-hover, #F5F7F2);
+  --ac-color-border: var(--tp-border, #DDE6D8);
+  --ac-color-border-light: var(--tp-border-light, #EEF2EA);
+
+  /* ---- Text (original) ---- */
+  --ac-color-text: var(--tp-text, #2F3A32);
+  --ac-color-text-secondary: var(--tp-text-secondary, #6F7F70);
+  --ac-color-text-muted: var(--tp-text-muted, #9AAB9A);
+  --ac-color-text-placeholder: var(--tp-text-placeholder, #B0BCAF);
+
+  /* ---- Status ---- */
+  --ac-color-success: var(--tp-success, #7DAA84);
+  --ac-color-warning: var(--tp-warning, #D9A441);
+  --ac-color-danger: var(--tp-danger, #D97878);
+  --ac-color-info: var(--tp-info, #7DAA84);
+
+  /* ---- Radius ---- */
+  --ac-radius-sm: 6px;
+  --ac-radius-md: 10px;
+  --ac-radius-lg: 14px;
+  --ac-radius-xl: 18px;
+
+  /* ---- Shadows ---- */
+  --ac-shadow-sm: var(--tp-shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+  --ac-shadow-md: var(--tp-shadow-md, 0 2px 8px rgba(0,0,0,0.08));
+  --ac-shadow-lg: var(--tp-shadow-lg, 0 4px 16px rgba(0,0,0,0.1));
+
+  /* ---- Layout ---- */
+  --ac-sidebar-width: 220px;
+  --ac-statusbar-height: 44px;
+  --ac-content-max-width: 900px;
+
+  /* ---- Mobile Layout ---- */
+  --ac-mobile-nav-height: 56px;
+  --ac-mobile-header-height: 44px;
+  --ac-mobile-input-min-height: 44px;
+  --ac-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ---- Typography ---- */
+  --ac-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ac-font-size-xs: 12px;
+  --ac-font-size-sm: 13px;
+  --ac-font-size-base: 14px;
+  --ac-font-size-lg: 16px;
+  --ac-font-size-xl: 18px;
+
+  /* ---- Transitions ---- */
+  --ac-transition-fast: 0.15s ease;
+  --ac-transition-normal: 0.25s ease;
+  --el-color-primary: var(--tp-primary, #7DAA84);
+  --el-color-primary-light-3: var(--tp-primary-soft, #DDEEDD);
+  --el-color-primary-light-5: var(--tp-primary-bg, rgba(125,170,132,0.08));
+}
+
+/* ---- Dark Theme ---- */
+html.dark {
+  --ac-color-primary: var(--tp-primary, #7DAA84);
+  --ac-color-primary-light: var(--tp-primary-soft, #9BC1A1);
+  --ac-color-primary-dark: var(--tp-primary, #6C9873);
+  --ac-color-primary-bg: var(--tp-primary-bg, rgba(125,170,132,0.08));
+  --ac-color-primary-border: var(--tp-primary-border, rgba(125,170,132,0.2));
+
+  --ac-color-bg: var(--tp-bg, #F8FAF4);
+  --ac-color-bg-secondary: var(--tp-bg-secondary, #F0F3EC);
+  --ac-color-surface: var(--tp-surface, #FFFFFF);
+  --ac-color-surface-hover: var(--tp-surface-hover, #F5F7F2);
+  --ac-color-border: var(--tp-border, #DDE6D8);
+  --ac-color-border-light: var(--tp-border-light, #EEF2EA);
+
+  --ac-color-text: var(--tp-text, #2F3A32);
+  --ac-color-text-secondary: var(--tp-text-secondary, #6F7F70);
+  --ac-color-text-muted: var(--tp-text-muted, #9AAB9A);
+  --ac-color-text-placeholder: var(--tp-text-placeholder, #B0BCAF);
+
+  --ac-color-success: var(--tp-success, #7DAA84);
+  --ac-color-warning: var(--tp-warning, #D9A441);
+  --ac-color-danger: var(--tp-danger, #D97878);
+
+  --ac-shadow-sm: var(--tp-shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+  --ac-shadow-md: var(--tp-shadow-md, 0 2px 8px rgba(0,0,0,0.08));
+  --ac-shadow-lg: var(--tp-shadow-lg, 0 4px 16px rgba(0,0,0,0.1));
+}
+
+/* ---- Global resets ---- */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: var(--ac-font-family);
+  font-size: var(--ac-font-size-base);
+  color: var(--ac-color-text);
+  background: var(--ac-color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  overflow: hidden;
+  height: 100vh;
+}
+
+#app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ac-color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ac-color-text-muted);
+}
+
+/* ---- Element Plus overrides ---- */
+.el-card {
+  border-radius: var(--ac-radius-md) !important;
+  border-color: var(--ac-color-border) !important;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--ac-color-primary);
+  --el-button-border-color: var(--ac-color-primary);
+  --el-button-hover-bg-color: var(--ac-color-primary-dark);
+  --el-button-hover-border-color: var(--ac-color-primary-dark);
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: var(--ac-radius-sm) !important;
+}
+
+.el-select .el-input__wrapper {
+  border-radius: var(--ac-radius-sm) !important;
+}
+
+.el-dialog {
+  border-radius: var(--ac-radius-lg) !important;
+}
+
+.el-message {
+  border-radius: var(--ac-radius-md) !important;
+}
+
+/* ---- Mobile touch optimizations ---- */
+@media (max-width: 768px) {
+  .el-dialog {
+    width: 92% !important;
+    margin: 10px auto !important;
+  }
+
+  .el-drawer {
+    width: 85% !important;
+  }
+
+  .el-form-item__label {
+    font-size: var(--ac-font-size-xs);
+  }
+
+  /* Larger touch targets */
+  .el-button--small {
+    min-height: 32px;
+    padding: 5px 12px;
+  }
+
+  .el-select {
+    --el-select-width: 100%;
+  }
+}

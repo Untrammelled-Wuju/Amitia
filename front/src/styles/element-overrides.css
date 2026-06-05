@@ -1,0 +1,493 @@
+﻿/* ============================================================
+   Element Plus - Warm Green Theme Overrides
+   ============================================================ */
+
+:root {
+  --el-color-primary: #7DAA84;
+  --el-color-primary-light-3: #9BC1A1;
+  --el-color-primary-light-5: #B5D2B9;
+  --el-color-primary-light-7: #D0E3D2;
+  --el-color-primary-light-8: #DDEEDD;
+  --el-color-primary-light-9: #EEF7EE;
+  --el-color-primary-dark-2: #6C9873;
+
+  --el-color-success: #7DAA84;
+  --el-color-warning: #D9A441;
+  --el-color-danger: #D97878;
+  --el-color-info: #7DAA84;
+
+  --el-border-color: #DDE6D8;
+  --el-border-color-light: #EEF2EA;
+  --el-border-color-lighter: #F3F6F0;
+
+  --el-text-color-primary: #2F3A32;
+  --el-text-color-regular: #2F3A32;
+  --el-text-color-secondary: #6F7F70;
+  --el-text-color-placeholder: #B0BCAF;
+
+  --el-bg-color: #FAFBF8;
+  --el-bg-color-overlay: #FFFFFF;
+}
+
+/* ---- Primary button ---- */
+.el-button--primary {
+  --el-button-bg-color: #7DAA84;
+  --el-button-border-color: #7DAA84;
+  --el-button-hover-bg-color: #6C9873;
+  --el-button-hover-border-color: #6C9873;
+  --el-button-active-bg-color: #5E8A65;
+  --el-button-active-border-color: #5E8A65;
+}
+
+.el-button--success {
+  --el-button-bg-color: #7DAA84;
+  --el-button-border-color: #7DAA84;
+  --el-button-hover-bg-color: #6C9873;
+  --el-button-hover-border-color: #6C9873;
+}
+
+/* ---- Link / text button ---- */
+.el-button--text,
+.el-button.is-text {
+  color: #7DAA84;
+}
+
+.el-button--text:hover,
+.el-button.is-text:hover {
+  color: #6C9873;
+  background: rgba(125, 170, 132, 0.08);
+}
+
+/* ---- Input: border color ---- */
+.el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--ac-color-border) inset;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #9BC1A1 inset;
+}
+
+.el-input.is-focus .el-input__wrapper,
+.el-input.is-focus .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+}
+
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--ac-color-border) inset;
+}
+
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px #9BC1A1 inset;
+}
+
+.el-textarea.is-focus .el-textarea__inner {
+  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+}
+
+.el-select .el-input.is-focus .el-input__wrapper {
+  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+}
+
+.el-select .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #9BC1A1 inset;
+}
+
+/* ---- Input: placeholder color ---- */
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: var(--ac-color-text-placeholder);
+}
+
+/* ---- Focus ring ---- */
+.el-input.is-focus .el-input__wrapper,
+.el-textarea.is-focus .el-textarea__inner,
+.el-select .el-input.is-focus .el-input__wrapper {
+  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px #9BC1A1 inset;
+}
+
+/* ---- Checkbox ---- */
+.el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: #7DAA84;
+  border-color: #7DAA84;
+}
+
+.el-checkbox__input.is-checked + .el-checkbox__label {
+  color: #7DAA84;
+}
+
+/* ---- Radio ---- */
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: #7DAA84;
+  border-color: #7DAA84;
+}
+
+.el-radio__input.is-checked + .el-radio__label {
+  color: #7DAA84;
+}
+
+/* ---- Switch ---- */
+.el-switch.is-checked .el-switch__core {
+  background-color: #7DAA84;
+  border-color: #7DAA84;
+}
+
+/* ---- Slider ---- */
+.el-slider__bar {
+  background-color: #7DAA84;
+}
+
+.el-slider__button {
+  border-color: #7DAA84;
+}
+
+/* ---- Progress ---- */
+.el-progress-bar__inner {
+  background-color: #7DAA84;
+}
+
+/* ---- Tag ---- */
+.el-tag--primary {
+  --el-tag-bg-color: rgba(125, 170, 132, 0.12);
+  --el-tag-border-color: rgba(125, 170, 132, 0.25);
+  --el-tag-text-color: #7DAA84;
+}
+
+.el-tag--success {
+  --el-tag-bg-color: rgba(125, 170, 132, 0.12);
+  --el-tag-border-color: rgba(125, 170, 132, 0.25);
+  --el-tag-text-color: #7DAA84;
+}
+
+.el-tag--danger {
+  --el-tag-bg-color: rgba(217, 120, 120, 0.12);
+  --el-tag-border-color: rgba(217, 120, 120, 0.25);
+  --el-tag-text-color: #D97878;
+}
+
+.el-tag--warning {
+  --el-tag-bg-color: rgba(217, 164, 65, 0.12);
+  --el-tag-border-color: rgba(217, 164, 65, 0.25);
+  --el-tag-text-color: #C8924A;
+}
+
+/* ---- Alert ---- */
+.el-alert--success {
+  --el-alert-bg-color: rgba(125, 170, 132, 0.1);
+  --el-alert-border-color: rgba(125, 170, 132, 0.2);
+}
+
+.el-alert--warning {
+  --el-alert-bg-color: rgba(217, 164, 65, 0.1);
+  --el-alert-border-color: rgba(217, 164, 65, 0.2);
+}
+
+.el-alert--error {
+  --el-alert-bg-color: rgba(217, 120, 120, 0.1);
+  --el-alert-border-color: rgba(217, 120, 120, 0.2);
+}
+
+/* ---- Message ---- */
+.el-message--success {
+  --el-message-bg-color: rgba(125, 170, 132, 0.1);
+  border-color: rgba(125, 170, 132, 0.3);
+}
+
+.el-message--warning {
+  --el-message-bg-color: rgba(217, 164, 65, 0.1);
+  border-color: rgba(217, 164, 65, 0.3);
+}
+
+.el-message--error {
+  --el-message-bg-color: rgba(217, 120, 120, 0.1);
+  border-color: rgba(217, 120, 120, 0.3);
+}
+
+/* ---- Menu / Nav ---- */
+.el-menu-item.is-active {
+  color: #7DAA84;
+  border-bottom-color: #7DAA84;
+}
+
+/* ---- Tabs ---- */
+.el-tabs__item.is-active {
+  color: #7DAA84;
+}
+
+.el-tabs__active-bar {
+  background-color: #7DAA84;
+}
+
+.el-tabs__item:hover {
+  color: #6C9873;
+}
+
+/* ---- Pagination ---- */
+.el-pagination .el-pager li.is-active {
+  background-color: #7DAA84;
+}
+
+.el-pagination .el-pager li:not(.is-disabled):hover {
+  color: #7DAA84;
+}
+
+/* ---- Dialog ---- */
+.el-dialog__header {
+  border-bottom: 1px solid var(--ac-color-border-light);
+}
+
+/* ---- Drawer ---- */
+.el-drawer__header {
+  border-bottom: 1px solid var(--ac-color-border-light);
+  margin-bottom: 0;
+}
+
+/* ---- Descriptions (settings preview) ---- */
+.el-descriptions__title {
+  color: var(--ac-color-text);
+  font-weight: 600;
+}
+
+.el-descriptions__label {
+  color: var(--ac-color-text-secondary);
+}
+
+.el-descriptions__content {
+  color: var(--ac-color-text);
+}
+
+/* ---- Dropdown menu ---- */
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  color: #7DAA84;
+  background-color: rgba(125, 170, 132, 0.06);
+}
+
+/* ---- Steps / Timeline ---- */
+.el-step__head.is-finish .el-step__icon {
+  background-color: #7DAA84;
+  border-color: #7DAA84;
+}
+
+.el-step__title.is-finish,
+.el-step__description.is-finish {
+  color: #7DAA84;
+}
+
+/* ---- Input number ---- */
+.el-input-number__increase:hover,
+.el-input-number__decrease:hover {
+  color: #7DAA84;
+}
+
+/* ---- Loading ---- */
+.el-loading-spinner .path {
+  stroke: #7DAA84;
+}
+
+/* ---- Date picker ---- */
+.el-date-table td.today span {
+  color: #7DAA84;
+}
+
+.el-date-table td.available:hover {
+  color: #7DAA84;
+}
+
+
+.el-overlay{
+  .el-drawer{
+    .el-drawer__body{
+      background-color: var(--ac-color-surface);
+    }
+  }
+}
+
+.el-popper{
+  .el-scrollbar{
+    .el-scrollbar__wrap{
+      .el-scrollbar__view{
+        .el-dropdown-menu{
+          background-color: var(--ac-color-surface);
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          .el-dropdown-menu__item{
+            color: var(--ac-color-text-secondary);
+          }
+          .is-active{
+            color: var(--ac-color-text);
+          }
+        }
+      }
+    }
+  }
+}
+.el-card{
+  background-color: var(--ac-color-surface);
+  .el-card__header{
+    border-bottom: 1px solid var(--ac-color-border-light);
+    .card-header-title{
+      color: var(--ac-color-text);
+    }
+  }
+}
+.el-alert{
+  background-color: var(--ac-color-surface) !important;
+}
+.el-table{
+  .el-table__inner-wrapper{
+    &::before{
+      border-bottom: 1px solid var(--ac-color-border-light);
+    }
+    .el-table__header{
+      thead{
+        tr{
+          .el-table__cell{
+            background-color: var(--ac-color-surface);
+            color: var(--ac-color-text);
+            border-bottom: 1px solid var(--ac-color-border-light);
+          }
+        }
+      }
+    }
+    .el-table__body-wrapper{
+      .el-scrollbar{
+        .el-scrollbar__wrap{
+          .el-scrollbar__view{
+            .el-table__body{
+              tbody{
+                tr{
+                  background-color: var(--ac-color-surface);
+                  color: var(--ac-color-text);
+                  td{
+                    color: var(--ac-color-text);
+                    background-color: var(--ac-color-surface);
+                    border-bottom: 1px solid var(--ac-color-border-light);
+                  }
+                }
+              }
+            }
+            .el-table__empty-block{
+              background-color: var(--ac-color-surface);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+.el-dialog{
+  background-color: var(--ac-color-surface);
+  .el-dialog__header{
+    span{
+      color: var(--ac-color-text);
+    }
+  }
+  .el-dialog__body{
+    .el-form{
+      .el-form-item{
+        .el-form-item__label{
+          color: var(--ac-color-text-secondary);
+        }
+      }
+    }
+  }
+}
+.el-input{
+  .el-input__wrapper{
+    background-color: var(--ac-color-surface);
+    input{
+      color: var(--ac-color-text);
+    }
+    .el-input-number__decrease{
+      
+    }
+  }
+}
+.el-form{
+  .el-form-item{
+    .el-form-item__label{
+      color: var(--ac-color-text);
+    }
+  }
+}
+.el-textarea{
+  textarea{
+    background-color: var(--ac-color-surface);
+    color: var(--ac-color-text);
+  }
+}
+.el-button{
+  background-color: var(--ac-color-surface) !important;
+  .el-icon{
+    color: var(--ac-color-text) !important;
+  }
+  span{
+    color: var(--ac-color-text) !important;
+  }
+  &:hover{
+    color: var(--ac-color-text) !important;
+  }
+}
+.el-select{
+  .el-select__wrapper{
+    background-color: var(--ac-color-surface);
+    .el-select__selection{
+      .el-select__selected-item{
+        span{
+          color: var(--ac-color-text);
+        }
+      }
+    }
+  }
+}
+.el-select-dropdown{
+  background-color: var(--ac-color-surface);
+  .el-scrollbar{
+    .el-select-dropdown__wrap{
+      .el-scrollbar__view{
+        .el-select-dropdown__item{
+          color: var(--ac-color-text-secondary);
+          background-color: var(--ac-color-surface);
+          &:hover{
+            background-color: var(--ac-color-surface-hover);
+          }
+          &.is-selected{
+            color: var(--ac-color-primary);
+          }
+        }
+      }
+    }
+  }
+}
+.el-tag--info{
+  background-color: var(--ac-color-surface);
+}
+.el-descriptions{
+  .el-descriptions__body{
+    .el-descriptions__table{
+      tbody{
+        tr{
+          td{
+            background-color: var(--ac-color-surface);
+          }
+        }
+      }
+    }
+  }
+}
+.el-collapse{
+  .el-collapse-item{
+    .el-collapse-item__header{
+      background-color: var(--ac-color-surface);
+      border-radius: 10px;
+    }
+    .el-collapse-item__wrap{
+      background-color: var(--ac-color-surface);
+    }
+  }
+}
