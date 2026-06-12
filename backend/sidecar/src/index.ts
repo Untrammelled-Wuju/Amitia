@@ -1,4 +1,4 @@
-﻿import Fastify from "fastify"
+import Fastify from "fastify"
 import cors from "@fastify/cors"
 
 import { sidecarConfig } from "./config.js"
@@ -33,7 +33,7 @@ app.addHook("onSend", async (_req, reply) => {
 // ============================================================
 const manager = getWechatManager()
 // 消息去抖缓冲区：按 fromUserId 分组
-const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number }>; timer: ReturnType<typeof setTimeout> }>()
+const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean }>; timer: ReturnType<typeof setTimeout> }>()
 
 // ============================================================
 // Forward messages to Core AI
@@ -42,12 +42,12 @@ const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: s
 manager.onMessage(async (msg) => {
   // ---- 5秒去抖缓冲：连续消息自动合并 ----
   const BUFFER_MS = 5000
-  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number }
+  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean }
   
   // 使用 module-level Map（定义在文件顶部）
   const key = msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt }
+  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, isVoice: (msg as any).isVoice || false }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -65,6 +65,7 @@ manager.onMessage(async (msg) => {
     const last = all[all.length - 1]
     const combined = all.map(m => m.text).join("\n")
     console.log(`[Sidecar] FIRE (${all.length} msgs): "${combined.substring(0, 100)}"`)
+    const wasVoice = all.some(m => m.isVoice === true)
 
     const headers: Record<string, string> = { "Content-Type": "application/json" }
     const t = sidecarConfig.bridgeApiToken
@@ -77,7 +78,8 @@ manager.onMessage(async (msg) => {
           channel: "wechat", accountId: "openclaw-wechat",
           conversationId: `conv-${last.fromUserId}`, senderId: last.fromUserId,
           messageId: last.messageId, contextToken: last.contextToken,
-          type: "text", text: combined, createdAt: last.createdAt,
+          type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
+          voiceMessage: wasVoice,
           skipTiming: true,
         }),
         signal: AbortSignal.timeout(60000),
@@ -87,11 +89,53 @@ manager.onMessage(async (msg) => {
       if (json?.data?.outgoingMessage?.text) {
         const reply = json.data.outgoingMessage.text
         console.log('[OpenClaw] Reply (' + reply.length + ' chars): ' + reply.substring(0, 200))
+        
+        const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
+        const shouldSendVoice = false
+        console.log('[OpenClaw] Voice decision: wasVoice=' + wasVoice + ' shouldSendVoice=' + shouldSendVoice + ' forceVoice=' + forceVoice)
+        
+        if (shouldSendVoice && reply.length > 0) {
+          try {
+            const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
+            let voiceSent = false
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i]
+              try {
+                const ttsResp = await fetch(sidecarConfig.coreUrl + "/api/tts/synthesize", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text: part }),
+                  signal: AbortSignal.timeout(60000),
+                })
+                const ttsJson = await ttsResp.json() as any
+                const audioUrl = ttsJson?.data?.audioUrl
+                if (audioUrl) {
+                  const fullAudioUrl = sidecarConfig.coreUrl + audioUrl
+                  const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
+                  if (audioResp.ok) {
+                    const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
+                    await manager.sendVoiceMessage(last.fromUserId, audioBuffer, 7, 0, last.contextToken)
+                    console.log('[OpenClaw] Voice part ' + (i+1) + ' sent OK')
+                    voiceSent = true
+                  }
+                }
+              } catch (partErr: any) {
+                console.error('[OpenClaw] Voice part ' + (i+1) + ' error: ' + (partErr?.message || String(partErr)))
+              }
+              if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
+            }
+            if (voiceSent) return
+            console.log('[OpenClaw] No voice parts sent, falling back to text')
+          } catch (ttsErr: any) {
+            console.error('[OpenClaw] TTS/voice error: ' + (ttsErr?.message || String(ttsErr)) + ', falling back to text')
+          }
+        }
+        
         const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
         console.log('[OpenClaw] Split into ' + parts.length + ' part(s)')
         for (let i = 0; i < parts.length; i++) {
           await manager.sendTextMessage(last.fromUserId, parts[i], last.contextToken).catch(
-            (err: any) => console.error(`[OpenClaw] Part ${i+1}/${parts.length} failed:`, err.message)
+            (err: any) => console.error('[OpenClaw] Part ' + (i+1) + '/' + parts.length + ' failed:', err.message)
           )
           if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800 + Math.random() * 1200))
         }
@@ -284,6 +328,28 @@ app.post("/api/send", async (req, reply) => {
   }
 })
 
+
+// Send voice message (for proactive / system messages)
+app.post("/api/send-voice", async (req, reply) => {
+  try {
+    const body = req.body as { toUserId?: string; audioUrl?: string; text?: string; contextToken?: string }
+    if (!body.toUserId || !body.audioUrl) {
+      return reply.status(422).send({
+        success: false,
+        message: "toUserId and audioUrl are required",
+      })
+    }
+    const fullAudioUrl = body.audioUrl.startsWith("http") ? body.audioUrl : sidecarConfig.coreUrl + body.audioUrl
+    const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
+    if (!audioResp.ok) throw new Error("Audio download failed: " + audioResp.status)
+    const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
+    await manager.sendVoiceMessage(body.toUserId, audioBuffer, 7, 0, body.contextToken)
+    return reply.send({ success: true, message: "Voice sent" })
+  } catch (err: any) {
+    console.error("[Sidecar] send-voice error:", err.message)
+    return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
+  }
+})
 // ============================================================
 // Startup
 // ============================================================

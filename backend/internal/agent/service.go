@@ -18,7 +18,7 @@ import (
 type Service interface {
 	Test(characterID, message string) (map[string]interface{}, error)
 	ContextPreview(convID string) (map[string]interface{}, error)
-	Webhook(channel, senderID, conversationID, text string) (map[string]interface{}, error)
+	Webhook(channel, senderID, conversationID, text string, voiceMessage bool) (map[string]interface{}, error)
 }
 
 const systemFormatInstruction = `【回复格式 - 系统固定规则】
@@ -131,7 +131,7 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}, nil
 }
 
-func (s *service) Webhook(channel, senderID, conversationID, text string) (map[string]interface{}, error) {
+func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool) (map[string]interface{}, error) {
 	if text == "" {
 		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
 	}
@@ -142,12 +142,19 @@ func (s *service) Webhook(channel, senderID, conversationID, text string) (map[s
 		ConversationID: convID,
 		Channel:        channel,
 		Source:         channel,
+		VoiceMessage:   voiceMessage,
 	}
 	result, err := s.chatSvc.ProcessMessage(pmReq)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": result.Reply}}, nil
+	forceVoice := result.ForceVoice
+	replyText := result.Reply
+	if channel == "wechat" && forceVoice {
+		forceVoice = false
+		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
+	}
+	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice}}, nil
 }
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName string

@@ -13,6 +13,7 @@ import {
   buildBaseInfo,
   getUpdates,
   sendMessage,
+  getUploadUrl,
   notifyStart,
   notifyStop,
 } from "@tencent-weixin/openclaw-weixin/dist/src/api/api.js"
@@ -60,6 +61,7 @@ export type MessageHandler = (msg: {
   messageId: string
   text: string
   contextToken?: string
+  isVoice?: boolean
   createdAt: number
 }) => Promise<string | string[] | void>
 
@@ -489,6 +491,105 @@ private state: WechatState = {
       console.error(`[OpenClaw] Send exception:`, err.message)
     }
   }
+  async sendVoiceMessage(
+    toUserId: string,
+    audioBuffer: Buffer,
+    encodeType: number = 7,
+    playtime: number = 0,
+    contextToken?: string
+  ): Promise<void> {
+    if (!this.token) throw new Error("Not logged in")
+    const rawsize = audioBuffer.length
+    const rawfilemd5 = crypto.createHash("md5").update(audioBuffer).digest("hex")
+    const aesKey = crypto.randomBytes(16)
+    const encrypted = this.aes128EcbEncrypt(audioBuffer, aesKey)
+    const filesize = encrypted.length
+    const filekey = `voice_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.mp3`
+    
+    console.log(`[OpenClaw][VOICE-SEND] rawsize=${rawsize} filesize=${filesize} filekey=${filekey}`)
+    
+    const uploadResp = await getUploadUrl({
+      baseUrl: this.state.baseUrl,
+      token: this.token,
+      filekey,
+      media_type: 4,
+      to_user_id: toUserId,
+      rawsize,
+      rawfilemd5,
+      filesize,
+      aeskey: aesKey.toString("hex"),
+      no_need_thumb: true,
+    })
+    
+    console.log("[OpenClaw][VOICE-SEND] uploadResp errcode=" + uploadResp.errcode + " upload_full_url=" + (uploadResp.upload_full_url ? "OK" : "MISSING"))
+    console.log("[OpenClaw][VOICE-SEND] uploadResp keys: " + Object.keys(uploadResp).join(","))
+    
+    if (uploadResp.errcode && uploadResp.errcode !== 0) {
+      throw new Error("getUploadUrl failed: " + uploadResp.errcode + " " + (uploadResp.errmsg || ""))
+    }
+    
+    if (!uploadResp.upload_full_url) {
+      throw new Error("getUploadUrl returned no upload_full_url")
+    }
+    
+    const encryptQueryParam = uploadResp.encrypt_query_param || (() => {
+      const m = uploadResp.upload_full_url.match(/encrypted_query_param=([^&]+)/)
+      return m ? decodeURIComponent(m[1]) : ""
+    })()
+    
+    if (!encryptQueryParam) throw new Error("encrypt_query_param missing")
+    
+    console.log("[OpenClaw][VOICE-SEND] CDN POST...")
+    const putResp = await fetch(uploadResp.upload_full_url, {
+      method: "POST",
+      body: encrypted,
+      signal: AbortSignal.timeout(30000),
+    })
+    
+    console.log("[OpenClaw][VOICE-SEND] CDN PUT response: status=" + putResp.status + " ok=" + putResp.ok)
+    
+    if (!putResp.ok) {
+      throw new Error("CDN upload failed: " + putResp.status)
+    }
+    
+    console.log("[OpenClaw][VOICE-SEND] CDN PUT OK")
+    
+    const accountId = this.getState().accountId || ""
+    
+    await sendMessage({
+      baseUrl: this.state.baseUrl,
+      token: this.token,
+      body: {
+        msg: {
+          from_user_id: accountId,
+          to_user_id: toUserId,
+          client_id: `openclaw-weixin:${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+          message_type: 2,
+          message_state: 2,
+          context_token: contextToken || "",
+          item_list: [{
+            type: 3,
+            voice_item: {
+              media: {
+                encrypt_query_param: encryptQueryParam,
+                aes_key: Buffer.from(aesKey.toString("hex")).toString("base64"),
+              },
+              encode_type: encodeType,
+              playtime,
+            },
+          }],
+        },
+      },
+    })
+    
+    console.log("[OpenClaw][VOICE-SEND] Message sent OK")
+  }
+  
+  private aes128EcbEncrypt(data: Buffer, key: Buffer): Buffer {
+    const cipher = crypto.createCipheriv("aes-128-ecb", key, Buffer.alloc(0))
+    cipher.setAutoPadding(true)
+    return Buffer.concat([cipher.update(data), cipher.final()])
+  }
 
   /** Stop message polling */
   async stopPolling(): Promise<void> {
@@ -615,8 +716,15 @@ private state: WechatState = {
 
     // Extract text from items
     let text = ""
+    let isVoice = false
     if (msg.item_list) {
       for (const item of msg.item_list) {
+        if (item.type === 3 && item.voice_item) {
+          isVoice = true
+          const vt = item.voice_item.text || ""
+          console.log("[OpenClaw][VOICE] playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " text=" + vt.substring(0, 100))
+          if (vt) text += vt
+        }
         if (item.type === 1 && item.text_item?.text) {
           text += item.text_item.text
         }
@@ -640,6 +748,7 @@ private state: WechatState = {
           toUserId,
           messageId,
           text,
+          isVoice,
           contextToken,
           createdAt,
         })
