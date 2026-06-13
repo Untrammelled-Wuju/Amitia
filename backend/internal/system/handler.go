@@ -328,11 +328,12 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	lines := strings.Split(strings.TrimSpace(result.Reply), "\n")
 	msgIDIdx := 0
 
-	voiceChance := 0.25
+	voiceChance := 1.0
 	if body.VoiceMessage { voiceChance = 0.80 }
-	applog.Info("[Voice] voiceMessage=%v voiceChance=%.0f%% replyLen=%d", body.VoiceMessage, voiceChance*100, len(result.Reply))
+	if result.ForceVoice { voiceChance = 1.0 }
+	applog.Info("[Voice] voiceMessage=%v forceVoice=%v voiceChance=%.0f%% replyLen=%d", body.VoiceMessage, result.ForceVoice, voiceChance*100, len(result.Reply))
 	var ttsCfg *tts.TtsConfig
-	if rand.Float64() < voiceChance && result.Reply != "" {
+	if (rand.Float64() < voiceChance || result.ForceVoice) && result.Reply != "" {
 		ttsRepo := tts.NewRepository(h.db)
 		activeCfg, cfgErr := ttsRepo.GetActive()
 		if cfgErr != nil { applog.Info("[Voice] GetActive err: %v", cfgErr) }
@@ -344,7 +345,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			if cfg.Volume == 0 { cfg.Volume = 1.0 }
 			ttsCfg = cfg
 		} else if activeCfg != nil && activeCfg.ApiKey == "" { applog.Info("[Voice] TTS ApiKey empty") }
-	} else { applog.Info("[Voice] skipped: chance=%.2f reply=%v", voiceChance, result.Reply != "") }
+	} else { applog.Info("[Voice] skipped: chance=%.2f forceVoice=%v reply=%v", voiceChance, result.ForceVoice, result.Reply != "") }
 
 	for i, line := range lines {
 		line = strings.TrimSpace(line)

@@ -91,7 +91,7 @@ manager.onMessage(async (msg) => {
         console.log('[OpenClaw] Reply (' + reply.length + ' chars): ' + reply.substring(0, 200))
         
         const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
-        const shouldSendVoice = false
+        const shouldSendVoice = forceVoice || (wasVoice && Math.random() < 0.8)
         console.log('[OpenClaw] Voice decision: wasVoice=' + wasVoice + ' shouldSendVoice=' + shouldSendVoice + ' forceVoice=' + forceVoice)
         
         if (shouldSendVoice && reply.length > 0) {

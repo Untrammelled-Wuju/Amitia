@@ -3,8 +3,11 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/config"
 	"gorm.io/gorm"
 )
 
@@ -259,9 +263,18 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	if req.AudioUrl != "" { msgType = "voice" }
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, time.Now().Format("2006-01-02 15:04:05"))
 	if req.ImageUrl != "" && req.ImageContext == "" {
-		desc := analyzeImageInternal(req.ImageUrl)
+		desc, errDetail := analyzeImageInternal(req.ImageUrl)
+		logPath := filepath.Join(config.AppCfg.Storage.DataDir, "image_recognition_log.txt")
+		if absPath, err := filepath.Abs(logPath); err == nil { os.WriteFile(absPath, []byte(desc), 0644) }
 		if desc != "" {
 			req.ImageContext = "[图片描述：" + desc + "]"
+		} else {
+			return &ProcessMessageResponse{
+				ConversationID: convID,
+				Reply:          errDetail,
+				CharacterID:    charID,
+				CharacterName:  charName,
+			}, nil
 		}
 	}
 	history := s.loadHistory(convID)
@@ -443,7 +456,7 @@ func (s *service) DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error
 	base := strings.TrimRight(baseURL, "/")
 	req, _ := http.NewRequest("GET", base+"/models", nil)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
 	if err != nil { return nil, fmt.Errorf("请求失败: %w", err) }
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
@@ -530,13 +543,33 @@ const doubaoAPIKey = "ark-919cb2bc-dcd1-4ef9-b8b5-5f1b42488bf7-9bd5c"
 const doubaoBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
 const doubaoModel = "doubao-seed-2-0-lite-260428"
 
-func analyzeImageInternal(imageBase64 string) string {
+func analyzeImageInternal(imageUrl string) (string, string) {
+	imageData := imageUrl
+	if strings.HasPrefix(imageUrl, "/images/") {
+		ext := filepath.Ext(imageUrl)
+		mimeType := "image/png"
+		switch ext {
+		case ".jpg", ".jpeg":
+			mimeType = "image/jpeg"
+		case ".gif":
+			mimeType = "image/gif"
+		case ".webp":
+			mimeType = "image/webp"
+		case ".bmp":
+			mimeType = "image/bmp"
+		}
+		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "images", filepath.Base(imageUrl))
+		data, err := os.ReadFile(filePath)
+		if err == nil {
+			imageData = "data:" + mimeType + ";base64," + base64Encode(data)
+		}
+	}
 	reqBody := map[string]interface{}{
 		"model": doubaoModel,
 		"input": []map[string]interface{}{{
 			"role": "user",
 			"content": []map[string]interface{}{
-				{"type": "input_image", "image_url": imageBase64},
+				{"type": "input_image", "image_url": imageData},
 				{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息"},
 			},
 		}},
@@ -545,18 +578,20 @@ func analyzeImageInternal(imageBase64 string) string {
 	req, _ := http.NewRequest("POST", doubaoBaseURL+"/responses", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", err.Error()
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return ""
+		body, _ := io.ReadAll(resp.Body)
+		return "", string(body)
 	}
+	rawBody, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		return "", string(rawBody)
 	}
 	output, _ := result["output"].([]interface{})
 	for _, item := range output {
@@ -570,8 +605,13 @@ func analyzeImageInternal(imageBase64 string) string {
 					texts = append(texts, fmt.Sprint(cm["text"]))
 				}
 			}
-			return strings.Join(texts, "")
+			resultText := strings.Join(texts, "")
+			return resultText, ""
 		}
 	}
-	return ""
+	return "", string(rawBody)
+}
+
+func base64Encode(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
 }

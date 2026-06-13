@@ -930,6 +930,14 @@ async function doActualSend(text: string) {
               scrollToBottom(true)
             }
 
+            if (eventType === "voice_audio" && data.audioUrl) {
+              const targetMsg = [...messages.value].reverse().find((m: any) => m.id === data.messageId || m.status === "streaming")
+              if (targetMsg) {
+                targetMsg.audioUrl = data.audioUrl
+                targetMsg.audioDuration = data.duration
+              }
+            }
+
                     if (eventType === "done") {
               const lastStreaming = [...messages.value].reverse().find((m: any) => m.status === "streaming" && m.id !== "streaming")
               if (lastStreaming?.id) lastPolledMsgId = lastStreaming.id
