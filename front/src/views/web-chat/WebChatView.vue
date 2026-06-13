@@ -811,19 +811,6 @@ async function handleContinueImport(batch: any) {
 }
 function uuidLike(obj: any): boolean { return typeof obj.id === "string" && obj.id.length > 20 }
 
-// 打字防抖：用户停止发送 1.5s 后才触发 AI 回复，连续发送的消息会合并
-let typingTimer: ReturnType<typeof setTimeout> | null = null
-const pendingTexts: string[] = []
-const TYPING_WAIT_MS = 500
-
-function flushPending() {
-  if (pendingTexts.length === 0 || sending.value) return
-  const combined = pendingTexts.join("\n")
-  pendingTexts.length = 0
-  // 将合并文本传递给实际发送逻辑（下面的代码）
-  doActualSend(combined)
-}
-
 function onImageAttached(file: File, base64: string) {
   currentImageFile.value = file
   currentImageBase64.value = base64
@@ -853,10 +840,8 @@ async function handleSend(text: string, imageBase64?: string) {
     handleImageSend(text, imageBase64 || currentImageBase64.value || "")
     return
   }
-  pendingTexts.push(text)
   if (sending.value) return
-  if (typingTimer) clearTimeout(typingTimer)
-  typingTimer = setTimeout(flushPending, TYPING_WAIT_MS)
+  doActualSend(text)
 }
 
 // doActualSend 是原来的 handleSend 逻辑
@@ -972,10 +957,7 @@ async function doActualSend(text: string) {
     abortController = null
     const lastMsg = messages.value[messages.value.length - 1]
     if (lastMsg?.id && lastMsg.id !== "streaming") lastPolledMsgId = lastMsg.id
-    if (pendingTexts.length > 0) {
-      const next = pendingTexts.shift()!
-      setTimeout(() => doActualSend(next), 300)
-    }
+
   }
 }
 

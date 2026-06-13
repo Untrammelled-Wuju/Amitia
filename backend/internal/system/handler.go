@@ -282,21 +282,38 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		AudioDuration  float64 `json:"audioDuration"`
 		ImageUrl       string  `json:"imageUrl"`
 	}
-		if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
+	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
 	msgContent := body.Content
 	if msgContent == "" { msgContent = body.Message }
 	if msgContent == "" { util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil); return }
+
+	convID := body.ConversationID
+	if convID == "" {
+		convID = "web-" + uuid.New().String()[:8]
+	}
+
+	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+
+	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
+	if bufErr != nil {
+		util.SuccessResponse(c, gin.H{"status": "queued", "conversationId": convID})
+		return
+	}
+
+	mergedContent := strings.Join(bufferedMsgs, "\n")
+	imageCtx := chat.GetBuffer().GetImageContexts(convID)
+
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
-		CharacterID: body.CharacterID, Message: msgContent,
-		ConversationID: body.ConversationID, Channel: "web", Source: "manual",
+		CharacterID: body.CharacterID, Message: mergedContent,
+		ConversationID: convID, Channel: "web", Source: "manual",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl: body.ImageUrl,
+		ImageContext: imageCtx,
 	})
 	if err != nil { util.ErrorResponse(c, response.InternalError, err.Error(), nil); return }
 	util.SuccessResponse(c, gin.H{"conversationId": result.ConversationID, "reply": result.Reply, "messageIds": result.MessageIDs, "characterName": result.CharacterName})
 }
-
 func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var body struct {
 		ConversationID string  `json:"conversationId"`
@@ -312,14 +329,35 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	msgContent := body.Content
 	if msgContent == "" { msgContent = body.Message }
 	if msgContent == "" { util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil); return }
+
+	convID := body.ConversationID
+	if convID == "" {
+		convID = "web-" + uuid.New().String()[:8]
+	}
+
+	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+
+	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
+	if bufErr != nil {
+		c.JSON(200, gin.H{"code": 0, "data": gin.H{"status": "queued", "conversationId": convID}})
+		return
+	}
+
+	mergedContent := strings.Join(bufferedMsgs, "\n")
+	imageCtx := chat.GetBuffer().GetImageContexts(convID)
+
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
-		CharacterID: body.CharacterID, Message: msgContent,
-		ConversationID: body.ConversationID, Channel: "web", Source: "manual",
+		CharacterID: body.CharacterID, Message: mergedContent,
+		ConversationID: convID, Channel: "web", Source: "manual",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl: body.ImageUrl,
+		ImageContext: imageCtx,
 	})
-	if err != nil { util.ErrorResponse(c, response.InternalError, err.Error(), nil); return }
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -328,7 +366,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	lines := strings.Split(strings.TrimSpace(result.Reply), "\n")
 	msgIDIdx := 0
 
-	voiceChance := 1.0
+	voiceChance := 0.20
 	if body.VoiceMessage { voiceChance = 0.80 }
 	if result.ForceVoice { voiceChance = 1.0 }
 	applog.Info("[Voice] voiceMessage=%v forceVoice=%v voiceChance=%.0f%% replyLen=%d", body.VoiceMessage, result.ForceVoice, voiceChance*100, len(result.Reply))
@@ -396,7 +434,6 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	fmt.Fprintf(c.Writer, "event: done\ndata: %s\n\n", string(db))
 	flusher.Flush()
 }
-
 func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	var body struct {
 		Title       string `json:"title"`

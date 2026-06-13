@@ -18,7 +18,7 @@ import (
 type Service interface {
 	Test(characterID, message string) (map[string]interface{}, error)
 	ContextPreview(convID string) (map[string]interface{}, error)
-	Webhook(channel, senderID, conversationID, text string, voiceMessage bool) (map[string]interface{}, error)
+	Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, skipTiming bool) (map[string]interface{}, error)
 }
 
 const systemFormatInstruction = `【回复格式 - 系统固定规则】
@@ -131,18 +131,33 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}, nil
 }
 
-func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool) (map[string]interface{}, error) {
-	if text == "" {
+func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, skipTiming bool) (map[string]interface{}, error) {
+	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d\n", channel, text[:min(len(text), 50)], len(imageUrl))
+	text = strings.TrimSpace(text)
+	if text == "" && imageUrl == "" {
 		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
 	}
 	convID := fmt.Sprintf("conv-%s-%s", channel, senderID)
+
+	var mergedText string
+	if skipTiming {
+		mergedText = text
+	} else {
+		msgs, bufErr := chat.GetBuffer().Buffer(convID, text)
+		if bufErr != nil {
+			return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
+		}
+		mergedText = strings.Join(msgs, "\n")
+	}
+
 	pmReq := &chat.ProcessMessageRequest{
 		CharacterID:    "",
-		Message:        text,
+		Message:        mergedText,
 		ConversationID: convID,
 		Channel:        channel,
 		Source:         channel,
 		VoiceMessage:   voiceMessage,
+		ImageUrl:       imageUrl,
 	}
 	result, err := s.chatSvc.ProcessMessage(pmReq)
 	if err != nil {

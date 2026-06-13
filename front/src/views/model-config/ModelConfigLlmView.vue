@@ -1,4 +1,4 @@
-﻿<template>
+<template>
 
     <!-- Privacy notice -->
     <el-alert type="info" :closable="false" show-icon style="margin-bottom:14px">

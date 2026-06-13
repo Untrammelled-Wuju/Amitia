@@ -212,6 +212,7 @@ func (s *service) loadHistory(convID string) []map[string]string {
 }
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
+	fmt.Printf("[ProcessMessage] msg=%s imageUrlLen=%d\n", req.Message[:min(len(req.Message), 50)], len(req.ImageUrl))
 	var charID, charName, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
@@ -262,13 +263,20 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	msgType := "text"
 	if req.AudioUrl != "" { msgType = "voice" }
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, time.Now().Format("2006-01-02 15:04:05"))
+	if req.Message == "" && req.ImageUrl != "" {
+		req.Message = "[图片]"
+	}
 	if req.ImageUrl != "" && req.ImageContext == "" {
+		fmt.Printf("[Image] 开始分析图片, url长度=%d\n", len(req.ImageUrl))
 		desc, errDetail := analyzeImageInternal(req.ImageUrl)
+		fmt.Printf("[Image] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
 		logPath := filepath.Join(config.AppCfg.Storage.DataDir, "image_recognition_log.txt")
 		if absPath, err := filepath.Abs(logPath); err == nil { os.WriteFile(absPath, []byte(desc), 0644) }
 		if desc != "" {
-			req.ImageContext = "[图片描述：" + desc + "]"
+			req.ImageContext = "[图片描述：" + desc + "]\n【指代说明】\n他/她/它≈图中人物"
+			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
 		} else {
+			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
 			return &ProcessMessageResponse{
 				ConversationID: convID,
 				Reply:          errDetail,

@@ -20,6 +20,7 @@ export interface QQMessage {
   groupId?: string
   createdAt: number
   isVoice?: boolean
+  imageUrl?: string
 }
 
 export type MessageHandler = (msg: QQMessage) => Promise<string | void>
@@ -299,7 +300,8 @@ export class QQBotClient {
     const extracted = this.extractContent(data)
     const text = extracted.text
     const isVoice = extracted.isVoice
-    if (!text && !isVoice) return
+    const imageUrl = extracted.imageUrl
+    if (!text && !isVoice && !imageUrl) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
@@ -309,6 +311,7 @@ export class QQBotClient {
       groupId: data?.group_id || data?.guild_id || "",
       createdAt: Date.now(),
       isVoice: isVoice,
+      imageUrl: imageUrl || undefined,
     }
 
     this._messageCount++
@@ -321,7 +324,8 @@ export class QQBotClient {
     const extracted = this.extractContent(data)
     const text = extracted.text
     const isVoice = extracted.isVoice
-    if (!text && !isVoice) return
+    const imageUrl = extracted.imageUrl
+    if (!text && !isVoice && !imageUrl) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
@@ -330,6 +334,7 @@ export class QQBotClient {
       text: text || (isVoice ? "[语音]" : ""),
       createdAt: Date.now(),
       isVoice: isVoice,
+      imageUrl: imageUrl || undefined,
     }
 
     this._messageCount++
@@ -338,7 +343,7 @@ export class QQBotClient {
     this.notifyHandlers(msg)
   }
 
-  private extractContent(data: any): { text: string; isVoice: boolean } {
+  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string } {
     const rawDataId = data?.id || "unknown"
     this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content类型=" + typeof data?.content + " isArray=" + Array.isArray(data?.content) + " attachments=" + (data?.attachments ? JSON.stringify(data.attachments).substring(0, 500) : "无"))
     if (typeof data.content === "object" && !Array.isArray(data.content)) {
@@ -347,9 +352,29 @@ export class QQBotClient {
     if (Array.isArray(data.content)) {
       this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content数组长度=" + data.content.length + " types=" + data.content.map((c:any) => c.type || c.msg_type || "?").join(","))
     }
+    const hasAttachmentsImage = data?.attachments?.some((a: any) =>
+      a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image"
+    )
+    if (hasAttachmentsImage) {
+      const imgAtt = data.attachments.find((a: any) =>
+        a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image"
+      )
+      const imgUrl = imgAtt?.url || ""
+      this.debugLog("[QQBot][IMAGE-DETECT] msgId=" + rawDataId + " 检测到图片! url=" + imgUrl)
+      if (typeof data?.content === "string" && data.content.trim()) {
+        return { text: data.content.trim(), isVoice: false, imageUrl: imgUrl }
+      }
+      if (Array.isArray(data?.content)) {
+        const iparts = data.content.filter((c: any) => c.type === "text" && c.text).map((c: any) => c.text)
+        const iv = iparts.length > 0 ? iparts.join("") : ""
+        return { text: iv, isVoice: false, imageUrl: imgUrl }
+      }
+      return { text: "", isVoice: false, imageUrl: imgUrl }
+    }
+
     if (typeof data?.content === "string") {
       const text = data.content.trim()
-      if (text) return { text, isVoice: false }
+      if (text) return { text, isVoice: false, imageUrl: '' }
     }
 
     if (data?.content && typeof data.content === "object") {
@@ -360,13 +385,15 @@ export class QQBotClient {
         const hasVoice = data.content.some((s: any) =>
           s.type === "voice" || s.type === "audio" || s.msg_type === "voice" || s.msg_type === "audio"
         )
-        if (textParts.length > 0) return { text: textParts.join(""), isVoice: hasVoice }
-        if (hasVoice) { this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! content数组详情:" + JSON.stringify(data.content).substring(0, 2000)); return { text: "[语音]", isVoice: true } }
-        return { text: "", isVoice: false }
+        const contentImageUrls = data.content.filter((c: any) => c.type === 'image' || c.msg_type === 'image').map((c: any) => c.url || '').filter(Boolean);
+        if (textParts.length > 0) return { text: textParts.join(''), isVoice: hasVoice, imageUrl: contentImageUrls[0] || '' }
+        if (hasVoice) { this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! content数组详情:" + JSON.stringify(data.content).substring(0, 2000)); return { text: "[语音]", isVoice: true, imageUrl: contentImageUrls[0] || "" } }
+        if (contentImageUrls.length > 0) { this.debugLog("[QQBot][IMAGE-DETECT] msgId=" + rawDataId + " 检测到content数组中的图片! url=" + contentImageUrls[0]); return { text: "", isVoice: false, imageUrl: contentImageUrls[0] } }
+        return { text: "", isVoice: false, imageUrl: "" }
       }
       if (typeof data.content.text === "string") {
         const text = data.content.text.trim()
-        if (text) return { text, isVoice: false }
+        if (text) return { text, isVoice: false, imageUrl: "" }
       }
     }
 
@@ -381,12 +408,12 @@ export class QQBotClient {
       this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! attachments详情:" + JSON.stringify(data.attachments).substring(0, 2000))
       this.debugLog("[QQBot][VOICE-ASR] msgId=" + rawDataId + " QQ语音识别文本: " + asrText)
       if (asrText) {
-        return { text: asrText, isVoice: true }
+        return { text: asrText, isVoice: true, imageUrl: "" }
       }
-      return { text: "[语音]", isVoice: true }
+      return { text: "[语音]", isVoice: true, imageUrl: "" }
     }
 
-    return { text: "", isVoice: false }
+    return { text: "", isVoice: false, imageUrl: "" }
   }
   private notifyHandlers(msg: QQMessage): void {
     for (const handler of this.handlers) {
@@ -570,7 +597,32 @@ export class QQBotClient {
   }
 
 
+
+  async downloadImage(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+    if (!this.config) return null
+    try {
+      const token = await this.getAccessToken()
+      const resp = await fetch(url, {
+        headers: { "Authorization": "QQBot " + token },
+        signal: AbortSignal.timeout(30000)
+      })
+      if (!resp.ok) {
+        this.debugLog("[QQBot][IMAGE-DL] 下载图片失败 status=" + resp.status)
+        return null
+      }
+      const arrayBuffer = await resp.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      const contentType = resp.headers.get("content-type") || "image/png"
+      this.debugLog("[QQBot][IMAGE-DL] 图片下载成功 size=" + buffer.length + " type=" + contentType)
+      return { buffer, contentType }
+    } catch (err: any) {
+      this.debugLog("[QQBot][IMAGE-DL] 下载图片异常: " + err.message)
+      return null
+    }
+  }
+
   disconnect(): void {
+
 
     console.log("[QQBot] 断开连接")
     this.loginStatus = "disconnected"

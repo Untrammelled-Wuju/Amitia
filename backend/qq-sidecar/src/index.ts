@@ -30,9 +30,11 @@ const qq = new QQBotClient()
 // Message forwarding
 // ============================================================
 const msgBuffers = new Map<string, {
-  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string }>
+  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string }>
   timer: ReturnType<typeof setTimeout>
 }>()
+
+const processingLocks = new Map<string, Promise<void>>()
 
 qq.onMessage(async (msg: QQMessage) => {
   if (msg.isVoice) {
@@ -46,7 +48,7 @@ qq.onMessage(async (msg: QQMessage) => {
   const BUFFER_MS = 5000
   const key = msg.groupId || msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false }
+  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "" }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -57,11 +59,18 @@ qq.onMessage(async (msg: QQMessage) => {
 
   const entry = msgBuffers.get(key)!
   entry.timer = setTimeout(async () => {
+    const prevLock = processingLocks.get(key)
+    if (prevLock) {
+      try { await prevLock } catch {}
+    }
+    let resolveLock: () => void
+    const lockPromise = new Promise<void>(r => { resolveLock = r })
+    processingLocks.set(key, lockPromise)
     msgBuffers.delete(key)
     const all = entry.msgs
     const last = all[all.length - 1]
-    const combined = all.map(m => m.text).join("\n")
-    const wasVoice = all.some(m => (m as any).isVoice)
+    const combined = all.map(m => m.text).filter(t => t.length > 0).join("\n")
+    const wasVoice = all.some(m => m.isVoice || false)
     if (wasVoice) {
       const logLineV3 = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
       logLineV3(`Voice-FWD: userId=${last.fromUserId} groupId=${last.groupId || "none"} msgId=${last.messageId} text=${combined.substring(0, 100)}`)
@@ -73,6 +82,17 @@ qq.onMessage(async (msg: QQMessage) => {
     if (t) headers["Authorization"] = "Bearer " + t
 
     try {
+      let imageUrl = ""
+      const firstImageMsg = all.find(m => m.imageUrl)
+      if (firstImageMsg?.imageUrl) {
+        const imgResult = await qq.downloadImage(firstImageMsg.imageUrl)
+        if (imgResult) {
+          imageUrl = "data:" + imgResult.contentType + ";base64," + imgResult.buffer.toString("base64")
+          console.log("[QQ-Sidecar][IMAGE-FWD] 图片已下载并编码, size=" + imgResult.buffer.length)
+        }
+      }
+
+      console.log("[QQ-Sidecar][WEBHOOK] text=" + combined.substring(0, 50) + " imageUrlLen=" + (imageUrl ? imageUrl.length : 0))
       const resp = await fetch(`${qqSidecarConfig.coreUrl}/api/agent/webhook`, {
         method: "POST", headers,
         body: JSON.stringify({
@@ -81,6 +101,7 @@ qq.onMessage(async (msg: QQMessage) => {
           messageId: last.messageId,
           type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
           voiceMessage: wasVoice,
+          imageUrl: imageUrl,
           skipTiming: true,
         }),
         signal: AbortSignal.timeout(60000),
@@ -169,6 +190,9 @@ qq.onMessage(async (msg: QQMessage) => {
       }
     } catch (err: any) { 
       try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " Forward FAILED: " + (err?.message || String(err)) + "\n") } catch {}
+    } finally {
+      processingLocks.delete(key)
+      resolveLock!()
     }
   }, BUFFER_MS)
 })

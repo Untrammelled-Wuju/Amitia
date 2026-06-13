@@ -26,13 +26,9 @@ func main() {
 	}
 	config.InitConfig(configPath)
 
-	
 	log.InitLogger("logs")
 
-	
 	db := mysql.NewSQLite(config.AppCfg.Storage.DataDir)
-
-	
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
@@ -76,15 +72,15 @@ func main() {
 	db.Exec("ALTER TABLE tts_configs ADD COLUMN realtime_app_id TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE tts_configs ADD COLUMN realtime_access_token TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE tts_configs ADD COLUMN realtime_secret_key TEXT DEFAULT ''")
+	db.Exec("CREATE TABLE IF NOT EXISTS vision_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_key TEXT DEFAULT '', model_name TEXT DEFAULT 'doubaoseed2.0lite', base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3', is_active INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
 
 	db.Exec("CREATE TABLE IF NOT EXISTS safety_events (id TEXT PRIMARY KEY, conversation_id TEXT, event_type TEXT, description TEXT, direction TEXT DEFAULT '', handled INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now'))))")
 
 	db.Exec("UPDATE characters SET conversation_id = (SELECT c.id FROM conversations c WHERE c.character_id = characters.id ORDER BY c.updated_at DESC LIMIT 1) WHERE conversation_id IS NULL OR conversation_id = ''")
 
-	
 	ctx := app.NewAppContext(db, nil)
 
-	
 	var env *Environment
 	if os.Getenv("START_SIDECAR") != "0" {
 		env = startEnvironment()
@@ -95,14 +91,12 @@ func main() {
 		}()
 	}
 
-	
 	compSvc := companion.NewService(ctx)
 	cron := NewProactiveCron(db, compSvc)
 	cron.Start()
 	proactive.SchedulerRunning = true
 	defer func() { proactive.SchedulerRunning = false; cron.Stop() }()
 
-	
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
 	fmt.Printf("    %s Backend Server\n", config.AppCfg.App.Name)
@@ -112,7 +106,6 @@ func main() {
 	fmt.Printf("    Database:    %s/app.db\n", config.AppCfg.Storage.DataDir)
 	fmt.Printf("  ========================================\n\n")
 
-
 	qqMgr := qq.NewManager("http://127.0.0.1:9877")
 	qq.SetManager(qqMgr)
 
@@ -120,6 +113,7 @@ func main() {
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx)
 	chatSvc := chat.NewService(chatRepo, ctx, memSvc)
+	chat.InitBuffer(6000)
 	go func() {
 		time.Sleep(3 * time.Second)
 		chatSvc.EnsureChannelConversation("wechat")

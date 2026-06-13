@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="voice-config">
     <el-alert
       title="隐私提示"
@@ -19,7 +19,7 @@
             <div class="tts-grid">
         <div class="tts-item">
           <span class="tts-label">API Key</span>
-          <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" style="width:260px" />
+          <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">合成资源ID</span>
@@ -36,11 +36,11 @@
         </div>
         <div class="tts-item">
           <span class="tts-label">Access Token</span>
-          <el-input v-model="realtimeAccessToken" size="small" placeholder="火山引擎Access Token" style="width:260px" />
+          <el-input v-model="realtimeAccessToken" size="small" placeholder="火山引擎Access Token" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">Secret Key</span>
-          <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" style="width:260px" />
+          <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">TTS默认语音</span>
@@ -70,6 +70,14 @@
           <span :style="{color: ttsTestResult==='ok'?'#67c23a':'#f56c6c'}">{{ ttsTestResult === 'ok' ? '连接正常' : '连接失败' }}</span>
         </div>
       </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--el-text-color-secondary);display:flex;flex-wrap:wrap;gap:12px">
+        <span>快捷入口：</span>
+        <el-link href="https://console.volcengine.com/speech/new/setting/apikeys?projectName=default" target="_blank" class="quick-link">API Key管理</el-link>
+        <el-link href="https://console.volcengine.com/speech/service/10035?AppID=3815252154" target="_blank" class="quick-link">豆包语音合成模型</el-link>
+        <el-link href="https://console.volcengine.com/speech/service/10036?AppID=3815252154" target="_blank" class="quick-link">声音复刻模型</el-link>
+        <el-link href="https://console.volcengine.com/speech/new/experience/clone?_vtm_=a86845.b103859.0_0.0_0.0.242_7650005566333666822" target="_blank" class="quick-link">声音复刻</el-link>
+        <el-link href="https://console.volcengine.com/speech/new/voices?_vtm_=a86845.b103859.0_0.0_0.0.242_7650005566333666822" target="_blank" class="quick-link">音色管理</el-link>
+      </div>
       <div style="margin-top:12px">
         <el-button type="primary" size="small" @click="saveAllTts" :loading="ttsSaving">保存TTS配置</el-button>
       </div>
@@ -85,7 +93,7 @@
             <div class="tts-grid">
         <div class="tts-item">
           <span class="tts-label">API Key</span>
-          <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" style="width:260px" />
+          <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">合成资源ID</span>
@@ -102,11 +110,11 @@
         </div>
         <div class="tts-item">
           <span class="tts-label">Access Token</span>
-          <el-input v-model="realtimeAccessToken" size="small" placeholder="火山引擎Access Token" style="width:260px" />
+          <el-input v-model="realtimeAccessToken" size="small" placeholder="火山引擎Access Token" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">Secret Key</span>
-          <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" style="width:260px" />
+          <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
           <span class="tts-label">当前音色</span>
@@ -335,4 +343,6 @@ async function testAsr() {
 .tts-item { display: flex; align-items: center; gap: 8px; }
 .tts-label { font-size: 13px; color: var(--el-text-color-secondary); min-width: 60px; flex-shrink: 0; }
 .tts-val { font-size: 13px; color: var(--el-text-color-regular); }
+.quick-link { color: var(--el-color-primary) !important; text-decoration: underline !important; }
+.quick-link:hover { color: var(--el-color-primary) !important; text-decoration: underline !important; }
 </style>

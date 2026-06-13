@@ -105,11 +105,14 @@ func (h *Handler) Chat(c *gin.Context) {
 func (h *Handler) ListModels(c *gin.Context) {
 	models, err := h.service.ListModels()
 	if err != nil { util.ErrorResponse(c, response.InternalError, "查询失败", nil); return }
-	for i := range models {
-		models[i].HasAPIKey = models[i].APIKey != ""
-		models[i].APIKey = ""
+	filtered := make([]ModelConfig, 0, len(models))
+	for _, m := range models {
+		if m.APIType == "doubao-vision" { continue }
+		m.HasAPIKey = m.APIKey != ""
+		m.APIKey = ""
+		filtered = append(filtered, m)
 	}
-	util.SuccessResponse(c, models)
+	util.SuccessResponse(c, filtered)
 }
 
 func (h *Handler) CreateModel(c *gin.Context) {

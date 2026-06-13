@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/tts"
@@ -48,6 +49,7 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
+		vision.RegisterVisionRouter(apiGroup, ctx)
 	}
 
 	r.Static("/audio", "./data/tts_cache")

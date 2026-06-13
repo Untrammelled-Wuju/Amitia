@@ -1,8 +1,6 @@
 package vision
 
-import (
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 type Repository interface {
 	List() ([]VisionConfig, error)
@@ -14,13 +12,9 @@ type Repository interface {
 	GetActive() (*VisionConfig, error)
 }
 
-type repository struct {
-	db *gorm.DB
-}
+type repository struct{ db *gorm.DB }
 
-func NewRepository(db *gorm.DB) Repository {
-	return &repository{db: db}
-}
+func NewRepository(db *gorm.DB) Repository { return &repository{db: db} }
 
 func (r *repository) List() ([]VisionConfig, error) {
 	var configs []VisionConfig
@@ -35,17 +29,13 @@ func (r *repository) GetByID(id int) (*VisionConfig, error) {
 	return &cfg, err
 }
 
-func (r *repository) Create(cfg *VisionConfig) error {
-	return r.db.Create(cfg).Error
-}
+func (r *repository) Create(cfg *VisionConfig) error { return r.db.Create(cfg).Error }
 
 func (r *repository) Update(id int, updates map[string]interface{}) error {
 	return r.db.Model(&VisionConfig{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *repository) Delete(id int) error {
-	return r.db.Where("id = ?", id).Delete(&VisionConfig{}).Error
-}
+func (r *repository) Delete(id int) error { return r.db.Where("id = ?", id).Delete(&VisionConfig{}).Error }
 
 func (r *repository) Activate(id int) error {
 	r.db.Model(&VisionConfig{}).Where("is_active = 1").Update("is_active", 0)
