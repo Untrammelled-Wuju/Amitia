@@ -1,0 +1,69 @@
+*** Begin Patch
+*** Update File: front/src/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue
+@@       </template>
+
+-      <div v-if="statusData" class="status-grid">
+-        <div class="status-card" :class="statusData.core">
+-          <div class="sc-label">Core 服务</div>
+-          <el-tag :type="statusData.core === 'running' ? 'success' : 'danger'" size="small">{{ statusData.core === 'running' ? '运行中' : '已停止' }}</el-tag>
+-          <div class="sc-detail">Uptime: {{ formatDuration(statusData?.uptime ?? 0) }}</div>
+-        </div>
+-
+-        <div class="status-card" :class="statusData.bridge">
+-          <div class="sc-label">Bridge 服务</div>
+-          <el-tag :type="statusData.bridge === 'running' ? 'success' : statusData.bridge === 'stopped' ? 'warning' : 'info'" size="small">
+-            {{ statusData.bridge === 'running' ? '运行中' : statusData.bridge === 'stopped' ? '已停止' : '未知' }}
+-          </el-tag>
+-          <div class="sc-detail">端口: {{ (statusData?.portStatus?.port ?? "未知") ?? '未知' }}</div>
+-        </div>
+-
+-        <div class="status-card" :class="statusData.database">
+-          <div class="sc-label">数据库</div>
+-          <el-tag :type="statusData.database === 'ok' ? 'success' : 'danger'" size="small">{{ statusData.database === 'ok' ? '正常' : '异常' }}</el-tag>
+-        </div>
+-
+-        <div class="status-card" :class="statusData.model">
+-          <div class="sc-label">模型配置</div>
+-          <el-tag :type="statusData.model === 'configured' ? 'success' : 'warning'" size="small">
+-            {{ statusData.model === 'configured' ? '已配置' : statusData.model === 'not_configured' ? '未配置' : '未知' }}
+-          </el-tag>
+-        </div>
+-
+-        <div class="status-card">
+-          <div class="sc-label">磁盘空间</div>
+-          <div class="sc-detail">
+-            可用: <strong>{{ statusData?.disk?.free ?? 0 }} {{ statusData?.disk?.unit ?? 'GB' }}</strong>
+-            / 总计: {{ statusData?.disk?.total ?? 0 }} {{ statusData?.disk?.unit ?? 'GB' }}
+-          </div>
+-        </div>
+-
+-        <div class="status-card">
+-          <div class="sc-label">数据目录</div>
+-          <el-tag :type="statusData.dataDirWritable ? 'success' : 'danger'" size="small">
+-            {{ statusData.dataDirWritable ? '可读写' : '不可写' }}
+-          </el-tag>
+-        </div>
+-      </div>
++      <div v-if="statusData" class="status-simple">
++        <div class="ss-overall">
++          <span class="ss-label">系统状态</span>
++          <el-tag :type="statusData.status === 'healthy' ? 'success' : 'warning'" size="large">
++            {{ statusData.status === 'healthy' ? '健康' : '部分异常' }}
++          </el-tag>
++          <span class="ss-time" v-if="statusData.lastCheck">上次检查: {{ statusData.lastCheck }}</span>
++        </div>
++        <div v-if="statusData.issues && statusData.issues.length > 0" class="ss-issues">
++          <div class="ss-issues-title">
++            <el-icon><WarningFilled /></el-icon> 发现问题 ({{ statusData.issues.length }})
++          </div>
++          <div v-for="(issue, idx) in statusData.issues" :key="idx" class="ss-issue-item">
++            <span class="ssi-type">{{ issue.type }}</span>
++            <span class="ssi-msg">{{ issue.msg }}</span>
++          </div>
++        </div>
++        <div v-else class="ss-no-issues">
++          <el-icon><CircleCheck /></el-icon> 未发现问题
++        </div>
++      </div>
+     </el-card>
+*** End Patch

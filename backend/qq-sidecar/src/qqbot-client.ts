@@ -19,6 +19,7 @@ export interface QQMessage {
   text: string
   groupId?: string
   createdAt: number
+  isVoice?: boolean
 }
 
 export type MessageHandler = (msg: QQMessage) => Promise<string | void>
@@ -278,11 +279,13 @@ export class QQBotClient {
 
       case "AT_MESSAGE_CREATE":
       case "GROUP_AT_MESSAGE_CREATE":
+        this.debugLog(`[QQBot][RAW-DISPATCH] ${eventType} 原始数据:` + JSON.stringify(data).substring(0, 2000))
         this.handleGroupMessage(data)
         break
 
       case "C2C_MESSAGE_CREATE":
       case "DIRECT_MESSAGE_CREATE":
+        this.debugLog(`[QQBot][RAW-DISPATCH] ${eventType} 原始数据:` + JSON.stringify(data).substring(0, 2000))
         this.handleDirectMessage(data)
         break
 
@@ -293,56 +296,98 @@ export class QQBotClient {
   }
 
   private handleGroupMessage(data: any): void {
-    const content = this.extractContent(data)
-    if (!content) return
+    const extracted = this.extractContent(data)
+    const text = extracted.text
+    const isVoice = extracted.isVoice
+    if (!text && !isVoice) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
       toUserId: this.accountId,
       messageId: data?.id || "",
-      text: content,
+      text: text || (isVoice ? "[语音]" : ""),
       groupId: data?.group_id || data?.guild_id || "",
       createdAt: Date.now(),
+      isVoice: isVoice,
     }
 
     this._messageCount++
-    console.log(`[QQBot][群:${msg.groupId}] ${msg.fromUserId}: ${msg.text.substring(0, 80)}`)
+    const preview = msg.text.substring(0, 80)
+    console.log(`[QQBot][群:${msg.groupId}] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (语音)" : ""}`)
     this.notifyHandlers(msg)
   }
 
   private handleDirectMessage(data: any): void {
-    const content = this.extractContent(data)
-    if (!content) return
+    const extracted = this.extractContent(data)
+    const text = extracted.text
+    const isVoice = extracted.isVoice
+    if (!text && !isVoice) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
       toUserId: this.accountId,
       messageId: data?.id || "",
-      text: content,
+      text: text || (isVoice ? "[语音]" : ""),
       createdAt: Date.now(),
+      isVoice: isVoice,
     }
 
     this._messageCount++
-    console.log(`[QQBot][私聊] ${msg.fromUserId}: ${msg.text.substring(0, 80)}`)
+    const preview = msg.text.substring(0, 80)
+    console.log(`[QQBot][私聊] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (语音)" : ""}`)
     this.notifyHandlers(msg)
   }
 
-  private extractContent(data: any): string {
-    if (typeof data?.content === "string") return data.content.trim()
+  private extractContent(data: any): { text: string; isVoice: boolean } {
+    const rawDataId = data?.id || "unknown"
+    this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content类型=" + typeof data?.content + " isArray=" + Array.isArray(data?.content) + " attachments=" + (data?.attachments ? JSON.stringify(data.attachments).substring(0, 500) : "无"))
+    if (typeof data.content === "object" && !Array.isArray(data.content)) {
+      this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content对象keys=" + Object.keys(data.content).join(",") + " content=" + JSON.stringify(data.content).substring(0, 1000))
+    }
+    if (Array.isArray(data.content)) {
+      this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content数组长度=" + data.content.length + " types=" + data.content.map((c:any) => c.type || c.msg_type || "?").join(","))
+    }
+    if (typeof data?.content === "string") {
+      const text = data.content.trim()
+      if (text) return { text, isVoice: false }
+    }
 
     if (data?.content && typeof data.content === "object") {
       if (Array.isArray(data.content)) {
-        return data.content
-          .filter((s: any) => s.type === "text")
-          .map((s: any) => s.text || "")
-          .join("")
+        const textParts = data.content
+          .filter((s: any) => s.type === "text" && s.text)
+          .map((s: any) => s.text)
+        const hasVoice = data.content.some((s: any) =>
+          s.type === "voice" || s.type === "audio" || s.msg_type === "voice" || s.msg_type === "audio"
+        )
+        if (textParts.length > 0) return { text: textParts.join(""), isVoice: hasVoice }
+        if (hasVoice) { this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! content数组详情:" + JSON.stringify(data.content).substring(0, 2000)); return { text: "[语音]", isVoice: true } }
+        return { text: "", isVoice: false }
       }
-      if (typeof data.content.text === "string") return data.content.text.trim()
+      if (typeof data.content.text === "string") {
+        const text = data.content.text.trim()
+        if (text) return { text, isVoice: false }
+      }
     }
 
-    return ""
-  }
+    const hasAttachmentsVoice = data?.attachments?.some((a: any) =>
+      a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice"
+    )
+    if (hasAttachmentsVoice) {
+      const voiceAtt = data.attachments.find((a: any) =>
+        a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice"
+      )
+      const asrText = voiceAtt?.asr_refer_text || ""
+      this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! attachments详情:" + JSON.stringify(data.attachments).substring(0, 2000))
+      this.debugLog("[QQBot][VOICE-ASR] msgId=" + rawDataId + " QQ语音识别文本: " + asrText)
+      if (asrText) {
+        return { text: asrText, isVoice: true }
+      }
+      return { text: "[语音]", isVoice: true }
+    }
 
+    return { text: "", isVoice: false }
+  }
   private notifyHandlers(msg: QQMessage): void {
     for (const handler of this.handlers) {
       try {
@@ -399,13 +444,14 @@ export class QQBotClient {
     }, "发送私聊")
   }
 
-  private async _sendWithRetry(sendFn: (token: string) => Promise<void>, label: string): Promise<void> {
+  private async _sendWithRetry<T>(sendFn: (token: string) => Promise<T>, label: string): Promise<T> {
     let token = this.accessToken
     if (!token) {
       token = await this.getAccessToken()
     }
     try {
-      await sendFn(token)
+      const result = await sendFn(token)
+      return result
     } catch (err: any) {
       const msg = err?.message || String(err)
       if (msg.includes("token not exist or expire") || msg.includes("11244")) {
@@ -413,15 +459,119 @@ export class QQBotClient {
         this.accessToken = ""
         this.accessTokenExpiry = 0
         token = await this.getAccessToken()
-        await sendFn(token)
+        const retryResult = await sendFn(token)
         console.log(`[QQBot] ${label}重试成功`)
+        return retryResult
       } else {
         throw err
       }
     }
   }
 
+  async uploadGroupMedia(groupId: string, fileBuffer: Buffer, fileName: string, fileType: number): Promise<string> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const b64 = fileBuffer.toString("base64")
+      this.debugLog("[QQBot][UPLOAD-JSON] groupId=" + groupId + " fileType=" + fileType + " b64Len=" + b64.length)
+      const url = this.apiBase + "/v2/groups/" + groupId + "/files"
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": "QQBot " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ file_type: fileType, file_data: b64, srv_send_msg: false }),
+      })
+      if (!resp.ok) {
+        const errText = await resp.text()
+        this.debugLog("[QQBot][UPLOAD-ERR] 上传群文件失败 status=" + resp.status + " body=" + errText.substring(0, 500))
+        throw new Error("上传群文件失败 (" + resp.status + "): " + errText)
+      }
+      const data = await resp.json() as { file_info?: string; file_uuid?: string }
+      if (!data.file_info) throw new Error("上传成功但未返回file_info")
+      return data.file_info
+    }, "上传群媒体")
+  }
+
+  async uploadPrivateMedia(userId: string, fileBuffer: Buffer, fileName: string, fileType: number): Promise<string> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const b64 = fileBuffer.toString("base64")
+      this.debugLog("[QQBot][UPLOAD-JSON] userId=" + userId + " fileType=" + fileType + " b64Len=" + b64.length)
+      const url = this.apiBase + "/v2/users/" + userId + "/files"
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": "QQBot " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ file_type: fileType, file_data: b64, srv_send_msg: false }),
+      })
+      if (!resp.ok) {
+        const errText = await resp.text()
+        this.debugLog("[QQBot][UPLOAD-ERR] 上传私聊文件失败 status=" + resp.status + " body=" + errText.substring(0, 500))
+        throw new Error("上传私聊文件失败 (" + resp.status + "): " + errText)
+      }
+      const data = await resp.json() as { file_info?: string; file_uuid?: string }
+      if (!data.file_info) throw new Error("上传成功但未返回file_info")
+      return data.file_info
+    }, "上传私聊媒体")
+  }
+
+
+  async sendGroupVoice(groupId: string, fileInfo: string): Promise<void> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const url = this.apiBase + "/v2/groups/" + groupId + "/messages"
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": "QQBot " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          msg_type: 7,
+          media: { file_info: fileInfo },
+          msg_id: "",
+          msg_seq: Math.floor(Date.now() / 1000),
+        })
+      })
+      if (!resp.ok) {
+        const errText = await resp.text()
+        throw new Error("发送群语音失败 (" + resp.status + "): " + errText)
+      }
+      console.log("[QQBot] 发送群语音: ->" + groupId)
+    }, "发送群语音")
+  }
+
+  async sendPrivateVoice(userId: string, fileInfo: string): Promise<void> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const url = this.apiBase + "/v2/users/" + userId + "/messages"
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": "QQBot " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          msg_type: 7,
+          media: { file_info: fileInfo },
+          msg_id: "",
+          msg_seq: Math.floor(Date.now() / 1000),
+        })
+      })
+      if (!resp.ok) {
+        const errText = await resp.text()
+        throw new Error("发送私聊语音失败 (" + resp.status + "): " + errText)
+      }
+      console.log("[QQBot] 发送私聊语音: ->" + userId)
+    }, "发送私聊语音")
+  }
+
+
   disconnect(): void {
+
     console.log("[QQBot] 断开连接")
     this.loginStatus = "disconnected"
     this.stopHeartbeat()
@@ -466,4 +616,3 @@ export class QQBotClient {
     }, delay)
   }
 }
-

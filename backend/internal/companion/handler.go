@@ -101,3 +101,6 @@ func (h *Handler) ProcessDelayedRepliesDebug(c *gin.Context) { util.SuccessRespo
 func (h *Handler) GetRuleLogs(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuleLogs()) }
 func (h *Handler) RegenerateSchedule(c *gin.Context) { util.SuccessResponse(c, h.service.RegenerateSchedule()) }
 func (h *Handler) RegenerateTimeline(c *gin.Context) { util.SuccessResponse(c, h.service.RegenerateTimeline()) }
+
+func (h *Handler) TriggerDailyRegeneration(c *gin.Context) { util.SuccessResponse(c, h.service.TriggerDailyRegeneration()) }
+

@@ -1,12 +1,13 @@
 package companion
 
+import "time"
 
 
 type SleepSetting struct {
-	ID        int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	BedTime   string    `gorm:"column:bed_time;default:23:00" json:"bedTime"`
-	WakeTime  string    `gorm:"column:wake_time;default:07:00" json:"wakeTime"`
-	Enabled   int       `gorm:"column:enabled;default:1" json:"enabled"`
+	ID        int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	BedTime   string `gorm:"column:bed_time;default:23:00" json:"bedTime"`
+	WakeTime  string `gorm:"column:wake_time;default:07:00" json:"wakeTime"`
+	Enabled   int    `gorm:"column:enabled;default:1" json:"enabled"`
 	CreatedAt string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -14,15 +15,15 @@ type SleepSetting struct {
 func (SleepSetting) TableName() string { return "sleep_settings" }
 
 type FixedEvent struct {
-	ID          int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"column:name;not null" json:"name"`
-	Description string    `gorm:"column:description" json:"description"`
-	WeekDay     int       `gorm:"column:week_day;default:-1" json:"weekDay"`
-	StartTime   string    `gorm:"column:start_time" json:"startTime"`
-	EndTime     string    `gorm:"column:end_time" json:"endTime"`
-	EventType   string    `gorm:"column:event_type;default:custom" json:"eventType"`
-	Location    string    `gorm:"column:location" json:"location"`
-	Enabled     int       `gorm:"column:enabled;default:1" json:"enabled"`
+	ID          int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name        string `gorm:"column:name;not null" json:"name"`
+	Description string `gorm:"column:description" json:"description"`
+	WeekDay     int    `gorm:"column:week_day;default:-1" json:"weekDay"`
+	StartTime   string `gorm:"column:start_time" json:"startTime"`
+	EndTime     string `gorm:"column:end_time" json:"endTime"`
+	EventType   string `gorm:"column:event_type;default:custom" json:"eventType"`
+	Location    string `gorm:"column:location" json:"location"`
+	Enabled     int    `gorm:"column:enabled;default:1" json:"enabled"`
 	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -30,15 +31,15 @@ type FixedEvent struct {
 func (FixedEvent) TableName() string { return "fixed_events" }
 
 type SpecialEvent struct {
-	ID          int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"column:name;not null" json:"name"`
-	Description string    `gorm:"column:description" json:"description"`
-	EventDate   string    `gorm:"column:event_date" json:"eventDate"`
-	StartTime   string    `gorm:"column:start_time" json:"startTime"`
-	EndTime     string    `gorm:"column:end_time" json:"endTime"`
-	EventType   string    `gorm:"column:event_type;default:custom" json:"eventType"`
-	Location    string    `gorm:"column:location" json:"location"`
-	Enabled     int       `gorm:"column:enabled;default:1" json:"enabled"`
+	ID          int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name        string `gorm:"column:name;not null" json:"name"`
+	Description string `gorm:"column:description" json:"description"`
+	EventDate   string `gorm:"column:event_date" json:"eventDate"`
+	StartTime   string `gorm:"column:start_time" json:"startTime"`
+	EndTime     string `gorm:"column:end_time" json:"endTime"`
+	EventType   string `gorm:"column:event_type;default:custom" json:"eventType"`
+	Location    string `gorm:"column:location" json:"location"`
+	Enabled     int    `gorm:"column:enabled;default:1" json:"enabled"`
 	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -46,12 +47,12 @@ type SpecialEvent struct {
 func (SpecialEvent) TableName() string { return "special_events" }
 
 type ClassAdjustment struct {
-	ID          int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Date        string    `gorm:"column:date" json:"date"`
-	SlotIndex   int       `gorm:"column:slot_index" json:"slotIndex"`
-	ClassName   string    `gorm:"column:class_name" json:"className"`
-	AdjustType  string    `gorm:"column:adjust_type;default:swap" json:"adjustType"`
-	Description string    `gorm:"column:description" json:"description"`
+	ID          int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Date        string `gorm:"column:date" json:"date"`
+	SlotIndex   int    `gorm:"column:slot_index" json:"slotIndex"`
+	ClassName   string `gorm:"column:class_name" json:"className"`
+	AdjustType  string `gorm:"column:adjust_type;default:swap" json:"adjustType"`
+	Description string `gorm:"column:description" json:"description"`
 	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -59,22 +60,22 @@ type ClassAdjustment struct {
 func (ClassAdjustment) TableName() string { return "class_adjustments" }
 
 type LifestyleTendency struct {
-	ID         int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Activity   string    `gorm:"column:activity" json:"activity"`
-	Intensity  int       `gorm:"column:intensity;default:50" json:"intensity"`
-	Schedule   string    `gorm:"column:schedule" json:"schedule"`
-	Preference string    `gorm:"column:preference" json:"preference"`
+	ID         int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Activity   string `gorm:"column:activity" json:"activity"`
+	Intensity  int    `gorm:"column:intensity;default:50" json:"intensity"`
+	Schedule   string `gorm:"column:schedule" json:"schedule"`
+	Preference string `gorm:"column:preference" json:"preference"`
 	UpdatedAt  string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (LifestyleTendency) TableName() string { return "lifestyle_tendencies" }
 
 type WorkProfile struct {
-	ID          int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	JobTitle    string    `gorm:"column:job_title" json:"jobTitle"`
-	WorkHours   string    `gorm:"column:work_hours" json:"workHours"`
-	WorkDays    string    `gorm:"column:work_days" json:"workDays"`
-	Description string    `gorm:"column:description" json:"description"`
+	ID          int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	JobTitle    string `gorm:"column:job_title" json:"jobTitle"`
+	WorkHours   string `gorm:"column:work_hours" json:"workHours"`
+	WorkDays    string `gorm:"column:work_days" json:"workDays"`
+	Description string `gorm:"column:description" json:"description"`
 	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
@@ -82,9 +83,12 @@ func (WorkProfile) TableName() string { return "work_profiles" }
 
 type ActiveMessageSetting struct {
 	Enabled     int    `gorm:"column:enabled;default:1" json:"enabled"`
-	MinInterval int    `gorm:"column:min_interval;default:60" json:"minInterval"`
-	MaxPerDay   int    `gorm:"column:max_per_day;default:6" json:"maxPerDay"`
-	Channel     string `gorm:"column:channel;default:all" json:"channel"`
+	MinInterval   int    `gorm:"column:min_interval;default:60" json:"minInterval"`
+	QuietStart    string `gorm:"column:quiet_start;default:23:00" json:"quietStart"`
+	QuietEnd      string `gorm:"column:quiet_end;default:07:00" json:"quietEnd"`
+	MaxPerDay     int    `gorm:"column:max_per_day;default:6" json:"maxPerDay"`
+	MaxDailyCalls int    `gorm:"column:max_daily_calls;default:10" json:"maxDailyCalls"`
+	Channel       string `gorm:"column:channel;default:all" json:"channel"`
 }
 
 type ScheduleSlot struct {
@@ -93,4 +97,43 @@ type ScheduleSlot struct {
 	EndTime   string `json:"endTime"`
 	Name      string `json:"name"`
 	Type      string `json:"type"`
+}
+
+type TodaySchedule struct {
+	WakeTime     time.Time  `json:"wakeTime"`
+	LunchTime    time.Time  `json:"lunchTime"`
+	DinnerTime   time.Time  `json:"dinnerTime"`
+	HasNap       bool       `json:"hasNap"`
+	NapStartTime *time.Time `json:"napStartTime,omitempty"`
+	NapEndTime   *time.Time `json:"napEndTime,omitempty"`
+	SleepTime    time.Time  `json:"sleepTime"`
+	IsRestDay    bool       `json:"isRestDay"`
+}
+
+type TimelineEntry struct {
+	StartTime  time.Time `json:"startTime"`
+	EndTime    time.Time `json:"endTime"`
+	State      string    `json:"state"`
+	SourceType string    `json:"sourceType"`
+	Priority   int       `json:"priority"`
+	Reason     string    `json:"reason"`
+}
+
+type ShareTask struct {
+	Type    string    `json:"type"`
+	DueTime time.Time `json:"dueTime"`
+	Prompt  string    `json:"prompt"`
+	Reason  string    `json:"reason"`
+}
+
+type ScheduleGenerateResult struct {
+	Generated         bool        `json:"generated"`
+	Tasks             []ShareTask `json:"tasks"`
+	TaskCount         int         `json:"taskCount"`
+	EstimatedLLMCalls int         `json:"estimatedLLMCalls"`
+}
+
+type ShareHistory struct {
+	RecentTopics []string `json:"recentTopics"`
+	LastShareAt  string   `json:"lastShareAt"`
 }

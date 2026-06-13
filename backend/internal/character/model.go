@@ -1,4 +1,4 @@
-package character
+﻿package character
 
 
 
@@ -33,6 +33,16 @@ type Character struct {
 	UserAddressingStyle *string   `gorm:"column:user_addressing_style" json:"userAddressingStyle"`
 	GenderExpression    int       `gorm:"column:gender_expression;default:30" json:"genderExpression"`
 	LifeIdentity        string    `gorm:"column:life_identity;default:CUSTOM" json:"lifeIdentity"`
+	VoiceConfigID       string    `gorm:"column:voice_config_id" json:"voiceConfigId"`
+	VoiceType           string    `gorm:"column:voice_type;default:zh_female_vv_uranus_bigtts" json:"voiceType"`
+	VoiceSpeed          float64   `gorm:"column:voice_speed;default:1.0" json:"voiceSpeed"`
+	VoicePitch          float64   `gorm:"column:voice_pitch;default:1.0" json:"voicePitch"`
+	VoiceVolume         float64   `gorm:"column:voice_volume;default:1.0" json:"voiceVolume"`
+	CustomVoiceID       string    `gorm:"column:custom_voice_id" json:"customVoiceId"`
+	VoiceMode           string    `gorm:"column:voice_mode;default:preset" json:"voiceMode"`
+	Emotion             string    `gorm:"column:emotion" json:"emotion"`
+	EmotionScale        int       `gorm:"column:emotion_scale;default:0" json:"emotionScale"`
+	SilenceDuration     int       `gorm:"column:silence_duration;default:0" json:"silenceDuration"`
 }
 
 func (Character) TableName() string { return "characters" }
@@ -53,6 +63,11 @@ func (CharacterTemplate) TableName() string { return "character_templates" }
 
 
 type CreateCharacterRequest struct {
+	VoiceType          string  `json:"voiceType"`
+	VoiceSpeed         float64 `json:"voiceSpeed"`
+	VoicePitch         float64 `json:"voicePitch"`
+	VoiceVolume        float64 `json:"voiceVolume"`
+	CustomVoiceID      string  `json:"customVoiceId"`
 	IsDefault          bool    `json:"isDefault"`
 	Name              string `json:"name"`
 	Identity          string `json:"identity"`
@@ -87,6 +102,16 @@ type UpdateCharacterRequest struct {
 	SelfReference     *string `json:"selfReference"`
 	GenderExpression  *int    `json:"genderExpression"`
 	LifeIdentity      *string `json:"lifeIdentity"`
+	VoiceConfigID      *string  `json:"voiceConfigId"`
+	VoiceType          *string  `json:"voiceType"`
+	VoiceSpeed         *float64 `json:"voiceSpeed"`
+	VoicePitch         *float64 `json:"voicePitch"`
+	VoiceVolume        *float64 `json:"voiceVolume"`
+	CustomVoiceID      *string  `json:"customVoiceId"`
+	VoiceMode          *string  `json:"voiceMode"`
+	Emotion            *string  `json:"emotion"`
+	EmotionScale       *int     `json:"emotionScale"`
+	SilenceDuration    *int     `json:"silenceDuration"`
 	PersonalityConfig *string `json:"personalityConfig"`
 	ChatStyleConfig   *string `json:"chatStyleConfig"`
 	SceneRules        *string `json:"sceneRules"`

@@ -10,7 +10,6 @@
       <el-button type="primary" text @click="onNewConversation" style="margin-left: 8px">新对话</el-button>
     </div>
 
-    <!-- 回复时机状态提示 -->
     <div v-if="timingStatus && timingStatus !== 'none'" class="timing-status" :class="'timing-' + timingStatus">
       <span class="timing-dot"></span>
       <span class="timing-text">{{ timingStatusText }}</span>
@@ -23,16 +22,28 @@
       <ChatPanel
         :messages="displayMessages"
         :loading="loading"
+        :sending="loading"
+        :call-active="callActive"
         :character-name="selectedCharacter.name"
         :character-avatar="selectedCharacter.avatar"
         @send="onSend"
+        @toggle-call="toggleCall"
       />
     </div>
     <div class="chat-empty" v-else>
       <el-empty description="请先选择或创建一个角色" />
     </div>
 
-    <!-- 底部操作 -->
+    <RealtimeCallWidget
+      v-if="callActive && showRealtimeCall"
+      :visible="callActive"
+      :api-key="ttsApiKey"
+      :voice-type="callVoiceType"
+      :resource-id="ttsResourceId"
+      :conversation-id="currentConversationId"
+      @state-change="onCallStateChange"
+    />
+
     <div v-if="selectedCharacter && timingStatus && timingStatus !== 'none'" class="timing-actions">
       <el-button size="small" @click="onHoldReply" :disabled="timingStatus === 'paused'">先别回</el-button>
       <el-button size="small" type="primary" @click="onForceReply">现在回复</el-button>
@@ -45,6 +56,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import axios from "axios"
 import type { Character, Conversation, Message, ApiResponse } from "@/types"
 import { ChatPanel } from "../../ui-index"
+import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import { ElMessage } from "element-plus"
 
 const API = "http://127.0.0.1:8899"
@@ -55,15 +67,34 @@ const messages = ref<Message[]>([])
 const selectedCharacterId = ref("")
 const currentConversationId = ref("")
 const loading = ref(false)
+const callActive = ref(false)
 
-// Reply timing state
 const timingStatus = ref<string | null>(null)
 const timingBufferId = ref<number | null>(null)
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 let eventSource: EventSource | null = null
 
+const ttsApiKey = ref("")
+const ttsResourceId = ref("volc.speech.dialog")
+const callVoiceType = ref("zh_female_vv_jupiter_bigtts")
+
 const selectedCharacter = computed(() => characters.value.find(c => c.id === selectedCharacterId.value))
-const filteredConversations = computed(() => conversations.value.filter(c => c.characterId === selectedCharacterId.value && c.channel !== "wechat" && c.channel !== "qq"))
+const currentConversation = computed(() => conversations.value.find(c => c.id === currentConversationId.value))
+
+const filteredConversations = computed(() =>
+  conversations.value.filter(c =>
+    c.characterId === selectedCharacterId.value &&
+    c.channel !== "wechat" &&
+    c.channel !== "qq"
+  )
+)
+
+const showRealtimeCall = computed(() => {
+  if (!selectedCharacter.value || !currentConversationId.value) return false
+  const conv = currentConversation.value
+  if (!conv) return false
+  return conv.channel !== "wechat" && conv.channel !== "qq"
+})
 
 const timingStatusText = computed(() => {
   const map: Record<string, string> = {
@@ -75,7 +106,6 @@ const timingStatusText = computed(() => {
   return map[timingStatus.value || ""] || ""
 })
 
-// Use messages + placeholder for assistant (if loading)
 const displayMessages = computed(() => {
   return messages.value
 })
@@ -83,6 +113,7 @@ const displayMessages = computed(() => {
 onMounted(async () => {
   const { data: c } = await axios.get<ApiResponse<Character[]>>(API + "/api/characters")
   if (c.code === 200 && c.data) characters.value = c.data
+  fetchTtsConfig()
 })
 
 onUnmounted(() => {
@@ -90,29 +121,79 @@ onUnmounted(() => {
   disconnectSSE()
 })
 
+async function fetchTtsConfig() {
+  try {
+    const { data } = await axios.get<ApiResponse<any[]>>("/api/tts/configs")
+    const configs = (data as any)?.data || data || [] ; const arr = Array.isArray(configs) ? configs : (configs?.data || []) ; const cfg = arr.find((c: any) => c.isActive) || arr[0]
+    
+    if (cfg) {
+      const full = await axios.get<ApiResponse<any>>("/api/tts/configs/" + cfg.id)
+      const fullData = (full.data as any)?.data || full.data || {} ; ttsApiKey.value = fullData?.apiKey || ""
+      ttsResourceId.value = fullData?.resourceId || "volc.speech.dialog"
+  } catch (e: any) { console.error("fetchTtsConfig failed", e) }
+}
+
 async function onCharacterChange() {
   currentConversationId.value = ""
   messages.value = []
   timingStatus.value = null
+  callActive.value = false
   if (!selectedCharacterId.value) return
   const { data } = await axios.get<ApiResponse<Conversation[]>>(API + "/api/conversations")
   if (data.code === 200 && data.data) conversations.value = data.data
+  updateCallVoiceType()
 }
 
 async function onConversationChange() {
-  if (!currentConversationId.value) { messages.value = []; timingStatus.value = null; disconnectSSE(); return }
+  if (!currentConversationId.value) { messages.value = []; timingStatus.value = null; disconnectSSE(); callActive.value = false; return }
   const { data } = await axios.get<ApiResponse<Message[]>>(API + "/api/conversations/" + currentConversationId.value + "/messages")
   if (data.code === 200 && data.data) messages.value = data.data
-  // Check timing status
   await checkTimingStatus()
   connectSSE()
+  updateCallVoiceType()
 }
 
 function onNewConversation() {
   currentConversationId.value = ""
   messages.value = []
   timingStatus.value = null
+  callActive.value = false
   stopPolling()
+}
+
+async function toggleCall() {
+  if (!showRealtimeCall.value) {
+    ElMessage.warning("当前对话不支持语音通话")
+    return
+  }
+  if (callActive.value) {
+    callActive.value = false
+  } else {
+    if (!ttsApiKey.value) { await fetchTtsConfig() }
+    if (!ttsApiKey.value) { ElMessage.warning("请先在模型配置中设置语音API Key"); return }
+
+
+    callActive.value = true
+  }
+}
+
+function updateCallVoiceType() {
+  const char = selectedCharacter.value
+  if (char?.voiceType) {
+    callVoiceType.value = char.voiceType
+  } else if (char?.customVoiceId) {
+    callVoiceType.value = char.customVoiceId
+  }
+}
+
+function onCallStateChange(state: string) {
+  if (state === "idle") {
+    callActive.value = false
+  }
+  if (state === "connected") {
+    timingStatus.value = null
+    stopPolling()
+  }
 }
 
 async function onSend(text: string) {
@@ -136,7 +217,6 @@ async function onSend(text: string) {
         connectSSE()
       }
 
-      // Add user message to display
       if (data.data.userMessage) {
         messages.value = [...messages.value, data.data.userMessage]
       }
@@ -144,7 +224,6 @@ async function onSend(text: string) {
       timingStatus.value = data.data.status || "waiting"
       timingBufferId.value = data.data.bufferId
 
-      // Start polling for new messages
       startPolling()
     } else {
       ElMessage.error(data.message || "发送失败")
@@ -198,7 +277,6 @@ function connectSSE() {
     try {
       const data = JSON.parse(event.data)
       if (data.type === "new_message" && data.message) {
-        // Append new message if not already in list
         const exists = messages.value.some(m => m.id === data.message.id)
         if (!exists) {
           messages.value = [...messages.value, data.message]
@@ -208,7 +286,6 @@ function connectSSE() {
   }
   eventSource.onerror = () => {
     disconnectSSE()
-    // Reconnect after 3 seconds
     setTimeout(() => { if (currentConversationId.value) connectSSE() }, 3000)
   }
 }
@@ -223,28 +300,24 @@ function disconnectSSE() {
 async function pollForMessages() {
   if (!currentConversationId.value) return
   try {
-    const lastMsgId = messages.value.length > 0 ? messages.value[messages.value.length - 1].id : null
     const { data } = await axios.get<ApiResponse<Message[]>>(
       API + "/api/conversations/" + currentConversationId.value + "/messages"
     )
     if (data.code === 200 && data.data) {
       const newMsgs = data.data
-      if (newMsgs.length !== messages.value.length) {
-        messages.value = newMsgs
+      const existingIds = new Set(messages.value.map((m: Message) => m.id))
+      const added = newMsgs.filter((m: Message) => !existingIds.has(m.id))
+      if (added.length > 0) {
+        messages.value = [...messages.value, ...added]
       }
-      // Check if assistant replied (last message is assistant)
       const lastMsg = newMsgs[newMsgs.length - 1]
       if (lastMsg && lastMsg.role === "assistant") {
         timingStatus.value = "none"
         stopPolling()
       }
     }
-
-    // Also update timing status
     await checkTimingStatus()
-  } catch {
-    // polling error, ignore
-  }
+  } catch {}
 }
 
 async function onForceReply() {

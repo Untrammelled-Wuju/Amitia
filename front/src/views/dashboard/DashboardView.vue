@@ -63,6 +63,14 @@
         </div>
       </div>
 
+      <div class="status-card" :class="qqClass">
+        <div class="sc-icon"><el-icon :size="22"><ChatDotSquare /></el-icon></div>
+        <div class="sc-body">
+          <div class="sc-label">QQ连接</div>
+          <div class="sc-value">{{ qqLabel }}</div>
+        </div>
+      </div>
+
       <div class="status-card" :class="runtimeHealth?.overall === 'ok' ? 'status-ok' : runtimeHealth?.overall === 'warning' ? 'status-warn' : 'status-off'">
         <div class="sc-icon"><el-icon :size="22"><CircleCheck /></el-icon></div>
         <div class="sc-body">
@@ -259,6 +267,10 @@
           <div class="qa-icon wechat"><el-icon :size="20"><Connection /></el-icon></div>
           <span>微信接入</span>
         </router-link>
+        <router-link to="/qq" class="qa-item">
+          <div class="qa-icon wechat"><el-icon :size="20"><ChatDotSquare /></el-icon></div>
+          <span>QQ接入</span>
+        </router-link>
         <router-link to="/model" class="qa-item">
           <div class="qa-icon model"><el-icon :size="20"><Cpu /></el-icon></div>
           <span>模型设置</span>
@@ -288,7 +300,7 @@
 import { ref, computed, onMounted } from "vue"
 import {
   Monitor, Cpu, Connection, CircleCheck, CircleClose,
-  Warning, QuestionFilled, ChatDotRound, UserFilled,
+  Warning, QuestionFilled, ChatDotRound, ChatDotSquare, UserFilled,
   Upload, Document, Setting, Refresh,
 } from "@element-plus/icons-vue"
 import { useApi } from "../../composables/useApi"
@@ -311,6 +323,19 @@ async function fetchCloudRisk() {
     const r = await get<any>("/api/wechat/cloud-check/risk-summary")
     cloudRisk.value = r?.data || r
   } catch { /* ignore */ }
+}
+
+
+async function fetchQQStatus() {
+  try {
+    const r = await get<any>("/api/qq/status")
+    const data = r?.data || r
+    if (data) {
+      health.value.qq = data.qqOnline || data.status === "online" ? "connected" : "disconnected"
+    }
+  } catch {
+    health.value.qq = "disconnected"
+  }
 }
 
 async function fetchAccessRisk() {
@@ -370,6 +395,8 @@ const modelClass = computed(() => health.value?.model === "configured" ? "status
 const modelName = ref("")
 const wechatLabel = computed(() => health.value?.wechat === "connected" ? "已连接" : "未连接")
 const wechatClass = computed(() => health.value?.wechat === "connected" ? "status-ok" : "status-off")
+const qqLabel = computed(() => health.value?.qq === "connected" ? "已连接" : "未连接")
+const qqClass = computed(() => health.value?.qq === "connected" ? "status-ok" : "status-off")
 
 // Diagnostics
 const diagResult = ref<any>(null)
@@ -432,7 +459,10 @@ const recentErrors = ref<any[]>([])
 const recentImports = ref<any[]>([])
 
 async function fetchHealth() {
-  try { health.value = await get<any>("/api/health") || {} } catch {}
+  try {
+    const data = await get<any>("/api/health") || {}
+    health.value = { ...health.value, ...data }
+  } catch {}
 }
 
 async function fetchModelInfo() {
@@ -562,6 +592,7 @@ onMounted(async () => {
     fetchFeedbackStats(),
     fetchAccessRisk(),
     fetchUsageOverview(),
+    fetchQQStatus(),
   ])
 })
 </script>

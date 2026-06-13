@@ -1,18 +1,18 @@
 <template>
   <div class="import-page">
-    <h2 class="page-title">Import Chat History</h2>
+    <h2 class="page-title">导入聊天记录</h2>
 
     <!-- Privacy notice -->
     <el-alert type="warning" :closable="true" show-icon style="margin-bottom:12px">
       <template #title>
-        Imported content may contain private info. Please remove verification codes, passwords, bank cards, and ID numbers before importing.
+        导入内容可能包含隐私信息，需自行移除验证码、密码、银行卡号和身份证号再导入。
       </template>
     </el-alert>
 
-    <!-- Step 1: Input -->
+    <!-- 步骤1: 输入 -->
     <el-card shadow="never" class="section-card">
       <template #header>
-        <span class="step-badge">1</span> Paste Chat History
+        <span class="step-badge">1</span> 粘贴聊天记录
       </template>
 
       <div class="input-area">
@@ -35,37 +35,37 @@ Hey there!"
         />
 
         <div class="input-options">
-          <el-input v-model="batchTitle" placeholder="Title (optional)" size="small" style="width:200px" />
+          <el-input v-model="batchTitle" placeholder="标题（可选）" size="small" style="width:200px" />
 
           <div class="format-picker">
-            <span class="fp-label">Format:</span>
+            <span class="fp-label">格式：</span>
             <el-radio-group v-model="parseFormat" size="small">
-              <el-radio-button value="auto">Auto</el-radio-button>
-              <el-radio-button value="standard">Standard</el-radio-button>
-              <el-radio-button value="timestamp">Timestamps</el-radio-button>
-              <el-radio-button value="multiline">Multi-line</el-radio-button>
-              <el-radio-button value="wechat">WeChat</el-radio-button>
+              <el-radio-button value="auto">自动</el-radio-button>
+              <el-radio-button value="standard">标准</el-radio-button>
+              <el-radio-button value="timestamp">时间戳</el-radio-button>
+              <el-radio-button value="multiline">多行</el-radio-button>
+              <el-radio-button value="wechat">微信</el-radio-button>
             </el-radio-group>
           </div>
         </div>
 
         <!-- Custom speaker names -->
         <el-collapse v-model="showSpeakerOptions" style="border:none">
-          <el-collapse-item title="Custom speaker name mapping" name="options">
+          <el-collapse-item title="自定义发言者名称映射" name="options">
             <div class="speaker-options">
               <div class="so-group">
-                <span class="so-label">User speakers (comma-separated):</span>
+                <span class="so-label">用户发言者（逗号分隔）：</span>
                 <el-input
                   v-model="userSpeakerInput"
-                  placeholder="e.g. Zhang San, Me, Myself"
+                  placeholder="例如：张三、我、自己"
                   size="small"
                 />
               </div>
               <div class="so-group">
-                <span class="so-label">AI speakers (comma-separated):</span>
+                <span class="so-label">AI 发言者（逗号分隔）：</span>
                 <el-input
                   v-model="assistantSpeakerInput"
-                  placeholder="e.g. AI, Li Si, Bot"
+                  placeholder="例如：AI、李四、Bot"
                   size="small"
                 />
               </div>
@@ -78,18 +78,18 @@ Hey there!"
             Parse
           </el-button>
           <el-upload :auto-upload="false" :show-file-list="false" :on-change="onFileChange" accept=".txt,.md">
-            <el-button :icon="Upload">Upload .txt / .md</el-button>
+            <el-button :icon="Upload">上传 .txt / .md</el-button>
           </el-upload>
         </div>
       </div>
     </el-card>
 
-    <!-- Step 2: Preview & Edit -->
+    <!-- 步骤2: 预览与编辑 -->
     <el-card shadow="never" class="section-card" v-if="parseResult">
       <template #header>
-        <span class="step-badge">2</span> Preview & Edit ({{ parseResult.items?.length || 0 }} messages)
+        <span class="step-badge">2</span> 预览与编辑（{{ parseResult.items?.length || 0 }} 条消息）
         <span class="detected-tag">
-          Detected: <el-tag size="small" type="info">{{ parseResult.detectedFormat || 'auto' }}</el-tag>
+          检测到： <el-tag size="small" type="info">{{ parseResult.detectedFormat || 'auto' }}</el-tag>
         </span>
       </template>
 
@@ -114,27 +114,27 @@ Hey there!"
         show-icon
         style="margin-bottom:8px"
       >
-        <template #title>High-risk sensitive data detected. Please review carefully before confirming.</template>
+        <template #title>检测到高风险敏感数据，确认前请仔细检查。</template>
       </el-alert>
 
       <!-- Editable table with confidence -->
       <el-table :data="editableItems" stripe size="small" max-height="400">
         <el-table-column prop="lineNo" label="#" width="50" />
-        <el-table-column label="Speaker" width="100">
+        <el-table-column label="发言者" width="100">
           <template #default="{row, $index}">
             <el-input v-model="editableItems[$index].speaker" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="Role" width="90">
+        <el-table-column label="角色" width="90">
           <template #default="{row, $index}">
             <el-select v-model="editableItems[$index].role" size="small">
-              <el-option label="User" value="user" />
+              <el-option label="用户" value="user" />
               <el-option label="AI" value="assistant" />
-              <el-option label="System" value="system" />
+              <el-option label="系统" value="system" />
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="Content">
+        <el-table-column label="内容">
           <template #default="{row, $index}">
             <el-input
               v-model="editableItems[$index].content"
@@ -143,7 +143,7 @@ Hey there!"
             />
           </template>
         </el-table-column>
-        <el-table-column label="Confidence" width="90" align="center">
+        <el-table-column label="置信度" width="90" align="center">
           <template #default="{row}">
             <el-progress
               :percentage="Math.round((row.confidence || 0) * 100)"
@@ -153,7 +153,7 @@ Hey there!"
             />
           </template>
         </el-table-column>
-        <el-table-column label="Time" width="100">
+        <el-table-column label="时间" width="100">
           <template #default="{row, $index}">
             <el-input
               v-model="editableItems[$index].timestamp"
@@ -165,17 +165,17 @@ Hey there!"
       </el-table>
     </el-card>
 
-    <!-- Step 3: Options & Confirm -->
+    <!-- 步骤3: 确认选项 -->
     <el-card shadow="never" class="section-card" v-if="parseResult">
       <template #header>
-        <span class="step-badge">3</span> Confirm Import
+        <span class="step-badge">3</span> 确认导入
       </template>
 
       <div class="confirm-options">
-        <el-checkbox v-model="genSummary">Generate conversation summary</el-checkbox>
-        <el-checkbox v-model="extractMemories">Extract memory candidates</el-checkbox>
+        <el-checkbox v-model="genSummary">生成会话摘要</el-checkbox>
+        <el-checkbox v-model="extractMemories">提取记忆候选项</el-checkbox>
         <span class="confirm-hint">
-          A new conversation will be created from the imported messages.
+          将从导入的消息创建一个新的会话。
         </span>
       </div>
 
@@ -187,15 +187,15 @@ Hey there!"
           :disabled="editableItems.length === 0"
           @click="handleConfirm"
         >
-          Confirm Import ({{ editableItems.length }} messages)
+          确认导入（{{ editableItems.length }} 条消息）
         </el-button>
       </div>
     </el-card>
 
-    <!-- Post-import actions -->
+    <!-- 导入后处理操作 -->
     <el-card shadow="never" class="section-card" v-if="importedBatchId">
       <template #header>
-        <span class="step-badge">4</span> Post-Import
+        <span class="step-badge">4</span> 导入后处理
       </template>
 
       <div class="post-actions">
@@ -206,7 +206,7 @@ Hey there!"
           Extract Memories
         </el-button>
         <router-link v-if="importedConvId" :to="'/logs'" class="inline-link">
-          View imported conversation
+          查看已导入会话
         </router-link>
       </div>
 
@@ -214,47 +214,47 @@ Hey there!"
         <div v-for="c in memCandidates.slice(0, 5)" :key="c.key" class="mem-candidate">
           <el-tag size="small">{{ c.key }}</el-tag>
           <span class="mc-val">{{ c.value }}</span>
-          <span class="mc-imp">importance: {{ c.importance }}/10</span>
+          <span class="mc-imp">重要性： {{ c.importance }}/10</span>
         </div>
         <el-button text size="small" @click="router.push('/memory')" v-if="memCandidates.length > 0">
-          Manage in Memory
+          在记忆中管理
         </el-button>
       </div>
     </el-card>
 
-    <!-- Batch History -->
+    <!-- 导入历史 -->
     <el-card shadow="never" class="section-card">
-      <template #header>Import History</template>
+      <template #header>导入历史</template>
       <el-table :data="batches" size="small" v-if="batches.length > 0">
-        <el-table-column prop="fileName" label="Name" show-overflow-tooltip />
-        <el-table-column label="Status" width="90">
+        <el-table-column prop="fileName" label="名称" show-overflow-tooltip />
+        <el-table-column label="状态" width="90">
           <template #default="{row}">
             <el-tag :type="row.status === 'completed' ? 'success' : 'info'" size="small">
               {{ row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="totalItems" label="Items" width="60" />
-        <el-table-column label="Date" width="140">
+        <el-table-column prop="totalItems" label="条目数" width="60" />
+        <el-table-column label="日期" width="140">
           <template #default="{row}">{{ fmtDate(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="Actions" width="160">
+        <el-table-column label="操作" width="160">
           <template #default="{row}">
-            <el-button text size="small" @click="viewBatch(row.id)">View</el-button>
-            <el-button text size="small" type="danger" @click="delBatch(row.id)">Delete</el-button>
+            <el-button text size="small" @click="viewBatch(row.id)">查看</el-button>
+            <el-button text size="small" type="danger" @click="delBatch(row.id)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-else description="No import history" :image-size="50" />
+      <el-empty v-else description="暂无导入历史" :image-size="50" />
     </el-card>
 
-    <!-- Detail dialog -->
-    <el-dialog v-model="detailVisible" title="Batch Detail" width="600px">
+    <!-- 详情弹窗 -->
+    <el-dialog v-model="detailVisible" title="批次详情" width="600px">
       <el-table :data="detailItems" size="small" max-height="350">
         <el-table-column prop="lineNo" label="#" width="50" v-if="false" />
-        <el-table-column prop="senderName" label="Speaker" width="80" />
-        <el-table-column prop="role" label="Role" width="70" />
-        <el-table-column prop="content" label="Content" show-overflow-tooltip />
+        <el-table-column prop="senderName" label="发言者" width="80" />
+        <el-table-column prop="role" label="角色" width="70" />
+        <el-table-column prop="content" label="内容" show-overflow-tooltip />
       </el-table>
     </el-dialog>
   </div>
@@ -270,7 +270,7 @@ import { useApi } from "../../composables/useApi"
 const router = useRouter()
 const { get, post, del, loading: apiLoading } = useApi()
 
-// ---- Input state ----
+// ---- 输入状态 ----
 const rawText = ref("")
 const batchTitle = ref("")
 const parseFormat = ref("auto")
@@ -284,14 +284,14 @@ function parseSpeakerNames(input: string): string[] {
   return input.split(/[,;，；]/).map(s => s.trim()).filter(Boolean)
 }
 
-// ---- Parse result ----
+// ---- 解析结果 ----
 const parseResult = ref<any>(null)
 const editableItems = ref<any[]>([])
 const confirming = ref(false)
 const genSummary = ref(false)
 const extractMemories = ref(false)
 
-// ---- Post-import ----
+// ---- 导入后处理 ----
 const importedBatchId = ref("")
 const importedConvId = ref("")
 const genSummaryLoading = ref(false)
@@ -304,14 +304,14 @@ const selectedCandidateIds = ref<string[]>([])
 const highRiskCount = ref(0)
 const memCandidates = ref<any[]>([])
 
-// ---- Batch history ----
+// ---- 导入历史 ----
 const batches = ref<any[]>([])
 const batchTotal = ref(0)
 const batchPage = ref(1)
 const detailVisible = ref(false)
 const detailItems = ref<any[]>([])
 
-// ---- Warning type helper ----
+// ---- 警告类型辅助 ----
 function warningType(w: any): "error" | "warning" | "info" {
   const type = typeof w === "string" ? "" : (w.type || "")
   if (type === "sensitive_data" || type === "empty_content") return "error"
@@ -320,14 +320,14 @@ function warningType(w: any): "error" | "warning" | "info" {
   return "warning"
 }
 
-// ---- Confidence color ----
+// ---- 置信度颜色 ----
 function confidenceColor(conf: number): string {
   if (conf >= 0.8) return "#67c23a"
   if (conf >= 0.5) return "#e6a23c"
   return "#f56c6c"
 }
 
-// ---- Parse ----
+// ---- 解析 ----
 async function handleParse() {
   if (!rawText.value.trim()) return
   parsing.value = true
@@ -353,7 +353,7 @@ async function handleParse() {
     importedBatchId.value = ""
     importedConvId.value = ""
   } catch {
-    // handled by interceptor
+    // 由拦截器处理
   } finally {
     parsing.value = false
   }
@@ -369,25 +369,25 @@ function onFileChange(file: any) {
   reader.readAsText(file.raw)
 }
 
-// ---- Confirm ----
+// ---- 确认 ----
 async function handleConfirm() {
   if (editableItems.value.length === 0) return
 
   await ElMessageBox.confirm(
-    `Confirm importing ${editableItems.value.length} messages? A new conversation will be created.`,
-    "Confirm Import",
-    { type: "warning", confirmButtonText: "Confirm" }
+    `确认导入 ${editableItems.value.length} 条消息？将创建一个新的会话。`,
+    "确认导入",
+    { type: "warning", confirmButtonText: "确认" }
   )
 
   confirming.value = true
   try {
     const result = await post<any>("/api/imports/confirm", {
       batchId: parseResult.value?.batchId,
-      title: batchTitle.value || "Imported Chat",
+      title: batchTitle.value || "已导入的聊天",
     })
     importedBatchId.value = result?.batchId || parseResult.value?.batchId
     importedConvId.value = result?.conversationId || ""
-    ElMessage.success(`Successfully imported ${result?.messageCount || editableItems.value.length} messages`)
+    ElMessage.success(`成功导入 ${result?.messageCount || editableItems.value.length} 条消息`)
     await fetchBatches()
 
     if (genSummary.value) await handleGenSummary()
@@ -399,7 +399,7 @@ async function handleConfirm() {
   }
 }
 
-// ---- Post-import actions ----
+// ---- 导入后处理操作 ----
 async function handleGenSummary() {
   if (!importedBatchId.value) return
   genSummaryLoading.value = true
@@ -409,16 +409,16 @@ async function handleGenSummary() {
     if (result?.summary) {
       summaryData.value = result.summary
     }
-    // Also try GET to fetch the saved summary
+    // 同时尝试GET获取已保存的摘要
     try {
       const saved = await get<any>(`/api/imports/batches/${importedBatchId.value}/summary`)
       if (saved?.summary) {
         summaryData.value = saved.summary
       }
     } catch {}
-    ElMessage.success("Summary generated successfully")
+    ElMessage.success("摘要生成成功")
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to generate summary")
+    ElMessage.error(err?.message || "摘要生成失败")
   }
   genSummaryLoading.value = false
 }
@@ -432,7 +432,7 @@ async function handleExtractMemories() {
     if (result?.candidates) {
       memCandidates.value = result.candidates
       highRiskCount.value = result.highRiskCount || result.candidates.filter((c: any) => c.riskLevel === 'high').length
-      // Auto-select low and medium risk, leave high risk unchecked
+      // 自动选中低中风险，高风险不选中
       selectedCandidateIds.value = result.candidates
         .filter((c: any) => c.riskLevel !== 'high')
         .map((c: any) => c.id)
@@ -476,12 +476,12 @@ async function handleConfirmMemories() {
       `/api/imports/batches/${importedBatchId.value}/confirm-memories`,
       { selectedIds: selectedCandidateIds.value }
     )
-    ElMessage.success(`Saved ${result?.savedCount || 0} memories`)
-    // Clear candidates after confirmation
+    ElMessage.success(`已保存 ${result?.savedCount || 0} 条记忆`)
+    // 确认后清除候选项
     memCandidates.value = []
     selectedCandidateIds.value = []
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to save memories")
+    ElMessage.error(err?.message || "保存记忆失败")
   }
   confirmMemLoading.value = false
 }
@@ -504,10 +504,10 @@ async function viewBatch(id: string) {
 }
 
 async function delBatch(id: string) {
-  await ElMessageBox.confirm("Delete this batch?", "Confirm", { type: "warning" })
+  await ElMessageBox.confirm("确定删除此批次？", "确认", { type: "warning" })
   try {
     await del(`/api/imports/batches/${id}`)
-    ElMessage.success("Deleted")
+    ElMessage.success("已删除")
     await fetchBatches()
   } catch {}
 }

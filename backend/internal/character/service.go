@@ -1,4 +1,4 @@
-package character
+﻿package character
 
 import (
 	"fmt"
@@ -49,12 +49,18 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
 		GenderExpression: req.GenderExpression, LifeIdentity: req.LifeIdentity,
 		Status: "enabled", PersonalityConfig: "{}", ChatStyleConfig: "{}", SceneRules: "{}",
+		VoiceType: req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
+		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID,
 	}
 	if c.Name == "" { c.Name = "新角色" }
 	if c.Gender == "" { c.Gender = "UNSPECIFIED" }
 	if c.Pronoun == "" { c.Pronoun = "TA" }
 	if c.SelfReference == "" { c.SelfReference = "我" }
 	if c.LifeIdentity == "" { c.LifeIdentity = "CUSTOM" }
+	if c.VoiceType == "" { c.VoiceType = "zh_female_vv_uranus_bigtts" }
+	if c.VoiceSpeed == 0 { c.VoiceSpeed = 1.0 }
+	if c.VoicePitch == 0 && req.VoicePitch == 0 { c.VoicePitch = 0 }
+	if c.VoiceVolume == 0 { c.VoiceVolume = 1.0 }
 	if req.IsDefault {
 		s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 		c.IsDefault = 1
@@ -99,6 +105,16 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 	if req.SelfReference != nil { updates["self_reference"] = *req.SelfReference }
 	if req.GenderExpression != nil { updates["gender_expression"] = *req.GenderExpression }
 	if req.LifeIdentity != nil { updates["life_identity"] = *req.LifeIdentity }
+	if req.VoiceConfigID != nil { updates["voice_config_id"] = *req.VoiceConfigID }
+	if req.VoiceType != nil { updates["voice_type"] = *req.VoiceType }
+	if req.VoiceSpeed != nil { updates["voice_speed"] = *req.VoiceSpeed }
+	if req.VoicePitch != nil { updates["voice_pitch"] = *req.VoicePitch }
+	if req.VoiceVolume != nil { updates["voice_volume"] = *req.VoiceVolume }
+	if req.CustomVoiceID != nil { updates["custom_voice_id"] = *req.CustomVoiceID }
+	if req.VoiceMode != nil { updates["voice_mode"] = *req.VoiceMode }
+	if req.Emotion != nil { updates["emotion"] = *req.Emotion }
+	if req.EmotionScale != nil { updates["emotion_scale"] = *req.EmotionScale }
+	if req.SilenceDuration != nil { updates["silence_duration"] = *req.SilenceDuration }
 	if req.PersonalityConfig != nil { updates["personality_config"] = *req.PersonalityConfig }
 	if req.IsDefault != nil {
 		if *req.IsDefault {

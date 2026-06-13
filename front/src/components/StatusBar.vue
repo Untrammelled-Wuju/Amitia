@@ -12,6 +12,10 @@
           <span class="dot"></span>
           <span class="dot-label">{{ wechatLabel }}</span>
         </span>
+        <span class="status-dot" :class="qqClass" :title="qqLabel">
+          <span class="dot"></span>
+          <span class="dot-label">{{ qqLabel }}</span>
+        </span>
         <span class="status-dot" :class="modelClass" :title="modelLabel">
           <span class="dot"></span>
           <span class="dot-label">{{ modelLabel }}</span>
@@ -45,6 +49,7 @@ import { Sunny, Moon } from "@element-plus/icons-vue"
 const props = defineProps<{
   deployMode?: string
   wechatStatus?: string
+  qqStatus?: string
   modelStatus?: string
   characterName?: string
   theme?: string
@@ -68,6 +73,13 @@ const wechatClass = computed(() =>
 )
 const wechatLabel = computed(() =>
   props.wechatStatus === "connected" ? "微信已连" : "微信未连"
+)
+
+const qqClass = computed(() =>
+  props.qqStatus === "connected" ? "status-on" : "status-off"
+)
+const qqLabel = computed(() =>
+  props.qqStatus === "connected" ? "QQ已连" : "QQ未连"
 )
 
 const modelClass = computed(() =>

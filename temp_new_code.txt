@@ -1,0 +1,35 @@
+		msgID := uuid.New().String()
+		if msgIDIdx < len(result.MessageIDs) {
+			msgID = result.MessageIDs[msgIDIdx]
+		}
+		msgIDIdx++
+
+		var audioURL string
+		var audioDuration float64
+		if ttsCfg != nil {
+			applog.Info("[Voice] TTS part: %s", line[:min(len(line), 30)])
+			synthResult, synthErr := ttsSynthesizeWithTimeout(ttsCfg, line, 8*time.Second)
+			if synthErr != nil {
+				applog.Info("[Voice] TTS err: %v", synthErr)
+			} else {
+				audioURL = synthResult.AudioURL
+				audioDuration = synthResult.Duration
+				h.db.Table("messages").Where("id = ?", msgID).Updates(map[string]interface{}{
+					"audio_url":      audioURL,
+					"audio_duration": audioDuration,
+				})
+			}
+		}
+
+		msg := gin.H{"id": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+		b, _ := json.Marshal(msg)
+		fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
+		flusher.Flush()
+
+		if audioURL != "" {
+			audioData := gin.H{"messageId": msgID, "audioUrl": audioURL, "duration": audioDuration}
+			ad, _ := json.Marshal(audioData)
+			applog.Info("[Voice] sending voice_audio: %s", audioURL)
+			fmt.Fprintf(c.Writer, "event: voice_audio\ndata: %s\n\n", string(ad))
+			flusher.Flush()
+		}

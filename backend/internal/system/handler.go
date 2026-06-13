@@ -1,6 +1,9 @@
 package system
 
 import (
+	applog "github.com/u-ai/backend/log"
+	"math/rand"
+	"io"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,9 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"strconv"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -84,7 +90,7 @@ func (h *Handler) CheckOutputSafety(c *gin.Context) {
 	var body struct{ Text string `json:"text"` }; c.ShouldBindJSON(&body); util.SuccessResponse(c, h.service.CheckSafety(body.Text))
 }
 func (h *Handler) SafetyImportCheck(c *gin.Context) { var body map[string]interface{}; c.ShouldBindJSON(&body); util.SuccessResponse(c, h.service.SafetyImportCheck(body)) }
-func (h *Handler) SafetyEvents(c *gin.Context)       { util.SuccessResponse(c, h.service.SafetyEvents()) }
+func (h *Handler) SafetyEvents(c *gin.Context)       { page, _ := strconv.Atoi(c.DefaultQuery("page", "1")); pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20")); util.SuccessResponse(c, h.service.SafetyEvents(page, pageSize)) }
 
 // ============= 会话 =============
 
@@ -256,51 +262,51 @@ func (h *Handler) DeleteCompanionMoodsByConversation(c *gin.Context) { util.Succ
 // ============= 旧版兼容 =============
 
 func (h *Handler) LegacyListConversations(c *gin.Context)    { util.SuccessResponse(c, h.service.LegacyListConversations()) }
-func (h *Handler) LegacyGetMessages(c *gin.Context)          { util.SuccessResponse(c, h.service.LegacyGetMessages(c.Param("id"))) }
+func (h *Handler) LegacyGetMessages(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	util.SuccessResponse(c, h.service.LegacyGetMessages(c.Param("id"), page, pageSize))
+}
 func (h *Handler) LegacyDeleteConversation(c *gin.Context)   { util.SuccessResponse(c, h.service.LegacyDeleteConversation(c.Param("id"))) }
 
 // ============= Web Chat 核心 (保留原实现) =============
 
 func (h *Handler) WebChatSend(c *gin.Context) {
 	var body struct {
-		ConversationID string `json:"conversationId"`
-		Content        string `json:"content"`
-		Message        string `json:"message"`
-		CharacterID    string `json:"characterId"`
+		ConversationID string  `json:"conversationId"`
+		Content        string  `json:"content"`
+		Message        string  `json:"message"`
+		CharacterID    string  `json:"characterId"`
+		VoiceMessage   bool    `json:"voiceMessage"`
+		AudioUrl       string  `json:"audioUrl"`
+		AudioDuration  float64 `json:"audioDuration"`
+		ImageUrl       string  `json:"imageUrl"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
+		if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
 	msgContent := body.Content
 	if msgContent == "" { msgContent = body.Message }
 	if msgContent == "" { util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil); return }
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: msgContent,
 		ConversationID: body.ConversationID, Channel: "web", Source: "manual",
+		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
+		VoiceMessage: body.VoiceMessage,
+		ImageUrl: body.ImageUrl,
 	})
 	if err != nil { util.ErrorResponse(c, response.InternalError, err.Error(), nil); return }
-	lines := strings.Split(strings.TrimSpace(result.Reply), "\n")
-	var aiMessages []gin.H
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || isReasoningLine(line) { continue }
-		aiMessages = append(aiMessages, gin.H{"id": uuid.New().String(), "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")})
-	}
-	if len(aiMessages) == 0 {
-		aiMessages = append(aiMessages, gin.H{"id": uuid.New().String(), "conversationId": result.ConversationID, "role": "assistant", "content": result.Reply, "createdAt": time.Now().Format("2006-01-02 15:04:05")})
-	}
-	util.SuccessResponse(c, gin.H{
-		"conversationId": result.ConversationID,
-		"userMessage":    gin.H{"id": uuid.New().String(), "conversationId": result.ConversationID, "role": "user", "content": msgContent, "createdAt": time.Now().Format("2006-01-02 15:04:05")},
-		"aiMessages":     aiMessages, "status": "completed", "bufferId": nil,
-	})
+	util.SuccessResponse(c, gin.H{"conversationId": result.ConversationID, "reply": result.Reply, "messageIds": result.MessageIDs, "characterName": result.CharacterName})
 }
-
 
 func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var body struct {
-		ConversationID string `json:"conversationId"`
-		Content        string `json:"content"`
-		Message        string `json:"message"`
-		CharacterID    string `json:"characterId"`
+		ConversationID string  `json:"conversationId"`
+		Content        string  `json:"content"`
+		Message        string  `json:"message"`
+		CharacterID    string  `json:"characterId"`
+		VoiceMessage   bool    `json:"voiceMessage"`
+		AudioUrl       string  `json:"audioUrl"`
+		AudioDuration  float64 `json:"audioDuration"`
+		ImageUrl       string  `json:"imageUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
 	msgContent := body.Content
@@ -309,6 +315,9 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: msgContent,
 		ConversationID: body.ConversationID, Channel: "web", Source: "manual",
+		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
+		VoiceMessage: body.VoiceMessage,
+		ImageUrl: body.ImageUrl,
 	})
 	if err != nil { util.ErrorResponse(c, response.InternalError, err.Error(), nil); return }
 	c.Header("Content-Type", "text/event-stream")
@@ -317,6 +326,26 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok { util.ErrorResponse(c, response.InternalError, "SSE not supported", nil); return }
 	lines := strings.Split(strings.TrimSpace(result.Reply), "\n")
+	msgIDIdx := 0
+
+	voiceChance := 0.25
+	if body.VoiceMessage { voiceChance = 0.80 }
+	applog.Info("[Voice] voiceMessage=%v voiceChance=%.0f%% replyLen=%d", body.VoiceMessage, voiceChance*100, len(result.Reply))
+	var ttsCfg *tts.TtsConfig
+	if rand.Float64() < voiceChance && result.Reply != "" {
+		ttsRepo := tts.NewRepository(h.db)
+		activeCfg, cfgErr := ttsRepo.GetActive()
+		if cfgErr != nil { applog.Info("[Voice] GetActive err: %v", cfgErr) }
+		if cfgErr == nil && activeCfg.ApiKey != "" {
+			cfg := &tts.TtsConfig{ApiKey: activeCfg.ApiKey, ResourceId: "seed-tts-2.0", VoiceType: activeCfg.VoiceType, Speed: activeCfg.Speed, Pitch: activeCfg.Pitch, Volume: activeCfg.Volume}
+			if cfg.VoiceType == "" { cfg.VoiceType = "zh_female_vv_uranus_bigtts" }
+			if cfg.Speed == 0 { cfg.Speed = 1.0 }
+			if cfg.Pitch == 0 { cfg.Pitch = 1.0 }
+			if cfg.Volume == 0 { cfg.Volume = 1.0 }
+			ttsCfg = cfg
+		} else if activeCfg != nil && activeCfg.ApiKey == "" { applog.Info("[Voice] TTS ApiKey empty") }
+	} else { applog.Info("[Voice] skipped: chance=%.2f reply=%v", voiceChance, result.Reply != "") }
+
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || isReasoningLine(line) { continue }
@@ -325,17 +354,47 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			if delayMs > 3000 { delayMs = 3000 }
 			time.Sleep(time.Duration(delayMs) * time.Millisecond)
 		}
-		msg := gin.H{"id": uuid.New().String(), "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+		msgID := uuid.New().String()
+		if msgIDIdx < len(result.MessageIDs) {
+			msgID = result.MessageIDs[msgIDIdx]
+		}
+		msgIDIdx++
+
+		var audioURL string
+		var audioDuration float64
+		if ttsCfg != nil {
+			applog.Info("[Voice] TTS part: %s", line[:min(len(line), 30)])
+			synthResult, synthErr := ttsSynthesizeWithTimeout(ttsCfg, line, 8*time.Second)
+			if synthErr != nil {
+				applog.Info("[Voice] TTS err: %v", synthErr)
+			} else {
+				audioURL = synthResult.AudioURL
+				audioDuration = synthResult.Duration
+				h.db.Table("messages").Where("id = ?", msgID).Updates(map[string]interface{}{
+					"audio_url":      audioURL,
+					"audio_duration": audioDuration,
+				})
+			}
+		}
+
+		msg := gin.H{"id": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
 		b, _ := json.Marshal(msg)
 		fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
 		flusher.Flush()
+
+		if audioURL != "" {
+			audioData := gin.H{"messageId": msgID, "audioUrl": audioURL, "duration": audioDuration}
+			ad, _ := json.Marshal(audioData)
+			applog.Info("[Voice] sending voice_audio: %s", audioURL)
+			fmt.Fprintf(c.Writer, "event: voice_audio\ndata: %s\n\n", string(ad))
+			flusher.Flush()
+		}
 	}
 	doneData := gin.H{"conversationId": result.ConversationID}
 	db, _ := json.Marshal(doneData)
 	fmt.Fprintf(c.Writer, "event: done\ndata: %s\n\n", string(db))
 	flusher.Flush()
 }
-
 
 func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	var body struct {
@@ -524,3 +583,142 @@ func (h *Handler) WebChatFromImport(c *gin.Context) {
 
 
 
+
+func (h *Handler) VoiceUpload(c *gin.Context) {
+	file, header, err := c.Request.FormFile("audio")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少音频文件", nil)
+		return
+	}
+	defer file.Close()
+
+	voiceDir := filepath.Join("data", "voice_msg")
+	if err := os.MkdirAll(voiceDir, 0755); err != nil {
+		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		return
+	}
+
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		ext = ".webm"
+	}
+	filename := uuid.New().String() + ext
+	savePath := filepath.Join(voiceDir, filename)
+
+	dst, err := os.Create(savePath)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		return
+	}
+
+	audioUrl := "/voice/" + filename
+	util.SuccessResponse(c, gin.H{"audioUrl": audioUrl, "duration": 0})
+}
+
+func (h *Handler) ImageUpload(c *gin.Context) {
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少图片文件", nil)
+		return
+	}
+	defer file.Close()
+
+	imageDir := filepath.Join("data", "images")
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		return
+	}
+
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		ext = ".png"
+	}
+	filename := uuid.New().String() + ext
+	savePath := filepath.Join(imageDir, filename)
+
+	dst, err := os.Create(savePath)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		return
+	}
+
+	imageUrl := "/images/" + filename
+	util.SuccessResponse(c, gin.H{"imageUrl": imageUrl})
+}
+
+func (h *Handler) VoiceTranscribe(c *gin.Context) {
+	var body struct {
+		AudioUrl string `json:"audioUrl"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.AudioUrl == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少audioUrl", nil)
+		return
+	}
+
+	asrRepo := asr.NewRepository(h.db)
+	activeCfg, cfgErr := asrRepo.GetActive()
+	apiKey := ""
+	if cfgErr == nil && activeCfg.ApiKey != "" {
+		apiKey = activeCfg.ApiKey
+	}
+	if apiKey == "" {
+		util.SuccessResponse(c, gin.H{"text": "", "status": "no_asr_key"})
+		return
+	}
+
+	fullAudioUrl := "http://127.0.0.1:8899" + body.AudioUrl
+
+	taskID, submitErr := asr.SubmitTask(apiKey, fullAudioUrl, "zh-CN")
+	if submitErr != nil {
+		util.SuccessResponse(c, gin.H{"text": "", "status": "asr_failed"})
+		return
+	}
+
+	for i := 0; i < 30; i++ {
+		time.Sleep(1 * time.Second)
+		result, queryErr := asr.QueryTask(apiKey, taskID)
+		if queryErr != nil {
+			continue
+		}
+		if result.Status == "done" || result.Status == "success" {
+			util.SuccessResponse(c, gin.H{"text": result.Result, "status": "ok"})
+			return
+		}
+		if result.Status == "failed" {
+			util.SuccessResponse(c, gin.H{"text": "", "status": "asr_failed"})
+			return
+		}
+	}
+
+	util.SuccessResponse(c, gin.H{"text": "", "status": "timeout"})
+}
+
+func ttsSynthesizeWithTimeout(cfg *tts.TtsConfig, text string, timeout time.Duration) (*tts.SynthesizeResponse, error) {
+	type result struct {
+		res *tts.SynthesizeResponse
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		r, e := tts.Synthesize(cfg, text)
+		ch <- result{r, e}
+	}()
+	select {
+	case res := <-ch:
+		return res.res, res.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("tts timeout after %v", timeout)
+	}
+}

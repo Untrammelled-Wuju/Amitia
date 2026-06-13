@@ -168,7 +168,7 @@ async function fetchEvents() {
 
 async function clearEvents() {
   await ElMessageBox.confirm("确定清除所有安全事件日志？","提示",{type:"warning"})
-  try { await del("/api/logs"); ElMessage.success("已清除"); fetchEvents() } catch {}
+  try { await del("/api/safety/events"); ElMessage.success("已清除"); fetchEvents() } catch {}
 }
 
 function fmtDate(d: string) { if(!d)return""; try{return new Date(d).toLocaleString("zh-CN")}catch{return d} }

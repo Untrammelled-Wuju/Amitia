@@ -129,12 +129,12 @@ func resolveTime(input string, now time.Time) (time.Time, error) {
 		}
 	}
 
-	t, err := time.Parse("2006-01-02 15:04:05", input)
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", input, time.Local)
 	if err == nil {
 		return t, nil
 	}
 
-	t, err = time.Parse("2006-01-02 15:04", input)
+	t, err = time.ParseInLocation("2006-01-02 15:04", input, time.Local)
 	if err == nil {
 		return t, nil
 	}

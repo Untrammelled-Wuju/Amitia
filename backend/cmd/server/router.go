@@ -1,6 +1,9 @@
 package main
 
 import (
+	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/asr"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
@@ -42,9 +45,16 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 		system.RegisterSystemRouter(apiGroup, ctx)
 		companion.RegisterCompanionRouter(apiGroup, ctx)
 		qq.RegisterQQRouter(apiGroup, ctx)
+		tts.RegisterTtsRouter(apiGroup, ctx)
+		asr.RegisterAsrRouter(apiGroup, ctx)
+		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 	}
 
+	r.Static("/audio", "./data/tts_cache")
+	r.Static("/voice", "./data/voice_msg")
+	r.Static("/images", "./data/images")
 	return r
 }
+
 
 

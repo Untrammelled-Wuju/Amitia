@@ -51,17 +51,19 @@ func RegisterCompanionRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		comp.GET("/active-message/tasks/today", handler.GetActiveMessageTasksToday)
 		comp.POST("/active-message/tasks/regenerate", handler.RegenerateActiveMessageTasks)
 		comp.POST("/active-message/tasks/:id/run", handler.RunActiveMessageTask)
-		comp.PATCH("/active-message/tasks/:id/cancel", handler.CancelActiveMessageTask)
+		comp.POST("/active-message/tasks/:id/cancel", handler.CancelActiveMessageTask)
 
 		comp.GET("/delayed-replies", handler.ListDelayedReplies)
-		comp.PATCH("/delayed-replies/:id/cancel", handler.CancelDelayedReply)
+		comp.POST("/delayed-replies/:id/cancel", handler.CancelDelayedReply)
 		comp.POST("/delayed-replies/process", handler.ProcessDelayedReplies)
 
 		comp.GET("/debug/overview", handler.GetDebugOverview)
 		comp.POST("/debug/regenerate-all", handler.RegenerateAllDebug)
 		comp.POST("/debug/process-active-messages", handler.ProcessActiveMessagesDebug)
 		comp.POST("/debug/process-delayed-replies", handler.ProcessDelayedRepliesDebug)
+		comp.POST("/debug/trigger-daily-regeneration", handler.TriggerDailyRegeneration)
 
 		comp.GET("/rule-logs", handler.GetRuleLogs)
 	}
 }
+

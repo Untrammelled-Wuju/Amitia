@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"math/rand"
+	"github.com/u-ai/backend/internal/tts"
 )
 
 type Executor struct {
@@ -22,11 +24,11 @@ func NewExecutor(db *gorm.DB) *Executor {
 }
 
 func (e *Executor) ScanAndExecute() {
-	e.scanRules()
-	e.scanReminders()
+	e.ScanRules()
+	e.ScanReminders()
 }
 
-func (e *Executor) scanRules() {
+func (e *Executor) ScanRules() {
 	type rule struct {
 		id, enabled, maxPerDay, sentToday, randomMinutes            int
 		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
@@ -137,7 +139,7 @@ func (e *Executor) executeRule(r struct {
 		time.Now(), time.Now(), r.id)
 }
 
-func (e *Executor) scanReminders() {
+func (e *Executor) ScanReminders() {
 	type rem struct {
 		id, enabled                             int
 		title, content, channel, charID, convID string
@@ -318,9 +320,30 @@ func (e *Executor) getActiveModelCron() map[string]string {
 func (e *Executor) sendToWeb(convID, content string) {
 	now := time.Now()
 	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
-	displayContent := "🔔 " + content
-	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)",
-		msgID, convID, displayContent, now)
+	displayContent := content
+	audioUrl := ""
+	var audioDuration float64
+
+	ttsRepo := tts.NewRepository(e.db)
+	activeCfg, cfgErr := ttsRepo.GetActive()
+	if cfgErr == nil && activeCfg.ApiKey != "" && content != "" {
+		cfg := &tts.TtsConfig{ApiKey: activeCfg.ApiKey, ResourceId: activeCfg.ResourceId, VoiceType: activeCfg.VoiceType, Speed: activeCfg.Speed, Pitch: activeCfg.Pitch, Volume: activeCfg.Volume}
+		if cfg.VoiceType == "" { cfg.VoiceType = "zh_female_vv_uranus_bigtts" }
+		if cfg.Speed == 0 { cfg.Speed = 1.0 }
+		if cfg.Pitch == 0 { cfg.Pitch = 1.0 }
+		if cfg.Volume == 0 { cfg.Volume = 1.0 }
+		if rand.Float64() < 0.20 {
+			synthResult, synthErr := tts.Synthesize(cfg, content)
+			if synthErr == nil {
+				audioUrl = synthResult.AudioURL
+				audioDuration = synthResult.Duration
+				displayContent = ""
+			}
+		}
+	}
+
+	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, audio_url, audio_duration, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?, ?, ?)",
+		msgID, convID, displayContent, audioUrl, audioDuration, now)
 }
 
 func (e *Executor) sendToWechat(convID, content string) bool {
@@ -361,7 +384,7 @@ func calcNextRemindAt(remindAt, repeatRule, nowDate, nowTime string) string {
 	if remindAt == "" || len(remindAt) < 16 {
 		return ""
 	}
-	t, err := time.Parse("2006-01-02 15:04:05", remindAt)
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", remindAt, time.Local)
 	if err != nil {
 		return ""
 	}
@@ -415,33 +438,86 @@ func (e *Executor) sendToQQ(userID, content string) bool {
 		targetID = userID[5:]
 	}
 
-	body, _ := json.Marshal(map[string]string{"toUserId": targetID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	useVoice := rand.Float64() < 0.20
+	voiceOK := false
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[Proactive] QQ发送失败: %v", err)
-		return false
+	body, _ := json.Marshal(map[string]string{"toUserId": targetID, "text": content})
+	client := &http.Client{Timeout: 60 * time.Second}
+
+	if useVoice {
+		voiceReq, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send-voice", bytes.NewReader(body))
+		voiceReq.Header.Set("Content-Type", "application/json")
+		voiceResp, voiceErr := client.Do(voiceReq)
+		if voiceErr == nil && voiceResp.StatusCode == 200 {
+			voiceOK = true
+		}
+		if voiceResp != nil {
+			voiceResp.Body.Close()
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		var respBody bytes.Buffer
-		respBody.ReadFrom(resp.Body)
-		log.Printf("[Proactive] QQ返回 %d body=%s", resp.StatusCode, respBody.String())
-		return false
+
+	if !voiceOK {
+		textReq, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
+		textReq.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(textReq)
+		if err != nil {
+			log.Printf("[Proactive] QQ发送失败: %v", err)
+			return false
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			var respBody bytes.Buffer
+			respBody.ReadFrom(resp.Body)
+			log.Printf("[Proactive] QQ返回 %d body=%s", resp.StatusCode, respBody.String())
+			return false
+		}
 	}
 
 	now := time.Now()
 	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
-	displayContent := "🔔 " + content
+	displayContent := content
 	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)",
 		msgID, convID, displayContent, now)
 
-	log.Printf("[Proactive] QQ已发送 to=%s", targetID)
+	log.Printf("[Proactive] QQ已发送 to=%s voice=%v voiceOK=%v", targetID, useVoice, voiceOK)
 	return true
 }
+
+func (e *Executor) ExecuteShareTask(prompt string) string {
+	var charName, identity, convID string
+	row := e.db.Table("characters").Select("name, identity, conversation_id").
+		Where("is_active = 1").Limit(1).Row()
+	if err := row.Scan(&charName, &identity, &convID); err != nil || convID == "" {
+		log.Println("[Proactive] ExecuteShareTask: no active character")
+		return ""
+	}
+	content := e.generateContent("系统主动消息", "share", prompt, charName, identity)
+	if content == "" {
+		return ""
+	}
+	sentWeb, sentWechat, sentQQ := false, false, false
+	e.sendToWeb(convID, content)
+	sentWeb = true
+	wcID := e.getWechatConvID(convID)
+	if wcID != "" {
+		e.sendToWechat(wcID, content)
+		sentWechat = true
+	}
+	qqID := e.getQQConvID("")
+	if qqID != "" {
+		e.sendToQQ(qqID, content)
+		sentQQ = true
+	}
+	status := "sent"
+	if !sentWeb && !sentWechat && !sentQQ {
+		status = "failed"
+	}
+	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
+		convID, content, "all", status, time.Now(), time.Now())
+	log.Printf("[Proactive] ExecuteShareTask sent: web=%v wechat=%v qq=%v", sentWeb, sentWechat, sentQQ)
+	return content
+}
+
 func (e *Executor) getQQConvID(charID string) string {
 	var id string
 	query := e.db.Table("conversations").Select("id")

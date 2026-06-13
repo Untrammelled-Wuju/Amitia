@@ -5,6 +5,7 @@
       v-if="!isMobile"
       :deploy-mode="health.deployMode"
       :wechat-status="health.wechat"
+      :qq-status="health.qq"
       :model-status="health.model"
       :character-name="currentCharName"
       :theme="theme.preset"
@@ -61,7 +62,7 @@ const pageTitle = computed(() => {
     "/chat": "聊天", "/character": "角色管理",
     "/logs": "聊天记录", "/settings": "设置", "/dashboard": "概览",
     "/model": "模型配置", "/reminders": "日程提醒", "/import": "导入", "/safety": "安全设置",
-    "/wechat": "微信", "/login": "登录",
+    "/qq": "QQ连接", "/wechat": "微信", "/login": "登录",
   }
   return titles[router.currentRoute.value.path] || "AI Companion"
 })
@@ -73,6 +74,7 @@ const health = ref({
   database: "ok",
   model: "not_configured",
   wechat: "disconnected",
+  qq: "disconnected",
   web: "enabled",
 })
 
@@ -91,6 +93,7 @@ const modelClass = computed(() =>
 provide("theme", theme)
 async function refreshAll() {
   await fetchHealth()
+  await fetchQQStatus()
   await fetchActiveCharacter()
 }
 provide("refreshHealth", refreshAll)
@@ -106,6 +109,19 @@ async function fetchHealth() {
     }
   } catch {
     // Core not available yet
+  }
+}
+
+
+async function fetchQQStatus() {
+  try {
+    const res = await apiClient.get("/api/qq/status")
+    const data = res.data?.data || res.data
+    if (data) {
+      health.value.qq = data.qqOnline || data.status === "online" ? "connected" : "disconnected"
+    }
+  } catch {
+    health.value.qq = "disconnected"
   }
 }
 
@@ -168,13 +184,14 @@ onMounted(() => {
     windowWidth.value = window.innerWidth
   })
   fetchHealth()
+  fetchQQStatus()
   if (isLoggedIn()) {
     fetchActiveCharacter()
     fetchUserInfo()
   }
 
   // Poll health every 30s
-  const interval = setInterval(fetchHealth, 30000)
+  const interval = setInterval(() => { fetchHealth(); fetchQQStatus() }, 30000)
   onUnmounted(() => clearInterval(interval))
 })
 </script>

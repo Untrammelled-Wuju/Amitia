@@ -196,7 +196,7 @@ function openEdit(row: Reminder) {
 }
 
 async function fetchCleanupConfig() {
-  try { const r = await request.get("/api/reminders/cleanup-config"); cleanupDays.value = r?.cleanupDays || "0" }
+  try { const r = await request.get("/api/reminders/cleanup-config"); const rd = (r as any)?.data; cleanupDays.value = (rd?.data?.cleanupDays ?? rd?.cleanupDays) || "0" }
   catch { cleanupDays.value = "0" }
 }
 

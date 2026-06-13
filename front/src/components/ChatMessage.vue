@@ -1,5 +1,5 @@
 <template>
-  <div :class="['chat-message', message.role, { 'is-reminder': isReminder, 'is-tool-result': isToolResult, 'is-typing': typingEnabled && isTypingActive }]">
+  <div :class="['chat-message', message.role, { 'is-reminder': isReminder, 'is-tool-result': isToolResult }]">
     <div class="message-avatar">
       <el-avatar :size="36" :src="message.role === 'assistant' ? avatar : undefined">
         {{ message.role === 'user' ? 'U' : 'AI' }}
@@ -44,7 +44,6 @@
 import { ref, computed } from "vue"
 import { ElMessage } from "element-plus"
 import { request } from "../composables/request"
-import { useTyping } from "../composables/useTyping"
 import type { Message } from "@/types"
 
 const props = defineProps<{
@@ -61,18 +60,11 @@ const isToolResult = computed(() => {
   return props.message.source === "tool_result" || props.message.msgType === "tool_result"
 })
 
-const typingEnabled = computed(() => {
-  return props.message.role === "assistant" && !!(props.message.content)
-})
 
-const { displayText, isTyping: isTypingActive } = useTyping(
-  () => props.message.content || "",
-  () => typingEnabled.value
-)
 
-const displayContent = computed(() => {
-  return typingEnabled.value ? displayText.value : (props.message.content || "")
-})
+
+
+const displayContent = computed(() => props.message.content || "")
 
 const feedbackSent = ref(false)
 const selectedType = ref("good")

@@ -39,9 +39,12 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 
 func (h *Handler) GetMessages(c *gin.Context) {
 	id := c.Param("id")
-	msgs, err := h.service.GetMessages(id)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	msgs, total, err := h.service.GetMessages(id, page, pageSize)
 	if err != nil { util.ErrorResponse(c, response.InternalError, "查询失败", nil); return }
-	util.SuccessResponse(c, msgs)
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	util.SuccessResponse(c, gin.H{"items": msgs, "total": total, "page": page, "pageSize": pageSize, "totalPages": totalPages})
 }
 
 func (h *Handler) DeleteConversation(c *gin.Context) {

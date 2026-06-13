@@ -39,7 +39,7 @@
         </span>
         <span class="voice-sec" v-if="voiceDuration && !voicePlaying">{{ voiceDuration }}</span>
       </div>
-      <div class="bubble-content" v-if="message.content && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove"></div>
+      <div class="bubble-content" v-if="message.content && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove" style="word-break:break-word;overflow-wrap:break-word"></div>
       <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
         <span class="status-tag" :class="message.status">
           {{ message.status === 'failed' ? '发送失败' : '生成中断' }}

@@ -28,7 +28,9 @@ type Message struct {
 	SafetyLevel     string    `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
 	Status          string    `gorm:"column:status;default:sent" json:"status"`
 	IncludeInCtx    int       `gorm:"column:include_in_context;default:1" json:"includeInContext"`
-	CreatedAt       string `gorm:"column:created_at" json:"createdAt"`
+	AudioUrl        string    `gorm:"column:audio_url;default:" json:"audioUrl"`
+	AudioDuration   float64   `gorm:"column:audio_duration;default:0" json:"audioDuration"`
+	ImageUrl        string    `gorm:"column:image_url;default:" json:"imageUrl"`
 }
 
 func (Message) TableName() string { return "messages" }
@@ -127,22 +129,30 @@ type ConversationListResponse struct {
 }
 
 type ProcessMessageRequest struct {
-	CharacterID    string `json:"characterId"`
-	Message        string `json:"message"`
-	ConversationID string `json:"conversationId"`
-	Channel        string `json:"channel"`
-	Source         string `json:"source"`
-	PeerID         string `json:"peerId"`
+	CharacterID    string  `json:"characterId"`
+	Message        string  `json:"message"`
+	ConversationID string  `json:"conversationId"`
+	Channel        string  `json:"channel"`
+	Source         string  `json:"source"`
+	PeerID         string  `json:"peerId"`
+	AudioUrl       string  `json:"audioUrl"`
+	AudioDuration  float64 `json:"audioDuration"`
+	VoiceMessage   bool    `json:"voiceMessage"`
+	ImageUrl       string  `json:"imageUrl"`
+	ImageContext   string  `json:"-"`
 }
 
 type ProcessMessageResponse struct {
-	ConversationID string `json:"conversationId"`
-	Reply          string `json:"reply"`
-	CharacterID    string `json:"characterId"`
-	CharacterName  string `json:"characterName"`
+	ConversationID string   `json:"conversationId"`
+	Reply          string   `json:"reply"`
+	CharacterID    string   `json:"characterId"`
+	CharacterName  string   `json:"characterName"`
+	MessageIDs     []string `json:"messageIds"`
+	ForceVoice     bool     `json:"forceVoice"`
 }
 
 type ChatStatsResponse struct {
 	TodayMessages      int64 `json:"todayMessages"`
 	TotalConversations int64 `json:"totalConversations"`
 }
+

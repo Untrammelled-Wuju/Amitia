@@ -1,30 +1,37 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/proactive"
 	"gorm.io/gorm"
 )
 
 type ProactiveCron struct {
-	db        *gorm.DB
-	executor  *proactive.Executor
-	running   bool
-	mu        sync.Mutex
-	stopCh    chan struct{}
-	scheduled map[int]int
-	lastClean string
+	db       *gorm.DB
+	compSvc  companion.Service
+	executor *proactive.Executor
+	running  bool
+	mu       sync.Mutex
+	stopCh   chan struct{}
+
+	scheduled          map[int]int
+	lastClean          string
+	lastRegenerateDate string
+	lastBurstAt        time.Time
+	todayBurstCount    int
 }
 
-func NewProactiveCron(db *gorm.DB) *ProactiveCron {
+func NewProactiveCron(db *gorm.DB, compSvc companion.Service) *ProactiveCron {
 	return &ProactiveCron{
-		db:        db,
-		executor:  proactive.NewExecutor(db),
-		scheduled: make(map[int]int),
+		db:                 db,
+		compSvc:            compSvc,
+		executor:           proactive.NewExecutor(db),
+		scheduled:          make(map[int]int),
+		lastRegenerateDate: time.Now().Format("2006-01-02"),
 	}
 }
 
@@ -37,9 +44,18 @@ func (c *ProactiveCron) Start() {
 	c.running = true
 	c.stopCh = make(chan struct{})
 	c.mu.Unlock()
-	go c.loop()
+
+	go c.runRuleScanner()
+	go c.runReminderScanner()
+	go c.runActiveTaskScanner()
+	go c.runDailyRegenerator()
+	go c.runRandomBurstTrigger()
+
 	log.Println("[ProactiveCron] 规则扫描已启动（每 10s）")
-	c.executor.ScanAndExecute()
+	log.Println("[ProactiveCron] 提醒扫描已启动（每 10s）")
+	log.Println("[ProactiveCron] 主动任务扫描已启动（每 30s）")
+	log.Println("[ProactiveCron] 每日重生成已启动（每 60s）")
+	log.Println("[ProactiveCron] 随机突发已启动（每 60s）")
 }
 
 func (c *ProactiveCron) Stop() {
@@ -50,18 +66,120 @@ func (c *ProactiveCron) Stop() {
 	}
 	c.running = false
 	close(c.stopCh)
-	log.Println("[ProactiveCron] 已停止")
+	log.Println("[ProactiveCron] 所有扫描器已停止")
 }
 
-func (c *ProactiveCron) loop() {
+func (c *ProactiveCron) runRuleScanner() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("[ProactiveCron] 规则扫描器 panic 恢复:", r)
+			go c.runRuleScanner()
+		}
+	}()
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			c.executor.ScanAndExecute()
-			c.cleanupOldReminders()
 			c.cleanStaleSchedules()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+func (c *ProactiveCron) runReminderScanner() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("[ProactiveCron] 提醒扫描器 panic 恢复:", r)
+			go c.runReminderScanner()
+		}
+	}()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.cleanupOldReminders()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+func (c *ProactiveCron) runActiveTaskScanner() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("[ProactiveCron] 主动任务扫描器 panic 恢复:", r)
+			go c.runActiveTaskScanner()
+		}
+	}()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			result := c.compSvc.ProcessDueActiveMessageTasks()
+			processed, _ := result["processed"].(int)
+			sent, _ := result["sent"].(int)
+			if processed > 0 {
+				log.Printf("[ProactiveCron] 主动任务处理: processed=%d sent=%d", processed, sent)
+			}
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+func (c *ProactiveCron) runDailyRegenerator() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("[ProactiveCron] 每日重生成器 panic 恢复:", r)
+			go c.runDailyRegenerator()
+		}
+	}()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.dailyRegenerate()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+func (c *ProactiveCron) dailyRegenerate() {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	if now.Hour() == 0 && now.Minute() < 5 && c.lastRegenerateDate != today {
+		log.Println("[ProactiveCron] 开始每日任务重生成...")
+		result := c.compSvc.ScheduleBasedGenerator(today)
+		c.lastRegenerateDate = today
+		c.lastBurstAt = time.Time{}
+		c.todayBurstCount = 0
+		taskCount, _ := result["taskCount"].(int)
+		log.Printf("[ProactiveCron] 每日任务重生成完成: tasks=%d", taskCount)
+	}
+}
+
+func (c *ProactiveCron) runRandomBurstTrigger() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("[ProactiveCron] 随机突发触发器 panic 恢复:", r)
+			go c.runRandomBurstTrigger()
+		}
+	}()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if c.compSvc != nil {
+				c.compSvc.RandomBurstTrigger()
+			}
 		case <-c.stopCh:
 			return
 		}
@@ -84,7 +202,12 @@ func (c *ProactiveCron) cleanupOldReminders() {
 	c.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_cleanup_days' LIMIT 1").Row().Scan(&daysStr)
 	days := 0
 	if daysStr != "" {
-		fmt.Sscanf(daysStr, "%d", &days)
+		_ = daysStr
+		for _, ch := range daysStr {
+			if ch >= '0' && ch <= '9' {
+				days = days*10 + int(ch-'0')
+			}
+		}
 	}
 	if days <= 0 {
 		return

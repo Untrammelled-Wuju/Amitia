@@ -251,12 +251,12 @@ async function fetchConvs() {
   if (channelFilter.value) params.channel = channelFilter.value
   try {
     const r = await get<any>("/api/chats/conversations", params)
-    let items: any[] = r?.items || []
+    let items: any[] = Array.isArray(r) ? r : (r?.items || [])
     // Pin wechat conversations at the top
     const wechatItems = items.filter((c: any) => c.channel === 'wechat' || c.source === 'wechat')
     const otherItems = items.filter((c: any) => c.channel !== 'wechat' && c.source !== 'wechat')
     convs.value = [...wechatItems, ...otherItems]
-    convTotal.value = r?.total || 0
+    convTotal.value = r?.total || (Array.isArray(r) ? r.length : 0)
   } catch {}
 }
 
@@ -274,8 +274,8 @@ async function fetchMessages() {
   if (!selectedConvId.value) return
   try {
     const r = await get<any>(`/api/chats/conversations/${selectedConvId.value}/messages`, { page:msgPage.value, pageSize:50 })
-    messages.value = r?.items || []
-    msgTotal.value = r?.total || 0
+    messages.value = Array.isArray(r) ? r : (r?.items || [])
+    msgTotal.value = r?.total || (Array.isArray(r) ? r.length : 0)
     nextTick(() => { if (msgListRef.value) msgListRef.value.scrollTop = 0 })
   } catch {}
 }

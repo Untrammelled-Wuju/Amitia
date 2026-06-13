@@ -1,6 +1,6 @@
-const CHAR_DELAY_MS = 300
-const SENTENCE_FLOAT_MIN = 1000
-const SENTENCE_FLOAT_MAX = 2000
+const CHAR_DELAY_MS = 20
+const SENTENCE_FLOAT_MIN = 200
+const SENTENCE_FLOAT_MAX = 500
 
 export function calcTypingDelay(text: string): number {
   const len = [...text].length

@@ -11,6 +11,9 @@
       <el-tab-pane label="生活规则" name="life-rules">
         <AiCharacterSettingsView v-if="activeTab==='life-rules'" />
       </el-tab-pane>
+      <el-tab-pane label="拟态语音" name="voice">
+        <CharacterVoiceView v-if="activeTab==='voice'" />
+      </el-tab-pane>
       <el-tab-pane label="记忆管理" name="memory">
         <MemoryManagerView v-if="activeTab==='memory'" />
       </el-tab-pane>
@@ -19,6 +22,9 @@
       </el-tab-pane>
       <el-tab-pane label="主动消息" name="proactive">
         <ProactiveRulesView v-if="activeTab==='proactive'" />
+      </el-tab-pane>
+      <el-tab-pane label="调试" name="debug">
+        <CompanionDebugView v-if="activeTab==='debug'" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -29,7 +35,8 @@ import { ref, computed, onMounted, provide } from "vue"
 import { useRouter, useRoute } from "vue-router"
 import { ArrowLeft } from "@element-plus/icons-vue"
 import { apiClient } from "../../ui-index"
-import { AiCharacterSettingsView, MemoryManagerView, MemoryTimelineView, ProactiveRulesView } from "../../ui-index"
+import { AiCharacterSettingsView, MemoryManagerView, MemoryTimelineView, ProactiveRulesView, CompanionDebugView } from "../../ui-index"
+import CharacterVoiceView from "../character-voice/CharacterVoiceView.vue"
 
 const router = useRouter()
 const route = useRoute()
@@ -39,9 +46,11 @@ provide("currentCharacterId", currentId)
 
 const activeTab = computed(() => {
   const p = route.path
+  if (p.endsWith("/voice")) return "voice"
   if (p.endsWith("/memory")) return "memory"
   if (p.endsWith("/timeline")) return "timeline"
   if (p.endsWith("/proactive")) return "proactive"
+  if (p.endsWith("/debug")) return "debug"
   return "life-rules"
 })
 

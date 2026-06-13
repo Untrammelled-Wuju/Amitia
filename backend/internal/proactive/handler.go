@@ -199,12 +199,18 @@ func (h *Handler) ResetPresets(c *gin.Context) {
 		characterID = c.Query("characterId")
 	}
 
-	presets := []ProactiveRule{
+	var amsEnabled int
+	h.db.Table("active_message_settings").Select("COALESCE(enabled, 1)").Limit(1).Row().Scan(&amsEnabled)
+
+	genericRules := []ProactiveRule{
+		{Name: "工作间歇", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 15 * * 1-5", PromptTemplate: "工作累了就起来活动一下，喝杯水休息一会吧。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
+		{Name: "晚间闲聊", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 20 * * *", PromptTemplate: "晚上好！放松一下，想聊点什么吗？", MaxPerDay: 20, Enabled: 1, RandomMinutes: 45},
+	}
+
+	scheduleRules := []ProactiveRule{
 		{Name: "早安问候", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 8 * * *", PromptTemplate: "早上好！新的一天开始了，有什么计划吗？", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
 		{Name: "晚安提醒", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 22 * * *", PromptTemplate: "夜深了，早点休息哦。今天过得怎么样？", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
-		{Name: "工作间歇", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 15 * * 1-5", PromptTemplate: "工作累了就起来活动一下，喝杯水休息一会吧。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
 		{Name: "午饭时间", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 12 * * *", PromptTemplate: "到午饭时间啦，别忘了按时吃饭哦！", MaxPerDay: 20, Enabled: 1, RandomMinutes: 15},
-		{Name: "晚间闲聊", Channel: "all", CharacterID: characterID, RuleType: "cron", ScheduleCron: "0 20 * * *", PromptTemplate: "晚上好！放松一下，想聊点什么吗？", MaxPerDay: 20, Enabled: 1, RandomMinutes: 45},
 		{Name: "早安心情", Channel: "all", CharacterID: characterID, RuleType: "daily_greeting", ScheduleCron: "30 7 * * *", PromptTemplate: "分享你刚起床的心情和今天的小期待，语气轻松愉快，像朋友发早安消息。不要使用emoji。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 20},
 		{Name: "午间日常", Channel: "all", CharacterID: characterID, RuleType: "custom", ScheduleCron: "30 12 * * *", PromptTemplate: "分享一下你此刻的状态或者在想什么，随意的日常片段，像朋友聊天。不要使用emoji。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
 		{Name: "傍晚时光", Channel: "all", CharacterID: characterID, RuleType: "custom", ScheduleCron: "0 18 * * *", PromptTemplate: "分享你今天的一个小感受或注意到的事情，温暖随意，像分享生活。不要使用emoji。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 30},
@@ -212,12 +218,38 @@ func (h *Handler) ResetPresets(c *gin.Context) {
 	}
 
 	h.service.DeleteRulesByCharacter(characterID)
-	for _, p := range presets {
-		h.service.CreateRuleDirect(&p)
-	}
-	util.SuccessMsgResponse(c, "已恢复系统预设规则", gin.H{"count": len(presets)})
-}
 
+	scheduleSkipped := []string{}
+	if amsEnabled == 1 {
+		for _, r := range genericRules {
+			h.service.CreateRuleDirect(&r)
+		}
+		for _, r := range scheduleRules {
+			scheduleSkipped = append(scheduleSkipped, r.Name)
+		}
+	} else {
+		for _, r := range genericRules {
+			h.service.CreateRuleDirect(&r)
+		}
+		for _, r := range scheduleRules {
+			r.Enabled = 0
+			h.service.CreateRuleDirect(&r)
+			scheduleSkipped = append(scheduleSkipped, r.Name+"(已禁用)")
+		}
+	}
+
+	createdCount := len(genericRules)
+	if amsEnabled != 1 {
+		createdCount += len(scheduleRules)
+	}
+
+	util.SuccessMsgResponse(c, "已恢复系统预设规则", gin.H{
+		"count":           createdCount,
+		"genericCreated":  len(genericRules),
+		"scheduleSkipped": scheduleSkipped,
+		"amsEnabled":      amsEnabled == 1,
+	})
+}
 func (h *Handler) RuleMessages(c *gin.Context) {
 	util.SuccessResponse(c, []map[string]interface{}{})
 }

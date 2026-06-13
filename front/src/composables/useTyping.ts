@@ -1,9 +1,9 @@
 import { ref, watch, onUnmounted } from "vue"
 import { splitSentences } from "@/utils/typing"
 
-const CHAR_DELAY_MS = 300
-const SENTENCE_FLOAT_MIN = 1000
-const SENTENCE_FLOAT_MAX = 2000
+const CHAR_DELAY_MS = 20
+const SENTENCE_FLOAT_MIN = 200
+const SENTENCE_FLOAT_MAX = 500
 
 function randomFloat(min: number, max: number): number {
   return Math.random() * (max - min) + min

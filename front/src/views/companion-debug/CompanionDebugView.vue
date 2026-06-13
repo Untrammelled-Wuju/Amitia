@@ -217,7 +217,7 @@ async function runTask(id: number) {
 
 async function cancelTask(id: number) {
   try {
-    await del(`/api/companion/active-message/tasks/${id}`)
+    await post(`/api/companion/active-message/tasks/${id}/cancel`)
     ElMessage.success("已取消")
     await loadAll()
   } catch {
@@ -254,7 +254,7 @@ function stateTagType(s: string) {
   if (s==="SLEEPING"||s==="NAPPING") return ""
   if (s.includes("CLASS")||s.includes("EXAM")||s.includes("STUDY")||s.includes("LIBRARY")) return "warning"
   if (s.includes("WORK")||s==="OVERTIME"||s.includes("PART_TIME")) return "danger"
-  if (s==="IDLE"||s==="AFTER_"||s.includes("BREAK")) return "success"
+  if (s==="IDLE"||s.includes("AFTER_")||s.includes("BREAK")) return "success"
   return "info"
 }
 

@@ -35,10 +35,18 @@ const msgBuffers = new Map<string, {
 }>()
 
 qq.onMessage(async (msg: QQMessage) => {
+  if (msg.isVoice) {
+    const logLineV2 = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
+    console.log(`[QQ-Sidecar][VOICE-IN] ========== 收到语音消息 ==========`)
+    console.log(`[QQ-Sidecar][VOICE-IN] fromUserId=${msg.fromUserId} groupId=${msg.groupId || "私聊"}`)
+    console.log(`[QQ-Sidecar][VOICE-IN] messageId=${msg.messageId} text="${msg.text}"`)
+    console.log(`[QQ-Sidecar][VOICE-IN] =========================================`)
+    logLineV2(`VOICE-IN: fromUserId=${msg.fromUserId} groupId=${msg.groupId || "none"} msgId=${msg.messageId}`)
+  }
   const BUFFER_MS = 5000
   const key = msg.groupId || msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId }
+  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -53,6 +61,12 @@ qq.onMessage(async (msg: QQMessage) => {
     const all = entry.msgs
     const last = all[all.length - 1]
     const combined = all.map(m => m.text).join("\n")
+    const wasVoice = all.some(m => (m as any).isVoice)
+    if (wasVoice) {
+      const logLineV3 = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
+      logLineV3(`Voice-FWD: userId=${last.fromUserId} groupId=${last.groupId || "none"} msgId=${last.messageId} text=${combined.substring(0, 100)}`)
+      console.log(`[QQ-Sidecar][VOICE-FWD] 转发语音到后端: fromUserId=${last.fromUserId} text="${combined.substring(0, 100)}"`)
+    }
 
     const headers: Record<string, string> = { "Content-Type": "application/json" }
     const t = qqSidecarConfig.bridgeApiToken
@@ -65,17 +79,74 @@ qq.onMessage(async (msg: QQMessage) => {
           channel: "qq", accountId: qq.getAccountId() || "qqbot",
           conversationId: "conv-" + last.fromUserId, senderId: last.fromUserId,
           messageId: last.messageId,
-          type: "text", text: combined, createdAt: last.createdAt,
+          type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
+          voiceMessage: wasVoice,
           skipTiming: true,
         }),
         signal: AbortSignal.timeout(60000),
       })
       const json = await resp.json() as any
-      const logLine = (msg: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msg + "\n") } catch {} }
+      const logLine = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
       logLine("Webhook response: " + JSON.stringify(json).substring(0, 300))
       if (json?.data?.outgoingMessage?.text) {
         const reply = json.data.outgoingMessage.text
         logLine("Reply text (" + reply.length + " chars): " + reply.substring(0, 100))
+
+        const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
+        const shouldSendVoice = forceVoice || (wasVoice && Math.random() < 0.8)
+        logLine("Voice decision: wasVoice=" + wasVoice + " shouldSendVoice=" + shouldSendVoice)
+
+        if (shouldSendVoice && reply.length > 0) {
+          try {
+            const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
+            logLine("Voice parts: " + parts.length)
+            let voiceSent = false
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i]
+              logLine("TTS part " + (i+1) + "/" + parts.length + ": " + part.substring(0, 50))
+              try {
+                const ttsResp = await fetch(`${qqSidecarConfig.coreUrl}/api/tts/synthesize`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text: part }),
+                  signal: AbortSignal.timeout(60000),
+                })
+                const ttsJson = await ttsResp.json() as any
+                const audioUrl = ttsJson?.data?.audioUrl
+                if (audioUrl) {
+                  const fullAudioUrl = qqSidecarConfig.coreUrl + audioUrl
+                  const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
+                  if (audioResp.ok) {
+                    const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
+                    logLine("Voice part " + (i+1) + " audio: " + audioBuffer.length + " bytes")
+                    const fileInfo = last.groupId
+                      ? await qq.uploadGroupMedia(last.groupId, audioBuffer, "voice" + i + ".mp3", 3)
+                      : await qq.uploadPrivateMedia(last.fromUserId, audioBuffer, "voice" + i + ".mp3", 3)
+                    if (last.groupId) {
+                      await qq.sendGroupVoice(last.groupId, fileInfo)
+                    } else {
+                      await qq.sendPrivateVoice(last.fromUserId, fileInfo)
+                    }
+                    logLine("Voice part " + (i+1) + " sent OK")
+                    voiceSent = true
+                  } else {
+                    logLine("Voice part " + (i+1) + " audio download failed: " + audioResp.status)
+                  }
+                } else {
+                  logLine("TTS part " + (i+1) + " returned no audioUrl")
+                }
+              } catch (partErr: any) {
+                logLine("Voice part " + (i+1) + " error: " + (partErr?.message || String(partErr)))
+              }
+              if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
+            }
+            if (voiceSent) return
+            logLine("No voice parts sent successfully, falling back to text")
+          } catch (ttsErr: any) {
+            logLine("TTS/voice send error: " + (ttsErr?.message || String(ttsErr)) + ", falling back to text")
+          }
+        }
+
         const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
         logLine("Reply parts: " + parts.length)
         for (let i = 0; i < parts.length; i++) {
@@ -159,6 +230,68 @@ app.post("/api/send", async (req, reply) => {
     return reply.send({ success: true })
   } catch (err: any) {
     console.error(`[HTTP] 发送失败:`, err.message)
+    return reply.status(500).send({ success: false, error: err.message })
+  }
+})
+
+app.post("/api/send-voice", async (req, reply) => {
+  if (!qq.isOnline()) {
+    return reply.status(503).send({ success: false, error: "QQBot未连接" })
+  }
+
+  const body = req.body as any
+  const toUserId = body?.toUserId
+  const text = body?.text
+  const groupId = body?.groupId
+
+  if (!toUserId && !groupId) {
+    return reply.status(400).send({ success: false, error: "toUserId or groupId required" })
+  }
+  if (!text) {
+    return reply.status(400).send({ success: false, error: "text required" })
+  }
+
+  try {
+    const parts = text.split(String.fromCharCode(10)).map((p: string) => p.trim()).filter((p: string) => p.length > 0).map((p: string) => p.trim()).filter((p: string) => p.length > 0)
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      try {
+        const ttsResp = await fetch(`${qqSidecarConfig.coreUrl}/api/tts/synthesize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: part }),
+          signal: AbortSignal.timeout(60000),
+        })
+        const ttsJson = await ttsResp.json() as any
+        const audioUrl = ttsJson?.data?.audioUrl
+        if (!audioUrl) throw new Error("TTS returned no audioUrl")
+        const fullAudioUrl = qqSidecarConfig.coreUrl + audioUrl
+        const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
+        if (!audioResp.ok) throw new Error("audio download failed: " + audioResp.status)
+        const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
+        const fileInfo = groupId
+          ? await qq.uploadGroupMedia(groupId, audioBuffer, "voice" + i + ".mp3", 3)
+          : await qq.uploadPrivateMedia(toUserId, audioBuffer, "voice" + i + ".mp3", 3)
+        if (groupId) {
+          await qq.sendGroupVoice(groupId, fileInfo)
+        } else {
+          await qq.sendPrivateVoice(toUserId, fileInfo)
+        }
+      } catch (e: any) {
+        console.error(`[HTTP] 语音发送失败 part=${i}:`, e.message)
+        try {
+          if (groupId) {
+            await qq.sendGroupMsg(groupId, part)
+          } else {
+            await qq.sendPrivateMsg(toUserId, part)
+          }
+        } catch {}
+      }
+      if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
+    }
+    return reply.send({ success: true })
+  } catch (err: any) {
+    console.error(`[HTTP] 语音发送失败:`, err.message)
     return reply.status(500).send({ success: false, error: err.message })
   }
 })

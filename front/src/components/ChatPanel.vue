@@ -12,7 +12,14 @@
         <span></span><span></span><span></span>
       </div>
     </div>
-    <ChatInput :disabled="loading" @send="$emit('send', $event)" />
+    <ChatInput
+      :disabled="loading"
+      :sending="sending"
+      :call-active="callActive"
+      @send="$emit('send', $event)"
+      @stop="$emit('stop')"
+      @toggle-call="$emit('toggleCall')"
+    />
   </div>
 </template>
 
@@ -25,11 +32,17 @@ import ChatInput from "./ChatInput.vue"
 const props = defineProps<{
   messages: Message[]
   loading?: boolean
+  sending?: boolean
+  callActive?: boolean
   characterName?: string
   characterAvatar?: string
 }>()
 
-defineEmits<{ send: [text: string] }>()
+defineEmits<{
+  send: [text: string]
+  stop: []
+  toggleCall: []
+}>()
 
 const messagesRef = ref<HTMLElement>()
 

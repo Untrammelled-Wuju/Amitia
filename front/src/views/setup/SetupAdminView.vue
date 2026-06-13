@@ -69,7 +69,7 @@
 import { ref, reactive, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
-import { apiClient, setToken } from "../../../ui-index"
+import { apiClient, setToken } from "../../ui-index"
 
 const router = useRouter()
 const formRef = ref()

@@ -12,7 +12,7 @@ type Repository interface {
 	UpdateConversation(id string, updates map[string]interface{}) error
 	DeleteConversation(id string) error
 	DeleteAllConversations() error
-	GetMessages(convID string) ([]Message, error)
+	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
 	CreateMessage(m *Message) error
 	DeleteMessage(id string) error
 	DeleteMessagesByConv(convID string) error
@@ -80,11 +80,16 @@ func (r *repository) DeleteAllConversations() error {
 	return r.db.Where("1=1").Delete(&Conversation{}).Error
 }
 
-func (r *repository) GetMessages(convID string) ([]Message, error) {
+func (r *repository) GetMessages(convID string, page, pageSize int) ([]Message, int64, error) {
+	if page <= 0 { page = 1 }
+	if pageSize <= 0 || pageSize > 200 { pageSize = 50 }
+	offset := (page - 1) * pageSize
+	var total int64
+	r.db.Model(&Message{}).Where("conversation_id = ?", convID).Count(&total)
 	var msgs []Message
-	err := r.db.Where("conversation_id = ?", convID).Order("created_at ASC").Find(&msgs).Error
+	err := r.db.Where("conversation_id = ?", convID).Order("created_at ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
 	if msgs == nil { msgs = []Message{} }
-	return msgs, err
+	return msgs, total, err
 }
 
 func (r *repository) CreateMessage(m *Message) error {

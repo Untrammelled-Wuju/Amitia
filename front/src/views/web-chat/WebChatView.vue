@@ -230,7 +230,6 @@ import { useApi, isLoggedIn, getToken } from "../../composables/useApi"
 import { useCachedApi } from "../../composables/useCachedApi"
 import ChatBubble from "../../components/ChatBubble.vue"
 import ChatInput from "../../components/ChatInput.vue"
-import { analyzeImage } from "../../utils/doubao"
 import ConversationDrawer from "../../components/ConversationDrawer.vue"
 
 const route = useRoute()
@@ -264,8 +263,7 @@ const qqOnline = ref(false)
 const callActive = ref(false)
 const currentImageBase64 = ref<string | null>(null)
 const currentImageFile = ref<File | null>(null)
-const IMAGE_STORE_KEY = "chat_image_messages"
-
+const pendingImageBase64 = ref<string | null>(null)
 const sending = ref(false)
 
 const modelMissing = ref(false)
@@ -281,6 +279,8 @@ const msgArea = ref<HTMLElement>()
 const inputRef = ref<InstanceType<typeof ChatInput>>()
 
 let abortController: AbortController | null = null
+
+function attachLocalImages(_msgs: any[]) {}
 let messagesVersion = 0
 let lastPolledMsgId: string | null = null
 let eventSource: EventSource | null = null
@@ -298,6 +298,15 @@ function connectSSE() {
     if (!msg.role || msg.role === "tool") return
     if ((msg as any).tool_calls_json) return
     if (!messages.value.some((m: any) => m.id === msg.id)) {
+      if (msg.role === "user") {
+        const now = Date.now()
+        const dup = messages.value.some((m: any) =>
+          m.role === "user" && m.content === msg.content &&
+          String(m.id).startsWith("user-") &&
+          (now - new Date(m.createdAt).getTime()) < 15000
+        )
+        if (dup) return
+      }
       lastPolledMsgId = msg.id || lastPolledMsgId
       messages.value.push(msg)
       if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
@@ -582,7 +591,18 @@ async function handleSwitchChar(c: any) {
 async function loadCharacterConversation() {
   if (!characterId.value) return
   const c = characters.value.find((x: any) => x.id === characterId.value)
-  const dedicatedConvId = c?.conversationId
+  let dedicatedConvId = c?.conversationId
+  if (!dedicatedConvId) {
+    try {
+      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
+      const all = convs?.conversations || convs?.items || []
+      const charConvs = all.filter((x: any) => (x.characterId || x.character_id) === characterId.value)
+      if (charConvs.length > 0) {
+        charConvs.sort((a: any, b: any) => new Date(b.updatedAt || b.updated_at || 0).getTime() - new Date(a.updatedAt || a.updated_at || 0).getTime())
+        dedicatedConvId = charConvs[0].id
+      }
+    } catch {}
+  }
   if (!dedicatedConvId) {
     disconnectSSE()
     convId.value = ""
@@ -599,7 +619,15 @@ async function loadCharacterConversation() {
     const r = await get<any>(`/api/web-chat/conversations/${dedicatedConvId}/messages`)
     if (version !== messagesVersion) return
     const items = (r?.messages || r?.items || [])
-    if (items.length) { messages.value = items; attachLocalImages(messages.value); msgPage.value = 1; hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE; await nextTick(); scrollToBottom() }
+    if (items.length) {
+      messages.value = items.map((m: any) => {
+        if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
+        return m
+      })
+      attachLocalImages(messages.value)
+      msgPage.value = 1; hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE
+      await nextTick(); scrollToBottom()
+    }
     else { messages.value = [] }
     lastPolledMsgId = messages.value[messages.value.length - 1]?.id || null
     connectSSE()
@@ -734,7 +762,10 @@ async function handleSelectConv(conv: any) {
     if (version !== messagesVersion) return
     const items = (r?.messages || r?.items || [])
     if (items.length) {
-      messages.value = items
+      messages.value = items.map((m: any) => {
+        if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
+        return m
+      })
       const cid = conv.characterId || conv.character_id
       if (cid && cid !== characterId.value) {
         const c = characters.value.find((x: any) => x.id === cid)
@@ -803,72 +834,18 @@ function onImageRemoved() {
   currentImageBase64.value = null
 }
 
-function saveImageMessage(msgId: string, imageBase64: string, text: string) {
-  try {
-    const store = JSON.parse(localStorage.getItem(IMAGE_STORE_KEY) || "[]")
-    store.push({ id: msgId, convId: convId.value, imageUrl: imageBase64, text, time: Date.now() })
-    if (store.length > 50) store.splice(0, store.length - 50)
-    localStorage.setItem(IMAGE_STORE_KEY, JSON.stringify(store))
-  } catch {}
-}
 
-function attachLocalImages(msgs: any[]) {
-  try {
-    const store = JSON.parse(localStorage.getItem(IMAGE_STORE_KEY) || "[]")
-    if (!store.length) return
-    let convImages = store.filter((e: any) => e.convId === convId.value)
-    if (!convImages.length) return
-    convImages = [...convImages].sort((a: any, b: any) => a.time - b.time)
-    let imgIdx = 0
-    for (const msg of msgs) {
-      if (msg.role !== "user" || msg.imageUrl) continue
-      const isCtx = (msg.content || "").indexOf("[\u7CFB\u7EDF\uFF1A") >= 0
-      if (isCtx && imgIdx < convImages.length) {
-        msg.imageUrl = convImages[imgIdx].imageUrl
-        msg.content = convImages[imgIdx].text || ""
-        imgIdx++
-      }
-    }
-  } catch {}
-}
+
+
 
 async function handleImageSend(text: string, imageBase64: string) {
   if (sending.value) return
-  sending.value = true
+  currentImageBase64.value = null
+  currentImageFile.value = null
   const hasUserText = !!(text && text.trim())
-  const userMsgId = "user-" + Date.now()
-  messages.value.push({
-    id: userMsgId, role: "user",
-    content: hasUserText ? text : "",
-    imageUrl: imageBase64,
-    status: "sent" as any,
-    conversationId: convId.value,
-    createdAt: new Date().toISOString()
-  })
-  scrollToBottom(true)
-  try {
-    const doubaoResult = await analyzeImage(imageBase64, "\u8BF7\u8BE6\u7EC6\u63CF\u8FF0\u8FD9\u5F20\u56FE\u7247\u7684\u5185\u5BB9\uFF0C\u5305\u62EC\u573A\u666F\u3001\u7269\u4F53\u3001\u4EBA\u7269\u3001\u6587\u5B57\u3001\u8868\u60C5\u3001\u6C1B\u56F4\u7B49\u6240\u6709\u53EF\u89C1\u4FE1\u606F")
-    saveImageMessage(userMsgId, imageBase64, hasUserText ? text : "")
-    currentImageBase64.value = null
-    currentImageFile.value = null
-    sending.value = false
-    let contextPrompt: string
-    if (hasUserText) {
-      contextPrompt = "[\u7CFB\u7EDF\uFF1A\u7528\u6237\u53D1\u9001\u4E86\u4E00\u5F20\u56FE\u7247\uFF0CAI\u5BF9\u56FE\u7247\u7684\u5206\u6790\u7ED3\u679C\u5982\u4E0B]\n" + doubaoResult + "\n\n\u7528\u6237\u9644\u5E26\u7684\u6587\u5B57\uFF1A" + text
-    } else {
-      contextPrompt = "[\u7CFB\u7EDF\uFF1A\u7528\u6237\u53D1\u9001\u4E86\u4E00\u5F20\u56FE\u7247\uFF0CAI\u5BF9\u56FE\u7247\u7684\u5206\u6790\u7ED3\u679C\u5982\u4E0B]\n" + doubaoResult + "\n\n\u8BF7\u7ED3\u5408\u5BF9\u8BDD\u4E0A\u4E0B\u6587\u81EA\u7136\u56DE\u590D\u3002\u5982\u679C\u662F\u8868\u60C5\u5305\u6216\u4E0E\u5F53\u524D\u8BDD\u9898\u76F8\u5173\uFF0C\u5EF6\u7EED\u8BDD\u9898\u800C\u975E\u63CF\u8FF0\u56FE\u7247\u3002\u65E0\u6CD5\u5224\u65AD\u65F6\u53EF\u53CB\u597D\u8BE2\u95EE\u3002"
-    }
-    await doActualSend(contextPrompt, true)
-  } catch (err: any) {
-    messages.value.push({
-      id: "error-" + Date.now(), role: "assistant",
-      content: "\u56FE\u7247\u5206\u6790\u5931\u8D25\uFF1A" + (err.message || "\u672A\u77E5\u9519\u8BEF"),
-      status: "failed" as any,
-      conversationId: convId.value,
-      createdAt: new Date().toISOString()
-    })
-    sending.value = false
-  }
+  const sendText = hasUserText ? text : "[图片]"
+  pendingImageBase64.value = imageBase64
+  await doActualSend(sendText)
 }
 
 async function handleSend(text: string, imageBase64?: string) {
@@ -891,11 +868,12 @@ async function doActualSend(text: string) {
 
   // 立即插入用户消息，不等后端返回
   const userMsgLocalId = "user-" + Date.now()
-  messages.value.push({ id: userMsgLocalId, role: "user", content: text, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
+  const imgUrl = pendingImageBase64.value
+  pendingImageBase64.value = null
+  const displayContent = (imgUrl && text === "[图片]") ? "" : text
+  const sendContent = (imgUrl && !text.trim()) ? "[图片]" : text
+  messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
   
-  // 只显示一个占位气泡，等 SSE 流返回后再替换
-  const placeholderId = "placeholder-" + Date.now()
-  messages.value.push({ id: placeholderId, role: "assistant", content: "", status: "streaming", createdAt: new Date().toISOString() })
   scrollToBottom(true)
 
   sending.value = true
@@ -906,7 +884,7 @@ async function doActualSend(text: string) {
     const res = await fetch("/api/web-chat/send-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: text }),
+      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "" }),
     })
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -944,31 +922,20 @@ async function doActualSend(text: string) {
           }
 
             if (eventType === "token" && data.content) {
-              const sIdx = messages.value.findIndex((m: any) => m.id === "streaming")
-              if (sIdx >= 0) {
-                messages.value[sIdx].content = data.content
-              } else {
-                messages.value.push({
-                  id: "streaming", role: "assistant", content: data.content,
-                  status: "streaming", conversationId: data.conversationId || convId.value,
-                  createdAt: data.createdAt || new Date().toISOString()
-                })
-              }
+              messages.value.push({
+                id: data.id || ("msg-" + Date.now()), role: "assistant", content: data.content,
+                status: "streaming", conversationId: data.conversationId || convId.value,
+                createdAt: data.createdAt || new Date().toISOString()
+              })
               scrollToBottom(true)
             }
 
                     if (eventType === "done") {
-              if (data.assistantMessage?.id) {
-                lastPolledMsgId = data.assistantMessage.id
-              }
-              const dIdx = messages.value.findIndex((m: any) => m.id === "streaming")
-              if (dIdx >= 0) {
-                messages.value[dIdx].id = data.id || data.assistantMessage?.id || ("msg-" + Date.now())
-                messages.value[dIdx].status = "sent"
-              } else {
-                const pIdx = messages.value.findIndex((m: any) => m.status === "streaming")
-                if (pIdx >= 0) messages.value.splice(pIdx, 1)
-              }
+              const lastStreaming = [...messages.value].reverse().find((m: any) => m.status === "streaming" && m.id !== "streaming")
+              if (lastStreaming?.id) lastPolledMsgId = lastStreaming.id
+              messages.value.forEach((m: any) => {
+                if (m.status === "streaming") m.status = "sent"
+              })
             }
         } catch { /* skip malformed */ }
       }
@@ -976,17 +943,9 @@ async function doActualSend(text: string) {
     // SSE already streaming, no need for DB polling
   } catch (err: any) {
     if (err?.name === "AbortError") {
-      const sIdx = messages.value.findIndex(m => m.id === "streaming")
-      const tIdx = -1
-      if (sIdx >= 0) {
-        const partial = messages.value[sIdx]
-        messages.value.splice(sIdx, 1)
-        if (partial.content) {
-          messages.value.push({ ...partial, id: "interrupted-" + Date.now(), status: "interrupted" })
-        }
-      }
-      if (tIdx >= 0) {
-        messages.value[tIdx] = { ...messages.value[tIdx], id: "user-" + Date.now(), status: "interrupted" }
+      const streaming = messages.value.filter((m: any) => m.status === "streaming")
+      for (const sm of streaming) {
+        sm.status = "interrupted"
       }
     } else {
       console.error("[Stream] Failed:", err)
@@ -1003,9 +962,8 @@ async function doActualSend(text: string) {
   } finally {
     sending.value = false
     abortController = null
-    // 重新连接 SSE 轮询（发送期间已断开）
-    connectSSE()
-    // 处理排队中的下一条消息
+    const lastMsg = messages.value[messages.value.length - 1]
+    if (lastMsg?.id && lastMsg.id !== "streaming") lastPolledMsgId = lastMsg.id
     if (pendingTexts.length > 0) {
       const next = pendingTexts.shift()!
       setTimeout(() => doActualSend(next), 300)
@@ -1018,18 +976,7 @@ function handleStop() {
     abortController.abort()
     abortController = null
   }
-  const sIdx = messages.value.findIndex(m => m.id === "streaming")
-  const tIdx = messages.value.findIndex(m => (m.id || "").startsWith("temp-"))
-  if (sIdx >= 0) {
-    const partial = messages.value[sIdx]
-    messages.value.splice(sIdx, 1)
-    if (partial.content) {
-      messages.value.push({ ...partial, id: "stopped-" + Date.now(), status: "interrupted" })
-    }
-  }
-  if (tIdx >= 0) {
-    messages.value[tIdx] = { ...messages.value[tIdx], id: "user-" + Date.now(), status: "interrupted" }
-  }
+  messages.value.filter((m: any) => m.status === "streaming").forEach((m: any) => m.status = "interrupted")
   sending.value = false
 }
 

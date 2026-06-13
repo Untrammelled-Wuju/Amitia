@@ -96,7 +96,7 @@ type Service interface {
 	Health() map[string]interface{}
 	ImportData(body map[string]interface{}) map[string]interface{}
 	LegacyDeleteConversation(id string) map[string]interface{}
-	LegacyGetMessages(id string) map[string]interface{}
+	LegacyGetMessages(id string, page, pageSize int) map[string]interface{}
 	LegacyListConversations() map[string]interface{}
 	MaintenanceDiagnose() map[string]interface{}
 	MaintenanceExportDiagnostic() map[string]interface{}
@@ -121,7 +121,9 @@ type Service interface {
 	RunDiagnostics() map[string]interface{}
 	RunNow() map[string]interface{}
 	RunReleaseCheck() map[string]interface{}
-	SafetyEvents() map[string]interface{}
+	SafetyEvents(page, pageSize int) map[string]interface{}
+	DeleteSafetyEvents() map[string]interface{}
+	HandleSafetyEvent(id string) map[string]interface{}
 	SafetyImportCheck(body map[string]interface{}) map[string]interface{}
 	SecurityAccountCheck() map[string]interface{}
 	SecurityExposureCheck() map[string]interface{}
@@ -311,16 +313,27 @@ func (s *service) UpdateAppConfig(body map[string]interface{}) map[string]interf
 	if v, ok := body["theme"].(string); ok { s.setAppSetting("theme", v) }
 	if v, ok := body["language"].(string); ok { s.setAppSetting("language", v) }
 	if v, ok := body["timezone"].(string); ok { s.setAppSetting("timezone", v) }
+	if settings, ok := body["settings"].(map[string]interface{}); ok {
+		for k, v := range settings {
+			if sv, ok := v.(string); ok {
+				s.setAppSetting(k, sv)
+			}
+		}
+	}
 	return s.AppConfig()
 }
 
 func (s *service) ConfigSettings() map[string]interface{} {
-	var settings []map[string]interface{}
-	s.db.Table("app_settings").Find(&settings)
-	if settings == nil { settings = []map[string]interface{}{} }
-	theme := s.GetTheme()
-	llm := s.GetLLMConfig()
-	return map[string]interface{}{"settings": settings, "theme": theme, "llm": llm}
+	var rows []struct {
+		Key   string
+		Value string
+	}
+	s.db.Table("app_settings").Find(&rows)
+	result := map[string]interface{}{}
+	for _, r := range rows {
+		result[r.Key] = r.Value
+	}
+	return result
 }
 
 func (s *service) ConfigExport() map[string]interface{} {
@@ -410,11 +423,32 @@ func (s *service) CheckSafety(text string) map[string]interface{} {
 	return map[string]interface{}{"safe": true, "type": "", "reason": "", "action": "allow"}
 }
 
-func (s *service) SafetyEvents() map[string]interface{} {
-	var events []map[string]interface{}
-	s.db.Table("messages").Where("safety_level IN ?", []string{"unsafe", "masked", "blocked"}).Order("created_at DESC").Limit(50).Find(&events)
-	if events == nil { events = []map[string]interface{}{} }
-	return map[string]interface{}{"events": events}
+func (s *service) SafetyEvents(page, pageSize int) map[string]interface{} {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	var total int64
+	s.db.Table("safety_events").Count(&total)
+	var items []map[string]interface{}
+	offset := (page - 1) * pageSize
+	s.db.Raw("SELECT id, conversation_id AS conversationId, event_type AS eventType, description, COALESCE(direction, '') AS direction, handled, created_at AS createdAt FROM safety_events ORDER BY created_at DESC LIMIT ? OFFSET ?", pageSize, offset).Scan(&items)
+	if items == nil {
+		items = []map[string]interface{}{}
+	}
+	return map[string]interface{}{"items": items, "total": total}
+}
+
+func (s *service) DeleteSafetyEvents() map[string]interface{} {
+	s.db.Exec("DELETE FROM safety_events")
+	return map[string]interface{}{"deleted": true}
+}
+
+func (s *service) HandleSafetyEvent(id string) map[string]interface{} {
+	s.db.Table("safety_events").Where("id = ?", id).Update("handled", 1)
+	return map[string]interface{}{"handled": true, "id": id}
 }
 
 func (s *service) SafetyImportCheck(body map[string]interface{}) map[string]interface{} {
@@ -632,10 +666,33 @@ func (s *service) GetAuditStats() map[string]interface{} {
 }
 
 func (s *service) GetMaintenanceStatus() map[string]interface{} {
-	sqlDB, _ := s.db.DB()
-	dbOk := sqlDB != nil && sqlDB.Ping() == nil
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	memMB := memStats.Alloc / 1024 / 1024
+	sqlDB, dbErr := s.db.DB()
+	dbOk := sqlDB != nil && dbErr == nil && sqlDB.Ping() == nil
 	issues := []interface{}{}
-	if !dbOk { issues = append(issues, map[string]interface{}{"type": "db", "msg": "Database connection issue"}) }
+	if !dbOk {
+		issues = append(issues, map[string]interface{}{"type": "DB", "msg": "数据库连接异常"})
+	}
+	var activeModel string
+	s.db.Table("model_configs").Select("model_name").Where("is_active = 1").Limit(1).Row().Scan(&activeModel)
+	if activeModel == "" {
+		issues = append(issues, map[string]interface{}{"type": "MODEL", "msg": "未配置活动模型"})
+	}
+	bridgeStatus := s.getWechatHealthStatus()
+	if bridgeStatus == "disconnected" {
+		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信 Bridge 未连接"})
+	}
+	if memMB > 500 {
+		issues = append(issues, map[string]interface{}{"type": "MEMORY", "msg": fmt.Sprintf("内存使用较高 (%dMB)", memMB)})
+	}
+	testFile := filepath.Join(s.dataDir, fmt.Sprintf(".write_test_%d", time.Now().UnixNano()))
+	if err := os.WriteFile(testFile, []byte("1"), 0644); err != nil {
+		issues = append(issues, map[string]interface{}{"type": "STORAGE", "msg": "数据目录不可写"})
+	} else {
+		os.Remove(testFile)
+	}
 	status := "healthy"
 	if len(issues) > 0 { status = "degraded" }
 	return map[string]interface{}{"status": status, "issues": issues, "lastCheck": time.Now().Format(time.DateTime)}
@@ -643,18 +700,78 @@ func (s *service) GetMaintenanceStatus() map[string]interface{} {
 
 func (s *service) MaintenanceDiagnose() map[string]interface{} {
 	checks := []interface{}{}
+	allPassed := true
 	sqlDB, _ := s.db.DB()
 	dbOk := sqlDB != nil && sqlDB.Ping() == nil
-	checks = append(checks, map[string]interface{}{"name": "Database", "pass": dbOk})
-	passed := dbOk
-	return map[string]interface{}{"diagnosis": map[string]interface{}{"passed": passed, "checks": checks}}
+	dbCheck := map[string]interface{}{"name": "数据库连接", "pass": dbOk}
+	if !dbOk {
+		dbCheck["error"] = "无法连接到数据库"
+		allPassed = false
+	}
+	checks = append(checks, dbCheck)
+	var activeModel string
+	s.db.Table("model_configs").Select("model_name").Where("is_active = 1").Limit(1).Row().Scan(&activeModel)
+	modelOk := activeModel != ""
+	modelCheck := map[string]interface{}{"name": "活动模型", "pass": modelOk}
+	if !modelOk {
+		modelCheck["error"] = "未配置活动模型"
+		allPassed = false
+	}
+	checks = append(checks, modelCheck)
+	var charCount int64
+	s.db.Table("characters").Where("is_active = 1").Count(&charCount)
+	charOk := charCount > 0
+	charCheck := map[string]interface{}{"name": "活跃角色", "pass": charOk}
+	if !charOk {
+		charCheck["error"] = "没有活跃角色"
+		allPassed = false
+	}
+	checks = append(checks, charCheck)
+	bridgeStatus := s.getWechatHealthStatus()
+	bridgeOk := bridgeStatus == "connected"
+	bridgeCheck := map[string]interface{}{"name": "微信 Bridge", "pass": bridgeOk}
+	if !bridgeOk {
+		bridgeCheck["error"] = "Bridge 状态: " + bridgeStatus
+		allPassed = false
+	}
+	checks = append(checks, bridgeCheck)
+	testFile := filepath.Join(s.dataDir, fmt.Sprintf(".write_test_%d", time.Now().UnixNano()))
+	storageOk := os.WriteFile(testFile, []byte("1"), 0644) == nil
+	if storageOk {
+		os.Remove(testFile)
+	}
+	storageCheck := map[string]interface{}{"name": "存储写入", "pass": storageOk}
+	if !storageOk {
+		storageCheck["error"] = "数据目录不可写"
+		allPassed = false
+	}
+	checks = append(checks, storageCheck)
+	var memStats2 runtime.MemStats
+	runtime.ReadMemStats(&memStats2)
+	memMB2 := memStats2.Alloc / 1024 / 1024
+	memOk := memMB2 < 500
+	memCheck := map[string]interface{}{"name": "内存使用", "pass": memOk}
+	if !memOk {
+		memCheck["error"] = fmt.Sprintf("内存使用偏高: %dMB", memMB2)
+		allPassed = false
+	}
+	checks = append(checks, memCheck)
+	apiKey := s.getAppSetting("api_key")
+	keyOk := apiKey != ""
+	keyCheck := map[string]interface{}{"name": "API Key", "pass": keyOk}
+	if !keyOk {
+		keyCheck["error"] = "未配置 API Key"
+		allPassed = false
+	}
+	checks = append(checks, keyCheck)
+	return map[string]interface{}{"diagnosis": map[string]interface{}{"passed": allPassed, "checks": checks}}
 }
 
 func (s *service) MaintenanceExportDiagnostic() map[string]interface{} {
 	diag := s.MaintenanceDiagnose()
 	health := s.Health()
-	runtime := s.GetRuntimeStatus()
-	report := map[string]interface{}{"health": health, "diagnosis": diag, "runtime": runtime, "exportedAt": time.Now().Format(time.DateTime)}
+	rtStatus := s.GetRuntimeStatus()
+	report := map[string]interface{}{"health": health, "diagnosis": diag, "runtime": rtStatus, "exportedAt": time.Now().Format(time.DateTime)}
 	data, _ := json.MarshalIndent(report, "", "  ")
 	name := fmt.Sprintf("diagnostic_%s.json", time.Now().Format("20060102_150405"))
 	os.WriteFile(filepath.Join(s.dataDir, name), data, 0644)
@@ -662,11 +779,20 @@ func (s *service) MaintenanceExportDiagnostic() map[string]interface{} {
 }
 
 func (s *service) MaintenanceReloadConfig() map[string]interface{} {
+	configPath := filepath.Join("..", "appsettings.json")
+	if data, err := os.ReadFile(configPath); err == nil {
+		var cfg map[string]interface{}
+		if json.Unmarshal(data, &cfg) == nil {
+			s.setAppSetting("config_last_reload", time.Now().Format(time.DateTime))
+		}
+	}
+	go s.sidecarPost("/api/config/reload", map[string]interface{}{})
 	return map[string]interface{}{"reloaded": true, "reloadedAt": time.Now().Format(time.DateTime)}
 }
 
 func (s *service) MaintenanceRestartBridge() map[string]interface{} {
-	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime)}
+	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))
+	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime), "bridgeResult": result}
 }
 
 func (s *service) GetLogsRecent(limit int) map[string]interface{} {
@@ -902,9 +1028,13 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 
 func (s *service) GetUsageOverview() map[string]interface{} {
 	var totalTokens, totalRequests int64
+	var todayTokens, todayCalls int64
+	today := time.Now().Format("2006-01-02")
 	s.db.Table("messages").Select("COALESCE(SUM(tokens), 0)").Row().Scan(&totalTokens)
 	s.db.Table("messages").Count(&totalRequests)
-	return map[string]interface{}{"totalTokens": totalTokens, "totalCost": 0, "totalRequests": totalRequests}
+	s.db.Table("messages").Where("date(created_at) = ?", today).Select("COALESCE(SUM(tokens), 0)").Row().Scan(&todayTokens)
+	s.db.Table("messages").Where("date(created_at) = ?", today).Count(&todayCalls)
+	return map[string]interface{}{"totalTokens": totalTokens, "totalCost": 0, "totalRequests": totalRequests, "todayCalls": todayCalls, "todayTokens": todayTokens}
 }
 
 func (s *service) GetUsageDaily() map[string]interface{} {
@@ -1359,19 +1489,31 @@ func (s *service) LegacyListConversations() map[string]interface{} {
 	return map[string]interface{}{"conversations": convs}
 }
 
-func (s *service) LegacyGetMessages(id string) map[string]interface{} {
+func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]interface{} {
+	if page <= 0 { page = 1 }
+	if pageSize <= 0 || pageSize > 200 { pageSize = 50 }
+	offset := (page - 1) * pageSize
+
+	var total int64
+	s.db.Table("messages").Where("conversation_id = ?", id).Count(&total)
+
 	var raw []map[string]interface{}
-	s.db.Table("messages").Where("conversation_id = ?", id).Order("created_at ASC").Limit(100).Find(&raw)
+	s.db.Table("messages").Where("conversation_id = ?", id).Order("created_at ASC").Limit(pageSize).Offset(offset).Find(&raw)
 	var msgs []map[string]interface{}
 	for _, m := range raw {
 		role := fmt.Sprint(m["role"])
 		content := fmt.Sprint(m["content"])
 		if role == "tool" { continue }
 		if role == "assistant" && (content == "" || content == "<nil>") { continue }
+		if v, ok := m["audio_url"]; ok { m["audioUrl"] = v; delete(m, "audio_url") }
+		if v, ok := m["audio_duration"]; ok { m["audioDuration"] = v; delete(m, "audio_duration") }
+		if v, ok := m["msg_type"]; ok { m["msgType"] = v; delete(m, "msg_type") }
+		if v, ok := m["image_url"]; ok && v != nil && v != "" { m["imageUrl"] = v; delete(m, "image_url") }
 		msgs = append(msgs, m)
 	}
 	if msgs == nil { msgs = []map[string]interface{}{} }
-	return map[string]interface{}{"messages": msgs}
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	return map[string]interface{}{"items": msgs, "total": total, "page": page, "pageSize": pageSize, "totalPages": totalPages}
 }
 func (s *service) LegacyDeleteConversation(id string) map[string]interface{} {
 	s.db.Table("messages").Where("conversation_id = ?", id).Delete(nil)

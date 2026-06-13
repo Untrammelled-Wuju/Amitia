@@ -1,0 +1,10 @@
+*** Begin Patch
+*** Update File: D:\桌面\跟进项目\U-Ai\backend\cmd\server\main.go
+@@ import (
+-	"github.com/u-ai/backend/internal/chat"
++	"github.com/u-ai/backend/internal/companion"
++	"github.com/u-ai/backend/internal/chat"
+@@ import (
+-	"github.com/u-ai/backend/internal/proactive"
++	"github.com/u-ai/backend/internal/proactive"
+*** End Patch

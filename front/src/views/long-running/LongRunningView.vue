@@ -13,128 +13,35 @@
 
       <div v-if="status" class="lr-status-grid">
         <div class="lr-stat-card">
-          <div class="lr-stat-label">运行时长</div>
-          <div class="lr-stat-value">{{ fmtUptime(status?.uptime ?? 0) }}</div>
-        </div>
-        <div class="lr-stat-card">
-          <div class="lr-stat-label">内存占用 (RSS)</div>
-          <div class="lr-stat-value">{{ status?.memory?.rssMB ?? 0 }} MB</div>
-        </div>
-        <div class="lr-stat-card">
-          <div class="lr-stat-label">堆内存</div>
-          <div class="lr-stat-value">{{ status?.memory?.heapUsedMB ?? 0 }} MB</div>
-        </div>
-        <div class="lr-stat-card">
-          <div class="lr-stat-label">SSE 连接数</div>
-          <div class="lr-stat-value">{{ status?.activeSseConnections ?? 0 }}</div>
-        </div>
-        <div class="lr-stat-card">
-          <div class="lr-stat-label">无活动时间</div>
-          <div class="lr-stat-value" :class="{ 'lr-warn': status.inactivityMinutes > 30 }">
-            {{ status.inactivityMinutes }} 分钟
+          <div class="lr-stat-label">运行状态</div>
+          <div class="lr-stat-value">
+            <el-tag :type="status.running ? 'success' : 'info'" size="large">
+              {{ status.running ? '运行中' : '空闲' }}
+            </el-tag>
           </div>
         </div>
         <div class="lr-stat-card">
-          <div class="lr-stat-label">最后清理</div>
-          <div class="lr-stat-value lr-sm">{{ status.lastCleanup ? fmtTime(status.lastCleanup) : '未执行' }}</div>
+          <div class="lr-stat-label">活跃任务数</div>
+          <div class="lr-stat-value">{{ status.tasks?.length ?? 0 }}</div>
+        </div>
+        <div class="lr-stat-card">
+          <div class="lr-stat-label">最后活动</div>
+          <div class="lr-stat-value lr-sm">
+            {{ status.tasks?.length > 0 ? fmtTime(status.tasks[0].updated_at) : '-' }}
+          </div>
+        </div>
+      </div>
+
+      <div v-if="status && status.tasks && status.tasks.length > 0" class="lr-task-list">
+        <div class="lr-task-list-title">任务列表</div>
+        <div v-for="task in status.tasks" :key="task.id" class="lr-task-row">
+          <span class="lr-task-title">{{ task.title || '未命名任务' }}</span>
+          <span class="lr-task-time">{{ fmtTime(task.updated_at) }}</span>
         </div>
       </div>
     </el-card>
 
-    <!-- Storage Status -->
-    <el-card shadow="never" class="section-card">
-      <template #header><span class="section-title">存储状态</span></template>
 
-      <div v-if="status" class="lr-storage-grid">
-        <!-- Database -->
-        <div class="lr-storage-section">
-          <div class="lr-ss-title">数据库</div>
-          <div class="lr-ss-row">
-            <span>主文件</span>
-            <span class="lr-ss-val">{{ fmtBytes(status.database.sizeBytes) }}</span>
-          </div>
-          <div class="lr-ss-row">
-            <span>WAL 文件</span>
-            <span class="lr-ss-val">{{ fmtBytes(status.database.walSizeBytes) }}</span>
-          </div>
-          <div class="lr-ss-row">
-            <span>完整性检查</span>
-            <span class="lr-ss-val">
-              <el-tag v-if="status.database.integrityOk === true" type="success" size="small">正常</el-tag>
-              <el-tag v-else-if="status.database.integrityOk === false" type="danger" size="small">异常</el-tag>
-              <el-tag v-else type="info" size="small">未检查</el-tag>
-            </span>
-          </div>
-          <div class="lr-ss-row" v-if="status.database.lastIntegrityCheck">
-            <span>上次检查</span>
-            <span class="lr-ss-val lr-sm">{{ fmtTime(status.database.lastIntegrityCheck) }}</span>
-          </div>
-        </div>
-
-        <!-- Logs -->
-        <div class="lr-storage-section">
-          <div class="lr-ss-title">
-            日志文件
-            <span class="lr-ss-sub">{{ fmtBytes(status.logs.totalSizeBytes) }}</span>
-          </div>
-          <div class="lr-log-list" v-if="status.logs.files.length > 0">
-            <div v-for="f in status.logs.files" :key="f.name" class="lr-log-row">
-              <span class="lr-log-name">{{ f.name }}</span>
-              <span class="lr-log-size">{{ fmtBytes(f.sizeBytes) }}</span>
-            </div>
-          </div>
-          <div v-else class="lr-empty">无日志文件</div>
-        </div>
-
-        <!-- Temp Files -->
-        <div class="lr-storage-section">
-          <div class="lr-ss-title">
-            临时文件
-            <span class="lr-ss-sub">{{ status.tempFiles.count }} 个 ({{ fmtBytes(status.tempFiles.totalSizeBytes) }})</span>
-          </div>
-        </div>
-
-        <!-- Backup -->
-        <div class="lr-storage-section">
-          <div class="lr-ss-title">最近备份</div>
-          <div v-if="status.lastBackup.time" class="lr-ss-row">
-            <span>时间</span>
-            <span class="lr-ss-val">{{ fmtTime(status.lastBackup.time) }}</span>
-          </div>
-          <div v-if="status.lastBackup.ageHours !== null" class="lr-ss-row">
-            <span>距今</span>
-            <span class="lr-ss-val" :class="{ 'lr-warn': status.lastBackup.ageHours > 168 }">
-              {{ status.lastBackup.ageHours }} 小时
-            </span>
-          </div>
-          <div v-else class="lr-empty">无备份记录</div>
-        </div>
-      </div>
-    </el-card>
-
-    <!-- Bridge Heartbeat -->
-    <el-card shadow="never" class="section-card">
-      <template #header><span class="section-title">Bridge 心跳</span></template>
-      <div v-if="status" class="lr-bridge">
-        <div class="lr-bridge-status">
-          <el-tag v-if="status.bridgeHeartbeat.ok" type="success" size="large">
-            <el-icon><CircleCheck /></el-icon> 正常
-          </el-tag>
-          <el-tag v-else type="danger" size="large">
-            <el-icon><CircleClose /></el-icon> {{ status.bridgeHeartbeat.lastCheck ? '异常' : '未检测' }}
-          </el-tag>
-          <span v-if="status.bridgeHeartbeat.latencyMs" class="lr-bridge-latency">
-            延迟: {{ status.bridgeHeartbeat.latencyMs }}ms
-          </span>
-        </div>
-        <div v-if="!status.bridgeHeartbeat.ok" class="lr-bridge-hint">
-          Bridge 心跳异常，请检查微信桥服务是否正常运行。
-        </div>
-        <div v-if="status.bridgeHeartbeat.lastCheck" class="lr-bridge-time">
-          上次检测: {{ fmtTime(status.bridgeHeartbeat.lastCheck) }}
-        </div>
-      </div>
-    </el-card>
 
     <!-- Manual Actions -->
     <el-card shadow="never" class="section-card">
@@ -207,35 +114,20 @@
     <!-- Config -->
     <el-card shadow="never" class="section-card">
       <template #header><span class="section-title">配置</span></template>
-      <el-form label-width="180px" label-position="left" size="small">
-        <el-form-item label="临时文件清理">
-          <el-switch v-model="config.tempCleanupEnabled" @change="saveConfig" />
-        </el-form-item>
-        <el-form-item label="临时文件保留天数">
-          <el-input-number v-model="config.tempRetentionDays" :min="1" :max="90" @change="saveConfig" size="small" />
-        </el-form-item>
-        <el-form-item label="日志轮转">
-          <el-switch v-model="config.logRotateEnabled" @change="saveConfig" />
-        </el-form-item>
-        <el-form-item label="日志最大大小 (MB)">
-          <el-input-number v-model="config.logMaxSizeMb" :min="1" :max="1000" @change="saveConfig" size="small" />
-        </el-form-item>
-        <el-form-item label="数据库完整性检查">
-          <el-switch v-model="config.dbIntegrityCheckEnabled" @change="saveConfig" />
-        </el-form-item>
-        <el-form-item label="备份提醒">
-          <el-switch v-model="config.backupReminderEnabled" @change="saveConfig" />
-        </el-form-item>
-        <el-form-item label="调度器错误隔离">
-          <el-switch v-model="config.schedulerErrorIsolation" @change="saveConfig" />
-        </el-form-item>
-        <el-form-item label="无活动超时 (分钟)">
-          <el-input-number v-model="config.inactivityTimeoutMinutes" :min="5" :max="1440" @change="saveConfig" size="small" />
-        </el-form-item>
-        <el-form-item label="模型请求超时 (ms)">
-          <el-input-number v-model="config.modelRequestTimeoutMs" :min="10000" :max="600000" :step="10000" @change="saveConfig" size="small" />
-        </el-form-item>
-      </el-form>
+
+      <div class="lr-config-form">
+        <div class="lr-cfg-row">
+          <span class="lr-cfg-label">最大任务数</span>
+          <el-input-number v-model="config.maxTasks" :min="1" :max="20" size="small" />
+        </div>
+        <div class="lr-cfg-row">
+          <span class="lr-cfg-label">超时时间 (分钟)</span>
+          <el-input-number v-model="config.timeoutMinutes" :min="5" :max="120" size="small" />
+        </div>
+        <div class="lr-cfg-actions">
+          <el-button type="primary" size="small" @click="saveConfig">保存配置</el-button>
+        </div>
+      </div>
     </el-card>
   </div>
 </template>
@@ -247,54 +139,24 @@ import { CircleCheck, CircleClose } from "@element-plus/icons-vue"
 import { get, post, put } from "../../composables/request.js"
 
 interface LongRunningStatus {
-  tempFiles: { count: number; totalSizeBytes: number }
-  logs: { files: { name: string; sizeBytes: number; lastModified: string }[]; totalSizeBytes: number }
-  database: { path: string; sizeBytes: number; walSizeBytes: number; lastIntegrityCheck: string | null; integrityOk: boolean | null }
-  lastBackup: { time: string | null; ageHours: number | null }
-  bridgeHeartbeat: { ok: boolean; lastCheck: string | null; latencyMs: number | null }
-  uptime: number
-  memory: { rssMB: number }
-  activeSseConnections: number
-  inactivityMinutes: number
-  lastCleanup: string | null
-  lastLogRotate: string | null
+  running: boolean
+  tasks: Array<{
+    id: string
+    title: string
+    character_id: string
+    updated_at: string
+  }>
 }
 
 interface LongRunningConfig {
-  tempCleanupEnabled: boolean
-  tempRetentionDays: number
-  logRotateEnabled: boolean
-  logMaxSizeMb: number
-  dbIntegrityCheckEnabled: boolean
-  backupReminderEnabled: boolean
-  schedulerErrorIsolation: boolean
-  inactivityTimeoutMinutes: number
-  modelRequestTimeoutMs: number
-  bridgeHeartbeatIntervalMs: number
-  sseConnectionMaxAgeMs: number
-  cleanupIntervalMinutes: number
-  logRotateIntervalMinutes: number
-  dbIntegrityCheckIntervalHours: number
-  backupReminderIntervalHours: number
+  maxTasks: number
+  timeoutMinutes: number
 }
 
 const status = ref<LongRunningStatus | null>(null)
 const config = ref<LongRunningConfig>({
-  tempCleanupEnabled: true,
-  tempRetentionDays: 7,
-  logRotateEnabled: true,
-  logMaxSizeMb: 50,
-  dbIntegrityCheckEnabled: true,
-  backupReminderEnabled: true,
-  schedulerErrorIsolation: true,
-  inactivityTimeoutMinutes: 30,
-  modelRequestTimeoutMs: 120000,
-  bridgeHeartbeatIntervalMs: 30000,
-  sseConnectionMaxAgeMs: 600000,
-  cleanupIntervalMinutes: 60,
-  logRotateIntervalMinutes: 30,
-  dbIntegrityCheckIntervalHours: 24,
-  backupReminderIntervalHours: 168,
+  maxTasks: 5,
+  timeoutMinutes: 30,
 })
 
 const loading = ref(false)
@@ -313,6 +175,7 @@ async function refresh() {
     // Also refresh config
     try {
       const cfgData = await get<LongRunningConfig>("/api/runtime/long-running/config")
+      if (cfgData) { config.value = cfgData }
     } catch { /* config fetch is separate */ }
   } catch {
     // Error handled by request interceptor
@@ -333,19 +196,11 @@ async function loadConfig() {
 async function saveConfig() {
   try {
     await put("/api/runtime/long-running/config", {
-      tempCleanupEnabled: config.value.tempCleanupEnabled,
-      tempRetentionDays: config.value.tempRetentionDays,
-      logRotateEnabled: config.value.logRotateEnabled,
-      logMaxSizeMb: config.value.logMaxSizeMb,
-      dbIntegrityCheckEnabled: config.value.dbIntegrityCheckEnabled,
-      backupReminderEnabled: config.value.backupReminderEnabled,
-      schedulerErrorIsolation: config.value.schedulerErrorIsolation,
-      inactivityTimeoutMinutes: config.value.inactivityTimeoutMinutes,
-      modelRequestTimeoutMs: config.value.modelRequestTimeoutMs,
+      maxTasks: config.value.maxTasks,
+      timeoutMinutes: config.value.timeoutMinutes,
     })
     ElMessage.success("配置已保存")
   } catch {
-    // Error handled by interceptor
   }
 }
 
@@ -666,5 +521,62 @@ onMounted(() => {
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+/* Task list */
+.lr-task-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lr-task-list-title {
+  font-size: var(--ac-font-size-sm);
+  font-weight: 600;
+  color: var(--ac-color-text-secondary);
+  margin-bottom: 4px;
+}
+.lr-task-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-color-bg-secondary);
+  font-size: 13px;
+}
+.lr-task-title {
+  font-weight: 500;
+  color: var(--ac-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 12px;
+}
+.lr-task-time {
+  font-size: 12px;
+  color: var(--ac-color-text-muted);
+  white-space: nowrap;
+}
+
+/* Config form */
+.lr-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lr-cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.lr-cfg-label {
+  font-size: 13px;
+  color: var(--ac-color-text);
+  min-width: 130px;
+}
+.lr-cfg-actions {
+  margin-top: 4px;
 }
 </style>

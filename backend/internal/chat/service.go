@@ -22,7 +22,7 @@ type Service interface {
 	CreateConversation(req *CreateConversationRequest) (*Conversation, error)
 	DeleteConversation(id string) error
 	DeleteAllConversations() error
-	GetMessages(convID string) ([]Message, error)
+	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
 	DeleteMessages(convID string) error
 	DeleteSingleMessage(id string) error
 	SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error)
@@ -39,6 +39,7 @@ type Service interface {
 	UpdateModelRoutes(routes []map[string]interface{}) error
 	DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error)
 	EnsureChannelConversation(channel string) (*Conversation, error)
+	RecalculateMessageCounts() (int64, error)
 	ListProviders() []ProviderInfo
 }
 
@@ -55,7 +56,8 @@ const systemFormatInstruction = `【回复格式 - 系统固定规则】
 create_schedule 仅在用户明确要求"提醒"、"叫"、"通知"、"叫醒"、"定时"等场景时调用。
 禁止在用户只问时间、闲聊、打招呼、问天气等日常对话中调用 create_schedule。
 get_current_time 仅在用户明确询问当前时间时调用。
-不要在用户没有明确要求的情况下自动创建任何提醒。`
+不要在用户没有明确要求的情况下自动创建任何提醒。
+force_voice_reply 仅在用户明确要求"用语音回复"、"发语音"、"语音回答"、"说语音"、"讲语音"时调用。调用后本次回复会以语音形式发送。`
 
 const systemNoEmojiInstruction = "【系统规则】回复中不要使用任何emoji表情符号。"
 
@@ -118,6 +120,11 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 	return c, nil
 }
 
+func (s *service) RecalculateMessageCounts() (int64, error) {
+	result := s.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE messages.conversation_id = conversations.id)")
+	return result.RowsAffected, result.Error
+}
+
 func (s *service) DeleteConversation(id string) error {
 	return s.repo.DeleteConversation(id)
 }
@@ -126,8 +133,8 @@ func (s *service) DeleteAllConversations() error {
 	return s.repo.DeleteAllConversations()
 }
 
-func (s *service) GetMessages(convID string) ([]Message, error) {
-	return s.repo.GetMessages(convID)
+func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int64, error) {
+	return s.repo.GetMessages(convID, page, pageSize)
 }
 
 func (s *service) DeleteMessages(convID string) error {
@@ -241,13 +248,30 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			s.db.Exec("UPDATE conversations SET title = ? WHERE id = ?", "微信对话", convID)
 		}
 	}
+	if req.VoiceMessage && (req.Message == "" || req.Message == "[语音]") {
+		req.Message = "（用户发来一条语音，听不清内容）"
+	}
+	if charID != "" {
+		s.db.Exec("UPDATE characters SET conversation_id = ?, updated_at = ? WHERE id = ? AND (conversation_id IS NULL OR conversation_id = '')", convID, time.Now().Format("2006-01-02 15:04:05"), charID)
+	}
 	userMsgID := uuid.New().String()
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, time.Now().Format("2006-01-02 15:04:05"))
+	msgType := "text"
+	if req.AudioUrl != "" { msgType = "voice" }
+	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, time.Now().Format("2006-01-02 15:04:05"))
+	if req.ImageUrl != "" && req.ImageContext == "" {
+		desc := analyzeImageInternal(req.ImageUrl)
+		if desc != "" {
+			req.ImageContext = "[图片描述：" + desc + "]"
+		}
+	}
 	history := s.loadHistory(convID)
 	messages := []map[string]interface{}{}
 	messages = append(messages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
 	if systemPrompt != "" { messages = append(messages, map[string]interface{}{"role": "system", "content": systemPrompt}) }
 	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
+	if req.ImageContext != "" {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": req.ImageContext})
+	}
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
 	messages = append(messages, map[string]interface{}{"role": "user", "content": req.Message})
 	toolDefs := tool.GetAll()
@@ -311,19 +335,24 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	if len(realLines) == 0 {
 		realLines = []string{reply}
 	}
+	var msgIDs []string
 	for _, line := range realLines {
-		msgID := uuid.New().String()
-		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", msgID, convID, "assistant", line, source, time.Now().Format("2006-01-02 15:04:05"))
+		id := uuid.New().String()
+		msgIDs = append(msgIDs, id)
+		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, convID, "assistant", line, source, time.Now().Format("2006-01-02 15:04:05"))
 	}
 	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
 	go s.autoExtractMemories(convID, charID)
+	go s.moodRecoveryCheck(convID, charID, source)
 
 	return &ProcessMessageResponse{
 		ConversationID: convID,
 		Reply:          reply,
 		CharacterID:    charID,
 		CharacterName:  charName,
+		MessageIDs:     msgIDs,
+		ForceVoice:     tool.GetForceVoice(),
 	}, nil
 }
 
@@ -491,4 +520,58 @@ func truncateStr(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n { return s }
 	return string(runes[:n]) + "..."
+}
+
+
+
+
+
+const doubaoAPIKey = "ark-919cb2bc-dcd1-4ef9-b8b5-5f1b42488bf7-9bd5c"
+const doubaoBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
+const doubaoModel = "doubao-seed-2-0-lite-260428"
+
+func analyzeImageInternal(imageBase64 string) string {
+	reqBody := map[string]interface{}{
+		"model": doubaoModel,
+		"input": []map[string]interface{}{{
+			"role": "user",
+			"content": []map[string]interface{}{
+				{"type": "input_image", "image_url": imageBase64},
+				{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息"},
+			},
+		}},
+	}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", doubaoBaseURL+"/responses", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return ""
+	}
+	output, _ := result["output"].([]interface{})
+	for _, item := range output {
+		m, _ := item.(map[string]interface{})
+		if m["type"] == "message" {
+			contentArr, _ := m["content"].([]interface{})
+			var texts []string
+			for _, c := range contentArr {
+				cm, _ := c.(map[string]interface{})
+				if cm["type"] == "output_text" {
+					texts = append(texts, fmt.Sprint(cm["text"]))
+				}
+			}
+			return strings.Join(texts, "")
+		}
+	}
+	return ""
 }
