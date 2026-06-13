@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5178,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8899",
@@ -18,6 +18,14 @@ export default defineConfig({
       },
       "/bridge": {
         target: "http://127.0.0.1:8898",
+        changeOrigin: true,
+      },
+      "/voice": {
+        target: "http://127.0.0.1:8899",
+        changeOrigin: true,
+      },
+      "/audio": {
+        target: "http://127.0.0.1:8899",
         changeOrigin: true,
       },
     },

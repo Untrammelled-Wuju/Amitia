@@ -141,13 +141,7 @@
         @retry="handleRetry"
       />
 
-      <!-- Typing indicator -->
-      <div v-if="sending" class="typing-bubble">
-        <div class="typing-dots">
-          <span></span><span></span><span></span>
-        </div>
-        <span class="typing-text">回复中...</span>
-      </div>
+
 
       <!-- Scroll-to-bottom button -->
       <transition name="fade">
@@ -168,6 +162,8 @@
       :disabled="modelMissing"
       :sending="sending"
       @send="handleSend"
+        @image="onImageAttached"
+        @removeImage="onImageRemoved"
       @stop="handleStop"
     />
 
@@ -234,6 +230,7 @@ import { useApi, isLoggedIn, getToken } from "../../composables/useApi"
 import { useCachedApi } from "../../composables/useCachedApi"
 import ChatBubble from "../../components/ChatBubble.vue"
 import ChatInput from "../../components/ChatInput.vue"
+import { analyzeImage } from "../../utils/doubao"
 import ConversationDrawer from "../../components/ConversationDrawer.vue"
 
 const route = useRoute()
@@ -264,6 +261,10 @@ const wechatOnline = ref(false)
 const qqMsgCount = ref(0)
 const isQQActive = ref(false)
 const qqOnline = ref(false)
+const callActive = ref(false)
+const currentImageBase64 = ref<string | null>(null)
+const currentImageFile = ref<File | null>(null)
+const IMAGE_STORE_KEY = "chat_image_messages"
 
 const sending = ref(false)
 
@@ -598,7 +599,7 @@ async function loadCharacterConversation() {
     const r = await get<any>(`/api/web-chat/conversations/${dedicatedConvId}/messages`)
     if (version !== messagesVersion) return
     const items = (r?.messages || r?.items || [])
-    if (items.length) { messages.value = items; await nextTick(); scrollToBottom() }
+    if (items.length) { messages.value = items; attachLocalImages(messages.value); msgPage.value = 1; hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE; await nextTick(); scrollToBottom() }
     else { messages.value = [] }
     lastPolledMsgId = messages.value[messages.value.length - 1]?.id || null
     connectSSE()
@@ -792,11 +793,91 @@ function flushPending() {
   doActualSend(combined)
 }
 
-async function handleSend(text: string) {
-  pendingTexts.push(text)
-  // 如果 AI 正在回复，排队等待（不重置计时器）
+function onImageAttached(file: File, base64: string) {
+  currentImageFile.value = file
+  currentImageBase64.value = base64
+}
+
+function onImageRemoved() {
+  currentImageFile.value = null
+  currentImageBase64.value = null
+}
+
+function saveImageMessage(msgId: string, imageBase64: string, text: string) {
+  try {
+    const store = JSON.parse(localStorage.getItem(IMAGE_STORE_KEY) || "[]")
+    store.push({ id: msgId, convId: convId.value, imageUrl: imageBase64, text, time: Date.now() })
+    if (store.length > 50) store.splice(0, store.length - 50)
+    localStorage.setItem(IMAGE_STORE_KEY, JSON.stringify(store))
+  } catch {}
+}
+
+function attachLocalImages(msgs: any[]) {
+  try {
+    const store = JSON.parse(localStorage.getItem(IMAGE_STORE_KEY) || "[]")
+    if (!store.length) return
+    let convImages = store.filter((e: any) => e.convId === convId.value)
+    if (!convImages.length) return
+    convImages = [...convImages].sort((a: any, b: any) => a.time - b.time)
+    let imgIdx = 0
+    for (const msg of msgs) {
+      if (msg.role !== "user" || msg.imageUrl) continue
+      const isCtx = (msg.content || "").indexOf("[\u7CFB\u7EDF\uFF1A") >= 0
+      if (isCtx && imgIdx < convImages.length) {
+        msg.imageUrl = convImages[imgIdx].imageUrl
+        msg.content = convImages[imgIdx].text || ""
+        imgIdx++
+      }
+    }
+  } catch {}
+}
+
+async function handleImageSend(text: string, imageBase64: string) {
   if (sending.value) return
-  // 每次新消息重置计时器
+  sending.value = true
+  const hasUserText = !!(text && text.trim())
+  const userMsgId = "user-" + Date.now()
+  messages.value.push({
+    id: userMsgId, role: "user",
+    content: hasUserText ? text : "",
+    imageUrl: imageBase64,
+    status: "sent" as any,
+    conversationId: convId.value,
+    createdAt: new Date().toISOString()
+  })
+  scrollToBottom(true)
+  try {
+    const doubaoResult = await analyzeImage(imageBase64, "\u8BF7\u8BE6\u7EC6\u63CF\u8FF0\u8FD9\u5F20\u56FE\u7247\u7684\u5185\u5BB9\uFF0C\u5305\u62EC\u573A\u666F\u3001\u7269\u4F53\u3001\u4EBA\u7269\u3001\u6587\u5B57\u3001\u8868\u60C5\u3001\u6C1B\u56F4\u7B49\u6240\u6709\u53EF\u89C1\u4FE1\u606F")
+    saveImageMessage(userMsgId, imageBase64, hasUserText ? text : "")
+    currentImageBase64.value = null
+    currentImageFile.value = null
+    sending.value = false
+    let contextPrompt: string
+    if (hasUserText) {
+      contextPrompt = "[\u7CFB\u7EDF\uFF1A\u7528\u6237\u53D1\u9001\u4E86\u4E00\u5F20\u56FE\u7247\uFF0CAI\u5BF9\u56FE\u7247\u7684\u5206\u6790\u7ED3\u679C\u5982\u4E0B]\n" + doubaoResult + "\n\n\u7528\u6237\u9644\u5E26\u7684\u6587\u5B57\uFF1A" + text
+    } else {
+      contextPrompt = "[\u7CFB\u7EDF\uFF1A\u7528\u6237\u53D1\u9001\u4E86\u4E00\u5F20\u56FE\u7247\uFF0CAI\u5BF9\u56FE\u7247\u7684\u5206\u6790\u7ED3\u679C\u5982\u4E0B]\n" + doubaoResult + "\n\n\u8BF7\u7ED3\u5408\u5BF9\u8BDD\u4E0A\u4E0B\u6587\u81EA\u7136\u56DE\u590D\u3002\u5982\u679C\u662F\u8868\u60C5\u5305\u6216\u4E0E\u5F53\u524D\u8BDD\u9898\u76F8\u5173\uFF0C\u5EF6\u7EED\u8BDD\u9898\u800C\u975E\u63CF\u8FF0\u56FE\u7247\u3002\u65E0\u6CD5\u5224\u65AD\u65F6\u53EF\u53CB\u597D\u8BE2\u95EE\u3002"
+    }
+    await doActualSend(contextPrompt, true)
+  } catch (err: any) {
+    messages.value.push({
+      id: "error-" + Date.now(), role: "assistant",
+      content: "\u56FE\u7247\u5206\u6790\u5931\u8D25\uFF1A" + (err.message || "\u672A\u77E5\u9519\u8BEF"),
+      status: "failed" as any,
+      conversationId: convId.value,
+      createdAt: new Date().toISOString()
+    })
+    sending.value = false
+  }
+}
+
+async function handleSend(text: string, imageBase64?: string) {
+  if (imageBase64 || currentImageBase64.value) {
+    handleImageSend(text, imageBase64 || currentImageBase64.value || "")
+    return
+  }
+  pendingTexts.push(text)
+  if (sending.value) return
   if (typingTimer) clearTimeout(typingTimer)
   typingTimer = setTimeout(flushPending, TYPING_WAIT_MS)
 }
@@ -862,36 +943,33 @@ async function doActualSend(text: string) {
             continue
           }
 
-          if (eventType === "token" && data.content) {
-            // 替换占位气泡为真实 AI 消息
-            const pIdx = messages.value.findIndex((m: any) => m.status === "streaming")
-            if (pIdx >= 0 && messages.value[pIdx].content === "") {
-              messages.value.splice(pIdx, 1) // 移除空白占位
-            }
-            const msg = {
-              id: data.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-              conversationId: data.conversationId || convId.value,
-              role: "assistant",
-              content: data.content,
-              status: "sent",
-              createdAt: data.createdAt || new Date().toISOString(),
-            }
-            if (!messages.value.some((m: any) => m.id === msg.id)) {
-              messages.value.push(msg)
-              lastPolledMsgId = msg.id
+            if (eventType === "token" && data.content) {
+              const sIdx = messages.value.findIndex((m: any) => m.id === "streaming")
+              if (sIdx >= 0) {
+                messages.value[sIdx].content = data.content
+              } else {
+                messages.value.push({
+                  id: "streaming", role: "assistant", content: data.content,
+                  status: "streaming", conversationId: data.conversationId || convId.value,
+                  createdAt: data.createdAt || new Date().toISOString()
+                })
+              }
               scrollToBottom(true)
             }
-          }
 
-          if (eventType === "done") {
-            // 更新 lastPolledMsgId 为最后一条 AI 消息的 DB ID，防止 SSE 重连后重复推送
-            if (data.assistantMessage?.id) {
-              lastPolledMsgId = data.assistantMessage.id
+                    if (eventType === "done") {
+              if (data.assistantMessage?.id) {
+                lastPolledMsgId = data.assistantMessage.id
+              }
+              const dIdx = messages.value.findIndex((m: any) => m.id === "streaming")
+              if (dIdx >= 0) {
+                messages.value[dIdx].id = data.id || data.assistantMessage?.id || ("msg-" + Date.now())
+                messages.value[dIdx].status = "sent"
+              } else {
+                const pIdx = messages.value.findIndex((m: any) => m.status === "streaming")
+                if (pIdx >= 0) messages.value.splice(pIdx, 1)
+              }
             }
-            // 移除可能残留的占位气泡
-            const pIdx = messages.value.findIndex((m: any) => m.status === "streaming")
-            if (pIdx >= 0) messages.value.splice(pIdx, 1)
-          }
         } catch { /* skip malformed */ }
       }
     }
@@ -899,7 +977,7 @@ async function doActualSend(text: string) {
   } catch (err: any) {
     if (err?.name === "AbortError") {
       const sIdx = messages.value.findIndex(m => m.id === "streaming")
-      const tIdx = messages.value.findIndex(m => m.id === placeholderId)
+      const tIdx = -1
       if (sIdx >= 0) {
         const partial = messages.value[sIdx]
         messages.value.splice(sIdx, 1)
@@ -915,7 +993,7 @@ async function doActualSend(text: string) {
       const errMsg = err?.message || "连接失败"
       modelError.value = errMsg
       ElMessage.error(errMsg)
-      const tIdx = messages.value.findIndex(m => m.id === placeholderId)
+      const tIdx = -1
       if (tIdx >= 0) {
         messages.value[tIdx] = { ...messages.value[tIdx], id: "failed-" + Date.now(), status: "failed" }
       }
@@ -1089,6 +1167,7 @@ async function loadOlderMessages() {
       // Preserve scroll position after prepending
       const el = msgArea.value
       const prevHeight = el?.scrollHeight || 0
+      attachLocalImages(older)
       messages.value = [...older, ...messages.value]
       msgPage.value++
       nextTick(() => {

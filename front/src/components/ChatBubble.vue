@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-bubble" :class="[message.role, { 'is-streaming': isStreaming, 'is-typing': typingEnabled && isTypingActive }]">
+  <div class="chat-bubble" :class="[message.role, { 'is-streaming': isStreaming }]">
     <div class="bubble-avatar">
       <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : undefined">
         {{ message.role === "user" ? "U" : charInitial }}
@@ -7,11 +7,39 @@
     </div>
     <div class="bubble-body">
       <div class="bubble-meta">
-        <span class="bubble-name">{{ message.role === "user" ? "你" : charName }}</span>
+        <span class="bubble-name" v-if="message.role !== 'user'">{{ charName }}</span>
         <span class="bubble-time" v-if="message.createdAt">{{ fmtTime(message.createdAt) }}</span>
         <span class="bubble-latency" v-if="message.latencyMs">{{ message.latencyMs }}ms</span>
+      
+      <div class="bubble-image" v-if="(message as any).imageUrl" @click="showImagePreview = true" style="display:inline-block;max-width:150px;overflow:hidden">
+        <img :src="(message as any).imageUrl" alt="用户上传图片" style="width:150px;height:120px;object-fit:cover;display:block;border-radius:6px;max-width:100%" />
+        <div class="image-overlay">
+          <el-icon><ZoomIn /></el-icon>
+        </div>
       </div>
-      <div class="bubble-content" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove"></div>
+       </div>
+      
+      <div class="voice-bar" v-if="hasAudio && !isStreaming" @click="toggleVoice()" :class="{ playing: voicePlaying, loading: voiceLoading, 'voice-only': !message.content }">
+        <div class="voice-icon-wrap">
+          <svg viewBox="0 0 28 28" class="voice-wx-icon" :class="{ active: voicePlaying }">
+            <rect class="voice-body" x="2" y="8" width="5" height="12" rx="1.5" />
+            <path class="voice-wave w1" d="M9 11a3 3 0 010 6" />
+            <path class="voice-wave w2" d="M11.5 8.5a6 6 0 010 11" />
+            <path class="voice-wave w3" d="M14 6a9 9 0 010 16" />
+          </svg>
+          <div class="voice-anim-dots" v-if="voiceLoading">
+            <span class="dot" />
+            <span class="dot" />
+            <span class="dot" />
+          </div>
+        </div>
+        <span class="voice-label">{{ voiceLoading ? '加载中' : voicePlaying ? '播放中' : '播放语音' }}</span>
+        <span class="voice-dots" v-if="voicePlaying">
+          <span v-for="i in 5" :key="i" class="vdot" :style="{ animationDelay: (i * 0.12) + 's' }" />
+        </span>
+        <span class="voice-sec" v-if="voiceDuration && !voicePlaying">{{ voiceDuration }}</span>
+      </div>
+      <div class="bubble-content" v-if="message.content && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove"></div>
       <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
         <span class="status-tag" :class="message.status">
           {{ message.status === 'failed' ? '发送失败' : '生成中断' }}
@@ -20,6 +48,11 @@
           <el-icon><Refresh /></el-icon> 重试
         </el-button>
       </div>
+      <div class="text-toggle" v-if="hasAudio && message.content" @click="textExpanded = !textExpanded">
+        <span>{{ textExpanded ? '隐藏文本' : '显示文本' }}</span>
+        <span class="text-toggle-arrow" :class="{ expanded: textExpanded }">&#9660;</span>
+      </div>
+
       <div class="bubble-actions" v-if="message.role === 'assistant' && !isStreaming">
         <el-button text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
@@ -27,14 +60,20 @@
         <slot name="actions" :message="message" />
       </div>
     </div>
-  </div>
+  
+    <el-dialog v-model="showImagePreview" title="图片预览" width="90%" :close-on-click-modal="true" class="image-preview-dialog">
+      <img :src="(message as any).imageUrl" style="width:100%;max-height:70vh;object-fit:contain" />
+    </el-dialog>
+</div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from "vue"
-import { DocumentCopy, Refresh } from "@element-plus/icons-vue"
+import { ref, computed, watch, onUnmounted } from "vue"
+
+import { DocumentCopy, Refresh, ZoomIn } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
-import { useTyping } from "../composables/useTyping"
+import { useApi } from "../composables/useApi"
+
 
 const props = defineProps<{
   message: {
@@ -45,30 +84,33 @@ const props = defineProps<{
     latencyMs?: number
     tokens?: number
     status?: string
+    audioUrl?: string
+    audioDuration?: number
   }
   charName?: string
   charAvatar?: string
   isStreaming?: boolean
   status?: string
+  characterId?: string
 }>()
 
 const emit = defineEmits<{
   retry: [message: any]
 }>()
 
+const hasAudio = computed(() => !!((props.message as any).audioUrl))
+const showImagePreview = ref(false)
+const textExpanded = ref(!((props.message as any).audioUrl))
+
+
 const charInitial = computed(() => (props.charName || "AI").charAt(0))
 
-const typingEnabled = computed(() => {
-  return props.message.role === "assistant" && !props.isStreaming && !!props.message.content
-})
+watch(hasAudio, (val) => { if (val) textExpanded.value = false })
 
-const { displayText, isTyping: isTypingActive } = useTyping(
-  () => props.message.content,
-  () => typingEnabled.value
-)
+
 
 const renderedContent = computed(() => {
-  const text = typingEnabled.value ? displayText.value : (props.message.content || "")
+  const text = props.message.content || ""
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -116,8 +158,92 @@ function onTouchEnd() {
   }
 }
 
+const { post } = useApi()
+const voicePlaying = ref(false)
+const voiceLoading = ref(false)
+const voiceDuration = ref("")
+const voiceAudio = ref<HTMLAudioElement | null>(null)
+
+function formatDuration(seconds: number): string {
+  const s = Math.round(seconds)
+  if (s < 60) return s + '\u2033'
+  return Math.floor(s / 60) + '\u2032' + (s % 60) + '\u2033'
+}
+
+async function toggleVoice() {
+  if (voiceLoading.value) return
+  if (voicePlaying.value) {
+    stopVoice()
+    return
+  }
+  const preUrl = (props.message as any).audioUrl
+  if (preUrl) {
+    stopVoice()
+    const audio = new Audio(preUrl)
+    voiceAudio.value = audio
+    voiceDuration.value = formatDuration((props.message as any).audioDuration || 0)
+    try {
+      await audio.play()
+      voicePlaying.value = true
+    } catch (e) {
+      ElMessage.warning("播放失败")
+    }
+    audio.onended = () => {
+      voicePlaying.value = false
+      voiceAudio.value = null
+    }
+    audio.onerror = () => {
+      voicePlaying.value = false
+      voiceAudio.value = null
+      ElMessage.warning("播放失败")
+    }
+    return
+  }
+  voiceLoading.value = true
+  try {
+    const res = await post<any>("/api/tts/synthesize", {
+      characterId: props.characterId || undefined,
+      text: props.message.content,
+    })
+    const url = res?.audioUrl
+    if (!url) {
+      ElMessage.warning("语音合成失败")
+      return
+    }
+    stopVoice()
+    const audio = new Audio(url)
+    voiceAudio.value = audio
+    voiceDuration.value = formatDuration(res?.duration || 0)
+    await audio.play()
+    voicePlaying.value = true
+    voiceLoading.value = false
+    audio.onended = () => {
+      voicePlaying.value = false
+      voiceAudio.value = null
+    }
+    audio.onerror = () => {
+      voicePlaying.value = false
+      voiceAudio.value = null
+      ElMessage.warning("播放失败")
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "语音合成失败")
+  } finally {
+    voiceLoading.value = false
+  }
+}
+
+function stopVoice() {
+  if (voiceAudio.value) {
+    voiceAudio.value.pause()
+    voiceAudio.value = null
+  }
+  voicePlaying.value = false
+}
+
 onUnmounted(() => {
   if (longPressTimer.value) clearTimeout(longPressTimer.value)
+  stopVoice()
 })
 
 async function copyContent() {
@@ -143,143 +269,226 @@ async function copyContent() {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.chat-bubble.user {
-  flex-direction: row-reverse;
-}
-
-.chat-bubble.assistant .bubble-avatar {
-  flex-shrink: 0;
-}
-
-.chat-bubble.user .bubble-avatar {
-  flex-shrink: 0;
-}
-
-.bubble-body {
-  max-width: 80%;
-  min-width: 60px;
-}
+.chat-bubble.user { flex-direction: row-reverse; }
+.chat-bubble.assistant .bubble-avatar { flex-shrink: 0; }
+.chat-bubble.user .bubble-avatar { flex-shrink: 0; }
+.bubble-body { max-width: 80%; min-width: 60px; }
 
 .bubble-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-  padding: 0 4px;
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 3px; padding: 0 4px;
 }
-
-.chat-bubble.user .bubble-meta {
-  justify-content: flex-end;
-}
-
-.bubble-name {
-  font-size: var(--ac-font-size-xs);
-  font-weight: 500;
-  color: var(--ac-color-text-secondary);
-}
-
-.bubble-time {
-  font-size: 10px;
-  color: var(--ac-color-text-muted);
-}
-
-.bubble-latency {
-  font-size: 10px;
-  color: var(--ac-color-text-placeholder);
-}
+.chat-bubble.user .bubble-meta { justify-content: flex-end; }
+.bubble-name { font-size: var(--ac-font-size-xs); font-weight: 500; color: var(--ac-color-text-secondary); }
+.bubble-time { font-size: 10px; color: var(--ac-color-text-muted); }
+.bubble-latency { font-size: 10px; color: var(--ac-color-text-placeholder); }
 
 .bubble-content {
-  padding: 10px 14px;
-  border-radius: var(--ac-radius-md);
-  font-size: var(--ac-font-size-sm);
-  line-height: 1.65;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
 
+padding: 10px 14px; border-radius: var(--ac-radius-md);
+  font-size: var(--ac-font-size-sm); line-height: 1.65;
+  word-break: break-word; white-space: pre-wrap;
+}
 .chat-bubble.user .bubble-content {
-  background: var(--ac-color-primary-bg);
-  color: var(--ac-color-text);
+  background: var(--ac-color-primary-bg); color: var(--ac-color-text);
   border-top-right-radius: 4px;
 }
-
 .chat-bubble.assistant .bubble-content {
-  background: var(--ac-color-surface);
-  border: 1px solid var(--ac-color-border-light);
+  background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light);
   border-top-left-radius: 4px;
 }
+.chat-bubble.is-streaming .bubble-content { border-color: var(--ac-color-primary-border); }
+.chat-bubble.is-typing .bubble-content { border-color: var(--ac-color-primary-border); }
 
-.chat-bubble.is-streaming .bubble-content {
-  border-color: var(--ac-color-primary-border);
+/* ======== Voice Bar (WeChat Style) ======== */
+.voice-bar {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; margin-top: 6px;
+  background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light);
+  border-radius: 20px; cursor: pointer; user-select: none;
+  transition: all 0.25s ease; min-width: 140px;
+}
+.voice-bar:hover { background: var(--ac-color-surface-hover); border-color: var(--ac-color-primary-border); }
+.voice-bar.playing {
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-primary-bg);
+}
+.voice-bar.loading { opacity: 0.7; pointer-events: none; }
+
+.voice-icon-wrap {
+  position: relative; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
 
-.chat-bubble.is-typing .bubble-content {
-  border-color: var(--ac-color-primary-border);
+/* WeChat-style voice icon (SVG) */
+.voice-wx-icon {
+  width: 28px; height: 28px;
+  fill: none; stroke: var(--ac-color-text-secondary);
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  transition: stroke 0.3s;
+}
+.voice-bar.playing .voice-wx-icon { stroke: var(--ac-color-primary); }
+.voice-wx-icon .voice-body { fill: var(--ac-color-text-secondary); stroke: none; transition: fill 0.3s; }
+.voice-bar.playing .voice-wx-icon .voice-body { fill: var(--ac-color-primary); }
+
+.voice-wx-icon .voice-wave { opacity: 0.3; transition: opacity 0.15s; }
+.voice-bar.playing .voice-wx-icon .voice-wave { animation: wavePulse 0.8s ease-in-out infinite; }
+.voice-bar.playing .voice-wx-icon .voice-wave.w2 { animation-delay: 0.15s; }
+.voice-bar.playing .voice-wx-icon .voice-wave.w3 { animation-delay: 0.3s; }
+
+@keyframes wavePulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 
-.bubble-actions {
+/* Loading dots */
+.voice-anim-dots {
+  position: absolute; bottom: -2px; display: flex; gap: 3px;
+}
+.voice-anim-dots .dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--ac-color-text-muted);
+  animation: dotHop 0.6s ease-in-out infinite;
+}
+.voice-anim-dots .dot:nth-child(2) { animation-delay: 0.15s; }
+.voice-anim-dots .dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotHop {
+  0%, 100% { transform: translateY(0); opacity: 0.3; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
+.voice-label {
+  font-size: 13px; color: var(--ac-color-text-secondary); white-space: nowrap;
+  transition: color 0.3s;
+}
+.voice-bar.playing .voice-label { color: var(--ac-color-primary); font-weight: 500; }
+
+/* Playing wave dots */
+.voice-dots { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+.voice-dots .vdot {
+  width: 3px; border-radius: 2px;
+  background: var(--ac-color-primary);
+  animation: barBounce 0.5s ease-in-out infinite alternate;
+}
+.voice-dots .vdot:nth-child(1) { height: 8px; }
+.voice-dots .vdot:nth-child(2) { height: 12px; }
+.voice-dots .vdot:nth-child(3) { height: 6px; }
+.voice-dots .vdot:nth-child(4) { height: 14px; }
+.voice-dots .vdot:nth-child(5) { height: 10px; }
+
+@keyframes barBounce {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1); }
+}
+
+.voice-sec {
+  font-size: 12px; color: var(--ac-color-text-muted);
+  margin-left: auto;
+}
+
+/* ======== Text toggle ======== */
+.text-toggle {
   display: flex;
-  gap: 2px;
-  padding: 2px 4px;
-  opacity: 0;
-  transition: opacity var(--ac-transition-fast);
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+.text-toggle:hover {
+  color: var(--ac-color-primary);
+}
+.text-toggle-arrow {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.text-toggle-arrow.expanded {
+  transform: rotate(180deg);
 }
 
-.chat-bubble:hover .bubble-actions {
-  opacity: 1;
+/* ======== Actions ======== */
+.bubble-actions {
+  display: flex; gap: 2px; padding: 2px 4px;
+  opacity: 0; transition: opacity var(--ac-transition-fast);
 }
+.chat-bubble:hover .bubble-actions { opacity: 1; }
+
+.voice-bar.voice-only { margin-top: 0; padding: 12px 18px; min-width: 160px; border-radius: 20px; }
+.voice-bar.voice-only .voice-label { font-size: 14px; }
+.voice-bar.voice-only .voice-dots { margin-left: 8px; }
 
 @media (max-width: 768px) {
-  .bubble-body {
-    max-width: 88%;
-  }
-  .bubble-actions {
-    opacity: 1;
-  }
+  .bubble-body { max-width: 88%; }
+  .bubble-actions { opacity: 1; }
 }
 
 .bubble-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  margin-bottom: 2px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 4px; margin-bottom: 2px;
 }
-
-.status-tag {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 3px;
-  line-height: 1.6;
-}
-
-.status-tag.failed {
-  color: #d35;
-  background: #fef0f0;
-}
-
-.status-tag.interrupted {
-  color: #b88230;
-  background: #fef8e7;
-}
-
-.retry-btn {
-  font-size: 11px;
-}
-
+.status-tag { font-size: 11px; padding: 1px 8px; border-radius: 3px; line-height: 1.6; }
+.status-tag.failed { color: #d35; background: #fef0f0; }
+.status-tag.interrupted { color: #b88230; background: #fef8e7; }
+.retry-btn { font-size: 11px; }
 .bubble-source-tag {
-  font-size: 10px;
-  padding: 0 5px;
-  border-radius: 3px;
-  line-height: 1.6;
-  color: #8b5e3c;
-  background: #fef6e8;
-  border: 1px solid #f0dba8;
+  font-size: 10px; padding: 0 5px; border-radius: 3px; line-height: 1.6;
+  color: #8b5e3c; background: #fef6e8; border: 1px solid #f0dba8;
 }
 .bubble-source-tag.tool {
-  color: #4a6fa5;
-  background: #eef3fa;
-  border: 1px solid #c8d6e5;
+  color: #4a6fa5; background: #eef3fa; border: 1px solid #c8d6e5;
+}
+</style>
+
+
+/* ======== Image in bubble ======== */
+.bubble-image {
+  position: relative;
+  display: inline-block;
+  max-width: 150px;
+  margin-top: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--ac-color-border-light);
+  transition: border-color 0.2s;
 }
 
-</style>
+.bubble-image:hover {
+  border-color: var(--ac-color-primary);
+}
+
+.bubble-image img {
+  display: block;
+  border-radius: 6px;
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #fff;
+  font-size: 24px;
+}
+
+.bubble-image:hover .image-overlay {
+  opacity: 1;
+}
+
+.image-preview-dialog .el-dialog__body {
+  padding: 0;
+}

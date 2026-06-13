@@ -39,6 +39,7 @@ export interface Message {
   conversationId: string
   role: "user" | "assistant" | "system"
   content: string
+  imageUrl?: string
   tokens?: number
   source: string
   importedItemId?: string | null
@@ -60,6 +61,32 @@ export interface Conversation {
 }
 
 // Character
+export interface TtsConfig {
+  id: number
+  name: string
+  apiKey: string
+  resourceId: string
+  voiceType: string
+  emotion: string
+  speed: number
+  pitch: number
+  volume: number
+  isActive: number
+  isCustom: number
+  customVoiceId: string
+  lastTestResult?: string
+  hasApiKey: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface VoicePreset {
+  name: string
+  label: string
+  gender: string
+  language: string
+}
+
 export interface Character {
   id: string
   name: string
@@ -89,7 +116,15 @@ export interface Character {
   pronoun: string
   selfReference: string
   userAddressingStyle?: string | null
+  voiceConfigId?: string
+  voiceType?: string
+  voiceSpeed?: number
+  voicePitch?: number
+  voiceVolume?: number
+  customVoiceId?: string
 }
+
+
 
 // Import
 export interface ImportResult {
@@ -105,6 +140,7 @@ export interface Memory {
   characterId: string
   memoryType: string
   content: string
+  imageUrl?: string
   importance: number
   source: string
   key: string
@@ -123,3 +159,18 @@ export interface LLMConfig {
   maxTokens: number
   topP: number
 }
+export interface RuntimeModeResponse {
+  deployMode: string
+  host: string
+  port: number
+  web: { enabled: boolean; publicBaseUrl: string; requireAuth: boolean }
+  bridge: { enabled: boolean; mode: string; host: string; port: number }
+  storage: { dataDir: string }
+}
+
+export interface RuntimeModeValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
+export type DeployMode = "desktop-local" | "cloud-web"
