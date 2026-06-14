@@ -168,6 +168,8 @@
       @stop="handleStop"
       @voiceAudio="handleVoiceAudio"
       @voiceText="handleVoiceText"
+      @video="onVideoAttached"
+      @removeVideo="onVideoRemoved"
     />
 
     <!-- Character drawer -->
@@ -268,6 +270,7 @@ const currentImageBase64 = ref<string | null>(null)
 const currentImageFile = ref<File | null>(null)
 const pendingImageBase64 = ref<string | null>(null)
 const pendingAudioUrl = ref<string | null>(null)
+const pendingVideoUrl = ref<string | null>(null)
 const sending = ref(false)
 
 const modelMissing = ref(false)
@@ -845,6 +848,14 @@ function onImageRemoved() {
   currentImageBase64.value = null
 }
 
+function onVideoAttached(_file: File, videoUrl: string) {
+  pendingVideoUrl.value = videoUrl
+}
+
+function onVideoRemoved() {
+  pendingVideoUrl.value = null
+}
+
 async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
   try {
     const formData = new FormData()
@@ -888,7 +899,14 @@ async function handleImageSend(text: string, imageBase64: string) {
   await doActualSend(sendText)
 }
 
-async function handleSend(text: string, imageBase64?: string) {
+async function handleSend(text: string, imageBase64?: string, videoBase64?: string) {
+  if (videoBase64 || pendingVideoUrl.value) {
+    pendingVideoUrl.value = videoBase64 || pendingVideoUrl.value || ""
+    const sendText = text.trim() || "[视频]"
+    doActualSend(sendText, undefined, undefined, pendingVideoUrl.value)
+    pendingVideoUrl.value = null
+    return
+  }
   if (imageBase64 || currentImageBase64.value) {
     handleImageSend(text, imageBase64 || currentImageBase64.value || "")
     return
@@ -898,7 +916,7 @@ async function handleSend(text: string, imageBase64?: string) {
 }
 
 // doActualSend 是原来的 handleSend 逻辑
-async function doActualSend(text: string, audioUrl?: string, voiceMessage?: boolean) {
+async function doActualSend(text: string, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string) {
   if (sending.value) return
 
   // 断开 SSE 轮询，防止与本 SSE 流重复推送消息
@@ -908,13 +926,16 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
   const userMsgLocalId = "user-" + Date.now()
   const imgUrl = pendingImageBase64.value
   const finalAudioUrl = audioUrl || pendingAudioUrl.value
+  const finalVideoUrl = videoUrl || pendingVideoUrl.value
   pendingImageBase64.value = null
   pendingAudioUrl.value = null
+  pendingVideoUrl.value = null
   const hasImage = !!(imgUrl)
   const hasVoice = !!(finalAudioUrl)
-  const displayContent = (hasVoice && !text.trim()) ? "[语音]" : (hasImage && text === "[图片]") ? "" : text
-  const sendContent = (hasVoice && !text.trim()) ? "[语音]" : (hasImage && !text.trim()) ? "[图片]" : text
-  messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
+  const hasVideo = !!(finalVideoUrl)
+  const displayContent = (hasVoice && !text.trim()) ? "[语音]" : (hasVideo && !text.trim()) ? "" : (hasImage && text === "[图片]") ? "" : text
+  const sendContent = (hasVoice && !text.trim()) ? "[语音]" : (hasVideo && !text.trim()) ? "[视频]" : (hasImage && !text.trim()) ? "[图片]" : text
+  messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, videoUrl: finalVideoUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
   
   scrollToBottom(true)
 
@@ -926,7 +947,7 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
     const res = await fetch("/api/web-chat/send-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl }),
+      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl, videoUrl: finalVideoUrl || "" }),
     })
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
