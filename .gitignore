@@ -30,3 +30,10 @@ __pycache__/
 temp_*.py
 backend/data/videos/
 backend/data/tts_cache/
+
+# Qdrant runtime data
+qdrant/storage/
+qdrant/snapshots/
+
+backend/qdrant/storage/
+backend/qdrant/qdrant_linux_*

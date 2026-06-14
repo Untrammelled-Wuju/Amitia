@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue"
+import { ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
 
@@ -169,7 +169,7 @@ async function regenerateAll() {
   } catch { return }
   regenerating.value = true
   try {
-    await post("/api/companion/debug/regenerate-all")
+    await post(withCharId("/api/companion/debug/regenerate-all"))
     ElMessage.success("已重新生成")
     await loadAll()
   } catch {
@@ -182,7 +182,7 @@ async function regenerateAll() {
 async function triggerActiveMsg() {
   triggeringActive.value = true
   try {
-    await post("/api/companion/debug/process-active-messages")
+    await post(withCharId("/api/companion/debug/process-active-messages"))
     ElMessage.success("主动消息处理器已触发")
     await loadAll()
   } catch {
@@ -195,7 +195,7 @@ async function triggerActiveMsg() {
 async function triggerDelayedReply() {
   triggeringDelayed.value = true
   try {
-    await post("/api/companion/debug/process-delayed-replies")
+    await post(withCharId("/api/companion/debug/process-delayed-replies"))
     ElMessage.success("延迟回复处理器已触发")
     await loadAll()
   } catch {
@@ -207,7 +207,7 @@ async function triggerDelayedReply() {
 
 async function runTask(id: number) {
   try {
-    await post(`/api/companion/active-message/tasks/${id}/run`)
+    await post(withCharId(`/api/companion/active-message/tasks/${id}/run`))
     ElMessage.success("任务已执行")
     await loadAll()
   } catch {
@@ -217,7 +217,7 @@ async function runTask(id: number) {
 
 async function cancelTask(id: number) {
   try {
-    await post(`/api/companion/active-message/tasks/${id}/cancel`)
+    await post(withCharId(`/api/companion/active-message/tasks/${id}/cancel`))
     ElMessage.success("已取消")
     await loadAll()
   } catch {
@@ -227,7 +227,7 @@ async function cancelTask(id: number) {
 
 async function cancelDelayed(id: number) {
   try {
-    await post(`/api/companion/delayed-replies/${id}/cancel`)
+    await post(withCharId(`/api/companion/delayed-replies/${id}/cancel`))
     ElMessage.success("已取消")
     await loadAll()
   } catch {

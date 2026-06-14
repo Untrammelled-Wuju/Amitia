@@ -65,31 +65,45 @@ func saveMemory(args map[string]interface{}) string {
 	key = strings.TrimSpace(key)
 	value = strings.TrimSpace(value)
 
+	characterID := CurrentCharacterID
+
 	var existingID string
-	row := toolDB.QueryRow("SELECT id FROM memories WHERE key = ? LIMIT 1", key)
-	row.Scan(&existingID)
+	if characterID != "" {
+		row := toolDB.QueryRow("SELECT id FROM memories WHERE key = ? AND character_id = ? LIMIT 1", key, characterID)
+		row.Scan(&existingID)
+	} else {
+		row := toolDB.QueryRow("SELECT id FROM memories WHERE key = ? LIMIT 1", key)
+		row.Scan(&existingID)
+	}
 
 	id := uuid.New().String()
 
 	if existingID != "" {
-		_, err := toolDB.Exec("UPDATE memories SET value = ?, memory_type = ?, importance = ?, updated_at = datetime('now') WHERE id = ?",
-			value, memoryType, int(importance), existingID)
+		_, err := toolDB.Exec("UPDATE memories SET value = ?, memory_type = ?, importance = ?, character_id = ?, updated_at = datetime('now') WHERE id = ?",
+			value, memoryType, int(importance), characterID, existingID)
 		if err != nil {
 			return fmt.Sprintf("ERROR: %s", err.Error())
 		}
-		toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, created_at) VALUES (?, ?, 'memory_edited', ?, ?, ?, ?, 'auto', datetime('now'))",
-			uuid.New().String(), existingID, key, value, memoryType, int(importance))
+		toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_edited', ?, ?, ?, ?, 'auto', ?, datetime('now'))",
+			uuid.New().String(), existingID, key, value, memoryType, int(importance), characterID)
+
+		if OnMemorySaved != nil {
+			OnMemorySaved(existingID, key, value, memoryType, characterID)
+		}
 		return fmt.Sprintf("OK (updated) %s: %s", key, value)
 	}
 
-	_, err := toolDB.Exec("INSERT INTO memories (id, key, value, memory_type, importance, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'auto', datetime('now'), datetime('now'))",
-		id, key, value, memoryType, int(importance))
+	_, err := toolDB.Exec("INSERT INTO memories (id, key, value, memory_type, importance, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'auto', datetime('now'), datetime('now'))",
+		id, key, value, memoryType, int(importance), characterID)
 	if err != nil {
 		return fmt.Sprintf("ERROR: %s", err.Error())
 	}
 
-	toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, created_at) VALUES (?, ?, 'memory_created', ?, ?, ?, ?, 'auto', datetime('now'))",
-		uuid.New().String(), id, key, value, memoryType, int(importance))
+	toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_created', ?, ?, ?, ?, 'auto', ?, datetime('now'))",
+		uuid.New().String(), id, key, value, memoryType, int(importance), characterID)
 
+	if OnMemorySaved != nil {
+		OnMemorySaved(id, key, value, memoryType, characterID)
+	}
 	return fmt.Sprintf("OK (created) %s: %s", key, value)
 }

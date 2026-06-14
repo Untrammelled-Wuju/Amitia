@@ -3,17 +3,17 @@ package memory
 
 
 type Memory struct {
-	ID           string     `gorm:"column:id;primaryKey" json:"id"`
-	CharacterID  string     `gorm:"column:character_id" json:"characterId"`
-	MemoryType   string     `gorm:"column:memory_type;default:custom" json:"memoryType"`
-	Source       string     `gorm:"column:source;default:manual" json:"source"`
-	Key          string     `gorm:"column:key;not null" json:"key"`
-	Value        string     `gorm:"column:value;not null" json:"value"`
-	Importance   int        `gorm:"column:importance;default:0" json:"importance"`
-	UseCount     int        `gorm:"column:use_count;default:0" json:"useCount"`
-	LastUsedAt   *string `gorm:"column:last_used_at" json:"lastUsedAt"`
-	CreatedAt    string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt    string  `gorm:"column:updated_at" json:"updatedAt"`
+	ID          string  `gorm:"column:id;primaryKey" json:"id"`
+	CharacterID string  `gorm:"column:character_id" json:"characterId"`
+	MemoryType  string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
+	Source      string  `gorm:"column:source;default:manual" json:"source"`
+	Key         string  `gorm:"column:key;not null" json:"key"`
+	Value       string  `gorm:"column:value;not null" json:"value"`
+	Importance  int     `gorm:"column:importance;default:0" json:"importance"`
+	UseCount    int     `gorm:"column:use_count;default:0" json:"useCount"`
+	LastUsedAt  *string `gorm:"column:last_used_at" json:"lastUsedAt"`
+	CreatedAt   string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   string  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (Memory) TableName() string { return "memories" }
@@ -39,6 +39,13 @@ type UpdateMemoryRequest struct {
 
 type SearchMemoryRequest struct {
 	Keyword     string `json:"keyword" binding:"required"`
+	CharacterID string `json:"characterId"`
+	Limit       int    `json:"limit"`
+}
+
+type VectorSearchRequest struct {
+	Keyword     string `json:"keyword"`
+	Query       string `json:"query"`
 	CharacterID string `json:"characterId"`
 	Limit       int    `json:"limit"`
 }

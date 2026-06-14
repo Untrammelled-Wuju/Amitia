@@ -11,72 +11,75 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/u-ai/backend/internal/embedding"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
 type Service interface {
-	GetSleepSetting() map[string]interface{}
-	UpdateSleepSetting(body map[string]interface{}) map[string]interface{}
-	GetSchedule(date string) map[string]interface{}
-	GetScheduleConflicts(date string) []map[string]interface{}
-	GetScheduleToday() map[string]interface{}
-	GetStateLife() map[string]interface{}
-	GetState() map[string]interface{}
-	GetTimelineToday() map[string]interface{}
-	ListFixedEvents(date string) []map[string]interface{}
+	GetSleepSetting(characterID string) map[string]interface{}
+	UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{}
+	GetSchedule(date string, characterID string) map[string]interface{}
+	GetScheduleConflicts(date string, characterID string) []map[string]interface{}
+	GetScheduleToday(characterID string) map[string]interface{}
+	GetStateLife(characterID string) map[string]interface{}
+	GetState(characterID string) map[string]interface{}
+	GetTimelineToday(characterID string) map[string]interface{}
+	ListFixedEvents(date string, characterID string) []map[string]interface{}
 	GetFixedEvent(id int) map[string]interface{}
-	CreateFixedEvent(body map[string]interface{}) map[string]interface{}
-	UpdateFixedEvent(id int, body map[string]interface{}) map[string]interface{}
-	DeleteFixedEvent(id int) bool
+	CreateFixedEvent(body map[string]interface{}, characterID string) map[string]interface{}
+	UpdateFixedEvent(id int, body map[string]interface{}, characterID string) map[string]interface{}
+	DeleteFixedEvent(id int, characterID string) bool
 	ToggleFixedEventEnabled(id int) map[string]interface{}
-	ListSpecialEvents() []map[string]interface{}
-	CreateSpecialEvent(body map[string]interface{}) map[string]interface{}
-	UpdateSpecialEvent(id int, body map[string]interface{}) map[string]interface{}
-	DeleteSpecialEvent(id int) bool
+	ListSpecialEvents(characterID string) []map[string]interface{}
+	CreateSpecialEvent(body map[string]interface{}, characterID string) map[string]interface{}
+	UpdateSpecialEvent(id int, body map[string]interface{}, characterID string) map[string]interface{}
+	DeleteSpecialEvent(id int, characterID string) bool
 	ToggleSpecialEventEnabled(id int) map[string]interface{}
-	ListClassAdjustments() []map[string]interface{}
-	CreateClassAdjustment(body map[string]interface{}) map[string]interface{}
-	UpdateClassAdjustment(id int, body map[string]interface{}) map[string]interface{}
-	DeleteClassAdjustment(id int) bool
-	GetEffectiveClasses(date string) []map[string]interface{}
-	GetLifestyleTendency() map[string]interface{}
-	UpdateLifestyleTendency(body map[string]interface{}) map[string]interface{}
-	ResetLifestyleTendency() map[string]interface{}
-	GetWorkProfile() map[string]interface{}
-	UpdateWorkProfile(body map[string]interface{}) map[string]interface{}
-	GetActiveMessageSetting() map[string]interface{}
-	UpdateActiveMessageSetting(body map[string]interface{}) map[string]interface{}
-	GetActiveMessageTasksToday() []map[string]interface{}
-	RegenerateActiveMessageTasks() map[string]interface{}
-	RunActiveMessageTask(id int) map[string]interface{}
-	CancelActiveMessageTask(id int) map[string]interface{}
+	ListClassAdjustments(characterID string) []map[string]interface{}
+	CreateClassAdjustment(body map[string]interface{}, characterID string) map[string]interface{}
+	UpdateClassAdjustment(id int, body map[string]interface{}, characterID string) map[string]interface{}
+	DeleteClassAdjustment(id int, characterID string) bool
+	GetEffectiveClasses(date string, characterID string) []map[string]interface{}
+	GetLifestyleTendency(characterID string) map[string]interface{}
+	UpdateLifestyleTendency(body map[string]interface{}, characterID string) map[string]interface{}
+	ResetLifestyleTendency(characterID string) map[string]interface{}
+	GetWorkProfile(characterID string) map[string]interface{}
+	UpdateWorkProfile(body map[string]interface{}, characterID string) map[string]interface{}
+	GetActiveMessageSetting(characterID string) map[string]interface{}
+	UpdateActiveMessageSetting(body map[string]interface{}, characterID string) map[string]interface{}
+	GetActiveMessageTasksToday(characterID string) []map[string]interface{}
+	RegenerateActiveMessageTasks(characterID string) map[string]interface{}
+	RunActiveMessageTask(id int, characterID string) map[string]interface{}
+	CancelActiveMessageTask(id int, characterID string) map[string]interface{}
 	ListDelayedReplies() []map[string]interface{}
 	CancelDelayedReply(id int) map[string]interface{}
-	ProcessDelayedReplies() map[string]interface{}
-	ProcessDueActiveMessageTasks() map[string]interface{}
-	GetDebugOverview() map[string]interface{}
-	RegenerateAllDebug() map[string]interface{}
-	ProcessActiveMessagesDebug() map[string]interface{}
-	ProcessDelayedRepliesDebug() map[string]interface{}
+	ProcessDelayedReplies(characterID string) map[string]interface{}
+	ProcessDueActiveMessageTasks(characterID string) map[string]interface{}
+	GetDebugOverview(characterID string) map[string]interface{}
+	RegenerateAllDebug(characterID string) map[string]interface{}
+	ProcessActiveMessagesDebug(characterID string) map[string]interface{}
+	ProcessDelayedRepliesDebug(characterID string) map[string]interface{}
 	GetRuleLogs() []map[string]interface{}
-	RegenerateSchedule() map[string]interface{}
-	RegenerateTimeline() map[string]interface{}
-	ScheduleBasedGenerator(date string) map[string]interface{}
+	RegenerateSchedule(characterID string) map[string]interface{}
+	RegenerateTimeline(characterID string) map[string]interface{}
+	ScheduleBasedGenerator(date string, characterID string) map[string]interface{}
 	GenerateSharePrompt(taskType string, schedule TodaySchedule, mood string, energy int) string
 	GetShareHistory() ShareHistory
-	TriggerDailyRegeneration() map[string]interface{}
-	RandomBurstTrigger() map[string]interface{}
+	TriggerDailyRegeneration(characterID string) map[string]interface{}
+	RandomBurstTrigger(characterID string) map[string]interface{}
 }
 
 type service struct {
 	db              *gorm.DB
+	embeddingSvc    *embedding.Service
 	lastBurstAt     time.Time
 	todayBurstCount int
-}
 
+}
 func NewService(ctx *app.AppContext) Service {
-	return &service{db: ctx.DB}
+	return &service{db: ctx.DB, embeddingSvc: embedding.NewService(ctx.DB)}
 }
 
 func (s *service) getSetting(key string) string {
@@ -87,31 +90,31 @@ func (s *service) setSetting(key, value string) {
 	s.db.Exec("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", key, value)
 }
 
-func (s *service) GetSleepSetting() map[string]interface{} {
+func (s *service) GetSleepSetting(characterID string) map[string]interface{} {
 	var bed, wake string; var enabled int
-	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled").Limit(1).Row().Scan(&bed, &wake, &enabled)
+	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled").Where("character_id = ?", characterID).Limit(1).Row().Scan(&bed, &wake, &enabled)
 	if err != nil { return map[string]interface{}{"bedTime": "23:00", "wakeTime": "07:00", "enabled": true} }
 	return map[string]interface{}{"bedTime": bed, "wakeTime": wake, "enabled": enabled == 1}
 }
 
-func (s *service) UpdateSleepSetting(body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["bedTime"].(string); ok { updates["bed_time"] = v }
 	if v, ok := body["wakeTime"].(string); ok { updates["wake_time"] = v }
 	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if len(updates) > 0 { s.db.Table("sleep_settings").Where("1=1").Updates(updates); go s.scheduleChanged() }
-	return s.GetSleepSetting()
+	if len(updates) > 0 { var c64 int64; s.db.Table("sleep_settings").Where("character_id = ?", characterID).Count(&c64); if c64 == 0 { s.db.Exec("INSERT INTO sleep_settings (character_id, bed_time, wake_time, enabled) VALUES (?, '23:00', '07:00', 1)", characterID) }; s.db.Table("sleep_settings").Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	return s.GetSleepSetting(characterID)
 }
 
-func (s *service) GetSchedule(date string) map[string]interface{} {
+func (s *service) GetSchedule(date string, characterID string) map[string]interface{} {
 	if date == "" { date = time.Now().Format("2006-01-02") }
-	return scheduleToMap(s.buildTodaySchedule(date))
+	return scheduleToMap(s.buildTodaySchedule(date, characterID))
 }
 
-func (s *service) GetScheduleConflicts(date string) []map[string]interface{} {
+func (s *service) GetScheduleConflicts(date string, characterID string) []map[string]interface{} {
 	if date == "" { date = time.Now().Format("2006-01-02") }
-	schedule := s.buildTodaySchedule(date)
-	timeline := s.buildTimeline(date, schedule)
+	schedule := s.buildTodaySchedule(date, characterID)
+	timeline := s.buildTimeline(date, schedule, characterID)
 
 	type conflict struct {
 		Type      string `json:"type"`
@@ -173,7 +176,7 @@ func (s *service) GetScheduleConflicts(date string) []map[string]interface{} {
 	if result == nil { result = []map[string]interface{}{} }
 	return result
 }
-func (s *service) GetScheduleToday() map[string]interface{} { return s.GetSchedule(time.Now().Format("2006-01-02")) }
+func (s *service) GetScheduleToday(characterID string) map[string]interface{} { return s.GetSchedule(time.Now().Format("2006-01-02"), characterID) }
 
 func (s *service) getIdleDuration() time.Duration {
 	var lastAt string
@@ -191,8 +194,8 @@ func (s *service) getIdleDuration() time.Duration {
 	return time.Since(t)
 }
 
-func (s *service) GetStateLife() map[string]interface{} {
-	stateResult := s.GetState()
+func (s *service) GetStateLife(characterID string) map[string]interface{} {
+	stateResult := s.GetState(characterID)
 	currentState, _ := stateResult["currentState"].(string)
 	if currentState == "" { currentState = "IDLE" }
 	sleeping, _ := stateResult["sleeping"].(bool)
@@ -221,7 +224,7 @@ func (s *service) GetStateLife() map[string]interface{} {
 
 	now := time.Now()
 	today := now.Format("2006-01-02")
-	schedule := s.buildTodaySchedule(today)
+	schedule := s.buildTodaySchedule(today, characterID)
 	energy := calculateEnergy(now, schedule, currentState)
 
 	var currentActivity string
@@ -239,7 +242,7 @@ func (s *service) GetStateLife() map[string]interface{} {
 	if currentState == "AFTER_WORK" { currentActivity = "下班放松" }
 	if currentActivity == "" { currentActivity = currentState }
 
-	sleep := s.GetSleepSetting()
+	sleep := s.GetSleepSetting(characterID)
 	result := map[string]interface{}{
 		"currentState":    currentState,
 		"currentActivity": currentActivity,
@@ -256,11 +259,11 @@ func (s *service) GetStateLife() map[string]interface{} {
 	return result
 }
 
-func (s *service) GetState() map[string]interface{} {
+func (s *service) GetState(characterID string) map[string]interface{} {
 	now := time.Now()
 	today := now.Format("2006-01-02")
 
-	timelineRes := s.GetTimelineToday()
+	timelineRes := s.GetTimelineToday(characterID)
 	entries, _ := timelineRes["events"].([]map[string]interface{})
 
 	var matchedEntry map[string]interface{}
@@ -285,7 +288,7 @@ func (s *service) GetState() map[string]interface{} {
 		return buildStateResult(state, reason, startStr, endStr)
 	}
 
-	schedule := s.buildTodaySchedule(today)
+	schedule := s.buildTodaySchedule(today, characterID)
 	wake := schedule.WakeTime
 	sleep := schedule.SleepTime
 	if sleep.Before(wake) || sleep.Equal(wake) { sleep = sleep.Add(24 * time.Hour) }
@@ -306,10 +309,10 @@ func (s *service) GetState() map[string]interface{} {
 		sleep.Format("2006-01-02T15:04:05"))
 }
 
-func (s *service) GetTimelineToday() map[string]interface{} {
+func (s *service) GetTimelineToday(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")
-	schedule := s.buildTodaySchedule(today)
-	entries := s.buildTimeline(today, schedule)
+	schedule := s.buildTodaySchedule(today, characterID)
+	entries := s.buildTimeline(today, schedule, characterID)
 	result := make([]map[string]interface{}, len(entries))
 	for i, e := range entries {
 		result[i] = map[string]interface{}{
@@ -325,7 +328,7 @@ func (s *service) GetTimelineToday() map[string]interface{} {
 	return map[string]interface{}{"date": today, "events": result, "schedule": scheduleToMap(schedule)}
 }
 
-func (s *service) ListFixedEvents(date string) []map[string]interface{} {
+func (s *service) ListFixedEvents(date string, characterID string) []map[string]interface{} {
 	var events []FixedEvent
 	q := s.db.Where("enabled = 1")
 	if date != "" { dayOfWeek := parseDayOfWeek(date); q = q.Where("(week_day = ? OR week_day = -1)", dayOfWeek) }
@@ -340,7 +343,7 @@ func (s *service) GetFixedEvent(id int) map[string]interface{} {
 	return map[string]interface{}{"id": e.ID, "name": e.Name, "description": e.Description, "weekDay": e.WeekDay, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "location": e.Location, "enabled": e.Enabled == 1}
 }
 
-func (s *service) CreateFixedEvent(body map[string]interface{}) map[string]interface{} {
+func (s *service) CreateFixedEvent(body map[string]interface{}, characterID string) map[string]interface{} {
 	name := ""; if v, ok := body["name"].(string); ok { name = v } else { name = "新事件" }
 	e := FixedEvent{Name: name, EventType: "custom", Enabled: 1}
 	if v, ok := body["description"].(string); ok { e.Description = v }
@@ -353,7 +356,7 @@ func (s *service) CreateFixedEvent(body map[string]interface{}) map[string]inter
 	return s.GetFixedEvent(e.ID)
 }
 
-func (s *service) UpdateFixedEvent(id int, body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateFixedEvent(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["name"].(string); ok { updates["name"] = v }
 	if v, ok := body["description"].(string); ok { updates["description"] = v }
@@ -363,25 +366,25 @@ func (s *service) UpdateFixedEvent(id int, body map[string]interface{}) map[stri
 	if v, ok := body["eventType"].(string); ok { updates["event_type"] = v }
 	if v, ok := body["location"].(string); ok { updates["location"] = v }
 	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if len(updates) > 0 { s.db.Model(&FixedEvent{}).Where("id = ?", id).Updates(updates); go s.scheduleChanged() }
+	if len(updates) > 0 { s.db.Model(&FixedEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
 	return s.GetFixedEvent(id)
 }
 
-func (s *service) DeleteFixedEvent(id int) bool { ok := s.db.Delete(&FixedEvent{}, id).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteFixedEvent(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&FixedEvent{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
 
 func (s *service) ToggleFixedEventEnabled(id int) map[string]interface{} {
 	s.db.Model(&FixedEvent{}).Where("id = ?", id).Update("enabled", gorm.Expr("CASE WHEN enabled = 1 THEN 0 ELSE 1 END"))
 	return s.GetFixedEvent(id)
 }
 
-func (s *service) ListSpecialEvents() []map[string]interface{} {
-	var events []SpecialEvent; s.db.Order("event_date, start_time").Find(&events)
+func (s *service) ListSpecialEvents(characterID string) []map[string]interface{} {
+	var events []SpecialEvent; s.db.Where("character_id = ?", characterID).Order("event_date, start_time").Find(&events)
 	result := make([]map[string]interface{}, len(events))
 	for i, e := range events { result[i] = map[string]interface{}{"id": e.ID, "name": e.Name, "description": e.Description, "eventDate": e.EventDate, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "location": e.Location, "enabled": e.Enabled == 1} }
 	return result
 }
 
-func (s *service) CreateSpecialEvent(body map[string]interface{}) map[string]interface{} {
+func (s *service) CreateSpecialEvent(body map[string]interface{}, characterID string) map[string]interface{} {
 	name := ""; if v, ok := body["name"].(string); ok { name = v } else { name = "特殊事件" }
 	e := SpecialEvent{Name: name, EventType: "custom", Enabled: 1}
 	if v, ok := body["description"].(string); ok { e.Description = v }
@@ -394,7 +397,7 @@ func (s *service) CreateSpecialEvent(body map[string]interface{}) map[string]int
 	return map[string]interface{}{"id": e.ID, "name": e.Name, "eventDate": e.EventDate}
 }
 
-func (s *service) UpdateSpecialEvent(id int, body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateSpecialEvent(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["name"].(string); ok { updates["name"] = v }
 	if v, ok := body["description"].(string); ok { updates["description"] = v }
@@ -402,25 +405,25 @@ func (s *service) UpdateSpecialEvent(id int, body map[string]interface{}) map[st
 	if v, ok := body["startTime"].(string); ok { updates["start_time"] = v }
 	if v, ok := body["endTime"].(string); ok { updates["end_time"] = v }
 	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if len(updates) > 0 { s.db.Model(&SpecialEvent{}).Where("id = ?", id).Updates(updates); go s.scheduleChanged() }
+	if len(updates) > 0 { s.db.Model(&SpecialEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
 	return map[string]interface{}{"id": id, "updated": true}
 }
 
-func (s *service) DeleteSpecialEvent(id int) bool { ok := s.db.Delete(&SpecialEvent{}, id).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteSpecialEvent(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&SpecialEvent{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
 
 func (s *service) ToggleSpecialEventEnabled(id int) map[string]interface{} {
 	s.db.Model(&SpecialEvent{}).Where("id = ?", id).Update("enabled", gorm.Expr("CASE WHEN enabled = 1 THEN 0 ELSE 1 END"))
 	return map[string]interface{}{"id": id, "toggled": true}
 }
 
-func (s *service) ListClassAdjustments() []map[string]interface{} {
-	var items []ClassAdjustment; s.db.Order("date, slot_index").Find(&items)
+func (s *service) ListClassAdjustments(characterID string) []map[string]interface{} {
+	var items []ClassAdjustment; s.db.Where("character_id = ?", characterID).Order("date, slot_index").Find(&items)
 	result := make([]map[string]interface{}, len(items))
 	for i, a := range items { result[i] = map[string]interface{}{"id": a.ID, "date": a.Date, "slotIndex": a.SlotIndex, "className": a.ClassName, "adjustType": a.AdjustType, "description": a.Description} }
 	return result
 }
 
-func (s *service) CreateClassAdjustment(body map[string]interface{}) map[string]interface{} {
+func (s *service) CreateClassAdjustment(body map[string]interface{}, characterID string) map[string]interface{} {
 	a := ClassAdjustment{AdjustType: "swap"}
 	if v, ok := body["date"].(string); ok { a.Date = v }
 	if v, ok := body["slotIndex"].(float64); ok { a.SlotIndex = int(v) }
@@ -431,20 +434,20 @@ func (s *service) CreateClassAdjustment(body map[string]interface{}) map[string]
 	return map[string]interface{}{"id": a.ID, "className": a.ClassName}
 }
 
-func (s *service) UpdateClassAdjustment(id int, body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateClassAdjustment(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["date"].(string); ok { updates["date"] = v }
 	if v, ok := body["slotIndex"].(float64); ok { updates["slot_index"] = int(v) }
 	if v, ok := body["className"].(string); ok { updates["class_name"] = v }
 	if v, ok := body["adjustType"].(string); ok { updates["adjust_type"] = v }
 	if v, ok := body["description"].(string); ok { updates["description"] = v }
-	if len(updates) > 0 { s.db.Model(&ClassAdjustment{}).Where("id = ?", id).Updates(updates); go s.scheduleChanged() }
+	if len(updates) > 0 { s.db.Model(&ClassAdjustment{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
 	return map[string]interface{}{"id": id, "updated": true}
 }
 
-func (s *service) DeleteClassAdjustment(id int) bool { ok := s.db.Delete(&ClassAdjustment{}, id).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteClassAdjustment(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&ClassAdjustment{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
 
-func (s *service) GetEffectiveClasses(date string) []map[string]interface{} {
+func (s *service) GetEffectiveClasses(date string, characterID string) []map[string]interface{} {
 	if date == "" { date = time.Now().Format("2006-01-02") }
 	type classSlot struct {
 		Title          string `json:"title"`
@@ -456,7 +459,7 @@ func (s *service) GetEffectiveClasses(date string) []map[string]interface{} {
 	}
 
 	var adjustments []ClassAdjustment
-	s.db.Where("date = ?", date).Order("slot_index ASC").Find(&adjustments)
+	s.db.Where("date = ? AND character_id = ?", date, characterID).Order("slot_index ASC").Find(&adjustments)
 
 	var slots []classSlot
 	for _, adj := range adjustments {
@@ -476,7 +479,7 @@ func (s *service) GetEffectiveClasses(date string) []map[string]interface{} {
 	}
 
 	var lt LifestyleTendency
-	if err := s.db.Limit(1).First(&lt); err == nil && lt.Schedule != "" {
+	if err := s.db.Where("character_id = ?", characterID).Limit(1).First(&lt); err == nil && lt.Schedule != "" {
 		lines := strings.Split(lt.Schedule, "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
@@ -504,7 +507,7 @@ func (s *service) GetEffectiveClasses(date string) []map[string]interface{} {
 	}
 
 	var specials []SpecialEvent
-	s.db.Where("enabled = 1 AND event_date = ?", date).Find(&specials)
+	s.db.Where("enabled = 1 AND event_date = ? AND character_id = ?", date, characterID).Find(&specials)
 	for _, sp := range specials {
 		if sp.EventType == "class" || sp.EventType == "exam" {
 			slots = append(slots, classSlot{
@@ -529,57 +532,57 @@ func (s *service) GetEffectiveClasses(date string) []map[string]interface{} {
 	return []map[string]interface{}{{"date": date, "dayOfWeek": parseDayOfWeek(date), "slots": result}}
 }
 
-func (s *service) GetLifestyleTendency() map[string]interface{} {
+func (s *service) GetLifestyleTendency(characterID string) map[string]interface{} {
 	var t LifestyleTendency
-	if err := s.db.Limit(1).First(&t); err != nil { return map[string]interface{}{"activity": "", "intensity": 50, "schedule": "", "preference": ""} }
+	if err := s.db.Where("character_id = ?", characterID).Limit(1).First(&t); err != nil { return map[string]interface{}{"activity": "", "intensity": 50, "schedule": "", "preference": ""} }
 	return map[string]interface{}{"id": t.ID, "activity": t.Activity, "intensity": t.Intensity, "schedule": t.Schedule, "preference": t.Preference}
 }
 
-func (s *service) UpdateLifestyleTendency(body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateLifestyleTendency(body map[string]interface{}, characterID string) map[string]interface{} {
 	var count int64; s.db.Model(&LifestyleTendency{}).Count(&count)
 	updates := make(map[string]interface{})
 	if v, ok := body["activity"].(string); ok { updates["activity"] = v }
 	if v, ok := body["intensity"].(float64); ok { updates["intensity"] = int(v) }
 	if v, ok := body["schedule"].(string); ok { updates["schedule"] = v }
 	if v, ok := body["preference"].(string); ok { updates["preference"] = v }
-	if count == 0 { s.db.Create(&LifestyleTendency{Activity: "", Intensity: 50, Schedule: "", Preference: ""}) }
-	if len(updates) > 0 { s.db.Model(&LifestyleTendency{}).Where("1=1").Updates(updates); go s.scheduleChanged() }
-	return s.GetLifestyleTendency()
+	if count == 0 { s.db.Create(&LifestyleTendency{CharacterID: characterID, Activity: "", Intensity: 50, Schedule: "", Preference: ""}) }
+	if len(updates) > 0 { s.db.Model(&LifestyleTendency{}).Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	return s.GetLifestyleTendency(characterID)
 }
 
-func (s *service) ResetLifestyleTendency() map[string]interface{} {
-	s.db.Where("1=1").Delete(&LifestyleTendency{})
-	return s.GetLifestyleTendency()
+func (s *service) ResetLifestyleTendency(characterID string) map[string]interface{} {
+	s.db.Where("character_id = ?", characterID).Delete(&LifestyleTendency{})
+	return s.GetLifestyleTendency(characterID)
 }
 
-func (s *service) GetWorkProfile() map[string]interface{} {
+func (s *service) GetWorkProfile(characterID string) map[string]interface{} {
 	var w WorkProfile
-	if err := s.db.Limit(1).First(&w); err != nil { return map[string]interface{}{"jobTitle": "", "workHours": "", "workDays": "", "description": ""} }
+	if err := s.db.Where("character_id = ?", characterID).Limit(1).First(&w); err != nil { return map[string]interface{}{"jobTitle": "", "workHours": "", "workDays": "", "description": ""} }
 	return map[string]interface{}{"id": w.ID, "jobTitle": w.JobTitle, "workHours": w.WorkHours, "workDays": w.WorkDays, "description": w.Description}
 }
 
-func (s *service) UpdateWorkProfile(body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateWorkProfile(body map[string]interface{}, characterID string) map[string]interface{} {
 	var count int64; s.db.Model(&WorkProfile{}).Count(&count)
 	updates := make(map[string]interface{})
 	if v, ok := body["jobTitle"].(string); ok { updates["job_title"] = v }
 	if v, ok := body["workHours"].(string); ok { updates["work_hours"] = v }
 	if v, ok := body["workDays"].(string); ok { updates["work_days"] = v }
 	if v, ok := body["description"].(string); ok { updates["description"] = v }
-	if count == 0 { s.db.Create(&WorkProfile{JobTitle: "", WorkHours: "", WorkDays: "", Description: ""}) }
-	if len(updates) > 0 { s.db.Model(&WorkProfile{}).Where("1=1").Updates(updates); go s.scheduleChanged() }
-	return s.GetWorkProfile()
+	if count == 0 { s.db.Create(&WorkProfile{CharacterID: characterID, JobTitle: "", WorkHours: "", WorkDays: "", Description: ""}) }
+	if len(updates) > 0 { s.db.Model(&WorkProfile{}).Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	return s.GetWorkProfile(characterID)
 }
 
-func (s *service) GetActiveMessageSetting() map[string]interface{} {
+func (s *service) GetActiveMessageSetting(characterID string) map[string]interface{} {
 	var enabled, activeLevel, minInterval, maxPerDay, maxDailyCalls int; var channel, quietStart, quietEnd string
-	err := s.db.Table("active_message_settings").Select("enabled, COALESCE(active_level, 40) as active_level, min_interval, COALESCE(quiet_start, '23:00') as quiet_start, COALESCE(quiet_end, '07:00') as quiet_end, max_per_day, COALESCE(max_daily_calls, 10) as max_daily_calls, channel").Limit(1).Row().Scan(&enabled, &activeLevel, &minInterval, &quietStart, &quietEnd, &maxPerDay, &maxDailyCalls, &channel)
+	err := s.db.Table("active_message_settings").Select("enabled, COALESCE(active_level, 40) as active_level, min_interval, COALESCE(quiet_start, '23:00') as quiet_start, COALESCE(quiet_end, '07:00') as quiet_end, max_per_day, COALESCE(max_daily_calls, 10) as max_daily_calls, channel").Where("character_id = ?", characterID).Limit(1).Row().Scan(&enabled, &activeLevel, &minInterval, &quietStart, &quietEnd, &maxPerDay, &maxDailyCalls, &channel)
 	if err != nil { return map[string]interface{}{"enabled": true, "activeLevel": 40, "quietStart": "23:00", "quietEnd": "07:00", "minInterval": 60, "maxPerDay": 6, "maxDailyCalls": 10, "channel": "all"} }
 	if quietStart == "" { quietStart = "23:00" }
 	if quietEnd == "" { quietEnd = "07:00" }
 	if activeLevel == 0 { activeLevel = 40 }
 	return map[string]interface{}{"enabled": enabled == 1, "activeLevel": activeLevel, "quietStart": quietStart, "quietEnd": quietEnd, "minInterval": minInterval, "maxPerDay": maxPerDay, "maxDailyCalls": maxDailyCalls, "channel": channel}
 }
-func (s *service) UpdateActiveMessageSetting(body map[string]interface{}) map[string]interface{} {
+func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
 	if v, ok := body["activeLevel"].(float64); ok { vv := int(v); if vv < 1 { vv = 1 }; if vv > 100 { vv = 100 }; updates["active_level"] = vv }
@@ -590,15 +593,15 @@ func (s *service) UpdateActiveMessageSetting(body map[string]interface{}) map[st
 	if v, ok := body["maxDailyCalls"].(float64); ok { vv := int(v); if vv < 1 { vv = 1 }; if vv > 50 { vv = 50 }; updates["max_daily_calls"] = vv }
 	if v, ok := body["channel"].(string); ok { updates["channel"] = v }
 	if len(updates) > 0 {
-		var count int64; s.db.Table("active_message_settings").Count(&count)
-		if count == 0 { s.db.Exec("INSERT INTO active_message_settings (enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel) VALUES (1, 40, 60, '23:00', '07:00', 6, 10, 'all')") }
-		s.db.Table("active_message_settings").Where("1=1").Updates(updates)
+		var count int64; s.db.Table("active_message_settings").Where("character_id = ?", characterID).Count(&count)
+		if count == 0 { s.db.Exec("INSERT INTO active_message_settings (character_id, enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel) VALUES (?, 1, 40, 60, '23:00', '07:00', 6, 10, 'all')", characterID) }
+		s.db.Table("active_message_settings").Where("character_id = ?", characterID).Updates(updates)
 	}
-	return s.GetActiveMessageSetting()
+	return s.GetActiveMessageSetting(characterID)
 }
-func (s *service) GetActiveMessageTasksToday() []map[string]interface{} {
+func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]interface{} {
 	var raw []map[string]interface{}
-	s.db.Table("active_message_task").Where("date(due_time) = date('now')").Order("due_time ASC").Find(&raw)
+	s.db.Table("active_message_task").Where("date(due_time) = date('now') AND character_id = ?", characterID).Order("due_time ASC").Find(&raw)
 	tasks := make([]map[string]interface{}, len(raw))
 	for i, r := range raw {
 		tasks[i] = map[string]interface{}{
@@ -622,14 +625,14 @@ func (s *service) GetActiveMessageTasksToday() []map[string]interface{} {
 	return tasks
 }
 
-func (s *service) RegenerateActiveMessageTasks() map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=datetime('now') WHERE date(due_time)=date('now') AND status='PENDING'")
+func (s *service) RegenerateActiveMessageTasks(characterID string) map[string]interface{} {
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=datetime('now') WHERE date(due_time)=date('now') AND status='PENDING' AND character_id = ?", characterID)
 	return map[string]interface{}{"regenerated": true}
 }
 
-func (s *service) RunActiveMessageTask(id int) map[string]interface{} {
+func (s *service) RunActiveMessageTask(id int, characterID string) map[string]interface{} {
 	var task map[string]interface{}
-	s.db.Table("active_message_task").Where("id = ?", id).Limit(1).Find(&task)
+	s.db.Table("active_message_task").Where("id = ? AND character_id = ?", id, characterID).Limit(1).Find(&task)
 	if len(task) == 0 {
 		return map[string]interface{}{"id": id, "status": "NOT_FOUND"}
 	}
@@ -647,17 +650,17 @@ func (s *service) RunActiveMessageTask(id int) map[string]interface{} {
 	var convID string
 	convRow.Scan(&convID)
 	var channelSetting string
-	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Limit(1).Row().Scan(&channelSetting)
+	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row().Scan(&channelSetting)
 	if channelSetting == "" { channelSetting = "all" }
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, nowStr)
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
-	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=?", nowStr, id)
+	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=? AND character_id=?", nowStr, id, characterID)
 	log.Printf("[Companion] RunActiveMessageTask sent type=%s id=%d channel=%s", taskType, id, channelSetting)
 	return map[string]interface{}{"id": id, "status": "SENT", "taskType": taskType, "channel": channelSetting}
 }
 
-func (s *service) CancelActiveMessageTask(id int) map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=datetime('now') WHERE id=?", id)
+func (s *service) CancelActiveMessageTask(id int, characterID string) map[string]interface{} {
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=datetime('now') WHERE id=? AND character_id=?", id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
 
@@ -686,7 +689,7 @@ func (s *service) CancelDelayedReply(id int) map[string]interface{} {
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
 
-func (s *service) ProcessDelayedReplies() map[string]interface{} {
+func (s *service) ProcessDelayedReplies(characterID string) map[string]interface{} {
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
 
@@ -706,12 +709,12 @@ func (s *service) ProcessDelayedReplies() map[string]interface{} {
 		if content == "" { continue }
 
 		canSend := true
-		stateResult := s.GetState()
+		stateResult := s.GetState(characterID)
 		currentState, _ := stateResult["currentState"].(string)
 
 		if currentState == "SLEEPING" || currentState == "NAPPING" {
 			canSend = false
-			schedule := s.buildTodaySchedule(now.Format("2006-01-02"))
+			schedule := s.buildTodaySchedule(now.Format("2006-01-02"), characterID)
 			wakeTime := schedule.WakeTime
 			if currentState == "NAPPING" && schedule.NapEndTime != nil {
 				wakeTime = *schedule.NapEndTime
@@ -772,15 +775,15 @@ func (s *service) ProcessDelayedReplies() map[string]interface{} {
 	}
 }
 
-func (s *service) GetDebugOverview() map[string]interface{} {
+func (s *service) GetDebugOverview(characterID string) map[string]interface{} {
 	
 now := time.Now()
 	
 nowStr := now.Format("2006-01-02 15:04:05")
 	
-schedule := s.GetScheduleToday()
+schedule := s.GetScheduleToday(characterID)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	lt := s.GetLifestyleTendency()
+	lt := s.GetLifestyleTendency(characterID)
 	intensity := 50
 	if v, ok := lt["intensity"].(int); ok { intensity = v }
 	if v, ok := lt["intensity"].(float64); ok { intensity = int(v) }
@@ -812,19 +815,19 @@ schedule := s.GetScheduleToday()
 		}
 	}
 	
-timeline := s.GetTimelineToday()
+timeline := s.GetTimelineToday(characterID)
 	
-currentState := s.GetState()
+currentState := s.GetState(characterID)
 	
-stateLife := s.GetStateLife()
+stateLife := s.GetStateLife(characterID)
 	
-activeMsgSetting := s.GetActiveMessageSetting()
+activeMsgSetting := s.GetActiveMessageSetting(characterID)
 	
-activeTasks := s.GetActiveMessageTasksToday()
+activeTasks := s.GetActiveMessageTasksToday(characterID)
 	
-conflicts := s.GetScheduleConflicts("")
+conflicts := s.GetScheduleConflicts("", characterID)
 	
-effectiveClasses := s.GetEffectiveClasses("")
+effectiveClasses := s.GetEffectiveClasses("", characterID)
 	
 var pendingReplies int64
 	
@@ -832,11 +835,11 @@ s.db.Table("delayed_replies").Where("status = 'pending'").Count(&pendingReplies)
 	
 var todayTaskCount int64
 	
-s.db.Table("active_message_task").Where("date(due_time) = date(?)", nowStr).Count(&todayTaskCount)
+s.db.Table("active_message_task").Where("date(due_time) = date(?) AND character_id = ?", nowStr, characterID).Count(&todayTaskCount)
 	
 var todaySentCount int64
 	
-s.db.Table("active_message_task").Where("date(due_time) = date(?) AND status = 'SENT'", nowStr).Count(&todaySentCount)
+s.db.Table("active_message_task").Where("date(due_time) = date(?) AND status = 'SENT' AND character_id = ?", nowStr, characterID).Count(&todaySentCount)
 	
 var todayLLMCalls int64
 	
@@ -844,7 +847,7 @@ s.db.Table("proactive_messages").Where("date(created_at) = date(?)", nowStr).Cou
 	
 var maxDailyCalls int64
 	
-s.db.Table("active_message_settings").Select("COALESCE(max_daily_calls, 10)").Limit(1).Row().Scan(&maxDailyCalls)
+s.db.Table("active_message_settings").Select("COALESCE(max_daily_calls, 10)").Where("character_id = ?", characterID).Limit(1).Row().Scan(&maxDailyCalls)
 	
 if maxDailyCalls == 0 { maxDailyCalls = 10 }
 	
@@ -915,28 +918,28 @@ return map[string]interface{}{
 }
 }
 
-func (s *service) RegenerateAllDebug() map[string]interface{} {
+func (s *service) RegenerateAllDebug(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")
-	scheduleResult := s.RegenerateSchedule()
-	s.ScheduleBasedGenerator(today)
+	scheduleResult := s.RegenerateSchedule(characterID)
+	s.ScheduleBasedGenerator(today, characterID)
 	return map[string]interface{}{
 		"regenerated": true,
 		"schedule":    scheduleResult["schedule"],
 		"timeline":    scheduleResult["timeline"],
-		"taskCount":   len(s.GetActiveMessageTasksToday()),
+		"taskCount":   len(s.GetActiveMessageTasksToday(characterID)),
 	}
 }
-func (s *service) ProcessActiveMessagesDebug() map[string]interface{} { return s.ProcessDueActiveMessageTasks() }
+func (s *service) ProcessActiveMessagesDebug(characterID string) map[string]interface{} { return s.ProcessDueActiveMessageTasks(characterID) }
 
-func (s *service) ProcessDueActiveMessageTasks() map[string]interface{} {
+func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]interface{} {
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
-		s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now') WHERE status='PROCESSING' AND updated_at < datetime('now', '-5 minutes')")
+		s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now') WHERE status='PROCESSING' AND updated_at < datetime('now', '-5 minutes') AND character_id = ?", characterID)
 	var tasks []map[string]interface{}
-	s.db.Table("active_message_task").Where("status = 'PENDING' AND due_time <= ?", nowStr).Order("due_time ASC").Limit(20).Find(&tasks)
+	s.db.Table("active_message_task").Where("status = 'PENDING' AND due_time <= ? AND character_id = ?", nowStr, characterID).Order("due_time ASC").Limit(20).Find(&tasks)
 	var processed, sent, delayed, failed int
 	var channelSetting string
-	channelRow := s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Limit(1).Row()
+	channelRow := s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row()
 	channelRow.Scan(&channelSetting)
 	if channelSetting == "" { channelSetting = "all" }
 	for _, t := range tasks {
@@ -944,14 +947,14 @@ func (s *service) ProcessDueActiveMessageTasks() map[string]interface{} {
 		id, _ := t["id"]
 		prompt, _ := t["prompt"].(string)
 		if prompt == "" { continue }
-		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', '+5 minutes') WHERE id = ? AND status='PENDING'", id)
+		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', '+5 minutes') WHERE id = ? AND status='PENDING' AND character_id = ?", id, characterID)
 		if result.RowsAffected == 0 { continue }
-		stateResult := s.GetState()
+		stateResult := s.GetState(characterID)
 		currentState, _ := stateResult["currentState"].(string)
 		if currentState == "SLEEPING" || currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
 			delayMin := 10
 			newDue := now.Add(time.Duration(delayMin) * time.Minute).Format("2006-01-02 15:04:05")
-			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now') WHERE id=?", newDue, id)
+			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now') WHERE id=? AND character_id=?", newDue, id, characterID)
 			delayed++
 			continue
 		}
@@ -969,24 +972,24 @@ func (s *service) ProcessDueActiveMessageTasks() map[string]interface{} {
 			if rc, ok := t["retry_count"]; ok { switch v := rc.(type) { case int64: retryCount = int(v); case float64: retryCount = int(v) } }
 			retryCount++
 			if retryCount >= 3 {
-				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now') WHERE id=?", retryCount, id)
+				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now') WHERE id=? AND character_id=?", retryCount, id, characterID)
 				failed++
 			} else {
 				newDue := now.Add(time.Duration(5*retryCount) * time.Minute).Format("2006-01-02 15:04:05")
-				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=datetime('now') WHERE id=?", newDue, retryCount, id)
+				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=datetime('now') WHERE id=? AND character_id=?", newDue, retryCount, id, characterID)
 				delayed++
 			}
 			continue
 		}
 		taskType, _ := t["task_type"].(string)
 		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
-		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=?", nowStr, id)
+		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=? AND character_id=?", nowStr, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
 	}
 	return map[string]interface{}{"processed": processed, "sent": sent, "delayed": delayed, "failed": failed}
 }
-func (s *service) ProcessDelayedRepliesDebug() map[string]interface{} { return s.ProcessDelayedReplies() }
+func (s *service) ProcessDelayedRepliesDebug(characterID string) map[string]interface{} { return s.ProcessDelayedReplies(characterID) }
 
 func (s *service) GetRuleLogs() []map[string]interface{} {
 	var logs []map[string]interface{}
@@ -995,11 +998,11 @@ func (s *service) GetRuleLogs() []map[string]interface{} {
 	return logs
 }
 
-func (s *service) RegenerateSchedule() map[string]interface{} {
+func (s *service) RegenerateSchedule(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")
-	schedule := s.buildTodaySchedule(today)
+	schedule := s.buildTodaySchedule(today, characterID)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	lt := s.GetLifestyleTendency()
+	lt := s.GetLifestyleTendency(characterID)
 	intensity := 50
 	if v, ok := lt["intensity"].(int); ok { intensity = v }
 	if v, ok := lt["intensity"].(float64); ok { intensity = int(v) }
@@ -1022,7 +1025,7 @@ func (s *service) RegenerateSchedule() map[string]interface{} {
 			schedule.NapEndTime = &ne
 		}
 	}
-	timeline := s.buildTimeline(today, schedule)
+	timeline := s.buildTimeline(today, schedule, characterID)
 	timelineMaps := make([]map[string]interface{}, len(timeline))
 	for i, e := range timeline {
 		timelineMaps[i] = map[string]interface{}{
@@ -1041,10 +1044,10 @@ func (s *service) RegenerateSchedule() map[string]interface{} {
 		"regenerated": true,
 	}
 }
-func (s *service) RegenerateTimeline() map[string]interface{} {
+func (s *service) RegenerateTimeline(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")
-	schedule := s.buildTodaySchedule(today)
-	timeline := s.buildTimeline(today, schedule)
+	schedule := s.buildTodaySchedule(today, characterID)
+	timeline := s.buildTimeline(today, schedule, characterID)
 	result := make([]map[string]interface{}, len(timeline))
 	for i, e := range timeline {
 		result[i] = map[string]interface{}{
@@ -1063,7 +1066,7 @@ func (s *service) RegenerateTimeline() map[string]interface{} {
 func parseDayOfWeek(date string) int { t, err := time.ParseInLocation("2006-01-02", date, time.Local); if err != nil { return int(time.Now().Weekday()) }; return int(t.Weekday()) }
 func toJSON(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
-func (s *service) buildTodaySchedule(date string) TodaySchedule {
+func (s *service) buildTodaySchedule(date string, characterID string) TodaySchedule {
 	today := parseDate(date)
 
 	wakeTime := parseTimeStr("08:00", today)
@@ -1071,7 +1074,7 @@ func (s *service) buildTodaySchedule(date string) TodaySchedule {
 
 	var bed, wake string
 	var sleepEnabled int
-	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled").Limit(1).Row().Scan(&bed, &wake, &sleepEnabled)
+	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled").Where("character_id = ?", characterID).Limit(1).Row().Scan(&bed, &wake, &sleepEnabled)
 	if err == nil {
 		if wake != "" { wakeTime = parseTimeStr(wake, today) }
 		if bed != "" { bedTime = parseTimeStr(bed, today) }
@@ -1113,7 +1116,7 @@ func (s *service) buildTodaySchedule(date string) TodaySchedule {
 
 	isRestDay := false
 	var specials []SpecialEvent
-	s.db.Where("enabled = 1 AND event_date = ?", date).Find(&specials)
+	s.db.Where("enabled = 1 AND event_date = ? AND character_id = ?", date, characterID).Find(&specials)
 	for _, sp := range specials {
 		if sp.EventType == "rest_day" || sp.StartTime == "" || (sp.StartTime == "00:00" && sp.EndTime == "23:59") {
 			isRestDay = true
@@ -1133,7 +1136,7 @@ func (s *service) buildTodaySchedule(date string) TodaySchedule {
 	}
 }
 
-func (s *service) buildTimeline(date string, schedule TodaySchedule) []TimelineEntry {
+func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID string) []TimelineEntry {
 	today := parseDate(date)
 	midnight := today
 	nextMidnight := today.Add(24 * time.Hour)
@@ -1153,7 +1156,7 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule) []TimelineE
 	hasWork := false
 	var workStart, workEnd time.Time
 	var wp WorkProfile
-	if err := s.db.Limit(1).First(&wp); err == nil && wp.JobTitle != "" && wp.WorkHours != "" {
+	if err := s.db.Where("character_id = ?", characterID).Limit(1).First(&wp); err == nil && wp.JobTitle != "" && wp.WorkHours != "" {
 		parts := splitTimeRange(wp.WorkHours)
 		if len(parts) == 2 {
 			workStart = parseTimeStr(parts[0], today)
@@ -1169,7 +1172,7 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule) []TimelineE
 		}
 	}
 
-	classes := s.buildClassEntries(date)
+	classes := s.buildClassEntries(date, characterID)
 
 	wake := schedule.WakeTime
 	lunch := schedule.LunchTime
@@ -1336,11 +1339,11 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule) []TimelineE
 	return merged
 }
 
-func (s *service) buildClassEntries(date string) []TimelineEntry {
+func (s *service) buildClassEntries(date string, characterID string) []TimelineEntry {
 	var entries []TimelineEntry
 	today := parseDate(date)
 
-	classes := s.GetEffectiveClasses(date)
+	classes := s.GetEffectiveClasses(date, characterID)
 	for _, c := range classes {
 		slots, _ := c["slots"].([]map[string]interface{})
 		for _, slot := range slots {
@@ -1587,18 +1590,18 @@ func sendProactiveNotification(db *gorm.DB, convID, msgID, content string) {
 	db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=datetime('now') WHERE id=?", convID)
 }
 
-func (s *service) ScheduleBasedGenerator(date string) map[string]interface{} {
+func (s *service) ScheduleBasedGenerator(date string, characterID string) map[string]interface{} {
 	if date == "" { date = time.Now().Format("2006-01-02") }
 	today := parseDate(date)
 
-	schedule := s.buildTodaySchedule(date)
-	timeline := s.buildTimeline(date, schedule)
-	stateLife := s.GetStateLife()
+	schedule := s.buildTodaySchedule(date, characterID)
+	timeline := s.buildTimeline(date, schedule, characterID)
+	stateLife := s.GetStateLife(characterID)
 	mood, _ := stateLife["mood"].(string)
 	if mood == "" { mood = "neutral" }
 	energy, _ := stateLife["energy"].(int)
 
-	lt := s.GetLifestyleTendency()
+	lt := s.GetLifestyleTendency(characterID)
 	dailyShareTendency := 50
 	if v, ok := lt["intensity"].(int); ok { dailyShareTendency = v }
 	if v, ok := lt["intensity"].(float64); ok { dailyShareTendency = int(v) }
@@ -1684,11 +1687,11 @@ func (s *service) ScheduleBasedGenerator(date string) map[string]interface{} {
 		tasks = filtered
 	}
 
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now') WHERE date(due_time)=? AND status='PENDING' AND source='system'", date)
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now') WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", date, characterID)
 
 	if idleDuration > 12*time.Hour {
 		var lastChase string
-		s.db.Table("active_message_task").Select("due_time").Where("task_type = 'chase_up' AND status IN ('SENT','PROCESSING')").Order("due_time DESC").Limit(1).Row().Scan(&lastChase)
+		s.db.Table("active_message_task").Select("due_time").Where("task_type = 'chase_up' AND status IN ('SENT','PROCESSING') AND character_id = ?", characterID).Order("due_time DESC").Limit(1).Row().Scan(&lastChase)
 		if lastChase == "" {
 			chaseTime := now.Add(time.Duration(5+rng.Intn(11)) * time.Minute)
 			if !isBlocked(chaseTime) {
@@ -1700,8 +1703,8 @@ func (s *service) ScheduleBasedGenerator(date string) map[string]interface{} {
 	}
 
 	for _, t := range tasks {
-		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', datetime('now'), datetime('now'))",
-			t.Type, t.DueTime.Format("2006-01-02 15:04:05"), t.Prompt)
+		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, character_id, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', ?, datetime('now'), datetime('now'))",
+			t.Type, t.DueTime.Format("2006-01-02 15:04:05"), t.Prompt, characterID)
 	}
 
 	resultMaps := make([]map[string]interface{}, len(tasks))
@@ -1725,13 +1728,34 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 	sleepSummary := "正常"
 
 	var recentMemories []string
-	rows, err := s.db.Table("memories").Select("value").Order("created_at DESC").Limit(5).Rows()
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var v string
-			rows.Scan(&v)
-			if v != "" { recentMemories = append(recentMemories, v) }
+	queryText := fmt.Sprintf("心情%s 精力%d", mood, energy)
+	if taskType == "morning_share" {
+		queryText = fmt.Sprintf("早晨 起床 心情%s", mood)
+	} else if taskType == "evening_reflection" || taskType == "bedtime_mood" {
+		queryText = fmt.Sprintf("晚上 睡觉前 心情%s", mood)
+	}
+	if s.embeddingSvc != nil && qdrantDB.Client != nil {
+		vec, vecErr := s.embeddingSvc.Embed(queryText)
+		if vecErr == nil {
+			points, searchErr := qdrantDB.SearchVectors(vec, 5, nil)
+			if searchErr == nil {
+				for _, p := range points {
+					if val, ok := p.Payload["value"]; ok {
+						recentMemories = append(recentMemories, val.GetStringValue())
+					}
+				}
+			}
+		}
+	}
+	if len(recentMemories) == 0 {
+		rows, err := s.db.Table("memories").Select("value").Order("created_at DESC").Limit(5).Rows()
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var v string
+				rows.Scan(&v)
+				if v != "" { recentMemories = append(recentMemories, v) }
+			}
 		}
 	}
 
@@ -1808,9 +1832,9 @@ func (s *service) GetShareHistory() ShareHistory {
 
 func (s *service) getShareHistory() ShareHistory { return s.GetShareHistory() }
 
-func (s *service) TriggerDailyRegeneration() map[string]interface{} {
+func (s *service) TriggerDailyRegeneration(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")
-	return s.ScheduleBasedGenerator(today)
+	return s.ScheduleBasedGenerator(today, characterID)
 }
 
 
@@ -1844,7 +1868,11 @@ func (s *service) scheduleChanged() {
 			log.Printf("[Companion] scheduleChanged panic recovered: %v", r)
 		}
 	}()
-	s.ScheduleBasedGenerator(time.Now().Format("2006-01-02"))
+	var charIDs []string
+	s.db.Table("characters").Pluck("id", &charIDs)
+	for _, cid := range charIDs {
+		s.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
+	}
 }
 func extractTopic(content string) string {
 	runes := []rune(content)
@@ -1856,14 +1884,14 @@ func extractTopic(content string) string {
 
 
 
-func (s *service) RandomBurstTrigger() map[string]interface{} {
-	setting := s.GetActiveMessageSetting()
+func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} {
+	setting := s.GetActiveMessageSetting(characterID)
 	enabled, _ := setting["enabled"].(bool)
 	if !enabled {
 		return map[string]interface{}{"triggered": false, "reason": "disabled"}
 	}
 
-	stateLife := s.GetStateLife()
+	stateLife := s.GetStateLife(characterID)
 	currentState, _ := stateLife["currentState"].(string)
 	blockedStates := map[string]bool{"SLEEPING": true, "IN_CLASS": true, "IN_EXAM": true, "BUSY": true, "WORKING": true, "WORKING_OUT": true, "OVERTIME": true}
 	if blockedStates[currentState] {
@@ -1950,16 +1978,34 @@ func (s *service) RandomBurstTrigger() map[string]interface{} {
 	if recentTopics == "" { recentTopics = "无" }
 
 	var recentMemoriesStr string
-	rows, err := s.db.Table("memories").Select("value").Where("importance >= 2").Order("created_at DESC").Limit(3).Rows()
-	if err == nil {
-		defer rows.Close()
-		var mems []string
-		for rows.Next() {
-			var v string
-			rows.Scan(&v)
-			if v != "" { mems = append(mems, v) }
+	queryText := fmt.Sprintf("心情%s 状态%s", mood, currentState)
+	if s.embeddingSvc != nil && qdrantDB.Client != nil {
+		vec, vecErr := s.embeddingSvc.Embed(queryText)
+		if vecErr == nil {
+			points, searchErr := qdrantDB.SearchVectors(vec, 3, nil)
+			if searchErr == nil {
+				var mems []string
+				for _, p := range points {
+					if val, ok := p.Payload["value"]; ok {
+						mems = append(mems, val.GetStringValue())
+					}
+				}
+				recentMemoriesStr = strings.Join(mems, "；")
+			}
 		}
-		recentMemoriesStr = strings.Join(mems, "；")
+	}
+	if recentMemoriesStr == "" {
+		rows, err := s.db.Table("memories").Select("value").Where("importance >= 2").Order("created_at DESC").Limit(3).Rows()
+		if err == nil {
+			defer rows.Close()
+			var mems []string
+			for rows.Next() {
+				var v string
+				rows.Scan(&v)
+				if v != "" { mems = append(mems, v) }
+			}
+			recentMemoriesStr = strings.Join(mems, "；")
+		}
 	}
 	if recentMemoriesStr == "" { recentMemoriesStr = "无" }
 
