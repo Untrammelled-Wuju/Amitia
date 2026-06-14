@@ -364,6 +364,7 @@ async function handleFinish() {
         identity: form.charIdentity,
         personality: form.charPersonality,
         isActive: 1,
+        isDefault: true,
       })
     }
 

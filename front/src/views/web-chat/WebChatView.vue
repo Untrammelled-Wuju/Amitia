@@ -605,13 +605,11 @@ async function loadCharacterConversation() {
   let dedicatedConvId = c?.conversationId
   if (!dedicatedConvId) {
     try {
-      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
-      const all = convs?.conversations || convs?.items || []
-      const charConvs = all.filter((x: any) => (x.characterId || x.character_id) === characterId.value)
-      if (charConvs.length > 0) {
-        charConvs.sort((a: any, b: any) => new Date(b.updatedAt || b.updated_at || 0).getTime() - new Date(a.updatedAt || a.updated_at || 0).getTime())
-        dedicatedConvId = charConvs[0].id
-      }
+      const created = await post<any>("/api/web-chat/conversations", {
+        characterId: characterId.value,
+        title: "",
+      })
+      if (created?.id) dedicatedConvId = created.id
     } catch {}
   }
   if (!dedicatedConvId) {

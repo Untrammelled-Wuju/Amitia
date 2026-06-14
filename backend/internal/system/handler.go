@@ -448,12 +448,33 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		Source      string `json:"source"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
-	if body.Title == "" { body.Title = "新对话" }
+	if body.Title == "" {
+		body.Title = "新对话"
+		if body.CharacterID != "" {
+			var charName string
+			h.db.Table("characters").Select("name").Where("id = ?", body.CharacterID).Limit(1).Row().Scan(&charName)
+			if charName != "" { body.Title = charName }
+		}
+	}
 	if body.Channel == "" { body.Channel = "web" }
 	if body.Source == "" { body.Source = "manual" }
-	if body.Channel == "wechat" || body.Channel == "qq" || body.CharacterID != "" {
+	if body.CharacterID != "" {
+		var existingConvID string
+		h.db.Table("characters").Select("conversation_id").Where("id = ?", body.CharacterID).Limit(1).Row().Scan(&existingConvID)
+		if existingConvID != "" {
+			var conv struct {
+				ID, Title, Channel, Source, CharacterID string
+			}
+			h.db.Table("conversations").Select("id, title, channel, source, character_id").Where("id = ?", existingConvID).Limit(1).Row().Scan(&conv.ID, &conv.Title, &conv.Channel, &conv.Source, &conv.CharacterID)
+			if conv.ID != "" {
+				util.SuccessResponse(c, gin.H{"id": conv.ID, "title": conv.Title, "channel": conv.Channel, "source": conv.Source, "characterId": conv.CharacterID})
+				return
+			}
+		}
+	}
+	if body.Channel == "wechat" || body.Channel == "qq" {
 		var existing []map[string]interface{}
-			h.db.Table("conversations").Where("channel = ? AND character_id = ?", body.Channel, body.CharacterID).Limit(1).Find(&existing)
+		h.db.Table("conversations").Where("channel = ? AND character_id = ?", body.Channel, body.CharacterID).Limit(1).Find(&existing)
 		if len(existing) > 0 {
 			util.SuccessResponse(c, gin.H{"id": existing[0]["id"], "title": existing[0]["title"], "channel": body.Channel, "source": existing[0]["source"], "characterId": existing[0]["character_id"]})
 			return
@@ -462,6 +483,7 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	convID := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	h.db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", convID, body.Title, body.CharacterID, body.Channel, body.Source, now, now)
+	h.db.Exec("UPDATE characters SET conversation_id = ?, updated_at = ? WHERE id = ? AND (conversation_id IS NULL OR conversation_id = '')", convID, now, body.CharacterID)
 	util.SuccessResponse(c, gin.H{"id": convID, "title": body.Title, "channel": body.Channel, "source": body.Source, "characterId": body.CharacterID})
 }
 

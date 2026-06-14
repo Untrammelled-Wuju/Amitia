@@ -241,15 +241,26 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	source := req.Source
 	if source == "" { source = "manual" }
 	if convID == "" {
-		convID = uuid.New().String()
-		title := req.Message
-		if len([]rune(title)) > 30 { title = string([]rune(title)[:30]) }
-		s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
+		var existingConvID string
+		s.db.Table("characters").Select("conversation_id").Where("id = ?", charID).Limit(1).Row().Scan(&existingConvID)
+		if existingConvID != "" {
+			var ec string
+			s.db.Table("conversations").Select("channel").Where("id = ?", existingConvID).Limit(1).Row().Scan(&ec)
+			if ec != "" {
+				convID = existingConvID
+			}
+		}
+		if convID == "" {
+			convID = uuid.New().String()
+			title := req.Message
+			if len([]rune(title)) > 30 { title = string([]rune(title)[:30]) }
+			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
+		}
 	} else {
 		var existingChannel string
 		s.db.Table("conversations").Select("channel").Where("id = ?", convID).Limit(1).Row().Scan(&existingChannel)
 		if existingChannel == "" {
-			s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, "新对话", channel, source)
+			s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, charName, channel, source)
 		} else if existingChannel != channel {
 			convID = uuid.New().String()
 			title := req.Message
