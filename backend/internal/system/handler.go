@@ -1,4 +1,4 @@
-package system
+﻿package system
 
 import (
 	applog "github.com/u-ai/backend/log"
@@ -379,16 +379,17 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var ttsCfg *tts.TtsConfig
 	if (rand.Float64() < voiceChance || result.ForceVoice) && result.Reply != "" {
 		ttsRepo := tts.NewRepository(h.db)
-		activeCfg, cfgErr := ttsRepo.GetActive()
-		if cfgErr != nil { applog.Info("[Voice] GetActive err: %v", cfgErr) }
-		if cfgErr == nil && activeCfg.ApiKey != "" {
-			cfg := &tts.TtsConfig{ApiKey: activeCfg.ApiKey, ResourceId: "seed-tts-2.0", VoiceType: activeCfg.VoiceType, Speed: activeCfg.Speed, Pitch: activeCfg.Pitch, Volume: activeCfg.Volume}
+		charCfg, cfgErr := ttsRepo.GetByCharacterID(body.CharacterID)
+		if cfgErr != nil { applog.Info("[Voice] GetByCharacterID err: %v", cfgErr) }
+		if cfgErr == nil && charCfg.ApiKey != "" {
+			cfg := &tts.TtsConfig{ApiKey: charCfg.ApiKey, ResourceId: charCfg.ResourceId, VoiceType: charCfg.VoiceType, Speed: charCfg.Speed, Pitch: charCfg.Pitch, Volume: charCfg.Volume}
+			if cfg.ResourceId == "" { cfg.ResourceId = "seed-tts-2.0" }
 			if cfg.VoiceType == "" { cfg.VoiceType = "zh_female_vv_uranus_bigtts" }
 			if cfg.Speed == 0 { cfg.Speed = 1.0 }
 			if cfg.Pitch == 0 { cfg.Pitch = 1.0 }
 			if cfg.Volume == 0 { cfg.Volume = 1.0 }
 			ttsCfg = cfg
-		} else if activeCfg != nil && activeCfg.ApiKey == "" { applog.Info("[Voice] TTS ApiKey empty") }
+		} else if charCfg != nil && charCfg.ApiKey == "" { applog.Info("[Voice] TTS ApiKey empty") }
 	} else { applog.Info("[Voice] skipped: chance=%.2f forceVoice=%v reply=%v", voiceChance, result.ForceVoice, result.Reply != "") }
 
 	for i, line := range lines {
