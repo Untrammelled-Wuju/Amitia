@@ -65,7 +65,6 @@
         :class="{ holding: holding, recognizing: listening, 'slide-text': slideZone === 'text', 'slide-cancel': slideZone === 'cancel' }"
         @mousedown.prevent="startHold"
         @mouseup.prevent="endHold"
-        @mouseleave.prevent="endHold"
         @touchstart.prevent="startHold"
         @touchmove.prevent="onTouchMove"
         @touchend.prevent="endHold"
@@ -245,6 +244,11 @@ const SLIDE_TEXT_THRESHOLD = 60
 const SLIDE_CANCEL_THRESHOLD = 120
 const VOICE_END_DELAY = 400
 
+function onGlobalMouseUp() {
+  document.removeEventListener("mouseup", onGlobalMouseUp)
+  endHold()
+}
+
 function startHold(e: TouchEvent | MouseEvent) {
   if (props.disabled || props.sending) return
   holding.value = true
@@ -257,6 +261,7 @@ function startHold(e: TouchEvent | MouseEvent) {
   }
   startRecording()
   startListening()
+  document.addEventListener("mouseup", onGlobalMouseUp)
 }
 
 function onTouchMove(e: TouchEvent) {
@@ -279,6 +284,7 @@ function endHold() {
   slideZone.value = 'none'
 
   setTimeout(() => {
+    document.removeEventListener("mouseup", onGlobalMouseUp)
     stopListening()
 
     if (zone === 'cancel') {
@@ -456,7 +462,7 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-defineExpose({ focus, clear: () => { text.value = ""; localStorage.removeItem(DRAFT_KEY) } })
+defineExpose({ focus, setText: (t: string) => { text.value = t; saveDraft(); nextTick(() => autoResize()) }, clear: () => { text.value = ""; localStorage.removeItem(DRAFT_KEY) } })
 </script>
 
 <style scoped>

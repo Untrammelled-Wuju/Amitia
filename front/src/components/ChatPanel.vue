@@ -19,6 +19,8 @@
       @send="$emit('send', $event)"
       @stop="$emit('stop')"
       @toggle-call="$emit('toggleCall')"
+      @voiceAudio="$emit('voiceAudio', $event)"
+      @voiceText="$emit('voiceText', $event)"
     />
   </div>
 </template>
@@ -42,6 +44,8 @@ defineEmits<{
   send: [text: string]
   stop: []
   toggleCall: []
+  voiceAudio: [blob: Blob, transcript?: string, duration?: number]
+  voiceText: [text: string]
 }>()
 
 const messagesRef = ref<HTMLElement>()
