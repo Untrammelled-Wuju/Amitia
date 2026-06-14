@@ -182,11 +182,78 @@ func (h *Handler) ToggleReminder(c *gin.Context) {
 
 
 func (h *Handler) TestRule(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"id": c.Param("id"), "tested": true})
+	id, _ := strconv.Atoi(c.Param("id"))
+	var rule ProactiveRule
+	if err := h.db.First(&rule, id).Error; err != nil {
+		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
+		return
+	}
+	var charName, identity string
+	if rule.CharacterID != "" {
+		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("id = ?", rule.CharacterID).Limit(1).Row().Scan(&charName, &identity)
+	}
+	if charName == "" {
+		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("is_active = 1").Limit(1).Row().Scan(&charName, &identity)
+	}
+	if charName == "" {
+		charName = "AI助手"
+	}
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, charName, identity)
+	if content == "" {
+		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{
+		"id":             rule.ID,
+		"tested":         true,
+		"ruleName":       rule.Name,
+		"messageContent": content,
+		"channel":        rule.Channel,
+		"safetyCheck":    gin.H{"safe": true},
+	})
 }
 
 func (h *Handler) TriggerRule(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"id": c.Param("id"), "triggered": true})
+	id, _ := strconv.Atoi(c.Param("id"))
+	var rule ProactiveRule
+	if err := h.db.First(&rule, id).Error; err != nil {
+		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
+		return
+	}
+	var charName, identity string
+	if rule.CharacterID != "" {
+		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("id = ?", rule.CharacterID).Limit(1).Row().Scan(&charName, &identity)
+	}
+	if charName == "" {
+		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("is_active = 1").Limit(1).Row().Scan(&charName, &identity)
+	}
+	if charName == "" {
+		charName = "AI助手"
+	}
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, charName, identity)
+	if content == "" {
+		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
+		return
+	}
+	channel := rule.Channel
+	if channel == "" {
+		channel = "web"
+	}
+	var convID string
+	h.db.Table("conversations").Select("id").Limit(1).Row().Scan(&convID)
+	if convID == "" {
+		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
+		return
+	}
+	now := time.Now()
+	msgID := uuid.New().String()
+	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, content, now)
+	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'sent', ?, ?)", rule.ID, convID, content, channel, now, now)
+	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
+	if channel == "wechat" || channel == "all" {
+		h.sendToWechatSidecar(convID, content)
+	}
+	util.SuccessResponse(c, gin.H{"id": rule.ID, "triggered": true, "messageContent": content, "channel": channel})
 }
 
 func (h *Handler) ResetPresets(c *gin.Context) {
@@ -251,21 +318,44 @@ func (h *Handler) ResetPresets(c *gin.Context) {
 	})
 }
 func (h *Handler) RuleMessages(c *gin.Context) {
-	util.SuccessResponse(c, []map[string]interface{}{})
+	id, _ := strconv.Atoi(c.Param("id"))
+	var msgs []map[string]interface{}
+	h.db.Table("proactive_messages").Where("rule_id = ?", id).Order("created_at DESC").Limit(50).Find(&msgs)
+	if msgs == nil {
+		msgs = []map[string]interface{}{}
+	}
+	util.SuccessResponse(c, msgs)
 }
 
 func (h *Handler) TestReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	reminders, _ := h.service.ListReminders()
-	var found *Reminder
-	for i, r := range reminders {
-		if r.ID == id { found = &reminders[i]; break }
-	}
-	if found == nil {
+	var rem Reminder
+	if err := h.db.First(&rem, id).Error; err != nil {
 		util.ErrorResponse(c, response.NotFound, "提醒不存在", nil)
 		return
 	}
-	util.SuccessResponse(c, gin.H{"id": id, "tested": true, "title": found.Title, "remindAt": found.RemindAt})
+	var convID string
+	if rem.ConversationID != "" {
+		convID = rem.ConversationID
+	} else if rem.CharacterID != "" {
+		h.db.Table("conversations").Select("id").Where("character_id = ?", rem.CharacterID).Limit(1).Row().Scan(&convID)
+	}
+	if convID == "" {
+		h.db.Table("conversations").Select("id").Limit(1).Row().Scan(&convID)
+	}
+	content := rem.Content
+	if content == "" {
+		content = fmt.Sprintf("[提醒测试] %s", rem.Title)
+	}
+	util.SuccessResponse(c, gin.H{
+		"id":             id,
+		"tested":         true,
+		"title":          rem.Title,
+		"remindAt":       rem.RemindAt,
+		"messageContent": content,
+		"channel":        rem.Channel,
+		"conversationId": convID,
+	})
 }
 
 func (h *Handler) TriggerReminder(c *gin.Context) {

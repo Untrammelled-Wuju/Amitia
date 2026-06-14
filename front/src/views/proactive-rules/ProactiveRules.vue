@@ -11,6 +11,69 @@
       <template #title>主动消息默认关闭，需手动开启规则后才会发送。安静时段和每日上限会自动约束发送频率。</template>
     </el-alert>
 
+
+    <!-- 主动消息设置 -->
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <div class="card-header-row">
+          <span class="section-title">主动消息设置</span>
+          <el-button type="primary" size="small" @click="saveActiveMsgSettings" :loading="savingSettings">保存设置</el-button>
+        </div>
+      </template>
+      <el-form :model="activeMsgSettings" label-position="top" size="small">
+        <el-row :gutter="16">
+          <el-col :span="6">
+            <el-form-item label="启用">
+              <el-switch v-model="activeMsgSettings.enabled" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="活跃度 (1-100)">
+              <el-slider v-model="activeMsgSettings.activeLevel" :min="1" :max="100" show-input :format-tooltip="(v:number)=>v+''" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="最小间隔(分钟)">
+              <el-input-number v-model="activeMsgSettings.minInterval" :min="5" :max="480" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="每日最大条数">
+              <el-input-number v-model="activeMsgSettings.maxPerDay" :min="1" :max="24" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="6">
+            <el-form-item label="安静开始">
+              <el-time-picker v-model="activeMsgSettings.quietStart" format="HH:mm" value-format="HH:mm" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="安静结束">
+              <el-time-picker v-model="activeMsgSettings.quietEnd" format="HH:mm" value-format="HH:mm" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="发送渠道">
+              <el-select v-model="activeMsgSettings.channel" style="width:100%">
+                <el-option label="全部平台" value="all" />
+                <el-option label="Web 端" value="web" />
+                <el-option label="微信" value="wechat" />
+                <el-option label="QQ" value="qq" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="每日AI调用上限">
+              <el-input-number v-model="activeMsgSettings.maxDailyCalls" :min="1" :max="50" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+    </el-card>
+
+
     <!-- Scheduler Status -->
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -246,6 +309,40 @@ const schedulerRunning = ref(false)
 
 const CHANNEL_LABELS: Record<string, string> = { all: "全部平台", web: "Web 端", wechat: "微信", "web,wechat": "Web + 微信" }
 function channelLabel(ch: string) { return CHANNEL_LABELS[ch] || ch }
+const activeMsgSettings = ref({
+  enabled: true,
+  activeLevel: 40,
+  quietStart: "23:00",
+  quietEnd: "07:00",
+  minInterval: 60,
+  maxPerDay: 6,
+  maxDailyCalls: 10,
+  channel: "all",
+})
+const savingSettings = ref(false)
+
+async function fetchActiveMsgSettings() {
+  try {
+    const params: any = {}
+    if (injectedCharacterId?.value) params.characterId = injectedCharacterId.value
+    const res: any = await request.get("/api/companion/active-message/setting", params)
+    if (res) Object.assign(activeMsgSettings.value, res)
+  } catch {}
+}
+
+async function saveActiveMsgSettings() {
+  savingSettings.value = true
+  try {
+    let url = "/api/companion/active-message/setting"
+    if (injectedCharacterId?.value) url += "?characterId=" + encodeURIComponent(injectedCharacterId.value)
+    await request.put(url, activeMsgSettings.value)
+    ElMessage.success("设置已保存")
+  } catch (err: any) {
+    ElMessage.error(err?.message || "保存失败")
+  } finally {
+    savingSettings.value = false
+  }
+}
 const enabledRuleCount = ref(0)
 const totalRuleCount = ref(0)
 
@@ -476,6 +573,7 @@ onMounted(() => {
   fetchStatus()
   fetchConversations()
   fetchCharacters()
+  fetchActiveMsgSettings()
 })
 </script>
 

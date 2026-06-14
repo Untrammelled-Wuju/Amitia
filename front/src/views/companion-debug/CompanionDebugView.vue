@@ -4,6 +4,7 @@
       <h2>AI 生活状态调试面板</h2>
       <el-button type="primary" @click="loadAll" :loading="loading">刷新</el-button>
       <el-button type="warning" @click="regenerateAll" :loading="regenerating">重新生成全部</el-button>
+      <el-button type="success" @click="triggerDailyRegen" :loading="triggeringDaily">触发每日重生</el-button>
     </div>
 
     <!-- 当前状态 -->
@@ -136,11 +137,13 @@ import { ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
 
-const { get, post, del } = useApi()
+const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
+const { get, post } = useApi()
 const loading = ref(false)
 const regenerating = ref(false)
 const triggeringActive = ref(false)
 const triggeringDelayed = ref(false)
+const triggeringDaily = ref(false)
 
 const data = reactive<any>({
   currentState: null,
@@ -154,7 +157,7 @@ const data = reactive<any>({
 async function loadAll() {
   loading.value = true
   try {
-    const res = await get<any>("/api/companion/debug/overview")
+    const res = await get<any>("/api/companion/debug/overview", { characterId: injectedCharacterId?.value ?? undefined })
     Object.assign(data, res)
   } catch {
     ElMessage.error("加载失败")
@@ -169,7 +172,7 @@ async function regenerateAll() {
   } catch { return }
   regenerating.value = true
   try {
-    await post(withCharId("/api/companion/debug/regenerate-all"))
+    await post(`/api/companion/debug/regenerate-all?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("已重新生成")
     await loadAll()
   } catch {
@@ -180,9 +183,12 @@ async function regenerateAll() {
 }
 
 async function triggerActiveMsg() {
+  try {
+    await ElMessageBox.confirm("将立即处理所有待发送的主动消息任务，确定？", "确认", { type: "warning" })
+  } catch { return }
   triggeringActive.value = true
   try {
-    await post(withCharId("/api/companion/debug/process-active-messages"))
+    await post(`/api/companion/debug/process-active-messages?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("主动消息处理器已触发")
     await loadAll()
   } catch {
@@ -193,9 +199,12 @@ async function triggerActiveMsg() {
 }
 
 async function triggerDelayedReply() {
+  try {
+    await ElMessageBox.confirm("将立即处理所有到期的延迟回复，确定？", "确认", { type: "warning" })
+  } catch { return }
   triggeringDelayed.value = true
   try {
-    await post(withCharId("/api/companion/debug/process-delayed-replies"))
+    await post(`/api/companion/debug/process-delayed-replies?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("延迟回复处理器已触发")
     await loadAll()
   } catch {
@@ -205,9 +214,25 @@ async function triggerDelayedReply() {
   }
 }
 
+async function triggerDailyRegen() {
+  try {
+    await ElMessageBox.confirm("将触发每日自动重生逻辑（取消旧任务+生成新任务），确定？", "确认", { type: "warning" })
+  } catch { return }
+  triggeringDaily.value = true
+  try {
+    await post(`/api/companion/debug/trigger-daily-regeneration?characterId=${injectedCharacterId?.value ?? ''}`)
+    ElMessage.success("每日重生已触发")
+    await loadAll()
+  } catch {
+    ElMessage.error("触发失败")
+  } finally {
+    triggeringDaily.value = false
+  }
+}
+
 async function runTask(id: number) {
   try {
-    await post(withCharId(`/api/companion/active-message/tasks/${id}/run`))
+    await post(`/api/companion/active-message/tasks/${id}/run?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("任务已执行")
     await loadAll()
   } catch {
@@ -217,7 +242,7 @@ async function runTask(id: number) {
 
 async function cancelTask(id: number) {
   try {
-    await post(withCharId(`/api/companion/active-message/tasks/${id}/cancel`))
+    await post(`/api/companion/active-message/tasks/${id}/cancel?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("已取消")
     await loadAll()
   } catch {
@@ -227,7 +252,7 @@ async function cancelTask(id: number) {
 
 async function cancelDelayed(id: number) {
   try {
-    await post(withCharId(`/api/companion/delayed-replies/${id}/cancel`))
+    await post(`/api/companion/delayed-replies/${id}/cancel?characterId=${injectedCharacterId?.value ?? ''}`)
     ElMessage.success("已取消")
     await loadAll()
   } catch {
@@ -251,7 +276,7 @@ function stateLabel(s: string) {
 
 function stateTagType(s: string) {
   if (!s) return "info"
-  if (s==="SLEEPING"||s==="NAPPING") return ""
+  if (s==="SLEEPING"||s==="NAPPING") return "info"
   if (s.includes("CLASS")||s.includes("EXAM")||s.includes("STUDY")||s.includes("LIBRARY")) return "warning"
   if (s.includes("WORK")||s==="OVERTIME"||s.includes("PART_TIME")) return "danger"
   if (s==="IDLE"||s.includes("AFTER_")||s.includes("BREAK")) return "success"

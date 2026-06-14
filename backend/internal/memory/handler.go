@@ -122,7 +122,8 @@ func (h *Handler) RecordUse(c *gin.Context) {
 
 
 func (h *Handler) DeleteAll(c *gin.Context) {
-	if err := h.service.DeleteAll(); err != nil {
+	characterID := c.Query("characterId")
+	if err := h.service.DeleteAll(characterID); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}
@@ -142,12 +143,75 @@ func (h *Handler) Timeline(c *gin.Context) {
 	}
 	util.SuccessResponse(c, gin.H{"items": items, "total": total, "page": page, "pageSize": pageSize})
 }
-func (h *Handler) CheckConflict(c *gin.Context)  { util.SuccessResponse(c, gin.H{"hasConflict": false}) }
-func (h *Handler) ResolveConflict(c *gin.Context) { util.SuccessResponse(c, gin.H{"resolved": true}) }
-func (h *Handler) ExtractCandidates(c *gin.Context) { util.SuccessResponse(c, gin.H{"candidates": 0}) }
-func (h *Handler) RebuildIndex(c *gin.Context)    { util.SuccessResponse(c, gin.H{"rebuilt": true}) }
-func (h *Handler) UpdateCandidate(c *gin.Context) { util.SuccessResponse(c, gin.H{"updated": true}) }
-func (h *Handler) DeleteCandidate(c *gin.Context) { util.SuccessResponse(c, gin.H{"deleted": true}) }
+func (h *Handler) CheckConflict(c *gin.Context) {
+	var req CheckConflictRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	result, err := h.service.CheckConflict(&req)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) ResolveConflict(c *gin.Context) {
+	var req ResolveConflictRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	result, err := h.service.ResolveConflict(&req)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) ExtractCandidates(c *gin.Context) {
+	candidates, err := h.service.ExtractCandidates()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"candidates": candidates, "total": len(candidates)})
+}
+
+func (h *Handler) RebuildIndex(c *gin.Context) {
+	result, err := h.service.RebuildIndex()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "索引重建完成", result)
+}
+
+func (h *Handler) UpdateCandidate(c *gin.Context) {
+	id := c.Param("id")
+	var req UpdateCandidateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	candidate, err := h.service.UpdateCandidate(id, &req)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "候选记忆已更新", candidate)
+}
+
+func (h *Handler) DeleteCandidate(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.service.DeleteCandidate(id); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "候选记忆已删除", nil)
+}
 
 func (h *Handler) GenerateCandidates(c *gin.Context) {
 	var req struct {

@@ -87,9 +87,9 @@ func (h *Handler) CancelActiveMessageTask(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id")); characterID := c.Query("characterId"); util.SuccessResponse(c, h.service.CancelActiveMessageTask(id, characterID))
 }
 
-func (h *Handler) ListDelayedReplies(c *gin.Context) { util.SuccessResponse(c, h.service.ListDelayedReplies()) }
+func (h *Handler) ListDelayedReplies(c *gin.Context) { util.SuccessResponse(c, h.service.ListDelayedReplies(c.Query("characterId"))) }
 func (h *Handler) CancelDelayedReply(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id")); util.SuccessResponse(c, h.service.CancelDelayedReply(id))
+	id, _ := strconv.Atoi(c.Param("id")); util.SuccessResponse(c, h.service.CancelDelayedReply(id, c.Query("characterId")))
 }
 func (h *Handler) ProcessDelayedReplies(c *gin.Context) { util.SuccessResponse(c, h.service.ProcessDelayedReplies(c.Query("characterId"))) }
 
@@ -98,9 +98,10 @@ func (h *Handler) RegenerateAllDebug(c *gin.Context) { util.SuccessResponse(c, h
 func (h *Handler) ProcessActiveMessagesDebug(c *gin.Context) { util.SuccessResponse(c, h.service.ProcessActiveMessagesDebug(c.Query("characterId"))) }
 func (h *Handler) ProcessDelayedRepliesDebug(c *gin.Context) { util.SuccessResponse(c, h.service.ProcessDelayedRepliesDebug(c.Query("characterId"))) }
 
-func (h *Handler) GetRuleLogs(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuleLogs()) }
+func (h *Handler) GetRuleLogs(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuleLogs(c.Query("characterId"))) }
 func (h *Handler) RegenerateSchedule(c *gin.Context) { util.SuccessResponse(c, h.service.RegenerateSchedule(c.Query("characterId"))) }
 func (h *Handler) RegenerateTimeline(c *gin.Context) { util.SuccessResponse(c, h.service.RegenerateTimeline(c.Query("characterId"))) }
 
 func (h *Handler) TriggerDailyRegeneration(c *gin.Context) { util.SuccessResponse(c, h.service.TriggerDailyRegeneration(c.Query("characterId"))) }
+
 
