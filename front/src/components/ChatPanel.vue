@@ -41,7 +41,7 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-  send: [text: string]
+  send: [text: string, imageBase64?: string, videoBase64?: string]
   stop: []
   toggleCall: []
   voiceAudio: [blob: Blob, transcript?: string, duration?: number]
