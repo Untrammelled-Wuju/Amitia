@@ -113,6 +113,14 @@ const showVideoPreview = ref(false)
 const previewVideoUrl = ref('')
 const textExpanded = ref(!((props.message as any).audioUrl))
 
+watch(
+  () => (props.message as any).audioUrl,
+  (val) => {
+    if (val && props.message.role === "assistant") {
+      textExpanded.value = false
+    }
+  }
+)
 
 const charInitial = computed(() => (props.charName || "AI").charAt(0))
 
