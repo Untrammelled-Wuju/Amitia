@@ -325,13 +325,13 @@ async function copyContent() {
 
 /* ======== Role colours ======== */
 .chat-bubble.user .bubble-content {
-  background: var(--ac-color-primary);
-  color: #fff;
+  background: var(--ac-color-bg-primary);
+  border: 1px solid var(--ac-color-border-light);
   border-top-right-radius: 2px;
 }
 .chat-bubble.assistant .bubble-content {
-  background: var(--ac-color-bg-primary);
-  border: 1px solid var(--ac-color-border-light);
+  background: var(--ac-color-primary);
+  color: #fff;
   border-top-left-radius: 2px;
 }
 .chat-bubble.is-streaming .bubble-content {
