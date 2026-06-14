@@ -9,11 +9,13 @@ import (
 
 
 type Config struct {
-	Server  ServerConfig  `mapstructure:"server"`
-	Storage StorageConfig `mapstructure:"storage"`
-	JWT     JWTConfig     `mapstructure:"jwt"`
-	App     AppConfig      `mapstructure:"app"`
-	Chat      ChatConfig     `mapstructure:"chat"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Storage   StorageConfig   `mapstructure:"storage"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	App       AppConfig       `mapstructure:"app"`
+	Chat      ChatConfig      `mapstructure:"chat"`
+	Qdrant    QdrantConfig    `mapstructure:"qdrant"`
+	Embedding EmbeddingConfig `mapstructure:"embedding"`
 }
 
 type ServerConfig struct {
@@ -41,6 +43,20 @@ type ChatConfig struct {
 	MergeWindowMs int `mapstructure:"mergeWindowMs"`
 }
 
+type QdrantConfig struct {
+	Host           string `mapstructure:"host"`
+	Port           int    `mapstructure:"port"`
+	CollectionName string `mapstructure:"collectionName"`
+	VectorDim      int    `mapstructure:"vectorDim"`
+	Limit          int    `mapstructure:"limit"`
+}
+
+type EmbeddingConfig struct {
+	ModelName string `mapstructure:"modelName"`
+	BaseUrl   string `mapstructure:"baseUrl"`
+	ApiKey    string `mapstructure:"apiKey"`
+}
+
 var AppCfg *Config
 
 
@@ -62,6 +78,14 @@ func InitConfig(configPath string) {
 	v.SetDefault("app.version", "1.0.0")
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.mergeWindowMs", 6000)
+	v.SetDefault("qdrant.host", "127.0.0.1")
+	v.SetDefault("qdrant.port", 9178)
+	v.SetDefault("qdrant.collectionName", "memory_embeddings")
+	v.SetDefault("qdrant.vectorDim", 1536)
+	v.SetDefault("qdrant.limit", 10)
+	v.SetDefault("embedding.modelName", "text-embedding-3-small")
+	v.SetDefault("embedding.baseUrl", "")
+	v.SetDefault("embedding.apiKey", "")
 
 	v.AutomaticEnv()
 

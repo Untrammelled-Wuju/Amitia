@@ -86,7 +86,9 @@ export function useFixedEvents() {
   async function getFixedEvents(characterId?: string): Promise<FixedEvent[]> {
     loading.value = true
     try {
-      const data = await get<FixedEvent[]>("/api/companion/fixed-events")
+      const params: any = {}
+      if (characterId) params.characterId = characterId
+      const data = await get<FixedEvent[]>("/api/companion/fixed-events", params)
       return data
     } finally {
       loading.value = false

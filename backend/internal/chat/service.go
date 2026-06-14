@@ -319,11 +319,29 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	if req.ImageContext != "" {
 		messages = append(messages, map[string]interface{}{"role": "system", "content": req.ImageContext})
 	}
+
+	if s.memorySvc != nil && req.Message != "" {
+		memResults, err := s.memorySvc.VectorSearch(&memory.VectorSearchRequest{
+			Keyword:     req.Message,
+			CharacterID: charID,
+			Limit:       5,
+		})
+		if err == nil && len(memResults) > 0 {
+			var memLines []string
+			for _, r := range memResults {
+				memLines = append(memLines, "- "+r.Memory.Value)
+			}
+			memContext := "【相关记忆】\n" + strings.Join(memLines, "\n")
+			messages = append(messages, map[string]interface{}{"role": "system", "content": memContext})
+		}
+	}
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
 	messages = append(messages, map[string]interface{}{"role": "user", "content": req.Message})
 	toolDefs := tool.GetAll()
 	var reply string
 	seenTools := map[string]bool{}
+
+	tool.SetCurrentCharacterID(charID)
 	for round := 0; round < 3; round++ {
 		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(modelCfg, messages, toolDefs)
 		if llmErr != nil {

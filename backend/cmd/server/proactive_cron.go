@@ -120,11 +120,15 @@ func (c *ProactiveCron) runActiveTaskScanner() {
 	for {
 		select {
 		case <-ticker.C:
-			result := c.compSvc.ProcessDueActiveMessageTasks()
-			processed, _ := result["processed"].(int)
-			sent, _ := result["sent"].(int)
-			if processed > 0 {
-				log.Printf("[ProactiveCron] 主动任务处理: processed=%d sent=%d", processed, sent)
+			var charIDs []string
+			c.db.Table("characters").Pluck("id", &charIDs)
+			for _, cid := range charIDs {
+				result := c.compSvc.ProcessDueActiveMessageTasks(cid)
+				processed, _ := result["processed"].(int)
+				sent, _ := result["sent"].(int)
+				if processed > 0 {
+					log.Printf("[ProactiveCron] 主动任务处理 char=%s: processed=%d sent=%d", cid, processed, sent)
+				}
 			}
 		case <-c.stopCh:
 			return
@@ -156,12 +160,16 @@ func (c *ProactiveCron) dailyRegenerate() {
 	today := now.Format("2006-01-02")
 	if now.Hour() == 0 && now.Minute() < 5 && c.lastRegenerateDate != today {
 		log.Println("[ProactiveCron] 开始每日任务重生成...")
-		result := c.compSvc.ScheduleBasedGenerator(today)
+		var charIDs []string
+		c.db.Table("characters").Pluck("id", &charIDs)
+		for _, cid := range charIDs {
+			result := c.compSvc.ScheduleBasedGenerator(today, cid)
+			taskCount, _ := result["taskCount"].(int)
+			log.Printf("[ProactiveCron] 每日任务重生成 char=%s: tasks=%d", cid, taskCount)
+		}
 		c.lastRegenerateDate = today
 		c.lastBurstAt = time.Time{}
 		c.todayBurstCount = 0
-		taskCount, _ := result["taskCount"].(int)
-		log.Printf("[ProactiveCron] 每日任务重生成完成: tasks=%d", taskCount)
 	}
 }
 
@@ -178,7 +186,11 @@ func (c *ProactiveCron) runRandomBurstTrigger() {
 		select {
 		case <-ticker.C:
 			if c.compSvc != nil {
-				c.compSvc.RandomBurstTrigger()
+				var charIDs []string
+				c.db.Table("characters").Pluck("id", &charIDs)
+				for _, cid := range charIDs {
+					c.compSvc.RandomBurstTrigger(cid)
+				}
 			}
 		case <-c.stopCh:
 			return

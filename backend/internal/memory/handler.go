@@ -86,6 +86,29 @@ func (h *Handler) Search(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
 }
 
+func (h *Handler) VectorSearch(c *gin.Context) {
+	var req VectorSearchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	results, err := h.service.VectorSearch(&req)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": results, "total": len(results)})
+}
+
+func (h *Handler) RebuildEmbeddings(c *gin.Context) {
+	result, err := h.service.RebuildEmbeddings()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "嵌入重建完成", result)
+}
+
 
 func (h *Handler) RecordUse(c *gin.Context) {
 	id := c.Param("id")
@@ -99,7 +122,10 @@ func (h *Handler) RecordUse(c *gin.Context) {
 
 
 func (h *Handler) DeleteAll(c *gin.Context) {
-	if err := h.service.DeleteAll(); err != nil { util.ErrorResponse(c, response.OperationFailed, "删除失败", nil); return }
+	if err := h.service.DeleteAll(); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		return
+	}
 	util.SuccessMsgResponse(c, "所有记忆已删除", nil)
 }
 
@@ -116,10 +142,10 @@ func (h *Handler) Timeline(c *gin.Context) {
 	}
 	util.SuccessResponse(c, gin.H{"items": items, "total": total, "page": page, "pageSize": pageSize})
 }
-func (h *Handler) CheckConflict(c *gin.Context) { util.SuccessResponse(c, gin.H{"hasConflict": false}) }
+func (h *Handler) CheckConflict(c *gin.Context)  { util.SuccessResponse(c, gin.H{"hasConflict": false}) }
 func (h *Handler) ResolveConflict(c *gin.Context) { util.SuccessResponse(c, gin.H{"resolved": true}) }
 func (h *Handler) ExtractCandidates(c *gin.Context) { util.SuccessResponse(c, gin.H{"candidates": 0}) }
-func (h *Handler) RebuildIndex(c *gin.Context) { util.SuccessResponse(c, gin.H{"rebuilt": true}) }
+func (h *Handler) RebuildIndex(c *gin.Context)    { util.SuccessResponse(c, gin.H{"rebuilt": true}) }
 func (h *Handler) UpdateCandidate(c *gin.Context) { util.SuccessResponse(c, gin.H{"updated": true}) }
 func (h *Handler) DeleteCandidate(c *gin.Context) { util.SuccessResponse(c, gin.H{"deleted": true}) }
 

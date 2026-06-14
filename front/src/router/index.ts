@@ -31,7 +31,6 @@ const router = createRouter({
       redirect: "/model/llm",
       children: [
         { path: "llm", name: "modelLlm", component: () => import("@/views/model-config/ModelConfigLlmView.vue"), meta: { requiresAuth: true } },
-        { path: "llm", name: "modelLlm", component: () => import("@/views/model-config/ModelConfigLlmView.vue"), meta: { requiresAuth: true } },
         { path: "voice", name: "modelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
         { path: "vision", name: "modelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
       ],

@@ -377,8 +377,8 @@ async function loadVectorStatus() {
 async function rebuildIndex() {
   rebuilding.value = true
   try {
-    const result = await post<any>("/api/memories/rebuild-index", {})
-    ElMessage.success(`Index rebuild complete: ${result.indexedCount} memories indexed`)
+    const result = await post<any>("/api/memories/rebuild-embeddings", {})
+    ElMessage.success(`Index rebuild complete: ${result.success} memories indexed`)
     await loadVectorStatus()
   } catch (err: any) {
     ElMessage.error(err.message || "Rebuild failed")
@@ -397,7 +397,7 @@ async function doSearch() {
   if (!searchQuery.value.trim()) return
   try {
     const result = await post<any>("/api/memories/search", {
-      query: searchQuery.value.trim(),
+      keyword: searchQuery.value.trim(),
       limit: 10,
     })
     searchResults.value = result?.items || []

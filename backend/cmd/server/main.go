@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 )
@@ -33,14 +34,16 @@ func main() {
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
 	db.Exec("CREATE TABLE IF NOT EXISTS active_message_task (id INTEGER PRIMARY KEY AUTOINCREMENT, task_type TEXT DEFAULT '', due_time TEXT, prompt TEXT DEFAULT '', status TEXT DEFAULT 'PENDING', reason TEXT DEFAULT '', retry_count INTEGER DEFAULT 0, max_retry INTEGER DEFAULT 3, last_error TEXT DEFAULT '', sent_at TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), canceled_at TEXT, source TEXT DEFAULT 'schedule_based')")
+	db.Exec("ALTER TABLE active_message_task ADD COLUMN character_id TEXT DEFAULT ''")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(status, due_time)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_active_task_char ON active_message_task(character_id)")
 	db.Exec("ALTER TABLE active_message_task ADD COLUMN source TEXT DEFAULT 'schedule_based'")
 	db.Exec("ALTER TABLE active_message_task ADD COLUMN max_retry INTEGER DEFAULT 3")
 	db.Exec("ALTER TABLE active_message_task ADD COLUMN last_error TEXT DEFAULT '')")
 	db.Exec("ALTER TABLE active_message_task ADD COLUMN reason TEXT DEFAULT '')")
 	db.Exec("ALTER TABLE active_message_task ADD COLUMN canceled_at TEXT")
-	db.Exec("CREATE TABLE IF NOT EXISTS active_message_settings (enabled INTEGER DEFAULT 1, active_level INTEGER DEFAULT 50, quiet_minutes TEXT DEFAULT '', min_interval INTEGER DEFAULT 60, max_daily INTEGER DEFAULT 6, max_daily_calls INTEGER DEFAULT 10, channel TEXT DEFAULT 'all', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+	db.Exec("CREATE TABLE IF NOT EXISTS active_message_settings (enabled INTEGER DEFAULT 1, active_level INTEGER DEFAULT 50, min_interval INTEGER DEFAULT 60, quiet_start TEXT DEFAULT '23:00', quiet_end TEXT DEFAULT '07:00', max_per_day INTEGER DEFAULT 6, max_daily_calls INTEGER DEFAULT 10, channel TEXT DEFAULT 'all', character_id TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
 	db.Exec("ALTER TABLE active_message_settings ADD COLUMN active_level INTEGER DEFAULT 50")
 	db.Exec("ALTER TABLE active_message_settings ADD COLUMN quiet_minutes TEXT DEFAULT '')")
 	db.Exec("ALTER TABLE active_message_settings ADD COLUMN max_daily_calls INTEGER DEFAULT 10")
@@ -60,6 +63,13 @@ func main() {
 		db.Exec("ALTER TABLE safety_events ADD COLUMN direction TEXT DEFAULT ''")
 	db.Exec("CREATE TABLE IF NOT EXISTS tts_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_key TEXT DEFAULT '', resource_id TEXT DEFAULT 'seed-tts-2.0', voice_type TEXT DEFAULT 'zh_female_cancan_mars_bigtts', emotion TEXT DEFAULT '', speed REAL DEFAULT 1.0, pitch REAL DEFAULT 1.0, volume REAL DEFAULT 1.0, is_active INTEGER DEFAULT 0, is_custom INTEGER DEFAULT 0, custom_voice_id TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
 	db.Exec("CREATE TABLE IF NOT EXISTS asr_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_key TEXT DEFAULT '', resource_id TEXT DEFAULT 'volc.seedasr.auc', is_active INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+	db.Exec("ALTER TABLE sleep_settings ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE fixed_events ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE special_events ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE class_adjustments ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE lifestyle_tendencies ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE work_profiles ADD COLUMN character_id TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE active_message_settings ADD COLUMN character_id TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE characters ADD COLUMN voice_config_id TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE characters ADD COLUMN voice_type TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE characters ADD COLUMN voice_speed REAL DEFAULT 1.0")
@@ -77,6 +87,7 @@ func main() {
 
 
 	db.Exec("CREATE TABLE IF NOT EXISTS safety_events (id TEXT PRIMARY KEY, conversation_id TEXT, event_type TEXT, description TEXT, direction TEXT DEFAULT '', handled INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now'))))")
+	db.Exec("CREATE TABLE IF NOT EXISTS memory_embeddings (memory_id TEXT PRIMARY KEY, created_at TEXT)")
 
 	db.Exec("UPDATE characters SET conversation_id = (SELECT c.id FROM conversations c WHERE c.character_id = characters.id ORDER BY c.updated_at DESC LIMIT 1) WHERE conversation_id IS NULL OR conversation_id = ''")
 
@@ -92,11 +103,17 @@ func main() {
 		}()
 	}
 
+	startQdrant()
+
 	compSvc := companion.NewService(ctx)
 	cron := NewProactiveCron(db, compSvc)
 	cron.Start()
 	proactive.SchedulerRunning = true
-	defer func() { proactive.SchedulerRunning = false; cron.Stop() }()
+	defer func() {
+		proactive.SchedulerRunning = false
+		cron.Stop()
+		qdrantDB.StopQdrant()
+	}()
 
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
@@ -105,6 +122,7 @@ func main() {
 	fmt.Printf("    Listen:      http://%s\n", serverAddr)
 	fmt.Printf("    Deploy Mode: %s\n", config.AppCfg.App.DeployMode)
 	fmt.Printf("    Database:    %s/app.db\n", config.AppCfg.Storage.DataDir)
+	fmt.Printf("    Qdrant:      %s:%d\n", config.AppCfg.Qdrant.Host, config.AppCfg.Qdrant.Port)
 	fmt.Printf("  ========================================\n\n")
 
 	qqMgr := qq.NewManager("http://127.0.0.1:9877")
@@ -113,6 +131,10 @@ func main() {
 	chatRepo := chat.NewRepository(ctx)
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx)
+
+	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
+		memSvc.SyncEmbedding(id, key, value, characterID, memoryType)
+	})
 	chatSvc := chat.NewService(chatRepo, ctx, memSvc)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
@@ -127,7 +149,7 @@ func main() {
 		} else {
 			log.Info("消息计数已修复，影响", count, "条对话")
 		}
-		compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"))
+		compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), "")
 		log.Info("今日主动消息任务已生成")
 
 	r := setupRouter(ctx)
@@ -135,4 +157,33 @@ func main() {
 		log.Error("服务启动失败:", err)
 		os.Exit(1)
 	}
+}
+
+func startQdrant() {
+	qcfg := config.AppCfg.Qdrant
+	log.Info("正在启动Qdrant...")
+	if err := qdrantDB.StartQdrant(); err != nil {
+		log.Error("Qdrant启动失败:", err)
+		log.Warn("向量检索功能不可用，将回退到关键词搜索")
+		return
+	}
+	if err := qdrantDB.WaitForQdrant(qcfg.Port); err != nil {
+		log.Error("等待Qdrant就绪超时:", err)
+		qdrantDB.StopQdrant()
+		log.Warn("向量检索功能不可用，将回退到关键词搜索")
+		return
+	}
+	if err := qdrantDB.InitClient(); err != nil {
+		log.Error("Qdrant客户端初始化失败:", err)
+		qdrantDB.StopQdrant()
+		log.Warn("向量检索功能不可用，将回退到关键词搜索")
+		return
+	}
+	if err := qdrantDB.EnsureCollection(); err != nil {
+		log.Error("Qdrant集合创建失败:", err)
+		qdrantDB.StopQdrant()
+		log.Warn("向量检索功能不可用，将回退到关键词搜索")
+		return
+	}
+	log.Info("Qdrant就绪，向量检索功能已启用")
 }

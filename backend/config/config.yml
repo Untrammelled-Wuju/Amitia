@@ -16,3 +16,15 @@ app:
   deployMode: "desktop-local"
 chat:
   mergeWindowMs: 6000
+
+qdrant:
+  host: "127.0.0.1"
+  port: 9178
+  collectionName: "memory_embeddings"
+  vectorDim: 1536
+  limit: 10
+
+embedding:
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
+  apiKey: ""
