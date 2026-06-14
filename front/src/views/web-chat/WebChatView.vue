@@ -110,7 +110,7 @@
     </header>
 
     <!-- Messages area -->
-    <div class="messages-area" :class="{ no_scroll: messages.length === 0 && !sending }" ref="msgArea" @scroll="onScroll" @touchstart="onMsgTouchStart" @touchmove="onMsgTouchMove" @touchend="onMsgTouchEnd">
+    <div class="messages-area" ref="msgArea" @scroll="onScroll" @wheel="onWheel" @touchstart="onMsgTouchStart" @touchmove="onMsgTouchMove" @touchend="onMsgTouchEnd">
       <!-- Pull-down to load history indicator (mobile) -->
       <div class="pull-indicator" :class="{ pulling: isPulling, ready: pullReady }">
         <el-icon :size="18" class="pull-icon" :class="{ spin: pullLoading }">
@@ -177,8 +177,8 @@
       :is-wechat-active="isWechatActive"
       :wechat-online="wechatOnline"
       :qq-msg-count="qqMsgCount"
-      :is-q-q-active="isQQActive"
-      :qq-online="qqOnline"
+      :isQQActive="isQQActive"
+      :qqOnline="qqOnline"
       @select-char="handleSwitchChar"
       @select-wechat="handleSelectWechat"
       @select-q-q="handleSelectQQ"
@@ -620,6 +620,7 @@ async function loadCharacterConversation() {
     if (version !== messagesVersion) return
     const items = (r?.messages || r?.items || [])
     if (items.length) {
+      if (items.length < 50 && (r?.totalPages || 1) <= 1) hasMoreHistory.value = false
       messages.value = items.map((m: any) => {
         if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
         return m
@@ -667,36 +668,34 @@ async function handleSelectWechat(skipConfirm = false) {
   }
   showDrawer.value = false
   try {
-    const r = await get<any>("/api/wechat/status")
-    const status = r?.data || r
-    if (status?.accountId) {
-      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 5 })
-      const items = convs?.conversations || convs?.items || []
-      const wc = items.find((x: any) => x.channel === "wechat")
-      if (wc) {
-        localStorage.setItem("webchat-last-conv", "wechat")
-        const cid = wc.characterId || wc.character_id
-        if (cid) {
-          const c = characters.value.find((x: any) => x.id === cid)
-          if (c) selectCharacter(c)
-        }
-        if (!characterId.value || !charName.value) {
-          const fallback = characters.value.find((x: any) => x.isDefault) || characters.value.find((x: any) => x.isActive) || characters.value[0]
-          if (fallback) selectCharacter(fallback)
-        }
-        await handleSelectConv(wc)
-        return
+    const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+    const items = convs?.conversations || convs?.items || []
+    const wc = items.find((x: any) => x.id === "channel-wechat") || items.find((x: any) => x.channel === "wechat")
+    if (wc) {
+      localStorage.setItem("webchat-last-conv", "wechat")
+      const cid = wc.characterId || wc.character_id
+      if (cid) {
+        const c = characters.value.find((x: any) => x.id === cid)
+        if (c) selectCharacter(c)
       }
-      const defaultChar = characters.value.find((c: any) => c.isDefault || c.isActive)
-      const created = await post<any>("/api/web-chat/conversations", {
-        title: "微信对话", channel: "wechat", characterId: defaultChar?.id || characterId.value || ""
-      })
-      if (created?.id) {
-        await handleSelectConv(created)
-        return
+      if (!characterId.value || !charName.value) {
+        const fallback = characters.value.find((x: any) => x.isDefault) || characters.value.find((x: any) => x.isActive) || characters.value[0]
+        if (fallback) selectCharacter(fallback)
       }
+      await handleSelectConv(wc)
+      return
     }
-  } catch {}
+    const defaultChar = characters.value.find((c: any) => c.isDefault || c.isActive)
+    const created = await post<any>("/api/web-chat/conversations", {
+      title: "微信对话", channel: "wechat", characterId: defaultChar?.id || characterId.value || ""
+    })
+    if (created?.id) {
+      await handleSelectConv(created)
+      return
+    }
+  } catch (e: any) {
+    console.error("[handleSelectWechat]", e)
+  }
   ElMessage.warning("未找到微信对话")
 }
 
@@ -720,7 +719,7 @@ async function handleSelectQQ(skipConfirm = false) {
     }
     const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
     const items = convs?.conversations || convs?.items || []
-    const qc = items.find((x: any) => x.channel === "qq")
+    const qc = items.find((x: any) => x.id === "channel-qq") || items.find((x: any) => x.channel === "qq")
     if (qc) {
       localStorage.setItem("webchat-last-conv", "qq")
       const cid = qc.characterId || qc.character_id
@@ -755,6 +754,8 @@ async function handleSelectConv(conv: any) {
   isQQActive.value = conv?.channel === "qq"
   convId.value = conv.id
   convTitle.value = conv?.channel === "qq" ? "QQ聊天" : conv?.channel === "wechat" ? "微信聊天" : (conv.title || "")
+  msgPage.value = 1
+  hasMoreHistory.value = true
   const version = ++messagesVersion
   try {
     const url = `/api/web-chat/conversations/${encodeURIComponent(conv.id)}/messages`
@@ -1086,6 +1087,18 @@ function onScroll() {
   }
 }
 
+
+
+function onWheel(e: WheelEvent) {
+  const el = msgArea.value
+  if (!el) return
+  if (e.deltaY >= 0) return
+  const noOverflow = el.scrollHeight <= el.clientHeight
+  const atTop = el.scrollTop <= 0
+  if ((noOverflow || atTop) && hasMoreHistory.value && !isLoadingHistory.value && convId.value) {
+    loadOlderMessages()
+  }
+}
 // ==========================================================
 // Load older messages (pagination)
 // ==========================================================
@@ -1268,9 +1281,7 @@ function typeLabel(type: string): string {
   position: relative;
 }
 
-.messages-area.no_scroll {
-  overflow-y: hidden;
-}
+
 
 /* Empty state */
 .empty-chat {

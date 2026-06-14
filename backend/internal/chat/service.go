@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"net/http"
@@ -104,13 +105,18 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 	if channel == "qq" {
 		title = "QQ对话"
 	}
+	convID := "channel-" + channel
 	c, err := s.repo.GetConversationByChannel(channel)
 	if err == nil && c != nil && c.ID != "" {
+		if c.ID != convID {
+			s.db.Exec("UPDATE conversations SET id = ? WHERE id = ?", convID, c.ID)
+			c.ID = convID
+		}
 		return c, nil
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	c = &Conversation{
-		ID:          uuid.New().String(),
+		ID:          convID,
 		CharacterID: "",
 		Title:       title,
 		Channel:     channel,
@@ -262,7 +268,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	userMsgID := uuid.New().String()
 	msgType := "text"
 	if req.AudioUrl != "" { msgType = "voice" }
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, time.Now().Format("2006-01-02 15:04:05"))
+	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, video_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, req.VideoUrl, time.Now().Format("2006-01-02 15:04:05"))
 	if req.Message == "" && req.ImageUrl != "" {
 		req.Message = "[图片]"
 	}
@@ -277,6 +283,23 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
 		} else {
 			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
+			return &ProcessMessageResponse{
+				ConversationID: convID,
+				Reply:          errDetail,
+				CharacterID:    charID,
+				CharacterName:  charName,
+			}, nil
+		}
+	}
+	if req.VideoUrl != "" && req.ImageContext == "" {
+		fmt.Printf("[Video] 开始分析视频, url长度=%d\n", len(req.VideoUrl))
+		desc, errDetail := analyzeVideoInternal(req.VideoUrl)
+		fmt.Printf("[Video] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
+		if desc != "" {
+			req.ImageContext = "[视频描述：" + desc + "]\n【指代说明】\n他/她/它≈视频中人物"
+			fmt.Printf("[Video] 视频描述已注入, 长度=%d\n", len(req.ImageContext))
+		} else {
+			fmt.Printf("[Video] 视频分析失败: %s\n", errDetail)
 			return &ProcessMessageResponse{
 				ConversationID: convID,
 				Reply:          errDetail,
@@ -572,21 +595,100 @@ func analyzeImageInternal(imageUrl string) (string, string) {
 			imageData = "data:" + mimeType + ";base64," + base64Encode(data)
 		}
 	}
+	content := []map[string]interface{}{
+		{"type": "input_image", "image_url": imageData},
+		{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息"},
+	}
+	return callDoubaoVision(content)
+}
+
+func analyzeVideoInternal(videoUrl string) (string, string) {
+	if strings.HasPrefix(videoUrl, "data:video/") {
+		content := []map[string]interface{}{
+			{"type": "input_video", "video_url": videoUrl},
+			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息"},
+		}
+		return callDoubaoVision(content)
+	}
+	if strings.HasPrefix(videoUrl, "/videos/") {
+		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "videos", filepath.Base(videoUrl))
+		fileID, err := uploadFileToArk(filePath)
+		time.Sleep(5 * time.Second)
+		if err != nil {
+			return "", fmt.Sprintf("视频上传失败: %s", err.Error())
+		}
+		content := []map[string]interface{}{
+			{"type": "input_video", "file_id": fileID},
+			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息"},
+		}
+		return callDoubaoVision(content)
+	}
+	return "", fmt.Sprintf("不支持的视频URL格式: %s", videoUrl[:min(len(videoUrl), 100)])
+}
+
+func uploadFileToArk(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("无法打开文件: %w", err)
+	}
+	defer file.Close()
+
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+
+	_ = writer.WriteField("purpose", "user_data")
+
+	fileName := filepath.Base(filePath)
+
+	part, err := writer.CreateFormFile("file", fileName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return "", err
+	}
+	writer.Close()
+
+	req, _ := http.NewRequest("POST", doubaoBaseURL+"/files", &requestBody)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("文件上传失败 (status=%d): %s", resp.StatusCode, string(body[:min(len(body), 300)]))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("解析上传响应失败: %w", err)
+	}
+	fileID, _ := result["id"].(string)
+	if fileID == "" {
+		return "", fmt.Errorf("未获取到file_id: %s", string(body[:min(len(body), 300)]))
+	}
+	return fileID, nil
+}
+
+func callDoubaoVision(content []map[string]interface{}) (string, string) {
 	reqBody := map[string]interface{}{
 		"model": doubaoModel,
 		"input": []map[string]interface{}{{
 			"role": "user",
-			"content": []map[string]interface{}{
-				{"type": "input_image", "image_url": imageData},
-				{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息"},
-			},
+			"content": content,
 		}},
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest("POST", doubaoBaseURL+"/responses", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err.Error()
