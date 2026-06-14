@@ -1,9 +1,6 @@
-@echo off
+﻿@echo off
 cd /d "%~dp0"
 
-echo [U-Ai] Starting QQ Lagrange...
-start "LagrangeBot" /MIN "%~dp0lagrange\bin\Lagrange.OneBot.exe"
-
-echo [U-Ai] Starting server (SignServer managed by Go backend on Linux)...
+echo [U-Ai] Starting server (Qdrant/QQ侧车/微信侧车由后端自动拉起)...
 set CONFIG_PATH=config
 server.exe

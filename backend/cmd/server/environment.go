@@ -16,43 +16,44 @@ import (
 	"time"
 )
 
-
 type Service struct {
-	Name    string
-	Dir     string
-	Cmd     string
-	Args    []string
-	Env     []string
-	Port    int
-	cmd     *exec.Cmd
-	cancel  context.CancelFunc
+	Name      string
+	Dir       string
+	Cmd       string
+	Args      []string
+	Env       []string
+	Port      int
+	cmd       *exec.Cmd
+	cancel    context.CancelFunc
 	HealthURL string
 }
 
-
 type Environment struct {
-	services  []*Service
-	workspace string
-	wg        sync.WaitGroup}
-
+	services   []*Service
+	workspace  string
+	wg         sync.WaitGroup
+	onShutdown func()
+}
 
 func NewEnvironment(workspace string) *Environment {
 	return &Environment{workspace: workspace}
 }
 
+func (e *Environment) SetOnShutdown(fn func()) {
+	e.onShutdown = fn
+}
 
 func (e *Environment) AddService(name, dir, cmd string, args []string, port int, env []string) {
 	e.services = append(e.services, &Service{
-		Name: name,
-		Dir:  filepath.Join(e.workspace, dir),
-		Cmd:  cmd,
-		Args: args,
-		Env:  env,
-		Port: port,
+		Name:      name,
+		Dir:       filepath.Join(e.workspace, dir),
+		Cmd:       cmd,
+		Args:      args,
+		Env:       env,
+		Port:      port,
 		HealthURL: fmt.Sprintf("http://127.0.0.1:%d/api/health", port),
 	})
 }
-
 
 func (e *Environment) StartAll() {
 	for _, svc := range e.services {
@@ -96,7 +97,6 @@ func (e *Environment) startService(svc *Service) error {
 		return fmt.Errorf("无法启动进程: %w", err)
 	}
 
-	
 	if svc.Port > 0 {
 		if err := e.waitForHealthy(svc); err != nil {
 			cancel()
@@ -106,7 +106,6 @@ func (e *Environment) startService(svc *Service) error {
 
 	log.Printf("[Env] %s 已就绪 (pid=%d)", svc.Name, svc.cmd.Process.Pid)
 
-	
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
@@ -134,7 +133,6 @@ func (e *Environment) waitForHealthy(svc *Service) error {
 	return fmt.Errorf("%s 在 30s 内未就绪", svc.Name)
 }
 
-
 func (e *Environment) StopAll() {
 	log.Println("[Env] 正在停止所有附属服务...")
 	for _, svc := range e.services {
@@ -156,12 +154,11 @@ func (e *Environment) StopAll() {
 		log.Println("[Env] 超时，强制终止...")
 		for _, svc := range e.services {
 			if svc.cmd != nil && svc.cmd.Process != nil {
-				svc.cmd.Process.Signal(syscall.SIGKILL)
+				svc.cmd.Process.Kill()
 			}
 		}
 	}
 }
-
 
 func (e *Environment) SetupSignalHandler() {
 	sigCh := make(chan os.Signal, 1)
@@ -171,10 +168,12 @@ func (e *Environment) SetupSignalHandler() {
 		sig := <-sigCh
 		log.Printf("[Env] 收到信号 %v，正在关闭...", sig)
 		e.StopAll()
+		if e.onShutdown != nil {
+			e.onShutdown()
+		}
 		os.Exit(0)
 	}()
 }
-
 
 type serviceWriter struct{ prefix string }
 
@@ -189,7 +188,6 @@ func (w *serviceWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-
 func startEnvironment() *Environment {
 	workspace := findWorkspace()
 	log.Printf("[Env] 根目录: %s", workspace)
@@ -199,8 +197,8 @@ func startEnvironment() *Environment {
 	sidecarCmd := "npx"
 	sidecarArgs := []string{"tsx", "src/index.ts"}
 	if runtime.GOOS == "windows" {
-		sidecarCmd = "cmd"
-		sidecarArgs = []string{"/c", "npx.cmd", "tsx", "src/index.ts"}
+		sidecarCmd = "npx.cmd"
+		sidecarArgs = []string{"tsx", "src/index.ts"}
 	}
 	env.AddService(
 		"backend/sidecar",
@@ -212,10 +210,6 @@ func startEnvironment() *Environment {
 
 	qqSidecarCmd := "node"
 	qqSidecarArgs := []string{"dist/index.js"}
-	if runtime.GOOS == "windows" {
-		qqSidecarCmd = "node"
-		qqSidecarArgs = []string{"dist/index.js"}
-	}
 	env.AddService(
 		"qq-sidecar",
 		"backend/qq-sidecar",
@@ -230,8 +224,6 @@ func startEnvironment() *Environment {
 
 	return env
 }
-
-
 
 func findWorkspace() string {
 	exe, _ := os.Executable()
@@ -260,4 +252,3 @@ func findWorkspace() string {
 	cwd, _ = os.Getwd()
 	return cwd
 }
-

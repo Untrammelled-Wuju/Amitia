@@ -12,7 +12,7 @@
     <el-card class="tts-card" shadow="hover">
       <template #header>
         <div class="tts-header">
-          <span>语音合成 (TTS)</span>
+          <span>语音识别/合成</span>
           <el-tag size="small" type="success">火山引擎</el-tag>
         </div>
       </template>
@@ -43,7 +43,7 @@
           <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
-          <span class="tts-label">TTS默认语音</span>
+          <span class="tts-label">默认语音</span>
           <el-select v-model="ttsVoiceType" size="small" style="width:240px">
             <el-option v-for="v in voicePresets" :key="v.name" :label="v.label" :value="v.name" />
           </el-select>
@@ -79,77 +79,11 @@
         <el-link href="https://console.volcengine.com/speech/new/voices?_vtm_=a86845.b103859.0_0.0_0.0.242_7650005566333666822" target="_blank" class="quick-link">音色管理</el-link>
       </div>
       <div style="margin-top:12px">
-        <el-button type="primary" size="small" @click="saveAllTts" :loading="ttsSaving">保存TTS配置</el-button>
+        <el-button type="primary" size="small" @click="saveAllTts" :loading="ttsSaving">保存配置</el-button>
       </div>
     </el-card>
 
-    <el-card class="tts-card" shadow="hover">
-      <template #header>
-        <div class="tts-header">
-          <span>语音识别 (ASR)</span>
-          <el-tag size="small" type="warning">火山引擎 ASR</el-tag>
-        </div>
-      </template>
-            <div class="tts-grid">
-        <div class="tts-item">
-          <span class="tts-label">API Key</span>
-          <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" type="password" show-password style="width:260px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">合成资源ID</span>
-          <el-input v-model="ttsResourceId" size="small" placeholder="seed-tts-2.0" style="width:260px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">复刻资源ID</span>
-          <el-input v-model="cloneResourceId" size="small" placeholder="volc.megatts.timbre" style="width:260px" />
-        </div>
-
-        <div class="tts-item">
-          <span class="tts-label">APP ID</span>
-          <el-input v-model="realtimeAppId" size="small" placeholder="火山引擎APP ID" style="width:260px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">Access Token</span>
-          <el-input v-model="realtimeAccessToken" size="small" placeholder="火山引擎Access Token" type="password" show-password style="width:260px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">Secret Key</span>
-          <el-input v-model="realtimeSecretKey" size="small" placeholder="火山引擎Secret Key" type="password" show-password style="width:260px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">当前音色</span>
-          <el-select v-model="ttsVoiceType" size="small" style="width:240px">
-            <el-option v-for="v in voicePresets" :key="v.name" :label="v.label" :value="v.name" />
-          </el-select>
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">语速</span>
-          <el-slider v-model="ttsSpeed" :min="0.5" :max="2.0" :step="0.1" size="small" show-input style="width:180px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">音调(半音)</span>
-          <el-slider v-model="ttsPitch" :min="-12" :max="12" :step="1" size="small" show-input style="width:180px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">音量</span>
-          <el-slider v-model="ttsVolume" :min="0.5" :max="2.0" :step="0.1" size="small" show-input style="width:180px" />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">试听</span>
-          <el-button size="small" @click="testTts" :loading="ttsTesting">测试</el-button>
-          <audio v-if="ttsAudio" :src="ttsAudio" controls style="width:200px;height:28px;margin-left:8px" />
-        </div>
-        <div class="tts-item" v-if="ttsTestResult">
-          <span class="tts-label">状态</span>
-          <span :style="{color: ttsTestResult==='ok'?'#67c23a':'#f56c6c'}">{{ ttsTestResult === 'ok' ? '连接正常' : '连接失败' }}</span>
-        </div>
-      </div>
-      <div style="margin-top:12px">
-        <el-button type="primary" size="small" @click="saveAllAsr" :loading="asrSaving">保存ASR配置</el-button>
-      </div>
-    </el-card>
-
-    <el-empty v-if="!ttsConfig && asrList.length === 0" description="暂无语音模型配置" />
+    <el-empty v-if="!ttsConfig" description="暂无语音模型配置" />
   </div>
 </template>
 
@@ -176,19 +110,12 @@ const ttsTesting = ref(false)
 const ttsTestResult = ref("")
 const voicePresets = ref<any[]>([])
 
-const asrList = ref<any[]>([])
-const asrApiKey = ref("")
-const asrResourceId = ref("volc.seedasr.auc")
-const asrTesting = ref(false)
-const asrTestResult = ref("")
 const ttsSaving = ref(false)
-const asrSaving = ref(false)
 
 
 onMounted(async () => {
   fetchTtsConfig()
   fetchVoices()
-  fetchAsrConfig()
 })
 
 async function fetchTtsConfig() {
@@ -217,98 +144,29 @@ async function fetchVoices() {
   try { voicePresets.value = await get("/api/tts/voices") } catch { voicePresets.value = [] }
 }
 
-async function fetchAsrConfig() {
-  try {
-    const r: any = await get("/api/asr/configs")
-    asrList.value = r || []
-    const cfg = asrList.value.find((c: any) => c.isActive) || asrList.value[0]
-    if (cfg) {
-      asrApiKey.value = cfg.apiKey || ""
-      asrResourceId.value = cfg.resourceId || "volc.seedasr.auc"
-    }
-} catch (e: any) { console.error("fetchAsrConfig failed", e); asrList.value = [] }
-}
-
-async function saveTtsKey() {
-  if (!ttsApiKey.value.trim()) return
-  try {
-    if (ttsConfig.value?.id) {
-      await put("/api/tts/configs/" + ttsConfig.value.id, { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value })
-      ttsTestResult.value = ""
-    } else {
-    const payload: any = { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value, voiceType: ttsVoiceType.value, speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value, realtimeAppId: realtimeAppId.value, realtimeAccessToken: realtimeAccessToken.value, realtimeSecretKey: realtimeSecretKey.value }
-      ttsConfig.value = r
-    }
-  } catch (err: any) { ElMessage.error(err?.message || '操作失败') }
-}
-
-async function saveTtsVoice() {
-  try {
-    if (ttsConfig.value?.id) {
-      await put('/api/tts/configs/' + ttsConfig.value.id, { voiceType: ttsVoiceType.value })
-      ttsTestResult.value = ""
-    }
-  } catch (err: any) { ElMessage.error(err?.message || '操作失败') }
-}
-
-async function saveTtsParams() {
-  try {
-    if (ttsConfig.value?.id) {
-      await put('/api/tts/configs/' + ttsConfig.value.id, { speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value })
-    }
-  } catch (err: any) { ElMessage.error(err?.message || '操作失败') }
-}
-
 async function saveAllTts() {
   ttsSaving.value = true
   try {
     const payload: any = { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value, voiceType: ttsVoiceType.value, speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value }
     if (ttsConfig.value?.id) {
-      await put('/api/tts/configs/' + ttsConfig.value.id, payload)
+      await put("/api/tts/configs/" + ttsConfig.value.id, payload)
     } else {
-      const r = await post('/api/tts/configs', { ...payload, name: '默认配置', isActive: 1 })
+      const r = await post("/api/tts/configs", { ...payload, name: "默认配置", isActive: 1 })
       ttsConfig.value = r
     }
-    ttsTestResult.value = ''
-    ElMessage.success('TTS配置保存成功')
-  } catch (err: any) { ElMessage.error(err?.message || '保存失败') }
+    ttsTestResult.value = ""
+    ElMessage.success("语音配置保存成功")
+  } catch (err: any) { ElMessage.error(err?.message || "保存失败") }
   finally { ttsSaving.value = false }
-}
-
-async function saveAllAsr() {
-  asrSaving.value = true
-  try {
-    const payload: any = { apiKey: asrApiKey.value, resourceId: asrResourceId.value }
-    if (asrList.value.length > 0 && asrList.value[0].id) {
-      await put('/api/asr/configs/' + asrList.value[0].id, payload)
-    } else {
-      const r = await post('/api/asr/configs', { ...payload, name: '默认配置', isActive: 1 })
-      asrList.value = [r]
-    }
-    asrTestResult.value = ''
-    ElMessage.success('ASR配置保存成功')
-  } catch (err: any) { ElMessage.error(err?.message || '保存失败') }
-  finally { asrSaving.value = false }
-}
-
-async function saveAsrKey() {
-  if (!asrApiKey.value.trim()) return
-  try {
-    if (asrList.value.length > 0 && asrList.value[0].id) {
-      await put('/api/asr/configs/' + asrList.value[0].id, { apiKey: asrApiKey.value })
-      asrTestResult.value = ""
-    } else {
-      const r = await post("/api/asr/configs", { name: "默认配置", apiKey: asrApiKey.value, resourceId: asrResourceId.value, isActive: 1 })
-      asrList.value = [r]
-    }
-  } catch (err: any) { ElMessage.error(err?.message || '操作失败') }
 }
 
 async function testTts() {
   ttsTesting.value = true; ttsAudio.value = ""; ttsTestResult.value = ""
   try {
     if (!ttsConfig.value?.id) {
-      if (ttsApiKey.value.trim()) { await saveTtsKey(); await fetchTtsConfig() }
+      const payload: any = { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value, voiceType: ttsVoiceType.value, speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value, realtimeAppId: realtimeAppId.value, realtimeAccessToken: realtimeAccessToken.value, realtimeSecretKey: realtimeSecretKey.value }
+      const r = await post("/api/tts/configs", { ...payload, name: "默认配置", isActive: 1 })
+      ttsConfig.value = r
       if (!ttsConfig.value?.id) { return }
     }
     const res: any = await post("/api/tts/synthesize", { voiceId: ttsConfig.value.id, text: "测试" })
@@ -317,20 +175,6 @@ async function testTts() {
   } catch {
     ttsTestResult.value = "fail"
   } finally { ttsTesting.value = false }
-}
-
-async function testAsr() {
-  asrTesting.value = true; asrTestResult.value = ""
-  try {
-    if (asrList.value.length === 0 || !asrList.value[0].id) {
-      if (asrApiKey.value.trim()) { await saveAsrKey(); await fetchAsrConfig() }
-      if (asrList.value.length === 0) { return }
-    }
-    await post('/api/asr/configs/' + asrList.value[0].id + '/test')
-    asrTestResult.value = "ok"
-  } catch {
-    asrTestResult.value = "fail"
-  } finally { asrTesting.value = false }
 }
 
 </script>
