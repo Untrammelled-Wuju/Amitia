@@ -53,7 +53,7 @@ export function useChat() {
     try {
       const r = await post<any>("/api/web-chat/conversations", {
         characterId: charId.value,
-        title: title || "New chat",
+        title: title || "",
       })
       return r
     } catch {

@@ -9,7 +9,7 @@
       style="margin-bottom: 16px"
     />
 
-    <el-card class="tts-card" v-if="ttsConfig" shadow="hover">
+    <el-card class="tts-card" shadow="hover">
       <template #header>
         <div class="tts-header">
           <span>语音合成 (TTS)</span>
@@ -83,7 +83,7 @@
       </div>
     </el-card>
 
-    <el-card class="tts-card" v-if="asrList.length > 0" shadow="hover">
+    <el-card class="tts-card" shadow="hover">
       <template #header>
         <div class="tts-header">
           <span>语音识别 (ASR)</span>
