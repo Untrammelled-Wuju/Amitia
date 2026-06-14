@@ -30,7 +30,7 @@ const qq = new QQBotClient()
 // Message forwarding
 // ============================================================
 const msgBuffers = new Map<string, {
-  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string }>
+  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string; videoUrl?: string }>
   timer: ReturnType<typeof setTimeout>
 }>()
 
@@ -45,7 +45,7 @@ qq.onMessage(async (msg: QQMessage) => {
     console.log(`[QQ-Sidecar][VOICE-IN] =========================================`)
     logLineV2(`VOICE-IN: fromUserId=${msg.fromUserId} groupId=${msg.groupId || "none"} msgId=${msg.messageId}`)
   }
-  const BUFFER_MS = 5000
+  const BUFFER_MS = qqSidecarConfig.mergeWindowMs
   const key = msg.groupId || msg.fromUserId
   const existing = msgBuffers.get(key)
   const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "" }
@@ -92,7 +92,17 @@ qq.onMessage(async (msg: QQMessage) => {
         }
       }
 
-      console.log("[QQ-Sidecar][WEBHOOK] text=" + combined.substring(0, 50) + " imageUrlLen=" + (imageUrl ? imageUrl.length : 0))
+      let videoUrl = ""
+      const firstVideoMsg = all.find(m => m.videoUrl)
+      if (firstVideoMsg?.videoUrl) {
+        const vidResult = await qq.downloadImage(firstVideoMsg.videoUrl)
+        if (vidResult) {
+          videoUrl = "data:" + vidResult.contentType + ";base64," + vidResult.buffer.toString("base64")
+          console.log("[QQ-Sidecar][VIDEO-FWD] 视频已下载并编码, size=" + vidResult.buffer.length)
+        }
+      }
+
+      console.log("[QQ-Sidecar][WEBHOOK] text=" + combined.substring(0, 50) + " imageUrlLen=" + (imageUrl ? imageUrl.length : 0) + " videoUrlLen=" + (videoUrl ? videoUrl.length : 0))
       const resp = await fetch(`${qqSidecarConfig.coreUrl}/api/agent/webhook`, {
         method: "POST", headers,
         body: JSON.stringify({
@@ -102,6 +112,7 @@ qq.onMessage(async (msg: QQMessage) => {
           type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
           voiceMessage: wasVoice,
           imageUrl: imageUrl,
+          videoUrl: videoUrl,
           skipTiming: true,
         }),
         signal: AbortSignal.timeout(60000),

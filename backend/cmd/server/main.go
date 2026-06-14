@@ -54,6 +54,7 @@ func main() {
 	db.Exec("ALTER TABLE proactive_messages ADD COLUMN updated_at TEXT")
 	db.Exec("ALTER TABLE messages ADD COLUMN tool_call_id TEXT DEFAULT '')")
 	db.Exec("ALTER TABLE messages ADD COLUMN image_url TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE messages ADD COLUMN video_url TEXT DEFAULT ''")
 	db.Exec("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
 	db.Exec("CREATE TABLE IF NOT EXISTS memory_events (id TEXT PRIMARY KEY, memory_id TEXT, event_type TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER, source TEXT, character_id TEXT, created_at TEXT)")
 		db.Exec("ALTER TABLE safety_events ADD COLUMN direction TEXT DEFAULT ''")
@@ -113,7 +114,7 @@ func main() {
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx)
 	chatSvc := chat.NewService(chatRepo, ctx, memSvc)
-	chat.InitBuffer(6000)
+	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)
 		chatSvc.EnsureChannelConversation("wechat")

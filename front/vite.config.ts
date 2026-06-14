@@ -28,6 +28,14 @@ export default defineConfig({
         target: "http://127.0.0.1:8899",
         changeOrigin: true,
       },
+      "/images": {
+        target: "http://127.0.0.1:8899",
+        changeOrigin: true,
+      },
+      "/videos": {
+        target: "http://127.0.0.1:8899",
+        changeOrigin: true,
+      },
     },
   },
 })

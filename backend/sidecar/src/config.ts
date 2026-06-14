@@ -5,6 +5,8 @@ function envStr(key: string, fallback: string): string {
 }
 
 export const sidecarConfig = {
+  mergeWindowMs: parseInt(process.env.MERGE_WINDOW_MS || "6000", 10),
+
   host: envStr("SIDECAR_HOST", "127.0.0.1"),
   port: parseInt(envStr("SIDECAR_PORT", "9876"), 10),
 

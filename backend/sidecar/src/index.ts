@@ -41,13 +41,13 @@ const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: s
 
 manager.onMessage(async (msg) => {
   // ---- 5秒去抖缓冲：连续消息自动合并 ----
-  const BUFFER_MS = 5000
-  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean }
+  const BUFFER_MS = sidecarConfig.mergeWindowMs
+  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; imageBase64?: string; aeskey?: string }
   
   // 使用 module-level Map（定义在文件顶部）
   const key = msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, isVoice: (msg as any).isVoice || false }
+  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, isVoice: (msg as any).isVoice || false, imageUrl: (msg as any).imageUrl || "", imageBase64: (msg as any).imageBase64 || "", aeskey: (msg as any).aeskey || "" }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -66,6 +66,45 @@ manager.onMessage(async (msg) => {
     const combined = all.map(m => m.text).join("\n")
     console.log(`[Sidecar] FIRE (${all.length} msgs): "${combined.substring(0, 100)}"`)
     const wasVoice = all.some(m => m.isVoice === true)
+    let imageUrl = ""
+    const firstImageMsg = all.find(m => m.imageUrl)
+    if (firstImageMsg?.imageUrl) {
+      try {
+        console.log("[Sidecar][IMAGE-DL] 开始下载图片: " + firstImageMsg.imageUrl.substring(0, 80) + "...")
+        const imgResp = await fetch(firstImageMsg.imageUrl, { signal: AbortSignal.timeout(30000) })
+        if (imgResp.ok) {
+          let imgBuffer = Buffer.from(await imgResp.arrayBuffer())
+          console.log("[Sidecar][IMAGE-DL] 下载完成, size=" + imgBuffer.length)
+
+          const rawAesKey = (firstImageMsg as any).aeskey
+          if (rawAesKey && rawAesKey.length === 32) {
+            try {
+              const crypto = await import("node:crypto")
+              const key = Buffer.from(rawAesKey, "hex")
+              const decipher = crypto.createDecipheriv("aes-128-ecb", key, null)
+              decipher.setAutoPadding(false)
+              let decrypted = Buffer.concat([decipher.update(imgBuffer), decipher.final()])
+              const padLen = decrypted[decrypted.length - 1]
+              if (padLen > 0 && padLen <= 16) {
+                decrypted = decrypted.subarray(0, decrypted.length - padLen)
+              }
+              imgBuffer = decrypted
+              console.log("[Sidecar][IMAGE-DL] AES解密成功, 解密后size=" + imgBuffer.length)
+            } catch (decErr: any) {
+              console.log("[Sidecar][IMAGE-DL] AES解密失败: " + decErr.message + ", 尝试使用原始数据")
+            }
+          }
+
+          const contentType = imgResp.headers.get("content-type") || "image/jpeg"
+          imageUrl = "data:" + contentType + ";base64," + imgBuffer.toString("base64")
+          console.log("[Sidecar][IMAGE-DL] 图片处理完成, final size=" + imgBuffer.length + " type=" + contentType)
+        } else {
+          console.log("[Sidecar][IMAGE-DL] 图片下载失败 HTTP " + imgResp.status)
+        }
+      } catch (err: any) {
+        console.log("[Sidecar][IMAGE-DL] 图片下载异常: " + err.message)
+      }
+    }
 
     const headers: Record<string, string> = { "Content-Type": "application/json" }
     const t = sidecarConfig.bridgeApiToken
@@ -79,10 +118,11 @@ manager.onMessage(async (msg) => {
           conversationId: `conv-${last.fromUserId}`, senderId: last.fromUserId,
           messageId: last.messageId, contextToken: last.contextToken,
           type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
+          imageBase64: last.imageBase64 || "", imageUrl: imageUrl || last.imageUrl || "",
           voiceMessage: wasVoice,
           skipTiming: true,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(180000),
       })
       const json = await resp.json() as any
       console.log(`[Sidecar] Core: code=${json?.code}, hasText=${!!json?.data?.outgoingMessage?.text}`)
@@ -105,7 +145,7 @@ manager.onMessage(async (msg) => {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ text: part }),
-                  signal: AbortSignal.timeout(60000),
+                  signal: AbortSignal.timeout(180000),
                 })
                 const ttsJson = await ttsResp.json() as any
                 const audioUrl = ttsJson?.data?.audioUrl

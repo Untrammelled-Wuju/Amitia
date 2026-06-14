@@ -28,3 +28,5 @@ Thumbs.db
 __pycache__/
 *.pyc
 temp_*.py
+backend/data/videos/
+backend/data/tts_cache/

@@ -40,6 +40,7 @@ export interface Message {
   role: "user" | "assistant" | "system"
   content: string
   imageUrl?: string
+  videoUrl?: string
   tokens?: number
   source: string
   importedItemId?: string | null

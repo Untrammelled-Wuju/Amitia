@@ -13,6 +13,7 @@ type Config struct {
 	Storage StorageConfig `mapstructure:"storage"`
 	JWT     JWTConfig     `mapstructure:"jwt"`
 	App     AppConfig      `mapstructure:"app"`
+	Chat      ChatConfig     `mapstructure:"chat"`
 }
 
 type ServerConfig struct {
@@ -36,6 +37,10 @@ type AppConfig struct {
 	DeployMode string `mapstructure:"deployMode"`
 }
 
+type ChatConfig struct {
+	MergeWindowMs int `mapstructure:"mergeWindowMs"`
+}
+
 var AppCfg *Config
 
 
@@ -56,6 +61,7 @@ func InitConfig(configPath string) {
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "1.0.0")
 	v.SetDefault("app.deployMode", "desktop-local")
+	v.SetDefault("chat.mergeWindowMs", 6000)
 
 	v.AutomaticEnv()
 
