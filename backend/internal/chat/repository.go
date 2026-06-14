@@ -27,6 +27,7 @@ type Repository interface {
 	GetModelRoutes() ([]map[string]interface{}, error)
 	UpdateModelRoutes(routes []map[string]interface{}) error
 	GetConversationByChannel(channel string) (*Conversation, error)
+	CountMessagesByConv(convID string) int64
 	ListProviders() []ProviderInfo
 }
 
@@ -184,4 +185,10 @@ func (r *repository) ListProviders() []ProviderInfo {
 		{ID: "qwen-compatible", Name: "Qwen Compatible"},
 		{ID: "custom-http", Name: "Custom HTTP"},
 	}
+}
+
+func (r *repository) CountMessagesByConv(convID string) int64 {
+	var count int64
+	r.db.Table("messages").Where("conversation_id = ?", convID).Count(&count)
+	return count
 }

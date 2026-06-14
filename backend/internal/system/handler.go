@@ -281,6 +281,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		AudioUrl       string  `json:"audioUrl"`
 		AudioDuration  float64 `json:"audioDuration"`
 		ImageUrl       string  `json:"imageUrl"`
+		VideoUrl       string  `json:"videoUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
 	msgContent := body.Content
@@ -293,6 +294,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	}
 
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
@@ -309,6 +311,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl: body.ImageUrl,
+		VideoUrl: body.VideoUrl,
 		ImageContext: imageCtx,
 	})
 	if err != nil { util.ErrorResponse(c, response.InternalError, err.Error(), nil); return }
@@ -324,6 +327,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		AudioUrl       string  `json:"audioUrl"`
 		AudioDuration  float64 `json:"audioDuration"`
 		ImageUrl       string  `json:"imageUrl"`
+		VideoUrl       string  `json:"videoUrl"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
 	msgContent := body.Content
@@ -336,6 +340,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	}
 
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
@@ -352,6 +357,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl: body.ImageUrl,
+		VideoUrl: body.VideoUrl,
 		ImageContext: imageCtx,
 	})
 	if err != nil {
@@ -442,10 +448,18 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		Source      string `json:"source"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil { util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil); return }
-	convID := uuid.New().String()
 	if body.Title == "" { body.Title = "新对话" }
 	if body.Channel == "" { body.Channel = "web" }
 	if body.Source == "" { body.Source = "manual" }
+	if body.Channel == "wechat" || body.Channel == "qq" || body.CharacterID != "" {
+		var existing []map[string]interface{}
+			h.db.Table("conversations").Where("channel = ? AND character_id = ?", body.Channel, body.CharacterID).Limit(1).Find(&existing)
+		if len(existing) > 0 {
+			util.SuccessResponse(c, gin.H{"id": existing[0]["id"], "title": existing[0]["title"], "channel": body.Channel, "source": existing[0]["source"], "characterId": existing[0]["character_id"]})
+			return
+		}
+	}
+	convID := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	h.db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", convID, body.Title, body.CharacterID, body.Channel, body.Source, now, now)
 	util.SuccessResponse(c, gin.H{"id": convID, "title": body.Title, "channel": body.Channel, "source": body.Source, "characterId": body.CharacterID})
@@ -695,6 +709,43 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 	imageUrl := "/images/" + filename
 	util.SuccessResponse(c, gin.H{"imageUrl": imageUrl})
 }
+func (h *Handler) VideoUpload(c *gin.Context) {
+	file, header, err := c.Request.FormFile("video")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少视频文件", nil)
+		return
+	}
+	defer file.Close()
+
+	videoDir := filepath.Join("data", "videos")
+	if err := os.MkdirAll(videoDir, 0755); err != nil {
+		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		return
+	}
+
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		ext = ".mp4"
+	}
+	filename := uuid.New().String() + ext
+	savePath := filepath.Join(videoDir, filename)
+
+	dst, err := os.Create(savePath)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		return
+	}
+
+	videoUrl := "/videos/" + filename
+	util.SuccessResponse(c, gin.H{"videoUrl": videoUrl})
+}
+
 
 func (h *Handler) VoiceTranscribe(c *gin.Context) {
 	var body struct {

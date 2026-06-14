@@ -120,6 +120,7 @@
         <span>{{ pullText }}</span>
       </div>
 
+
       <!-- Empty state -->
       <div v-if="messages.length === 0 && !sending" class="empty-chat">
         <div class="empty-icon">
@@ -223,7 +224,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "
 import { useRoute, useRouter } from "vue-router"
 import {
   Menu, MoreFilled, Refresh, Delete, Collection, Switch,
-  ChatDotRound, ArrowDown, Check, Promotion, Loading,
+  ChatDotRound, ArrowDown, ArrowUp, Check, Promotion, Loading,
 } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi, isLoggedIn, getToken } from "../../composables/useApi"
@@ -293,29 +294,31 @@ function connectSSE() {
   const url = apiBase + "/api/messages/stream?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
   eventSource = new EventSource(url)
   eventSource.onmessage = function(event) {
-  try {
-    const msg = JSON.parse(event.data)
-    if (!msg.role || msg.role === "tool") return
-    if ((msg as any).tool_calls_json) return
-    if (!messages.value.some((m: any) => m.id === msg.id)) {
-      if (msg.role === "user") {
-        const now = Date.now()
-        const dup = messages.value.some((m: any) =>
-          m.role === "user" && m.content === msg.content &&
-          String(m.id).startsWith("user-") &&
-          (now - new Date(m.createdAt).getTime()) < 15000
-        )
-        if (dup) return
+    try {
+      const msg = JSON.parse(event.data)
+      if (!msg.role || msg.role === "tool") return
+      if ((msg as any).tool_calls_json) return
+      if (!messages.value.some((m: any) => m.id === msg.id)) {
+        if (msg.role === "user") {
+          const now = Date.now()
+          const dup = messages.value.some((m: any) =>
+            m.role === "user" && m.content === msg.content &&
+            String(m.id).startsWith("user-") &&
+            (now - new Date(m.createdAt).getTime()) < 15000
+          )
+          if (dup) return
+        }
+        lastPolledMsgId = msg.id || lastPolledMsgId
+        messages.value.push(msg)
+        if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
+          new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
+        }
+        scrollToBottom()
+        fetchWechatMsgCount()
+        fetchQQStatus()
       }
-      lastPolledMsgId = msg.id || lastPolledMsgId
-      messages.value.push(msg)
-      if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
-        new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
-      }
-      scrollToBottom()
-    }
-  } catch (_e) { /* skip */ }
-}
+    } catch (_e) { /* skip */ }
+  }
   eventSource.onerror = () => {
     disconnectSSE()
     setTimeout(() => { if (convId.value) connectSSE() }, 3000)
@@ -424,7 +427,9 @@ function connectProactiveSSE() {
           messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: new Date().toISOString() })
           nextTick(() => scrollToBottom())
         }
-      } catch {}
+        } catch {}
+        fetchWechatMsgCount()
+        fetchQQStatus()
     })
     proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(connectProactiveSSE, 5000) }
   } catch { setTimeout(connectProactiveSSE, 5000) }
@@ -434,8 +439,11 @@ async function fetchWechatMsgCount() {
   try {
     const r = await get<any>("/api/wechat/status")
     const status = r?.data || r
-    wechatMsgCount.value = status?.messageCount || 0
     wechatOnline.value = status?.status === "connected" || status?.accountId != null
+    const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
+    const items = convs?.conversations || convs?.items || []
+    const wc = items.find((x: any) => x.channel === "wechat")
+    wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
   } catch {}
 }
 
@@ -443,8 +451,11 @@ async function fetchQQStatus() {
   try {
     const r = await get<any>("/api/qq/status")
     const data = r?.data || r
-    qqMsgCount.value = data?.messageCount || 0
     qqOnline.value = data?.qqOnline || data?.status === "online"
+    const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
+    const items = convs?.conversations || convs?.items || []
+    const qc = items.find((x: any) => x.channel === "qq")
+    qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
   } catch {}
 }
 
@@ -671,6 +682,11 @@ async function handleSelectWechat(skipConfirm = false) {
     const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
     const items = convs?.conversations || convs?.items || []
     const wc = items.find((x: any) => x.id === "channel-wechat") || items.find((x: any) => x.channel === "wechat")
+      // 清理重复的微信对话
+      const wechatDups = items.filter((x: any) => (x.id === "channel-wechat" || x.channel === "wechat") && x.id !== wc?.id)
+      for (const d of wechatDups) {
+        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
+      }
     if (wc) {
       localStorage.setItem("webchat-last-conv", "wechat")
       const cid = wc.characterId || wc.character_id
@@ -720,6 +736,11 @@ async function handleSelectQQ(skipConfirm = false) {
     const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
     const items = convs?.conversations || convs?.items || []
     const qc = items.find((x: any) => x.id === "channel-qq") || items.find((x: any) => x.channel === "qq")
+      // 清理重复的QQ对话
+      const qqDups = items.filter((x: any) => (x.id === "channel-qq" || x.channel === "qq") && x.id !== qc?.id)
+      for (const d of qqDups) {
+        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
+      }
     if (qc) {
       localStorage.setItem("webchat-last-conv", "qq")
       const cid = qc.characterId || qc.character_id
@@ -759,7 +780,7 @@ async function handleSelectConv(conv: any) {
   const version = ++messagesVersion
   try {
     const url = `/api/web-chat/conversations/${encodeURIComponent(conv.id)}/messages`
-    const r = await get<any>(url)
+    const r = await get<any>(url, { page: 1, pageSize: HISTORY_PAGE_SIZE })
     if (version !== messagesVersion) return
     const items = (r?.messages || r?.items || [])
     if (items.length) {
@@ -767,6 +788,7 @@ async function handleSelectConv(conv: any) {
         if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
         return m
       })
+      hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE
       const cid = conv.characterId || conv.character_id
       if (cid && cid !== characterId.value) {
         const c = characters.value.find((x: any) => x.id === cid)
@@ -958,6 +980,8 @@ async function doActualSend(text: string) {
     abortController = null
     const lastMsg = messages.value[messages.value.length - 1]
     if (lastMsg?.id && lastMsg.id !== "streaming") lastPolledMsgId = lastMsg.id
+    fetchWechatMsgCount()
+    fetchQQStatus()
 
   }
 }
@@ -1082,7 +1106,7 @@ function onScroll() {
   userScrolledUp.value = distFromBottom > 100
 
   // Load older messages when scrolled to top
-  if (el.scrollTop <= 20 && hasMoreHistory.value && !isLoadingHistory.value && convId.value) {
+  if (el.scrollTop <= 50 && hasMoreHistory.value && !isLoadingHistory.value && convId.value) {
     loadOlderMessages()
   }
 }
@@ -1096,6 +1120,7 @@ function onWheel(e: WheelEvent) {
   const noOverflow = el.scrollHeight <= el.clientHeight
   const atTop = el.scrollTop <= 0
   if ((noOverflow || atTop) && hasMoreHistory.value && !isLoadingHistory.value && convId.value) {
+    e.preventDefault()
     loadOlderMessages()
   }
 }
@@ -1276,7 +1301,8 @@ function typeLabel(type: string): string {
   margin: 0 auto;
   flex: 1 1 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
+  overscroll-behavior-y: contain;
   padding: 12px 16px;
   position: relative;
 }
@@ -1528,5 +1554,25 @@ function typeLabel(type: string): string {
     padding: 12px 12px;
   }
 }
+
+
+/* History loading indicator */
+.history-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-muted);
+}
+.history-end {
+  text-align: center;
+  padding: 8px 0;
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-muted);
+  opacity: 0.5;
+}
+
 </style>
 

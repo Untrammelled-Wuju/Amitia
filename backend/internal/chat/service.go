@@ -81,6 +81,9 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 	if q.PageSize <= 0 { q.PageSize = 20 }
 	convs, total, err := s.repo.ListConversations(q)
 	if err != nil { return nil, err }
+	for i := range convs {
+		convs[i].MessageCount = int(s.repo.CountMessagesByConv(convs[i].ID))
+	}
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
 	return &ConversationListResponse{Items: convs, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
