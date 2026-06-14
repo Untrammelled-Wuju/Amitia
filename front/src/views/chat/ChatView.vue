@@ -28,6 +28,8 @@
         :character-avatar="selectedCharacter.avatar"
         @send="onSend"
         @toggle-call="toggleCall"
+        @voiceAudio="handleVoiceAudio"
+        @voiceText="handleVoiceText"
       />
     </div>
     <div class="chat-empty" v-else>
@@ -60,6 +62,35 @@ import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import { ElMessage } from "element-plus"
 
 const API = "http://127.0.0.1:8899"
+
+async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
+  try {
+    const formData = new FormData()
+    formData.append("audio", blob, "voice.webm")
+    const token = localStorage.getItem("ai-companion-token") || ""
+    const res = await fetch(API + "/api/voice/upload", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+      body: formData,
+    })
+    if (!res.ok) throw new Error("Voice upload failed")
+    const data = await res.json()
+    const audioUrl = (data as any)?.data?.audioUrl || (data as any)?.audioUrl || ""
+    if (!audioUrl) throw new Error("No audioUrl returned")
+    const sendText = transcript || "[语音]"
+    await onSend(sendText, undefined, undefined, audioUrl)
+  } catch (err: any) {
+    console.error("[Voice] upload failed:", err)
+    ElMessage.error("语音发送失败")
+  }
+}
+
+function handleVoiceText(text: string) {
+  if (text) {
+    onSend(text)
+  }
+}
+
 
 const characters = ref<Character[]>([])
 const conversations = ref<Conversation[]>([])
@@ -196,7 +227,7 @@ function onCallStateChange(state: string) {
   }
 }
 
-async function onSend(text: string, imageBase64?: string, videoBase64?: string) {
+async function onSend(text: string, imageBase64?: string, videoBase64?: string, audioUrl?: string) {
   if (!selectedCharacterId.value) return
   loading.value = true
   try {
@@ -224,6 +255,10 @@ async function onSend(text: string, imageBase64?: string, videoBase64?: string) 
         loading.value = false
         return
       }
+    }
+    if (audioUrl) {
+      payload.audioUrl = audioUrl
+      payload.voiceMessage = true
     }
     if (currentConversationId.value) {
       payload.conversationId = currentConversationId.value

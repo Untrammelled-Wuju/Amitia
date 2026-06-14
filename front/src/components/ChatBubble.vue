@@ -209,19 +209,28 @@ async function toggleVoice() {
   }
   voiceLoading.value = true
   try {
-    const res = await post<any>("/api/tts/synthesize", {
-      characterId: props.characterId || undefined,
-      text: props.message.content,
-    })
-    const url = res?.audioUrl
+    const msgAudioUrl = (props.message as any).audioUrl
+    let url = ""
+    if (msgAudioUrl) {
+      url = msgAudioUrl
+    } else if (props.message.role === "assistant") {
+      const res = await post<any>("/api/tts/synthesize", {
+        characterId: props.characterId || undefined,
+        text: props.message.content,
+      })
+      url = res?.audioUrl
+    } else {
+      ElMessage.warning("该消息无语音")
+      return
+    }
     if (!url) {
-      ElMessage.warning("语音合成失败")
+      ElMessage.warning("语音加载失败")
       return
     }
     stopVoice()
     const audio = new Audio(url)
     voiceAudio.value = audio
-    voiceDuration.value = formatDuration(res?.duration || 0)
+    voiceDuration.value = formatDuration((props.message as any).audioDuration || 0)
     await audio.play()
     voicePlaying.value = true
     voiceLoading.value = false
@@ -235,7 +244,7 @@ async function toggleVoice() {
       ElMessage.warning("播放失败")
     }
   } catch (err: any) {
-    ElMessage.error(err?.message || "语音合成失败")
+    ElMessage.error(err?.message || "语音播放失败")
   } finally {
     voiceLoading.value = false
   }

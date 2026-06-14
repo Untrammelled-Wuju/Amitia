@@ -166,6 +166,8 @@
         @image="onImageAttached"
         @removeImage="onImageRemoved"
       @stop="handleStop"
+      @voiceAudio="handleVoiceAudio"
+      @voiceText="handleVoiceText"
     />
 
     <!-- Character drawer -->
@@ -265,6 +267,7 @@ const callActive = ref(false)
 const currentImageBase64 = ref<string | null>(null)
 const currentImageFile = ref<File | null>(null)
 const pendingImageBase64 = ref<string | null>(null)
+const pendingAudioUrl = ref<string | null>(null)
 const sending = ref(false)
 
 const modelMissing = ref(false)
@@ -842,6 +845,35 @@ function onImageRemoved() {
   currentImageBase64.value = null
 }
 
+async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
+  try {
+    const formData = new FormData()
+    formData.append("audio", blob, "voice.webm")
+    const token = localStorage.getItem("ai-companion-token") || ""
+    const res = await fetch("/api/voice/upload", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+      body: formData,
+    })
+    if (!res.ok) throw new Error("Voice upload failed")
+    const data = await res.json()
+    const audioUrl = data?.data?.audioUrl || data?.audioUrl || ""
+    if (!audioUrl) throw new Error("No audioUrl returned")
+    pendingAudioUrl.value = audioUrl
+    const sendText = transcript || "[语音]"
+    await doActualSend(sendText, audioUrl, true)
+  } catch (err: any) {
+    console.error("[Voice] upload failed:", err)
+    ElMessage.error("语音发送失败")
+  }
+}
+
+function handleVoiceText(text: string) {
+  if (text) {
+    inputRef.value?.setText?.(text)
+  }
+}
+
 
 
 
@@ -866,7 +898,7 @@ async function handleSend(text: string, imageBase64?: string) {
 }
 
 // doActualSend 是原来的 handleSend 逻辑
-async function doActualSend(text: string) {
+async function doActualSend(text: string, audioUrl?: string, voiceMessage?: boolean) {
   if (sending.value) return
 
   // 断开 SSE 轮询，防止与本 SSE 流重复推送消息
@@ -875,10 +907,14 @@ async function doActualSend(text: string) {
   // 立即插入用户消息，不等后端返回
   const userMsgLocalId = "user-" + Date.now()
   const imgUrl = pendingImageBase64.value
+  const finalAudioUrl = audioUrl || pendingAudioUrl.value
   pendingImageBase64.value = null
-  const displayContent = (imgUrl && text === "[图片]") ? "" : text
-  const sendContent = (imgUrl && !text.trim()) ? "[图片]" : text
-  messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
+  pendingAudioUrl.value = null
+  const hasImage = !!(imgUrl)
+  const hasVoice = !!(finalAudioUrl)
+  const displayContent = (hasVoice && !text.trim()) ? "[语音]" : (hasImage && text === "[图片]") ? "" : text
+  const sendContent = (hasVoice && !text.trim()) ? "[语音]" : (hasImage && !text.trim()) ? "[图片]" : text
+  messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
   
   scrollToBottom(true)
 
@@ -890,7 +926,7 @@ async function doActualSend(text: string) {
     const res = await fetch("/api/web-chat/send-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "" }),
+      body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl }),
     })
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
