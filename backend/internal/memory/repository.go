@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -12,7 +14,7 @@ type Repository interface {
 	Create(m *Memory) error
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
-	DeleteAll() error
+	DeleteAll(characterID string) error
 	Search(keyword, characterID string, limit int) ([]Memory, error)
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
@@ -32,8 +34,15 @@ func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	if q.CharacterID != "" {
 		query = query.Where("character_id = ?", q.CharacterID)
 	}
-	if q.MemoryType != "" {
-		query = query.Where("memory_type = ?", q.MemoryType)
+	if q.Source != "" {
+		query = query.Where("source = ?", q.Source)
+	}
+	memoryTypeFilter := q.MemoryType
+	if memoryTypeFilter == "" {
+		memoryTypeFilter = q.Type
+	}
+	if memoryTypeFilter != "" {
+		query = query.Where("memory_type = ?", memoryTypeFilter)
 	}
 	if q.Keyword != "" {
 		query = query.Where("(key LIKE ? OR value LIKE ?)", "%"+q.Keyword+"%", "%"+q.Keyword+"%")
@@ -46,16 +55,45 @@ func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	if q.PageSize <= 0 {
 		q.PageSize = 50
 	}
-	sortBy := q.SortBy
-	if sortBy == "" || !map[string]bool{"updated_at": true, "created_at": true, "importance": true, "use_count": true}[sortBy] {
-		sortBy = "updated_at"
+	sortRaw := q.SortBy
+	if sortRaw == "" {
+		sortRaw = q.Sort
 	}
+	sortBy, sortDir := parseSort(sortRaw)
 	var items []Memory
-	err := query.Order(sortBy + " DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&items).Error
+	err := query.Order(sortBy + " " + sortDir).Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&items).Error
 	if items == nil {
 		items = []Memory{}
 	}
 	return items, total, err
+}
+
+func parseSort(raw string) (col, dir string) {
+	col = "updated_at"
+	dir = "DESC"
+	if raw == "" {
+		return
+	}
+	lower := strings.ToLower(raw)
+	if strings.HasSuffix(lower, "_desc") {
+		dir = "DESC"
+		raw = raw[:len(raw)-5]
+	} else if strings.HasSuffix(lower, "_asc") {
+		dir = "ASC"
+		raw = raw[:len(raw)-4]
+	}
+	validCols := map[string]string{
+		"updated_at": "updated_at",
+		"created_at": "created_at",
+		"importance": "importance",
+		"use_count":  "use_count",
+		"time":       "created_at",
+	}
+	mapped, ok := validCols[strings.ToLower(raw)]
+	if ok {
+		col = mapped
+	}
+	return
 }
 
 func (r *repository) FindByID(id string) (*Memory, error) {
@@ -76,12 +114,16 @@ func (r *repository) Update(id string, updates map[string]interface{}) error {
 }
 
 func (r *repository) Delete(id string) error {
-	r.db.Where("memory_id = ?", id).Delete(&struct{}{})
+	r.db.Exec("DELETE FROM memory_events WHERE memory_id = ?", id)
 	return r.db.Where("id = ?", id).Delete(&Memory{}).Error
 }
 
-func (r *repository) DeleteAll() error {
-	r.db.Where("1=1").Delete(&struct{}{})
+func (r *repository) DeleteAll(characterID string) error {
+	if characterID != "" {
+		r.db.Exec("DELETE FROM memory_events WHERE character_id = ?", characterID)
+		return r.db.Where("character_id = ?", characterID).Delete(&Memory{}).Error
+	}
+	r.db.Exec("DELETE FROM memory_events")
 	return r.db.Where("1=1").Delete(&Memory{}).Error
 }
 
@@ -117,3 +159,4 @@ func (r *repository) MarkEmbedded(id string) error {
 		id,
 	).Error
 }
+

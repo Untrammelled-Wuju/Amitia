@@ -54,9 +54,12 @@ type MemoryListQuery struct {
 	Page        int    `form:"page"`
 	PageSize    int    `form:"pageSize"`
 	CharacterID string `form:"characterId"`
+	Source      string `form:"source"`
 	MemoryType  string `form:"memoryType"`
+	Type        string `form:"type"`
 	Keyword     string `form:"keyword"`
 	SortBy      string `form:"sortBy"`
+	Sort        string `form:"sort"`
 }
 
 type MemoryListResponse struct {

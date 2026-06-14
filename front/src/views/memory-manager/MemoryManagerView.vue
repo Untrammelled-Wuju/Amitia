@@ -84,7 +84,7 @@
 
     <!-- Candidate list -->
     <div v-if="showCandidates && candidates.length > 0" class="candidate-list">
-      <div v-for="c in candidates" :key="c.key" class="candidate-card">
+      <div v-for="c in candidates" :key="c.id" class="candidate-card">
         <div class="cc-header">
           <el-tag size="small" :type="c.importance > 7 ? 'danger' : 'info'">{{ typeLabel(c.memoryType) }}</el-tag>
           <span class="cc-importance">重要: {{ c.importance }}/10</span>
@@ -92,7 +92,11 @@
         <div class="cc-key">{{ c.key }}</div>
         <div class="cc-value">{{ c.value }}</div>
         <div class="cc-source">来源: {{ c.sourceText || "提取" }}</div>
-        <el-button size="small" type="primary" @click="confirmCandidate(c)">确认保存</el-button>
+        <div class="cc-actions">
+          <el-button size="small" type="primary" @click="confirmCandidate(c)">确认保存</el-button>
+          <el-button size="small" @click="editCandidate(c)">编辑</el-button>
+          <el-button size="small" type="danger" @click="deleteCandidateItem(c)">删除</el-button>
+        </div>
       </div>
     </div>
 
@@ -257,12 +261,11 @@ const editingId = ref("")
 const saving = ref(false)
 const showCandidates = ref(false)
 const conversationList = ref<any[]>([])
-const form = reactive({ key:"", value:"", memoryType:"custom", importance:5 })
+const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"" })
 const editCandidateVisible = ref(false)
 const conflictVisible = ref(false)
 const showGenerateDialog = ref(false)
-const editForm = reactive({ key: "", value: "", content: "", memoryType: "custom", importance: 5 })
-const saveEditCandidate = ref(null as (() => void) | null)
+const editForm = reactive({ key: "", value: "", content: "", memoryType: "custom", importance: 5, candidateId: "" })
 const conflictNewType = ref("")
 const conflictNewContent = ref("")
 const conflictList = ref<any[]>([])
@@ -273,10 +276,30 @@ const generateConvId = ref("")
 const generateBatchId = ref("")
 
 async function doResolveConflict() {
-  ElMessage.info("Conflict resolution not yet fully implemented")
+  if (!resolveAction.value) { ElMessage.warning("请选择处理方式"); return }
+  try {
+    await post("/api/memories/resolve-conflict", {
+      action: resolveAction.value,
+      newKey: conflictNewType.value ? "" : "",
+      newValue: conflictNewContent.value,
+      newType: conflictNewType.value,
+      importance: 5,
+      conflictId: conflictList.value[0]?.id || "",
+    })
+    ElMessage.success("冲突已解决")
+    conflictVisible.value = false
+    fetchList()
+  } catch (err: any) {
+    ElMessage.error(err?.message || "处理失败")
+  }
 }
 
 async function generateCandidates() {
+  if (generateSource.value === "import") {
+    if (!generateBatchId.value) { ElMessage.warning("请输入Import Batch ID"); return }
+    ElMessage.info("导入批次提取暂不支持，请使用会话方式")
+    return
+  }
   if (!generateConvId.value) { ElMessage.warning("请选择会话"); return }
   generating.value = true
   try {
@@ -303,9 +326,9 @@ async function fetchList() {
   const params: any = { page:page.value, pageSize:pageSize.value }
   if (injectedCharacterId?.value) params.characterId = injectedCharacterId.value
   if (keyword.value) params.keyword = keyword.value
-  if (typeFilter.value) params.type = typeFilter.value
+  if (typeFilter.value) params.memoryType = typeFilter.value
   if (sourceFilter.value) params.source = sourceFilter.value
-  if (sortBy.value) params.sort = sortBy.value
+  if (sortBy.value) params.sortBy = sortBy.value
   try {
     const r = await get<any>("/api/memories", params)
     memories.value = r?.items || []
@@ -315,13 +338,13 @@ async function fetchList() {
 
 function showCreate() {
   editing.value = false; editingId.value = ""
-  form.key=""; form.value=""; form.memoryType="custom"; form.importance=5
+  form.key=""; form.value=""; form.memoryType="custom"; form.importance=5; form.characterId=injectedCharacterId?.value||""
   dialogVisible.value = true
 }
 
 function showEdit(row: any) {
   editing.value = true; editingId.value = row.id
-  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance
+  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""
   dialogVisible.value = true
 }
 
@@ -345,8 +368,10 @@ async function delMem(id: string) {
 }
 
 async function handleClearAll() {
-  await ElMessageBox.confirm(`确定清空全部 ${total.value} 条记忆？此操作不可撤销。`,"警告",{type:"warning",confirmButtonText:"确定清空",confirmButtonClass:"el-button--danger"})
-  await del("/api/memories")
+  await ElMessageBox.confirm(`确定清空当前角色全部 ${total.value} 条记忆？此操作不可撤销。`,"警告",{type:"warning",confirmButtonText:"确定清空",confirmButtonClass:"el-button--danger"})
+  const cid = injectedCharacterId?.value
+  if (cid) await del(`/api/memories?characterId=${cid}`)
+  else await del("/api/memories")
   ElMessage.success("已清空")
   fetchList()
 }
@@ -362,10 +387,55 @@ async function handleExport() {
 }
 
 async function confirmCandidate(c: any) {
-  await post("/api/memories",{key:c.key,value:c.value,memoryType:c.memoryType||"custom",importance:c.importance||5})
-  ElMessage.success("已保存")
-  candidates.value = candidates.value.filter(x=>x.key!==c.key)
+  try {
+    await post("/api/memory-candidates/" + c.id + "/accept", {})
+    ElMessage.success("已保存")
+  } catch {
+    await post("/api/memories",{key:c.key,value:c.value,memoryType:c.memoryType||"custom",importance:c.importance||5})
+    ElMessage.success("已保存")
+  }
+  candidates.value = candidates.value.filter(x=>x.id!==c.id)
   fetchList()
+}
+
+async function editCandidate(c: any) {
+  editForm.key = c.key
+  editForm.value = c.value
+  editForm.content = c.value
+  editForm.memoryType = c.memoryType
+  editForm.importance = c.importance
+  editForm.candidateId = c.id
+  editCandidateVisible.value = true
+}
+
+async function saveEditCandidate() {
+  if (!editForm.candidateId) return
+  saving.value = true
+  try {
+    await put("/api/memory-candidates/" + editForm.candidateId, {
+      key: editForm.key,
+      value: editForm.content,
+      memoryType: editForm.memoryType,
+      importance: editForm.importance,
+    })
+    ElMessage.success("已更新")
+    editCandidateVisible.value = false
+    await loadCandidates()
+  } catch (err: any) {
+    ElMessage.error(err?.message || "更新失败")
+  }
+  saving.value = false
+}
+
+async function deleteCandidateItem(c: any) {
+  try {
+    await del("/api/memory-candidates/" + c.id)
+    ElMessage.success("已删除")
+    candidates.value = candidates.value.filter(x=>x.id!==c.id)
+  } catch {
+    candidates.value = candidates.value.filter(x=>x.id!==c.id)
+    ElMessage.success("已删除")
+  }
 }
 
 async function loadVectorStatus() {
@@ -396,15 +466,31 @@ function searchMemory() {
 async function doSearch() {
   if (!searchQuery.value.trim()) return
   try {
-    const result = await post<any>("/api/memories/search", {
+    const result = await post<any>("/api/memories/vector-search", {
       keyword: searchQuery.value.trim(),
       limit: 10,
     })
-    searchResults.value = result?.items || []
+    const items = result?.items || []
+    searchResults.value = items.map((r: any) => ({
+      id: r.memory?.id || r.id,
+      key: r.memory?.key || r.key,
+      value: r.memory?.value || r.value,
+      memoryType: r.memory?.memoryType || r.memoryType,
+      score: r.score ?? 0,
+    }))
     searched.value = true
   } catch {
-    searchResults.value = []
-    searched.value = true
+    try {
+      const result = await post<any>("/api/memories/search", {
+        keyword: searchQuery.value.trim(),
+        limit: 10,
+      })
+      searchResults.value = (result?.items || []).map((r: any) => ({ ...r, score: 0 }))
+      searched.value = true
+    } catch {
+      searchResults.value = []
+      searched.value = true
+    }
   }
 }
 
@@ -421,9 +507,17 @@ async function loadConversations() {
   } catch {}
 }
 
+async function loadCandidates() {
+  try {
+    const r: any = await get("/api/memory-candidates")
+    candidates.value = r?.candidates || []
+  } catch {}
+}
+
 onMounted(async () => {
   await loadVectorStatus()
   await fetchList()
+  await loadCandidates()
   await loadConversations()
 })
 </script>
@@ -506,3 +600,6 @@ onMounted(async () => {
   color: var(--ac-color-text-secondary);
 }
 </style>
+
+
+

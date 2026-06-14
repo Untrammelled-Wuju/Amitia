@@ -98,7 +98,8 @@ export function useFixedEvents() {
   async function createFixedEvent(input: FixedEventInput, characterId?: string): Promise<FixedEvent> {
     loading.value = true
     try {
-      const data = await post<FixedEvent>("/api/companion/fixed-events", input)
+      const url = characterId ? `/api/companion/fixed-events?characterId=${encodeURIComponent(characterId)}` : "/api/companion/fixed-events"
+    const data = await post<FixedEvent>(url, input)
       return data
     } finally {
       loading.value = false
@@ -119,7 +120,8 @@ export function useFixedEvents() {
   async function deleteFixedEvent(id: number, characterId?: string): Promise<void> {
     loading.value = true
     try {
-      await del<void>(`/api/companion/fixed-events/${id}`)
+      const delUrl = characterId ? `/api/companion/fixed-events/${id}?characterId=${encodeURIComponent(characterId)}` : `/api/companion/fixed-events/${id}`
+    await del<void>(delUrl)
     } finally {
       loading.value = false
     }

@@ -22,7 +22,7 @@
           <el-input v-model="ttsApiKey" size="small" placeholder="火山引擎API Key" type="password" show-password style="width:260px" />
         </div>
         <div class="tts-item">
-          <span class="tts-label">合成资源ID</span>
+          <span class="tts-label">语音合成大模型</span>
           <el-input v-model="ttsResourceId" size="small" placeholder="seed-tts-2.0" style="width:260px" />
         </div>
         <div class="tts-item">

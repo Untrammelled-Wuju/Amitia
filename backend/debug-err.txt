@@ -1,0 +1,38 @@
+2026/06/14 20:21:04 [DB] 连接 SQLite: data\app.db
+2026/06/14 20:21:04 [Env] 根目录: D:\桌面\跟进项目\U-Ai
+2026/06/14 20:21:04 [Env] 附属服务启动中...
+2026/06/14 20:21:04 [Env] 正在启动 backend/sidecar (端口 9876)...
+2026/06/14 20:21:04 [Env] qq-sidecar 已在运行 (端口 9877)，跳过启动
+2026/06/14 20:21:05 [ProactiveCron] 规则扫描已启动（每 10s）
+2026/06/14 20:21:05 [ProactiveCron] 提醒扫描已启动（每 10s）
+2026/06/14 20:21:05 [ProactiveCron] 主动任务扫描已启动（每 30s）
+2026/06/14 20:21:05 [ProactiveCron] 每日重生成已启动（每 60s）
+2026/06/14 20:21:05 [ProactiveCron] 随机突发已启动（每 60s）
+2026/06/14 20:21:05 [GET-LT] characterID=""
+2026/06/14 20:21:05 [GET-LT] ERROR: record not found
+2026/06/14 20:21:08 [backend/sidecar] [Sidecar] 安全警告: BRIDGE_API_TOKEN 未设置或仍为默认值
+2026/06/14 20:21:09 [backend/sidecar] {"level":30,"time":1781439669496,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","msg":"Server listening at http://127.0.0.1:9876"}
+2026/06/14 20:21:09 [backend/sidecar] 
+  ========================================
+    OpenClaw WeChat Sidecar Server
+    Listen:    http://127.0.0.1:9876
+    Account:   114ad1484f6a-im-bot
+    Core URL:  http://127.0.0.1:8899
+  ========================================
+2026/06/14 20:21:09 [backend/sidecar] {"level":30,"time":1781439669802,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-1","req":{"method":"GET","url":"/api/health","hostname":"127.0.0.1:9876","remoteAddress":"127.0.0.1","remotePort":51002},"msg":"incoming request"}
+2026/06/14 20:21:09 [Env] backend/sidecar 已就绪 (pid=31832)
+2026/06/14 20:21:09 [backend/sidecar] {"level":30,"time":1781439669810,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-1","res":{"statusCode":200},"responseTime":7.420500000007451,"msg":"request completed"}
+2026/06/14 20:21:09 [backend/sidecar] [OpenClaw] Starting message polling on https://ilinkai.weixin.qq.com
+2026/06/14 20:21:10 [backend/sidecar] {"level":30,"time":1781439670293,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-2","req":{"method":"GET","url":"/api/status","hostname":"127.0.0.1:9876","remoteAddress":"127.0.0.1","remotePort":50605},"msg":"incoming request"}
+2026/06/14 20:21:10 [backend/sidecar] {"level":30,"time":1781439670295,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-2","res":{"statusCode":200},"responseTime":1.4281000001356006,"msg":"request completed"}
+2026/06/14 20:21:10 [GET-LT] characterID="65a16651-678a-442a-9b85-bcb6c2e104b3"
+2026/06/14 20:21:15 [ProactiveCron] 每日计数器已重置
+2026/06/14 20:21:28 [backend/sidecar] [OpenClaw] getUpdates OK: ret=? msgs=0
+2026/06/14 20:21:35 [ProactiveCron] 主动任务处理 char=65a16651-678a-442a-9b85-bcb6c2e104b3: processed=20 sent=0
+2026/06/14 20:21:39 [backend/sidecar] {"level":30,"time":1781439699979,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-3","req":{"method":"GET","url":"/api/status","hostname":"127.0.0.1:9876","remoteAddress":"127.0.0.1","remotePort":50605},"msg":"incoming request"}
+2026/06/14 20:21:39 [backend/sidecar] {"level":30,"time":1781439699980,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-3","res":{"statusCode":200},"responseTime":0.8391999993473291,"msg":"request completed"}
+2026/06/14 20:21:46 [backend/sidecar] [OpenClaw] getUpdates OK: ret=? msgs=0
+2026/06/14 20:22:04 [backend/sidecar] [OpenClaw] getUpdates OK: ret=? msgs=0
+2026/06/14 20:22:05 [ProactiveCron] 主动任务处理 char=65a16651-678a-442a-9b85-bcb6c2e104b3: processed=20 sent=0
+2026/06/14 20:22:10 [backend/sidecar] {"level":30,"time":1781439730283,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-4","req":{"method":"GET","url":"/api/status","hostname":"127.0.0.1:9876","remoteAddress":"127.0.0.1","remotePort":50605},"msg":"incoming request"}
+2026/06/14 20:22:10 [backend/sidecar] {"level":30,"time":1781439730284,"pid":39824,"hostname":"LAPTOP-LBQ0AOA7","reqId":"req-4","res":{"statusCode":200},"responseTime":0.6613999996334314,"msg":"request completed"}

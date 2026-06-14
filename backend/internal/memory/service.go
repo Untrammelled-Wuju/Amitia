@@ -25,7 +25,7 @@ type Service interface {
 	Create(req *CreateMemoryRequest) (*Memory, error)
 	Update(id string, req *UpdateMemoryRequest) (*Memory, error)
 	Delete(id string) error
-	DeleteAll() error
+	DeleteAll(characterID string) error
 	Search(req *SearchMemoryRequest) ([]Memory, error)
 	VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error)
 	RecordUse(id string) (*Memory, error)
@@ -36,8 +36,53 @@ type Service interface {
 	AcceptCandidate(id string) (*Memory, error)
 	RejectCandidate(id string) error
 	BatchAcceptCandidates(ids []string) ([]Memory, error)
+	UpdateCandidate(id string, req *UpdateCandidateRequest) (*MemoryCandidate, error)
+	DeleteCandidate(id string) error
+	CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error)
+	ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error)
+	ExtractCandidates() ([]MemoryCandidate, error)
+	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)
 	SyncEmbedding(memID, key, value, characterID, memoryType string)
+}
+type UpdateCandidateRequest struct {
+	Key        *string `json:"key"`
+	Value      *string `json:"value"`
+	MemoryType *string `json:"memoryType"`
+	Importance *int    `json:"importance"`
+}
+
+type CheckConflictRequest struct {
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	MemoryType  string `json:"memoryType"`
+	Importance  int    `json:"importance"`
+	CharacterID string `json:"characterId"`
+}
+
+type CheckConflictResponse struct {
+	HasConflict bool              `json:"hasConflict"`
+	Conflicts   []ConflictItem    `json:"conflicts"`
+}
+
+type ConflictItem struct {
+	Memory     Memory `json:"memory"`
+	Reason     string `json:"reason"`
+}
+
+type ResolveConflictRequest struct {
+	Action       string `json:"action"`
+	NewKey       string `json:"newKey"`
+	NewValue     string `json:"newValue"`
+	NewType      string `json:"newType"`
+	Importance   int    `json:"importance"`
+	CharacterID  string `json:"characterId"`
+	ConflictID   string `json:"conflictId"`
+}
+
+type ResolveConflictResponse struct {
+	Resolved bool   `json:"resolved"`
+	MemoryID string `json:"memoryId"`
 }
 type MemoryCandidate struct {
 	ID             string `json:"id"`
@@ -157,14 +202,14 @@ func (s *service) Delete(id string) error {
 	return s.repo.Delete(id)
 }
 
-func (s *service) DeleteAll() error {
+func (s *service) DeleteAll(characterID string) error {
 	go func() {
 		if qdrantDB.Client != nil {
 			qdrantDB.Client.DeleteCollection(context.Background(), config.AppCfg.Qdrant.CollectionName)
 			qdrantDB.EnsureCollection()
 		}
 	}()
-	return s.repo.DeleteAll()
+	return s.repo.DeleteAll(characterID)
 }
 
 func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
@@ -458,6 +503,145 @@ func (s *service) BatchAcceptCandidates(ids []string) ([]Memory, error) {
 		}
 	}
 	return accepted, nil
+}
+
+func (s *service) UpdateCandidate(id string, req *UpdateCandidateRequest) (*MemoryCandidate, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, c := range s.candidates {
+		if c.ID == id {
+			if req.Key != nil {
+				s.candidates[i].Key = *req.Key
+			}
+			if req.Value != nil {
+				s.candidates[i].Value = *req.Value
+			}
+			if req.MemoryType != nil {
+				s.candidates[i].MemoryType = *req.MemoryType
+			}
+			if req.Importance != nil {
+				s.candidates[i].Importance = *req.Importance
+			}
+			result := s.candidates[i]
+			return &result, nil
+		}
+	}
+	return nil, fmt.Errorf("候选记忆不存在")
+}
+
+func (s *service) DeleteCandidate(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, c := range s.candidates {
+		if c.ID == id {
+			s.candidates = append(s.candidates[:i], s.candidates[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("候选记忆不存在")
+}
+
+func (s *service) CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error) {
+	var existingMemories []Memory
+	s.db.Where("(key LIKE ? OR value LIKE ?)", "%"+req.Key+"%", "%"+req.Value+"%").Find(&existingMemories)
+
+	resp := &CheckConflictResponse{HasConflict: false, Conflicts: []ConflictItem{}}
+	for _, m := range existingMemories {
+		reason := ""
+		keyMatch := strings.Contains(m.Key, req.Key) || strings.Contains(req.Key, m.Key)
+		valMatch := strings.Contains(m.Value, req.Value) || strings.Contains(req.Value, m.Value)
+		typeMatch := m.MemoryType == req.MemoryType
+
+		if keyMatch && valMatch && typeMatch {
+			reason = "key、value和类型都相似"
+		} else if keyMatch && valMatch {
+			reason = "key和value相似"
+		} else if keyMatch && typeMatch {
+			reason = "key和类型相似"
+		} else if valMatch {
+			reason = "value相似"
+		} else {
+			continue
+		}
+		resp.HasConflict = true
+		resp.Conflicts = append(resp.Conflicts, ConflictItem{Memory: m, Reason: reason})
+	}
+	return resp, nil
+}
+
+func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error) {
+	resp := &ResolveConflictResponse{Resolved: true}
+
+	switch req.Action {
+	case "keep_old":
+		return resp, nil
+	case "replace_old":
+		if req.ConflictID != "" {
+			s.repo.Delete(req.ConflictID)
+		}
+		m := &Memory{
+			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
+			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
+		}
+		if err := s.repo.Create(m); err != nil {
+			return nil, err
+		}
+		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+		resp.MemoryID = m.ID
+		return resp, nil
+	case "keep_both":
+		m := &Memory{
+			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
+			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
+		}
+		if err := s.repo.Create(m); err != nil {
+			return nil, err
+		}
+		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+		resp.MemoryID = m.ID
+		return resp, nil
+	case "merge":
+		if req.ConflictID != "" {
+			existing, err := s.repo.FindByID(req.ConflictID)
+			if err == nil && existing != nil {
+				updates := map[string]interface{}{
+					"value": existing.Value + "; " + req.NewValue,
+				}
+				s.repo.Update(req.ConflictID, updates)
+				go s.SyncEmbedding(existing.ID, existing.Key, updates["value"].(string), existing.CharacterID, existing.MemoryType)
+				s.logEvent(existing.ID, "memory_edited", existing.Key, updates["value"].(string), existing.MemoryType, existing.Importance, existing.Source, existing.CharacterID)
+				resp.MemoryID = existing.ID
+				return resp, nil
+			}
+		}
+		m := &Memory{
+			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
+			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
+		}
+		if err := s.repo.Create(m); err != nil {
+			return nil, err
+		}
+		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+		resp.MemoryID = m.ID
+		return resp, nil
+	default:
+		return nil, fmt.Errorf("未知的冲突解决动作: %s", req.Action)
+	}
+}
+
+func (s *service) ExtractCandidates() ([]MemoryCandidate, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]MemoryCandidate, len(s.candidates))
+	copy(result, s.candidates)
+	return result, nil
+}
+
+func (s *service) RebuildIndex() (map[string]interface{}, error) {
+	return s.RebuildEmbeddings()
 }
 
 func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType string) {

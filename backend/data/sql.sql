@@ -181,6 +181,8 @@ CREATE TABLE IF NOT EXISTS sleep_settings (
     bed_time TEXT DEFAULT '23:00',
     wake_time TEXT DEFAULT '07:00',
     enabled INTEGER DEFAULT 1,
+    sleep_reply_enabled INTEGER DEFAULT 0,
+    sleep_reply_mode TEXT DEFAULT 'NO_REPLY',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -188,13 +190,17 @@ CREATE TABLE IF NOT EXISTS sleep_settings (
 CREATE TABLE IF NOT EXISTS fixed_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
-    name TEXT NOT NULL,
+    title TEXT NOT NULL,
     description TEXT DEFAULT '',
     week_day INTEGER DEFAULT -1,
     start_time TEXT DEFAULT '',
     end_time TEXT DEFAULT '',
-    event_type TEXT DEFAULT 'custom',
-    location TEXT DEFAULT '',
+    event_type TEXT DEFAULT 'CUSTOM_BUSY',
+    repeat_type TEXT DEFAULT 'weekly',
+    repeat_days TEXT DEFAULT '',
+    prepare_min_minutes INTEGER DEFAULT 10,
+    prepare_max_minutes INTEGER DEFAULT 40,
+    reply_mode TEXT DEFAULT 'SHORT_REPLY',
     enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -203,14 +209,24 @@ CREATE TABLE IF NOT EXISTS fixed_events (
 CREATE TABLE IF NOT EXISTS special_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
-    name TEXT NOT NULL,
+    title TEXT NOT NULL,
     description TEXT DEFAULT '',
-    event_date TEXT DEFAULT '',
+    start_date TEXT DEFAULT '',
+    end_date TEXT DEFAULT '',
     start_time TEXT DEFAULT '',
     end_time TEXT DEFAULT '',
-    event_type TEXT DEFAULT 'custom',
-    location TEXT DEFAULT '',
+    event_type TEXT DEFAULT 'CUSTOM',
+    repeat_type TEXT DEFAULT 'none',
+    repeat_days TEXT DEFAULT '',
     enabled INTEGER DEFAULT 1,
+    priority INTEGER DEFAULT 0,
+    active_message_allowed INTEGER DEFAULT 1,
+    reply_mode TEXT DEFAULT 'SHORT_REPLY',
+    affect_schedule INTEGER DEFAULT 0,
+    affect_sleep INTEGER DEFAULT 0,
+    affect_meal INTEGER DEFAULT 0,
+    affect_energy INTEGER DEFAULT 0,
+    payload TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -230,20 +246,41 @@ CREATE TABLE IF NOT EXISTS class_adjustments (
 CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
-    activity TEXT DEFAULT '',
-    intensity INTEGER DEFAULT 50,
-    schedule TEXT DEFAULT '',
-    preference TEXT DEFAULT '',
+    punctuality_tendency INTEGER DEFAULT 50,
+    early_prepare_tendency INTEGER DEFAULT 50,
+    self_discipline_tendency INTEGER DEFAULT 50,
+    sleepiness_tendency INTEGER DEFAULT 50,
+    randomness_tendency INTEGER DEFAULT 50,
+    activity_energy INTEGER DEFAULT 50,
+    social_energy INTEGER DEFAULT 50,
+    care_tendency INTEGER DEFAULT 50,
+    daily_share_tendency INTEGER DEFAULT 50,
+    manually_configured INTEGER DEFAULT 0,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS work_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
-    job_title TEXT DEFAULT '',
-    work_hours TEXT DEFAULT '',
-    work_days TEXT DEFAULT '',
-    description TEXT DEFAULT '',
+    enabled INTEGER DEFAULT 0,
+    work_days TEXT DEFAULT 'MON,TUE,WED,THU,FRI',
+    work_start_time TEXT DEFAULT '09:00',
+    work_end_time TEXT DEFAULT '18:00',
+    lunch_break_start_time TEXT DEFAULT '12:00',
+    lunch_break_end_time TEXT DEFAULT '13:30',
+    commute_min_minutes INTEGER DEFAULT 15,
+    commute_max_minutes INTEGER DEFAULT 45,
+    prepare_min_minutes INTEGER DEFAULT 20,
+    prepare_max_minutes INTEGER DEFAULT 60,
+    reply_mode TEXT DEFAULT 'SHORT_REPLY',
+    allow_overtime INTEGER DEFAULT 0,
+    overtime_probability INTEGER DEFAULT 10,
+    overtime_min_minutes INTEGER DEFAULT 30,
+    overtime_max_minutes INTEGER DEFAULT 180,
+    overtime_reply_mode TEXT DEFAULT 'SHORT_REPLY',
+    delayed_reply_enabled INTEGER DEFAULT 0,
+    commute_home_share_enabled INTEGER DEFAULT 1,
+    commute_home_share_probability INTEGER DEFAULT 60,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -346,9 +383,13 @@ CREATE TABLE IF NOT EXISTS memories (
     source TEXT DEFAULT 'manual',
     character_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    use_count INTEGER DEFAULT 0,
+    last_used_at TEXT
 );
 
+ALTER TABLE memories ADD COLUMN use_count INTEGER DEFAULT 0;
+ALTER TABLE memories ADD COLUMN last_used_at TEXT;
 CREATE TABLE IF NOT EXISTS memory_events (
     id TEXT PRIMARY KEY,
     memory_id TEXT DEFAULT '',
@@ -409,3 +450,15 @@ CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(sta
 CREATE INDEX IF NOT EXISTS idx_active_task_char ON active_message_task(character_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
+
+
+-- ============================================
+-- 数据库迁移: 为旧表添加缺失字段 (忽略已存在的列)
+-- ============================================
+
+INSERT OR IGNORE INTO sleep_settings (id, character_id, bed_time, wake_time, enabled, sleep_reply_enabled, sleep_reply_mode) SELECT id, character_id, bed_time, wake_time, enabled, 0, 'NO_REPLY' FROM sleep_settings WHERE sleep_reply_mode IS NULL;
+
+UPDATE fixed_events SET repeat_type = 'weekly' WHERE repeat_type IS NULL;
+UPDATE fixed_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
+
+UPDATE special_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;

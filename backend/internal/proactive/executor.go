@@ -92,10 +92,17 @@ func (e *Executor) executeRule(r struct {
 	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID              string
 }) {
 	var charName, identity, convID string
-	row := e.db.Table("characters").Select("name, identity, conversation_id").
-		Where("is_active = 1").Limit(1).Row()
-	if err := row.Scan(&charName, &identity, &convID); err != nil || convID == "" {
-		return
+	if r.charID != "" {
+		row := e.db.Table("characters").Select("name, COALESCE(identity,''), conversation_id").
+			Where("id = ?", r.charID).Limit(1).Row()
+		row.Scan(&charName, &identity, &convID)
+	}
+	if charName == "" || convID == "" {
+		row := e.db.Table("characters").Select("name, identity, conversation_id").
+			Where("is_active = 1").Limit(1).Row()
+		if err := row.Scan(&charName, &identity, &convID); err != nil || convID == "" {
+			return
+		}
 	}
 
 	content := e.generateContent(r.name, r.ruleType, r.prompt, charName, identity)

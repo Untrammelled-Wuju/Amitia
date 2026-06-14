@@ -119,7 +119,7 @@
           <SliderRow v-model="form.personalityConfig.initiative" label="主动性" left="被动回应" right="主动找话题" :min="0" :max="100" />
             <div class="slider-hint">
               数值越高，AI 越可能主动延续话题或提醒你。
-              系统会自动限制频率（每日 {{ dailyLimit }} 条），避免打扰。
+              系统会自动限制频率（每日 <el-input-number v-model="form.personalityConfig.dailyLimit" :min="1" :max="200" size="small" style="width:70px" /> 条），避免打扰。
             </div>
           <SliderRow v-model="form.personalityConfig.teasing" label="吐槽程度" left="从不禁" right="可吐槽" :min="0" :max="100" />
           <SliderRow v-model="form.personalityConfig.customerServiceAvoidance" label="客服腔抑制" left="官方" right="自然" :min="0" :max="100" />
@@ -151,6 +151,21 @@
         </div>
       </div>
 
+
+      <!-- 作息倾向 -->
+      <div class="section-card">
+        <div class="section-title">
+          作息倾向
+          <el-button size="small" @click="saveLifestyle" :loading="lifestyleSaving" style="margin-left:12px">保存</el-button>
+          <el-button size="small" @click="resetLifestyle" :loading="lifestyleResetting" type="warning" plain>恢复默认</el-button>
+        </div>
+        <template v-for="group in lifestyleGroups" :key="group.name">
+          <div class="slider-hint">{{ group.name }}</div>
+          <div class="slider-grid">
+            <SliderRow v-for="item in group.sliders" :key="item.key" v-model="lifestyleForm[item.key]" :label="item.label" :left="item.left" :right="item.right" :min="0" :max="100" />
+          </div>
+        </template>
+      </div>
       <!-- 5. 亲密边界 -->
       <el-collapse v-model="activeCollapse" class="section-collapse">
         <el-collapse-item title="亲密边界（高级设置）" name="intimacy">
@@ -313,7 +328,7 @@
 
       <!-- 上班规则 -->
       <div class="section-card" v-if="showWorkSection">
-        <div class="section-title">上班规则</div>
+        <div class="section-title">上班规则  <el-button size="small" @click="saveWorkProfile" :loading="workSaving" type="primary" style="margin-left:12px">保存上班规则</el-button></div>
         <div class="work-grid">
           <div class="work-item">
             <label class="gender-label">启用上班状态</label>
@@ -364,6 +379,43 @@
               <el-option v-for="opt in WORK_REPLY_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
             <span class="gender-hint">工作期间的回复方式</span>
+          </div>
+          <div class="work-item">
+            <label class="gender-label">允许加班</label>
+            <el-switch v-model="workForm.allowOvertime" />
+            <span class="gender-hint">开启后工作日晚间可能触发加班状态</span>
+          </div>
+          <div class="work-item" v-if="workForm.allowOvertime">
+            <label class="gender-label">加班概率(%)</label>
+            <el-input-number v-model="workForm.overtimeProbability" :min="0" :max="100" size="default" style="width:120px" />
+          </div>
+          <div class="work-item" v-if="workForm.allowOvertime">
+            <label class="gender-label">加班时长(分)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <el-input-number v-model="workForm.overtimeMinMinutes" :min="10" :max="120" size="default" style="width:100px" />
+              <span style="font-size:11px;color:var(--ac-color-text-placeholder)">到</span>
+              <el-input-number v-model="workForm.overtimeMaxMinutes" :min="10" :max="300" size="default" style="width:100px" />
+            </div>
+          </div>
+          <div class="work-item" v-if="workForm.allowOvertime">
+            <label class="gender-label">加班回复模式</label>
+            <el-select v-model="workForm.overtimeReplyMode" size="default" style="width:140px">
+              <el-option v-for="opt in WORK_REPLY_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+          </div>
+          <div class="work-item">
+            <label class="gender-label">延迟回复</label>
+            <el-switch v-model="workForm.delayedReplyEnabled" />
+            <span class="gender-hint">开启后工作期间可能延迟回消息</span>
+          </div>
+          <div class="work-item">
+            <label class="gender-label">通勤分享</label>
+            <el-switch v-model="workForm.commuteHomeShareEnabled" />
+            <span class="gender-hint">下班路上是否主动分享今日状态</span>
+          </div>
+          <div class="work-item" v-if="workForm.commuteHomeShareEnabled">
+            <label class="gender-label">分享概率(%)</label>
+            <el-input-number v-model="workForm.commuteHomeShareProbability" :min="0" :max="100" size="default" style="width:120px" />
           </div>
         </div>
       </div>
@@ -488,20 +540,30 @@ const lifeIdentityCustom = ref("")
 const isCustomLifeIdentity = computed(() => !PRESET_IDENTITIES.includes(lifeIdentity.value))
 const showCourseSection = computed(() => lifeIdentity.value === "SCHOOL" || isCustomLifeIdentity.value)
 const showWorkSection = computed(() => lifeIdentity.value === "WORK" || isCustomLifeIdentity.value)
-function onLifeIdentityChange(val: string) {
+async function onLifeIdentityChange(val: string) {
   lifeIdentity.value = val
   if (PRESET_IDENTITIES.includes(val)) {
     lifeIdentityCustom.value = ""
   }
-  saveConfig()
+  try {
+    const payload: any = {
+      lifeIdentity: isCustomLifeIdentity.value ? lifeIdentityCustom.value || lifeIdentity.value : lifeIdentity.value,
+      name: form.name.trim(),
+      description: form.description.trim(),
+      personalityConfig: form.personalityConfig,
+    }
+    if (charId.value) payload.id = charId.value
+    await post<any>("/api/ai/character/save", payload)
+  } catch { /* silent */ }
 }
 
 const DEFAULT_CONFIG = {
   familiarity: 78, formality: 22, customerServiceAvoidance: 92,
   directness: 75, verbosity: 32, structureLevel: 40, shortSentence: 85, toneWords: 45,
-  warmth: 58, emotionalExpression: 45, comfortLevel: 55, preachingAvoidance: 88,
+  warmth: 58, comfortLevel: 55, preachingAvoidance: 88,
   companionship: 55, boundary: 85, dependencyAvoidance: 85,
   execution: 75, explanationDepth: 55, judgment: 75, clarification: 35,
+  rationality: 50, humor: 40, initiative: 50, teasing: 30, patience: 60, dailyLimit: 3,
   intimacyExpression: 25, flirtiness: 0, romanticTone: 0,
   suggestivenessAvoidance: 100, intimacyBoundary: 90,
 }
@@ -524,7 +586,6 @@ const genderForm = reactive({
   userAddressingStyle: "自然称呼" as string | null,
   genderExpression: 30,
 })
-const genderSaving = ref(false)
 
 const lifestyleForm = reactive({
   punctualityTendency: 50,
@@ -541,11 +602,15 @@ const lifestyleSaving = ref(false)
 const lifestyleResetting = ref(false)
 const lifestyleConfigured = ref(false)
 
+const lifestyleGroups = computed(() => LIFESTYLE_GROUPS.map(g => ({
+  name: g.name,
+  sliders: LIFESTYLE_SLIDERS.filter(s => g.keys.includes(s.key)),
+})))
+
 const sleepForm = reactive({
   sleepReplyEnabled: false,
   sleepReplyMode: "NO_REPLY",
 })
-const sleepSaving = ref(false)
 
 const workForm = reactive({
   enabled: false,
@@ -587,7 +652,7 @@ const specialForm = reactive({
 })
 
 async function loadSpecialEvents() {
-  try { specialEvents.value = await getSpecialEvents() } catch { }
+  try { specialEvents.value = await getSpecialEvents(injectedCharacterId?.value ?? undefined) } catch { }
 }
 
 function editSpecial(se: any) {
@@ -608,24 +673,24 @@ async function saveSpecial() {
     if (editingSpecial.value) {
       await updateSpecialEvent(editingSpecial.value.id, input, injectedCharacterId?.value ?? undefined)
     } else {
-      await createSpecialEvent(input)
+      await createSpecialEvent(input, injectedCharacterId?.value ?? undefined)
     }
-    showSpecialDialog.value = false; editingSpecial.value = null
+    showSpecialDialog.value = false; const wasEditingSpecial = !!editingSpecial.value; editingSpecial.value = null
     specialForm.title = ""; specialForm.startDate = null; specialForm.endDate = null
     specialForm.startTime = null; specialForm.endTime = null; specialForm.replyMode = "SHORT_REPLY"; specialForm.affectSleep = false
     await loadSpecialEvents()
-    ElMessage.success(editingSpecial.value ? "已更新" : "已添加")
+    ElMessage.success(wasEditingSpecial ? "已更新" : "已添加")
   } catch (e: any) { ElMessage.error(e?.message || "保存失败") }
   finally { specialSaving.value = false }
 }
 
 async function deleteSpecial(id: number) {
-  try { await deleteSpecialEvent(id); await loadSpecialEvents(); ElMessage.success("已删除") }
+  try { await deleteSpecialEvent(id, injectedCharacterId?.value ?? undefined); await loadSpecialEvents(); ElMessage.success("已删除") }
   catch { ElMessage.error("删除失败") }
 }
 
 async function toggleSpecial(id: number, enabled: boolean) {
-  try { await updateSpecialEvent(id, { enabled }) } catch { }
+  try { await updateSpecialEvent(id, { enabled }, injectedCharacterId?.value ?? undefined) } catch { }
 }
 
 
@@ -719,13 +784,6 @@ watch(() => genderForm.gender, (newGender) => {
   }
 })
 
-const dailyLimit = computed(() => {
-  const i = form.personalityConfig.initiative
-  if (i <= 20) return 1
-  if (i <= 50) return 3
-  if (i <= 80) return 5
-  return 8
-})
 
 // ==========================================================
 onMounted(async () => {
@@ -878,7 +936,7 @@ async function saveConfig() {
           userAddressingStyle: genderForm.userAddressingStyle,
           genderExpression: genderForm.genderExpression,
         }, injectedCharacterId?.value ?? undefined)
-    } catch { /* silent */ }
+    } catch (e: any) { console.warn("Role profile save failed:", e) }
 
     // Save sleep setting
     try {
@@ -886,7 +944,7 @@ async function saveConfig() {
         sleepReplyEnabled: sleepForm.sleepReplyEnabled,
         sleepReplyMode: sleepForm.sleepReplyMode,
       }, injectedCharacterId?.value ?? undefined)
-    } catch { /* silent */ }
+    } catch (e: any) { console.warn("Sleep setting save failed:", e) }
 
     // Save work profile
     try {
@@ -911,7 +969,7 @@ async function saveConfig() {
         commuteHomeShareEnabled: workForm.commuteHomeShareEnabled,
         commuteHomeShareProbability: workForm.commuteHomeShareProbability,
       } as any, injectedCharacterId?.value ?? undefined)
-    } catch { /* silent */ }
+    } catch (e: any) { console.warn("Work profile save failed:", e) }
 
 
     ElMessage.success("保存成功")
@@ -1002,9 +1060,10 @@ async function saveCourse() {
     if (editingCourse.value) {
       await updateFixedEvent(editingCourse.value.id, input, injectedCharacterId?.value ?? undefined)
     } else {
-      await createFixedEvent(input)
+      await createFixedEvent(input, injectedCharacterId?.value ?? undefined)
     }
     showCourseDialog.value = false
+    const wasEditing = !!editingCourse.value
     editingCourse.value = null
     courseForm.title = ""
     courseForm.startTime = ""
@@ -1014,7 +1073,7 @@ async function saveCourse() {
     courseForm.prepareMaxMinutes = 40
     courseForm.replyMode = "SHORT_REPLY"
     await loadCourses()
-    ElMessage.success(editingCourse.value ? "已更新" : "已添加")
+    ElMessage.success(wasEditing ? "已更新" : "已添加")
   } catch (e: any) {
     ElMessage.error(e?.message || "保存失败")
   } finally {
@@ -1024,7 +1083,7 @@ async function saveCourse() {
 
 async function deleteCourse(id: number) {
   try {
-    await deleteFixedEvent(id)
+    await deleteFixedEvent(id, injectedCharacterId?.value ?? undefined)
     await loadCourses()
     ElMessage.success("已删除")
   } catch {
@@ -1034,7 +1093,7 @@ async function deleteCourse(id: number) {
 
 async function toggleCourse(id: number, enabled: boolean) {
   try {
-    await updateFixedEvent(id, {})
+    await updateFixedEvent(id, { enabled }, injectedCharacterId?.value ?? undefined)
     await loadCourses()
   } catch { /* silent */ }
 }
