@@ -23,7 +23,6 @@ import (
 )
 
 func main() {
-	
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
 		configPath = "config"
@@ -37,17 +36,18 @@ func main() {
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
 	initDatabase(db)
-ctx := app.NewAppContext(db, nil)
+	ctx := app.NewAppContext(db, nil)
 
-	var env *Environment
-	if os.Getenv("START_SIDECAR") != "0" {
-		env = startEnvironment()
-		defer func() {
-			if env != nil {
-				env.StopAll()
-			}
-		}()
+	env := startEnvironment()
+	env.SetOnShutdown(func() { qdrantDB.StopQdrant() })
+
+	cleanup := func() {
+		if env != nil {
+			env.StopAll()
+		}
+		qdrantDB.StopQdrant()
 	}
+	defer cleanup()
 
 	startQdrant()
 
@@ -58,7 +58,6 @@ ctx := app.NewAppContext(db, nil)
 	defer func() {
 		proactive.SchedulerRunning = false
 		cron.Stop()
-		qdrantDB.StopQdrant()
 	}()
 
 	serverAddr := config.AppCfg.Server.Addr()
@@ -89,22 +88,22 @@ ctx := app.NewAppContext(db, nil)
 		chatSvc.EnsureChannelConversation("qq")
 		log.Info("频道对话已确保创建")
 	}()
-		count, err := chatSvc.RecalculateMessageCounts()
-		if err != nil {
-			log.Error("重算消息计数失败:", err)
-		} else {
-			log.Info("消息计数已修复，影响", count, "条对话")
-		}
-		compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), "")
-		log.Info("今日主动消息任务已生成")
+	count, err := chatSvc.RecalculateMessageCounts()
+	if err != nil {
+		log.Error("重算消息计数失败:", err)
+	} else {
+		log.Info("消息计数已修复，影响", count, "条对话")
+	}
+	compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), "")
+	log.Info("今日主动消息任务已生成")
 
 	r := setupRouter(ctx)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)
+		cleanup()
 		os.Exit(1)
 	}
 }
-
 
 func initDatabase(db *gorm.DB) {
 	sqlPath := filepath.Join(config.AppCfg.Storage.DataDir, "sql.sql")
