@@ -650,7 +650,7 @@ func (s *service) RunActiveMessageTask(id int) map[string]interface{} {
 	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Limit(1).Row().Scan(&channelSetting)
 	if channelSetting == "" { channelSetting = "all" }
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, nowStr)
-	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, prompt, channelSetting, nowStr, nowStr)
+	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
 	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=?", nowStr, id)
 	log.Printf("[Companion] RunActiveMessageTask sent type=%s id=%d channel=%s", taskType, id, channelSetting)
 	return map[string]interface{}{"id": id, "status": "SENT", "taskType": taskType, "channel": channelSetting}
@@ -979,7 +979,7 @@ func (s *service) ProcessDueActiveMessageTasks() map[string]interface{} {
 			continue
 		}
 		taskType, _ := t["task_type"].(string)
-		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, prompt, channelSetting, nowStr, nowStr)
+		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
 		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=?", nowStr, id)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
@@ -1848,13 +1848,10 @@ func (s *service) scheduleChanged() {
 }
 func extractTopic(content string) string {
 	runes := []rune(content)
-	if len(runes) < 3 { return "" }
-	middle := len(runes) / 2
-	start := middle - 10
-	if start < 0 { start = 0 }
-	end := middle + 10
-	if end > len(runes) { end = len(runes) }
-	return string(runes[start:end])
+	if len(runes) < 6 { return "" }
+	maxLen := 10
+	if maxLen > len(runes) { maxLen = len(runes) }
+	return string(runes[:maxLen])
 }
 
 

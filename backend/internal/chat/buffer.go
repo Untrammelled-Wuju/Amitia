@@ -116,6 +116,26 @@ func (mb *MessageBuffer) AnalyzeImage(convID, imageUrl string) {
 	}()
 }
 
+func (mb *MessageBuffer) AnalyzeVideo(convID, videoUrl string) {
+	if videoUrl == "" {
+		return
+	}
+	buf := mb.getOrCreate(convID)
+
+	go func() {
+		desc, errDetail := analyzeVideoInternal(videoUrl)
+		if desc == "" && errDetail != "" {
+			desc = "视频解析失败：" + errDetail
+		}
+		if desc != "" {
+			ctx := "[视频描述：" + desc + "]"
+			buf.mu.Lock()
+			buf.imageContexts = append(buf.imageContexts, ctx)
+			buf.mu.Unlock()
+		}
+	}()
+}
+
 func (mb *MessageBuffer) GetImageContexts(convID string) string {
 	buf := mb.getOrCreate(convID)
 	buf.mu.Lock()

@@ -2,10 +2,18 @@
   <div class="chat-input-bar">
 
     <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="handleImageSelect" />
+    <input ref="videoInputRef" type="file" accept="video/*" style="display:none" @change="handleVideoSelect" />
     <div v-if="attachedImagePreview" class="image-preview-bar">
       <div class="preview-thumb" :style="{ backgroundImage: 'url(' + attachedImagePreview + ')' }"></div>
       <span class="preview-name">{{ attachedImage?.name || '图片' }}</span>
       <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="clearImage" />
+    </div>
+    <div v-if="attachedVideo" class="video-preview-bar">
+      <el-icon size="20" color="#409eff"><VideoCamera /></el-icon>
+      <span class="preview-name">{{ attachedVideo.name }}</span>
+      <span v-if="uploadingVideo" class="upload-status">上传中...</span>
+      <span v-else-if="attachedVideoUrl" class="upload-status ready">就绪</span>
+      <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="clearVideo" :disabled="uploadingVideo" />
     </div>
     <div class="input-wrapper">
       <div class="input-left-actions">
@@ -18,6 +26,15 @@
           :class="{ 'has-image': !!attachedImagePreview }"
           @click="fileInputRef?.click()"
           title="上传图片"
+        />
+        <el-button
+          :icon="VideoCamera"
+          circle
+          size="small"
+          class="video-btn"
+          :class="{ 'has-video': !!attachedVideo }"
+          @click="videoInputRef?.click()"
+          title="上传视频"
         />
         <el-button
           :icon="voiceMode ? Key : Microphone"
@@ -101,7 +118,7 @@
           :icon="Promotion"
           circle
           size="small"
-          :disabled="disabled || (!text.trim() && !attachedImagePreview)"
+          :disabled="disabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo)"
           @click="handleSend"
           title="发送 (Enter)"
         />
@@ -120,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch, onUnmounted } from "vue"
-import { Promotion, CloseBold, Microphone, Phone, Key, Picture, PictureFilled } from "@element-plus/icons-vue"
+import { Promotion, CloseBold, Microphone, Phone, Key, Picture, PictureFilled, VideoCamera } from "@element-plus/icons-vue"
 
 const props = defineProps<{
   disabled?: boolean
@@ -129,19 +146,25 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  send: [text: string, imageBase64?: string]
+  send: [text: string, imageBase64?: string, videoBase64?: string]
   stop: []
   toggleCall: []
   voiceText: [text: string]
   voiceAudio: [blob: Blob, transcript?: string, duration?: number]
   image: [file: File, base64: string]
   removeImage: []
+  video: [file: File, videoUrl: string]
+  removeVideo: []
 }>()
 
 const DRAFT_KEY = "webchat_draft"
 const attachedImage = ref<File | null>(null)
 const attachedImagePreview = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
+const videoInputRef = ref<HTMLInputElement>()
+const attachedVideo = ref<File | null>(null)
+const attachedVideoUrl = ref<string | null>(null)
+const uploadingVideo = ref(false)
 const text = ref(localStorage.getItem(DRAFT_KEY) || "")
 const inputRef = ref<HTMLTextAreaElement>()
 const voiceMode = ref(false)
@@ -165,15 +188,36 @@ function saveDraft() {
 }
 
 function handleSend(e?: KeyboardEvent) {
-  if (attachedImage.value && attachedImagePreview.value) {
-    fileToBase64(attachedImage.value).then(base64 => {
+  if (attachedVideo.value) {
+    if (uploadingVideo.value) return
+    if (attachedVideoUrl.value) {
+      const trimmed = text.value.trim() || "[视频]"
+      emit("send", trimmed, undefined, attachedVideoUrl.value)
+      text.value = ""
+      localStorage.removeItem(DRAFT_KEY)
+      clearVideo()
+      nextTick(() => autoResize())
+    }
+    return
+  }
+  if (attachedImage.value) {
+    if (attachedImagePreview.value) {
       const trimmed = text.value.trim()
-      emit("send", trimmed, base64)
+      emit("send", trimmed, attachedImagePreview.value)
       text.value = ""
       localStorage.removeItem(DRAFT_KEY)
       clearImage()
       nextTick(() => autoResize())
-    })
+    } else {
+      fileToBase64(attachedImage.value).then(base64 => {
+        const trimmed = text.value.trim()
+        emit("send", trimmed, base64)
+        text.value = ""
+        localStorage.removeItem(DRAFT_KEY)
+        clearImage()
+        nextTick(() => autoResize())
+      })
+    }
     return
   }
   if (e) e.preventDefault()
@@ -370,6 +414,37 @@ function clearImage() {
   attachedImage.value = null
   attachedImagePreview.value = null
   emit('removeImage')
+}
+
+function handleVideoSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('video/')) return
+  attachedVideo.value = file
+  uploadingVideo.value = true
+  const formData = new FormData()
+  formData.append('video', file)
+  const token = localStorage.getItem('ai-companion-token') || ''
+  fetch('/api/video/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: formData })
+    .then(res => res.json())
+    .then(data => {
+      const videoUrl = data?.data?.videoUrl || data?.videoUrl || ''
+      if (videoUrl) {
+        attachedVideoUrl.value = videoUrl
+        emit('video', file, videoUrl)
+      }
+    })
+    .catch(() => {})
+    .finally(() => { uploadingVideo.value = false })
+  input.value = ''
+}
+
+function clearVideo() {
+  attachedVideo.value = null
+  attachedVideoUrl.value = null
+  uploadingVideo.value = false
+  emit('removeVideo')
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -612,6 +687,15 @@ defineExpose({ focus, clear: () => { text.value = ""; localStorage.removeItem(DR
     border-radius: 10px;
   }
 }
+
+.upload-status {
+  font-size: 11px;
+  color: var(--ac-color-text-muted);
+  flex-shrink: 0;
+}
+.upload-status.ready {
+  color: var(--ac-color-success);
+}
 </style>
 
 
@@ -650,6 +734,21 @@ defineExpose({ focus, clear: () => { text.value = ""; localStorage.removeItem(DR
   flex-shrink: 0;
 }
 
+.video-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: var(--ac-color-surface);
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-sm);
+}
+.video-btn.has-video {
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
+}
 .image-btn.has-image {
   background: var(--ac-color-primary-bg);
   color: var(--ac-color-primary);

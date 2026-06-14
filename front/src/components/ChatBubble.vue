@@ -17,6 +17,12 @@
           <el-icon><ZoomIn /></el-icon>
         </div>
       </div>
+      <div class="bubble-video" v-if="(message as any).videoUrl" @click="handleVideoClick((message as any).videoUrl)">
+        <video :src="(message as any).videoUrl" preload="metadata" />
+        <div class="video-overlay">
+          <el-icon size="28"><VideoPlay /></el-icon>
+        </div>
+      </div>
        </div>
       
       <div class="voice-bar" v-if="hasAudio && !isStreaming" @click="toggleVoice()" :class="{ playing: voicePlaying, loading: voiceLoading, 'voice-only': !message.content }">
@@ -39,7 +45,7 @@
         </span>
         <span class="voice-sec" v-if="voiceDuration && !voicePlaying">{{ voiceDuration }}</span>
       </div>
-      <div class="bubble-content" v-if="message.content && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove" style="word-break:break-word;overflow-wrap:break-word"></div>
+      <div class="bubble-content" v-if="renderedContent && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove" style="word-break:break-word;overflow-wrap:break-word"></div>
       <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
         <span class="status-tag" :class="message.status">
           {{ message.status === 'failed' ? '发送失败' : '生成中断' }}
@@ -64,13 +70,16 @@
     <el-dialog v-model="showImagePreview" title="图片预览" width="90%" :close-on-click-modal="true" class="image-preview-dialog">
       <img :src="(message as any).imageUrl" style="width:100%;max-height:70vh;object-fit:contain" />
     </el-dialog>
+    <el-dialog v-model="showVideoPreview" title="视频预览" width="90%" :close-on-click-modal="true" class="video-preview-dialog" @closed="stopPreviewVideo">
+      <video :src="previewVideoUrl" controls autoplay style="width:100%;max-height:70vh;border-radius:6px" />
+    </el-dialog>
 </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue"
 
-import { DocumentCopy, Refresh, ZoomIn } from "@element-plus/icons-vue"
+import { DocumentCopy, Refresh, ZoomIn, VideoPlay } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { useApi } from "../composables/useApi"
 
@@ -100,17 +109,18 @@ const emit = defineEmits<{
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
 const showImagePreview = ref(false)
+const showVideoPreview = ref(false)
+const previewVideoUrl = ref('')
 const textExpanded = ref(!((props.message as any).audioUrl))
 
 
 const charInitial = computed(() => (props.charName || "AI").charAt(0))
 
-watch(hasAudio, (val) => { if (val) textExpanded.value = false })
-
-
-
 const renderedContent = computed(() => {
   const text = props.message.content || ""
+  const msg = props.message as any
+  if (text === "[图片]" && msg.imageUrl) return ""
+  if (text === "[视频]" && msg.videoUrl) return ""
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -156,18 +166,24 @@ function onTouchEnd() {
     clearTimeout(longPressTimer.value)
     longPressTimer.value = null
   }
+  if (longPressTriggered.value) {
+    longPressTriggered.value = false
+    return
+  }
 }
 
 const { post } = useApi()
 const voicePlaying = ref(false)
 const voiceLoading = ref(false)
-const voiceDuration = ref("")
 const voiceAudio = ref<HTMLAudioElement | null>(null)
+const voiceDuration = ref('')
 
 function formatDuration(seconds: number): string {
-  const s = Math.round(seconds)
-  if (s < 60) return s + '\u2033'
-  return Math.floor(s / 60) + '\u2032' + (s % 60) + '\u2033'
+  if (!seconds || seconds <= 0) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  if (m > 0) return `${m}:${String(s).padStart(2, '0')}`
+  return `${s}s`
 }
 
 async function toggleVoice() {
@@ -176,18 +192,10 @@ async function toggleVoice() {
     stopVoice()
     return
   }
-  const preUrl = (props.message as any).audioUrl
-  if (preUrl) {
-    stopVoice()
-    const audio = new Audio(preUrl)
-    voiceAudio.value = audio
-    voiceDuration.value = formatDuration((props.message as any).audioDuration || 0)
-    try {
-      await audio.play()
-      voicePlaying.value = true
-    } catch (e) {
-      ElMessage.warning("播放失败")
-    }
+  if (voiceAudio.value) {
+    const audio = voiceAudio.value
+    await audio.play()
+    voicePlaying.value = true
     audio.onended = () => {
       voicePlaying.value = false
       voiceAudio.value = null
@@ -241,6 +249,15 @@ function stopVoice() {
   voicePlaying.value = false
 }
 
+function handleVideoClick(url: string) {
+  previewVideoUrl.value = url
+  showVideoPreview.value = true
+}
+
+function stopPreviewVideo() {
+  previewVideoUrl.value = ''
+}
+
 onUnmounted(() => {
   if (longPressTimer.value) clearTimeout(longPressTimer.value)
   stopVoice()
@@ -257,20 +274,20 @@ async function copyContent() {
 </script>
 
 <style scoped>
+/* ======== Layout ======== */
 .chat-bubble {
   display: flex;
   gap: 10px;
-  padding: 6px 0;
-  animation: fadeIn 0.2s ease;
+  padding: 8px 16px;
+  align-items: flex-start;
+  animation: bubbleIn 0.25s ease;
 }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .chat-bubble.user { flex-direction: row-reverse; }
-.chat-bubble.assistant .bubble-avatar { flex-shrink: 0; }
 .chat-bubble.user .bubble-avatar { flex-shrink: 0; }
 .bubble-body { max-width: 80%; min-width: 60px; }
 
@@ -284,52 +301,76 @@ async function copyContent() {
 .bubble-latency { font-size: 10px; color: var(--ac-color-text-placeholder); }
 
 .bubble-content {
-
-padding: 10px 14px; border-radius: var(--ac-radius-md);
+  padding: 10px 14px; border-radius: var(--ac-radius-md);
   font-size: var(--ac-font-size-sm); line-height: 1.65;
   word-break: break-word; white-space: pre-wrap;
 }
+
+/* ======== Role colours ======== */
 .chat-bubble.user .bubble-content {
-  background: var(--ac-color-primary-bg); color: var(--ac-color-text);
-  border-top-right-radius: 4px;
+  background: var(--ac-color-primary);
+  color: #fff;
+  border-top-right-radius: 2px;
 }
 .chat-bubble.assistant .bubble-content {
-  background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light);
-  border-top-left-radius: 4px;
+  background: var(--ac-color-bg-primary);
+  border: 1px solid var(--ac-color-border-light);
+  border-top-left-radius: 2px;
 }
-.chat-bubble.is-streaming .bubble-content { border-color: var(--ac-color-primary-border); }
-.chat-bubble.is-typing .bubble-content { border-color: var(--ac-color-primary-border); }
-
-/* ======== Voice Bar (WeChat Style) ======== */
-.voice-bar {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; margin-top: 6px;
-  background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light);
-  border-radius: 20px; cursor: pointer; user-select: none;
-  transition: all 0.25s ease; min-width: 140px;
-}
-.voice-bar:hover { background: var(--ac-color-surface-hover); border-color: var(--ac-color-primary-border); }
-.voice-bar.playing {
+.chat-bubble.is-streaming .bubble-content {
   border-color: var(--ac-color-primary);
+}
+
+/* ======== Voice bar ======== */
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  border-radius: 12px;
+  background: var(--ac-color-bg-secondary);
+  transition: background 0.2s, box-shadow 0.2s;
+  user-select: none;
+  font-size: 13px;
+}
+.voice-bar:hover {
+  background: var(--ac-color-primary-bg);
+  box-shadow: 0 0 0 1px var(--ac-color-primary);
+}
+.voice-bar.playing {
   background: var(--ac-color-primary-bg);
 }
-.voice-bar.loading { opacity: 0.7; pointer-events: none; }
+.voice-bar.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
 
 .voice-icon-wrap {
-  position: relative; width: 28px; height: 28px;
-  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.voice-wx-icon {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--ac-color-text-secondary);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.2s;
+}
+.voice-bar.playing .voice-wx-icon {
+  stroke: var(--ac-color-primary);
 }
 
-/* WeChat-style voice icon (SVG) */
-.voice-wx-icon {
-  width: 28px; height: 28px;
-  fill: none; stroke: var(--ac-color-text-secondary);
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-  transition: stroke 0.3s;
-}
-.voice-bar.playing .voice-wx-icon { stroke: var(--ac-color-primary); }
-.voice-wx-icon .voice-body { fill: var(--ac-color-text-secondary); stroke: none; transition: fill 0.3s; }
+.voice-wx-icon .voice-body { fill: var(--ac-color-text-secondary); transition: fill 0.2s; }
 .voice-bar.playing .voice-wx-icon .voice-body { fill: var(--ac-color-primary); }
 
 .voice-wx-icon .voice-wave { opacity: 0.3; transition: opacity 0.15s; }
@@ -444,8 +485,6 @@ padding: 10px 14px; border-radius: var(--ac-radius-md);
 .bubble-source-tag.tool {
   color: #4a6fa5; background: #eef3fa; border: 1px solid #c8d6e5;
 }
-</style>
-
 
 /* ======== Image in bubble ======== */
 .bubble-image {
@@ -488,7 +527,44 @@ padding: 10px 14px; border-radius: var(--ac-radius-md);
 .bubble-image:hover .image-overlay {
   opacity: 1;
 }
+.bubble-video {
+  position: relative;
+  border-radius: 6px;
+  display: inline-block;
+  max-width: 260px;
+  min-width: 120px;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.bubble-video video {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.video-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.bubble-video:hover .video-overlay {
+  opacity: 1;
+}
 
 .image-preview-dialog .el-dialog__body {
   padding: 0;
 }
+.video-preview-dialog .el-dialog__body {
+  padding: 0;
+}
+</style>

@@ -209,6 +209,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/web-chat/conversations/from-import", handler.WebChatFromImport)
 	r.POST("/voice/upload", handler.VoiceUpload)
 	r.POST("/image/upload", handler.ImageUpload)
+	r.POST("/video/upload", handler.VideoUpload)
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
 }

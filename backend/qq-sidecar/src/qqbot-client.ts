@@ -21,6 +21,7 @@ export interface QQMessage {
   createdAt: number
   isVoice?: boolean
   imageUrl?: string
+  videoUrl?: string
 }
 
 export type MessageHandler = (msg: QQMessage) => Promise<string | void>
@@ -312,6 +313,7 @@ export class QQBotClient {
       createdAt: Date.now(),
       isVoice: isVoice,
       imageUrl: imageUrl || undefined,
+      videoUrl: (extracted as any).videoUrl || undefined,
     }
 
     this._messageCount++
@@ -343,7 +345,7 @@ export class QQBotClient {
     this.notifyHandlers(msg)
   }
 
-  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string } {
+  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string; videoUrl?: string } {
     const rawDataId = data?.id || "unknown"
     this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content类型=" + typeof data?.content + " isArray=" + Array.isArray(data?.content) + " attachments=" + (data?.attachments ? JSON.stringify(data.attachments).substring(0, 500) : "无"))
     if (typeof data.content === "object" && !Array.isArray(data.content)) {
@@ -351,6 +353,19 @@ export class QQBotClient {
     }
     if (Array.isArray(data.content)) {
       this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content数组长度=" + data.content.length + " types=" + data.content.map((c:any) => c.type || c.msg_type || "?").join(","))
+    }
+    const hasAttachmentsVideo = data?.attachments?.some((a: any) =>
+      a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video"
+    )
+    if (hasAttachmentsVideo) {
+      const vidAtt = data.attachments.find((a: any) =>
+        a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video"
+      )
+      const vidUrl = (vidAtt?.url || vidAtt?.src_url || vidAtt?.url_src || "")
+      const text = typeof data.content === "string" ? data.content.trim() : ""
+      this.debugLog("[QQBot][VIDEO-DETECT] msgId=" + rawDataId + " 检测到视频! url=" + vidUrl)
+      if (text) return { text, isVoice: false, imageUrl: "", videoUrl: vidUrl }
+      return { text: "", isVoice: false, imageUrl: "", videoUrl: vidUrl }
     }
     const hasAttachmentsImage = data?.attachments?.some((a: any) =>
       a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image"

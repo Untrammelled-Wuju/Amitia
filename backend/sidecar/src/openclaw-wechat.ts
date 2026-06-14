@@ -62,6 +62,9 @@ export type MessageHandler = (msg: {
   text: string
   contextToken?: string
   isVoice?: boolean
+  imageBase64?: string
+  imageUrl?: string
+  aeskey?: string
   createdAt: number
 }) => Promise<string | string[] | void>
 
@@ -731,7 +734,44 @@ private state: WechatState = {
       }
     }
 
-    if (!text) {
+    let imageBase64: string | undefined
+    let imageUrl: string | undefined
+    let aeskey: string | undefined
+    if (msg.item_list) {
+      for (const item of msg.item_list) {
+        if (item.type === 2 && item.image_item) {
+          console.log("[OpenClaw][IMAGE] === 收到图片消息 from " + this.hashId(String(fromUserId)) + " ===")
+          console.log("[OpenClaw][IMAGE] image_item keys: " + Object.keys(item.image_item).join(", "))
+          const img = item.image_item
+          if (img.url) {
+            imageUrl = img.url
+            console.log("[OpenClaw][IMAGE] url: " + img.url)
+          }
+          if (img.media) {
+            console.log("[OpenClaw][IMAGE] media keys: " + Object.keys(img.media).join(", "))
+            if (img.media.full_url) {
+              imageUrl = img.media.full_url
+              console.log("[OpenClaw][IMAGE] media.full_url: " + img.media.full_url)
+            }
+            if (img.media.encrypt_query_param) {
+              console.log("[OpenClaw][IMAGE] encrypt_query_param: " + img.media.encrypt_query_param.substring(0, 80) + "...")
+            }
+            if (img.media.aes_key) {
+              console.log("[OpenClaw][IMAGE] aes_key: " + img.media.aes_key.substring(0, 16) + "...")
+            }
+          }
+          if (img.aeskey) {
+            aeskey = img.aeskey
+            console.log("[OpenClaw][IMAGE] aeskey: " + img.aeskey.substring(0, 16) + "...")
+          }
+          console.log("[OpenClaw][IMAGE] mid_size=" + img.mid_size + " hd_size=" + img.hd_size)
+          console.log("[OpenClaw][IMAGE] thumb: " + img.thumb_width + "x" + img.thumb_height + " size=" + img.thumb_size)
+          console.log("[OpenClaw][IMAGE] === 图片信息打印完毕 ===")
+        }
+      }
+    }
+
+    if (!text && !imageUrl) {
       console.log("[OpenClaw] Non-text msg from userId=" + this.hashId(String(fromUserId)))
       return
     }
@@ -749,6 +789,9 @@ private state: WechatState = {
           messageId,
           text,
           isVoice,
+          imageBase64,
+          imageUrl,
+          aeskey,
           contextToken,
           createdAt,
         })

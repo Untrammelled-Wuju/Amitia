@@ -55,6 +55,7 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")
 	r.Static("/images", "./data/images")
+	r.Static("/videos", "./data/videos")
 	return r
 }
 

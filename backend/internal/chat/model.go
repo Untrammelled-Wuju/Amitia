@@ -31,6 +31,7 @@ type Message struct {
 	AudioUrl        string    `gorm:"column:audio_url;default:" json:"audioUrl"`
 	AudioDuration   float64   `gorm:"column:audio_duration;default:0" json:"audioDuration"`
 	ImageUrl        string    `gorm:"column:image_url;default:" json:"imageUrl"`
+	VideoUrl        string    `gorm:"column:video_url;default:" json:"videoUrl"`
 }
 
 func (Message) TableName() string { return "messages" }
@@ -139,6 +140,7 @@ type ProcessMessageRequest struct {
 	AudioDuration  float64 `json:"audioDuration"`
 	VoiceMessage   bool    `json:"voiceMessage"`
 	ImageUrl       string  `json:"imageUrl"`
+	VideoUrl       string  `json:"videoUrl"`
 	ImageContext   string  `json:"-"`
 }
 

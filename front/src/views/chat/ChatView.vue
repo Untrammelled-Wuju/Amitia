@@ -196,13 +196,34 @@ function onCallStateChange(state: string) {
   }
 }
 
-async function onSend(text: string) {
+async function onSend(text: string, imageBase64?: string, videoBase64?: string) {
   if (!selectedCharacterId.value) return
   loading.value = true
   try {
     const payload: any = {
       characterId: selectedCharacterId.value,
       message: text,
+    }
+    if (imageBase64) {
+      payload.imageUrl = imageBase64
+    }
+    if (videoBase64) {
+      loading.value = true
+      try {
+        const blob = await (await fetch(videoBase64)).blob()
+        const formData = new FormData()
+        formData.append("video", blob, "video.mp4")
+        const uploadResp = await axios.post(API + "/api/video/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        })
+        if (uploadResp.data?.data?.videoUrl) {
+          payload.videoUrl = uploadResp.data.data.videoUrl
+        }
+      } catch (e: any) {
+        ElMessage.error("视频上传失败: " + (e?.message || "未知错误"))
+        loading.value = false
+        return
+      }
     }
     if (currentConversationId.value) {
       payload.conversationId = currentConversationId.value

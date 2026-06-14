@@ -14,3 +14,5 @@ app:
   name: "U-Ai"
   version: "1.0.0"
   deployMode: "desktop-local"
+chat:
+  mergeWindowMs: 6000
