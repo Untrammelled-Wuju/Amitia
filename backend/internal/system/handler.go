@@ -423,16 +423,16 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			}
 		}
 
-		msg := gin.H{"id": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
-		b, _ := json.Marshal(msg)
-		fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
-		flusher.Flush()
-
-		if audioURL != "" {
-			audioData := gin.H{"messageId": msgID, "audioUrl": audioURL, "duration": audioDuration}
+		if ttsCfg != nil && audioURL != "" {
+			audioData := gin.H{"messageId": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05"), "audioUrl": audioURL, "duration": audioDuration}
 			ad, _ := json.Marshal(audioData)
 			applog.Info("[Voice] sending voice_audio: %s", audioURL)
 			fmt.Fprintf(c.Writer, "event: voice_audio\ndata: %s\n\n", string(ad))
+			flusher.Flush()
+		} else if ttsCfg == nil {
+			msg := gin.H{"id": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+			b, _ := json.Marshal(msg)
+			fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
 			flusher.Flush()
 		}
 	}
