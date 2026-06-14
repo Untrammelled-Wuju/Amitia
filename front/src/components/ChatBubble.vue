@@ -351,6 +351,9 @@ async function copyContent() {
   transition: background 0.2s, box-shadow 0.2s;
   user-select: none;
   font-size: 13px;
+  min-width: 140px;
+  width: fit-content;
+  max-width: 100%;
 }
 .voice-bar:hover {
   background: var(--ac-color-primary-bg);
