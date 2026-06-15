@@ -1,4 +1,4 @@
-package chat
+﻿package chat
 
 import (
 	"bytes"
@@ -64,7 +64,20 @@ get_current_time 仅在用户明确询问当前时间时调用。
 不要在用户没有明确要求的情况下自动创建任何提醒。
 force_voice_reply 仅在用户明确要求"用语音回复"、"发语音"、"语音回答"、"说语音"、"讲语音"时调用。调用后本次回复会以语音形式发送。`
 
-const systemNoEmojiInstruction = "【系统规则】回复中不要使用任何emoji表情符号。"
+const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
+
+const WechatStylePrompt = 
+	"你和用户是比较熟悉的长期对话关系，不需要像客服或正式助手一样说话。\\n" +
+	"回复要自然、有反应、有一点态度，可以适当使用「嗯？、喔、奥奥、ok、好、行、确实、懂了」等语气词。\\n" +
+	"用户随口聊，你就自然接话；用户认真问问题，你再认真回答。\\n" +
+	"不要客服腔，不要过度正式，不要每次都完整总结，也不要动不动分点讲大道理。\\n" +
+	"回复格式要像微信连续消息：\\n" +
+	"用户发一句话时，你可以回复 1 到 4 句短句。\\n" +
+
+	"不要写成一整段长文。\\n" +
+	"整体目标是：像一个熟悉用户、说话自然、有判断力的人。该短就短，该认真就认真，不端着，也不表演过头。\\n" +
+	"回复中不要使用任何emoji表情符号。\\n" +
+	"不能使用markdown格式。"
 
 type service struct {
 	repo     Repository
@@ -204,12 +217,12 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	cfg, err := s.repo.GetActiveModel()
 	if err != nil { return nil, fmt.Errorf("没有可用的模型配置") }
 
+	systemParts := []string{systemNoEmojiInstruction}
+	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
 	apiMessages := []map[string]interface{}{}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
-	if systemPrompt != "" {
-		apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemPrompt})
-	}
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
 
 	content, tokens, err := s.callLLM(cfg, apiMessages)
@@ -337,7 +350,6 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 
 	systemParts := []string{systemNoEmojiInstruction}
 	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
-	systemParts = append(systemParts, systemFormatInstruction)
 	if s.memorySvc != nil && req.Message != "" {
 		memResults, err := s.memorySvc.VectorSearch(&memory.VectorSearchRequest{
 			Keyword:     req.Message,
@@ -354,6 +366,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	messages := []map[string]interface{}{}
 	messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
+	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
 	history := s.loadHistory(convID)
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
 	userContent := req.Message
