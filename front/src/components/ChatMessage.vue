@@ -12,7 +12,15 @@
         <span v-else-if="isToolResult" class="source-tag tool-tag">工具</span>
         <span class="message-time">{{ formatTime(message.createdAt) }}</span>
       </div>
-      <div class="message-content">{{ displayContent }}</div>
+      <div v-if="message.msgType === 'voice' && message.audioUrl" class="message-voice">
+        <div class="voice-bubble" @click="toggleAudio">
+          <span class="voice-icon">{{ audioPlaying ? '⏸' : '🔊' }}</span>
+          <span class="voice-label">语音消息</span>
+          <span class="voice-wave"></span>
+        </div>
+        <audio ref="audioRef" :src="message.audioUrl" @ended="audioPlaying=false" @play="audioPlaying=true" @pause="audioPlaying=false" preload="none" />
+      </div>
+      <div v-else class="message-content">{{ displayContent }}</div>
       <div v-if="message.role === 'assistant'" class="feedback-row">
         <el-button link size="small" @click="submitFeedback('good')" :disabled="feedbackSent">
           👍
@@ -64,7 +72,23 @@ const isToolResult = computed(() => {
 
 
 
+const audioRef = ref<HTMLAudioElement>()
+const audioPlaying = ref(false)
+const audioLoading = ref(false)
+const audioSrc = ref("")
+
 const displayContent = computed(() => props.message.content || "")
+
+async function toggleAudio() {
+  if (!audioRef.value) return
+  if (audioPlaying.value) {
+    audioRef.value.pause()
+  } else {
+    audioLoading.value = true
+    audioRef.value.play().catch(e => console.error("audio play failed", e))
+    audioLoading.value = false
+  }
+}
 
 const feedbackSent = ref(false)
 const selectedType = ref("good")
@@ -134,4 +158,17 @@ function formatTime(dateStr: string): string {
   background: #eef3fa;
   border: 1px solid #c8d6e5;
 }
+
+.message-voice { margin-top: 4px; }
+.voice-bubble {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 18px;
+  background: var(--el-color-primary-light-9);
+  cursor: pointer; user-select: none;
+  transition: background 0.2s;
+}
+.voice-bubble:hover { background: var(--el-color-primary-light-7); }
+.voice-icon { font-size: 16px; }
+.voice-label { font-size: 13px; color: var(--el-color-primary); }
+.voice-wave { width: 40px; height: 20px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'%3E%3Crect x='2' y='8' width='3' height='4' rx='1' fill='%234094ff'/%3E%3Crect x='7' y='4' width='3' height='12' rx='1' fill='%234094ff'/%3E%3Crect x='12' y='1' width='3' height='18' rx='1' fill='%234094ff'/%3E%3Crect x='17' y='5' width='3' height='10' rx='1' fill='%234094ff'/%3E%3Crect x='22' y='3' width='3' height='14' rx='1' fill='%234094ff'/%3E%3Crect x='27' y='7' width='3' height='6' rx='1' fill='%234094ff'/%3E%3Crect x='32' y='2' width='3' height='16' rx='1' fill='%234094ff'/%3E%3Crect x='37' y='6' width='3' height='8' rx='1' fill='%234094ff'/%3E%3C/svg%3E") no-repeat center;}
 </style>
