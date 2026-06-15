@@ -33,7 +33,7 @@ app.addHook("onSend", async (_req, reply) => {
 // ============================================================
 const manager = getWechatManager()
 // 消息去抖缓冲区：按 fromUserId 分组
-const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean }>; timer: ReturnType<typeof setTimeout> }>()
+const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; imageBase64?: string; aeskey?: string }>; timer: ReturnType<typeof setTimeout> }>()
 
 // ============================================================
 // Forward messages to Core AI
@@ -47,6 +47,7 @@ manager.onMessage(async (msg) => {
   // 使用 module-level Map（定义在文件顶部）
   const key = msg.fromUserId
   const existing = msgBuffers.get(key)
+  console.log(`[Sidecar][DIAG] buffer入: text="${msg.text.substring(0,60)}" isVoice=${(msg as any).isVoice} hasImage=${!!((msg as any).imageUrl)}`);
   const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, isVoice: (msg as any).isVoice || false, imageUrl: (msg as any).imageUrl || "", imageBase64: (msg as any).imageBase64 || "", aeskey: (msg as any).aeskey || "" }
 
   if (existing) {
@@ -64,8 +65,8 @@ manager.onMessage(async (msg) => {
     const all = entry.msgs
     const last = all[all.length - 1]
     const combined = all.map(m => m.text).join("\n")
-    console.log(`[Sidecar] FIRE (${all.length} msgs): "${combined.substring(0, 100)}"`)
-    const wasVoice = all.some(m => m.isVoice === true)
+    const wasVoice = all.some(m => m.isVoice === true); console.log(`[Sidecar][DIAG] FIRE: msgs=${all.length} wasVoice=${wasVoice} text="${combined.substring(0,100)}"`)
+
     let imageUrl = ""
     const firstImageMsg = all.find(m => m.imageUrl)
     if (firstImageMsg?.imageUrl) {
@@ -125,14 +126,15 @@ manager.onMessage(async (msg) => {
         signal: AbortSignal.timeout(180000),
       })
       const json = await resp.json() as any
-      console.log(`[Sidecar] Core: code=${json?.code}, hasText=${!!json?.data?.outgoingMessage?.text}`)
+      console.log(`[Sidecar][DIAG] 后端响应: code=${json?.code} msg=${json?.msg} hasData=${!!json?.data} hasOutMsg=${!!json?.data?.outgoingMessage} hasText=${!!json?.data?.outgoingMessage?.text}`)
       if (json?.data?.outgoingMessage?.text) {
         const reply = json.data.outgoingMessage.text
         console.log('[OpenClaw] Reply (' + reply.length + ' chars): ' + reply.substring(0, 200))
         
         const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
-        const shouldSendVoice = forceVoice || (wasVoice && Math.random() < 0.8)
-        console.log('[OpenClaw] Voice decision: wasVoice=' + wasVoice + ' shouldSendVoice=' + shouldSendVoice + ' forceVoice=' + forceVoice)
+        // 微信iLink平台不支持主动推送语音消息，只能发文字，禁止改为true
+        const shouldSendVoice = false
+        console.log('[OpenClaw][DIAG] Voice决策: wasVoice=' + wasVoice + ' shouldSendVoice=' + shouldSendVoice + ' forceVoice=' + forceVoice + ' replyLen=' + reply.length)
         
         if (shouldSendVoice && reply.length > 0) {
           try {
@@ -141,13 +143,14 @@ manager.onMessage(async (msg) => {
             for (let i = 0; i < parts.length; i++) {
               const part = parts[i]
               try {
+                console.log("[OpenClaw][DIAG] TTS合成: part" + (i+1) + " text=" + part.substring(0,30));
                 const ttsResp = await fetch(sidecarConfig.coreUrl + "/api/tts/synthesize", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ text: part }),
                   signal: AbortSignal.timeout(180000),
                 })
-                const ttsJson = await ttsResp.json() as any
+                const ttsJson = await ttsResp.json() as any; console.log("[OpenClaw][DIAG] TTS响应: ok=" + ttsResp.ok + " code=" + (ttsJson.code || "?") + " hasAudio=" + !!ttsJson?.data?.audioUrl)
                 const audioUrl = ttsJson?.data?.audioUrl
                 if (audioUrl) {
                   const fullAudioUrl = sidecarConfig.coreUrl + audioUrl
@@ -165,15 +168,16 @@ manager.onMessage(async (msg) => {
               if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
             }
             if (voiceSent) return
-            console.log('[OpenClaw] No voice parts sent, falling back to text')
+            console.log('[OpenClaw][DIAG] 语音发送全部失败，fallback到文字')
           } catch (ttsErr: any) {
             console.error('[OpenClaw] TTS/voice error: ' + (ttsErr?.message || String(ttsErr)) + ', falling back to text')
           }
         }
         
         const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
-        console.log('[OpenClaw] Split into ' + parts.length + ' part(s)')
+        console.log('[OpenClaw][DIAG] 文字发送: parts=' + parts.length + ' toUserId=' + last.fromUserId.substring(0,10) + '...')
         for (let i = 0; i < parts.length; i++) {
+          console.log("[OpenClaw][DIAG] sendText part" + (i+1) + "/" + parts.length + " len=" + parts[i].length + " text=" + parts[i].substring(0,40));
           await manager.sendTextMessage(last.fromUserId, parts[i], last.contextToken).catch(
             (err: any) => console.error('[OpenClaw] Part ' + (i+1) + '/' + parts.length + ' failed:', err.message)
           )
