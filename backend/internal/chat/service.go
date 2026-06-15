@@ -316,6 +316,20 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	userMsgID := uuid.New().String()
 	msgType := "text"
 	if req.AudioUrl != "" { msgType = "voice" }
+	if strings.HasPrefix(req.ImageUrl, "data:") {
+		imgDir := filepath.Join(config.AppCfg.Storage.DataDir, "images")
+		os.MkdirAll(imgDir, 0755)
+		idx := strings.Index(req.ImageUrl, ";base64,")
+		if idx > 0 {
+			mimePart := req.ImageUrl[5:idx]
+			ext := ".png"
+			if strings.Contains(mimePart, "jpeg") || strings.Contains(mimePart, "jpg") { ext = ".jpg" }
+			fname := userMsgID + ext
+			data, _ := base64.StdEncoding.DecodeString(req.ImageUrl[idx+8:])
+			os.WriteFile(filepath.Join(imgDir, fname), data, 0644)
+			req.ImageUrl = "/images/" + fname
+		}
+	}
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, video_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, req.VideoUrl, time.Now().Format("2006-01-02 15:04:05"))
 	if req.Message == "" && req.ImageUrl != "" {
 		req.Message = "[图片]"
