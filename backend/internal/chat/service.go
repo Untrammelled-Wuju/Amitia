@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/http"
 	"os"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
@@ -437,10 +438,38 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		realLines = []string{reply}
 	}
 	var msgIDs []string
+	var audioUrls []string
+	isChannelMsg := source == "qq" || source == "wechat"
 	for _, line := range realLines {
 		id := uuid.New().String()
 		msgIDs = append(msgIDs, id)
-		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, convID, "assistant", line, source, time.Now().Format("2006-01-02 15:04:05"))
+		msgType := "text"
+		audioURL := ""
+		if isChannelMsg {
+			cfg, _ := tts.GetActiveConfig(s.db)
+			if cfg != nil {
+				result, err := tts.Synthesize(cfg, line)
+				if err == nil && result.AudioURL != "" {
+					cacheFile := strings.TrimPrefix(result.AudioURL, "/audio/")
+					cachePath := "data/tts_cache/" + cacheFile
+					voiceDir := "data/voice_msg"
+					os.MkdirAll(voiceDir, 0755)
+					voiceFile := id + ".mp3"
+					voicePath := voiceDir + "/" + voiceFile
+					if src, srcErr := os.Open(cachePath); srcErr == nil {
+						if dst, dstErr := os.Create(voicePath); dstErr == nil {
+							io.Copy(dst, src)
+							dst.Close()
+							msgType = "voice"
+							audioURL = "/voice/" + voiceFile
+							audioUrls = append(audioUrls, audioURL)
+						}
+						src.Close()
+					}
+				}
+			}
+		}
+		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, convID, "assistant", line, source, msgType, audioURL, time.Now().Format("2006-01-02 15:04:05"))
 	}
 	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
@@ -455,6 +484,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		CharacterName:  charName,
 		MessageIDs:     msgIDs,
 		ForceVoice:     tool.GetForceVoice(),
+		AudioUrls:     audioUrls,
 	}, nil
 }
 

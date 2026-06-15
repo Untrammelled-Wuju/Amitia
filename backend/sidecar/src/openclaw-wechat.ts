@@ -29,6 +29,8 @@ import {
 } from "@tencent-weixin/openclaw-weixin/dist/src/auth/accounts.js"
 import type { WeixinMessage } from "@tencent-weixin/openclaw-weixin/dist/src/api/types.js"
 import { normalizeAccountId } from "openclaw/plugin-sdk/account-id"
+import { downloadAndDecryptBuffer } from "@tencent-weixin/openclaw-weixin/dist/src/cdn/pic-decrypt.js"
+import { silkToWav } from "@tencent-weixin/openclaw-weixin/dist/src/media/silk-transcode.js"
 import crypto from "node:crypto"
 
 // ============================================================
@@ -63,7 +65,7 @@ export type MessageHandler = (msg: {
   text: string
   contextToken?: string
   isVoice?: boolean
-  imageBase64?: string
+  audioBase64?: string; imageBase64?: string
   imageUrl?: string
   aeskey?: string
   createdAt: number
@@ -669,6 +671,26 @@ private state: WechatState = {
         if (item.type === 3 && item.voice_item) {
           isVoice = true
           console.log("[OpenClaw][DIAG] voice_item: playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " hasText=" + (item.voice_item.text ? "YES len=" + item.voice_item.text.length : "NO") + " hasMedia=" + !!item.voice_item.media);
+          if (item.voice_item.media && item.voice_item.media.encrypt_query_param && item.voice_item.media.aes_key) {
+            try {
+              console.log("[OpenClaw][VOICE-DL] 开始下载语音...")
+              const silkBuf = await downloadAndDecryptBuffer(
+                item.voice_item.media.encrypt_query_param,
+                item.voice_item.media.aes_key,
+                this.state.baseUrl,
+                "wechat-voice",
+                item.voice_item.media.full_url
+              )
+              console.log("[OpenClaw][VOICE-DL] 下载完成, size=" + silkBuf.length)
+              const wavBuf = await silkToWav(silkBuf)
+              const audioBuf = wavBuf || silkBuf
+              audioBase64 = audioBuf.toString("base64")
+              audioMime = wavBuf ? "audio/wav" : "audio/silk"
+              console.log("[OpenClaw][VOICE-DL] 转码完成, size=" + audioBuf.length + " mime=" + audioMime)
+            } catch (dlErr: any) {
+              console.error("[OpenClaw][VOICE-DL] 下载失败: " + (dlErr?.message || String(dlErr)))
+            }
+          }
           const vt = item.voice_item.text || ""
           console.log("[OpenClaw][VOICE] playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " text=" + vt.substring(0, 100))
           if (vt) text += vt
@@ -679,7 +701,7 @@ private state: WechatState = {
       }
     }
 
-    let imageBase64: string | undefined
+    let audioBase64: string | undefined; let audioMime: string | undefined; let imageBase64: string | undefined
     let imageUrl: string | undefined
     let aeskey: string | undefined
     if (msg.item_list) {
@@ -738,6 +760,7 @@ private state: WechatState = {
           messageId,
           text,
           isVoice,
+          audioBase64,
           imageBase64,
           imageUrl,
           aeskey,

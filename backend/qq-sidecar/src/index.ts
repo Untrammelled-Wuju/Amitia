@@ -183,54 +183,40 @@ qq.onMessage(async (msg: QQMessage) => {
         const shouldSendVoice = forceVoice || (wasVoice && Math.random() < 0.8)
         logLine("Voice decision: wasVoice=" + wasVoice + " shouldSendVoice=" + shouldSendVoice)
 
-        if (shouldSendVoice && reply.length > 0) {
+        const audioUrls: string[] = json?.data?.outgoingMessage?.audioUrls || []
+        if (shouldSendVoice && audioUrls.length > 0) {
           try {
-            const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
-            logLine("Voice parts: " + parts.length)
+            logLine("Voice audioUrls: " + audioUrls.length)
             let voiceSent = false
-            for (let i = 0; i < parts.length; i++) {
-              const part = parts[i]
-              logLine("TTS part " + (i+1) + "/" + parts.length + ": " + part.substring(0, 50))
+            for (let i = 0; i < audioUrls.length; i++) {
               try {
-                const ttsResp = await fetch(`${qqSidecarConfig.coreUrl}/api/tts/synthesize`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ text: part }),
-                          signal: AbortSignal.timeout(600000),
-                })
-                const ttsJson = await ttsResp.json() as any
-                const audioUrl = ttsJson?.data?.audioUrl
-                if (audioUrl) {
-                  const fullAudioUrl = qqSidecarConfig.coreUrl + audioUrl
-                  const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
-                  if (audioResp.ok) {
-                    const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
-                    logLine("Voice part " + (i+1) + " audio: " + audioBuffer.length + " bytes")
-                    const fileInfo = last.groupId
-                      ? await qq.uploadGroupMedia(last.groupId, audioBuffer, "voice" + i + ".mp3", 3)
-                      : await qq.uploadPrivateMedia(last.fromUserId, audioBuffer, "voice" + i + ".mp3", 3)
-                    if (last.groupId) {
-                      await qq.sendGroupVoice(last.groupId, fileInfo)
-                    } else {
-                      await qq.sendPrivateVoice(last.fromUserId, fileInfo)
-                    }
-                    logLine("Voice part " + (i+1) + " sent OK")
-                    voiceSent = true
+                const fullAudioUrl = qqSidecarConfig.coreUrl + audioUrls[i]
+                const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
+                if (audioResp.ok) {
+                  const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
+                  logLine("Voice part " + (i+1) + " audio: " + audioBuffer.length + " bytes")
+                  const fileInfo = last.groupId
+                    ? await qq.uploadGroupMedia(last.groupId, audioBuffer, "voice" + i + ".mp3", 3)
+                    : await qq.uploadPrivateMedia(last.fromUserId, audioBuffer, "voice" + i + ".mp3", 3)
+                  if (last.groupId) {
+                    await qq.sendGroupVoice(last.groupId, fileInfo)
                   } else {
-                    logLine("Voice part " + (i+1) + " audio download failed: " + audioResp.status)
+                    await qq.sendPrivateVoice(last.fromUserId, fileInfo)
                   }
+                  logLine("Voice part " + (i+1) + " sent OK")
+                  voiceSent = true
                 } else {
-                  logLine("TTS part " + (i+1) + " returned no audioUrl")
+                  logLine("Voice part " + (i+1) + " audio download failed: " + audioResp.status)
                 }
               } catch (partErr: any) {
                 logLine("Voice part " + (i+1) + " error: " + (partErr?.message || String(partErr)))
               }
-              if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
+              if (i < audioUrls.length - 1) await new Promise(r => setTimeout(r, 800))
             }
             if (voiceSent) return
             logLine("No voice parts sent successfully, falling back to text")
           } catch (ttsErr: any) {
-            logLine("TTS/voice send error: " + (ttsErr?.message || String(ttsErr)) + ", falling back to text")
+            logLine("Voice send error: " + (ttsErr?.message || String(ttsErr)) + ", falling back to text")
           }
         }
 

@@ -41,6 +41,8 @@ export interface Message {
   content: string
   imageUrl?: string
   videoUrl?: string
+  audioUrl?: string
+  msgType?: string
   tokens?: number
   source: string
   importedItemId?: string | null

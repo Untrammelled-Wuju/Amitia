@@ -24,5 +24,6 @@ func RegisterTtsRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		ttsGroup.POST("/synthesize", handler.Synthesize)
 		ttsGroup.POST("/voice-clone", handler.CloneVoice)
 		ttsGroup.DELETE("/voice-clone", handler.DeleteClonedVoice)
+		ttsGroup.GET("/play/:messageId", func(c *gin.Context) { HandlePlayMessage(c, ctx.DB) })
 	}
 }

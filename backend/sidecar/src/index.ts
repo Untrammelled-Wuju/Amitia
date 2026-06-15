@@ -33,7 +33,7 @@ app.addHook("onSend", async (_req, reply) => {
 // ============================================================
 const manager = getWechatManager()
 // 消息去抖缓冲区：按 fromUserId 分组
-const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; imageBase64?: string; aeskey?: string }>; timer: ReturnType<typeof setTimeout> }>()
+const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; audioBase64?: string; imageBase64?: string; aeskey?: string }>; timer: ReturnType<typeof setTimeout> }>()
 
 // ============================================================
 // Forward messages to Core AI
@@ -42,13 +42,13 @@ const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: s
 manager.onMessage(async (msg) => {
   // ---- 5秒去抖缓冲：连续消息自动合并 ----
   const BUFFER_MS = sidecarConfig.mergeWindowMs
-  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; imageBase64?: string; aeskey?: string }
+  type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; audioBase64?: string; imageBase64?: string; aeskey?: string }
   
   // 使用 module-level Map（定义在文件顶部）
   const key = msg.fromUserId
   const existing = msgBuffers.get(key)
   console.log(`[Sidecar][DIAG] buffer入: text="${msg.text.substring(0,60)}" isVoice=${(msg as any).isVoice} hasImage=${!!((msg as any).imageUrl)}`);
-  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, isVoice: (msg as any).isVoice || false, imageUrl: (msg as any).imageUrl || "", imageBase64: (msg as any).imageBase64 || "", aeskey: (msg as any).aeskey || "" }
+  const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, audioBase64: (msg as any).audioBase64 || "", isVoice: (msg as any).isVoice || false, imageUrl: (msg as any).imageUrl || "", imageBase64: (msg as any).imageBase64 || "", aeskey: (msg as any).aeskey || "" }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -120,6 +120,7 @@ manager.onMessage(async (msg) => {
           messageId: last.messageId, contextToken: last.contextToken,
           type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
           imageBase64: last.imageBase64 || "", imageUrl: imageUrl || last.imageUrl || "",
+          audioBase64: (all.find(m => m.audioBase64) || last).audioBase64 || "",
           voiceMessage: wasVoice,
           skipTiming: true,
         }),

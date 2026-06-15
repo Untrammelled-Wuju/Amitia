@@ -174,7 +174,7 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice}}, nil
+	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.AudioUrls}}, nil
 }
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName string
