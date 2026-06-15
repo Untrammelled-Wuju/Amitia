@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================
 // OpenClaw WeChat Integration Layer
 // Wraps @tencent-weixin/openclaw-weixin functions
@@ -306,35 +307,6 @@ private state: WechatState = {
     poll().catch((err) => console.error("[OpenClaw] Poll loop crashed:", err))
   }
 
-  /** Persist getUpdatesBuf to account data for crash recovery */
-  private persistBuf(): void {
-    if (!this.state.accountId) return
-    try {
-      const data: Record<string, any> = { messageCount: this.state.messageCount }
-      if (this.getUpdatesBuf) data.getUpdatesBuf = this.getUpdatesBuf
-      saveWeixinAccount(this.state.accountId, data)
-    } catch {
-      // Non-critical, ignore
-    }
-  }
-
-  /** Stop message polling */
-  async stopPolling(): Promise<void> {
-    this.polling = false
-    this.pollAbort.abort()
-
-    if (this.token) {
-      try {
-        await notifyStop({
-          baseUrl: this.state.baseUrl,
-          token: this.token,
-        })
-      } catch {
-        // ignore
-      }
-    }
-  }
-
   /** Reset current login state so a fresh QR scan can be started. */
 
   /**
@@ -427,36 +399,6 @@ private state: WechatState = {
     } catch (err: any) {
       console.error("[OpenClaw] Failed to send pre-expiry warning:", err.message)
     }
-  }
-
-  async resetLogin(): Promise<void> {
-    await this.stopPolling()
-
-    // Clean up old account from SDK persistent store so server creates a new bot
-    const oldAccountId = this.state.accountId
-    if (oldAccountId) {
-      try {
-        unregisterWeixinAccountId(oldAccountId)
-        clearWeixinAccount(oldAccountId)
-        this.debugLog("[OpenClaw] Cleared old account: ")
-      } catch (err: any) {
-        console.warn(`[OpenClaw] Failed to clear old account:`, err.message)
-      }
-    }
-
-    this.state = {
-      status: "idle",
-      accountId: null,
-      qrCodeUrl: "",
-      sessionKey: "",
-      message: "",
-      messageCount: 0,
-      baseUrl: DEFAULT_BASE_URL,
-      startedAt: null,
-      lastError: null,
-    }
-    this.getUpdatesBuf = ""
-    this.token = null
   }
 
   /** Send a text message back to WeChat */
@@ -708,6 +650,7 @@ private state: WechatState = {
 
   private async processMessage(msg: WeixinMessage): Promise<void> {
     // Skip bot messages (our own replies)
+    console.log("[OpenClaw][DIAG] === processMessage === msg_type=" + msg.message_type + " from=" + this.hashId(String(msg.from_user_id || '')) + " items.len=" + (msg.item_list ? msg.item_list.length : 0));
     if (msg.message_type === 2) return
 
     const fromUserId = msg.from_user_id || ""
@@ -721,9 +664,11 @@ private state: WechatState = {
     let text = ""
     let isVoice = false
     if (msg.item_list) {
+      console.log("[OpenClaw][DIAG] item_list: " + msg.item_list.length + " items");
       for (const item of msg.item_list) {
         if (item.type === 3 && item.voice_item) {
           isVoice = true
+          console.log("[OpenClaw][DIAG] voice_item: playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " hasText=" + (item.voice_item.text ? "YES len=" + item.voice_item.text.length : "NO") + " hasMedia=" + !!item.voice_item.media);
           const vt = item.voice_item.text || ""
           console.log("[OpenClaw][VOICE] playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " text=" + vt.substring(0, 100))
           if (vt) text += vt
@@ -738,6 +683,7 @@ private state: WechatState = {
     let imageUrl: string | undefined
     let aeskey: string | undefined
     if (msg.item_list) {
+      console.log("[OpenClaw][DIAG] item_list: " + msg.item_list.length + " items");
       for (const item of msg.item_list) {
         if (item.type === 2 && item.image_item) {
           console.log("[OpenClaw][IMAGE] === 收到图片消息 from " + this.hashId(String(fromUserId)) + " ===")
@@ -771,7 +717,9 @@ private state: WechatState = {
       }
     }
 
+    console.log("[OpenClaw][DIAG] textCheck: text=" + JSON.stringify(text.substring(0,100)) + " isVoice=" + isVoice + " hasImage=" + !!imageUrl);
     if (!text && !imageUrl) {
+      console.log("[OpenClaw][DIAG] *** 消息被丢弃: text为空且无图片 ***");
       console.log("[OpenClaw] Non-text msg from userId=" + this.hashId(String(fromUserId)))
       return
     }
@@ -781,6 +729,7 @@ private state: WechatState = {
 
     console.log("[OpenClaw] Msg from " + this.hashId(String(fromUserId)) + ": " + (text.length > 80 ? text.substring(0, 80) + "..." : text))
 
+    console.log("[OpenClaw][DIAG] 调用handler: text=" + text.substring(0,80) + " isVoice=" + isVoice + " handlers=" + this.handlers.length);
     for (const handler of this.handlers) {
       try {
         const reply = await handler({

@@ -255,7 +255,7 @@ func (s *service) loadHistory(convID string) []map[string]string {
 }
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
-	fmt.Printf("[ProcessMessage] msg=%s imageUrlLen=%d\n", req.Message[:min(len(req.Message), 50)], len(req.ImageUrl))
+	fmt.Printf("[DIAG-ProcessMessage] channel=%s voiceMessage=%v msg=%s audioUrl=%s imageUrlLen=%d\n", req.Channel, req.VoiceMessage, req.Message[:min(len(req.Message), 80)], req.AudioUrl[:min(len(req.AudioUrl), 60)], len(req.ImageUrl))
 	var charID, charName, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
@@ -308,6 +308,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		}
 	}
 	if req.VoiceMessage && (req.Message == "" || req.Message == "[语音]") {
+		fmt.Printf("[DIAG-VoiceFallback] 触发语音降级: msg=%q\n", req.Message)
 		req.Message = "（用户发来一条语音，听不清内容）"
 	}
 	if charID != "" {
@@ -332,9 +333,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
 		} else {
 			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
-			return &ProcessMessageResponse{
-				ConversationID: convID,
-				Reply:          errDetail,
+				return &ProcessMessageResponse{
+					ConversationID: convID,
+					Reply:          errDetail,
 				CharacterID:    charID,
 				CharacterName:  charName,
 			}, nil
@@ -446,6 +447,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	go s.autoExtractMemories(convID, charID)
 	go s.moodRecoveryCheck(convID, charID, source)
 
+		fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), tool.GetForceVoice())
 	return &ProcessMessageResponse{
 		ConversationID: convID,
 		Reply:          reply,

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"log"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -132,6 +133,7 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 }
 
 func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, skipTiming bool) (map[string]interface{}, error) {
+	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", channel, text[:min(len(text), 80)], voiceMessage, len(imageUrl), skipTiming)
 	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", channel, text[:min(len(text), 50)], len(imageUrl), len(videoUrl))
 	text = strings.TrimSpace(text)
 	if text == "" && imageUrl == "" && videoUrl == "" {
@@ -166,10 +168,12 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 	}
 	forceVoice := result.ForceVoice
 	replyText := result.Reply
+	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, channel)
 	if channel == "wechat" && forceVoice {
 		forceVoice = false
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
+	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
 	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice}}, nil
 }
 func (s *service) getActiveModel() map[string]string {
