@@ -32,7 +32,7 @@ const fileRouter: FileRouter = createDefaultRouter()
 // Message forwarding
 // ============================================================
 const msgBuffers = new Map<string, {
-  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string; videoUrl?: string; imageData?: string }>
+  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string; videoUrl?: string; voiceUrl?: string; imageData?: string }>
   timer: ReturnType<typeof setTimeout>
 }>()
 
@@ -60,7 +60,7 @@ qq.onMessage(async (msg: QQMessage) => {
       }
     } catch {}
   }
-  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", fileUrl: msg.fileUrl || "", fileName: msg.fileName || "", imageData }
+  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", fileUrl: msg.fileUrl || "", fileName: msg.fileName || "", voiceUrl: msg.voiceUrl || "", imageData }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -89,6 +89,16 @@ qq.onMessage(async (msg: QQMessage) => {
       const logLineV3 = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
       logLineV3(`Voice-FWD: userId=${last.fromUserId} groupId=${last.groupId || "none"} msgId=${last.messageId} text=${combined.substring(0, 100)}`)
       console.log(`[QQ-Sidecar][VOICE-FWD] 转发语音到后端: fromUserId=${last.fromUserId} text="${combined.substring(0, 100)}"`)
+    }
+    let audioBase64 = ""
+    if (wasVoice && last.voiceUrl) {
+      try {
+        const voiceDl = await qq.downloadImage(last.voiceUrl)
+        if (voiceDl) {
+          audioBase64 = voiceDl.buffer.toString("base64")
+          console.log("[QQ-Sidecar][VOICE-DL] 用户语音已下载, size=" + voiceDl.buffer.length)
+        }
+      } catch {}
     }
 
     const headers: Record<string, string> = { "Content-Type": "application/json" }
@@ -154,6 +164,7 @@ qq.onMessage(async (msg: QQMessage) => {
           messageId: last.messageId,
           type: wasVoice ? "voice" : "text", text: combined, createdAt: last.createdAt,
           voiceMessage: wasVoice,
+          audioBase64: audioBase64,
           imageUrl: imageUrl,
           videoUrl: videoUrl,
           skipTiming: true,

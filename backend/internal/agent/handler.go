@@ -47,13 +47,14 @@ func (h *Handler) Webhook(c *gin.Context) {
 		MsgType        string `json:"type"`
 		ImageUrl       string `json:"imageUrl"`
 		VideoUrl       string `json:"videoUrl"`
+		AudioBase64    string `json:"audioBase64"`
 		SkipTiming     bool   `json:"skipTiming"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	result, err := h.service.Webhook(body.Channel, body.SenderID, body.ConversationID, body.Text, body.VoiceMessage, body.ImageUrl, body.VideoUrl, body.SkipTiming)
+	result, err := h.service.Webhook(body.Channel, body.SenderID, body.ConversationID, body.Text, body.VoiceMessage, body.ImageUrl, body.VideoUrl, body.AudioBase64, body.SkipTiming)
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, "AI 调用失败: "+err.Error(), nil)
 		return
