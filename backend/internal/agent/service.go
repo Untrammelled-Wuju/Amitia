@@ -61,12 +61,12 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
+	systemParts := []string{systemNoEmojiInstruction}
+	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
+	systemParts = append(systemParts, systemFormatInstruction)
 	apiMessages := []map[string]interface{}{}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
-	if systemPrompt != "" {
-		apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemPrompt})
-	}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": message})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": message})
 
 	start := time.Now()
