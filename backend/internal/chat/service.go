@@ -335,11 +335,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		}
 	}
 
-	messages := []map[string]interface{}{}
-	messages = append(messages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
-	if systemPrompt != "" { messages = append(messages, map[string]interface{}{"role": "system", "content": systemPrompt}) }
-	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
-
+	systemParts := []string{systemNoEmojiInstruction}
+	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
+	systemParts = append(systemParts, systemFormatInstruction)
 	if s.memorySvc != nil && req.Message != "" {
 		memResults, err := s.memorySvc.VectorSearch(&memory.VectorSearchRequest{
 			Keyword:     req.Message,
@@ -351,10 +349,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			for _, r := range memResults {
 				memLines = append(memLines, "- "+r.Memory.Value)
 			}
-			memContext := "【相关记忆】\n" + strings.Join(memLines, "\n")
-			messages = append(messages, map[string]interface{}{"role": "system", "content": memContext})
+			systemParts = append(systemParts, "【相关记忆】\n"+strings.Join(memLines, "\n"))
 		}
 	}
+	messages := []map[string]interface{}{}
+	messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	history := s.loadHistory(convID)
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
 	userContent := req.Message
