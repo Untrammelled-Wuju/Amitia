@@ -1,25 +1,29 @@
 package agent
 
 import (
-	"log"
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
+    "bytes"
+    "encoding/base64"
+    "encoding/json"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strings"
+    "time"
 
-	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/pkg/app"
-	"gorm.io/gorm"
+    "github.com/google/uuid"
+    "github.com/u-ai/backend/internal/chat"
+    "github.com/u-ai/backend/pkg/app"
+    "gorm.io/gorm"
 )
 
 
 type Service interface {
 	Test(characterID, message string) (map[string]interface{}, error)
 	ContextPreview(convID string) (map[string]interface{}, error)
-	Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, skipTiming bool) (map[string]interface{}, error)
+	Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, audioBase64 string, skipTiming bool) (map[string]interface{}, error)
 }
 
 const systemFormatInstruction = `【回复格式 - 系统固定规则】
@@ -132,7 +136,7 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}, nil
 }
 
-func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, skipTiming bool) (map[string]interface{}, error) {
+func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, audioBase64 string, skipTiming bool) (map[string]interface{}, error) {
 	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", channel, text[:min(len(text), 80)], voiceMessage, len(imageUrl), skipTiming)
 	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", channel, text[:min(len(text), 50)], len(imageUrl), len(videoUrl))
 	text = strings.TrimSpace(text)
@@ -152,6 +156,18 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		mergedText = strings.Join(msgs, "\n")
 	}
 
+	audioUrl := ""
+	if audioBase64 != "" {
+		voiceDir := "data/voice_msg"
+		os.MkdirAll(voiceDir, 0755)
+		fname := uuid.New().String() + ".mp3"
+		data, err := base64.StdEncoding.DecodeString(audioBase64)
+		if err == nil {
+			os.WriteFile(filepath.Join(voiceDir, fname), data, 0644)
+			audioUrl = "/voice/" + fname
+			fmt.Printf("[Webhook] 用户语音已保存: %s\n", fname)
+		}
+	}
 	pmReq := &chat.ProcessMessageRequest{
 		CharacterID:    "",
 		Message:        mergedText,
@@ -161,6 +177,7 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		VoiceMessage:   voiceMessage,
 		ImageUrl:       imageUrl,
 		VideoUrl:       videoUrl,
+		AudioUrl:       audioUrl,
 	}
 	result, err := s.chatSvc.ProcessMessage(pmReq)
 	if err != nil {

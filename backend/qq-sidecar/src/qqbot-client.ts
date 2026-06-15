@@ -23,6 +23,7 @@ export interface QQMessage {
   imageUrl?: string
   videoUrl?: string
   fileUrl?: string
+  voiceUrl?: string
   fileName?: string
 }
 
@@ -319,6 +320,7 @@ export class QQBotClient {
       videoUrl: (extracted as any).videoUrl || undefined,
       fileUrl: fileUrl || undefined,
       fileName: extracted.fileName || undefined,
+      voiceUrl: extracted.voiceUrl || undefined,
     }
 
     this._messageCount++
@@ -345,6 +347,7 @@ export class QQBotClient {
       imageUrl: imageUrl || undefined,
       fileUrl: fileUrl || undefined,
       fileName: extracted.fileName || undefined,
+      voiceUrl: extracted.voiceUrl || undefined,
     }
 
     this._messageCount++
@@ -353,7 +356,8 @@ export class QQBotClient {
     this.notifyHandlers(msg)
   }
 
-  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string; videoUrl?: string; fileUrl?: string; fileName?: string; fileContentType?: string } {
+  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string; videoUrl?: string; fileUrl?: string
+  fileName?: string; fileContentType?: string; voiceUrl?: string } {
     const rawDataId = data?.id || "unknown"
     this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content类型=" + typeof data?.content + " isArray=" + Array.isArray(data?.content) + " attachments=" + (data?.attachments ? JSON.stringify(data.attachments).substring(0, 500) : "无"))
     if (typeof data.content === "object" && !Array.isArray(data.content)) {
@@ -431,9 +435,9 @@ export class QQBotClient {
       this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " 检测到语音消息! attachments详情:" + JSON.stringify(data.attachments).substring(0, 2000))
       this.debugLog("[QQBot][VOICE-ASR] msgId=" + rawDataId + " QQ语音识别文本: " + asrText)
       if (asrText) {
-        return { text: asrText, isVoice: true, imageUrl: "" }
+        return { text: asrText, isVoice: true, imageUrl: "", voiceUrl: voiceAtt?.url || "" }
       }
-      return { text: "[语音]", isVoice: true, imageUrl: "" }
+      return { text: "[语音]", isVoice: true, imageUrl: "", voiceUrl: voiceAtt?.url || "" }
     }
 
     const hasAttachmentsFile = data?.attachments?.some((a: any) =>
