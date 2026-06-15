@@ -29,7 +29,7 @@ const systemFormatInstruction = `【回复格式 - 系统固定规则】
 不要把多句话连成一段。
 不要用句号连接多个意思。`
 
-const systemNoEmojiInstruction = "【系统规则】回复中不要使用任何emoji表情符号。"
+const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
 
 type service struct {
 	db      *gorm.DB

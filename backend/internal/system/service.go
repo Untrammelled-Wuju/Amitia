@@ -306,7 +306,8 @@ func (s *service) AppConfig() map[string]interface{} {
 	if lang == "" { lang = "zh-CN" }
 	tz := s.getAppSetting("timezone")
 	if tz == "" { tz = "Asia/Shanghai" }
-	return map[string]interface{}{"theme": theme, "language": lang, "timezone": tz}
+	settings := s.ConfigSettings()
+	return map[string]interface{}{"theme": theme, "language": lang, "timezone": tz, "settings": settings}
 }
 
 func (s *service) UpdateAppConfig(body map[string]interface{}) map[string]interface{} {
