@@ -5,6 +5,7 @@ import { qqSidecarConfig } from "./config.js"
 import { QQBotClient } from "./qqbot-client.js"
 import type { QQMessage } from "./qqbot-client.js"
 import { loadQQBotConfig, saveQQBotConfig } from "./qqbot-persist.js"
+import { FileRouter, createDefaultRouter } from "./file-router.js"
 import path from "node:path"
 import fs from "node:fs"
 
@@ -25,6 +26,7 @@ app.addHook("onSend", async (_req, reply) => {
 })
 
 const qq = new QQBotClient()
+const fileRouter: FileRouter = createDefaultRouter()
 
 // ============================================================
 // Message forwarding
@@ -48,7 +50,7 @@ qq.onMessage(async (msg: QQMessage) => {
   const BUFFER_MS = qqSidecarConfig.mergeWindowMs
   const key = msg.groupId || msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "" }
+  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", fileUrl: msg.fileUrl || "", fileName: msg.fileName || "" }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -83,8 +85,39 @@ qq.onMessage(async (msg: QQMessage) => {
 
     try {
       let imageUrl = ""
+      let videoUrl = ""
+
+      const firstFileMsg = all.find(m => (m as any).fileUrl)
+      if (firstFileMsg && (firstFileMsg as any).fileUrl) {
+        const fileResult = await qq.downloadImage((firstFileMsg as any).fileUrl)
+        if (fileResult) {
+          console.log("[QQ-Sidecar][FILE-FWD] 文件已下载, size=" + fileResult.buffer.length + " type=" + fileResult.contentType)
+          const routeResult = await fileRouter.route({
+            buffer: fileResult.buffer,
+            fileName: (firstFileMsg as any).fileName || "unknown",
+            mimeType: fileResult.contentType,
+          })
+          if (routeResult) {
+            console.log("[QQ-Sidecar][FILE-ROUTE] 文件路由: handler=" + routeResult.handler)
+            if (routeResult.handler === "image" && routeResult.data?.base64) {
+              imageUrl = "data:" + (routeResult.data.mimeType || fileResult.contentType) + ";base64," + routeResult.data.base64
+              console.log("[QQ-Sidecar][FILE-ROUTE] 文件识别为图片, base64Len=" + imageUrl.length)
+            } else if (routeResult.handler === "video" && routeResult.data?.base64) {
+              videoUrl = "data:" + (routeResult.data.mimeType || fileResult.contentType) + ";base64," + routeResult.data.base64
+              console.log("[QQ-Sidecar][FILE-ROUTE] 文件识别为视频, base64Len=" + videoUrl.length)
+            } else if (routeResult.handler === "audio" && routeResult.data?.base64) {
+              console.log("[QQ-Sidecar][FILE-ROUTE] 文件识别为音频(暂不处理)")
+            } else {
+              console.log("[QQ-Sidecar][FILE-ROUTE] 未知文件类型, handler=" + routeResult.handler)
+            }
+          } else {
+            console.log("[QQ-Sidecar][FILE-ROUTE] 未找到文件处理器")
+          }
+        }
+      }
+
       const firstImageMsg = all.find(m => m.imageUrl)
-      if (firstImageMsg?.imageUrl) {
+      if (!imageUrl && firstImageMsg?.imageUrl) {
         const imgResult = await qq.downloadImage(firstImageMsg.imageUrl)
         if (imgResult) {
           imageUrl = "data:" + imgResult.contentType + ";base64," + imgResult.buffer.toString("base64")
@@ -92,9 +125,8 @@ qq.onMessage(async (msg: QQMessage) => {
         }
       }
 
-      let videoUrl = ""
       const firstVideoMsg = all.find(m => m.videoUrl)
-      if (firstVideoMsg?.videoUrl) {
+      if (!videoUrl && firstVideoMsg?.videoUrl) {
         const vidResult = await qq.downloadImage(firstVideoMsg.videoUrl)
         if (vidResult) {
           videoUrl = "data:" + vidResult.contentType + ";base64," + vidResult.buffer.toString("base64")
@@ -115,9 +147,21 @@ qq.onMessage(async (msg: QQMessage) => {
           videoUrl: videoUrl,
           skipTiming: true,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(600000),
       })
       const json = await resp.json() as any
+      if (json?.code && json.code !== 200) {
+        const errMsg = "AI服务异常 [code=" + json.code + "] " + (json.msg || "")
+        console.error("[QQ-Sidecar][WEBHOOK-ERR] " + errMsg)
+        try {
+          if (last.groupId) {
+            await qq.sendGroupMsg(last.groupId, errMsg)
+          } else {
+            await qq.sendPrivateMsg(last.fromUserId, errMsg)
+          }
+        } catch {}
+        return
+      }
       const logLine = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
       logLine("Webhook response: " + JSON.stringify(json).substring(0, 300))
       if (json?.data?.outgoingMessage?.text) {
@@ -141,7 +185,7 @@ qq.onMessage(async (msg: QQMessage) => {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ text: part }),
-                  signal: AbortSignal.timeout(60000),
+                  signal: AbortSignal.timeout(600000),
                 })
                 const ttsJson = await ttsResp.json() as any
                 const audioUrl = ttsJson?.data?.audioUrl
@@ -295,7 +339,7 @@ app.post("/api/send-voice", async (req, reply) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: part }),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(600000),
         })
         const ttsJson = await ttsResp.json() as any
         const audioUrl = ttsJson?.data?.audioUrl

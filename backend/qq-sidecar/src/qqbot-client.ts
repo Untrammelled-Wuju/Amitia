@@ -22,6 +22,8 @@ export interface QQMessage {
   isVoice?: boolean
   imageUrl?: string
   videoUrl?: string
+  fileUrl?: string
+  fileName?: string
 }
 
 export type MessageHandler = (msg: QQMessage) => Promise<string | void>
@@ -302,7 +304,8 @@ export class QQBotClient {
     const text = extracted.text
     const isVoice = extracted.isVoice
     const imageUrl = extracted.imageUrl
-    if (!text && !isVoice && !imageUrl) return
+    const fileUrl = extracted.fileUrl
+    if (!text && !isVoice && !imageUrl && !fileUrl) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
@@ -314,6 +317,8 @@ export class QQBotClient {
       isVoice: isVoice,
       imageUrl: imageUrl || undefined,
       videoUrl: (extracted as any).videoUrl || undefined,
+      fileUrl: fileUrl || undefined,
+      fileName: extracted.fileName || undefined,
     }
 
     this._messageCount++
@@ -327,7 +332,8 @@ export class QQBotClient {
     const text = extracted.text
     const isVoice = extracted.isVoice
     const imageUrl = extracted.imageUrl
-    if (!text && !isVoice && !imageUrl) return
+    const fileUrl = extracted.fileUrl
+    if (!text && !isVoice && !imageUrl && !fileUrl) return
 
     const msg: QQMessage = {
       fromUserId: data?.author?.id || "",
@@ -337,6 +343,8 @@ export class QQBotClient {
       createdAt: Date.now(),
       isVoice: isVoice,
       imageUrl: imageUrl || undefined,
+      fileUrl: fileUrl || undefined,
+      fileName: extracted.fileName || undefined,
     }
 
     this._messageCount++
@@ -345,7 +353,7 @@ export class QQBotClient {
     this.notifyHandlers(msg)
   }
 
-  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string; videoUrl?: string } {
+  private extractContent(data: any): { text: string; isVoice: boolean; imageUrl: string; videoUrl?: string; fileUrl?: string; fileName?: string; fileContentType?: string } {
     const rawDataId = data?.id || "unknown"
     this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content类型=" + typeof data?.content + " isArray=" + Array.isArray(data?.content) + " attachments=" + (data?.attachments ? JSON.stringify(data.attachments).substring(0, 500) : "无"))
     if (typeof data.content === "object" && !Array.isArray(data.content)) {
@@ -428,6 +436,38 @@ export class QQBotClient {
       return { text: "[语音]", isVoice: true, imageUrl: "" }
     }
 
+    const hasAttachmentsFile = data?.attachments?.some((a: any) =>
+      a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file"
+    )
+    if (hasAttachmentsFile) {
+      const fileAtt = data.attachments.find((a: any) =>
+        a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file"
+      )
+      const fUrl = (fileAtt?.url || "")
+      const fName = (fileAtt?.filename || fileAtt?.file_name || "")
+      const fContentType = (fileAtt?.content_type || "")
+      this.debugLog("[QQBot][FILE-DETECT] msgId=" + rawDataId + " 检测到文件! url=" + fUrl + " name=" + fName + " contentType=" + fContentType)
+      if (fUrl) {
+        const ftext = typeof data?.content === "string" ? data.content.trim() : ""
+        return { text: ftext, isVoice: false, imageUrl: "", fileUrl: fUrl, fileName: fName, fileContentType: fContentType }
+      }
+    }
+    const hasAttachmentsOther = data?.attachments?.some((a: any) =>
+      a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice")
+    )
+    if (hasAttachmentsOther) {
+      const otherAtt = data.attachments.find((a: any) =>
+        a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice")
+      )
+      const oUrl = (otherAtt?.url || "")
+      const oName = (otherAtt?.filename || otherAtt?.file_name || "")
+      const oContentType = (otherAtt?.content_type || "")
+      this.debugLog("[QQBot][FILE-DETECT] msgId=" + rawDataId + " 检测到通用附件(可能是文件)! url=" + oUrl + " name=" + oName + " contentType=" + oContentType)
+      if (oUrl) {
+        const otext = typeof data?.content === "string" ? data.content.trim() : ""
+        return { text: otext, isVoice: false, imageUrl: "", fileUrl: oUrl, fileName: oName, fileContentType: oContentType }
+      }
+    }
     return { text: "", isVoice: false, imageUrl: "" }
   }
   private notifyHandlers(msg: QQMessage): void {

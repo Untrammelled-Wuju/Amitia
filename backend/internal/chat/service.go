@@ -2,22 +2,22 @@ package chat
 
 import (
 	"bytes"
-	"encoding/json"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
-	"net/http"
 	"strings"
 	"time"
 
-		"github.com/google/uuid"
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
-	"github.com/u-ai/backend/config"
 	"gorm.io/gorm"
 )
 
@@ -151,17 +151,18 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 }
 
 func (s *service) DeleteMessages(convID string) error {
-	if err := s.repo.DeleteMessagesByConv(convID); err != nil { return err }
-	s.repo.UpdateConversation(convID, map[string]interface{}{"message_count": 0})
-	return nil
+	return s.repo.DeleteMessagesByConv(convID)
 }
 
 func (s *service) DeleteSingleMessage(id string) error {
-	var msg Message
-	if err := s.db.Where("id = ?", id).First(&msg).Error; err != nil { return fmt.Errorf("消息不存在") }
-	if err := s.repo.DeleteMessage(id); err != nil { return err }
-	s.db.Exec("UPDATE conversations SET message_count = MAX(0, message_count - 1), updated_at = ? WHERE id = ?", time.Now(), msg.ConversationID)
-	return nil
+	msgs, _, err := s.repo.GetMessages("", 0, 0)
+	if err != nil { return err }
+	for _, m := range msgs {
+		if m.ID == id {
+			return s.repo.DeleteMessage(id)
+		}
+	}
+	return fmt.Errorf("消息不存在")
 }
 
 func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error) {
@@ -170,54 +171,74 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListRespons
 	_, total, err := s.repo.SearchMessages(q)
 	if err != nil { return nil, err }
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
-	return &ConversationListResponse{Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
+	items := make([]Conversation, 0)
+	return &ConversationListResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
 
 func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) {
-	if err := s.repo.UpdateConversation(convID, map[string]interface{}{"character_id": charID}); err != nil { return nil, err }
+	s.db.Exec("UPDATE conversations SET character_id = ?, updated_at = ? WHERE id = ?", charID, time.Now().Format("2006-01-02 15:04:05"), convID)
 	return s.repo.GetConversation(convID)
 }
 
 func (s *service) GetStats() (*ChatStatsResponse, error) {
-	var todayMsgs, totalConvs int64
-	s.db.Model(&Message{}).Where("created_at >= ?", time.Now().Format("2006-01-02")).Count(&todayMsgs)
-	s.db.Model(&Conversation{}).Count(&totalConvs)
-	return &ChatStatsResponse{TodayMessages: todayMsgs, TotalConversations: totalConvs}, nil
+	var todayMessages int64
+	s.db.Table("messages").Where("date(created_at) = date('now')").Count(&todayMessages)
+	var totalConvs int64
+	s.db.Table("conversations").Count(&totalConvs)
+	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
 }
 
+
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
-	channel := req.Channel
-	if channel == "" { channel = "web" }
-	pmReq := &ProcessMessageRequest{
-		CharacterID:    req.CharacterID,
-		Message:        req.Message,
-		ConversationID: req.ConversationID,
-		Channel:        channel,
-		Source:         "manual",
+	var charID, charName, systemPrompt string
+	if req.CharacterID != "" {
+		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
+		if err != nil { return nil, fmt.Errorf("角色不存在") }
+	} else {
+		s.db.Table("characters").Select("id, name, system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+		if charID == "" {
+			s.db.Table("characters").Select("id, name, system_prompt").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+		}
+		if charID == "" { return nil, fmt.Errorf("没有可用角色") }
 	}
-	result, err := s.ProcessMessage(pmReq)
-	if err != nil { return nil, err }
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil { return nil, fmt.Errorf("没有可用的模型配置") }
+
+	apiMessages := []map[string]interface{}{}
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
+	if systemPrompt != "" {
+		apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemPrompt})
+	}
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
+
+	content, tokens, err := s.callLLM(cfg, apiMessages)
+		if err != nil { return nil, err }
+
+	msgID := uuid.New().String()
+	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", msgID, "", "assistant", content, "web", time.Now().Format("2006-01-02 15:04:05"))
 	return &ChatResponse{
-		ConversationID: result.ConversationID,
+		ConversationID: "",
 		Message: &MessageItem{
-			ID:             uuid.New().String(),
-			ConversationID: result.ConversationID,
-			Role:           "assistant",
-			Content:        result.Reply,
-			Source:         "manual",
-			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
+			ID:      msgID,
+			Role:    "assistant",
+			Content: content,
+			Tokens:  tokens,
 		},
 	}, nil
 }
 
-
 func (s *service) loadHistory(convID string) []map[string]string {
-	rows, _ := s.db.Table("messages").Select("role, content").Where("conversation_id = ? AND (tool_call_id IS NULL OR tool_call_id = '') AND role IN ('user','assistant','system')", convID).Order("created_at ASC").Limit(20).Rows()
+	rows, err := s.db.Table("messages").Select("role, content").Where("conversation_id = ?", convID).Order("created_at ASC").Rows()
+	if err != nil { return nil }
 	defer rows.Close()
-	var history []map[string]string
-	for rows.Next() { var role, content string; rows.Scan(&role, &content); history = append(history, map[string]string{"role": role, "content": content}) }
-	if len(history) > 0 { history = history[:len(history)-1] }
-	return history
+	var record []map[string]string
+	for rows.Next() {
+		var role, content string
+		rows.Scan(&role, &content)
+		record = append(record, map[string]string{"role": role, "content": content})
+	}
+	return record
 }
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
@@ -291,9 +312,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		desc, errDetail := analyzeImageInternal(req.ImageUrl)
 		fmt.Printf("[Image] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
 		logPath := filepath.Join(config.AppCfg.Storage.DataDir, "image_recognition_log.txt")
-		if absPath, err := filepath.Abs(logPath); err == nil { os.WriteFile(absPath, []byte(desc), 0644) }
+		if absPath, err := filepath.Abs(logPath); err == nil { f, _ := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); if f != nil { f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " [" + fmt.Sprint(len(desc)) + " chars]\n" + desc + "\n---\n"); f.Close() } }
 		if desc != "" {
-			req.ImageContext = "[图片描述：" + desc + "]\n【指代说明】\n他/她/它≈图中人物"
+			req.ImageContext = "【用户刚发的图片内容】" + desc
 			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
 		} else {
 			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
@@ -310,26 +331,14 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		desc, errDetail := analyzeVideoInternal(req.VideoUrl)
 		fmt.Printf("[Video] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
 		if desc != "" {
-			req.ImageContext = "[视频描述：" + desc + "]\n【指代说明】\n他/她/它≈视频中人物"
-			fmt.Printf("[Video] 视频描述已注入, 长度=%d\n", len(req.ImageContext))
-		} else {
-			fmt.Printf("[Video] 视频分析失败: %s\n", errDetail)
-			return &ProcessMessageResponse{
-				ConversationID: convID,
-				Reply:          errDetail,
-				CharacterID:    charID,
-				CharacterName:  charName,
-			}, nil
+			req.ImageContext = "【用户刚发的视频内容】" + desc
 		}
 	}
-	history := s.loadHistory(convID)
+
 	messages := []map[string]interface{}{}
 	messages = append(messages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction})
 	if systemPrompt != "" { messages = append(messages, map[string]interface{}{"role": "system", "content": systemPrompt}) }
 	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
-	if req.ImageContext != "" {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": req.ImageContext})
-	}
 
 	if s.memorySvc != nil && req.Message != "" {
 		memResults, err := s.memorySvc.VectorSearch(&memory.VectorSearchRequest{
@@ -346,7 +355,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			messages = append(messages, map[string]interface{}{"role": "system", "content": memContext})
 		}
 	}
+	history := s.loadHistory(convID)
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
+	if req.ImageContext != "" {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": req.ImageContext})
+	}
 	messages = append(messages, map[string]interface{}{"role": "user", "content": req.Message})
 	toolDefs := tool.GetAll()
 	var reply string
@@ -359,7 +372,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			s.db.Exec("DELETE FROM messages WHERE id = ?", userMsgID)
 			return nil, fmt.Errorf("AI 调用失败: %w", llmErr)
 		}
-			if len(toolCalls) == 0 {
+		if len(toolCalls) == 0 {
 			reply = aiContent
 			break
 		}
@@ -387,15 +400,12 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 				json.Unmarshal([]byte(args), &toolArgs)
 				toolArgs["conversation_id"] = convID
 				toolArgs["character_id"] = charID
-					if channel == "web" { toolArgs["channel"] = "all" } else if channel != "" { toolArgs["channel"] = channel }
+				if channel == "web" { toolArgs["channel"] = "all" } else if channel != "" { toolArgs["channel"] = channel }
 				newArgs, _ := json.Marshal(toolArgs)
 				args = string(newArgs)
 			}
 			result, _ := tool.Execute(name, args)
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
-
-			// tool 结果不入库，避免污染历史上下文
-
 		}
 	}
 	if reply == "" {
@@ -464,7 +474,7 @@ func (s *service) callLLM(cfg *ModelConfig, messages []map[string]interface{}) (
 	if err != nil { return "", 0, err }
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil { return "", 0, fmt.Errorf("请求失败: %w", err) }
 	defer resp.Body.Close()
@@ -553,7 +563,7 @@ func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]inter
 	req, _ := http.NewRequest("POST", base+"/chat/completions", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
 	if err != nil { return "", "", nil, 0, err }
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
@@ -590,17 +600,11 @@ func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]inter
 	return choice.Message.Content, choice.Message.ReasoningContent, toolCalls, r.Usage.TotalTokens, nil
 }
 
-
-
 func truncateStr(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n { return s }
 	return string(runes[:n]) + "..."
 }
-
-
-
-
 
 const doubaoAPIKey = "ark-919cb2bc-dcd1-4ef9-b8b5-5f1b42488bf7-9bd5c"
 const doubaoBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
@@ -629,7 +633,7 @@ func analyzeImageInternal(imageUrl string) (string, string) {
 	}
 	content := []map[string]interface{}{
 		{"type": "input_image", "image_url": imageData},
-		{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息"},
+		{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息，严禁描述不存在于图片中的信息"},
 	}
 	return callDoubaoVision(content)
 }
@@ -638,7 +642,7 @@ func analyzeVideoInternal(videoUrl string) (string, string) {
 	if strings.HasPrefix(videoUrl, "data:video/") {
 		content := []map[string]interface{}{
 			{"type": "input_video", "video_url": videoUrl},
-			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息"},
+			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息，严禁描述不存在于视频中的信息"},
 		}
 		return callDoubaoVision(content)
 	}
@@ -651,7 +655,7 @@ func analyzeVideoInternal(videoUrl string) (string, string) {
 		}
 		content := []map[string]interface{}{
 			{"type": "input_video", "file_id": fileID},
-			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息"},
+			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息，严禁描述不存在于视频中的信息"},
 		}
 		return callDoubaoVision(content)
 	}
