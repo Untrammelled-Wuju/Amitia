@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -1517,7 +1518,21 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 			if v, ok := m["audio_url"]; ok { m["audioUrl"] = v; delete(m, "audio_url") }
 			if v, ok := m["audio_duration"]; ok { m["audioDuration"] = v; delete(m, "audio_duration") }
 			if v, ok := m["msg_type"]; ok { m["msgType"] = v; delete(m, "msg_type") }
-			if v, ok := m["image_url"]; ok && v != nil && v != "" { m["imageUrl"] = v; delete(m, "image_url") }
+			if v, ok := m["image_url"]; ok && v != nil && v != "" {
+				imageUrl := fmt.Sprint(v)
+				if strings.HasPrefix(imageUrl, "data:") {
+					newPath := chat.SaveImageFromDataURI(imageUrl)
+					if newPath != imageUrl {
+						m["imageUrl"] = newPath
+						go s.db.Exec("UPDATE messages SET image_url = ? WHERE id = ?", newPath, m["id"])
+					} else {
+						m["imageUrl"] = imageUrl
+					}
+				} else {
+					m["imageUrl"] = imageUrl
+				}
+				delete(m, "image_url")
+			}
 			if v, ok := m["video_url"]; ok && v != nil && v != "" { m["videoUrl"] = v; delete(m, "video_url") }
 			msgs = append(msgs, m)
 		}

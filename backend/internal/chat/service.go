@@ -1,4 +1,4 @@
-﻿package chat
+package chat
 
 import (
 	"bytes"
@@ -316,24 +316,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	userMsgID := uuid.New().String()
 	msgType := "text"
 	if req.AudioUrl != "" { msgType = "voice" }
-	if strings.HasPrefix(req.ImageUrl, "data:") {
-		imgDir := filepath.Join(config.AppCfg.Storage.DataDir, "images")
-		os.MkdirAll(imgDir, 0755)
-		idx := strings.Index(req.ImageUrl, ";base64,")
-		if idx > 0 {
-			mimePart := req.ImageUrl[5:idx]
-			ext := ".png"
-			if strings.Contains(mimePart, "jpeg") || strings.Contains(mimePart, "jpg") { ext = ".jpg" }
-			fname := userMsgID + ext
-			data, _ := base64.StdEncoding.DecodeString(req.ImageUrl[idx+8:])
-			os.WriteFile(filepath.Join(imgDir, fname), data, 0644)
-			req.ImageUrl = "/images/" + fname
-		}
-	}
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, video_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, req.VideoUrl, time.Now().Format("2006-01-02 15:04:05"))
+	if req.ImageUrl != "" { req.ImageUrl = SaveImageFromDataURI(req.ImageUrl) }
 	if req.Message == "" && req.ImageUrl != "" {
 		req.Message = "[图片]"
 	}
+	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, video_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, req.VideoUrl, time.Now().Format("2006-01-02 15:04:05"))
 	if req.ImageUrl != "" && req.ImageContext == "" {
 		fmt.Printf("[Image] 开始分析图片, url长度=%d\n", len(req.ImageUrl))
 		desc, errDetail := analyzeImageInternal(req.ImageUrl)
@@ -787,4 +774,28 @@ func callDoubaoVision(content []map[string]interface{}) (string, string) {
 
 func base64Encode(data []byte) string {
 	return base64.StdEncoding.EncodeToString(data)
+}
+
+func SaveImageFromDataURI(imageUrl string) string {
+	if !strings.HasPrefix(imageUrl, "data:") {
+		return imageUrl
+	}
+	imgDir := filepath.Join(config.AppCfg.Storage.DataDir, "images")
+	os.MkdirAll(imgDir, 0755)
+	idx := strings.Index(imageUrl, ";base64,")
+	if idx <= 0 {
+		return imageUrl
+	}
+	mimePart := imageUrl[5:idx]
+	ext := ".png"
+	if strings.Contains(mimePart, "jpeg") || strings.Contains(mimePart, "jpg") {
+		ext = ".jpg"
+	}
+	fname := uuid.New().String() + ext
+	data, err := base64.StdEncoding.DecodeString(imageUrl[idx+8:])
+	if err != nil {
+		return imageUrl
+	}
+	os.WriteFile(filepath.Join(imgDir, fname), data, 0644)
+	return "/images/" + fname
 }
