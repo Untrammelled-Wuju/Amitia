@@ -357,10 +357,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	history := s.loadHistory(convID)
 	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
+	userContent := req.Message
 	if req.ImageContext != "" {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": req.ImageContext})
+		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
-	messages = append(messages, map[string]interface{}{"role": "user", "content": req.Message})
+	messages = append(messages, map[string]interface{}{"role": "user", "content": userContent})
 	toolDefs := tool.GetAll()
 	var reply string
 	seenTools := map[string]bool{}
