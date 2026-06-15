@@ -212,6 +212,8 @@ function disconnectSSE() {
 const convSummary = ref("")
 const showSummary = ref(false)
 
+async function fetchConvSummary() {}
+
 // Network & error states
 const isOffline = ref(!navigator.onLine)
 
@@ -301,35 +303,34 @@ function connectProactiveSSE() {
   } catch { setTimeout(connectProactiveSSE, 5000) }
 }
 
+let __fsLast = 0
+let __wcfLast = 0
 async function fetchWechatMsgCount() {
+  if (Date.now() - __wcfLast < 8000) return
+  __wcfLast = Date.now()
   try {
     const r = await get<any>("/api/wechat/status")
     const status = r?.data || r
     wechatOnline.value = status?.status === "connected" || status?.accountId != null
-    const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
-    const items = convs?.conversations || convs?.items || []
-    const wc = items.find((x: any) => x.channel === "wechat")
-    wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
   } catch {}
 }
 
-async function fetchQQStatus() {
+async function fetchStatus() {
+  if (Date.now() - __fsLast < 8000) return
+  __fsLast = Date.now()
   try {
     const r = await get<any>("/api/qq/status")
     const data = r?.data || r
     qqOnline.value = data?.qqOnline || data?.status === "online"
-    const convs = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
-    const items = convs?.conversations || convs?.items || []
-    const qc = items.find((x: any) => x.channel === "qq")
-    qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
   } catch {}
 }
 
+async function fetchQQStatus() { fetchStatus() }
 onMounted(async () => {
   fetchWechatMsgCount()
   fetchQQStatus()
-  setInterval(fetchWechatMsgCount, 15000)
-  setInterval(fetchQQStatus, 15000)
+  setInterval(fetchWechatMsgCount, 30000)
+  setInterval(fetchStatus, 15000)
   connectProactiveSSE()
   history.scrollRestoration = 'manual'
   // Network listeners
@@ -517,18 +518,14 @@ async function fetchConversations() {
   if (!characterId.value) { conversations.value = []; return }
   try {
     const r = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
-    conversations.value = r?.conversations || r?.items || []
+    const items = r?.conversations || r?.items || []
+    conversations.value = items
+    const wc = items.find((x: any) => x.channel === "wechat")
+    wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
+    const qc = items.find((x: any) => x.channel === "qq")
+    qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
   } catch { conversations.value = [] }
 }
-
-async function fetchConvSummary() {
-  if (!convId.value) return
-  try {
-    const r = await get<any>(`/api/chats/conversations/${convId.value}/summary`)
-    convSummary.value = r?.summaryText || ""
-  } catch { convSummary.value = "" }
-}
-
 async function handleSelectWechat(skipConfirm = false) {
   if (!skipConfirm) {
     try {
