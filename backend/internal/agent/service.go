@@ -194,7 +194,7 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
 	if err != nil { return "", 0, err }
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
