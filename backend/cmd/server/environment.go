@@ -208,8 +208,8 @@ func startEnvironment() *Environment {
 		nil,
 	)
 
-	qqSidecarCmd := "node"
-	qqSidecarArgs := []string{"dist/index.js"}
+	qqSidecarCmd := "npx.cmd"
+	qqSidecarArgs := []string{"tsx", "src/index.ts"}
 	env.AddService(
 		"qq-sidecar",
 		"backend/qq-sidecar",

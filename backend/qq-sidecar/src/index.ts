@@ -32,7 +32,7 @@ const fileRouter: FileRouter = createDefaultRouter()
 // Message forwarding
 // ============================================================
 const msgBuffers = new Map<string, {
-  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string; videoUrl?: string }>
+  msgs: Array<{ text: string; fromUserId: string; messageId: string; createdAt: number; groupId?: string; isVoice?: boolean; imageUrl?: string; videoUrl?: string; imageData?: string }>
   timer: ReturnType<typeof setTimeout>
 }>()
 
@@ -50,7 +50,17 @@ qq.onMessage(async (msg: QQMessage) => {
   const BUFFER_MS = qqSidecarConfig.mergeWindowMs
   const key = msg.groupId || msg.fromUserId
   const existing = msgBuffers.get(key)
-  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", fileUrl: msg.fileUrl || "", fileName: msg.fileName || "" }
+  let imageData = ""
+  if (msg.imageUrl) {
+    try {
+      const dl = await qq.downloadImage(msg.imageUrl)
+      if (dl) {
+        imageData = "data:" + dl.contentType + ";base64," + dl.buffer.toString("base64")
+        console.log("[QQ-Sidecar][MSG-DL] len=" + imageData.length)
+      }
+    } catch {}
+  }
+  const item = { text: msg.text, fromUserId: msg.fromUserId, messageId: msg.messageId, createdAt: msg.createdAt, groupId: msg.groupId, isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", fileUrl: msg.fileUrl || "", fileName: msg.fileName || "", imageData }
 
   if (existing) {
     clearTimeout(existing.timer)
@@ -65,11 +75,13 @@ qq.onMessage(async (msg: QQMessage) => {
     if (prevLock) {
       try { await prevLock } catch {}
     }
+    const flog = (s: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + s + "\n") } catch {} }
     let resolveLock: () => void
     const lockPromise = new Promise<void>(r => { resolveLock = r })
     processingLocks.set(key, lockPromise)
     msgBuffers.delete(key)
     const all = entry.msgs
+    flog("FWD-START msgs=" + all.length)
     const last = all[all.length - 1]
     const combined = all.map(m => m.text).filter(t => t.length > 0).join("\n")
     const wasVoice = all.some(m => m.isVoice || false)
@@ -116,13 +128,12 @@ qq.onMessage(async (msg: QQMessage) => {
         }
       }
 
-      const firstImageMsg = all.find(m => m.imageUrl)
-      if (!imageUrl && firstImageMsg?.imageUrl) {
-        const imgResult = await qq.downloadImage(firstImageMsg.imageUrl)
-        if (imgResult) {
-          imageUrl = "data:" + imgResult.contentType + ";base64," + imgResult.buffer.toString("base64")
-          console.log("[QQ-Sidecar][IMAGE-FWD] 图片已下载并编码, size=" + imgResult.buffer.length)
-        }
+      flog("FWD-IMG check")
+      const firstImageData = all.find(m => (m as any).imageData)
+      if (!imageUrl && firstImageData && (firstImageData as any).imageData) {
+        imageUrl = (firstImageData as any).imageData
+        flog("FWD-IMG using imageData len=" + imageUrl.length)
+        console.log("[QQ-Sidecar][IMAGE-FWD] 使用预下载图片, len=" + imageUrl.length)
       }
 
       const firstVideoMsg = all.find(m => m.videoUrl)
@@ -147,7 +158,7 @@ qq.onMessage(async (msg: QQMessage) => {
           videoUrl: videoUrl,
           skipTiming: true,
         }),
-        signal: AbortSignal.timeout(600000),
+                signal: AbortSignal.timeout(600000),
       })
       const json = await resp.json() as any
       if (json?.code && json.code !== 200) {
@@ -185,7 +196,7 @@ qq.onMessage(async (msg: QQMessage) => {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ text: part }),
-                  signal: AbortSignal.timeout(600000),
+                          signal: AbortSignal.timeout(600000),
                 })
                 const ttsJson = await ttsResp.json() as any
                 const audioUrl = ttsJson?.data?.audioUrl
@@ -339,7 +350,7 @@ app.post("/api/send-voice", async (req, reply) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: part }),
-          signal: AbortSignal.timeout(600000),
+                  signal: AbortSignal.timeout(600000),
         })
         const ttsJson = await ttsResp.json() as any
         const audioUrl = ttsJson?.data?.audioUrl
