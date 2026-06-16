@@ -147,7 +147,7 @@ async function fetchVoices() {
 async function saveAllTts() {
   ttsSaving.value = true
   try {
-    const payload: any = { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value, voiceType: ttsVoiceType.value, speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value }
+    const payload: any = { apiKey: ttsApiKey.value, resourceId: ttsResourceId.value, cloneResourceId: cloneResourceId.value, voiceType: ttsVoiceType.value, speed: ttsSpeed.value, pitch: ttsPitch.value, volume: ttsVolume.value, realtimeAppId: realtimeAppId.value, realtimeAccessToken: realtimeAccessToken.value, realtimeSecretKey: realtimeSecretKey.value }
     if (ttsConfig.value?.id) {
       await put("/api/tts/configs/" + ttsConfig.value.id, payload)
     } else {

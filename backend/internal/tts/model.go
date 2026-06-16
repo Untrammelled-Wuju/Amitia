@@ -1,11 +1,11 @@
-﻿package tts
+package tts
 
 type TtsConfig struct {
 	ID            int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	Name          string  `gorm:"column:name;not null" json:"name"`
 	ApiKey        string  `gorm:"column:api_key" json:"apiKey"`
 	ResourceId    string  `gorm:"column:resource_id;default:seed-tts-2.0" json:"resourceId"`
-	VoiceType     string  `gorm:"column:voice_type;default:zh_female_cancan_mars_bigtts" json:"voiceType"`
+	VoiceType     string  `gorm:"column:voice_type;default:zh_female_vv_uranus_bigtts" json:"voiceType"`
 	Emotion       string  `gorm:"column:emotion" json:"emotion"`
 	Speed         float64 `gorm:"column:speed;default:1.0" json:"speed"`
 	Pitch         float64 `gorm:"column:pitch;default:1.0" json:"pitch"`
