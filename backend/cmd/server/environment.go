@@ -189,34 +189,47 @@ func (w *serviceWriter) Write(p []byte) (int, error) {
 }
 
 func startEnvironment() *Environment {
-	workspace := findWorkspace()
-	log.Printf("[Env] 根目录: %s", workspace)
+	cwd, _ := os.Getwd()
 
-	env := NewEnvironment(workspace)
+	bundledQQ := filepath.Join(cwd, "qq-sidecar", "bundle.mjs")
+	bundledWX := filepath.Join(cwd, "sidecar", "bundle.mjs")
+	_, qqOk := os.Stat(bundledQQ)
+	_, wxOk := os.Stat(bundledWX)
+	useBundled := qqOk == nil && wxOk == nil
+
+	var env *Environment
+	if useBundled {
+		env = NewEnvironment(cwd)
+		log.Printf("[Env] 根目录(CWD): %s", cwd)
+		log.Printf("[Env] 使用打包版附属服务")
+	} else {
+		workspace := findWorkspace()
+		env = NewEnvironment(workspace)
+		log.Printf("[Env] 根目录: %s", workspace)
+	}
 
 	sidecarCmd := "npx"
 	sidecarArgs := []string{"tsx", "src/index.ts"}
+	sidecarDir := "backend/sidecar"
 	if runtime.GOOS == "windows" {
 		sidecarCmd = "npx.cmd"
-		sidecarArgs = []string{"tsx", "src/index.ts"}
 	}
-	env.AddService(
-		"backend/sidecar",
-		"backend/sidecar",
-		sidecarCmd, sidecarArgs,
-		9876,
-		nil,
-	)
+	if useBundled {
+		sidecarCmd = "node"
+		sidecarArgs = []string{"bundle.mjs"}
+		sidecarDir = "sidecar"
+	}
+	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 9876, nil)
 
 	qqSidecarCmd := "npx.cmd"
 	qqSidecarArgs := []string{"tsx", "src/index.ts"}
-	env.AddService(
-		"qq-sidecar",
-		"backend/qq-sidecar",
-		qqSidecarCmd, qqSidecarArgs,
-		9877,
-		nil,
-	)
+	qqSidecarDir := "backend/qq-sidecar"
+	if useBundled {
+		qqSidecarCmd = "node"
+		qqSidecarArgs = []string{"bundle.mjs"}
+		qqSidecarDir = "qq-sidecar"
+	}
+	env.AddService("qq-sidecar", qqSidecarDir, qqSidecarCmd, qqSidecarArgs, 9877, nil)
 
 	env.SetupSignalHandler()
 	env.StartAll()

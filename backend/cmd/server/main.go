@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/chat"
@@ -10,7 +11,9 @@ import (
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/proactive"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -21,6 +24,26 @@ import (
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 )
+
+
+func killExistingServer(addr string) {
+	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	if err != nil {
+		return
+	}
+	conn.Close()
+	log.Warn("检测到服务端口已被占用，正在终止旧进程...")
+	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :8899 | findstr LISTENING").Output()
+	fields := strings.Fields(string(out))
+	for _, f := range fields {
+		if pid, err2 := strconv.Atoi(f); err2 == nil {
+			if pid != os.Getpid() {
+				exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
+			}
+		}
+	}
+	time.Sleep(2 * time.Second)
+}
 
 func main() {
 	configPath := os.Getenv("CONFIG_PATH")
@@ -97,6 +120,9 @@ func main() {
 	compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), "")
 	log.Info("今日主动消息任务已生成")
 
+	killExistingServer(serverAddr)
+
+
 	r := setupRouter(ctx)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)
@@ -112,16 +138,39 @@ func initDatabase(db *gorm.DB) {
 		log.Warn("sql.sql未找到，跳过建表:", err)
 		return
 	}
-	statements := strings.Split(string(data), ";")
-	for _, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" || strings.HasPrefix(stmt, "--") {
+	raw := string(data)
+	lines := strings.Split(raw, "\n")
+	var current strings.Builder
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
 			continue
 		}
-		db.Exec(stmt)
+		current.WriteString(trimmed)
+		current.WriteString(" ")
+		if strings.HasSuffix(trimmed, ";") {
+			stmt := strings.TrimSpace(current.String())
+			stmt = strings.TrimSuffix(stmt, ";")
+			current.Reset()
+			if stmt != "" {
+				result := db.Exec(stmt)
+				if result.Error != nil && !strings.Contains(result.Error.Error(), "duplicate column name") {
+					log.Warn("SQL执行错误:", result.Error)
+				}
+			}
+		}
+	}
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		result := db.Exec(stmt)
+		if result.Error != nil && !strings.Contains(result.Error.Error(), "duplicate column name") {
+			log.Warn("SQL执行错误:", result.Error)
+		}
 	}
 	log.Info("sql.sql建表完成")
 }
+
+
 
 func startQdrant() {
 	qcfg := config.AppCfg.Qdrant

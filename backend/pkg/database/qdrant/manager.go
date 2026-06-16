@@ -1,6 +1,7 @@
 package qdrant
 
 import (
+	"net"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,6 +30,35 @@ func (w *qdrantWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+
+func killExistingQdrant(port int) {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	if err != nil {
+		return
+	}
+	conn.Close()
+
+	log.Warn("检测到旧Qdrant进程，正在终止...")
+	if runtime.GOOS == "windows" {
+		exec.Command("taskkill", "/F", "/IM", "qdrant.exe").Run()
+	} else {
+		exec.Command("pkill", "-9", "qdrant").Run()
+	}
+	time.Sleep(2 * time.Second)
+
+	for i := 0; i < 10; i++ {
+		conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+		if err != nil {
+			log.Info("旧Qdrant已释放端口", port)
+			return
+		}
+		conn.Close()
+		time.Sleep(1 * time.Second)
+	}
+	log.Warn("旧Qdrant未能在10秒内释放端口，继续启动...")
+}
+
 func StartQdrant() error {
 	cfg := config.AppCfg.Qdrant
 	workDir, err := os.Getwd()
@@ -36,6 +66,8 @@ func StartQdrant() error {
 		log.Error("获取工作目录失败:", err)
 		return err
 	}
+
+	killExistingQdrant(cfg.Port)
 
 	qdrantDir := filepath.Join(workDir, "qdrant")
 	configDir := filepath.Join(qdrantDir, "config")
