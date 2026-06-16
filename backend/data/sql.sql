@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS tts_configs (
     name TEXT NOT NULL,
     api_key TEXT DEFAULT '',
     resource_id TEXT DEFAULT 'seed-tts-2.0',
-    voice_type TEXT DEFAULT 'zh_female_cancan_mars_bigtts',
+    voice_type TEXT DEFAULT 'zh_female_vv_uranus_bigtts',
     emotion TEXT DEFAULT '',
     speed REAL DEFAULT 1.0,
     pitch REAL DEFAULT 1.0,
@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS tts_configs (
     realtime_app_id TEXT DEFAULT '',
     realtime_access_token TEXT DEFAULT '',
     realtime_secret_key TEXT DEFAULT '',
+    clone_resource_id TEXT DEFAULT 'volc.megatts.timbre',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
