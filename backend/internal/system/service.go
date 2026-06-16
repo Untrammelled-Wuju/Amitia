@@ -92,6 +92,10 @@ type Service interface {
 	GetWechatBridgeQRCode() map[string]interface{}
 	GetWechatBridgeStatus() map[string]interface{}
 	GetWechatBridgeStatusDetail() map[string]interface{}
+	GetQQBridgeStatus() map[string]interface{}
+	GetQQBridgeStatusDetail() map[string]interface{}
+	GetQQBridgeConfig() map[string]interface{}
+	GetQQBridgeEvents() map[string]interface{}
 	GetWechatEvents() map[string]interface{}
 	GetWechatStatus() map[string]interface{}
 	Health() map[string]interface{}
@@ -103,6 +107,7 @@ type Service interface {
 	MaintenanceExportDiagnostic() map[string]interface{}
 	MaintenanceReloadConfig() map[string]interface{}
 	MaintenanceRestartBridge() map[string]interface{}
+	MaintenanceRestartQQBridge() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	NotificationsSubscribe(body map[string]interface{}) map[string]interface{}
 	NotificationsTest() map[string]interface{}
@@ -156,6 +161,7 @@ type Service interface {
 	ValidateMode() map[string]interface{}
 	VerifyRecoveryCode(code string) map[string]interface{}
 	WechatBridgeRecover() map[string]interface{}
+	QQBridgeRecover() map[string]interface{}
 	WechatCloudCheck() map[string]interface{}
 	WechatCloudCheckReport() map[string]interface{}
 	WechatCloudCheckRiskSummary() map[string]interface{}
@@ -252,7 +258,7 @@ func (s *service) Health() map[string]interface{} {
 	return map[string]interface{}{
 		"health": true, "version": "1.0.0", "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
-		"wechat": s.getWechatHealthStatus(), "web": "enabled",
+		"wechat": s.getWechatHealthStatus(), "qq": s.getQQHealthStatus(), "web": "enabled",
 		"uptime": int(time.Since(s.startTime).Seconds()),
 	}
 }
@@ -286,11 +292,6 @@ func (s *service) RunDiagnostics() map[string]interface{} {
 	mStatus := "warn"
 	if activeModel != "" { mStatus = "pass" }
 	checks = append(checks, map[string]interface{}{"name": "Active Model", "status": mStatus, "detail": activeModel})
-	var charCount int64
-	s.db.Table("characters").Where("is_active = 1").Count(&charCount)
-	cStatus := "warn"
-	if charCount > 0 { cStatus = "pass" }
-	checks = append(checks, map[string]interface{}{"name": "Active Characters", "status": cStatus, "detail": charCount})
 	var ruleCount int64
 	s.db.Table("proactive_rules").Where("enabled = 1").Count(&ruleCount)
 	checks = append(checks, map[string]interface{}{"name": "Enabled Rules", "status": "info", "detail": ruleCount})
@@ -686,6 +687,10 @@ func (s *service) GetMaintenanceStatus() map[string]interface{} {
 	if bridgeStatus == "disconnected" {
 		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信 Bridge 未连接"})
 	}
+	qqStatus := s.getQQHealthStatus()
+	if qqStatus == "disconnected" {
+		issues = append(issues, map[string]interface{}{"type": "QQ", "msg": "QQ Bridge 未连接"})
+	}
 	if memMB > 500 {
 		issues = append(issues, map[string]interface{}{"type": "MEMORY", "msg": fmt.Sprintf("内存使用较高 (%dMB)", memMB)})
 	}
@@ -720,15 +725,6 @@ func (s *service) MaintenanceDiagnose() map[string]interface{} {
 		allPassed = false
 	}
 	checks = append(checks, modelCheck)
-	var charCount int64
-	s.db.Table("characters").Where("is_active = 1").Count(&charCount)
-	charOk := charCount > 0
-	charCheck := map[string]interface{}{"name": "活跃角色", "pass": charOk}
-	if !charOk {
-		charCheck["error"] = "没有活跃角色"
-		allPassed = false
-	}
-	checks = append(checks, charCheck)
 	bridgeStatus := s.getWechatHealthStatus()
 	bridgeOk := bridgeStatus == "connected"
 	bridgeCheck := map[string]interface{}{"name": "微信 Bridge", "pass": bridgeOk}
@@ -737,6 +733,14 @@ func (s *service) MaintenanceDiagnose() map[string]interface{} {
 		allPassed = false
 	}
 	checks = append(checks, bridgeCheck)
+	qqBridgeStatus := s.getQQHealthStatus()
+	qqBridgeOk := qqBridgeStatus == "connected"
+	qqBridgeCheck := map[string]interface{}{"name": "QQ Bridge", "pass": qqBridgeOk}
+	if !qqBridgeOk {
+		qqBridgeCheck["error"] = "QQ Bridge 状态: " + qqBridgeStatus
+		allPassed = false
+	}
+	checks = append(checks, qqBridgeCheck)
 	testFile := filepath.Join(s.dataDir, fmt.Sprintf(".write_test_%d", time.Now().UnixNano()))
 	storageOk := os.WriteFile(testFile, []byte("1"), 0644) == nil
 	if storageOk {
@@ -1206,6 +1210,50 @@ func (s *service) readSidecarResponse(resp *http.Response, err error) map[string
 	return result
 }
 
+
+func (s *service) qqSidecarGet(path string) (*http.Response, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	return client.Get("http://127.0.0.1:9877" + path)
+}
+
+func (s *service) qqSidecarPost(path string, body map[string]interface{}) (*http.Response, error) {
+	jsonBody, _ := json.Marshal(body)
+	client := &http.Client{Timeout: 30 * time.Second}
+	return client.Post("http://127.0.0.1:9877"+path, "application/json", bytes.NewReader(jsonBody))
+}
+
+func (s *service) qqReadSidecarResponse(resp *http.Response, err error) map[string]interface{} {
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error(), "available": false}
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	if result == nil {
+		result = map[string]interface{}{"success": resp.StatusCode == 200}
+	}
+	result["available"] = true
+	return result
+}
+
+func (s *service) getQQHealthStatus() string {
+	resp, err := s.qqSidecarGet("/api/status")
+	if err != nil {
+		return "disconnected"
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if status, ok := data["status"].(string); ok {
+			return status
+		}
+	}
+	return "disconnected"
+}
+
 func (s *service) GetWechatBridgeStatus() map[string]interface{} {
 	resp, err := s.sidecarGet("/api/status")
 	if err != nil {
@@ -1236,6 +1284,44 @@ func (s *service) GetWechatBridgeEvents() map[string]interface{} {
 
 func (s *service) GetWechatBridgeQRCode() map[string]interface{} {
 	return s.readSidecarResponse(s.sidecarGet("/api/qrcode"))
+}
+
+
+func (s *service) GetQQBridgeStatus() map[string]interface{} {
+	resp, err := s.qqSidecarGet("/api/status")
+	if err != nil {
+		return map[string]interface{}{"connected": false, "status": "disconnected"}
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		status, _ := data["status"].(string)
+		return map[string]interface{}{"connected": status == "connected", "status": status}
+	}
+	return map[string]interface{}{"connected": resp.StatusCode == 200, "status": "unknown"}
+}
+
+func (s *service) GetQQBridgeStatusDetail() map[string]interface{} {
+	return s.qqReadSidecarResponse(s.qqSidecarGet("/api/status"))
+}
+
+func (s *service) GetQQBridgeConfig() map[string]interface{} {
+	return map[string]interface{}{"config": map[string]interface{}{"mode": "qqbot", "sidecarPort": 9877}, "available": true}
+}
+
+func (s *service) GetQQBridgeEvents() map[string]interface{} {
+	return map[string]interface{}{"events": []interface{}{}, "available": true}
+}
+
+func (s *service) QQBridgeRecover() map[string]interface{} {
+	return s.qqReadSidecarResponse(s.qqSidecarPost("/api/login/reconnect", nil))
+}
+
+func (s *service) MaintenanceRestartQQBridge() map[string]interface{} {
+	result := s.qqReadSidecarResponse(s.qqSidecarPost("/api/login/reconnect", nil))
+	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime), "bridgeResult": result}
 }
 
 func (s *service) GetWechatEvents() map[string]interface{} {

@@ -1,4 +1,4 @@
-﻿package system
+package system
 
 import (
 	applog "github.com/u-ai/backend/log"
@@ -135,6 +135,13 @@ func (h *Handler) WechatBridgeConfig(c *gin.Context)       { util.SuccessRespons
 func (h *Handler) UpdateWechatBridgeConfig(c *gin.Context) { var body map[string]interface{}; c.ShouldBindJSON(&body); util.SuccessResponse(c, h.service.UpdateWechatBridgeConfig(body)) }
 func (h *Handler) WechatBridgeEvents(c *gin.Context)       { util.SuccessResponse(c, h.service.GetWechatBridgeEvents()) }
 func (h *Handler) WechatBridgeQRCode(c *gin.Context)       { util.SuccessResponse(c, h.service.GetWechatBridgeQRCode()) }
+func (h *Handler) QQBridgeStatus(c *gin.Context)         { util.SuccessResponse(c, h.service.GetQQBridgeStatus()) }
+func (h *Handler) QQBridgeStatusDetail(c *gin.Context)   { util.SuccessResponse(c, h.service.GetQQBridgeStatusDetail()) }
+func (h *Handler) QQBridgeConfig(c *gin.Context)         { util.SuccessResponse(c, h.service.GetQQBridgeConfig()) }
+func (h *Handler) QQBridgeEvents(c *gin.Context)         { util.SuccessResponse(c, h.service.GetQQBridgeEvents()) }
+func (h *Handler) QQBridgeRecover(c *gin.Context)        { util.SuccessResponse(c, h.service.QQBridgeRecover()) }
+func (h *Handler) MaintenanceRestartQQBridge(c *gin.Context) { util.SuccessResponse(c, h.service.MaintenanceRestartQQBridge()) }
+
 func (h *Handler) WechatBridgeRecover(c *gin.Context)      { util.SuccessResponse(c, h.service.WechatBridgeRecover()) }
 func (h *Handler) WechatCloudCheckRun(c *gin.Context)      { util.SuccessResponse(c, h.service.WechatCloudCheckRun()) }
 func (h *Handler) WechatCloudCheck(c *gin.Context)         { util.SuccessResponse(c, h.service.WechatCloudCheck()) }
