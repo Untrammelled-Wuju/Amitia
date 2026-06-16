@@ -328,6 +328,7 @@ CREATE TABLE IF NOT EXISTS active_message_task (
     last_error TEXT DEFAULT '',
     sent_at TEXT,
     canceled_at TEXT,
+    cancel_reason TEXT DEFAULT '',
     source TEXT DEFAULT 'schedule_based',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -336,16 +337,21 @@ CREATE TABLE IF NOT EXISTS active_message_task (
 CREATE TABLE IF NOT EXISTS proactive_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT DEFAULT '',
-    description TEXT DEFAULT '',
-    rule_type TEXT DEFAULT '',
-    trigger_condition TEXT DEFAULT '',
-    action TEXT DEFAULT '',
     enabled INTEGER DEFAULT 1,
+    channel TEXT DEFAULT 'web',
     character_id TEXT DEFAULT '',
+    rule_type TEXT DEFAULT 'cron',
+    schedule_cron TEXT DEFAULT '',
+    quiet_start TEXT DEFAULT '',
+    quiet_end TEXT DEFAULT '',
+    max_per_day INTEGER DEFAULT 10,
     sent_count_today INTEGER DEFAULT 0,
+    prompt_template TEXT DEFAULT '',
+    random_minutes INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
 
 CREATE TABLE IF NOT EXISTS proactive_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -365,15 +371,20 @@ CREATE TABLE IF NOT EXISTS proactive_messages (
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT DEFAULT '',
-    remind_at TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 1,
+    content TEXT DEFAULT '',
+    channel TEXT DEFAULT 'web',
     character_id TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    remind_at TEXT DEFAULT '',
+    repeat_rule TEXT DEFAULT '',
+    enabled INTEGER DEFAULT 1,
     last_triggered_at TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
 -- 记忆
+
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
     key TEXT DEFAULT '',
@@ -388,8 +399,6 @@ CREATE TABLE IF NOT EXISTS memories (
     last_used_at TEXT
 );
 
-ALTER TABLE memories ADD COLUMN use_count INTEGER DEFAULT 0;
-ALTER TABLE memories ADD COLUMN last_used_at TEXT;
 CREATE TABLE IF NOT EXISTS memory_events (
     id TEXT PRIMARY KEY,
     memory_id TEXT DEFAULT '',
