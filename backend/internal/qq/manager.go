@@ -78,7 +78,7 @@ func (m *Manager) Connect(appID, token string, sandbox bool) error {
 		logrus.Errorf("[QQ] 连接QQBot失败: %v", err)
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -98,7 +98,7 @@ func (m *Manager) Disconnect() {
 		logrus.Errorf("[QQ] 断开连接失败: %v", err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	m.mu.Lock()
 	m.status = StatusDisconnected
