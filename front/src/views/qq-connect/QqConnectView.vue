@@ -42,6 +42,11 @@
           </div>
         </div>
       </el-card>
+
+      <el-alert type="warning" :closable="false" show-icon style="margin-top: 12px">
+        <template #title>主动推送须知</template>
+        添加QQ好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+      </el-alert>
     </template>
 
     <template v-if="!qqOnline">
@@ -79,6 +84,11 @@
           <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
         </div>
       </el-card>
+
+      <el-alert type="warning" :closable="false" show-icon style="margin-top: 12px">
+        <template #title>主动推送须知</template>
+        连接成功后，添加QQ好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+      </el-alert>
     </template>
 
     </template>

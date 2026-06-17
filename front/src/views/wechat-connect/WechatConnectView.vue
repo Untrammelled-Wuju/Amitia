@@ -69,6 +69,11 @@
       </el-card>
     </template>
 
+    <el-alert v-if="!isConnected" type="warning" :closable="false" show-icon style="margin-bottom: 14px">
+      <template #title>主动推送须知</template>
+      扫码连接后，添加微信好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+    </el-alert>
+
     <template v-if="isConnected">
       <el-card shadow="never" class="section-card">
         <template #header>
@@ -109,6 +114,11 @@
         </div>
       </el-card>
     </template>
+
+    <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 14px">
+      <template #title>主动推送须知</template>
+      添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+    </el-alert>
 
     <!-- Cloud Deployment Check -->
     <el-card shadow="never" class="section-card">
