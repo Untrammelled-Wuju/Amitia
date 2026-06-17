@@ -143,7 +143,7 @@ func (r *repository) Search(keyword, characterID string, limit int) ([]Memory, e
 func (r *repository) RecordUse(id string) error {
 	return r.db.Model(&Memory{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"use_count":    gorm.Expr("use_count + 1"),
-		"last_used_at": gorm.Expr("datetime('now')"),
+		"last_used_at": gorm.Expr("datetime('now', 'localtime')"),
 	}).Error
 }
 
@@ -155,7 +155,7 @@ func (r *repository) VectorStatus() (totalMem, embedded int64) {
 
 func (r *repository) MarkEmbedded(id string) error {
 	return r.db.Exec(
-		"INSERT OR REPLACE INTO memory_embeddings (memory_id, created_at) VALUES (?, datetime('now'))",
+		"INSERT OR REPLACE INTO memory_embeddings (memory_id, created_at) VALUES (?, datetime('now', 'localtime'))",
 		id,
 	).Error
 }

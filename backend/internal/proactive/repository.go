@@ -67,7 +67,7 @@ func (r *repository) DeleteRule(id int) error {
 }
 
 func (r *repository) ToggleRule(id int) (*ProactiveRule, error) {
-	r.db.Exec("UPDATE proactive_rules SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = datetime('now') WHERE id = ?", id)
+	r.db.Exec("UPDATE proactive_rules SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = datetime('now', 'localtime') WHERE id = ?", id)
 	return r.FindRuleByID(id)
 }
 
@@ -95,7 +95,7 @@ func (r *repository) DeleteReminder(id int) error {
 }
 
 func (r *repository) ToggleReminder(id int) (*Reminder, error) {
-	r.db.Exec("UPDATE reminders SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = datetime('now') WHERE id = ?", id)
+	r.db.Exec("UPDATE reminders SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = datetime('now', 'localtime') WHERE id = ?", id)
 	var rem Reminder
 	r.db.First(&rem, id)
 	return &rem, nil
@@ -103,7 +103,7 @@ func (r *repository) ToggleReminder(id int) (*Reminder, error) {
 
 func (r *repository) PendingReminders() ([]Reminder, error) {
 	var items []Reminder
-	err := r.db.Where("enabled = 1 AND remind_at <= datetime('now', '+5 minutes')").
+	err := r.db.Where("enabled = 1 AND remind_at <= datetime('now', 'localtime', '+5 minutes')").
 		Order("remind_at ASC").Limit(20).Find(&items).Error
 	if items == nil { items = []Reminder{} }
 	return items, err

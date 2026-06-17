@@ -103,6 +103,8 @@ func (h *Handler) Status(c *gin.Context) {
 	for _, r := range rules {
 		if v, ok := r["enabled"]; ok {
 			switch n := v.(type) {
+			case int:
+				if n == 1 { enabled++ }
 			case int64:
 				if n == 1 { enabled++ }
 			case float64:
@@ -251,7 +253,16 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'sent', ?, ?)", rule.ID, convID, content, channel, now, now)
 	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
 	if channel == "wechat" || channel == "all" {
-		h.sendToWechatSidecar(convID, content)
+		wcID := h.getWechatConvIDForTrigger(rule.CharacterID)
+		if wcID != "" {
+			h.sendToWechatSidecar(wcID, content)
+		}
+	}
+	if channel == "qq" || channel == "all" {
+		qqID := h.getQQConvIDForTrigger(rule.CharacterID)
+		if qqID != "" {
+			h.sendToQQSidecarForTrigger(qqID, content)
+		}
 	}
 	util.SuccessResponse(c, gin.H{"id": rule.ID, "triggered": true, "messageContent": content, "channel": channel})
 }
@@ -468,7 +479,7 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "参数无效", nil)
 		return
 	}
-	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now'))", body.CleanupDays)
+	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now', 'localtime'))", body.CleanupDays)
 	util.SuccessMsgResponse(c, "已更新", nil)
 }
 func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity string) string {
@@ -564,6 +575,41 @@ func (h *Handler) getWechatConvID(charID string) string {
 	}
 	query.Where("channel = 'wechat' AND source = 'wechat'").Limit(1).Row().Scan(&id)
 	return id
+}
+
+
+func (h *Handler) getWechatConvIDForTrigger(charID string) string {
+	var id string
+	h.db.Table("conversations").Select("id").
+		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
+		Limit(1).Row().Scan(&id)
+	return id
+}
+
+func (h *Handler) getQQConvIDForTrigger(charID string) string {
+	var id string
+	h.db.Table("conversations").Select("id").
+		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Limit(1).Row().Scan(&id)
+	return id
+}
+
+func (h *Handler) sendToQQSidecarForTrigger(toUserID, content string) {
+	if strings.HasPrefix(toUserID, "conv-qq-") {
+		toUserID = toUserID[8:]
+	} else if strings.HasPrefix(toUserID, "conv-") {
+		toUserID = toUserID[5:]
+	}
+	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		log.Printf("[Proactive] QQ发送失败: %v", err)
+		return
+	}
+	resp.Body.Close()
+	log.Printf("[Proactive] QQ已发送 to=%s", toUserID)
 }
 
 func (h *Handler) CleanupTriggeredReminders() {

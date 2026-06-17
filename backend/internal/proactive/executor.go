@@ -382,7 +382,7 @@ func (e *Executor) sendToWechat(convID, content string) bool {
 func (e *Executor) getWechatConvID(charID string) string {
 	var id string
 	e.db.Table("conversations").Select("id").
-		Where("character_id = ? AND channel = 'wechat' AND source = 'wechat'", charID).
+		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
 		Limit(1).Row().Scan(&id)
 	return id
 }
@@ -527,10 +527,8 @@ func (e *Executor) ExecuteShareTask(prompt string) string {
 
 func (e *Executor) getQQConvID(charID string) string {
 	var id string
-	query := e.db.Table("conversations").Select("id")
-	if charID != "" {
-		query = query.Where("character_id = ?", charID)
-	}
-	query.Where("channel = 'qq'").Limit(1).Row().Scan(&id)
+	e.db.Table("conversations").Select("id").
+		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Limit(1).Row().Scan(&id)
 	return id
 }

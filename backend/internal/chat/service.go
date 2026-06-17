@@ -196,7 +196,7 @@ func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) 
 
 func (s *service) GetStats() (*ChatStatsResponse, error) {
 	var todayMessages int64
-	s.db.Table("messages").Where("date(created_at) = date('now')").Count(&todayMessages)
+	s.db.Table("messages").Where("date(created_at) = date('now', 'localtime')").Count(&todayMessages)
 	var totalConvs int64
 	s.db.Table("conversations").Count(&totalConvs)
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
@@ -295,12 +295,15 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		var existingChannel string
 		s.db.Table("conversations").Select("channel").Where("id = ?", convID).Limit(1).Row().Scan(&existingChannel)
 		if existingChannel == "" {
-			s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, charName, channel, source)
+			s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?, ?)", convID, charID, charName, channel, source, req.PeerID)
 		} else if existingChannel != channel {
 			convID = uuid.New().String()
 			title := req.Message
 			if len([]rune(title)) > 30 { title = string([]rune(title)[:30]) }
 			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
+		}
+		if req.PeerID != "" {
+			s.db.Exec("UPDATE conversations SET peer_id = ? WHERE id = ?", req.PeerID, convID)
 		}
 		if channel == "qq" {
 			s.db.Exec("UPDATE conversations SET title = ? WHERE id = ?", "QQ对话", convID)

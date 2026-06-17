@@ -52,6 +52,7 @@ export class QQBotClient {
   private accessToken: string = ""
   private accessTokenExpiry: number = 0
   private _messageCount: number = 0
+  private _manualDisconnect: boolean = false
 
 
   private lastErrorMessage: string = ""
@@ -86,6 +87,7 @@ export class QQBotClient {
     this.reconnectAttempts = 0
     this.identifyRetries = 0
     this.lastErrorMessage = ""
+    this._manualDisconnect = false
     await this._doConnect(config)
   }
 
@@ -108,7 +110,7 @@ export class QQBotClient {
       this.debugLog(`获取Gateway失败: ` + err.message)
       this.lastErrorMessage = `Gateway请求失败: ` + err.message
       this.loginStatus = "disconnected"
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (!this._manualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect()
       }
     }
@@ -176,8 +178,12 @@ export class QQBotClient {
         return
       }
       if (this.loginStatus !== "disconnected") {
-        this.loginStatus = "connecting"
-        this.scheduleReconnect()
+        if (this._manualDisconnect) {
+          this.loginStatus = "disconnected"
+        } else {
+          this.loginStatus = "connecting"
+          this.scheduleReconnect()
+        }
       }
     })
 
@@ -684,6 +690,7 @@ export class QQBotClient {
 
 
     console.log("[QQBot] 断开连接")
+    this._manualDisconnect = true
     this.loginStatus = "disconnected"
     this.stopHeartbeat()
     if (this.reconnectTimer) {
@@ -710,6 +717,10 @@ export class QQBotClient {
   }
 
   private scheduleReconnect(): void {
+    if (this._manualDisconnect) {
+      this.debugLog("手动断开，跳过自动重连")
+      return
+    }
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.debugLog("重连次数已达上限，停止重连"); this.lastErrorMessage = "重连次数已达上限，请检查网络和凭证"
       this.loginStatus = "disconnected"
