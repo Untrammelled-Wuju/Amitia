@@ -14,6 +14,7 @@ type ProactiveCron struct {
 	db       *gorm.DB
 	compSvc  companion.Service
 	executor *proactive.Executor
+	scheduler *proactive.SafeScheduler
 	running  bool
 	mu       sync.Mutex
 	stopCh   chan struct{}
@@ -26,10 +27,12 @@ type ProactiveCron struct {
 }
 
 func NewProactiveCron(db *gorm.DB, compSvc companion.Service) *ProactiveCron {
+	exec := proactive.NewExecutor(db)
 	return &ProactiveCron{
 		db:                 db,
 		compSvc:            compSvc,
-		executor:           proactive.NewExecutor(db),
+		executor:           exec,
+		scheduler:          proactive.NewSafeScheduler(db, exec),
 		scheduled:          make(map[int]int),
 		lastRegenerateDate: time.Now().Format("2006-01-02"),
 	}
@@ -45,13 +48,13 @@ func (c *ProactiveCron) Start() {
 	c.stopCh = make(chan struct{})
 	c.mu.Unlock()
 
-	go c.runRuleScanner()
+	c.scheduler.Start()
 	go c.runReminderScanner()
 	go c.runActiveTaskScanner()
 	go c.runDailyRegenerator()
 	go c.runRandomBurstTrigger()
 
-	log.Println("[ProactiveCron] 规则扫描已启动（每 10s）")
+	log.Println("[ProactiveCron] 规则扫描已启动（SafeScheduler Timer模式）")
 	log.Println("[ProactiveCron] 提醒扫描已启动（每 10s）")
 	log.Println("[ProactiveCron] 主动任务扫描已启动（每 30s）")
 	log.Println("[ProactiveCron] 每日重生成已启动（每 60s）")
@@ -65,28 +68,9 @@ func (c *ProactiveCron) Stop() {
 		return
 	}
 	c.running = false
+	c.scheduler.Stop()
 	close(c.stopCh)
 	log.Println("[ProactiveCron] 所有扫描器已停止")
-}
-
-func (c *ProactiveCron) runRuleScanner() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("[ProactiveCron] 规则扫描器 panic 恢复:", r)
-			go c.runRuleScanner()
-		}
-	}()
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			c.executor.ScanAndExecute()
-			c.cleanStaleSchedules()
-		case <-c.stopCh:
-			return
-		}
-	}
 }
 
 func (c *ProactiveCron) runReminderScanner() {

@@ -1,6 +1,7 @@
 package proactive
 
 import (
+	"sync"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -16,11 +17,25 @@ import (
 )
 
 type Executor struct {
-	db *gorm.DB
+	db          *gorm.DB
+	runningRules sync.Map
 }
 
 func NewExecutor(db *gorm.DB) *Executor {
 	return &Executor{db: db}
+}
+
+func (e *Executor) isRuleRunning(id int) bool {
+	_, ok := e.runningRules.Load(id)
+	return ok
+}
+
+func (e *Executor) markRuleRunning(id int) {
+	e.runningRules.Store(id, true)
+}
+
+func (e *Executor) markRuleDone(id int) {
+	e.runningRules.Delete(id)
 }
 
 func (e *Executor) ScanAndExecute() {
@@ -32,11 +47,11 @@ func (e *Executor) ScanRules() {
 	type rule struct {
 		id, enabled, maxPerDay, sentToday, randomMinutes            int
 		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
-		charID                                                      string
+		charID, lastSentAt                                          string
 	}
 
 	rows, err := e.db.Table("proactive_rules").
-		Select("id, name, enabled, channel, character_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes").
+		Select("id, name, enabled, channel, character_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
 		Where("enabled = 1").Rows()
 	if err != nil {
 		return
@@ -51,13 +66,20 @@ func (e *Executor) ScanRules() {
 		var r rule
 		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.ruleType,
 			&r.cron, &r.quietStart, &r.quietEnd, &r.maxPerDay, &r.sentToday,
-			&r.prompt, &r.randomMinutes)
+			&r.prompt, &r.randomMinutes, &r.lastSentAt)
 
 		if r.cron == "" || r.sentToday >= r.maxPerDay {
 			continue
 		}
 		if !quietHoursAllow(r.quietStart, r.quietEnd, timeStr) {
 			continue
+		}
+
+		if len(r.lastSentAt) >= 19 {
+			lastTime, err := time.Parse("2006-01-02 15:04:05", r.lastSentAt[:19])
+			if err == nil && now.Sub(lastTime) < time.Duration(r.randomMinutes+10)*time.Minute {
+				continue
+			}
 		}
 
 		baseMin := parseCronMinute(r.cron)
@@ -82,14 +104,22 @@ func (e *Executor) ScanRules() {
 			continue
 		}
 
+		if e.isRuleRunning(r.id) {
+			continue
+		}
+		e.markRuleRunning(r.id)
 		log.Printf("[Proactive] 触发规则 id=%d name=%s channel=%s", r.id, r.name, r.channel)
-		go e.executeRule(r)
+		ruleCopy := r
+		go func() {
+			defer e.markRuleDone(ruleCopy.id)
+			e.executeRule(ruleCopy)
+		}()
 	}
 }
 
 func (e *Executor) executeRule(r struct {
 	id, enabled, maxPerDay, sentToday, randomMinutes                                 int
-	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID              string
+	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, lastSentAt  string
 }) {
 	var charName, identity, convID string
 	if r.charID != "" {

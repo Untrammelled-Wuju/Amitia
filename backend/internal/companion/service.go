@@ -687,7 +687,15 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 	nowStr := now.Format("2006-01-02 15:04:05")
 	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
 	generated := s.generateLLMReply(prompt)
-	if generated == "" { generated = prompt }
+	if generated == "" {
+		switch taskType {
+		case "morning_share": generated = "早上好！新的一天开始了。"
+		case "noon_daily": generated = "午安，记得按时吃饭哦。"
+		case "evening_reflection": generated = "傍晚好，今天辛苦了。"
+		case "bedtime_mood": generated = "夜深了，早点休息。"
+		default: generated = "你好呀！"
+		}
+	}
 	convRow := s.db.Table("conversations").Select("id").Limit(1).Row()
 	var convID string
 	convRow.Scan(&convID)
@@ -1891,16 +1899,19 @@ func (s *service) GetShareHistory() ShareHistory {
 	var lastAt string
 
 	var rows []map[string]interface{}
-	s.db.Table("proactive_messages").Select("message_content, created_at").Order("created_at DESC").Limit(20).Find(&rows)
+	s.db.Table("proactive_messages").Select("message_content, created_at").Order("created_at DESC").Limit(30).Find(&rows)
 
 	for _, r := range rows {
 		if content, ok := r["message_content"].(string); ok && len(content) > 0 {
-			topic := extractTopic(content)
-			if topic != "" { topics = append(topics, topic) }
+			if len([]rune(content)) <= 100 {
+				topic := extractTopic(content)
+				if topic != "" { topics = append(topics, topic) }
+			}
 		}
 		if lastAt == "" {
 			if ca, ok := r["created_at"].(string); ok { lastAt = ca }
 		}
+		if len(topics) >= 5 { break }
 	}
 
 	if topics == nil { topics = []string{} }
