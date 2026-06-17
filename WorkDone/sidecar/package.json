@@ -1,0 +1,26 @@
+{
+  "name": "@ai-companion/wechat-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@ai-companion/config": "workspace:*",
+    "@fastify/cors": "^9.0.0",
+    "@tencent-weixin/openclaw-weixin": "^2.4.3",
+    "axios": "^1.16.1",
+    "fast-xml-parser": "^4.5.0",
+    "fastify": "^4.29.0",
+    "openclaw": "^2026.5.19",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.0"
+  }
+}
