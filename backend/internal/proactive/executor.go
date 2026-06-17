@@ -383,6 +383,7 @@ func (e *Executor) getWechatConvID(charID string) string {
 	var id string
 	e.db.Table("conversations").Select("id").
 		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id
 }
@@ -529,6 +530,7 @@ func (e *Executor) getQQConvID(charID string) string {
 	var id string
 	e.db.Table("conversations").Select("id").
 		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id
 }
