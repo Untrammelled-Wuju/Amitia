@@ -1032,7 +1032,7 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 		if convID == "" { failed++; continue }
 		msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
 		generated := s.generateLLMReply(prompt)
-		if generated == "" { generated = prompt }
+		if generated == "" { failed++; continue }
 		displayContent := generated
 		insErr := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, displayContent, nowStr).Error
 		if insErr != nil {
@@ -1933,7 +1933,7 @@ func (s *service) generateLLMReply(prompt string) string {
 	if err != nil || baseURL == "" || apiKey == "" {
 		return ""
 	}
-	sys := "你的语气自然、口语化。字数控制在8-40字。不要调用工具，直接输出纯文本。不要使用emoji。"
+	now := time.Now(); sys := fmt.Sprintf("当前时间：%s，周%s。\n你的语气自然、口语化。字数控制在8-40字。不要调用工具，直接输出纯文本。不要使用emoji。", now.Format("15:04"), now.Weekday().String())
 	msgs := []map[string]interface{}{{"role": "system", "content": sys}, {"role": "user", "content": prompt}}
 	reqBody, _ := json.Marshal(map[string]interface{}{"model": modelName, "messages": msgs, "temperature": 0.9, "max_tokens": 200, "stream": false})
 	baseURL = strings.TrimRight(baseURL, "/")
