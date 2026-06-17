@@ -32,6 +32,7 @@ app.addHook("onSend", async (_req, reply) => {
 
 // ============================================================
 const manager = getWechatManager()
+const contextTokenCache = new Map<string, string>()
 // 消息去抖缓冲区：按 fromUserId 分组
 const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; audioBase64?: string; imageBase64?: string; aeskey?: string }>; timer: ReturnType<typeof setTimeout> }>()
 
@@ -367,7 +368,8 @@ app.post("/api/send", async (req, reply) => {
         message: "toUserId and text are required",
       })
     }
-    await manager.sendTextMessage(body.toUserId, body.text, body.contextToken)
+    const ctxToken = body.contextToken || contextTokenCache.get(body.toUserId) || ""
+    await manager.sendTextMessage(body.toUserId, body.text, ctxToken)
     return reply.send({ success: true, message: "Sent" })
   } catch (err: any) { console.error("[Sidecar]", err); return reply.status(500).send({ success: false, message: "服务器错误" })
   }
