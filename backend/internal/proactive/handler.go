@@ -582,6 +582,7 @@ func (h *Handler) getWechatConvIDForTrigger(charID string) string {
 	var id string
 	h.db.Table("conversations").Select("id").
 		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id
 }
@@ -590,6 +591,7 @@ func (h *Handler) getQQConvIDForTrigger(charID string) string {
 	var id string
 	h.db.Table("conversations").Select("id").
 		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id
 }
@@ -608,7 +610,12 @@ func (h *Handler) sendToQQSidecarForTrigger(toUserID, content string) {
 		log.Printf("[Proactive] QQ发送失败: %v", err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("[Proactive] QQ返回 %d body=%s", resp.StatusCode, string(bodyBytes))
+		return
+	}
 	log.Printf("[Proactive] QQ已发送 to=%s", toUserID)
 }
 
