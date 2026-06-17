@@ -50,6 +50,7 @@ manager.onMessage(async (msg) => {
   const existing = msgBuffers.get(key)
   console.log(`[Sidecar][DIAG] buffer入: text="${msg.text.substring(0,60)}" isVoice=${(msg as any).isVoice} hasImage=${!!((msg as any).imageUrl)}`);
   const item: BMsg = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, audioBase64: (msg as any).audioBase64 || "", isVoice: (msg as any).isVoice || false, imageUrl: (msg as any).imageUrl || "", imageBase64: (msg as any).imageBase64 || "", aeskey: (msg as any).aeskey || "" }
+    if (msg.contextToken) { contextTokenCache.set(msg.fromUserId, msg.contextToken) }
 
   if (existing) {
     clearTimeout(existing.timer)
