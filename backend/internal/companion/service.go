@@ -1,8 +1,9 @@
 package companion
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
+	"encoding/json"
 	"log"
 	"math/rand"
 	"sort"
@@ -87,7 +88,7 @@ func (s *service) getSetting(key string) string {
 }
 
 func (s *service) setSetting(key, value string) {
-	s.db.Exec("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", key, value)
+	s.db.Exec("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now', 'localtime')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", key, value)
 }
 
 func (s *service) GetSleepSetting(characterID string) map[string]interface{} {
@@ -642,7 +643,7 @@ func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, charac
 }
 func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]interface{} {
 	var raw []map[string]interface{}
-	s.db.Table("active_message_task").Where("date(due_time) = date('now') AND character_id = ?", characterID).Order("due_time ASC").Find(&raw)
+	s.db.Table("active_message_task").Where("date(due_time) = date('now', 'localtime') AND character_id = ?", characterID).Order("due_time ASC").Find(&raw)
 	tasks := make([]map[string]interface{}, len(raw))
 	for i, r := range raw {
 		tasks[i] = map[string]interface{}{
@@ -667,7 +668,7 @@ func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]in
 }
 
 func (s *service) RegenerateActiveMessageTasks(characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=datetime('now') WHERE date(due_time)=date('now') AND status='PENDING' AND character_id = ?", characterID)
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=datetime('now', 'localtime') WHERE date(due_time)=date('now', 'localtime') AND status='PENDING' AND character_id = ?", characterID)
 	return map[string]interface{}{"regenerated": true}
 }
 
@@ -695,13 +696,29 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 	if channelSetting == "" { channelSetting = "all" }
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, nowStr)
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
-	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=? AND character_id=?", nowStr, id, characterID)
+	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
+
+	if s.isDefaultCharacter(characterID) {
+		if strings.Contains(channelSetting, "wechat") || channelSetting == "all" {
+			wcID := s.getWechatConvIDForChar(characterID)
+			if wcID != "" {
+				s.sendToWechatSidecar(wcID, generated)
+			}
+		}
+		if strings.Contains(channelSetting, "qq") || channelSetting == "all" {
+			qqID := s.getQQConvIDForChar(characterID)
+			if qqID != "" {
+				s.sendToQQSidecar(qqID, generated)
+			}
+		}
+	}
+
 	log.Printf("[Companion] RunActiveMessageTask sent type=%s id=%d channel=%s", taskType, id, channelSetting)
 	return map[string]interface{}{"id": id, "status": "SENT", "taskType": taskType, "channel": channelSetting}
 }
 
 func (s *service) CancelActiveMessageTask(id int, characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=datetime('now') WHERE id=? AND character_id=?", id, characterID)
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
 
@@ -728,7 +745,7 @@ func (s *service) ListDelayedReplies(characterID string) []map[string]interface{
 }
 
 func (s *service) CancelDelayedReply(id int, characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE delayed_replies SET status='cancelled', updated_at=datetime('now') WHERE id=? AND character_id=?", id, characterID)
+	s.db.Exec("UPDATE delayed_replies SET status='cancelled', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
 
@@ -763,14 +780,14 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				wakeTime = *schedule.NapEndTime
 			}
 			if wakeTime.Before(now) { wakeTime = wakeTime.Add(24 * time.Hour) }
-			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now') WHERE id = ?",
+			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
 				wakeTime.Format("2006-01-02 15:04:05"), id)
 			delayed++
 		} else if currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
 			canSend = false
 			delayMin := 10 + rand.Intn(21)
 			newTime := now.Add(time.Duration(delayMin) * time.Minute)
-			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now') WHERE id = ?",
+			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
 				newTime.Format("2006-01-02 15:04:05"), id)
 			delayed++
 		}
@@ -797,13 +814,13 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				}
 				retryCount++
 				if retryCount >= 3 {
-					s.db.Exec("UPDATE delayed_replies SET status='FAILED', retry_count=?, updated_at=datetime('now') WHERE id = ?", retryCount, id)
+					s.db.Exec("UPDATE delayed_replies SET status='FAILED', retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
 					failed++
 				} else {
-					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=datetime('now') WHERE id = ?", retryCount, id)
+					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
 				}
 			} else {
-				s.db.Exec("UPDATE delayed_replies SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id = ?", nowStr, id)
+				s.db.Exec("UPDATE delayed_replies SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id = ?", nowStr, id)
 				sendProactiveNotification(s.db, convID, msgID, content)
 				sent++
 			}
@@ -977,7 +994,7 @@ func (s *service) ProcessActiveMessagesDebug(characterID string) map[string]inte
 func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]interface{} {
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
-		s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now') WHERE status='PROCESSING' AND updated_at < datetime('now', '-5 minutes') AND character_id = ?", characterID)
+		s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now', 'localtime') WHERE status='PROCESSING' AND updated_at < datetime('now', 'localtime', '-5 minutes') AND character_id = ?", characterID)
 	var tasks []map[string]interface{}
 	s.db.Table("active_message_task").Where("status = 'PENDING' AND due_time <= ? AND character_id = ?", nowStr, characterID).Order("due_time ASC").Limit(20).Find(&tasks)
 	var processed, sent, delayed, failed int
@@ -990,14 +1007,14 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 		id, _ := t["id"]
 		prompt, _ := t["prompt"].(string)
 		if prompt == "" { continue }
-		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', '+5 minutes') WHERE id = ? AND status='PENDING' AND character_id = ?", id, characterID)
+		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', 'localtime', '+5 minutes') WHERE id = ? AND status='PENDING' AND character_id = ?", id, characterID)
 		if result.RowsAffected == 0 { continue }
 		stateResult := s.GetState(characterID)
 		currentState, _ := stateResult["currentState"].(string)
 		if currentState == "SLEEPING" || currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
 			delayMin := 10
 			newDue := now.Add(time.Duration(delayMin) * time.Minute).Format("2006-01-02 15:04:05")
-			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now') WHERE id=? AND character_id=?", newDue, id, characterID)
+			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, id, characterID)
 			delayed++
 			continue
 		}
@@ -1015,20 +1032,35 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 			if rc, ok := t["retry_count"]; ok { switch v := rc.(type) { case int64: retryCount = int(v); case float64: retryCount = int(v) } }
 			retryCount++
 			if retryCount >= 3 {
-				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now') WHERE id=? AND character_id=?", retryCount, id, characterID)
+				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", retryCount, id, characterID)
 				failed++
 			} else {
 				newDue := now.Add(time.Duration(5*retryCount) * time.Minute).Format("2006-01-02 15:04:05")
-				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=datetime('now') WHERE id=? AND character_id=?", newDue, retryCount, id, characterID)
+				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, retryCount, id, characterID)
 				delayed++
 			}
 			continue
 		}
 		taskType, _ := t["task_type"].(string)
 		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
-		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now') WHERE id=? AND character_id=?", nowStr, id, characterID)
+		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
+
+		if s.isDefaultCharacter(characterID) {
+			if strings.Contains(channelSetting, "wechat") || channelSetting == "all" {
+				wcID := s.getWechatConvIDForChar(characterID)
+				if wcID != "" {
+					s.sendToWechatSidecar(wcID, generated)
+				}
+			}
+			if strings.Contains(channelSetting, "qq") || channelSetting == "all" {
+				qqID := s.getQQConvIDForChar(characterID)
+				if qqID != "" {
+					s.sendToQQSidecar(qqID, generated)
+				}
+			}
+		}
 	}
 	return map[string]interface{}{"processed": processed, "sent": sent, "delayed": delayed, "failed": failed}
 }
@@ -1632,7 +1664,7 @@ func hashInt(n int) int {
 }
 
 func sendProactiveNotification(db *gorm.DB, convID, msgID, content string) {
-	db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=datetime('now') WHERE id=?", convID)
+	db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=datetime('now', 'localtime') WHERE id=?", convID)
 }
 
 func (s *service) ScheduleBasedGenerator(date string, characterID string) map[string]interface{} {
@@ -1732,7 +1764,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 		tasks = filtered
 	}
 
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now') WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", date, characterID)
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now', 'localtime') WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", date, characterID)
 
 	if idleDuration > 12*time.Hour {
 		var lastChase string
@@ -1748,7 +1780,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	}
 
 	for _, t := range tasks {
-		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, character_id, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', ?, datetime('now'), datetime('now'))",
+		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, character_id, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', ?, datetime('now', 'localtime'), datetime('now', 'localtime'))",
 			t.Type, t.DueTime.Format("2006-01-02 15:04:05"), t.Prompt, characterID)
 	}
 
@@ -2073,10 +2105,89 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'sent', ?, ?)",
 		convID, prompt, now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"))
 
+	if s.isDefaultCharacter(characterID) {
+		wcID := s.getWechatConvIDForChar(characterID)
+		if wcID != "" {
+			s.sendToWechatSidecar(wcID, generated)
+		}
+		qqID := s.getQQConvIDForChar(characterID)
+		if qqID != "" {
+			s.sendToQQSidecar(qqID, generated)
+		}
+	}
+
 	s.lastBurstAt = now
 	s.todayBurstCount++
 
 	log.Printf("[Companion] RandomBurst triggered: prob=%.4f energyMod=%.2f moodMod=%.2f stateMod=%.2f budgetMod=%.2f", finalProb, energyMod, moodMod, stateMod, budgetMod)
 
 	return map[string]interface{}{"triggered": true, "prob": finalProb, "burstCount": s.todayBurstCount, "prompt": prompt}
+
+}
+func (s *service) sendToWechatSidecar(toUserID, content string) {
+	if strings.HasPrefix(toUserID, "conv-") {
+		toUserID = toUserID[5:]
+	}
+	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:9876/api/send", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		log.Printf("[Companion] 微信发送失败: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("[Companion] 微信发送失败 HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		return
+	}
+	log.Printf("[Companion] 微信已发送 to=%s", toUserID)
+}
+
+func (s *service) sendToQQSidecar(toUserID, content string) {
+	if strings.HasPrefix(toUserID, "conv-qq-") {
+		toUserID = toUserID[8:]
+	} else if strings.HasPrefix(toUserID, "conv-") {
+		toUserID = toUserID[5:]
+	}
+	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		log.Printf("[Companion] QQ发送失败: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("[Companion] QQ发送失败 HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		return
+	}
+	log.Printf("[Companion] QQ已发送 to=%s", toUserID)
+}
+
+func (s *service) isDefaultCharacter(characterID string) bool {
+	var isActive int
+	s.db.Table("characters").Select("is_default").Where("id = ?", characterID).Limit(1).Row().Scan(&isActive)
+	return isActive == 1
+}
+
+func (s *service) getWechatConvIDForChar(characterID string) string {
+	var id string
+	s.db.Table("conversations").Select("id").
+		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
+		Limit(1).Row().Scan(&id)
+	return id
+}
+
+func (s *service) getQQConvIDForChar(characterID string) string {
+	var id string
+	s.db.Table("conversations").Select("id").
+		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Order("updated_at DESC").
+		Limit(1).Row().Scan(&id)
+	return id
 }

@@ -143,7 +143,10 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 	if text == "" && imageUrl == "" && videoUrl == "" {
 		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
 	}
-	convID := "channel-" + channel
+	convID := conversationID
+	if convID == "" {
+		convID = "channel-" + channel
+	}
 
 	var mergedText string
 	if skipTiming {
@@ -174,6 +177,7 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		ConversationID: convID,
 		Channel:        channel,
 		Source:         channel,
+		PeerID:         senderID,
 		VoiceMessage:   voiceMessage,
 		ImageUrl:       imageUrl,
 		VideoUrl:       videoUrl,

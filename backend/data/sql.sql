@@ -331,6 +331,7 @@ CREATE TABLE IF NOT EXISTS active_message_task (
     canceled_at TEXT,
     cancel_reason TEXT DEFAULT '',
     source TEXT DEFAULT 'schedule_based',
+    lock_until TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -349,6 +350,7 @@ CREATE TABLE IF NOT EXISTS proactive_rules (
     sent_count_today INTEGER DEFAULT 0,
     prompt_template TEXT DEFAULT '',
     random_minutes INTEGER DEFAULT 0,
+    last_sent_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -472,3 +474,6 @@ UPDATE fixed_events SET repeat_type = 'weekly' WHERE repeat_type IS NULL;
 UPDATE fixed_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
 
 UPDATE special_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
+-- ============================================
+-- 迁移: 添加缺失字段
+-- ============================================

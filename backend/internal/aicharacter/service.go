@@ -65,7 +65,7 @@ func (s *service) GetPreset(id string) map[string]interface{} {
 func (s *service) SetDefault(id string) map[string]interface{} {
 	s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 	s.db.Table("characters").Where("id = ?", id).Update("is_default", 1)
-	s.db.Exec("UPDATE conversations SET character_id = ?, updated_at = datetime('now') WHERE channel = 'wechat'", id)
+	s.db.Exec("UPDATE conversations SET character_id = ?, updated_at = datetime('now', 'localtime') WHERE channel = 'wechat'", id)
 	return map[string]interface{}{"success": true}
 }
 

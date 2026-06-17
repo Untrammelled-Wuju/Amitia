@@ -161,6 +161,7 @@ async function fetchTtsConfig() {
       const full = await axios.get<ApiResponse<any>>("/api/tts/configs/" + cfg.id)
       const fullData = (full.data as any)?.data || full.data || {} ; ttsApiKey.value = fullData?.apiKey || ""
       ttsResourceId.value = fullData?.resourceId || "volc.speech.dialog"
+      }
   } catch (e: any) { console.error("fetchTtsConfig failed", e) }
 }
 

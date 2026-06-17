@@ -117,7 +117,11 @@ func main() {
 	} else {
 		log.Info("消息计数已修复，影响", count, "条对话")
 	}
-	compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), "")
+	var charIDs []string
+	db.Table("characters").Pluck("id", &charIDs)
+	for _, cid := range charIDs {
+		compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
+	}
 	log.Info("今日主动消息任务已生成")
 
 	killExistingServer(serverAddr)

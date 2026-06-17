@@ -79,12 +79,12 @@ func saveMemory(args map[string]interface{}) string {
 	id := uuid.New().String()
 
 	if existingID != "" {
-		_, err := toolDB.Exec("UPDATE memories SET value = ?, memory_type = ?, importance = ?, character_id = ?, updated_at = datetime('now') WHERE id = ?",
+		_, err := toolDB.Exec("UPDATE memories SET value = ?, memory_type = ?, importance = ?, character_id = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
 			value, memoryType, int(importance), characterID, existingID)
 		if err != nil {
 			return fmt.Sprintf("ERROR: %s", err.Error())
 		}
-		toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_edited', ?, ?, ?, ?, 'auto', ?, datetime('now'))",
+		toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_edited', ?, ?, ?, ?, 'auto', ?, datetime('now', 'localtime'))",
 			uuid.New().String(), existingID, key, value, memoryType, int(importance), characterID)
 
 		if OnMemorySaved != nil {
@@ -93,13 +93,13 @@ func saveMemory(args map[string]interface{}) string {
 		return fmt.Sprintf("OK (updated) %s: %s", key, value)
 	}
 
-	_, err := toolDB.Exec("INSERT INTO memories (id, key, value, memory_type, importance, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'auto', datetime('now'), datetime('now'))",
+	_, err := toolDB.Exec("INSERT INTO memories (id, key, value, memory_type, importance, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'auto', datetime('now', 'localtime'), datetime('now', 'localtime'))",
 		id, key, value, memoryType, int(importance), characterID)
 	if err != nil {
 		return fmt.Sprintf("ERROR: %s", err.Error())
 	}
 
-	toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_created', ?, ?, ?, ?, 'auto', ?, datetime('now'))",
+	toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_created', ?, ?, ?, ?, 'auto', ?, datetime('now', 'localtime'))",
 		uuid.New().String(), id, key, value, memoryType, int(importance), characterID)
 
 	if OnMemorySaved != nil {

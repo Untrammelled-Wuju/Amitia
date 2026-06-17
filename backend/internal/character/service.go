@@ -79,7 +79,7 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		{"晚间闲聊", "all", "cron", "0 20 * * *", "晚上好！放松一下，想聊点什么吗？", 20, 45},
 	}
 	for _, p := range presetRules {
-		s.db.Exec("INSERT INTO proactive_rules (name, enabled, channel, character_id, rule_type, schedule_cron, max_per_day, prompt_template, random_minutes, created_at, updated_at) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+		s.db.Exec("INSERT INTO proactive_rules (name, enabled, channel, character_id, rule_type, schedule_cron, max_per_day, prompt_template, random_minutes, created_at, updated_at) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))",
 			p.Name, p.Channel, c.ID, p.RuleType, p.ScheduleCron, p.MaxPerDay, p.PromptTemplate, p.RandomMinutes)
 	}
 	return c, nil

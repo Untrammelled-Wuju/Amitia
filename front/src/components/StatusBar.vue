@@ -76,10 +76,10 @@ const wechatLabel = computed(() =>
 )
 
 const qqClass = computed(() =>
-  props.qqStatus === "connected" ? "status-on" : "status-off"
+  props.qqStatus === "connected" || props.qqStatus === "online" ? "status-on" : "status-off"
 )
 const qqLabel = computed(() =>
-  props.qqStatus === "connected" ? "QQ已连" : "QQ未连"
+  props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ已连" : "QQ未连"
 )
 
 const modelClass = computed(() =>
