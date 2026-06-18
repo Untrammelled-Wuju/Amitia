@@ -28,6 +28,8 @@
       <div class="toolbar-spacer"></div>
       <el-button size="small" type="primary" :icon="Plus" @click="showCreate">新建</el-button>
       <el-button size="small" @click="handleExport">导出</el-button>
+      <el-button size="small" type="success" @click="batchVerify" :disabled="selectedIds.length===0">批量确认</el-button>
+      <el-button size="small" type="warning" @click="batchSetImportant" :disabled="selectedIds.length===0">标为重要</el-button>
       <el-button size="small" type="danger" plain @click="handleClearAll" :disabled="total === 0">清空全部</el-button>
     </div>
 
@@ -39,7 +41,7 @@
           {{ vectorStatus.enabled ? '已启用' : '已禁用' }}
         </el-tag>
         <span class="vib-provider" v-if="vectorStatus.enabled">
-          Provider: {{ vectorStatus.providerName }} | Embeddings: {{ vectorStatus.totalEmbeddings }}
+          Provider: {{ vectorStatus.providerName }} | 总向量: {{ vectorStatus.totalEmbeddings || vectorStatus.totalEmbedded || 0 }}
         </span>
         <span class="vib-time" v-if="vectorStatus.lastRebuildAt">
           最近重建: {{ fmtDate(vectorStatus.lastRebuildAt) }}
@@ -53,6 +55,25 @@
           语义搜索
         </el-button>
       </div>
+      <el-table
+        v-if="vectorStatus.collections && vectorStatus.collections.length"
+        :data="vectorStatus.collections"
+        size="small"
+        class="vector-collection-table"
+      >
+        <el-table-column prop="label" label="层级" min-width="100" />
+        <el-table-column prop="name" label="Collection" min-width="160" show-overflow-tooltip />
+        <el-table-column label="向量数" width="90">
+          <template #default="{ row }">{{ row.totalEmbeddings || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'ready' ? 'success' : row.status === 'error' ? 'danger' : 'info'">
+              {{ row.status === 'ready' ? '正常' : row.status === 'error' ? '异常' : '未启用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- Memory Search Dialog -->
@@ -120,7 +141,24 @@
           <span style="font-size:11px;margin-left:4px">{{ row.importance }}/10</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120">
+      <el-table-column label="置信度" width="100" sortable prop="confidence">
+        <template #default="{ row }">
+          <div style="display:flex;align-items:center;gap:4px">
+            <el-progress :percentage="row.confidence || 50" :stroke-width="6" :show-text="false"
+              :color="row.confidence >= 80 ? '#67c23a' : row.confidence >= 50 ? '#e6a23c' : '#f56c6c'" />
+            <span style="font-size:11px">{{ row.confidence || 50 }}%</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="核实状态" width="90" sortable prop="verifiedStatus">
+        <template #default="{ row }">
+          <el-tag v-if="row.verifiedStatus === 'user_verified'" type="success" size="small">已确认</el-tag>
+          <el-tag v-else-if="row.verifiedStatus === 'auto_confirmed'" type="warning" size="small">自动确认</el-tag>
+          <el-tag v-else-if="row.verifiedStatus === 'contradicted'" type="danger" size="small">有矛盾</el-tag>
+          <el-tag v-else type="info" size="small">未核实</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="140">
         <template #default="{row}">
           <el-button text size="small" @click="showEdit(row)">编辑</el-button>
           <el-button text size="small" type="danger" @click="delMem(row.id)">删除</el-button>
@@ -233,6 +271,8 @@ const { get, post, put, del } = useApi()
 // Vector memory state
 const vectorStatus = ref<any>(null)
 const rebuilding = ref(false)
+const selectedIds = ref<string[]>([])
+const tableRef = ref<any>(null)
 const searchDialogVisible = ref(false)
 const searchQuery = ref("")
 const searchResults = ref<any[]>([])
@@ -367,6 +407,18 @@ async function delMem(id: string) {
   fetchList()
 }
 
+function handleSelectionChange(rows: any[]) { selectedIds.value = rows.map(r => r.id) }
+
+async function batchVerify() {
+  if (selectedIds.value.length === 0) return
+  try { await post("/api/memories/batch-verify", { ids: selectedIds.value, status: "user_verified" }); ElMessage.success("批量确认成功"); selectedIds.value = []; fetchList() } catch { ElMessage.error("操作失败") }
+}
+
+async function batchSetImportant() {
+  if (selectedIds.value.length === 0) return
+  try { await post("/api/memories/batch-importance", { ids: selectedIds.value, importance: 10 }); ElMessage.success("已标为重要"); selectedIds.value = []; fetchList() } catch { ElMessage.error("操作失败") }
+}
+
 async function handleClearAll() {
   await ElMessageBox.confirm(`确定清空当前角色全部 ${total.value} 条记忆？此操作不可撤销。`,"警告",{type:"warning",confirmButtonText:"确定清空",confirmButtonClass:"el-button--danger"})
   const cid = injectedCharacterId?.value
@@ -448,7 +500,7 @@ async function rebuildIndex() {
   rebuilding.value = true
   try {
     const result = await post<any>("/api/memories/rebuild-embeddings", {})
-    ElMessage.success(`Index rebuild complete: ${result.success} memories indexed`)
+    ElMessage.success(`索引重建完成：${result.embedded ?? result.totalEmbedded ?? 0} 条记忆已处理`)
     await loadVectorStatus()
   } catch (err: any) {
     ElMessage.error(err.message || "Rebuild failed")
@@ -466,7 +518,7 @@ function searchMemory() {
 async function doSearch() {
   if (!searchQuery.value.trim()) return
   try {
-    const result = await post<any>("/api/memories/vector-search", {
+    const result = await post<any>("/api/memories/hybrid-search", {
       keyword: searchQuery.value.trim(),
       limit: 10,
     })
@@ -477,6 +529,8 @@ async function doSearch() {
       value: r.memory?.value || r.value,
       memoryType: r.memory?.memoryType || r.memoryType,
       score: r.score ?? 0,
+      matchType: r.matchType || "hybrid",
+      memoryLayer: r.memoryLayer || "",
     }))
     searched.value = true
   } catch {
@@ -570,6 +624,10 @@ onMounted(async () => {
 .vib-actions {
   display: flex;
   gap: 6px;
+}
+.vector-collection-table {
+  width: 100%;
+  margin-top: 8px;
 }
 
 /* Search Results */

@@ -2,21 +2,21 @@ package memory
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/embedding"
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +28,7 @@ type Service interface {
 	DeleteAll(characterID string) error
 	Search(req *SearchMemoryRequest) ([]Memory, error)
 	VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error)
+	HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error)
 	RecordUse(id string) (*Memory, error)
 	GetVectorStatus() map[string]interface{}
 	GetTimeline(page, pageSize int, characterID, source, memoryType string) ([]map[string]interface{}, int64, error)
@@ -40,11 +41,24 @@ type Service interface {
 	DeleteCandidate(id string) error
 	CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error)
 	ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error)
+	AutoResolveConflict(key, value, characterID string, newConfidence int) (*ResolveConflictResponse, error)
+	GetRankedMemories(characterID, query string, limit int) ([]RankedMemory, error)
 	ExtractCandidates() ([]MemoryCandidate, error)
 	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)
-	SyncEmbedding(memID, key, value, characterID, memoryType string)
+	SyncEmbedding(memID, key, value, characterID, memoryType string) bool
+	BatchVerify(ids []string, status string) error
+	BatchSetImportance(ids []string, importance int) error
 }
+
+type RankedMemory struct {
+	Memory         Memory  `json:"memory"`
+	FinalScore     float64 `json:"finalScore"`
+	VectorScore    float64 `json:"vectorScore"`
+	KeywordScore   float64 `json:"keywordScore"`
+	ImportanceNorm float64 `json:"importanceNorm"`
+}
+
 type UpdateCandidateRequest struct {
 	Key        *string `json:"key"`
 	Value      *string `json:"value"`
@@ -61,23 +75,23 @@ type CheckConflictRequest struct {
 }
 
 type CheckConflictResponse struct {
-	HasConflict bool              `json:"hasConflict"`
-	Conflicts   []ConflictItem    `json:"conflicts"`
+	HasConflict bool           `json:"hasConflict"`
+	Conflicts   []ConflictItem `json:"conflicts"`
 }
 
 type ConflictItem struct {
-	Memory     Memory `json:"memory"`
-	Reason     string `json:"reason"`
+	Memory Memory `json:"memory"`
+	Reason string `json:"reason"`
 }
 
 type ResolveConflictRequest struct {
-	Action       string `json:"action"`
-	NewKey       string `json:"newKey"`
-	NewValue     string `json:"newValue"`
-	NewType      string `json:"newType"`
-	Importance   int    `json:"importance"`
-	CharacterID  string `json:"characterId"`
-	ConflictID   string `json:"conflictId"`
+	Action      string `json:"action"`
+	NewKey      string `json:"newKey"`
+	NewValue    string `json:"newValue"`
+	NewType     string `json:"newType"`
+	Importance  int    `json:"importance"`
+	CharacterID string `json:"characterId"`
+	ConflictID  string `json:"conflictId"`
 }
 
 type ResolveConflictResponse struct {
@@ -96,8 +110,21 @@ type MemoryCandidate struct {
 }
 
 type VectorSearchResult struct {
-	Memory Memory  `json:"memory"`
-	Score  float32 `json:"score"`
+	Memory         Memory  `json:"memory"`
+	Score          float32 `json:"score"`
+	CollectionName string  `json:"collectionName"`
+	MemoryLayer    string  `json:"memoryLayer"`
+	MatchType      string  `json:"matchType,omitempty"`
+}
+
+type HybridSearchResult struct {
+	Memory         Memory  `json:"memory"`
+	Score          float64 `json:"score"`
+	VectorScore    float64 `json:"vectorScore"`
+	KeywordScore   float64 `json:"keywordScore"`
+	MatchType      string  `json:"matchType"`
+	CollectionName string  `json:"collectionName"`
+	MemoryLayer    string  `json:"memoryLayer"`
 }
 
 type service struct {
@@ -138,13 +165,40 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	if req.Importance > 10 {
 		req.Importance = 10
 	}
+	if req.Confidence < 0 {
+		req.Confidence = 0
+	}
+	if req.Confidence > 100 {
+		req.Confidence = 100
+	}
+	if req.VerifiedStatus == "" {
+		req.VerifiedStatus = "unverified"
+	}
+
+	resp, err := s.AutoResolveConflict(req.Key, req.Value, req.CharacterID, req.Confidence)
+	if err == nil && resp != nil && resp.Resolved {
+		return s.repo.FindByID(resp.MemoryID)
+	}
+
+	var expiresAt *string
+	if req.ExpiresAt != "" {
+		expiresAt = &req.ExpiresAt
+	}
+
 	m := &Memory{
-		CharacterID: req.CharacterID,
-		MemoryType:  req.MemoryType,
-		Source:      req.Source,
-		Key:         req.Key,
-		Value:       req.Value,
-		Importance:  req.Importance,
+		CharacterID:    req.CharacterID,
+		MemoryType:     req.MemoryType,
+		Source:         req.Source,
+		Key:            req.Key,
+		Value:          req.Value,
+		Importance:     req.Importance,
+		Confidence:     req.Confidence,
+		ExpiresAt:      expiresAt,
+		EntityID:       req.EntityID,
+		EntityType:     req.EntityType,
+		SourceMsgID:    req.SourceMsgID,
+		SourceConvID:   req.SourceConvID,
+		VerifiedStatus: req.VerifiedStatus,
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, fmt.Errorf("创建失败: %w", err)
@@ -157,6 +211,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 }
 
 func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
+	before, _ := s.repo.FindByID(id)
 	updates := make(map[string]interface{})
 	if req.Key != nil {
 		updates["key"] = *req.Key
@@ -173,116 +228,211 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	if req.Importance != nil {
 		updates["importance"] = *req.Importance
 	}
+	if req.Confidence != nil {
+		updates["confidence"] = *req.Confidence
+	}
+	if req.ExpiresAt != nil {
+		updates["expires_at"] = *req.ExpiresAt
+	}
+	if req.EntityID != nil {
+		updates["entity_id"] = *req.EntityID
+	}
+	if req.EntityType != nil {
+		updates["entity_type"] = *req.EntityType
+	}
+	if req.VerifiedStatus != nil {
+		updates["verified_status"] = *req.VerifiedStatus
+	}
 	if len(updates) == 0 {
-		return nil, fmt.Errorf("没有可更新的字段")
+		return s.repo.FindByID(id)
 	}
 	if err := s.repo.Update(id, updates); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	m, _ := s.repo.FindByID(id)
-	if m != nil {
-		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
-		s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+	m, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, err
 	}
+	if before != nil && before.MemoryType != m.MemoryType {
+		deleteVectorsFromCollections([]string{m.ID}, collectionNameForMemoryType(before.MemoryType))
+	}
+	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
 
 func (s *service) Delete(id string) error {
-	m, _ := s.repo.FindByID(id)
-	if m != nil {
-		s.logEvent(m.ID, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+	m, err := s.repo.FindByID(id)
+	if err != nil {
+		return err
 	}
-
-	go func() {
-		if qdrantDB.Client != nil {
-			_ = qdrantDB.DeleteVectors([]string{id})
-		}
-	}()
-
+	s.logEvent(id, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+	deleteVectorsFromCollections([]string{id}, qdrantDB.CollectionNames()...)
 	return s.repo.Delete(id)
 }
 
 func (s *service) DeleteAll(characterID string) error {
-	go func() {
-		if qdrantDB.Client != nil {
-			qdrantDB.Client.DeleteCollection(context.Background(), config.AppCfg.Qdrant.CollectionName)
-			qdrantDB.EnsureCollection()
-		}
-	}()
+	var ids []string
+	query := s.db.Model(&Memory{})
+	if characterID != "" {
+		query = query.Where("character_id = ?", characterID)
+	}
+	query.Pluck("id", &ids)
+	if characterID != "" {
+		s.logEvent("", "memory_deleted_all", "", "", "", 0, "", characterID)
+	}
+	deleteVectorsFromCollections(ids, qdrantDB.CollectionNames()...)
 	return s.repo.DeleteAll(characterID)
 }
 
 func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
-	if req.Limit <= 0 {
-		req.Limit = 10
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 20
 	}
-
-	if qdrantDB.Client != nil && req.Keyword != "" {
-		results, err := s.VectorSearch(&VectorSearchRequest{
-			Keyword:     req.Keyword,
-			CharacterID: req.CharacterID,
-			Limit:       req.Limit,
-		})
-		if err == nil && len(results) > 0 {
-			memories := make([]Memory, len(results))
-			for i, r := range results {
-				memories[i] = r.Memory
-			}
-			return memories, nil
-		}
-	}
-
-	return s.repo.Search(req.Keyword, req.CharacterID, req.Limit)
+	return s.repo.Search(req.Keyword, req.CharacterID, limit)
 }
 
 func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error) {
-	if req.Limit <= 0 {
-		req.Limit = config.AppCfg.Qdrant.Limit
-	}
-
 	if qdrantDB.Client == nil {
-		return nil, fmt.Errorf("向量数据库未就绪")
+		return nil, fmt.Errorf("向量数据库未初始化")
 	}
-
-	text := req.Keyword
-	if text == "" {
-		text = req.Query
+	queryText := req.Query
+	if queryText == "" {
+		queryText = req.Keyword
 	}
-	if text == "" {
-		return nil, fmt.Errorf("搜索关键词不能为空")
+	if queryText == "" {
+		return nil, fmt.Errorf("缺少查询文本")
 	}
-
-	vector, err := s.embeddingSvc.Embed(text)
+	vector, err := s.embeddingSvc.Embed(queryText)
 	if err != nil {
-		return nil, fmt.Errorf("生成嵌入向量失败: %w", err)
+		return nil, fmt.Errorf("向量化失败: %w", err)
 	}
-
-	filter := make(map[string]interface{})
-	if req.CharacterID != "" {
-		filter["character_id"] = req.CharacterID
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 5
 	}
-
-	points, err := qdrantDB.SearchVectors(vector, req.Limit, filter)
+	results, err := qdrantDB.MultiSearch(vector, limit+1, nil)
 	if err != nil {
 		return nil, fmt.Errorf("向量检索失败: %w", err)
 	}
-
-	results := make([]VectorSearchResult, 0)
-	for _, p := range points {
-		payloadMap := p.Payload
-		memIDVal, ok := payloadMap["memory_id"]
-		if !ok {
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Point.Score > results[j].Point.Score
+	})
+	var vsResults []VectorSearchResult
+	seen := map[string]bool{}
+	for _, r := range results {
+		memID := ""
+		if val, ok := r.Point.Payload["memory_id"]; ok {
+			memID = val.GetStringValue()
+		}
+		if memID == "" || seen[memID] {
 			continue
 		}
-		memID := memIDVal.GetStringValue()
 		m, err := s.repo.FindByID(memID)
-		if err != nil || m == nil {
+		if err != nil {
 			continue
 		}
-		results = append(results, VectorSearchResult{
-			Memory: *m,
-			Score:  p.Score,
+		if req.CharacterID != "" && m.CharacterID != req.CharacterID {
+			continue
+		}
+		seen[memID] = true
+		vsResults = append(vsResults, VectorSearchResult{
+			Memory:         *m,
+			Score:          float32(r.Point.Score),
+			CollectionName: r.CollectionName,
+			MemoryLayer:    memoryLayerLabel(collectionKeyFromCollectionName(r.CollectionName)),
+			MatchType:      "vector",
 		})
+		if len(vsResults) >= limit {
+			break
+		}
+	}
+	return vsResults, nil
+}
+
+func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	queryText := req.Query
+	if queryText == "" {
+		queryText = req.Keyword
+	}
+	if queryText == "" {
+		return nil, fmt.Errorf("缺少查询文本")
+	}
+	type acc struct {
+		m              Memory
+		vectorScore    float64
+		keywordScore   float64
+		collectionName string
+	}
+	merged := map[string]*acc{}
+	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
+		Query:       queryText,
+		CharacterID: req.CharacterID,
+		Limit:       limit * 2,
+	})
+	for _, r := range vectorResults {
+		item := merged[r.Memory.ID]
+		if item == nil {
+			item = &acc{m: r.Memory, collectionName: r.CollectionName}
+			merged[r.Memory.ID] = item
+		}
+		if float64(r.Score) > item.vectorScore {
+			item.vectorScore = float64(r.Score)
+			item.collectionName = r.CollectionName
+		}
+	}
+	keywordResults, err := s.repo.Search(queryText, req.CharacterID, limit*2)
+	if err != nil {
+		return nil, err
+	}
+	queryLower := strings.ToLower(queryText)
+	for _, m := range keywordResults {
+		item := merged[m.ID]
+		if item == nil {
+			item = &acc{m: m, collectionName: collectionNameForMemoryType(m.MemoryType)}
+			merged[m.ID] = item
+		}
+		score := keywordMatchScore(queryLower, m.Key, m.Value)
+		if score <= 0 {
+			score = 0.5
+		}
+		if score > item.keywordScore {
+			item.keywordScore = score
+		}
+	}
+	results := make([]HybridSearchResult, 0, len(merged))
+	for _, item := range merged {
+		matchType := "keyword"
+		if item.vectorScore > 0 && item.keywordScore > 0 {
+			matchType = "hybrid"
+		} else if item.vectorScore > 0 {
+			matchType = "vector"
+		}
+		score := item.vectorScore*0.6 + item.keywordScore*0.4
+		if matchType == "hybrid" {
+			score += 0.1
+		}
+		collectionKey := collectionKeyFromCollectionName(item.collectionName)
+		results = append(results, HybridSearchResult{
+			Memory:         item.m,
+			Score:          math.Round(score*10000) / 10000,
+			VectorScore:    math.Round(item.vectorScore*10000) / 10000,
+			KeywordScore:   math.Round(item.keywordScore*10000) / 10000,
+			MatchType:      matchType,
+			CollectionName: item.collectionName,
+			MemoryLayer:    memoryLayerLabel(collectionKey),
+		})
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+	if len(results) > limit {
+		results = results[:limit]
 	}
 	return results, nil
 }
@@ -295,162 +445,92 @@ func (s *service) RecordUse(id string) (*Memory, error) {
 }
 
 func (s *service) GetVectorStatus() map[string]interface{} {
-	total, embedded := s.repo.VectorStatus()
-
+	totalMem, embedded := s.repo.VectorStatus()
+	collections := make([]map[string]interface{}, 0)
+	totalEmbeddings := uint64(0)
 	enabled := qdrantDB.Client != nil
-	providerName := ""
-	vectorCount := uint64(0)
-	if enabled {
-		providerName = "qdrant"
-		count, err := qdrantDB.GetVectorCount()
-		if err == nil {
-			vectorCount = count
+	for _, collectionName := range qdrantDB.CollectionNames() {
+		count := uint64(0)
+		status := "disabled"
+		if enabled {
+			if c, err := qdrantDB.GetVectorCount(collectionName); err == nil {
+				count = c
+				status = "ready"
+				totalEmbeddings += c
+			} else {
+				status = "error"
+			}
 		}
-	}
-
-	return map[string]interface{}{
-		"totalMemories":   total,
-		"embeddedCount":   embedded,
-		"totalEmbeddings": vectorCount,
-		"enabled":         enabled,
-		"providerName":    providerName,
-		"status":          "ok",
-	}
-}
-
-func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
-	if qdrantDB.Client == nil {
-		return nil, fmt.Errorf("向量数据库未就绪")
-	}
-
-	var memories []Memory
-	s.db.Find(&memories)
-
-	successCount := 0
-	failCount := 0
-	for _, m := range memories {
-		text := m.Key + " " + m.Value
-		vector, err := s.embeddingSvc.Embed(text)
-		if err != nil {
-			failCount++
-			log.Error("重建嵌入失败:", m.ID, err)
-			continue
-		}
-
-		payload := map[string]interface{}{
-			"memory_id":    m.ID,
-			"character_id": m.CharacterID,
-			"memory_type":  m.MemoryType,
-			"key":          m.Key,
-			"value":        m.Value,
-		}
-		err = qdrantDB.UpsertVectors([]qdrantDB.VectorPoint{
-			{ID: m.ID, Vector: vector, Payload: payload},
+		collectionKey := collectionKeyFromCollectionName(collectionName)
+		collections = append(collections, map[string]interface{}{
+			"key":             collectionKey,
+			"name":            collectionName,
+			"label":           memoryLayerLabel(collectionKey),
+			"totalEmbeddings": count,
+			"status":          status,
 		})
-		if err != nil {
-			failCount++
-			log.Error("存储嵌入失败:", m.ID, err)
-			continue
-		}
-		successCount++
-		_ = s.repo.MarkEmbedded(m.ID)
 	}
-
+	if totalEmbeddings > 0 {
+		embedded = int64(totalEmbeddings)
+	}
+	notEmbedded := totalMem - embedded
+	if notEmbedded < 0 {
+		notEmbedded = 0
+	}
 	return map[string]interface{}{
-		"total":   len(memories),
-		"success": successCount,
-		"failed":  failCount,
-	}, nil
+		"totalMemories":   totalMem,
+		"totalEmbedded":   embedded,
+		"notEmbedded":     notEmbedded,
+		"enabled":         enabled,
+		"providerName":    "Qdrant",
+		"totalEmbeddings": totalEmbeddings,
+		"collections":     collections,
+	}
 }
 
 func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversationId is required")
+	messages, err := s.repo.GetConversationMessages(conversationID)
+	if err != nil || len(messages) == 0 {
+		return nil, err
 	}
-
-	var msgs []map[string]interface{}
-	s.db.Table("messages").
-		Where("conversation_id = ? AND role IN ('user','assistant')", conversationID).
-		Order("created_at ASC").Limit(30).Find(&msgs)
-	if len(msgs) == 0 {
-		return nil, fmt.Errorf("没有可提取的消息")
-	}
-
-	var conversationText strings.Builder
-	for _, msg := range msgs {
-		role, _ := msg["role"].(string)
-		content, _ := msg["content"].(string)
-		if role == "user" {
-			conversationText.WriteString("用户: ")
-		} else {
-			conversationText.WriteString("AI: ")
-		}
-		conversationText.WriteString(content)
-		conversationText.WriteString("\n")
-	}
-
 	cfg := s.getActiveModel()
 	if cfg == nil {
-		return nil, fmt.Errorf("没有可用的模型配置")
+		return nil, fmt.Errorf("no active model")
 	}
-
-	prompt := fmt.Sprintf("从以下对话中提取值得记忆的关键信息，以JSON数组格式返回，每个元素包含key/value/memoryType/importance字段。\nmemoryType可选值: fact(事实)/preference(偏好)/relationship(关系)/plan(计划)\nimportance: 1-10 重要程度\n\n%s", conversationText.String())
-
-	apiMessages := []map[string]interface{}{
-		{"role": "system", "content": "你是一个信息提取助手。只返回JSON数组，不要其他内容。"},
-		{"role": "user", "content": prompt},
+	conversationText := ""
+	for _, msg := range messages {
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		conversationText += role + ": " + content + "\n"
 	}
-	content, _, err := s.callLLM(cfg, apiMessages)
+	systemPrompt := `你是一个记忆提取器。从对话中提取值得长期记忆的事实，返回JSON数组。
+每条记忆包含：key(关键词标签)、value(记忆内容)、memoryType(类型：personal_info/hobby/preference/fact/plan/habit/relationship)、importance(1-10)、confidence(0-100)
+
+只提取明确的事实信息，不确定的信息confidence低于50。如果没有值得记忆的内容，返回空数组[]。`
+
+	messagesLLM := []map[string]interface{}{
+		{"role": "system", "content": systemPrompt},
+		{"role": "user", "content": conversationText},
+	}
+	content, _, err := s.callLLM(cfg, messagesLLM)
 	if err != nil {
 		return nil, err
 	}
-
-	var extracted []struct {
-		Key        string `json:"key"`
-		Value      string `json:"value"`
-		MemoryType string `json:"memoryType"`
-		Importance int    `json:"importance"`
-	}
 	content = extractJSONArray(content)
-	if err := json.Unmarshal([]byte(content), &extracted); err != nil {
-		return nil, fmt.Errorf("解析提取结果失败: %w", err)
+	var candidates []MemoryCandidate
+	if err := json.Unmarshal([]byte(content), &candidates); err != nil {
+		return nil, nil
 	}
-
+	for i := range candidates {
+		candidates[i].ID = uuid.New().String()
+		candidates[i].SourceText = conversationText
+		candidates[i].ConversationID = conversationID
+		candidates[i].CreatedAt = time.Now().Format("2006-01-02 15:04:05")
+	}
 	s.mu.Lock()
-	s.candidates = nil
-	for _, e := range extracted {
-		if e.Key == "" || e.Value == "" {
-			continue
-		}
-		if e.MemoryType == "" {
-			e.MemoryType = "fact"
-		}
-		if e.Importance < 1 {
-			e.Importance = 5
-		}
-		if e.Importance > 10 {
-			e.Importance = 10
-		}
-		convIDShort := conversationID
-		if len(convIDShort) > 8 {
-			convIDShort = convIDShort[:8]
-		}
-		s.candidates = append(s.candidates, MemoryCandidate{
-			ID:             uuid.New().String(),
-			Key:            e.Key,
-			Value:          e.Value,
-			MemoryType:     e.MemoryType,
-			Importance:     e.Importance,
-			SourceText:     convIDShort,
-			ConversationID: conversationID,
-			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
-		})
-	}
-	result := make([]MemoryCandidate, len(s.candidates))
-	copy(result, s.candidates)
+	s.candidates = append(s.candidates, candidates...)
 	s.mu.Unlock()
-
-	return result, nil
+	return candidates, nil
 }
 
 func (s *service) ListCandidates() []MemoryCandidate {
@@ -464,22 +544,35 @@ func (s *service) ListCandidates() []MemoryCandidate {
 func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var target *MemoryCandidate
+	var idx int
 	for i, c := range s.candidates {
 		if c.ID == id {
-			m := &Memory{
-				Key: c.Key, Value: c.Value, MemoryType: c.MemoryType,
-				Importance: c.Importance, Source: "extracted",
-			}
-			if err := s.repo.Create(m); err != nil {
-				return nil, err
-			}
-			go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
-			s.logEvent(m.ID, "candidate_accepted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
-			s.candidates = append(s.candidates[:i], s.candidates[i+1:]...)
-			return m, nil
+			target = &c
+			idx = i
+			break
 		}
 	}
-	return nil, fmt.Errorf("候选记忆不存在")
+	if target == nil {
+		return nil, fmt.Errorf("候选记忆不存在")
+	}
+	m := &Memory{
+		CharacterID:  "",
+		MemoryType:   target.MemoryType,
+		Source:       "auto",
+		Key:          target.Key,
+		Value:        target.Value,
+		Importance:   target.Importance,
+		Confidence:   50,
+		SourceConvID: target.ConversationID,
+	}
+	if err := s.repo.Create(m); err != nil {
+		return nil, err
+	}
+	s.candidates = append(s.candidates[:idx], s.candidates[idx+1:]...)
+	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+	return m, nil
 }
 
 func (s *service) RejectCandidate(id string) error {
@@ -495,14 +588,15 @@ func (s *service) RejectCandidate(id string) error {
 }
 
 func (s *service) BatchAcceptCandidates(ids []string) ([]Memory, error) {
-	var accepted []Memory
+	var memories []Memory
 	for _, id := range ids {
 		m, err := s.AcceptCandidate(id)
-		if err == nil {
-			accepted = append(accepted, *m)
+		if err != nil {
+			continue
 		}
+		memories = append(memories, *m)
 	}
-	return accepted, nil
+	return memories, nil
 }
 
 func (s *service) UpdateCandidate(id string, req *UpdateCandidateRequest) (*MemoryCandidate, error) {
@@ -522,60 +616,61 @@ func (s *service) UpdateCandidate(id string, req *UpdateCandidateRequest) (*Memo
 			if req.Importance != nil {
 				s.candidates[i].Importance = *req.Importance
 			}
-			result := s.candidates[i]
-			return &result, nil
+			return &s.candidates[i], nil
 		}
 	}
 	return nil, fmt.Errorf("候选记忆不存在")
 }
 
 func (s *service) DeleteCandidate(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, c := range s.candidates {
-		if c.ID == id {
-			s.candidates = append(s.candidates[:i], s.candidates[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("候选记忆不存在")
+	return s.RejectCandidate(id)
 }
 
 func (s *service) CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error) {
-	var existingMemories []Memory
-	s.db.Where("(key LIKE ? OR value LIKE ?)", "%"+req.Key+"%", "%"+req.Value+"%").Find(&existingMemories)
+	existing, err := s.repo.SearchByKey(req.Key, req.CharacterID)
+	if err != nil {
+		return &CheckConflictResponse{HasConflict: false}, nil
+	}
 
-	resp := &CheckConflictResponse{HasConflict: false, Conflicts: []ConflictItem{}}
-	for _, m := range existingMemories {
-		reason := ""
-		keyMatch := strings.Contains(m.Key, req.Key) || strings.Contains(req.Key, m.Key)
-		valMatch := strings.Contains(m.Value, req.Value) || strings.Contains(req.Value, m.Value)
-		typeMatch := m.MemoryType == req.MemoryType
+	var conflicts []ConflictItem
 
-		if keyMatch && valMatch && typeMatch {
-			reason = "key、value和类型都相似"
-		} else if keyMatch && valMatch {
-			reason = "key和value相似"
-		} else if keyMatch && typeMatch {
-			reason = "key和类型相似"
-		} else if valMatch {
-			reason = "value相似"
-		} else {
+	for _, m := range existing {
+		if m.ID == "" {
 			continue
 		}
-		resp.HasConflict = true
-		resp.Conflicts = append(resp.Conflicts, ConflictItem{Memory: m, Reason: reason})
+
+		if m.Key == req.Key && m.Value == req.Value {
+			conflicts = append(conflicts, ConflictItem{Memory: m, Reason: "exact_match"})
+			continue
+		}
+
+		if m.Key == req.Key && m.Value != req.Value {
+			sim := jaccardSimilarity(req.Value, m.Value)
+			if sim > 0.85 {
+				conflicts = append(conflicts, ConflictItem{Memory: m, Reason: fmt.Sprintf("semantic_similar(%.2f)", sim)})
+				continue
+			}
+		}
+
+		if m.Key == req.Key {
+			isContradict, _ := s.llmCheckContradiction(req.Value, m.Value)
+			if isContradict {
+				conflicts = append(conflicts, ConflictItem{Memory: m, Reason: "llm_contradiction"})
+			}
+		}
 	}
-	return resp, nil
+
+	return &CheckConflictResponse{
+		HasConflict: len(conflicts) > 0,
+		Conflicts:   conflicts,
+	}, nil
 }
 
 func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error) {
 	resp := &ResolveConflictResponse{Resolved: true}
 
 	switch req.Action {
-	case "keep_old":
-		return resp, nil
-	case "replace_old":
+	case "replace":
 		if req.ConflictID != "" {
 			s.repo.Delete(req.ConflictID)
 		}
@@ -590,34 +685,18 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
-	case "keep_both":
-		m := &Memory{
-			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
-			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
-		}
-		if err := s.repo.Create(m); err != nil {
-			return nil, err
-		}
-		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
-		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
-		resp.MemoryID = m.ID
+	case "keep_existing":
 		return resp, nil
 	case "merge":
+		newValue := req.NewValue
 		if req.ConflictID != "" {
 			existing, err := s.repo.FindByID(req.ConflictID)
-			if err == nil && existing != nil {
-				updates := map[string]interface{}{
-					"value": existing.Value + "; " + req.NewValue,
-				}
-				s.repo.Update(req.ConflictID, updates)
-				go s.SyncEmbedding(existing.ID, existing.Key, updates["value"].(string), existing.CharacterID, existing.MemoryType)
-				s.logEvent(existing.ID, "memory_edited", existing.Key, updates["value"].(string), existing.MemoryType, existing.Importance, existing.Source, existing.CharacterID)
-				resp.MemoryID = existing.ID
-				return resp, nil
+			if err == nil {
+				newValue = existing.Value + "; " + req.NewValue
 			}
 		}
 		m := &Memory{
-			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
+			Key: req.NewKey, Value: newValue, MemoryType: req.NewType,
 			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
 		}
 		if err := s.repo.Create(m); err != nil {
@@ -632,6 +711,177 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 	}
 }
 
+func (s *service) AutoResolveConflict(key, value, characterID string, newConfidence int) (*ResolveConflictResponse, error) {
+	existing, err := s.repo.SearchByKey(key, characterID)
+	if err != nil || len(existing) == 0 {
+		return &ResolveConflictResponse{Resolved: false}, nil
+	}
+
+	for _, m := range existing {
+		if m.Key != key {
+			continue
+		}
+		if m.Value == value {
+			if newConfidence > m.Confidence+10 {
+				s.repo.Update(m.ID, map[string]interface{}{
+					"confidence": newConfidence,
+					"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+				})
+			}
+			return &ResolveConflictResponse{Resolved: true, MemoryID: m.ID}, nil
+		}
+		confDiff := newConfidence - m.Confidence
+		if confDiff >= 40 {
+			s.repo.Delete(m.ID)
+			return &ResolveConflictResponse{Resolved: false}, nil
+		}
+	}
+
+	return &ResolveConflictResponse{Resolved: false}, nil
+}
+
+func (s *service) GetRankedMemories(characterID, query string, limit int) ([]RankedMemory, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	allMemories, _, err := s.repo.List(MemoryListQuery{
+		CharacterID: characterID,
+		PageSize:    200,
+		Page:        1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	vectorScores := make(map[string]float64)
+	if qdrantDB.Client != nil && query != "" {
+		vector, err := s.embeddingSvc.Embed(query)
+		if err == nil {
+			results, err := qdrantDB.MultiSearch(vector, 50, nil)
+			if err == nil {
+				for _, r := range results {
+					if val, ok := r.Point.Payload["memory_id"]; ok {
+						rawMemID := val.GetStringValue()
+						if float64(r.Point.Score) > vectorScores[rawMemID] {
+							vectorScores[rawMemID] = float64(r.Point.Score)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	queryLower := strings.ToLower(query)
+	var ranked []RankedMemory
+	for _, m := range allMemories {
+		vs := vectorScores[m.ID]
+		ks := keywordMatchScore(queryLower, m.Key, m.Value)
+		is := float64(m.Importance) / 10.0
+
+		finalScore := vs*0.4 + ks*0.3 + is*0.3
+		if finalScore > 0 {
+			ranked = append(ranked, RankedMemory{
+				Memory:         m,
+				FinalScore:     math.Round(finalScore*10000) / 10000,
+				VectorScore:    math.Round(vs*10000) / 10000,
+				KeywordScore:   math.Round(ks*10000) / 10000,
+				ImportanceNorm: math.Round(is*10000) / 10000,
+			})
+		}
+	}
+
+	sort.Slice(ranked, func(i, j int) bool {
+		return ranked[i].FinalScore > ranked[j].FinalScore
+	})
+
+	if len(ranked) > limit {
+		ranked = ranked[:limit]
+	}
+	return ranked, nil
+}
+
+func (s *service) BatchVerify(ids []string, status string) error {
+	for _, id := range ids {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		s.repo.Update(id, map[string]interface{}{
+			"verified_status":  status,
+			"last_verified_at": now,
+		})
+	}
+	return nil
+}
+
+func (s *service) BatchSetImportance(ids []string, importance int) error {
+	for _, id := range ids {
+		s.repo.Update(id, map[string]interface{}{"importance": importance})
+	}
+	return nil
+}
+
+func keywordMatchScore(query, key, value string) float64 {
+	keyLower := strings.ToLower(key)
+	valLower := strings.ToLower(value)
+
+	if strings.Contains(keyLower, query) || strings.Contains(valLower, query) {
+		return 1.0
+	}
+
+	queryWords := strings.Fields(query)
+	matchCount := 0
+	for _, w := range queryWords {
+		if strings.Contains(keyLower, w) || strings.Contains(valLower, w) {
+			matchCount++
+		}
+	}
+	if len(queryWords) > 0 {
+		return float64(matchCount) / float64(len(queryWords))
+	}
+	return 0
+}
+
+func jaccardSimilarity(a, b string) float64 {
+	wordsA := make(map[string]bool)
+	wordsB := make(map[string]bool)
+	for _, w := range strings.Fields(strings.ToLower(a)) {
+		wordsA[w] = true
+	}
+	for _, w := range strings.Fields(strings.ToLower(b)) {
+		wordsB[w] = true
+	}
+	intersection := 0
+	for w := range wordsA {
+		if wordsB[w] {
+			intersection++
+		}
+	}
+	union := len(wordsA) + len(wordsB) - intersection
+	if union == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(union)
+}
+
+func (s *service) llmCheckContradiction(newVal, oldVal string) (bool, error) {
+	cfg := s.getActiveModel()
+	if cfg == nil {
+		return false, nil
+	}
+	prompt := fmt.Sprintf(`判断以下两条记忆是否存在矛盾。存在矛盾返回true，不矛盾返回false。
+记忆A: %s
+记忆B: %s
+只返回true或false。`, newVal, oldVal)
+
+	messages := []map[string]interface{}{
+		{"role": "user", "content": prompt},
+	}
+	content, _, err := s.callLLM(cfg, messages)
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(content)), "true"), nil
+}
+
 func (s *service) ExtractCandidates() ([]MemoryCandidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -644,15 +894,47 @@ func (s *service) RebuildIndex() (map[string]interface{}, error) {
 	return s.RebuildEmbeddings()
 }
 
-func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType string) {
+func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
+	totalMem, embedded := s.repo.VectorStatus()
 	if qdrantDB.Client == nil {
-		return
+		return map[string]interface{}{
+			"totalMemories": totalMem,
+			"embedded":      embedded,
+			"status":        "qdrant_not_available",
+		}, nil
+	}
+	var memories []Memory
+	s.db.Find(&memories)
+	successCount := 0
+	failCount := 0
+	for _, m := range memories {
+		if s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType) {
+			successCount++
+		} else {
+			failCount++
+		}
+	}
+	status := "completed"
+	if failCount > 0 {
+		status = "partial_failed"
+	}
+	return map[string]interface{}{
+		"totalMemories": totalMem,
+		"embedded":      int64(successCount),
+		"failed":        int64(failCount),
+		"status":        status,
+	}, nil
+}
+
+func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType string) bool {
+	if qdrantDB.Client == nil {
+		return false
 	}
 	text := key + " " + value
 	vector, err := s.embeddingSvc.Embed(text)
 	if err != nil {
 		log.Error("生成嵌入失败:", memID, err)
-		return
+		return false
 	}
 
 	payload := map[string]interface{}{
@@ -662,14 +944,75 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 		"key":          key,
 		"value":        value,
 	}
+	collectionName := collectionNameForMemoryType(memoryType)
 	err = qdrantDB.UpsertVectors([]qdrantDB.VectorPoint{
 		{ID: memID, Vector: vector, Payload: payload},
-	})
+	}, collectionName)
 	if err != nil {
 		log.Error("存储嵌入失败:", memID, err)
+		return false
+	}
+	if err := s.repo.MarkEmbedded(memID); err != nil {
+		log.Warn("标记嵌入状态失败:", memID, err)
+	}
+	return true
+}
+
+func collectionNameForMemoryType(memoryType string) string {
+	return qdrantDB.ResolveConfiguredCollection(collectionKeyForMemoryType(memoryType))
+}
+
+func collectionKeyForMemoryType(memoryType string) string {
+	switch strings.ToLower(memoryType) {
+	case "working_memory", "working", "summary", "current_summary":
+		return "working_memory"
+	case "profile", "user_profile", "personal_info", "hobby", "preference", "habit", "relationship", "nickname":
+		return "user_profiles"
+	case "episodic", "episode", "event", "moment", "scene":
+		return "episodic_memories"
+	default:
+		return "memory_embeddings"
+	}
+}
+
+func collectionKeyFromCollectionName(collectionName string) string {
+	keys := []string{"memory_embeddings", "working_memory", "user_profiles", "episodic_memories"}
+	for _, key := range keys {
+		if qdrantDB.ResolveConfiguredCollection(key) == collectionName {
+			return key
+		}
+	}
+	return collectionName
+}
+
+func memoryLayerLabel(collectionKey string) string {
+	switch collectionKey {
+	case "working_memory":
+		return "当前摘要"
+	case "user_profiles":
+		return "用户画像"
+	case "episodic_memories":
+		return "情景回忆"
+	default:
+		return "事实记忆"
+	}
+}
+
+func deleteVectorsFromCollections(ids []string, collectionNames ...string) {
+	if qdrantDB.Client == nil || len(ids) == 0 {
 		return
 	}
-	_ = s.repo.MarkEmbedded(memID)
+	if len(collectionNames) == 0 {
+		collectionNames = qdrantDB.CollectionNames()
+	}
+	for _, collectionName := range collectionNames {
+		if collectionName == "" {
+			continue
+		}
+		if err := qdrantDB.DeleteVectors(ids, collectionName); err != nil {
+			log.Warn("删除向量失败:", collectionName, err)
+		}
+	}
 }
 
 func (s *service) logEvent(memoryID, eventType, key, value, memoryType string, importance int, source, characterID string) {

@@ -39,22 +39,54 @@ func InitClient() error {
 }
 
 func EnsureCollection() error {
+	return EnsureCollectionByName(defaultCollectionName(), defaultVectorDim())
+}
+
+func EnsureCollections() error {
 	cfg := config.AppCfg.Qdrant
+	collections := cfg.Collections
+	if len(collections) == 0 {
+		return EnsureCollection()
+	}
+	for key, c := range collections {
+		name := c.Name
+		if name == "" {
+			name = key
+		}
+		dim := c.VectorDim
+		if dim <= 0 {
+			dim = cfg.VectorDim
+		}
+		if err := EnsureCollectionByName(name, dim); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func EnsureCollectionByName(collectionName string, vectorDim int) error {
 	ctx := context.Background()
 
-	exists, err := Client.CollectionExists(ctx, cfg.CollectionName)
+	if collectionName == "" {
+		collectionName = defaultCollectionName()
+	}
+	if vectorDim <= 0 {
+		vectorDim = defaultVectorDim()
+	}
+
+	exists, err := Client.CollectionExists(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("检查集合失败: %w", err)
 	}
 
 	if !exists {
-		log.Info(fmt.Sprintf("创建Qdrant集合: %s", cfg.CollectionName))
+		log.Info(fmt.Sprintf("创建Qdrant集合: %s", collectionName))
 		req := &qdrant.CreateCollection{
-			CollectionName: cfg.CollectionName,
+			CollectionName: collectionName,
 			VectorsConfig: &qdrant.VectorsConfig{
 				Config: &qdrant.VectorsConfig_Params{
 					Params: &qdrant.VectorParams{
-						Size:     uint64(cfg.VectorDim),
+						Size:     uint64(vectorDim),
 						Distance: qdrant.Distance_Cosine,
 					},
 				},
@@ -63,9 +95,9 @@ func EnsureCollection() error {
 		if err := Client.CreateCollection(ctx, req); err != nil {
 			return fmt.Errorf("创建集合失败: %w", err)
 		}
-		log.Info(fmt.Sprintf("集合%s创建成功", cfg.CollectionName))
+		log.Info(fmt.Sprintf("集合%s创建成功", collectionName))
 	} else {
-		log.Info(fmt.Sprintf("使用已有集合: %s", cfg.CollectionName))
+		log.Info(fmt.Sprintf("使用已有集合: %s", collectionName))
 	}
 
 	return nil
@@ -77,8 +109,8 @@ type VectorPoint struct {
 	Payload map[string]interface{}
 }
 
-func UpsertVectors(points []VectorPoint) error {
-	cfg := config.AppCfg.Qdrant
+func UpsertVectors(points []VectorPoint, collectionName ...string) error {
+	target := resolveCollectionName(collectionName...)
 	ctx := context.Background()
 
 	qdrantPoints := make([]*qdrant.PointStruct, len(points))
@@ -91,14 +123,14 @@ func UpsertVectors(points []VectorPoint) error {
 	}
 
 	_, err := Client.Upsert(ctx, &qdrant.UpsertPoints{
-		CollectionName: cfg.CollectionName,
+		CollectionName: target,
 		Points:         qdrantPoints,
 	})
 	return err
 }
 
-func DeleteVectors(ids []string) error {
-	cfg := config.AppCfg.Qdrant
+func DeleteVectors(ids []string, collectionName ...string) error {
+	target := resolveCollectionName(collectionName...)
 	ctx := context.Background()
 
 	qdrantIDs := make([]*qdrant.PointId, len(ids))
@@ -107,14 +139,15 @@ func DeleteVectors(ids []string) error {
 	}
 
 	_, err := Client.Delete(ctx, &qdrant.DeletePoints{
-		CollectionName: cfg.CollectionName,
+		CollectionName: target,
 		Points:         qdrant.NewPointsSelector(qdrantIDs...),
 	})
 	return err
 }
 
-func SearchVectors(vector []float32, limit int, filter map[string]interface{}) ([]*qdrant.ScoredPoint, error) {
+func SearchVectors(vector []float32, limit int, filter map[string]interface{}, collectionName ...string) ([]*qdrant.ScoredPoint, error) {
 	cfg := config.AppCfg.Qdrant
+	target := resolveCollectionName(collectionName...)
 	ctx := context.Background()
 
 	if limit <= 0 {
@@ -122,7 +155,7 @@ func SearchVectors(vector []float32, limit int, filter map[string]interface{}) (
 	}
 
 	queryReq := &qdrant.QueryPoints{
-		CollectionName: cfg.CollectionName,
+		CollectionName: target,
 		Query:          qdrant.NewQuery(vector...),
 		Limit:          qdrant.PtrOf(uint64(limit)),
 		WithPayload:    qdrant.NewWithPayload(true),
@@ -133,6 +166,36 @@ func SearchVectors(vector []float32, limit int, filter map[string]interface{}) (
 	}
 
 	return Client.Query(ctx, queryReq)
+}
+
+type CollectionScoredPoint struct {
+	CollectionName string
+	Point          *qdrant.ScoredPoint
+}
+
+func MultiSearch(vector []float32, limit int, filter map[string]interface{}, collectionNames ...string) ([]CollectionScoredPoint, error) {
+	if len(collectionNames) == 0 {
+		collectionNames = CollectionNames()
+	}
+	if limit <= 0 {
+		limit = config.AppCfg.Qdrant.Limit
+	}
+	results := make([]CollectionScoredPoint, 0)
+	var lastErr error
+	for _, collectionName := range collectionNames {
+		points, err := SearchVectors(vector, limit, filter, collectionName)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		for _, p := range points {
+			results = append(results, CollectionScoredPoint{CollectionName: collectionName, Point: p})
+		}
+	}
+	if len(results) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	return results, nil
 }
 
 func buildFilter(filter map[string]interface{}) *qdrant.Filter {
@@ -151,11 +214,11 @@ func buildFilter(filter map[string]interface{}) *qdrant.Filter {
 	}
 }
 
-func GetVectorCount() (uint64, error) {
-	cfg := config.AppCfg.Qdrant
+func GetVectorCount(collectionName ...string) (uint64, error) {
+	target := resolveCollectionName(collectionName...)
 	ctx := context.Background()
 
-	info, err := Client.GetCollectionInfo(ctx, cfg.CollectionName)
+	info, err := Client.GetCollectionInfo(ctx, target)
 	if err != nil {
 		return 0, err
 	}
@@ -163,4 +226,80 @@ func GetVectorCount() (uint64, error) {
 		return 0, nil
 	}
 	return *info.PointsCount, nil
+}
+
+func CollectionNames() []string {
+	cfg := config.AppCfg.Qdrant
+	if len(cfg.Collections) == 0 {
+		return []string{defaultCollectionName()}
+	}
+	keys := []string{"memory_embeddings", "working_memory", "user_profiles", "episodic_memories"}
+	names := make([]string, 0, len(cfg.Collections))
+	seen := map[string]bool{}
+	for _, key := range keys {
+		if c, ok := cfg.Collections[key]; ok {
+			name := c.Name
+			if name == "" {
+				name = key
+			}
+			names = append(names, name)
+			seen[name] = true
+		}
+	}
+	for key, c := range cfg.Collections {
+		name := c.Name
+		if name == "" {
+			name = key
+		}
+		if !seen[name] {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func ResolveConfiguredCollection(key string) string {
+	if config.AppCfg == nil {
+		return key
+	}
+	if c, ok := config.AppCfg.Qdrant.Collections[key]; ok {
+		if c.Name != "" {
+			return c.Name
+		}
+		return key
+	}
+	if key == "" {
+		return defaultCollectionName()
+	}
+	return key
+}
+
+func resolveCollectionName(collectionName ...string) string {
+	if len(collectionName) > 0 && collectionName[0] != "" {
+		return collectionName[0]
+	}
+	return defaultCollectionName()
+}
+
+func defaultCollectionName() string {
+	if config.AppCfg == nil {
+		return "memory_embeddings"
+	}
+	if config.AppCfg.Qdrant.CollectionName != "" {
+		return config.AppCfg.Qdrant.CollectionName
+	}
+	return ResolveConfiguredCollection("memory_embeddings")
+}
+
+func defaultVectorDim() int {
+	if config.AppCfg == nil {
+		return 1536
+	}
+	if config.AppCfg.Qdrant.VectorDim > 0 {
+		return config.AppCfg.Qdrant.VectorDim
+	}
+	if c, ok := config.AppCfg.Qdrant.Collections["memory_embeddings"]; ok && c.VectorDim > 0 {
+		return c.VectorDim
+	}
+	return 1536
 }

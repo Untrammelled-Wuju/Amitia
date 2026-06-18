@@ -159,3 +159,10 @@ type ChatStatsResponse struct {
 	TotalConversations int64 `json:"totalConversations"`
 }
 
+
+type WorkingMemoryState struct {
+	ConversationID string   `json:"conversationId"`
+	Summary        string   `json:"summary"`
+	KeyPoints      []string `json:"keyPoints"`
+	UpdatedAt      string   `json:"updatedAt"`
+}

@@ -16,9 +16,12 @@ type Repository interface {
 	Delete(id string) error
 	DeleteAll(characterID string) error
 	Search(keyword, characterID string, limit int) ([]Memory, error)
+	SearchByKey(key, characterID string) ([]Memory, error)
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
 	MarkEmbedded(id string) error
+	GetConversationMessages(conversationID string) ([]map[string]interface{}, error)
+	GetRankedByImportance(characterID string, limit int) ([]Memory, error)
 }
 
 type repository struct {
@@ -46,6 +49,12 @@ func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	}
 	if q.Keyword != "" {
 		query = query.Where("(key LIKE ? OR value LIKE ?)", "%"+q.Keyword+"%", "%"+q.Keyword+"%")
+	}
+	if q.VerifiedStatus != "" {
+		query = query.Where("verified_status = ?", q.VerifiedStatus)
+	}
+	if q.MinConfidence > 0 {
+		query = query.Where("confidence >= ?", q.MinConfidence)
 	}
 	var total int64
 	query.Count(&total)
@@ -86,6 +95,7 @@ func parseSort(raw string) (col, dir string) {
 		"updated_at": "updated_at",
 		"created_at": "created_at",
 		"importance": "importance",
+		"confidence": "confidence",
 		"use_count":  "use_count",
 		"time":       "created_at",
 	}
@@ -133,7 +143,20 @@ func (r *repository) Search(keyword, characterID string, limit int) ([]Memory, e
 		query = query.Where("character_id = ?", characterID)
 	}
 	var items []Memory
-	err := query.Order("importance DESC, use_count DESC").Limit(limit).Find(&items).Error
+	err := query.Order("importance DESC, confidence DESC, use_count DESC").Limit(limit).Find(&items).Error
+	if items == nil {
+		items = []Memory{}
+	}
+	return items, err
+}
+
+func (r *repository) SearchByKey(key, characterID string) ([]Memory, error) {
+	query := r.db.Where("key = ?", key)
+	if characterID != "" {
+		query = query.Where("character_id = ?", characterID)
+	}
+	var items []Memory
+	err := query.Order("confidence DESC").Find(&items).Error
 	if items == nil {
 		items = []Memory{}
 	}
@@ -160,3 +183,29 @@ func (r *repository) MarkEmbedded(id string) error {
 	).Error
 }
 
+func (r *repository) GetConversationMessages(conversationID string) ([]map[string]interface{}, error) {
+	var messages []map[string]interface{}
+	err := r.db.Table("messages").
+		Select("role, content").
+		Where("conversation_id = ?", conversationID).
+		Order("created_at ASC").
+		Find(&messages).Error
+	if messages == nil {
+		messages = []map[string]interface{}{}
+	}
+	return messages, err
+}
+
+func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Memory, error) {
+	query := r.db.Where("character_id = ?", characterID).
+		Order("importance DESC, confidence DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	var items []Memory
+	err := query.Find(&items).Error
+	if items == nil {
+		items = []Memory{}
+	}
+	return items, err
+}

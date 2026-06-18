@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -8,16 +9,13 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-
 type Handler struct {
 	service Service
 }
 
-
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
 }
-
 
 func (h *Handler) List(c *gin.Context) {
 	var q MemoryListQuery
@@ -29,7 +27,6 @@ func (h *Handler) List(c *gin.Context) {
 	}
 	util.SuccessResponse(c, resp)
 }
-
 
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateMemoryRequest
@@ -44,7 +41,6 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "记忆创建成功", m)
 }
-
 
 func (h *Handler) Update(c *gin.Context) {
 	id := c.Param("id")
@@ -61,7 +57,6 @@ func (h *Handler) Update(c *gin.Context) {
 	util.SuccessMsgResponse(c, "记忆更新成功", m)
 }
 
-
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(id); err != nil {
@@ -70,7 +65,6 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "记忆已删除", nil)
 }
-
 
 func (h *Handler) Search(c *gin.Context) {
 	var req SearchMemoryRequest
@@ -100,6 +94,20 @@ func (h *Handler) VectorSearch(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"items": results, "total": len(results)})
 }
 
+func (h *Handler) HybridSearch(c *gin.Context) {
+	var req VectorSearchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	results, err := h.service.HybridSearch(&req)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": results, "total": len(results)})
+}
+
 func (h *Handler) RebuildEmbeddings(c *gin.Context) {
 	result, err := h.service.RebuildEmbeddings()
 	if err != nil {
@@ -108,7 +116,6 @@ func (h *Handler) RebuildEmbeddings(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "嵌入重建完成", result)
 }
-
 
 func (h *Handler) RecordUse(c *gin.Context) {
 	id := c.Param("id")
@@ -119,7 +126,6 @@ func (h *Handler) RecordUse(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "使用已记录", m)
 }
-
 
 func (h *Handler) DeleteAll(c *gin.Context) {
 	characterID := c.Query("characterId")
@@ -272,4 +278,57 @@ func (h *Handler) BatchAcceptCandidates(c *gin.Context) {
 func (h *Handler) VectorStatus(c *gin.Context) {
 	status := h.service.GetVectorStatus()
 	util.SuccessResponse(c, status)
+}
+
+func (h *Handler) BatchVerify(c *gin.Context) {
+	var req struct {
+		IDs    []string `json:"ids" binding:"required"`
+		Status string   `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		util.ErrorResponse(c, response.InvalidParams, "ids不能为空", nil)
+		return
+	}
+	if req.Status == "" {
+		req.Status = "user_verified"
+	}
+	if err := h.service.BatchVerify(req.IDs, req.Status); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "批量确认完成", nil)
+}
+
+func (h *Handler) BatchSetImportance(c *gin.Context) {
+	var req struct {
+		IDs        []string `json:"ids" binding:"required"`
+		Importance int      `json:"importance"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		util.ErrorResponse(c, response.InvalidParams, "ids不能为空", nil)
+		return
+	}
+	if req.Importance <= 0 {
+		req.Importance = 10
+	}
+	if err := h.service.BatchSetImportance(req.IDs, req.Importance); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "批量设置完成", nil)
+}
+
+func (h *Handler) GetRankedMemories(c *gin.Context) {
+	characterID := c.Query("characterId")
+	query := c.Query("query")
+	limit := 10
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	ranked, err := h.service.GetRankedMemories(characterID, query, limit)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, ranked)
 }

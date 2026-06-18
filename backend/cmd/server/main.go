@@ -1,19 +1,21 @@
 package main
 
 import (
-	"path/filepath"
-	"strconv"
-	"strings"
-	"gorm.io/gorm"
+	"fmt"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/proactive"
-	"fmt"
+	"github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/qq"
+	"gorm.io/gorm"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -24,7 +26,6 @@ import (
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 )
-
 
 func killExistingServer(addr string) {
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
@@ -103,7 +104,11 @@ func main() {
 	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
 		memSvc.SyncEmbedding(id, key, value, characterID, memoryType)
 	})
-	chatSvc := chat.NewService(chatRepo, ctx, memSvc)
+	profRepo := profile.NewRepository(ctx)
+	profSvc := profile.NewService(profRepo, ctx)
+	epiRepo := episodic.NewRepository(ctx)
+	epiSvc := episodic.NewService(epiRepo, ctx)
+	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -125,7 +130,6 @@ func main() {
 	log.Info("今日主动消息任务已生成")
 
 	killExistingServer(serverAddr)
-
 
 	r := setupRouter(ctx)
 	if err := r.Run(serverAddr); err != nil {
@@ -174,8 +178,6 @@ func initDatabase(db *gorm.DB) {
 	log.Info("sql.sql建表完成")
 }
 
-
-
 func startQdrant() {
 	qcfg := config.AppCfg.Qdrant
 	log.Info("正在启动Qdrant...")
@@ -196,7 +198,7 @@ func startQdrant() {
 		log.Warn("向量检索功能不可用，将回退到关键词搜索")
 		return
 	}
-	if err := qdrantDB.EnsureCollection(); err != nil {
+	if err := qdrantDB.EnsureCollections(); err != nil {
 		log.Error("Qdrant集合创建失败:", err)
 		qdrantDB.StopQdrant()
 		log.Warn("向量检索功能不可用，将回退到关键词搜索")

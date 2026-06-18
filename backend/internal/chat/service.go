@@ -7,17 +7,19 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"os"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -67,8 +69,7 @@ force_voice_reply 仅在用户明确要求"用语音回复"、"发语音"、"语
 
 const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
 
-const WechatStylePrompt = 
-	"你和用户是比较熟悉的长期对话关系，不需要像客服或正式助手一样说话。\\n" +
+const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，不需要像客服或正式助手一样说话。\\n" +
 	"回复要自然、有反应、有一点态度，可以适当使用「嗯？、喔、奥奥、ok、好、行、确实、懂了」等语气词。\\n" +
 	"用户随口聊，你就自然接话；用户认真问问题，你再认真回答。\\n" +
 	"不要客服腔，不要过度正式，不要每次都完整总结，也不要动不动分点讲大道理。\\n" +
@@ -81,20 +82,29 @@ const WechatStylePrompt =
 	"不能使用markdown格式。"
 
 type service struct {
-	repo     Repository
-	db       *gorm.DB
-	memorySvc memory.Service
+	repo        Repository
+	db          *gorm.DB
+	memorySvc   memory.Service
+	profileSvc  profile.Service
+	episodicSvc episodic.Service
+	wmCache     *WorkingMemoryCache
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service) Service {
-	return &service{repo: repo, db: ctx.DB, memorySvc: memSvc}
+func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service) Service {
+	return &service{repo: repo, db: ctx.DB, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute)}
 }
 
 func (s *service) ListConversations(q ConversationQuery) (*ConversationListResponse, error) {
-	if q.Page <= 0 { q.Page = 1 }
-	if q.PageSize <= 0 { q.PageSize = 20 }
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.PageSize <= 0 {
+		q.PageSize = 20
+	}
 	convs, total, err := s.repo.ListConversations(q)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	for i := range convs {
 		convs[i].MessageCount = int(s.repo.CountMessagesByConv(convs[i].ID))
 	}
@@ -104,16 +114,26 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 
 func (s *service) GetConversation(id string) (*Conversation, error) {
 	c, err := s.repo.GetConversation(id)
-	if err != nil { return nil, fmt.Errorf("对话不存在") }
+	if err != nil {
+		return nil, fmt.Errorf("对话不存在")
+	}
 	return c, nil
 }
 
 func (s *service) CreateConversation(req *CreateConversationRequest) (*Conversation, error) {
-	if req.Title == "" { req.Title = "New Chat" }
-	if req.Channel == "" { req.Channel = "web" }
-	if req.Source == "" { req.Source = "manual" }
+	if req.Title == "" {
+		req.Title = "New Chat"
+	}
+	if req.Channel == "" {
+		req.Channel = "web"
+	}
+	if req.Source == "" {
+		req.Source = "manual"
+	}
 	c := &Conversation{CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
-	if err := s.repo.CreateConversation(c); err != nil { return nil, err }
+	if err := s.repo.CreateConversation(c); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -170,7 +190,9 @@ func (s *service) DeleteMessages(convID string) error {
 
 func (s *service) DeleteSingleMessage(id string) error {
 	msgs, _, err := s.repo.GetMessages("", 0, 0)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	for _, m := range msgs {
 		if m.ID == id {
 			return s.repo.DeleteMessage(id)
@@ -180,10 +202,16 @@ func (s *service) DeleteSingleMessage(id string) error {
 }
 
 func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error) {
-	if q.Page <= 0 { q.Page = 1 }
-	if q.PageSize <= 0 { q.PageSize = 20 }
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.PageSize <= 0 {
+		q.PageSize = 20
+	}
 	_, total, err := s.repo.SearchMessages(q)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
 	items := make([]Conversation, 0)
 	return &ConversationListResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
@@ -202,24 +230,31 @@ func (s *service) GetStats() (*ChatStatsResponse, error) {
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
 }
 
-
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	var charID, charName, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
-		if err != nil { return nil, fmt.Errorf("角色不存在") }
+		if err != nil {
+			return nil, fmt.Errorf("角色不存在")
+		}
 	} else {
 		s.db.Table("characters").Select("id, name, system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
 		if charID == "" {
 			s.db.Table("characters").Select("id, name, system_prompt").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
 		}
-		if charID == "" { return nil, fmt.Errorf("没有可用角色") }
+		if charID == "" {
+			return nil, fmt.Errorf("没有可用角色")
+		}
 	}
 	cfg, err := s.repo.GetActiveModel()
-	if err != nil { return nil, fmt.Errorf("没有可用的模型配置") }
+	if err != nil {
+		return nil, fmt.Errorf("没有可用的模型配置")
+	}
 
 	systemParts := []string{systemNoEmojiInstruction}
-	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
+	if systemPrompt != "" {
+		systemParts = append(systemParts, systemPrompt)
+	}
 	apiMessages := []map[string]interface{}{}
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
@@ -227,7 +262,9 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
 
 	content, tokens, err := s.callLLM(cfg, apiMessages)
-		if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	msgID := uuid.New().String()
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", msgID, "", "assistant", content, "web", time.Now().Format("2006-01-02 15:04:05"))
@@ -243,8 +280,12 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 }
 
 func (s *service) loadHistory(convID string) []map[string]string {
-	rows, err := s.db.Table("messages").Select("role, content").Where("conversation_id = ?", convID).Order("created_at ASC").Rows()
-	if err != nil { return nil }
+	maxRounds := s.getWindowMaxRounds()
+	limit := maxRounds * 2
+	rows, err := s.db.Table("messages").Select("role, content").Where("conversation_id = ? AND include_in_context = 1", convID).Order("created_at DESC").Limit(limit).Rows()
+	if err != nil {
+		return nil
+	}
 	defer rows.Close()
 	var record []map[string]string
 	for rows.Next() {
@@ -252,7 +293,28 @@ func (s *service) loadHistory(convID string) []map[string]string {
 		rows.Scan(&role, &content)
 		record = append(record, map[string]string{"role": role, "content": content})
 	}
+	for i, j := 0, len(record)-1; i < j; i, j = i+1, j-1 {
+		record[i], record[j] = record[j], record[i]
+	}
 	return record
+}
+
+func (s *service) getWindowMaxRounds() int {
+	if config.AppCfg != nil && config.AppCfg.Chat.ContextWindowMaxRounds > 0 {
+		return config.AppCfg.Chat.ContextWindowMaxRounds
+	}
+	return 20
+}
+
+func (s *service) trimContextWindow(convID string) {
+	maxRounds := s.getWindowMaxRounds()
+	limit := maxRounds * 2
+	var keepIDs []string
+	s.db.Table("messages").Where("conversation_id = ?", convID).Order("created_at DESC").Limit(limit).Pluck("id", &keepIDs)
+	if len(keepIDs) == 0 {
+		return
+	}
+	s.db.Table("messages").Where("conversation_id = ? AND id NOT IN ?", convID, keepIDs).Update("include_in_context", 0)
 }
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
@@ -260,21 +322,31 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	var charID, charName, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
-		if err != nil { return nil, fmt.Errorf("角色不存在") }
+		if err != nil {
+			return nil, fmt.Errorf("角色不存在")
+		}
 	} else {
 		s.db.Table("characters").Select("id, name, system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
 		if charID == "" {
 			s.db.Table("characters").Select("id, name, system_prompt").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
 		}
-		if charID == "" { return nil, fmt.Errorf("没有可用角色") }
+		if charID == "" {
+			return nil, fmt.Errorf("没有可用角色")
+		}
 	}
 	modelCfg, err := s.repo.GetActiveModel()
-	if err != nil { return nil, fmt.Errorf("没有可用的模型配置") }
+	if err != nil {
+		return nil, fmt.Errorf("没有可用的模型配置")
+	}
 	convID := req.ConversationID
 	channel := req.Channel
-	if channel == "" { channel = "web" }
+	if channel == "" {
+		channel = "web"
+	}
 	source := req.Source
-	if source == "" { source = "manual" }
+	if source == "" {
+		source = "manual"
+	}
 	if convID == "" {
 		var existingConvID string
 		s.db.Table("characters").Select("conversation_id").Where("id = ?", charID).Limit(1).Row().Scan(&existingConvID)
@@ -288,7 +360,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		if convID == "" {
 			convID = uuid.New().String()
 			title := req.Message
-			if len([]rune(title)) > 30 { title = string([]rune(title)[:30]) }
+			if len([]rune(title)) > 30 {
+				title = string([]rune(title)[:30])
+			}
 			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
 		}
 	} else {
@@ -299,7 +373,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		} else if existingChannel != channel {
 			convID = uuid.New().String()
 			title := req.Message
-			if len([]rune(title)) > 30 { title = string([]rune(title)[:30]) }
+			if len([]rune(title)) > 30 {
+				title = string([]rune(title)[:30])
+			}
 			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
 		}
 		if req.PeerID != "" {
@@ -320,8 +396,12 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	userMsgID := uuid.New().String()
 	msgType := "text"
-	if req.AudioUrl != "" { msgType = "voice" }
-	if req.ImageUrl != "" { req.ImageUrl = SaveImageFromDataURI(req.ImageUrl) }
+	if req.AudioUrl != "" {
+		msgType = "voice"
+	}
+	if req.ImageUrl != "" {
+		req.ImageUrl = SaveImageFromDataURI(req.ImageUrl)
+	}
 	if req.Message == "" && req.ImageUrl != "" {
 		req.Message = "[图片]"
 	}
@@ -331,15 +411,21 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		desc, errDetail := analyzeImageInternal(req.ImageUrl)
 		fmt.Printf("[Image] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
 		logPath := filepath.Join(config.AppCfg.Storage.DataDir, "image_recognition_log.txt")
-		if absPath, err := filepath.Abs(logPath); err == nil { f, _ := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); if f != nil { f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " [" + fmt.Sprint(len(desc)) + " chars]\n" + desc + "\n---\n"); f.Close() } }
+		if absPath, err := filepath.Abs(logPath); err == nil {
+			f, _ := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if f != nil {
+				f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " [" + fmt.Sprint(len(desc)) + " chars]\n" + desc + "\n---\n")
+				f.Close()
+			}
+		}
 		if desc != "" {
 			req.ImageContext = "【用户刚发的图片内容】" + desc
 			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
 		} else {
 			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
-				return &ProcessMessageResponse{
-					ConversationID: convID,
-					Reply:          errDetail,
+			return &ProcessMessageResponse{
+				ConversationID: convID,
+				Reply:          errDetail,
 				CharacterID:    charID,
 				CharacterName:  charName,
 			}, nil
@@ -355,26 +441,58 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 
 	systemParts := []string{systemNoEmojiInstruction}
-	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
+	if systemPrompt != "" {
+		systemParts = append(systemParts, systemPrompt)
+	}
 	if s.memorySvc != nil && req.Message != "" {
-		memResults, err := s.memorySvc.VectorSearch(&memory.VectorSearchRequest{
-			Keyword:     req.Message,
-			CharacterID: charID,
-			Limit:       5,
-		})
-		if err == nil && len(memResults) > 0 {
-			var memLines []string
-			for _, r := range memResults {
-				memLines = append(memLines, "- "+r.Memory.Value)
+		results, err := s.memorySvc.HybridSearch(&memory.VectorSearchRequest{Query: req.Message, CharacterID: charID, Limit: 8})
+		if err == nil && len(results) > 0 {
+			layerLines := map[string][]string{}
+			layerOrder := []string{"当前摘要", "用户画像", "情景回忆", "事实记忆"}
+			for _, r := range results {
+				layer := r.MemoryLayer
+				if layer == "" {
+					layer = "事实记忆"
+				}
+				typeLabel := r.Memory.MemoryType
+				if typeLabel == "" {
+					typeLabel = "fact"
+				}
+				line := fmt.Sprintf("- [%s %s 置信%d%%] %s", typeLabel, r.MatchType, r.Memory.Confidence, r.Memory.Value)
+				layerLines[layer] = append(layerLines[layer], line)
 			}
-			systemParts = append(systemParts, "【相关记忆】\n"+strings.Join(memLines, "\n"))
+			for _, layer := range layerOrder {
+				if lines := layerLines[layer]; len(lines) > 0 {
+					systemParts = append(systemParts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
+				}
+			}
 		}
 	}
 	messages := []map[string]interface{}{}
+	if s.wmCache != nil {
+		wm := s.wmCache.Get(convID)
+		if wm != nil && wm.State != nil && wm.State.Summary != "" {
+			systemParts = append(systemParts, "【工作记忆】\n"+wm.State.Summary)
+		}
+	}
+	if s.profileSvc != nil {
+		profilePrompt := s.profileSvc.ToSystemPrompt("default")
+		if profilePrompt != "" {
+			systemParts = append(systemParts, profilePrompt)
+			if s.episodicSvc != nil {
+				epiPrompt := s.episodicSvc.ToSystemPrompt("default")
+				if epiPrompt != "" {
+					systemParts = append(systemParts, epiPrompt)
+				}
+			}
+		}
+	}
 	messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
 	history := s.loadHistory(convID)
-	for _, m := range history { messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]}) }
+	for _, m := range history {
+		messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]})
+	}
 	userContent := req.Message
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
@@ -384,6 +502,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	var reply string
 	seenTools := map[string]bool{}
 
+	tool.SetCurrentConversationID(convID)
 	tool.SetCurrentCharacterID(charID)
 	for round := 0; round < 3; round++ {
 		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(modelCfg, messages, toolDefs)
@@ -419,7 +538,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 				json.Unmarshal([]byte(args), &toolArgs)
 				toolArgs["conversation_id"] = convID
 				toolArgs["character_id"] = charID
-				if channel == "web" { toolArgs["channel"] = "all" } else if channel != "" { toolArgs["channel"] = channel }
+				if channel == "web" {
+					toolArgs["channel"] = "all"
+				} else if channel != "" {
+					toolArgs["channel"] = channel
+				}
 				newArgs, _ := json.Marshal(toolArgs)
 				args = string(newArgs)
 			}
@@ -434,7 +557,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	var realLines []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" { continue }
+		if line == "" {
+			continue
+		}
 		realLines = append(realLines, line)
 	}
 	if len(realLines) == 0 {
@@ -476,10 +601,20 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
+	if s.wmCache != nil {
+		s.wmCache.UpdateSummary(convID, reply)
+	}
+	go s.trimContextWindow(convID)
+	if s.profileSvc != nil {
+		go s.extractProfile(convID)
+		if s.episodicSvc != nil {
+			go s.detectEpisodicMoment(convID)
+		}
+	}
 	go s.autoExtractMemories(convID, charID)
 	go s.moodRecoveryCheck(convID, charID, source)
 
-		fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), tool.GetForceVoice())
+	fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), tool.GetForceVoice())
 	return &ProcessMessageResponse{
 		ConversationID: convID,
 		Reply:          reply,
@@ -487,14 +622,38 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		CharacterName:  charName,
 		MessageIDs:     msgIDs,
 		ForceVoice:     tool.GetForceVoice(),
-		AudioUrls:     audioUrls,
+		AudioUrls:      audioUrls,
 	}, nil
 }
 
+func (s *service) detectEpisodicMoment(convID string) {
+	if s.episodicSvc == nil {
+		return
+	}
+	messages := s.loadHistory(convID)
+	if len(messages) == 0 {
+		return
+	}
+	s.episodicSvc.ExtractFromConversation("default", convID, messages)
+}
+func (s *service) extractProfile(convID string) {
+	if s.profileSvc == nil {
+		return
+	}
+	messages := s.loadHistory(convID)
+	if len(messages) == 0 {
+		return
+	}
+	s.profileSvc.ExtractFromConversation("default", convID, messages)
+}
 func (s *service) autoExtractMemories(convID, charID string) {
-	if s.memorySvc == nil { return }
+	if s.memorySvc == nil {
+		return
+	}
 	candidates, err := s.memorySvc.GenerateCandidates(convID)
-	if err != nil || len(candidates) == 0 { return }
+	if err != nil || len(candidates) == 0 {
+		return
+	}
 
 	existingKeys := map[string]bool{}
 	var existingMemories []struct {
@@ -507,8 +666,12 @@ func (s *service) autoExtractMemories(convID, charID string) {
 	}
 
 	for _, c := range candidates {
-		if c.Importance < 7 { continue }
-		if existingKeys[c.Key+"|"+c.Value] { continue }
+		if c.Importance < 7 {
+			continue
+		}
+		if existingKeys[c.Key+"|"+c.Value] {
+			continue
+		}
 		existingKeys[c.Key+"|"+c.Value] = true
 		s.memorySvc.AcceptCandidate(c.ID)
 	}
@@ -520,21 +683,37 @@ func (s *service) callLLM(cfg *ModelConfig, messages []map[string]interface{}) (
 	jsonBody, _ := json.Marshal(reqBody)
 	url := baseURL + "/chat/completions"
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
-	if err != nil { return "", 0, err }
+	if err != nil {
+		return "", 0, err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil { return "", 0, fmt.Errorf("请求失败: %w", err) }
+	if err != nil {
+		return "", 0, fmt.Errorf("请求失败: %w", err)
+	}
 	defer resp.Body.Close()
 	respBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 { return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, truncateStr(string(respBytes), 200)) }
-	var result struct {
-		Choices []struct{ Message struct{ Content string `json:"content"` } `json:"message"` } `json:"choices"`
-		Usage   struct{ TotalTokens int `json:"total_tokens"` } `json:"usage"`
+	if resp.StatusCode != 200 {
+		return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, truncateStr(string(respBytes), 200))
 	}
-	if err := json.Unmarshal(respBytes, &result); err != nil { return "", 0, fmt.Errorf("解析响应失败: %w", err) }
-	if len(result.Choices) == 0 { return "", 0, fmt.Errorf("API 未返回有效回复") }
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", 0, fmt.Errorf("解析响应失败: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", 0, fmt.Errorf("API 未返回有效回复")
+	}
 	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
 }
 
@@ -543,12 +722,16 @@ func (s *service) ListModels() ([]ModelConfig, error) {
 }
 
 func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
-	if err := s.repo.CreateModel(cfg); err != nil { return nil, fmt.Errorf("创建失败: %w", err) }
+	if err := s.repo.CreateModel(cfg); err != nil {
+		return nil, fmt.Errorf("创建失败: %w", err)
+	}
 	return cfg, nil
 }
 
 func (s *service) UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error) {
-	if err := s.repo.UpdateModel(id, updates); err != nil { return nil, fmt.Errorf("更新失败: %w", err) }
+	if err := s.repo.UpdateModel(id, updates); err != nil {
+		return nil, fmt.Errorf("更新失败: %w", err)
+	}
 	return s.repo.GetModelByID(id)
 }
 
@@ -557,7 +740,9 @@ func (s *service) DeleteModel(id int) error {
 }
 
 func (s *service) ActivateModel(id int) (*ModelConfig, error) {
-	if err := s.repo.ActivateModel(id); err != nil { return nil, fmt.Errorf("激活失败: %w", err) }
+	if err := s.repo.ActivateModel(id); err != nil {
+		return nil, fmt.Errorf("激活失败: %w", err)
+	}
 	return s.repo.GetModelByID(id)
 }
 
@@ -570,7 +755,7 @@ func (s *service) UpdateModelRoutes(routes []map[string]interface{}) error {
 }
 
 type ModelDetectItem struct {
-	ID     string `json:"id"`
+	ID      string `json:"id"`
 	OwnedBy string `json:"owned_by,omitempty"`
 }
 
@@ -579,22 +764,39 @@ func (s *service) DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error
 	req, _ := http.NewRequest("GET", base+"/models", nil)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
-	if err != nil { return nil, fmt.Errorf("请求失败: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %w", err)
+	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 { return nil, fmt.Errorf("API 返回 %d", resp.StatusCode) }
-	var r struct{ Data []struct{ ID string `json:"id"`; OwnedBy string `json:"owned_by"` } `json:"data"` }
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
+	}
+	var r struct {
+		Data []struct {
+			ID      string `json:"id"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
 	if err := json.Unmarshal(rb, &r); err != nil {
-		var r2 struct{ Models []struct{ Name string `json:"name"` } `json:"models"` }
+		var r2 struct {
+			Models []struct {
+				Name string `json:"name"`
+			} `json:"models"`
+		}
 		if json.Unmarshal(rb, &r2) == nil {
 			items := make([]ModelDetectItem, len(r2.Models))
-			for i, m := range r2.Models { items[i] = ModelDetectItem{ID: m.Name} }
+			for i, m := range r2.Models {
+				items[i] = ModelDetectItem{ID: m.Name}
+			}
 			return items, nil
 		}
 		return nil, fmt.Errorf("解析响应失败")
 	}
 	items := make([]ModelDetectItem, len(r.Data))
-	for i, m := range r.Data { items[i] = ModelDetectItem{ID: m.ID, OwnedBy: m.OwnedBy} }
+	for i, m := range r.Data {
+		items[i] = ModelDetectItem{ID: m.ID, OwnedBy: m.OwnedBy}
+	}
 	return items, nil
 }
 
@@ -613,7 +815,9 @@ func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]inter
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil { return "", "", nil, 0, err }
+	if err != nil {
+		return "", "", nil, 0, err
+	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
@@ -637,7 +841,9 @@ func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]inter
 		Usage struct{ TotalTokens int }
 	}
 	json.Unmarshal(rb, &r)
-	if len(r.Choices) == 0 { return "", "", nil, 0, fmt.Errorf("no choices") }
+	if len(r.Choices) == 0 {
+		return "", "", nil, 0, fmt.Errorf("no choices")
+	}
 	choice := r.Choices[0]
 	var toolCalls []map[string]interface{}
 	for _, tc := range choice.Message.ToolCalls {
@@ -651,7 +857,9 @@ func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]inter
 
 func truncateStr(s string, n int) string {
 	runes := []rune(s)
-	if len(runes) <= n { return s }
+	if len(runes) <= n {
+		return s
+	}
 	return string(runes[:n]) + "..."
 }
 
@@ -765,7 +973,7 @@ func callDoubaoVision(content []map[string]interface{}) (string, string) {
 	reqBody := map[string]interface{}{
 		"model": doubaoModel,
 		"input": []map[string]interface{}{{
-			"role": "user",
+			"role":    "user",
 			"content": content,
 		}},
 	}

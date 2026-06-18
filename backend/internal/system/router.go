@@ -3,12 +3,14 @@ package system
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
 )
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext) {
-	memRepo := memory.NewRepository(ctx); memSvc := memory.NewService(memRepo, ctx); chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc)
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profile.Service, epiSvc episodic.Service) {
+	memRepo := memory.NewRepository(ctx); memSvc := memory.NewService(memRepo, ctx); chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc)
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc)
 
@@ -219,8 +221,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
 }
-
-
 
 
 

@@ -410,16 +410,75 @@ CREATE TABLE IF NOT EXISTS memory_events (
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT '',
     importance INTEGER DEFAULT 0,
+    confidence INTEGER DEFAULT 50,
+    expires_at TEXT DEFAULT NULL,
+    entity_id TEXT DEFAULT '',
+    entity_type TEXT DEFAULT '',
+    source_msg_id TEXT DEFAULT '',
+    source_conv_id TEXT DEFAULT '',
+    verified_status TEXT DEFAULT 'unverified',
+    last_verified_at TEXT DEFAULT NULL,
     source TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
+ALTER TABLE memories ADD COLUMN expires_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN entity_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN entity_type TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
+ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
+CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
+CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_memories_importance_conf ON memories(character_id, importance, confidence);
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+
+
+CREATE TABLE IF NOT EXISTS episodic_memories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    scene_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    context_before TEXT DEFAULT '',
+    context_after TEXT DEFAULT '',
+    trigger_keywords TEXT DEFAULT '',
+    sentiment_score INTEGER DEFAULT 0,
+    message_id_start TEXT DEFAULT '',
+    message_id_end TEXT DEFAULT '',
+    source_conv_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_episodic_user_id ON episodic_memories(user_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_scene_type ON episodic_memories(user_id, scene_type);
+CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(user_id, created_at);
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    category TEXT NOT NULL,
+    attribute_name TEXT NOT NULL,
+    attribute_value TEXT NOT NULL,
+    confidence INTEGER DEFAULT 50,
+    source_conv_id TEXT DEFAULT '',
+    verified_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, category, attribute_name);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(user_id, confidence);
 -- 反馈
 CREATE TABLE IF NOT EXISTS message_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -461,6 +520,7 @@ CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time);
 CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(status, due_time);
 CREATE INDEX IF NOT EXISTS idx_active_task_char ON active_message_task(character_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conv_ctx ON messages(conversation_id, include_in_context);
 CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
 
 
