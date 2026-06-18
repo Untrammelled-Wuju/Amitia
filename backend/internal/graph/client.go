@@ -56,11 +56,11 @@ func (c *Client) initSchema() error {
 	ctx := context.Background()
 
 	queries := []string{
-		"DEFINE TABLE entity_node SCHEMAFULL",
+		"DEFINE TABLE entity_node SCHEMALESS",
 		"DEFINE FIELD entity_type ON entity_node TYPE string",
 		"DEFINE FIELD label ON entity_node TYPE string",
-		"DEFINE FIELD properties ON entity_node TYPE flexible",
-		"DEFINE TABLE entity_edge TYPE RELATION IN entity_node TO entity_node SCHEMAFULL",
+		"DEFINE FIELD properties ON entity_node TYPE object",
+		"DEFINE TABLE entity_edge TYPE RELATION IN entity_node TO entity_node SCHEMALESS",
 		"DEFINE FIELD relation_type ON entity_edge TYPE string",
 		"DEFINE FIELD weight ON entity_edge TYPE float",
 		"DEFINE INDEX idx_entity_type ON entity_node FIELDS entity_type",

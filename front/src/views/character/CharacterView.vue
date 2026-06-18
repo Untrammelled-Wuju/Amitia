@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="char-layout">
     <div class="char-sidebar">
       <div class="sidebar-header">
@@ -33,12 +33,6 @@
           </el-tab-pane>
           <el-tab-pane label="拟态语音" name="voice">
             <CharacterVoiceView v-if="activeTab==='voice'" :key="`voice-${selectedId}`" />
-          </el-tab-pane>
-          <el-tab-pane label="记忆管理" name="memory">
-            <MemoryManagerView v-if="activeTab==='memory'" :key="`mem-${selectedId}`" />
-          </el-tab-pane>
-          <el-tab-pane label="记忆时间线" name="timeline">
-            <MemoryTimelineView v-if="activeTab==='timeline'" :key="`tl-${selectedId}`" />
           </el-tab-pane>
           <el-tab-pane label="主动消息" name="proactive">
             <ProactiveRulesView v-if="activeTab==='proactive'" :key="`pro-${selectedId}`" />
@@ -97,8 +91,8 @@
 import { ref, reactive, computed, onMounted, watch, provide } from "vue"
 import { useRouter, useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { apiClient, post } from "../../ui-index"
-import { AiCharacterSettingsView, CharacterVoiceView, MemoryManagerView, MemoryTimelineView, ProactiveRulesView, CompanionDebugView } from "../../ui-index"
+import { apiClient } from "@/composables/useApi"
+import { AiCharacterSettingsView, CharacterVoiceView, ProactiveRulesView, CompanionDebugView } from "../../ui-index"
 
 const router = useRouter()
 const route = useRoute()
@@ -141,8 +135,6 @@ const selectedChar = ref<any>(null)
 const activeTab = computed(() => {
   const p = route.path
   if (p.endsWith("/voice")) return "voice"
-    if (p.endsWith("/memory")) return "memory"
-  if (p.endsWith("/timeline")) return "timeline"
   if (p.endsWith("/proactive")) return "proactive"
   if (p.endsWith("/debug")) return "debug"
   return "life-rules"
@@ -200,62 +192,65 @@ function openCreate() {
   form.voiceType = "zh_female_vv_uranus_bigtts"
   form.voiceSpeed = 1.0; form.voicePitch = 0; form.voiceVolume = 1.0
   form.customVoiceId = ""
-  testAudioUrl.value = ""; cloneResult.value = ""; cloneFile.value = null; cloneName.value = ""
+  form.emotion = ""; form.emotionScale = 0; form.silenceDuration = 0
+  cloneFile.value = null; cloneName.value = ""; cloneResult.value = ""
   showDialog.value = true
 }
 
 function editCurrent() {
   if (!selectedChar.value) return
-  const c = selectedChar.value
-  editingId.value = c.id
-  form.name = c.name || ""
-  form.description = c.description || ""
-  form.personality = c.personality || ""
-  form.voiceType = c.voiceType || "zh_female_vv_uranus_bigtts"
-  form.voiceSpeed = c.voiceSpeed || 1.0
-  form.voicePitch = c.voicePitch ?? 0
-  form.voiceVolume = c.voiceVolume || 1.0
-  form.customVoiceId = c.customVoiceId || ""
-  form.emotion = c.emotion || ""
-  if (!currentVoiceSupportsEmotion.value) {
-    form.emotion = ""
-    form.emotionScale = 0
-  }
-  form.emotionScale = c.emotionScale || 4
-  form.silenceDuration = c.silenceDuration || 0
-  testAudioUrl.value = ""; cloneResult.value = ""; cloneFile.value = null; cloneName.value = ""
+  editingId.value = selectedChar.value.id
+  form.name = selectedChar.value.name || ""
+  form.description = selectedChar.value.description || ""
+  form.personality = selectedChar.value.personality || ""
+  form.voiceType = selectedChar.value.voiceType || "zh_female_vv_uranus_bigtts"
+  form.voiceSpeed = selectedChar.value.voiceSpeed ?? 1.0
+  form.voicePitch = selectedChar.value.voicePitch ?? 0
+  form.voiceVolume = selectedChar.value.voiceVolume ?? 1.0
+  form.customVoiceId = selectedChar.value.customVoiceId || ""
+  form.emotion = selectedChar.value.emotion || ""
+  form.emotionScale = selectedChar.value.emotionScale ?? 0
+  form.silenceDuration = selectedChar.value.silenceDuration ?? 0
+  cloneFile.value = null; cloneName.value = ""; cloneResult.value = ""
   showDialog.value = true
 }
 
-function onCloneFile(file: any) {
-  cloneFile.value = file.raw || file
-}
-
 function onVoiceTypeChange() {
-  if (!currentVoiceSupportsEmotion.value) {
-    form.emotion = ""
-    form.emotionScale = 0
+  const v = voicePresets.value.find((p: any) => p.name === form.voiceType)
+  if (v) {
+    if (v.supportsEmotion) {
+      if (!form.emotion) form.emotion = "happy"
+    } else {
+      form.emotion = ""
+    }
   }
 }
 
 async function testVoice() {
   testingVoice.value = true; testAudioUrl.value = ""
   try {
-    if (!globalApiKey.value) { ElMessage.warning("请先在音色配置中设置API Key"); return }
-    await ensureApiKeyInConfig()
-    const configs = await apiClient.get("/api/tts/configs").then(r => r.data?.data || [])
-    const cfg = configs.find((c: any) => c.isActive) || configs[0]
-    if (!cfg) { ElMessage.warning("未找到音色配置"); return }
-
-    const voiceType = form.customVoiceId || form.voiceType
-    await apiClient.put(`/api/tts/configs/${cfg.id}`, { voiceType, speed: form.voiceSpeed, pitch: form.voicePitch })
-    const res = await post<any>("/api/tts/synthesize", { voiceId: cfg.id, text: "你好，试听一下" })
-    testAudioUrl.value = (res as any)?.audioUrl || ""
-  } catch (err: any) { ElMessage.error(err?.message || "试听失败") }
+    const token = localStorage.getItem("ai-companion-token")
+    const res = await fetch("/api/tts/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: token ? "Bearer " + token : "" },
+      body: JSON.stringify({
+        voiceType: form.voiceType,
+        text: "你好，我是你的AI伙伴",
+        speedRatio: form.voiceSpeed,
+        pitchRatio: form.voicePitch,
+        volumeRatio: form.voiceVolume,
+        emotion: form.emotion || undefined,
+        emotionScale: form.emotionScale || undefined,
+        silenceDuration: form.silenceDuration || undefined,
+      }),
+    })
+    const json = await res.json()
+    testAudioUrl.value = json?.data?.audioUrl || json?.audioUrl || ""
+  } catch {}
   finally { testingVoice.value = false }
 }
 
-async function ensureApiKeyInConfig() {
+async function ensureTtsConfig() {
   if (!globalApiKey.value) return
   const configs = await apiClient.get("/api/tts/configs").then(r => r.data?.data || [])
   const existing = configs.find((c: any) => c.isActive)

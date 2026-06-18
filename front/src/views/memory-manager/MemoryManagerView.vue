@@ -215,11 +215,12 @@
           <el-tag v-else type="info" size="small">未核实</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="范围" width="170">
+      <el-table-column label="范围" width="220">
         <template #default="{ row }">
           <el-tag size="small" :type="row.scope==='user'?'success':'info'">{{ row.scope==='user'?'共享':'独有' }}</el-tag>
-          <el-button v-if="row.scope==='character'" text size="small" type="warning" style="margin-left:4px" @click="toggleScope(row)">升级为共享</el-button>
-          <el-button v-if="row.scope==='user'" text size="small" type="info" style="margin-left:4px" @click="toggleScope(row)">降级为独享</el-button>
+          <span v-if="row.scope==='character' && row.characterId" class="scope-char-name">{{ charName(row.characterId) }}</span>
+          <el-button v-if="row.scope==='character'" text size="small" type="warning" class="scope-toggle-btn" @click="toggleScope(row)">升级为共享</el-button>
+          <el-button v-if="row.scope==='user'" text size="small" type="info" class="scope-toggle-btn" @click="toggleScope(row)">降级为独享</el-button>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="140">
@@ -514,6 +515,11 @@ async function generateCandidates() {
 }
 
 function typeLabel(t: string) { return TYPES.find(x=>x.value===t)?.label || t }
+
+function charName(cid: string) {
+  const ch = characters.value.find((c: any) => String(c.id) === String(cid))
+  return ch ? "[" + ch.name + "]" : ""
+}
 function sourceLabel(s: string) { return SOURCES.find(x=>x.value===s)?.label || s }
 function importanceColor(v: number) { return v>=8?'#c85a5a':v>=5?'#c8924a':'#5b7fa5' }
 function isExpired(expiresAt?: string) { return !!expiresAt && new Date(expiresAt).getTime() < Date.now() }
@@ -1014,7 +1020,23 @@ onMounted(async () => {
 .wb-content { font-size: 13px; color: var(--ac-color-text-secondary); }
 .graph-mini { padding: 8px 0; }
 .graph-stat { font-size: 14px; margin-bottom: 6px; }
+
+.scope-char-name {
+  font-size: 11px;
+  color: #909399;
+  margin-left: 4px;
+}
+
+.scope-toggle-btn {
+  margin-left: 4px !important;
+  text-decoration: underline !important;
+}
 </style>
+
+
+
+
+
 
 
 

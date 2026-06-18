@@ -25,6 +25,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 )
@@ -65,17 +66,22 @@ func main() {
 	ctx := app.NewAppContext(db, nil)
 
 	env := startEnvironment()
-	env.SetOnShutdown(func() { qdrantDB.StopQdrant() })
+	env.SetOnShutdown(func() {
+		qdrantDB.StopQdrant()
+		surrealdbDB.StopSurreal()
+	})
 
 	cleanup := func() {
 		if env != nil {
 			env.StopAll()
 		}
 		qdrantDB.StopQdrant()
+		surrealdbDB.StopSurreal()
 	}
 	defer cleanup()
 
 	startQdrant()
+	startSurreal()
 
 	compSvc := companion.NewService(ctx)
 	cron := NewProactiveCron(db, compSvc)
@@ -94,6 +100,7 @@ func main() {
 	fmt.Printf("    Deploy Mode: %s\n", config.AppCfg.App.DeployMode)
 	fmt.Printf("    Database:    %s/app.db\n", config.AppCfg.Storage.DataDir)
 	fmt.Printf("    Qdrant:      %s:%d\n", config.AppCfg.Qdrant.Host, config.AppCfg.Qdrant.Port)
+	fmt.Printf("    SurrealDB:   %s:%d\n", config.AppCfg.Surreal.Host, config.AppCfg.Surreal.Port)
 	fmt.Printf("  ========================================\n\n")
 
 	qqMgr := qq.NewManager("http://127.0.0.1:9877")
@@ -213,6 +220,23 @@ func startQdrant() {
 	log.Info("Qdrant就绪，向量检索功能已启用")
 }
 
+func startSurreal() {
+	cfg := config.AppCfg.Surreal
+	log.Info("正在启动SurrealDB...")
+	if err := surrealdbDB.StartSurreal(); err != nil {
+		log.Error("SurrealDB启动失败:", err)
+		log.Warn("图谱功能不可用")
+		return
+	}
+	if err := surrealdbDB.WaitForSurreal(cfg.Port); err != nil {
+		log.Error("等待SurrealDB就绪超时:", err)
+		surrealdbDB.StopSurreal()
+		log.Warn("图谱功能不可用")
+		return
+	}
+	log.Info("SurrealDB就绪，图谱功能已启用")
+}
+
 func initGraph() graph.Service {
 	cfg := config.AppCfg.Surreal
 	client, err := graph.NewClient(cfg)
@@ -220,6 +244,5 @@ func initGraph() graph.Service {
 		log.Warn("SurrealDB连接失败，图谱功能不可用:", err)
 		return nil
 	}
-	log.Info("SurrealDB已连接，图谱功能已启用")
 	return graph.NewService(client)
 }
