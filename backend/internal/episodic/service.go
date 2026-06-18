@@ -84,6 +84,7 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 			"sceneType":      m.SceneType,
 			"sentimentScore": m.SentimentScore,
 			"sourceConvID":   m.SourceConvID,
+			"user_id":        m.UserID,
 		})
 		s.graphSvc.SyncEdge("user:default", "episodic:"+m.ID, "experienced", 1.0)
 	}

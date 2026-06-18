@@ -40,12 +40,12 @@ let chartInstance: any = null
 
 async function fetchGraph() {
   try {
-    const s = await get<any>("/api/graph/stats")
+    const s = await get<any>("/api/graph/stats?userId=default")
     stats.value = s
   } catch {}
   if (searchId.value) {
     try {
-      const data = await get<any>(`/api/graph/node/${encodeURIComponent(searchId.value)}/neighbors?depth=${depth.value}`)
+      const data = await get<any>(`/api/graph/node/${encodeURIComponent(searchId.value)}/neighbors?depth=${depth.value}&userId=default`)
       renderGraph(data)
     } catch {}
   }

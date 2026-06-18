@@ -16,6 +16,10 @@
           <el-option label="关系" value="relationship" />
           <el-option label="其他" value="custom" />
         </el-select>
+        <el-select v-model="timelineType" placeholder="来源类型" clearable size="small" style="width:110px" @change="fetchTimeline">
+          <el-option label="结构化记忆" value="memory" />
+          <el-option label="情景记忆" value="episodic" />
+        </el-select>
         <el-button size="small" @click="showLayers = !showLayers">层级筛选</el-button>
         <el-button size="small" @click="diffMode = !diffMode" :type="diffMode ? 'warning' : ''">Diff</el-button>
         <el-button size="small" @click="exportCSV" :disabled="items.length === 0">CSV导出</el-button>
@@ -88,6 +92,7 @@ const pageSize = 30
 const total = ref(0)
 const sourceFilter = ref("")
 const typeFilter = ref("")
+const timelineType = ref("")
 const showLayers = ref(false)
 const layerFilters = ref({ working: true, profile: true, episodic: true, fact: true, worldbook: true, graph: true })
 const diffMode = ref(false)
@@ -100,9 +105,10 @@ async function fetchTimeline() {
   loading.value = true
   try {
     const params: any = { page: page.value, pageSize }
-    if (injectedCharacterId?.value) params.characterId = injectedCharacterId.value
+    params.userId = "default"
     if (sourceFilter.value) params.source = sourceFilter.value
     if (typeFilter.value) params.memoryType = typeFilter.value
+    if (timelineType.value) params.type = timelineType.value
     const r = await get<any>("/api/memories/timeline", params)
     items.value = r?.items || []
     allItems.value = r?.items || []

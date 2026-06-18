@@ -12,10 +12,10 @@ import (
 type Service interface {
 	SyncNode(entityType, entityID, label string, properties map[string]interface{}) error
 	SyncEdge(sourceID, targetID, relationType string, weight float64) error
-	QueryNeighbors(entityID string, depth int) (map[string]interface{}, error)
+	QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error)
 	FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error)
 	DeleteOrphanNodes() error
-	GetStats() (map[string]interface{}, error)
+	GetStats(userID string) (map[string]interface{}, error)
 	Name() string
 	Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
@@ -60,8 +60,12 @@ func (s *service) SyncEdge(sourceID, targetID, relationType string, weight float
 	return err
 }
 
-func (s *service) QueryNeighbors(entityID string, depth int) (map[string]interface{}, error) {
-	query := fmt.Sprintf("SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s` LIMIT 100", entityID)
+func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
+	userFilter := ""
+	if userID != "" {
+		userFilter = fmt.Sprintf(" WHERE properties.user_id = \"%s\"", userID)
+	}
+	query := fmt.Sprintf("SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s`%s LIMIT 100", entityID, userFilter)
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	if err != nil {
 		return nil, err
@@ -97,13 +101,18 @@ func (s *service) DeleteOrphanNodes() error {
 	return err
 }
 
-func (s *service) GetStats() (map[string]interface{}, error) {
+func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 	nodeCount := 0
 	edgeCount := 0
 	var byType []map[string]interface{}
 
+	nodeFilter := ""
+	if userID != "" {
+		nodeFilter = fmt.Sprintf(" WHERE properties.user_id = \"%s\"", userID)
+	}
+
 	nodeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
-		"SELECT count() FROM entity_node GROUP ALL", nil)
+		fmt.Sprintf("SELECT count() FROM entity_node%s GROUP ALL", nodeFilter), nil)
 	if err == nil && nodeResult != nil && len(*nodeResult) > 0 {
 		raw := (*nodeResult)[0].Result
 		if arr, ok := raw.([]interface{}); ok && len(arr) > 0 {
@@ -129,7 +138,7 @@ func (s *service) GetStats() (map[string]interface{}, error) {
 	}
 
 	typeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
-		"SELECT entity_type, count() FROM entity_node GROUP BY entity_type", nil)
+		fmt.Sprintf("SELECT entity_type, count() FROM entity_node%s GROUP BY entity_type", nodeFilter), nil)
 	if err == nil && typeResult != nil && len(*typeResult) > 0 {
 		raw := (*typeResult)[0].Result
 		if arr, ok := raw.([]interface{}); ok {
@@ -220,7 +229,7 @@ func (s *stubService) SyncEdge(sourceID, targetID, relationType string, weight f
 	return nil
 }
 
-func (s *stubService) QueryNeighbors(entityID string, depth int) (map[string]interface{}, error) {
+func (s *stubService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
 	return nil, nil
 }
 
@@ -232,6 +241,6 @@ func (s *stubService) DeleteOrphanNodes() error {
 	return nil
 }
 
-func (s *stubService) GetStats() (map[string]interface{}, error) {
+func (s *stubService) GetStats(userID string) (map[string]interface{}, error) {
 	return map[string]interface{}{"nodeCount": 0, "edgeCount": 0, "byType": nil}, nil
 }

@@ -142,7 +142,8 @@ func (h *Handler) Timeline(c *gin.Context) {
 	characterID := c.Query("characterId")
 	source := c.Query("source")
 	memoryType := c.Query("memoryType")
-	items, total, err := h.service.GetTimeline(page, pageSize, characterID, source, memoryType)
+	timelineType := c.Query("type")
+	items, total, err := h.service.GetTimeline(page, pageSize, characterID, source, memoryType, timelineType)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return

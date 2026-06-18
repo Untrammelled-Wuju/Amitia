@@ -82,7 +82,6 @@
     />
 
 
-.profile-toggle-btn { position: fixed; right: 16px; top: 40px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 16px; z-index: 901; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     <div v-if="showProfiles" class="profile-summary-panel">
       <div class="profile-panel-header">
         <h4>用户画像摘要</h4>
@@ -1261,7 +1260,41 @@ async function onMsgTouchEnd() {
   }
 }
 
-.profile-summary-panel {
+
+.profile-toggle-btn {
+  position: fixed; right: 16px; top: 40px; width: 36px; height: 36px;
+  border-radius: 50%; border: 1px solid #ddd; background: #fff;
+  cursor: pointer; font-size: 16px; z-index: 901;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.mem-inject-toggle-btn {
+  position: fixed; right: 16px; top: 90px; width: 36px; height: 36px;
+  border-radius: 50%; border: 1px solid #ddd; background: #fff;
+  cursor: pointer; font-size: 16px; z-index: 901;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.mem-inject-panel {
+  position: fixed; right: 16px; top: 130px; width: 320px; max-height: 60vh;
+  background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow-y: auto; z-index: 900;
+}
+.mi-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid #eee;
+}
+.mi-header h4 { margin: 0; font-size: 15px; }
+.mi-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: #999; }
+.mi-loading { padding: 24px; text-align: center; color: #999; font-size: 13px; }
+.mi-section { padding: 8px 16px; border-bottom: 1px solid #f0f0f0; }
+.mi-section h5 { margin: 4px 0 8px; font-size: 13px; color: #666; }
+.mi-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  font-size: 13px; border-bottom: 1px solid #fafafa; flex-wrap: wrap;
+}
+.mi-layer { color: #666; font-size: 12px; }
+.mi-score { color: #999; font-size: 11px; }
+.mi-content { flex: 1 1 100%; color: #333; font-size: 12px; margin-top: 4px; }
+.mi-profile-card { padding: 8px 0; border-bottom: 1px solid #fafafa; font-size: 12px; }.profile-summary-panel {
   position: fixed; right: 16px; top: 80px; width: 280px; max-height: 60vh;
   background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   overflow-y: auto; z-index: 900;
