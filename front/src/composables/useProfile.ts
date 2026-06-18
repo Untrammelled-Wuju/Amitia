@@ -40,9 +40,9 @@ export function useProfile() {
   async function fetchProfiles(params?: { userId?: string; category?: string; page?: number; pageSize?: number }) {
     loading.value = true
     try {
-      const res = await apiClient.get<{ data: ProfileListResponse }>("/api/profiles", { params })
-      profiles.value = res.data.data.items
-      total.value = res.data.data.total
+      const res = await apiClient.get<ProfileListResponse>("/api/profiles", { params })
+      profiles.value = res.data.items || []
+      total.value = res.data.total || 0
     } catch (e) {
       console.error("获取画像失败", e)
     } finally {

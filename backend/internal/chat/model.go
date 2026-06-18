@@ -111,6 +111,19 @@ type ChatResponse struct {
 	Message        *MessageItem `json:"message"`
 }
 
+
+type ContextStructureLog struct {
+	ConversationID string `json:"conversationId"`
+	Round          int    `json:"round"`
+	Sys1Tokens     int    `json:"sys1Tokens"`
+	Sys2Tokens     int    `json:"sys2Tokens"`
+	HistoryTokens  int    `json:"historyTokens"`
+	UserTokens     int    `json:"userTokens"`
+	TotalMessages  int    `json:"totalMessages"`
+	CompressedFrom int    `json:"compressedFrom"`
+	CompressedTo   int    `json:"compressedTo"`
+}
+
 type MessageItem struct {
 	ID             string `json:"id"`
 	ConversationID string `json:"conversationId"`

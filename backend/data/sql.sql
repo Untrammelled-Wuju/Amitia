@@ -479,6 +479,32 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, category, attribute_name);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(user_id, confidence);
+CREATE TABLE IF NOT EXISTS world_book (
+    id TEXT PRIMARY KEY,
+    match_type TEXT NOT NULL DEFAULT 'keyword',
+    match_pattern TEXT NOT NULL DEFAULT '',
+    match_scope TEXT NOT NULL DEFAULT 'full_context',
+    inject_content TEXT NOT NULL DEFAULT '',
+    priority INTEGER DEFAULT 0,
+    hit_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_world_book_match_type ON world_book(match_type);
+CREATE INDEX IF NOT EXISTS idx_world_book_priority ON world_book(priority);
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    round_start INTEGER NOT NULL DEFAULT 0,
+    round_end INTEGER NOT NULL DEFAULT 0,
+    summary_text TEXT NOT NULL DEFAULT '',
+    parent_summary_id TEXT DEFAULT '',
+    compressed_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_conv_summaries_conv_round ON conversation_summaries(conversation_id, round_start);
+CREATE INDEX IF NOT EXISTS idx_conv_summaries_parent ON conversation_summaries(parent_summary_id);
 -- 反馈
 CREATE TABLE IF NOT EXISTS message_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -537,3 +563,13 @@ UPDATE special_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
 -- ============================================
 -- 迁移: 添加缺失字段
 -- ============================================
+CREATE TABLE IF NOT EXISTS retrieval_logs (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL DEFAULT '',
+    query_text TEXT NOT NULL DEFAULT '',
+    retrieved_memory_ids TEXT DEFAULT '[]',
+    scoring_details TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);

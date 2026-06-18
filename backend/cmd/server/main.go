@@ -5,6 +5,8 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
@@ -104,11 +106,15 @@ func main() {
 	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
 		memSvc.SyncEmbedding(id, key, value, characterID, memoryType)
 	})
+	graphSvc := initGraph()
 	profRepo := profile.NewRepository(ctx)
-	profSvc := profile.NewService(profRepo, ctx)
+	profSvc := profile.NewService(profRepo, ctx, graphSvc)
 	epiRepo := episodic.NewRepository(ctx)
-	epiSvc := episodic.NewService(epiRepo, ctx)
-	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc)
+	epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
+	wbRepo := worldbook.NewRepository(ctx)
+	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
+	comp := chat.NewCompressor(db)
+	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -205,4 +211,15 @@ func startQdrant() {
 		return
 	}
 	log.Info("Qdrant就绪，向量检索功能已启用")
+}
+
+func initGraph() graph.Service {
+	cfg := config.AppCfg.Surreal
+	client, err := graph.NewClient(cfg)
+	if err != nil {
+		log.Warn("SurrealDB连接失败，图谱功能不可用:", err)
+		return nil
+	}
+	log.Info("SurrealDB已连接，图谱功能已启用")
+	return graph.NewService(client)
 }

@@ -7,6 +7,16 @@
       <template #title>记忆保存在你自己的设备或服务器上，可随时编辑或删除。候选记忆需确认后才保存。</template>
     </el-alert>
 
+    <div class="pipeline-bar" v-if="pipelineStatus">
+      <span class="pl-label">管线状态:</span>
+      <template v-for="l in pipelineStatus.layers" :key="l.layer">
+        <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
+          <span class="pl-dot" :class="'pl-' + l.status" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c'}"></span>
+        </el-tooltip>
+      </template>
+      <span class="pl-time" v-if="pipelineStatus.endedAt">{{ fmtDate(pipelineStatus.endedAt) }}</span>
+    </div>
+
     <!-- Toolbar -->
     <div class="mem-toolbar">
       <el-input v-model="keyword" placeholder="搜索关键词..." size="small" style="width:180px" clearable @clear="fetchList" @keyup.enter="fetchList">
@@ -30,8 +40,49 @@
       <el-button size="small" @click="handleExport">导出</el-button>
       <el-button size="small" type="success" @click="batchVerify" :disabled="selectedIds.length===0">批量确认</el-button>
       <el-button size="small" type="warning" @click="batchSetImportant" :disabled="selectedIds.length===0">标为重要</el-button>
+      <el-button size="small" type="danger" @click="batchDelete" :disabled="selectedIds.length===0">批量删除</el-button>
       <el-button size="small" type="danger" plain @click="handleClearAll" :disabled="total === 0">清空全部</el-button>
+      <router-link to="/graph"><el-button size="small" type="info" plain>图谱</el-button></router-link>
     </div>
+
+
+    <div class="global-search-bar">
+      <el-input v-model="globalQuery" placeholder="全局搜索所有记忆类型..." size="small" clearable @clear="clearGlobalSearch" @keyup.enter="doGlobalSearch">
+        <template #prefix><el-icon><Search /></el-icon></template>
+        <template #append>
+          <el-button size="small" @click="doGlobalSearch" :loading="globalSearching">搜索</el-button>
+        </template>
+      </el-input>
+      <el-button size="small" @click="showGlobalResults = !showGlobalResults" v-if="globalSearched">
+        {{ showGlobalResults ? '隐藏结果' : '显示结果(' + globalResultCount + ')' }}
+      </el-button>
+    </div>
+    <div v-if="showGlobalResults && globalSearched" class="global-results">
+      <div v-if="globalResults.memories.length" class="gr-section">
+        <h4>结构化记忆 ({{ globalResults.memories.length }})</h4>
+        <div v-for="m in globalResults.memories" :key="m.id" class="gr-item">
+          <el-tag size="small">{{ typeLabel(m.memoryType) }}</el-tag>
+          <span>{{ m.key }}: {{ m.value }}</span>
+          <span class="gr-score" v-if="m.score">({{ (m.score*100).toFixed(0) }}%)</span>
+        </div>
+      </div>
+      <div v-if="globalResults.profiles.length" class="gr-section">
+        <h4>用户画像 ({{ globalResults.profiles.length }})</h4>
+        <div v-for="p in globalResults.profiles" :key="p.id" class="gr-item">{{ p.attributeName }}: {{ p.attributeValue }}</div>
+      </div>
+      <div v-if="globalResults.episodics.length" class="gr-section">
+        <h4>情景记忆 ({{ globalResults.episodics.length }})</h4>
+        <div v-for="e in globalResults.episodics" :key="e.id" class="gr-item">{{ e.title }}</div>
+      </div>
+      <div v-if="globalResults.worldBooks.length" class="gr-section">
+        <h4>世界书 ({{ globalResults.worldBooks.length }})</h4>
+        <div v-for="w in globalResults.worldBooks" :key="w.id" class="gr-item">{{ w.matchPattern }}</div>
+      </div>
+      <el-empty v-if="globalResultCount === 0" description="未找到相关结果" :image-size="40" />
+    </div>
+
+    <el-tabs v-model="activeTab" class="mem-tabs">
+      <el-tab-pane label="全部记忆" name="list">
 
         <!-- Vector Memory Index -->
     <div class="vector-index-bar" v-if="vectorStatus">
@@ -122,7 +173,8 @@
     </div>
 
     <!-- Memory list -->
-    <el-table :data="memories" stripe size="small" style="margin-top:10px">
+    <el-table ref="tableRef" :data="memories" stripe size="small" style="margin-top:10px" @selection-change="handleSelectionChange">
+      <el-table-column type="selection" width="36" />
       <el-table-column prop="key" label="关键词" width="140" show-overflow-tooltip />
       <el-table-column prop="value" label="内容" show-overflow-tooltip />
       <el-table-column label="类型" width="90">
@@ -144,15 +196,16 @@
       <el-table-column label="置信度" width="100" sortable prop="confidence">
         <template #default="{ row }">
           <div style="display:flex;align-items:center;gap:4px">
-            <el-progress :percentage="row.confidence || 50" :stroke-width="6" :show-text="false"
-              :color="row.confidence >= 80 ? '#67c23a' : row.confidence >= 50 ? '#e6a23c' : '#f56c6c'" />
-            <span style="font-size:11px">{{ row.confidence || 50 }}%</span>
+            <el-progress :percentage="row.confidence ?? 50" :stroke-width="6" :show-text="false"
+              :color="(row.confidence ?? 50) >= 80 ? '#67c23a' : (row.confidence ?? 50) >= 50 ? '#e6a23c' : '#f56c6c'" />
+            <span style="font-size:11px">{{ row.confidence ?? 50 }}%</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column label="核实状态" width="90" sortable prop="verifiedStatus">
         <template #default="{ row }">
-          <el-tag v-if="row.verifiedStatus === 'user_verified'" type="success" size="small">已确认</el-tag>
+          <el-tag v-if="isExpired(row.expiresAt)" type="info" size="small">已过期</el-tag>
+          <el-tag v-else-if="row.verifiedStatus === 'user_verified'" type="success" size="small">已确认</el-tag>
           <el-tag v-else-if="row.verifiedStatus === 'auto_confirmed'" type="warning" size="small">自动确认</el-tag>
           <el-tag v-else-if="row.verifiedStatus === 'contradicted'" type="danger" size="small">有矛盾</el-tag>
           <el-tag v-else type="info" size="small">未核实</el-tag>
@@ -175,6 +228,65 @@
       @current-change="fetchList"
       style="margin-top:12px;justify-content:center"
     />
+
+      </el-tab-pane>
+
+      <el-tab-pane label="检索分析" name="analysis">
+        <div class="analysis-panel">
+          <h3 class="ap-title">检索质量分析</h3>
+
+          <div class="ap-stats-row">
+            <el-card shadow="hover" class="ap-stat-card">
+              <div class="ap-stat-num">{{ retrievalStats.totalCount }}</div>
+              <div class="ap-stat-label">总检索次数</div>
+            </el-card>
+            <el-card shadow="hover" class="ap-stat-card">
+              <div class="ap-stat-num" v-if="retrievalLogs.length > 0">{{ (retrievalLogs.length / (retrievalStats.totalCount || 1) * 100).toFixed(1) }}%</div>
+              <div class="ap-stat-num" v-else>--</div>
+              <div class="ap-stat-label">最近50条占比</div>
+            </el-card>
+          </div>
+
+          <h4 class="ap-subtitle">半衰期参数（天）</h4>
+          <div class="ap-sliders">
+            <div class="ap-slider-item">
+              <span class="ap-slider-label">情景记忆</span>
+              <el-slider v-model="halflifeEpisodic" :min="7" :max="90" :step="1" show-input disabled />
+            </div>
+            <div class="ap-slider-item">
+              <span class="ap-slider-label">用户画像</span>
+              <el-slider v-model="halflifeProfile" :min="30" :max="180" :step="1" show-input disabled />
+            </div>
+            <div class="ap-slider-item">
+              <span class="ap-slider-label">结构化事实</span>
+              <el-slider v-model="halflifeFact" :min="60" :max="365" :step="1" show-input disabled />
+            </div>
+            <div class="ap-slider-item">
+              <span class="ap-slider-label">世界书</span>
+              <el-slider v-model="halflifeWorldbook" :min="180" :max="730" :step="1" show-input disabled />
+            </div>
+          </div>
+
+          <h4 class="ap-subtitle">最近检索日志</h4>
+          <el-table :data="retrievalLogs" size="small" max-height="300" style="width:100%">
+            <el-table-column prop="queryText" label="查询文本" min-width="180" show-overflow-tooltip />
+            <el-table-column label="检索记忆数" width="100">
+              <template #default="{ row }">
+                {{ parseMemIDs(row.retrievedMemoryIDs).length }}
+              </template>
+            </el-table-column>
+            <el-table-column label="最高分" width="80">
+              <template #default="{ row }">
+                {{ maxScore(row.scoringDetails) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="时间" width="160">
+              <template #default="{ row }">{{ fmtDate(row.createdAt) }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- Create/Edit Dialog -->
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑记忆' : '新建记忆'" width="480px" destroy-on-close>
@@ -270,6 +382,7 @@ const { get, post, put, del } = useApi()
 
 // Vector memory state
 const vectorStatus = ref<any>(null)
+const pipelineStatus = ref<any>(null)
 const rebuilding = ref(false)
 const selectedIds = ref<string[]>([])
 const tableRef = ref<any>(null)
@@ -314,6 +427,29 @@ const generating = ref(false)
 const generateSource = ref("conversation")
 const generateConvId = ref("")
 const generateBatchId = ref("")
+const activeTab = ref("list")
+const retrievalStats = ref({ totalCount: 0 })
+const retrievalLogs = ref<any[]>([])
+const halflifeEpisodic = ref(30)
+const halflifeProfile = ref(90)
+const halflifeFact = ref(180)
+const halflifeWorldbook = ref(365)
+const globalQuery = ref("")
+const globalSearching = ref(false)
+const globalSearched = ref(false)
+const showGlobalResults = ref(false)
+const globalResults = ref({ memories: [] as any[], profiles: [] as any[], episodics: [] as any[], worldBooks: [] as any[] })
+const globalResultCount = ref(0)
+const profileItems = ref<any[]>([])
+const profileLoading = ref(false)
+const episodicItems = ref<any[]>([])
+const episodicLoading = ref(false)
+const factItems = ref<any[]>([])
+const factsLoading = ref(false)
+const worldbookItems = ref<any[]>([])
+const worldbookLoading = ref(false)
+const graphStats = ref<any>(null)
+const graphLoading = ref(false)
 
 async function doResolveConflict() {
   if (!resolveAction.value) { ElMessage.warning("请选择处理方式"); return }
@@ -361,6 +497,7 @@ async function generateCandidates() {
 function typeLabel(t: string) { return TYPES.find(x=>x.value===t)?.label || t }
 function sourceLabel(s: string) { return SOURCES.find(x=>x.value===s)?.label || s }
 function importanceColor(v: number) { return v>=8?'#c85a5a':v>=5?'#c8924a':'#5b7fa5' }
+function isExpired(expiresAt?: string) { return !!expiresAt && new Date(expiresAt).getTime() < Date.now() }
 
 async function fetchList() {
   const params: any = { page:page.value, pageSize:pageSize.value }
@@ -417,6 +554,20 @@ async function batchVerify() {
 async function batchSetImportant() {
   if (selectedIds.value.length === 0) return
   try { await post("/api/memories/batch-importance", { ids: selectedIds.value, importance: 10 }); ElMessage.success("已标为重要"); selectedIds.value = []; fetchList() } catch { ElMessage.error("操作失败") }
+}
+
+async function batchDelete() {
+  if (selectedIds.value.length === 0) return
+  await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 条记忆？此操作不可撤销。`,"提示",{type:"warning"})
+  try {
+    await Promise.all(selectedIds.value.map(id => del(`/api/memories/${id}`)))
+    ElMessage.success("批量删除成功")
+    selectedIds.value = []
+    tableRef.value?.clearSelection?.()
+    fetchList()
+  } catch {
+    ElMessage.error("批量删除失败")
+  }
 }
 
 async function handleClearAll() {
@@ -496,6 +647,13 @@ async function loadVectorStatus() {
   } catch {}
 }
 
+async function fetchPipelineStatus() {
+  try {
+    const r = await get<any>("/api/memory/pipeline/status")
+    pipelineStatus.value = r
+  } catch {}
+}
+
 async function rebuildIndex() {
   rebuilding.value = true
   try {
@@ -568,11 +726,135 @@ async function loadCandidates() {
   } catch {}
 }
 
+function parseMemIDs(raw: string): string[] {
+  if (!raw) return []
+  try { return JSON.parse(raw) } catch { return [] }
+}
+
+function maxScore(raw: string): string {
+  if (!raw) return "--"
+  try {
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr) || arr.length === 0) return "--"
+    const max = Math.max(...arr.map((x: any) => x.score || 0))
+    return (max * 100).toFixed(1) + "%"
+  } catch { return "--" }
+}
+
+function clearGlobalSearch() {
+  globalQuery.value = ""
+  globalSearched.value = false
+  showGlobalResults.value = false
+  globalResults.value = { memories: [], profiles: [], episodics: [], worldBooks: [] }
+  globalResultCount.value = 0
+}
+
+async function doGlobalSearch() {
+  if (!globalQuery.value.trim()) return
+  globalSearching.value = true
+  try {
+    const q = globalQuery.value.trim()
+    const hub = await import("../../composables/useMemoryHub")
+    const { useMemoryHub } = hub
+    const { globalSearch } = useMemoryHub()
+    const results = await globalSearch(q)
+    globalResults.value = results
+    globalResultCount.value = results.memories.length + results.profiles.length + results.episodics.length + results.worldBooks.length
+    globalSearched.value = true
+    showGlobalResults.value = true
+  } catch {
+    globalResults.value = { memories: [], profiles: [], episodics: [], worldBooks: [] }
+    globalResultCount.value = 0
+    globalSearched.value = true
+    showGlobalResults.value = true
+  }
+  globalSearching.value = false
+}
+
+async function loadProfiles() {
+  profileLoading.value = true
+  try {
+    const { get } = useApi()
+    const r: any = await get("/api/profiles", { pageSize: 20 })
+    profileItems.value = r?.items || []
+  } catch { profileItems.value = [] }
+  profileLoading.value = false
+}
+
+async function loadEpisodics() {
+  episodicLoading.value = true
+  try {
+    const { get } = useApi()
+    const r: any = await get("/api/episodic", { pageSize: 20 })
+    episodicItems.value = r?.items || []
+  } catch { episodicItems.value = [] }
+  episodicLoading.value = false
+}
+
+async function loadFacts() {
+  factsLoading.value = true
+  try {
+    const { get } = useApi()
+    const r: any = await get("/api/memories", { memoryType: "custom,preference,event,habit,nickname,relationship", pageSize: 50, sortBy: "time_desc" })
+    factItems.value = r?.items || []
+  } catch { factItems.value = [] }
+  factsLoading.value = false
+}
+
+async function loadWorldBooks() {
+  worldbookLoading.value = true
+  try {
+    const { get } = useApi()
+    const r: any = await get("/api/world-book", { pageSize: 20 })
+    worldbookItems.value = r?.items || []
+  } catch { worldbookItems.value = [] }
+  worldbookLoading.value = false
+}
+
+async function loadGraphStats() {
+  graphLoading.value = true
+  try {
+    const { get } = useApi()
+    graphStats.value = await get("/api/graph/stats")
+  } catch { graphStats.value = null }
+  graphLoading.value = false
+}
+
+function sceneEmoji(t: string): string {
+  const m: Record<string,string> = { insight: "💡", joke: "😂", milestone: "🏆", emotional_peak: "💗", confession: "🫣" }
+  return m[t] || "📌"
+}
+
+function sceneLabel(t: string): string {
+  const m: Record<string,string> = { insight: "感悟", joke: "笑话", milestone: "里程碑", emotional_peak: "情感峰值", confession: "坦白" }
+  return m[t] || t
+}
+
+function profileCatLabel(c: string): string {
+  const m: Record<string,string> = { personal_info: "个人信息", preference: "偏好", habit: "习惯", fear: "恐惧", relationship: "关系", health: "健康", plan: "计划" }
+  return m[c] || c
+}
+
+function wbMatchLabel(t: string): string {
+  const m: Record<string,string> = { regex: "正则", exact: "精确", keyword: "关键词" }
+  return m[t] || t
+}
+
+async function loadRetrievalStats() {
+  try {
+    const r: any = await get("/api/memory/retrieval/stats")
+    retrievalStats.value = { totalCount: r?.totalCount || 0 }
+    retrievalLogs.value = r?.recentLogs || []
+  } catch {}
+}
+
 onMounted(async () => {
   await loadVectorStatus()
+  fetchPipelineStatus()
   await fetchList()
   await loadCandidates()
   await loadConversations()
+  loadRetrievalStats()
 })
 </script>
 
@@ -657,6 +939,58 @@ onMounted(async () => {
   font-size: var(--ac-font-size-sm);
   color: var(--ac-color-text-secondary);
 }
+.pipeline-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: #f8f9fb; border: 1px solid #e4e7ed; border-radius: 6px;
+  margin-bottom: 12px; font-size: 13px;
+}
+.pl-label { color: #606266; font-weight: 600; margin-right: 4px; }
+.pl-dot {
+  display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+  cursor: pointer; transition: transform 0.15s;
+}
+.pl-dot:hover { transform: scale(1.3); }
+.pl-time { color: #909399; font-size: 12px; margin-left: auto; }
+.mem-tabs { margin-top: 8px; }
+.analysis-panel { padding: 4px 0; }
+.ap-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+.ap-stats-row { display: flex; gap: 16px; margin-bottom: 20px; }
+.ap-stat-card { flex: 1; text-align: center; }
+.ap-stat-num { font-size: 28px; font-weight: 700; color: var(--ac-color-primary); }
+.ap-stat-label { font-size: 13px; color: var(--ac-color-text-muted); margin-top: 4px; }
+.ap-subtitle { font-size: 14px; font-weight: 600; margin: 16px 0 10px; }
+.ap-sliders { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.ap-slider-item { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 10px; }
+.ap-slider-label { font-size: 13px; white-space: nowrap; min-width: 80px; }
+.global-search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.global-search-bar .el-input { flex: 1; max-width: 400px; }
+.global-results { background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-sm); padding: 12px; margin-bottom: 12px; }
+.gr-section { margin-bottom: 10px; }
+.gr-section h4 { font-size: 13px; margin: 0 0 6px; color: var(--ac-color-text-secondary); }
+.gr-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.gr-score { font-size: 11px; color: var(--ac-color-primary); }
+.sub-panel { padding: 8px 0; }
+.sub-loading, .sub-empty { text-align: center; padding: 40px; color: var(--ac-color-text-muted); }
+.profile-cards { display: flex; flex-direction: column; gap: 6px; }
+.profile-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); }
+.pc-attr { font-weight: 600; font-size: 13px; }
+.pc-val { font-size: 13px; color: var(--ac-color-text-secondary); }
+.pc-conf { font-size: 12px; color: var(--ac-color-text-muted); }
+.episodic-cards { display: flex; flex-direction: column; gap: 8px; }
+.episodic-card { padding: 10px 12px; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); }
+.ec-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ec-emoji { font-size: 16px; }
+.ec-title { font-weight: 600; font-size: 13px; }
+.ec-content { font-size: 13px; color: var(--ac-color-text-secondary); margin-bottom: 4px; }
+.ec-time { font-size: 11px; color: var(--ac-color-text-muted); }
+.wb-cards { display: flex; flex-direction: column; gap: 8px; }
+.wb-card { padding: 10px 12px; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); }
+.wb-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.wb-pattern { font-size: 12px; background: var(--ac-color-bg); padding: 1px 6px; border-radius: 3px; }
+.wb-priority { font-size: 12px; color: var(--ac-color-text-muted); }
+.wb-content { font-size: 13px; color: var(--ac-color-text-secondary); }
+.graph-mini { padding: 8px 0; }
+.graph-stat { font-size: 14px; margin-bottom: 6px; }
 </style>
 
 

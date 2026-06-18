@@ -2,6 +2,7 @@ package episodic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -25,12 +27,13 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
-	db   *gorm.DB
+	repo     Repository
+	db       *gorm.DB
+	graphSvc graph.Service
 }
 
-func NewService(repo Repository, ctx *app.AppContext) Service {
-	return &service{repo: repo, db: ctx.DB}
+func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Service {
+	return &service{repo: repo, db: ctx.DB, graphSvc: graphSvc}
 }
 
 func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
@@ -57,6 +60,9 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	if req.SceneType == "" {
 		return nil, fmt.Errorf("sceneType不能为空")
 	}
+	if req.UserID == "" {
+		req.UserID = "default"
+	}
 	m := &EpisodicMemory{
 		UserID:          req.UserID,
 		SceneType:       req.SceneType,
@@ -72,6 +78,14 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
+	}
+	if s.graphSvc != nil && m != nil {
+		s.graphSvc.SyncNode("episodic", m.ID, m.Title, map[string]interface{}{
+			"sceneType":      m.SceneType,
+			"sentimentScore": m.SentimentScore,
+			"sourceConvID":   m.SourceConvID,
+		})
+		s.graphSvc.SyncEdge("user:default", "episodic:"+m.ID, "experienced", 1.0)
 	}
 	return m, nil
 }
@@ -89,6 +103,9 @@ func (s *service) GetDetail(id string) (*EpisodicMemory, []map[string]interface{
 }
 
 func (s *service) SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string) (*EpisodicMemory, error) {
+	if userID == "" {
+		userID = "default"
+	}
 	m := &EpisodicMemory{
 		UserID:         userID,
 		SceneType:      sceneType,
@@ -106,6 +123,9 @@ func (s *service) SaveFromTool(userID, sceneType, title, content string, sentime
 }
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
+	if userID == "" {
+		userID = "default"
+	}
 	if len(messages) == 0 {
 		return nil
 	}
@@ -262,4 +282,10 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (s *service) Name() string { return "情景记忆" }
+
+func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
+	return s.ExtractFromConversation("default", convID, messages)
 }

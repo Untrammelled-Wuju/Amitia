@@ -29,6 +29,7 @@ func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service) {
 		chatsGroup.POST("/cleanup/preview", handler.CleanupPreview)
 		chatsGroup.POST("/cleanup/confirm", handler.CleanupConfirm)
 		chatsGroup.POST("/cleanup/vacuum", handler.CleanupVacuum)
+		chatsGroup.GET("/conversations/:id/compression-status", handler.CompressionStatus)
 		chatsGroup.POST("/export", handler.Export)
 	}
 	modelGroup := r.Group("/model")

@@ -271,3 +271,9 @@ func (h *Handler) TestModelStandalone(c *gin.Context) {
 	}
 	h.doTestConnection(c, body.BaseURL, body.APIKey, body.ModelName)
 }
+
+func (h *Handler) CompressionStatus(c *gin.Context) {
+	id := c.Param("id")
+	status := h.service.GetCompressionStatus(id)
+	util.SuccessResponse(c, status)
+}

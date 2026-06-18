@@ -7,7 +7,7 @@ import (
 
 func RegisterProfileRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	repo := NewRepository(ctx)
-	svc := NewService(repo, ctx)
+	svc := NewService(repo, ctx, nil)
 	handler := NewHandler(svc)
 
 	r.GET("/profiles", handler.List)

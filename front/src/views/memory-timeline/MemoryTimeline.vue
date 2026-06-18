@@ -16,6 +16,23 @@
           <el-option label="关系" value="relationship" />
           <el-option label="其他" value="custom" />
         </el-select>
+        <el-button size="small" @click="showLayers = !showLayers">层级筛选</el-button>
+        <el-button size="small" @click="diffMode = !diffMode" :type="diffMode ? 'warning' : ''">Diff</el-button>
+        <el-button size="small" @click="exportCSV" :disabled="items.length === 0">CSV导出</el-button>
+      </div>
+      <div v-if="showLayers" class="layer-filters">
+        <el-checkbox v-model="layerFilters.working" label="工作记忆" size="small" @change="applyFilters" />
+        <el-checkbox v-model="layerFilters.profile" label="用户画像" size="small" @change="applyFilters" />
+        <el-checkbox v-model="layerFilters.episodic" label="情景记忆" size="small" @change="applyFilters" />
+        <el-checkbox v-model="layerFilters.fact" label="结构化事实" size="small" @change="applyFilters" />
+        <el-checkbox v-model="layerFilters.worldbook" label="世界书" size="small" @change="applyFilters" />
+        <el-checkbox v-model="layerFilters.graph" label="图谱" size="small" @change="applyFilters" />
+      </div>
+      <div v-if="diffMode" class="diff-bar">
+        <span>对比时间点1: </span><el-date-picker v-model="diffTime1" type="datetime" size="small" placeholder="选择时间点1" />
+        <span>时间点2: </span><el-date-picker v-model="diffTime2" type="datetime" size="small" placeholder="选择时间点2" />
+        <el-button size="small" @click="doDiff" :disabled="!diffTime1 || !diffTime2">对比</el-button>
+        <span v-if="diffResult" class="diff-summary">新增{{ diffResult.added }} 修改{{ diffResult.modified }} 删除{{ diffResult.deleted }}</span>
       </div>
     </div>
 
@@ -71,6 +88,13 @@ const pageSize = 30
 const total = ref(0)
 const sourceFilter = ref("")
 const typeFilter = ref("")
+const showLayers = ref(false)
+const layerFilters = ref({ working: true, profile: true, episodic: true, fact: true, worldbook: true, graph: true })
+const diffMode = ref(false)
+const diffTime1 = ref("")
+const diffTime2 = ref("")
+const diffResult = ref<any>(null)
+const allItems = ref<any[]>([])
 
 async function fetchTimeline() {
   loading.value = true
@@ -81,6 +105,7 @@ async function fetchTimeline() {
     if (typeFilter.value) params.memoryType = typeFilter.value
     const r = await get<any>("/api/memories/timeline", params)
     items.value = r?.items || []
+    allItems.value = r?.items || []
     total.value = r?.total || 0
   } catch {}
   loading.value = false
@@ -130,6 +155,47 @@ function formatDate(d: string): string {
   return new Date(d).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
+function guessLayer(item: any): string {
+  if (item.source === 'profile' || item.source === 'user_profile') return 'profile'
+  if (item.source === 'episodic') return 'episodic'
+  if (item.source === 'worldbook') return 'worldbook'
+  if (item.source === 'graph') return 'graph'
+  if (item.memory_type === 'working') return 'working'
+  return 'fact'
+}
+
+function layerColor(layer: string): string {
+  const colors: Record<string,string> = { working: '#409eff', profile: '#e6a23c', episodic: '#f56c6c', fact: '#67c23a', worldbook: '#909399', graph: '#b37feb' }
+  return colors[layer] || '#409eff'
+}
+
+function applyFilters() { fetchTimeline() }
+
+function exportCSV() {
+  const headers = ['层级','类型','时间','内容']
+  const rows = items.value.map((i: any) => [guessLayer(i), eventLabel(i.event_type), formatDate(i.created_at), i.value || i.key || ''])
+  const csv = [headers.join(',')].concat(rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(','))).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'memory-timeline.csv'; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function doDiff() {
+  if (!diffTime1.value || !diffTime2.value) return
+  const t1 = new Date(diffTime1.value).getTime()
+  const t2 = new Date(diffTime2.value).getTime()
+  const before = allItems.value.filter((i: any) => new Date(i.created_at).getTime() <= t1)
+  const after = allItems.value.filter((i: any) => new Date(i.created_at).getTime() <= t2)
+  const beforeIds = new Set(before.map((i: any) => i.id))
+  const afterIds = new Set(after.map((i: any) => i.id))
+  diffResult.value = {
+    added: after.filter((i: any) => !beforeIds.has(i.id)).length,
+    modified: 0,
+    deleted: before.filter((i: any) => !afterIds.has(i.id)).length,
+  }
+}
+
 onMounted(() => fetchTimeline())
 </script>
 
@@ -164,4 +230,7 @@ onMounted(() => fetchTimeline())
 .tl-meta { display: flex; gap: 10px; margin-top: 6px; font-size: 11px; color: var(--ac-color-text-muted); }
 
 .pagination { display: flex; justify-content: center; margin-top: 20px; }
+.layer-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 0; margin-bottom: 8px; }
+.diff-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); margin-bottom: 8px; }
+.diff-summary { font-size: 13px; font-weight: 600; color: var(--ac-color-warning); }
 </style>

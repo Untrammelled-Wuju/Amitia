@@ -2,6 +2,7 @@ package profile
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -25,12 +27,13 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
-	db   *gorm.DB
+	repo     Repository
+	db       *gorm.DB
+	graphSvc graph.Service
 }
 
-func NewService(repo Repository, ctx *app.AppContext) Service {
-	return &service{repo: repo, db: ctx.DB}
+func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Service {
+	return &service{repo: repo, db: ctx.DB, graphSvc: graphSvc}
 }
 
 func (s *service) List(q ProfileListQuery) (*ProfileListResponse, error) {
@@ -57,6 +60,9 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	if req.Category == "" {
 		return nil, fmt.Errorf("category不能为空")
 	}
+	if req.UserID == "" {
+		req.UserID = "default"
+	}
 	if req.Confidence < 0 {
 		req.Confidence = 0
 	}
@@ -74,7 +80,15 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	if p.Confidence == 0 {
 		p.Confidence = 50
 	}
-	return s.repo.UpsertConfidence(p)
+	result, err := s.repo.UpsertConfidence(p)
+	if err == nil && result != nil && s.graphSvc != nil {
+		s.graphSvc.SyncNode("profile", p.AttributeName, p.AttributeValue, map[string]interface{}{
+			"category":   p.Category,
+			"confidence": p.Confidence,
+		})
+		s.graphSvc.SyncEdge("user:default", "profile:"+p.AttributeName, "has_profile", float64(p.Confidence)/100.0)
+	}
+	return result, err
 }
 
 func (s *service) Update(id string, req *UpdateProfileRequest) (*UserProfile, error) {
@@ -103,6 +117,9 @@ func (s *service) GetByUserID(userID string) ([]UserProfile, error) {
 }
 
 func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string) (*UserProfile, error) {
+	if userID == "" {
+		userID = "default"
+	}
 	if category == "" {
 		category = "personal_info"
 	}
@@ -124,6 +141,9 @@ func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, c
 }
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
+	if userID == "" {
+		userID = "default"
+	}
 	if len(messages) == 0 {
 		return nil
 	}
@@ -297,4 +317,10 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (s *service) Name() string { return "用户画像" }
+
+func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
+	return s.ExtractFromConversation("default", convID, messages)
 }

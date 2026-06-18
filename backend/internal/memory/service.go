@@ -2,6 +2,7 @@ package memory
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,7 @@ type Service interface {
 	SyncEmbedding(memID, key, value, characterID, memoryType string) bool
 	BatchVerify(ids []string, status string) error
 	BatchSetImportance(ids []string, importance int) error
+	RetrieveStats() (map[string]interface{}, error)
 }
 
 type RankedMemory struct {
@@ -170,6 +172,9 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	}
 	if req.Confidence > 100 {
 		req.Confidence = 100
+	}
+	if req.Confidence == 0 {
+		req.Confidence = 50
 	}
 	if req.VerifiedStatus == "" {
 		req.VerifiedStatus = "unverified"
@@ -363,38 +368,52 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 	if queryText == "" {
 		return nil, fmt.Errorf("缺少查询文本")
 	}
-	type acc struct {
+
+	vectorFetchLimit := limit * 2
+	if vectorFetchLimit < 20 {
+		vectorFetchLimit = 20
+	}
+	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
+		Query:       queryText,
+		CharacterID: req.CharacterID,
+		Limit:       vectorFetchLimit,
+	})
+
+	scorer := &RetrievalScorer{}
+	pipelineResults := scorer.Pipeline(vectorResults)
+
+	merged := map[string]*struct {
 		m              Memory
 		vectorScore    float64
 		keywordScore   float64
 		collectionName string
+		matchType      string
+	}{}
+	for _, pr := range pipelineResults {
+		merged[pr.Memory.ID] = &struct {
+			m              Memory
+			vectorScore    float64
+			keywordScore   float64
+			collectionName string
+			matchType      string
+		}{m: pr.Memory, vectorScore: pr.VectorScore, collectionName: pr.CollectionName, matchType: pr.MatchType}
 	}
-	merged := map[string]*acc{}
-	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
-		Query:       queryText,
-		CharacterID: req.CharacterID,
-		Limit:       limit * 2,
-	})
-	for _, r := range vectorResults {
-		item := merged[r.Memory.ID]
-		if item == nil {
-			item = &acc{m: r.Memory, collectionName: r.CollectionName}
-			merged[r.Memory.ID] = item
-		}
-		if float64(r.Score) > item.vectorScore {
-			item.vectorScore = float64(r.Score)
-			item.collectionName = r.CollectionName
-		}
-	}
+
 	keywordResults, err := s.repo.Search(queryText, req.CharacterID, limit*2)
 	if err != nil {
-		return nil, err
+		keywordResults = nil
 	}
 	queryLower := strings.ToLower(queryText)
 	for _, m := range keywordResults {
-		item := merged[m.ID]
-		if item == nil {
-			item = &acc{m: m, collectionName: collectionNameForMemoryType(m.MemoryType)}
+		item, exists := merged[m.ID]
+		if !exists {
+			item = &struct {
+				m              Memory
+				vectorScore    float64
+				keywordScore   float64
+				collectionName string
+				matchType      string
+			}{m: m, collectionName: collectionNameForMemoryType(m.MemoryType), matchType: "keyword"}
 			merged[m.ID] = item
 		}
 		score := keywordMatchScore(queryLower, m.Key, m.Value)
@@ -404,17 +423,15 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		if score > item.keywordScore {
 			item.keywordScore = score
 		}
+		if item.matchType == "vector" {
+			item.matchType = "hybrid"
+		}
 	}
+
 	results := make([]HybridSearchResult, 0, len(merged))
 	for _, item := range merged {
-		matchType := "keyword"
-		if item.vectorScore > 0 && item.keywordScore > 0 {
-			matchType = "hybrid"
-		} else if item.vectorScore > 0 {
-			matchType = "vector"
-		}
 		score := item.vectorScore*0.6 + item.keywordScore*0.4
-		if matchType == "hybrid" {
+		if item.matchType == "hybrid" {
 			score += 0.1
 		}
 		collectionKey := collectionKeyFromCollectionName(item.collectionName)
@@ -423,17 +440,26 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 			Score:          math.Round(score*10000) / 10000,
 			VectorScore:    math.Round(item.vectorScore*10000) / 10000,
 			KeywordScore:   math.Round(item.keywordScore*10000) / 10000,
-			MatchType:      matchType,
+			MatchType:      item.matchType,
 			CollectionName: item.collectionName,
 			MemoryLayer:    memoryLayerLabel(collectionKey),
 		})
 	}
+
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
 	if len(results) > limit {
 		results = results[:limit]
 	}
+
+	memoryIDs := make([]string, len(results))
+	for i, r := range results {
+		memoryIDs[i] = r.Memory.ID
+	}
+
+	s.logRetrieval(req.CharacterID, queryText, memoryIDs, results)
+
 	return results, nil
 }
 
@@ -668,15 +694,48 @@ func (s *service) CheckConflict(req *CheckConflictRequest) (*CheckConflictRespon
 
 func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error) {
 	resp := &ResolveConflictResponse{Resolved: true}
+	var existing *Memory
+	if req.ConflictID != "" {
+		if m, err := s.repo.FindByID(req.ConflictID); err == nil {
+			existing = m
+		}
+	}
+	newKey := req.NewKey
+	if newKey == "" && existing != nil {
+		newKey = existing.Key
+	}
+	newType := req.NewType
+	if newType == "" {
+		if existing != nil && existing.MemoryType != "" {
+			newType = existing.MemoryType
+		} else {
+			newType = "custom"
+		}
+	}
+	characterID := req.CharacterID
+	if characterID == "" && existing != nil {
+		characterID = existing.CharacterID
+	}
+	importance := req.Importance
+	if importance == 0 && existing != nil {
+		importance = existing.Importance
+	}
+	if importance < 0 {
+		importance = 0
+	}
+	if importance > 10 {
+		importance = 10
+	}
 
 	switch req.Action {
-	case "replace":
+	case "replace", "replace_old":
 		if req.ConflictID != "" {
 			s.repo.Delete(req.ConflictID)
 		}
 		m := &Memory{
-			Key: req.NewKey, Value: req.NewValue, MemoryType: req.NewType,
-			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
+			Key: newKey, Value: req.NewValue, MemoryType: newType,
+			Importance: importance, CharacterID: characterID, Source: "manual",
+			Confidence: 50, VerifiedStatus: "user_verified",
 		}
 		if err := s.repo.Create(m); err != nil {
 			return nil, err
@@ -685,19 +744,44 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
-	case "keep_existing":
+	case "keep_existing", "keep_old":
+		resp.MemoryID = req.ConflictID
+		return resp, nil
+	case "keep_both":
+		m := &Memory{
+			Key: newKey, Value: req.NewValue, MemoryType: newType,
+			Importance: importance, CharacterID: characterID, Source: "manual",
+			Confidence: 50, VerifiedStatus: "user_verified",
+		}
+		if err := s.repo.Create(m); err != nil {
+			return nil, err
+		}
+		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+		resp.MemoryID = m.ID
 		return resp, nil
 	case "merge":
 		newValue := req.NewValue
-		if req.ConflictID != "" {
-			existing, err := s.repo.FindByID(req.ConflictID)
-			if err == nil {
-				newValue = existing.Value + "; " + req.NewValue
+		if existing != nil {
+			newValue = existing.Value + "; " + req.NewValue
+			updates := map[string]interface{}{
+				"value":            newValue,
+				"importance":       importance,
+				"confidence":       maxInt(existing.Confidence, 50),
+				"verified_status":  "user_verified",
+				"last_verified_at": time.Now().Format("2006-01-02 15:04:05"),
 			}
+			if err := s.repo.Update(existing.ID, updates); err != nil {
+				return nil, err
+			}
+			go s.SyncEmbedding(existing.ID, newKey, newValue, characterID, newType)
+			resp.MemoryID = existing.ID
+			return resp, nil
 		}
 		m := &Memory{
-			Key: req.NewKey, Value: newValue, MemoryType: req.NewType,
-			Importance: req.Importance, CharacterID: req.CharacterID, Source: "manual",
+			Key: newKey, Value: newValue, MemoryType: newType,
+			Importance: importance, CharacterID: characterID, Source: "manual",
+			Confidence: 50, VerifiedStatus: "user_verified",
 		}
 		if err := s.repo.Create(m); err != nil {
 			return nil, err
@@ -838,6 +922,13 @@ func keywordMatchScore(query, key, value string) float64 {
 		return float64(matchCount) / float64(len(queryWords))
 	}
 	return 0
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func jaccardSimilarity(a, b string) float64 {
@@ -1120,4 +1211,78 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+func (s *service) Name() string { return "结构化事实" }
+
+func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
+	candidates, err := s.GenerateCandidates(convID)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	existingKeys := make(map[string]bool)
+	var existingMemories []struct {
+		Key   string
+		Value string
+	}
+	s.db.Table("memories").Select("key, value").Find(&existingMemories)
+	for _, m := range existingMemories {
+		existingKeys[m.Key+"|"+m.Value] = true
+	}
+	for _, c := range candidates {
+		if c.Importance < 7 {
+			continue
+		}
+		if existingKeys[c.Key+"|"+c.Value] {
+			continue
+		}
+		existingKeys[c.Key+"|"+c.Value] = true
+		mem, err := s.AcceptCandidate(c.ID)
+		if err == nil && mem != nil {
+			s.SyncEmbedding(mem.ID, mem.Key, mem.Value, mem.CharacterID, mem.MemoryType)
+		}
+	}
+	return nil
+}
+
+
+func (s *service) logRetrieval(characterID, queryText string, memoryIDs []string, results []HybridSearchResult) {
+	id := uuid.New().String()
+	now := time.Now().Format("2006-01-02 15:04:05")
+	memIDsJSON, _ := json.Marshal(memoryIDs)
+	scoringDetails := make([]map[string]interface{}, 0, len(results))
+	for _, r := range results {
+		scoringDetails = append(scoringDetails, map[string]interface{}{
+			"id":         r.Memory.ID,
+			"score":      r.Score,
+			"matchType":  r.MatchType,
+			"memoryType": r.Memory.MemoryType,
+			"layer":      r.MemoryLayer,
+		})
+	}
+	detailsJSON, _ := json.Marshal(scoringDetails)
+	s.db.Exec(
+		"INSERT INTO retrieval_logs (id, conversation_id, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, characterID, queryText, string(memIDsJSON), string(detailsJSON), now,
+	)
+}
+
+func (s *service) RetrieveStats() (map[string]interface{}, error) {
+	type logRow struct {
+		QueryText          string `json:"queryText"`
+		RetrievedMemoryIDs string `json:"retrievedMemoryIDs"`
+		ScoringDetails     string `json:"scoringDetails"`
+		CreatedAt          string `json:"createdAt"`
+	}
+	var rows []logRow
+	s.db.Table("retrieval_logs").Order("created_at DESC").Limit(50).Find(&rows)
+	if rows == nil {
+		rows = []logRow{}
+	}
+	var total int64
+	s.db.Table("retrieval_logs").Count(&total)
+	return map[string]interface{}{
+		"recentLogs": rows,
+		"totalCount":  total,
+	}, nil
 }

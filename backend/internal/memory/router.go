@@ -5,7 +5,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext) {
+func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext) *Handler {
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
 	handler := NewHandler(svc)
@@ -38,4 +38,6 @@ func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/memory-candidates/:id/reject", handler.RejectCandidate)
 	r.POST("/memory-candidates/batch-accept", handler.BatchAcceptCandidates)
 	r.POST("/memory-candidates/generate", handler.GenerateCandidates)
+
+	return handler
 }

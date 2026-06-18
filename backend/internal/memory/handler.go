@@ -332,3 +332,13 @@ func (h *Handler) GetRankedMemories(c *gin.Context) {
 	}
 	util.SuccessResponse(c, ranked)
 }
+
+
+func (h *Handler) RetrieveStats(c *gin.Context) {
+	stats, err := h.service.RetrieveStats()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, stats)
+}
