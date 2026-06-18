@@ -112,6 +112,59 @@
       :memories="memories"
     />
   </div>
+    <button class="mem-inject-toggle-btn" @click="showMemInject = !showMemInject" :title="showMemInject ? '隐藏记忆注入' : '记忆注入'">🧠</button>
+    <div v-if="showMemInject" class="mem-inject-panel">
+      <div class="mi-header">
+        <h4>记忆注入</h4>
+        <button class="mi-close-btn" @click="showMemInject = false">✕</button>
+      </div>
+      <div v-if="miLoading" class="mi-loading">加载中...</div>
+      <div v-else>
+        <div class="mi-section" v-if="miMemories.length">
+          <h5>当前检索记忆 ({{ miMemories.length }})</h5>
+          <div v-for="m in miMemories" :key="m.id" class="mi-item">
+            <el-tag size="small" :type="m.matchType === 'vector' ? 'success' : 'info'">{{ m.matchType }}</el-tag>
+            <span class="mi-layer">{{ m.memoryLayer || '事实记忆' }}</span>
+            <span class="mi-score">{{ (m.score * 100).toFixed(0) }}%</span>
+            <div class="mi-content">{{ m.memory?.value || m.value }}</div>
+            <el-button size="small" text type="danger" @click="feedbackMemory(m, 'irrelevant')">不相关</el-button>
+            <el-button size="small" text type="warning" @click="feedbackMemory(m, 'wrong')">错误</el-button>
+          </div>
+        </div>
+        <div class="mi-section" v-if="miProfiles.length">
+          <h5>用户画像 ({{ miProfiles.length }})</h5>
+          <div v-for="p in miProfiles" :key="p.id" class="mi-profile-card">
+            <span>{{ p.attributeName }}: {{ p.attributeValue }}</span>
+            <el-tag :type="p.confidence >= 80 ? 'success' : 'warning'" size="small">{{ p.confidence }}%</el-tag>
+          </div>
+        </div>
+        <div class="mi-section" v-if="miWorldbookHits.length">
+          <h5>世界书命中 ({{ miWorldbookHits.length }})</h5>
+          <div v-for="w in miWorldbookHits" :key="w.entry?.id || w.id" class="mi-wb-hit">
+            <el-tag size="small" type="danger">命中</el-tag>
+            <span>{{ w.entry?.matchPattern || w.matchPattern }}</span>
+          </div>
+        </div>
+        <div class="mi-section">
+          <h5>压缩状态</h5>
+          <div class="mi-compress">
+            <span>已压缩 {{ miCompression.compressedRounds || 0 }} / {{ miCompression.totalRounds || 0 }} 轮</span>
+            <span v-if="miCompression.lastCompressedAt">上次: {{ miCompression.lastCompressedAt }}</span>
+          </div>
+        </div>
+        <div class="mi-section">
+          <h5>管线状态</h5>
+          <div class="mi-pipeline">
+            <template v-for="l in (miPipeline?.layers || [])" :key="l.layer">
+              <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
+                <span class="mi-pl-dot" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c'}"></span>
+              </el-tooltip>
+            </template>
+          </div>
+        </div>
+        <div class="mi-empty" v-if="!miMemories.length && !miProfiles.length && !miWorldbookHits.length">暂无记忆注入数据</div>
+      </div>
+    </div>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue"
@@ -171,6 +224,14 @@ const showCharPicker = ref(false)
 const showMemories = ref(false)
 const showScrollBtn = ref(false)
 const showProfiles = ref(false)
+const showMemInject = ref(false)
+const miLoading = ref(false)
+const miMemories = ref<any[]>([])
+const miProfiles = ref<any[]>([])
+const miWorldbookHits = ref<any[]>([])
+const miCompression = ref<any>({})
+const miPipeline = ref<any>(null)
+
 const profileLoading = ref(false)
 const profileItems = ref<any[]>([])
 const { profiles: profData, fetchProfiles, categoryLabel: profileCatLabel } = useProfile()
@@ -184,6 +245,7 @@ function profileConfClass(c: number): string { if (c >= 80) return "conf-high"; 
 
 onMounted(async () => {
   await fetchProfiles({ pageSize: 10 })
+  await loadMemInject()
   profileItems.value = profData.value
 })
 const importContext = ref<any>(null)
@@ -250,6 +312,34 @@ const convSummary = ref("")
 const showSummary = ref(false)
 
 async function fetchConvSummary() {}
+
+async function loadMemInject() {
+  miLoading.value = true
+  try {
+    if (convId.value) {
+      const { useApi } = await import("../../composables/useApi")
+      const { get } = useApi()
+      try { const compR: any = await get("/api/chats/" + convId.value + "/compression-status"); miCompression.value = compR || {} } catch {}
+      try { const pipeR: any = await get("/api/memory/pipeline/status"); miPipeline.value = pipeR } catch {}
+      try { const profR: any = await get("/api/profiles", { pageSize: 5 }); miProfiles.value = profR?.items || [] } catch {}
+    }
+  } catch {}
+  miLoading.value = false
+}
+
+function feedbackMemory(m: any, type: string) {
+  ElMessage.info("已标记为" + (type === "irrelevant" ? "不相关" : "错误") + "，将优化后续检索")
+}
+
+async function checkWorldbookHits(userMsg: string) {
+  try {
+    const { useApi } = await import("../../composables/useApi")
+    const { get } = useApi()
+    const r: any = await get("/api/world-book/match", { text: userMsg })
+    miWorldbookHits.value = r?.matches || []
+  } catch { miWorldbookHits.value = [] }
+}
+
 
 // Network & error states
 const isOffline = ref(!navigator.onLine)
@@ -833,6 +923,7 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
   
   scrollToBottom(true)
 
+  checkWorldbookHits(text)
   sending.value = true
   modelError.value = ""
 
@@ -926,7 +1017,7 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
       const errMsg = err?.message || "连接失败"
       modelError.value = errMsg
       ElMessage.error(errMsg)
-      const tIdx = -1
+      const tIdx = messages.value.findIndex((m: any) => m.id === userMsgLocalId) 
       if (tIdx >= 0) {
         messages.value[tIdx] = { ...messages.value[tIdx], id: "failed-" + Date.now(), status: "failed" }
       }

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,9 +18,11 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/profile"
-	"github.com/u-ai/backend/internal/tts"
+	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -48,6 +51,8 @@ type Service interface {
 	DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error)
 	EnsureChannelConversation(channel string) (*Conversation, error)
 	RecalculateMessageCounts() (int64, error)
+	GetCompressionStatus(convID string) map[string]interface{}
+	GetPipelineStatus() interface{}
 	ListProviders() []ProviderInfo
 }
 
@@ -86,12 +91,23 @@ type service struct {
 	db          *gorm.DB
 	memorySvc   memory.Service
 	profileSvc  profile.Service
-	episodicSvc episodic.Service
+	episodicSvc  episodic.Service
+	worldBookSvc worldbook.Service
 	wmCache     *WorkingMemoryCache
+	compressor  *Compressor
+	pipeline    *memory.Pipeline
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service) Service {
-	return &service{repo: repo, db: ctx.DB, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute)}
+func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor) Service {
+	p := memory.NewPipeline(
+		memory.NewWorkingMemoryService(),
+		profSvc.(memory.PipelineLayer),
+		epiSvc.(memory.PipelineLayer),
+		memSvc.(memory.PipelineLayer),
+		qdrant.NewQdrantClient(),
+		graph.NewStubService(),
+	)
+	return &service{repo: repo, db: ctx.DB, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute), compressor: comp, pipeline: p}
 }
 
 func (s *service) ListConversations(q ConversationQuery) (*ConversationListResponse, error) {
@@ -251,6 +267,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
+
 	systemParts := []string{systemNoEmojiInstruction}
 	if systemPrompt != "" {
 		systemParts = append(systemParts, systemPrompt)
@@ -259,66 +276,55 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
 
 	content, tokens, err := s.callLLM(cfg, apiMessages)
 	if err != nil {
 		return nil, err
 	}
 
-	msgID := uuid.New().String()
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?)", msgID, "", "assistant", content, "web", time.Now().Format("2006-01-02 15:04:05"))
-	return &ChatResponse{
-		ConversationID: "",
-		Message: &MessageItem{
-			ID:      msgID,
-			Role:    "assistant",
-			Content: content,
-			Tokens:  tokens,
-		},
-	}, nil
-}
+	convID := req.ConversationID
+	if convID == "" {
+		convID = uuid.New().String()
+		s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: req.Channel})
+	}
 
-func (s *service) loadHistory(convID string) []map[string]string {
-	maxRounds := s.getWindowMaxRounds()
-	limit := maxRounds * 2
-	rows, err := s.db.Table("messages").Select("role, content").Where("conversation_id = ? AND include_in_context = 1", convID).Order("created_at DESC").Limit(limit).Rows()
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var record []map[string]string
-	for rows.Next() {
-		var role, content string
-		rows.Scan(&role, &content)
-		record = append(record, map[string]string{"role": role, "content": content})
-	}
-	for i, j := 0, len(record)-1; i < j; i, j = i+1, j-1 {
-		record[i], record[j] = record[j], record[i]
-	}
-	return record
-}
+	s.repo.CreateMessage(&Message{ID: uuid.New().String(), ConversationID: convID, Role: "user", Content: req.Message})
+	aiMsgID := uuid.New().String()
+	s.repo.CreateMessage(&Message{ID: aiMsgID, ConversationID: convID, Role: "assistant", Content: content, Tokens: tokens})
+	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
-func (s *service) getWindowMaxRounds() int {
-	if config.AppCfg != nil && config.AppCfg.Chat.ContextWindowMaxRounds > 0 {
-		return config.AppCfg.Chat.ContextWindowMaxRounds
-	}
-	return 20
+	return &ChatResponse{ConversationID: convID, Message: &MessageItem{ID: aiMsgID, ConversationID: convID, Role: "assistant", Content: content, Tokens: tokens}}, nil
 }
 
 func (s *service) trimContextWindow(convID string) {
-	maxRounds := s.getWindowMaxRounds()
-	limit := maxRounds * 2
-	var keepIDs []string
-	s.db.Table("messages").Where("conversation_id = ?", convID).Order("created_at DESC").Limit(limit).Pluck("id", &keepIDs)
-	if len(keepIDs) == 0 {
+	maxRounds := config.AppCfg.Chat.ContextWindowMaxRounds
+	if maxRounds <= 0 {
+		maxRounds = 20
+	}
+	var ids []string
+	s.db.Table("messages").Select("id").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Order("created_at DESC").Limit(maxRounds * 2 + 100).Pluck("id", &ids)
+	if len(ids) <= maxRounds*2 {
 		return
 	}
-	s.db.Table("messages").Where("conversation_id = ? AND id NOT IN ?", convID, keepIDs).Update("include_in_context", 0)
+	cutoff := ids[maxRounds*2-1]
+	s.db.Exec("UPDATE messages SET include_in_context = 0 WHERE conversation_id = ? AND include_in_context = 1 AND created_at < (SELECT created_at FROM messages WHERE id = ?)", convID, cutoff)
+}
+
+func (s *service) loadHistory(convID string) []map[string]string {
+	var messages []Message
+	s.db.Where("conversation_id = ? AND include_in_context = 1", convID).Order("created_at ASC").Find(&messages)
+	if messages == nil {
+		messages = []Message{}
+	}
+	history := make([]map[string]string, len(messages))
+	for i, m := range messages {
+		history[i] = map[string]string{"role": m.Role, "content": m.Content}
+	}
+	return history
 }
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
-	fmt.Printf("[DIAG-ProcessMessage] channel=%s voiceMessage=%v msg=%s audioUrl=%s imageUrlLen=%d\n", req.Channel, req.VoiceMessage, req.Message[:min(len(req.Message), 80)], req.AudioUrl[:min(len(req.AudioUrl), 60)], len(req.ImageUrl))
+	fmt.Printf("[DIAG-ProcessMessage] channel=%s voiceMessage=%v msg=%s audioUrl=%s imageUrlLen=%d\n", req.Channel, req.VoiceMessage, req.Message, req.AudioUrl, len(req.ImageUrl))
 	var charID, charName, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
@@ -334,164 +340,46 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 			return nil, fmt.Errorf("没有可用角色")
 		}
 	}
-	modelCfg, err := s.repo.GetActiveModel()
-	if err != nil {
-		return nil, fmt.Errorf("没有可用的模型配置")
-	}
-	convID := req.ConversationID
+
 	channel := req.Channel
-	if channel == "" {
-		channel = "web"
-	}
 	source := req.Source
 	if source == "" {
 		source = "manual"
 	}
+	convID := req.ConversationID
 	if convID == "" {
-		var existingConvID string
-		s.db.Table("characters").Select("conversation_id").Where("id = ?", charID).Limit(1).Row().Scan(&existingConvID)
-		if existingConvID != "" {
-			var ec string
-			s.db.Table("conversations").Select("channel").Where("id = ?", existingConvID).Limit(1).Row().Scan(&ec)
-			if ec != "" {
-				convID = existingConvID
-			}
-		}
-		if convID == "" {
-			convID = uuid.New().String()
-			title := req.Message
-			if len([]rune(title)) > 30 {
-				title = string([]rune(title)[:30])
-			}
-			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
-		}
-	} else {
-		var existingChannel string
-		s.db.Table("conversations").Select("channel").Where("id = ?", convID).Limit(1).Row().Scan(&existingChannel)
-		if existingChannel == "" {
-			s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, peer_id) VALUES (?, ?, ?, ?, ?, ?)", convID, charID, charName, channel, source, req.PeerID)
-		} else if existingChannel != channel {
-			convID = uuid.New().String()
-			title := req.Message
-			if len([]rune(title)) > 30 {
-				title = string([]rune(title)[:30])
-			}
-			s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source) VALUES (?, ?, ?, ?, ?)", convID, charID, title, channel, source)
-		}
-		if req.PeerID != "" {
-			s.db.Exec("UPDATE conversations SET peer_id = ? WHERE id = ?", req.PeerID, convID)
-		}
-		if channel == "qq" {
-			s.db.Exec("UPDATE conversations SET title = ? WHERE id = ?", "QQ对话", convID)
-		} else if channel == "wechat" {
-			s.db.Exec("UPDATE conversations SET title = ? WHERE id = ?", "微信对话", convID)
-		}
-	}
-	if req.VoiceMessage && (req.Message == "" || req.Message == "[语音]") {
-		fmt.Printf("[DIAG-VoiceFallback] 触发语音降级: msg=%q\n", req.Message)
-		req.Message = "（用户发来一条语音，听不清内容）"
-	}
-	if charID != "" {
-		s.db.Exec("UPDATE characters SET conversation_id = ?, updated_at = ? WHERE id = ? AND (conversation_id IS NULL OR conversation_id = '')", convID, time.Now().Format("2006-01-02 15:04:05"), charID)
-	}
-	userMsgID := uuid.New().String()
-	msgType := "text"
-	if req.AudioUrl != "" {
-		msgType = "voice"
-	}
-	if req.ImageUrl != "" {
-		req.ImageUrl = SaveImageFromDataURI(req.ImageUrl)
-	}
-	if req.Message == "" && req.ImageUrl != "" {
-		req.Message = "[图片]"
-	}
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, audio_duration, image_url, video_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", userMsgID, convID, "user", req.Message, source, msgType, req.AudioUrl, req.AudioDuration, req.ImageUrl, req.VideoUrl, time.Now().Format("2006-01-02 15:04:05"))
-	if req.ImageUrl != "" && req.ImageContext == "" {
-		fmt.Printf("[Image] 开始分析图片, url长度=%d\n", len(req.ImageUrl))
-		desc, errDetail := analyzeImageInternal(req.ImageUrl)
-		fmt.Printf("[Image] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
-		logPath := filepath.Join(config.AppCfg.Storage.DataDir, "image_recognition_log.txt")
-		if absPath, err := filepath.Abs(logPath); err == nil {
-			f, _ := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if f != nil {
-				f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " [" + fmt.Sprint(len(desc)) + " chars]\n" + desc + "\n---\n")
-				f.Close()
-			}
-		}
-		if desc != "" {
-			req.ImageContext = "【用户刚发的图片内容】" + desc
-			fmt.Printf("[Image] 图片描述已注入, 长度=%d\n", len(req.ImageContext))
+		var existing struct{ ID string }
+		err := s.db.Table("conversations").Select("id").Where("character_id = ? AND channel = ?", charID, channel).Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
+		if err == nil && existing.ID != "" {
+			convID = existing.ID
 		} else {
-			fmt.Printf("[Image] 图片分析失败: %s\n", errDetail)
-			return &ProcessMessageResponse{
-				ConversationID: convID,
-				Reply:          errDetail,
-				CharacterID:    charID,
-				CharacterName:  charName,
-			}, nil
-		}
-	}
-	if req.VideoUrl != "" && req.ImageContext == "" {
-		fmt.Printf("[Video] 开始分析视频, url长度=%d\n", len(req.VideoUrl))
-		desc, errDetail := analyzeVideoInternal(req.VideoUrl)
-		fmt.Printf("[Video] 分析完成, desc长度=%d, errDetail=%s\n", len(desc), errDetail[:min(len(errDetail), 200)])
-		if desc != "" {
-			req.ImageContext = "【用户刚发的视频内容】" + desc
+			convID = uuid.New().String()
+			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
 		}
 	}
 
-	systemParts := []string{systemNoEmojiInstruction}
-	if systemPrompt != "" {
-		systemParts = append(systemParts, systemPrompt)
+	userMsgID := uuid.New().String()
+	s.repo.CreateMessage(&Message{ID: userMsgID, ConversationID: convID, Role: "user", Content: req.Message, MsgType: "text", Source: source, AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl})
+
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil {
+		s.db.Exec("DELETE FROM messages WHERE id = ?", userMsgID)
+		return nil, fmt.Errorf("没有可用的模型配置")
 	}
-	if s.memorySvc != nil && req.Message != "" {
-		results, err := s.memorySvc.HybridSearch(&memory.VectorSearchRequest{Query: req.Message, CharacterID: charID, Limit: 8})
-		if err == nil && len(results) > 0 {
-			layerLines := map[string][]string{}
-			layerOrder := []string{"当前摘要", "用户画像", "情景回忆", "事实记忆"}
-			for _, r := range results {
-				layer := r.MemoryLayer
-				if layer == "" {
-					layer = "事实记忆"
-				}
-				typeLabel := r.Memory.MemoryType
-				if typeLabel == "" {
-					typeLabel = "fact"
-				}
-				line := fmt.Sprintf("- [%s %s 置信%d%%] %s", typeLabel, r.MatchType, r.Memory.Confidence, r.Memory.Value)
-				layerLines[layer] = append(layerLines[layer], line)
-			}
-			for _, layer := range layerOrder {
-				if lines := layerLines[layer]; len(lines) > 0 {
-					systemParts = append(systemParts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
-				}
-			}
-		}
-	}
-	messages := []map[string]interface{}{}
-	if s.wmCache != nil {
-		wm := s.wmCache.Get(convID)
-		if wm != nil && wm.State != nil && wm.State.Summary != "" {
-			systemParts = append(systemParts, "【工作记忆】\n"+wm.State.Summary)
-		}
-	}
-	if s.profileSvc != nil {
-		profilePrompt := s.profileSvc.ToSystemPrompt("default")
-		if profilePrompt != "" {
-			systemParts = append(systemParts, profilePrompt)
-			if s.episodicSvc != nil {
-				epiPrompt := s.episodicSvc.ToSystemPrompt("default")
-				if epiPrompt != "" {
-					systemParts = append(systemParts, epiPrompt)
-				}
-			}
-		}
-	}
-	messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
-	messages = append(messages, map[string]interface{}{"role": "system", "content": systemFormatInstruction})
+
+	sys1Parts := s.sys1Builder(systemPrompt, req.Message)
 	history := s.loadHistory(convID)
+	sys2Parts := s.sys2Builder(convID, charID, req.Message)
+
+	messages := []map[string]interface{}{}
+	if len(sys1Parts) > 0 {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(sys1Parts, "\n\n")})
+	}
 	for _, m := range history {
 		messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]})
+	}
+	if len(sys2Parts) > 0 {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(sys2Parts, "\n\n")})
 	}
 	userContent := req.Message
 	if req.ImageContext != "" {
@@ -505,7 +393,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	tool.SetCurrentConversationID(convID)
 	tool.SetCurrentCharacterID(charID)
 	for round := 0; round < 3; round++ {
-		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(modelCfg, messages, toolDefs)
+		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(cfg, messages, toolDefs)
 		if llmErr != nil {
 			s.db.Exec("DELETE FROM messages WHERE id = ?", userMsgID)
 			return nil, fmt.Errorf("AI 调用失败: %w", llmErr)
@@ -553,9 +441,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	if reply == "" {
 		reply = "操作已完成"
 	}
-	lines := strings.Split(strings.TrimSpace(reply), "\n")
+	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
 	var realLines []string
-	for _, line := range lines {
+	for _, line := range lines_ {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -567,52 +455,22 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	var msgIDs []string
 	var audioUrls []string
-	isChannelMsg := source == "qq" || source == "wechat"
-	for _, line := range realLines {
-		id := uuid.New().String()
-		msgIDs = append(msgIDs, id)
-		msgType := "text"
-		audioURL := ""
-		if isChannelMsg {
-			cfg, _ := tts.GetActiveConfig(s.db)
-			if cfg != nil {
-				result, err := tts.Synthesize(cfg, line)
-				if err == nil && result.AudioURL != "" {
-					cacheFile := strings.TrimPrefix(result.AudioURL, "/audio/")
-					cachePath := "data/tts_cache/" + cacheFile
-					voiceDir := "data/voice_msg"
-					os.MkdirAll(voiceDir, 0755)
-					voiceFile := id + ".mp3"
-					voicePath := voiceDir + "/" + voiceFile
-					if src, srcErr := os.Open(cachePath); srcErr == nil {
-						if dst, dstErr := os.Create(voicePath); dstErr == nil {
-							io.Copy(dst, src)
-							dst.Close()
-							msgType = "voice"
-							audioURL = "/voice/" + voiceFile
-							audioUrls = append(audioUrls, audioURL)
-						}
-						src.Close()
-					}
-				}
-			}
-		}
-		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, msg_type, audio_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, convID, "assistant", line, source, msgType, audioURL, time.Now().Format("2006-01-02 15:04:05"))
+	for _, text := range realLines {
+		aiMsgID := uuid.New().String()
+		s.repo.CreateMessage(&Message{ID: aiMsgID, ConversationID: convID, Role: "assistant", Content: text, MsgType: "text", Source: source})
+		msgIDs = append(msgIDs, aiMsgID)
 	}
 	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(convID, reply)
 	}
+	go s.pipeline.Execute(context.Background(), convID, history, reply)
 	go s.trimContextWindow(convID)
-	if s.profileSvc != nil {
-		go s.extractProfile(convID)
-		if s.episodicSvc != nil {
-			go s.detectEpisodicMoment(convID)
-		}
-	}
-	go s.autoExtractMemories(convID, charID)
 	go s.moodRecoveryCheck(convID, charID, source)
+	if s.compressor != nil {
+		go s.compressor.MaybeCompress(convID)
+	}
 
 	fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), tool.GetForceVoice())
 	return &ProcessMessageResponse{
@@ -625,6 +483,73 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		AudioUrls:      audioUrls,
 	}, nil
 }
+func (s *service) sys1Builder(systemPrompt, userMessage string) []string {
+	parts := []string{systemNoEmojiInstruction}
+	if systemPrompt != "" {
+		parts = append(parts, systemPrompt)
+	}
+	if s.profileSvc != nil {
+		profilePrompt := s.profileSvc.ToSystemPrompt("default")
+		if profilePrompt != "" {
+			parts = append(parts, profilePrompt)
+		}
+	}
+	if s.episodicSvc != nil {
+		epiPrompt := s.episodicSvc.ToSystemPrompt("default")
+		if epiPrompt != "" {
+			parts = append(parts, epiPrompt)
+		}
+	}
+	if s.worldBookSvc != nil {
+		wbPrompt := s.worldBookSvc.ToSystemPrompt(userMessage, "")
+		if wbPrompt != "" {
+			parts = append(parts, wbPrompt)
+		}
+	}
+	return parts
+}
+func (s *service) sys2Builder(convID, charID, userMessage string) []string {
+	parts := []string{systemFormatInstruction}
+	if s.wmCache != nil {
+		wm := s.wmCache.Get(convID)
+		if wm != nil && wm.State != nil && wm.State.Summary != "" {
+			parts = append(parts, "【工作记忆】\n" + wm.State.Summary)
+		}
+	}
+	if s.compressor != nil {
+		status := s.compressor.GetCompressionStatus(convID)
+		if summary, ok := status["latestSummary"].(string); ok && summary != "" {
+			parts = append(parts, "【对话历史摘要】\n"+summary)
+		}
+	}
+	if s.memorySvc != nil && userMessage != "" {
+		results, err := s.memorySvc.HybridSearch(&memory.VectorSearchRequest{Query: userMessage, CharacterID: charID, Limit: 8})
+		if err == nil && len(results) > 0 {
+			layerLines := map[string][]string{}
+			layerOrder := []string{"当前摘要", "用户画像", "情景回忆", "事实记忆"}
+			for _, r := range results {
+				layer := r.MemoryLayer
+				if layer == "" {
+					layer = "事实记忆"
+				}
+				typeLabel := r.Memory.MemoryType
+				if typeLabel == "" {
+					typeLabel = "fact"
+				}
+				line := fmt.Sprintf("- [%s %s %.0f%% 置信%d%%] %s", typeLabel, r.MatchType, r.Score*100, r.Memory.Confidence, r.Memory.Value)
+				layerLines[layer] = append(layerLines[layer], line)
+				go s.memorySvc.RecordUse(r.Memory.ID)
+			}
+			for _, layer := range layerOrder {
+				if lines := layerLines[layer]; len(lines) > 0 {
+					parts = append(parts, "【" + layer + "】\n" + strings.Join(lines, "\n"))
+				}
+			}
+		}
+	}
+	return parts
+}
+
 
 func (s *service) detectEpisodicMoment(convID string) {
 	if s.episodicSvc == nil {
@@ -675,6 +600,20 @@ func (s *service) autoExtractMemories(convID, charID string) {
 		existingKeys[c.Key+"|"+c.Value] = true
 		s.memorySvc.AcceptCandidate(c.ID)
 	}
+}
+
+func (s *service) GetCompressionStatus(convID string) map[string]interface{} {
+	if s.compressor == nil {
+		return map[string]interface{}{}
+	}
+	return s.compressor.GetCompressionStatus(convID)
+}
+
+func (s *service) GetPipelineStatus() interface{} {
+	if s.pipeline == nil {
+		return nil
+	}
+	return s.pipeline.LastRun()
 }
 
 func (s *service) callLLM(cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {

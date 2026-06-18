@@ -42,3 +42,12 @@ embedding:
   modelName: "text-embedding-3-small"
   baseUrl: ""
   apiKey: ""
+
+surrealdb:
+  host: "127.0.0.1"
+  port: 8000
+  namespace: "uai"
+  database: "memory_graph"
+  username: "root"
+  password: "root"
+  dataPath: "data/graph.db"

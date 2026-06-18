@@ -46,6 +46,33 @@
     </div>
     <div class="nav-divider"></div>
     <div class="nav-section">
+      <router-link to="/memory-manager" class="nav-item" active-class="nav-active">
+        <el-icon><Collection /></el-icon>
+        <span>记忆总览</span>
+      </router-link>
+      <router-link to="/profiles" class="nav-item" active-class="nav-active">
+        <el-icon><User /></el-icon>
+        <span>用户画像</span>
+      </router-link>
+      <router-link to="/episodic" class="nav-item" active-class="nav-active">
+        <el-icon><Timer /></el-icon>
+        <span>情景记忆</span>
+      </router-link>
+      <router-link to="/world-book" class="nav-item" active-class="nav-active">
+        <el-icon><Notebook /></el-icon>
+        <span>世界书</span>
+      </router-link>
+      <router-link to="/graph" class="nav-item" active-class="nav-active">
+        <el-icon><Share /></el-icon>
+        <span>记忆图谱</span>
+      </router-link>
+      <router-link to="/memory-timeline" class="nav-item" active-class="nav-active">
+        <el-icon><Histogram /></el-icon>
+        <span>时间线</span>
+      </router-link>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section">
       <router-link to="/safety" class="nav-item" active-class="nav-active">
         <el-icon><Lock /></el-icon>
         <span>安全设置</span>
@@ -70,6 +97,7 @@
 import {
   ChatDotRound, Odometer, Connection, Cpu, UserFilled,
   Bell, ChatDotSquare, ChatLineSquare, Upload, Lock, Clock, Setting, Monitor,
+  Collection, User, Timer, Notebook, Share, Histogram,
 } from "@element-plus/icons-vue"
 </script>
 

@@ -15,6 +15,7 @@ type Config struct {
 	Chat      ChatConfig      `mapstructure:"chat"`
 	Qdrant    QdrantConfig    `mapstructure:"qdrant"`
 	Embedding EmbeddingConfig `mapstructure:"embedding"`
+	Surreal   SurrealConfig   `mapstructure:"surrealdb"`
 }
 
 type ServerConfig struct {
@@ -63,6 +64,16 @@ type EmbeddingConfig struct {
 	ApiKey    string `mapstructure:"apiKey"`
 }
 
+type SurrealConfig struct {
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	Namespace string `mapstructure:"namespace"`
+	Database  string `mapstructure:"database"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	DataPath  string `mapstructure:"dataPath"`
+}
+
 var AppCfg *Config
 
 func InitConfig(configPath string) {
@@ -99,6 +110,13 @@ func InitConfig(configPath string) {
 	v.SetDefault("embedding.modelName", "text-embedding-3-small")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")
+	v.SetDefault("surrealdb.host", "127.0.0.1")
+	v.SetDefault("surrealdb.port", 8000)
+	v.SetDefault("surrealdb.namespace", "uai")
+	v.SetDefault("surrealdb.database", "memory_graph")
+	v.SetDefault("surrealdb.username", "root")
+	v.SetDefault("surrealdb.password", "root")
+	v.SetDefault("surrealdb.dataPath", "data/graph.db")
 
 	v.AutomaticEnv()
 
