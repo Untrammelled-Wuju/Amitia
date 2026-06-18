@@ -19,6 +19,12 @@ func SetCurrentCharacterID(id string) {
 	CurrentCharacterID = id
 }
 
+var CurrentConversationID string
+
+func SetCurrentConversationID(id string) {
+	CurrentConversationID = id
+}
+
 var OnMemorySaved func(id, key, value, memoryType, characterID string)
 
 func SetOnMemorySaved(fn func(id, key, value, memoryType, characterID string)) {

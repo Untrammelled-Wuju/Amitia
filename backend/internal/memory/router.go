@@ -17,6 +17,7 @@ func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.DELETE("/memories/:id", handler.Delete)
 	r.POST("/memories/search", handler.Search)
 	r.POST("/memories/vector-search", handler.VectorSearch)
+	r.POST("/memories/hybrid-search", handler.HybridSearch)
 	r.POST("/memories/:id/use", handler.RecordUse)
 	r.GET("/memories/vector-status", handler.VectorStatus)
 	r.GET("/memories/timeline", handler.Timeline)
@@ -25,6 +26,10 @@ func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/memories/extract-candidates", handler.ExtractCandidates)
 	r.POST("/memories/rebuild-index", handler.RebuildIndex)
 	r.POST("/memories/rebuild-embeddings", handler.RebuildEmbeddings)
+
+	r.POST("/memories/batch-verify", handler.BatchVerify)
+	r.POST("/memories/batch-importance", handler.BatchSetImportance)
+	r.GET("/memories/ranked", handler.GetRankedMemories)
 
 	r.GET("/memory-candidates", handler.ListCandidates)
 	r.PUT("/memory-candidates/:id", handler.UpdateCandidate)

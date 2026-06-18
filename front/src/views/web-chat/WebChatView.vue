@@ -28,6 +28,7 @@
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
     />
+    <button class="profile-toggle-btn" @click="showProfiles = !showProfiles" :title="showProfiles ? '隐藏画像' : '显示画像'">👤</button>
 
     <MessagesArea
       ref="msgAreaRef"
@@ -80,6 +81,25 @@
       @continue-import="handleContinueImport"
     />
 
+
+.profile-toggle-btn { position: fixed; right: 16px; top: 40px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 16px; z-index: 901; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    <div v-if="showProfiles" class="profile-summary-panel">
+      <div class="profile-panel-header">
+        <h4>用户画像摘要</h4>
+        <button class="profile-close-btn" @click="showProfiles = false">✕</button>
+      </div>
+      <div v-if="profileLoading" class="profile-loading">加载中...</div>
+      <div v-else-if="profileItems.length === 0" class="profile-empty">暂无画像</div>
+      <div v-else class="profile-items">
+        <div v-for="p in profileItems" :key="p.id" class="profile-item">
+          <span class="profile-cat">{{ profileCatLabel(p.category) }}</span>
+          <span class="profile-name">{{ p.attributeName }}</span>
+          <span class="profile-val">{{ p.attributeValue }}</span>
+          <span class="profile-conf" :class="profileConfClass(p.confidence)">{{ p.confidence }}%</span>
+        </div>
+      </div>
+    </div>
+
     <CharacterPickerDialog
       v-model:visible="showCharPicker"
       :characters="characters"
@@ -106,6 +126,7 @@ import ChatInput from "../../components/ChatInput.vue"
 import ConversationDrawer from "../../components/ConversationDrawer.vue"
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue"
 import MemoryPanel from "../../components/MemoryPanel.vue"
+import { useProfile } from "@/composables/useProfile"
 
 const route = useRoute()
 const router = useRouter()
@@ -149,6 +170,22 @@ const showDrawer = ref(false)
 const showCharPicker = ref(false)
 const showMemories = ref(false)
 const showScrollBtn = ref(false)
+const showProfiles = ref(false)
+const profileLoading = ref(false)
+const profileItems = ref<any[]>([])
+const { profiles: profData, fetchProfiles, categoryLabel: profileCatLabel } = useProfile()
+
+
+const profileCatMap: Record<string, string> = {
+  personal_info: '个人信息', preference: '偏好', habit: '习惯',
+  fear: '恐惧', relationship: '关系', health: '健康', plan: '计划',
+}
+function profileConfClass(c: number): string { if (c >= 80) return "conf-high"; if (c >= 50) return "conf-mid"; return "conf-low" }
+
+onMounted(async () => {
+  await fetchProfiles({ pageSize: 10 })
+  profileItems.value = profData.value
+})
 const importContext = ref<any>(null)
 const showImportDetail = ref(false)
 
@@ -1132,4 +1169,29 @@ async function onMsgTouchEnd() {
     max-width: 100%;
   }
 }
+
+.profile-summary-panel {
+  position: fixed; right: 16px; top: 80px; width: 280px; max-height: 60vh;
+  background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow-y: auto; z-index: 900;
+}
+.profile-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid #eee;
+}
+.profile-panel-header h4 { margin: 0; font-size: 15px; }
+.profile-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: #999; }
+.profile-loading, .profile-empty { padding: 24px; text-align: center; color: #999; font-size: 13px; }
+.profile-items { padding: 8px 0; }
+.profile-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 16px;
+  font-size: 13px; border-bottom: 1px solid #f5f5f5;
+}
+.profile-cat { color: #999; font-size: 11px; min-width: 48px; }
+.profile-name { color: #666; min-width: 48px; }
+.profile-val { color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-conf { font-size: 11px; font-weight: 600; min-width: 36px; text-align: right; }
+.conf-high { color: #4caf50; }
+.conf-mid { color: #ff9800; }
+.conf-low { color: #f44336; }
 </style>

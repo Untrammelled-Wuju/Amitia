@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-
 type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
 	Storage   StorageConfig   `mapstructure:"storage"`
@@ -40,15 +39,22 @@ type AppConfig struct {
 }
 
 type ChatConfig struct {
-	MergeWindowMs int `mapstructure:"mergeWindowMs"`
+	MergeWindowMs          int `mapstructure:"mergeWindowMs"`
+	ContextWindowMaxRounds int `mapstructure:"contextWindowMaxRounds"`
 }
 
 type QdrantConfig struct {
-	Host           string `mapstructure:"host"`
-	Port           int    `mapstructure:"port"`
-	CollectionName string `mapstructure:"collectionName"`
-	VectorDim      int    `mapstructure:"vectorDim"`
-	Limit          int    `mapstructure:"limit"`
+	Host           string                      `mapstructure:"host"`
+	Port           int                         `mapstructure:"port"`
+	CollectionName string                      `mapstructure:"collectionName"`
+	VectorDim      int                         `mapstructure:"vectorDim"`
+	Limit          int                         `mapstructure:"limit"`
+	Collections    map[string]CollectionConfig `mapstructure:"collections"`
+}
+
+type CollectionConfig struct {
+	Name      string `mapstructure:"name"`
+	VectorDim int    `mapstructure:"vectorDim"`
 }
 
 type EmbeddingConfig struct {
@@ -59,7 +65,6 @@ type EmbeddingConfig struct {
 
 var AppCfg *Config
 
-
 func InitConfig(configPath string) {
 	v := viper.New()
 	v.SetConfigName("config")
@@ -67,7 +72,6 @@ func InitConfig(configPath string) {
 	v.AddConfigPath(configPath)
 	v.AddConfigPath(".")
 
-	
 	v.SetDefault("server.port", 8900)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
@@ -77,12 +81,21 @@ func InitConfig(configPath string) {
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "1.0.0")
 	v.SetDefault("app.deployMode", "desktop-local")
+	v.SetDefault("chat.contextWindowMaxRounds", 20)
 	v.SetDefault("chat.mergeWindowMs", 6000)
 	v.SetDefault("qdrant.host", "127.0.0.1")
 	v.SetDefault("qdrant.port", 9178)
 	v.SetDefault("qdrant.collectionName", "memory_embeddings")
 	v.SetDefault("qdrant.vectorDim", 1536)
 	v.SetDefault("qdrant.limit", 10)
+	v.SetDefault("qdrant.collections.memory_embeddings.name", "memory_embeddings")
+	v.SetDefault("qdrant.collections.memory_embeddings.vectorDim", 1536)
+	v.SetDefault("qdrant.collections.working_memory.name", "working_memory")
+	v.SetDefault("qdrant.collections.working_memory.vectorDim", 1536)
+	v.SetDefault("qdrant.collections.user_profiles.name", "user_profiles")
+	v.SetDefault("qdrant.collections.user_profiles.vectorDim", 1536)
+	v.SetDefault("qdrant.collections.episodic_memories.name", "episodic_memories")
+	v.SetDefault("qdrant.collections.episodic_memories.vectorDim", 1536)
 	v.SetDefault("embedding.modelName", "text-embedding-3-small")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")
@@ -100,10 +113,8 @@ func InitConfig(configPath string) {
 		log.Fatalf("配置解析失败: %v", err)
 	}
 
-	
 	v.WatchConfig()
 }
-
 
 func (c *ServerConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
