@@ -573,3 +573,4 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT "character";

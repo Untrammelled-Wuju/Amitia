@@ -20,7 +20,8 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) Neighbors(c *gin.Context) {
 	id := c.Param("id")
 	depth, _ := strconv.Atoi(c.DefaultQuery("depth", "2"))
-	result, err := h.svc.QueryNeighbors(id, depth)
+	userID := c.DefaultQuery("userId", "default")
+	result, err := h.svc.QueryNeighbors(id, depth, userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, "查询邻居失败", nil)
 		return
@@ -45,7 +46,8 @@ func (h *Handler) FindPath(c *gin.Context) {
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	result, err := h.svc.GetStats()
+	userID := c.DefaultQuery("userId", "default")
+	result, err := h.svc.GetStats(userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, "统计查询失败", nil)
 		return

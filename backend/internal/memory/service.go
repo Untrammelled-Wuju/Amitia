@@ -32,7 +32,7 @@ type Service interface {
 	HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error)
 	RecordUse(id string) (*Memory, error)
 	GetVectorStatus() map[string]interface{}
-	GetTimeline(page, pageSize int, characterID, source, memoryType string) ([]map[string]interface{}, int64, error)
+	GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
 	GenerateCandidates(conversationID string) ([]MemoryCandidate, error)
 	ListCandidates() []MemoryCandidate
 	AcceptCandidate(id string) (*Memory, error)
@@ -179,6 +179,9 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	if req.VerifiedStatus == "" {
 		req.VerifiedStatus = "unverified"
 	}
+	if req.Scope == "" {
+		req.Scope = "character"
+	}
 
 	resp, err := s.AutoResolveConflict(req.Key, req.Value, req.CharacterID, req.Confidence)
 	if err == nil && resp != nil && resp.Resolved {
@@ -194,6 +197,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		CharacterID:    req.CharacterID,
 		MemoryType:     req.MemoryType,
 		Source:         req.Source,
+		Scope:          req.Scope,
 		Key:            req.Key,
 		Value:          req.Value,
 		Importance:     req.Importance,
@@ -247,6 +251,9 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	}
 	if req.VerifiedStatus != nil {
 		updates["verified_status"] = *req.VerifiedStatus
+	}
+	if req.Scope != nil {
+		updates["scope"] = *req.Scope
 	}
 	if len(updates) == 0 {
 		return s.repo.FindByID(id)
@@ -1115,31 +1122,78 @@ func (s *service) logEvent(memoryID, eventType, key, value, memoryType string, i
 	)
 }
 
-func (s *service) GetTimeline(page, pageSize int, characterID, source, memoryType string) ([]map[string]interface{}, int64, error) {
+func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
 	if pageSize <= 0 {
 		pageSize = 30
 	}
-	query := s.db.Table("memory_events")
-	if characterID != "" {
-		query = query.Where("character_id = ?", characterID)
+
+	var allEvents []map[string]interface{}
+
+	if timelineType == "" || timelineType == "memory" || timelineType == "structured" {
+		query := s.db.Table("memory_events")
+		if source != "" {
+			query = query.Where("source = ?", source)
+		}
+		if memoryType != "" {
+			query = query.Where("memory_type = ?", memoryType)
+		}
+		var events []map[string]interface{}
+		err := query.Order("created_at DESC").Find(&events).Error
+		if err != nil {
+			return nil, 0, err
+		}
+		if events == nil {
+			events = []map[string]interface{}{}
+		}
+		for _, e := range events {
+			e["timelineType"] = "memory"
+			allEvents = append(allEvents, e)
+		}
 	}
-	if source != "" {
-		query = query.Where("source = ?", source)
+
+	if timelineType == "" || timelineType == "episodic" {
+		var episodics []map[string]interface{}
+		eq := s.db.Table("episodic_memories")
+		if userID != "" {
+			eq = eq.Where("user_id = ?", userID)
+		}
+		err := eq.Order("created_at DESC").Find(&episodics).Error
+		if err != nil {
+			return nil, 0, err
+		}
+		if episodics == nil {
+			episodics = []map[string]interface{}{}
+		}
+		for _, e := range episodics {
+			e["timelineType"] = "episodic"
+			allEvents = append(allEvents, e)
+		}
 	}
-	if memoryType != "" {
-		query = query.Where("memory_type = ?", memoryType)
+
+	sort.Slice(allEvents, func(i, j int) bool {
+		ti, _ := allEvents[i]["created_at"].(string)
+		tj, _ := allEvents[j]["created_at"].(string)
+		if ti == "" {
+			ti2, _ := allEvents[i]["createdAt"].(string)
+			tj2, _ := allEvents[j]["createdAt"].(string)
+			return ti2 > tj2
+		}
+		return ti > tj
+	})
+
+	total := int64(len(allEvents))
+	start := (page - 1) * pageSize
+	if start >= int(total) {
+		return []map[string]interface{}{}, total, nil
 	}
-	var total int64
-	query.Count(&total)
-	var events []map[string]interface{}
-	err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&events).Error
-	if events == nil {
-		events = []map[string]interface{}{}
+	end := start + pageSize
+	if end > int(total) {
+		end = int(total)
 	}
-	return events, total, err
+	return allEvents[start:end], total, nil
 }
 
 func (s *service) getActiveModel() map[string]interface{} {

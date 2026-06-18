@@ -85,6 +85,7 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 		s.graphSvc.SyncNode("profile", p.AttributeName, p.AttributeValue, map[string]interface{}{
 			"category":   p.Category,
 			"confidence": p.Confidence,
+			"user_id":    p.UserID,
 		})
 		s.graphSvc.SyncEdge("user:default", "profile:"+p.AttributeName, "has_profile", float64(p.Confidence)/100.0)
 	}

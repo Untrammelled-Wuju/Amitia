@@ -5,6 +5,7 @@ type Memory struct {
 	CharacterID    string  `gorm:"column:character_id" json:"characterId"`
 	MemoryType     string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
 	Source         string  `gorm:"column:source;default:manual" json:"source"`
+	Scope          string  `gorm:"column:scope;default:character" json:"scope"`
 	Key            string  `gorm:"column:key;not null" json:"key"`
 	Value          string  `gorm:"column:value;not null" json:"value"`
 	Importance     int     `gorm:"column:importance;default:0" json:"importance"`
@@ -38,6 +39,7 @@ type CreateMemoryRequest struct {
 	SourceConvID   string `json:"sourceConvId"`
 	VerifiedStatus string `json:"verifiedStatus"`
 	Source         string `json:"source"`
+	Scope          string `json:"scope"`
 }
 
 type UpdateMemoryRequest struct {
@@ -51,6 +53,7 @@ type UpdateMemoryRequest struct {
 	EntityID       *string `json:"entityId"`
 	EntityType     *string `json:"entityType"`
 	VerifiedStatus *string `json:"verifiedStatus"`
+	Scope          *string `json:"scope"`
 }
 
 type SearchMemoryRequest struct {

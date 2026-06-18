@@ -28,6 +28,10 @@
       <el-select v-model="sourceFilter" placeholder="来源" size="small" style="width:110px" clearable @change="fetchList">
         <el-option v-for="s in SOURCES" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
+      <el-select v-model="characterFilter" placeholder="角色" size="small" style="width:130px" clearable @change="fetchList">
+        <el-option label="全部角色" value="" />
+        <el-option v-for="ch in characters" :key="ch.id" :label="ch.name" :value="ch.id" />
+      </el-select>
       <el-select v-model="sortBy" size="small" style="width:120px" @change="fetchList">
         <el-option label="重要度降序" value="importance_desc" />
         <el-option label="重要度升序" value="importance_asc" />
@@ -59,7 +63,7 @@
     </div>
     <div v-if="showGlobalResults && globalSearched" class="global-results">
       <div v-if="globalResults.memories.length" class="gr-section">
-        <h4>结构化记忆 ({{ globalResults.memories.length }})</h4>
+        <h4><el-tooltip content="按角色独立，切换角色后数据不同" placement="top"><span class="gr-label">结构化记忆</span></el-tooltip> ({{ globalResults.memories.length }})</h4>
         <div v-for="m in globalResults.memories" :key="m.id" class="gr-item">
           <el-tag size="small">{{ typeLabel(m.memoryType) }}</el-tag>
           <span>{{ m.key }}: {{ m.value }}</span>
@@ -67,15 +71,15 @@
         </div>
       </div>
       <div v-if="globalResults.profiles.length" class="gr-section">
-        <h4>用户画像 ({{ globalResults.profiles.length }})</h4>
+        <h4><el-tooltip content="按用户共享，所有角色共用同一份画像" placement="top"><span class="gr-label">用户画像</span></el-tooltip> ({{ globalResults.profiles.length }})</h4>
         <div v-for="p in globalResults.profiles" :key="p.id" class="gr-item">{{ p.attributeName }}: {{ p.attributeValue }}</div>
       </div>
       <div v-if="globalResults.episodics.length" class="gr-section">
-        <h4>情景记忆 ({{ globalResults.episodics.length }})</h4>
+        <h4><el-tooltip content="按用户共享，跨角色的对话日记" placement="top"><span class="gr-label">情景记忆</span></el-tooltip> ({{ globalResults.episodics.length }})</h4>
         <div v-for="e in globalResults.episodics" :key="e.id" class="gr-item">{{ e.title }}</div>
       </div>
       <div v-if="globalResults.worldBooks.length" class="gr-section">
-        <h4>世界书 ({{ globalResults.worldBooks.length }})</h4>
+        <h4><el-tooltip content="全局共享，所有角色通用知识规则" placement="top"><span class="gr-label">世界书</span></el-tooltip> ({{ globalResults.worldBooks.length }})</h4>
         <div v-for="w in globalResults.worldBooks" :key="w.id" class="gr-item">{{ w.matchPattern }}</div>
       </div>
       <el-empty v-if="globalResultCount === 0" description="未找到相关结果" :image-size="40" />
@@ -211,6 +215,13 @@
           <el-tag v-else type="info" size="small">未核实</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="范围" width="170">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.scope==='user'?'success':'info'">{{ row.scope==='user'?'共享':'独有' }}</el-tag>
+          <el-button v-if="row.scope==='character'" text size="small" type="warning" style="margin-left:4px" @click="toggleScope(row)">升级为共享</el-button>
+          <el-button v-if="row.scope==='user'" text size="small" type="info" style="margin-left:4px" @click="toggleScope(row)">降级为独享</el-button>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="140">
         <template #default="{row}">
           <el-button text size="small" @click="showEdit(row)">编辑</el-button>
@@ -298,6 +309,12 @@
         </el-form-item>
         <el-form-item label="重要度">
           <el-slider v-model="form.importance" :max="10" show-input :marks="{1:'低',5:'中',10:'高'}" />
+        </el-form-item>
+        <el-form-item label="范围">
+          <el-select v-model="form.scope" style="width:100%">
+            <el-option label="仅当前角色" value="character" />
+            <el-option label="跨角色共享" value="user" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -404,6 +421,8 @@ const candidates = ref<any[]>([])
 const keyword = ref("")
 const typeFilter = ref("")
 const sourceFilter = ref("")
+const characterFilter = ref(injectedCharacterId?.value || "")
+const characters = ref<any[]>([])
 const sortBy = ref("importance_desc")
 const page = ref(1)
 const pageSize = ref(20)
@@ -414,11 +433,11 @@ const editingId = ref("")
 const saving = ref(false)
 const showCandidates = ref(false)
 const conversationList = ref<any[]>([])
-const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"" })
+const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"", scope:"character" })
 const editCandidateVisible = ref(false)
 const conflictVisible = ref(false)
 const showGenerateDialog = ref(false)
-const editForm = reactive({ key: "", value: "", content: "", memoryType: "custom", importance: 5, candidateId: "" })
+const editForm = reactive({ key: "", value: "", content: "", memoryType: "custom", importance: 5, candidateId: "", scope: "character" })
 const conflictNewType = ref("")
 const conflictNewContent = ref("")
 const conflictList = ref<any[]>([])
@@ -501,7 +520,7 @@ function isExpired(expiresAt?: string) { return !!expiresAt && new Date(expiresA
 
 async function fetchList() {
   const params: any = { page:page.value, pageSize:pageSize.value }
-  if (injectedCharacterId?.value) params.characterId = injectedCharacterId.value
+  if (characterFilter.value) params.characterId = characterFilter.value
   if (keyword.value) params.keyword = keyword.value
   if (typeFilter.value) params.memoryType = typeFilter.value
   if (sourceFilter.value) params.source = sourceFilter.value
@@ -521,9 +540,11 @@ function showCreate() {
 
 function showEdit(row: any) {
   editing.value = true; editingId.value = row.id
-  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""
+  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""; form.scope=row.scope||"character"
   dialogVisible.value = true
 }
+
+async function toggleScope(row: any) { const newScope = row.scope === "user" ? "character" : "user"; try { await put(`/api/memories/${row.id}`, { scope: newScope }); row.scope = newScope; ElMessage.success(newScope === "user" ? "已升级为共享记忆" : "已降级为独享记忆") } catch {} }
 
 async function saveMem() {
   saving.value = true
@@ -849,8 +870,10 @@ async function loadRetrievalStats() {
 }
 
 onMounted(async () => {
+  try { characters.value = await get<any[]>("/api/characters") || [] } catch {}
   await loadVectorStatus()
   fetchPipelineStatus()
+  fetchList()
   await fetchList()
   await loadCandidates()
   await loadConversations()
