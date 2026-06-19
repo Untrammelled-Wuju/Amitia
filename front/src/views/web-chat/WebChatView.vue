@@ -30,8 +30,8 @@
     />
     <div class="chat-body-wrapper">
       <div class="floating-btns">
-        <button class="fa-btn" :class="{ active: showProfiles }" @click="showProfiles = !showProfiles" title="显示画像">👤</button>
-        <button class="fa-btn" :class="{ active: showMemInject }" @click="showMemInject = !showMemInject" title="记忆注入">🧠</button>
+        <button class="fa-btn" :class="{ active: showProfiles }" @click="toggleProfiles" title="显示画像">👤</button>
+        <button class="fa-btn" :class="{ active: showMemInject }" @click="toggleMemInject" title="记忆注入">🧠</button>
       </div>
       <div v-if="showProfiles" class="fa-panel profile-summary-panel">
         <div class="profile-panel-header">
@@ -226,6 +226,20 @@ const showMemories = ref(false)
 const showScrollBtn = ref(false)
 const showProfiles = ref(false)
 const showMemInject = ref(false)
+
+function toggleProfiles() {
+  showProfiles.value = !showProfiles.value
+  if (showProfiles.value) {
+    showMemInject.value = false
+  }
+}
+
+function toggleMemInject() {
+  showMemInject.value = !showMemInject.value
+  if (showMemInject.value) {
+    showProfiles.value = false
+  }
+}
 const miLoading = ref(false)
 const miMemories = ref<any[]>([])
 const miProfiles = ref<any[]>([])
