@@ -119,59 +119,6 @@
       <template #title>主动推送须知</template>
       添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
     </el-alert>
-
-    <!-- Cloud Deployment Check -->
-    <el-card shadow="never" class="section-card">
-      <template #header>
-        <div class="card-header-row">
-          <span class="card-header-title">云端部署检查</span>
-          <el-button
-            size="small"
-            type="primary"
-            :loading="cloudCheckLoading"
-            @click="runCloudCheck"
-          >运行检查</el-button>
-        </div>
-      </template>
-
-      <div class="cloud-check-hint" v-if="!cloudReport">
-        <el-icon :size="16"><InfoFilled /></el-icon>
-        <span>点击"运行检查"验证桥接服务是否准备好云端部署</span>
-      </div>
-
-      <div class="cloud-check-hint" v-if="cloudReport">
-        <el-icon :size="16"><InfoFilled /></el-icon>
-        <span>云端桥接运行后，你的电脑无需保持开机。</span>
-      </div>
-
-      <div v-if="cloudReport" class="cloud-check-result">
-        <div class="cloud-overall" :class="'cloud-' + cloudReport.overallStatus">
-          <span class="cloud-overall-dot"></span>
-          <span class="cloud-overall-label">总体：{{ cloudOverallLabel }}</span>
-          <span class="cloud-overall-time">{{ formatTime(cloudReport.checkedAt) }}</span>
-        </div>
-
-        <div class="cloud-item-list">
-          <div
-            v-for="(item, idx) in cloudReport.items"
-            :key="idx"
-            class="cloud-item"
-            :class="'cloud-item-' + item.status"
-          >
-            <div class="cloud-item-header">
-              <span class="cloud-item-dot" :class="item.status"></span>
-              <span class="cloud-item-name">{{ item.name }}</span>
-              <span class="cloud-item-badge" :class="item.status">{{ statusBadge(item.status) }}</span>
-            </div>
-            <div class="cloud-item-msg">{{ item.message }}</div>
-            <div class="cloud-item-suggestion" v-if="item.suggestion">
-              <el-icon :size="12"><Warning /></el-icon>
-              {{ item.suggestion }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-card>
   </template>
   </div>
 </template>
@@ -197,45 +144,9 @@ const loginError = ref("")
 // Page load state
 const pageReady = ref(false)
 
-// Cloud check state
 const reconnecting = ref(false)
-const cloudCheckLoading = ref(false)
-const cloudReport = ref<any>(null)
 
 const isConnected = computed(() => detail.value?.status === "connected")
-
-const cloudOverallLabel = computed(() => {
-  const s = cloudReport.value?.overallStatus
-  const map: Record<string, string> = { ok: "全部正常", warning: "需要注意", error: "发现问题", unknown: "未检查" }
-  return map[s] || s || "未知"
-})
-
-function statusBadge(status: string): string {
-  const map: Record<string, string> = { ok: "OK", warning: "WARN", error: "ERR", unknown: "N/A" }
-  return map[status] || status.toUpperCase()
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return ""
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString()
-  } catch { return iso }
-}
-
-async function runCloudCheck() {
-  cloudCheckLoading.value = true
-  try {
-    const resp = await post<any>("/api/wechat/cloud-check/run")
-    cloudReport.value = resp?.data || resp
-    const msg = cloudReport.value?.overallStatus === "ok" ? "所有检查通过" : "发现问题"
-    ElMessage({ type: cloudReport.value?.overallStatus === "ok" ? "success" : "warning", message: msg })
-  } catch (err: any) {
-    ElMessage.error(err?.message || "云端检查失败")
-  } finally {
-    cloudCheckLoading.value = false
-  }
-}
 
 async function refreshStatus() {
   loading.value = true
@@ -250,13 +161,6 @@ async function refreshStatus() {
     loading.value = false
   }
 
-  // Also load cloud check
-  try {
-    const cloudResp = await get<any>("/api/wechat/cloud-check")
-    if (cloudResp?.data?.items) {
-      cloudReport.value = cloudResp.data
-    }
-  } catch { /* ignore */ }
   pageReady.value = true
 }
 
@@ -489,104 +393,4 @@ onUnmounted(() => {
 .sd-item { padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: 4px; }
 .sd-label { font-size: 11px; color: var(--ac-color-text-muted); display: block; }
 .sd-value { font-size: 14px; font-weight: 600; color: var(--ac-color-text); }
-
-/* Cloud check section */
-.cloud-check-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--ac-color-bg-secondary);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--ac-color-text-muted);
-  margin-bottom: 12px;
-}
-.cloud-check-result {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cloud-overall {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.cloud-ok { background: #f0f9eb; color: #5a9e6f; }
-.cloud-warning { background: #fdf6ec; color: #e6a23c; }
-.cloud-error { background: #fef0f0; color: #f56c6c; }
-.cloud-unknown { background: #f5f7fa; color: #909399; }
-.cloud-overall-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.cloud-ok .cloud-overall-dot { background: #5a9e6f; }
-.cloud-warning .cloud-overall-dot { background: #e6a23c; }
-.cloud-error .cloud-overall-dot { background: #f56c6c; }
-.cloud-unknown .cloud-overall-dot { background: #909399; }
-.cloud-overall-label { flex: 1; }
-.cloud-overall-time { font-size: 11px; font-weight: 400; color: var(--ac-color-text-muted); }
-
-.cloud-item-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-.cloud-item {
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 0.5px solid transparent;
-}
-.cloud-item-ok { background: var(--ac-color-bg); border-color: #ebeef5; }
-.cloud-item-warning { background: var(--ac-color-bg); border-color: #faecd8; }
-.cloud-item-error { background: var(--ac-color-bg); border-color: #fde2e2; }
-.cloud-item-unknown { background: var(--ac-color-bg); border-color: #e4e7ed; }
-.cloud-item-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
-}
-.cloud-item-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.cloud-item-dot.ok { background: #5a9e6f; }
-.cloud-item-dot.warning { background: #e6a23c; }
-.cloud-item-dot.error { background: #f56c6c; }
-.cloud-item-dot.unknown { background: #909399; }
-.cloud-item-name { font-size: 13px; font-weight: 600; color: var(--ac-color-text); }
-.cloud-item-badge {
-  margin-left: auto;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.cloud-item-badge.ok { background: #e1f3d8; color: #5a9e6f; }
-.cloud-item-badge.warning { background: #faecd8; color: #e6a23c; }
-.cloud-item-badge.error { background: #fde2e2; color: #f56c6c; }
-.cloud-item-badge.unknown { background: #e4e7ed; color: #909399; }
-.cloud-item-msg { font-size: 12px; color: var(--ac-color-text-muted); margin-bottom: 2px; }
-.cloud-item-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #e6a23c;
-  padding: 4px 8px;
-  background: rgba(230, 162, 60, 0.08);
-  border-radius: 3px;
-}
 </style>
