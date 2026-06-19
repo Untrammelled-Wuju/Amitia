@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	applog "github.com/u-ai/backend/log"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -383,7 +385,10 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	}
 	userContent := req.Message
 	if req.ImageContext != "" {
+		applog.Info(fmt.Sprintf("[Process] Injecting ImageContext len=%d into prompt", len(req.ImageContext)))
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
+	} else {
+		applog.Info("[Process] No ImageContext to inject")
 	}
 	messages = append(messages, map[string]interface{}{"role": "user", "content": userContent})
 	toolDefs := tool.GetAll()

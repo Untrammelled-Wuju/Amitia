@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	applog "github.com/u-ai/backend/log"
 )
 
 var ErrBufferAborted = fmt.Errorf("buffer aborted by newer message")
@@ -80,7 +82,6 @@ func (mb *MessageBuffer) Buffer(convID, text string) ([]string, error) {
 		msgs := make([]string, len(buf.messages))
 		copy(msgs, buf.messages)
 		buf.messages = nil
-		buf.imageContexts = nil
 		buf.timer = nil
 		for _, w := range buf.waiters {
 			w <- msgs
@@ -102,18 +103,21 @@ func (mb *MessageBuffer) AnalyzeImage(convID, imageUrl string) {
 	}
 	buf := mb.getOrCreate(convID)
 
-	go func() {
-		desc, errDetail := analyzeImageInternal(imageUrl)
-		if desc == "" && errDetail != "" {
-			desc = "图片解析失败：" + errDetail
-		}
-		if desc != "" {
-			ctx := "[图片描述：" + desc + "]"
-			buf.mu.Lock()
-			buf.imageContexts = append(buf.imageContexts, ctx)
-			buf.mu.Unlock()
-		}
-	}()
+	applog.Info(fmt.Sprintf("[Image] Analyzing image: %s", imageUrl[:min(len(imageUrl), 80)]))
+	desc, errDetail := analyzeImageInternal(imageUrl)
+	if desc == "" && errDetail != "" {
+		applog.Warn(fmt.Sprintf("[Image] Analysis failed: %s", errDetail))
+		desc = "图片解析失败：" + errDetail
+	} else if desc != "" {
+		applog.Info(fmt.Sprintf("[Image] Analysis success, descLen=%d", len(desc)))
+	}
+	if desc != "" {
+		ctx := "[图片描述：" + desc + "]"
+		buf.mu.Lock()
+		buf.imageContexts = append(buf.imageContexts, ctx)
+		buf.mu.Unlock()
+		applog.Info(fmt.Sprintf("[Image] Context appended, total contexts=%d", len(buf.imageContexts)))
+	}
 }
 
 func (mb *MessageBuffer) AnalyzeVideo(convID, videoUrl string) {
@@ -122,18 +126,23 @@ func (mb *MessageBuffer) AnalyzeVideo(convID, videoUrl string) {
 	}
 	buf := mb.getOrCreate(convID)
 
-	go func() {
-		desc, errDetail := analyzeVideoInternal(videoUrl)
-		if desc == "" && errDetail != "" {
-			desc = "视频解析失败：" + errDetail
-		}
-		if desc != "" {
-			ctx := "[视频描述：" + desc + "]"
-			buf.mu.Lock()
-			buf.imageContexts = append(buf.imageContexts, ctx)
-			buf.mu.Unlock()
-		}
-	}()
+	applog.Info(fmt.Sprintf("[Video] Analyzing video: %s", videoUrl[:min(len(videoUrl), 80)]))
+	desc, errDetail := analyzeVideoInternal(videoUrl)
+	if desc == "" && errDetail != "" {
+		applog.Warn(fmt.Sprintf("[Video] Analysis failed: %s", errDetail))
+		desc = "视频解析失败：" + errDetail
+	} else if desc != "" {
+		applog.Info(fmt.Sprintf("[Video] Analysis success, descLen=%d desc=%s", len(desc), desc[:min(len(desc), 120)]))
+	} else {
+		applog.Warn("[Video] Analysis returned empty without error")
+	}
+	if desc != "" {
+		ctx := "[视频描述：" + desc + "]"
+		buf.mu.Lock()
+		buf.imageContexts = append(buf.imageContexts, ctx)
+		buf.mu.Unlock()
+		applog.Info(fmt.Sprintf("[Video] Context appended to imageContexts, total contexts=%d", len(buf.imageContexts)))
+	}
 }
 
 func (mb *MessageBuffer) GetImageContexts(convID string) string {

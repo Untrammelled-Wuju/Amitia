@@ -300,6 +300,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		convID = "web-" + uuid.New().String()[:8]
 	}
 
+	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
 	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
@@ -311,6 +312,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 
 	mergedContent := strings.Join(bufferedMsgs, "\n")
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
+	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
@@ -346,6 +348,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		convID = "web-" + uuid.New().String()[:8]
 	}
 
+	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
 	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
@@ -357,6 +360,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 
 	mergedContent := strings.Join(bufferedMsgs, "\n")
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
+	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
 	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
