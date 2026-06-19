@@ -342,7 +342,7 @@
               </el-form>
               <div class="step-illustration" style="margin-top:12px">
                 <span>使用步骤：</span>
-                <span>1. 前往 <a href="https://q.qq.com/" target="_blank">QQ开放平台</a> 创建机器人</span>
+                <span>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:#409eff">QQ开放平台</a> 创建机器人</span>
                 <span>2. 获取 AppID 和 Token</span>
                 <span>3. 填入上方表单，点击"连接"</span>
                 <span>4. 连接成功后，在QQ中 @机器人 即可对话</span>
