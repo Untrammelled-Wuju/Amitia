@@ -982,9 +982,7 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
                   createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
                 })
                 scrollToBottom(true)
-                return
-              }
-              if (targetMsg) {
+              } else if (targetMsg) {
                 targetMsg.audioUrl = data.audioUrl
                 targetMsg.audioDuration = data.duration
               }
