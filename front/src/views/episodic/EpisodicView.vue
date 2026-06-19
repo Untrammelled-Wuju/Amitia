@@ -2,10 +2,10 @@
   <div class="episodic-page">
     <div class="page-header">
       <h2>情景记忆</h2>
-      <select v-model="filterType" @change="onFilterChange">
-        <option value="">全部类型</option>
-        <option v-for="(label, key) in typeMap" :key="key" :value="key">{{ label }}</option>
-      </select>
+      <el-select v-model="filterType" placeholder="全部类型" clearable size="small" style="width:150px" @change="onFilterChange">
+        <el-option label="全部类型" value="" />
+        <el-option v-for="(label, key) in typeMap" :key="key" :label="label" :value="key" />
+      </el-select>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
@@ -24,9 +24,9 @@
           <div class="item-title">{{ m.title }}</div>
           <div class="item-content">{{ m.content }}</div>
           <div class="item-footer">
-            <span v-if="m.triggerKeywords" class="keywords">{{ m.triggerKeywords }}</span>
+            <el-tag v-if="m.triggerKeywords" size="small" type="info">{{ m.triggerKeywords }}</el-tag>
             <span class="time">{{ m.createdAt }}</span>
-            <button class="btn-del" @click.stop="handleDelete(m.id)">删除</button>
+            <el-button size="small" text type="danger" @click.stop="handleDelete(m.id)">删除</el-button>
           </div>
         </div>
       </div>
@@ -34,14 +34,17 @@
       <div v-if="memories.length === 0" class="empty">暂无情景记忆</div>
     </div>
 
-    <div v-if="detailMemory" class="modal-overlay" @click.self="detailMemory = null">
-      <div class="modal modal-detail">
+    <el-dialog v-model="drawerVisible" title="情景详情" width="520px" align-center @close="detailMemory = null" destroy-on-close>
+      <template v-if="detailMemory">
+        <br>
         <h3>{{ sceneEmoji(detailMemory.sceneType) }} {{ detailMemory.title }}</h3>
+        <br>
         <p class="detail-content">{{ detailMemory.content }}</p>
+        <br>
         <div class="detail-meta">
-          <span>类型: {{ sceneLabel(detailMemory.sceneType) }}</span>
-          <span>情感: {{ detailMemory.sentimentScore }}</span>
-          <span v-if="detailMemory.triggerKeywords">触发词: {{ detailMemory.triggerKeywords }}</span>
+          <el-tag size="small">{{ sceneLabel(detailMemory.sceneType) }}</el-tag>
+          <el-tag size="small" type="warning">情感 {{ detailMemory.sentimentScore }}</el-tag>
+          <el-tag v-if="detailMemory.triggerKeywords" size="small" type="info">{{ detailMemory.triggerKeywords }}</el-tag>
         </div>
         <div v-if="detailMessages.length > 0" class="context-bubbles">
           <h4>对话上下文</h4>
@@ -50,14 +53,17 @@
             <span class="bubble-text">{{ msg.content }}</span>
           </div>
         </div>
-        <button class="btn" @click="detailMemory = null">关闭</button>
-      </div>
-    </div>
+      </template>
+      <template #footer>
+        <el-button type="primary" @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
+import { ElMessageBox } from "element-plus"
 import { useEpisodic, type EpisodicMemory } from "@/composables/useEpisodic"
 
 const {
@@ -72,6 +78,7 @@ const typeMap: Record<string, string> = {
 }
 
 const filterType = ref("")
+const drawerVisible = ref(false)
 const detailMemory = ref<EpisodicMemory | null>(null)
 const detailMessages = ref<any[]>([])
 
@@ -83,6 +90,8 @@ function onFilterChange() {
 
 async function showDetail(m: EpisodicMemory) {
   detailMemory.value = m
+  detailMessages.value = []
+  drawerVisible.value = true
   try {
     const data = await getDetail(m.id)
     detailMessages.value = data.messages || []
@@ -90,7 +99,14 @@ async function showDetail(m: EpisodicMemory) {
 }
 
 async function handleDelete(id: string) {
-  if (confirm("确定删除？")) { await deleteMemory(id) }
+  try {
+    await ElMessageBox.confirm("确定删除这条情景记忆？", "删除确认", {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning",
+    })
+    await deleteMemory(id)
+  } catch {}
 }
 </script>
 
@@ -98,33 +114,20 @@ async function handleDelete(id: string) {
 .episodic-page { padding: 24px; max-width: 800px; margin: 0 auto; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { margin: 0; font-size: 24px; }
-.page-header select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; }
+
 .timeline { position: relative; padding-left: 24px; }
 .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
 .timeline-item { position: relative; margin-bottom: 20px; cursor: pointer; display: flex; gap: 16px; }
-.timeline-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px #e0e0e0; flex-shrink: 0; margin-top: 4px; }
-.timeline-content { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex: 1; }
-.item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.timeline-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ac-color-text-primary); box-shadow: 0 0 0 2px #e0e0e0; flex-shrink: 0; margin-top: 4px; }
+.timeline-content { background: var(--ac-color-bg-secondary); border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex: 1; }
+.item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: ; }
 .scene-emoji { font-size: 16px; }
-.scene-type { font-size: 12px; color: #999; }
-.sentiment-badge { font-size: 11px; color: #fff; padding: 1px 6px; border-radius: 10px; }
-.item-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-.item-content { font-size: 14px; color: #555; margin-bottom: 8px; }
-.item-footer { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #bbb; }
-.keywords { color: #1976d2; }
-.btn-del { background: none; border: none; color: #f44336; cursor: pointer; font-size: 12px; }
+.scene-type { font-size: 12px; color: var(--ac-color-text-primary); }
+
+.item-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: var(--ac-color-text-primary); }
+.item-content { font-size: 14px; color: var(--ac-color-text-secondary); margin-bottom: 8px; }
+.item-footer { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--ac-color-text-primary); }
+
+
 .loading, .empty { text-align: center; padding: 48px; color: #999; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 600px; width: 90vw; max-height: 80vh; overflow-y: auto; }
-.modal-detail h3 { margin: 0 0 12px; }
-.detail-content { color: #555; line-height: 1.6; margin-bottom: 12px; }
-.detail-meta { display: flex; gap: 16px; font-size: 12px; color: #999; margin-bottom: 16px; }
-.context-bubbles { border-top: 1px solid #eee; padding-top: 12px; }
-.context-bubbles h4 { font-size: 14px; margin: 0 0 8px; }
-.context-bubble { padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
-.role-user { background: #e3f2fd; }
-.role-assistant { background: #f5f5f5; }
-.bubble-role { font-weight: 600; margin-right: 8px; font-size: 11px; color: #999; }
-.bubble-text { color: #333; }
-.btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; margin-top: 12px; }
 </style>

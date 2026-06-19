@@ -89,3 +89,18 @@ type MemoryListResponse struct {
 	Page     int      `json:"page"`
 	PageSize int      `json:"pageSize"`
 }
+
+
+type MemoryCandidateModel struct {
+	ID             string `gorm:"column:id;primaryKey" json:"id"`
+	Key            string `gorm:"column:key" json:"key"`
+	Value          string `gorm:"column:value" json:"value"`
+	MemoryType     string `gorm:"column:memory_type;default:custom" json:"memoryType"`
+	Importance     int    `gorm:"column:importance;default:5" json:"importance"`
+	SourceText     string `gorm:"column:source_text" json:"sourceText"`
+	ConversationID string `gorm:"column:conversation_id" json:"conversationId"`
+	CharacterID    string `gorm:"column:character_id" json:"characterId"`
+	CreatedAt      string `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (MemoryCandidateModel) TableName() string { return "memory_candidates" }

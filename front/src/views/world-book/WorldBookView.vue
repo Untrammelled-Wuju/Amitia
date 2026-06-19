@@ -3,28 +3,28 @@
     <div class="page-header">
       <h2>世界书</h2>
       <div class="header-actions">
-        <button class="btn btn-test" @click="testPanelOpen = !testPanelOpen">
+        <el-button size="small" :type="testPanelOpen ? 'warning' : 'success'" @click="testPanelOpen = !testPanelOpen">
           {{ testPanelOpen ? '关闭测试' : '在线测试' }}
-        </button>
-        <button class="btn btn-import" @click="triggerImport">JSON导入</button>
-        <button class="btn btn-export" @click="exportRules">JSON导出</button>
-        <button class="btn btn-add" @click="showAddForm = true">新增规则</button>
+        </el-button>
+        <el-button size="small" @click="triggerImport">JSON导入</el-button>
+        <el-button size="small" @click="exportRules">JSON导出</el-button>
+        <el-button size="small" type="primary" @click="showAddForm = true">新增规则</el-button>
       </div>
     </div>
 
     <div class="filter-bar">
-      <select v-model="filterType" @change="onFilterChange">
-        <option value="">全部类型</option>
-        <option value="regex">正则匹配</option>
-        <option value="exact">精确匹配</option>
-        <option value="keyword">关键词匹配</option>
-      </select>
+      <el-select v-model="filterType" placeholder="全部类型" clearable size="small" style="width:150px" @change="onFilterChange">
+        <el-option label="全部类型" value="" />
+        <el-option label="正则匹配" value="regex" />
+        <el-option label="精确匹配" value="exact" />
+        <el-option label="关键词匹配" value="keyword" />
+      </el-select>
     </div>
 
     <div v-if="testPanelOpen" class="test-panel">
       <h3>在线测试</h3>
-      <textarea v-model="testText" placeholder="输入测试文本，查看哪些规则命中..." rows="4"></textarea>
-      <button class="btn" @click="runTest" :disabled="!testText.trim()">测试匹配</button>
+      <el-input v-model="testText" type="textarea" placeholder="输入测试文本，查看哪些规则命中..." :rows="4" />
+      <el-button size="small" type="primary" @click="runTest" :disabled="!testText.trim()" style="margin-top:8px">测试匹配</el-button>
       <div v-if="testResults.length > 0" class="test-results">
         <h4>命中规则 ({{ testResults.length }})</h4>
         <div v-for="(r, idx) in testResults" :key="idx" class="test-match-item">
@@ -40,65 +40,69 @@
       <div v-if="testText && tested && testResults.length === 0" class="no-match">无规则命中</div>
     </div>
 
-    <div v-if="showAddForm" class="modal-overlay" @click.self="showAddForm = false">
-      <div class="modal">
-        <h3>新增规则</h3>
-        <form @submit.prevent="handleCreate">
-          <label>匹配类型</label>
-          <select v-model="form.matchType">
-            <option value="regex">正则匹配</option>
-            <option value="exact">精确匹配</option>
-            <option value="keyword">关键词匹配</option>
-          </select>
-          <label>匹配模式</label>
-          <input v-model="form.matchPattern" placeholder="正则表达式/精确文本/关键词(逗号分隔)" />
-          <label>匹配范围</label>
-          <select v-model="form.matchScope">
-            <option value="full_context">全部上下文</option>
-            <option value="user_message">仅用户消息</option>
-            <option value="assistant_reply">仅AI回复</option>
-          </select>
-          <label>注入内容</label>
-          <textarea v-model="form.injectContent" placeholder="匹配命中后注入到上下文的记忆内容" rows="3"></textarea>
-          <label>优先级</label>
-          <input v-model.number="form.priority" type="number" placeholder="数字越大越优先" />
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">创建</button>
-            <button type="button" class="btn" @click="showAddForm = false">取消</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog v-model="showAddForm" title="新增规则" width="500px" align-center destroy-on-close @closed="showAddForm = false">
+      <el-form label-width="80px">
+        <el-form-item label="匹配类型">
+          <el-select v-model="form.matchType" style="width:100%">
+            <el-option label="正则匹配" value="regex" />
+            <el-option label="精确匹配" value="exact" />
+            <el-option label="关键词匹配" value="keyword" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="匹配模式">
+          <el-input v-model="form.matchPattern" placeholder="正则表达式/精确文本/关键词(逗号分隔)" />
+        </el-form-item>
+        <el-form-item label="匹配范围">
+          <el-select v-model="form.matchScope" style="width:100%">
+            <el-option label="全部上下文" value="full_context" />
+            <el-option label="仅用户消息" value="user_message" />
+            <el-option label="仅AI回复" value="assistant_reply" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="注入内容">
+          <el-input v-model="form.injectContent" type="textarea" placeholder="匹配命中后注入到上下文的记忆内容" :rows="3" />
+        </el-form-item>
+        <el-form-item label="优先级">
+          <el-input-number v-model="form.priority" :min="0" :max="10" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddForm = false">取消</el-button>
+        <el-button type="primary" @click="handleCreate">创建</el-button>
+      </template>
+    </el-dialog>
 
-    <div v-if="editingEntry" class="modal-overlay" @click.self="editingEntry = null">
-      <div class="modal">
-        <h3>编辑规则</h3>
-        <form @submit.prevent="handleUpdate">
-          <label>匹配类型</label>
-          <select v-model="editForm.matchType">
-            <option value="regex">正则匹配</option>
-            <option value="exact">精确匹配</option>
-            <option value="keyword">关键词匹配</option>
-          </select>
-          <label>匹配模式</label>
-          <input v-model="editForm.matchPattern" />
-          <label>匹配范围</label>
-          <select v-model="editForm.matchScope">
-            <option value="full_context">全部上下文</option>
-            <option value="user_message">仅用户消息</option>
-            <option value="assistant_reply">仅AI回复</option>
-          </select>
-          <label>注入内容</label>
-          <textarea v-model="editForm.injectContent" rows="3"></textarea>
-          <label>优先级</label>
-          <input v-model.number="editForm.priority" type="number" />
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">保存</button>
-            <button type="button" class="btn" @click="editingEntry = null">取消</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog v-model="editVisible" title="编辑规则" width="500px" align-center destroy-on-close @closed="editingEntry = null">
+      <el-form label-width="80px">
+        <el-form-item label="匹配类型">
+          <el-select v-model="editForm.matchType" style="width:100%">
+            <el-option label="正则匹配" value="regex" />
+            <el-option label="精确匹配" value="exact" />
+            <el-option label="关键词匹配" value="keyword" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="匹配模式">
+          <el-input v-model="editForm.matchPattern" />
+        </el-form-item>
+        <el-form-item label="匹配范围">
+          <el-select v-model="editForm.matchScope" style="width:100%">
+            <el-option label="全部上下文" value="full_context" />
+            <el-option label="仅用户消息" value="user_message" />
+            <el-option label="仅AI回复" value="assistant_reply" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="注入内容">
+          <el-input v-model="editForm.injectContent" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="优先级">
+          <el-input-number v-model="editForm.priority" :min="0" :max="10" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false; editingEntry = null">取消</el-button>
+        <el-button type="primary" @click="handleUpdate">保存</el-button>
+      </template>
+    </el-dialog>
 
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -113,17 +117,15 @@
         <div class="rule-pattern">匹配: {{ rule.matchPattern }}</div>
         <div class="rule-content">注入: {{ rule.injectContent }}</div>
         <div class="rule-actions">
-          <button class="btn-sm" @click="startEdit(rule)">编辑</button>
-          <button class="btn-sm btn-del" @click="handleDelete(rule.id)">删除</button>
+          <el-button size="small" @click="startEdit(rule)">编辑</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(rule.id)">删除</el-button>
         </div>
       </div>
       <div v-if="rules.length === 0" class="empty">暂无世界书规则</div>
     </div>
 
-    <div class="pagination" v-if="totalPages > 1">
-      <button :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
+    <div v-if="totalPages > 1" class="pagination">
+      <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next" size="small" @current-change="changePage" />
     </div>
 
     <input ref="importInput" type="file" accept=".json" style="display:none" @change="handleImport" />
@@ -131,7 +133,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from "vue"
+import { ref, reactive, onMounted } from "vue"
+import { ElMessageBox } from "element-plus"
 import { useWorldBook } from "@/composables/useWorldBook"
 
 const {
@@ -146,6 +149,7 @@ const testText = ref("")
 const testResults = ref<any[]>([])
 const tested = ref(false)
 const showAddForm = ref(false)
+const editVisible = ref(false)
 const editingEntry = ref<any>(null)
 const importInput = ref<HTMLInputElement | null>(null)
 
@@ -176,15 +180,20 @@ function startEdit(rule: any) {
   editForm.matchScope = rule.matchScope
   editForm.injectContent = rule.injectContent
   editForm.priority = rule.priority
+  editVisible.value = true
 }
 
 async function handleUpdate() {
   await updateRule(editingEntry.value.id, { ...editForm })
+  editVisible.value = false
   editingEntry.value = null
 }
 
 async function handleDelete(id: string) {
-  if (confirm("确定删除？")) { await deleteRule(id) }
+  try {
+    await ElMessageBox.confirm("确定删除这条规则？", "删除确认", { confirmButtonText: "确定", cancelButtonText: "取消", type: "warning" })
+    await deleteRule(id)
+  } catch {}
 }
 
 function changePage(p: number) { fetchRules({ page: p, matchType: filterType.value || undefined }) }
@@ -201,13 +210,13 @@ async function handleImport(e: Event) {
   if (!file) return
   const text = await file.text()
   let data: any[]
-  try { data = JSON.parse(text) } catch { alert("JSON格式错误"); return }
-  if (!Array.isArray(data)) { alert("JSON应为数组"); return }
+  try { data = JSON.parse(text) } catch { ElMessage.error("JSON格式错误"); return }
+  if (!Array.isArray(data)) { ElMessage.error("JSON应为数组"); return }
   let success = 0
   for (const item of data) {
     try { await createRule(item); success++ } catch {}
   }
-  alert(`导入完成：成功 ${success} / ${data.length}`)
+  ElMessage.success(`导入完成：成功 ${success} / ${data.length}`)
   fetchRules()
 }
 
@@ -226,21 +235,12 @@ function exportRules() {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h2 { margin: 0; font-size: 24px; }
 .header-actions { display: flex; gap: 8px; }
-.btn { padding: 8px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; }
-.btn:hover { background: #f5f5f5; }
-.btn-primary { background: #1976d2; color: #fff; border-color: #1976d2; }
-.btn-add { background: #1976d2; color: #fff; border: none; }
-.btn-test { background: #43a047; color: #fff; border: none; }
-.btn-export { background: #ff9800; color: #fff; border: none; }
-.btn-import { background: #8e24aa; color: #fff; border: none; }
-.btn-sm { padding: 4px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; }
-.btn-del { color: #f44336; border-color: #f44336; }
+
 .filter-bar { margin-bottom: 16px; }
-.filter-bar select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; }
+
 .test-panel { background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
 .test-panel h3 { margin: 0 0 12px; }
-.test-panel textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; resize: vertical; box-sizing: border-box; }
-.test-panel .btn { margin-top: 8px; }
+
 .test-results { margin-top: 12px; }
 .test-results h4 { margin: 0 0 8px; }
 .test-match-item { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
@@ -256,23 +256,15 @@ function exportRules() {
 .badge-exact { background: #1976d2; }
 .badge-keyword { background: #388e3c; }
 .rules-list { display: flex; flex-direction: column; gap: 12px; }
-.rule-card { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.rule-card { background: var(--ac-color-bg-secondary); border: 1px solid #666; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 .rule-meta { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 12px; }
 .match-scope { color: #999; }
 .priority { color: #ff9800; }
 .hit-count { color: #43a047; }
-.rule-pattern { font-family: monospace; font-size: 14px; color: #333; margin-bottom: 4px; }
-.rule-content { font-size: 14px; color: #555; margin-bottom: 8px; }
+.rule-pattern { font-family: monospace; font-size: 14px; color: var(--ac-color-text-primary); margin-bottom: 4px; }
+.rule-content { font-size: 14px; color: var(--ac-color-text-primary); margin-bottom: 8px; }
 .rule-actions { display: flex; gap: 8px; }
 .loading, .empty { text-align: center; padding: 48px; color: #999; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 20px; }
-.pagination button { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; }
-.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 540px; width: 90vw; max-height: 80vh; overflow-y: auto; }
-.modal h3 { margin: 0 0 16px; }
-.modal label { display: block; font-size: 13px; color: #666; margin: 10px 0 4px; }
-.modal input, .modal select, .modal textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-.modal textarea { resize: vertical; }
-.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
 </style>

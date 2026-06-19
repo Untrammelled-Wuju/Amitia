@@ -139,16 +139,19 @@ export interface ImportResult {
 
 // Memory
 export interface Memory {
-  id: number
+  id: string
   characterId: string
   memoryType: string
-  content: string
-  imageUrl?: string
-  importance: number
-  source: string
   key: string
+  value: string
+  importance: number
+  confidence: number
+  source: string
+  scope: string
+  verifiedStatus: string
   useCount: number
   lastUsedAt?: string | null
+  expiresAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -177,3 +180,4 @@ export interface RuntimeModeValidationResult {
 }
 
 export type DeployMode = "desktop-local" | "cloud-web"
+

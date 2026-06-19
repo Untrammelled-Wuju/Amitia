@@ -73,7 +73,7 @@
     <el-empty v-else-if="!loading" description="暂无时间线记录" :image-size="80" />
 
     <div class="pagination" v-if="total > pageSize">
-      <el-pagination v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" small @current-change="fetchTimeline" />
+      <el-pagination v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" size="small" @current-change="fetchTimeline" />
     </div>
   </div>
 </template>
