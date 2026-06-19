@@ -6,6 +6,7 @@
       <router-link to="/model/llm" class="sub-nav-item" active-class="sub-nav-active">普通模型</router-link>
       <router-link to="/model/voice" class="sub-nav-item" active-class="sub-nav-active">语音模型</router-link>
       <router-link to="/model/vision" class="sub-nav-item" active-class="sub-nav-active">视觉模型</router-link>
+      <router-link to="/model/embedding" class="sub-nav-item" active-class="sub-nav-active">向量模型</router-link>
     </div>
 
     <router-view />

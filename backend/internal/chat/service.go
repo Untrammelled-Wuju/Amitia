@@ -520,6 +520,43 @@ func (s *service) sys1Builder(systemPrompt, userMessage string) []string {
 	}
 	return parts
 }
+
+
+func (s *service) rewriteQueryForSearch(userMessage string) string {
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil {
+		return userMessage
+	}
+	prompt := []map[string]interface{}{
+		{"role": "system", "content": "把用户输入转成用于记忆检索的简洁关键词，去除语气词和寒暄，直接输出关键词不要解释。如果输入已经是简短的关键词则原样返回。"},
+		{"role": "user", "content": userMessage},
+	}
+	rewritten, _, err := s.callLLM(cfg, prompt)
+	if err != nil || rewritten == "" {
+		return userMessage
+	}
+	rewritten = strings.TrimSpace(rewritten)
+	if len([]rune(rewritten)) < 2 {
+		return userMessage
+	}
+	return rewritten
+}
+
+func shouldRetrieveMemory(msg string) bool {
+	trimmed := strings.TrimSpace(msg)
+	if len([]rune(trimmed)) < 4 {
+		return false
+	}
+	greetings := []string{"嗯", "好", "哦", "啊", "哈", "嗨", "喂", "在吗", "在不在", "好的", "好吧", "行", "可以", "知道了", "明白了", "懂了", "嗯嗯", "哈哈", "呵呵", "嘿嘿", "谢谢", "多谢", "再见", "拜拜", "晚安", "早安", "早上好", "晚上好", "ok", "OK", "Ok", "hi", "Hi", "hello", "Hello", "bye", "Bye"}
+	lower := strings.ToLower(trimmed)
+	for _, g := range greetings {
+		if lower == strings.ToLower(g) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *service) sys2Builder(convID, charID, userMessage string) []string {
 	parts := []string{systemFormatInstruction}
 	if s.wmCache != nil {

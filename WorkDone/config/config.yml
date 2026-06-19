@@ -22,23 +22,23 @@ qdrant:
   host: "127.0.0.1"
   port: 9178
   collectionName: "memory_embeddings"
-  vectorDim: 1536
+  vectorDim: 2560
   limit: 10
   collections:
     memory_embeddings:
       name: "memory_embeddings"
-      vectorDim: 1536
+      vectorDim: 2560
     working_memory:
       name: "working_memory"
-      vectorDim: 1536
+      vectorDim: 2560
     user_profiles:
       name: "user_profiles"
-      vectorDim: 1536
+      vectorDim: 2560
     episodic_memories:
       name: "episodic_memories"
-      vectorDim: 1536
+      vectorDim: 2560
 
 embedding:
-  modelName: "text-embedding-3-small"
-  baseUrl: ""
+  modelName: "doubao-embedding-text-240515"
+  baseUrl: "https://ark.cn-beijing.volces.com/api/v3"
   apiKey: ""
