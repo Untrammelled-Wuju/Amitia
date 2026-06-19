@@ -236,6 +236,7 @@ function toggleMemInject() {
 const miLoading = ref(false)
 const miMemories = ref<any[]>([])
 const miProfiles = ref<any[]>([])
+const miCompression = ref<any>({})
 const miPipeline = ref<any>(null)
 
 const profileLoading = ref(false)
