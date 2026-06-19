@@ -394,8 +394,17 @@ CREATE TABLE IF NOT EXISTS memories (
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT 'fact',
     importance INTEGER DEFAULT 0,
+    confidence INTEGER DEFAULT 50,
     source TEXT DEFAULT 'manual',
+    scope TEXT DEFAULT 'character',
     character_id TEXT DEFAULT '',
+    entity_id TEXT DEFAULT '',
+    entity_type TEXT DEFAULT '',
+    source_msg_id TEXT DEFAULT '',
+    source_conv_id TEXT DEFAULT '',
+    verified_status TEXT DEFAULT 'unverified',
+    last_verified_at TEXT,
+    expires_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     use_count INTEGER DEFAULT 0,
@@ -431,6 +440,7 @@ ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'character';
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
     id TEXT PRIMARY KEY,
@@ -609,3 +619,14 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
 );
 
 
+
+CREATE TABLE IF NOT EXISTS embedding_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT 'default',
+    api_key TEXT DEFAULT '',
+    model_name TEXT DEFAULT 'doubao-embedding-vision-251215',
+    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
+    is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
