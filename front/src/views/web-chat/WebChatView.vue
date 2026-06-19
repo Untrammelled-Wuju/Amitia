@@ -28,8 +28,79 @@
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
     />
-    <button class="profile-toggle-btn" @click="showProfiles = !showProfiles" :title="showProfiles ? '隐藏画像' : '显示画像'">👤</button>
-
+    <div class="chat-body-wrapper">
+      <div class="floating-btns">
+        <button class="fa-btn" :class="{ active: showProfiles }" @click="showProfiles = !showProfiles" title="显示画像">👤</button>
+        <button class="fa-btn" :class="{ active: showMemInject }" @click="showMemInject = !showMemInject" title="记忆注入">🧠</button>
+      </div>
+      <div v-if="showProfiles" class="fa-panel profile-summary-panel">
+        <div class="profile-panel-header">
+          <h4>用户画像摘要</h4>
+          <button class="profile-close-btn" @click="showProfiles = false">✕</button>
+        </div>
+        <div v-if="profileLoading" class="profile-loading">加载中...</div>
+        <div v-else-if="profileItems.length === 0" class="profile-empty">暂无画像</div>
+        <div v-else class="profile-items">
+          <div v-for="p in profileItems" :key="p.id" class="profile-item">
+            <span class="profile-cat">{{ profileCatLabel(p.category) }}</span>
+            <span class="profile-name">{{ p.attributeName }}</span>
+            <span class="profile-val">{{ p.attributeValue }}</span>
+            <span class="profile-conf" :class="profileConfClass(p.confidence)">{{ p.confidence }}%</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="showMemInject" class="fa-panel mem-inject-panel">
+        <div class="mi-header">
+          <h4>记忆注入</h4>
+          <button class="mi-close-btn" @click="showMemInject = false">✕</button>
+        </div>
+        <div v-if="miLoading" class="mi-loading">加载中...</div>
+        <div v-else>
+          <div class="mi-section" v-if="miMemories.length">
+            <h5>当前检索记忆 ({{ miMemories.length }})</h5>
+            <div v-for="m in miMemories" :key="m.id" class="mi-item">
+              <el-tag size="small" :type="m.matchType === 'vector' ? 'success' : 'info'">{{ m.matchType }}</el-tag>
+              <span class="mi-layer">{{ m.memoryLayer || '事实记忆' }}</span>
+              <span class="mi-score">{{ (m.score * 100).toFixed(0) }}%</span>
+              <div class="mi-content">{{ m.memory?.value || m.value }}</div>
+              <el-button size="small" text type="danger" @click="feedbackMemory(m, 'irrelevant')">不相关</el-button>
+              <el-button size="small" text type="warning" @click="feedbackMemory(m, 'wrong')">错误</el-button>
+            </div>
+          </div>
+          <div class="mi-section" v-if="miProfiles.length">
+            <h5>用户画像 ({{ miProfiles.length }})</h5>
+            <div v-for="p in miProfiles" :key="p.id" class="mi-profile-card">
+              <span>{{ p.attributeName }}: {{ p.attributeValue }}</span>
+              <el-tag :type="p.confidence >= 80 ? 'success' : 'warning'" size="small">{{ p.confidence }}%</el-tag>
+            </div>
+          </div>
+          <div class="mi-section" v-if="miWorldbookHits.length">
+            <h5>世界书命中 ({{ miWorldbookHits.length }})</h5>
+            <div v-for="w in miWorldbookHits" :key="w.entry?.id || w.id" class="mi-wb-hit">
+              <el-tag size="small" type="danger">命中</el-tag>
+              <span>{{ w.entry?.matchPattern || w.matchPattern }}</span>
+            </div>
+          </div>
+          <div class="mi-section">
+            <h5>压缩状态</h5>
+            <div class="mi-compress">
+              <span>已压缩 {{ miCompression.compressedRounds || 0 }} / {{ miCompression.totalRounds || 0 }} 轮</span>
+              <span v-if="miCompression.lastCompressedAt">上次: {{ miCompression.lastCompressedAt }}</span>
+            </div>
+          </div>
+          <div class="mi-section">
+            <h5>管线状态</h5>
+            <div class="mi-pipeline">
+              <template v-for="l in (miPipeline?.layers || [])" :key="l.layer">
+                <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
+                  <span class="mi-pl-dot" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c'}"></span>
+                </el-tooltip>
+              </template>
+            </div>
+          </div>
+          <div class="mi-empty" v-if="!miMemories.length && !miProfiles.length && !miWorldbookHits.length">暂无记忆注入数据</div>
+        </div>
+      </div>
     <MessagesArea
       ref="msgAreaRef"
       :messages="messages"
@@ -49,7 +120,7 @@
       @retry="handleRetry"
       @scroll-to-bottom="scrollToBottom(true)"
     />
-
+    </div>
     <ChatInput
       ref="inputRef"
       :disabled="modelMissing"
@@ -82,22 +153,6 @@
     />
 
 
-    <div v-if="showProfiles" class="profile-summary-panel">
-      <div class="profile-panel-header">
-        <h4>用户画像摘要</h4>
-        <button class="profile-close-btn" @click="showProfiles = false">✕</button>
-      </div>
-      <div v-if="profileLoading" class="profile-loading">加载中...</div>
-      <div v-else-if="profileItems.length === 0" class="profile-empty">暂无画像</div>
-      <div v-else class="profile-items">
-        <div v-for="p in profileItems" :key="p.id" class="profile-item">
-          <span class="profile-cat">{{ profileCatLabel(p.category) }}</span>
-          <span class="profile-name">{{ p.attributeName }}</span>
-          <span class="profile-val">{{ p.attributeValue }}</span>
-          <span class="profile-conf" :class="profileConfClass(p.confidence)">{{ p.confidence }}%</span>
-        </div>
-      </div>
-    </div>
 
     <CharacterPickerDialog
       v-model:visible="showCharPicker"
@@ -111,59 +166,6 @@
       :memories="memories"
     />
   </div>
-    <button class="mem-inject-toggle-btn" @click="showMemInject = !showMemInject" :title="showMemInject ? '隐藏记忆注入' : '记忆注入'">🧠</button>
-    <div v-if="showMemInject" class="mem-inject-panel">
-      <div class="mi-header">
-        <h4>记忆注入</h4>
-        <button class="mi-close-btn" @click="showMemInject = false">✕</button>
-      </div>
-      <div v-if="miLoading" class="mi-loading">加载中...</div>
-      <div v-else>
-        <div class="mi-section" v-if="miMemories.length">
-          <h5>当前检索记忆 ({{ miMemories.length }})</h5>
-          <div v-for="m in miMemories" :key="m.id" class="mi-item">
-            <el-tag size="small" :type="m.matchType === 'vector' ? 'success' : 'info'">{{ m.matchType }}</el-tag>
-            <span class="mi-layer">{{ m.memoryLayer || '事实记忆' }}</span>
-            <span class="mi-score">{{ (m.score * 100).toFixed(0) }}%</span>
-            <div class="mi-content">{{ m.memory?.value || m.value }}</div>
-            <el-button size="small" text type="danger" @click="feedbackMemory(m, 'irrelevant')">不相关</el-button>
-            <el-button size="small" text type="warning" @click="feedbackMemory(m, 'wrong')">错误</el-button>
-          </div>
-        </div>
-        <div class="mi-section" v-if="miProfiles.length">
-          <h5>用户画像 ({{ miProfiles.length }})</h5>
-          <div v-for="p in miProfiles" :key="p.id" class="mi-profile-card">
-            <span>{{ p.attributeName }}: {{ p.attributeValue }}</span>
-            <el-tag :type="p.confidence >= 80 ? 'success' : 'warning'" size="small">{{ p.confidence }}%</el-tag>
-          </div>
-        </div>
-        <div class="mi-section" v-if="miWorldbookHits.length">
-          <h5>世界书命中 ({{ miWorldbookHits.length }})</h5>
-          <div v-for="w in miWorldbookHits" :key="w.entry?.id || w.id" class="mi-wb-hit">
-            <el-tag size="small" type="danger">命中</el-tag>
-            <span>{{ w.entry?.matchPattern || w.matchPattern }}</span>
-          </div>
-        </div>
-        <div class="mi-section">
-          <h5>压缩状态</h5>
-          <div class="mi-compress">
-            <span>已压缩 {{ miCompression.compressedRounds || 0 }} / {{ miCompression.totalRounds || 0 }} 轮</span>
-            <span v-if="miCompression.lastCompressedAt">上次: {{ miCompression.lastCompressedAt }}</span>
-          </div>
-        </div>
-        <div class="mi-section">
-          <h5>管线状态</h5>
-          <div class="mi-pipeline">
-            <template v-for="l in (miPipeline?.layers || [])" :key="l.layer">
-              <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
-                <span class="mi-pl-dot" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c'}"></span>
-              </el-tooltip>
-            </template>
-          </div>
-        </div>
-        <div class="mi-empty" v-if="!miMemories.length && !miProfiles.length && !miWorldbookHits.length">暂无记忆注入数据</div>
-      </div>
-    </div>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue"
@@ -1261,22 +1263,10 @@ async function onMsgTouchEnd() {
 }
 
 
-.profile-toggle-btn {
-  position: fixed; right: 16px; top: 40px; width: 36px; height: 36px;
-  border-radius: 50%; border: 1px solid #ddd; background: #fff;
-  cursor: pointer; font-size: 16px; z-index: 901;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.mem-inject-toggle-btn {
-  position: fixed; right: 16px; top: 90px; width: 36px; height: 36px;
-  border-radius: 50%; border: 1px solid #ddd; background: #fff;
-  cursor: pointer; font-size: 16px; z-index: 901;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
+
+
 .mem-inject-panel {
-  position: fixed; right: 16px; top: 130px; width: 320px; max-height: 60vh;
-  background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-  overflow-y: auto; z-index: 900;
+  width: 320px; max-height: 50vh;
 }
 .mi-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -1318,4 +1308,52 @@ async function onMsgTouchEnd() {
 .conf-high { color: #4caf50; }
 .conf-mid { color: #ff9800; }
 .conf-low { color: #f44336; }
+
+.chat-body-wrapper {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.floating-btns {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+}
+
+.fa-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--ac-color-border, #ddd);
+  background: var(--ac-color-surface, #fff);
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.fa-btn.active {
+  background: var(--ac-color-primary-bg, #e8f4fd);
+  border-color: var(--ac-color-primary, #409eff);
+}
+
+.fa-panel {
+  position: absolute;
+  right: 16px;
+  top: 52px;
+  z-index: 19;
+  background: var(--ac-color-surface, #fff);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow-y: auto;
+}
 </style>
