@@ -334,7 +334,7 @@
                   <el-input v-model="form.qqToken" placeholder="QQ 机器人 Token" type="password" show-password />
                 </el-form-item>
                 <el-form-item>
-                  <el-button type="primary" @click="connectQQ" :loading="qqConnecting" :disabled="!form.qqAppId || !form.qqToken">
+                  <el-button type="primary" @click="connectQQ" :loading="qqConnecting" :disabled="!qqConnected && (!form.qqAppId || !form.qqToken)">
                     {{ qqConnecting ? '连接中...' : '连接' }}
                   </el-button>
                   <span v-if="qqError" style="color:#f56c6c;margin-left:8px">{{ qqError }}</span>
@@ -530,6 +530,10 @@ async function startWxLogin() {
   wxError.value = ""
   wxQrLoading.value = true
   stopWxPolling()
+  wxConnected.value = false
+  wxQrCodeUrl.value = ""
+  wxQrStep.value = 0
+  wxScanning.value = false
   try {
     const res = await get<any>("/api/wechat/login/start")
     const imgUrl = res?.data?.qrImageUrl || res?.qrImageUrl || res?.data?.qrCodeUrl || res?.qrCodeUrl
@@ -589,15 +593,18 @@ function stopQQPoll() {
 }
 
 async function connectQQ() {
-  if (!form.qqAppId || !form.qqToken) return
   qqError.value = ""
   qqConnecting.value = true
   try {
-    await axios.post(QQ_API + "/connect", {
-      appId: form.qqAppId,
-      token: form.qqToken,
-      sandbox: false,
-    })
+    if (form.qqAppId && form.qqToken) {
+      await axios.post(QQ_API + "/connect", {
+        appId: form.qqAppId,
+        token: form.qqToken,
+        sandbox: false,
+      })
+    } else {
+      await axios.post(QQ_API + "/connect", {})
+    }
     stopQQPoll()
     const startTime = Date.now()
     qqPollTimer = setInterval(async () => {
