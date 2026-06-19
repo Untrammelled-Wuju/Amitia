@@ -41,7 +41,7 @@ func (s *service) GetByID(id int) (*EmbeddingConfig, error) {
 
 func (s *service) Create(req *CreateEmbeddingConfigRequest) (*EmbeddingConfig, error) {
 	if req.Name == "" { return nil, fmt.Errorf("名称不能为空") }
-	if req.ModelName == "" { req.ModelName = "doubao-embedding-text-240515" }
+	if req.ModelName == "" { req.ModelName = "doubao-embedding-vision-251215" }
 	if req.BaseUrl == "" { req.BaseUrl = "https://ark.cn-beijing.volces.com/api/v3" }
 	now := time.Now().Format("2006-01-02 15:04:05")
 	cfg := &EmbeddingConfig{
@@ -84,10 +84,10 @@ func (s *service) TestConnection(id int) (map[string]interface{}, error) {
 	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
 	reqBody := map[string]interface{}{
 		"model": cfg.ModelName,
-		"input": "连接测试",
+		"input": []map[string]interface{}{{"type": "text", "text": "连接测试"}},
 	}
 	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseUrl+"/embeddings", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequest("POST", baseUrl+"/embeddings/multimodal", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()
