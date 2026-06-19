@@ -408,7 +408,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from "vue"
+import { ref, reactive, onMounted, onUnmounted, watch } from "vue"
 import { Loading, Picture, CircleCheckFilled } from "@element-plus/icons-vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
@@ -463,6 +463,19 @@ const form = reactive({
   qqEnabled: false,
   qqAppId: "",
   qqToken: "",
+})
+
+watch(current, async (val) => {
+  if (val === 7 && form.wechatEnabled) { await refreshWxStatus() }
+  if (val === 8 && form.qqEnabled) { await refreshQQStatus() }
+})
+
+watch(() => form.wechatEnabled, async (enabled) => {
+  if (enabled && current.value === 7) { await refreshWxStatus() }
+})
+
+watch(() => form.qqEnabled, async (enabled) => {
+  if (enabled && current.value === 8) { await refreshQQStatus() }
 })
 
 
@@ -569,6 +582,12 @@ function stopWxPolling() {
   if (wxPollTimer) { clearInterval(wxPollTimer); wxPollTimer = null }
 }
 
+let qqPollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopQQPoll() {
+  if (qqPollTimer) { clearInterval(qqPollTimer); qqPollTimer = null }
+}
+
 async function connectQQ() {
   if (!form.qqAppId || !form.qqToken) return
   qqError.value = ""
@@ -579,11 +598,25 @@ async function connectQQ() {
       token: form.qqToken,
       sandbox: false,
     })
-    setTimeout(refreshQQStatus, 3000)
+    stopQQPoll()
+    const startTime = Date.now()
+    qqPollTimer = setInterval(async () => {
+      await refreshQQStatus()
+      if (qqConnected.value) {
+        stopQQPoll()
+        qqConnecting.value = false
+        return
+      }
+      if (Date.now() - startTime > 30000) {
+        stopQQPoll()
+        qqConnecting.value = false
+        qqError.value = "连接超时，请检查AppID和Token是否有效"
+      }
+    }, 2000)
   } catch (e: any) {
     qqError.value = e?.response?.data?.error || "连接失败，请检查AppID和Token"
+    qqConnecting.value = false
   }
-  qqConnecting.value = false
 }
 
 async function refreshQQStatus() {
@@ -700,6 +733,7 @@ async function handleFinish() {
 }
 onUnmounted(() => {
   stopWxPolling()
+  stopQQPoll()
 })
 </script>
 
