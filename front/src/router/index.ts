@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from "vue-router"
+import { createRouter, createWebHistory } from "vue-router"
 import { apiClient } from "../ui-index"
 
 const TOKEN_KEY = "ai-companion-token"
@@ -32,6 +32,7 @@ const router = createRouter({
       children: [
         { path: "llm", name: "modelLlm", component: () => import("@/views/model-config/ModelConfigLlmView.vue"), meta: { requiresAuth: true } },
         { path: "voice", name: "modelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
+        { path: "embedding", name: "modelEmbedding", component: () => import("@/views/model-config/VectorModelConfigView.vue") },
         { path: "vision", name: "modelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
       ],
     },

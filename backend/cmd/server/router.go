@@ -9,10 +9,11 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/worldbook"
-	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/proactive"
@@ -71,6 +72,7 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 		vision.RegisterVisionRouter(apiGroup, ctx)
+		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 	}
 
 	r.Static("/audio", "./data/tts_cache")

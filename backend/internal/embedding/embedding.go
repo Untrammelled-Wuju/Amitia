@@ -26,26 +26,21 @@ func NewService(db *gorm.DB) *Service {
 }
 
 func (s *Service) getConfig() (baseURL, apiKey, modelName string) {
+	var dbURL, dbKey, dbModel string
+	err := s.db.Table("embedding_configs").
+		Select("base_url, api_key, model_name").
+		Where("is_active = 1").Limit(1).Row().
+		Scan(&dbURL, &dbKey, &dbModel)
+	if err == nil && dbURL != "" {
+		baseURL = dbURL
+		apiKey = dbKey
+		modelName = dbModel
+		return
+	}
 	ec := config.AppCfg.Embedding
 	modelName = ec.ModelName
 	baseURL = ec.BaseUrl
 	apiKey = ec.ApiKey
-
-	if baseURL == "" || apiKey == "" {
-		var dbURL, dbKey, dbModel string
-		err := s.db.Table("model_configs").
-			Select("base_url, api_key, model_name").
-			Where("is_active = 1").Limit(1).Row().
-			Scan(&dbURL, &dbKey, &dbModel)
-		if err == nil {
-			if baseURL == "" {
-				baseURL = dbURL
-			}
-			if apiKey == "" {
-				apiKey = dbKey
-			}
-		}
-	}
 	return
 }
 
