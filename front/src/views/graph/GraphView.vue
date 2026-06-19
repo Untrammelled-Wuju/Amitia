@@ -233,9 +233,9 @@ onUnmounted(() => {
 .stat-type { font-weight: 500; }
 .graph-container { flex: 1; min-height: 400px; border: 1px solid #e4e7ed; border-radius: 8px; overflow: hidden; position: relative; }
 .graph-container.fullscreen { position: fixed; inset: 0; z-index: 1000; background: #fff; border: none; border-radius: 0; }
-.fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #f5f7fa; border-bottom: 1px solid #e4e7ed; }
-.fullscreen-title { font-size: 14px; font-weight: 600; color: #303133; }
-.fullscreen-close { font-size: 14px; }
+.fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--ac-color-bg-secondary); border-bottom: 1px solid #e4e7ed; }
+.fullscreen-title { font-size: 14px; font-weight: 600; color: var(--ac-color-text-primary); }
+.fullscreen-close { font-size: 14px; color: var(--ac-color-text-primary); }
 .chart { width: 100%; height: 100%; }
 .graph-container.fullscreen .chart { height: calc(100% - 41px); }
 </style>
