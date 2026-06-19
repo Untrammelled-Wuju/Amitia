@@ -164,17 +164,6 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-
-CREATE TABLE IF NOT EXISTS embedding_configs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    api_key TEXT DEFAULT '',
-    model_name TEXT DEFAULT 'doubao-embedding-text-240515',
-    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
-    is_active INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-);
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -405,8 +394,17 @@ CREATE TABLE IF NOT EXISTS memories (
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT 'fact',
     importance INTEGER DEFAULT 0,
+    confidence INTEGER DEFAULT 50,
     source TEXT DEFAULT 'manual',
+    scope TEXT DEFAULT 'character',
     character_id TEXT DEFAULT '',
+    entity_id TEXT DEFAULT '',
+    entity_type TEXT DEFAULT '',
+    source_msg_id TEXT DEFAULT '',
+    source_conv_id TEXT DEFAULT '',
+    verified_status TEXT DEFAULT 'unverified',
+    last_verified_at TEXT,
+    expires_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     use_count INTEGER DEFAULT 0,
@@ -442,6 +440,19 @@ ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'character';
+
+CREATE TABLE IF NOT EXISTS memory_candidates (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT '',
+    memory_type TEXT DEFAULT 'custom',
+    importance INTEGER DEFAULT 5,
+    source_text TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
 
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
@@ -574,3 +585,48 @@ UPDATE special_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
 -- ============================================
 -- 迁移: 添加缺失字段
 -- ============================================
+CREATE TABLE IF NOT EXISTS retrieval_logs (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL DEFAULT '',
+    query_text TEXT NOT NULL DEFAULT '',
+    retrieved_memory_ids TEXT DEFAULT '[]',
+    scoring_details TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT "character";
+
+ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
+ALTER TABLE memories ADD COLUMN expires_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN entity_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN entity_type TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
+ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS memory_candidates (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT '',
+    memory_type TEXT DEFAULT 'custom',
+    importance INTEGER DEFAULT 5,
+    source_text TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+
+
+CREATE TABLE IF NOT EXISTS embedding_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT 'default',
+    api_key TEXT DEFAULT '',
+    model_name TEXT DEFAULT 'doubao-embedding-vision-251215',
+    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
+    is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
