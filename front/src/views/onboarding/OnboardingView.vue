@@ -295,7 +295,7 @@
                 <template #header>
                   <div class="card-header-row">
                     <span class="card-header-title">连接状态</span>
-                    <el-button size="small" @click="connectQQ" :loading="qqConnecting">重新连接</el-button>
+                    <el-button size="small" @click="resetQQConnection">重新连接</el-button>
                   </div>
                 </template>
                 <div class="status-main">
@@ -592,14 +592,18 @@ function stopQQPoll() {
   if (qqPollTimer) { clearInterval(qqPollTimer); qqPollTimer = null }
 }
 
+async function resetQQConnection() {
+  try { await axios.post(QQ_API + "/disconnect") } catch {}
+  qqConnected.value = false
+  form.qqAppId = ""
+  form.qqToken = ""
+  qqError.value = ""
+}
+
 async function connectQQ() {
   qqError.value = ""
   qqConnecting.value = true
   try {
-    if (qqConnected.value) {
-      await axios.post(QQ_API + "/disconnect")
-      qqConnected.value = false
-    }
     if (form.qqAppId && form.qqToken) {
       await axios.post(QQ_API + "/connect", {
         appId: form.qqAppId,
