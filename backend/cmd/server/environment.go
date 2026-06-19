@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -69,8 +71,9 @@ func (e *Environment) startService(svc *Service) error {
 	if svc.Port > 0 {
 		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", svc.Port), 2*time.Second); err == nil {
 			conn.Close()
-			log.Printf("[Env] %s 已在运行 (端口 %d)，跳过启动", svc.Name, svc.Port)
-			return nil
+			log.Printf("[Env] %s 端口 %d 被占用，正在终止旧进程...", svc.Name, svc.Port)
+			killByPort(svc.Port)
+			time.Sleep(1 * time.Second)
 		}
 	}
 
@@ -114,6 +117,19 @@ func (e *Environment) startService(svc *Service) error {
 	}()
 
 	return nil
+}
+
+func killByPort(port int) {
+	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :"+strconv.Itoa(port)+" | findstr LISTENING").Output()
+	fields := strings.Fields(string(out))
+	for _, f := range fields {
+		if pid, err := strconv.Atoi(f); err == nil {
+			if pid != os.Getpid() {
+				log.Printf("[Env] 终止旧进程 PID=%d", pid)
+				exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
+			}
+		}
+	}
 }
 
 func (e *Environment) waitForHealthy(svc *Service) error {

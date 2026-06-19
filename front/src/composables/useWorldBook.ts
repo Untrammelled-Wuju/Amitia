@@ -82,7 +82,7 @@ export function useWorldBook() {
 
   async function testMatch(text: string): Promise<TestMatchResponse | null> {
     try {
-      const res = await apiClient.post<TestMatchResponse>("/api/world-book/test-match", { text })
+      const res = await apiClient.post<TestMatchResponse>("/api/world-book/match", { text })
       return res.data
     } catch (e) {
       console.error("测试匹配失败", e)

@@ -14,7 +14,7 @@ func RegisterWorldBookRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/world-book", handler.Create)
 	r.PUT("/world-book/:id", handler.Update)
 	r.DELETE("/world-book/:id", handler.Delete)
-	r.POST("/world-book/test-match", handler.TestMatch)
+	r.POST("/world-book/match", handler.TestMatch)
 	r.DELETE("/world-book", handler.DeleteAll)
 	r.GET("/world-book/system-prompt", handler.SystemPrompt)
 }
