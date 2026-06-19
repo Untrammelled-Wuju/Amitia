@@ -1284,44 +1284,44 @@ async function onMsgTouchEnd() {
 }
 .mi-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px; border-bottom: 1px solid #eee;
+  padding: 12px 16px; border-bottom: 1px solid var(--ac-color-border-light);
 }
 .mi-header h4 { margin: 0; font-size: 15px; }
-.mi-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: #999; }
-.mi-loading { padding: 24px; text-align: center; color: #999; font-size: 13px; }
-.mi-section { padding: 8px 16px; border-bottom: 1px solid #f0f0f0; }
-.mi-section h5 { margin: 4px 0 8px; font-size: 13px; color: #666; }
+.mi-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--ac-color-text-muted); }
+.mi-loading { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
+.mi-section { padding: 8px 16px; border-bottom: 1px solid var(--ac-color-border-light); }
+.mi-section h5 { margin: 4px 0 8px; font-size: 13px; color: var(--ac-color-text-secondary); }
 .mi-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 0;
-  font-size: 13px; border-bottom: 1px solid #fafafa; flex-wrap: wrap;
+  font-size: 13px; border-bottom: 1px solid var(--ac-color-border-light); flex-wrap: wrap;
 }
-.mi-layer { color: #666; font-size: 12px; }
-.mi-score { color: #999; font-size: 11px; }
-.mi-content { flex: 1 1 100%; color: #333; font-size: 12px; margin-top: 4px; }
-.mi-profile-card { padding: 8px 0; border-bottom: 1px solid #fafafa; font-size: 12px; }.profile-summary-panel {
+.mi-layer { color: var(--ac-color-text-secondary); font-size: 12px; }
+.mi-score { color: var(--ac-color-text-muted); font-size: 11px; }
+.mi-content { flex: 1 1 100%; color: var(--ac-color-text); font-size: 12px; margin-top: 4px; }
+.mi-profile-card { padding: 8px 0; border-bottom: 1px solid var(--ac-color-border-light); font-size: 12px; }.profile-summary-panel {
   position: fixed; right: 16px; top: 80px; width: 280px; max-height: 60vh;
-  background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  background: var(--ac-color-surface); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   overflow-y: auto; z-index: 900;
 }
 .profile-panel-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px; border-bottom: 1px solid #eee;
+  padding: 12px 16px; border-bottom: 1px solid var(--ac-color-border-light);
 }
 .profile-panel-header h4 { margin: 0; font-size: 15px; }
-.profile-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: #999; }
-.profile-loading, .profile-empty { padding: 24px; text-align: center; color: #999; font-size: 13px; }
+.profile-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--ac-color-text-muted); }
+.profile-loading, .profile-empty { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
 .profile-items { padding: 8px 0; }
 .profile-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 16px;
-  font-size: 13px; border-bottom: 1px solid #f5f5f5;
+  font-size: 13px; border-bottom: 1px solid var(--ac-color-border-light);
 }
-.profile-cat { color: #999; font-size: 11px; min-width: 48px; }
-.profile-name { color: #666; min-width: 48px; }
-.profile-val { color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-cat { color: var(--ac-color-text-muted); font-size: 11px; min-width: 48px; }
+.profile-name { color: var(--ac-color-text-secondary); min-width: 48px; }
+.profile-val { color: var(--ac-color-text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-conf { font-size: 11px; font-weight: 600; min-width: 36px; text-align: right; }
-.conf-high { color: #4caf50; }
-.conf-mid { color: #ff9800; }
-.conf-low { color: #f44336; }
+.conf-high { color: var(--ac-color-success); }
+.conf-mid { color: var(--ac-color-warning); }
+.conf-low { color: var(--ac-color-danger); }
 
 .chat-body-wrapper {
   position: relative;
