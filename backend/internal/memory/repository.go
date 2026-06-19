@@ -22,6 +22,12 @@ type Repository interface {
 	MarkEmbedded(id string) error
 	GetConversationMessages(conversationID string) ([]map[string]interface{}, error)
 	GetRankedByImportance(characterID string, limit int) ([]Memory, error)
+	ListCandidates() ([]MemoryCandidateModel, error)
+	CreateCandidate(c *MemoryCandidateModel) error
+	UpdateCandidate(id string, updates map[string]interface{}) error
+	DeleteCandidate(id string) error
+	GetCandidateByID(id string) (*MemoryCandidateModel, error)
+	DeleteAllCandidates() error
 }
 
 type repository struct {
@@ -208,4 +214,36 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 		items = []Memory{}
 	}
 	return items, err
+}
+
+
+func (r *repository) ListCandidates() ([]MemoryCandidateModel, error) {
+	var items []MemoryCandidateModel
+	err := r.db.Order("created_at DESC").Find(&items).Error
+	if items == nil {
+		items = []MemoryCandidateModel{}
+	}
+	return items, err
+}
+
+func (r *repository) CreateCandidate(c *MemoryCandidateModel) error {
+	return r.db.Create(c).Error
+}
+
+func (r *repository) UpdateCandidate(id string, updates map[string]interface{}) error {
+	return r.db.Model(&MemoryCandidateModel{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func (r *repository) DeleteCandidate(id string) error {
+	return r.db.Where("id = ?", id).Delete(&MemoryCandidateModel{}).Error
+}
+
+func (r *repository) GetCandidateByID(id string) (*MemoryCandidateModel, error) {
+	var c MemoryCandidateModel
+	err := r.db.Where("id = ?", id).First(&c).Error
+	return &c, err
+}
+
+func (r *repository) DeleteAllCandidates() error {
+	return r.db.Where("1=1").Delete(&MemoryCandidateModel{}).Error
 }

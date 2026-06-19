@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from "vue-router"
+﻿import { createRouter, createWebHistory } from "vue-router"
 import { apiClient } from "../ui-index"
 
 const TOKEN_KEY = "ai-companion-token"
@@ -58,6 +58,7 @@ const router = createRouter({
     { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
     { path: "/memory-manager", name: "memoryManager", component: () => import("@/views/memory-manager/MemoryManagerView.vue"), meta: { requiresAuth: true } },
     { path: "/memory-timeline", name: "memoryTimeline", component: () => import("@/views/memory-timeline/MemoryTimeline.vue"), meta: { requiresAuth: true } },
+    { path: "/memory", redirect: "/memory-manager" },
     { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
     { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
     { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },

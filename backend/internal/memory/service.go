@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -133,8 +132,6 @@ type service struct {
 	repo         Repository
 	db           *gorm.DB
 	embeddingSvc *embedding.Service
-	candidates   []MemoryCandidate
-	mu           sync.Mutex
 }
 
 func NewService(repo Repository, ctx *app.AppContext) Service {
@@ -142,7 +139,6 @@ func NewService(repo Repository, ctx *app.AppContext) Service {
 		repo:         repo,
 		db:           ctx.DB,
 		embeddingSvc: embedding.NewService(ctx.DB),
-		candidates:   []MemoryCandidate{},
 	}
 }
 
@@ -559,65 +555,62 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 		candidates[i].SourceText = conversationText
 		candidates[i].ConversationID = conversationID
 		candidates[i].CreatedAt = time.Now().Format("2006-01-02 15:04:05")
+		model := &MemoryCandidateModel{
+			ID: candidates[i].ID, Key: candidates[i].Key, Value: candidates[i].Value,
+			MemoryType: candidates[i].MemoryType, Importance: candidates[i].Importance,
+			SourceText: candidates[i].SourceText, ConversationID: candidates[i].ConversationID,
+			CreatedAt: candidates[i].CreatedAt,
+		}
+		if err := s.repo.CreateCandidate(model); err != nil {
+			log.Error("保存候选记忆失败:", err)
+		}
 	}
-	s.mu.Lock()
-	s.candidates = append(s.candidates, candidates...)
-	s.mu.Unlock()
 	return candidates, nil
 }
 
 func (s *service) ListCandidates() []MemoryCandidate {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	result := make([]MemoryCandidate, len(s.candidates))
-	copy(result, s.candidates)
+	models, err := s.repo.ListCandidates()
+	if err != nil || len(models) == 0 {
+		return []MemoryCandidate{}
+	}
+	result := make([]MemoryCandidate, len(models))
+	for i, m := range models {
+		result[i] = MemoryCandidate{
+			ID: m.ID, Key: m.Key, Value: m.Value,
+			MemoryType: m.MemoryType, Importance: m.Importance,
+			SourceText: m.SourceText, ConversationID: m.ConversationID,
+			CreatedAt: m.CreatedAt,
+		}
+	}
 	return result
 }
 
 func (s *service) AcceptCandidate(id string) (*Memory, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var target *MemoryCandidate
-	var idx int
-	for i, c := range s.candidates {
-		if c.ID == id {
-			target = &c
-			idx = i
-			break
-		}
-	}
-	if target == nil {
+	model, err := s.repo.GetCandidateByID(id)
+	if err != nil || model == nil {
 		return nil, fmt.Errorf("候选记忆不存在")
 	}
 	m := &Memory{
-		CharacterID:  "",
-		MemoryType:   target.MemoryType,
+		CharacterID:  model.CharacterID,
+		MemoryType:   model.MemoryType,
 		Source:       "auto",
-		Key:          target.Key,
-		Value:        target.Value,
-		Importance:   target.Importance,
+		Key:          model.Key,
+		Value:        model.Value,
+		Importance:   model.Importance,
 		Confidence:   50,
-		SourceConvID: target.ConversationID,
+		SourceConvID: model.ConversationID,
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
 	}
-	s.candidates = append(s.candidates[:idx], s.candidates[idx+1:]...)
+	s.repo.DeleteCandidate(id)
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
 
 func (s *service) RejectCandidate(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, c := range s.candidates {
-		if c.ID == id {
-			s.candidates = append(s.candidates[:i], s.candidates[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("候选记忆不存在")
+	return s.repo.DeleteCandidate(id)
 }
 
 func (s *service) BatchAcceptCandidates(ids []string) ([]Memory, error) {
@@ -633,26 +626,24 @@ func (s *service) BatchAcceptCandidates(ids []string) ([]Memory, error) {
 }
 
 func (s *service) UpdateCandidate(id string, req *UpdateCandidateRequest) (*MemoryCandidate, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, c := range s.candidates {
-		if c.ID == id {
-			if req.Key != nil {
-				s.candidates[i].Key = *req.Key
-			}
-			if req.Value != nil {
-				s.candidates[i].Value = *req.Value
-			}
-			if req.MemoryType != nil {
-				s.candidates[i].MemoryType = *req.MemoryType
-			}
-			if req.Importance != nil {
-				s.candidates[i].Importance = *req.Importance
-			}
-			return &s.candidates[i], nil
-		}
+	updates := make(map[string]interface{})
+	if req.Key != nil { updates["key"] = *req.Key }
+	if req.Value != nil { updates["value"] = *req.Value }
+	if req.MemoryType != nil { updates["memory_type"] = *req.MemoryType }
+	if req.Importance != nil { updates["importance"] = *req.Importance }
+	if err := s.repo.UpdateCandidate(id, updates); err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("候选记忆不存在")
+	model, err := s.repo.GetCandidateByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return &MemoryCandidate{
+		ID: model.ID, Key: model.Key, Value: model.Value,
+		MemoryType: model.MemoryType, Importance: model.Importance,
+		SourceText: model.SourceText, ConversationID: model.ConversationID,
+		CreatedAt: model.CreatedAt,
+	}, nil
 }
 
 func (s *service) DeleteCandidate(id string) error {
@@ -981,11 +972,7 @@ func (s *service) llmCheckContradiction(newVal, oldVal string) (bool, error) {
 }
 
 func (s *service) ExtractCandidates() ([]MemoryCandidate, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	result := make([]MemoryCandidate, len(s.candidates))
-	copy(result, s.candidates)
-	return result, nil
+	return s.ListCandidates(), nil
 }
 
 func (s *service) RebuildIndex() (map[string]interface{}, error) {
@@ -1340,3 +1327,10 @@ func (s *service) RetrieveStats() (map[string]interface{}, error) {
 		"totalCount":  total,
 	}, nil
 }
+
+
+
+
+
+
+

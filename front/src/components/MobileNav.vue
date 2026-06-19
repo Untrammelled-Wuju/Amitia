@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <nav class="mobile-nav">
     <router-link to="/chat" class="tab-item" active-class="tab-active">
       <el-icon><ChatDotRound /></el-icon>
@@ -8,7 +8,7 @@
       <el-icon><UserFilled /></el-icon>
       <span>角色</span>
     </router-link>
-    <router-link to="/memory" class="tab-item" active-class="tab-active">
+    <router-link to="/memory-manager" class="tab-item" active-class="tab-active">
       <el-icon><Collection /></el-icon>
       <span>记忆</span>
     </router-link>

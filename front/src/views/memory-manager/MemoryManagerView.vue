@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mem-page">
     <h2 class="page-title">记忆管理</h2>
 
@@ -38,7 +38,7 @@
         <el-option label="时间降序" value="time_desc" />
         <el-option label="时间升序" value="time_asc" />
       </el-select>
-      <el-button size="small" @click="showGenerateDialog = true">Generate Candidates</el-button>
+      <el-button size="small" @click="showGenerateDialog = true">生成候选</el-button>
       <div class="toolbar-spacer"></div>
       <el-button size="small" type="primary" :icon="Plus" @click="showCreate">新建</el-button>
       <el-button size="small" @click="handleExport">导出</el-button>
@@ -48,7 +48,6 @@
       <el-button size="small" type="danger" plain @click="handleClearAll" :disabled="total === 0">清空全部</el-button>
       <router-link to="/graph"><el-button size="small" type="info" plain>图谱</el-button></router-link>
     </div>
-
 
     <div class="global-search-bar">
       <el-input v-model="globalQuery" placeholder="全局搜索所有记忆类型..." size="small" clearable @clear="clearGlobalSearch" @keyup.enter="doGlobalSearch">
@@ -324,24 +323,24 @@
       </template>
     </el-dialog>
       <!-- Edit Candidate Dialog -->
-    <el-dialog v-model="editCandidateVisible" title="Edit Candidate" width="480px" destroy-on-close>
+    <el-dialog v-model="editCandidateVisible" title="编辑候选记忆" width="480px" destroy-on-close>
       <el-form :model="editForm" label-position="top">
-        <el-form-item label="Content"><el-input v-model="editForm.content" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="Type">
+        <el-form-item label="内容"><el-input v-model="editForm.content" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="类型">
           <el-select v-model="editForm.memoryType" style="width:100%"><el-option v-for="t in TYPES" :key="t.value" :label="t.label" :value="t.value" /></el-select>
         </el-form-item>
-        <el-form-item label="Importance"><el-slider v-model="editForm.importance" :max="10" show-input /></el-form-item>
+        <el-form-item label="重要度"><el-slider v-model="editForm.importance" :max="10" show-input /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editCandidateVisible=false">Cancel</el-button>
-        <el-button type="primary" @click="saveEditCandidate" :loading="saving">Save & Accept</el-button>
+        <el-button @click="editCandidateVisible=false">取消</el-button>
+        <el-button type="primary" @click="saveEditCandidate" :loading="saving">保存并确认</el-button>
       </template>
     </el-dialog>
 
         <!-- Conflict Resolution Dialog -->
-    <el-dialog v-model="conflictVisible" title="Memory Conflict Detected" width="550px" destroy-on-close :close-on-click-modal="false">
+    <el-dialog v-model="conflictVisible" title="记忆冲突检测" width="550px" destroy-on-close :close-on-click-modal="false">
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:12px">
-        The new memory may conflict with existing ones. Choose how to resolve:
+        新记忆可能与现有记忆冲突，请选择处理方式:
       </el-alert>
       <div class="conflict-new">
         <strong>New:</strong> [{{ conflictNewType }}] {{ conflictNewContent }}
@@ -351,38 +350,29 @@
         <div class="conflict-reason">{{ c.reason }}</div>
       </div>
       <el-radio-group v-model="resolveAction" style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
-        <el-radio value="keep_old">Keep old, discard new</el-radio>
-        <el-radio value="replace_old">Replace old with new</el-radio>
-        <el-radio value="keep_both">Keep both</el-radio>
-        <el-radio value="merge">Merge into existing</el-radio>
+        <el-radio value="keep_old">保留旧记忆，丢弃新记忆</el-radio>
+        <el-radio value="replace_old">用新记忆替换旧记忆</el-radio>
+        <el-radio value="keep_both">同时保留</el-radio>
+        <el-radio value="merge">合并到现有记忆</el-radio>
       </el-radio-group>
       <template #footer>
-        <el-button @click="conflictVisible=false">Cancel</el-button>
-        <el-button type="primary" @click="doResolveConflict">Resolve</el-button>
+        <el-button @click="conflictVisible=false; dialogVisible=true">取消</el-button>
+        <el-button type="primary" @click="doResolveConflict">解决</el-button>
       </template>
     </el-dialog>
 
-    <!-- Generate Candidates Dialog -->
-    <el-dialog v-model="showGenerateDialog" title="Generate Candidates" width="500px" destroy-on-close>
+    <!-- 生成候选 Dialog -->
+    <el-dialog v-model="showGenerateDialog" title="生成候选" width="500px" destroy-on-close>
       <el-form label-position="top">
-        <el-form-item label="Source">
-          <el-radio-group v-model="generateSource">
-            <el-radio value="conversation">Recent Chat</el-radio>
-            <el-radio value="import">Import Batch</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="选择会话" v-if="generateSource === 'conversation'">
+        <el-form-item label="选择会话">
           <el-select v-model="generateConvId" placeholder="选择会话" filterable style="width:100%">
             <el-option v-for="c in conversationList" :key="c.id" :label="c.title" :value="c.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Import Batch ID" v-if="generateSource === 'import'">
-          <el-input v-model="generateBatchId" placeholder="Enter import batch ID" />
-        </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showGenerateDialog=false">Cancel</el-button>
-        <el-button type="primary" @click="generateCandidates" :loading="generating">Generate</el-button>
+        <el-button @click="showGenerateDialog=false">取消</el-button>
+        <el-button type="primary" @click="generateCandidates" :loading="generating">生成</el-button>
       </template>
     </el-dialog>
   </div>
@@ -434,7 +424,7 @@ const editingId = ref("")
 const saving = ref(false)
 const showCandidates = ref(false)
 const conversationList = ref<any[]>([])
-const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"", scope:"character" })
+const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"", scope:"character", source:"manual" })
 const editCandidateVisible = ref(false)
 const conflictVisible = ref(false)
 const showGenerateDialog = ref(false)
@@ -444,9 +434,7 @@ const conflictNewContent = ref("")
 const conflictList = ref<any[]>([])
 const resolveAction = ref("")
 const generating = ref(false)
-const generateSource = ref("conversation")
 const generateConvId = ref("")
-const generateBatchId = ref("")
 const activeTab = ref("list")
 const retrievalStats = ref({ totalCount: 0 })
 const retrievalLogs = ref<any[]>([])
@@ -460,23 +448,13 @@ const globalSearched = ref(false)
 const showGlobalResults = ref(false)
 const globalResults = ref({ memories: [] as any[], profiles: [] as any[], episodics: [] as any[], worldBooks: [] as any[] })
 const globalResultCount = ref(0)
-const profileItems = ref<any[]>([])
-const profileLoading = ref(false)
-const episodicItems = ref<any[]>([])
-const episodicLoading = ref(false)
-const factItems = ref<any[]>([])
-const factsLoading = ref(false)
-const worldbookItems = ref<any[]>([])
-const worldbookLoading = ref(false)
-const graphStats = ref<any>(null)
-const graphLoading = ref(false)
 
 async function doResolveConflict() {
   if (!resolveAction.value) { ElMessage.warning("请选择处理方式"); return }
   try {
     await post("/api/memories/resolve-conflict", {
       action: resolveAction.value,
-      newKey: conflictNewType.value ? "" : "",
+      newKey: "", characterId: injectedCharacterId?.value || "",
       newValue: conflictNewContent.value,
       newType: conflictNewType.value,
       importance: 5,
@@ -491,11 +469,6 @@ async function doResolveConflict() {
 }
 
 async function generateCandidates() {
-  if (generateSource.value === "import") {
-    if (!generateBatchId.value) { ElMessage.warning("请输入Import Batch ID"); return }
-    ElMessage.info("导入批次提取暂不支持，请使用会话方式")
-    return
-  }
   if (!generateConvId.value) { ElMessage.warning("请选择会话"); return }
   generating.value = true
   try {
@@ -540,13 +513,13 @@ async function fetchList() {
 
 function showCreate() {
   editing.value = false; editingId.value = ""
-  form.key=""; form.value=""; form.memoryType="custom"; form.importance=5; form.characterId=injectedCharacterId?.value||""
+  form.key=""; form.value=""; form.memoryType="custom"; form.importance=5; form.characterId=injectedCharacterId?.value||""; form.source="manual"; form.scope="character"
   dialogVisible.value = true
 }
 
 function showEdit(row: any) {
   editing.value = true; editingId.value = row.id
-  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""; form.scope=row.scope||"character"
+  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""; form.scope=row.scope||"character"; form.source=row.source||"manual"
   dialogVisible.value = true
 }
 
@@ -555,12 +528,13 @@ async function toggleScope(row: any) { const newScope = row.scope === "user" ? "
 async function saveMem() {
   saving.value = true
   try {
-    if (editing.value) await put(`/api/memories/${editingId.value}`,{...form})
-    else await post("/api/memories",{...form})
+    const payload = {...form, source: form.source || "manual"}
+    if (editing.value) await put(`/api/memories/${editingId.value}`, payload)
+    else await post("/api/memories", payload)
     dialogVisible.value = false
     ElMessage.success(editing.value?"保存成功":"新建成功")
     fetchList()
-  } catch {}
+  } catch (err: any) { ElMessage.error(err?.message || "保存失败") }
   saving.value = false
 }
 
@@ -599,21 +573,28 @@ async function batchDelete() {
 
 async function handleClearAll() {
   await ElMessageBox.confirm(`确定清空当前角色全部 ${total.value} 条记忆？此操作不可撤销。`,"警告",{type:"warning",confirmButtonText:"确定清空",confirmButtonClass:"el-button--danger"})
-  const cid = injectedCharacterId?.value
-  if (cid) await del(`/api/memories?characterId=${cid}`)
-  else await del("/api/memories")
+  const cid = characterFilter.value || injectedCharacterId?.value
+  if (!cid) { ElMessage.warning("请先选择角色再清空"); return }
+  await del(`/api/memories?characterId=${cid}`)
   ElMessage.success("已清空")
   fetchList()
 }
 
 async function handleExport() {
-  // Build JSON export
-  const data = memories.value.map(m=>({key:m.key,value:m.value,type:m.memoryType,importance:m.importance,source:m.source}))
-  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"})
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a"); a.href=url; a.download="memories-"+new Date().toISOString().slice(0,10)+".json"; a.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success("已导出")
+  try {
+    const params: any = { pageSize: 10000 }
+    if (characterFilter.value) params.characterId = characterFilter.value
+    if (typeFilter.value) params.memoryType = typeFilter.value
+    if (sourceFilter.value) params.source = sourceFilter.value
+    const all = await get<any>("/api/memories", params)
+    const items = all?.items || []
+    const data = items.map((m:any)=>({key:m.key,value:m.value,type:m.memoryType,importance:m.importance,source:m.source,scope:m.scope}))
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href=url; a.download="memories-"+new Date().toISOString().slice(0,10)+".json"; a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已导出 ${items.length} 条记忆`)
+  } catch { ElMessage.error("导出失败") }
 }
 
 async function confirmCandidate(c: any) {
@@ -621,7 +602,7 @@ async function confirmCandidate(c: any) {
     await post("/api/memory-candidates/" + c.id + "/accept", {})
     ElMessage.success("已保存")
   } catch {
-    await post("/api/memories",{key:c.key,value:c.value,memoryType:c.memoryType||"custom",importance:c.importance||5})
+    await post("/api/memories",{key:c.key,value:c.value,memoryType:c.memoryType||"custom",importance:c.importance||5,source:"manual",scope:"character",characterId:characterFilter.value||injectedCharacterId?.value||""})
     ElMessage.success("已保存")
   }
   candidates.value = candidates.value.filter(x=>x.id!==c.id)
@@ -660,12 +641,9 @@ async function saveEditCandidate() {
 async function deleteCandidateItem(c: any) {
   try {
     await del("/api/memory-candidates/" + c.id)
-    ElMessage.success("已删除")
-    candidates.value = candidates.value.filter(x=>x.id!==c.id)
-  } catch {
     candidates.value = candidates.value.filter(x=>x.id!==c.id)
     ElMessage.success("已删除")
-  }
+  } catch { ElMessage.error("删除失败") }
 }
 
 async function loadVectorStatus() {
@@ -738,7 +716,6 @@ function fmtDate(d: string) {
   try { return new Date(d).toLocaleString("zh-CN") } catch { return d }
 }
 
-
 async function loadConversations() {
   try {
     const res: any = await get("/api/chats/conversations", { pageSize: 100 })
@@ -798,74 +775,7 @@ async function doGlobalSearch() {
   globalSearching.value = false
 }
 
-async function loadProfiles() {
-  profileLoading.value = true
-  try {
-    const { get } = useApi()
-    const r: any = await get("/api/profiles", { pageSize: 20 })
-    profileItems.value = r?.items || []
-  } catch { profileItems.value = [] }
-  profileLoading.value = false
-}
 
-async function loadEpisodics() {
-  episodicLoading.value = true
-  try {
-    const { get } = useApi()
-    const r: any = await get("/api/episodic", { pageSize: 20 })
-    episodicItems.value = r?.items || []
-  } catch { episodicItems.value = [] }
-  episodicLoading.value = false
-}
-
-async function loadFacts() {
-  factsLoading.value = true
-  try {
-    const { get } = useApi()
-    const r: any = await get("/api/memories", { memoryType: "custom,preference,event,habit,nickname,relationship", pageSize: 50, sortBy: "time_desc" })
-    factItems.value = r?.items || []
-  } catch { factItems.value = [] }
-  factsLoading.value = false
-}
-
-async function loadWorldBooks() {
-  worldbookLoading.value = true
-  try {
-    const { get } = useApi()
-    const r: any = await get("/api/world-book", { pageSize: 20 })
-    worldbookItems.value = r?.items || []
-  } catch { worldbookItems.value = [] }
-  worldbookLoading.value = false
-}
-
-async function loadGraphStats() {
-  graphLoading.value = true
-  try {
-    const { get } = useApi()
-    graphStats.value = await get("/api/graph/stats")
-  } catch { graphStats.value = null }
-  graphLoading.value = false
-}
-
-function sceneEmoji(t: string): string {
-  const m: Record<string,string> = { insight: "💡", joke: "😂", milestone: "🏆", emotional_peak: "💗", confession: "🫣" }
-  return m[t] || "📌"
-}
-
-function sceneLabel(t: string): string {
-  const m: Record<string,string> = { insight: "感悟", joke: "笑话", milestone: "里程碑", emotional_peak: "情感峰值", confession: "坦白" }
-  return m[t] || t
-}
-
-function profileCatLabel(c: string): string {
-  const m: Record<string,string> = { personal_info: "个人信息", preference: "偏好", habit: "习惯", fear: "恐惧", relationship: "关系", health: "健康", plan: "计划" }
-  return m[c] || c
-}
-
-function wbMatchLabel(t: string): string {
-  const m: Record<string,string> = { regex: "正则", exact: "精确", keyword: "关键词" }
-  return m[t] || t
-}
 
 async function loadRetrievalStats() {
   try {
@@ -879,7 +789,7 @@ onMounted(async () => {
   try { characters.value = await get<any[]>("/api/characters") || [] } catch {}
   await loadVectorStatus()
   fetchPipelineStatus()
-  fetchList()
+
   await fetchList()
   await loadCandidates()
   await loadConversations()
@@ -970,7 +880,7 @@ onMounted(async () => {
 }
 .pipeline-bar {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-  background: #f8f9fb; border: 1px solid #e4e7ed; border-radius: 6px;
+  background: var(--ac-color-bg-secondary); border: 1px solid #e4e7ed; border-radius: 6px;
   margin-bottom: 12px; font-size: 13px;
 }
 .pl-label { color: #606266; font-weight: 600; margin-right: 4px; }
@@ -991,7 +901,7 @@ onMounted(async () => {
 .ap-sliders { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .ap-slider-item { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 10px; }
 .ap-slider-label { font-size: 13px; white-space: nowrap; min-width: 80px; }
-.global-search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.global-search-bar { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
 .global-search-bar .el-input { flex: 1; max-width: 400px; }
 .global-results { background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-sm); padding: 12px; margin-bottom: 12px; }
 .gr-section { margin-bottom: 10px; }
@@ -1032,11 +942,6 @@ onMounted(async () => {
   text-decoration: underline !important;
 }
 </style>
-
-
-
-
-
 
 
 

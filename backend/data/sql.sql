@@ -432,6 +432,18 @@ ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
 
+CREATE TABLE IF NOT EXISTS memory_candidates (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT '',
+    memory_type TEXT DEFAULT 'custom',
+    importance INTEGER DEFAULT 5,
+    source_text TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
 CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
@@ -574,3 +586,26 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
 ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT "character";
+
+ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
+ALTER TABLE memories ADD COLUMN expires_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN entity_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN entity_type TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
+ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS memory_candidates (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT '',
+    memory_type TEXT DEFAULT 'custom',
+    importance INTEGER DEFAULT 5,
+    source_text TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+
