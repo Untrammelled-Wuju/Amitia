@@ -18,6 +18,8 @@ func RegisterGraphRouter(r *gin.RouterGroup, cfg config.SurrealConfig) {
 		g.GET("/node/:id/neighbors", handler.Neighbors)
 		g.GET("/path", handler.FindPath)
 		g.GET("/stats", handler.Stats)
+		g.GET("/nodes", handler.AllNodes)
+		g.GET("/edges", handler.AllEdges)
 		g.DELETE("/node/:id", handler.DeleteNode)
 	}
 }

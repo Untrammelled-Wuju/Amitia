@@ -63,3 +63,23 @@ func (h *Handler) DeleteNode(c *gin.Context) {
 	}
 	util.SuccessResponse(c, nil)
 }
+
+func (h *Handler) AllNodes(c *gin.Context) {
+	userID := c.DefaultQuery("userId", "default")
+	result, err := h.svc.GetAllNodes(userID)
+	if err != nil {
+		util.ErrorResponse(c, 500, "查询节点失败", nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) AllEdges(c *gin.Context) {
+	userID := c.DefaultQuery("userId", "default")
+	result, err := h.svc.GetAllEdges(userID)
+	if err != nil {
+		util.ErrorResponse(c, 500, "查询边失败", nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}

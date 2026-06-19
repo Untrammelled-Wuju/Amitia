@@ -25,32 +25,32 @@
       </div>
       <div ref="chartRef" class="chart"></div>
     </div>
-    <el-drawer v-model="detailVisible" title="节点详情" size="360px">
-      <div v-if="selectedNode" class="node-detail">
-        <p><strong>标签:</strong> {{ selectedNode.label }}</p>
-        <p><strong>类型:</strong> {{ selectedNode.entity_type }}</p>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue"
 import { useApi } from "@/composables/useApi"
+import { useTheme } from "@/composables/useTheme"
 
 const { get } = useApi()
+function extractId(obj: any): string {
+  if (!obj) return ""
+  if (typeof obj === "string") return obj.replace("entity_node:", "")
+  if (obj.ID) return obj.ID
+  return String(obj)
+}
 const chartRef = ref<HTMLElement>()
 const depth = ref(2)
 const searchId = ref("")
 const typeFilter = ref("")
 const labelKeyword = ref("")
 const showFullscreen = ref(false)
-const detailVisible = ref(false)
-const selectedNode = ref<any>(null)
 const stats = ref<any>(null)
 const allNodes = ref<any[]>([])
 const allLinks = ref<any[]>([])
 let chartInstance: any = null
+const { resolvedMode } = useTheme()
 
 const typeLabels: Record<string,string> = { memory: "记忆", profile: "画像", episodic: "情景", worldbook: "世界书" }
 const typeColors: Record<string,string> = { memory: "#409eff", profile: "#e6a23c", episodic: "#f56c6c", worldbook: "#67c23a" }
@@ -97,10 +97,74 @@ async function fetchGraph() {
     try {
       const url = `/api/graph/node/${encodeURIComponent(searchId.value)}/neighbors?depth=${depth.value}&userId=default`
       const data = await get<any>(url)
-      allNodes.value = data?.neighbors || data?.result || []
-      allLinks.value = data?.edges || data?.links || []
+      var rawNeighbors = data?.neighbors || data?.result || []
+      var neighborIds = new Set()
+      if (Array.isArray(rawNeighbors)) {
+        for (var n of rawNeighbors) {
+          if (typeof n === "string") neighborIds.add(n)
+          else if (n && n.id) neighborIds.add(n.id)
+        }
+      }
+      allNodes.value = []
+      allLinks.value = []
       renderGraph()
-    } catch {}
+      try {
+        var nodesData = await get<any>("/api/graph/nodes?userId=default")
+        var allNodesData = nodesData?.data || nodesData || []
+        if (Array.isArray(allNodesData) && allNodesData.length > 0) {
+          allNodes.value = allNodesData.filter(function(n) {
+            var nid = extractId(n.id)
+            return neighborIds.has(nid) || nid === searchId.value
+          })
+          if (allNodes.value.length === 0 && allNodesData.length > 0) {
+            allNodes.value = allNodesData.filter(function(n) {
+              var nid = extractId(n.id)
+              return nid.indexOf(searchId.value) !== -1
+            })
+          }
+          renderGraph()
+        }
+      } catch {}
+      try {
+        var edgesData = await get<any>("/api/graph/edges?userId=default")
+        var allEdgesData = edgesData?.data || edgesData || []
+        if (Array.isArray(allEdgesData) && allEdgesData.length > 0) {
+          var nodeIdSet = new Set(allNodes.value.map(function(n) { return n.id }))
+          allLinks.value = allEdgesData.filter(function(e) {
+            return nodeIdSet.has(e.in) && nodeIdSet.has(e.out)
+          })
+          renderGraph()
+        }
+      } catch {}
+    } catch {
+      allNodes.value = []
+      allLinks.value = []
+      renderGraph()
+    }
+  } else {
+    try {
+      var nodesData = await get<any>("/api/graph/nodes?userId=default")
+      var allNodesArr = nodesData?.data || nodesData || []
+      if (Array.isArray(allNodesArr) && allNodesArr.length > 0) {
+        allNodes.value = allNodesArr
+        try {
+          var edgesData = await get<any>("/api/graph/edges?userId=default")
+          var allEdgesArr = edgesData?.data || edgesData || []
+          if (Array.isArray(allEdgesArr) && allEdgesArr.length > 0) {
+            allLinks.value = allEdgesArr
+          }
+        } catch {}
+        renderGraph()
+      } else {
+        allNodes.value = []
+        allLinks.value = []
+        renderGraph()
+      }
+    } catch {
+      allNodes.value = []
+      allLinks.value = []
+      renderGraph()
+    }
   }
 }
 
@@ -110,30 +174,41 @@ async function renderGraph() {
   if (!chartRef.value) return
   if (!chartInstance) {
     chartInstance = (await import("echarts")).init(chartRef.value)
-    chartInstance.on("click", (params: any) => {
-      if (params.dataType === "node") {
-        selectedNode.value = params.data
-        detailVisible.value = true
-      }
-    })
   }
-  var nodes = filteredNodes.value.map((n: any) => ({
-    id: n.id, name: n.label || n.id,
-    symbolSize: 30,
-    itemStyle: { color: typeColor(n.entity_type) },
-  }))
-  var links = filteredLinks.value.map((l: any) => ({
-    source: l.source || l.in, target: l.target || l.out,
-  }))
+  var nodes = filteredNodes.value.map((n: any) => {
+    var nid = extractId(n.id)
+    return {
+      id: nid, name: n.label || nid,
+      label: n.label || nid,
+      entity_type: n.entity_type,
+      symbolSize: 30,
+      itemStyle: { color: typeColor(n.entity_type) },
+    }
+  })
+  var links = filteredLinks.value.map((l: any) => {
+    return { source: extractId(l.in || l.source), target: extractId(l.out || l.target) }
+  })
+  var textColor = getComputedStyle(document.documentElement).getPropertyValue("--ac-color-text").trim() || "#333"
   chartInstance.setOption({
+    tooltip: {
+      trigger: "item",
+      formatter: (params: any) => {
+        var d = params.data
+        return "<strong>" + (d.label || d.name) + "</strong><br/>ID: " + d.id + "<br/>类型: " + typeLabel(d.entity_type)
+      },
+    },
     series: [{
       type: "graph", layout: "force", roam: true, draggable: true,
       data: nodes, links: links,
       force: { repulsion: 300, edgeLength: [120, 300] },
-      label: { show: true, fontSize: 11 },
+      label: { show: true, fontSize: 11, color: textColor },
     }]
   }, true)
 }
+
+watch(resolvedMode, () => {
+  nextTick(() => renderGraph())
+})
 
 onMounted(() => {
   fetchGraph()
@@ -163,5 +238,4 @@ onUnmounted(() => {
 .fullscreen-close { font-size: 14px; }
 .chart { width: 100%; height: 100%; }
 .graph-container.fullscreen .chart { height: calc(100% - 41px); }
-.node-detail p { margin: 8px 0; font-size: 14px; }
 </style>

@@ -16,6 +16,8 @@ type Service interface {
 	FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error)
 	DeleteOrphanNodes() error
 	GetStats(userID string) (map[string]interface{}, error)
+	GetAllNodes(userID string) ([]map[string]interface{}, error)
+	GetAllEdges(userID string) ([]map[string]interface{}, error)
 	Name() string
 	Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
@@ -61,16 +63,40 @@ func (s *service) SyncEdge(sourceID, targetID, relationType string, weight float
 }
 
 func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
-	userFilter := ""
-	if userID != "" {
-		userFilter = fmt.Sprintf(" WHERE properties.user_id = \"%s\"", userID)
+	types := []string{"memory:", "profile:", "episodic:", "worldbook:"}
+
+	queryWithFilter := func(id string) (map[string]interface{}, error) {
+		userFilter := ""
+		if userID != "" {
+			userFilter = fmt.Sprintf(" WHERE properties.user_id = \"%s\"", userID)
+		}
+		query := fmt.Sprintf("SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s`%s LIMIT 100", id, userFilter)
+		results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
+		if err != nil {
+			return nil, err
+		}
+		return s.toMap(results), nil
 	}
-	query := fmt.Sprintf("SELECT ->entity_edge->entity_node AS neighbors FROM entity_node:`%s`%s LIMIT 100", entityID, userFilter)
-	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
+
+	result, err := queryWithFilter(entityID)
 	if err != nil {
 		return nil, err
 	}
-	return s.toMap(results), nil
+	if arr, ok := result["result"].([]interface{}); ok && len(arr) > 0 {
+		return result, nil
+	}
+
+	for _, t := range types {
+		result, err = queryWithFilter(t + entityID)
+		if err != nil {
+			return nil, err
+		}
+		if arr, ok := result["result"].([]interface{}); ok && len(arr) > 0 {
+			return result, nil
+		}
+	}
+
+	return result, nil
 }
 
 func (s *service) FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error) {
@@ -113,16 +139,9 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 
 	nodeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
 		fmt.Sprintf("SELECT count() FROM entity_node%s GROUP ALL", nodeFilter), nil)
-	if err == nil && nodeResult != nil && len(*nodeResult) > 0 {
-		raw := (*nodeResult)[0].Result
-		if arr, ok := raw.([]interface{}); ok && len(arr) > 0 {
-			if m, ok := arr[0].(map[string]interface{}); ok {
-				if c, ok := m["count"]; ok {
-					switch v := c.(type) { case float64: nodeCount = int(v); case int: nodeCount = v; case int64: nodeCount = int(v) }
-				}
-			}
-		}
-	}
+	_ = nodeResult
+	_ = err
+
 
 	edgeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
 		"SELECT count() FROM entity_edge GROUP ALL", nil)
@@ -131,7 +150,7 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 		if arr, ok := raw.([]interface{}); ok && len(arr) > 0 {
 			if m, ok := arr[0].(map[string]interface{}); ok {
 				if c, ok := m["count"]; ok {
-					switch v := c.(type) { case float64: edgeCount = int(v); case int: edgeCount = v; case int64: edgeCount = int(v) }
+					switch v := c.(type) { case float64: edgeCount = int(v); case int: edgeCount = v; case int64: edgeCount = int(v); case uint64: edgeCount = int(v) }
 				}
 			}
 		}
@@ -151,11 +170,78 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 		}
 	}
 
+	for _, t := range byType {
+		if c, ok := t["count"]; ok {
+			switch v := c.(type) {
+			case float64: nodeCount += int(v)
+			case int: nodeCount += v
+			case int64: nodeCount += int(v)
+			case uint64: nodeCount += int(v)
+			case json.Number:
+				if n, e := v.Int64(); e == nil { nodeCount += int(n) }
+			}
+		}
+	}
+
 	return map[string]interface{}{
 		"nodeCount": nodeCount,
 		"edgeCount": edgeCount,
 		"byType":    byType,
 	}, nil
+}
+
+func (s *service) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+	if s.client == nil || s.client.DB() == nil {
+		return nil, nil
+	}
+	nodeFilter := ""
+	if userID != "" {
+		nodeFilter = fmt.Sprintf(" WHERE properties.user_id = \"%s\"", userID)
+	}
+	query := fmt.Sprintf("SELECT id, entity_type, label, properties FROM entity_node%s", nodeFilter)
+	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
+	if err != nil {
+		return nil, err
+	}
+	if results == nil || len(*results) == 0 {
+		return nil, nil
+	}
+	raw := (*results)[0].Result
+	if arr, ok := raw.([]interface{}); ok {
+		nodes := make([]map[string]interface{}, 0, len(arr))
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				nodes = append(nodes, m)
+			}
+		}
+		return nodes, nil
+	}
+	return nil, nil
+}
+
+func (s *service) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+	if s.client == nil || s.client.DB() == nil {
+		return nil, nil
+	}
+	query := "SELECT id, in, out, relation_type, weight FROM entity_edge"
+	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
+	if err != nil {
+		return nil, err
+	}
+	if results == nil || len(*results) == 0 {
+		return nil, nil
+	}
+	raw := (*results)[0].Result
+	if arr, ok := raw.([]interface{}); ok {
+		edges := make([]map[string]interface{}, 0, len(arr))
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				edges = append(edges, m)
+			}
+		}
+		return edges, nil
+	}
+	return nil, nil
 }
 
 func (s *service) toMap(results *[]surrealdb.QueryResult[any]) map[string]interface{} {
@@ -243,4 +329,12 @@ func (s *stubService) DeleteOrphanNodes() error {
 
 func (s *stubService) GetStats(userID string) (map[string]interface{}, error) {
 	return map[string]interface{}{"nodeCount": 0, "edgeCount": 0, "byType": nil}, nil
+}
+
+func (s *stubService) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
+func (s *stubService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+	return nil, nil
 }
