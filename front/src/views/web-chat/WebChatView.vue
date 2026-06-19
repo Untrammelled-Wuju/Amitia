@@ -74,13 +74,6 @@
               <el-tag :type="p.confidence >= 80 ? 'success' : 'warning'" size="small">{{ p.confidence }}%</el-tag>
             </div>
           </div>
-          <div class="mi-section" v-if="miWorldbookHits.length">
-            <h5>世界书命中 ({{ miWorldbookHits.length }})</h5>
-            <div v-for="w in miWorldbookHits" :key="w.entry?.id || w.id" class="mi-wb-hit">
-              <el-tag size="small" type="danger">命中</el-tag>
-              <span>{{ w.entry?.matchPattern || w.matchPattern }}</span>
-            </div>
-          </div>
           <div class="mi-section">
             <h5>压缩状态</h5>
             <div class="mi-compress">
@@ -98,7 +91,7 @@
               </template>
             </div>
           </div>
-          <div class="mi-empty" v-if="!miMemories.length && !miProfiles.length && !miWorldbookHits.length">暂无记忆注入数据</div>
+          <div class="mi-empty" v-if="!miMemories.length && !miProfiles.length">暂无记忆注入数据</div>
         </div>
       </div>
     <MessagesArea
@@ -243,8 +236,6 @@ function toggleMemInject() {
 const miLoading = ref(false)
 const miMemories = ref<any[]>([])
 const miProfiles = ref<any[]>([])
-const miWorldbookHits = ref<any[]>([])
-const miCompression = ref<any>({})
 const miPipeline = ref<any>(null)
 
 const profileLoading = ref(false)
@@ -345,16 +336,6 @@ async function loadMemInject() {
 function feedbackMemory(m: any, type: string) {
   ElMessage.info("已标记为" + (type === "irrelevant" ? "不相关" : "错误") + "，将优化后续检索")
 }
-
-async function checkWorldbookHits(userMsg: string) {
-  try {
-    const { useApi } = await import("../../composables/useApi")
-    const { get } = useApi()
-    const r: any = await get("/api/world-book/match", { text: userMsg })
-    miWorldbookHits.value = r?.matches || []
-  } catch { miWorldbookHits.value = [] }
-}
-
 
 // Network & error states
 const isOffline = ref(!navigator.onLine)
@@ -938,7 +919,6 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
   
   scrollToBottom(true)
 
-  checkWorldbookHits(text)
   sending.value = true
   modelError.value = ""
 
