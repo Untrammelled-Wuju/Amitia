@@ -663,12 +663,13 @@ async function handleNext() {
     }
     try {
       if (!hasAdmin.value) {
-        // Create admin for ALL modes
         try {
           await post("/api/auth/setup", { username: form.username, password: form.password })
+          hasAdmin.value = true
         } catch (setupErr: any) {
-          // 409 = admin already exists, thats fine, just login
-          if (setupErr?.response?.status !== 409 && setupErr?.response?.data?.code !== 20006) {
+          if (setupErr?.response?.status === 409 || setupErr?.response?.data?.code === 20006) {
+            hasAdmin.value = true
+          } else {
             throw setupErr
           }
         }
