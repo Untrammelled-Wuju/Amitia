@@ -107,7 +107,7 @@ func InitConfig(configPath string) {
 	v.SetDefault("qdrant.collections.user_profiles.vectorDim", 2560)
 	v.SetDefault("qdrant.collections.episodic_memories.name", "episodic_memories")
 	v.SetDefault("qdrant.collections.episodic_memories.vectorDim", 2560)
-	v.SetDefault("embedding.modelName", "text-embedding-3-small")
+	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")
 	v.SetDefault("surrealdb.host", "127.0.0.1")

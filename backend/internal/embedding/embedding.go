@@ -54,11 +54,11 @@ func (s *Service) Embed(text string) ([]float32, error) {
 
 	reqBody := map[string]interface{}{
 		"model": modelName,
-		"input": text,
+		"input": []map[string]interface{}{{"type": "text", "text": text}},
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/embeddings", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", baseURL+"/embeddings/multimodal", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +111,11 @@ func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
 
 	reqBody := map[string]interface{}{
 		"model": modelName,
-		"input": inputs,
+		"input": s.buildMultimodalInputs(texts),
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/embeddings", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", baseURL+"/embeddings/multimodal", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +161,13 @@ func truncateStr(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
+func (s *Service) buildMultimodalInputs(texts []string) []map[string]interface{} {
+	inputs := make([]map[string]interface{}, len(texts))
+	for i, t := range texts {
+		inputs[i] = map[string]interface{}{"type": "text", "text": t}
+	}
+	return inputs
+}
 func fallbackEmbeddings(texts []string) [][]float32 {
 	vectors := make([][]float32, len(texts))
 	for i, text := range texts {
