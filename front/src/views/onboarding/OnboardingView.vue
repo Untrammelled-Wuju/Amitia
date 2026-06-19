@@ -535,7 +535,7 @@ async function startWxLogin() {
   wxQrStep.value = 0
   wxScanning.value = false
   try {
-    const res = await get<any>("/api/wechat/login/start")
+    const res = await post<any>("/api/wechat/login/rescan")
     const imgUrl = res?.data?.qrImageUrl || res?.qrImageUrl || res?.data?.qrCodeUrl || res?.qrCodeUrl
     if (imgUrl) {
       wxQrCodeUrl.value = imgUrl
@@ -596,6 +596,10 @@ async function connectQQ() {
   qqError.value = ""
   qqConnecting.value = true
   try {
+    if (qqConnected.value) {
+      await axios.post(QQ_API + "/disconnect")
+      qqConnected.value = false
+    }
     if (form.qqAppId && form.qqToken) {
       await axios.post(QQ_API + "/connect", {
         appId: form.qqAppId,
