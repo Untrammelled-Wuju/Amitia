@@ -121,7 +121,6 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 async function doConnect() {
   if (!appId.value || !token.value) return
   connecting.value = true
-  loginStatus.value = ""
   try {
     await axios.post(QQ_API + "/connect", {
       appId: appId.value,
@@ -129,19 +128,12 @@ async function doConnect() {
       sandbox: sandbox.value,
     })
     loginStatus.value = "connecting"
-    await new Promise(r => setTimeout(r, 3000))
-    await refreshStatus()
-    if (!qqOnline.value) {
-      ElMessage.error("连接失败，请检查AppID和Token是否有效")
-      loginStatus.value = ""
-    }
+    setTimeout(refreshStatus, 3000)
   } catch (e: any) {
     const msg = e?.response?.data?.error || "连接失败，请检查AppID和Token"
     ElMessage.error(msg)
-    loginStatus.value = ""
-  } finally {
-    connecting.value = false
   }
+  connecting.value = false
 }
 
 async function doDisconnect() {
