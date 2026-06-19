@@ -399,7 +399,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	tool.SetCurrentCharacterID(charID)
 	for round := 0; round < 3; round++ {
 		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(cfg, messages, toolDefs)
+		applog.Info("[ToolLoop] round=%d toolCalls=%d aiContentLen=%d", round, len(toolCalls), len(aiContent))
 		if llmErr != nil {
+			applog.Warn("[ToolLoop] LLM error: %v", llmErr)
 			s.db.Exec("DELETE FROM messages WHERE id = ?", userMsgID)
 			return nil, fmt.Errorf("AI 调用失败: %w", llmErr)
 		}
@@ -439,12 +441,16 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 				newArgs, _ := json.Marshal(toolArgs)
 				args = string(newArgs)
 			}
-			result, _ := tool.Execute(name, args)
+			result, ok := tool.Execute(name, args)
+			applog.Info("[ToolLoop] Execute %s ok=%v result=%s", name, ok, result[:min(len(result), 60)])
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
 		}
 	}
 	if reply == "" {
+		applog.Warn("[ToolLoop] reply empty, fallback to text")
 		reply = "操作已完成"
+	} else {
+		applog.Info("[ToolLoop] final reply len=%d", len(reply))
 	}
 	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
 	var realLines []string
@@ -477,14 +483,15 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		go s.compressor.MaybeCompress(convID)
 	}
 
-	fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), tool.GetForceVoice())
+	fv := tool.GetForceVoice()
+	fmt.Printf("[DIAG-ProcessMessage] 返回: replyLen=%d forceVoice=%v\n", len(reply), fv)
 	return &ProcessMessageResponse{
 		ConversationID: convID,
 		Reply:          reply,
 		CharacterID:    charID,
 		CharacterName:  charName,
 		MessageIDs:     msgIDs,
-		ForceVoice:     tool.GetForceVoice(),
+		ForceVoice:     fv,
 		AudioUrls:      audioUrls,
 	}, nil
 }
