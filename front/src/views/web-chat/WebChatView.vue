@@ -974,18 +974,12 @@ async function doActualSend(text: string, audioUrl?: string, voiceMessage?: bool
             }
 
             if (eventType === "voice_audio" && data.audioUrl) {
-              let targetMsg = [...messages.value].reverse().find((m: any) => m.id === data.messageId || m.status === "streaming")
-              if (!targetMsg && data.content) {
-                messages.value.push({
-                  id: data.messageId || ("msg-" + Date.now()), role: "assistant", content: data.content,
-                  status: "streaming", conversationId: data.conversationId || convId.value,
-                  createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
-                })
-                scrollToBottom(true)
-              } else if (targetMsg) {
-                targetMsg.audioUrl = data.audioUrl
-                targetMsg.audioDuration = data.duration
-              }
+              messages.value.push({
+                id: data.messageId || ("msg-" + Date.now()), role: "assistant", content: data.content || "",
+                status: "streaming", conversationId: data.conversationId || convId.value,
+                createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
+              })
+              scrollToBottom(true)
             }
 
                     if (eventType === "done") {
