@@ -1289,6 +1289,7 @@ async function onMsgTouchEnd() {
 .mi-header h4 { margin: 0; font-size: 15px; }
 .mi-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--ac-color-text-muted); }
 .mi-loading { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
+.mi-empty { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
 .mi-section { padding: 8px 16px; border-bottom: 1px solid var(--ac-color-border-light); }
 .mi-section h5 { margin: 4px 0 8px; font-size: 13px; color: var(--ac-color-text-secondary); }
 .mi-item {
