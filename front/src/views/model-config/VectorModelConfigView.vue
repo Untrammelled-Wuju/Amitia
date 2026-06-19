@@ -23,11 +23,11 @@
         </div>
         <div class="embedding-item">
           <span class="embedding-label">模型名称</span>
-          <el-input v-model="modelName" size="small" placeholder="doubao-embedding-text-240515" style="width:260px" />
+          <el-input v-model="modelName" size="small" disabled style="width:260px" />
         </div>
         <div class="embedding-item">
           <span class="embedding-label">接口地址</span>
-          <el-input v-model="baseUrl" size="small" placeholder="https://ark.cn-beijing.volces.com/api/v3" style="width:260px" />
+          <el-input v-model="baseUrl" size="small" disabled style="width:260px" />
         </div>
         <div class="embedding-item">
           <span class="embedding-label">测试连接</span>
@@ -36,7 +36,7 @@
         </div>
       </div>
       <div style="margin-top:6px;font-size:12px;color:var(--el-text-color-secondary)">
-        <el-link class="quick-link" href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-embedding-text-240515" target="_blank">
+        <el-link class="quick-link" href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-embedding-vision" target="_blank">
           前往火山引擎控制台开通向量模型并获取 API Key
         </el-link>
       </div>
@@ -55,7 +55,7 @@ import { useApi } from "../../composables/useApi"
 const { get, post, put } = useApi()
 
 const apiKey = ref("")
-const modelName = ref("doubao-embedding-text-240515")
+const modelName = ref("doubao-embedding-vision-251215")
 const baseUrl = ref("https://ark.cn-beijing.volces.com/api/v3")
 const saving = ref(false)
 const testing = ref(false)
@@ -69,7 +69,7 @@ async function fetchConfig() {
       const cfg = all[0]
       configId.value = cfg.id
       if (cfg.apiKey) apiKey.value = cfg.apiKey
-      modelName.value = cfg.modelName || "doubao-embedding-text-240515"
+      modelName.value = cfg.modelName || "doubao-embedding-vision-251215"
       baseUrl.value = cfg.baseUrl || "https://ark.cn-beijing.volces.com/api/v3"
     }
   } catch {}
@@ -79,7 +79,7 @@ async function saveEmbedding() {
   if (!apiKey.value.trim()) { ElMessage.warning("请输入API Key"); return }
   saving.value = true
   try {
-    const payload = { name: "向量模型", apiKey: apiKey.value, modelName: modelName.value, baseUrl: baseUrl.value }
+    const payload = { name: "向量模型", apiKey: apiKey.value }
     if (configId.value) {
       await put(`/api/embedding/configs/${configId.value}`, payload)
     } else {

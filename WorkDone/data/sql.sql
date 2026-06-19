@@ -164,6 +164,17 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+
+CREATE TABLE IF NOT EXISTS embedding_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    api_key TEXT DEFAULT '',
+    model_name TEXT DEFAULT 'doubao-embedding-text-240515',
+    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
+    is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

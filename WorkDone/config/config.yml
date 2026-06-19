@@ -39,6 +39,6 @@ qdrant:
       vectorDim: 2560
 
 embedding:
-  modelName: "doubao-embedding-text-240515"
+  modelName: "doubao-embedding-vision-251215"
   baseUrl: "https://ark.cn-beijing.volces.com/api/v3"
   apiKey: ""
