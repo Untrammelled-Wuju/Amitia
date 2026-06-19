@@ -143,7 +143,31 @@
           </el-form>
         </div>
 
-        <!-- Step 5: Web Chat -->
+        <!-- Step 5: Profile -->
+        <div v-if="current === 5" class="step-panel">
+          <h2>用户画像（可选）</h2>
+          <p class="step-desc">填写你的个人信息，让 AI 更好地了解你。</p>
+          <div class="profile-list">
+            <div v-for="(item, idx) in profileList" :key="idx" class="profile-row">
+              <el-select v-model="item.category" style="width:120px" size="default">
+                <el-option label="基本信息" value="basic" />
+                <el-option label="兴趣爱好" value="hobby" />
+                <el-option label="工作学习" value="work" />
+                <el-option label="生活习惯" value="lifestyle" />
+                <el-option label="社交关系" value="social" />
+                <el-option label="其他" value="other" />
+              </el-select>
+              <el-input v-model="item.attributeName" placeholder="属性名" style="width:140px" />
+              <el-input v-model="item.attributeValue" placeholder="属性值" style="flex:1" />
+              <el-button size="small" type="danger" text @click="profileList.splice(idx, 1)">删除</el-button>
+            </div>
+          </div>
+          <el-button size="small" @click="profileList.push({ category: 'basic', attributeName: '', attributeValue: '' })" style="margin-top:8px">
+            + 添加画像
+          </el-button>
+        </div>
+
+        <!-- Step 6: Web Chat -->
         <div v-if="current === 5" class="step-panel">
           <h2>启用 Web 聊天</h2>
           <p class="step-desc">通过浏览器直接与 AI 角色对话。</p>
@@ -154,18 +178,185 @@
           </div>
         </div>
 
-        <!-- Step 6: WeChat (optional) -->
-        <div v-if="current === 6" class="step-panel">
+        <!-- Step 7: WeChat (optional) -->
+        <div v-if="current === 7" class="step-panel">
           <h2>微信接入（可选）</h2>
           <p class="step-desc">通过微信桥接，在微信中与 AI 角色对话。</p>
           <div class="toggle-card">
             <div class="tc-desc">需要桌面端运行微信桥接服务。可稍后在设置中配置。</div>
             <el-switch v-model="form.wechatEnabled" />
           </div>
+          <template v-if="form.wechatEnabled">
+            <template v-if="wxConnected">
+              <el-alert type="success" :closable="false" show-icon style="margin-top:16px;margin-bottom:12px">
+                <template #title>微信已成功连接</template>
+              </el-alert>
+              <el-card shadow="never" class="section-card">
+                <template #header>
+                  <div class="card-header-row">
+                    <span class="card-header-title">连接状态</span>
+                    <el-button size="small" @click="startWxLogin" :loading="wxQrLoading">重新扫码</el-button>
+                  </div>
+                </template>
+                <div class="status-main">
+                  <div class="status-row">
+                    <div class="status-indicator ok"></div>
+                    <span class="status-label">已连接</span>
+                  </div>
+                  <div class="status-detail-grid">
+                    <div class="sd-item">
+                      <span class="sd-label">消息数</span>
+                      <span class="sd-value">{{ wxMessageCount }}</span>
+                    </div>
+                    <div class="sd-item" v-if="wxAccountId">
+                      <span class="sd-label">账号</span>
+                      <span class="sd-value">{{ wxAccountId.slice(0, 12) }}...</span>
+                    </div>
+                    <div class="sd-item">
+                      <span class="sd-label">模式</span>
+                      <span class="sd-value">OpenClaw</span>
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+              <el-alert type="warning" :closable="false" show-icon style="margin-top:12px">
+                <template #title>主动推送须知</template>
+                添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+              </el-alert>
+            </template>
+
+            <template v-if="!wxConnected">
+              <el-card shadow="never" class="section-card" style="margin-top:16px">
+                <template #header><span class="card-header-title">扫码连接</span></template>
+                <div class="login-layout">
+                  <div class="login-steps">
+                    <div class="qr-step-row">
+                      <div class="qr-step-num" :class="{ active: wxQrStep >= 0 }">1</div>
+                      <div class="qr-step-body">
+                        <span class="qr-step-title">生成二维码</span>
+                        <el-button size="small" type="primary" :loading="wxQrLoading" @click="startWxLogin" :disabled="wxQrLoading">获取二维码</el-button>
+                      </div>
+                    </div>
+                    <div class="qr-step-row">
+                      <div class="qr-step-num" :class="{ active: wxQrStep >= 1 }">2</div>
+                      <div class="qr-step-body">
+                        <span class="qr-step-title">用微信扫码</span>
+                        <span v-if="wxQrStep >= 1" class="qr-status">
+                          <el-icon class="is-loading" v-if="wxScanning"><Loading /></el-icon>
+                          {{ wxScanning ? '等待扫码中...' : '请扫描二维码' }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="qr-step-row">
+                      <div class="qr-step-num" :class="{ active: wxConnected }">3</div>
+                      <div class="qr-step-body">
+                        <span class="qr-step-title">确认连接</span>
+                        <span v-if="wxConnected" class="qr-done">
+                          <el-icon><CircleCheckFilled /></el-icon> 已连接
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="login-qr">
+                    <div class="qr-frame" v-if="wxQrCodeUrl">
+                      <img :src="wxQrCodeUrl" alt="二维码" />
+                    </div>
+                    <div class="qr-frame qr-empty" v-else>
+                      <el-icon :size="36"><Picture /></el-icon>
+                      <span>点击按钮获取二维码</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="qr-tip" v-if="wxQrCodeUrl">打开微信，扫描二维码确认连接。</div>
+              </el-card>
+              <div v-if="wxError" style="color:#f56c6c;font-size:12px;margin-top:8px">{{ wxError }}</div>
+              <el-alert type="warning" :closable="false" show-icon style="margin-top:12px">
+                <template #title>主动推送须知</template>
+                添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+              </el-alert>
+            </template>
+          </template>
         </div>
 
-        <!-- Step 7: Privacy -->
-        <div v-if="current === 7" class="step-panel">
+        <!-- Step 8: QQ (optional) -->
+        <div v-if="current === 8" class="step-panel">
+          <h2>QQ 接入（可选）</h2>
+          <p class="step-desc">通过 QQ 机器人，在 QQ 中与 AI 角色对话。</p>
+          <div class="toggle-card">
+            <div class="tc-desc">需要后端运行 QQ 桥接服务。可稍后在设置中配置。</div>
+            <el-switch v-model="form.qqEnabled" />
+          </div>
+          <template v-if="form.qqEnabled">
+            <template v-if="qqConnected">
+              <el-alert type="success" :closable="false" show-icon style="margin-top:16px;margin-bottom:12px">
+                <template #title>QQ Bot 已成功连接</template>
+              </el-alert>
+              <el-card shadow="never" class="section-card">
+                <template #header>
+                  <div class="card-header-row">
+                    <span class="card-header-title">连接状态</span>
+                    <el-button size="small" @click="connectQQ" :loading="qqConnecting">重新连接</el-button>
+                  </div>
+                </template>
+                <div class="status-main">
+                  <div class="status-row">
+                    <div class="status-indicator ok"></div>
+                    <span class="status-label">已连接</span>
+                  </div>
+                  <div class="status-detail-grid">
+                    <div class="sd-item">
+                      <span class="sd-label">Bot ID</span>
+                      <span class="sd-value">{{ qqAccountId }}</span>
+                    </div>
+                    <div class="sd-item">
+                      <span class="sd-label">协议</span>
+                      <span class="sd-value">QQBot (WebSocket)</span>
+                    </div>
+                    <div class="sd-item">
+                      <span class="sd-label">消息数</span>
+                      <span class="sd-value">{{ qqMessageCount }}</span>
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+              <el-alert type="warning" :closable="false" show-icon style="margin-top:12px">
+                <template #title>主动推送须知</template>
+                添加QQ好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+              </el-alert>
+            </template>
+
+            <template v-if="!qqConnected">
+              <el-form :model="form" label-position="top" size="default" style="margin-top:16px">
+                <el-form-item label="AppID">
+                  <el-input v-model="form.qqAppId" placeholder="QQ 机器人 AppID" />
+                </el-form-item>
+                <el-form-item label="Token">
+                  <el-input v-model="form.qqToken" placeholder="QQ 机器人 Token" type="password" show-password />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="connectQQ" :loading="qqConnecting" :disabled="!form.qqAppId || !form.qqToken">
+                    {{ qqConnecting ? '连接中...' : '连接' }}
+                  </el-button>
+                  <span v-if="qqError" style="color:#f56c6c;margin-left:8px">{{ qqError }}</span>
+                </el-form-item>
+              </el-form>
+              <div class="step-illustration" style="margin-top:12px">
+                <span>使用步骤：</span>
+                <span>1. 前往 <a href="https://q.qq.com/" target="_blank">QQ开放平台</a> 创建机器人</span>
+                <span>2. 获取 AppID 和 Token</span>
+                <span>3. 填入上方表单，点击"连接"</span>
+                <span>4. 连接成功后，在QQ中 @机器人 即可对话</span>
+              </div>
+              <el-alert type="warning" :closable="false" show-icon style="margin-top:12px">
+                <template #title>主动推送须知</template>
+                连接成功后，添加QQ好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+              </el-alert>
+            </template>
+          </template>
+        </div>
+
+        <!-- Step 9: Privacy -->
+        <div v-if="current === 9" class="step-panel">
           <h2>隐私与安全</h2>
           <p class="step-desc">了解 AI Companion 如何处理你的数据。</p>
           <div class="privacy-cards">
@@ -202,7 +393,9 @@
         <el-descriptions title="设置预览" :column="2" border size="small">
           <el-descriptions-item label="部署方式">{{ form.deployMode === 'desktop' ? '桌面本地' : '私有云' }}</el-descriptions-item>
           <el-descriptions-item label="Web 聊天">{{ form.webChatEnabled ? '已开启' : '未开启' }}</el-descriptions-item>
+          <el-descriptions-item label="用户画像">{{ profileList.filter(p=>p.attributeName).length || '未填写' }}</el-descriptions-item>
           <el-descriptions-item label="微信接入">{{ form.wechatEnabled ? '已开启' : '未开启' }}</el-descriptions-item>
+          <el-descriptions-item label="QQ 接入">{{ form.qqEnabled ? '已开启' : '未开启' }}</el-descriptions-item>
           <el-descriptions-item label="管理员">{{ form.username || '-' }}</el-descriptions-item>
           <el-descriptions-item label="API 类型">{{ form.apiType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="模型">{{ form.modelName || '-' }}</el-descriptions-item>
@@ -215,10 +408,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue"
+import { ref, reactive, onMounted, onUnmounted } from "vue"
+import { Loading, Picture, CircleCheckFilled } from "@element-plus/icons-vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
 import { useApi, setToken } from "../../ui-index"
+import axios from "axios"
 
 const router = useRouter()
 const { get, post } = useApi()
@@ -244,8 +439,10 @@ const steps = [
   { label: "账号", key: "admin" },
   { label: "模型", key: "model" },
   { label: "角色", key: "character" },
+  { label: "画像", key: "profile" },
   { label: "Web", key: "web" },
   { label: "微信", key: "wechat" },
+  { label: "QQ", key: "qq" },
   { label: "隐私", key: "privacy" },
 ]
 
@@ -263,7 +460,30 @@ const form = reactive({
   charPersonality: "温和、体贴、有耐心",
   webChatEnabled: true,
   wechatEnabled: false,
+  qqEnabled: false,
+  qqAppId: "",
+  qqToken: "",
 })
+
+
+const profileList = reactive<{ category: string; attributeName: string; attributeValue: string }[]>([])
+
+const wxQrLoading = ref(false)
+const wxQrCodeUrl = ref("")
+const wxQrStep = ref(0)
+const wxScanning = ref(false)
+const wxConnected = ref(false)
+const wxAccountId = ref("")
+const wxMessageCount = ref(0)
+const wxError = ref("")
+let wxPollTimer: ReturnType<typeof setInterval> | null = null
+
+const QQ_API = "http://127.0.0.1:8899/api/qq"
+const qqConnected = ref(false)
+const qqConnecting = ref(false)
+const qqAccountId = ref("")
+const qqMessageCount = ref(0)
+const qqError = ref("")
 
 async function detectModels() {
   detectError.value = ""
@@ -290,6 +510,90 @@ function pickModel(id: string) {
   form.modelName = id
   detectError.value = ""
   detectedModels.value = []
+}
+
+
+async function startWxLogin() {
+  wxError.value = ""
+  wxQrLoading.value = true
+  stopWxPolling()
+  try {
+    const res = await get<any>("/api/wechat/login/start")
+    const imgUrl = res?.data?.qrImageUrl || res?.qrImageUrl || res?.data?.qrCodeUrl || res?.qrCodeUrl
+    if (imgUrl) {
+      wxQrCodeUrl.value = imgUrl
+      wxQrStep.value = 1
+      wxScanning.value = true
+      startWxPolling()
+    } else {
+      wxError.value = "获取二维码失败"
+    }
+  } catch (err: any) {
+    wxError.value = err?.message || "获取二维码失败"
+  } finally {
+    wxQrLoading.value = false
+  }
+}
+
+async function refreshWxStatus() {
+  try {
+    const res = await get<any>("/api/wechat/status")
+    const data = res?.data || res
+    if (data?.status === "connected") {
+      wxConnected.value = true
+      wxScanning.value = false
+      wxQrStep.value = 3
+      wxAccountId.value = data?.accountId || ""
+      wxMessageCount.value = data?.messageCount || 0
+      stopWxPolling()
+    }
+  } catch { /* ignore */ }
+}
+
+function startWxPolling() {
+  stopWxPolling()
+  const startTime = Date.now()
+  wxPollTimer = setInterval(async () => {
+    if (Date.now() - startTime > 130000) {
+      stopWxPolling()
+      wxScanning.value = false
+      wxQrStep.value = 0
+      ElMessage.warning("扫码超时，请重新获取二维码")
+      return
+    }
+    await refreshWxStatus()
+  }, 2000)
+}
+
+function stopWxPolling() {
+  if (wxPollTimer) { clearInterval(wxPollTimer); wxPollTimer = null }
+}
+
+async function connectQQ() {
+  if (!form.qqAppId || !form.qqToken) return
+  qqError.value = ""
+  qqConnecting.value = true
+  try {
+    await axios.post(QQ_API + "/connect", {
+      appId: form.qqAppId,
+      token: form.qqToken,
+      sandbox: false,
+    })
+    setTimeout(refreshQQStatus, 3000)
+  } catch (e: any) {
+    qqError.value = e?.response?.data?.error || "连接失败，请检查AppID和Token"
+  }
+  qqConnecting.value = false
+}
+
+async function refreshQQStatus() {
+  try {
+    const res = await axios.get(QQ_API + "/status")
+    const data = res.data?.data || res.data
+    qqConnected.value = !!data?.qqOnline
+    qqAccountId.value = data?.accountId || ""
+    qqMessageCount.value = data?.messageCount || 0
+  } catch { /* ignore */ }
 }
 
 async function handleNext() {
@@ -369,10 +673,20 @@ async function handleFinish() {
     }
 
     // 3. Mark onboarding as completed
+    const validProfiles = profileList.filter(p => p.attributeName && p.attributeValue)
+    for (const p of validProfiles) {
+      await post("/api/profiles", {
+        category: p.category,
+        attributeName: p.attributeName,
+        attributeValue: p.attributeValue,
+      }).catch(() => {})
+    }
+
     await post("/api/onboarding/complete", {
       deployMode: form.deployMode === "cloud" ? "cloud-web" : "desktop-local",
       webChatEnabled: form.webChatEnabled,
       wechatEnabled: form.wechatEnabled,
+      qqEnabled: form.qqEnabled,
       modelConfig: form.apiKey ? { name: "default", apiType: form.apiType, baseUrl: form.baseUrl, apiKey: form.apiKey, modelName: form.modelName } : undefined,
       username: form.username,
       password: form.password || undefined,
@@ -384,6 +698,9 @@ async function handleFinish() {
     stepError.value = err?.message || err?.response?.data?.message || "设置过程中出现错误，请重试"
   }
 }
+onUnmounted(() => {
+  stopWxPolling()
+})
 </script>
 
 <style scoped>
@@ -584,6 +901,96 @@ async function handleFinish() {
   color: var(--ac-color-text-muted);
 }
 
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-card { margin-bottom: 12px; }
+.card-header-row { display: flex; align-items: center; justify-content: space-between; }
+.card-header-title { font-weight: 600; font-size: 13px; }
+
+.login-layout {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+@media (max-width: 560px) {
+  .login-layout { flex-direction: column-reverse; align-items: center; }
+}
+
+.login-steps { flex: 1; min-width: 0; }
+.login-qr { flex-shrink: 0; }
+
+.qr-frame {
+  width: 200px;
+  height: 200px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.qr-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.qr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.qr-tip {
+  margin-top: 14px;
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
+}
+
+.qr-step-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+.qr-step-row:last-child { border-bottom: none; }
+.qr-step-num {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+  background: #f5f7fa; color: #909399;
+  border: 2px solid #dcdfe6;
+}
+.qr-step-num.active { background: #5a9e6f; color: #fff; border-color: #5a9e6f; }
+.qr-step-body { flex: 1; display: flex; align-items: center; gap: 10px; }
+.qr-step-title { font-size: 13px; font-weight: 600; color: var(--ac-color-text); }
+.qr-status { font-size: 12px; color: #4e5969; display: flex; align-items: center; gap: 4px; }
+.qr-done { font-size: 12px; color: #5a9e6f; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+.status-main { display: flex; flex-direction: column; gap: 12px; }
+.status-row { display: flex; align-items: center; gap: 10px; }
+.status-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.status-indicator.ok { background: #5a9e6f; }
+.status-label { font-size: 16px; font-weight: 600; color: var(--ac-color-text); }
+.status-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.sd-item { padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: 4px; }
+.sd-label { font-size: 11px; color: var(--ac-color-text-muted); display: block; }
+.sd-value { font-size: 14px; font-weight: 600; color: var(--ac-color-text); }
+
 .privacy-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -666,6 +1073,10 @@ async function handleFinish() {
 
   .privacy-cards {
     grid-template-columns: 1fr;
+  }
+
+  .profile-row {
+    flex-wrap: wrap;
   }
 }
 </style>
