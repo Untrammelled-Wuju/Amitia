@@ -188,8 +188,12 @@ async function renderGraph() {
   var links = filteredLinks.value.map((l: any) => {
     return { source: extractId(l.in || l.source), target: extractId(l.out || l.target) }
   })
-  var textColor = getComputedStyle(document.documentElement).getPropertyValue("--ac-color-text").trim() || "#333"
+  var styles = getComputedStyle(document.documentElement)
+  var textColor = styles.getPropertyValue("--ac-color-text").trim() || "#333"
+  var bgColor = styles.getPropertyValue("--ac-color-bg").trim() || "#fff"
+  var lineColor = styles.getPropertyValue("--ac-color-border").trim() || "#e0e0e0"
   chartInstance.setOption({
+    backgroundColor: bgColor,
     tooltip: {
       trigger: "item",
       formatter: (params: any) => {
@@ -202,6 +206,7 @@ async function renderGraph() {
       data: nodes, links: links,
       force: { repulsion: 300, edgeLength: [120, 300] },
       label: { show: true, fontSize: 11, color: textColor },
+      lineStyle: { color: lineColor, curveness: 0.2 },
     }]
   }, true)
 }
@@ -232,7 +237,7 @@ onUnmounted(() => {
 .graph-stats { display: flex; gap: 16px; margin-bottom: 8px; font-size: 13px; color: #606266; flex-wrap: wrap; }
 .stat-type { font-weight: 500; }
 .graph-container { flex: 1; min-height: 400px; border: 1px solid #e4e7ed; border-radius: 8px; overflow: hidden; position: relative; }
-.graph-container.fullscreen { position: fixed; inset: 0; z-index: 1000; background: #fff; border: none; border-radius: 0; }
+.graph-container.fullscreen { position: fixed; inset: 0; z-index: 1000; background: var(--ac-color-bg); border: none; border-radius: 0; }
 .fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--ac-color-bg-secondary); border-bottom: 1px solid #e4e7ed; }
 .fullscreen-title { font-size: 14px; font-weight: 600; color: var(--ac-color-text-primary); }
 .fullscreen-close { font-size: 14px; color: var(--ac-color-text-primary); }
