@@ -579,11 +579,16 @@ async function connectQQ() {
       token: form.qqToken,
       sandbox: false,
     })
-    setTimeout(refreshQQStatus, 3000)
+    await new Promise(r => setTimeout(r, 3000))
+    await refreshQQStatus()
+    if (!qqConnected.value) {
+      qqError.value = "连接失败，请检查AppID和Token是否有效"
+    }
   } catch (e: any) {
     qqError.value = e?.response?.data?.error || "连接失败，请检查AppID和Token"
+  } finally {
+    qqConnecting.value = false
   }
-  qqConnecting.value = false
 }
 
 async function refreshQQStatus() {
