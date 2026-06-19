@@ -168,7 +168,7 @@
         </div>
 
         <!-- Step 6: Web Chat -->
-        <div v-if="current === 5" class="step-panel">
+        <div v-if="current === 6" class="step-panel">
           <h2>启用 Web 聊天</h2>
           <p class="step-desc">通过浏览器直接与 AI 角色对话。</p>
           <div class="toggle-card">
