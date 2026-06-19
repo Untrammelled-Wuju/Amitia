@@ -118,9 +118,16 @@ const sandbox = ref(false)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+let connectPollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopConnectPoll() {
+  if (connectPollTimer) { clearInterval(connectPollTimer); connectPollTimer = null }
+}
+
 async function doConnect() {
   if (!appId.value || !token.value) return
   connecting.value = true
+  loginStatus.value = ""
   try {
     await axios.post(QQ_API + "/connect", {
       appId: appId.value,
@@ -128,12 +135,29 @@ async function doConnect() {
       sandbox: sandbox.value,
     })
     loginStatus.value = "connecting"
-    setTimeout(refreshStatus, 3000)
+    stopConnectPoll()
+    const startTime = Date.now()
+    connectPollTimer = setInterval(async () => {
+      await refreshStatus()
+      if (qqOnline.value) {
+        stopConnectPoll()
+        connecting.value = false
+        loginStatus.value = ""
+        ElMessage.success("QQ Bot 连接成功")
+        return
+      }
+      if (Date.now() - startTime > 30000) {
+        stopConnectPoll()
+        connecting.value = false
+        loginStatus.value = ""
+        ElMessage.error("连接超时，请检查AppID和Token是否有效")
+      }
+    }, 2000)
   } catch (e: any) {
     const msg = e?.response?.data?.error || "连接失败，请检查AppID和Token"
     ElMessage.error(msg)
+    connecting.value = false
   }
-  connecting.value = false
 }
 
 async function doDisconnect() {
@@ -189,6 +213,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
+  stopConnectPoll()
 })
 </script>
 
