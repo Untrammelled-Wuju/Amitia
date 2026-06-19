@@ -665,21 +665,20 @@ async function handleNext() {
       if (!hasAdmin.value) {
         try {
           await post("/api/auth/setup", { username: form.username, password: form.password })
-          hasAdmin.value = true
         } catch (setupErr: any) {
           if (setupErr?.response?.status === 409 || setupErr?.response?.data?.code === 20006) {
-            hasAdmin.value = true
+            // admin exists, continue
           } else {
             throw setupErr
           }
         }
       }
-      // Login to get token for subsequent authenticated calls
       const loginRes = await post<any>("/api/auth/login", { username: form.username, password: form.password })
       if (loginRes?.token) {
         setToken(loginRes.token)
       }
       current.value++
+      hasAdmin.value = true
     } catch (e: any) {
       stepError.value = e?.response?.data?.message || e?.message || (hasAdmin.value ? "登录失败，请检查密码" : "创建账号失败，请重试")
     }
