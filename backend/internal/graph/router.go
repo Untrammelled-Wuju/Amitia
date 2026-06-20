@@ -3,11 +3,13 @@ package graph
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/log"
 )
 
 func RegisterGraphRouter(r *gin.RouterGroup, cfg config.SurrealConfig) {
 	client, err := NewClient(cfg)
 	if err != nil {
+		log.Warn("Graph 路由未注册: SurrealDB 连接失败:", err)
 		return
 	}
 	svc := NewService(client)

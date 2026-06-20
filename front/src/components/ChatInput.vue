@@ -55,7 +55,7 @@
         :placeholder="sending ? 'AI 回复中...' : '输入消息...'"
         :disabled="disabled || sending"
         rows="1"
-        @keydown.enter.exact="handleSend"
+        @keydown.enter.exact="handleEnterSend"
         @input="autoResize"
       />
 
@@ -118,7 +118,7 @@
           circle
           size="small"
           :disabled="disabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo)"
-          @click="handleSend"
+          @click="handleSendClick"
           title="发送 (Enter)"
         />
       </div>
@@ -135,8 +135,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch, onUnmounted } from "vue"
-import { Promotion, CloseBold, Microphone, Phone, Key, Picture, PictureFilled, VideoCamera } from "@element-plus/icons-vue"
+import { computed } from "vue"
+import { Promotion, CloseBold, Microphone, Phone, Key, Picture, VideoCamera } from "@element-plus/icons-vue"
+import { useTextInput } from "../composables/useTextInput"
+import { useVoiceInput } from "../composables/useVoiceInput"
+import { useMediaUpload } from "../composables/useMediaUpload"
 
 const props = defineProps<{
   disabled?: boolean
@@ -156,347 +159,138 @@ const emit = defineEmits<{
   removeVideo: []
 }>()
 
-const DRAFT_KEY = "webchat_draft"
-const attachedImage = ref<File | null>(null)
-const attachedImagePreview = ref<string | null>(null)
-const fileInputRef = ref<HTMLInputElement>()
-const videoInputRef = ref<HTMLInputElement>()
-const attachedVideo = ref<File | null>(null)
-const attachedVideoUrl = ref<string | null>(null)
-const uploadingVideo = ref(false)
-const text = ref(localStorage.getItem(DRAFT_KEY) || "")
-const inputRef = ref<HTMLTextAreaElement>()
-const voiceMode = ref(false)
-const holding = ref(false)
-const listening = ref(false)
-const slideZone = ref<'none' | 'text' | 'cancel'>('none')
-const touchStartY = ref(0)
-const lastTranscript = ref('')
-let recognition: any = null
-let mediaRecorder: MediaRecorder | null = null
-let audioChunks: Blob[] = []
-let onRecordingComplete: (() => void) | null = null
-let recordingStartTime = 0
+const isDisabled = () => !!props.disabled
+const isSending = () => !!props.sending
 
-function saveDraft() {
-  if (text.value.trim()) {
-    localStorage.setItem(DRAFT_KEY, text.value)
-  } else {
-    localStorage.removeItem(DRAFT_KEY)
-  }
-}
+const textInput = useTextInput(
+  emit as any,
+  isDisabled,
+  isSending,
+)
 
-function handleSend(e?: KeyboardEvent) {
+const voiceInput = useVoiceInput(
+  emit as any,
+  emit as any,
+  isDisabled,
+  isSending,
+)
+
+const mediaUpload = useMediaUpload(
+  emit as any,
+  emit as any,
+  emit as any,
+  emit as any,
+)
+
+const {
+  text, inputRef, handleSend, sendWithImage, sendWithVideo,
+  autoResize, focus, setText, clear: clearText, saveDraft,
+} = textInput
+
+const {
+  voiceMode, holding, listening, slideZone,
+  startHold, endHold, onTouchMove,
+} = voiceInput
+
+const {
+  attachedImage, attachedImagePreview, fileInputRef, videoInputRef,
+  attachedVideo, attachedVideoUrl, uploadingVideo,
+  handleImageSelect, clearImage, handleVideoSelect, clearVideo,
+} = mediaUpload
+
+function handleEnterSend(e: KeyboardEvent) {
   if (attachedVideo.value) {
     if (uploadingVideo.value) return
     if (attachedVideoUrl.value) {
-      const trimmed = text.value.trim() || "[视频]"
-      emit("send", trimmed, undefined, attachedVideoUrl.value)
-      text.value = ""
-      localStorage.removeItem(DRAFT_KEY)
+      sendWithVideo(text.value.trim() || "[视频]", attachedVideoUrl.value)
       clearVideo()
-      nextTick(() => autoResize())
+      return
     }
     return
   }
   if (attachedImage.value) {
     if (attachedImagePreview.value) {
-      const trimmed = text.value.trim()
-      emit("send", trimmed, attachedImagePreview.value)
-      text.value = ""
-      localStorage.removeItem(DRAFT_KEY)
+      sendWithImage(text.value.trim(), attachedImagePreview.value)
       clearImage()
-      nextTick(() => autoResize())
     } else {
-      fileToBase64(attachedImage.value).then(base64 => {
-        const trimmed = text.value.trim()
-        emit("send", trimmed, base64)
-        text.value = ""
-        localStorage.removeItem(DRAFT_KEY)
+      mediaUpload.fileToBase64(attachedImage.value).then((base64) => {
+        sendWithImage(text.value.trim(), base64)
         clearImage()
-        nextTick(() => autoResize())
       })
     }
     return
   }
-  if (e) e.preventDefault()
-  const trimmed = text.value.trim()
-  if (!trimmed || props.disabled || props.sending) return
-  emit("send", trimmed)
-  text.value = ""; localStorage.removeItem(DRAFT_KEY)
-  nextTick(() => autoResize())
+  handleSend(e)
 }
 
-function autoResize() {
-  const el = inputRef.value
-  if (!el) return
-  el.style.height = "auto"
-  el.style.height = Math.min(el.scrollHeight, 120) + "px"
-}
-
-watch(text, () => { saveDraft() }, { flush: 'post' })
-
-function focus() {
-  inputRef.value?.focus()
-}
-
-const SLIDE_TEXT_THRESHOLD = 60
-const SLIDE_CANCEL_THRESHOLD = 120
-const VOICE_END_DELAY = 400
-
-function onGlobalMouseUp() {
-  document.removeEventListener("mouseup", onGlobalMouseUp)
-  endHold()
-}
-
-function startHold(e: TouchEvent | MouseEvent) {
-  if (props.disabled || props.sending) return
-  holding.value = true
-  slideZone.value = 'none'
-  lastTranscript.value = ''
-  if ('touches' in e) {
-    touchStartY.value = e.touches[0].clientY
-  } else {
-    touchStartY.value = e.clientY
-  }
-  startRecording()
-  startListening()
-  document.addEventListener("mouseup", onGlobalMouseUp)
-}
-
-function onTouchMove(e: TouchEvent) {
-  if (!holding.value) return
-  const currentY = e.touches[0].clientY
-  const deltaY = touchStartY.value - currentY
-  if (deltaY > SLIDE_CANCEL_THRESHOLD) {
-    slideZone.value = 'cancel'
-  } else if (deltaY > SLIDE_TEXT_THRESHOLD) {
-    slideZone.value = 'text'
-  } else {
-    slideZone.value = 'none'
-  }
-}
-
-function endHold() {
-  if (!holding.value) return
-  const zone = slideZone.value
-  holding.value = false
-  slideZone.value = 'none'
-
-  setTimeout(() => {
-    document.removeEventListener("mouseup", onGlobalMouseUp)
-    stopListening()
-
-    if (zone === 'cancel') {
-      stopRecording()
-      audioChunks = []
+function handleSendClick() {
+  if (attachedVideo.value) {
+    if (uploadingVideo.value) return
+    if (attachedVideoUrl.value) {
+      sendWithVideo(text.value.trim() || "[视频]", attachedVideoUrl.value)
+      clearVideo()
       return
     }
-
-    if (zone === 'text') {
-      stopRecording()
-      audioChunks = []
-      if (lastTranscript.value) {
-        text.value = text.value ? text.value + lastTranscript.value : lastTranscript.value
-        saveDraft()
-      }
-      voiceMode.value = false
-      return
-    }
-
-    onRecordingComplete = () => {
-      if (audioChunks.length > 0) {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' })
-        const transcript = lastTranscript.value || undefined
-        audioChunks = []
-        const duration = Math.round((Date.now() - recordingStartTime) / 1000)
-        emit("voiceAudio", blob, transcript, duration)
-      }
-      voiceMode.value = false
-    }
-    stopRecording()
-  }, VOICE_END_DELAY)
-}
-
-function startRecording() {
-  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-    recordingStartTime = Date.now()
-    audioChunks = []
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
-    mediaRecorder = new MediaRecorder(stream, { mimeType })
-    mediaRecorder.ondataavailable = (e: BlobEvent) => {
-      if (e.data.size > 0) audioChunks.push(e.data)
-    }
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop())
-      if (onRecordingComplete) {
-        onRecordingComplete()
-        onRecordingComplete = null
-      }
-    }
-    mediaRecorder.start()
-  }).catch(() => {
-    holding.value = false
-  })
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop()
-  }
-  mediaRecorder = null
-}
-
-function startListening() {
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  if (!SpeechRecognition) {
     return
   }
-  if (recognition) {
-    try { recognition.stop() } catch {}
-    recognition = null
-  }
-  recognition = new SpeechRecognition()
-  recognition.lang = "zh-CN"
-  recognition.interimResults = true
-  recognition.maxAlternatives = 1
-  recognition.continuous = false
-
-  recognition.onstart = () => { listening.value = true }
-  recognition.onresult = (event: any) => {
-    let finalTranscript = ''
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript
-      }
+  if (attachedImage.value) {
+    if (attachedImagePreview.value) {
+      sendWithImage(text.value.trim(), attachedImagePreview.value)
+      clearImage()
+    } else {
+      mediaUpload.fileToBase64(attachedImage.value).then((base64) => {
+        sendWithImage(text.value.trim(), base64)
+        clearImage()
+      })
     }
-    if (finalTranscript) {
-      lastTranscript.value = finalTranscript
-    } else if (event.results.length > 0) {
-      lastTranscript.value = event.results[event.results.length - 1][0].transcript
-    }
-  }
-  recognition.onerror = () => {
-    listening.value = false
-  }
-  recognition.onend = () => { listening.value = false }
-
-  try {
-    recognition.start()
-  } catch {
-    listening.value = false
-  }
-}
-
-function stopListening() {
-  if (recognition) {
-    try { recognition.stop() } catch {}
-    recognition = null
-  }
-  listening.value = false
-}
-
-onUnmounted(() => {
-  stopListening()
-  stopRecording()
-})
-
-function handleImageSelect(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
     return
   }
-  attachedImage.value = file
-  fileToBase64(file).then(dataUrl => {
-    attachedImagePreview.value = dataUrl
-    emit('image', file, dataUrl)
-  })
-  input.value = ''
+  handleSend()
 }
 
-function clearImage() {
-  attachedImage.value = null
-  attachedImagePreview.value = null
-  emit('removeImage')
-}
-
-function handleVideoSelect(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('video/')) return
-  attachedVideo.value = file
-  uploadingVideo.value = true
-  const formData = new FormData()
-  formData.append('video', file)
-  const token = localStorage.getItem('ai-companion-token') || ''
-  fetch('/api/video/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: formData })
-    .then(res => res.json())
-    .then(data => {
-      const videoUrl = data?.data?.videoUrl || data?.videoUrl || ''
-      if (videoUrl) {
-        attachedVideoUrl.value = videoUrl
-        emit('video', file, videoUrl)
-      }
-    })
-    .catch(() => {})
-    .finally(() => { uploadingVideo.value = false })
-  input.value = ''
-}
-
-function clearVideo() {
-  attachedVideo.value = null
-  attachedVideoUrl.value = null
-  uploadingVideo.value = false
-  emit('removeVideo')
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error('文件读取失败'))
-    reader.readAsDataURL(file)
-  })
-}
-
-defineExpose({ focus, setText: (t: string) => { text.value = t; saveDraft(); nextTick(() => autoResize()) }, clear: () => { text.value = ""; localStorage.removeItem(DRAFT_KEY) } })
+defineExpose({ focus, setText, clear: clearText })
 </script>
 
 <style scoped>
 .chat-input-bar {
-  padding: 10px 14px;
-  flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--ac-color-bg-primary);
+  border-top: 1px solid var(--ac-color-border-light);
 }
 
 .input-wrapper {
   flex: 1;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--ac-color-bg-secondary);
-  border-radius: var(--ac-radius-lg);
-  padding: 6px 6px 6px 6px;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 6px 8px 6px 10px;
+  background: var(--ac-color-surface);
   border: 1px solid var(--ac-color-border);
-  transition: border-color var(--ac-transition-fast);
-  box-shadow: var(--ac-shadow-sm);
-  min-height: 44px;
-}
-
-.input-wrapper:focus-within {
-  border-color: var(--ac-color-primary);
+  border-radius: var(--ac-radius-md);
+  min-height: 36px;
 }
 
 .input-left-actions {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding-left: 4px;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.image-btn.has-image {
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
+}
+
+.video-btn.has-video {
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
 }
 
 .mode-toggle-btn {
@@ -702,10 +496,7 @@ defineExpose({ focus, setText: (t: string) => { text.value = t; saveDraft(); nex
 .upload-status.ready {
   color: var(--ac-color-success);
 }
-</style>
 
-
-/* ======== Image preview ======== */
 .image-preview-bar {
   display: flex;
   align-items: center;
@@ -750,13 +541,6 @@ defineExpose({ focus, setText: (t: string) => { text.value = t; saveDraft(); nex
   border: 1px solid var(--ac-color-border-light);
   border-radius: var(--ac-radius-sm);
 }
-.video-btn.has-video {
-  background: var(--ac-color-primary-bg);
-  color: var(--ac-color-primary);
-  border-color: var(--ac-color-primary);
-}
-.image-btn.has-image {
-  background: var(--ac-color-primary-bg);
-  color: var(--ac-color-primary);
-  border-color: var(--ac-color-primary);
-}
+</style>
+
+
