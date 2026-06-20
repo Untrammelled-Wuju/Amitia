@@ -66,14 +66,17 @@ onMounted(async () => {
 
 <style scoped>
 .fa-panel {
+  position: absolute;
+  right: 16px;
+  top: 52px;
+  z-index: 19;
   background: var(--ac-color-surface, #fff);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   overflow-y: auto;
 }
 .profile-summary-panel {
-  position: fixed; right: 16px; top: 80px; width: 280px; max-height: 60vh;
-  z-index: 900;
+  width: 280px; max-height: 60vh;
 }
 .profile-panel-header {
   display: flex; justify-content: space-between; align-items: center;
