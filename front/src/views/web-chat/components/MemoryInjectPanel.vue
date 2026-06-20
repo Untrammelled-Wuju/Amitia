@@ -87,3 +87,37 @@ onMounted(async () => {
   loading.value = false
 })
 </script>
+
+<style scoped>
+.fa-panel {
+  position: absolute;
+  right: 16px;
+  top: 52px;
+  z-index: 19;
+  background: var(--ac-color-surface, #fff);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow-y: auto;
+}
+.mem-inject-panel {
+  width: 320px; max-height: 50vh;
+}
+.mi-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--ac-color-border-light);
+}
+.mi-header h4 { margin: 0; font-size: 15px; }
+.mi-close-btn { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--ac-color-text-muted); }
+.mi-loading { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
+.mi-empty { padding: 24px; text-align: center; color: var(--ac-color-text-muted); font-size: 13px; }
+.mi-section { padding: 8px 16px; border-bottom: 1px solid var(--ac-color-border-light); }
+.mi-section h5 { margin: 4px 0 8px; font-size: 13px; color: var(--ac-color-text-secondary); }
+.mi-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  font-size: 13px; border-bottom: 1px solid var(--ac-color-border-light); flex-wrap: wrap;
+}
+.mi-layer { color: var(--ac-color-text-secondary); font-size: 12px; }
+.mi-score { color: var(--ac-color-text-muted); font-size: 11px; }
+.mi-content { flex: 1 1 100%; color: var(--ac-color-text); font-size: 12px; margin-top: 4px; }
+.mi-profile-card { padding: 8px 0; border-bottom: 1px solid var(--ac-color-border-light); font-size: 12px; }
+</style>
