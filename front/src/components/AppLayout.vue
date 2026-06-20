@@ -8,7 +8,7 @@
       :qq-status="health.qq"
       :model-status="health.model"
       :character-name="currentCharName"
-      :theme="theme.preset"
+      :theme="theme.preset"`n      
       :username="authUsername"
       @toggle-theme="toggleTheme"
       @logout="handleLogout"

@@ -1,7 +1,7 @@
 import { ref, watch } from "vue"
 import { apiClient } from "./useApi"
 
-export type ThemePreset = "system" | "dark" | "calm-blue" | "warm-gray"
+export type ThemePreset = "system" | "dark" | "light" | "calm-blue" | "warm-gray" | "mint" | "navy"
 
 export interface ThemeState {
   preset: ThemePreset
@@ -12,13 +12,14 @@ export interface ThemeState {
 const STORAGE_KEY = "ai-companion-theme"
 
 const state = ref<ThemeState>({
-  preset: (localStorage.getItem(STORAGE_KEY) as ThemePreset) || "dark",
+  preset: (localStorage.getItem(STORAGE_KEY) as ThemePreset) || "system",
   accentColor: "",
   customTheme: null,
 })
 
 const resolvedMode = ref<"light" | "dark">("light")
 const themeLoaded = ref(false)
+const preferredLight = ref<ThemePreset>("light")
 
 // 立即应用已保存的主题，避免刷新闪烁
 applyTheme(state.value.preset)
@@ -26,8 +27,11 @@ applyTheme(state.value.preset)
 export const THEME_PRESETS: { id: ThemePreset; name: string; description: string }[] = [
   { id: "system", name: "跟随系统", description: "自动跟随操作系统主题设置" },
   { id: "dark", name: "深色", description: "护眼深色模式" },
+  { id: "light", name: "亮色", description: "明亮浅色模式" },
   { id: "calm-blue", name: "静谧蓝", description: "克制的蓝色中性风格" },
   { id: "warm-gray", name: "暖灰", description: "温暖中性灰色调" },
+  { id: "mint", name: "薄荷绿", description: "清新薄荷浅色风格" },
+  { id: "navy", name: "深邃蓝", description: "深海暗色护眼风格" },
 ]
 
 function getSystemPreference(): "light" | "dark" {
@@ -129,6 +133,9 @@ export function useTheme() {
   function setPreset(preset: ThemePreset) {
     state.value.preset = preset
     saveToServer(preset, state.value.accentColor)
+    if (preset === "light" || preset === "calm-blue" || preset === "warm-gray" || preset === "mint") {
+      preferredLight.value = preset
+    }
   }
 
   function setAccentColor(color: string) {
@@ -139,8 +146,8 @@ export function useTheme() {
   }
 
   function toggleLightDark() {
-    if (resolvedMode.value === "dark") {
-      setPreset("dark")
+    if (state.value.preset === "dark") {
+      setPreset(preferredLight.value)
     } else {
       setPreset("dark")
     }
@@ -154,6 +161,7 @@ export function useTheme() {
     setPreset,
     setAccentColor,
     toggleLightDark,
+    preferredLight,
     loadFromServer,
   }
 }

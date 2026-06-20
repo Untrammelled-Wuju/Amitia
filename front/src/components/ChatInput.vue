@@ -169,17 +169,17 @@ const textInput = useTextInput(
 )
 
 const voiceInput = useVoiceInput(
-  emit as any,
-  emit as any,
+  (text: string) => emit("voiceText", text),
+  (blob: Blob, transcript?: string, duration?: number) => emit("voiceAudio", blob, transcript, duration),
   isDisabled,
   isSending,
 )
 
 const mediaUpload = useMediaUpload(
-  emit as any,
-  emit as any,
-  emit as any,
-  emit as any,
+  (file: File, base64: string) => emit("image", file, base64),
+  (file: File, videoUrl: string) => emit("video", file, videoUrl),
+  () => emit("removeImage"),
+  () => emit("removeVideo"),
 )
 
 const {
@@ -262,9 +262,9 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 .input-wrapper {
-  flex: 1;
   display: flex;
-  align-items: flex-end;
+  flex: 1;
+  align-items: center;
   gap: 4px;
   padding: 6px 8px 6px 10px;
   background: var(--ac-color-surface);
@@ -455,6 +455,7 @@ defineExpose({ focus, setText, clear: clearText })
 
 .call-btn-outer {
   flex-shrink: 0;
+  align-self: center;
   width: 40px;
   height: 40px;
   font-size: 18px;

@@ -395,22 +395,29 @@ func (s *service) GetTheme() map[string]interface{} {
 	if theme == "" { theme = "dark" }
 	mode := s.getAppSetting("theme_mode")
 	if mode == "" { mode = "dark" }
-	return map[string]interface{}{"theme": theme, "mode": mode}
+	return map[string]interface{}{"preset": theme, "theme": theme, "mode": mode, "accentColor": s.getAppSetting("theme_accent_color")}
 }
 
 func (s *service) UpdateTheme(body map[string]interface{}) map[string]interface{} {
+	if v, ok := body["preset"].(string); ok { s.setAppSetting("theme", v) }
 	if v, ok := body["theme"].(string); ok { s.setAppSetting("theme", v) }
+	if v, ok := body["accentColor"].(string); ok { s.setAppSetting("theme_accent_color", v) }
 	if v, ok := body["mode"].(string); ok { s.setAppSetting("theme_mode", v) }
 	return s.GetTheme()
 }
 
 func (s *service) GetThemePresets() map[string]interface{} {
 	return map[string]interface{}{"presets": []interface{}{
-		map[string]interface{}{"id": "dark", "name": "Dark Mode", "colors": map[string]interface{}{}},
-		map[string]interface{}{"id": "warm", "name": "Warm Tone", "colors": map[string]interface{}{}},
-		map[string]interface{}{"id": "soft-green", "name": "Soft Green", "colors": map[string]interface{}{}},
+		map[string]interface{}{"id": "system", "name": "跟随系统", "description": "自动跟随操作系统主题设置"},
+		map[string]interface{}{"id": "dark", "name": "深色", "description": "护眼深色模式"},
+		map[string]interface{}{"id": "light", "name": "亮色", "description": "明亮浅色模式"},
+		map[string]interface{}{"id": "calm-blue", "name": "静谧蓝", "description": "克制的蓝色中性风格"},
+		map[string]interface{}{"id": "warm-gray", "name": "暖灰", "description": "温暖中性灰色调"},
+		map[string]interface{}{"id": "mint", "name": "薄荷绿", "description": "清新薄荷浅色风格"},
+		map[string]interface{}{"id": "navy", "name": "深邃蓝", "description": "深海暗色护眼风格"},
 	}}
 }
+
 
 func (s *service) CheckSafety(text string) map[string]interface{} {
 	for _, kw := range []string{"suicide", "self-harm", "violence"} {

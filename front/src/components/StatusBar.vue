@@ -96,9 +96,11 @@ const characterLabel = computed(() =>
   props.characterName || "未选角色"
 )
 
-const themeIcon = computed(() =>
-  props.theme === "dark" ? Sunny : Moon
-)
+const themeIcon = computed(() => {
+  if (props.theme === "dark") return Sunny
+  return Moon
+})
+
 </script>
 
 <style scoped>

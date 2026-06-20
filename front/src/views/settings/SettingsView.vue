@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="settings-view">
     <div class="page-header"><h2>系统设置</h2></div>
     
@@ -30,6 +30,26 @@
       </el-form>
     </el-card>
 
+    <!-- 主题设置 -->
+    <el-card class="settings-card" style="margin-top: 16px">
+      <template #header><span>主题设置</span></template>
+      <div class="theme-preset-list">
+        <div
+          v-for="p in presets"
+          :key="p.id"
+          class="theme-preset-item"
+          :class="{ active: themeState.preset === p.id }"
+          @click="setPreset(p.id)"
+        >
+          <div class="theme-preset-preview" :class="'preview-' + p.id"></div>
+          <div class="theme-preset-info">
+            <span class="theme-preset-name">{{ p.name }}</span>
+            <span class="theme-preset-desc">{{ p.description }}</span>
+          </div>
+          <el-icon v-if="themeState.preset === p.id" color="var(--ac-color-primary)"><Check /></el-icon>
+        </div>
+      </div>
+    </el-card>
 
 
     <!-- 回复时机判断 -->
@@ -79,11 +99,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue"
+import { useTheme } from '../../composables/useTheme'
 import axios from "axios"
 import { ElMessage } from "element-plus"
+import { Check } from '@element-plus/icons-vue'
 
 const API = "http://127.0.0.1:8899"
 const savingPrompt = ref(false)
+
+const { state: themeState, setPreset, presets } = useTheme()
 
 const DEFAULT_STYLE_PROMPT = "你和用户是比较熟悉的长期对话关系，不需要像客服或正式助手一样说话。\n回复要自然、有反应、有一点态度，可以适当使用「嗯？、喔、奥奥、ok、好、行、确实、懂了」等语气词。\n用户随口聊，你就自然接话；用户认真问问题，你再认真回答。\n不要客服腔，不要过度正式，不要每次都完整总结，也不要动不动分点讲大道理。\n回复格式要像微信连续消息：\n用户发一句话时，你可以回复 1 到 4 句短句。\n不要写成一整段长文。\n整体目标是：像一个熟悉用户、说话自然、有判断力的人。该短就短，该认真就认真，不端着，也不表演过头。\n回复中不要使用任何emoji表情符号。\n不能使用markdown格式。"
 
@@ -137,4 +161,85 @@ async function loadTimingOverview() {
 .page-header h2 { font-size: 18px; font-weight: 600; }
 .settings-card { margin-bottom: 16px; }
 .form-tip { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; }
+
+/* 主题预设卡片 */
+.theme-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.theme-preset-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 2px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--ac-color-surface);
+}
+
+.theme-preset-item:hover {
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-surface-hover);
+}
+
+.theme-preset-item.active {
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-primary-bg);
+}
+
+.theme-preset-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--ac-color-border);
+}
+
+.preview-light {
+  background: linear-gradient(135deg, #F8FAF4 0%, #7DAA84 100%);
+}
+.preview-dark {
+  background: #1A1B1E;
+}
+
+.preview-system {
+  background: linear-gradient(135deg, #F8FAF4 50%, #1A1B1E 50%);
+}
+
+.preview-calm-blue {
+  background: linear-gradient(135deg, #3B82F6 0%, #DBEAFE 100%);
+}
+
+.preview-warm-gray {
+  background: linear-gradient(135deg, #8A8178 0%, #EDE8E2 100%);
+}
+
+.preview-mint {
+  background: linear-gradient(135deg, #089B8A 0%, #F6FDF9 100%);
+}
+
+.preview-navy {
+  background: linear-gradient(135deg, #0F172A 0%, #60A5FA 100%);
+}
+.theme-preset-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-preset-name {
+  font-size: var(--ac-font-size-sm);
+  font-weight: 500;
+  color: var(--ac-color-text);
+}
+
+.theme-preset-desc {
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-muted);
+}
 </style>

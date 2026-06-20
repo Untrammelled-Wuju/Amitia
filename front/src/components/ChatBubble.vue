@@ -93,7 +93,8 @@ watch(
 const charInitial = computed(() => (props.charName || "AI").charAt(0))
 
 const renderedContent = computed(() => {
-  const text = props.message.content || ""
+  const raw = (props.message as any).content
+  const text = typeof raw === "string" ? raw : ""
   const msg = props.message as any
   if (text === "[图片]" && msg.imageUrl) return ""
   if (text === "[视频]" && msg.videoUrl) return ""
@@ -103,7 +104,6 @@ const renderedContent = computed(() => {
     .replace(/>/g, "&gt;")
     .replace(/\n/g, "<br>")
 })
-
 const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const longPressTriggered = ref(false)
 const touchStartY = ref(0)

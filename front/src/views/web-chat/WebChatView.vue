@@ -62,10 +62,19 @@
       @scroll-to-bottom="scrollToBottom(true)"
     />
     </div>
+    <RealtimeCallWidget
+      v-if="callActive"
+      :visible="callActive"
+      :api-key="ttsApiKey"
+      :voice-type="ttsVoiceType"
+      :resource-id="ttsResourceId"
+      :conversation-id="convId"
+    />
     <ChatInput
       ref="inputRef"
       :disabled="modelMissing"
       :sending="sending"
+      :call-active="callActive"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -74,6 +83,7 @@
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
+      @toggleCall="handleToggleCall"
     />
 
     <ConversationDrawer
@@ -123,10 +133,39 @@ import ChatInput from "../../components/ChatInput.vue"
 import ConversationDrawer from "../../components/ConversationDrawer.vue"
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue"
 import MemoryPanel from "../../components/MemoryPanel.vue"
+import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue"
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue"
 
 const router = useRouter()
+const callActive = ref(false)
+const ttsApiKey = ref("")
+const ttsVoiceType = ref("")
+const ttsResourceId = ref("")
+
+async function fetchTtsConfig() {
+  try {
+    const token = localStorage.getItem("ai-companion-token") || ""
+    const res = await fetch("/api/tts/configs", { headers: { Authorization: "Bearer " + token } })
+    const data = await res.json()
+    const list = Array.isArray(data?.data) ? data.data : (data?.data?.items || data?.data?.configs || [])
+    const active = list.find((c: any) => c.isActive || c.is_active)
+    if (active) {
+      ttsApiKey.value = active.apiKey || ""
+      ttsVoiceType.value = active.voiceType || ""
+      ttsResourceId.value = active.resourceId || ""
+    }
+  } catch {}
+}
+
+async function handleToggleCall() {
+  await fetchTtsConfig()
+  if (!ttsApiKey.value) {
+    router.push("/model/voice")
+    return
+  }
+  callActive.value = !callActive.value
+}
 const { get } = useApi()
 const { cachedGet, invalidateCache } = useCachedApi()
 const currentCharName = inject<any>("currentCharName", null)

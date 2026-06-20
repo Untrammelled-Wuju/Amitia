@@ -66,7 +66,7 @@ export function useWebChatSend(
       const audioUrl = data?.data?.audioUrl || data?.audioUrl || ""
       if (!audioUrl) throw new Error("No audioUrl returned")
       pendingAudioUrl.value = audioUrl
-      const sendText = transcript || "[语音]"
+      const sendText = typeof transcript === "string" && transcript.trim() ? transcript : "[语音]"
       await doActualSend(sendText, audioUrl, true)
     } catch (err: any) {
       console.error("[Voice] upload failed:", err)
@@ -74,8 +74,8 @@ export function useWebChatSend(
     }
   }
 
-  function handleVoiceText(text: string) {
-    if (text) {
+  function handleVoiceText(text: unknown) {
+    if (typeof text === "string" && text.trim()) {
       inputRef.value?.setText?.(text)
     }
   }
@@ -106,7 +106,8 @@ export function useWebChatSend(
     doActualSend(text)
   }
 
-  async function doActualSend(text: string, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string) {
+  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string) {
+    const safeText = typeof text === "string" ? text : ""
     if (sending.value) return
     disconnectSSE()
     const userMsgLocalId = "user-" + Date.now()
@@ -119,8 +120,8 @@ export function useWebChatSend(
     const hasImage = !!(imgUrl)
     const hasVoice = !!(finalAudioUrl)
     const hasVideo = !!(finalVideoUrl)
-    const displayContent = (hasVoice && !text.trim()) ? "[语音]" : (hasVideo && !text.trim()) ? "" : (hasImage && text === "[图片]") ? "" : text
-    const sendContent = (hasVoice && !text.trim()) ? "[语音]" : (hasVideo && !text.trim()) ? "[视频]" : (hasImage && !text.trim()) ? "[图片]" : text
+    const displayContent = (hasVoice && !safeText.trim()) ? "[语音]" : (hasVideo && !safeText.trim()) ? "" : (hasImage && safeText === "[图片]") ? "" : safeText
+    const sendContent = (hasVoice && !safeText.trim()) ? "[语音]" : (hasVideo && !safeText.trim()) ? "[视频]" : (hasImage && !safeText.trim()) ? "[图片]" : safeText
     messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, videoUrl: finalVideoUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
     scrollToBottom(true)
     sending.value = true

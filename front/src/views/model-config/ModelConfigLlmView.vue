@@ -71,7 +71,7 @@ const {
   testingId, testResultVisible, testResult,
   scenarioRoutes, routeAssignments,
   form, rules,
-  showDialog, testConfig, setActive, delConfig,
+  showDialog, saveConfig, testConfig, setActive, delConfig,
   onProviderChange, detectModels,
   assignRoute,
 } = modelConfig

@@ -23,7 +23,7 @@ export function useModelConfig() {
   const testingId = ref<number | null>(null)
   const testResultVisible = ref(false)
   const testResult = ref<any>(null)
-  const dialogdialogFormRef = ref<FormInstance | null>(null)
+  const dialogFormRef = ref<FormInstance | null>(null)
   const scenarioRoutes = ref<any[]>([])
   const routeAssignments = ref<Record<string, number | null>>({})
 
@@ -150,11 +150,11 @@ export function useModelConfig() {
     }
     onProviderChange(form.apiType)
     dialogVisible.value = true
-    setTimeout(() => dialogdialogFormRef.value?.clearValidate(), 0)
+    setTimeout(() => dialogFormRef.value?.clearValidate(), 0)
   }
 
   async function saveConfig() {
-    const valid = await dialogdialogFormRef.value?.validate().catch(() => false)
+    const valid = await dialogFormRef.value?.validate().catch(() => false)
     if (!valid) return
 
     saving.value = true
