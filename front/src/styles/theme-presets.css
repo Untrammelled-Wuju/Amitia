@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    Theme Presets - CSS Variable Definitions
    Data attribute driven: html[data-theme="preset-name"]
    ============================================================ */
@@ -121,6 +121,64 @@ html[data-theme="warm-gray"] {
   --tp-shadow-lg: 0 4px 16px rgba(0,0,0,0.09);
 }
 
+
+/* === Mint === */
+html[data-theme="mint"] {
+  --tp-primary: #089B8A;
+  --tp-primary-soft: #CCFBF1;
+  --tp-primary-bg: rgba(8, 155, 138, 0.08);
+  --tp-primary-border: rgba(8, 155, 138, 0.2);
+
+  --tp-bg: #F6FDF9;
+  --tp-bg-secondary: #ECF8F3;
+  --tp-surface: #FFFFFF;
+  --tp-surface-hover: #F2FBF7;
+  --tp-border: #D4EDE5;
+  --tp-border-light: #E8F5F0;
+
+  --tp-text: #134E4A;
+  --tp-text-secondary: #5B8A84;
+  --tp-text-muted: #94B5B1;
+  --tp-text-placeholder: #B8D2CE;
+
+  --tp-success: #089B8A;
+  --tp-warning: #D97706;
+  --tp-danger: #DC6B6B;
+  --tp-info: #089B8A;
+
+  --tp-shadow-sm: 0 1px 3px rgba(19, 78, 74, 0.04);
+  --tp-shadow-md: 0 2px 8px rgba(19, 78, 74, 0.06);
+  --tp-shadow-lg: 0 4px 16px rgba(19, 78, 74, 0.08);
+}
+
+/* === Navy Dark === */
+html[data-theme="navy"] {
+  --tp-primary: #60A5FA;
+  --tp-primary-soft: #1E3A5F;
+  --tp-primary-bg: rgba(96, 165, 250, 0.12);
+  --tp-primary-border: rgba(96, 165, 250, 0.25);
+
+  --tp-bg: #0F172A;
+  --tp-bg-secondary: #1A2332;
+  --tp-surface: #1E293B;
+  --tp-surface-hover: #243447;
+  --tp-border: #334155;
+  --tp-border-light: #2D3A4A;
+
+  --tp-text: #E2E8F0;
+  --tp-text-secondary: #94A3B8;
+  --tp-text-muted: #64748B;
+  --tp-text-placeholder: #475569;
+
+  --tp-success: #34D399;
+  --tp-warning: #FBBF24;
+  --tp-danger: #F87171;
+  --tp-info: #60A5FA;
+
+  --tp-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --tp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --tp-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
 /* === Element Plus variable bridge === */
 html[data-theme] {
   --el-color-primary: var(--tp-primary);

@@ -83,14 +83,20 @@ export function useVoiceInput(
       }
 
       onRecordingComplete = () => {
-        if (audioChunks.length > 0) {
-          const blob = new Blob(audioChunks, { type: "audio/webm" })
-          const transcript = lastTranscript.value || undefined
+        try {
+          if (audioChunks.length > 0) {
+            const blob = new Blob(audioChunks, { type: "audio/webm" })
+            const transcript = lastTranscript.value || undefined
+            audioChunks = []
+            const duration = Math.round((Date.now() - recordingStartTime) / 1000)
+            try { onVoiceAudio(blob, transcript, duration) } catch (e) { console.error("[Voice] emit error:", e) }
+          }
+          voiceMode.value = false
+        } catch (e) {
+          console.error("[Voice] onRecordingComplete error:", e)
           audioChunks = []
-          const duration = Math.round((Date.now() - recordingStartTime) / 1000)
-          onVoiceAudio(blob, transcript, duration)
+          voiceMode.value = false
         }
-        voiceMode.value = false
       }
       stopRecording()
     }, VOICE_END_DELAY)
@@ -99,7 +105,7 @@ export function useVoiceInput(
   function startRecording() {
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
       recordingStartTime = Date.now()
-      audioChunks = []
+
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : "audio/webm"

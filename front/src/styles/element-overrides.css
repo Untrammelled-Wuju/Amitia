@@ -1,20 +1,20 @@
-﻿/* ============================================================
+/* ============================================================
    Element Plus - Warm Green Theme Overrides
    ============================================================ */
 
 :root {
-  --el-color-primary: #7DAA84;
-  --el-color-primary-light-3: #9BC1A1;
-  --el-color-primary-light-5: #B5D2B9;
-  --el-color-primary-light-7: #D0E3D2;
-  --el-color-primary-light-8: #DDEEDD;
-  --el-color-primary-light-9: #EEF7EE;
-  --el-color-primary-dark-2: #6C9873;
+  --el-color-primary: var(--ac-color-primary);
+  --el-color-primary-light-3: var(--ac-color-primary-light);
+  --el-color-primary-light-5: var(--ac-color-primary-bg);
+  --el-color-primary-light-7: var(--ac-color-primary-bg);
+  --el-color-primary-light-8: var(--ac-color-primary-bg);
+  --el-color-primary-light-9: var(--ac-color-primary-bg);
+  --el-color-primary-dark-2: var(--ac-color-primary-dark);
 
-  --el-color-success: #7DAA84;
-  --el-color-warning: #D9A441;
-  --el-color-danger: #D97878;
-  --el-color-info: #7DAA84;
+  --el-color-success: var(--ac-color-primary);
+  --el-color-warning: var(--ac-color-warning);
+  --el-color-danger: var(--ac-color-danger);
+  --el-color-info: var(--ac-color-primary);
 
   --el-border-color: #DDE6D8;
   --el-border-color-light: #EEF2EA;
@@ -31,31 +31,31 @@
 
 /* ---- Primary button ---- */
 .el-button--primary {
-  --el-button-bg-color: #7DAA84;
-  --el-button-border-color: #7DAA84;
-  --el-button-hover-bg-color: #6C9873;
-  --el-button-hover-border-color: #6C9873;
-  --el-button-active-bg-color: #5E8A65;
-  --el-button-active-border-color: #5E8A65;
+  --el-button-bg-color: var(--ac-color-primary);
+  --el-button-border-color: var(--ac-color-primary);
+  --el-button-hover-bg-color: var(--ac-color-primary-dark);
+  --el-button-hover-border-color: var(--ac-color-primary-dark);
+  --el-button-active-bg-color: var(--ac-color-primary-dark);
+  --el-button-active-border-color: var(--ac-color-primary-dark);
 }
 
 .el-button--success {
-  --el-button-bg-color: #7DAA84;
-  --el-button-border-color: #7DAA84;
-  --el-button-hover-bg-color: #6C9873;
-  --el-button-hover-border-color: #6C9873;
+  --el-button-bg-color: var(--ac-color-primary);
+  --el-button-border-color: var(--ac-color-primary);
+  --el-button-hover-bg-color: var(--ac-color-primary-dark);
+  --el-button-hover-border-color: var(--ac-color-primary-dark);
 }
 
 /* ---- Link / text button ---- */
 .el-button--text,
 .el-button.is-text {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 .el-button--text:hover,
 .el-button.is-text:hover {
-  color: #6C9873;
-  background: rgba(125, 170, 132, 0.08);
+  color: var(--ac-color-primary-dark);
+  background: var(--ac-color-primary-bg);
 }
 
 /* ---- Input: border color ---- */
@@ -64,12 +64,12 @@
 }
 
 .el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px #9BC1A1 inset;
+  box-shadow: 0 0 0 1px var(--ac-color-primary-light) inset;
 }
 
 .el-input.is-focus .el-input__wrapper,
 .el-input.is-focus .el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+  box-shadow: 0 0 0 1px var(--ac-color-primary) inset !important;
 }
 
 .el-textarea__inner {
@@ -77,19 +77,19 @@
 }
 
 .el-textarea__inner:hover {
-  box-shadow: 0 0 0 1px #9BC1A1 inset;
+  box-shadow: 0 0 0 1px var(--ac-color-primary-light) inset;
 }
 
 .el-textarea.is-focus .el-textarea__inner {
-  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+  box-shadow: 0 0 0 1px var(--ac-color-primary) inset !important;
 }
 
 .el-select .el-input.is-focus .el-input__wrapper {
-  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+  box-shadow: 0 0 0 1px var(--ac-color-primary) inset !important;
 }
 
 .el-select .el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px #9BC1A1 inset;
+  box-shadow: 0 0 0 1px var(--ac-color-primary-light) inset;
 }
 
 /* ---- Input: placeholder color ---- */
@@ -102,71 +102,71 @@
 .el-input.is-focus .el-input__wrapper,
 .el-textarea.is-focus .el-textarea__inner,
 .el-select .el-input.is-focus .el-input__wrapper {
-  box-shadow: 0 0 0 1px #7DAA84 inset !important;
+  box-shadow: 0 0 0 1px var(--ac-color-primary) inset !important;
 }
 
 .el-input__wrapper:hover,
 .el-textarea__inner:hover {
-  box-shadow: 0 0 0 1px #9BC1A1 inset;
+  box-shadow: 0 0 0 1px var(--ac-color-primary-light) inset;
 }
 
 /* ---- Checkbox ---- */
 .el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: #7DAA84;
-  border-color: #7DAA84;
+  background-color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
 }
 
 .el-checkbox__input.is-checked + .el-checkbox__label {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 /* ---- Radio ---- */
 .el-radio__input.is-checked .el-radio__inner {
-  background-color: #7DAA84;
-  border-color: #7DAA84;
+  background-color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
 }
 
 .el-radio__input.is-checked + .el-radio__label {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 /* ---- Switch ---- */
 .el-switch.is-checked .el-switch__core {
-  background-color: #7DAA84;
-  border-color: #7DAA84;
+  background-color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
 }
 
 /* ---- Slider ---- */
 .el-slider__bar {
-  background-color: #7DAA84;
+  background-color: var(--ac-color-primary);
 }
 
 .el-slider__button {
-  border-color: #7DAA84;
+  border-color: var(--ac-color-primary);
 }
 
 /* ---- Progress ---- */
 .el-progress-bar__inner {
-  background-color: #7DAA84;
+  background-color: var(--ac-color-primary);
 }
 
 /* ---- Tag ---- */
 .el-tag--primary {
-  --el-tag-bg-color: rgba(125, 170, 132, 0.12);
-  --el-tag-border-color: rgba(125, 170, 132, 0.25);
-  --el-tag-text-color: #7DAA84;
+  --el-tag-bg-color: var(--ac-color-primary-bg);
+  --el-tag-border-color: var(--ac-color-primary-border);
+  --el-tag-text-color: var(--ac-color-primary);
 }
 
 .el-tag--success {
-  --el-tag-bg-color: rgba(125, 170, 132, 0.12);
-  --el-tag-border-color: rgba(125, 170, 132, 0.25);
-  --el-tag-text-color: #7DAA84;
+  --el-tag-bg-color: var(--ac-color-primary-bg);
+  --el-tag-border-color: var(--ac-color-primary-border);
+  --el-tag-text-color: var(--ac-color-primary);
 }
 
 .el-tag--danger {
   --el-tag-bg-color: rgba(217, 120, 120, 0.12);
   --el-tag-border-color: rgba(217, 120, 120, 0.25);
-  --el-tag-text-color: #D97878;
+  --el-tag-text-color: var(--ac-color-danger);
 }
 
 .el-tag--warning {
@@ -209,30 +209,30 @@
 
 /* ---- Menu / Nav ---- */
 .el-menu-item.is-active {
-  color: #7DAA84;
-  border-bottom-color: #7DAA84;
+  color: var(--ac-color-primary);
+  border-bottom-color: var(--ac-color-primary);
 }
 
 /* ---- Tabs ---- */
 .el-tabs__item.is-active {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 .el-tabs__active-bar {
-  background-color: #7DAA84;
+  background-color: var(--ac-color-primary);
 }
 
 .el-tabs__item:hover {
-  color: #6C9873;
+  color: var(--ac-color-primary-dark);
 }
 
 /* ---- Pagination ---- */
 .el-pagination .el-pager li.is-active {
-  background-color: #7DAA84;
+  background-color: var(--ac-color-primary);
 }
 
 .el-pagination .el-pager li:not(.is-disabled):hover {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 /* ---- Dialog ---- */
@@ -262,39 +262,39 @@
 
 /* ---- Dropdown menu ---- */
 .el-dropdown-menu__item:not(.is-disabled):hover {
-  color: #7DAA84;
-  background-color: rgba(125, 170, 132, 0.06);
+  color: var(--ac-color-primary);
+  background-color: var(--ac-color-primary-bg);
 }
 
 /* ---- Steps / Timeline ---- */
 .el-step__head.is-finish .el-step__icon {
-  background-color: #7DAA84;
-  border-color: #7DAA84;
+  background-color: var(--ac-color-primary);
+  border-color: var(--ac-color-primary);
 }
 
 .el-step__title.is-finish,
 .el-step__description.is-finish {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 /* ---- Input number ---- */
 .el-input-number__increase:hover,
 .el-input-number__decrease:hover {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 /* ---- Loading ---- */
 .el-loading-spinner .path {
-  stroke: #7DAA84;
+  stroke: var(--ac-color-primary);
 }
 
 /* ---- Date picker ---- */
 .el-date-table td.today span {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 .el-date-table td.available:hover {
-  color: #7DAA84;
+  color: var(--ac-color-primary);
 }
 
 
