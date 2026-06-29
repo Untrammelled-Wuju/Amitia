@@ -333,7 +333,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	fmt.Printf("[DIAG-ProcessMessage] channel=%s voiceMessage=%v msg=%s audioUrl=%s imageUrlLen=%d\n", req.Channel, req.VoiceMessage, req.Message, req.AudioUrl, len(req.ImageUrl))
 	var charID, charName, identity, systemPrompt string
 	if req.CharacterID != "" {
-		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
+		err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		if err != nil {
 			return nil, fmt.Errorf("角色不存在")
 		}
@@ -497,6 +497,8 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		MessageIDs:     msgIDs,
 		ForceVoice:     fv,
 		AudioUrls:      audioUrls,
+		UserMessage:    &MessageItem{ID: userMsgID, ConversationID: convID, Role: "user", Content: req.Message, Source: source, CreatedAt: time.Now().Format("2006-01-02 15:04:05")},
+		UserMessageID:  userMsgID,
 	}, nil
 }
 func (s *service) sys1Builder(charName, identity, systemPrompt, userMessage string) []string {

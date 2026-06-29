@@ -47,15 +47,15 @@ func NewService(ctx *app.AppContext, chatSvc chat.Service) Service {
 }
 
 func (s *service) Test(characterID, message string) (map[string]interface{}, error) {
-	var charID, charName, systemPrompt string
+	var charID, charName, identity, systemPrompt string
 	if characterID == "" {
 		s.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 		if characterID == "" {
 			s.db.Table("characters").Select("id").Limit(1).Row().Scan(&characterID)
 		}
 	}
-	err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", characterID).
-		Row().Scan(&charID, &charName, &systemPrompt)
+	err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("id = ?", characterID).
+		Row().Scan(&charID, &charName, &identity, &systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
 	}
@@ -67,6 +67,8 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 	}
 
 	systemParts := []string{systemNoEmojiInstruction}
+	if identity == "" { identity = "一个AI伙伴" }
+	systemParts = append(systemParts, fmt.Sprintf("你是%s，%s。", charName, identity))
 	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
 	systemParts = append(systemParts, systemFormatInstruction)
 	apiMessages := []map[string]interface{}{}

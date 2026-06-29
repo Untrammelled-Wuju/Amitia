@@ -226,7 +226,7 @@ const {
   connectSSE, disconnectSSE,
   connectProactiveSSE, disconnectProactiveSSE, cleanup: cleanupSSE,
   setLastPolledMsgId,
-} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus())
+} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), sending)
 
 const {
   canRegenerate,
