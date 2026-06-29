@@ -30,8 +30,8 @@
     />
     <div class="chat-body-wrapper">
       <div class="floating-btns">
-        <button class="fa-btn" :class="{ active: showProfiles }" @click="toggleProfiles" title="显示画像">👤</button>
-        <button class="fa-btn" :class="{ active: showMemInject }" @click="toggleMemInject" title="记忆注入">🧠</button>
+        <button class="fa-btn" :class="{ active: showProfiles }" @click="toggleProfiles" title="显示画像"><el-icon :size="20"><User /></el-icon></button>
+        <button class="fa-btn" :class="{ active: showMemInject }" @click="toggleMemInject" title="记忆注入"><el-icon :size="20"><Connection /></el-icon></button>
       </div>
       <ProfileSummaryPanel
         :visible="showProfiles"
@@ -120,6 +120,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch, inject } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
+import { User, Connection } from "@element-plus/icons-vue"
 import { useApi, isLoggedIn } from "../../composables/useApi"
 import { useCachedApi } from "../../composables/useCachedApi"
 import { useWebChatSSE } from "../../composables/useWebChatSSE"
