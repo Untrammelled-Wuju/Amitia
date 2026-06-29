@@ -1,6 +1,6 @@
 <template>
   <div class="sw-form">
-    <p class="sw-hint">Choose a default personality for your AI companion. You can change this later.</p>
+    <p class="sw-hint">Choose a default personality for your Amitia companion. You can change this later.</p>
     <div v-if="characters.length === 0" class="sw-notice">
       No characters found. A default character will be created automatically.
     </div>

@@ -1,14 +1,14 @@
-﻿<template>
+<template>
   <teleport to="body">
     <transition name="pwa-fade">
       <div v-if="showPrompt" class="pwa-install-overlay" @click.self="dismiss">
         <div class="pwa-install-card">
           <div class="pwa-card-header">
             <div class="pwa-icon">
-              <img src="/icons/icon-192.png" alt="AI Companion" width="48" height="48" />
+              <img src="/icons/icon-192.png" alt="Amitia" width="48" height="48" />
             </div>
             <div class="pwa-title-group">
-              <h3 class="pwa-title">Install AI Companion</h3>
+              <h3 class="pwa-title">Install Amitia</h3>
               <p class="pwa-subtitle">Add to home screen for quick access</p>
             </div>
             <button class="pwa-close" @click="dismiss" aria-label="Close">&times;</button>

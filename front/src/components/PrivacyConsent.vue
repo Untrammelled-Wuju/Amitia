@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="欢迎使用 AI Companion"
+    title="欢迎使用阿米提亚"
     width="520px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"

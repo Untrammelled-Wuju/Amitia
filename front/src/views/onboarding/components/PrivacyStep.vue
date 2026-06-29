@@ -1,7 +1,7 @@
 <template>
   <div class="step-panel">
     <h2>隐私与安全</h2>
-    <p class="step-desc">了解 AI Companion 如何处理你的数据。</p>
+    <p class="step-desc">了解阿米提亚如何处理你的数据。</p>
     <div class="privacy-cards">
       <div class="pc-card">
         <div class="pc-title">数据存储位置</div>

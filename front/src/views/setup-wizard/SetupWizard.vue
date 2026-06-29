@@ -2,8 +2,8 @@
   <div class="setup-wizard">
     <div class="sw-container">
       <header class="sw-header">
-        <h1 class="sw-title">U-Ai System Setup</h1>
-        <p class="sw-subtitle">Complete the following steps to configure your AI companion.</p>
+        <h1 class="sw-title">Amitia System Setup</h1>
+        <p class="sw-subtitle">Complete the following steps to configure your Amitia companion.</p>
       </header>
 
       <div class="sw-steps">
