@@ -14,6 +14,14 @@ export function useWebChatSSE(
   function getLastPolledMsgId() { return lastPolledMsgId }
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
 
+  function sortMessages() {
+    messages.value.sort((a: any, b: any) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return ta - tb
+    })
+  }
+
   function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
@@ -35,8 +43,9 @@ export function useWebChatSSE(
             )
             if (dup) return
           }
-          lastPolledMsgId = msg.id || lastPolledMsgId
           messages.value.push(msg)
+          sortMessages()
+          lastPolledMsgId = msg.id || lastPolledMsgId
           if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
             new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
           }
@@ -66,8 +75,11 @@ export function useWebChatSSE(
         try {
           const msg = JSON.parse(e.data)
           if (msg.conversationId === convId.value) {
-            messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: new Date().toISOString() })
-            nextTick(() => scrollToBottom())
+            if (!messages.value.some((m: any) => m.id === msg.messageId)) {
+              messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: msg.createdAt || new Date().toISOString() })
+              sortMessages()
+              nextTick(() => scrollToBottom())
+            }
           }
         } catch {}
           fetchWechatMsgCount()
