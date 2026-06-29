@@ -1,7 +1,7 @@
 <template>
   <header class="status-bar">
     <div class="status-left">
-      <span class="status-brand">AI Companion</span>
+      <span class="status-brand">Amitia</span>
       <el-tag :type="deployTagType" size="small" class="status-tag">
         {{ deployLabel }}
       </el-tag>

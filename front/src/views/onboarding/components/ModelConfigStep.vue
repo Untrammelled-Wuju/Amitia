@@ -1,7 +1,7 @@
 <template>
   <div class="step-panel">
     <h2>配置 AI 模型</h2>
-    <p class="step-desc">AI Companion 需要连接大语言模型才能对话。</p>
+    <p class="step-desc">阿米提亚需要连接大语言模型才能对话。</p>
     <el-form label-position="top" size="default">
       <el-form-item label="API 类型">
         <el-select v-model="apiTypeModel" style="width:100%">

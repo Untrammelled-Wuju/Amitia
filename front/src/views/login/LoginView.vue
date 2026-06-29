@@ -2,7 +2,7 @@
   <div class="login-page">
     <el-card class="login-card" shadow="never">
       <div class="login-header">
-        <h1>AI Companion</h1>
+        <h1>Amitia</h1>
       </div>
 
       <!-- Status detection -->

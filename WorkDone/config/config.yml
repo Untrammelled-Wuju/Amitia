@@ -11,7 +11,7 @@ jwt:
   expireDays: 7
 
 app:
-  name: "U-Ai"
+  name: "Amitia"
   version: "1.0.0"
   deployMode: "desktop-local"
 chat:

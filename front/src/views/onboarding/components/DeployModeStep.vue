@@ -1,7 +1,7 @@
 <template>
   <div class="step-panel">
     <h2>选择部署方式</h2>
-    <p class="step-desc">决定 AI Companion 的运行环境和访问方式。</p>
+    <p class="step-desc">决定阿米提亚的运行环境和访问方式。</p>
     <div class="deploy-cards">
       <div class="deploy-card" :class="{ selected: modelValue === 'desktop' }" @click="emit('update:modelValue', 'desktop')">
         <div class="dc-radio"><span class="dc-dot" :class="{ on: modelValue === 'desktop' }"></span></div>
