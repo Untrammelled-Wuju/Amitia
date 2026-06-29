@@ -249,16 +249,16 @@ func (s *service) GetStats() (*ChatStatsResponse, error) {
 }
 
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
-	var charID, charName, systemPrompt string
+	var charID, charName, identity, systemPrompt string
 	if req.CharacterID != "" {
-		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
+		err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		if err != nil {
 			return nil, fmt.Errorf("角色不存在")
 		}
 	} else {
-		s.db.Table("characters").Select("id, name, system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+		s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		if charID == "" {
-			s.db.Table("characters").Select("id, name, system_prompt").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+			s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Limit(1).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		}
 		if charID == "" {
 			return nil, fmt.Errorf("没有可用角色")
@@ -271,6 +271,10 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 
 
 	systemParts := []string{systemNoEmojiInstruction}
+	if identity == "" {
+		identity = "一个AI伙伴"
+	}
+	systemParts = append(systemParts, fmt.Sprintf("你是%s，%s。", charName, identity))
 	if systemPrompt != "" {
 		systemParts = append(systemParts, systemPrompt)
 	}
@@ -327,16 +331,16 @@ func (s *service) loadHistory(convID string) []map[string]string {
 
 func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
 	fmt.Printf("[DIAG-ProcessMessage] channel=%s voiceMessage=%v msg=%s audioUrl=%s imageUrlLen=%d\n", req.Channel, req.VoiceMessage, req.Message, req.AudioUrl, len(req.ImageUrl))
-	var charID, charName, systemPrompt string
+	var charID, charName, identity, systemPrompt string
 	if req.CharacterID != "" {
 		err := s.db.Table("characters").Select("id, name, system_prompt").Where("id = ?", req.CharacterID).Row().Scan(&charID, &charName, &systemPrompt)
 		if err != nil {
 			return nil, fmt.Errorf("角色不存在")
 		}
 	} else {
-		s.db.Table("characters").Select("id, name, system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+		s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("is_default = 1").Limit(1).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		if charID == "" {
-			s.db.Table("characters").Select("id, name, system_prompt").Limit(1).Row().Scan(&charID, &charName, &systemPrompt)
+			s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Limit(1).Row().Scan(&charID, &charName, &identity, &systemPrompt)
 		}
 		if charID == "" {
 			return nil, fmt.Errorf("没有可用角色")
@@ -369,7 +373,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	sys1Parts := s.sys1Builder(systemPrompt, req.Message)
+	sys1Parts := s.sys1Builder(charName, identity, systemPrompt, req.Message)
 	history := s.loadHistory(convID)
 	sys2Parts := s.sys2Builder(convID, charID, req.Message)
 
@@ -495,8 +499,12 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		AudioUrls:      audioUrls,
 	}, nil
 }
-func (s *service) sys1Builder(systemPrompt, userMessage string) []string {
+func (s *service) sys1Builder(charName, identity, systemPrompt, userMessage string) []string {
 	parts := []string{systemNoEmojiInstruction}
+	if identity == "" {
+		identity = "一个AI伙伴"
+	}
+	parts = append(parts, fmt.Sprintf("你是%s，%s。", charName, identity))
 	if systemPrompt != "" {
 		parts = append(parts, systemPrompt)
 	}
