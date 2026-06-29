@@ -578,21 +578,28 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-		c.Header("X-Accel-Buffering", "no")
-	lastID := c.Query("since")
+	c.Header("X-Accel-Buffering", "no")
+	sinceID := c.Query("since")
+	sinceCreatedAt := ""
+	if sinceID != "" {
+		h.db.Table("messages").Select("created_at").Where("id = ?", sinceID).Row().Scan(&sinceCreatedAt)
+	}
+	if sinceCreatedAt == "" {
+		sinceCreatedAt = "0001-01-01"
+	}
 	for {
 		var msgs []map[string]interface{}
-		rows, _ := h.db.Table("messages").Where("conversation_id = ? AND id > ?", convID, lastID).Order("created_at ASC").Rows()
+		rows, _ := h.db.Table("messages").Where("conversation_id = ? AND (created_at > ? OR (created_at = ? AND id > ?))", convID, sinceCreatedAt, sinceCreatedAt, sinceID).Order("created_at ASC, id ASC").Rows()
 		for rows.Next() { var m map[string]interface{}; h.db.ScanRows(rows, &m); msgs = append(msgs, m) }
 		rows.Close()
 		for _, m := range msgs {
 			role, _ := m["role"].(string)
 			content, _ := m["content"].(string)
-			// 跳过工具消息和空 assistant 占位
 			if role == "tool" { continue }
 			if role == "assistant" && content == "" { continue }
 			c.SSEvent("message", m)
-			if id, ok := m["id"].(string); ok { lastID = id }
+			if ca, ok := m["created_at"].(string); ok { sinceCreatedAt = ca }
+			if id, ok := m["id"].(string); ok { sinceID = id }
 			c.Writer.Flush()
 		}
 		select {
