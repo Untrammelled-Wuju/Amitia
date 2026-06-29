@@ -6,6 +6,7 @@ export function useWebChatSSE(
   scrollToBottom: (smooth?: boolean) => void,
   fetchWechatMsgCount: () => void,
   fetchQQStatus: () => void,
+  sending: Ref<boolean>,
 ) {
   let eventSource: EventSource | null = null
   let lastPolledMsgId: string | null = null
@@ -44,7 +45,7 @@ export function useWebChatSSE(
             if (dup) return
           }
           messages.value.push(msg)
-          sortMessages()
+          if (!sending.value) sortMessages()
           lastPolledMsgId = msg.id || lastPolledMsgId
           if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
             new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
@@ -77,7 +78,7 @@ export function useWebChatSSE(
           if (msg.conversationId === convId.value) {
             if (!messages.value.some((m: any) => m.id === msg.messageId)) {
               messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: msg.createdAt || new Date().toISOString() })
-              sortMessages()
+              if (!sending.value) sortMessages()
               nextTick(() => scrollToBottom())
             }
           }

@@ -164,7 +164,9 @@ type ProcessMessageResponse struct {
 	CharacterName  string   `json:"characterName"`
 	MessageIDs     []string `json:"messageIds"`
 	ForceVoice     bool     `json:"forceVoice"`
-	AudioUrls     []string `json:"audioUrls"`
+	AudioUrls      []string    `json:"audioUrls"`
+	UserMessage    *MessageItem `json:"userMessage"`
+	UserMessageID  string      `json:"userMessageId"`
 }
 
 type ChatStatsResponse struct {

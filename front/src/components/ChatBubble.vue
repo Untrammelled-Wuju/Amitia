@@ -156,7 +156,7 @@ async function copyContent() {
 .chat-bubble {
   display: flex;
   gap: 10px;
-  padding: 8px 16px;
+  padding: 8px 0;
   align-items: flex-start;
   animation: bubbleIn 0.25s ease;
 }

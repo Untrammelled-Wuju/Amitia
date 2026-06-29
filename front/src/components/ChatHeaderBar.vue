@@ -94,7 +94,7 @@ const styleLabel = (v: string) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 0 8px;
+  padding: 6px 10px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--ac-color-border-light);
 }
