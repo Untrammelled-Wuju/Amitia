@@ -22,5 +22,6 @@
   "devDependencies": {
     "tsx": "^4.11.0",
     "typescript": "^5.4.0"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

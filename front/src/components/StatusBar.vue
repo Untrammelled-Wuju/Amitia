@@ -1,7 +1,11 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <header class="status-bar">
     <div class="status-left">
-      <span class="status-brand">Amitia</span>
+      <span class="status-brand">AI-Amitia</span>
       <el-tag :type="deployTagType" size="small" class="status-tag">
         {{ deployLabel }}
       </el-tag>

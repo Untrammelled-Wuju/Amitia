@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package agent
 
 import (
@@ -10,7 +12,9 @@ import (
 )
 
 func RegisterAgentRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profile.Service, epiSvc episodic.Service) {
-	memRepo := memory.NewRepository(ctx); memSvc := memory.NewService(memRepo, ctx); chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil)
+	memRepo := memory.NewRepository(ctx)
+	memSvc := memory.NewService(memRepo, ctx)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil)
 	svc := NewService(ctx, chatSvc)
 	handler := NewHandler(svc)
 

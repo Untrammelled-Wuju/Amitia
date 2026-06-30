@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="scenario-section">
     <h3 class="section-title">用途分配</h3>

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, computed } from "vue"
 import { useRouter } from "vue-router"
 import { apiClient, setToken } from "../../../ui-index"
@@ -13,7 +15,7 @@ export interface WizardStep {
 }
 
 export const DEFAULT_STEPS: WizardStep[] = [
-  { key: "detect-mode", label: "Mode", title: "Select Deployment Mode", description: "Choose how you want to run your Amitia companion.", buttonLabel: "Confirm Mode", done: false, requiresAction: true },
+  { key: "detect-mode", label: "Mode", title: "Select Deployment Mode", description: "Choose how you want to run your AI-Amitia companion.", buttonLabel: "Confirm Mode", done: false, requiresAction: true },
   { key: "core-check", label: "Core", title: "Core Service Check", description: "Verifying the core service is running.", done: false, requiresAction: false },
   { key: "web-check", label: "Web", title: "Web Interface Check", description: "Verifying the web interface is accessible.", done: false, requiresAction: false },
   { key: "bridge-check", label: "Bridge", title: "WeChat Bridge Check", description: "Checking WeChat Bridge availability.", done: false, requiresAction: false },
@@ -21,7 +23,7 @@ export const DEFAULT_STEPS: WizardStep[] = [
   { key: "admin-password", label: "Password", title: "Set Admin Password", description: "Create an admin account to protect your data.", buttonLabel: "Save Password", done: false, requiresAction: true },
   { key: "model-config", label: "Model", title: "Configure AI Model", description: "Connect your AI model API for chat functionality.", buttonLabel: "Save & Test", done: false, requiresAction: true },
   { key: "model-test", label: "Test", title: "Test Model Connection", description: "Verify the model API is reachable and working.", buttonLabel: "Test Connection", done: false, requiresAction: true },
-  { key: "character-select", label: "Character", title: "Choose Default Character", description: "Select the personality for your Amitia companion.", buttonLabel: "Confirm Character", done: false, requiresAction: false },
+  { key: "character-select", label: "Character", title: "Choose Default Character", description: "Select the personality for your AI-Amitia companion.", buttonLabel: "Confirm Character", done: false, requiresAction: false },
   { key: "wechat-option", label: "WeChat", title: "WeChat Access", description: "Decide if you want to use the companion via WeChat.", buttonLabel: "Confirm", done: false, requiresAction: true },
   { key: "cloud-deploy-info", label: "Deploy", title: "Deployment Overview", description: "Review how your system will run.", buttonLabel: "Continue", done: false, requiresAction: false },
   { key: "privacy-boundary", label: "Privacy", title: "Privacy & Security", description: "Understand your privacy and security boundaries.", buttonLabel: "Confirm", done: false, requiresAction: true },

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package mysql
 
 import (
@@ -11,7 +13,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
-
 
 func NewSQLite(dataDir string) *gorm.DB {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {

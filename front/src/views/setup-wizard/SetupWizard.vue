@@ -1,9 +1,13 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="setup-wizard">
     <div class="sw-container">
       <header class="sw-header">
-        <h1 class="sw-title">Amitia System Setup</h1>
-        <p class="sw-subtitle">Complete the following steps to configure your Amitia companion.</p>
+        <h1 class="sw-title">AI-Amitia System Setup</h1>
+        <p class="sw-subtitle">Complete the following steps to configure your AI-Amitia companion.</p>
       </header>
 
       <div class="sw-steps">

@@ -1,13 +1,15 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package response
 
 const (
 	OK   = 200
 	FAIL = 400
 
-	InvalidParams  = 400
-	Unauthorized   = 401
-	Forbidden      = 403
-	NotFound       = 404
+	InvalidParams   = 400
+	Unauthorized    = 401
+	Forbidden       = 403
+	NotFound        = 404
 	TooManyRequests = 429
 
 	InternalError = 500
@@ -16,9 +18,9 @@ const (
 	DataNotFound    = 601
 	OperationFailed = 602
 
-	InvalidToken  = 700
-	TokenExpired  = 701
-	AccessDenied  = 702
+	InvalidToken = 700
+	TokenExpired = 701
+	AccessDenied = 702
 )
 
 func GetMessage(code int) string {

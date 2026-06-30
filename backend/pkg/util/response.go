@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package util
 
 import (
@@ -7,7 +9,6 @@ import (
 	"github.com/u-ai/backend/pkg/comment/response"
 )
 
-
 func SuccessResponse(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, gin.H{
 		"code": response.OK,
@@ -16,7 +17,6 @@ func SuccessResponse(c *gin.Context, data interface{}) {
 	})
 }
 
-
 func SuccessMsgResponse(c *gin.Context, msg string, data interface{}) {
 	c.JSON(http.StatusOK, gin.H{
 		"code": response.OK,
@@ -24,7 +24,6 @@ func SuccessMsgResponse(c *gin.Context, msg string, data interface{}) {
 		"data": data,
 	})
 }
-
 
 func ErrorResponse(c *gin.Context, code int, msg string, data interface{}) {
 	c.JSON(http.StatusOK, gin.H{

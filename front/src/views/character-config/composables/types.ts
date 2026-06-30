@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 export type TemplateItem = {
   id: string; name: string; scenario: string; identity: string; personality: string
   speakingStyle: string; relationshipStyle: string; hasSafeBoundaries: boolean

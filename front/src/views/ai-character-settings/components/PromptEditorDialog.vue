@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog v-model="showModel" title="修改角色提示词" width="700px" destroy-on-close>
     <div class="preview-content">

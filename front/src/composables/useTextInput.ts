@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, nextTick, watch } from "vue"
 
 const DRAFT_KEY = "webchat_draft"

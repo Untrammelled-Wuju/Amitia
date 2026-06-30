@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package feedback
 
 import (
@@ -7,7 +9,6 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
-
 
 type Service interface {
 	Create(msgID string, req *CreateFeedbackRequest) (*MessageFeedback, error)
@@ -21,7 +22,6 @@ type service struct {
 	repo Repository
 	db   *gorm.DB
 }
-
 
 func NewService(repo Repository, ctx *app.AppContext) Service {
 	return &service{repo: repo, db: ctx.DB}
@@ -46,7 +46,6 @@ func (s *service) Create(msgID string, req *CreateFeedbackRequest) (*MessageFeed
 		return nil, fmt.Errorf("创建反馈失败: %w", err)
 	}
 
-	
 	if req.FeedbackType == "unsafe" {
 		s.db.Exec(`INSERT INTO safety_events (id, conversation_id, event_type, description, handled)
 			VALUES (?, ?, 'user_reported_unsafe', ?, 0)`,

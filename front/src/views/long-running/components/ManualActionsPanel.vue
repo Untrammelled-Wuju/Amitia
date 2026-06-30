@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-card shadow="never" class="section-card">
     <template #header><span class="section-title">手动操作</span></template>

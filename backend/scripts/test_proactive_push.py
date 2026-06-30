@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 彭旭
+# SPDX-License-Identifier: AGPL-3.0-only
 # -*- coding: utf-8 -*-
 """主动消息推送测试 - 微信/QQ Sidecar
 用法: python test_proactive_push.py

@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <teleport to="body">
     <transition name="pwa-fade">
@@ -5,10 +9,10 @@
         <div class="pwa-install-card">
           <div class="pwa-card-header">
             <div class="pwa-icon">
-              <img src="/icons/icon-192.png" alt="Amitia" width="48" height="48" />
+              <img src="/icons/icon-192.png" alt="AI-Amitia" width="48" height="48" />
             </div>
             <div class="pwa-title-group">
-              <h3 class="pwa-title">Install Amitia</h3>
+              <h3 class="pwa-title">Install AI-Amitia</h3>
               <p class="pwa-subtitle">Add to home screen for quick access</p>
             </div>
             <button class="pwa-close" @click="dismiss" aria-label="Close">&times;</button>

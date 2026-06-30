@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 彭旭
+# SPDX-License-Identifier: AGPL-3.0-only
 # U-Ai Companion Life 接口验收脚本
 # 用法: bash scripts/check_companion_life.sh [BASE_URL]
 BASE_URL="${1:-http://localhost:8080}"

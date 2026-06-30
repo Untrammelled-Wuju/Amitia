@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-drawer
     :model-value="visible" @update:model-value="(val: boolean) => emit('update:visible', val)"

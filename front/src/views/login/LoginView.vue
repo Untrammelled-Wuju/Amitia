@@ -1,8 +1,12 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="login-page">
     <el-card class="login-card" shadow="never">
       <div class="login-header">
-        <h1>Amitia</h1>
+        <h1>AI-Amitia</h1>
       </div>
 
       <!-- Status detection -->

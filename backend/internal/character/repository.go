@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package character
 
 import (
@@ -29,9 +31,13 @@ func NewRepository(ctx *app.AppContext) Repository {
 func (r *repository) List(includeDisabled bool) ([]Character, error) {
 	var chars []Character
 	q := r.db.Order("sort_order, created_at")
-	if !includeDisabled { q = q.Where("status = ?", "enabled") }
+	if !includeDisabled {
+		q = q.Where("status = ?", "enabled")
+	}
 	err := q.Find(&chars).Error
-	if chars == nil { chars = []Character{} }
+	if chars == nil {
+		chars = []Character{}
+	}
 	return chars, err
 }
 
@@ -42,7 +48,9 @@ func (r *repository) FindByID(id string) (*Character, error) {
 }
 
 func (r *repository) Create(c *Character) error {
-	if c.ID == "" { c.ID = uuid.New().String() }
+	if c.ID == "" {
+		c.ID = uuid.New().String()
+	}
 	return r.db.Create(c).Error
 }
 
@@ -68,7 +76,9 @@ func (r *repository) FindTemplateByID(id string) (*CharacterTemplate, error) {
 func (r *repository) ListTemplates() ([]CharacterTemplate, error) {
 	var templates []CharacterTemplate
 	err := r.db.Find(&templates).Error
-	if templates == nil { templates = []CharacterTemplate{} }
+	if templates == nil {
+		templates = []CharacterTemplate{}
+	}
 	return templates, err
 }
 

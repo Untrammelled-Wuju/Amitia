@@ -1,10 +1,12 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package worldbook
 
 import (
-	"time"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Repository interface {

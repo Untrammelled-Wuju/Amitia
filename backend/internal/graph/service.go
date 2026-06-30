@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package graph
 
 import (
@@ -142,7 +144,6 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 	_ = nodeResult
 	_ = err
 
-
 	edgeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
 		"SELECT count() FROM entity_edge GROUP ALL", nil)
 	if err == nil && edgeResult != nil && len(*edgeResult) > 0 {
@@ -150,7 +151,16 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 		if arr, ok := raw.([]interface{}); ok && len(arr) > 0 {
 			if m, ok := arr[0].(map[string]interface{}); ok {
 				if c, ok := m["count"]; ok {
-					switch v := c.(type) { case float64: edgeCount = int(v); case int: edgeCount = v; case int64: edgeCount = int(v); case uint64: edgeCount = int(v) }
+					switch v := c.(type) {
+					case float64:
+						edgeCount = int(v)
+					case int:
+						edgeCount = v
+					case int64:
+						edgeCount = int(v)
+					case uint64:
+						edgeCount = int(v)
+					}
 				}
 			}
 		}
@@ -173,12 +183,18 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 	for _, t := range byType {
 		if c, ok := t["count"]; ok {
 			switch v := c.(type) {
-			case float64: nodeCount += int(v)
-			case int: nodeCount += v
-			case int64: nodeCount += int(v)
-			case uint64: nodeCount += int(v)
+			case float64:
+				nodeCount += int(v)
+			case int:
+				nodeCount += v
+			case int64:
+				nodeCount += int(v)
+			case uint64:
+				nodeCount += int(v)
 			case json.Number:
-				if n, e := v.Int64(); e == nil { nodeCount += int(n) }
+				if n, e := v.Int64(); e == nil {
+					nodeCount += int(n)
+				}
 			}
 		}
 	}

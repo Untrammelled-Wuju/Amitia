@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package asr
 
 import "gorm.io/gorm"
@@ -12,14 +14,16 @@ type Repository interface {
 	GetActive() (*AsrConfig, error)
 }
 
-type repository struct { db *gorm.DB }
+type repository struct{ db *gorm.DB }
 
 func NewRepository(db *gorm.DB) Repository { return &repository{db: db} }
 
 func (r *repository) List() ([]AsrConfig, error) {
 	var configs []AsrConfig
 	err := r.db.Order("is_active DESC, created_at DESC").Find(&configs).Error
-	if configs == nil { configs = []AsrConfig{} }
+	if configs == nil {
+		configs = []AsrConfig{}
+	}
 	return configs, err
 }
 

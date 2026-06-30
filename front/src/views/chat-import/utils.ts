@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 export function parseSpeakerNames(input: string): string[] {
   if (!input.trim()) return []
   return input.split(/[,;，；]/).map(s => s.trim()).filter(Boolean)

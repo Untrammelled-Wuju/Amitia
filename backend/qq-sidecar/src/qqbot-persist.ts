@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"

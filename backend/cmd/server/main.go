@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package main
 
 import (
@@ -6,11 +8,11 @@ import (
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
+	"github.com/u-ai/backend/internal/worldbook"
 	"gorm.io/gorm"
 	"net"
 	"os"

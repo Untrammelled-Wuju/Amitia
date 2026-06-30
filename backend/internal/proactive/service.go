@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package proactive
 
 import (
@@ -66,12 +68,22 @@ func (s *service) ListRules(characterID string) ([]map[string]interface{}, error
 }
 
 func (s *service) CreateRule(req *CreateRuleRequest) (*ProactiveRule, error) {
-	if req.Channel == "" { req.Channel = "web" }
-	if req.RuleType == "" { req.RuleType = "cron" }
-	if req.MaxPerDay == 0 { req.MaxPerDay = 1 }
-	if req.RandomMinutes == 0 { req.RandomMinutes = 30 }
+	if req.Channel == "" {
+		req.Channel = "web"
+	}
+	if req.RuleType == "" {
+		req.RuleType = "cron"
+	}
+	if req.MaxPerDay == 0 {
+		req.MaxPerDay = 1
+	}
+	if req.RandomMinutes == 0 {
+		req.RandomMinutes = 30
+	}
 	enabled := 1
-	if req.Enabled != nil && !*req.Enabled { enabled = 0 }
+	if req.Enabled != nil && !*req.Enabled {
+		enabled = 0
+	}
 	rule := &ProactiveRule{
 		Name: req.Name, Enabled: enabled, Channel: req.Channel,
 		ConversationID: req.ConversationID, CharacterID: req.CharacterID,
@@ -87,12 +99,16 @@ func (s *service) CreateRule(req *CreateRuleRequest) (*ProactiveRule, error) {
 }
 
 func (s *service) UpdateRule(id int, updates map[string]interface{}) (*ProactiveRule, error) {
-	if len(updates) == 0 { return nil, fmt.Errorf("没有可更新的字段") }
-	if err := s.repo.UpdateRule(id, updates); err != nil { return nil, fmt.Errorf("更新失败: %w", err) }
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("没有可更新的字段")
+	}
+	if err := s.repo.UpdateRule(id, updates); err != nil {
+		return nil, fmt.Errorf("更新失败: %w", err)
+	}
 	return s.repo.FindRuleByID(id)
 }
 
-func (s *service) DeleteRule(id int) error { return s.repo.DeleteRule(id) }
+func (s *service) DeleteRule(id int) error                   { return s.repo.DeleteRule(id) }
 func (s *service) ToggleRule(id int) (*ProactiveRule, error) { return s.repo.ToggleRule(id) }
 func (s *service) DeleteRulesByCharacter(characterID string) error {
 	return s.db.Where("character_id = ?", characterID).Delete(&ProactiveRule{}).Error
@@ -101,7 +117,9 @@ func (s *service) CreateRuleDirect(rule *ProactiveRule) error { return s.repo.Cr
 
 func (s *service) ListReminders() ([]Reminder, error) {
 	items, err := s.repo.ListReminders()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	for i := range items {
 		if items[i].ConversationID != "" {
 			var title, charID string
@@ -119,26 +137,35 @@ func (s *service) ListReminders() ([]Reminder, error) {
 }
 
 func (s *service) CreateReminder(req *CreateReminderRequest) (*Reminder, error) {
-	if req.Channel == "" { req.Channel = "web" }
-	if req.RepeatRule == "" { req.RepeatRule = "none" }
+	if req.Channel == "" {
+		req.Channel = "web"
+	}
+	if req.RepeatRule == "" {
+		req.RepeatRule = "none"
+	}
 	rem := &Reminder{
 		Title: req.Title, Content: req.Content, Channel: req.Channel,
 		ConversationID: req.ConversationID, CharacterID: req.CharacterID,
 		RemindAt: req.RemindAt, RepeatRule: req.RepeatRule,
 	}
-	if err := s.repo.CreateReminder(rem); err != nil { return nil, fmt.Errorf("创建失败: %w", err) }
+	if err := s.repo.CreateReminder(rem); err != nil {
+		return nil, fmt.Errorf("创建失败: %w", err)
+	}
 	return rem, nil
 }
 
 func (s *service) UpdateReminder(id int, updates map[string]interface{}) (*Reminder, error) {
-	if len(updates) == 0 { return nil, fmt.Errorf("没有可更新的字段") }
-	if err := s.repo.UpdateReminder(id, updates); err != nil { return nil, fmt.Errorf("更新失败: %w", err) }
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("没有可更新的字段")
+	}
+	if err := s.repo.UpdateReminder(id, updates); err != nil {
+		return nil, fmt.Errorf("更新失败: %w", err)
+	}
 	var rem Reminder
 	s.db.First(&rem, id)
 	return &rem, nil
 }
 
-func (s *service) DeleteReminder(id int) error { return s.repo.DeleteReminder(id) }
+func (s *service) DeleteReminder(id int) error              { return s.repo.DeleteReminder(id) }
 func (s *service) ToggleReminder(id int) (*Reminder, error) { return s.repo.ToggleReminder(id) }
-func (s *service) PendingReminders() ([]Reminder, error) { return s.repo.PendingReminders() }
-
+func (s *service) PendingReminders() ([]Reminder, error)    { return s.repo.PendingReminders() }

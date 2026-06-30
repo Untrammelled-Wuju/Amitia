@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package qq
 
 import (
@@ -56,13 +58,13 @@ func NewManager(sidecarURL string) *Manager {
 
 func (m *Manager) SetMessageHandler(handler func(msg *Msg)) {}
 
-func (m *Manager) GetStatus() Status     { m.refreshFromSidecar(); return m.status }
-func (m *Manager) GetAccountID() string  { m.refreshFromSidecar(); return m.accountID }
-func (m *Manager) GetLastError() string  { m.refreshFromSidecar(); return m.lastError }
+func (m *Manager) GetStatus() Status      { m.refreshFromSidecar(); return m.status }
+func (m *Manager) GetAccountID() string   { m.refreshFromSidecar(); return m.accountID }
+func (m *Manager) GetLastError() string   { m.refreshFromSidecar(); return m.lastError }
 func (m *Manager) GetMessageCount() int64 { m.refreshFromSidecar(); return m.messageCount }
-func (m *Manager) IsOnline() bool        { m.refreshFromSidecar(); return m.status == StatusOnline }
-func (m *Manager) GetAppID() string      { return m.appID }
-func (m *Manager) GetSandbox() bool      { return m.sandbox }
+func (m *Manager) IsOnline() bool         { m.refreshFromSidecar(); return m.status == StatusOnline }
+func (m *Manager) GetAppID() string       { return m.appID }
+func (m *Manager) GetSandbox() bool       { return m.sandbox }
 
 func (m *Manager) Connect(appID, token string, sandbox bool) error {
 	m.mu.Lock()

@@ -1,8 +1,12 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="onboarding-shell">
     <div class="onb-container">
       <header class="onb-header">
-        <h1 class="onb-brand">Amitia</h1>
+        <h1 class="onb-brand">AI-Amitia</h1>
         <p class="onb-sub">本地部署的 AI 虚拟陪伴智能体，守护你的每一次对话</p>
       </header>
 

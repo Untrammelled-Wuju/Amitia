@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package mood
 
 import (
@@ -21,14 +23,18 @@ func NewService(ctx *app.AppContext) Service { return &service{db: ctx.DB} }
 func (s *service) List() []map[string]interface{} {
 	var moods []map[string]interface{}
 	s.db.Table("moods").Order("created_at DESC").Limit(50).Find(&moods)
-	if moods == nil { moods = []map[string]interface{}{} }
+	if moods == nil {
+		moods = []map[string]interface{}{}
+	}
 	return moods
 }
 
 func (s *service) GetByConversation(id string) []map[string]interface{} {
 	var moods []map[string]interface{}
 	s.db.Table("moods").Where("conversation_id = ?", id).Order("created_at DESC").Find(&moods)
-	if moods == nil { moods = []map[string]interface{}{} }
+	if moods == nil {
+		moods = []map[string]interface{}{}
+	}
 	return moods
 }
 

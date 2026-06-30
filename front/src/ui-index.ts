@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 // Shared UI Components
 export { default as AppLayout } from "./components/AppLayout.vue"
 export { default as StatusBar } from "./components/StatusBar.vue"

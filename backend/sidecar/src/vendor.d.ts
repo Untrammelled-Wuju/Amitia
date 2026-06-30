@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 declare module "@tencent-weixin/openclaw-weixin/dist/src/auth/login-qr.js" {
   export const DEFAULT_ILINK_BOT_TYPE: string
   export function startWeixinLoginWithQr(opts: {

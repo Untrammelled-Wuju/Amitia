@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package companion
 
 import (
@@ -66,4 +68,3 @@ func RegisterCompanionRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		comp.GET("/rule-logs", handler.GetRuleLogs)
 	}
 }
-

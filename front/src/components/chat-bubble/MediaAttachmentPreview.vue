@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="bubble-image" v-if="imageUrl" @click="showImagePreview = true">
     <img :src="imageUrl" alt="用户上传图片" style="width:150px;height:120px;object-fit:cover;display:block;border-radius:6px;max-width:100%" />

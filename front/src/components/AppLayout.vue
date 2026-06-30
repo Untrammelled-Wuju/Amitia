@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
     <!-- Desktop: top status bar -->
@@ -64,7 +68,7 @@ const pageTitle = computed(() => {
     "/model": "模型配置", "/reminders": "日程提醒", "/import": "导入", "/safety": "安全设置",
     "/qq": "QQ连接", "/wechat": "微信", "/login": "登录",
   }
-  return titles[router.currentRoute.value.path] || "Amitia"
+  return titles[router.currentRoute.value.path] || "AI-Amitia"
 })
 
 // Health state

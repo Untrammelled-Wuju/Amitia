@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { get, post, put, del } from "@/composables/request"
 
 export function fetchConvsApi(params: any) {

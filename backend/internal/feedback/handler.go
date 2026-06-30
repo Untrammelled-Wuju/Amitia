@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package feedback
 
 import (
@@ -8,16 +10,13 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-
 type Handler struct {
 	service Service
 }
 
-
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
 }
-
 
 func (h *Handler) Create(c *gin.Context) {
 	msgID := c.Param("id")
@@ -34,7 +33,6 @@ func (h *Handler) Create(c *gin.Context) {
 	util.SuccessMsgResponse(c, "反馈已提交", fb)
 }
 
-
 func (h *Handler) GetByMessage(c *gin.Context) {
 	msgID := c.Param("id")
 	items, err := h.service.GetByMessage(msgID)
@@ -45,16 +43,16 @@ func (h *Handler) GetByMessage(c *gin.Context) {
 	util.SuccessResponse(c, items)
 }
 
-
 func (h *Handler) Stats(c *gin.Context) {
 	stats := h.service.GetStats()
 	util.SuccessResponse(c, stats)
 }
 
-
 func (h *Handler) Recent(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	if limit <= 0 || limit > 100 { limit = 20 }
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
 	items, err := h.service.GetRecent(limit)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
@@ -62,7 +60,6 @@ func (h *Handler) Recent(c *gin.Context) {
 	}
 	util.SuccessResponse(c, items)
 }
-
 
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))

@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div :class="['chat-message', message.role, { 'is-reminder': isReminder, 'is-tool-result': isToolResult }]">
     <div class="message-avatar">

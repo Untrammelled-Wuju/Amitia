@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package tts
 
 import (
@@ -22,10 +24,10 @@ import (
 const volcanoSSEUri = "https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse"
 
 type v3ReqParams struct {
-	Text        string          `json:"text"`
-	Speaker     string          `json:"speaker"`
-	AudioParams audioParams     `json:"audio_params"`
-	Additions   string          `json:"additions,omitempty"`
+	Text        string      `json:"text"`
+	Speaker     string      `json:"speaker"`
+	AudioParams audioParams `json:"audio_params"`
+	Additions   string      `json:"additions,omitempty"`
 }
 
 type audioParams struct {
@@ -71,7 +73,7 @@ func getCacheDir() string {
 
 func cacheKey(cfg *TtsConfig, text string) string {
 	h := sha256.New()
-	h.Write([]byte(fmt.Sprintf("%s|%s|%.1f|%.1f|%.1f|%s", cfg.VoiceType, text, cfg.Speed, cfg.Pitch, cfg.Volume, cfg.Emotion, cfg.EmotionScale, cfg.SilenceDuration)))
+	h.Write([]byte(fmt.Sprintf("%s|%s|%.1f|%.1f|%.1f|%s|%d|%d", cfg.VoiceType, text, cfg.Speed, cfg.Pitch, cfg.Volume, cfg.Emotion, cfg.EmotionScale, cfg.SilenceDuration)))
 	return fmt.Sprintf("%x.mp3", h.Sum(nil))
 }
 
@@ -179,7 +181,6 @@ func TestConnection(cfg *TtsConfig) error {
 	return err
 }
 
-
 const volcanoCloneUri = "https://openspeech.bytedance.com/api/v3/tts/voice_clone"
 const volcanoV1CloneUri = "https://openspeech.bytedance.com/api/v1/mega_tts/audio/upload"
 const volcanoV1StatusUri = "https://openspeech.bytedance.com/api/v1/mega_tts/status"
@@ -200,7 +201,7 @@ func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte
 	}
 
 	reqBody := VoiceCloneRequest{
-		SpeakerID: "custom_speaker_id",
+		SpeakerID:       "custom_speaker_id",
 		CustomSpeakerID: customName,
 		Audio: cloneAudio{
 			Data:   base64.StdEncoding.EncodeToString(audioData),
@@ -488,14 +489,13 @@ func buildAdditions(cfg *TtsConfig) string {
 	return string(b)
 }
 
-
 func truncateStr(s string, n int) string {
 	runes := []rune(s)
-	if len(runes) <= n { return s }
+	if len(runes) <= n {
+		return s
+	}
 	return string(runes[:n]) + "..."
 }
-
-
 
 func HandlePlayMessage(c *gin.Context, db interface{}) {
 	msgID := c.Param("messageId")

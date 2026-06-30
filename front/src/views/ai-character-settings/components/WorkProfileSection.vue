@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="section-card">
     <div class="section-title">上班规则  <el-button size="small" @click="saveWorkProfile" :loading="workSaving" type="primary" style="margin-left:12px">保存</el-button></div>

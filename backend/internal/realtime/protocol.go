@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package realtime
 
 import (
@@ -58,7 +60,9 @@ func buildEventFrame(msgType byte, eventCode int32, sessionID string, payload []
 	}
 
 	plen := make([]byte, 4)
-	if payload == nil { payload = []byte{} }
+	if payload == nil {
+		payload = []byte{}
+	}
 	binary.BigEndian.PutUint32(plen, uint32(len(payload)))
 	buf = append(buf, plen...)
 	buf = append(buf, payload...)
@@ -115,7 +119,9 @@ type ParsedFrame struct {
 }
 
 func parseFrame(data []byte) (*ParsedFrame, error) {
-	if len(data) < 4 { return nil, nil }
+	if len(data) < 4 {
+		return nil, nil
+	}
 	var hdrBytes [4]byte
 	copy(hdrBytes[:], data[:4])
 	hdr := parseHeader(hdrBytes)
@@ -124,14 +130,18 @@ func parseFrame(data []byte) (*ParsedFrame, error) {
 	f := &ParsedFrame{Hdr: hdr}
 
 	if hdr.Flags&FlagHasEvent != 0 {
-		if pos+4 > len(data) { return f, nil }
+		if pos+4 > len(data) {
+			return f, nil
+		}
 		f.EventCode = int32(binary.BigEndian.Uint32(data[pos:]))
 		pos += 4
 	}
 
 	isConn := f.EventCode == 1 || f.EventCode == 2 || f.EventCode == 50 || f.EventCode == 51 || f.EventCode == 52
 	if !isConn {
-		if pos+4 > len(data) { return f, nil }
+		if pos+4 > len(data) {
+			return f, nil
+		}
 		sidLen := binary.BigEndian.Uint32(data[pos:])
 		pos += 4
 		if sidLen > 0 && sidLen < 1024 && pos+int(sidLen) <= len(data) {
@@ -140,7 +150,9 @@ func parseFrame(data []byte) (*ParsedFrame, error) {
 		}
 	}
 
-	if pos+4 > len(data) { return f, nil }
+	if pos+4 > len(data) {
+		return f, nil
+	}
 	payloadLen := binary.BigEndian.Uint32(data[pos:])
 	pos += 4
 

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 彭旭
+# SPDX-License-Identifier: AGPL-3.0-only
 # SurrealDB 二进制下载脚本 (Windows)
 # 用法: .\scripts\download-surreal.ps1
 # 部署时需将 backend\surrealdb\surreal.exe 复制到 WorkDone\surrealdb\

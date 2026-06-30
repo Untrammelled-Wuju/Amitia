@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package redis
 
 import (
@@ -8,7 +10,6 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 )
-
 
 func NewRDB(addr, password string, db int) *goredis.Client {
 	rdb := goredis.NewClient(&goredis.Options{

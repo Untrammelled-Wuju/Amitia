@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, computed, inject } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../../composables/useApi"

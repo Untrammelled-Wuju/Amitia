@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package user
 
 import (
@@ -6,16 +8,13 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-
 type Handler struct {
 	service Service
 }
 
-
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
 }
-
 
 func (h *Handler) Status(c *gin.Context) {
 	hasAdmin, err := h.service.HasAdmin()
@@ -25,7 +24,6 @@ func (h *Handler) Status(c *gin.Context) {
 	}
 	util.SuccessResponse(c, gin.H{"hasAdmin": hasAdmin})
 }
-
 
 func (h *Handler) Setup(c *gin.Context) {
 	var req SetupRequest
@@ -46,7 +44,6 @@ func (h *Handler) Setup(c *gin.Context) {
 	util.SuccessMsgResponse(c, "管理员注册成功", resp)
 }
 
-
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,7 +58,6 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "登录成功", resp)
 }
-
 
 func (h *Handler) Me(c *gin.Context) {
 	token := extractToken(c)
@@ -78,7 +74,6 @@ func (h *Handler) Me(c *gin.Context) {
 	util.SuccessResponse(c, resp)
 }
 
-
 func (h *Handler) Logout(c *gin.Context) {
 	token := extractToken(c)
 	if token == "" {
@@ -92,7 +87,6 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "已登出", nil)
 }
-
 
 func (h *Handler) ListSessions(c *gin.Context) {
 	token := extractToken(c)
@@ -108,7 +102,6 @@ func (h *Handler) ListSessions(c *gin.Context) {
 	}
 	util.SuccessResponse(c, sessions)
 }
-
 
 func (h *Handler) RevokeSession(c *gin.Context) {
 	token := extractToken(c)
@@ -130,7 +123,6 @@ func (h *Handler) RevokeSession(c *gin.Context) {
 	util.SuccessResponse(c, nil)
 }
 
-
 func (h *Handler) RevokeAllSessions(c *gin.Context) {
 	token := extractToken(c)
 	if token == "" {
@@ -144,7 +136,6 @@ func (h *Handler) RevokeAllSessions(c *gin.Context) {
 	}
 	util.SuccessResponse(c, nil)
 }
-
 
 func (h *Handler) ChangePassword(c *gin.Context) {
 	token := extractToken(c)
@@ -170,7 +161,6 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 	util.SuccessMsgResponse(c, "密码修改成功", nil)
 }
 
-
 func extractToken(c *gin.Context) string {
 	auth := c.GetHeader("Authorization")
 	if len(auth) > 7 && auth[:7] == "Bearer " {
@@ -178,7 +168,6 @@ func extractToken(c *gin.Context) string {
 	}
 	return ""
 }
-
 
 func parseID(s string) int {
 	id := 0

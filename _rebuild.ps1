@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 彭旭
+# SPDX-License-Identifier: AGPL-3.0-only
 $file = "D:\桌面\跟进项目\U-Ai\记忆系统增强规划.md"
 $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine("# 项目记忆系统增强规划")

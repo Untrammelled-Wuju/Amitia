@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, watch, onUnmounted } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"

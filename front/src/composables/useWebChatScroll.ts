@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, type Ref, nextTick } from "vue"
 import { useApi } from "./useApi"
 

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import type { Character, Conversation } from "@/types"

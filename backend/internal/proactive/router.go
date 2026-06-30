@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package proactive
 
 import (
@@ -31,9 +33,7 @@ func RegisterProactiveRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/reminders/cancel-by-query", handler.CancelRemindersByQuery)
 	r.POST("/reminders/cancel-latest", handler.CancelLatestReminder)
 	r.GET("/reminders/status", handler.ReminderStatus)
-		r.GET("/reminders/pending", handler.PendingReminders)
+	r.GET("/reminders/pending", handler.PendingReminders)
 	r.GET("/reminders/cleanup-config", handler.GetCleanupConfig)
 	r.PUT("/reminders/cleanup-config", handler.SetCleanupConfig)
 }
-
-

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 type Memory struct {
@@ -89,7 +91,6 @@ type MemoryListResponse struct {
 	Page     int      `json:"page"`
 	PageSize int      `json:"pageSize"`
 }
-
 
 type MemoryCandidateModel struct {
 	ID             string `gorm:"column:id;primaryKey" json:"id"`

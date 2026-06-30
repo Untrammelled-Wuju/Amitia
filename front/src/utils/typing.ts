@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 const CHAR_DELAY_MS = 20
 const SENTENCE_FLOAT_MIN = 200
 const SENTENCE_FLOAT_MAX = 500

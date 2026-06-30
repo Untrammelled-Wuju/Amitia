@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 export function fmtBytes(bytes: number): string {
   if (!bytes || bytes === 0) return "0 B"
   if (bytes < 1024) return bytes + " B"

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 export function sourceTableLabel(table: string): string {
   const map: Record<string, string> = {
     messages: "聊天消息",

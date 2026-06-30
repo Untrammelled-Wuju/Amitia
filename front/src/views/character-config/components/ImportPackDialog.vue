@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" title="导入角色包" width="560px" destroy-on-close>
     <template v-if="!preview">

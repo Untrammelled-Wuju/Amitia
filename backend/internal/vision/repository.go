@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package vision
 
 import "gorm.io/gorm"
@@ -19,7 +21,9 @@ func NewRepository(db *gorm.DB) Repository { return &repository{db: db} }
 func (r *repository) List() ([]VisionConfig, error) {
 	var configs []VisionConfig
 	err := r.db.Order("is_active DESC, created_at DESC").Find(&configs).Error
-	if configs == nil { configs = []VisionConfig{} }
+	if configs == nil {
+		configs = []VisionConfig{}
+	}
 	return configs, err
 }
 
@@ -35,7 +39,9 @@ func (r *repository) Update(id int, updates map[string]interface{}) error {
 	return r.db.Model(&VisionConfig{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *repository) Delete(id int) error { return r.db.Where("id = ?", id).Delete(&VisionConfig{}).Error }
+func (r *repository) Delete(id int) error {
+	return r.db.Where("id = ?", id).Delete(&VisionConfig{}).Error
+}
 
 func (r *repository) Activate(id int) error {
 	r.db.Model(&VisionConfig{}).Where("is_active = 1").Update("is_active", 0)

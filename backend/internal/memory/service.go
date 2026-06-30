@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 import (
@@ -627,10 +629,18 @@ func (s *service) BatchAcceptCandidates(ids []string) ([]Memory, error) {
 
 func (s *service) UpdateCandidate(id string, req *UpdateCandidateRequest) (*MemoryCandidate, error) {
 	updates := make(map[string]interface{})
-	if req.Key != nil { updates["key"] = *req.Key }
-	if req.Value != nil { updates["value"] = *req.Value }
-	if req.MemoryType != nil { updates["memory_type"] = *req.MemoryType }
-	if req.Importance != nil { updates["importance"] = *req.Importance }
+	if req.Key != nil {
+		updates["key"] = *req.Key
+	}
+	if req.Value != nil {
+		updates["value"] = *req.Value
+	}
+	if req.MemoryType != nil {
+		updates["memory_type"] = *req.MemoryType
+	}
+	if req.Importance != nil {
+		updates["importance"] = *req.Importance
+	}
 	if err := s.repo.UpdateCandidate(id, updates); err != nil {
 		return nil, err
 	}
@@ -1286,7 +1296,6 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	return nil
 }
 
-
 func (s *service) logRetrieval(characterID, queryText string, memoryIDs []string, results []HybridSearchResult) {
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
@@ -1324,13 +1333,6 @@ func (s *service) RetrieveStats() (map[string]interface{}, error) {
 	s.db.Table("retrieval_logs").Count(&total)
 	return map[string]interface{}{
 		"recentLogs": rows,
-		"totalCount":  total,
+		"totalCount": total,
 	}, nil
 }
-
-
-
-
-
-
-

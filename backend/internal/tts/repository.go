@@ -1,4 +1,6 @@
-﻿package tts
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package tts
 
 import (
 	"gorm.io/gorm"
@@ -26,7 +28,9 @@ func NewRepository(db *gorm.DB) Repository {
 func (r *repository) List() ([]TtsConfig, error) {
 	var configs []TtsConfig
 	err := r.db.Order("is_active DESC, created_at DESC").Find(&configs).Error
-	if configs == nil { configs = []TtsConfig{} }
+	if configs == nil {
+		configs = []TtsConfig{}
+	}
 	return configs, err
 }
 
@@ -93,16 +97,30 @@ func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 	if cfg.VoiceType == "" {
 		cfg.VoiceType = active.VoiceType
 	}
-	if cfg.Speed == 0 { cfg.Speed = active.Speed }
-	if cfg.Pitch == 0 { cfg.Pitch = active.Pitch }
-	if cfg.Volume == 0 { cfg.Volume = active.Volume }
+	if cfg.Speed == 0 {
+		cfg.Speed = active.Speed
+	}
+	if cfg.Pitch == 0 {
+		cfg.Pitch = active.Pitch
+	}
+	if cfg.Volume == 0 {
+		cfg.Volume = active.Volume
+	}
 	if char.VoiceMode == "clone" && char.CustomVoiceID != "" {
 		cfg.VoiceType = char.CustomVoiceID
 		cfg.ResourceId = "seed-icl-2.0"
 	}
-	if cfg.VoiceType == "" { cfg.VoiceType = "zh_female_vv_uranus_bigtts" }
-	if cfg.Speed == 0 { cfg.Speed = 1.0 }
-	if cfg.Pitch == 0 { cfg.Pitch = 1.0 }
-	if cfg.Volume == 0 { cfg.Volume = 1.0 }
+	if cfg.VoiceType == "" {
+		cfg.VoiceType = "zh_female_vv_uranus_bigtts"
+	}
+	if cfg.Speed == 0 {
+		cfg.Speed = 1.0
+	}
+	if cfg.Pitch == 0 {
+		cfg.Pitch = 1.0
+	}
+	if cfg.Volume == 0 {
+		cfg.Volume = 1.0
+	}
 	return cfg, nil
 }

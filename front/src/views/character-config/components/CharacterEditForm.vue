@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-tabs v-model="activeTabModel">
     <el-tab-pane label="编辑角色" name="edit">

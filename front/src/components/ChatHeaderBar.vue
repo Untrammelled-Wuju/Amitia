@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <header class="chat-header">
     <el-button :icon="Menu" text circle size="small" class="menu-btn" @click="$emit('toggleDrawer')" />

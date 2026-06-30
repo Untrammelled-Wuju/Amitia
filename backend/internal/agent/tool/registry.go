@@ -1,12 +1,14 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package tool
 
 import "encoding/json"
 
 var (
-	tools       []Tool
-	funcMap     = make(map[string]ToolCallFunc)
-	memTools    []Tool
-	memFuncMap  = make(map[string]ToolCallFunc)
+	tools      []Tool
+	funcMap    = make(map[string]ToolCallFunc)
+	memTools   []Tool
+	memFuncMap = make(map[string]ToolCallFunc)
 )
 
 func Register(t Tool, fn ToolCallFunc) {
