@@ -38,7 +38,7 @@ export function useOnboardingWizard() {
     apiType: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",
     apiKey: "",
-    modelName: "deepseek-chat",
+    modelName: "",
     charName: "小暖",
     charIdentity: "AI 虚拟陪伴角色",
     charPersonality: "温和、体贴、有耐心",
@@ -265,6 +265,12 @@ export function useOnboardingWizard() {
     if (current.value === 4) {
       if (!form.charName) {
         stepError.value = "请输入角色名称"
+        return
+      }
+    }
+    if (current.value === 3) {
+      if (!form.modelName.trim()) {
+        stepError.value = "请输入模型名称"
         return
       }
     }

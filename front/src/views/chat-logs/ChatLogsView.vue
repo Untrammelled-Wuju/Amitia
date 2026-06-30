@@ -189,7 +189,7 @@ onMounted(() => { fetchConvs(); loadCharacters() })
 </script>
 
 <style scoped>
-.logs-page { padding: 0 24px 24px; max-width: 1200px; margin: 0 auto; }
+.logs-page { padding: 0 24px 24px; }
 .page-title { font-size: var(--ac-font-size-lg); font-weight: 600; margin: 0 0 14px 0; color: var(--ac-color-text); }
 .logs-layout { display: flex; gap: 0; height: calc(100vh - 200px); min-height: 400px; border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-md); overflow: hidden; }
 .msg-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; padding: 12px; }
