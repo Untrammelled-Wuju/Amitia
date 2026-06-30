@@ -12,18 +12,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         :model-value="rawText"
         type="textarea"
         :rows="8"
-        placeholder="Paste your chat history. Examples:
+        placeholder="粘贴聊天记录。示例：
 
-User: I'm a bit tired today
-AI: Take a rest then.
+用户：我今天有点累
+AI：那就休息一下。
 
-[2026-05-18 12:00] Me: What's for dinner?
-[2026-05-18 12:01] You: Whatever you want
+[2026-05-18 12:00] 我：晚饭吃什么？
+[2026-05-18 12:01] 你：随你喜欢
 
-2026/05/18 12:00 Zhang San
-Hello!
-2026/05/18 12:01 Li Si
-Hey there!"
+2026/05/18 12:00 张三
+你好！
+2026/05/18 12:01 李四
+你好呀！"
         @update:model-value="$emit('update:rawText', $event)"
       />
       <div class="input-options">
@@ -55,7 +55,7 @@ Hey there!"
       </el-collapse>
       <div class="input-actions">
         <el-button type="primary" :icon="Reading" :loading="parsing" :disabled="!rawText.trim()" @click="$emit('parse')">
-          Parse
+          解析
         </el-button>
         <el-upload :auto-upload="false" :show-file-list="false" :on-change="(file: any) => $emit('fileChange', file)">
           <el-button :icon="Upload">上传 .txt / .md</el-button>

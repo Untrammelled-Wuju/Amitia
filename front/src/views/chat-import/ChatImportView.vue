@@ -65,10 +65,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       </template>
       <div class="post-actions">
         <el-button :loading="genSummaryLoading" @click="handleGenSummary" v-if="genSummary">
-          Generate Summary
+          生成摘要
         </el-button>
         <el-button :loading="extractLoading" @click="handleExtractMemories" v-if="extractMemories">
-          Extract Memories
+          提取记忆
         </el-button>
         <router-link v-if="importedConvId" :to="'/logs'" class="inline-link">
           查看已导入会话

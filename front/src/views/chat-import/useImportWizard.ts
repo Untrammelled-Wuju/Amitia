@@ -134,9 +134,9 @@ export function useImportWizard() {
       if (result?.candidates) {
         memCandidates.value = result.candidates
       }
-      ElMessage.success(`Extracted ${memCandidates.value.length} memory candidates`)
+      ElMessage.success(`已提取 ${memCandidates.value.length} 条记忆候选`)
     } catch (err: any) {
-      ElMessage.error(err?.message || "Failed to extract memory candidates")
+      ElMessage.error(err?.message || "提取记忆候选失败")
     }
     extractLoading.value = false
   }
@@ -146,11 +146,11 @@ export function useImportWizard() {
     try {
       const result = await createConversationFromImport(importedBatchId.value)
       if (result?.id) {
-        ElMessage.success("Conversation created! Redirecting to chat...")
+        ElMessage.success("会话已创建，正在跳转聊天...")
         router.push(`/chat/${result.id}`)
       }
     } catch (err: any) {
-      ElMessage.error(err?.message || "Failed to create conversation")
+      ElMessage.error(err?.message || "创建会话失败")
     }
   }
 
