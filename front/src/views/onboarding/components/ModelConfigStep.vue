@@ -23,7 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-form-item label="模型名称">
         <div class="model-detect-wrap">
           <div class="model-detect-row">
-            <el-input v-model="modelNameModel" placeholder="deepseek-chat" class="model-input" />
+            <el-input v-model="modelNameModel" placeholder="请输入模型名称" class="model-input" />
             <el-button type="success" :loading="detectingModels" @click="emit('detect')" :disabled="!baseUrl || !apiKey">
               {{ detectingModels ? '检测中...' : '检测模型' }}
             </el-button>
