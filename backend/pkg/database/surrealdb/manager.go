@@ -15,6 +15,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 var surrealCmd *exec.Cmd
@@ -62,11 +63,7 @@ func killExistingSurreal(port int) {
 
 func StartSurreal() error {
 	cfg := config.AppCfg.Surreal
-	workDir, err := os.Getwd()
-	if err != nil {
-		log.Error("获取工作目录失败:", err)
-		return err
-	}
+	workDir := util.RuntimeRoot()
 
 	killExistingSurreal(cfg.Port)
 
@@ -90,7 +87,7 @@ func StartSurreal() error {
 
 	storagePath := cfg.DataPath
 	if storagePath != "" && storagePath != "memory" {
-		absPath := filepath.Join(workDir, storagePath)
+		absPath := util.ResolveRuntimePath(workDir, storagePath)
 		os.MkdirAll(absPath, 0755)
 		storagePath = "surrealkv:" + absPath
 	}

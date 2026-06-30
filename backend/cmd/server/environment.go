@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type Service struct {
@@ -207,18 +209,18 @@ func (w *serviceWriter) Write(p []byte) (int, error) {
 }
 
 func startEnvironment() *Environment {
-	cwd, _ := os.Getwd()
+	runtimeRoot := util.RuntimeRoot()
 
-	bundledQQ := filepath.Join(cwd, "qq-sidecar", "bundle.mjs")
-	bundledWX := filepath.Join(cwd, "sidecar", "bundle.mjs")
+	bundledQQ := filepath.Join(runtimeRoot, "qq-sidecar", "bundle.mjs")
+	bundledWX := filepath.Join(runtimeRoot, "sidecar", "bundle.mjs")
 	_, qqOk := os.Stat(bundledQQ)
 	_, wxOk := os.Stat(bundledWX)
 	useBundled := qqOk == nil && wxOk == nil
 
 	var env *Environment
 	if useBundled {
-		env = NewEnvironment(cwd)
-		log.Printf("[Env] 根目录(CWD): %s", cwd)
+		env = NewEnvironment(runtimeRoot)
+		log.Printf("[Env] 根目录: %s", runtimeRoot)
 		log.Printf("[Env] 使用打包版附属服务")
 	} else {
 		workspace := findWorkspace()
