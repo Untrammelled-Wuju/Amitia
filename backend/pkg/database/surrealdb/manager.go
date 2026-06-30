@@ -3,13 +3,16 @@
 package surrealdb
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -80,7 +83,9 @@ func StartSurreal() error {
 	}
 
 	if _, err := os.Stat(surrealPath); os.IsNotExist(err) {
-		return fmt.Errorf("SurrealDB程序不存在: %s", surrealPath)
+		if err := ensureSurrealBinary(surrealPath, surrealDir); err != nil {
+			return err
+		}
 	}
 
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
@@ -109,6 +114,80 @@ func StartSurreal() error {
 
 	surrealCmd = cmd
 	log.Info("SurrealDB已启动", "port", cfg.Port, "pid", cmd.Process.Pid)
+	return nil
+}
+
+func ensureSurrealBinary(surrealPath, surrealDir string) error {
+	if _, err := os.Stat(surrealPath); err == nil {
+		return nil
+	}
+
+	for _, name := range []string{"surreal.exe.zip", "surreal.zip"} {
+		zipPath := filepath.Join(surrealDir, name)
+		if _, err := os.Stat(zipPath); err == nil {
+			log.Info("正在解压SurrealDB程序", "zip", zipPath)
+			if err := unzipSurreal(zipPath, surrealDir); err != nil {
+				return fmt.Errorf("解压SurrealDB程序失败: %w", err)
+			}
+			if _, err := os.Stat(surrealPath); err == nil {
+				return nil
+			}
+			return fmt.Errorf("SurrealDB压缩包中未找到程序: %s", surrealPath)
+		}
+	}
+
+	return fmt.Errorf("SurrealDB程序不存在: %s", surrealPath)
+}
+
+func unzipSurreal(zipPath, targetDir string) error {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	targetDir, err = filepath.Abs(targetDir)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range reader.File {
+		targetPath := filepath.Join(targetDir, file.Name)
+		cleanPath, err := filepath.Abs(targetPath)
+		if err != nil {
+			return err
+		}
+		if cleanPath != targetDir && !strings.HasPrefix(cleanPath, targetDir+string(os.PathSeparator)) {
+			return fmt.Errorf("非法压缩包路径: %s", file.Name)
+		}
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(cleanPath, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
+			return err
+		}
+		src, err := file.Open()
+		if err != nil {
+			return err
+		}
+		dst, err := os.OpenFile(cleanPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			src.Close()
+			return err
+		}
+		_, copyErr := io.Copy(dst, src)
+		closeErr := dst.Close()
+		src.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
 	return nil
 }
 
