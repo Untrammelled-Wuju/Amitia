@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 var qdrantCmd *exec.Cmd
@@ -60,11 +61,7 @@ func killExistingQdrant(port int) {
 
 func StartQdrant() error {
 	cfg := config.AppCfg.Qdrant
-	workDir, err := os.Getwd()
-	if err != nil {
-		log.Error("获取工作目录失败:", err)
-		return err
-	}
+	workDir := util.RuntimeRoot()
 
 	killExistingQdrant(cfg.Port)
 

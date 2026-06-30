@@ -8,12 +8,36 @@
 import sqlite3, socket, urllib.request, json, time, sys, os
 
 SCRIPT = os.path.abspath(__file__)
-PROJECT = os.path.dirname(os.path.dirname(SCRIPT))
-DB = os.path.abspath(os.path.join(PROJECT, "..", "release", "data", "app.db"))
+BACKEND = os.path.dirname(os.path.dirname(SCRIPT))
+ROOT = os.path.dirname(BACKEND)
 API = "http://127.0.0.1:8899"
 CID = "6bf3e54c-bc0e-4180-9613-2c10861ae6be"
 WECHAT = 9876
 QQ = 9877
+
+def is_runtime_dir(path):
+    return os.path.isdir(path) and os.path.isdir(os.path.join(path, "qdrant")) and os.path.isdir(os.path.join(path, "surrealdb")) and os.path.isdir(os.path.join(path, "data"))
+
+def find_db_path():
+    preferred = ["release", "WorkDone"]
+    for name in preferred:
+        candidate = os.path.join(ROOT, name)
+        if is_runtime_dir(candidate):
+            db = os.path.join(candidate, "data", "app.db")
+            if os.path.exists(db):
+                return os.path.abspath(db)
+    for name in os.listdir(ROOT):
+        candidate = os.path.join(ROOT, name)
+        if is_runtime_dir(candidate):
+            db = os.path.join(candidate, "data", "app.db")
+            if os.path.exists(db):
+                return os.path.abspath(db)
+    fallback = os.path.join(BACKEND, "data", "app.db")
+    if os.path.exists(fallback):
+        return os.path.abspath(fallback)
+    return os.path.abspath(os.path.join(ROOT, "data", "app.db"))
+
+DB = find_db_path()
 
 PASS = 0
 FAIL = 0
@@ -113,9 +137,9 @@ for port, name in [(WECHAT, "wechat"), (QQ, "QQ")]:
         check(f"{name} 可达", False, str(e))
 
 print("\n[5] 代码逻辑")
-svc = open(os.path.join(PROJECT, "internal", "companion", "service.go"), encoding="utf-8").read()
+svc = open(os.path.join(BACKEND, "internal", "companion", "service.go"), encoding="utf-8").read()
 check("companion isDefault守卫", svc.count("isDefaultCharacter(characterID)") >= 2)
-hdl = open(os.path.join(PROJECT, "internal", "proactive", "handler.go"), encoding="utf-8").read()
+hdl = open(os.path.join(BACKEND, "internal", "proactive", "handler.go"), encoding="utf-8").read()
 check("TriggerRule wechat", "sendToWechatSidecar" in hdl)
 check("TriggerRule QQ", "sendToQQSidecarForTrigger" in hdl)
 

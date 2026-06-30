@@ -28,6 +28,7 @@ import (
 	"github.com/u-ai/backend/pkg/database/mysql"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
+	"github.com/u-ai/backend/pkg/util"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
 )
@@ -52,13 +53,20 @@ func killExistingServer(addr string) {
 }
 
 func main() {
+	runtimeRoot := util.RuntimeRoot()
+
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "config"
+		configPath = filepath.Join(runtimeRoot, "config")
+	} else if !filepath.IsAbs(configPath) {
+		configPath = filepath.Join(runtimeRoot, configPath)
 	}
 	config.InitConfig(configPath)
 
-	log.InitLogger("logs")
+	config.AppCfg.Storage.DataDir = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Storage.DataDir)
+	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)
+
+	log.InitLogger(filepath.Join(runtimeRoot, "logs"))
 
 	db := mysql.NewSQLite(config.AppCfg.Storage.DataDir)
 
