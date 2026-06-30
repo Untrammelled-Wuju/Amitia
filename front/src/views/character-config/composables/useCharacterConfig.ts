@@ -3,13 +3,14 @@
 import { ref, reactive, computed, inject } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../../composables/useApi"
-import { type TemplateItem, DEFAULT_BOUNDARY, DEFAULT_PERSONALITY_CONFIG } from "./types"
+import { type TemplateItem, DEFAULT_BOUNDARY, DEFAULT_PERSONALITY_CONFIG, type PersonalityConfig } from "./types"
 
 export { type TemplateItem } from "./types"
 
 export function useCharacterConfig() {
   const { get, post, put, del } = useApi()
   const refreshHealth = inject<() => void>("refreshHealth", () => {})
+  const defaultPersonalityConfig = DEFAULT_PERSONALITY_CONFIG
 
   const templates = ref<any[]>([])
   const showTemplateDialog = ref(false)
@@ -28,10 +29,15 @@ export function useCharacterConfig() {
     speakingStyle: "", relationshipStyle: "",
     systemPrompt: "", boundaryRules: DEFAULT_BOUNDARY,
     isActive: true, description: "", basePrompt: "", isDefault: false, status: "enabled",
-    personalityConfig: { ...DEFAULT_PERSONALITY_CONFIG },
+    personalityConfig: { ...DEFAULT_PERSONALITY_CONFIG } as PersonalityConfig,
     chatStyleConfig: null as any,
     sceneRules: null as any,
   })
+
+  function normalizePersonalityConfig(value: any): PersonalityConfig {
+    const raw = typeof value === "string" ? JSON.parse(value) : (value || {})
+    return { ...defaultPersonalityConfig, ...(raw as Partial<PersonalityConfig>) }
+  }
 
   const hasOtherActive = computed(() =>
     characters.value.some(c => c.isActive && c.id !== selectedId.value)
@@ -64,7 +70,7 @@ export function useCharacterConfig() {
     form.basePrompt = c.basePrompt || ""
     form.isDefault = !!c.isDefault
     form.status = c.status || "enabled"
-    form.personalityConfig = typeof c.personalityConfig === "string" ? JSON.parse(c.personalityConfig) : (c.personalityConfig || { ...DEFAULT_PERSONALITY_CONFIG })
+    form.personalityConfig = normalizePersonalityConfig(c.personalityConfig)
     form.chatStyleConfig = c.chatStyleConfig || null
     form.sceneRules = c.sceneRules || null
     form.isActive = !!c.isActive
@@ -100,7 +106,7 @@ export function useCharacterConfig() {
     form.systemPrompt = c.systemPrompt || ""; form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY
     form.description = c.description || ""; form.basePrompt = c.basePrompt || ""
     form.isDefault = false; form.status = "enabled"
-    form.personalityConfig = typeof c.personalityConfig === "string" ? JSON.parse(c.personalityConfig) : (c.personalityConfig || { ...DEFAULT_PERSONALITY_CONFIG })
+    form.personalityConfig = normalizePersonalityConfig(c.personalityConfig)
     form.chatStyleConfig = c.chatStyleConfig || null; form.sceneRules = c.sceneRules || null
     form.isActive = false
     ElMessage.success("已复制角色，请修改后保存")

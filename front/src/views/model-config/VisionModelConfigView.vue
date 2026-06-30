@@ -87,7 +87,7 @@ async function saveVision() {
     if (visionConfigId.value) {
       await put(`/api/vision/configs/${visionConfigId.value}`, payload)
     } else {
-      const r = await post("/api/vision/configs", { ...payload, isActive: 1 })
+      const r = await post<{ id: number }>("/api/vision/configs", { ...payload, isActive: 1 })
       visionConfigId.value = r.id
     }
     testResult.value = ""

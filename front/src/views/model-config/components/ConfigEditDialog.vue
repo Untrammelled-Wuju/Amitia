@@ -72,15 +72,15 @@ SPDX-License-Identifier: AGPL-3.0-only
               {{ detectingModels ? '检测中' : '检测可用模型' }}
             </el-button>
           </div>
-          <div v-if="detectError" class="detect-error">{{ detectError }}</div>
+          <div v-if="localDetectError || detectError" class="detect-error">{{ localDetectError || detectError }}</div>
           <div v-if="detectedModels.length > 0" class="detect-dropdown">
             <div class="detect-hint">已检测到 {{ detectedModels.length }} 个模型，点击选择：</div>
             <div
               v-for="m in detectedModels"
               :key="m.id"
               class="detect-option"
-              :class="{ active: form.modelName === m.id }"
-              @click="form.modelName = m.id; detectError = ''"
+              :class="{ active: props.form.modelName === m.id }"
+              @click="selectModel(m.id)"
             >
               {{ m.id }}
             </div>
@@ -150,7 +150,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, watch } from "vue"
 import type { FormInstance, FormRules } from "element-plus"
 
 const props = defineProps<{
@@ -179,8 +179,18 @@ const visible = computed({
 })
 
 const formRef = ref<FormInstance>()
+const localDetectError = ref("")
 
 defineExpose({ formRef })
+
+watch(() => props.detectError, (val) => {
+  localDetectError.value = val
+}, { immediate: true })
+
+function selectModel(modelId: string) {
+  props.form.modelName = modelId
+  localDetectError.value = ""
+}
 
 function capLabel(key: string | number): string {
   const labels: Record<string, string> = {

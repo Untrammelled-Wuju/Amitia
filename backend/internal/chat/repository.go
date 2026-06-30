@@ -22,6 +22,7 @@ type Repository interface {
 	GetActiveModel() (*ModelConfig, error)
 	GetModelByID(id int) (*ModelConfig, error)
 	ListModels() ([]ModelConfig, error)
+	CountModels() (int64, error)
 	CreateModel(cfg *ModelConfig) error
 	UpdateModel(id int, updates map[string]interface{}) error
 	DeleteModel(id int) error
@@ -172,6 +173,12 @@ func (r *repository) ListModels() ([]ModelConfig, error) {
 		cfgs = []ModelConfig{}
 	}
 	return cfgs, err
+}
+
+func (r *repository) CountModels() (int64, error) {
+	var count int64
+	err := r.db.Table("model_configs").Count(&count).Error
+	return count, err
 }
 
 func (r *repository) CreateModel(cfg *ModelConfig) error {

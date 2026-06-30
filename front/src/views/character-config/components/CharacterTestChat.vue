@@ -22,11 +22,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-input
         v-model="msgModel"
         placeholder="输入测试消息..."
-        @keyup.enter="emit('send', chatRef)"
+        @keyup.enter="emit('send', msgModel)"
         :disabled="loading"
       >
         <template #append>
-          <el-button :icon="Promotion" @click="emit('send', chatRef)" :disabled="loading || !msg.trim()" />
+          <el-button :icon="Promotion" @click="emit('send', msgModel)" :disabled="loading || !msg.trim()" />
         </template>
       </el-input>
     </div>
@@ -40,8 +40,7 @@ import { Promotion } from "@element-plus/icons-vue"
 const props = defineProps<{ messages: { role: string; content: string }[]; loading: boolean; msg: string; charName: string }>()
 const emit = defineEmits<{
   (e: "update:msg", v: string): void
-  (e: "send", ref: HTMLElement | null): void
+  (e: "send", text: string): void
 }>()
-const chatRef = ref<HTMLElement>()
 const msgModel = computed({ get: () => props.msg, set: (v) => emit("update:msg", v) })
 </script>

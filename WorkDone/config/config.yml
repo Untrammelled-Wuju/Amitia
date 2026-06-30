@@ -11,7 +11,7 @@ jwt:
   expireDays: 7
 
 app:
-  name: "Amitia"
+  name: "U-Ai"
   version: "1.0.0"
   deployMode: "desktop-local"
 chat:
@@ -22,23 +22,32 @@ qdrant:
   host: "127.0.0.1"
   port: 9178
   collectionName: "memory_embeddings"
-  vectorDim: 2560
+  vectorDim: 1536
   limit: 10
   collections:
     memory_embeddings:
       name: "memory_embeddings"
-      vectorDim: 2560
+      vectorDim: 1536
     working_memory:
       name: "working_memory"
-      vectorDim: 2560
+      vectorDim: 1536
     user_profiles:
       name: "user_profiles"
-      vectorDim: 2560
+      vectorDim: 1536
     episodic_memories:
       name: "episodic_memories"
-      vectorDim: 2560
+      vectorDim: 1536
 
 embedding:
-  modelName: "doubao-embedding-vision-251215"
-  baseUrl: "https://ark.cn-beijing.volces.com/api/v3"
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
   apiKey: ""
+
+surrealdb:
+  host: "127.0.0.1"
+  port: 8000
+  namespace: "uai"
+  database: "memory_graph"
+  username: "root"
+  password: "root"
+  dataPath: "data/graph.db"

@@ -51,7 +51,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-table :data="reminders" stripe size="small" v-loading="loading" empty-text="暂无提醒">
         <el-table-column prop="title" label="标题" min-width="120" show-overflow-tooltip />
         <el-table-column label="启用" width="70">
-          <template #default="{ row }"><el-switch :model-value="row.enabled" :active-value="1" :inactive-value="0" size="small" @change="toggleReminder(row)" /></template>
+          <template #default="{ row }"><el-switch :model-value="row.enabled" size="small" @change="(val: boolean) => toggleReminder(row, val)" /></template>
         </el-table-column>
         <el-table-column label="渠道" width="70">
           <template #default="{ row }"><el-tag :type="row.channel === 'wechat' ? 'success' : row.channel === 'qq' ? 'primary' : 'info'" size="small">{{ row.channel === 'wechat' ? '微信' : row.channel === 'qq' ? 'QQ' : 'Web' }}</el-tag></template>
@@ -172,7 +172,11 @@ function resetForm() { form.value = { title: '', content: '', channel: 'web', co
 
 async function fetchReminders() {
   loading.value = true
-  try { const res: any = await request.get("/api/reminders"); reminders.value = Array.isArray(res) ? res : [] } catch { reminders.value = [] }
+  try {
+    const res: any = await request.get("/api/reminders")
+    const raw = Array.isArray(res) ? res : (res?.items || res?.data || res || [])
+    reminders.value = raw.map((item: any) => ({ ...item, enabled: !!item.enabled }))
+  } catch { reminders.value = [] }
   finally { loading.value = false }
 }
 
@@ -182,7 +186,7 @@ async function fetchStatus() {
 
 async function fetchConversationOptions() {
   loadingConvs.value = true
-  try { const r = await request.get("/api/web-chat/conversations", {  }); conversationOptions.value = r?.conversations || [] }
+  try { const r: any = await request.get("/api/web-chat/conversations"); conversationOptions.value = r?.items || r?.data || r?.conversations || r || [] }
   catch { conversationOptions.value = [] }
   finally { loadingConvs.value = false }
 }
@@ -195,7 +199,7 @@ async function fetchCharacterOptions() {
 function openCreate() { isEditing.value = false; editingId.value = null; resetForm(); dialogVisible.value = true; fetchConversationOptions(); fetchCharacterOptions() }
 function openEdit(row: Reminder) {
   isEditing.value = true; editingId.value = row.id
-  form.value = { title: row.title, content: row.content, channel: row.channel, conversationId: row.conversationId || '', characterId: row.characterId || '', remindAt: row.remindAt, repeatRule: row.repeatRule, enabled: row.enabled }
+  form.value = { title: row.title, content: row.content, channel: row.channel, conversationId: row.conversationId || '', characterId: row.characterId || '', remindAt: row.remindAt, repeatRule: row.repeatRule, enabled: !!row.enabled }
   dialogVisible.value = true; fetchConversationOptions(); fetchCharacterOptions()
 }
 
@@ -222,17 +226,17 @@ async function saveReminder() {
   finally { saving.value = false }
 }
 
-async function toggleReminder(row: Reminder) {
+async function toggleReminder(row: Reminder, nextValue?: boolean) {
   const prev = row.enabled
   const id = row.id
-  const updateLocal = (v: number) => {
+  const updateLocal = (v: boolean) => {
     const idx = reminders.value.findIndex(r => r.id === id)
     if (idx >= 0) reminders.value[idx].enabled = v
   }
-  updateLocal(row.enabled ? 0 : 1)
+  updateLocal(typeof nextValue === "boolean" ? nextValue : !row.enabled)
   try {
     const res: any = await request.post(`/api/reminders/${id}/toggle`)
-    const newVal = res?.enabled != null ? res.enabled : (prev ? 0 : 1)
+    const newVal = res?.enabled != null ? !!res.enabled : !prev
     updateLocal(newVal)
     ElMessage.success(newVal ? '已启用' : '已停用')
     await fetchStatus()

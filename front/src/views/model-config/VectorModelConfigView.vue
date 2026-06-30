@@ -87,7 +87,7 @@ async function saveEmbedding() {
     if (configId.value) {
       await put(`/api/embedding/configs/${configId.value}`, payload)
     } else {
-      const r = await post("/api/embedding/configs", { ...payload, isActive: 1 })
+      const r = await post<{ id: number }>("/api/embedding/configs", { ...payload, isActive: 1 })
       configId.value = r.id
     }
     testResult.value = ""
