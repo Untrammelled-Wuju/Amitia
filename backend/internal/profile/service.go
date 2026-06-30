@@ -26,6 +26,7 @@ type Service interface {
 	ExtractFromConversation(userID, convID string, messages []map[string]string) error
 	ToSystemPrompt(userID string) string
 	UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string) (*UserProfile, error)
+	SyncGraphProfile(id string) bool
 }
 
 type service struct {
@@ -83,13 +84,8 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 		p.Confidence = 50
 	}
 	result, err := s.repo.UpsertConfidence(p)
-	if err == nil && result != nil && s.graphSvc != nil {
-		s.graphSvc.SyncNode("profile", p.AttributeName, p.AttributeValue, map[string]interface{}{
-			"category":   p.Category,
-			"confidence": p.Confidence,
-			"user_id":    p.UserID,
-		})
-		s.graphSvc.SyncEdge("user:default", "profile:"+p.AttributeName, "has_profile", float64(p.Confidence)/100.0)
+	if err == nil && result != nil {
+		s.syncGraph(result)
 	}
 	return result, err
 }
@@ -108,11 +104,27 @@ func (s *service) Update(id string, req *UpdateProfileRequest) (*UserProfile, er
 	if err := s.repo.Update(id, updates); err != nil {
 		return nil, err
 	}
-	return s.repo.FindByID(id)
+	result, err := s.repo.FindByID(id)
+	if err == nil && result != nil {
+		s.syncGraph(result)
+	}
+	return result, err
 }
 
 func (s *service) Delete(id string) error {
-	return s.repo.Delete(id)
+	p, _ := s.repo.FindByID(id)
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	if s.graphSvc != nil && p != nil {
+		userID := p.UserID
+		if userID == "" {
+			userID = "default"
+		}
+		nodeID := userID + ":" + p.Category + ":" + p.AttributeName
+		_ = s.graphSvc.DeleteNode("profile:" + nodeID)
+	}
+	return nil
 }
 
 func (s *service) GetByUserID(userID string) ([]UserProfile, error) {
@@ -140,7 +152,20 @@ func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, c
 		Confidence:     confidence,
 		SourceConvID:   convID,
 	}
-	return s.repo.UpsertConfidence(p)
+	result, err := s.repo.UpsertConfidence(p)
+	if err == nil && result != nil {
+		s.syncGraph(result)
+	}
+	return result, err
+}
+
+func (s *service) SyncGraphProfile(id string) bool {
+	p, err := s.repo.FindByID(id)
+	if err != nil || p == nil {
+		return false
+	}
+	s.syncGraph(p)
+	return true
 }
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
@@ -195,7 +220,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 		if cat == "" || name == "" || val == "" {
 			continue
 		}
-		s.repo.UpsertConfidence(&UserProfile{
+		result, err := s.repo.UpsertConfidence(&UserProfile{
 			UserID:         userID,
 			Category:       cat,
 			AttributeName:  name,
@@ -203,6 +228,9 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			Confidence:     int(conf),
 			SourceConvID:   convID,
 		})
+		if err == nil && result != nil {
+			s.syncGraph(result)
+		}
 	}
 	return nil
 }
@@ -326,4 +354,22 @@ func (s *service) Name() string { return "用户画像" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
 	return s.ExtractFromConversation("default", convID, messages)
+}
+
+func (s *service) syncGraph(p *UserProfile) {
+	if s.graphSvc == nil || p == nil {
+		return
+	}
+	if p.UserID == "" {
+		p.UserID = "default"
+	}
+	nodeID := p.UserID + ":" + p.Category + ":" + p.AttributeName
+	_ = s.graphSvc.SyncNode("user", p.UserID, p.UserID, map[string]interface{}{"user_id": p.UserID})
+	_ = s.graphSvc.SyncNode("profile", nodeID, p.AttributeValue, map[string]interface{}{
+		"category":       p.Category,
+		"confidence":     p.Confidence,
+		"user_id":        p.UserID,
+		"source_conv_id": p.SourceConvID,
+	})
+	_ = s.graphSvc.SyncEdge("user:"+p.UserID, "profile:"+nodeID, "has_profile", float64(p.Confidence)/100.0)
 }

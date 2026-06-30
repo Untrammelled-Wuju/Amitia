@@ -229,8 +229,7 @@ if __name__ == "__main__":
     
     print("\n[3] 获取数据库密钥...")
     print("    需要登出并重新登录微信。")
-    print("    按 Enter 开始，然后立即登出微信并重新登录...")
-    input()
+    print("    已自动开始扫描，请立即登出微信并重新登录...")
     
     try:
         db_key = extractor.get_db_key(timeout_seconds=180)

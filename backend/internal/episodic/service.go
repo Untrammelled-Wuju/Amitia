@@ -26,6 +26,7 @@ type Service interface {
 	ExtractFromConversation(userID, convID string, messages []map[string]string) error
 	ToSystemPrompt(userID string) string
 	SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string) (*EpisodicMemory, error)
+	SyncGraphEpisodic(id string) bool
 }
 
 type service struct {
@@ -81,20 +82,18 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
 	}
-	if s.graphSvc != nil && m != nil {
-		s.graphSvc.SyncNode("episodic", m.ID, m.Title, map[string]interface{}{
-			"sceneType":      m.SceneType,
-			"sentimentScore": m.SentimentScore,
-			"sourceConvID":   m.SourceConvID,
-			"user_id":        m.UserID,
-		})
-		s.graphSvc.SyncEdge("user:default", "episodic:"+m.ID, "experienced", 1.0)
-	}
+	s.syncGraph(m)
 	return m, nil
 }
 
 func (s *service) Delete(id string) error {
-	return s.repo.Delete(id)
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	if s.graphSvc != nil {
+		_ = s.graphSvc.DeleteNode("episodic:" + id)
+	}
+	return nil
 }
 
 func (s *service) GetByUserID(userID string) ([]EpisodicMemory, error) {
@@ -122,7 +121,17 @@ func (s *service) SaveFromTool(userID, sceneType, title, content string, sentime
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
 	}
+	s.syncGraph(m)
 	return m, nil
+}
+
+func (s *service) SyncGraphEpisodic(id string) bool {
+	m, _, err := s.repo.GetDetailWithMessages(id, s.db)
+	if err != nil || m == nil {
+		return false
+	}
+	s.syncGraph(m)
+	return true
 }
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
@@ -178,7 +187,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 		if st == "" || title == "" || desc == "" {
 			continue
 		}
-		s.repo.Create(&EpisodicMemory{
+		m := &EpisodicMemory{
 			UserID:          userID,
 			SceneType:       st,
 			Title:           title,
@@ -186,7 +195,10 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			SentimentScore:  int(score),
 			TriggerKeywords: keywords,
 			SourceConvID:    convID,
-		})
+		}
+		if err := s.repo.Create(m); err == nil {
+			s.syncGraph(m)
+		}
 	}
 	return nil
 }
@@ -291,4 +303,22 @@ func (s *service) Name() string { return "情景记忆" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
 	return s.ExtractFromConversation("default", convID, messages)
+}
+
+func (s *service) syncGraph(m *EpisodicMemory) {
+	if s.graphSvc == nil || m == nil {
+		return
+	}
+	if m.UserID == "" {
+		m.UserID = "default"
+	}
+	_ = s.graphSvc.SyncNode("user", m.UserID, m.UserID, map[string]interface{}{"user_id": m.UserID})
+	_ = s.graphSvc.SyncNode("episodic", m.ID, m.Title, map[string]interface{}{
+		"sceneType":       m.SceneType,
+		"sentimentScore":  m.SentimentScore,
+		"sourceConvID":    m.SourceConvID,
+		"triggerKeywords": m.TriggerKeywords,
+		"user_id":         m.UserID,
+	})
+	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func setupRouter(ctx *app.AppContext) *gin.Engine {
+func setupRouter(ctx *app.AppContext, graphSvc graph.Service) *gin.Engine {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -42,8 +42,7 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 		character.RegisterCharacterRouter(apiGroup, ctx)
 		chatRepo := chat.NewRepository(ctx)
 		memRepo := memory.NewRepository(ctx)
-		memSvc := memory.NewService(memRepo, ctx)
-		graphSvc := initGraphRouter()
+		memSvc := memory.NewService(memRepo, ctx, graphSvc)
 		profRepo := profile.NewRepository(ctx)
 		profSvc := profile.NewService(profRepo, ctx, graphSvc)
 		epiRepo := episodic.NewRepository(ctx)
@@ -53,23 +52,23 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 		visionRepo := vision.NewRepository(ctx.DB)
 		visionSvc := vision.NewService(visionRepo)
 		comp := chat.NewCompressor(ctx.DB)
-		chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc)
+		chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc, graphSvc)
 		chat.RegisterChatRouter(apiGroup, ctx, chatSvc)
-		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx)
+		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, graphSvc)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
 			c.JSON(200, gin.H{"code": 200, "data": chatSvc.GetPipelineStatus(), "msg": "操作成功"})
 		})
 
-		profile.RegisterProfileRouter(apiGroup, ctx)
+		profile.RegisterProfileRouter(apiGroup, ctx, graphSvc)
 		proactive.RegisterProactiveRouter(apiGroup, ctx)
-		episodic.RegisterEpisodicRouter(apiGroup, ctx)
-		worldbook.RegisterWorldBookRouter(apiGroup, ctx)
+		episodic.RegisterEpisodicRouter(apiGroup, ctx, graphSvc)
+		worldbook.RegisterWorldBookRouter(apiGroup, ctx, graphSvc)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Surreal)
-		agent.RegisterAgentRouter(apiGroup, ctx, profSvc, epiSvc)
+		agent.RegisterAgentRouter(apiGroup, ctx, profSvc, epiSvc, graphSvc)
 		aicharacter.RegisterAICharacterRouter(apiGroup, ctx)
-		system.RegisterSystemRouter(apiGroup, ctx, profSvc, epiSvc)
+		system.RegisterSystemRouter(apiGroup, ctx, profSvc, epiSvc, graphSvc)
 		companion.RegisterCompanionRouter(apiGroup, ctx)
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
@@ -84,12 +83,4 @@ func setupRouter(ctx *app.AppContext) *gin.Engine {
 	r.Static("/images", "./data/images")
 	r.Static("/videos", "./data/videos")
 	return r
-}
-
-func initGraphRouter() graph.Service {
-	client, err := graph.NewClient(config.AppCfg.Surreal)
-	if err != nil {
-		return nil
-	}
-	return graph.NewService(client)
 }
