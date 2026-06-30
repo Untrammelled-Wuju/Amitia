@@ -19,7 +19,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           type="primary"
           size="small"
           :icon="Phone"
-          :loading="callState === 'connecting'"
           @click="start"
         >
           语音通话
@@ -56,7 +55,7 @@ const props = defineProps<{
   voiceType: string
   resourceId: string
   conversationId: string
-  dialogId: string
+  dialogId?: string
 }>()
 
 const emit = defineEmits<{
@@ -64,7 +63,9 @@ const emit = defineEmits<{
   stateChange: [state: string]
 }>()
 
-const callState = ref<"idle" | "connecting" | "connected" | "error">("idle")
+type CallState = "idle" | "connecting" | "connected" | "error"
+
+const callState = ref<CallState>("idle")
 const callDuration = ref(0)
 const errorMsg = ref("")
 let ws: WebSocket | null = null
@@ -123,9 +124,12 @@ async function start() {
     return
   }
 
-  audioCtx = new AudioContext({ sampleRate: 16000 }); playCtx = new AudioContext({ sampleRate: 24000 })
-  const source = audioCtx.createMediaStreamSource(mediaStream)
-  scriptNode = audioCtx.createScriptProcessor(4096, 1, 1)
+  audioCtx = new AudioContext({ sampleRate: 16000 })
+  playCtx = new AudioContext({ sampleRate: 24000 })
+  const inputCtx = audioCtx
+  if (!inputCtx || !mediaStream) return
+  const source = inputCtx.createMediaStreamSource(mediaStream)
+  scriptNode = inputCtx.createScriptProcessor(4096, 1, 1)
 
   const baseUrl = "ws://127.0.0.1:8899/api/realtime/session"
   const params = new URLSearchParams({
@@ -133,7 +137,7 @@ async function start() {
     voiceType: props.voiceType || "zh_female_vv_jupiter_bigtts",
     resourceId: props.resourceId || "volc.speech.dialog",
     conversationId: props.conversationId,
-      dialogId: props.dialogId || '',
+    dialogId: props.dialogId || "",
   })
   ws = new WebSocket(baseUrl + "?" + params.toString())
 
@@ -150,10 +154,11 @@ async function start() {
           ws.send(JSON.stringify({ event: "audio", data: base64 }))
         }
       }
-      const silenceGain = audioCtx.createGain(); silenceGain.gain.value = 0
+      const silenceGain = inputCtx.createGain()
+      silenceGain.gain.value = 0
       source.connect(scriptNode)
       scriptNode.connect(silenceGain)
-      silenceGain.connect(audioCtx.destination)
+      silenceGain.connect(inputCtx.destination)
     }
   }
 
@@ -225,10 +230,12 @@ function cleanupCall() {
     mediaStream = null
   }
   nextPlayTime = 0
-    isAiSpeaking = false
-    if (playCtx && playCtx.state !== "closed") { setTimeout(() => { try { playCtx?.close() } catch {}; playCtx = null }, 3000) }
-    if (audioCtx && audioCtx.state !== "closed") {
-    audioCtx.close()
+  isAiSpeaking = false
+  if (playCtx && playCtx.state !== "closed") {
+    setTimeout(() => { try { playCtx?.close() } catch {} ; playCtx = null }, 3000)
+  }
+  if (audioCtx && audioCtx.state !== "closed") {
+    void audioCtx.close()
     audioCtx = null
   }
 }

@@ -83,14 +83,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed } from "vue"
 import { FullScreen } from "@element-plus/icons-vue"
-import PersonalitySliders from "../../../components/PersonalitySliders.vue"
+import PersonalitySliders, { type PersonalityConfig } from "../../../components/PersonalitySliders.vue"
 
 const props = defineProps<{
   activeTab: string
   name: string; avatar: string; identity: string; personality: string
   speakingStyle: string; relationshipStyle: string
   systemPrompt: string; boundaryRules: string
-  personalityConfig: Record<string, number>
+  personalityConfig: PersonalityConfig
   isActive: boolean; hasOtherActive: boolean
   saving: boolean; selectedId: string
 }>()
@@ -105,7 +105,7 @@ const emit = defineEmits<{
   (e: "update:relationshipStyle", v: string): void
   (e: "update:systemPrompt", v: string): void
   (e: "update:boundaryRules", v: string): void
-  (e: "update:personalityConfig", v: Record<string, number>): void
+  (e: "update:personalityConfig", v: PersonalityConfig): void
   (e: "update:isActive", v: boolean): void
   (e: "showFullPrompt"): void
   (e: "showFullBounds"): void

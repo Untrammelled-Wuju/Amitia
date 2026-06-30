@@ -50,8 +50,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                 :loading="testLoading"
                 v-model:msg="testMsg"
                 :char-name="selected?.name || ''"
-                @send="onSendTest"
-              />
+              @send="onSendTest"
+            />
             </template>
           </CharacterEditForm>
         </template>
@@ -148,8 +148,8 @@ function onSelectChar(c: any) {
   clearTestMessages()
 }
 
-function onSendTest(ref: HTMLElement | null) {
-  sendTest(selectedId.value, ref)
+function onSendTest(text: string) {
+  sendTest(selectedId.value, text)
 }
 
 function onExportPack() {

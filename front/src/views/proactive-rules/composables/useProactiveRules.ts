@@ -7,7 +7,7 @@ import { request } from "../../../composables/request"
 export interface ProactiveRule {
   id: number
   name: string
-  enabled: number
+  enabled: boolean
   channel: string
   conversationId: string | null
   characterId: string | null
@@ -102,6 +102,7 @@ export function useProactiveRules() {
       const rawRules = Array.isArray(res) ? res : (res?.items || res?.data || [])
       rules.value = rawRules.map((r: any) => ({
         ...r,
+        enabled: !!r.enabled,
         _isSystem: typeof r._isSystem === "boolean" ? r._isSystem : ["早安问候","晚安提醒","学习打卡","工作间歇","午饭时间","晚间闲聊"].includes(r.name),
       }))
     } catch {
@@ -153,8 +154,8 @@ export function useProactiveRules() {
 
   function openEditDialog(row: ProactiveRule) {
     isEditing.value = true; editingId.value = row.id
-    form.value = {
-      name: row.name, enabled: row.enabled, channel: row.channel,
+      form.value = {
+      name: row.name, enabled: !!row.enabled, channel: row.channel,
       conversationId: row.conversationId || "", characterId: row.characterId || "",
       ruleType: row.ruleType, scheduleCron: row.scheduleCron,
       quietStart: row.quietStart, quietEnd: row.quietEnd,
@@ -192,7 +193,7 @@ export function useProactiveRules() {
   async function toggleRule(row: ProactiveRule, val: boolean) {
     try {
       const result: any = await request.post(`/api/proactive/rules/${row.id}/toggle`)
-      row.enabled = result?.enabled ?? (val ? 1 : 0)
+      row.enabled = result?.enabled != null ? !!result.enabled : !!val
       ElMessage.success(row.enabled ? "规则已启用" : "规则已停用")
       await fetchStatus()
     } catch (err: any) { ElMessage.error(err?.message || "操作失败") }
@@ -241,8 +242,8 @@ export function useProactiveRules() {
 
   async function fetchConversations() {
     try {
-      const res: any = await request.get("/api/chats/conversations", { pageSize: 100 })
-      conversations.value = res?.items || res?.data || []
+      const res: any = await request.get("/api/chats/conversations", { params: { pageSize: 100 } })
+      conversations.value = res?.items || res?.data || res || []
     } catch {}
   }
 

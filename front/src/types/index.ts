@@ -179,6 +179,14 @@ export interface RuntimeModeResponse {
 export interface RuntimeModeValidationResult {
   valid: boolean
   errors: string[]
+  warnings?: string[]
+  checks?: Array<{
+    name: string
+    level: "info" | "warn" | "error"
+    passed: boolean
+    message: string
+    suggestion?: string
+  }>
 }
 
 export type DeployMode = "desktop-local" | "cloud-web"

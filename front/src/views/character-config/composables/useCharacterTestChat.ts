@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, nextTick } from "vue"
+import { ref } from "vue"
 import { useApi } from "../../../composables/useApi"
 
 export function useCharacterTestChat() {
@@ -10,8 +10,8 @@ export function useCharacterTestChat() {
   const testMsg = ref("")
   const testLoading = ref(false)
 
-  async function sendTest(characterId: string, testChatRef: HTMLElement | null) {
-    const msg = testMsg.value.trim()
+  async function sendTest(characterId: string, text: string) {
+    const msg = text.trim()
     if (!msg || testLoading.value || !characterId) return
     testMessages.value.push({ role: "user", content: msg })
     testMsg.value = ""
@@ -23,11 +23,6 @@ export function useCharacterTestChat() {
       testMessages.value.push({ role: "assistant", content: "测试失败，请检查模型配置" })
     } finally {
       testLoading.value = false
-      if (testChatRef) {
-        nextTick(() => {
-          testChatRef.scrollTop = testChatRef.scrollHeight
-        })
-      }
     }
   }
 

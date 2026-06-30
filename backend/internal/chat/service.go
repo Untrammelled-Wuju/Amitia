@@ -719,6 +719,13 @@ func (s *service) ListModels() ([]ModelConfig, error) {
 }
 
 func (s *service) CreateModel(cfg *ModelConfig) (*ModelConfig, error) {
+	count, err := s.repo.CountModels()
+	if err != nil {
+		return nil, fmt.Errorf("查询失败: %w", err)
+	}
+	if count == 0 {
+		cfg.IsActive = 1
+	}
 	if err := s.repo.CreateModel(cfg); err != nil {
 		return nil, fmt.Errorf("创建失败: %w", err)
 	}

@@ -48,7 +48,7 @@ const result = ref("")
 
 onMounted(async () => {
   const { data } = await axios.get<ApiResponse<Character[]>>(API + "/api/characters")
-  if (data.success && data.data) characters.value = data.data
+  if (data.code === 200 && data.data) characters.value = data.data
 })
 
 async function doImport() {
@@ -61,11 +61,11 @@ async function doImport() {
       characterId: characterId.value,
       raw: rawText.value,
     })
-    if (data.success) {
+    if (data.code === 200) {
       result.value = data.message || "成功导入 " + (data.data?.messageCount || 0) + " 条消息"
       rawText.value = ""
     } else {
-      ElMessage.error(data.error || "导入失败")
+      ElMessage.error(data.message || "导入失败")
     }
   } catch (err: any) {
     ElMessage.error("导入失败: " + err.message)

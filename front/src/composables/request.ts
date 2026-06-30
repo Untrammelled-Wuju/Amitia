@@ -53,7 +53,7 @@ function classifyError(body: ApiResponse | null, axiosError: AxiosError | null):
 
   // Auth errors: 401, 403, 700-702
   if (code === 401 || code === 403 || code === ERR.TOKEN_EXPIRED || code === ERR.TOKEN_INVALID || code === 702) {
-    if (code === ERR.UNAUTHORIZED || code === ERR.TOKEN_EXPIRED || code === ERR.TOKEN_INVALID) {
+    if (code === 401 || code === ERR.TOKEN_EXPIRED || code === ERR.TOKEN_INVALID) {
       localStorage.removeItem(TOKEN_KEY)
       if (window.location.pathname !== "/login") {
         window.location.href = "/login"

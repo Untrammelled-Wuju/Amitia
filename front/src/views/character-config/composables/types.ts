@@ -5,6 +5,38 @@ export type TemplateItem = {
   speakingStyle: string; relationshipStyle: string; hasSafeBoundaries: boolean
 }
 
+export interface PersonalityConfig {
+  familiarity: number
+  formality: number
+  customerServiceAvoidance: number
+  directness: number
+  verbosity: number
+  structureLevel: number
+  shortSentence: number
+  toneWords: number
+  warmth: number
+  emotionalExpression: number
+  comfortLevel: number
+  preachingAvoidance: number
+  rationality: number
+  humor: number
+  teasing: number
+  initiative: number
+  patience: number
+  companionship: number
+  boundary: number
+  dependencyAvoidance: number
+  execution: number
+  explanationDepth: number
+  judgment: number
+  clarification: number
+  intimacyExpression: number
+  flirtiness: number
+  romanticTone: number
+  suggestivenessAvoidance: number
+  intimacyBoundary: number
+}
+
 export const DEFAULT_BOUNDARY = [
   "不能声称自己是真人。",
   "不能声称自己是真实恋人。",
@@ -14,7 +46,7 @@ export const DEFAULT_BOUNDARY = [
   "不能输出成人化、操控式、威胁式或危险内容。",
 ].join("\n")
 
-export const DEFAULT_PERSONALITY_CONFIG: Record<string, number> = {
+export const DEFAULT_PERSONALITY_CONFIG: PersonalityConfig = {
   familiarity: 78, formality: 22, customerServiceAvoidance: 92,
   directness: 75, verbosity: 32, structureLevel: 40, shortSentence: 85, toneWords: 45,
   warmth: 58, emotionalExpression: 45, comfortLevel: 55, preachingAvoidance: 88,

@@ -3,10 +3,10 @@
 import { ref } from "vue"
 
 export function useMediaUpload(
-  emit: (e: "image", ...args: any[]) => void,
-  emitVideo: (e: "video", ...args: any[]) => void,
-  emitRemoveImage: (e: "removeImage") => void,
-  emitRemoveVideo: (e: "removeVideo") => void,
+  onImage: (file: File, base64: string) => void,
+  onVideo: (file: File, videoUrl: string) => void,
+  onRemoveImage: () => void,
+  onRemoveVideo: () => void,
 ) {
   const attachedImage = ref<File | null>(null)
   const attachedImagePreview = ref<string | null>(null)
@@ -35,7 +35,7 @@ export function useMediaUpload(
     attachedImage.value = file
     fileToBase64(file).then((dataUrl) => {
       attachedImagePreview.value = dataUrl
-      emit("image", file, dataUrl)
+      onImage(file, dataUrl)
     })
     input.value = ""
   }
@@ -43,7 +43,7 @@ export function useMediaUpload(
   function clearImage() {
     attachedImage.value = null
     attachedImagePreview.value = null
-    emitRemoveImage("removeImage")
+    onRemoveImage()
   }
 
   function handleVideoSelect(e: Event) {
@@ -62,7 +62,7 @@ export function useMediaUpload(
         const videoUrl = data?.data?.videoUrl || data?.videoUrl || ""
         if (videoUrl) {
           attachedVideoUrl.value = videoUrl
-          emitVideo("video", file, videoUrl)
+          onVideo(file, videoUrl)
         }
       })
       .catch(() => {})
@@ -74,7 +74,7 @@ export function useMediaUpload(
     attachedVideo.value = null
     attachedVideoUrl.value = null
     uploadingVideo.value = false
-    emitRemoveVideo("removeVideo")
+    onRemoveVideo()
   }
 
   return {

@@ -72,22 +72,29 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-icon v-else><CircleClose /></el-icon>
         <span>{{ validationResult.valid ? '配置校验通过' : '配置存在问题' }}</span>
       </div>
-      <div class="vr-checks">
+      <div v-if="validationResult.errors.length > 0" class="vr-checks">
         <div
-          v-for="check in validationResult.checks"
-          :key="check.name"
-          class="vr-check-item"
-          :class="'vr-' + check.level"
+          v-for="(error, index) in validationResult.errors"
+          :key="index"
+          class="vr-check-item vr-error"
         >
           <span class="vr-check-icon">
-            <el-icon v-if="check.passed"><CircleCheck /></el-icon>
-            <el-icon v-else-if="check.level === 'error'"><CircleClose /></el-icon>
-            <el-icon v-else><Warning /></el-icon>
+            <el-icon><CircleClose /></el-icon>
           </span>
           <div class="vr-check-body">
-            <div class="vr-check-name">{{ check.name }}</div>
-            <div class="vr-check-msg">{{ check.message }}</div>
-            <div v-if="check.suggestion" class="vr-check-suggestion">{{ check.suggestion }}</div>
+            <div class="vr-check-name">错误 {{ index + 1 }}</div>
+            <div class="vr-check-msg">{{ error }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-if="!validationResult.valid && validationResult.errors.length === 0" class="vr-checks">
+        <div class="vr-check-item vr-error">
+          <span class="vr-check-icon">
+            <el-icon><CircleClose /></el-icon>
+          </span>
+          <div class="vr-check-body">
+            <div class="vr-check-name">校验失败</div>
+            <div class="vr-check-msg">未返回具体错误信息</div>
           </div>
         </div>
       </div>
@@ -154,7 +161,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed } from "vue"
 import {
   Monitor, Cloudy, Checked,
-  CircleCheck, CircleClose, Warning, InfoFilled, List,
+  CircleCheck, CircleClose, InfoFilled, List,
 } from "@element-plus/icons-vue"
 import type { RuntimeModeResponse, RuntimeModeValidationResult } from "@/types"
 

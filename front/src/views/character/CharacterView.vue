@@ -296,8 +296,8 @@ async function previewClone() {
     const cfg = configs.find((c: any) => c.isActive) || configs[0]
     if (!cfg) { ElMessage.warning("未找到音色配置"); return }
     await apiClient.put(`/api/tts/configs/${cfg.id}`, { voiceType: form.customVoiceId })
-    const res = await post<any>("/api/tts/synthesize", { speakerId: form.customVoiceId, text: "复刻音色试听" })
-    testAudioUrl.value = (res as any)?.audioUrl || ""
+    const res = await apiClient.post("/api/tts/synthesize", { speakerId: form.customVoiceId, text: "复刻音色试听" })
+    testAudioUrl.value = (res as any)?.data?.audioUrl || (res as any)?.audioUrl || ""
   } catch (err: any) { ElMessage.error(err?.message || "试听失败") }
   finally { previewCloneLoading.value = false }
 }

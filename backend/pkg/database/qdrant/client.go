@@ -81,25 +81,50 @@ func EnsureCollectionByName(collectionName string, vectorDim int) error {
 
 	if !exists {
 		log.Info(fmt.Sprintf("创建Qdrant集合: %s", collectionName))
-		req := &qdrant.CreateCollection{
-			CollectionName: collectionName,
-			VectorsConfig: &qdrant.VectorsConfig{
-				Config: &qdrant.VectorsConfig_Params{
-					Params: &qdrant.VectorParams{
-						Size:     uint64(vectorDim),
-						Distance: qdrant.Distance_Cosine,
-					},
-				},
-			},
-		}
-		if err := Client.CreateCollection(ctx, req); err != nil {
-			return fmt.Errorf("创建集合失败: %w", err)
-		}
-		log.Info(fmt.Sprintf("集合%s创建成功", collectionName))
-	} else {
-		log.Info(fmt.Sprintf("使用已有集合: %s", collectionName))
+		return createCollection(ctx, collectionName, vectorDim)
 	}
 
+	info, err := Client.GetCollectionInfo(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("获取集合信息失败: %w", err)
+	}
+
+	actualDim := collectionVectorDim(info)
+	if actualDim > 0 && actualDim != uint64(vectorDim) {
+		pointCount := uint64(0)
+		if info.PointsCount != nil {
+			pointCount = *info.PointsCount
+		}
+		if pointCount > 0 {
+			return fmt.Errorf("集合%s维度不一致: 现有=%d 期望=%d 点数=%d，需要先迁移数据", collectionName, actualDim, vectorDim, pointCount)
+		}
+		log.Warn(fmt.Sprintf("集合%s维度不一致，准备重建: 现有=%d 期望=%d", collectionName, actualDim, vectorDim))
+		if err := Client.DeleteCollection(ctx, collectionName); err != nil {
+			return fmt.Errorf("删除旧集合失败: %w", err)
+		}
+		return createCollection(ctx, collectionName, vectorDim)
+	}
+
+	log.Info(fmt.Sprintf("使用已有集合: %s", collectionName))
+	return nil
+}
+
+func createCollection(ctx context.Context, collectionName string, vectorDim int) error {
+	req := &qdrant.CreateCollection{
+		CollectionName: collectionName,
+		VectorsConfig: &qdrant.VectorsConfig{
+			Config: &qdrant.VectorsConfig_Params{
+				Params: &qdrant.VectorParams{
+					Size:     uint64(vectorDim),
+					Distance: qdrant.Distance_Cosine,
+				},
+			},
+		},
+	}
+	if err := Client.CreateCollection(ctx, req); err != nil {
+		return fmt.Errorf("创建集合失败: %w", err)
+	}
+	log.Info(fmt.Sprintf("集合%s创建成功", collectionName))
 	return nil
 }
 
@@ -302,4 +327,25 @@ func defaultVectorDim() int {
 		return c.VectorDim
 	}
 	return 1536
+}
+
+func collectionVectorDim(info *qdrant.CollectionInfo) uint64 {
+	if info == nil || info.Config == nil || info.Config.Params == nil {
+		return 0
+	}
+	vectorsConfig := info.Config.Params.GetVectorsConfig()
+	if vectorsConfig == nil {
+		return 0
+	}
+	if params := vectorsConfig.GetParams(); params != nil {
+		return params.GetSize()
+	}
+	if paramsMap := vectorsConfig.GetParamsMap(); paramsMap != nil {
+		for _, params := range paramsMap.GetMap() {
+			if params != nil {
+				return params.GetSize()
+			}
+		}
+	}
+	return 0
 }

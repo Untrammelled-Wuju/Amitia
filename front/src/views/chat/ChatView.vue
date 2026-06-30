@@ -47,6 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :voice-type="callVoiceType"
       :resource-id="ttsResourceId"
       :conversation-id="currentConversationId"
+      :dialog-id="currentConversationId"
       @state-change="onCallStateChange"
     />
 

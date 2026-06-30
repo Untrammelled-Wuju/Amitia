@@ -184,7 +184,7 @@ export function useModelConfig() {
     try {
       const result = await post<any>(`/api/model/configs/${id}/test`, { configId: id })
       testResult.value = {
-        success: result?.test?.success ?? (result?.status === "ok") ?? result?.success ?? false,
+        success: result?.test?.success ?? result?.success ?? (result?.status === "ok"),
         latencyMs: result?.test?.latencyMs ?? result?.latencyMs ?? result?.latency ?? 0,
         message: result?.test?.message ?? result?.message ?? "",
         reply: result?.test?.reply ?? result?.reply ?? "",
