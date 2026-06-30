@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-table-column label="状态" width="90">
         <template #default="{row}">
           <el-tag :type="row.status === 'completed' ? 'success' : 'info'" size="small">
-            {{ row.status }}
+            {{ statusLabel(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -40,6 +40,13 @@ defineEmits<{
   view: [id: string]
   delete: [id: string]
 }>()
+
+function statusLabel(status: string) {
+  if (status === "completed") return "已完成"
+  if (status === "pending") return "处理中"
+  if (status === "failed") return "失败"
+  return status || "未知"
+}
 </script>
 
 <style scoped>

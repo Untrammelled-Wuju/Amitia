@@ -7,7 +7,8 @@ SPDX-License-Identifier: AGPL-3.0-only
     <template #header>
       <span class="step-badge">2</span> 预览与编辑（{{ parseResult.items?.length || 0 }} 条消息）
       <span class="detected-tag">
-        检测到： <el-tag size="small" type="info">{{ parseResult.detectedFormat || 'auto' }}</el-tag>
+        检测到：
+        <el-tag size="small" type="info">{{ formatLabel(parseResult.detectedFormat) }}</el-tag>
       </span>
     </template>
     <div v-if="parseResult.warnings?.length" class="warnings-block">
@@ -85,6 +86,15 @@ defineProps<{
   parseResult: any
   editableItems: any[]
 }>()
+
+function formatLabel(value: string) {
+  if (value === "auto") return "自动"
+  if (value === "standard") return "标准"
+  if (value === "timestamp") return "时间戳"
+  if (value === "multiline") return "多行"
+  if (value === "wechat") return "微信"
+  return value || "自动"
+}
 </script>
 
 <style scoped>
