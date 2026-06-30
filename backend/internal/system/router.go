@@ -15,7 +15,7 @@ import (
 func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profile.Service, epiSvc episodic.Service) {
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx)
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil, nil)
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc)
 
