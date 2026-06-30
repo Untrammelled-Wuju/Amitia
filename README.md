@@ -60,18 +60,18 @@ Amitia、阿米提亚、官方 Logo、角色形象和其他品牌资产不随 AG
 
 ### 快速开始
 
-本项目运行时可直接使用 `WorkDone` 目录下的编译后程序，无需源码编译。
+本项目运行时可直接使用 `release` 目录下的编译后程序，无需源码编译。
 
 ```bash
 # 1. 启动依赖服务
 # SurrealDB (端口 8000)
-./WorkDone/surrealdb/surreal.exe start --user root --pass root rocksdb:data.db
+./release/surrealdb/surreal.exe start --user root --pass root rocksdb:data.db
 
 # Qdrant (端口 9178)
-./WorkDone/qdrant/qdrant.exe
+./release/qdrant/qdrant.exe
 
 # 2. 启动后端 (端口 8899)
-./WorkDone/server.exe
+./release/server.exe
 
 # 3. 启动前端 (端口 5178)
 cd front && pnpm install && pnpm run dev
@@ -85,7 +85,7 @@ cd front && pnpm install && pnpm run dev
 U-Ai/
 ├── front/          # Vue 3 前端
 ├── backend/        # Go 后端源码
-├── WorkDone/       # 编译后运行目录
+├── release/        # 编译后运行目录
 │   ├── server.exe  # 后端可执行文件
 │   ├── qdrant/     # 向量数据库
 │   └── surrealdb/  # 图数据库
@@ -146,13 +146,13 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CLA.md](CLA.md) before contr
 ```bash
 # 1. Start dependencies
 # SurrealDB (port 8000)
-./WorkDone/surrealdb/surreal.exe start --user root --pass root rocksdb:data.db
+./release/surrealdb/surreal.exe start --user root --pass root rocksdb:data.db
 
 # Qdrant (port 9178)
-./WorkDone/qdrant/qdrant.exe
+./release/qdrant/qdrant.exe
 
 # 2. Start backend (port 8899)
-./WorkDone/server.exe
+./release/server.exe
 
 # 3. Start frontend (port 5178)
 cd front && pnpm install && pnpm run dev
@@ -166,7 +166,7 @@ Open `http://127.0.0.1:5178` and follow the setup wizard.
 U-Ai/
 ├── front/          # Vue 3 frontend
 ├── backend/        # Go backend source
-├── WorkDone/       # Compiled runtime
+├── release/        # Compiled runtime
 │   ├── server.exe  # Backend binary
 │   ├── qdrant/     # Vector database
 │   └── surrealdb/  # Graph database
