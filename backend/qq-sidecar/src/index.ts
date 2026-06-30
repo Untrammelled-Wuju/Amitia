@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 process.on('unhandledRejection', (reason) => { console.error('[QQ-Sidecar] Unhandled Rejection:', reason) })
 import Fastify from "fastify"
 import cors from "@fastify/cors"

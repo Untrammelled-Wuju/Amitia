@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 import (
@@ -215,7 +217,6 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 	}
 	return items, err
 }
-
 
 func (r *repository) ListCandidates() ([]MemoryCandidateModel, error) {
 	var items []MemoryCandidateModel

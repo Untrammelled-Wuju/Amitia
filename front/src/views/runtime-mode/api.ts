@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { apiClient } from "@/composables/useApi"
 import type { RuntimeModeResponse, RuntimeModeValidationResult, DeployMode } from "@/types"
 

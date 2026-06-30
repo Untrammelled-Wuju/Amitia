@@ -1,18 +1,19 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package companion
 
 import "time"
 
-
 type SleepSetting struct {
-	ID                 int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	CharacterID        string `gorm:"column:character_id;index" json:"characterId"`
-	BedTime            string `gorm:"column:bed_time;default:23:00" json:"bedTime"`
-	WakeTime           string `gorm:"column:wake_time;default:07:00" json:"wakeTime"`
-	Enabled            int    `gorm:"column:enabled;default:1" json:"enabled"`
-	SleepReplyEnabled  int    `gorm:"column:sleep_reply_enabled;default:0" json:"sleepReplyEnabled"`
-	SleepReplyMode     string `gorm:"column:sleep_reply_mode;default:NO_REPLY" json:"sleepReplyMode"`
-	CreatedAt          string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt          string `gorm:"column:updated_at" json:"updatedAt"`
+	ID                int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	CharacterID       string `gorm:"column:character_id;index" json:"characterId"`
+	BedTime           string `gorm:"column:bed_time;default:23:00" json:"bedTime"`
+	WakeTime          string `gorm:"column:wake_time;default:07:00" json:"wakeTime"`
+	Enabled           int    `gorm:"column:enabled;default:1" json:"enabled"`
+	SleepReplyEnabled int    `gorm:"column:sleep_reply_enabled;default:0" json:"sleepReplyEnabled"`
+	SleepReplyMode    string `gorm:"column:sleep_reply_mode;default:NO_REPLY" json:"sleepReplyMode"`
+	CreatedAt         string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt         string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (SleepSetting) TableName() string { return "sleep_settings" }
@@ -39,28 +40,28 @@ type FixedEvent struct {
 func (FixedEvent) TableName() string { return "fixed_events" }
 
 type SpecialEvent struct {
-	ID                int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	CharacterID       string `gorm:"column:character_id;index" json:"characterId"`
-	Title             string `gorm:"column:title;not null" json:"title"`
-	Description       string `gorm:"column:description" json:"description"`
-	StartDate         string `gorm:"column:start_date" json:"startDate"`
-	EndDate           string `gorm:"column:end_date" json:"endDate"`
-	StartTime         string `gorm:"column:start_time" json:"startTime"`
-	EndTime           string `gorm:"column:end_time" json:"endTime"`
-	EventType         string `gorm:"column:event_type;default:CUSTOM" json:"eventType"`
-	RepeatType        string `gorm:"column:repeat_type;default:none" json:"repeatType"`
-	RepeatDays        string `gorm:"column:repeat_days" json:"repeatDays"`
-	Enabled           int    `gorm:"column:enabled;default:1" json:"enabled"`
-	Priority          int    `gorm:"column:priority;default:0" json:"priority"`
-	ActiveMessageAllowed int `gorm:"column:active_message_allowed;default:1" json:"activeMessageAllowed"`
-	ReplyMode         string `gorm:"column:reply_mode;default:SHORT_REPLY" json:"replyMode"`
-	AffectSchedule    int    `gorm:"column:affect_schedule;default:0" json:"affectSchedule"`
-	AffectSleep       int    `gorm:"column:affect_sleep;default:0" json:"affectSleep"`
-	AffectMeal        int    `gorm:"column:affect_meal;default:0" json:"affectMeal"`
-	AffectEnergy      int    `gorm:"column:affect_energy;default:0" json:"affectEnergy"`
-	Payload           string `gorm:"column:payload" json:"payload"`
-	CreatedAt         string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt         string `gorm:"column:updated_at" json:"updatedAt"`
+	ID                   int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	CharacterID          string `gorm:"column:character_id;index" json:"characterId"`
+	Title                string `gorm:"column:title;not null" json:"title"`
+	Description          string `gorm:"column:description" json:"description"`
+	StartDate            string `gorm:"column:start_date" json:"startDate"`
+	EndDate              string `gorm:"column:end_date" json:"endDate"`
+	StartTime            string `gorm:"column:start_time" json:"startTime"`
+	EndTime              string `gorm:"column:end_time" json:"endTime"`
+	EventType            string `gorm:"column:event_type;default:CUSTOM" json:"eventType"`
+	RepeatType           string `gorm:"column:repeat_type;default:none" json:"repeatType"`
+	RepeatDays           string `gorm:"column:repeat_days" json:"repeatDays"`
+	Enabled              int    `gorm:"column:enabled;default:1" json:"enabled"`
+	Priority             int    `gorm:"column:priority;default:0" json:"priority"`
+	ActiveMessageAllowed int    `gorm:"column:active_message_allowed;default:1" json:"activeMessageAllowed"`
+	ReplyMode            string `gorm:"column:reply_mode;default:SHORT_REPLY" json:"replyMode"`
+	AffectSchedule       int    `gorm:"column:affect_schedule;default:0" json:"affectSchedule"`
+	AffectSleep          int    `gorm:"column:affect_sleep;default:0" json:"affectSleep"`
+	AffectMeal           int    `gorm:"column:affect_meal;default:0" json:"affectMeal"`
+	AffectEnergy         int    `gorm:"column:affect_energy;default:0" json:"affectEnergy"`
+	Payload              string `gorm:"column:payload" json:"payload"`
+	CreatedAt            string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt            string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (SpecialEvent) TableName() string { return "special_events" }
@@ -98,28 +99,28 @@ type LifestyleTendency struct {
 func (LifestyleTendency) TableName() string { return "lifestyle_tendencies" }
 
 type WorkProfile struct {
-	ID                        int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	CharacterID               string `gorm:"column:character_id;uniqueIndex" json:"characterId"`
-	Enabled                   int    `gorm:"column:enabled;default:0" json:"enabled"`
-	WorkDays                  string `gorm:"column:work_days;default:MON,TUE,WED,THU,FRI" json:"workDays"`
-	WorkStartTime             string `gorm:"column:work_start_time;default:09:00" json:"workStartTime"`
-	WorkEndTime               string `gorm:"column:work_end_time;default:18:00" json:"workEndTime"`
-	LunchBreakStartTime       string `gorm:"column:lunch_break_start_time;default:12:00" json:"lunchBreakStartTime"`
-	LunchBreakEndTime         string `gorm:"column:lunch_break_end_time;default:13:30" json:"lunchBreakEndTime"`
-	CommuteMinMinutes         int    `gorm:"column:commute_min_minutes;default:15" json:"commuteMinMinutes"`
-	CommuteMaxMinutes         int    `gorm:"column:commute_max_minutes;default:45" json:"commuteMaxMinutes"`
-	PrepareMinMinutes         int    `gorm:"column:prepare_min_minutes;default:20" json:"prepareMinMinutes"`
-	PrepareMaxMinutes         int    `gorm:"column:prepare_max_minutes;default:60" json:"prepareMaxMinutes"`
-	ReplyMode                 string `gorm:"column:reply_mode;default:SHORT_REPLY" json:"replyMode"`
-	AllowOvertime             int    `gorm:"column:allow_overtime;default:0" json:"allowOvertime"`
-	OvertimeProbability       int    `gorm:"column:overtime_probability;default:10" json:"overtimeProbability"`
-	OvertimeMinMinutes        int    `gorm:"column:overtime_min_minutes;default:30" json:"overtimeMinMinutes"`
-	OvertimeMaxMinutes        int    `gorm:"column:overtime_max_minutes;default:180" json:"overtimeMaxMinutes"`
-	OvertimeReplyMode         string `gorm:"column:overtime_reply_mode;default:SHORT_REPLY" json:"overtimeReplyMode"`
-	DelayedReplyEnabled       int    `gorm:"column:delayed_reply_enabled;default:0" json:"delayedReplyEnabled"`
-	CommuteHomeShareEnabled   int    `gorm:"column:commute_home_share_enabled;default:1" json:"commuteHomeShareEnabled"`
-	CommuteHomeShareProbability int  `gorm:"column:commute_home_share_probability;default:60" json:"commuteHomeShareProbability"`
-	UpdatedAt                 string `gorm:"column:updated_at" json:"updatedAt"`
+	ID                          int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	CharacterID                 string `gorm:"column:character_id;uniqueIndex" json:"characterId"`
+	Enabled                     int    `gorm:"column:enabled;default:0" json:"enabled"`
+	WorkDays                    string `gorm:"column:work_days;default:MON,TUE,WED,THU,FRI" json:"workDays"`
+	WorkStartTime               string `gorm:"column:work_start_time;default:09:00" json:"workStartTime"`
+	WorkEndTime                 string `gorm:"column:work_end_time;default:18:00" json:"workEndTime"`
+	LunchBreakStartTime         string `gorm:"column:lunch_break_start_time;default:12:00" json:"lunchBreakStartTime"`
+	LunchBreakEndTime           string `gorm:"column:lunch_break_end_time;default:13:30" json:"lunchBreakEndTime"`
+	CommuteMinMinutes           int    `gorm:"column:commute_min_minutes;default:15" json:"commuteMinMinutes"`
+	CommuteMaxMinutes           int    `gorm:"column:commute_max_minutes;default:45" json:"commuteMaxMinutes"`
+	PrepareMinMinutes           int    `gorm:"column:prepare_min_minutes;default:20" json:"prepareMinMinutes"`
+	PrepareMaxMinutes           int    `gorm:"column:prepare_max_minutes;default:60" json:"prepareMaxMinutes"`
+	ReplyMode                   string `gorm:"column:reply_mode;default:SHORT_REPLY" json:"replyMode"`
+	AllowOvertime               int    `gorm:"column:allow_overtime;default:0" json:"allowOvertime"`
+	OvertimeProbability         int    `gorm:"column:overtime_probability;default:10" json:"overtimeProbability"`
+	OvertimeMinMinutes          int    `gorm:"column:overtime_min_minutes;default:30" json:"overtimeMinMinutes"`
+	OvertimeMaxMinutes          int    `gorm:"column:overtime_max_minutes;default:180" json:"overtimeMaxMinutes"`
+	OvertimeReplyMode           string `gorm:"column:overtime_reply_mode;default:SHORT_REPLY" json:"overtimeReplyMode"`
+	DelayedReplyEnabled         int    `gorm:"column:delayed_reply_enabled;default:0" json:"delayedReplyEnabled"`
+	CommuteHomeShareEnabled     int    `gorm:"column:commute_home_share_enabled;default:1" json:"commuteHomeShareEnabled"`
+	CommuteHomeShareProbability int    `gorm:"column:commute_home_share_probability;default:60" json:"commuteHomeShareProbability"`
+	UpdatedAt                   string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (WorkProfile) TableName() string { return "work_profiles" }

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
 import (
@@ -21,10 +23,10 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qdrant"
+	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -89,15 +91,15 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 	"不能使用markdown格式。"
 
 type service struct {
-	repo        Repository
-	db          *gorm.DB
-	memorySvc   memory.Service
-	profileSvc  profile.Service
+	repo         Repository
+	db           *gorm.DB
+	memorySvc    memory.Service
+	profileSvc   profile.Service
 	episodicSvc  episodic.Service
 	worldBookSvc worldbook.Service
-	wmCache     *WorkingMemoryCache
-	compressor  *Compressor
-	pipeline    *memory.Pipeline
+	wmCache      *WorkingMemoryCache
+	compressor   *Compressor
+	pipeline     *memory.Pipeline
 }
 
 func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor) Service {
@@ -269,7 +271,6 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-
 	systemParts := []string{systemNoEmojiInstruction}
 	if identity == "" {
 		identity = "一个AI伙伴"
@@ -308,7 +309,7 @@ func (s *service) trimContextWindow(convID string) {
 		maxRounds = 20
 	}
 	var ids []string
-	s.db.Table("messages").Select("id").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Order("created_at DESC").Limit(maxRounds * 2 + 100).Pluck("id", &ids)
+	s.db.Table("messages").Select("id").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Order("created_at DESC").Limit(maxRounds*2+100).Pluck("id", &ids)
 	if len(ids) <= maxRounds*2 {
 		return
 	}
@@ -403,9 +404,9 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	tool.SetCurrentCharacterID(charID)
 	for round := 0; round < 3; round++ {
 		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(cfg, messages, toolDefs)
-		applog.Info("[ToolLoop] round=%d toolCalls=%d aiContentLen=%d", round, len(toolCalls), len(aiContent))
+		applog.Info(fmt.Sprintf("[ToolLoop] round=%d toolCalls=%d aiContentLen=%d", round, len(toolCalls), len(aiContent)))
 		if llmErr != nil {
-			applog.Warn("[ToolLoop] LLM error: %v", llmErr)
+			applog.Warn(fmt.Sprintf("[ToolLoop] LLM error: %v", llmErr))
 			s.db.Exec("DELETE FROM messages WHERE id = ?", userMsgID)
 			return nil, fmt.Errorf("AI 调用失败: %w", llmErr)
 		}
@@ -446,7 +447,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 				args = string(newArgs)
 			}
 			result, ok := tool.Execute(name, args)
-			applog.Info("[ToolLoop] Execute %s ok=%v result=%s", name, ok, result[:min(len(result), 60)])
+			applog.Info(fmt.Sprintf("[ToolLoop] Execute %s ok=%v result=%s", name, ok, result[:min(len(result), 60)]))
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
 		}
 	}
@@ -454,7 +455,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 		applog.Warn("[ToolLoop] reply empty, fallback to text")
 		reply = "操作已完成"
 	} else {
-		applog.Info("[ToolLoop] final reply len=%d", len(reply))
+		applog.Info(fmt.Sprintf("[ToolLoop] final reply len=%d", len(reply)))
 	}
 	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
 	var realLines []string
@@ -531,7 +532,6 @@ func (s *service) sys1Builder(charName, identity, systemPrompt, userMessage stri
 	return parts
 }
 
-
 func (s *service) rewriteQueryForSearch(userMessage string) string {
 	cfg, err := s.repo.GetActiveModel()
 	if err != nil {
@@ -572,7 +572,7 @@ func (s *service) sys2Builder(convID, charID, userMessage string) []string {
 	if s.wmCache != nil {
 		wm := s.wmCache.Get(convID)
 		if wm != nil && wm.State != nil && wm.State.Summary != "" {
-			parts = append(parts, "【工作记忆】\n" + wm.State.Summary)
+			parts = append(parts, "【工作记忆】\n"+wm.State.Summary)
 		}
 	}
 	if s.compressor != nil {
@@ -601,14 +601,13 @@ func (s *service) sys2Builder(convID, charID, userMessage string) []string {
 			}
 			for _, layer := range layerOrder {
 				if lines := layerLines[layer]; len(lines) > 0 {
-					parts = append(parts, "【" + layer + "】\n" + strings.Join(lines, "\n"))
+					parts = append(parts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
 				}
 			}
 		}
 	}
 	return parts
 }
-
 
 func (s *service) detectEpisodicMoment(convID string) {
 	if s.episodicSvc == nil {

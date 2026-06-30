@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package user
 
 import (
-	"gorm.io/gorm"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 )
-
 
 type Repository interface {
 	FindByUsername(username string) (*AuthUser, error)
@@ -24,7 +25,6 @@ type Repository interface {
 type repository struct {
 	db *gorm.DB
 }
-
 
 func NewRepository(ctx *app.AppContext) Repository {
 	return &repository{db: ctx.DB}
@@ -74,9 +74,9 @@ func (r *repository) ListSessions(userID int) ([]SessionResponse, error) {
 	for i, s := range sessions {
 		res[i] = SessionResponse{
 			ID: s.ID, DeviceName: s.DeviceName, IPAddress: s.IPAddress,
-			UserAgent: s.UserAgent,
+			UserAgent:    s.UserAgent,
 			LastActiveAt: s.LastActiveAt,
-			CreatedAt: s.CreatedAt,
+			CreatedAt:    s.CreatedAt,
 		}
 		if s.ExpiresAt != nil {
 			res[i].ExpiresAt = *s.ExpiresAt

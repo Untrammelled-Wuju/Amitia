@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package feedback
 
 import (
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
-
 
 type Repository interface {
 	Create(fb *MessageFeedback) error
@@ -19,7 +20,6 @@ type repository struct {
 	db *gorm.DB
 }
 
-
 func NewRepository(ctx *app.AppContext) Repository {
 	return &repository{db: ctx.DB}
 }
@@ -31,7 +31,9 @@ func (r *repository) Create(fb *MessageFeedback) error {
 func (r *repository) GetByMessage(msgID string) ([]MessageFeedback, error) {
 	var items []MessageFeedback
 	err := r.db.Where("message_id = ?", msgID).Order("created_at DESC").Find(&items).Error
-	if items == nil { items = []MessageFeedback{} }
+	if items == nil {
+		items = []MessageFeedback{}
+	}
 	return items, err
 }
 
@@ -46,14 +48,17 @@ func (r *repository) GetStats() (int64, map[string]int64, []MessageFeedback, err
 	defer rows.Close()
 	byType := map[string]int64{}
 	for rows.Next() {
-		var t string; var c int64
+		var t string
+		var c int64
 		rows.Scan(&t, &c)
 		byType[t] = c
 	}
 
 	var recent []MessageFeedback
 	r.db.Order("created_at DESC").Limit(10).Find(&recent)
-	if recent == nil { recent = []MessageFeedback{} }
+	if recent == nil {
+		recent = []MessageFeedback{}
+	}
 
 	return total, byType, recent, nil
 }
@@ -61,7 +66,9 @@ func (r *repository) GetStats() (int64, map[string]int64, []MessageFeedback, err
 func (r *repository) GetRecent(limit int) ([]MessageFeedback, error) {
 	var items []MessageFeedback
 	err := r.db.Order("created_at DESC").Limit(limit).Find(&items).Error
-	if items == nil { items = []MessageFeedback{} }
+	if items == nil {
+		items = []MessageFeedback{}
+	}
 	return items, err
 }
 

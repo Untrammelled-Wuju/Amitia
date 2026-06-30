@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import axios, { type AxiosInstance, type AxiosResponse, type AxiosError } from "axios"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { ERR, type ApiResponse } from "@/types"

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 import (
@@ -333,7 +335,6 @@ func (h *Handler) GetRankedMemories(c *gin.Context) {
 	}
 	util.SuccessResponse(c, ranked)
 }
-
 
 func (h *Handler) RetrieveStats(c *gin.Context) {
 	stats, err := h.service.RetrieveStats()

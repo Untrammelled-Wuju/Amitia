@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="char-config-page">
     <el-alert type="warning" :closable="false" show-icon style="margin-bottom:12px">

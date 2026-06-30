@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog v-model="show" title="从模板创建角色" width="720px" top="5vh">
     <div v-if="loading" style="text-align:center;padding:40px">

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 const { spawn } = require('node-pty');
 const fs = require('fs');
 console.log('Starting Lagrange via PTY...');

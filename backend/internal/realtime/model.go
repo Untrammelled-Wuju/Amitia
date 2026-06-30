@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package realtime
 
 const volcanoRealtimeUri = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"

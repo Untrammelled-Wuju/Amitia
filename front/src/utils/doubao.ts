@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 const DOUBAO_API_KEY = "ark-919cb2bc-dcd1-4ef9-b8b5-5f1b42488bf7-9bd5c"
 const DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 const DOUBAO_MODEL = "doubao-seed-2-0-lite-260428"

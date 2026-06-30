@@ -1,24 +1,25 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package agent
 
 import (
-    "bytes"
-    "encoding/base64"
-    "encoding/json"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "os"
-    "path/filepath"
-    "strings"
-    "time"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/u-ai/backend/internal/chat"
-    "github.com/u-ai/backend/pkg/app"
-    "gorm.io/gorm"
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 )
-
 
 type Service interface {
 	Test(characterID, message string) (map[string]interface{}, error)
@@ -41,7 +42,6 @@ type service struct {
 	chatSvc chat.Service
 }
 
-
 func NewService(ctx *app.AppContext, chatSvc chat.Service) Service {
 	return &service{db: ctx.DB, chatSvc: chatSvc}
 }
@@ -59,7 +59,9 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
 	}
-	if message == "" { message = "你好，请简单介绍一下你自己" }
+	if message == "" {
+		message = "你好，请简单介绍一下你自己"
+	}
 
 	cfg := s.getActiveModel()
 	if cfg == nil {
@@ -67,9 +69,13 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 	}
 
 	systemParts := []string{systemNoEmojiInstruction}
-	if identity == "" { identity = "一个AI伙伴" }
+	if identity == "" {
+		identity = "一个AI伙伴"
+	}
 	systemParts = append(systemParts, fmt.Sprintf("你是%s，%s。", charName, identity))
-	if systemPrompt != "" { systemParts = append(systemParts, systemPrompt) }
+	if systemPrompt != "" {
+		systemParts = append(systemParts, systemPrompt)
+	}
 	systemParts = append(systemParts, systemFormatInstruction)
 	apiMessages := []map[string]interface{}{}
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
@@ -119,8 +125,12 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}
 
 	estTokens := 0
-	if systemPrompt != "" { estTokens += len(systemPrompt) / 2 }
-	for _, m := range msgs { estTokens += len(m["content"]) / 2 }
+	if systemPrompt != "" {
+		estTokens += len(systemPrompt) / 2
+	}
+	for _, m := range msgs {
+		estTokens += len(m["content"]) / 2
+	}
 
 	sysPreview := systemPrompt
 	if len([]rune(sysPreview)) > 200 {
@@ -128,13 +138,13 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}
 
 	return map[string]interface{}{
-		"conversationId":     convID,
-		"title":              title,
-		"characterId":        charID,
+		"conversationId":      convID,
+		"title":               title,
+		"characterId":         charID,
 		"systemPromptPreview": sysPreview,
-		"messageCount":       msgCount,
-		"recentMessages":     msgs,
-		"estimatedTokens":    estTokens,
+		"messageCount":        msgCount,
+		"recentMessages":      msgs,
+		"estimatedTokens":     estTokens,
 	}, nil
 }
 
@@ -206,8 +216,12 @@ func (s *service) getActiveModel() map[string]string {
 		Select("base_url, api_key, model_name, temperature, max_tokens, top_p").
 		Where("is_active = 1").Limit(1).Row().
 		Scan(&baseURL, &apiKey, &modelName, &temp, &maxTokens, &topP)
-	if err != nil { return nil }
-	_ = temp; _ = maxTokens; _ = topP
+	if err != nil {
+		return nil
+	}
+	_ = temp
+	_ = maxTokens
+	_ = topP
 	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName}
 }
 
@@ -222,7 +236,9 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
 	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
-	if err != nil { return "", 0, err }
+	if err != nil {
+		return "", 0, err
+	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
@@ -233,12 +249,16 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 		Usage   struct{ TotalTokens int }
 	}
 	json.Unmarshal(rb, &r)
-	if len(r.Choices) == 0 { return "", 0, fmt.Errorf("no choices") }
+	if len(r.Choices) == 0 {
+		return "", 0, fmt.Errorf("no choices")
+	}
 	return r.Choices[0].Message.Content, r.Usage.TotalTokens, nil
 }
 
 func truncate(s string, n int) string {
 	runes := []rune(s)
-	if len(runes) <= n { return s }
+	if len(runes) <= n {
+		return s
+	}
 	return string(runes[:n]) + "..."
 }

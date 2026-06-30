@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog v-model="visible" title="上下文预览" width="700px" top="5vh" :close-on-click-modal="false">
     <div v-if="loading" style="text-align:center;padding:40px">

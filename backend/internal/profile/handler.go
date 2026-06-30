@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package profile
 
 import (
@@ -79,9 +81,9 @@ func (h *Handler) GetByUserID(c *gin.Context) {
 
 func (h *Handler) Extract(c *gin.Context) {
 	var body struct {
-		UserID         string                 `json:"userId"`
-		ConversationID string                 `json:"conversationId"`
-		Messages       []map[string]string    `json:"messages"`
+		UserID         string              `json:"userId"`
+		ConversationID string              `json:"conversationId"`
+		Messages       []map[string]string `json:"messages"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive } from "vue"
 import { ElMessage } from "element-plus"
 import { apiClient } from "../../../composables/useApi"

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package proactive
 
 import (
@@ -5,9 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-
 type Repository interface {
-	
 	ListRules() ([]ProactiveRule, error)
 	ListRulesByCharacter(characterID string) ([]ProactiveRule, error)
 	FindRuleByID(id int) (*ProactiveRule, error)
@@ -16,7 +16,7 @@ type Repository interface {
 	DeleteRule(id int) error
 	ToggleRule(id int) (*ProactiveRule, error)
 	ResetDailyCounts() error
-	
+
 	ListReminders() ([]Reminder, error)
 	CreateReminder(r *Reminder) error
 	UpdateReminder(id int, updates map[string]interface{}) error
@@ -29,7 +29,6 @@ type repository struct {
 	db *gorm.DB
 }
 
-
 func NewRepository(ctx *app.AppContext) Repository {
 	return &repository{db: ctx.DB}
 }
@@ -37,14 +36,18 @@ func NewRepository(ctx *app.AppContext) Repository {
 func (r *repository) ListRules() ([]ProactiveRule, error) {
 	var rules []ProactiveRule
 	err := r.db.Order("id").Find(&rules).Error
-	if rules == nil { rules = []ProactiveRule{} }
+	if rules == nil {
+		rules = []ProactiveRule{}
+	}
 	return rules, err
 }
 
 func (r *repository) ListRulesByCharacter(characterID string) ([]ProactiveRule, error) {
 	var rules []ProactiveRule
 	err := r.db.Where("character_id = ?", characterID).Order("id").Find(&rules).Error
-	if rules == nil { rules = []ProactiveRule{} }
+	if rules == nil {
+		rules = []ProactiveRule{}
+	}
 	return rules, err
 }
 
@@ -78,7 +81,9 @@ func (r *repository) ResetDailyCounts() error {
 func (r *repository) ListReminders() ([]Reminder, error) {
 	var items []Reminder
 	err := r.db.Order("remind_at ASC").Find(&items).Error
-	if items == nil { items = []Reminder{} }
+	if items == nil {
+		items = []Reminder{}
+	}
 	return items, err
 }
 
@@ -105,6 +110,8 @@ func (r *repository) PendingReminders() ([]Reminder, error) {
 	var items []Reminder
 	err := r.db.Where("enabled = 1 AND remind_at <= datetime('now', 'localtime', '+5 minutes')").
 		Order("remind_at ASC").Limit(20).Find(&items).Error
-	if items == nil { items = []Reminder{} }
+	if items == nil {
+		items = []Reminder{}
+	}
 	return items, err
 }

@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div>
     <div v-if="accessRisk && (accessRisk.overallLevel === 'error' || accessRisk.overallLevel === 'warn')" class="access-risk-alert" :class="'risk-' + accessRisk.overallLevel">

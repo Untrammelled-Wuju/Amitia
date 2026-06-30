@@ -1,10 +1,12 @@
-﻿package realtime
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package realtime
 
 import (
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -26,24 +28,38 @@ func HandleSession(c *gin.Context) {
 	appLog.Info("HandleSession ENTER")
 
 	apiKey := c.Query("apiKey")
-	if apiKey == "" { apiKey = c.GetHeader("X-Tts-Api-Key") }
+	if apiKey == "" {
+		apiKey = c.GetHeader("X-Tts-Api-Key")
+	}
 	if apiKey == "" {
 		c.JSON(400, gin.H{"code": 400, "message": "API Key required"})
 		return
 	}
 	voiceType := c.Query("voiceType")
-	if voiceType == "" { voiceType = "zh_female_vv_jupiter_bigtts" }
+	if voiceType == "" {
+		voiceType = "zh_female_vv_jupiter_bigtts"
+	}
 	resourceId := "volc.speech.dialog"
 	appId := c.Query("appId")
-	if appId == "" { appId = c.GetHeader("X-Api-App-ID") }
+	if appId == "" {
+		appId = c.GetHeader("X-Api-App-ID")
+	}
 	realtimeAppId := appId
 	realtimeAccessToken := apiKey
 	if dbInstance != nil {
-		var ttsCfg struct { RealtimeAppId string `gorm:"column:realtime_app_id"`; RealtimeAccessToken string `gorm:"column:realtime_access_token"`; RealtimeSecretKey string `gorm:"column:realtime_secret_key"` }
+		var ttsCfg struct {
+			RealtimeAppId       string `gorm:"column:realtime_app_id"`
+			RealtimeAccessToken string `gorm:"column:realtime_access_token"`
+			RealtimeSecretKey   string `gorm:"column:realtime_secret_key"`
+		}
 		dbInstance.Table("tts_configs").Where("is_active = 1").Select("realtime_app_id, realtime_access_token, realtime_secret_key").First(&ttsCfg)
-		if ttsCfg.RealtimeAppId != "" { realtimeAppId = ttsCfg.RealtimeAppId }
-		if ttsCfg.RealtimeAccessToken != "" { realtimeAccessToken = ttsCfg.RealtimeAccessToken }
-		
+		if ttsCfg.RealtimeAppId != "" {
+			realtimeAppId = ttsCfg.RealtimeAppId
+		}
+		if ttsCfg.RealtimeAccessToken != "" {
+			realtimeAccessToken = ttsCfg.RealtimeAccessToken
+		}
+
 	}
 
 	conversationId := c.Query("conversationId")
@@ -57,15 +73,27 @@ func HandleSession(c *gin.Context) {
 		if conv.CID != "" {
 			var ch struct{ N, SP, SS, VT, CVID, VM string }
 			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, system_prompt as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
-			if ch.VM == "clone" && ch.CVID != "" { voiceType = ch.CVID } else if ch.VT != "" { voiceType = ch.VT }
-			if ch.N != "" { botName = ch.N }
-			if ch.SP != "" { systemRole = ch.SP }
-			if systemRole == "" && ch.SS != "" { systemRole = ch.SS }
+			if ch.VM == "clone" && ch.CVID != "" {
+				voiceType = ch.CVID
+			} else if ch.VT != "" {
+				voiceType = ch.VT
+			}
+			if ch.N != "" {
+				botName = ch.N
+			}
+			if ch.SP != "" {
+				systemRole = ch.SP
+			}
+			if systemRole == "" && ch.SS != "" {
+				systemRole = ch.SS
+			}
 		}
 	}
 
 	browserConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer browserConn.Close()
 	appLog.Info("browser WS upgraded")
 
@@ -81,9 +109,16 @@ func HandleSession(c *gin.Context) {
 	volcanoConn, resp, err := dialer.Dial(volcanoRealtimeUri, volcanoHeaders)
 	if err != nil {
 		sc := 0
-		if resp != nil { sc = resp.StatusCode }
+		if resp != nil {
+			sc = resp.StatusCode
+		}
 		bodyStr := ""
-		if resp != nil { sc = resp.StatusCode; body, _ := io.ReadAll(resp.Body); resp.Body.Close(); bodyStr = string(body) }
+		if resp != nil {
+			sc = resp.StatusCode
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			bodyStr = string(body)
+		}
 		browserConn.WriteJSON(gin.H{"event": "error", "data": fmt.Sprintf("volc dial failed HTTP %d body: %s err: %v", sc, bodyStr, err)})
 		return
 	}
@@ -116,16 +151,17 @@ func HandleSession(c *gin.Context) {
 		}
 	}
 
-
 	dialogData := map[string]interface{}{"bot_name": botName, "dialog_id": dialogId, "extra": nil}
 	dialogData["model"] = "1.2.1.1"
 	dialogData["extra"] = map[string]interface{}{"recv_timeout": 120, "input_mod": "audio"}
-	if systemRole != "" { dialogData["system_role"] = systemRole }
+	if systemRole != "" {
+		dialogData["system_role"] = systemRole
+	}
 
 	sessPayload := map[string]interface{}{
 		"dialog": dialogData,
-		"asr": map[string]interface{}{"audio_info": map[string]interface{}{"format": "pcm", "sample_rate": 16000, "channel": 1}},
-		"tts": map[string]interface{}{"speaker": voiceType, "audio_config": map[string]interface{}{"channel": 1, "format": "pcm_s16le", "sample_rate": 24000}},
+		"asr":    map[string]interface{}{"audio_info": map[string]interface{}{"format": "pcm", "sample_rate": 16000, "channel": 1}},
+		"tts":    map[string]interface{}{"speaker": voiceType, "audio_config": map[string]interface{}{"channel": 1, "format": "pcm_s16le", "sample_rate": 24000}},
 	}
 	sessJSON, _ := json.Marshal(sessPayload)
 	sessFrame := buildEventFrame(MsgTypeFullClient, EvtStartSession, sessID, sessJSON)
@@ -159,7 +195,9 @@ func HandleSession(c *gin.Context) {
 
 	var respDialogId string
 	if respFrame != nil && respFrame.EventCode == 150 {
-		var ssResp struct{ DialogID string `json:"dialog_id"` }
+		var ssResp struct {
+			DialogID string `json:"dialog_id"`
+		}
 		if json.Unmarshal(respFrame.Payload, &ssResp) == nil && ssResp.DialogID != "" {
 			respDialogId = ssResp.DialogID
 		}
@@ -175,10 +213,18 @@ func HandleSession(c *gin.Context) {
 		defer close(doneCh)
 		for {
 			msgType, data, err := volcanoConn.ReadMessage()
-			if err != nil { appLog.Info("volc read loop:", err); return }
-			if msgType != websocket.BinaryMessage { continue }
+			if err != nil {
+				appLog.Info("volc read loop:", err)
+				return
+			}
+			if msgType != websocket.BinaryMessage {
+				continue
+			}
 			frame, _ := parseFrame(data)
-			if frame == nil { appLog.Info("volc nil frame len:", len(data)); continue }
+			if frame == nil {
+				appLog.Info("volc nil frame len:", len(data))
+				continue
+			}
 			appLog.Info("volc evt:", frame.EventCode)
 			switch frame.EventCode {
 			case 352:
@@ -198,11 +244,14 @@ func HandleSession(c *gin.Context) {
 		defer wg.Done()
 		for {
 			select {
-			case <-doneCh: return
+			case <-doneCh:
+				return
 			default:
 			}
 			var msg map[string]interface{}
-			if err := browserConn.ReadJSON(&msg); err != nil { return }
+			if err := browserConn.ReadJSON(&msg); err != nil {
+				return
+			}
 			evt, _ := msg["event"].(string)
 			switch evt {
 			case "stop":
@@ -224,16 +273,3 @@ func HandleSession(c *gin.Context) {
 }
 
 func itoa(i int32) string { return fmt.Sprintf("%d", i) }
-
-
-
-
-
-
-
-
-
-
-
-
-

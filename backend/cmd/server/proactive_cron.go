@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package main
 
 import (
@@ -11,13 +13,13 @@ import (
 )
 
 type ProactiveCron struct {
-	db       *gorm.DB
-	compSvc  companion.Service
-	executor *proactive.Executor
+	db        *gorm.DB
+	compSvc   companion.Service
+	executor  *proactive.Executor
 	scheduler *proactive.SafeScheduler
-	running  bool
-	mu       sync.Mutex
-	stopCh   chan struct{}
+	running   bool
+	mu        sync.Mutex
+	stopCh    chan struct{}
 
 	scheduled          map[int]int
 	lastClean          string

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 import (
@@ -58,12 +60,12 @@ type LayerResult struct {
 }
 
 type PipelineRun struct {
-	ID        string        `json:"id"`
-	ConvID    string        `json:"convId"`
-	StartedAt string        `json:"startedAt"`
-	EndedAt   string        `json:"endedAt"`
-	DurationMs int64        `json:"durationMs"`
-	Layers    []LayerResult `json:"layers"`
+	ID         string        `json:"id"`
+	ConvID     string        `json:"convId"`
+	StartedAt  string        `json:"startedAt"`
+	EndedAt    string        `json:"endedAt"`
+	DurationMs int64         `json:"durationMs"`
+	Layers     []LayerResult `json:"layers"`
 }
 
 type Pipeline struct {

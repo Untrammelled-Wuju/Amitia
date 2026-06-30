@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package proactive
 
 import (
@@ -15,22 +17,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/comment/response"
-	"github.com/u-ai/backend/pkg/util"
 	"github.com/u-ai/backend/pkg/sse"
+	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
-
 
 type Handler struct {
 	service Service
 	db      *gorm.DB
 }
 
-
 func NewHandler(srv Service, db *gorm.DB) *Handler {
 	return &Handler{service: srv, db: db}
 }
-
 
 func (h *Handler) ListRules(c *gin.Context) {
 	characterID := c.Query("characterId")
@@ -41,7 +40,6 @@ func (h *Handler) ListRules(c *gin.Context) {
 	}
 	util.SuccessResponse(c, rules)
 }
-
 
 func (h *Handler) CreateRule(c *gin.Context) {
 	var req CreateRuleRequest
@@ -56,7 +54,6 @@ func (h *Handler) CreateRule(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "规则创建成功", rule)
 }
-
 
 func (h *Handler) UpdateRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -73,7 +70,6 @@ func (h *Handler) UpdateRule(c *gin.Context) {
 	util.SuccessMsgResponse(c, "规则更新成功", rule)
 }
 
-
 func (h *Handler) DeleteRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.DeleteRule(id); err != nil {
@@ -82,7 +78,6 @@ func (h *Handler) DeleteRule(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "规则已删除", nil)
 }
-
 
 func (h *Handler) ToggleRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -94,7 +89,6 @@ func (h *Handler) ToggleRule(c *gin.Context) {
 	util.SuccessMsgResponse(c, "状态已切换", rule)
 }
 
-
 func (h *Handler) Status(c *gin.Context) {
 	characterID := c.Query("characterId")
 	rules, _ := h.service.ListRules(characterID)
@@ -104,17 +98,22 @@ func (h *Handler) Status(c *gin.Context) {
 		if v, ok := r["enabled"]; ok {
 			switch n := v.(type) {
 			case int:
-				if n == 1 { enabled++ }
+				if n == 1 {
+					enabled++
+				}
 			case int64:
-				if n == 1 { enabled++ }
+				if n == 1 {
+					enabled++
+				}
 			case float64:
-				if int(n) == 1 { enabled++ }
+				if int(n) == 1 {
+					enabled++
+				}
 			}
 		}
 	}
 	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning, "enabledRuleCount": enabled, "totalRuleCount": total})
 }
-
 
 func (h *Handler) ListReminders(c *gin.Context) {
 	items, err := h.service.ListReminders()
@@ -124,7 +123,6 @@ func (h *Handler) ListReminders(c *gin.Context) {
 	}
 	util.SuccessResponse(c, items)
 }
-
 
 func (h *Handler) CreateReminder(c *gin.Context) {
 	var req CreateReminderRequest
@@ -145,7 +143,6 @@ func (h *Handler) CreateReminder(c *gin.Context) {
 	util.SuccessMsgResponse(c, "提醒创建成功", rem)
 }
 
-
 func (h *Handler) UpdateReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var updates map[string]interface{}
@@ -161,7 +158,6 @@ func (h *Handler) UpdateReminder(c *gin.Context) {
 	util.SuccessMsgResponse(c, "提醒更新成功", rem)
 }
 
-
 func (h *Handler) DeleteReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.DeleteReminder(id); err != nil {
@@ -170,7 +166,6 @@ func (h *Handler) DeleteReminder(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "提醒已删除", nil)
 }
-
 
 func (h *Handler) ToggleReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -181,7 +176,6 @@ func (h *Handler) ToggleReminder(c *gin.Context) {
 	}
 	util.SuccessMsgResponse(c, "状态已切换", rem)
 }
-
 
 func (h *Handler) TestRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -394,9 +388,13 @@ func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
 		row := h.db.Table("conversations").Select("id").Where("channel = ?", rem.Channel).Limit(1).Row()
 		row.Scan(&convID)
 	}
-	if convID == "" { return }
+	if convID == "" {
+		return
+	}
 	content := rem.Content
-	if content == "" { content = fmt.Sprintf("[提醒] %s", rem.Title) }
+	if content == "" {
+		content = fmt.Sprintf("[提醒] %s", rem.Title)
+	}
 	msgID = uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, content, now)
@@ -418,8 +416,12 @@ func (h *Handler) CancelRemindersByQuery(c *gin.Context) {
 	count := 0
 	for _, r := range reminders {
 		match := true
-		if body.Title != "" && r.Title != body.Title { match = false }
-		if body.CharacterID != "" && r.CharacterID != body.CharacterID { match = false }
+		if body.Title != "" && r.Title != body.Title {
+			match = false
+		}
+		if body.CharacterID != "" && r.CharacterID != body.CharacterID {
+			match = false
+		}
 		if match {
 			h.service.DeleteReminder(r.ID)
 			count++
@@ -446,8 +448,12 @@ func (h *Handler) ReminderStatus(c *gin.Context) {
 	dueNow := 0
 	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	for _, r := range reminders {
-		if r.Enabled == 1 { enabled++ }
-		if r.Enabled == 1 && r.RemindAt <= nowStr { dueNow++ }
+		if r.Enabled == 1 {
+			enabled++
+		}
+		if r.Enabled == 1 && r.RemindAt <= nowStr {
+			dueNow++
+		}
 	}
 	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning, "total": total, "enabled": enabled, "dueNow": dueNow})
 }
@@ -461,13 +467,12 @@ func (h *Handler) PendingReminders(c *gin.Context) {
 	util.SuccessResponse(c, items)
 }
 
-
-
-
 func (h *Handler) GetCleanupConfig(c *gin.Context) {
 	var value string
 	h.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_cleanup_days' LIMIT 1").Row().Scan(&value)
-	if value == "" { value = "0" }
+	if value == "" {
+		value = "0"
+	}
 	util.SuccessResponse(c, gin.H{"cleanupDays": value})
 }
 
@@ -490,9 +495,9 @@ func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity
 		prompt = "发一条自然的主动消息。"
 	}
 
-		now := time.Now()
-		sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity, now.Format("15:04"), now.Weekday().String())
-			usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
+	now := time.Now()
+	sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity, now.Format("15:04"), now.Weekday().String())
+	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
 
 	cfg := h.getActiveModelConfig()
 	if cfg == nil {
@@ -578,7 +583,6 @@ func (h *Handler) getWechatConvID(charID string) string {
 	return id
 }
 
-
 func (h *Handler) getWechatConvIDForTrigger(charID string) string {
 	var id string
 	h.db.Table("conversations").Select("id").
@@ -624,8 +628,12 @@ func (h *Handler) CleanupTriggeredReminders() {
 	var daysStr string
 	h.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_cleanup_days' LIMIT 1").Row().Scan(&daysStr)
 	days := 0
-	if daysStr != "" { fmt.Sscanf(daysStr, "%d", &days) }
-	if days <= 0 { return }
+	if daysStr != "" {
+		fmt.Sscanf(daysStr, "%d", &days)
+	}
+	if days <= 0 {
+		return
+	}
 	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
 	h.db.Exec("DELETE FROM reminders WHERE enabled = 0 AND last_triggered_at < ?", cutoff)
 }

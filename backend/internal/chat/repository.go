@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
 import (
@@ -41,18 +43,34 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int64, error) {
 	query := r.db.Model(&Conversation{})
-	if q.Channel != "" { query = query.Where("channel = ?", q.Channel) }
-	if q.Source != "" { query = query.Where("source = ?", q.Source) }
-	if q.CharacterID != "" { query = query.Where("character_id = ?", q.CharacterID) }
-	if q.Keyword != "" { query = query.Where("title LIKE ?", "%"+q.Keyword+"%") }
+	if q.Channel != "" {
+		query = query.Where("channel = ?", q.Channel)
+	}
+	if q.Source != "" {
+		query = query.Where("source = ?", q.Source)
+	}
+	if q.CharacterID != "" {
+		query = query.Where("character_id = ?", q.CharacterID)
+	}
+	if q.Keyword != "" {
+		query = query.Where("title LIKE ?", "%"+q.Keyword+"%")
+	}
 	var total int64
 	query.Count(&total)
-	if q.Page <= 0 { q.Page = 1 }
-	if q.PageSize <= 0 { q.PageSize = 20 }
-	if q.PageSize > 100 { q.PageSize = 100 }
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.PageSize <= 0 {
+		q.PageSize = 20
+	}
+	if q.PageSize > 100 {
+		q.PageSize = 100
+	}
 	var convs []Conversation
 	err := query.Order("updated_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&convs).Error
-	if convs == nil { convs = []Conversation{} }
+	if convs == nil {
+		convs = []Conversation{}
+	}
 	return convs, total, err
 }
 
@@ -82,14 +100,20 @@ func (r *repository) DeleteAllConversations() error {
 }
 
 func (r *repository) GetMessages(convID string, page, pageSize int) ([]Message, int64, error) {
-	if page <= 0 { page = 1 }
-	if pageSize <= 0 || pageSize > 200 { pageSize = 50 }
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 200 {
+		pageSize = 50
+	}
 	offset := (page - 1) * pageSize
 	var total int64
 	r.db.Model(&Message{}).Where("conversation_id = ?", convID).Count(&total)
 	var msgs []Message
 	err := r.db.Where("conversation_id = ?", convID).Order("created_at ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
-	if msgs == nil { msgs = []Message{} }
+	if msgs == nil {
+		msgs = []Message{}
+	}
 	return msgs, total, err
 }
 
@@ -107,15 +131,25 @@ func (r *repository) DeleteMessagesByConv(convID string) error {
 
 func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, error) {
 	query := r.db.Model(&Message{}).Where("content LIKE ?", "%"+q.Keyword+"%")
-	if q.ConversationID != "" { query = query.Where("conversation_id = ?", q.ConversationID) }
+	if q.ConversationID != "" {
+		query = query.Where("conversation_id = ?", q.ConversationID)
+	}
 	var total int64
 	query.Count(&total)
-	if q.Page <= 0 { q.Page = 1 }
-	if q.PageSize <= 0 { q.PageSize = 20 }
-	if q.PageSize > 50 { q.PageSize = 50 }
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.PageSize <= 0 {
+		q.PageSize = 20
+	}
+	if q.PageSize > 50 {
+		q.PageSize = 50
+	}
 	var msgs []Message
 	err := query.Order("created_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&msgs).Error
-	if msgs == nil { msgs = []Message{} }
+	if msgs == nil {
+		msgs = []Message{}
+	}
 	return msgs, total, err
 }
 
@@ -134,7 +168,9 @@ func (r *repository) GetModelByID(id int) (*ModelConfig, error) {
 func (r *repository) ListModels() ([]ModelConfig, error) {
 	var cfgs []ModelConfig
 	err := r.db.Order("id").Find(&cfgs).Error
-	if cfgs == nil { cfgs = []ModelConfig{} }
+	if cfgs == nil {
+		cfgs = []ModelConfig{}
+	}
 	return cfgs, err
 }
 
@@ -158,7 +194,9 @@ func (r *repository) ActivateModel(id int) error {
 func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {
 	var routes []map[string]interface{}
 	r.db.Table("model_scenario_routes").Find(&routes)
-	if routes == nil { routes = []map[string]interface{}{} }
+	if routes == nil {
+		routes = []map[string]interface{}{}
+	}
 	return routes, nil
 }
 

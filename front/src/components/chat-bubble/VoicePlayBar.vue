@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="voice-bar" :class="{ playing: voicePlaying, loading: voiceLoading, 'voice-only': !hasContent }" @click="toggleVoice">
     <div class="voice-icon-wrap">

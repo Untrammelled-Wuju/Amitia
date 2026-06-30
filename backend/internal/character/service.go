@@ -1,4 +1,6 @@
-﻿package character
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package character
 
 import (
 	"fmt"
@@ -36,7 +38,9 @@ func (s *service) List(includeDisabled bool) ([]Character, error) {
 
 func (s *service) GetByID(id string) (*Character, error) {
 	c, err := s.repo.FindByID(id)
-	if err != nil { return nil, fmt.Errorf("角色不存在") }
+	if err != nil {
+		return nil, fmt.Errorf("角色不存在")
+	}
 	return c, nil
 }
 
@@ -52,24 +56,44 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		VoiceType: req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID,
 	}
-	if c.Name == "" { c.Name = "新角色" }
-	if c.Gender == "" { c.Gender = "UNSPECIFIED" }
-	if c.Pronoun == "" { c.Pronoun = "TA" }
-	if c.SelfReference == "" { c.SelfReference = "我" }
-	if c.LifeIdentity == "" { c.LifeIdentity = "CUSTOM" }
-	if c.VoiceType == "" { c.VoiceType = "zh_female_vv_uranus_bigtts" }
-	if c.VoiceSpeed == 0 { c.VoiceSpeed = 1.0 }
-	if c.VoicePitch == 0 && req.VoicePitch == 0 { c.VoicePitch = 0 }
-	if c.VoiceVolume == 0 { c.VoiceVolume = 1.0 }
+	if c.Name == "" {
+		c.Name = "新角色"
+	}
+	if c.Gender == "" {
+		c.Gender = "UNSPECIFIED"
+	}
+	if c.Pronoun == "" {
+		c.Pronoun = "TA"
+	}
+	if c.SelfReference == "" {
+		c.SelfReference = "我"
+	}
+	if c.LifeIdentity == "" {
+		c.LifeIdentity = "CUSTOM"
+	}
+	if c.VoiceType == "" {
+		c.VoiceType = "zh_female_vv_uranus_bigtts"
+	}
+	if c.VoiceSpeed == 0 {
+		c.VoiceSpeed = 1.0
+	}
+	if c.VoicePitch == 0 && req.VoicePitch == 0 {
+		c.VoicePitch = 0
+	}
+	if c.VoiceVolume == 0 {
+		c.VoiceVolume = 1.0
+	}
 	if req.IsDefault {
 		s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 		c.IsDefault = 1
 	}
-	if err := s.repo.Create(c); err != nil { return nil, fmt.Errorf("创建角色失败: %w", err) }
+	if err := s.repo.Create(c); err != nil {
+		return nil, fmt.Errorf("创建角色失败: %w", err)
+	}
 	// Auto-create preset proactive rules for the new character
 	presetRules := []struct {
 		Name, Channel, RuleType, ScheduleCron, PromptTemplate string
-		MaxPerDay, RandomMinutes int
+		MaxPerDay, RandomMinutes                              int
 	}{
 		{"早安问候", "all", "cron", "0 8 * * *", "早上好！新的一天开始了，有什么计划吗？", 20, 30},
 		{"晚安提醒", "all", "cron", "0 22 * * *", "夜深了，早点休息哦。今天过得怎么样？", 20, 30},
@@ -87,35 +111,91 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 
 func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, error) {
 	_, err := s.repo.FindByID(id)
-	if err != nil { return nil, fmt.Errorf("角色不存在") }
+	if err != nil {
+		return nil, fmt.Errorf("角色不存在")
+	}
 	updates := make(map[string]interface{})
-	if req.Name != nil { updates["name"] = *req.Name }
-	if req.Identity != nil { updates["identity"] = *req.Identity }
-	if req.Personality != nil { updates["personality"] = *req.Personality }
-	if req.SpeakingStyle != nil { updates["speaking_style"] = *req.SpeakingStyle }
-	if req.RelationshipStyle != nil { updates["relationship_style"] = *req.RelationshipStyle }
-	if req.SystemPrompt != nil { updates["system_prompt"] = *req.SystemPrompt }
-	if req.BoundaryRules != nil { updates["boundary_rules"] = *req.BoundaryRules }
-	if req.Description != nil { updates["description"] = *req.Description }
-	if req.Status != nil { updates["status"] = *req.Status }
-	if req.IsActive != nil { updates["is_active"] = *req.IsActive }
-	if req.SortOrder != nil { updates["sort_order"] = *req.SortOrder }
-	if req.Gender != nil { updates["gender"] = *req.Gender }
-	if req.Pronoun != nil { updates["pronoun"] = *req.Pronoun }
-	if req.SelfReference != nil { updates["self_reference"] = *req.SelfReference }
-	if req.GenderExpression != nil { updates["gender_expression"] = *req.GenderExpression }
-	if req.LifeIdentity != nil { updates["life_identity"] = *req.LifeIdentity }
-	if req.VoiceConfigID != nil { updates["voice_config_id"] = *req.VoiceConfigID }
-	if req.VoiceType != nil { updates["voice_type"] = *req.VoiceType }
-	if req.VoiceSpeed != nil { updates["voice_speed"] = *req.VoiceSpeed }
-	if req.VoicePitch != nil { updates["voice_pitch"] = *req.VoicePitch }
-	if req.VoiceVolume != nil { updates["voice_volume"] = *req.VoiceVolume }
-	if req.CustomVoiceID != nil { updates["custom_voice_id"] = *req.CustomVoiceID }
-	if req.VoiceMode != nil { updates["voice_mode"] = *req.VoiceMode }
-	if req.Emotion != nil { updates["emotion"] = *req.Emotion }
-	if req.EmotionScale != nil { updates["emotion_scale"] = *req.EmotionScale }
-	if req.SilenceDuration != nil { updates["silence_duration"] = *req.SilenceDuration }
-	if req.PersonalityConfig != nil { updates["personality_config"] = *req.PersonalityConfig }
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Identity != nil {
+		updates["identity"] = *req.Identity
+	}
+	if req.Personality != nil {
+		updates["personality"] = *req.Personality
+	}
+	if req.SpeakingStyle != nil {
+		updates["speaking_style"] = *req.SpeakingStyle
+	}
+	if req.RelationshipStyle != nil {
+		updates["relationship_style"] = *req.RelationshipStyle
+	}
+	if req.SystemPrompt != nil {
+		updates["system_prompt"] = *req.SystemPrompt
+	}
+	if req.BoundaryRules != nil {
+		updates["boundary_rules"] = *req.BoundaryRules
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.Status != nil {
+		updates["status"] = *req.Status
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+	if req.SortOrder != nil {
+		updates["sort_order"] = *req.SortOrder
+	}
+	if req.Gender != nil {
+		updates["gender"] = *req.Gender
+	}
+	if req.Pronoun != nil {
+		updates["pronoun"] = *req.Pronoun
+	}
+	if req.SelfReference != nil {
+		updates["self_reference"] = *req.SelfReference
+	}
+	if req.GenderExpression != nil {
+		updates["gender_expression"] = *req.GenderExpression
+	}
+	if req.LifeIdentity != nil {
+		updates["life_identity"] = *req.LifeIdentity
+	}
+	if req.VoiceConfigID != nil {
+		updates["voice_config_id"] = *req.VoiceConfigID
+	}
+	if req.VoiceType != nil {
+		updates["voice_type"] = *req.VoiceType
+	}
+	if req.VoiceSpeed != nil {
+		updates["voice_speed"] = *req.VoiceSpeed
+	}
+	if req.VoicePitch != nil {
+		updates["voice_pitch"] = *req.VoicePitch
+	}
+	if req.VoiceVolume != nil {
+		updates["voice_volume"] = *req.VoiceVolume
+	}
+	if req.CustomVoiceID != nil {
+		updates["custom_voice_id"] = *req.CustomVoiceID
+	}
+	if req.VoiceMode != nil {
+		updates["voice_mode"] = *req.VoiceMode
+	}
+	if req.Emotion != nil {
+		updates["emotion"] = *req.Emotion
+	}
+	if req.EmotionScale != nil {
+		updates["emotion_scale"] = *req.EmotionScale
+	}
+	if req.SilenceDuration != nil {
+		updates["silence_duration"] = *req.SilenceDuration
+	}
+	if req.PersonalityConfig != nil {
+		updates["personality_config"] = *req.PersonalityConfig
+	}
 	if req.IsDefault != nil {
 		if *req.IsDefault {
 			s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
@@ -124,11 +204,21 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 			updates["is_default"] = 0
 		}
 	}
-	if req.ChatStyleConfig != nil { updates["chat_style_config"] = *req.ChatStyleConfig }
-	if req.SceneRules != nil { updates["scene_rules"] = *req.SceneRules }
-	if req.Avatar != nil { updates["avatar"] = *req.Avatar }
-	if len(updates) == 0 { return nil, fmt.Errorf("没有可更新的字段") }
-	if err := s.repo.Update(id, updates); err != nil { return nil, fmt.Errorf("更新失败: %w", err) }
+	if req.ChatStyleConfig != nil {
+		updates["chat_style_config"] = *req.ChatStyleConfig
+	}
+	if req.SceneRules != nil {
+		updates["scene_rules"] = *req.SceneRules
+	}
+	if req.Avatar != nil {
+		updates["avatar"] = *req.Avatar
+	}
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("没有可更新的字段")
+	}
+	if err := s.repo.Update(id, updates); err != nil {
+		return nil, fmt.Errorf("更新失败: %w", err)
+	}
 	return s.repo.FindByID(id)
 }
 
@@ -136,8 +226,12 @@ func (s *service) Delete(id string) error { return s.repo.Delete(id) }
 
 func (s *service) SetActive(id string) (*Character, error) {
 	_, err := s.repo.FindByID(id)
-	if err != nil { return nil, fmt.Errorf("角色不存在") }
-	if err := s.repo.SetActive(id); err != nil { return nil, fmt.Errorf("设置活跃失败: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("角色不存在")
+	}
+	if err := s.repo.SetActive(id); err != nil {
+		return nil, fmt.Errorf("设置活跃失败: %w", err)
+	}
 	return s.repo.FindByID(id)
 }
 
@@ -145,21 +239,39 @@ func (s *service) ListTemplates() ([]CharacterTemplate, error) { return s.repo.L
 
 func (s *service) GetTemplateByID(id string) (*CharacterTemplate, error) {
 	t, err := s.repo.FindTemplateByID(id)
-	if err != nil { return nil, fmt.Errorf("模板不存在") }
+	if err != nil {
+		return nil, fmt.Errorf("模板不存在")
+	}
 	return t, nil
 }
 
 func (s *service) GetRoleProfile(characterID string) (*RoleProfileResponse, error) {
 	var c *Character
 	var err error
-	if characterID != "" { c, err = s.repo.FindByID(characterID) } else { c, err = s.repo.GetActive() }
-	if err != nil { return nil, fmt.Errorf("没有可用角色") }
+	if characterID != "" {
+		c, err = s.repo.FindByID(characterID)
+	} else {
+		c, err = s.repo.GetActive()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("没有可用角色")
+	}
 	return &RoleProfileResponse{ID: c.ID, CharacterID: c.ID, RoleName: c.Name, Gender: c.Gender, GenderLabel: c.GenderLabel, Pronoun: c.Pronoun, SelfReference: c.SelfReference, GenderExpression: c.GenderExpression, LifeIdentity: c.LifeIdentity, UserAddressingStyle: c.UserAddressingStyle}, nil
 }
 
 func (s *service) UpdateRoleProfile(characterID string, updates map[string]interface{}) (*RoleProfileResponse, error) {
 	var targetID string
-	if characterID != "" { targetID = characterID } else { active, err := s.repo.GetActive(); if err != nil { return nil, fmt.Errorf("没有可用角色") }; targetID = active.ID }
-	if err := s.repo.Update(targetID, updates); err != nil { return nil, fmt.Errorf("更新失败: %w", err) }
+	if characterID != "" {
+		targetID = characterID
+	} else {
+		active, err := s.repo.GetActive()
+		if err != nil {
+			return nil, fmt.Errorf("没有可用角色")
+		}
+		targetID = active.ID
+	}
+	if err := s.repo.Update(targetID, updates); err != nil {
+		return nil, fmt.Errorf("更新失败: %w", err)
+	}
 	return s.GetRoleProfile(targetID)
 }

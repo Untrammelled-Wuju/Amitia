@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 export const CHANNELS = [
   { label: "Web", value: "web" },
   { label: "微信", value: "wechat" },

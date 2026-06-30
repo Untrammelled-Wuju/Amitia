@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package sse
 
 import (
@@ -57,7 +59,9 @@ func SSEHandler(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	clientID := c.Query("clientId")
-	if clientID == "" { clientID = "default" }
+	if clientID == "" {
+		clientID = "default"
+	}
 	client := Global.Subscribe(clientID)
 	defer Global.Unsubscribe(clientID)
 

@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog :model-value="visible" @update:model-value="$emit('update:visible', $event)" title="切换角色" width="400px">
     <div class="char-list">

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
 import (
@@ -85,7 +87,7 @@ func (c *Compressor) MaybeCompress(convID string) {
 		return
 	}
 
-	roundEnd := nextRoundStart + (count/2) - 1
+	roundEnd := nextRoundStart + (count / 2) - 1
 	cs := &ConversationSummary{
 		ID:              uuid.New().String(),
 		ConversationID:  convID,

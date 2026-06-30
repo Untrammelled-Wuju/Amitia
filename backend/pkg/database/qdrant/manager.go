@@ -1,8 +1,8 @@
 package qdrant
 
 import (
-	"net"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,7 +29,6 @@ func (w *qdrantWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
-
 
 func killExistingQdrant(port int) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

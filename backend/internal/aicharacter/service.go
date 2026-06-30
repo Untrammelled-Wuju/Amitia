@@ -1,9 +1,11 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package aicharacter
 
 import (
+	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
-	"encoding/json"
 	"gorm.io/gorm"
 )
 
@@ -27,10 +29,12 @@ func NewService(ctx *app.AppContext) Service { return &service{db: ctx.DB} }
 func (s *service) GetDefault() map[string]interface{} {
 	var c struct {
 		ID, Name, Identity, PersonalityConfig string
-		IsDefault                              int
+		IsDefault                             int
 	}
 	err := s.db.Table("characters").Select("id, name, identity, personality_config, is_default").Where("is_default = 1").Limit(1).Row().Scan(&c.ID, &c.Name, &c.Identity, &c.PersonalityConfig, &c.IsDefault)
-	if err != nil { return map[string]interface{}{"id": "", "name": "", "identity": ""} }
+	if err != nil {
+		return map[string]interface{}{"id": "", "name": "", "identity": ""}
+	}
 	result := map[string]interface{}{"id": c.ID, "name": c.Name, "identity": c.Identity, "isDefault": c.IsDefault == 1}
 	if c.PersonalityConfig != "" {
 		var pc map[string]interface{}
@@ -58,7 +62,11 @@ func (s *service) GetPresets() []map[string]interface{} {
 
 func (s *service) GetPreset(id string) map[string]interface{} {
 	presets := s.GetPresets()
-	for _, p := range presets { if p["id"] == id { return p } }
+	for _, p := range presets {
+		if p["id"] == id {
+			return p
+		}
+	}
 	return map[string]interface{}{}
 }
 
@@ -76,7 +84,9 @@ func (s *service) ResetDefault() map[string]interface{} {
 
 func (s *service) PreviewPrompt(body map[string]interface{}) map[string]interface{} {
 	prompt := ""
-	if v, ok := body["systemPrompt"].(string); ok { prompt = v }
+	if v, ok := body["systemPrompt"].(string); ok {
+		prompt = v
+	}
 	return map[string]interface{}{"preview": prompt, "estimatedTokens": len(prompt) / 2}
 }
 
@@ -84,23 +94,27 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 	id, _ := body["id"].(string)
 	name, _ := body["name"].(string)
 	desc, _ := body["description"].(string)
-	
+
 	updates := make(map[string]interface{})
-	if name != "" { updates["name"] = name }
-	if desc != "" { updates["description"] = desc }
-	
+	if name != "" {
+		updates["name"] = name
+	}
+	if desc != "" {
+		updates["description"] = desc
+	}
+
 	// Handle personalityConfig
 	if pc, ok := body["personalityConfig"]; ok {
 		if pcBytes, err := json.Marshal(pc); err == nil {
 			updates["personality_config"] = string(pcBytes)
 		}
 	}
-	
+
 	// Handle lifeIdentity
 	if li, ok := body["lifeIdentity"].(string); ok && li != "" {
 		updates["life_identity"] = li
 	}
-	
+
 	// Handle isDefault - only update if explicitly provided (accepts bool or number)
 	if isDef, ok := body["isDefault"]; ok {
 		var isDefaultVal bool
@@ -117,21 +131,23 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 			updates["is_default"] = 0
 		}
 	}
-	
+
 	if id != "" {
 		if len(updates) > 0 {
 			s.db.Table("characters").Where("id = ?", id).Updates(updates)
 		}
 		return map[string]interface{}{"id": id, "saved": true}
 	}
-	
+
 	// Create new character
 	newId := uuid.New().String()
 	c := map[string]interface{}{
 		"id": newId, "name": name, "description": desc,
 		"status": "enabled", "personality_config": "{}", "chat_style_config": "{}", "scene_rules": "{}",
 	}
-	for k, v := range updates { c[k] = v }
+	for k, v := range updates {
+		c[k] = v
+	}
 	s.db.Table("characters").Create(c)
 	return map[string]interface{}{"id": newId, "saved": true}
 }

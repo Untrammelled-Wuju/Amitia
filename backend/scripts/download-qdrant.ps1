@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 彭旭
+# SPDX-License-Identifier: AGPL-3.0-only
 # Qdrant 二进制下载脚本 (Windows)
 # 用法: .\scripts\download-qdrant.ps1
 # 或手动: 1. 下载对应平台二进制放到 backend\qdrant\ 目录

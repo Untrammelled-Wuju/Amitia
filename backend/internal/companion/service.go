@@ -1,20 +1,22 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package companion
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"math/rand"
+	"net/http"
 	"sort"
 	"strings"
-	"io"
-	"net/http"
 	"time"
 
 	"github.com/u-ai/backend/internal/embedding"
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"github.com/u-ai/backend/pkg/app"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
 )
 
@@ -77,14 +79,16 @@ type service struct {
 	embeddingSvc    *embedding.Service
 	lastBurstAt     time.Time
 	todayBurstCount int
-
 }
+
 func NewService(ctx *app.AppContext) Service {
 	return &service{db: ctx.DB, embeddingSvc: embedding.NewService(ctx.DB)}
 }
 
 func (s *service) getSetting(key string) string {
-	var v string; s.db.Table("app_settings").Select("value").Where("key = ?", key).Row().Scan(&v); return v
+	var v string
+	s.db.Table("app_settings").Select("value").Where("key = ?", key).Row().Scan(&v)
+	return v
 }
 
 func (s *service) setSetting(key, value string) {
@@ -92,30 +96,68 @@ func (s *service) setSetting(key, value string) {
 }
 
 func (s *service) GetSleepSetting(characterID string) map[string]interface{} {
-	var bed, wake string; var enabled, sleepReplyEnabled int; var sleepReplyMode string
+	var bed, wake string
+	var enabled, sleepReplyEnabled int
+	var sleepReplyMode string
 	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled, COALESCE(sleep_reply_enabled, 0) as sleep_reply_enabled, COALESCE(sleep_reply_mode, 'NO_REPLY') as sleep_reply_mode").Where("character_id = ?", characterID).Limit(1).Row().Scan(&bed, &wake, &enabled, &sleepReplyEnabled, &sleepReplyMode)
-	if err != nil { return map[string]interface{}{"bedTime": "23:00", "wakeTime": "07:00", "enabled": true, "sleepReplyEnabled": false, "sleepReplyMode": "NO_REPLY"} }
+	if err != nil {
+		return map[string]interface{}{"bedTime": "23:00", "wakeTime": "07:00", "enabled": true, "sleepReplyEnabled": false, "sleepReplyMode": "NO_REPLY"}
+	}
 	return map[string]interface{}{"bedTime": bed, "wakeTime": wake, "enabled": enabled == 1, "sleepReplyEnabled": sleepReplyEnabled == 1, "sleepReplyMode": sleepReplyMode}
 }
 
 func (s *service) UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
-	if v, ok := body["bedTime"].(string); ok { updates["bed_time"] = v }
-	if v, ok := body["wakeTime"].(string); ok { updates["wake_time"] = v }
-	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if v, ok := body["sleepReplyEnabled"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["sleep_reply_enabled"] = 1 } else { updates["sleep_reply_enabled"] = 0 } } else if f, ok2 := v.(float64); ok2 { updates["sleep_reply_enabled"] = int(f) } }
-	if v, ok := body["sleepReplyMode"].(string); ok { updates["sleep_reply_mode"] = v }
-	if len(updates) > 0 { var c64 int64; s.db.Table("sleep_settings").Where("character_id = ?", characterID).Count(&c64); if c64 == 0 { s.db.Exec("INSERT INTO sleep_settings (character_id, bed_time, wake_time, enabled) VALUES (?, '23:00', '07:00', 1)", characterID) }; s.db.Table("sleep_settings").Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["bedTime"].(string); ok {
+		updates["bed_time"] = v
+	}
+	if v, ok := body["wakeTime"].(string); ok {
+		updates["wake_time"] = v
+	}
+	if v, ok := body["enabled"].(bool); ok {
+		if v {
+			updates["enabled"] = 1
+		} else {
+			updates["enabled"] = 0
+		}
+	}
+	if v, ok := body["sleepReplyEnabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["sleep_reply_enabled"] = 1
+			} else {
+				updates["sleep_reply_enabled"] = 0
+			}
+		} else if f, ok2 := v.(float64); ok2 {
+			updates["sleep_reply_enabled"] = int(f)
+		}
+	}
+	if v, ok := body["sleepReplyMode"].(string); ok {
+		updates["sleep_reply_mode"] = v
+	}
+	if len(updates) > 0 {
+		var c64 int64
+		s.db.Table("sleep_settings").Where("character_id = ?", characterID).Count(&c64)
+		if c64 == 0 {
+			s.db.Exec("INSERT INTO sleep_settings (character_id, bed_time, wake_time, enabled) VALUES (?, '23:00', '07:00', 1)", characterID)
+		}
+		s.db.Table("sleep_settings").Where("character_id = ?", characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	return s.GetSleepSetting(characterID)
 }
 
 func (s *service) GetSchedule(date string, characterID string) map[string]interface{} {
-	if date == "" { date = time.Now().Format("2006-01-02") }
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
 	return scheduleToMap(s.buildTodaySchedule(date, characterID))
 }
 
 func (s *service) GetScheduleConflicts(date string, characterID string) []map[string]interface{} {
-	if date == "" { date = time.Now().Format("2006-01-02") }
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
 	schedule := s.buildTodaySchedule(date, characterID)
 	timeline := s.buildTimeline(date, schedule, characterID)
 
@@ -134,8 +176,12 @@ func (s *service) GetScheduleConflicts(date string, characterID string) []map[st
 	for i := 0; i < len(timeline); i++ {
 		for j := i + 1; j < len(timeline); j++ {
 			a, b := timeline[i], timeline[j]
-			if a.EndTime.Before(b.StartTime) || a.EndTime.Equal(b.StartTime) { continue }
-			if b.EndTime.Before(a.StartTime) || b.EndTime.Equal(a.StartTime) { continue }
+			if a.EndTime.Before(b.StartTime) || a.EndTime.Equal(b.StartTime) {
+				continue
+			}
+			if b.EndTime.Before(a.StartTime) || b.EndTime.Equal(a.StartTime) {
+				continue
+			}
 			level := "warning"
 			msg := fmt.Sprintf("%s 与 %s 时间重叠", a.Reason, b.Reason)
 			if a.State == "SLEEPING" && (b.State == "IN_EXAM" || b.State == "IN_CLASS") {
@@ -153,7 +199,9 @@ func (s *service) GetScheduleConflicts(date string, characterID string) []map[st
 
 	if schedule.HasNap && schedule.NapStartTime != nil && schedule.NapEndTime != nil {
 		for _, e := range timeline {
-			if e.State == "SLEEPING" { continue }
+			if e.State == "SLEEPING" {
+				continue
+			}
 			ns := *schedule.NapStartTime
 			ne := *schedule.NapEndTime
 			if e.StartTime.Before(ne) && e.EndTime.After(ns) {
@@ -176,10 +224,14 @@ func (s *service) GetScheduleConflicts(date string, characterID string) []map[st
 			"sourceA": c.SourceA, "sourceB": c.SourceB,
 		}
 	}
-	if result == nil { result = []map[string]interface{}{} }
+	if result == nil {
+		result = []map[string]interface{}{}
+	}
 	return result
 }
-func (s *service) GetScheduleToday(characterID string) map[string]interface{} { return s.GetSchedule(time.Now().Format("2006-01-02"), characterID) }
+func (s *service) GetScheduleToday(characterID string) map[string]interface{} {
+	return s.GetSchedule(time.Now().Format("2006-01-02"), characterID)
+}
 
 func (s *service) getIdleDuration() time.Duration {
 	var lastAt string
@@ -200,7 +252,9 @@ func (s *service) getIdleDuration() time.Duration {
 func (s *service) GetStateLife(characterID string) map[string]interface{} {
 	stateResult := s.GetState(characterID)
 	currentState, _ := stateResult["currentState"].(string)
-	if currentState == "" { currentState = "IDLE" }
+	if currentState == "" {
+		currentState = "IDLE"
+	}
 	sleeping, _ := stateResult["sleeping"].(bool)
 	busy, _ := stateResult["busy"].(bool)
 	available, _ := stateResult["available"].(bool)
@@ -211,8 +265,12 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 	var moods []map[string]interface{}
 	s.db.Table("moods").Order("created_at DESC").Limit(1).Find(&moods)
 	if len(moods) > 0 {
-		if m, ok := moods[0]["mood"].(string); ok && m != "" { mood = m }
-		if m, ok := moods[0]["mood_value"].(string); ok && m != "" { mood = m }
+		if m, ok := moods[0]["mood"].(string); ok && m != "" {
+			mood = m
+		}
+		if m, ok := moods[0]["mood_value"].(string); ok && m != "" {
+			mood = m
+		}
 	}
 	idleDuration := s.getIdleDuration()
 	if idleDuration > 48*time.Hour {
@@ -231,19 +289,45 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 	energy := calculateEnergy(now, schedule, currentState)
 
 	var currentActivity string
-	if currentState == "SLEEPING" { currentActivity = "正在睡觉" }
-	if currentState == "WAKING_UP" { currentActivity = "刚睡醒" }
-	if currentState == "EATING_LUNCH" || currentState == "EATING_DINNER" { currentActivity = "正在吃饭" }
-	if currentState == "NAPPING" { currentActivity = "正在午睡" }
-	if currentState == "WORKING" { currentActivity = "正在工作" }
-	if currentState == "IN_CLASS" { currentActivity = "正在上课" }
-	if currentState == "STUDYING" { currentActivity = "正在学习" }
-	if currentState == "COMMUTING_TO_WORK" { currentActivity = "上班路上" }
-	if currentState == "COMMUTING_HOME" { currentActivity = "下班路上" }
-	if currentState == "BEFORE_SLEEP" { currentActivity = "准备睡觉" }
-	if currentState == "IDLE" { currentActivity = "空闲中" }
-	if currentState == "AFTER_WORK" { currentActivity = "下班放松" }
-	if currentActivity == "" { currentActivity = currentState }
+	if currentState == "SLEEPING" {
+		currentActivity = "正在睡觉"
+	}
+	if currentState == "WAKING_UP" {
+		currentActivity = "刚睡醒"
+	}
+	if currentState == "EATING_LUNCH" || currentState == "EATING_DINNER" {
+		currentActivity = "正在吃饭"
+	}
+	if currentState == "NAPPING" {
+		currentActivity = "正在午睡"
+	}
+	if currentState == "WORKING" {
+		currentActivity = "正在工作"
+	}
+	if currentState == "IN_CLASS" {
+		currentActivity = "正在上课"
+	}
+	if currentState == "STUDYING" {
+		currentActivity = "正在学习"
+	}
+	if currentState == "COMMUTING_TO_WORK" {
+		currentActivity = "上班路上"
+	}
+	if currentState == "COMMUTING_HOME" {
+		currentActivity = "下班路上"
+	}
+	if currentState == "BEFORE_SLEEP" {
+		currentActivity = "准备睡觉"
+	}
+	if currentState == "IDLE" {
+		currentActivity = "空闲中"
+	}
+	if currentState == "AFTER_WORK" {
+		currentActivity = "下班放松"
+	}
+	if currentActivity == "" {
+		currentActivity = currentState
+	}
 
 	sleep := s.GetSleepSetting(characterID)
 	result := map[string]interface{}{
@@ -251,14 +335,18 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 		"currentActivity": currentActivity,
 		"mood":            mood,
 		"energy":          energy,
-		"idleDuration":  idleDuration.Seconds(),
+		"idleDuration":    idleDuration.Seconds(),
 		"sleeping":        sleeping,
 		"busy":            busy,
 		"available":       available,
 		"sleepSetting":    sleep,
 	}
-	if stateStartedAt != "" { result["stateStartedAt"] = stateStartedAt }
-	if stateEndsAt != "" { result["stateEndsAt"] = stateEndsAt }
+	if stateStartedAt != "" {
+		result["stateStartedAt"] = stateStartedAt
+	}
+	if stateEndsAt != "" {
+		result["stateEndsAt"] = stateEndsAt
+	}
 	return result
 }
 
@@ -273,10 +361,14 @@ func (s *service) GetState(characterID string) map[string]interface{} {
 	for _, e := range entries {
 		startStr, _ := e["startTime"].(string)
 		endStr, _ := e["endTime"].(string)
-		if startStr == "" || endStr == "" { continue }
+		if startStr == "" || endStr == "" {
+			continue
+		}
 		start, err1 := time.ParseInLocation("2006-01-02T15:04:05", startStr, time.Local)
 		end, err2 := time.ParseInLocation("2006-01-02T15:04:05", endStr, time.Local)
-		if err1 != nil || err2 != nil { continue }
+		if err1 != nil || err2 != nil {
+			continue
+		}
 		if (now.After(start) || now.Equal(start)) && now.Before(end) {
 			matchedEntry = e
 			break
@@ -294,7 +386,9 @@ func (s *service) GetState(characterID string) map[string]interface{} {
 	schedule := s.buildTodaySchedule(today, characterID)
 	wake := schedule.WakeTime
 	sleep := schedule.SleepTime
-	if sleep.Before(wake) || sleep.Equal(wake) { sleep = sleep.Add(24 * time.Hour) }
+	if sleep.Before(wake) || sleep.Equal(wake) {
+		sleep = sleep.Add(24 * time.Hour)
+	}
 
 	if now.Before(wake) || (now.After(sleep) || now.Equal(sleep)) {
 		return buildStateResult("SLEEPING", "睡眠时间",
@@ -319,68 +413,141 @@ func (s *service) GetTimelineToday(characterID string) map[string]interface{} {
 	result := make([]map[string]interface{}, len(entries))
 	for i, e := range entries {
 		result[i] = map[string]interface{}{
-			"startTime": e.StartTime.Format("2006-01-02T15:04:05"),
-			"endTime":   e.EndTime.Format("2006-01-02T15:04:05"),
-			"state":     e.State,
+			"startTime":  e.StartTime.Format("2006-01-02T15:04:05"),
+			"endTime":    e.EndTime.Format("2006-01-02T15:04:05"),
+			"state":      e.State,
 			"sourceType": e.SourceType,
-			"priority":  e.Priority,
-			"reason":    e.Reason,
+			"priority":   e.Priority,
+			"reason":     e.Reason,
 		}
 	}
-	if result == nil { result = []map[string]interface{}{} }
+	if result == nil {
+		result = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"date": today, "events": result, "schedule": scheduleToMap(schedule)}
 }
 
 func (s *service) ListFixedEvents(date string, characterID string) []map[string]interface{} {
 	var events []FixedEvent
 	q := s.db.Where("character_id = ?", characterID)
-	if date != "" { dayOfWeek := parseDayOfWeek(date); q = q.Where("(week_day = ? OR week_day = -1)", dayOfWeek) }
+	if date != "" {
+		dayOfWeek := parseDayOfWeek(date)
+		q = q.Where("(week_day = ? OR week_day = -1)", dayOfWeek)
+	}
 	q.Order("start_time").Find(&events)
 	result := make([]map[string]interface{}, len(events))
-	for i, e := range events { result[i] = map[string]interface{}{"id": e.ID, "title": e.Title, "description": e.Description, "weekDay": e.WeekDay, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "repeatDays": e.RepeatDays, "prepareMinMinutes": e.PrepareMinMinutes, "prepareMaxMinutes": e.PrepareMaxMinutes, "replyMode": e.ReplyMode, "enabled": e.Enabled == 1} }
+	for i, e := range events {
+		result[i] = map[string]interface{}{"id": e.ID, "title": e.Title, "description": e.Description, "weekDay": e.WeekDay, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "repeatDays": e.RepeatDays, "prepareMinMinutes": e.PrepareMinMinutes, "prepareMaxMinutes": e.PrepareMaxMinutes, "replyMode": e.ReplyMode, "enabled": e.Enabled == 1}
+	}
 	return result
 }
 
 func (s *service) GetFixedEvent(id int) map[string]interface{} {
-	var e FixedEvent; s.db.First(&e, id)
+	var e FixedEvent
+	s.db.First(&e, id)
 	return map[string]interface{}{"id": e.ID, "title": e.Title, "description": e.Description, "weekDay": e.WeekDay, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "repeatDays": e.RepeatDays, "prepareMinMinutes": e.PrepareMinMinutes, "prepareMaxMinutes": e.PrepareMaxMinutes, "replyMode": e.ReplyMode, "enabled": e.Enabled == 1}
 }
 
 func (s *service) CreateFixedEvent(body map[string]interface{}, characterID string) map[string]interface{} {
-	title := ""; if v, ok := body["title"].(string); ok { title = v } else { title = "新事件" }
+	title := ""
+	if v, ok := body["title"].(string); ok {
+		title = v
+	} else {
+		title = "新事件"
+	}
 	e := FixedEvent{Title: title, CharacterID: characterID, EventType: "CUSTOM_BUSY", Enabled: 1, ReplyMode: "SHORT_REPLY"}
-	if v, ok := body["description"].(string); ok { e.Description = v }
-	if v, ok := body["weekDay"].(float64); ok { e.WeekDay = int(v) }
-	if v, ok := body["startTime"].(string); ok { e.StartTime = v }
-	if v, ok := body["endTime"].(string); ok { e.EndTime = v }
-	if v, ok := body["eventType"].(string); ok { e.EventType = v }
-	if v, ok := body["repeatType"].(string); ok { e.RepeatType = v }
-	if v, ok := body["repeatDays"].(string); ok { e.RepeatDays = v }
-	if v, ok := body["prepareMinMinutes"].(float64); ok { e.PrepareMinMinutes = int(v) }
-	if v, ok := body["prepareMaxMinutes"].(float64); ok { e.PrepareMaxMinutes = int(v) }
-	if v, ok := body["replyMode"].(string); ok { e.ReplyMode = v }
-	s.db.Create(&e); go s.scheduleChanged()
+	if v, ok := body["description"].(string); ok {
+		e.Description = v
+	}
+	if v, ok := body["weekDay"].(float64); ok {
+		e.WeekDay = int(v)
+	}
+	if v, ok := body["startTime"].(string); ok {
+		e.StartTime = v
+	}
+	if v, ok := body["endTime"].(string); ok {
+		e.EndTime = v
+	}
+	if v, ok := body["eventType"].(string); ok {
+		e.EventType = v
+	}
+	if v, ok := body["repeatType"].(string); ok {
+		e.RepeatType = v
+	}
+	if v, ok := body["repeatDays"].(string); ok {
+		e.RepeatDays = v
+	}
+	if v, ok := body["prepareMinMinutes"].(float64); ok {
+		e.PrepareMinMinutes = int(v)
+	}
+	if v, ok := body["prepareMaxMinutes"].(float64); ok {
+		e.PrepareMaxMinutes = int(v)
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		e.ReplyMode = v
+	}
+	s.db.Create(&e)
+	go s.scheduleChanged()
 	return s.GetFixedEvent(e.ID)
 }
 
 func (s *service) UpdateFixedEvent(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
-	if v, ok := body["title"].(string); ok { updates["title"] = v }
-	if v, ok := body["description"].(string); ok { updates["description"] = v }
-	if v, ok := body["weekDay"].(float64); ok { updates["week_day"] = int(v) }
-	if v, ok := body["startTime"].(string); ok { updates["start_time"] = v }
-	if v, ok := body["endTime"].(string); ok { updates["end_time"] = v }
-	if v, ok := body["eventType"].(string); ok { updates["event_type"] = v }
-	if v, ok := body["repeatDays"].(string); ok { updates["repeat_days"] = v }
-	if v, ok := body["prepareMinMinutes"].(float64); ok { updates["prepare_min_minutes"] = int(v) }
-	if v, ok := body["prepareMaxMinutes"].(float64); ok { updates["prepare_max_minutes"] = int(v) }
-	if v, ok := body["replyMode"].(string); ok { updates["reply_mode"] = v }
-	if v, ok := body["enabled"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["enabled"] = 1 } else { updates["enabled"] = 0 } } else if f, ok2 := v.(float64); ok2 { updates["enabled"] = int(f) } }
-	if len(updates) > 0 { s.db.Model(&FixedEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["title"].(string); ok {
+		updates["title"] = v
+	}
+	if v, ok := body["description"].(string); ok {
+		updates["description"] = v
+	}
+	if v, ok := body["weekDay"].(float64); ok {
+		updates["week_day"] = int(v)
+	}
+	if v, ok := body["startTime"].(string); ok {
+		updates["start_time"] = v
+	}
+	if v, ok := body["endTime"].(string); ok {
+		updates["end_time"] = v
+	}
+	if v, ok := body["eventType"].(string); ok {
+		updates["event_type"] = v
+	}
+	if v, ok := body["repeatDays"].(string); ok {
+		updates["repeat_days"] = v
+	}
+	if v, ok := body["prepareMinMinutes"].(float64); ok {
+		updates["prepare_min_minutes"] = int(v)
+	}
+	if v, ok := body["prepareMaxMinutes"].(float64); ok {
+		updates["prepare_max_minutes"] = int(v)
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		updates["reply_mode"] = v
+	}
+	if v, ok := body["enabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["enabled"] = 1
+			} else {
+				updates["enabled"] = 0
+			}
+		} else if f, ok2 := v.(float64); ok2 {
+			updates["enabled"] = int(f)
+		}
+	}
+	if len(updates) > 0 {
+		s.db.Model(&FixedEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	return s.GetFixedEvent(id)
 }
 
-func (s *service) DeleteFixedEvent(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&FixedEvent{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteFixedEvent(id int, characterID string) bool {
+	ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&FixedEvent{}).RowsAffected > 0
+	if ok {
+		go s.scheduleChanged()
+	}
+	return ok
+}
 
 func (s *service) ToggleFixedEventEnabled(id int) map[string]interface{} {
 	s.db.Model(&FixedEvent{}).Where("id = ?", id).Update("enabled", gorm.Expr("CASE WHEN enabled = 1 THEN 0 ELSE 1 END"))
@@ -388,52 +555,170 @@ func (s *service) ToggleFixedEventEnabled(id int) map[string]interface{} {
 }
 
 func (s *service) ListSpecialEvents(characterID string) []map[string]interface{} {
-	var events []SpecialEvent; s.db.Where("character_id = ?", characterID).Order("start_date, start_time").Find(&events)
+	var events []SpecialEvent
+	s.db.Where("character_id = ?", characterID).Order("start_date, start_time").Find(&events)
 	result := make([]map[string]interface{}, len(events))
-	for i, e := range events { result[i] = map[string]interface{}{"id": e.ID, "title": e.Title, "description": e.Description, "startDate": e.StartDate, "endDate": e.EndDate, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "enabled": e.Enabled == 1, "priority": e.Priority, "activeMessageAllowed": e.ActiveMessageAllowed == 1, "replyMode": e.ReplyMode, "affectSchedule": e.AffectSchedule == 1, "affectSleep": e.AffectSleep == 1, "affectMeal": e.AffectMeal == 1, "affectEnergy": e.AffectEnergy == 1} }
+	for i, e := range events {
+		result[i] = map[string]interface{}{"id": e.ID, "title": e.Title, "description": e.Description, "startDate": e.StartDate, "endDate": e.EndDate, "startTime": e.StartTime, "endTime": e.EndTime, "eventType": e.EventType, "enabled": e.Enabled == 1, "priority": e.Priority, "activeMessageAllowed": e.ActiveMessageAllowed == 1, "replyMode": e.ReplyMode, "affectSchedule": e.AffectSchedule == 1, "affectSleep": e.AffectSleep == 1, "affectMeal": e.AffectMeal == 1, "affectEnergy": e.AffectEnergy == 1}
+	}
 	return result
 }
 
 func (s *service) CreateSpecialEvent(body map[string]interface{}, characterID string) map[string]interface{} {
-	title := ""; if v, ok := body["title"].(string); ok { title = v } else { title = "特殊事件" }
+	title := ""
+	if v, ok := body["title"].(string); ok {
+		title = v
+	} else {
+		title = "特殊事件"
+	}
 	e := SpecialEvent{Title: title, CharacterID: characterID, EventType: "CUSTOM", Enabled: 1, ReplyMode: "SHORT_REPLY", ActiveMessageAllowed: 1}
-	if v, ok := body["description"].(string); ok { e.Description = v }
-	if v, ok := body["startDate"].(string); ok { e.StartDate = v }
-	if v, ok := body["endDate"].(string); ok { e.EndDate = v }
-	if v, ok := body["startTime"].(string); ok { e.StartTime = v }
-	if v, ok := body["endTime"].(string); ok { e.EndTime = v }
-	if v, ok := body["eventType"].(string); ok { e.EventType = v }
-	if v, ok := body["replyMode"].(string); ok { e.ReplyMode = v }
-	if v, ok := body["affectSleep"]; ok { if b, ok2 := v.(bool); ok2 { if b { e.AffectSleep = 1 } } }
-	if v, ok := body["affectSchedule"]; ok { if b, ok2 := v.(bool); ok2 { if b { e.AffectSchedule = 1 } } }
-	if v, ok := body["affectMeal"]; ok { if b, ok2 := v.(bool); ok2 { if b { e.AffectMeal = 1 } } }
-	if v, ok := body["affectEnergy"]; ok { if b, ok2 := v.(bool); ok2 { if b { e.AffectEnergy = 1 } } }
-	if v, ok := body["priority"].(float64); ok { e.Priority = int(v) }
-	s.db.Create(&e); go s.scheduleChanged()
+	if v, ok := body["description"].(string); ok {
+		e.Description = v
+	}
+	if v, ok := body["startDate"].(string); ok {
+		e.StartDate = v
+	}
+	if v, ok := body["endDate"].(string); ok {
+		e.EndDate = v
+	}
+	if v, ok := body["startTime"].(string); ok {
+		e.StartTime = v
+	}
+	if v, ok := body["endTime"].(string); ok {
+		e.EndTime = v
+	}
+	if v, ok := body["eventType"].(string); ok {
+		e.EventType = v
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		e.ReplyMode = v
+	}
+	if v, ok := body["affectSleep"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				e.AffectSleep = 1
+			}
+		}
+	}
+	if v, ok := body["affectSchedule"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				e.AffectSchedule = 1
+			}
+		}
+	}
+	if v, ok := body["affectMeal"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				e.AffectMeal = 1
+			}
+		}
+	}
+	if v, ok := body["affectEnergy"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				e.AffectEnergy = 1
+			}
+		}
+	}
+	if v, ok := body["priority"].(float64); ok {
+		e.Priority = int(v)
+	}
+	s.db.Create(&e)
+	go s.scheduleChanged()
 	return map[string]interface{}{"id": e.ID, "title": e.Title, "startDate": e.StartDate, "endDate": e.EndDate}
 }
 
 func (s *service) UpdateSpecialEvent(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
-	if v, ok := body["title"].(string); ok { updates["title"] = v }
-	if v, ok := body["description"].(string); ok { updates["description"] = v }
-	if v, ok := body["startDate"].(string); ok { updates["start_date"] = v }
-	if v, ok := body["endDate"].(string); ok { updates["end_date"] = v }
-	if v, ok := body["startTime"].(string); ok { updates["start_time"] = v }
-	if v, ok := body["endTime"].(string); ok { updates["end_time"] = v }
-	if v, ok := body["eventType"].(string); ok { updates["event_type"] = v }
-	if v, ok := body["replyMode"].(string); ok { updates["reply_mode"] = v }
-	if v, ok := body["affectSleep"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["affect_sleep"] = 1 } else { updates["affect_sleep"] = 0 } } }
-	if v, ok := body["affectSchedule"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["affect_schedule"] = 1 } else { updates["affect_schedule"] = 0 } } }
-	if v, ok := body["affectMeal"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["affect_meal"] = 1 } else { updates["affect_meal"] = 0 } } }
-	if v, ok := body["affectEnergy"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["affect_energy"] = 1 } else { updates["affect_energy"] = 0 } } }
-	if v, ok := body["priority"].(float64); ok { updates["priority"] = int(v) }
-	if v, ok := body["enabled"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["enabled"] = 1 } else { updates["enabled"] = 0 } } else if f, ok2 := v.(float64); ok2 { updates["enabled"] = int(f) } }
-	if len(updates) > 0 { s.db.Model(&SpecialEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["title"].(string); ok {
+		updates["title"] = v
+	}
+	if v, ok := body["description"].(string); ok {
+		updates["description"] = v
+	}
+	if v, ok := body["startDate"].(string); ok {
+		updates["start_date"] = v
+	}
+	if v, ok := body["endDate"].(string); ok {
+		updates["end_date"] = v
+	}
+	if v, ok := body["startTime"].(string); ok {
+		updates["start_time"] = v
+	}
+	if v, ok := body["endTime"].(string); ok {
+		updates["end_time"] = v
+	}
+	if v, ok := body["eventType"].(string); ok {
+		updates["event_type"] = v
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		updates["reply_mode"] = v
+	}
+	if v, ok := body["affectSleep"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["affect_sleep"] = 1
+			} else {
+				updates["affect_sleep"] = 0
+			}
+		}
+	}
+	if v, ok := body["affectSchedule"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["affect_schedule"] = 1
+			} else {
+				updates["affect_schedule"] = 0
+			}
+		}
+	}
+	if v, ok := body["affectMeal"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["affect_meal"] = 1
+			} else {
+				updates["affect_meal"] = 0
+			}
+		}
+	}
+	if v, ok := body["affectEnergy"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["affect_energy"] = 1
+			} else {
+				updates["affect_energy"] = 0
+			}
+		}
+	}
+	if v, ok := body["priority"].(float64); ok {
+		updates["priority"] = int(v)
+	}
+	if v, ok := body["enabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["enabled"] = 1
+			} else {
+				updates["enabled"] = 0
+			}
+		} else if f, ok2 := v.(float64); ok2 {
+			updates["enabled"] = int(f)
+		}
+	}
+	if len(updates) > 0 {
+		s.db.Model(&SpecialEvent{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	return map[string]interface{}{"id": id, "updated": true}
 }
 
-func (s *service) DeleteSpecialEvent(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&SpecialEvent{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteSpecialEvent(id int, characterID string) bool {
+	ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&SpecialEvent{}).RowsAffected > 0
+	if ok {
+		go s.scheduleChanged()
+	}
+	return ok
+}
 
 func (s *service) ToggleSpecialEventEnabled(id int) map[string]interface{} {
 	s.db.Model(&SpecialEvent{}).Where("id = ?", id).Update("enabled", gorm.Expr("CASE WHEN enabled = 1 THEN 0 ELSE 1 END"))
@@ -441,38 +726,73 @@ func (s *service) ToggleSpecialEventEnabled(id int) map[string]interface{} {
 }
 
 func (s *service) ListClassAdjustments(characterID string) []map[string]interface{} {
-	var items []ClassAdjustment; s.db.Where("character_id = ?", characterID).Order("date, slot_index").Find(&items)
+	var items []ClassAdjustment
+	s.db.Where("character_id = ?", characterID).Order("date, slot_index").Find(&items)
 	result := make([]map[string]interface{}, len(items))
-	for i, a := range items { result[i] = map[string]interface{}{"id": a.ID, "date": a.Date, "slotIndex": a.SlotIndex, "className": a.ClassName, "adjustType": a.AdjustType, "description": a.Description} }
+	for i, a := range items {
+		result[i] = map[string]interface{}{"id": a.ID, "date": a.Date, "slotIndex": a.SlotIndex, "className": a.ClassName, "adjustType": a.AdjustType, "description": a.Description}
+	}
 	return result
 }
 
 func (s *service) CreateClassAdjustment(body map[string]interface{}, characterID string) map[string]interface{} {
 	a := ClassAdjustment{AdjustType: "swap"}
-	if v, ok := body["date"].(string); ok { a.Date = v }
-	if v, ok := body["slotIndex"].(float64); ok { a.SlotIndex = int(v) }
-	if v, ok := body["className"].(string); ok { a.ClassName = v }
-	if v, ok := body["adjustType"].(string); ok { a.AdjustType = v }
-	if v, ok := body["description"].(string); ok { a.Description = v }
-	s.db.Create(&a); go s.scheduleChanged()
+	if v, ok := body["date"].(string); ok {
+		a.Date = v
+	}
+	if v, ok := body["slotIndex"].(float64); ok {
+		a.SlotIndex = int(v)
+	}
+	if v, ok := body["className"].(string); ok {
+		a.ClassName = v
+	}
+	if v, ok := body["adjustType"].(string); ok {
+		a.AdjustType = v
+	}
+	if v, ok := body["description"].(string); ok {
+		a.Description = v
+	}
+	s.db.Create(&a)
+	go s.scheduleChanged()
 	return map[string]interface{}{"id": a.ID, "className": a.ClassName}
 }
 
 func (s *service) UpdateClassAdjustment(id int, body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
-	if v, ok := body["date"].(string); ok { updates["date"] = v }
-	if v, ok := body["slotIndex"].(float64); ok { updates["slot_index"] = int(v) }
-	if v, ok := body["className"].(string); ok { updates["class_name"] = v }
-	if v, ok := body["adjustType"].(string); ok { updates["adjust_type"] = v }
-	if v, ok := body["description"].(string); ok { updates["description"] = v }
-	if len(updates) > 0 { s.db.Model(&ClassAdjustment{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["date"].(string); ok {
+		updates["date"] = v
+	}
+	if v, ok := body["slotIndex"].(float64); ok {
+		updates["slot_index"] = int(v)
+	}
+	if v, ok := body["className"].(string); ok {
+		updates["class_name"] = v
+	}
+	if v, ok := body["adjustType"].(string); ok {
+		updates["adjust_type"] = v
+	}
+	if v, ok := body["description"].(string); ok {
+		updates["description"] = v
+	}
+	if len(updates) > 0 {
+		s.db.Model(&ClassAdjustment{}).Where("id = ? AND character_id = ?", id, characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	return map[string]interface{}{"id": id, "updated": true}
 }
 
-func (s *service) DeleteClassAdjustment(id int, characterID string) bool { ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&ClassAdjustment{}).RowsAffected > 0; if ok { go s.scheduleChanged() }; return ok }
+func (s *service) DeleteClassAdjustment(id int, characterID string) bool {
+	ok := s.db.Where("id = ? AND character_id = ?", id, characterID).Delete(&ClassAdjustment{}).RowsAffected > 0
+	if ok {
+		go s.scheduleChanged()
+	}
+	return ok
+}
 
 func (s *service) GetEffectiveClasses(date string, characterID string) []map[string]interface{} {
-	if date == "" { date = time.Now().Format("2006-01-02") }
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
 	type classSlot struct {
 		Title          string `json:"title"`
 		StartTime      string `json:"startTime"`
@@ -498,11 +818,11 @@ func (s *service) GetEffectiveClasses(date string, characterID string) []map[str
 			SourceType:     "class_adjustment",
 			AdjustmentType: adj.AdjustType,
 		}
-		if adj.AdjustType == "canceled" { continue }
+		if adj.AdjustType == "canceled" {
+			continue
+		}
 		slots = append(slots, slot)
 	}
-
-
 
 	var specials []SpecialEvent
 	s.db.Where("enabled = 1 AND start_date = ? AND character_id = ?", date, characterID).Find(&specials)
@@ -526,33 +846,80 @@ func (s *service) GetEffectiveClasses(date string, characterID string) []map[str
 			"adjustmentType": s.AdjustmentType,
 		}
 	}
-	if result == nil { result = []map[string]interface{}{} }
+	if result == nil {
+		result = []map[string]interface{}{}
+	}
 	return []map[string]interface{}{{"date": date, "dayOfWeek": parseDayOfWeek(date), "slots": result}}
 }
 
 func (s *service) GetLifestyleTendency(characterID string) map[string]interface{} {
 	var t LifestyleTendency
 	s.db.Table("lifestyle_tendencies").Where("character_id = ?", characterID).Limit(1).Find(&t)
-	if t.ID == 0 { return map[string]interface{}{"punctualityTendency": 50, "earlyPrepareTendency": 50, "selfDisciplineTendency": 50, "sleepinessTendency": 50, "randomnessTendency": 50, "activityEnergy": 50, "socialEnergy": 50, "careTendency": 50, "dailyShareTendency": 50, "manuallyConfigured": false} }
+	if t.ID == 0 {
+		return map[string]interface{}{"punctualityTendency": 50, "earlyPrepareTendency": 50, "selfDisciplineTendency": 50, "sleepinessTendency": 50, "randomnessTendency": 50, "activityEnergy": 50, "socialEnergy": 50, "careTendency": 50, "dailyShareTendency": 50, "manuallyConfigured": false}
+	}
 	return map[string]interface{}{"id": t.ID, "punctualityTendency": t.PunctualityTendency, "earlyPrepareTendency": t.EarlyPrepareTendency, "selfDisciplineTendency": t.SelfDisciplineTendency, "sleepinessTendency": t.SleepinessTendency, "randomnessTendency": t.RandomnessTendency, "activityEnergy": t.ActivityEnergy, "socialEnergy": t.SocialEnergy, "careTendency": t.CareTendency, "dailyShareTendency": t.DailyShareTendency, "manuallyConfigured": t.ManuallyConfigured == 1}
 }
 
 func (s *service) UpdateLifestyleTendency(body map[string]interface{}, characterID string) map[string]interface{} {
-	var count int64; s.db.Model(&LifestyleTendency{}).Where("character_id = ?", characterID).Count(&count)
-	if count == 0 { s.db.Create(&LifestyleTendency{CharacterID: characterID}) }
+	var count int64
+	s.db.Model(&LifestyleTendency{}).Where("character_id = ?", characterID).Count(&count)
+	if count == 0 {
+		s.db.Create(&LifestyleTendency{CharacterID: characterID})
+	}
 	updates := make(map[string]interface{})
 	result := map[string]interface{}{"punctualityTendency": 50, "earlyPrepareTendency": 50, "selfDisciplineTendency": 50, "sleepinessTendency": 50, "randomnessTendency": 50, "activityEnergy": 50, "socialEnergy": 50, "careTendency": 50, "dailyShareTendency": 50, "manuallyConfigured": false}
-	if v, ok := body["punctualityTendency"].(float64); ok { updates["punctuality_tendency"] = int(v); result["punctualityTendency"] = int(v) }
-	if v, ok := body["earlyPrepareTendency"].(float64); ok { updates["early_prepare_tendency"] = int(v); result["earlyPrepareTendency"] = int(v) }
-	if v, ok := body["selfDisciplineTendency"].(float64); ok { updates["self_discipline_tendency"] = int(v); result["selfDisciplineTendency"] = int(v) }
-	if v, ok := body["sleepinessTendency"].(float64); ok { updates["sleepiness_tendency"] = int(v); result["sleepinessTendency"] = int(v) }
-	if v, ok := body["randomnessTendency"].(float64); ok { updates["randomness_tendency"] = int(v); result["randomnessTendency"] = int(v) }
-	if v, ok := body["activityEnergy"].(float64); ok { updates["activity_energy"] = int(v); result["activityEnergy"] = int(v) }
-	if v, ok := body["socialEnergy"].(float64); ok { updates["social_energy"] = int(v); result["socialEnergy"] = int(v) }
-	if v, ok := body["careTendency"].(float64); ok { updates["care_tendency"] = int(v); result["careTendency"] = int(v) }
-	if v, ok := body["dailyShareTendency"].(float64); ok { updates["daily_share_tendency"] = int(v); result["dailyShareTendency"] = int(v) }
-	if v, ok := body["manuallyConfigured"]; ok { if b, ok2 := v.(bool); ok2 { if b { updates["manually_configured"] = 1; result["manuallyConfigured"] = true } else { updates["manually_configured"] = 0; result["manuallyConfigured"] = false } } }
-	if len(updates) > 0 { s.db.Model(&LifestyleTendency{}).Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["punctualityTendency"].(float64); ok {
+		updates["punctuality_tendency"] = int(v)
+		result["punctualityTendency"] = int(v)
+	}
+	if v, ok := body["earlyPrepareTendency"].(float64); ok {
+		updates["early_prepare_tendency"] = int(v)
+		result["earlyPrepareTendency"] = int(v)
+	}
+	if v, ok := body["selfDisciplineTendency"].(float64); ok {
+		updates["self_discipline_tendency"] = int(v)
+		result["selfDisciplineTendency"] = int(v)
+	}
+	if v, ok := body["sleepinessTendency"].(float64); ok {
+		updates["sleepiness_tendency"] = int(v)
+		result["sleepinessTendency"] = int(v)
+	}
+	if v, ok := body["randomnessTendency"].(float64); ok {
+		updates["randomness_tendency"] = int(v)
+		result["randomnessTendency"] = int(v)
+	}
+	if v, ok := body["activityEnergy"].(float64); ok {
+		updates["activity_energy"] = int(v)
+		result["activityEnergy"] = int(v)
+	}
+	if v, ok := body["socialEnergy"].(float64); ok {
+		updates["social_energy"] = int(v)
+		result["socialEnergy"] = int(v)
+	}
+	if v, ok := body["careTendency"].(float64); ok {
+		updates["care_tendency"] = int(v)
+		result["careTendency"] = int(v)
+	}
+	if v, ok := body["dailyShareTendency"].(float64); ok {
+		updates["daily_share_tendency"] = int(v)
+		result["dailyShareTendency"] = int(v)
+	}
+	if v, ok := body["manuallyConfigured"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			if b {
+				updates["manually_configured"] = 1
+				result["manuallyConfigured"] = true
+			} else {
+				updates["manually_configured"] = 0
+				result["manuallyConfigured"] = false
+			}
+		}
+	}
+	if len(updates) > 0 {
+		s.db.Model(&LifestyleTendency{}).Where("character_id = ?", characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	return result
 }
 
@@ -564,79 +931,233 @@ func (s *service) ResetLifestyleTendency(characterID string) map[string]interfac
 func (s *service) GetWorkProfile(characterID string) map[string]interface{} {
 	var w WorkProfile
 	s.db.Table("work_profiles").Where("character_id = ?", characterID).Limit(1).Find(&w)
-	if w.ID == 0 { return map[string]interface{}{"enabled": false, "workDays": "MON,TUE,WED,THU,FRI", "workStartTime": "09:00", "workEndTime": "18:00", "lunchBreakStartTime": "12:00", "lunchBreakEndTime": "13:30", "commuteMinMinutes": 15, "commuteMaxMinutes": 45, "prepareMinMinutes": 20, "prepareMaxMinutes": 60, "replyMode": "SHORT_REPLY", "allowOvertime": false, "overtimeProbability": 10, "overtimeMinMinutes": 30, "overtimeMaxMinutes": 180, "overtimeReplyMode": "SHORT_REPLY", "delayedReplyEnabled": false, "commuteHomeShareEnabled": true, "commuteHomeShareProbability": 60} }
+	if w.ID == 0 {
+		return map[string]interface{}{"enabled": false, "workDays": "MON,TUE,WED,THU,FRI", "workStartTime": "09:00", "workEndTime": "18:00", "lunchBreakStartTime": "12:00", "lunchBreakEndTime": "13:30", "commuteMinMinutes": 15, "commuteMaxMinutes": 45, "prepareMinMinutes": 20, "prepareMaxMinutes": 60, "replyMode": "SHORT_REPLY", "allowOvertime": false, "overtimeProbability": 10, "overtimeMinMinutes": 30, "overtimeMaxMinutes": 180, "overtimeReplyMode": "SHORT_REPLY", "delayedReplyEnabled": false, "commuteHomeShareEnabled": true, "commuteHomeShareProbability": 60}
+	}
 	return map[string]interface{}{"id": w.ID, "enabled": w.Enabled == 1, "workDays": w.WorkDays, "workStartTime": w.WorkStartTime, "workEndTime": w.WorkEndTime, "lunchBreakStartTime": w.LunchBreakStartTime, "lunchBreakEndTime": w.LunchBreakEndTime, "commuteMinMinutes": w.CommuteMinMinutes, "commuteMaxMinutes": w.CommuteMaxMinutes, "prepareMinMinutes": w.PrepareMinMinutes, "prepareMaxMinutes": w.PrepareMaxMinutes, "replyMode": w.ReplyMode, "allowOvertime": w.AllowOvertime == 1, "overtimeProbability": w.OvertimeProbability, "overtimeMinMinutes": w.OvertimeMinMinutes, "overtimeMaxMinutes": w.OvertimeMaxMinutes, "overtimeReplyMode": w.OvertimeReplyMode, "delayedReplyEnabled": w.DelayedReplyEnabled == 1, "commuteHomeShareEnabled": w.CommuteHomeShareEnabled == 1, "commuteHomeShareProbability": w.CommuteHomeShareProbability}
 }
 
 func (s *service) UpdateWorkProfile(body map[string]interface{}, characterID string) map[string]interface{} {
-	var count int64; s.db.Model(&WorkProfile{}).Where("character_id = ?", characterID).Count(&count)
-	if count == 0 { s.db.Create(&WorkProfile{CharacterID: characterID}) }
+	var count int64
+	s.db.Model(&WorkProfile{}).Where("character_id = ?", characterID).Count(&count)
+	if count == 0 {
+		s.db.Create(&WorkProfile{CharacterID: characterID})
+	}
 	updates := make(map[string]interface{})
-	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if v, ok := body["workDays"].(string); ok { updates["work_days"] = v }
-	if v, ok := body["workStartTime"].(string); ok { updates["work_start_time"] = v }
-	if v, ok := body["workEndTime"].(string); ok { updates["work_end_time"] = v }
-	if v, ok := body["lunchBreakStartTime"].(string); ok { updates["lunch_break_start_time"] = v }
-	if v, ok := body["lunchBreakEndTime"].(string); ok { updates["lunch_break_end_time"] = v }
-	if v, ok := body["commuteMinMinutes"].(float64); ok { updates["commute_min_minutes"] = int(v) }
-	if v, ok := body["commuteMaxMinutes"].(float64); ok { updates["commute_max_minutes"] = int(v) }
-	if v, ok := body["prepareMinMinutes"].(float64); ok { updates["prepare_min_minutes"] = int(v) }
-	if v, ok := body["prepareMaxMinutes"].(float64); ok { updates["prepare_max_minutes"] = int(v) }
-	if v, ok := body["replyMode"].(string); ok { updates["reply_mode"] = v }
-	if v, ok := body["allowOvertime"].(bool); ok { if v { updates["allow_overtime"] = 1 } else { updates["allow_overtime"] = 0 } }
-	if v, ok := body["overtimeProbability"].(float64); ok { updates["overtime_probability"] = int(v) }
-	if v, ok := body["overtimeMinMinutes"].(float64); ok { updates["overtime_min_minutes"] = int(v) }
-	if v, ok := body["overtimeMaxMinutes"].(float64); ok { updates["overtime_max_minutes"] = int(v) }
-	if v, ok := body["overtimeReplyMode"].(string); ok { updates["overtime_reply_mode"] = v }
-	if v, ok := body["delayedReplyEnabled"].(bool); ok { if v { updates["delayed_reply_enabled"] = 1 } else { updates["delayed_reply_enabled"] = 0 } }
-	if v, ok := body["commuteHomeShareEnabled"].(bool); ok { if v { updates["commute_home_share_enabled"] = 1 } else { updates["commute_home_share_enabled"] = 0 } }
-	if v, ok := body["commuteHomeShareProbability"].(float64); ok { updates["commute_home_share_probability"] = int(v) }
-	if len(updates) > 0 { s.db.Model(&WorkProfile{}).Where("character_id = ?", characterID).Updates(updates); go s.scheduleChanged() }
+	if v, ok := body["enabled"].(bool); ok {
+		if v {
+			updates["enabled"] = 1
+		} else {
+			updates["enabled"] = 0
+		}
+	}
+	if v, ok := body["workDays"].(string); ok {
+		updates["work_days"] = v
+	}
+	if v, ok := body["workStartTime"].(string); ok {
+		updates["work_start_time"] = v
+	}
+	if v, ok := body["workEndTime"].(string); ok {
+		updates["work_end_time"] = v
+	}
+	if v, ok := body["lunchBreakStartTime"].(string); ok {
+		updates["lunch_break_start_time"] = v
+	}
+	if v, ok := body["lunchBreakEndTime"].(string); ok {
+		updates["lunch_break_end_time"] = v
+	}
+	if v, ok := body["commuteMinMinutes"].(float64); ok {
+		updates["commute_min_minutes"] = int(v)
+	}
+	if v, ok := body["commuteMaxMinutes"].(float64); ok {
+		updates["commute_max_minutes"] = int(v)
+	}
+	if v, ok := body["prepareMinMinutes"].(float64); ok {
+		updates["prepare_min_minutes"] = int(v)
+	}
+	if v, ok := body["prepareMaxMinutes"].(float64); ok {
+		updates["prepare_max_minutes"] = int(v)
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		updates["reply_mode"] = v
+	}
+	if v, ok := body["allowOvertime"].(bool); ok {
+		if v {
+			updates["allow_overtime"] = 1
+		} else {
+			updates["allow_overtime"] = 0
+		}
+	}
+	if v, ok := body["overtimeProbability"].(float64); ok {
+		updates["overtime_probability"] = int(v)
+	}
+	if v, ok := body["overtimeMinMinutes"].(float64); ok {
+		updates["overtime_min_minutes"] = int(v)
+	}
+	if v, ok := body["overtimeMaxMinutes"].(float64); ok {
+		updates["overtime_max_minutes"] = int(v)
+	}
+	if v, ok := body["overtimeReplyMode"].(string); ok {
+		updates["overtime_reply_mode"] = v
+	}
+	if v, ok := body["delayedReplyEnabled"].(bool); ok {
+		if v {
+			updates["delayed_reply_enabled"] = 1
+		} else {
+			updates["delayed_reply_enabled"] = 0
+		}
+	}
+	if v, ok := body["commuteHomeShareEnabled"].(bool); ok {
+		if v {
+			updates["commute_home_share_enabled"] = 1
+		} else {
+			updates["commute_home_share_enabled"] = 0
+		}
+	}
+	if v, ok := body["commuteHomeShareProbability"].(float64); ok {
+		updates["commute_home_share_probability"] = int(v)
+	}
+	if len(updates) > 0 {
+		s.db.Model(&WorkProfile{}).Where("character_id = ?", characterID).Updates(updates)
+		go s.scheduleChanged()
+	}
 	result := map[string]interface{}{"id": 0, "enabled": false, "workDays": "MON,TUE,WED,THU,FRI", "workStartTime": "09:00", "workEndTime": "18:00", "lunchBreakStartTime": "12:00", "lunchBreakEndTime": "13:30", "commuteMinMinutes": 15, "commuteMaxMinutes": 45, "prepareMinMinutes": 20, "prepareMaxMinutes": 60, "replyMode": "SHORT_REPLY", "allowOvertime": false, "overtimeProbability": 10, "overtimeMinMinutes": 30, "overtimeMaxMinutes": 180, "overtimeReplyMode": "SHORT_REPLY", "delayedReplyEnabled": false, "commuteHomeShareEnabled": true, "commuteHomeShareProbability": 60}
-	if v, ok := body["enabled"]; ok { if b, ok2 := v.(bool); ok2 { result["enabled"] = b } }
-	if v, ok := body["workDays"].(string); ok { result["workDays"] = v }
-	if v, ok := body["workStartTime"].(string); ok { result["workStartTime"] = v }
-	if v, ok := body["workEndTime"].(string); ok { result["workEndTime"] = v }
-	if v, ok := body["lunchBreakStartTime"].(string); ok { result["lunchBreakStartTime"] = v }
-	if v, ok := body["lunchBreakEndTime"].(string); ok { result["lunchBreakEndTime"] = v }
-	if v, ok := body["commuteMinMinutes"].(float64); ok { result["commuteMinMinutes"] = int(v) }
-	if v, ok := body["commuteMaxMinutes"].(float64); ok { result["commuteMaxMinutes"] = int(v) }
-	if v, ok := body["prepareMinMinutes"].(float64); ok { result["prepareMinMinutes"] = int(v) }
-	if v, ok := body["prepareMaxMinutes"].(float64); ok { result["prepareMaxMinutes"] = int(v) }
-	if v, ok := body["replyMode"].(string); ok { result["replyMode"] = v }
-	if v, ok := body["allowOvertime"]; ok { if b, ok2 := v.(bool); ok2 { result["allowOvertime"] = b } }
-	if v, ok := body["overtimeProbability"].(float64); ok { result["overtimeProbability"] = int(v) }
-	if v, ok := body["overtimeMinMinutes"].(float64); ok { result["overtimeMinMinutes"] = int(v) }
-	if v, ok := body["overtimeMaxMinutes"].(float64); ok { result["overtimeMaxMinutes"] = int(v) }
-	if v, ok := body["overtimeReplyMode"].(string); ok { result["overtimeReplyMode"] = v }
-	if v, ok := body["delayedReplyEnabled"]; ok { if b, ok2 := v.(bool); ok2 { result["delayedReplyEnabled"] = b } }
-	if v, ok := body["commuteHomeShareEnabled"]; ok { if b, ok2 := v.(bool); ok2 { result["commuteHomeShareEnabled"] = b } }
-	if v, ok := body["commuteHomeShareProbability"].(float64); ok { result["commuteHomeShareProbability"] = int(v) }
+	if v, ok := body["enabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			result["enabled"] = b
+		}
+	}
+	if v, ok := body["workDays"].(string); ok {
+		result["workDays"] = v
+	}
+	if v, ok := body["workStartTime"].(string); ok {
+		result["workStartTime"] = v
+	}
+	if v, ok := body["workEndTime"].(string); ok {
+		result["workEndTime"] = v
+	}
+	if v, ok := body["lunchBreakStartTime"].(string); ok {
+		result["lunchBreakStartTime"] = v
+	}
+	if v, ok := body["lunchBreakEndTime"].(string); ok {
+		result["lunchBreakEndTime"] = v
+	}
+	if v, ok := body["commuteMinMinutes"].(float64); ok {
+		result["commuteMinMinutes"] = int(v)
+	}
+	if v, ok := body["commuteMaxMinutes"].(float64); ok {
+		result["commuteMaxMinutes"] = int(v)
+	}
+	if v, ok := body["prepareMinMinutes"].(float64); ok {
+		result["prepareMinMinutes"] = int(v)
+	}
+	if v, ok := body["prepareMaxMinutes"].(float64); ok {
+		result["prepareMaxMinutes"] = int(v)
+	}
+	if v, ok := body["replyMode"].(string); ok {
+		result["replyMode"] = v
+	}
+	if v, ok := body["allowOvertime"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			result["allowOvertime"] = b
+		}
+	}
+	if v, ok := body["overtimeProbability"].(float64); ok {
+		result["overtimeProbability"] = int(v)
+	}
+	if v, ok := body["overtimeMinMinutes"].(float64); ok {
+		result["overtimeMinMinutes"] = int(v)
+	}
+	if v, ok := body["overtimeMaxMinutes"].(float64); ok {
+		result["overtimeMaxMinutes"] = int(v)
+	}
+	if v, ok := body["overtimeReplyMode"].(string); ok {
+		result["overtimeReplyMode"] = v
+	}
+	if v, ok := body["delayedReplyEnabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			result["delayedReplyEnabled"] = b
+		}
+	}
+	if v, ok := body["commuteHomeShareEnabled"]; ok {
+		if b, ok2 := v.(bool); ok2 {
+			result["commuteHomeShareEnabled"] = b
+		}
+	}
+	if v, ok := body["commuteHomeShareProbability"].(float64); ok {
+		result["commuteHomeShareProbability"] = int(v)
+	}
 	return result
 }
 
 func (s *service) GetActiveMessageSetting(characterID string) map[string]interface{} {
-	var enabled, activeLevel, minInterval, maxPerDay, maxDailyCalls int; var channel, quietStart, quietEnd string
+	var enabled, activeLevel, minInterval, maxPerDay, maxDailyCalls int
+	var channel, quietStart, quietEnd string
 	err := s.db.Table("active_message_settings").Select("enabled, COALESCE(active_level, 40) as active_level, min_interval, COALESCE(quiet_start, '23:00') as quiet_start, COALESCE(quiet_end, '07:00') as quiet_end, max_per_day, COALESCE(max_daily_calls, 10) as max_daily_calls, channel").Where("character_id = ?", characterID).Limit(1).Row().Scan(&enabled, &activeLevel, &minInterval, &quietStart, &quietEnd, &maxPerDay, &maxDailyCalls, &channel)
-	if err != nil { return map[string]interface{}{"enabled": true, "activeLevel": 40, "quietStart": "23:00", "quietEnd": "07:00", "minInterval": 60, "maxPerDay": 6, "maxDailyCalls": 10, "channel": "all"} }
-	if quietStart == "" { quietStart = "23:00" }
-	if quietEnd == "" { quietEnd = "07:00" }
-	if activeLevel == 0 { activeLevel = 40 }
+	if err != nil {
+		return map[string]interface{}{"enabled": true, "activeLevel": 40, "quietStart": "23:00", "quietEnd": "07:00", "minInterval": 60, "maxPerDay": 6, "maxDailyCalls": 10, "channel": "all"}
+	}
+	if quietStart == "" {
+		quietStart = "23:00"
+	}
+	if quietEnd == "" {
+		quietEnd = "07:00"
+	}
+	if activeLevel == 0 {
+		activeLevel = 40
+	}
 	return map[string]interface{}{"enabled": enabled == 1, "activeLevel": activeLevel, "quietStart": quietStart, "quietEnd": quietEnd, "minInterval": minInterval, "maxPerDay": maxPerDay, "maxDailyCalls": maxDailyCalls, "channel": channel}
 }
 func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
-	if v, ok := body["enabled"].(bool); ok { if v { updates["enabled"] = 1 } else { updates["enabled"] = 0 } }
-	if v, ok := body["activeLevel"].(float64); ok { vv := int(v); if vv < 1 { vv = 1 }; if vv > 100 { vv = 100 }; updates["active_level"] = vv }
-	if v, ok := body["minInterval"].(float64); ok { updates["min_interval"] = int(v) }
-	if v, ok := body["quietStart"].(string); ok { updates["quiet_start"] = v }
-	if v, ok := body["quietEnd"].(string); ok { updates["quiet_end"] = v }
-	if v, ok := body["maxPerDay"].(float64); ok { updates["max_per_day"] = int(v) }
-	if v, ok := body["maxDailyCalls"].(float64); ok { vv := int(v); if vv < 1 { vv = 1 }; if vv > 50 { vv = 50 }; updates["max_daily_calls"] = vv }
-	if v, ok := body["channel"].(string); ok { updates["channel"] = v }
+	if v, ok := body["enabled"].(bool); ok {
+		if v {
+			updates["enabled"] = 1
+		} else {
+			updates["enabled"] = 0
+		}
+	}
+	if v, ok := body["activeLevel"].(float64); ok {
+		vv := int(v)
+		if vv < 1 {
+			vv = 1
+		}
+		if vv > 100 {
+			vv = 100
+		}
+		updates["active_level"] = vv
+	}
+	if v, ok := body["minInterval"].(float64); ok {
+		updates["min_interval"] = int(v)
+	}
+	if v, ok := body["quietStart"].(string); ok {
+		updates["quiet_start"] = v
+	}
+	if v, ok := body["quietEnd"].(string); ok {
+		updates["quiet_end"] = v
+	}
+	if v, ok := body["maxPerDay"].(float64); ok {
+		updates["max_per_day"] = int(v)
+	}
+	if v, ok := body["maxDailyCalls"].(float64); ok {
+		vv := int(v)
+		if vv < 1 {
+			vv = 1
+		}
+		if vv > 50 {
+			vv = 50
+		}
+		updates["max_daily_calls"] = vv
+	}
+	if v, ok := body["channel"].(string); ok {
+		updates["channel"] = v
+	}
 	if len(updates) > 0 {
-		var count int64; s.db.Table("active_message_settings").Where("character_id = ?", characterID).Count(&count)
-		if count == 0 { s.db.Exec("INSERT INTO active_message_settings (character_id, enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel) VALUES (?, 1, 40, 60, '23:00', '07:00', 6, 10, 'all')", characterID) }
+		var count int64
+		s.db.Table("active_message_settings").Where("character_id = ?", characterID).Count(&count)
+		if count == 0 {
+			s.db.Exec("INSERT INTO active_message_settings (character_id, enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel) VALUES (?, 1, 40, 60, '23:00', '07:00', 6, 10, 'all')", characterID)
+		}
 		s.db.Table("active_message_settings").Where("character_id = ?", characterID).Updates(updates)
 	}
 	return s.GetActiveMessageSetting(characterID)
@@ -663,7 +1184,9 @@ func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]in
 			"payload":      r["payload"],
 		}
 	}
-	if tasks == nil { tasks = []map[string]interface{}{} }
+	if tasks == nil {
+		tasks = []map[string]interface{}{}
+	}
 	return tasks
 }
 
@@ -685,15 +1208,24 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 	}
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
+	messageCreatedAt := nowStr
+	if dueTime, ok := task["due_time"].(string); ok && dueTime != "" {
+		messageCreatedAt = dueTime
+	}
 	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
 	generated := s.generateLLMReply(prompt)
 	if generated == "" {
 		switch taskType {
-		case "morning_share": generated = "早上好！新的一天开始了。"
-		case "noon_daily": generated = "午安，记得按时吃饭哦。"
-		case "evening_reflection": generated = "傍晚好，今天辛苦了。"
-		case "bedtime_mood": generated = "夜深了，早点休息。"
-		default: generated = "你好呀！"
+		case "morning_share":
+			generated = "早上好！新的一天开始了。"
+		case "noon_daily":
+			generated = "午安，记得按时吃饭哦。"
+		case "evening_reflection":
+			generated = "傍晚好，今天辛苦了。"
+		case "bedtime_mood":
+			generated = "夜深了，早点休息。"
+		default:
+			generated = "你好呀！"
 		}
 	}
 	convRow := s.db.Table("conversations").Select("id").Limit(1).Row()
@@ -701,8 +1233,10 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 	convRow.Scan(&convID)
 	var channelSetting string
 	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row().Scan(&channelSetting)
-	if channelSetting == "" { channelSetting = "all" }
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, nowStr)
+	if channelSetting == "" {
+		channelSetting = "all"
+	}
+	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, messageCreatedAt)
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
 	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 
@@ -733,22 +1267,28 @@ func (s *service) CancelActiveMessageTask(id int, characterID string) map[string
 func (s *service) ListDelayedReplies(characterID string) []map[string]interface{} {
 	var raw []map[string]interface{}
 	q := s.db.Table("delayed_replies").Where("status = 'pending'")
-	if characterID != "" { q = q.Where("character_id = ?", characterID) }
+	if characterID != "" {
+		q = q.Where("character_id = ?", characterID)
+	}
 	q.Order("scheduled_at ASC").Find(&raw)
 	replies := make([]map[string]interface{}, len(raw))
 	for i, r := range raw {
 		triggerState := "delay"
-		if ch, _ := r["channel"].(string); ch != "" { triggerState = ch }
+		if ch, _ := r["channel"].(string); ch != "" {
+			triggerState = ch
+		}
 		replies[i] = map[string]interface{}{
-			"id":                r["id"],
-			"status":            r["status"],
-			"triggerState":      triggerState,
-			"userMessage":       r["content"],
+			"id":                 r["id"],
+			"status":             r["status"],
+			"triggerState":       triggerState,
+			"userMessage":        r["content"],
 			"expectedReplyAfter": r["scheduled_at"],
-			"channel":           r["channel"],
+			"channel":            r["channel"],
 		}
 	}
-	if replies == nil { replies = []map[string]interface{}{} }
+	if replies == nil {
+		replies = []map[string]interface{}{}
+	}
 	return replies
 }
 
@@ -774,7 +1314,9 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 		convID, _ := t["conversation_id"].(string)
 		channel, _ := t["channel"].(string)
 
-		if content == "" { continue }
+		if content == "" {
+			continue
+		}
 
 		canSend := true
 		stateResult := s.GetState(characterID)
@@ -787,7 +1329,9 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 			if currentState == "NAPPING" && schedule.NapEndTime != nil {
 				wakeTime = *schedule.NapEndTime
 			}
-			if wakeTime.Before(now) { wakeTime = wakeTime.Add(24 * time.Hour) }
+			if wakeTime.Before(now) {
+				wakeTime = wakeTime.Add(24 * time.Hour)
+			}
 			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
 				wakeTime.Format("2006-01-02 15:04:05"), id)
 			delayed++
@@ -805,8 +1349,13 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				row := s.db.Table("conversations").Select("id").Limit(1).Row()
 				row.Scan(&convID)
 			}
-			if convID == "" { failed++; continue }
-			if channel == "" { channel = "web" }
+			if convID == "" {
+				failed++
+				continue
+			}
+			if channel == "" {
+				channel = "web"
+			}
 
 			msgID := fmt.Sprintf("reply-%d", now.UnixNano())
 			displayContent := "💬 " + content
@@ -816,8 +1365,10 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				retryCount := 0
 				if rc, ok := t["retry_count"]; ok {
 					switch v := rc.(type) {
-					case int64: retryCount = int(v)
-					case float64: retryCount = int(v)
+					case int64:
+						retryCount = int(v)
+					case float64:
+						retryCount = int(v)
 					}
 				}
 				retryCount++
@@ -844,20 +1395,28 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 }
 
 func (s *service) GetDebugOverview(characterID string) map[string]interface{} {
-	
-now := time.Now()
-	
-nowStr := now.Format("2006-01-02 15:04:05")
-	
-schedule := s.GetScheduleToday(characterID)
+
+	now := time.Now()
+
+	nowStr := now.Format("2006-01-02 15:04:05")
+
+	schedule := s.GetScheduleToday(characterID)
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	lt := s.GetLifestyleTendency(characterID)
 	intensity := 50
-	if v, ok := lt["intensity"].(int); ok { intensity = v }
-	if v, ok := lt["intensity"].(float64); ok { intensity = int(v) }
+	if v, ok := lt["intensity"].(int); ok {
+		intensity = v
+	}
+	if v, ok := lt["intensity"].(float64); ok {
+		intensity = int(v)
+	}
 	jitterMax := intensity / 10
-	if jitterMax < 2 { jitterMax = 2 }
-	if jitterMax > 15 { jitterMax = 15 }
+	if jitterMax < 2 {
+		jitterMax = 2
+	}
+	if jitterMax > 15 {
+		jitterMax = 15
+	}
 	if st, ok := schedule["wakeTime"].(string); ok {
 		if t, err := time.ParseInLocation("2006-01-02T15:04:05", st, time.Local); err == nil {
 			off := time.Duration(rng.Intn(jitterMax*2+1)-jitterMax) * time.Minute
@@ -882,108 +1441,91 @@ schedule := s.GetScheduleToday(characterID)
 			schedule["sleepTime"] = t.Add(off).Format("2006-01-02T15:04:05")
 		}
 	}
-	
-timeline := s.GetTimelineToday(characterID)
-	
-currentState := s.GetState(characterID)
-	
-stateLife := s.GetStateLife(characterID)
-	
-activeMsgSetting := s.GetActiveMessageSetting(characterID)
-	
-activeTasks := s.GetActiveMessageTasksToday(characterID)
-	
-conflicts := s.GetScheduleConflicts("", characterID)
-	
-effectiveClasses := s.GetEffectiveClasses("", characterID)
-	
-var pendingReplies int64
-	
-s.db.Table("delayed_replies").Where("status = 'pending'").Count(&pendingReplies)
-	
-var todayTaskCount int64
-	
-s.db.Table("active_message_task").Where("date(due_time) = date(?) AND character_id = ?", nowStr, characterID).Count(&todayTaskCount)
-	
-var todaySentCount int64
-	
-s.db.Table("active_message_task").Where("date(due_time) = date(?) AND status = 'SENT' AND character_id = ?", nowStr, characterID).Count(&todaySentCount)
-	
-var todayLLMCalls int64
-	
-s.db.Table("proactive_messages").Where("date(created_at) = date(?)", nowStr).Count(&todayLLMCalls)
-	
-var maxDailyCalls int64
-	
-s.db.Table("active_message_settings").Select("COALESCE(max_daily_calls, 10)").Where("character_id = ?", characterID).Limit(1).Row().Scan(&maxDailyCalls)
-	
-if maxDailyCalls == 0 { maxDailyCalls = 10 }
-	
+
+	timeline := s.GetTimelineToday(characterID)
+
+	currentState := s.GetState(characterID)
+
+	stateLife := s.GetStateLife(characterID)
+
+	activeMsgSetting := s.GetActiveMessageSetting(characterID)
+
+	activeTasks := s.GetActiveMessageTasksToday(characterID)
+
+	conflicts := s.GetScheduleConflicts("", characterID)
+
+	effectiveClasses := s.GetEffectiveClasses("", characterID)
+
+	var pendingReplies int64
+
+	s.db.Table("delayed_replies").Where("status = 'pending'").Count(&pendingReplies)
+
+	var todayTaskCount int64
+
+	s.db.Table("active_message_task").Where("date(due_time) = date(?) AND character_id = ?", nowStr, characterID).Count(&todayTaskCount)
+
+	var todaySentCount int64
+
+	s.db.Table("active_message_task").Where("date(due_time) = date(?) AND status = 'SENT' AND character_id = ?", nowStr, characterID).Count(&todaySentCount)
+
+	var todayLLMCalls int64
+
+	s.db.Table("proactive_messages").Where("date(created_at) = date(?)", nowStr).Count(&todayLLMCalls)
+
+	var maxDailyCalls int64
+
+	s.db.Table("active_message_settings").Select("COALESCE(max_daily_calls, 10)").Where("character_id = ?", characterID).Limit(1).Row().Scan(&maxDailyCalls)
+
+	if maxDailyCalls == 0 {
+		maxDailyCalls = 10
+	}
+
 	delayedRepliesList := s.ListDelayedReplies(characterID)
-	if delayedRepliesList == nil { delayedRepliesList = []map[string]interface{}{} }
+	if delayedRepliesList == nil {
+		delayedRepliesList = []map[string]interface{}{}
+	}
 	recentRuleLogs := s.GetRuleLogs(characterID)
-	if recentRuleLogs == nil { recentRuleLogs = []map[string]interface{}{} }
-	
-return map[string]interface{}{
-	
-	
-"now":                    nowStr,
-	
-	
-"todaySchedule":           schedule,
-		"schedule":               schedule,
-	
-	
-"timeline":               timeline["events"],
-	
-	
-"currentState":           currentState,
-	
-	
-"stateLife":              stateLife,
-	
-	
-"activeMessageSetting":   activeMsgSetting,
-	
-	
-"activeMessageTasks": activeTasks,
-	
-	
-"scheduleConflicts":      conflicts,
-	
-	
-"effectiveClasses":       effectiveClasses,
-	
-	
-"delayedReplies":         delayedRepliesList,
-	
-	
-"recentRuleLogs":         recentRuleLogs,
-	
-	
-	"stats": map[string]interface{}{
-	
-	
-	
-"todayTaskCount": todayTaskCount,
-	
-	
-	
-"todaySentCount": todaySentCount,
-	
-	
-	
-"todayLLMCalls":  todayLLMCalls,
-	
-	
-	
-"maxDailyCalls":  maxDailyCalls,
+	if recentRuleLogs == nil {
+		recentRuleLogs = []map[string]interface{}{}
+	}
+
+	return map[string]interface{}{
+
+		"now": nowStr,
+
+		"todaySchedule": schedule,
+		"schedule":      schedule,
+
+		"timeline": timeline["events"],
+
+		"currentState": currentState,
+
+		"stateLife": stateLife,
+
+		"activeMessageSetting": activeMsgSetting,
+
+		"activeMessageTasks": activeTasks,
+
+		"scheduleConflicts": conflicts,
+
+		"effectiveClasses": effectiveClasses,
+
+		"delayedReplies": delayedRepliesList,
+
+		"recentRuleLogs": recentRuleLogs,
+
+		"stats": map[string]interface{}{
+
+			"todayTaskCount": todayTaskCount,
+
+			"todaySentCount": todaySentCount,
+
+			"todayLLMCalls": todayLLMCalls,
+
+			"maxDailyCalls":     maxDailyCalls,
 			"remainingLLMCalls": maxDailyCalls - todayLLMCalls,
-	
-	
-},
-	
-}
+		},
+	}
 }
 
 func (s *service) RegenerateAllDebug(characterID string) map[string]interface{} {
@@ -997,26 +1539,34 @@ func (s *service) RegenerateAllDebug(characterID string) map[string]interface{} 
 		"taskCount":   len(s.GetActiveMessageTasksToday(characterID)),
 	}
 }
-func (s *service) ProcessActiveMessagesDebug(characterID string) map[string]interface{} { return s.ProcessDueActiveMessageTasks(characterID) }
+func (s *service) ProcessActiveMessagesDebug(characterID string) map[string]interface{} {
+	return s.ProcessDueActiveMessageTasks(characterID)
+}
 
 func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]interface{} {
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
-		s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now', 'localtime') WHERE status='PROCESSING' AND updated_at < datetime('now', 'localtime', '-5 minutes') AND character_id = ?", characterID)
+	s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now', 'localtime') WHERE status='PROCESSING' AND updated_at < datetime('now', 'localtime', '-5 minutes') AND character_id = ?", characterID)
 	var tasks []map[string]interface{}
 	s.db.Table("active_message_task").Where("status = 'PENDING' AND due_time <= ? AND character_id = ?", nowStr, characterID).Order("due_time ASC").Limit(20).Find(&tasks)
 	var processed, sent, delayed, failed int
 	var channelSetting string
 	channelRow := s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row()
 	channelRow.Scan(&channelSetting)
-	if channelSetting == "" { channelSetting = "all" }
+	if channelSetting == "" {
+		channelSetting = "all"
+	}
 	for _, t := range tasks {
 		processed++
 		id, _ := t["id"]
 		prompt, _ := t["prompt"].(string)
-		if prompt == "" { continue }
+		if prompt == "" {
+			continue
+		}
 		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', 'localtime', '+5 minutes') WHERE id = ? AND status='PENDING' AND character_id = ?", id, characterID)
-		if result.RowsAffected == 0 { continue }
+		if result.RowsAffected == 0 {
+			continue
+		}
 		stateResult := s.GetState(characterID)
 		currentState, _ := stateResult["currentState"].(string)
 		if currentState == "SLEEPING" || currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
@@ -1029,15 +1579,32 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 		convRow := s.db.Table("conversations").Select("id").Limit(1).Row()
 		var convID string
 		convRow.Scan(&convID)
-		if convID == "" { failed++; continue }
+		if convID == "" {
+			failed++
+			continue
+		}
 		msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
 		generated := s.generateLLMReply(prompt)
-		if generated == "" { failed++; continue }
+		if generated == "" {
+			failed++
+			continue
+		}
 		displayContent := generated
-		insErr := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, displayContent, nowStr).Error
+		messageCreatedAt := nowStr
+		if dueTime, ok := t["due_time"].(string); ok && dueTime != "" {
+			messageCreatedAt = dueTime
+		}
+		insErr := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, displayContent, messageCreatedAt).Error
 		if insErr != nil {
 			retryCount := 0
-			if rc, ok := t["retry_count"]; ok { switch v := rc.(type) { case int64: retryCount = int(v); case float64: retryCount = int(v) } }
+			if rc, ok := t["retry_count"]; ok {
+				switch v := rc.(type) {
+				case int64:
+					retryCount = int(v)
+				case float64:
+					retryCount = int(v)
+				}
+			}
 			retryCount++
 			if retryCount >= 3 {
 				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", retryCount, id, characterID)
@@ -1072,14 +1639,20 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 	}
 	return map[string]interface{}{"processed": processed, "sent": sent, "delayed": delayed, "failed": failed}
 }
-func (s *service) ProcessDelayedRepliesDebug(characterID string) map[string]interface{} { return s.ProcessDelayedReplies(characterID) }
+func (s *service) ProcessDelayedRepliesDebug(characterID string) map[string]interface{} {
+	return s.ProcessDelayedReplies(characterID)
+}
 
 func (s *service) GetRuleLogs(characterID string) []map[string]interface{} {
 	var logs []map[string]interface{}
 	q := s.db.Table("proactive_rule_logs")
-	if characterID != "" { q = q.Where("character_id = ?", characterID) }
+	if characterID != "" {
+		q = q.Where("character_id = ?", characterID)
+	}
 	q.Order("triggered_at DESC").Limit(50).Find(&logs)
-	if logs == nil { logs = []map[string]interface{}{} }
+	if logs == nil {
+		logs = []map[string]interface{}{}
+	}
 	return logs
 }
 
@@ -1089,11 +1662,19 @@ func (s *service) RegenerateSchedule(characterID string) map[string]interface{} 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	lt := s.GetLifestyleTendency(characterID)
 	intensity := 50
-	if v, ok := lt["intensity"].(int); ok { intensity = v }
-	if v, ok := lt["intensity"].(float64); ok { intensity = int(v) }
+	if v, ok := lt["intensity"].(int); ok {
+		intensity = v
+	}
+	if v, ok := lt["intensity"].(float64); ok {
+		intensity = int(v)
+	}
 	jitterMax := intensity / 10
-	if jitterMax < 2 { jitterMax = 2 }
-	if jitterMax > 15 { jitterMax = 15 }
+	if jitterMax < 2 {
+		jitterMax = 2
+	}
+	if jitterMax > 15 {
+		jitterMax = 15
+	}
 	jitterMin := func(t time.Time, maxMin int) time.Time {
 		off := time.Duration(rng.Intn(maxMin*2+1)-maxMin) * time.Minute
 		return t.Add(off)
@@ -1114,15 +1695,17 @@ func (s *service) RegenerateSchedule(characterID string) map[string]interface{} 
 	timelineMaps := make([]map[string]interface{}, len(timeline))
 	for i, e := range timeline {
 		timelineMaps[i] = map[string]interface{}{
-			"startTime": e.StartTime.Format("2006-01-02T15:04:05"),
-			"endTime":   e.EndTime.Format("2006-01-02T15:04:05"),
-			"state":     e.State,
+			"startTime":  e.StartTime.Format("2006-01-02T15:04:05"),
+			"endTime":    e.EndTime.Format("2006-01-02T15:04:05"),
+			"state":      e.State,
 			"sourceType": e.SourceType,
-			"priority":  e.Priority,
-			"reason":    e.Reason,
+			"priority":   e.Priority,
+			"reason":     e.Reason,
 		}
 	}
-	if timelineMaps == nil { timelineMaps = []map[string]interface{}{} }
+	if timelineMaps == nil {
+		timelineMaps = []map[string]interface{}{}
+	}
 	return map[string]interface{}{
 		"schedule":    scheduleToMap(schedule),
 		"timeline":    timelineMaps,
@@ -1136,19 +1719,27 @@ func (s *service) RegenerateTimeline(characterID string) map[string]interface{} 
 	result := make([]map[string]interface{}, len(timeline))
 	for i, e := range timeline {
 		result[i] = map[string]interface{}{
-			"startTime": e.StartTime.Format("2006-01-02T15:04:05"),
-			"endTime":   e.EndTime.Format("2006-01-02T15:04:05"),
-			"state":     e.State,
+			"startTime":  e.StartTime.Format("2006-01-02T15:04:05"),
+			"endTime":    e.EndTime.Format("2006-01-02T15:04:05"),
+			"state":      e.State,
 			"sourceType": e.SourceType,
-			"priority":  e.Priority,
-			"reason":    e.Reason,
+			"priority":   e.Priority,
+			"reason":     e.Reason,
 		}
 	}
-	if result == nil { result = []map[string]interface{}{} }
+	if result == nil {
+		result = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"events": result, "regenerated": true}
 }
 
-func parseDayOfWeek(date string) int { t, err := time.ParseInLocation("2006-01-02", date, time.Local); if err != nil { return int(time.Now().Weekday()) }; return int(t.Weekday()) }
+func parseDayOfWeek(date string) int {
+	t, err := time.ParseInLocation("2006-01-02", date, time.Local)
+	if err != nil {
+		return int(time.Now().Weekday())
+	}
+	return int(t.Weekday())
+}
 func toJSON(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
 func (s *service) buildTodaySchedule(date string, characterID string) TodaySchedule {
@@ -1161,9 +1752,15 @@ func (s *service) buildTodaySchedule(date string, characterID string) TodaySched
 	var sleepEnabled int
 	err := s.db.Table("sleep_settings").Select("bed_time, wake_time, enabled").Where("character_id = ?", characterID).Limit(1).Row().Scan(&bed, &wake, &sleepEnabled)
 	if err == nil {
-		if wake != "" { wakeTime = parseTimeStr(wake, today) }
-		if bed != "" { bedTime = parseTimeStr(bed, today) }
-		if bedTime.Before(wakeTime) || bedTime.Equal(wakeTime) { bedTime = bedTime.Add(24 * time.Hour) }
+		if wake != "" {
+			wakeTime = parseTimeStr(wake, today)
+		}
+		if bed != "" {
+			bedTime = parseTimeStr(bed, today)
+		}
+		if bedTime.Before(wakeTime) || bedTime.Equal(wakeTime) {
+			bedTime = bedTime.Add(24 * time.Hour)
+		}
 	}
 
 	lunchTime := parseTimeStr("12:00", today)
@@ -1176,9 +1773,13 @@ func (s *service) buildTodaySchedule(date string, characterID string) TodaySched
 	for _, e := range events {
 		switch e.EventType {
 		case "meal_lunch":
-			if e.StartTime != "" { lunchTime = parseTimeStr(e.StartTime, today) }
+			if e.StartTime != "" {
+				lunchTime = parseTimeStr(e.StartTime, today)
+			}
 		case "meal_dinner":
-			if e.StartTime != "" { dinnerTime = parseTimeStr(e.StartTime, today) }
+			if e.StartTime != "" {
+				dinnerTime = parseTimeStr(e.StartTime, today)
+			}
 		case "nap":
 			if e.StartTime != "" && e.EndTime != "" {
 				ns := parseTimeStr(e.StartTime, today)
@@ -1193,9 +1794,13 @@ func (s *service) buildTodaySchedule(date string, characterID string) TodaySched
 	var lt LifestyleTendency
 	if err := s.db.Limit(1).First(&lt); err == nil {
 		if lt.ActivityEnergy < 30 {
-			if wakeTime.Hour() < 7 { wakeTime = wakeTime.Add(30 * time.Minute) }
+			if wakeTime.Hour() < 7 {
+				wakeTime = wakeTime.Add(30 * time.Minute)
+			}
 		} else if lt.ActivityEnergy > 70 {
-			if wakeTime.Hour() > 6 { wakeTime = wakeTime.Add(-15 * time.Minute) }
+			if wakeTime.Hour() > 6 {
+				wakeTime = wakeTime.Add(-15 * time.Minute)
+			}
 		}
 	}
 
@@ -1210,14 +1815,14 @@ func (s *service) buildTodaySchedule(date string, characterID string) TodaySched
 	}
 
 	return TodaySchedule{
-		WakeTime:  wakeTime,
-		LunchTime: lunchTime,
-		DinnerTime: dinnerTime,
-		HasNap:    hasNap,
+		WakeTime:     wakeTime,
+		LunchTime:    lunchTime,
+		DinnerTime:   dinnerTime,
+		HasNap:       hasNap,
 		NapStartTime: napStart,
 		NapEndTime:   napEnd,
-		SleepTime: bedTime,
-		IsRestDay: isRestDay,
+		SleepTime:    bedTime,
+		IsRestDay:    isRestDay,
 	}
 }
 
@@ -1227,10 +1832,12 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 	nextMidnight := today.Add(24 * time.Hour)
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		var entries []TimelineEntry
+	var entries []TimelineEntry
 
 	addEntry := func(start, end time.Time, state, sourceType string, priority int, reason string) {
-		if end.Before(start) || end.Equal(start) { return }
+		if end.Before(start) || end.Equal(start) {
+			return
+		}
 		entries = append(entries, TimelineEntry{
 			StartTime: start, EndTime: end,
 			State: state, SourceType: sourceType,
@@ -1246,11 +1853,15 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 		if len(parts) == 2 {
 			workStart = parseTimeStr(parts[0], today)
 			workEnd = parseTimeStr(parts[1], today)
-			if workEnd.Before(workStart) || workEnd.Equal(workStart) { workEnd = workEnd.Add(12 * time.Hour) }
+			if workEnd.Before(workStart) || workEnd.Equal(workStart) {
+				workEnd = workEnd.Add(12 * time.Hour)
+			}
 			todayWeekday := int(today.Weekday())
 			if wp.WorkDays != "" {
 				workDays := parseWorkDays(wp.WorkDays)
-				if workDays[todayWeekday] { hasWork = true }
+				if workDays[todayWeekday] {
+					hasWork = true
+				}
 			} else {
 				hasWork = todayWeekday >= 1 && todayWeekday <= 5
 			}
@@ -1264,7 +1875,9 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 	dinner := schedule.DinnerTime
 	sleep := schedule.SleepTime
 
-	if sleep.Before(wake) || sleep.Equal(wake) { sleep = sleep.Add(24 * time.Hour) }
+	if sleep.Before(wake) || sleep.Equal(wake) {
+		sleep = sleep.Add(24 * time.Hour)
+	}
 
 	addEntry(midnight, wake, "SLEEPING", "schedule", 100, "睡眠时间")
 
@@ -1293,7 +1906,9 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 		if schedule.HasNap && schedule.NapStartTime != nil && schedule.NapEndTime != nil {
 			ns := *schedule.NapStartTime
 			ne := *schedule.NapEndTime
-			if ns.After(lunchEnd) { addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲") }
+			if ns.After(lunchEnd) {
+				addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲")
+			}
 			addEntry(ns, ne, "NAPPING", "schedule", 85, "午睡")
 			lunchEnd = ne
 		}
@@ -1309,24 +1924,26 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 
 		addEntry(dinner, dinner.Add(1*time.Hour), "EATING_DINNER", "schedule", 85, "晚饭时间")
 		afterDinner := dinner.Add(1 * time.Hour)
-		if afterDinner.Before(afterWork) { afterDinner = afterWork }
+		if afterDinner.Before(afterWork) {
+			afterDinner = afterWork
+		}
 
 		beforeSleep := sleep.Add(-1 * time.Hour)
 		if beforeSleep.After(afterDinner) {
 			if afterDinner.Before(beforeSleep) {
-			gap := beforeSleep.Sub(afterDinner)
-			if gap > 2*time.Hour && rng.Intn(3) == 0 {
-				studyEnd := afterDinner.Add(time.Duration(30+rng.Intn(61)) * time.Minute)
-				if studyEnd.Before(beforeSleep.Add(-30 * time.Minute)) {
-					addEntry(afterDinner, studyEnd, "STUDYING", "schedule", 55, "晚间学习")
-					addEntry(studyEnd, beforeSleep, "AFTER_WORK", "schedule", 50, "晚间放松")
+				gap := beforeSleep.Sub(afterDinner)
+				if gap > 2*time.Hour && rng.Intn(3) == 0 {
+					studyEnd := afterDinner.Add(time.Duration(30+rng.Intn(61)) * time.Minute)
+					if studyEnd.Before(beforeSleep.Add(-30 * time.Minute)) {
+						addEntry(afterDinner, studyEnd, "STUDYING", "schedule", 55, "晚间学习")
+						addEntry(studyEnd, beforeSleep, "AFTER_WORK", "schedule", 50, "晚间放松")
+					} else {
+						addEntry(afterDinner, beforeSleep, "AFTER_WORK", "schedule", 50, "下班后自由时间")
+					}
 				} else {
 					addEntry(afterDinner, beforeSleep, "AFTER_WORK", "schedule", 50, "下班后自由时间")
 				}
-			} else {
-				addEntry(afterDinner, beforeSleep, "AFTER_WORK", "schedule", 50, "下班后自由时间")
 			}
-		}
 		}
 		addEntry(beforeSleep, sleep, "BEFORE_SLEEP", "schedule", 80, "睡前准备")
 
@@ -1337,7 +1954,9 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 		if schedule.HasNap && schedule.NapStartTime != nil && schedule.NapEndTime != nil {
 			ns := *schedule.NapStartTime
 			ne := *schedule.NapEndTime
-			if ns.After(lunchEnd) { addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲") }
+			if ns.After(lunchEnd) {
+				addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲")
+			}
 			addEntry(ns, ne, "NAPPING", "schedule", 85, "午睡")
 			lunchEnd = ne
 		}
@@ -1357,10 +1976,14 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 			ne := *schedule.NapEndTime
 			addEntry(afterWake, lunch, "IDLE", "schedule", 50, "自由时间")
 			addEntry(lunch, lunchEnd, "EATING_LUNCH", "schedule", 85, "午饭时间")
-			if ns.After(lunchEnd) { addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲") }
+			if ns.After(lunchEnd) {
+				addEntry(lunchEnd, ns, "IDLE", "schedule", 40, "空闲")
+			}
 			addEntry(ns, ne, "NAPPING", "schedule", 85, "午睡")
 			afterLunchEnd := ne
-			if afterLunchEnd.Before(lunchEnd) { afterLunchEnd = lunchEnd }
+			if afterLunchEnd.Before(lunchEnd) {
+				afterLunchEnd = lunchEnd
+			}
 			addEntry(afterLunchEnd, dinner, "IDLE", "schedule", 45, "午后时间")
 		} else {
 			addEntry(afterWake, lunch, "IDLE", "schedule", 50, "自由时间")
@@ -1433,14 +2056,20 @@ func (s *service) buildClassEntries(date string, characterID string) []TimelineE
 		slots, _ := c["slots"].([]map[string]interface{})
 		for _, slot := range slots {
 			name, _ := slot["className"].(string)
-			if name == "" { name, _ = slot["name"].(string) }
+			if name == "" {
+				name, _ = slot["name"].(string)
+			}
 			startStr, _ := slot["startTime"].(string)
 			endStr, _ := slot["endTime"].(string)
-			if startStr == "" || endStr == "" { continue }
+			if startStr == "" || endStr == "" {
+				continue
+			}
 
 			start := parseTimeStr(startStr, today)
 			end := parseTimeStr(endStr, today)
-			if end.Before(start) { continue }
+			if end.Before(start) {
+				continue
+			}
 
 			reason := fmt.Sprintf("课程: %s", name)
 			entries = append(entries, TimelineEntry{
@@ -1472,7 +2101,9 @@ func (s *service) buildClassEntries(date string, characterID string) []TimelineE
 		if e.EventType == "study" || e.EventType == "course" {
 			start := parseTimeStr(e.StartTime, today)
 			end := parseTimeStr(e.EndTime, today)
-			if end.Before(start) { continue }
+			if end.Before(start) {
+				continue
+			}
 			entries = append(entries, TimelineEntry{
 				StartTime: start, EndTime: end,
 				State: "STUDYING", SourceType: "fixed_event",
@@ -1486,12 +2117,12 @@ func (s *service) buildClassEntries(date string, characterID string) []TimelineE
 
 func scheduleToMap(s TodaySchedule) map[string]interface{} {
 	result := map[string]interface{}{
-		"wakeTime":  s.WakeTime.Format("2006-01-02T15:04:05"),
-		"lunchTime": s.LunchTime.Format("2006-01-02T15:04:05"),
+		"wakeTime":   s.WakeTime.Format("2006-01-02T15:04:05"),
+		"lunchTime":  s.LunchTime.Format("2006-01-02T15:04:05"),
 		"dinnerTime": s.DinnerTime.Format("2006-01-02T15:04:05"),
-		"hasNap":    s.HasNap,
-		"sleepTime": s.SleepTime.Format("2006-01-02T15:04:05"),
-		"isRestDay": s.IsRestDay,
+		"hasNap":     s.HasNap,
+		"sleepTime":  s.SleepTime.Format("2006-01-02T15:04:05"),
+		"isRestDay":  s.IsRestDay,
 	}
 	if s.NapStartTime != nil {
 		result["napStartTime"] = s.NapStartTime.Format("2006-01-02T15:04:05")
@@ -1504,15 +2135,21 @@ func scheduleToMap(s TodaySchedule) map[string]interface{} {
 
 func parseTimeStr(t string, date time.Time) time.Time {
 	parts := splitTimeRange(t)
-	if len(parts) < 2 { parts = []string{"08", "00"} }
-	h := 0; m := 0
-	fmt.Sscanf(parts[0], "%d", &h); fmt.Sscanf(parts[1], "%d", &m)
+	if len(parts) < 2 {
+		parts = []string{"08", "00"}
+	}
+	h := 0
+	m := 0
+	fmt.Sscanf(parts[0], "%d", &h)
+	fmt.Sscanf(parts[1], "%d", &m)
 	return time.Date(date.Year(), date.Month(), date.Day(), h, m, 0, 0, time.Local)
 }
 
 func parseDate(date string) time.Time {
 	t, err := time.ParseInLocation("2006-01-02", date, time.Local)
-	if err != nil { return time.Now() }
+	if err != nil {
+		return time.Now()
+	}
 	return t
 }
 
@@ -1532,9 +2169,13 @@ func splitTimeRange(s string) []string {
 							p2 = p
 						}
 					}
-					if p2 != "" { parts = append(parts, p2) }
+					if p2 != "" {
+						parts = append(parts, p2)
+					}
 				}
-				if len(parts) >= 2 { return parts }
+				if len(parts) >= 2 {
+					return parts
+				}
 			}
 			return []string{s[:idx], s[idx+1:]}
 		}
@@ -1548,24 +2189,34 @@ func parseWorkDays(s string) map[int]bool {
 	current := ""
 	for _, ch := range s {
 		if ch == ',' {
-			if current != "" { parts = append(parts, current); current = "" }
+			if current != "" {
+				parts = append(parts, current)
+				current = ""
+			}
 		} else {
 			current += string(ch)
 		}
 	}
-	if current != "" { parts = append(parts, current) }
+	if current != "" {
+		parts = append(parts, current)
+	}
 
 	dayMap := map[string]int{"1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "0": 0, "7": 0}
 	for _, p := range parts {
 		p = trimSpace(p)
-		if d, ok := dayMap[p]; ok { result[d] = true; continue }
+		if d, ok := dayMap[p]; ok {
+			result[d] = true
+			continue
+		}
 		if idx := indexOf(p, "-"); idx >= 0 {
 			from := trimSpace(p[:idx])
 			to := trimSpace(p[idx+1:])
 			fd, fok := dayMap[from]
 			td, tok := dayMap[to]
 			if fok && tok {
-				for d := fd; d <= td; d++ { result[d] = true }
+				for d := fd; d <= td; d++ {
+					result[d] = true
+				}
 			}
 		}
 	}
@@ -1574,18 +2225,24 @@ func parseWorkDays(s string) map[int]bool {
 
 func indexOf(s, substr string) int {
 	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr { return i }
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
 	}
 	return -1
 }
 
 func trimSpace(s string) string {
-	start := 0; end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t') { start++ }
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') { end-- }
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
+		end--
+	}
 	return s[start:end]
 }
-
 
 func buildStateResult(state, reason, startedAt, endsAt string) map[string]interface{} {
 	sleeping := state == "SLEEPING" || state == "NAPPING"
@@ -1607,22 +2264,34 @@ func buildStateResult(state, reason, startedAt, endsAt string) map[string]interf
 func calculateEnergy(now time.Time, schedule TodaySchedule, currentState string) int {
 	wake := schedule.WakeTime
 	sleep := schedule.SleepTime
-	if sleep.Before(wake) || sleep.Equal(wake) { sleep = sleep.Add(24 * time.Hour) }
+	if sleep.Before(wake) || sleep.Equal(wake) {
+		sleep = sleep.Add(24 * time.Hour)
+	}
 	lunch := schedule.LunchTime
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 	dinner := schedule.DinnerTime
 
 	wakeHour := wake.Sub(today).Hours()
-	if wakeHour > 24 { wakeHour -= 24 }
-	if wakeHour < 0 { wakeHour += 24 }
+	if wakeHour > 24 {
+		wakeHour -= 24
+	}
+	if wakeHour < 0 {
+		wakeHour += 24
+	}
 
 	nowHour := float64(now.Hour()) + float64(now.Minute())/60.0
-	if now.Before(today) { nowHour += 24 }
+	if now.Before(today) {
+		nowHour += 24
+	}
 
 	lunchHour := lunch.Sub(today).Hours()
-	if lunchHour < 0 { lunchHour += 24 }
+	if lunchHour < 0 {
+		lunchHour += 24
+	}
 	dinnerHour := dinner.Sub(today).Hours()
-	if dinnerHour < 0 { dinnerHour += 24 }
+	if dinnerHour < 0 {
+		dinnerHour += 24
+	}
 	sleepHour := sleep.Sub(today).Hours()
 
 	if currentState == "SLEEPING" || currentState == "NAPPING" {
@@ -1651,7 +2320,9 @@ func calculateEnergy(now time.Time, schedule TodaySchedule, currentState string)
 		base := 65
 		hoursSinceLunch := nowHour - lunchHour
 		base -= int(hoursSinceLunch) * 3
-		if base < 40 { base = 40 }
+		if base < 40 {
+			base = 40
+		}
 		return base + hashInt(now.Minute())%16
 	}
 	if nowHour >= dinnerHour && nowHour < sleepHour-2 {
@@ -1667,7 +2338,9 @@ func hashInt(n int) int {
 	n = ((n >> 16) ^ n) * 0x45d9f3b
 	n = ((n >> 16) ^ n) * 0x45d9f3b
 	n = (n >> 16) ^ n
-	if n < 0 { n = -n }
+	if n < 0 {
+		n = -n
+	}
 	return n
 }
 
@@ -1676,20 +2349,28 @@ func sendProactiveNotification(db *gorm.DB, convID, msgID, content string) {
 }
 
 func (s *service) ScheduleBasedGenerator(date string, characterID string) map[string]interface{} {
-	if date == "" { date = time.Now().Format("2006-01-02") }
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
 	today := parseDate(date)
 
 	schedule := s.buildTodaySchedule(date, characterID)
 	timeline := s.buildTimeline(date, schedule, characterID)
 	stateLife := s.GetStateLife(characterID)
 	mood, _ := stateLife["mood"].(string)
-	if mood == "" { mood = "neutral" }
+	if mood == "" {
+		mood = "neutral"
+	}
 	energy, _ := stateLife["energy"].(int)
 
 	lt := s.GetLifestyleTendency(characterID)
 	dailyShareTendency := 50
-	if v, ok := lt["intensity"].(int); ok { dailyShareTendency = v }
-	if v, ok := lt["intensity"].(float64); ok { dailyShareTendency = int(v) }
+	if v, ok := lt["intensity"].(int); ok {
+		dailyShareTendency = v
+	}
+	if v, ok := lt["intensity"].(float64); ok {
+		dailyShareTendency = int(v)
+	}
 
 	var tasks []ShareTask
 	now := today
@@ -1713,8 +2394,12 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	}
 
 	addTask := func(taskType string, dueTime time.Time, reason string) bool {
-		if isBlocked(dueTime) { return false }
-		if dueTime.Before(now) { return false }
+		if isBlocked(dueTime) {
+			return false
+		}
+		if dueTime.Before(now) {
+			return false
+		}
 		prompt := s.GenerateSharePrompt(taskType, schedule, mood, energy)
 		tasks = append(tasks, ShareTask{
 			Type: taskType, DueTime: dueTime,
@@ -1727,38 +2412,66 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	lunch := schedule.LunchTime
 	dinner := schedule.DinnerTime
 	sleep := schedule.SleepTime
-	if sleep.Before(wake) || sleep.Equal(wake) { sleep = sleep.Add(24 * time.Hour) }
+	if sleep.Before(wake) || sleep.Equal(wake) {
+		sleep = sleep.Add(24 * time.Hour)
+	}
 
 	added := 0
 	maxTasks := 3
-	if dailyShareTendency >= 60 { maxTasks = 5 }
-	if dailyShareTendency < 30 { maxTasks = 2 }
+	if dailyShareTendency >= 60 {
+		maxTasks = 5
+	}
+	if dailyShareTendency < 30 {
+		maxTasks = 2
+	}
 	idleDuration := s.getIdleDuration()
-	if idleDuration > 48*time.Hour { maxTasks = 0 } else if idleDuration > 24*time.Hour { maxTasks = 1 } else if idleDuration > 12*time.Hour { if maxTasks > 2 { maxTasks = 2 } } else if idleDuration > 6*time.Hour { if maxTasks > 3 { maxTasks = 3 } }
+	if idleDuration > 48*time.Hour {
+		maxTasks = 0
+	} else if idleDuration > 24*time.Hour {
+		maxTasks = 1
+	} else if idleDuration > 12*time.Hour {
+		if maxTasks > 2 {
+			maxTasks = 2
+		}
+	} else if idleDuration > 6*time.Hour {
+		if maxTasks > 3 {
+			maxTasks = 3
+		}
+	}
 
 	if added < maxTasks {
 		morningTime := randomMinutes(wake, 5, 20)
-		if addTask("morning_share", morningTime, "早安分享") { added++ }
+		if addTask("morning_share", morningTime, "早安分享") {
+			added++
+		}
 	}
 
 	if added < maxTasks {
 		noonTime := randomMinutes(lunch, -10, 0)
-		if addTask("noon_daily", noonTime, "午间日常") { added++ }
+		if addTask("noon_daily", noonTime, "午间日常") {
+			added++
+		}
 	}
 
 	if added < maxTasks {
 		eveningTime := randomMinutes(dinner, 30, 90)
-		if addTask("evening_reflection", eveningTime, "傍晚分享") { added++ }
+		if addTask("evening_reflection", eveningTime, "傍晚分享") {
+			added++
+		}
 	}
 
 	if added < maxTasks {
 		bedtime := randomMinutes(sleep, -60, -30)
-		if addTask("bedtime_mood", bedtime, "睡前心情") { added++ }
+		if addTask("bedtime_mood", bedtime, "睡前心情") {
+			added++
+		}
 	}
 
 	if added < maxTasks && schedule.HasNap && schedule.NapEndTime != nil {
 		napWake := randomMinutes(*schedule.NapEndTime, 0, 10)
-		if addTask("nap_wake", napWake, "午睡唤醒") { added++ }
+		if addTask("nap_wake", napWake, "午睡唤醒") {
+			added++
+		}
 	}
 
 	if len(tasks) > 1 {
@@ -1799,7 +2512,9 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 			"prompt": t.Prompt, "reason": t.Reason,
 		}
 	}
-	if resultMaps == nil { resultMaps = []map[string]interface{}{} }
+	if resultMaps == nil {
+		resultMaps = []map[string]interface{}{}
+	}
 	return map[string]interface{}{
 		"generated":         true,
 		"tasks":             resultMaps,
@@ -1839,14 +2554,18 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 			for rows.Next() {
 				var v string
 				rows.Scan(&v)
-				if v != "" { recentMemories = append(recentMemories, v) }
+				if v != "" {
+					recentMemories = append(recentMemories, v)
+				}
 			}
 		}
 	}
 
 	history := s.getShareHistory()
 	recentTopicsStr := strings.Join(history.RecentTopics, "、")
-	if recentTopicsStr == "" { recentTopicsStr = "无" }
+	if recentTopicsStr == "" {
+		recentTopicsStr = "无"
+	}
 
 	scheduleSummary := fmt.Sprintf("起床 %s，午饭 %s，晚饭 %s，睡觉 %s",
 		schedule.WakeTime.Format("15:04"),
@@ -1905,16 +2624,24 @@ func (s *service) GetShareHistory() ShareHistory {
 		if content, ok := r["message_content"].(string); ok && len(content) > 0 {
 			if len([]rune(content)) <= 100 {
 				topic := extractTopic(content)
-				if topic != "" { topics = append(topics, topic) }
+				if topic != "" {
+					topics = append(topics, topic)
+				}
 			}
 		}
 		if lastAt == "" {
-			if ca, ok := r["created_at"].(string); ok { lastAt = ca }
+			if ca, ok := r["created_at"].(string); ok {
+				lastAt = ca
+			}
 		}
-		if len(topics) >= 5 { break }
+		if len(topics) >= 5 {
+			break
+		}
 	}
 
-	if topics == nil { topics = []string{} }
+	if topics == nil {
+		topics = []string{}
+	}
 	return ShareHistory{RecentTopics: topics, LastShareAt: lastAt}
 }
 
@@ -1924,8 +2651,6 @@ func (s *service) TriggerDailyRegeneration(characterID string) map[string]interf
 	today := time.Now().Format("2006-01-02")
 	return s.ScheduleBasedGenerator(today, characterID)
 }
-
-
 
 func (s *service) generateLLMReply(prompt string) string {
 	var baseURL, apiKey, modelName string
@@ -1941,7 +2666,8 @@ func (s *service) generateLLMReply(prompt string) string {
 	if identity == "" {
 		identity = "一个AI伙伴"
 	}
-	now := time.Now(); sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。字数控制在8-40字。不要调用工具，直接输出纯文本。不要使用emoji。", charName, identity, now.Format("15:04"), now.Weekday().String())
+	now := time.Now()
+	sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。字数控制在8-40字。不要调用工具，直接输出纯文本。不要使用emoji。", charName, identity, now.Format("15:04"), now.Weekday().String())
 	msgs := []map[string]interface{}{{"role": "system", "content": sys}, {"role": "user", "content": prompt}}
 	reqBody, _ := json.Marshal(map[string]interface{}{"model": modelName, "messages": msgs, "temperature": 0.9, "max_tokens": 200, "stream": false})
 	baseURL = strings.TrimRight(baseURL, "/")
@@ -1949,12 +2675,18 @@ func (s *service) generateLLMReply(prompt string) string {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil { return "" }
+	if err != nil {
+		return ""
+	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
-	var r struct{ Choices []struct{ Message struct{ Content string } } }
+	var r struct {
+		Choices []struct{ Message struct{ Content string } }
+	}
 	json.Unmarshal(rb, &r)
-	if len(r.Choices) > 0 { return strings.TrimSpace(r.Choices[0].Message.Content) }
+	if len(r.Choices) > 0 {
+		return strings.TrimSpace(r.Choices[0].Message.Content)
+	}
 	return ""
 }
 
@@ -1972,13 +2704,15 @@ func (s *service) scheduleChanged() {
 }
 func extractTopic(content string) string {
 	runes := []rune(content)
-	if len(runes) < 6 { return "" }
+	if len(runes) < 6 {
+		return ""
+	}
 	maxLen := 10
-	if maxLen > len(runes) { maxLen = len(runes) }
+	if maxLen > len(runes) {
+		maxLen = len(runes)
+	}
 	return string(runes[:maxLen])
 }
-
-
 
 func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} {
 	setting := s.GetActiveMessageSetting(characterID)
@@ -1996,8 +2730,12 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 
 	quietStart, _ := setting["quietStart"].(string)
 	quietEnd, _ := setting["quietEnd"].(string)
-	if quietStart == "" { quietStart = "23:00" }
-	if quietEnd == "" { quietEnd = "07:00" }
+	if quietStart == "" {
+		quietStart = "23:00"
+	}
+	if quietEnd == "" {
+		quietEnd = "07:00"
+	}
 	now := time.Now()
 	nowStr := now.Format("15:04")
 	if quietStart <= quietEnd {
@@ -2010,7 +2748,9 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 		}
 	}
 
-	if s.lastBurstAt.Format("2006-01-02") != now.Format("2006-01-02") { s.todayBurstCount = 0 }
+	if s.lastBurstAt.Format("2006-01-02") != now.Format("2006-01-02") {
+		s.todayBurstCount = 0
+	}
 	minInterval, _ := setting["minInterval"].(int)
 	if time.Since(s.lastBurstAt) < time.Duration(minInterval)*time.Minute {
 		return map[string]interface{}{"triggered": false, "reason": "minInterval"}
@@ -2022,7 +2762,9 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	}
 
 	maxDailyCalls, _ := setting["maxDailyCalls"].(int)
-	if maxDailyCalls == 0 { maxDailyCalls = 10 }
+	if maxDailyCalls == 0 {
+		maxDailyCalls = 10
+	}
 	todayStr := now.Format("2006-01-02")
 	var todayLLMCalls int64
 	s.db.Table("proactive_messages").Where("date(created_at) = date(?)", todayStr).Count(&todayLLMCalls)
@@ -2031,7 +2773,9 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	}
 
 	activeLevel, _ := setting["activeLevel"].(int)
-	if activeLevel == 0 { activeLevel = 40 }
+	if activeLevel == 0 {
+		activeLevel = 40
+	}
 	baseProb := float64(activeLevel) / 100.0 * 0.05
 
 	energy, _ := stateLife["energy"].(int)
@@ -2040,10 +2784,20 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	idleDuration := time.Duration(idleSec) * time.Second
 
 	energyMod := 1.0
-	if energy > 70 { energyMod = 1.2 } else if energy < 30 { energyMod = 0.3 }
+	if energy > 70 {
+		energyMod = 1.2
+	} else if energy < 30 {
+		energyMod = 0.3
+	}
 
 	moodMod := 1.0
-	if mood == "happy" { moodMod = 1.3 } else if mood == "sad" || mood == "depressed" || mood == "ignored" { moodMod = 1.5 } else if mood == "tired" || mood == "lonely" { moodMod = 0.7 }
+	if mood == "happy" {
+		moodMod = 1.3
+	} else if mood == "sad" || mood == "depressed" || mood == "ignored" {
+		moodMod = 1.5
+	} else if mood == "tired" || mood == "lonely" {
+		moodMod = 0.7
+	}
 
 	stateMod := 1.0
 	switch currentState {
@@ -2056,13 +2810,19 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	}
 
 	budgetRemaining := maxDailyCalls - int(todayLLMCalls)
-	if budgetRemaining < 1 { budgetRemaining = 1 }
+	if budgetRemaining < 1 {
+		budgetRemaining = 1
+	}
 	budgetMod := float64(budgetRemaining) / float64(maxDailyCalls)
 
 	finalProb := baseProb * energyMod * moodMod * stateMod * budgetMod
 
-	if idleDuration > 48*time.Hour { finalProb = finalProb * 0.1 }
-	if idleDuration > 24*time.Hour { finalProb = finalProb * 0.3 }
+	if idleDuration > 48*time.Hour {
+		finalProb = finalProb * 0.1
+	}
+	if idleDuration > 24*time.Hour {
+		finalProb = finalProb * 0.3
+	}
 
 	rng := rand.New(rand.NewSource(now.UnixNano()))
 	if rng.Float64() >= finalProb {
@@ -2071,7 +2831,9 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 
 	history := s.getShareHistory()
 	recentTopics := strings.Join(history.RecentTopics, "、")
-	if recentTopics == "" { recentTopics = "无" }
+	if recentTopics == "" {
+		recentTopics = "无"
+	}
 
 	var recentMemoriesStr string
 	queryText := fmt.Sprintf("心情%s 状态%s", mood, currentState)
@@ -2098,18 +2860,24 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 			for rows.Next() {
 				var v string
 				rows.Scan(&v)
-				if v != "" { mems = append(mems, v) }
+				if v != "" {
+					mems = append(mems, v)
+				}
 			}
 			recentMemoriesStr = strings.Join(mems, "；")
 		}
 	}
-	if recentMemoriesStr == "" { recentMemoriesStr = "无" }
+	if recentMemoriesStr == "" {
+		recentMemoriesStr = "无"
+	}
 
 	prompt := fmt.Sprintf("当前你处于 %s 状态，心情 %s，精力 %d/100。最近记忆：%s。请生成一条像微信里突然想到就发出的自然短消息，1-2句，不要客服腔，不要解释，不要 emoji，避免重复这些话题：%s。", currentState, mood, energy, recentMemoriesStr, recentTopics)
 
 	msgID := fmt.Sprintf("burst-%d", now.UnixNano())
 	generated := s.generateLLMReply(prompt)
-	if generated == "" { return map[string]interface{}{"triggered": false, "reason": "llmFailed"} }
+	if generated == "" {
+		return map[string]interface{}{"triggered": false, "reason": "llmFailed"}
+	}
 	displayContent := generated
 
 	var convID string

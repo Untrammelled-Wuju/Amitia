@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package system
 
 import (
@@ -9,8 +11,11 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
 )
+
 func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profile.Service, epiSvc episodic.Service) {
-	memRepo := memory.NewRepository(ctx); memSvc := memory.NewService(memRepo, ctx); chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil)
+	memRepo := memory.NewRepository(ctx)
+	memSvc := memory.NewService(memRepo, ctx)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil)
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc)
 
@@ -125,6 +130,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profi
 	r.GET("/update/config", handler.GetUpdateConfig)
 
 	r.GET("/version", handler.Version)
+	r.GET("/about", handler.About)
 
 	r.GET("/reply-timing/overview", handler.ReplyTimingOverview)
 	r.GET("/reply-timing/buffers", handler.ReplyTimingBuffers)
@@ -189,11 +195,9 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profi
 	r.GET("/reminders/stream", handler.RemindersStream)
 	r.GET("/proactive-sse", sse.SSEHandler)
 
-
 	r.GET("/conversations", handler.LegacyListConversations)
 	r.GET("/conversations/:id/messages", handler.LegacyGetMessages)
 	r.DELETE("/conversations/:id", handler.LegacyDeleteConversation)
-
 
 	r.GET("/moods", handler.GetCompanionMoods)
 	r.GET("/moods/conversations/:id", handler.GetCompanionMoodsByConversation)
@@ -221,7 +225,3 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profi
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
 }
-
-
-
-

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed } from "vue"
 import { useApi, isLoggedIn, getToken } from "./useApi"
 import type { ApiResponse } from "@/types"

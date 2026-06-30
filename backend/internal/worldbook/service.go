@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package worldbook
 
 import (
@@ -184,7 +186,7 @@ func (s *service) TestMatch(text string) (*TestMatchResponse, error) {
 	rules := s.loadRules()
 	var results []MatchResult
 	for _, rule := range rules {
-			scopedText := s.getScopedText(text, text, text, rule.MatchScope)
+		scopedText := s.getScopedText(text, text, text, rule.MatchScope)
 		if matched, hitText := s.tryMatch(rule, scopedText); matched {
 			results = append(results, MatchResult{
 				Entry:      rule,
@@ -207,7 +209,7 @@ func (s *service) MatchAndCollect(userMessage, assistantReply string) []MatchRes
 		if assistantReply != "" {
 			fullText = userMessage + "\n" + assistantReply
 		}
-			scopedText := s.getScopedText(userMessage, assistantReply, fullText, rule.MatchScope)
+		scopedText := s.getScopedText(userMessage, assistantReply, fullText, rule.MatchScope)
 		if matched, hitText := s.tryMatch(rule, scopedText); matched {
 			results = append(results, MatchResult{
 				Entry:      rule,

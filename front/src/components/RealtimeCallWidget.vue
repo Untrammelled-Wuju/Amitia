@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="realtime-widget" v-if="visible">
     <div class="rw-bar" :class="{ active: callState === 'connected' }">

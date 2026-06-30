@@ -1,10 +1,12 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package system
 
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -43,6 +45,7 @@ type Service interface {
 	GetAuditActions() []string
 	GetAuditSettings() map[string]interface{}
 	GetAuditStats() map[string]interface{}
+	GetAbout() map[string]interface{}
 	GetCurrentSession(token string) map[string]interface{}
 	GetImportsBatchDetail(id string) map[string]interface{}
 	GetImportsBatchMemoryCandidates(id string) map[string]interface{}
@@ -200,18 +203,24 @@ func (s *service) setAppSetting(key, val string) {
 
 func toFloat(v interface{}) float64 {
 	switch n := v.(type) {
-	case float64: return n
-	case int: return float64(n)
-	case int64: return float64(n)
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
 	}
 	return 0
 }
 
 func toInt(v interface{}) int {
 	switch n := v.(type) {
-	case float64: return int(n)
-	case int: return n
-	case int64: return int(n)
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
 	case string:
 		val := 0
 		fmt.Sscanf(n, "%d", &val)
@@ -275,7 +284,7 @@ func (s *service) Diagnostics() map[string]interface{} {
 		"version": "1.0.0-go", "goVersion": runtime.Version(),
 		"uptime": time.Since(s.startTime).String(), "goroutines": runtime.NumGoroutine(),
 		"memory": map[string]interface{}{"allocMB": memStats.Alloc / 1024 / 1024, "totalAllocMB": memStats.TotalAlloc / 1024 / 1024},
-		"stats": map[string]interface{}{"users": userCount, "conversations": convCount, "messages": msgCount, "enabledRules": ruleCount},
+		"stats":  map[string]interface{}{"users": userCount, "conversations": convCount, "messages": msgCount, "enabledRules": ruleCount},
 	}
 }
 
@@ -283,21 +292,29 @@ func (s *service) RunDiagnostics() map[string]interface{} {
 	checks := []map[string]interface{}{}
 	dbOk := false
 	sqlDB, _ := s.db.DB()
-	if sqlDB != nil { dbOk = sqlDB.Ping() == nil }
+	if sqlDB != nil {
+		dbOk = sqlDB.Ping() == nil
+	}
 	status := "fail"
-	if dbOk { status = "pass" }
+	if dbOk {
+		status = "pass"
+	}
 	checks = append(checks, map[string]interface{}{"name": "Database", "status": status})
 	var activeModel string
 	s.db.Table("model_configs").Select("model_name").Where("is_active = 1").Limit(1).Row().Scan(&activeModel)
 	mStatus := "warn"
-	if activeModel != "" { mStatus = "pass" }
+	if activeModel != "" {
+		mStatus = "pass"
+	}
 	checks = append(checks, map[string]interface{}{"name": "Active Model", "status": mStatus, "detail": activeModel})
 	var ruleCount int64
 	s.db.Table("proactive_rules").Where("enabled = 1").Count(&ruleCount)
 	checks = append(checks, map[string]interface{}{"name": "Enabled Rules", "status": "info", "detail": ruleCount})
 	passCount := 0
 	for _, c := range checks {
-		if c["status"] == "pass" { passCount++ }
+		if c["status"] == "pass" {
+			passCount++
+		}
 	}
 	return map[string]interface{}{"checks": checks, "passed": passCount, "total": len(checks)}
 }
@@ -305,17 +322,27 @@ func (s *service) RunDiagnostics() map[string]interface{} {
 func (s *service) AppConfig() map[string]interface{} {
 	theme := s.getAppSetting("theme")
 	lang := s.getAppSetting("language")
-	if lang == "" { lang = "zh-CN" }
+	if lang == "" {
+		lang = "zh-CN"
+	}
 	tz := s.getAppSetting("timezone")
-	if tz == "" { tz = "Asia/Shanghai" }
+	if tz == "" {
+		tz = "Asia/Shanghai"
+	}
 	settings := s.ConfigSettings()
 	return map[string]interface{}{"theme": theme, "language": lang, "timezone": tz, "settings": settings}
 }
 
 func (s *service) UpdateAppConfig(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["theme"].(string); ok { s.setAppSetting("theme", v) }
-	if v, ok := body["language"].(string); ok { s.setAppSetting("language", v) }
-	if v, ok := body["timezone"].(string); ok { s.setAppSetting("timezone", v) }
+	if v, ok := body["theme"].(string); ok {
+		s.setAppSetting("theme", v)
+	}
+	if v, ok := body["language"].(string); ok {
+		s.setAppSetting("language", v)
+	}
+	if v, ok := body["timezone"].(string); ok {
+		s.setAppSetting("timezone", v)
+	}
 	if settings, ok := body["settings"].(map[string]interface{}); ok {
 		for k, v := range settings {
 			if sv, ok := v.(string); ok {
@@ -345,8 +372,34 @@ func (s *service) ConfigExport() map[string]interface{} {
 	return map[string]interface{}{"data": settings, "exported": true}
 }
 
+func readEnvOrDefault(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
 func (s *service) GetVersion() map[string]interface{} {
-	return map[string]interface{}{"version": "1.0.0", "buildTime": "2026-05-27", "goVersion": runtime.Version()}
+	return map[string]interface{}{
+		"version":   readEnvOrDefault("AMITIA_VERSION", "1.0.0"),
+		"buildTime": readEnvOrDefault("AMITIA_BUILD_TIME", "2026-05-27"),
+		"goVersion": runtime.Version(),
+	}
+}
+
+func (s *service) GetAbout() map[string]interface{} {
+	return map[string]interface{}{
+		"name":                   "Amitia",
+		"displayName":            "阿米提亚",
+		"version":                readEnvOrDefault("AMITIA_VERSION", "1.0.0"),
+		"gitCommit":              os.Getenv("AMITIA_GIT_COMMIT"),
+		"license":                "AGPL-3.0-only",
+		"copyright":              "Copyright (C) 2026 彭旭",
+		"sourceCodeUrl":          readEnvOrDefault("AMITIA_SOURCE_CODE_URL", "https://gitee.com/Untrammelled/Amitia"),
+		"commercialLicensingUrl": readEnvOrDefault("AMITIA_COMMERCIAL_LICENSE_URL", "mailto:3151508592@qq.com"),
+		"thirdPartyNoticesUrl":   readEnvOrDefault("AMITIA_THIRD_PARTY_NOTICES_URL", "https://gitee.com/Untrammelled/Amitia/blob/master/THIRD_PARTY_NOTICES.md"),
+	}
 }
 
 func (s *service) GetLLMConfig() map[string]interface{} {
@@ -372,13 +425,27 @@ func (s *service) UpdateLLMConfig(body map[string]interface{}) map[string]interf
 	var activeID int
 	s.db.Table("model_configs").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&activeID)
 	updates := map[string]interface{}{}
-	if v, ok := body["provider"].(string); ok { updates["api_type"] = v }
-	if v, ok := body["model"].(string); ok { updates["model_name"] = v }
-	if v, ok := body["baseUrl"].(string); ok { updates["base_url"] = v }
-	if v, ok := body["temperature"]; ok { updates["temperature"] = toFloat(v) }
-	if v, ok := body["maxTokens"]; ok { updates["max_tokens"] = toInt(v) }
-	if v, ok := body["topP"]; ok { updates["top_p"] = toFloat(v) }
-	if v, ok := body["apiKey"].(string); ok { s.setAppSetting("api_key", v) }
+	if v, ok := body["provider"].(string); ok {
+		updates["api_type"] = v
+	}
+	if v, ok := body["model"].(string); ok {
+		updates["model_name"] = v
+	}
+	if v, ok := body["baseUrl"].(string); ok {
+		updates["base_url"] = v
+	}
+	if v, ok := body["temperature"]; ok {
+		updates["temperature"] = toFloat(v)
+	}
+	if v, ok := body["maxTokens"]; ok {
+		updates["max_tokens"] = toInt(v)
+	}
+	if v, ok := body["topP"]; ok {
+		updates["top_p"] = toFloat(v)
+	}
+	if v, ok := body["apiKey"].(string); ok {
+		s.setAppSetting("api_key", v)
+	}
 	if activeID > 0 && len(updates) > 0 {
 		s.db.Table("model_configs").Where("id = ?", activeID).Updates(updates)
 	}
@@ -392,17 +459,29 @@ func (s *service) MoodDetectionConfig() map[string]interface{} {
 
 func (s *service) GetTheme() map[string]interface{} {
 	theme := s.getAppSetting("theme")
-	if theme == "" { theme = "dark" }
+	if theme == "" {
+		theme = "dark"
+	}
 	mode := s.getAppSetting("theme_mode")
-	if mode == "" { mode = "dark" }
+	if mode == "" {
+		mode = "dark"
+	}
 	return map[string]interface{}{"preset": theme, "theme": theme, "mode": mode, "accentColor": s.getAppSetting("theme_accent_color")}
 }
 
 func (s *service) UpdateTheme(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["preset"].(string); ok { s.setAppSetting("theme", v) }
-	if v, ok := body["theme"].(string); ok { s.setAppSetting("theme", v) }
-	if v, ok := body["accentColor"].(string); ok { s.setAppSetting("theme_accent_color", v) }
-	if v, ok := body["mode"].(string); ok { s.setAppSetting("theme_mode", v) }
+	if v, ok := body["preset"].(string); ok {
+		s.setAppSetting("theme", v)
+	}
+	if v, ok := body["theme"].(string); ok {
+		s.setAppSetting("theme", v)
+	}
+	if v, ok := body["accentColor"].(string); ok {
+		s.setAppSetting("theme_accent_color", v)
+	}
+	if v, ok := body["mode"].(string); ok {
+		s.setAppSetting("theme_mode", v)
+	}
 	return s.GetTheme()
 }
 
@@ -417,7 +496,6 @@ func (s *service) GetThemePresets() map[string]interface{} {
 		map[string]interface{}{"id": "navy", "name": "深邃蓝", "description": "深海暗色护眼风格"},
 	}}
 }
-
 
 func (s *service) CheckSafety(text string) map[string]interface{} {
 	for _, kw := range []string{"suicide", "self-harm", "violence"} {
@@ -479,7 +557,9 @@ func (s *service) GetCurrentSession(token string) map[string]interface{} {
 func (s *service) GetLoginHistory() []map[string]interface{} {
 	var sessions []map[string]interface{}
 	s.db.Table("auth_sessions").Order("created_at DESC").Limit(20).Find(&sessions)
-	if sessions == nil { sessions = []map[string]interface{}{} }
+	if sessions == nil {
+		sessions = []map[string]interface{}{}
+	}
 	return sessions
 }
 
@@ -507,17 +587,31 @@ func (s *service) VerifyRecoveryCode(code string) map[string]interface{} {
 
 func (s *service) GetSessionSettings() map[string]interface{} {
 	timeout := s.getAppSetting("session_timeout")
-	if timeout == "" { timeout = "1440" }
+	if timeout == "" {
+		timeout = "1440"
+	}
 	maxSess := s.getAppSetting("max_sessions")
-	if maxSess == "" { maxSess = "10" }
+	if maxSess == "" {
+		maxSess = "10"
+	}
 	tracking := s.getAppSetting("device_tracking") != "false"
 	return map[string]interface{}{"sessionTimeoutMinutes": toInt(timeout), "maxSessionsPerUser": toInt(maxSess), "enableDeviceTracking": tracking}
 }
 
 func (s *service) UpdateSessionSettings(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["sessionTimeoutMinutes"]; ok { s.setAppSetting("session_timeout", fmt.Sprintf("%d", toInt(v))) }
-	if v, ok := body["maxSessionsPerUser"]; ok { s.setAppSetting("max_sessions", fmt.Sprintf("%d", toInt(v))) }
-	if v, ok := body["enableDeviceTracking"].(bool); ok { if v { s.setAppSetting("device_tracking", "true") } else { s.setAppSetting("device_tracking", "false") } }
+	if v, ok := body["sessionTimeoutMinutes"]; ok {
+		s.setAppSetting("session_timeout", fmt.Sprintf("%d", toInt(v)))
+	}
+	if v, ok := body["maxSessionsPerUser"]; ok {
+		s.setAppSetting("max_sessions", fmt.Sprintf("%d", toInt(v)))
+	}
+	if v, ok := body["enableDeviceTracking"].(bool); ok {
+		if v {
+			s.setAppSetting("device_tracking", "true")
+		} else {
+			s.setAppSetting("device_tracking", "false")
+		}
+	}
 	return s.GetSessionSettings()
 }
 
@@ -528,7 +622,7 @@ func (s *service) GetRuntimeStatus() map[string]interface{} {
 	return map[string]interface{}{
 		"status": "running", "pid": pid,
 		"memory": map[string]interface{}{"rssMB": memStats.Alloc / 1024 / 1024},
-		"cpu": runtime.NumCPU(), "uptime": int(time.Since(s.startTime).Seconds()),
+		"cpu":    runtime.NumCPU(), "uptime": int(time.Since(s.startTime).Seconds()),
 	}
 }
 
@@ -538,18 +632,24 @@ func (s *service) GetRuntimeHealth() map[string]interface{} {
 
 func (s *service) GetRuntimeHealthHistory() map[string]interface{} {
 	logs := s.healthLog
-	if logs == nil { logs = []map[string]interface{}{} }
+	if logs == nil {
+		logs = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"history": logs, "count": len(logs)}
 }
 
 func (s *service) GetRuntimeMode() map[string]interface{} {
 	mode := s.getAppSetting("runtime_mode")
-	if mode == "" { mode = "desktop-local" }
+	if mode == "" {
+		mode = "desktop-local"
+	}
 	return map[string]interface{}{"mode": mode}
 }
 
 func (s *service) UpdateRuntimeMode(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["mode"].(string); ok { s.setAppSetting("runtime_mode", v) }
+	if v, ok := body["mode"].(string); ok {
+		s.setAppSetting("runtime_mode", v)
+	}
 	return s.GetRuntimeMode()
 }
 
@@ -562,7 +662,9 @@ func (s *service) CheckDBIntegrity() map[string]interface{} {
 		}
 	}
 	status := "ok"
-	if len(issues) > 0 { status = "degraded" }
+	if len(issues) > 0 {
+		status = "degraded"
+	}
 	return map[string]interface{}{"status": status, "issues": issues}
 }
 
@@ -603,7 +705,9 @@ func (s *service) RotateLogs() map[string]interface{} {
 
 func (s *service) ValidateMode() map[string]interface{} {
 	mode := s.getAppSetting("runtime_mode")
-	if mode == "" { mode = "desktop-local" }
+	if mode == "" {
+		mode = "desktop-local"
+	}
 	return map[string]interface{}{"valid": true, "mode": mode}
 }
 
@@ -664,7 +768,11 @@ func (s *service) GetAuditSettings() map[string]interface{} {
 
 func (s *service) UpdateAuditSettings(body map[string]interface{}) map[string]interface{} {
 	if v, ok := body["enabled"].(bool); ok {
-		if v { s.setAppSetting("audit_enabled", "true") } else { s.setAppSetting("audit_enabled", "false") }
+		if v {
+			s.setAppSetting("audit_enabled", "true")
+		} else {
+			s.setAppSetting("audit_enabled", "false")
+		}
 	}
 	return s.GetAuditSettings()
 }
@@ -708,7 +816,9 @@ func (s *service) GetMaintenanceStatus() map[string]interface{} {
 		os.Remove(testFile)
 	}
 	status := "healthy"
-	if len(issues) > 0 { status = "degraded" }
+	if len(issues) > 0 {
+		status = "degraded"
+	}
 	return map[string]interface{}{"status": status, "issues": issues, "lastCheck": time.Now().Format(time.DateTime)}
 }
 
@@ -819,7 +929,9 @@ func (s *service) GetLogsRecent(limit int) map[string]interface{} {
 			if err == nil {
 				fileLines := strings.Split(string(data), "\n")
 				start := len(fileLines) - limit
-				if start < 0 { start = 0 }
+				if start < 0 {
+					start = 0
+				}
 				for _, l := range fileLines[start:] {
 					if l != "" && count < limit {
 						lines = append(lines, map[string]interface{}{"file": entries[i].Name(), "line": l, "time": time.Now().Format(time.DateTime)})
@@ -872,9 +984,13 @@ func (s *service) GetLogsFiles() map[string]interface{} {
 func (s *service) GetLogsFileContent(name string) string {
 	logDir := "logs"
 	data, err := os.ReadFile(filepath.Join(logDir, name))
-	if err != nil { return "File not found: " + name }
+	if err != nil {
+		return "File not found: " + name
+	}
 	content := string(data)
-	if len(content) > 50000 { content = content[:50000] + "\n... (truncated)" }
+	if len(content) > 50000 {
+		content = content[:50000] + "\n... (truncated)"
+	}
 	return content
 }
 
@@ -916,7 +1032,9 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 	dir := s.dataDir
 	var totalSize int64
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() { totalSize += info.Size() }
+		if err == nil && !info.IsDir() {
+			totalSize += info.Size()
+		}
 		return nil
 	})
 	return map[string]interface{}{"totalMB": totalSize / 1024 / 1024, "usedMB": totalSize / 1024 / 1024, "freeMB": 0, "path": dir}
@@ -940,7 +1058,9 @@ func (s *service) GetStorageMigrations() map[string]interface{} {
 	migFile := filepath.Join(s.dataDir, ".migration_version")
 	data, err := os.ReadFile(migFile)
 	version := "0"
-	if err == nil { version = strings.TrimSpace(string(data)) }
+	if err == nil {
+		version = strings.TrimSpace(string(data))
+	}
 	return map[string]interface{}{"migrations": []interface{}{map[string]interface{}{"name": "initial", "version": version, "applied": err == nil}}}
 }
 
@@ -956,9 +1076,13 @@ func (s *service) StorageBackup() map[string]interface{} {
 	name := fmt.Sprintf("backup_%s.db", time.Now().Format("20060102_150405"))
 	src := filepath.Join(s.dataDir, "app.db")
 	srcData, err := os.ReadFile(src)
-	if err != nil { return map[string]interface{}{"ok": false, "error": err.Error()} }
+	if err != nil {
+		return map[string]interface{}{"ok": false, "error": err.Error()}
+	}
 	err = os.WriteFile(filepath.Join(backupDir, name), srcData, 0644)
-	if err != nil { return map[string]interface{}{"ok": false, "error": err.Error()} }
+	if err != nil {
+		return map[string]interface{}{"ok": false, "error": err.Error()}
+	}
 	return map[string]interface{}{"backupName": name, "sizeMB": int64(len(srcData)) / 1024 / 1024}
 }
 
@@ -977,7 +1101,9 @@ func (s *service) DeleteStorageBackup(name string) map[string]interface{} {
 func (s *service) DeleteAllStorage() map[string]interface{} {
 	backupDir := filepath.Join(s.dataDir, "backups")
 	entries, _ := os.ReadDir(backupDir)
-	for _, e := range entries { os.Remove(filepath.Join(backupDir, e.Name())) }
+	for _, e := range entries {
+		os.Remove(filepath.Join(backupDir, e.Name()))
+	}
 	return map[string]interface{}{"deleted": true}
 }
 
@@ -985,9 +1111,13 @@ func (s *service) StorageRestore(name string) map[string]interface{} {
 	src := filepath.Join(s.dataDir, "backups", name)
 	dst := filepath.Join(s.dataDir, "app.db")
 	data, err := os.ReadFile(src)
-	if err != nil { return map[string]interface{}{"ok": false, "error": err.Error()} }
+	if err != nil {
+		return map[string]interface{}{"ok": false, "error": err.Error()}
+	}
 	err = os.WriteFile(dst, data, 0644)
-	if err != nil { return map[string]interface{}{"ok": false, "error": err.Error()} }
+	if err != nil {
+		return map[string]interface{}{"ok": false, "error": err.Error()}
+	}
 	return map[string]interface{}{"restored": true}
 }
 
@@ -1011,7 +1141,7 @@ func (s *service) StorageExportUserData() map[string]interface{} {
 	exportDir := filepath.Join(s.dataDir, "exports")
 	os.MkdirAll(exportDir, 0755)
 	name := fmt.Sprintf("user_data_%s.json", time.Now().Format("20060102_150405"))
-	
+
 	var chars []map[string]interface{}
 	s.db.Table("characters").Find(&chars)
 	var convs []map[string]interface{}
@@ -1020,7 +1150,7 @@ func (s *service) StorageExportUserData() map[string]interface{} {
 	s.db.Table("memories").Find(&mems)
 	var settings []map[string]interface{}
 	s.db.Table("app_settings").Find(&settings)
-	
+
 	export := map[string]interface{}{"characters": chars, "conversations": convs, "memories": mems, "settings": settings, "exportedAt": time.Now().Format(time.DateTime)}
 	data, _ := json.MarshalIndent(export, "", "  ")
 	os.WriteFile(filepath.Join(exportDir, name), data, 0644)
@@ -1031,9 +1161,13 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 	if fileName, ok := body["fileName"].(string); ok {
 		src := filepath.Join(s.dataDir, "exports", fileName)
 		data, err := os.ReadFile(src)
-		if err != nil { return map[string]interface{}{"imported": false, "error": err.Error()} }
+		if err != nil {
+			return map[string]interface{}{"imported": false, "error": err.Error()}
+		}
 		var imp map[string]interface{}
-		if err := json.Unmarshal(data, &imp); err != nil { return map[string]interface{}{"imported": false, "error": err.Error()} }
+		if err := json.Unmarshal(data, &imp); err != nil {
+			return map[string]interface{}{"imported": false, "error": err.Error()}
+		}
 		return map[string]interface{}{"imported": true, "fileName": fileName, "size": len(data)}
 	}
 	return map[string]interface{}{"imported": false, "error": "missing fileName"}
@@ -1053,21 +1187,27 @@ func (s *service) GetUsageOverview() map[string]interface{} {
 func (s *service) GetUsageDaily() map[string]interface{} {
 	var daily []map[string]interface{}
 	s.db.Raw("SELECT date(created_at) as date, COUNT(*) as count, COALESCE(SUM(tokens), 0) as tokens FROM messages GROUP BY date(created_at) ORDER BY date DESC LIMIT 30").Scan(&daily)
-	if daily == nil { daily = []map[string]interface{}{} }
+	if daily == nil {
+		daily = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"daily": daily}
 }
 
 func (s *service) GetUsageModels() map[string]interface{} {
 	var models []map[string]interface{}
 	s.db.Table("model_configs").Select("model_name as name, api_type as provider").Find(&models)
-	if models == nil { models = []map[string]interface{}{} }
+	if models == nil {
+		models = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"models": models}
 }
 
 func (s *service) GetUsageSources() map[string]interface{} {
 	var sources []map[string]interface{}
 	s.db.Raw("SELECT source, COUNT(*) as count FROM messages GROUP BY source").Scan(&sources)
-	if sources == nil { sources = []map[string]interface{}{} }
+	if sources == nil {
+		sources = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"sources": sources}
 }
 
@@ -1083,7 +1223,11 @@ func (s *service) GetNotificationsSettings() map[string]interface{} {
 
 func (s *service) UpdateNotificationsSettings(body map[string]interface{}) map[string]interface{} {
 	if v, ok := body["enabled"].(bool); ok {
-		if v { s.setAppSetting("notifications_enabled", "true") } else { s.setAppSetting("notifications_enabled", "false") }
+		if v {
+			s.setAppSetting("notifications_enabled", "true")
+		} else {
+			s.setAppSetting("notifications_enabled", "false")
+		}
 	}
 	return s.GetNotificationsSettings()
 }
@@ -1110,15 +1254,31 @@ func (s *service) NotificationsTest() map[string]interface{} {
 func (s *service) GetSecurityAccessConfig() map[string]interface{} {
 	auth := s.getAppSetting("require_auth") != "false"
 	origins := s.getAppSetting("allowed_origins")
-	if origins == "" { origins = "*" }
+	if origins == "" {
+		origins = "*"
+	}
 	rateLimit := s.getAppSetting("rate_limit") != "false"
 	return map[string]interface{}{"requireAuth": auth, "allowedOrigins": origins, "rateLimit": rateLimit}
 }
 
 func (s *service) UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["requireAuth"].(bool); ok { if v { s.setAppSetting("require_auth", "true") } else { s.setAppSetting("require_auth", "false") } }
-	if v, ok := body["allowedOrigins"].(string); ok { s.setAppSetting("allowed_origins", v) }
-	if v, ok := body["rateLimit"].(bool); ok { if v { s.setAppSetting("rate_limit", "true") } else { s.setAppSetting("rate_limit", "false") } }
+	if v, ok := body["requireAuth"].(bool); ok {
+		if v {
+			s.setAppSetting("require_auth", "true")
+		} else {
+			s.setAppSetting("require_auth", "false")
+		}
+	}
+	if v, ok := body["allowedOrigins"].(string); ok {
+		s.setAppSetting("allowed_origins", v)
+	}
+	if v, ok := body["rateLimit"].(bool); ok {
+		if v {
+			s.setAppSetting("rate_limit", "true")
+		} else {
+			s.setAppSetting("rate_limit", "false")
+		}
+	}
 	return s.GetSecurityAccessConfig()
 }
 
@@ -1131,7 +1291,9 @@ func (s *service) GetSecurityStatus() map[string]interface{} {
 	acct := s.SecurityAccountCheck()
 	exp := s.SecurityExposureCheck()
 	status := "secure"
-	if !acct["secure"].(bool) || exp["exposed"].(bool) { status = "warning" }
+	if !acct["secure"].(bool) || exp["exposed"].(bool) {
+		status = "warning"
+	}
 	return map[string]interface{}{"status": status, "account": acct, "exposure": exp}
 }
 
@@ -1217,7 +1379,6 @@ func (s *service) readSidecarResponse(resp *http.Response, err error) map[string
 	return result
 }
 
-
 func (s *service) qqSidecarGet(path string) (*http.Response, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	return client.Get("http://127.0.0.1:9877" + path)
@@ -1292,7 +1453,6 @@ func (s *service) GetWechatBridgeEvents() map[string]interface{} {
 func (s *service) GetWechatBridgeQRCode() map[string]interface{} {
 	return s.readSidecarResponse(s.sidecarGet("/api/qrcode"))
 }
-
 
 func (s *service) GetQQBridgeStatus() map[string]interface{} {
 	resp, err := s.qqSidecarGet("/api/status")
@@ -1410,14 +1570,18 @@ func (s *service) WechatReplyTimingStatus() map[string]interface{} {
 func (s *service) GetImportsBatches() map[string]interface{} {
 	var batches []map[string]interface{}
 	s.db.Table("conversations").Where("source = ?", "import").Order("created_at DESC").Find(&batches)
-	if batches == nil { batches = []map[string]interface{}{} }
+	if batches == nil {
+		batches = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"batches": batches, "total": len(batches)}
 }
 
 func (s *service) GetImportsBatchDetail(id string) map[string]interface{} {
 	var batch map[string]interface{}
 	s.db.Table("conversations").Where("id = ? AND source = ?", id, "import").Limit(1).Scan(&batch)
-	if batch == nil { batch = map[string]interface{}{} }
+	if batch == nil {
+		batch = map[string]interface{}{}
+	}
 	var msgCount int64
 	s.db.Table("messages").Where("conversation_id = ?", id).Count(&msgCount)
 	batch["messageCount"] = msgCount
@@ -1436,7 +1600,9 @@ func (s *service) GetImportsBatchSummary(id string) map[string]interface{} {
 func (s *service) GetImportsBatchMemoryCandidates(id string) map[string]interface{} {
 	var msgs []map[string]interface{}
 	s.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "user").Order("created_at DESC").Limit(20).Find(&msgs)
-	if msgs == nil { msgs = []map[string]interface{}{} }
+	if msgs == nil {
+		msgs = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"candidates": msgs, "conversationId": id}
 }
 
@@ -1457,10 +1623,10 @@ func (s *service) ConfirmImportsBatchMemories(id string) map[string]interface{} 
 	for _, msg := range msgs {
 		if content, ok := msg["content"].(string); ok && len(content) > 10 {
 			s.db.Table("memories").Create(map[string]interface{}{
-				"id": fmt.Sprintf("mem_%s_%d", id[:8], confirmed),
-				"key": fmt.Sprintf("imported_%d", confirmed),
-				"value": content,
-				"source": "import",
+				"id":         fmt.Sprintf("mem_%s_%d", id[:8], confirmed),
+				"key":        fmt.Sprintf("imported_%d", confirmed),
+				"value":      content,
+				"source":     "import",
 				"created_at": time.Now().Format("2006-01-02 15:04:05"),
 			})
 			confirmed++
@@ -1498,14 +1664,18 @@ func (s *service) ImportData(body map[string]interface{}) map[string]interface{}
 func (s *service) GetMoods() map[string]interface{} {
 	var moods []map[string]interface{}
 	s.db.Raw("SELECT DISTINCT mood as name, COUNT(*) as count, MAX(created_at) as lastDetected FROM messages WHERE mood IS NOT NULL AND mood != '' GROUP BY mood ORDER BY count DESC").Scan(&moods)
-	if moods == nil { moods = []map[string]interface{}{} }
+	if moods == nil {
+		moods = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"moods": moods}
 }
 
 func (s *service) GetMoodsByConversation(id string) map[string]interface{} {
 	var moods []map[string]interface{}
 	s.db.Table("messages").Where("conversation_id = ? AND mood IS NOT NULL AND mood != ''", id).Order("created_at DESC").Limit(50).Find(&moods)
-	if moods == nil { moods = []map[string]interface{}{} }
+	if moods == nil {
+		moods = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"moods": moods, "conversationId": id}
 }
 
@@ -1529,7 +1699,9 @@ func (s *service) GetReplyTimingOverview() map[string]interface{} {
 func (s *service) GetReplyTimingBuffers() map[string]interface{} {
 	var rules []map[string]interface{}
 	s.db.Table("proactive_rules").Order("created_at DESC").Find(&rules)
-	if rules == nil { rules = []map[string]interface{}{} }
+	if rules == nil {
+		rules = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"buffers": rules}
 }
 
@@ -1559,28 +1731,40 @@ func (s *service) RunNow() map[string]interface{} {
 func (s *service) GetLongRunningStatus() map[string]interface{} {
 	var tasks []map[string]interface{}
 	s.db.Raw("SELECT c.id, c.title, c.character_id, c.updated_at FROM conversations c WHERE c.channel = 'long_running' ORDER BY c.updated_at DESC LIMIT 10").Scan(&tasks)
-	if tasks == nil { tasks = []map[string]interface{}{} }
+	if tasks == nil {
+		tasks = []map[string]interface{}{}
+	}
 	return map[string]interface{}{"running": len(tasks) > 0, "tasks": tasks}
 }
 
 func (s *service) GetLongRunningConfig() map[string]interface{} {
 	maxT := s.getAppSetting("long_running_max_tasks")
-	if maxT == "" { maxT = "5" }
+	if maxT == "" {
+		maxT = "5"
+	}
 	timeout := s.getAppSetting("long_running_timeout")
-	if timeout == "" { timeout = "30" }
+	if timeout == "" {
+		timeout = "30"
+	}
 	return map[string]interface{}{"maxTasks": toInt(maxT), "timeoutMinutes": toInt(timeout)}
 }
 
 func (s *service) UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["maxTasks"]; ok { s.setAppSetting("long_running_max_tasks", fmt.Sprintf("%d", toInt(v))) }
-	if v, ok := body["timeoutMinutes"]; ok { s.setAppSetting("long_running_timeout", fmt.Sprintf("%d", toInt(v))) }
+	if v, ok := body["maxTasks"]; ok {
+		s.setAppSetting("long_running_max_tasks", fmt.Sprintf("%d", toInt(v)))
+	}
+	if v, ok := body["timeoutMinutes"]; ok {
+		s.setAppSetting("long_running_timeout", fmt.Sprintf("%d", toInt(v)))
+	}
 	return s.GetLongRunningConfig()
 }
 
 func (s *service) LegacyListConversations() map[string]interface{} {
 	var convs []map[string]interface{}
 	s.db.Table("conversations").Order("updated_at DESC").Limit(50).Find(&convs)
-	if convs == nil { convs = []map[string]interface{}{} }
+	if convs == nil {
+		convs = []map[string]interface{}{}
+	}
 	for i, c := range convs {
 		var count int64
 		s.db.Table("messages").Where("conversation_id = ?", c["id"]).Count(&count)
@@ -1590,8 +1774,12 @@ func (s *service) LegacyListConversations() map[string]interface{} {
 }
 
 func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]interface{} {
-	if page <= 0 { page = 1 }
-	if pageSize <= 0 || pageSize > 200 { pageSize = 50 }
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 200 {
+		pageSize = 50
+	}
 	offset := (page - 1) * pageSize
 
 	var total int64
@@ -1606,11 +1794,24 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 		for _, m := range raw {
 			role := fmt.Sprint(m["role"])
 			content := fmt.Sprint(m["content"])
-			if role == "tool" { continue }
-			if role == "assistant" && (content == "" || content == "<nil>") { continue }
-			if v, ok := m["audio_url"]; ok { m["audioUrl"] = v; delete(m, "audio_url") }
-			if v, ok := m["audio_duration"]; ok { m["audioDuration"] = v; delete(m, "audio_duration") }
-			if v, ok := m["msg_type"]; ok { m["msgType"] = v; delete(m, "msg_type") }
+			if role == "tool" {
+				continue
+			}
+			if role == "assistant" && (content == "" || content == "<nil>") {
+				continue
+			}
+			if v, ok := m["audio_url"]; ok {
+				m["audioUrl"] = v
+				delete(m, "audio_url")
+			}
+			if v, ok := m["audio_duration"]; ok {
+				m["audioDuration"] = v
+				delete(m, "audio_duration")
+			}
+			if v, ok := m["msg_type"]; ok {
+				m["msgType"] = v
+				delete(m, "msg_type")
+			}
 			if v, ok := m["image_url"]; ok && v != nil && v != "" {
 				imageUrl := fmt.Sprint(v)
 				if strings.HasPrefix(imageUrl, "data:") {
@@ -1626,11 +1827,16 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 				}
 				delete(m, "image_url")
 			}
-			if v, ok := m["video_url"]; ok && v != nil && v != "" { m["videoUrl"] = v; delete(m, "video_url") }
+			if v, ok := m["video_url"]; ok && v != nil && v != "" {
+				m["videoUrl"] = v
+				delete(m, "video_url")
+			}
 			msgs = append(msgs, m)
 		}
 		if len(msgs) >= pageSize || int64(offset+queryLimit) >= total {
-			if msgs == nil { msgs = []map[string]interface{}{} }
+			if msgs == nil {
+				msgs = []map[string]interface{}{}
+			}
 			totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
 			return map[string]interface{}{"items": msgs, "total": total, "page": page, "pageSize": pageSize, "totalPages": totalPages}
 		}
@@ -1674,13 +1880,19 @@ func (s *service) GetUpdateConfig() map[string]interface{} {
 
 func (s *service) UpdateUpdateConfig(body map[string]interface{}) map[string]interface{} {
 	if v, ok := body["autoCheck"].(bool); ok {
-		if v { s.setAppSetting("auto_update", "true") } else { s.setAppSetting("auto_update", "false") }
+		if v {
+			s.setAppSetting("auto_update", "true")
+		} else {
+			s.setAppSetting("auto_update", "false")
+		}
 	}
 	return s.GetUpdateConfig()
 }
 
 func (s *service) ToolRoute(body map[string]interface{}) map[string]interface{} {
 	tool, _ := body["tool"].(string)
-	if tool == "" { tool = "unknown" }
+	if tool == "" {
+		tool = "unknown"
+	}
 	return map[string]interface{}{"routed": true, "tool": tool}
 }

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package asr
 
 import (
@@ -50,8 +52,12 @@ type AsrQueryResp struct {
 var asrService Service
 
 func SubmitTask(apiKey string, audioURL string, language string) (string, error) {
-	if apiKey == "" { return "", fmt.Errorf("API Key 未配置") }
-	if audioURL == "" { return "", fmt.Errorf("音频URL不能为空") }
+	if apiKey == "" {
+		return "", fmt.Errorf("API Key 未配置")
+	}
+	if audioURL == "" {
+		return "", fmt.Errorf("音频URL不能为空")
+	}
 	reqBody := AsrSubmitReq{Audio: AsrAudio{URL: audioURL, Language: language}, User: AsrUser{UID: "u-ai-user"}}
 	jsonBody, _ := json.Marshal(reqBody)
 	taskID := uuid.New().String()
@@ -63,18 +69,28 @@ func SubmitTask(apiKey string, audioURL string, language string) (string, error)
 	req.Header.Set("X-Api-Sequence", "-1")
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil { return "", fmt.Errorf("提交ASR任务失败: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("提交ASR任务失败: %w", err)
+	}
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 { return "", fmt.Errorf("ASR提交返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300)) }
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("ASR提交返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+	}
 	var result AsrSubmitResp
-	if err := json.Unmarshal(rawBody, &result); err != nil { return "", fmt.Errorf("解析响应失败: %w", err) }
-	if result.Code != 3000 { return "", fmt.Errorf("ASR提交失败 [code:%d]: %s", result.Code, result.Message) }
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+	if result.Code != 3000 {
+		return "", fmt.Errorf("ASR提交失败 [code:%d]: %s", result.Code, result.Message)
+	}
 	return taskID, nil
 }
 
 func QueryTask(apiKey string, taskID string) (*AsrQueryResp, error) {
-	if apiKey == "" || taskID == "" { return nil, fmt.Errorf("参数不全") }
+	if apiKey == "" || taskID == "" {
+		return nil, fmt.Errorf("参数不全")
+	}
 	req, _ := http.NewRequest("GET", asrQueryUri+"?task_id="+taskID, nil)
 	req.Header.Set("X-Api-Key", apiKey)
 	req.Header.Set("X-Api-Resource-Id", "volc.seedasr.auc")
@@ -82,27 +98,41 @@ func QueryTask(apiKey string, taskID string) (*AsrQueryResp, error) {
 	req.Header.Set("X-Api-Sequence", "-1")
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil { return nil, fmt.Errorf("查询ASR失败: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("查询ASR失败: %w", err)
+	}
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 { return nil, fmt.Errorf("ASR查询返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300)) }
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("ASR查询返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+	}
 	var result AsrQueryResp
-	if err := json.Unmarshal(rawBody, &result); err != nil { return nil, fmt.Errorf("解析响应失败: %w", err) }
-	if result.Code != 3000 { return nil, fmt.Errorf("ASR查询失败 [code:%d]: %s", result.Code, result.Message) }
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	if result.Code != 3000 {
+		return nil, fmt.Errorf("ASR查询失败 [code:%d]: %s", result.Code, result.Message)
+	}
 	return &result, nil
 }
 
 func truncateStr(s string, n int) string {
 	runes := []rune(s)
-	if len(runes) <= n { return s }
+	if len(runes) <= n {
+		return s
+	}
 	return string(runes[:n]) + "..."
 }
 
 func resolveApiKey(explicitKey string) string {
-	if explicitKey != "" { return explicitKey }
+	if explicitKey != "" {
+		return explicitKey
+	}
 	if asrService != nil {
 		key, err := asrService.GetActiveApiKey()
-		if err == nil { return key }
+		if err == nil {
+			return key
+		}
 	}
 	return ""
 }
@@ -131,14 +161,25 @@ func RegisterAsrRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 func handleSubmit(c *gin.Context) {
 	apiKey := c.GetHeader("X-Tts-Api-Key")
-	if apiKey == "" { apiKey = c.Query("apiKey") }
+	if apiKey == "" {
+		apiKey = c.Query("apiKey")
+	}
 	apiKey = resolveApiKey(apiKey)
-	if apiKey == "" { util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil); return }
+	if apiKey == "" {
+		util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil)
+		return
+	}
 	audioURL := c.PostForm("audioUrl")
-	if audioURL == "" { util.ErrorResponse(c, response.InvalidParams, "缺少音频URL", nil); return }
+	if audioURL == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少音频URL", nil)
+		return
+	}
 	language := c.PostForm("language")
 	taskID, err := SubmitTask(apiKey, audioURL, language)
-	if err != nil { util.ErrorResponse(c, response.OperationFailed, err.Error(), nil); return }
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
 	util.SuccessMsgResponse(c, "ASR任务已提交", map[string]string{"taskId": taskID})
 }
 
@@ -181,12 +222,23 @@ func handleServeUpload(c *gin.Context) {
 
 func handleQuery(c *gin.Context) {
 	apiKey := c.GetHeader("X-Tts-Api-Key")
-	if apiKey == "" { apiKey = c.Query("apiKey") }
+	if apiKey == "" {
+		apiKey = c.Query("apiKey")
+	}
 	apiKey = resolveApiKey(apiKey)
-	if apiKey == "" { util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil); return }
+	if apiKey == "" {
+		util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil)
+		return
+	}
 	taskID := c.Query("taskId")
-	if taskID == "" { util.ErrorResponse(c, response.InvalidParams, "缺少taskId", nil); return }
+	if taskID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少taskId", nil)
+		return
+	}
 	result, err := QueryTask(apiKey, taskID)
-	if err != nil { util.ErrorResponse(c, response.OperationFailed, err.Error(), nil); return }
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
 	util.SuccessResponse(c, map[string]interface{}{"status": result.Status, "result": result.Result})
 }

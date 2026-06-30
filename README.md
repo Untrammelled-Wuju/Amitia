@@ -38,6 +38,26 @@
 | 图数据库 | SurrealDB |
 | 嵌入模型 | Doubao Embedding Vision |
 
+### 许可证与商业授权
+
+Amitia 社区版本依据 GNU Affero General Public License Version 3 only（AGPL-3.0-only）发布。你可以在遵守 AGPL-3.0-only 条款的前提下使用、研究、修改、部署和分发本项目。需要闭源修改、闭源集成、OEM、白标、闭源二次分发或其他不希望遵守 AGPL-3.0-only 义务的使用方式时，可以通过 3151508592@qq.com 联系申请单独商业许可证。
+
+详见 [LICENSE](LICENSE) 和 [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md)。
+
+源码公开地址：Gitee - https://gitee.com/Untrammelled/Amitia；GitHub - https://github.com/Untrammelled-Wuju/Amitia
+
+### 品牌与商标
+
+Amitia、阿米提亚、官方 Logo、角色形象和其他品牌资产不随 AGPL-3.0-only 软件许可证自动授权。详见 [TRADEMARKS.md](TRADEMARKS.md)。
+
+### 第三方组件
+
+第三方组件、依赖、SDK、模型、字体、图片、图标、音频和其他素材仍适用其原始许可证、服务条款或权利声明。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+### 贡献与安全
+
+贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [CLA.md](CLA.md)。安全漏洞请按照 [SECURITY.md](SECURITY.md) 报告，不要通过公开 Issue 披露敏感漏洞。
+
 ### 快速开始
 
 ```bash
@@ -98,6 +118,26 @@ U-Ai/
 | Vector DB | Qdrant |
 | Graph DB | SurrealDB |
 | Embedding | Doubao Embedding Vision |
+
+### Licensing and Commercial Licensing
+
+The Amitia Community Edition is released under the GNU Affero General Public License Version 3 only (AGPL-3.0-only). You may use, study, modify, deploy, and distribute this project subject to compliance with AGPL-3.0-only. A separate commercial license is available for closed-source modifications, closed-source integrations, OEM, white labeling, closed-source redistribution, or other use cases where you do not wish to comply with AGPL-3.0-only obligations.
+
+See [LICENSE](LICENSE) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
+
+Source code: Gitee - https://gitee.com/Untrammelled/Amitia; GitHub - https://github.com/Untrammelled-Wuju/Amitia
+
+### Trademarks
+
+Amitia, 阿米提亚, official logos, character assets, and other brand assets are not automatically licensed under the AGPL-3.0-only software license. See [TRADEMARKS.md](TRADEMARKS.md).
+
+### Third-Party Components
+
+Third-party components, dependencies, SDKs, models, fonts, images, icons, audio, and other assets remain subject to their original licenses, terms, or notices. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Contributing and Security
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CLA.md](CLA.md) before contributing. Report security vulnerabilities according to [SECURITY.md](SECURITY.md) and do not disclose sensitive vulnerabilities through public issues.
 
 ### Quick Start
 

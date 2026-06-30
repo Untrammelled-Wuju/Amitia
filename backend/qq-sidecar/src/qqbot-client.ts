@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 // QQBot 官方 WebSocket 客户端
 import WebSocket from "ws"
 import fs from "node:fs"

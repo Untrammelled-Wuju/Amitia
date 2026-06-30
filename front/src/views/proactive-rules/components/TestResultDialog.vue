@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <el-dialog v-model="visible" title="测试结果" width="500px">
     <div v-if="testResult" class="msg-preview">{{ testResult.message || JSON.stringify(testResult, null, 2) }}</div>

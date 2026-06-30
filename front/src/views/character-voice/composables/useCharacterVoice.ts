@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, inject, onMounted, computed, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { apiClient } from "../../../ui-index"

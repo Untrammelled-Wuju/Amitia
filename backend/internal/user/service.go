@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package user
 
 import (
@@ -23,25 +25,23 @@ const (
 	keyLen  = 64
 )
 
-
 type Service interface {
-	
 	Login(username, password, ipAddr, userAgent string) (*LoginResponse, string, error)
-	
+
 	Setup(username, password, ipAddr, userAgent string) (*LoginResponse, error)
-	
+
 	GetMe(token string) (*UserInfoResponse, error)
-	
+
 	Logout(token string) error
-	
+
 	HasAdmin() (bool, error)
-	
+
 	ListSessions(token string) ([]SessionResponse, error)
-	
+
 	RevokeSession(token string, sessionID int) error
-	
+
 	RevokeAllSessions(token string) error
-	
+
 	ChangePassword(token, oldPassword, newPassword string) error
 }
 
@@ -51,7 +51,6 @@ type service struct {
 	jwtSecret string
 }
 
-
 func NewService(repo Repository, ctx *app.AppContext) Service {
 	return &service{
 		repo:      repo,
@@ -59,12 +58,6 @@ func NewService(repo Repository, ctx *app.AppContext) Service {
 		jwtSecret: config.AppCfg.JWT.Secret,
 	}
 }
-
-
-
-
-
-
 
 func hashPassword(password string) string {
 	rawSalt := make([]byte, saltLen)
@@ -79,7 +72,7 @@ func verifyPassword(password, stored string) bool {
 	if len(parts) != 2 {
 		return false
 	}
-	salt := []byte(parts[0]) 
+	salt := []byte(parts[0])
 	key, _ := hex.DecodeString(parts[1])
 	if key == nil {
 		return false
@@ -106,10 +99,6 @@ func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
 }
-
-
-
-
 
 type JWTClaims struct {
 	UserId   int    `json:"userId"`
@@ -147,10 +136,6 @@ func (s *service) parseJWT(tokenStr string) (*JWTClaims, error) {
 	return claims, nil
 }
 
-
-
-
-
 func (s *service) Login(username, password, ipAddr, userAgent string) (*LoginResponse, string, error) {
 	user, err := s.repo.FindByUsername(username)
 	if err != nil {
@@ -165,7 +150,6 @@ func (s *service) Login(username, password, ipAddr, userAgent string) (*LoginRes
 		return nil, "", fmt.Errorf("签发令牌失败")
 	}
 
-	
 	deviceName := parseDevice(userAgent)
 	expiresAtStr := time.Now().Add(time.Duration(config.AppCfg.JWT.ExpireDays) * 24 * time.Hour).Format("2006-01-02 15:04:05")
 	session := &AuthSession{
@@ -180,7 +164,6 @@ func (s *service) Login(username, password, ipAddr, userAgent string) (*LoginRes
 		return nil, "", fmt.Errorf("创建会话失败")
 	}
 
-	
 	s.repo.UpdateLoginTime(user.ID)
 
 	return &LoginResponse{
@@ -189,10 +172,6 @@ func (s *service) Login(username, password, ipAddr, userAgent string) (*LoginRes
 		Role:     user.Role,
 	}, token, nil
 }
-
-
-
-
 
 func (s *service) Setup(username, password, ipAddr, userAgent string) (*LoginResponse, error) {
 	hasAdmin, err := s.repo.HasAdmin()
@@ -237,10 +216,6 @@ func (s *service) Setup(username, password, ipAddr, userAgent string) (*LoginRes
 	}, nil
 }
 
-
-
-
-
 func (s *service) GetMe(token string) (*UserInfoResponse, error) {
 	claims, err := s.parseJWT(token)
 	if err != nil {
@@ -267,25 +242,13 @@ func (s *service) GetMe(token string) (*UserInfoResponse, error) {
 	return resp, nil
 }
 
-
-
-
-
 func (s *service) Logout(token string) error {
 	return s.repo.DeleteSessionByHash(hashToken(token))
 }
 
-
-
-
-
 func (s *service) HasAdmin() (bool, error) {
 	return s.repo.HasAdmin()
 }
-
-
-
-
 
 func (s *service) ListSessions(token string) ([]SessionResponse, error) {
 	claims, err := s.parseJWT(token)
@@ -296,7 +259,7 @@ func (s *service) ListSessions(token string) ([]SessionResponse, error) {
 }
 
 func (s *service) RevokeSession(token string, sessionID int) error {
-	
+
 	currentHash := hashToken(token)
 	var tokHash string
 	s.db.Table("auth_sessions").Select("token_hash").Where("id = ?", sessionID).Scan(&tokHash)
@@ -315,10 +278,6 @@ func (s *service) RevokeAllSessions(token string) error {
 	return s.repo.DeleteOtherSessions(claims.UserId, currentHash)
 }
 
-
-
-
-
 func (s *service) ChangePassword(token, oldPassword, newPassword string) error {
 	claims, err := s.parseJWT(token)
 	if err != nil {
@@ -336,10 +295,6 @@ func (s *service) ChangePassword(token, oldPassword, newPassword string) error {
 
 	return s.repo.UpdatePassword(claims.UserId, hashPassword(newPassword))
 }
-
-
-
-
 
 func parseDevice(ua string) string {
 	if ua == "" {

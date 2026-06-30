@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div v-if="visible" class="fa-panel profile-summary-panel">
     <div class="profile-panel-header">

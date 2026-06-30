@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package proactive
 
 import (
-	"sync"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,15 +10,16 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 	"math/rand"
-	"github.com/u-ai/backend/internal/tts"
 )
 
 type Executor struct {
-	db          *gorm.DB
+	db           *gorm.DB
 	runningRules sync.Map
 }
 
@@ -118,8 +120,8 @@ func (e *Executor) ScanRules() {
 }
 
 func (e *Executor) executeRule(r struct {
-	id, enabled, maxPerDay, sentToday, randomMinutes                                 int
-	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, lastSentAt  string
+	id, enabled, maxPerDay, sentToday, randomMinutes                                int
+	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, lastSentAt string
 }) {
 	var charName, identity, convID string
 	if r.charID != "" {
@@ -365,10 +367,18 @@ func (e *Executor) sendToWeb(convID, content string) {
 	activeCfg, cfgErr := ttsRepo.GetActive()
 	if cfgErr == nil && activeCfg.ApiKey != "" && content != "" {
 		cfg := &tts.TtsConfig{ApiKey: activeCfg.ApiKey, ResourceId: activeCfg.ResourceId, VoiceType: activeCfg.VoiceType, Speed: activeCfg.Speed, Pitch: activeCfg.Pitch, Volume: activeCfg.Volume}
-		if cfg.VoiceType == "" { cfg.VoiceType = "zh_female_vv_uranus_bigtts" }
-		if cfg.Speed == 0 { cfg.Speed = 1.0 }
-		if cfg.Pitch == 0 { cfg.Pitch = 1.0 }
-		if cfg.Volume == 0 { cfg.Volume = 1.0 }
+		if cfg.VoiceType == "" {
+			cfg.VoiceType = "zh_female_vv_uranus_bigtts"
+		}
+		if cfg.Speed == 0 {
+			cfg.Speed = 1.0
+		}
+		if cfg.Pitch == 0 {
+			cfg.Pitch = 1.0
+		}
+		if cfg.Volume == 0 {
+			cfg.Volume = 1.0
+		}
 		if rand.Float64() < 0.20 {
 			synthResult, synthErr := tts.Synthesize(cfg, content)
 			if synthErr == nil {
