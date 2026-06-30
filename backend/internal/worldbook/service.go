@@ -3,6 +3,7 @@
 package worldbook
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"regexp"
 	"strings"
@@ -86,6 +87,7 @@ func (s *service) Create(req *CreateWorldBookRequest) (*WorldBookEntry, error) {
 	if err := s.repo.Create(e); err != nil {
 		return nil, err
 	}
+	s.syncGraph(e)
 	s.invalidateCache()
 	return e, nil
 }
@@ -111,20 +113,29 @@ func (s *service) Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntr
 		return nil, err
 	}
 	s.invalidateCache()
-	return s.repo.FindByID(id)
+	e, err := s.repo.FindByID(id)
+	if err == nil {
+		s.syncGraph(e)
+	}
+	return e, err
 }
 
 func (s *service) Delete(id string) error {
 	err := s.repo.Delete(id)
 	if err == nil {
+		s.deleteGraph(id)
 		s.invalidateCache()
 	}
 	return err
 }
 
 func (s *service) DeleteAll() error {
+	rules := s.loadRules()
 	err := s.repo.DeleteAll()
 	if err == nil {
+		for _, rule := range rules {
+			s.deleteGraph(rule.ID)
+		}
 		s.invalidateCache()
 	}
 	return err
@@ -221,10 +232,46 @@ func (s *service) MatchAndCollect(userMessage, assistantReply string) []MatchRes
 	}
 	if s.graphSvc != nil {
 		for _, r := range results {
-			s.graphSvc.SyncEdge("worldbook:"+r.Entry.ID, r.HitText, "triggered_by", float64(r.Entry.Priority)/10.0)
+			s.syncGraph(&r.Entry)
+			triggerID := triggerNodeID(r.Entry.ID, r.HitText)
+			s.graphSvc.SyncNode("worldbook_trigger", triggerID, r.HitText, map[string]interface{}{
+				"worldbook_id": r.Entry.ID,
+				"hit_text":     r.HitText,
+				"match_scope":  r.MatchScope,
+				"user_id":      "default",
+			})
+			s.graphSvc.SyncEdge("worldbook:"+r.Entry.ID, "worldbook_trigger:"+triggerID, "triggered_by", float64(r.Entry.Priority)/10.0)
 		}
 	}
 	return results
+}
+
+func (s *service) syncGraph(e *WorldBookEntry) {
+	if s.graphSvc == nil || e == nil {
+		return
+	}
+	_ = s.graphSvc.SyncNode("worldbook", e.ID, e.MatchPattern, map[string]interface{}{
+		"match_type":     e.MatchType,
+		"match_pattern":  e.MatchPattern,
+		"match_scope":    e.MatchScope,
+		"inject_content": e.InjectContent,
+		"priority":       e.Priority,
+		"hit_count":      e.HitCount,
+		"user_id":        "default",
+	})
+}
+
+func (s *service) deleteGraph(id string) {
+	if s.graphSvc == nil || id == "" {
+		return
+	}
+	_ = s.graphSvc.DeleteNode("worldbook:" + id)
+	_ = s.graphSvc.DeleteNodesByProperty("worldbook_trigger", "worldbook_id", id)
+}
+
+func triggerNodeID(entryID, hitText string) string {
+	sum := sha1.Sum([]byte(entryID + ":" + hitText))
+	return fmt.Sprintf("%x", sum)
 }
 
 func (s *service) ToSystemPrompt(userMessage, assistantReply string) string {

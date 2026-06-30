@@ -205,6 +205,9 @@ func saveProfile(args map[string]interface{}) string {
 		toolDB.Exec(
 			"UPDATE user_profiles SET attribute_value = ?, confidence = ?, source_conv_id = ?, updated_at = datetime('now','localtime') WHERE id = ?",
 			attrValue, newConf, convID, existingID)
+		if OnProfileSaved != nil {
+			OnProfileSaved(existingID)
+		}
 		return fmt.Sprintf("OK (updated) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf)
 	}
 
@@ -212,6 +215,9 @@ func saveProfile(args map[string]interface{}) string {
 	toolDB.Exec(
 		"INSERT INTO user_profiles (id, user_id, category, attribute_name, attribute_value, confidence, source_conv_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		id, userID, category, attrName, attrValue, newConf, convID)
+	if OnProfileSaved != nil {
+		OnProfileSaved(id)
+	}
 	return fmt.Sprintf("OK (created) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf)
 }
 func init() {
@@ -270,5 +276,8 @@ func saveEpisodicMemory(args map[string]interface{}) string {
 	toolDB.Exec(
 		"INSERT INTO episodic_memories (id, user_id, scene_type, title, content, sentiment_score, source_conv_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))",
 		id, userID, sceneType, title, content, int(score), convID)
+	if OnEpisodicSaved != nil {
+		OnEpisodicSaved(id)
+	}
 	return fmt.Sprintf("OK (created) %s: %s (score %d)", sceneType, title, int(score))
 }

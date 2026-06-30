@@ -117,24 +117,31 @@ func main() {
 	qqMgr := qq.NewManager("http://127.0.0.1:9877")
 	qq.SetManager(qqMgr)
 
+	graphSvc := initGraph()
 	chatRepo := chat.NewRepository(ctx)
 	memRepo := memory.NewRepository(ctx)
-	memSvc := memory.NewService(memRepo, ctx)
+	memSvc := memory.NewService(memRepo, ctx, graphSvc)
 
 	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
 		memSvc.SyncEmbedding(id, key, value, characterID, memoryType)
+		memSvc.SyncGraphMemory(id)
 	})
-	graphSvc := initGraph()
 	profRepo := profile.NewRepository(ctx)
 	profSvc := profile.NewService(profRepo, ctx, graphSvc)
 	epiRepo := episodic.NewRepository(ctx)
 	epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
+	agenttool.SetOnProfileSaved(func(id string) {
+		profSvc.SyncGraphProfile(id)
+	})
+	agenttool.SetOnEpisodicSaved(func(id string) {
+		epiSvc.SyncGraphEpisodic(id)
+	})
 	wbRepo := worldbook.NewRepository(ctx)
 	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
 	visionRepo := vision.NewRepository(db)
 	visionSvc := vision.NewService(visionRepo)
 	comp := chat.NewCompressor(db)
-	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc)
+	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc, graphSvc)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -157,7 +164,7 @@ func main() {
 
 	killExistingServer(serverAddr)
 
-	r := setupRouter(ctx)
+	r := setupRouter(ctx, graphSvc)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)
 		cleanup()
@@ -252,10 +259,15 @@ func startSurreal() {
 
 func initGraph() graph.Service {
 	cfg := config.AppCfg.Surreal
-	client, err := graph.NewClient(cfg)
-	if err != nil {
-		log.Warn("SurrealDB连接失败，图谱功能不可用:", err)
-		return nil
+	var lastErr error
+	for i := 0; i < 30; i++ {
+		client, err := graph.NewClient(cfg)
+		if err == nil {
+			return graph.NewService(client)
+		}
+		lastErr = err
+		time.Sleep(time.Second)
 	}
-	return graph.NewService(client)
+	log.Warn("SurrealDB连接失败，图谱功能不可用:", lastErr)
+	return nil
 }

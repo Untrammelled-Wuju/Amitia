@@ -9,10 +9,11 @@ front/dist/
 *.db-wal
 backend/data/data/backups/
 *.log
-logs/
-log/
-backend/logs/
-backend/log/
+/logs/
+/log/
+/backend/logs/
+/backend/log/
+/front/logs/
 stderr*.txt
 stdout*.txt
 stderr*.log
@@ -37,3 +38,6 @@ qdrant/snapshots/
 
 backend/qdrant/storage/
 backend/qdrant/qdrant_linux_*
+release/qdrant/storage/
+release/qdrant/snapshots/
+wechat-chat-extractor/weFlow.zip

@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/embedding"
+	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -49,6 +50,7 @@ type Service interface {
 	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)
 	SyncEmbedding(memID, key, value, characterID, memoryType string) bool
+	SyncGraphMemory(id string) bool
 	BatchVerify(ids []string, status string) error
 	BatchSetImportance(ids []string, importance int) error
 	RetrieveStats() (map[string]interface{}, error)
@@ -134,13 +136,19 @@ type service struct {
 	repo         Repository
 	db           *gorm.DB
 	embeddingSvc *embedding.Service
+	graphSvc     graph.Service
 }
 
-func NewService(repo Repository, ctx *app.AppContext) Service {
+func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service) Service {
+	var gs graph.Service
+	if len(graphSvc) > 0 {
+		gs = graphSvc[0]
+	}
 	return &service{
 		repo:         repo,
 		db:           ctx.DB,
 		embeddingSvc: embedding.NewService(ctx.DB),
+		graphSvc:     gs,
 	}
 }
 
@@ -212,6 +220,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	}
 
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.syncGraph(m)
 
 	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
@@ -267,6 +276,7 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 		deleteVectorsFromCollections([]string{m.ID}, collectionNameForMemoryType(before.MemoryType))
 	}
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.syncGraph(m)
 	s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
@@ -278,6 +288,7 @@ func (s *service) Delete(id string) error {
 	}
 	s.logEvent(id, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	deleteVectorsFromCollections([]string{id}, qdrantDB.CollectionNames()...)
+	s.deleteGraph(m)
 	return s.repo.Delete(id)
 }
 
@@ -292,6 +303,11 @@ func (s *service) DeleteAll(characterID string) error {
 		s.logEvent("", "memory_deleted_all", "", "", "", 0, "", characterID)
 	}
 	deleteVectorsFromCollections(ids, qdrantDB.CollectionNames()...)
+	if s.graphSvc != nil {
+		for _, id := range ids {
+			_ = s.graphSvc.DeleteNode("memory:" + id)
+		}
+	}
 	return s.repo.DeleteAll(characterID)
 }
 
@@ -607,6 +623,7 @@ func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	}
 	s.repo.DeleteCandidate(id)
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.syncGraph(m)
 	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
@@ -738,6 +755,9 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 	switch req.Action {
 	case "replace", "replace_old":
 		if req.ConflictID != "" {
+			if existing != nil {
+				s.deleteGraph(existing)
+			}
 			s.repo.Delete(req.ConflictID)
 		}
 		m := &Memory{
@@ -749,6 +769,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.syncGraph(m)
 		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
@@ -765,6 +786,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.syncGraph(m)
 		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
@@ -783,6 +805,9 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 				return nil, err
 			}
 			go s.SyncEmbedding(existing.ID, newKey, newValue, characterID, newType)
+			if updated, err := s.repo.FindByID(existing.ID); err == nil {
+				s.syncGraph(updated)
+			}
 			resp.MemoryID = existing.ID
 			return resp, nil
 		}
@@ -795,6 +820,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.syncGraph(m)
 		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
@@ -819,11 +845,15 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 					"confidence": newConfidence,
 					"updated_at": time.Now().Format("2006-01-02 15:04:05"),
 				})
+				if updated, err := s.repo.FindByID(m.ID); err == nil {
+					s.syncGraph(updated)
+				}
 			}
 			return &ResolveConflictResponse{Resolved: true, MemoryID: m.ID}, nil
 		}
 		confDiff := newConfidence - m.Confidence
 		if confDiff >= 40 {
+			s.deleteGraph(&m)
 			s.repo.Delete(m.ID)
 			return &ResolveConflictResponse{Resolved: false}, nil
 		}
@@ -992,6 +1022,11 @@ func (s *service) RebuildIndex() (map[string]interface{}, error) {
 func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
 	totalMem, embedded := s.repo.VectorStatus()
 	if qdrantDB.Client == nil {
+		var memories []Memory
+		s.db.Find(&memories)
+		for _, m := range memories {
+			s.syncGraph(&m)
+		}
 		return map[string]interface{}{
 			"totalMemories": totalMem,
 			"embedded":      embedded,
@@ -1008,6 +1043,7 @@ func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
 		} else {
 			failCount++
 		}
+		s.syncGraph(&m)
 	}
 	status := "completed"
 	if failCount > 0 {
@@ -1019,6 +1055,69 @@ func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
 		"failed":        int64(failCount),
 		"status":        status,
 	}, nil
+}
+
+func (s *service) syncGraph(m *Memory) {
+	if s.graphSvc == nil || m == nil {
+		return
+	}
+	userID := "default"
+	if m.Scope == "user" && m.CharacterID != "" {
+		userID = m.CharacterID
+	}
+	label := strings.TrimSpace(m.Key)
+	if label == "" {
+		label = strings.TrimSpace(m.Value)
+	}
+	_ = s.graphSvc.SyncNode("memory", m.ID, label, map[string]interface{}{
+		"key":             m.Key,
+		"value":           m.Value,
+		"memory_type":     m.MemoryType,
+		"source":          m.Source,
+		"scope":           m.Scope,
+		"importance":      m.Importance,
+		"confidence":      m.Confidence,
+		"character_id":    m.CharacterID,
+		"user_id":         userID,
+		"entity_id":       m.EntityID,
+		"entity_type":     m.EntityType,
+		"source_msg_id":   m.SourceMsgID,
+		"source_conv_id":  m.SourceConvID,
+		"verified_status": m.VerifiedStatus,
+		"created_at":      m.CreatedAt,
+		"updated_at":      m.UpdatedAt,
+	})
+	_ = s.graphSvc.SyncNode("user", userID, userID, map[string]interface{}{"user_id": userID})
+	_ = s.graphSvc.SyncEdge("user:"+userID, "memory:"+m.ID, "remembers", float64(m.Importance)/10.0)
+	if m.CharacterID != "" {
+		_ = s.graphSvc.SyncNode("character", m.CharacterID, m.CharacterID, map[string]interface{}{"character_id": m.CharacterID, "user_id": userID})
+		_ = s.graphSvc.SyncEdge("character:"+m.CharacterID, "memory:"+m.ID, "has_memory", float64(m.Confidence)/100.0)
+	}
+	if m.EntityID != "" {
+		entityType := strings.TrimSpace(m.EntityType)
+		if entityType == "" {
+			entityType = "entity"
+		}
+		_ = s.graphSvc.SyncNode(entityType, m.EntityID, m.EntityID, map[string]interface{}{"user_id": userID})
+		_ = s.graphSvc.SyncEdge("memory:"+m.ID, entityType+":"+m.EntityID, "mentions", 1.0)
+	}
+}
+
+func (s *service) deleteGraph(m *Memory) {
+	if s.graphSvc == nil || m == nil {
+		return
+	}
+	_ = s.graphSvc.DeleteNode("memory:" + m.ID)
+	if m.CharacterID != "" {
+		_ = s.graphSvc.DeleteNodeIfOrphan("character:" + m.CharacterID)
+	}
+	if m.EntityID != "" {
+		entityType := strings.TrimSpace(m.EntityType)
+		if entityType == "" {
+			entityType = "entity"
+		}
+		_ = s.graphSvc.DeleteNodeIfOrphan(entityType + ":" + m.EntityID)
+	}
 }
 
 func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType string) bool {
@@ -1050,6 +1149,15 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 	if err := s.repo.MarkEmbedded(memID); err != nil {
 		log.Warn("标记嵌入状态失败:", memID, err)
 	}
+	return true
+}
+
+func (s *service) SyncGraphMemory(id string) bool {
+	m, err := s.repo.FindByID(id)
+	if err != nil || m == nil {
+		return false
+	}
+	s.syncGraph(m)
 	return true
 }
 

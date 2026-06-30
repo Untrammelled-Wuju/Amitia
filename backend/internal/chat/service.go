@@ -130,9 +130,13 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service) Service {
+func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service, graphSvc graph.Service) Service {
 	if visionSvc != nil {
 		SetVisionModelConfigProvider(visionSvc.GetActive)
+	}
+	graphLayer := graphSvc
+	if graphLayer == nil {
+		graphLayer = graph.NewStubService()
 	}
 	p := memory.NewPipeline(
 		memory.NewWorkingMemoryService(),
@@ -140,7 +144,7 @@ func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, pro
 		epiSvc.(memory.PipelineLayer),
 		memSvc.(memory.PipelineLayer),
 		qdrant.NewQdrantClient(),
-		graph.NewStubService(),
+		graphLayer,
 	)
 	return &service{repo: repo, db: ctx.DB, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute), compressor: comp, pipeline: p}
 }
@@ -512,7 +516,11 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(convID, reply)
 	}
-	go s.pipeline.Execute(context.Background(), convID, history, reply)
+	pipelineMessages := make([]map[string]string, 0, len(history)+2)
+	pipelineMessages = append(pipelineMessages, history...)
+	pipelineMessages = append(pipelineMessages, map[string]string{"role": "user", "content": req.Message})
+	pipelineMessages = append(pipelineMessages, map[string]string{"role": "assistant", "content": reply})
+	go s.pipeline.Execute(context.Background(), convID, pipelineMessages, reply)
 	go s.trimContextWindow(convID)
 	go s.moodRecoveryCheck(convID, charID, source)
 	if s.compressor != nil {

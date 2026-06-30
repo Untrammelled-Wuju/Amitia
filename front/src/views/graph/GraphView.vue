@@ -56,8 +56,8 @@ const allLinks = ref<any[]>([])
 let chartInstance: any = null
 const { resolvedMode } = useTheme()
 
-const typeLabels: Record<string,string> = { memory: "记忆", profile: "画像", episodic: "情景", worldbook: "世界书" }
-const typeColors: Record<string,string> = { memory: "#409eff", profile: "#e6a23c", episodic: "#f56c6c", worldbook: "#67c23a" }
+const typeLabels: Record<string,string> = { memory: "记忆", profile: "画像", episodic: "情景", worldbook: "世界书", worldbook_trigger: "触发片段", user: "用户", character: "角色", entity: "实体" }
+const typeColors: Record<string,string> = { memory: "#409eff", profile: "#e6a23c", episodic: "#f56c6c", worldbook: "#67c23a", worldbook_trigger: "#909399", user: "#8e6ad8", character: "#14b8a6", entity: "#64748b" }
 function typeLabel(t: string) { return typeLabels[t] || t }
 function typeColor(t: string) { return typeColors[t] || "#909399" }
 const typeOptions = computed(() => (stats.value?.byType || []).map((t: any) => ({ label: typeLabel(t.entity_type), value: t.entity_type })))
@@ -69,8 +69,12 @@ const filteredNodes = computed(() => {
     return true
   })
 })
-const filteredNodeIds = computed(() => new Set(filteredNodes.value.map((n: any) => n.id)))
-const filteredLinks = computed(() => allLinks.value.filter((l: any) => filteredNodeIds.value.has(l.source) && filteredNodeIds.value.has(l.target)))
+const filteredNodeIds = computed(() => new Set(filteredNodes.value.map((n: any) => extractId(n.id))))
+const filteredLinks = computed(() => allLinks.value.filter((l: any) => {
+  const source = extractId(l.in || l.source)
+  const target = extractId(l.out || l.target)
+  return filteredNodeIds.value.has(source) && filteredNodeIds.value.has(target)
+}))
 const filteredCount = computed(() => filteredNodes.value.length)
 
 function toggleFullscreen() {
@@ -133,9 +137,9 @@ async function fetchGraph() {
         var edgesData = await get<any>("/api/graph/edges?userId=default")
         var allEdgesData = edgesData?.data || edgesData || []
         if (Array.isArray(allEdgesData) && allEdgesData.length > 0) {
-          var nodeIdSet = new Set(allNodes.value.map(function(n) { return n.id }))
+          var nodeIdSet = new Set(allNodes.value.map(function(n) { return extractId(n.id) }))
           allLinks.value = allEdgesData.filter(function(e) {
-            return nodeIdSet.has(e.in) && nodeIdSet.has(e.out)
+            return nodeIdSet.has(extractId(e.in)) && nodeIdSet.has(extractId(e.out))
           })
           renderGraph()
         }

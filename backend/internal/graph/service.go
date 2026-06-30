@@ -14,6 +14,9 @@ import (
 type Service interface {
 	SyncNode(entityType, entityID, label string, properties map[string]interface{}) error
 	SyncEdge(sourceID, targetID, relationType string, weight float64) error
+	DeleteNode(entityID string) error
+	DeleteNodeIfOrphan(entityID string) error
+	DeleteNodesByProperty(entityType, propertyKey, propertyValue string) error
 	QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error)
 	FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error)
 	DeleteOrphanNodes() error
@@ -42,11 +45,16 @@ func (s *service) SyncNode(entityType, entityID, label string, properties map[st
 	if s.client == nil || s.client.DB() == nil {
 		return nil
 	}
-	id := fmt.Sprintf("%s:%s", entityType, entityID)
-	props, _ := json.Marshal(properties)
+	id := sanitizeRecordID(fmt.Sprintf("%s:%s", entityType, entityID))
+	content := map[string]interface{}{
+		"entity_type": entityType,
+		"label":       label,
+		"properties":  properties,
+	}
+	body, _ := json.Marshal(content)
 	query := fmt.Sprintf(
-		"UPSERT entity_node:`%s` CONTENT {entity_type: \"%s\", label: \"%s\", properties: %s}",
-		id, entityType, label, string(props),
+		"UPSERT entity_node:`%s` CONTENT %s",
+		id, string(body),
 	)
 	_, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	return err
@@ -56,12 +64,59 @@ func (s *service) SyncEdge(sourceID, targetID, relationType string, weight float
 	if s.client == nil || s.client.DB() == nil {
 		return nil
 	}
+	relation, _ := json.Marshal(relationType)
 	query := fmt.Sprintf(
-		"RELATE entity_node:`%s`->entity_edge->entity_node:`%s` SET relation_type=\"%s\", weight=%f",
-		sourceID, targetID, relationType, weight,
+		"RELATE entity_node:`%s`->entity_edge->entity_node:`%s` SET relation_type=%s, weight=%f",
+		sanitizeRecordID(sourceID), sanitizeRecordID(targetID), string(relation), weight,
 	)
 	_, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	return err
+}
+
+func (s *service) DeleteNode(entityID string) error {
+	if s.client == nil || s.client.DB() == nil {
+		return nil
+	}
+	id := sanitizeRecordID(entityID)
+	queries := []string{
+		fmt.Sprintf("DELETE entity_edge WHERE in = entity_node:`%s` OR out = entity_node:`%s`", id, id),
+		fmt.Sprintf("DELETE entity_node:`%s`", id),
+	}
+	for _, query := range queries {
+		if _, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *service) DeleteNodeIfOrphan(entityID string) error {
+	if s.client == nil || s.client.DB() == nil {
+		return nil
+	}
+	id := sanitizeRecordID(entityID)
+	query := fmt.Sprintf("DELETE entity_node:`%s` WHERE count(<-entity_edge) = 0 AND count(->entity_edge) = 0", id)
+	_, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
+	return err
+}
+
+func (s *service) DeleteNodesByProperty(entityType, propertyKey, propertyValue string) error {
+	if s.client == nil || s.client.DB() == nil {
+		return nil
+	}
+	typ, _ := json.Marshal(entityType)
+	key := strings.ReplaceAll(propertyKey, "`", "")
+	value, _ := json.Marshal(propertyValue)
+	queries := []string{
+		fmt.Sprintf("DELETE entity_edge WHERE in IN (SELECT VALUE id FROM entity_node WHERE entity_type = %s AND properties.%s = %s) OR out IN (SELECT VALUE id FROM entity_node WHERE entity_type = %s AND properties.%s = %s)", string(typ), key, string(value), string(typ), key, string(value)),
+		fmt.Sprintf("DELETE entity_node WHERE entity_type = %s AND properties.%s = %s", string(typ), key, string(value)),
+	}
+	for _, query := range queries {
+		if _, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
@@ -103,8 +158,8 @@ func (s *service) QueryNeighbors(entityID string, depth int, userID string) (map
 
 func (s *service) FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error) {
 	query := fmt.Sprintf(
-		"SELECT * FROM entity_node:`%s` WHERE out->entity_edge->in->entity_node:`%s` LIMIT 20",
-		sourceID, targetID,
+		"SELECT id, in, out, relation_type, weight FROM entity_edge WHERE in = entity_node:`%s` AND out = entity_node:`%s` LIMIT 20",
+		sanitizeRecordID(sourceID), sanitizeRecordID(targetID),
 	)
 	results, err := surrealdb.Query[any](context.Background(), s.client.DB(), query, nil)
 	if err != nil {
@@ -331,6 +386,18 @@ func (s *stubService) SyncEdge(sourceID, targetID, relationType string, weight f
 	return nil
 }
 
+func (s *stubService) DeleteNode(entityID string) error {
+	return nil
+}
+
+func (s *stubService) DeleteNodeIfOrphan(entityID string) error {
+	return nil
+}
+
+func (s *stubService) DeleteNodesByProperty(entityType, propertyKey, propertyValue string) error {
+	return nil
+}
+
 func (s *stubService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
 	return nil, nil
 }
@@ -353,4 +420,8 @@ func (s *stubService) GetAllNodes(userID string) ([]map[string]interface{}, erro
 
 func (s *stubService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
 	return nil, nil
+}
+
+func sanitizeRecordID(id string) string {
+	return strings.ReplaceAll(id, "`", "")
 }

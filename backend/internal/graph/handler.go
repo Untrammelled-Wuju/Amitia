@@ -3,11 +3,9 @@
 package graph
 
 import (
-	"context"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/surrealdb/surrealdb.go"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -59,9 +57,9 @@ func (h *Handler) Stats(c *gin.Context) {
 
 func (h *Handler) DeleteNode(c *gin.Context) {
 	id := c.Param("id")
-	if svc, ok := h.svc.(*service); ok && svc.client != nil {
-		_, _ = surrealdb.Query[any](context.Background(), svc.client.DB(),
-			"DELETE entity_node:`"+id+"`", nil)
+	if err := h.svc.DeleteNode(id); err != nil {
+		util.ErrorResponse(c, 500, "删除节点失败", nil)
+		return
 	}
 	util.SuccessResponse(c, nil)
 }
