@@ -9,7 +9,7 @@ import sqlite3, socket, urllib.request, json, time, sys, os
 
 SCRIPT = os.path.abspath(__file__)
 PROJECT = os.path.dirname(os.path.dirname(SCRIPT))
-DB = os.path.abspath(os.path.join(PROJECT, "..", "WorkDone", "data", "app.db"))
+DB = os.path.abspath(os.path.join(PROJECT, "..", "release", "data", "app.db"))
 API = "http://127.0.0.1:8899"
 CID = "6bf3e54c-bc0e-4180-9613-2c10861ae6be"
 WECHAT = 9876

@@ -59,8 +59,8 @@
 | Doubao Embedding Vision | User configured | Service terms TO BE VERIFIED | README / embedding | Provider terms require manual review |
 | WeChat bridge / OpenClaw integration | package versions above | License status: TO BE VERIFIED | backend/sidecar | WeChat/OpenClaw terms and account rules require manual review |
 | QQ bridge | package versions above | License status: TO BE VERIFIED | backend/qq-sidecar | QQ bridge implementation and SDK terms require manual review |
-| Qdrant runtime binaries | bundled under WorkDone/qdrant and backend/qdrant | License status: TO BE VERIFIED | runtime vector database | Bundled binary notices should be reviewed before redistribution |
-| SurrealDB runtime binary | bundled under WorkDone/surrealdb if present | License status: TO BE VERIFIED | runtime graph database | Bundled binary notices should be reviewed before redistribution |
+| Qdrant runtime binaries | bundled under release/qdrant and backend/qdrant | License status: TO BE VERIFIED | runtime vector database | Bundled binary notices should be reviewed before redistribution |
+| SurrealDB runtime binary | bundled under release/surrealdb if present | License status: TO BE VERIFIED | runtime graph database | Bundled binary notices should be reviewed before redistribution |
 | unidbg-fetch-qsign-all.jar | bundled JAR | License status: TO BE VERIFIED | backend/libs | Bundled third-party binary requires manual license review |
 
 ## Fonts, Images, Icons, Audio, Models, and Media
@@ -81,7 +81,7 @@ The following locations were treated as third-party, generated, runtime, or buil
 - backend/sidecar/node_modules
 - backend/qq-sidecar/node_modules
 - front/dist
-- WorkDone
+- release
 - backend/data
 - backend/qdrant
 - qdrant
