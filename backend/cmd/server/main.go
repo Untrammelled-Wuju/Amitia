@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
+	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"gorm.io/gorm"
 	"net"
@@ -130,8 +131,10 @@ func main() {
 	epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
 	wbRepo := worldbook.NewRepository(ctx)
 	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
+	visionRepo := vision.NewRepository(db)
+	visionSvc := vision.NewService(visionRepo)
 	comp := chat.NewCompressor(db)
-	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp)
+	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)

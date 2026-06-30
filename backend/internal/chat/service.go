@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	applog "github.com/u-ai/backend/log"
@@ -26,6 +27,7 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qdrant"
+	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -102,7 +104,36 @@ type service struct {
 	pipeline     *memory.Pipeline
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor) Service {
+var visionModelConfigProviderMu sync.RWMutex
+var visionModelConfigProvider func() (*visioncfg.VisionConfig, error)
+
+func SetVisionModelConfigProvider(provider func() (*visioncfg.VisionConfig, error)) {
+	visionModelConfigProviderMu.Lock()
+	visionModelConfigProvider = provider
+	visionModelConfigProviderMu.Unlock()
+}
+
+func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
+	visionModelConfigProviderMu.RLock()
+	provider := visionModelConfigProvider
+	visionModelConfigProviderMu.RUnlock()
+	if provider == nil {
+		return nil, fmt.Errorf("未配置可用的模型来源")
+	}
+	cfg, err := provider()
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil || cfg.ApiKey == "" || cfg.BaseUrl == "" || cfg.ModelName == "" {
+		return nil, fmt.Errorf("未找到可用的模型配置")
+	}
+	return cfg, nil
+}
+
+func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service) Service {
+	if visionSvc != nil {
+		SetVisionModelConfigProvider(visionSvc.GetActive)
+	}
 	p := memory.NewPipeline(
 		memory.NewWorkingMemoryService(),
 		profSvc.(memory.PipelineLayer),
@@ -867,11 +898,11 @@ func truncateStr(s string, n int) string {
 	return string(runes[:n]) + "..."
 }
 
-const doubaoAPIKey = "ark-919cb2bc-dcd1-4ef9-b8b5-5f1b42488bf7-9bd5c"
-const doubaoBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
-const doubaoModel = "doubao-seed-2-0-lite-260428"
-
 func analyzeImageInternal(imageUrl string) (string, string) {
+	cfg, err := getVisionModelConfig()
+	if err != nil {
+		return "", err.Error()
+	}
 	imageData := imageUrl
 	if strings.HasPrefix(imageUrl, "/images/") {
 		ext := filepath.Ext(imageUrl)
@@ -896,20 +927,24 @@ func analyzeImageInternal(imageUrl string) (string, string) {
 		{"type": "input_image", "image_url": imageData},
 		{"type": "input_text", "text": "请详细描述这张图片的内容，包括场景、物体、人物、文字、表情、氛围等所有可见信息，严禁描述不存在于图片中的信息"},
 	}
-	return callDoubaoVision(content)
+	return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 }
 
 func analyzeVideoInternal(videoUrl string) (string, string) {
+	cfg, err := getVisionModelConfig()
+	if err != nil {
+		return "", err.Error()
+	}
 	if strings.HasPrefix(videoUrl, "data:video/") {
 		content := []map[string]interface{}{
 			{"type": "input_video", "video_url": videoUrl},
 			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息，严禁描述不存在于视频中的信息"},
 		}
-		return callDoubaoVision(content)
+		return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	}
 	if strings.HasPrefix(videoUrl, "/videos/") {
 		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "videos", filepath.Base(videoUrl))
-		fileID, err := uploadFileToArk(filePath)
+		fileID, err := uploadFileToArk(cfg.BaseUrl, cfg.ApiKey, filePath)
 		time.Sleep(5 * time.Second)
 		if err != nil {
 			return "", fmt.Sprintf("视频上传失败: %s", err.Error())
@@ -918,12 +953,12 @@ func analyzeVideoInternal(videoUrl string) (string, string) {
 			{"type": "input_video", "file_id": fileID},
 			{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息，严禁描述不存在于视频中的信息"},
 		}
-		return callDoubaoVision(content)
+		return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	}
 	return "", fmt.Sprintf("不支持的视频URL格式: %s", videoUrl[:min(len(videoUrl), 100)])
 }
 
-func uploadFileToArk(filePath string) (string, error) {
+func uploadFileToArk(baseURL, apiKey, filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("无法打开文件: %w", err)
@@ -946,9 +981,9 @@ func uploadFileToArk(filePath string) (string, error) {
 	}
 	writer.Close()
 
-	req, _ := http.NewRequest("POST", doubaoBaseURL+"/files", &requestBody)
+	req, _ := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/files", &requestBody)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
@@ -973,18 +1008,18 @@ func uploadFileToArk(filePath string) (string, error) {
 	return fileID, nil
 }
 
-func callDoubaoVision(content []map[string]interface{}) (string, string) {
+func callDoubaoVision(baseURL, apiKey, modelName string, content []map[string]interface{}) (string, string) {
 	reqBody := map[string]interface{}{
-		"model": doubaoModel,
+		"model": modelName,
 		"input": []map[string]interface{}{{
 			"role":    "user",
 			"content": content,
 		}},
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", doubaoBaseURL+"/responses", bytes.NewReader(bodyBytes))
+	req, _ := http.NewRequest("POST", strings.TrimRight(baseURL, "/")+"/responses", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+doubaoAPIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
