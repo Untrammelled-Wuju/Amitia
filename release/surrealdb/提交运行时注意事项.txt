@@ -1,0 +1,3 @@
+SurrealDB 压缩包必须使用 zip 格式。
+文件名必须为 surreal.exe.zip。
+压缩包内必须直接包含 surreal.exe，不能嵌套在其他文件夹中。
