@@ -26,6 +26,6 @@ func (s *service) moodRecoveryCheck(convID, charID, source string) {
 	idleDur := time.Since(t)
 	if idleDur > 6*time.Hour {
 		idleHours := int(idleDur.Hours())
-		s.db.Exec("INSERT INTO mood_logs (character_id, mood, intensity, source, note, created_at) VALUES (?, 'happy', 7, 'reconnect', ?, datetime('now', 'localtime'))", charID, fmt.Sprintf("用户回来了 (冷落%d小时)", idleHours))
+		s.db.Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, 'happy', 7, datetime('now', 'localtime'))", charID, fmt.Sprintf("用户回来了 (冷落%d小时)", idleHours))
 	}
 }

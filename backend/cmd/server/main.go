@@ -26,6 +26,7 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/migration"
 )
 
 func killExistingServer(addr string) {
@@ -68,6 +69,11 @@ func main() {
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
 	initDatabase(db)
+	migRunner := migration.Runner{DB: db}
+	if err := migRunner.Apply(migration.DefaultMigrations()); err != nil {
+		log.Error("数据库迁移失败:", err)
+		os.Exit(1)
+	}
 	ctx := app.NewAppContext(db, nil)
 
 	env := startEnvironment()

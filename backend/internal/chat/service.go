@@ -53,7 +53,7 @@ type Service interface {
 	ChangeCharacter(convID, charID string) (*Conversation, error)
 	GetStats() (*ChatStatsResponse, error)
 	Chat(req *ChatRequest) (*ChatResponse, error)
-	ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error)
+	ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error)
 	ListModels() ([]ModelConfig, error)
 	CreateModel(cfg *ModelConfig) (*ModelConfig, error)
 	UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error)
@@ -438,7 +438,7 @@ func (s *service) findRequestMessages(convID, requestID string) (Message, []Mess
 	return user, assistants, userFound
 }
 
-func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
+func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
 	requestID := strings.TrimSpace(req.RequestID)
 	if requestID == "" {
 		requestID = uuid.New().String()
@@ -577,7 +577,7 @@ func (s *service) ProcessMessage(req *ProcessMessageRequest) (*ProcessMessageRes
 	toolDefs := tool.GetAll()
 	var reply string
 	seenTools := map[string]bool{}
-	toolExecCtx, cancelTools := context.WithTimeout(context.Background(), 60*time.Second)
+	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelTools()
 	forceVoice := false
 
@@ -802,26 +802,11 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		VideoUrl:       req.VideoUrl,
 		RequestID:      req.RequestID,
 	}
-	result := make(chan struct {
-		resp *ProcessMessageResponse
-		err  error
-	}, 1)
-	go func() {
-		resp, err := s.ProcessMessage(chatReq)
-		result <- struct {
-			resp *ProcessMessageResponse
-			err  error
-		}{resp, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case r := <-result:
-		if r.err != nil {
-			return nil, r.err
-		}
-		return convertProcessMessageResponse(r.resp), nil
+	resp, err := s.ProcessMessage(ctx, chatReq)
+	if err != nil {
+		return nil, err
 	}
+	return convertProcessMessageResponse(resp), nil
 }
 func (s *service) getRoleRuntimeProfile(characterID string) (*character.RoleRuntimeProfile, error) {
 	if s.charRepo != nil {

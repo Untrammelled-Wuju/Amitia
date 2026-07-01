@@ -72,9 +72,17 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 		createErr := r.db.Create(profile).Error
 		return profile, createErr
 	}
-	newConfidence := existing.Confidence + 10
-	if newConfidence > 100 {
-		newConfidence = 100
+	var newConfidence int
+	if existing.AttributeValue != profile.AttributeValue {
+		newConfidence = existing.Confidence / 2
+		if newConfidence < 5 {
+			newConfidence = 5
+		}
+	} else {
+		newConfidence = existing.Confidence + 10
+		if newConfidence > 100 {
+			newConfidence = 100
+		}
 	}
 	updates := map[string]interface{}{
 		"attribute_value": profile.AttributeValue,

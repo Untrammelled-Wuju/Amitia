@@ -55,7 +55,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Surreal)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.Chat)
 		aicharacter.RegisterAICharacterRouter(apiGroup, ctx)
-		system.RegisterSystemRouter(apiGroup, ctx, services.Profile, services.Episodic, services.Graph)
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.Memory, services.Profile, services.Episodic, services.Graph)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)

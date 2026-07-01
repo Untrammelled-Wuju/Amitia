@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
@@ -112,6 +112,7 @@ type MemoryCandidate struct {
 	Importance     int    `json:"importance"`
 	SourceText     string `json:"sourceText"`
 	ConversationID string `json:"conversationId"`
+	CharacterID    string `json:"characterId"`
 	CreatedAt      string `json:"createdAt"`
 }
 
@@ -554,6 +555,8 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 	if err != nil || len(messages) == 0 {
 		return nil, err
 	}
+	var characterID string
+	s.db.Table("conversations").Select("character_id").Where("id = ?", conversationID).Row().Scan(&characterID)
 	cfg := s.getActiveModel()
 	if cfg == nil {
 		return nil, fmt.Errorf("no active model")
@@ -586,11 +589,13 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 		candidates[i].ID = uuid.New().String()
 		candidates[i].SourceText = conversationText
 		candidates[i].ConversationID = conversationID
+		candidates[i].CharacterID = characterID
 		candidates[i].CreatedAt = time.Now().Format("2006-01-02 15:04:05")
 		model := &MemoryCandidateModel{
 			ID: candidates[i].ID, Key: candidates[i].Key, Value: candidates[i].Value,
 			MemoryType: candidates[i].MemoryType, Importance: candidates[i].Importance,
 			SourceText: candidates[i].SourceText, ConversationID: candidates[i].ConversationID,
+			CharacterID: candidates[i].CharacterID,
 			CreatedAt: candidates[i].CreatedAt,
 		}
 		if err := s.repo.CreateCandidate(model); err != nil {
@@ -611,6 +616,7 @@ func (s *service) ListCandidates() []MemoryCandidate {
 			ID: m.ID, Key: m.Key, Value: m.Value,
 			MemoryType: m.MemoryType, Importance: m.Importance,
 			SourceText: m.SourceText, ConversationID: m.ConversationID,
+			CharacterID: m.CharacterID,
 			CreatedAt: m.CreatedAt,
 		}
 	}
@@ -1437,8 +1443,8 @@ func (s *service) logRetrieval(characterID, queryText string, memoryIDs []string
 	}
 	detailsJSON, _ := json.Marshal(scoringDetails)
 	s.db.Exec(
-		"INSERT INTO retrieval_logs (id, conversation_id, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-		id, characterID, queryText, string(memIDsJSON), string(detailsJSON), now,
+		"INSERT INTO retrieval_logs (id, conversation_id, character_id, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		id, "", characterID, queryText, string(memIDsJSON), string(detailsJSON), now,
 	)
 }
 

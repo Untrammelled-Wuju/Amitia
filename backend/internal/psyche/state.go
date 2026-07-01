@@ -41,6 +41,7 @@ func NewInMemoryPsycheStore() *InMemoryPsycheStore {
 func (s *InMemoryPsycheStore) SaveState(state *PsycheState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	state.StateVersion++
 	s.states[state.CharacterID] = *state
 	return nil
 }
@@ -97,15 +98,17 @@ func NewSQLitePsycheStore(db *gorm.DB) *SQLitePsycheStore {
 }
 
 func (s *SQLitePsycheStore) SaveState(state *PsycheState) error {
+	nextVersion := state.StateVersion + 1
 	result := s.db.Model(&PsycheState{}).
-		Where("character_id = ? AND version = ?", state.CharacterID, state.Version).
+		Where("character_id = ? AND state_version = ?", state.CharacterID, state.StateVersion).
 		Updates(map[string]interface{}{
-			"emotion":    state.Emotion,
-			"mood":       state.Mood,
-			"stress":     state.Stress,
-			"energy":     state.Energy,
-			"version":    StateVersionV1,
-			"updated_at": time.Now().UTC(),
+			"emotion":      state.Emotion,
+			"mood":         state.Mood,
+			"stress":       state.Stress,
+			"energy":       state.Energy,
+			"version":      StateVersionV1,
+			"state_version": nextVersion,
+			"updated_at":   time.Now().UTC(),
 		})
 	if result.Error != nil {
 		return result.Error
@@ -115,7 +118,7 @@ func (s *SQLitePsycheStore) SaveState(state *PsycheState) error {
 		if err := s.db.Where("character_id = ?", state.CharacterID).First(&latest).Error; err != nil {
 			return fmt.Errorf("%w: failed to load latest state: %v", ErrVersionConflict, err)
 		}
-		state.Version = latest.Version
+		state.StateVersion = latest.StateVersion
 		state.Emotion = latest.Emotion
 		state.Mood = latest.Mood
 		state.Stress = latest.Stress
@@ -123,6 +126,7 @@ func (s *SQLitePsycheStore) SaveState(state *PsycheState) error {
 		state.UpdatedAt = latest.UpdatedAt
 		return fmt.Errorf("%w: character %s version mismatch", ErrVersionConflict, state.CharacterID)
 	}
+	state.StateVersion = nextVersion
 	state.Version = StateVersionV1
 	return nil
 }
@@ -173,6 +177,7 @@ func NewPsycheState(characterID string) PsycheState {
 	return PsycheState{
 		CharacterID: characterID,
 		Version:     StateVersionV1,
+		StateVersion: 1,
 		Emotion: EmotionDimensions{
 			Valence:   0.5,
 			Arousal:   0.5,

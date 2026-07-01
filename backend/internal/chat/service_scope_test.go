@@ -43,7 +43,7 @@ func TestProcessMessageRejectsConversationCharacterMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := svc.ProcessMessage(&ProcessMessageRequest{
+	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 		Message:        "你好",
@@ -68,7 +68,7 @@ func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := svc.ProcessMessage(&ProcessMessageRequest{
+	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID:    "char-1",
 		ConversationID: "conv-2",
 		Message:        "你好",

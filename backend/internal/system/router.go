@@ -13,10 +13,7 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
-	memRepo := memory.NewRepository(ctx)
-	memSvc := memory.NewService(memRepo, ctx, graphSvc)
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, nil, nil, nil, graphSvc)
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc)
 

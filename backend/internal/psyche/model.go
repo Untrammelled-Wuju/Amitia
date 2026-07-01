@@ -197,6 +197,7 @@ type MoodDimensions struct {
 type PsycheState struct {
 	CharacterID string           `json:"characterId"`
 	Version     string           `json:"version"`
+	StateVersion int             `json:"stateVersion" gorm:"column:state_version;default:0"`
 	Emotion     EmotionDimensions `json:"emotion"`
 	Mood        MoodDimensions    `json:"mood"`
 	Stress      float64           `json:"stress"`

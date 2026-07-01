@@ -74,7 +74,7 @@ func setupProcessTraceService(t *testing.T, modelStatus int) (*service, *bytes.B
 func TestProcessMessageTraceCoversInputModelAndDBCommit(t *testing.T) {
 	svc, logs, cleanup := setupProcessTraceService(t, http.StatusOK)
 	t.Cleanup(cleanup)
-	resp, err := svc.ProcessMessage(&ProcessMessageRequest{
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID: "char-trace",
 		Message:     "这是很长的隐私消息，日志里不应该完整记录",
 		Channel:     "web",
@@ -109,7 +109,7 @@ func TestProcessMessageTraceCoversInputModelAndDBCommit(t *testing.T) {
 func TestProcessMessageTraceCoversFailedModelRequest(t *testing.T) {
 	svc, logs, cleanup := setupProcessTraceService(t, http.StatusInternalServerError)
 	t.Cleanup(cleanup)
-	_, err := svc.ProcessMessage(&ProcessMessageRequest{
+	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 		CharacterID: "char-trace",
 		Message:     "失败请求不应该泄漏完整内容",
 		Channel:     "web",

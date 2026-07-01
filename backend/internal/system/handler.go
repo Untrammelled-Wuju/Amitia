@@ -617,7 +617,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
-	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
+	result, err := h.chatSvc.ProcessMessage(c.Request.Context(), &chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: "manual",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
@@ -676,7 +676,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
-	result, err := h.chatSvc.ProcessMessage(&chat.ProcessMessageRequest{
+	result, err := h.chatSvc.ProcessMessage(c.Request.Context(), &chat.ProcessMessageRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: "manual",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,

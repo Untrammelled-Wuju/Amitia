@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"context"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
@@ -195,7 +196,7 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		VideoUrl:       videoUrl,
 		AudioUrl:       audioUrl,
 	}
-	result, err := s.chatSvc.ProcessMessage(pmReq)
+	result, err := s.chatSvc.ProcessMessage(context.Background(), pmReq)
 	if err != nil {
 		return nil, err
 	}
