@@ -25,7 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <SliderRow :model-value="modelValue.initiative" @update:model-value="(v: number) => emitUpdate('initiative', v)" label="主动性" left="被动回应" right="主动找话题" :min="0" :max="100" />
         <div class="slider-hint">
           数值越高，AI 越可能主动延续话题或提醒你。
-          系统会自动限制频率（每日 <el-input-number :model-value="modelValue.dailyLimit" @update:model-value="(v: number | undefined) => emitUpdate('dailyLimit', v ?? 3)" :min="1" :max="200" size="small" style="width:80px" /> 条）
+          系统会自动限制频率（每日 <el-input-number :model-value="(modelValue.dailyLimit ?? 3)" @update:model-value="(v: number | undefined) => emitUpdate('dailyLimit', v ?? 3)" :min="1" :max="200" size="small" style="width:80px" /> 条）
         </div>
         <SliderRow :model-value="modelValue.teasing" @update:model-value="(v: number) => emitUpdate('teasing', v)" label="吐槽程度" left="从不禁" right="可吐槽" :min="0" :max="100" />
         <SliderRow :model-value="modelValue.customerServiceAvoidance" @update:model-value="(v: number) => emitUpdate('customerServiceAvoidance', v)" label="客服腔抑制" left="官方" right="自然" :min="0" :max="100" />

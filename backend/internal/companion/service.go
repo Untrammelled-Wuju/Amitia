@@ -1786,7 +1786,7 @@ func (s *service) buildTodaySchedule(date string, characterID string) TodaySched
 	}
 
 	var lt LifestyleTendency
-	if err := s.db.Limit(1).First(&lt); err == nil {
+	if err := s.db.Where("character_id = ?", characterID).Limit(1).First(&lt); err == nil {
 		if lt.ActivityEnergy < 30 {
 			if wakeTime.Hour() < 7 {
 				wakeTime = wakeTime.Add(30 * time.Minute)
