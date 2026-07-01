@@ -167,6 +167,9 @@ import MemoryStatusPanel from "./components/MemoryStatusPanel.vue"
 import CandidateMemoryPanel from "./components/CandidateMemoryPanel.vue"
 import MemoryTable from "./components/MemoryTable.vue"
 import RetrievalAnalysisPanel from "./components/RetrievalAnalysisPanel.vue"
+import { useMemoryDiagnostics } from "./composables/useMemoryDiagnostics"
+import { useMemoryCandidates } from "./composables/useMemoryCandidates"
+import { useMemoryList } from "./composables/useMemoryList"
 import { useApi } from "../../composables/useApi"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
