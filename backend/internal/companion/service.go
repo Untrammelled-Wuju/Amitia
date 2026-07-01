@@ -268,7 +268,7 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 
 	mood := "neutral"
 	var moods []map[string]interface{}
-	s.db.Table("moods").Order("created_at DESC").Limit(1).Find(&moods)
+	s.db.Table("moods").Where("character_id = ?", characterID).Order("created_at DESC").Limit(1).Find(&moods)
 	if len(moods) > 0 {
 		if m, ok := moods[0]["mood"].(string); ok && m != "" {
 			mood = m
@@ -277,17 +277,8 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 			mood = m
 		}
 	}
-	idleDuration := s.getIdleDuration(characterID)
-	if idleDuration > 48*time.Hour {
-		mood = "depressed"
-	} else if idleDuration > 24*time.Hour {
-		mood = "sad"
-	} else if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
-		mood = "ignored"
-	} else if idleDuration > 6*time.Hour {
-		mood = "lonely"
-	}
 
+	idleDuration := s.getIdleDuration(characterID)
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	schedule := s.buildTodaySchedule(today, characterID)
@@ -2893,7 +2884,7 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 		msgID, convID, displayContent, now.Format("2006-01-02 15:04:05"))
 
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'sent', ?, ?)",
-		convID, prompt, now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"))
+		convID, displayContent, now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"))
 
 	if s.isDefaultCharacter(characterID) {
 		wcID := s.getWechatConvIDForChar(characterID)
