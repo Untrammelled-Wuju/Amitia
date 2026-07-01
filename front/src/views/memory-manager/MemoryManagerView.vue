@@ -138,23 +138,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <!-- Memory Search Dialog -->
-    <el-dialog v-model="searchDialogVisible" title="语义搜索" width="500px">
-      <el-input v-model="searchQuery" placeholder="输入搜索词..." @keyup.enter="doSearch" />
-      <div style="margin-top:12px;max-height:300px;overflow-y:auto">
-        <div v-for="r in searchResults" :key="r.id" class="search-result-item">
-          <div class="sri-header">
-            <el-tag size="small">{{ typeLabel(r.memoryType) }}</el-tag>
-            <span class="sri-score">Score: {{ (r.score * 100).toFixed(1) }}%</span>
-          </div>
-          <div class="sri-key">{{ r.key }}</div>
-          <div class="sri-value">{{ r.value }}</div>
-        </div>
-        <el-empty v-if="searchResults.length === 0 && searched" description="无结果" />
-        <div v-if="!searched" style="color:var(--ac-color-text-muted);text-align:center;padding:20px">
-          输入关键词进行语义搜索
-        </div>
-      </div>
-    </el-dialog>
+    <MemorySearchDialog v-model="searchDialogVisible" />
 
 <!-- Candidate memories banner -->
     <el-alert v-if="candidates.length > 0" type="warning" :closable="false" show-icon style="margin:10px 0">
@@ -317,92 +301,15 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-tabs>
 
     <!-- Create/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑记忆' : '新建记忆'" width="480px" destroy-on-close>
-      <el-form :model="form" label-position="top">
-        <el-form-item label="关键词"><el-input v-model="form.key" placeholder="例如: 喜欢的音乐" /></el-form-item>
-        <el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="3" placeholder="例如: 喜欢星期六下午听轻音乐" /></el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="form.memoryType" style="width:100%"><el-option v-for="t in TYPES" :key="t.value" :label="t.label" :value="t.value" /></el-select>
-        </el-form-item>
-        <el-form-item label="重要度">
-          <el-slider v-model="form.importance" :max="10" show-input :marks="{1:'低',5:'中',10:'高'}" />
-        </el-form-item>
-        <el-form-item label="范围">
-          <el-select v-model="form.scopeType" style="width:100%">
-            <el-option v-for="s in SCOPE_TYPES" :key="s.value" :label="s.label" :value="s.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="敏感等级">
-          <el-select v-model="form.sensitivity" style="width:100%">
-            <el-option v-for="s in SENSITIVITY_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="使用权限">
-          <div class="permission-switches">
-            <el-checkbox v-model="form.allowContextUse">允许用于上下文理解</el-checkbox>
-            <el-checkbox v-model="form.allowProactiveMention">允许主动提及</el-checkbox>
-            <el-checkbox v-model="form.requiresConfirmation">使用前需要确认</el-checkbox>
-          </div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible=false">取消</el-button>
-        <el-button type="primary" @click="saveMem" :loading="saving">保存</el-button>
-      </template>
-    </el-dialog>
+    <MemoryEditorDialog v-model="dialogVisible" :editing="editing" :editing-id="editingId" :character-id="injectedCharacterId?.value || ''" @memory-saved="fetchList" />
       <!-- Edit Candidate Dialog -->
-    <el-dialog v-model="editCandidateVisible" title="编辑候选记忆" width="480px" destroy-on-close>
-      <el-form :model="editForm" label-position="top">
-        <el-form-item label="内容"><el-input v-model="editForm.content" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="editForm.memoryType" style="width:100%"><el-option v-for="t in TYPES" :key="t.value" :label="t.label" :value="t.value" /></el-select>
-        </el-form-item>
-        <el-form-item label="重要度"><el-slider v-model="editForm.importance" :max="10" show-input /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editCandidateVisible=false">取消</el-button>
-        <el-button type="primary" @click="saveEditCandidate" :loading="saving">保存并确认</el-button>
-      </template>
-    </el-dialog>
+    <CandidateEditorDialog v-model="editCandidateVisible" @candidate-updated="loadCandidates" />
 
         <!-- Conflict Resolution Dialog -->
-    <el-dialog v-model="conflictVisible" title="记忆冲突检测" width="550px" destroy-on-close :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:12px">
-        新记忆可能与现有记忆冲突，请选择处理方式:
-      </el-alert>
-      <div class="conflict-new">
-        <strong>New:</strong> [{{ conflictNewType }}] {{ conflictNewContent }}
-      </div>
-      <div v-for="c in conflictList" :key="c.id" class="conflict-old">
-        <strong>Existing:</strong> [{{ c.memoryType }}] {{ c.value }}
-        <div class="conflict-reason">{{ c.reason }}</div>
-      </div>
-      <el-radio-group v-model="resolveAction" style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
-        <el-radio value="keep_old">保留旧记忆，丢弃新记忆</el-radio>
-        <el-radio value="replace_old">用新记忆替换旧记忆</el-radio>
-        <el-radio value="keep_both">同时保留</el-radio>
-        <el-radio value="merge">合并到现有记忆</el-radio>
-      </el-radio-group>
-      <template #footer>
-        <el-button @click="conflictVisible=false; dialogVisible=true">取消</el-button>
-        <el-button type="primary" @click="doResolveConflict">解决</el-button>
-      </template>
-    </el-dialog>
+    <ConflictResolverDialog v-model="conflictVisible" @conflict-resolved="fetchList" />
 
     <!-- 生成候选 Dialog -->
-    <el-dialog v-model="showGenerateDialog" title="生成候选" width="500px" destroy-on-close>
-      <el-form label-position="top">
-        <el-form-item label="选择会话">
-          <el-select v-model="generateConvId" placeholder="选择会话" filterable style="width:100%">
-            <el-option v-for="c in conversationList" :key="c.id" :label="c.title" :value="c.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showGenerateDialog=false">取消</el-button>
-        <el-button type="primary" @click="generateCandidates" :loading="generating">生成</el-button>
-      </template>
-    </el-dialog>
+    <CandidateGenerateDialog v-model="showGenerateDialog" :conversation-list="conversationList" :candidates="candidates" @update:candidates="candidates = $event" @show-candidates="showCandidates = true" />
   </div>
 </template>
 
@@ -410,6 +317,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Search, Plus } from "@element-plus/icons-vue"
+import CandidateGenerateDialog from "./components/CandidateGenerateDialog.vue"
+import MemorySearchDialog from "./components/MemorySearchDialog.vue"
+import CandidateEditorDialog from "./components/CandidateEditorDialog.vue"
+import MemoryEditorDialog from "./components/MemoryEditorDialog.vue"
+import ConflictResolverDialog from "./components/ConflictResolverDialog.vue"
 import { useApi } from "../../composables/useApi"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
