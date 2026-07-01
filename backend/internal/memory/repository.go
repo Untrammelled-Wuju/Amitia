@@ -22,7 +22,7 @@ type Repository interface {
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
 	MarkEmbedded(id string) error
-	GetConversationMessages(conversationID string) ([]map[string]interface{}, error)
+	GetConversationMessages(conversationID string, limit int) ([]map[string]interface{}, error)
 	GetRankedByImportance(characterID string, limit int) ([]Memory, error)
 	ListCandidates() ([]MemoryCandidateModel, error)
 	CreateCandidate(c *MemoryCandidateModel) error
@@ -191,13 +191,19 @@ func (r *repository) MarkEmbedded(id string) error {
 	).Error
 }
 
-func (r *repository) GetConversationMessages(conversationID string) ([]map[string]interface{}, error) {
+func (r *repository) GetConversationMessages(conversationID string, limit int) ([]map[string]interface{}, error) {
 	var messages []map[string]interface{}
-	err := r.db.Table("messages").
+	query := r.db.Table("messages").
 		Select("role, content").
 		Where("conversation_id = ?", conversationID).
-		Order("created_at ASC").
-		Find(&messages).Error
+		Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Find(&messages).Error
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
 	if messages == nil {
 		messages = []map[string]interface{}{}
 	}

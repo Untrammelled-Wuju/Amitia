@@ -551,7 +551,7 @@ func (s *service) GetVectorStatus() map[string]interface{} {
 }
 
 func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, error) {
-	messages, err := s.repo.GetConversationMessages(conversationID)
+	messages, err := s.repo.GetConversationMessages(conversationID, 100)
 	if err != nil || len(messages) == 0 {
 		return nil, err
 	}

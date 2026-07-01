@@ -18,6 +18,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const DefaultUserID = "default"
+
 type Service interface {
 	List(q ProfileListQuery) (*ProfileListResponse, error)
 	Create(req *CreateProfileRequest) (*UserProfile, error)
@@ -65,7 +67,7 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 		return nil, fmt.Errorf("category不能为空")
 	}
 	if req.UserID == "" {
-		req.UserID = "default"
+		req.UserID = DefaultUserID
 	}
 	if req.Confidence < 0 {
 		req.Confidence = 0
@@ -122,7 +124,7 @@ func (s *service) Delete(id string) error {
 	if s.graphSvc != nil && p != nil {
 		userID := p.UserID
 		if userID == "" {
-			userID = "default"
+			userID = DefaultUserID
 		}
 		nodeID := userID + ":" + p.Category + ":" + p.AttributeName
 		if p.CharacterID != "" {
@@ -142,7 +144,7 @@ func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfi
 
 func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
 	if userID == "" {
-		userID = "default"
+		userID = DefaultUserID
 	}
 	scope := s.profileScope(convID, characterID...)
 	if category == "" {
@@ -181,7 +183,7 @@ func (s *service) SyncGraphProfile(id string) bool {
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
 	if userID == "" {
-		userID = "default"
+		userID = DefaultUserID
 	}
 	if len(messages) == 0 {
 		return nil
@@ -370,7 +372,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation("default", convID, pending); err != nil {
+	if err := s.ExtractFromConversation(DefaultUserID, convID, pending); err != nil {
 		return err
 	}
 	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile:%s:%d", convID, maxSequence))
@@ -402,7 +404,7 @@ func (s *service) syncGraph(p *UserProfile) {
 		return
 	}
 	if p.UserID == "" {
-		p.UserID = "default"
+		p.UserID = DefaultUserID
 	}
 	nodeID := p.UserID + ":" + p.Category + ":" + p.AttributeName
 	if p.CharacterID != "" {
