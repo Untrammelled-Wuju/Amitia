@@ -1,16 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
-﻿<template>
-  <div class="mem-page">
-    <h2 class="page-title">记忆管理</h2>
-
-    <!-- Privacy note -->
-    <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
-      <template #title>记忆保存在你自己的设备或服务器上，可随时编辑或删除。候选记忆需确认后才保存。</template>
-    </el-alert>
-
+    <MemoryStatusPanel />
     <div class="pipeline-bar" v-if="pipelineStatus">
       <span class="pl-label">管线状态:</span>
       <template v-for="l in pipelineStatus.layers" :key="l.layer">
@@ -55,7 +44,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-button size="small" type="danger" plain @click="handleClearAll" :disabled="total === 0">清空全部</el-button>
       <router-link to="/graph"><el-button size="small" type="info" plain>图谱</el-button></router-link>
     </div>
-
     <div class="global-search-bar">
       <el-input v-model="globalQuery" placeholder="全局搜索所有记忆类型..." size="small" clearable @clear="clearGlobalSearch" @keyup.enter="doGlobalSearch">
         <template #prefix><el-icon><Search /></el-icon></template>
@@ -149,90 +137,8 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-alert>
 
     <!-- Candidate list -->
-    <div v-if="showCandidates && candidates.length > 0" class="candidate-list">
-      <div v-for="c in candidates" :key="c.id" class="candidate-card">
-        <div class="cc-header">
-          <el-tag size="small" :type="c.importance > 7 ? 'danger' : 'info'">{{ typeLabel(c.memoryType) }}</el-tag>
-          <span class="cc-importance">重要: {{ c.importance }}/10</span>
-        </div>
-        <div class="cc-key">{{ c.key }}</div>
-        <div class="cc-value">{{ c.value }}</div>
-        <div class="cc-source">来源: {{ c.sourceText || "提取" }}</div>
-        <div class="cc-actions">
-          <el-button size="small" type="primary" @click="confirmCandidate(c)">确认保存</el-button>
-          <el-button size="small" @click="editCandidate(c)">编辑</el-button>
-          <el-button size="small" type="danger" @click="deleteCandidateItem(c)">删除</el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Memory list -->
-    <el-table ref="tableRef" :data="memories" stripe size="small" style="margin-top:10px" @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="36" />
-      <el-table-column prop="key" label="关键词" width="140" show-overflow-tooltip />
-      <el-table-column prop="value" label="内容" show-overflow-tooltip />
-      <el-table-column label="类型" width="90">
-        <template #default="{row}">
-          <el-tag size="small" type="info">{{ typeLabel(row.memoryType) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="来源" width="80">
-        <template #default="{row}">
-          <span class="source-badge" :class="row.source">{{ sourceLabel(row.source) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="重要度" width="90" sortable prop="importance">
-        <template #default="{row}">
-          <el-progress :percentage="row.importance * 10" :stroke-width="6" :show-text="false" :color="importanceColor(row.importance)" />
-          <span style="font-size:11px;margin-left:4px">{{ row.importance }}/10</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="置信度" width="100" sortable prop="confidence">
-        <template #default="{ row }">
-          <div style="display:flex;align-items:center;gap:4px">
-            <el-progress :percentage="row.confidence ?? 50" :stroke-width="6" :show-text="false"
-              :color="(row.confidence ?? 50) >= 80 ? '#67c23a' : (row.confidence ?? 50) >= 50 ? '#e6a23c' : '#f56c6c'" />
-            <span style="font-size:11px">{{ row.confidence ?? 50 }}%</span>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="核实状态" width="90" sortable prop="verifiedStatus">
-        <template #default="{ row }">
-          <el-tag v-if="isExpired(row.expiresAt)" type="info" size="small">已过期</el-tag>
-          <el-tag v-else-if="row.verifiedStatus === 'user_verified'" type="success" size="small">已确认</el-tag>
-          <el-tag v-else-if="row.verifiedStatus === 'auto_confirmed'" type="warning" size="small">自动确认</el-tag>
-          <el-tag v-else-if="row.verifiedStatus === 'contradicted'" type="danger" size="small">有矛盾</el-tag>
-          <el-tag v-else type="info" size="small">未核实</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="范围" width="220">
-        <template #default="{ row }">
-          <el-tag size="small" :type="scopeTypeTagType(row)">{{ scopeTypeLabel(row) }}</el-tag>
-          <span v-if="rowScopeType(row)==='user_character' && row.characterId" class="scope-char-name">{{ charName(row.characterId) }}</span>
-          <el-button v-if="rowScopeType(row)==='user_character'" text size="small" type="warning" class="scope-toggle-btn" @click="toggleScope(row)">升级为全局</el-button>
-          <el-button v-if="rowScopeType(row)==='user_global'" text size="small" type="info" class="scope-toggle-btn" @click="toggleScope(row)">降级为角色</el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="权限" width="180">
-        <template #default="{ row }">
-          <div class="permission-tags">
-            <el-tag size="small" :type="sensitivityTagType(rowSensitivity(row))">{{ sensitivityLabel(rowSensitivity(row)) }}</el-tag>
-            <el-tag size="small" :type="rowAllowContextUse(row) ? 'success' : 'info'">{{ rowAllowContextUse(row) ? '可理解' : '禁上下文' }}</el-tag>
-            <el-tag size="small" :type="rowAllowProactiveMention(row) ? 'warning' : 'info'">{{ rowAllowProactiveMention(row) ? '可主动提' : '禁主动提' }}</el-tag>
-            <el-tag v-if="rowRequiresConfirmation(row)" size="small" type="danger">需确认</el-tag>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="140">
-        <template #default="{row}">
-          <el-button text size="small" @click="showEdit(row)">编辑</el-button>
-          <el-button text size="small" type="danger" @click="delMem(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-pagination
-      v-if="total > pageSize"
+    <CandidateMemoryPanel :candidates="candidates" :show-candidates="showCandidates" @confirm="confirmCandidate" @edit="editCandidate" @delete-item="deleteCandidateItem" @toggle-show="showCandidates = !showCandidates" />
+    <MemoryTable :memories="memories" :selected-ids="selectedIds" :page="page" :page-size="pageSize" :total="total" @selection-change="handleSelectionChange" @edit="showEdit" @delete="delMem" @toggle-scope="toggleScope" @page-change="page = $event; fetchList()" />
       v-model:current-page="page"
       :page-size="pageSize"
       :total="total"
@@ -244,72 +150,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-tab-pane>
 
       <el-tab-pane label="检索分析" name="analysis">
-        <div class="analysis-panel">
-          <h3 class="ap-title">检索质量分析</h3>
-
-          <div class="ap-stats-row">
-            <el-card shadow="hover" class="ap-stat-card">
-              <div class="ap-stat-num">{{ retrievalStats.totalCount }}</div>
-              <div class="ap-stat-label">总检索次数</div>
-            </el-card>
-            <el-card shadow="hover" class="ap-stat-card">
-              <div class="ap-stat-num" v-if="retrievalLogs.length > 0">{{ (retrievalLogs.length / (retrievalStats.totalCount || 1) * 100).toFixed(1) }}%</div>
-              <div class="ap-stat-num" v-else>--</div>
-              <div class="ap-stat-label">最近50条占比</div>
-            </el-card>
-          </div>
-
-          <h4 class="ap-subtitle">半衰期参数（天）</h4>
-          <div class="ap-sliders">
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">情景记忆</span>
-              <el-slider v-model="halflifeEpisodic" :min="7" :max="90" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">用户画像</span>
-              <el-slider v-model="halflifeProfile" :min="30" :max="180" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">结构化事实</span>
-              <el-slider v-model="halflifeFact" :min="60" :max="365" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">世界书</span>
-              <el-slider v-model="halflifeWorldbook" :min="180" :max="730" :step="1" show-input disabled />
-            </div>
-          </div>
-
-          <h4 class="ap-subtitle">最近检索日志</h4>
-          <el-table :data="retrievalLogs" size="small" max-height="300" style="width:100%">
-            <el-table-column prop="queryText" label="查询文本" min-width="180" show-overflow-tooltip />
-            <el-table-column label="检索记忆数" width="100">
-              <template #default="{ row }">
-                {{ parseMemIDs(row.retrievedMemoryIDs).length }}
-              </template>
-            </el-table-column>
-            <el-table-column label="最高分" width="80">
-              <template #default="{ row }">
-                {{ maxScore(row.scoringDetails) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="createdAt" label="时间" width="160">
-              <template #default="{ row }">{{ fmtDate(row.createdAt) }}</template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
-
-    <!-- Create/Edit Dialog -->
-    <MemoryEditorDialog v-model="dialogVisible" :editing="editing" :editing-id="editingId" :character-id="injectedCharacterId?.value || ''" @memory-saved="fetchList" />
-      <!-- Edit Candidate Dialog -->
-    <CandidateEditorDialog v-model="editCandidateVisible" @candidate-updated="loadCandidates" />
-
-        <!-- Conflict Resolution Dialog -->
-    <ConflictResolverDialog v-model="conflictVisible" @conflict-resolved="fetchList" />
-
-    <!-- 生成候选 Dialog -->
-    <CandidateGenerateDialog v-model="showGenerateDialog" :conversation-list="conversationList" :candidates="candidates" @update:candidates="candidates = $event" @show-candidates="showCandidates = true" />
+    <RetrievalAnalysisPanel :retrieval-stats="retrievalStats" :retrieval-logs="retrievalLogs" :halflife-episodic="halflifeEpisodic" :halflife-profile="halflifeProfile" :halflife-fact="halflifeFact" :halflife-worldbook="halflifeWorldbook" />
   </div>
 </template>
 
@@ -322,6 +163,10 @@ import MemorySearchDialog from "./components/MemorySearchDialog.vue"
 import CandidateEditorDialog from "./components/CandidateEditorDialog.vue"
 import MemoryEditorDialog from "./components/MemoryEditorDialog.vue"
 import ConflictResolverDialog from "./components/ConflictResolverDialog.vue"
+import MemoryStatusPanel from "./components/MemoryStatusPanel.vue"
+import CandidateMemoryPanel from "./components/CandidateMemoryPanel.vue"
+import MemoryTable from "./components/MemoryTable.vue"
+import RetrievalAnalysisPanel from "./components/RetrievalAnalysisPanel.vue"
 import { useApi } from "../../composables/useApi"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
