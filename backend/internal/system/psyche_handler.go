@@ -110,10 +110,10 @@ func (h *PsycheQueryHandler) PADLabel(c *gin.Context) {
 
 func (h *PsycheQueryHandler) ResolveBelief(c *gin.Context) {
 	var req struct {
-		Key        string               `json:"key"`
-		Candidates []belief.Candidate   `json:"candidates"`
+		Key        string                `json:"key"`
+		Candidates []belief.Candidate    `json:"candidates"`
 		Policy     belief.ResolverPolicy `json:"policy"`
-		Now        time.Time            `json:"now"`
+		Now        time.Time             `json:"now"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数错误", err.Error())

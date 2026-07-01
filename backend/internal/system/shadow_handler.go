@@ -27,15 +27,15 @@ func (h *Handler) ShadowModeStart(c *gin.Context) {
 		body.Phase = string(mindruntime.ShadowPhaseInteraction)
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"started": true,
-		"phase":   body.Phase,
+		"started":   true,
+		"phase":     body.Phase,
 		"startedAt": time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
 func (h *Handler) ShadowModeStop(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"stopped":  true,
+		"stopped":   true,
 		"stoppedAt": time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -58,9 +58,9 @@ func (h *Handler) ShadowModePhaseAdvance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"advanced":    true,
-		"fromPhase":   currentPhase,
-		"toPhase":     nextPhase,
+		"advanced":  true,
+		"fromPhase": currentPhase,
+		"toPhase":   nextPhase,
 	})
 }
 
@@ -73,13 +73,13 @@ func (h *Handler) ShadowModeThresholds(c *gin.Context) {
 
 func (h *Handler) ShadowModeUpdateThresholds(c *gin.Context) {
 	var body struct {
-		MaxErrorRate         float64 `json:"maxErrorRate"`
-		MaxP95LatencyMs      int64   `json:"maxP95LatencyMs"`
-		MaxDuplicateDeliveries int    `json:"maxDuplicateDeliveries"`
-		MaxUnknownBacklog    int     `json:"maxUnknownBacklog"`
-		MaxConsistencyDiffs  int     `json:"maxConsistencyDiffs"`
-		MaxPostCancelSubmit  int     `json:"maxPostCancelSubmit"`
-		MaxQueueAgeMs        int64   `json:"maxQueueAgeMs"`
+		MaxErrorRate           float64 `json:"maxErrorRate"`
+		MaxP95LatencyMs        int64   `json:"maxP95LatencyMs"`
+		MaxDuplicateDeliveries int     `json:"maxDuplicateDeliveries"`
+		MaxUnknownBacklog      int     `json:"maxUnknownBacklog"`
+		MaxConsistencyDiffs    int     `json:"maxConsistencyDiffs"`
+		MaxPostCancelSubmit    int     `json:"maxPostCancelSubmit"`
+		MaxQueueAgeMs          int64   `json:"maxQueueAgeMs"`
 	}
 	c.ShouldBindJSON(&body)
 	thresholds := mindruntime.DefaultAutoRollbackThresholds()
@@ -112,28 +112,28 @@ func (h *Handler) ShadowModeUpdateThresholds(c *gin.Context) {
 
 func (h *Handler) ShadowModeCompare(c *gin.Context) {
 	oldMetrics := mindruntime.ShadowMetrics{
-		LatencyMs:      150,
-		ErrorCount:     2,
-		CancelCount:    1,
-		QueueDepth:     10,
-		DeliveryStatus: "delivered",
-		SafetyScore:    0.95,
-		ConsistencyDiffs: 0,
-		UnknownBacklog: 0,
+		LatencyMs:           150,
+		ErrorCount:          2,
+		CancelCount:         1,
+		QueueDepth:          10,
+		DeliveryStatus:      "delivered",
+		SafetyScore:         0.95,
+		ConsistencyDiffs:    0,
+		UnknownBacklog:      0,
 		DuplicateDeliveries: 0,
-		QueueAgeMs:     500,
+		QueueAgeMs:          500,
 	}
 	newMetrics := mindruntime.ShadowMetrics{
-		LatencyMs:      120,
-		ErrorCount:     1,
-		CancelCount:    0,
-		QueueDepth:     8,
-		DeliveryStatus: "delivered",
-		SafetyScore:    0.97,
-		ConsistencyDiffs: 0,
-		UnknownBacklog: 0,
+		LatencyMs:           120,
+		ErrorCount:          1,
+		CancelCount:         0,
+		QueueDepth:          8,
+		DeliveryStatus:      "delivered",
+		SafetyScore:         0.97,
+		ConsistencyDiffs:    0,
+		UnknownBacklog:      0,
 		DuplicateDeliveries: 0,
-		QueueAgeMs:     400,
+		QueueAgeMs:          400,
 	}
 	comparison := mindruntime.CompareShadowResults(oldMetrics, newMetrics)
 	c.JSON(http.StatusOK, gin.H{

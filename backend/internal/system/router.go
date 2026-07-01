@@ -222,9 +222,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/video/upload", handler.VideoUpload)
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
-
 }
-
 
 func RegisterShadowRouter(r *gin.RouterGroup, handler *Handler) {
 	g := r.Group("/shadow")

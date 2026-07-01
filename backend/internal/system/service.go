@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
-	"github.com/google/uuid"
 )
 
 type Service interface {

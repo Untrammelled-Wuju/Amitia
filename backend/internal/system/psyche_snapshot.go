@@ -11,21 +11,21 @@ import (
 )
 
 type PsycheSnapshotOutput struct {
-	Emotion      affect.EmotionState           `json:"emotion"`
-	Mood         affect.MoodState              `json:"mood"`
-	Stress       float64                       `json:"stress"`
-	AffectLabel  string                        `json:"affectLabel"`
-	Needs        map[string]float64            `json:"needs"`
-	Beliefs      []beliefSnapshotEntry         `json:"beliefs"`
+	Emotion      affect.EmotionState            `json:"emotion"`
+	Mood         affect.MoodState               `json:"mood"`
+	Stress       float64                        `json:"stress"`
+	AffectLabel  string                         `json:"affectLabel"`
+	Needs        map[string]float64             `json:"needs"`
+	Beliefs      []beliefSnapshotEntry          `json:"beliefs"`
 	Relationship relationship.RelationshipState `json:"relationship"`
-	CollectedAt  string                        `json:"collectedAt"`
+	CollectedAt  string                         `json:"collectedAt"`
 }
 
 type beliefSnapshotEntry struct {
-	Key         string  `json:"key"`
-	Value       string  `json:"value"`
-	Confidence  float64 `json:"confidence"`
-	Conflicted  bool    `json:"conflicted"`
+	Key        string  `json:"key"`
+	Value      string  `json:"value"`
+	Confidence float64 `json:"confidence"`
+	Conflicted bool    `json:"conflicted"`
 }
 
 func RegisterPsycheSnapshotRouter(r *gin.RouterGroup) {

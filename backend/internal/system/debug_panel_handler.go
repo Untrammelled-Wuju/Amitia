@@ -79,8 +79,8 @@ func (h *Handler) ReconciliationStatus(c *gin.Context) {
 
 func (h *Handler) ReconciliationRepair(c *gin.Context) {
 	var body struct {
-		ScanID    string `json:"scanId"`
-		DiffID    string `json:"diffId"`
+		ScanID     string `json:"scanId"`
+		DiffID     string `json:"diffId"`
 		AutoRepair bool   `json:"autoRepair"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
