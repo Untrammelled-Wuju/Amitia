@@ -86,7 +86,7 @@ type ChatRequest struct {
 	CharacterID    string `json:"characterId" binding:"required"`
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel        string `json:"channel"`
 }
 
@@ -94,7 +94,7 @@ type WebChatRequest struct {
 	CharacterID    string `json:"characterId" binding:"required"`
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 }
 
 type CreateConversationRequest struct {
@@ -117,20 +117,20 @@ type ConversationQuery struct {
 type MessageSearchQuery struct {
 	Keyword        string `form:"keyword" binding:"required"`
 	ConversationID string `form:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Page           int    `form:"page"`
 	PageSize       int    `form:"pageSize"`
 }
 
 type ChatResponse struct {
 	ConversationID string       `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Message        *MessageItem `json:"message"`
 }
 
 type ContextStructureLog struct {
 	ConversationID string `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Round          int    `json:"round"`
 	Sys1Tokens     int    `json:"sys1Tokens"`
 	Sys2Tokens     int    `json:"sys2Tokens"`
@@ -144,7 +144,7 @@ type ContextStructureLog struct {
 type MessageItem struct {
 	ID             string `json:"id"`
 	ConversationID string `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Role           string `json:"role"`
 	Content        string `json:"content"`
 	Tokens         int    `json:"tokens"`
@@ -179,7 +179,7 @@ type ProcessMessageRequest struct {
 
 type ProcessMessageResponse struct {
 	ConversationID string       `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply          string       `json:"reply"`
 	CharacterID    string       `json:"characterId"`
 	CharacterName  string       `json:"characterName"`
@@ -198,7 +198,7 @@ type ChatStatsResponse struct {
 
 type WorkingMemoryState struct {
 	ConversationID string   `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Sequence       int64    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Summary        string   `json:"summary"`
 	KeyPoints      []string `json:"keyPoints"`
 	UpdatedAt      string   `json:"updatedAt"`

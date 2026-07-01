@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
