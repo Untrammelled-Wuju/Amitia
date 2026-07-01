@@ -13,6 +13,31 @@ import (
 	"github.com/u-ai/backend/internal/proactive"
 )
 
+func calculateMaxShareTasks(dailyShareTendency int, idleDuration time.Duration) int {
+	maxTasks := 3
+	if dailyShareTendency >= 60 {
+		maxTasks = 5
+	}
+	if dailyShareTendency < 30 {
+		maxTasks = 2
+	}
+	if idleDuration > 48*time.Hour {
+		return 0
+	}
+	if idleDuration > 24*time.Hour {
+		return 1
+	}
+	if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
+		if maxTasks > 2 {
+			return 2
+		}
+	}
+	if idleDuration > 6*time.Hour && maxTasks > 3 {
+		maxTasks = 3
+	}
+	return maxTasks
+}
+
 func (s *service) ScheduleBasedGenerator(date string, characterID string) map[string]interface{} {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
@@ -81,29 +106,9 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 		sleep = sleep.Add(24 * time.Hour)
 	}
 
-	added := 0
-	maxTasks := 3
-	if dailyShareTendency >= 60 {
-		maxTasks = 5
-	}
-	if dailyShareTendency < 30 {
-		maxTasks = 2
-	}
 	idleDuration := s.getIdleDuration(characterID)
-	if idleDuration > 48*time.Hour {
-		maxTasks = 0
-	} else if idleDuration > 24*time.Hour {
-		maxTasks = 1
-	} else if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
-		if maxTasks > 2 {
-			maxTasks = 2
-		}
-	} else if idleDuration > 6*time.Hour {
-		if maxTasks > 3 {
-			maxTasks = 3
-		}
-	}
-
+	maxTasks := calculateMaxShareTasks(dailyShareTendency, idleDuration)
+	added := 0
 	if added < maxTasks {
 		morningTime := randomMinutes(wake, 5, 20)
 		if addTask("morning_share", morningTime, "早安分享") {
