@@ -42,7 +42,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx)
 		chat.RegisterChatRouter(apiGroup, ctx, services.Chat)
-		memHandler := memory.RegisterMemoryRouter(apiGroup, services.Memory)
+		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
 			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
