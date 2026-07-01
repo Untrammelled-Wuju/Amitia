@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	"github.com/google/uuid"
 )
 
 type Service interface {
@@ -1660,7 +1661,47 @@ func (s *service) ConfirmImports(body map[string]interface{}) map[string]interfa
 }
 
 func (s *service) ImportData(body map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{"imported": true, "importedAt": time.Now().Format(time.DateTime)}
+	source, _ := body["source"].(string)
+	charID, _ := body["characterId"].(string)
+	raw, _ := body["raw"].(string)
+	if source == "" || charID == "" || raw == "" {
+		return map[string]interface{}{"code": -1, "message": "参数不完整"}
+	}
+	lines := strings.Split(raw, "\n")
+	var msgs []map[string]interface{}
+	now := time.Now()
+	convID := charID + "_import_" + now.Format("20060102150405")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		role := "user"
+		if source == "plaintext" && i%2 == 1 {
+			role = "assistant"
+		}
+		msgs = append(msgs, map[string]interface{}{
+			"id":              uuid.New().String(),
+			"conversation_id": convID,
+			"role":            role,
+			"content":         line,
+			"created_at":      now.Format("2006-01-02 15:04:05"),
+		})
+	}
+	if len(msgs) == 0 {
+		return map[string]interface{}{"code": -1, "message": "没有有效的消息"}
+	}
+	s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		convID, charID, "导入的聊天记录", "web", "import", now, now)
+	for _, m := range msgs {
+		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+			m["id"], m["conversation_id"], m["role"], m["content"], m["created_at"])
+	}
+	return map[string]interface{}{
+		"code":    200,
+		"data":    map[string]interface{}{"messageCount": len(msgs), "conversationId": convID},
+		"message": fmt.Sprintf("成功导入 %d 条消息", len(msgs)),
+	}
 }
 
 func (s *service) GetMoods() map[string]interface{} {
