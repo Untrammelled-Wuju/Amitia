@@ -1,3 +1,3 @@
-﻿package memory
+package memory
 
 type AutobiographicalMemoryService struct{}

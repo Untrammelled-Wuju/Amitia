@@ -1,0 +1,133 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package memory
+
+import (
+	"github.com/u-ai/backend/log"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+)
+
+func (s *service) GetVectorStatus() map[string]interface{} {
+	totalMem, embedded := s.repo.VectorStatus()
+	collections := make([]map[string]interface{}, 0)
+	totalEmbeddings := uint64(0)
+	enabled := qdrantDB.Client != nil
+	for _, collectionName := range qdrantDB.CollectionNames() {
+		count := uint64(0)
+		status := "disabled"
+		if enabled {
+			if c, err := qdrantDB.GetVectorCount(collectionName); err == nil {
+				count = c
+				status = "ready"
+				totalEmbeddings += c
+			} else {
+				status = "error"
+			}
+		}
+		collectionKey := collectionKeyFromCollectionName(collectionName)
+		collections = append(collections, map[string]interface{}{
+			"key":             collectionKey,
+			"name":            collectionName,
+			"label":           memoryLayerLabel(collectionKey),
+			"totalEmbeddings": count,
+			"status":          status,
+		})
+	}
+	if totalEmbeddings > 0 {
+		embedded = int64(totalEmbeddings)
+	}
+	notEmbedded := totalMem - embedded
+	if notEmbedded < 0 {
+		notEmbedded = 0
+	}
+	return map[string]interface{}{
+		"totalMemories":   totalMem,
+		"totalEmbedded":   embedded,
+		"notEmbedded":     notEmbedded,
+		"enabled":         enabled,
+		"providerName":    "Qdrant",
+		"totalEmbeddings": totalEmbeddings,
+		"collections":     collections,
+	}
+}
+
+func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType string) bool {
+	if qdrantDB.Client == nil {
+		return false
+	}
+	mem, errMem := s.repo.FindByID(memID)
+	scopeType := ""
+	userID := ""
+	if errMem == nil && mem != nil {
+		scopeType = mem.Scope
+		userID = mem.CharacterID
+	}
+	text := key + " " + value
+	vector, err := s.embeddingSvc.Embed(text)
+	if err != nil {
+		return false
+	}
+	payload := map[string]interface{}{
+		"memory_id":    memID,
+		"character_id": characterID,
+		"memory_type":  memoryType,
+		"scope_type":   scopeType,
+		"memory_kind":  memoryType,
+		"user_id":      userID,
+		"value":        value,
+	}
+	collectionName := "memory_embeddings"
+	err = qdrantDB.UpsertVectors([]qdrantDB.VectorPoint{
+		{ID: memID, Vector: vector, Payload: payload},
+	}, collectionName)
+	if err != nil {
+		log.Error("存储嵌入失败:", memID, err)
+		return false
+	}
+	if err := s.repo.MarkEmbedded(memID); err != nil {
+		log.Warn("标记嵌入状态失败:", memID, err)
+	}
+	return true
+}
+
+func (s *service) RebuildIndex() (map[string]interface{}, error) {
+	return s.RebuildEmbeddings()
+}
+
+func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
+	totalMem, embedded := s.repo.VectorStatus()
+	if qdrantDB.Client == nil {
+		var memories []Memory
+		s.db.Find(&memories)
+		for _, m := range memories {
+			s.syncGraph(&m)
+		}
+		return map[string]interface{}{
+			"totalMemories": totalMem,
+			"embedded":      embedded,
+			"status":        "qdrant_not_available",
+		}, nil
+	}
+	var memories []Memory
+	s.db.Find(&memories)
+	successCount := 0
+	failCount := 0
+	for _, m := range memories {
+		if s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType) {
+			successCount++
+		} else {
+			failCount++
+		}
+		s.syncGraph(&m)
+	}
+	status := "completed"
+	if failCount > 0 {
+		status = "partial_failed"
+	}
+	return map[string]interface{}{
+		"totalMemories": totalMem,
+		"embedded":      int64(successCount),
+		"failed":        int64(failCount),
+		"status":        status,
+	}, nil
+}
