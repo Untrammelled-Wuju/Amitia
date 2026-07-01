@@ -4,13 +4,9 @@ package episodic
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterEpisodicRouter(r *gin.RouterGroup, ctx *app.AppContext, graphSvc graph.Service) {
-	repo := NewRepository(ctx)
-	svc := NewService(repo, ctx, graphSvc)
+func RegisterEpisodicRouter(r *gin.RouterGroup, svc Service) {
 	handler := NewHandler(svc)
 
 	r.GET("/episodic", handler.List)

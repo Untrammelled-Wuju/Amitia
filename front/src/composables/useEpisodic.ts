@@ -86,9 +86,18 @@ export function useEpisodic() {
     return "#f44336"
   }
 
+  function sentimentIntensity(score: number): { label: string; percent: number } {
+    const clamped = Math.max(-10, Math.min(10, score))
+    const percent = ((clamped + 10) / 20) * 100
+    if (score >= 5) return { label: "强烈正面", percent }
+    if (score >= 1) return { label: "正面", percent }
+    if (score >= -4) return { label: "负面", percent }
+    return { label: "强烈负面", percent }
+  }
+
   return {
     memories, loading, total,
     fetchMemories, deleteMemory, getDetail,
-    sceneLabel, sceneEmoji, sentimentColor,
+    sceneLabel, sceneEmoji, sentimentColor, sentimentIntensity,
   }
 }

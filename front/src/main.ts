@@ -13,35 +13,39 @@ import "./styles/theme-presets.css"
 
 import App from "./App.vue"
 import router from "./router"
-
-const app = createApp(App)
-app.use(createPinia())
-app.use(router)
-app.use(ElementPlus, { locale: zhCn })
-
-// Setup unified error handling
+import { getRuntimeConnection } from "./runtime/runtime-adapter"
+import { shouldRegisterServiceWorker } from "./runtime/runtime-capabilities"
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index"
-setErrorPanelHandler((err) => {
-  // In web mode, show a simple alert for panel-level errors
-  import("element-plus").then(({ ElMessageBox }) => {
-    ElMessageBox.alert(err.detail || err.message, err.message, {
-      type: "error",
-      confirmButtonText: err.action?.label || "OK",
-    }).then(() => err.action?.handler?.())
-  })
-})
-setErrorBannerHandler((err) => {
-  import("element-plus").then(({ ElNotification }) => {
-    ElNotification({ title: err.message, message: err.detail || "", type: "warning", duration: 6000 })
-  })
-})
 
-app.mount("#app")
+async function bootstrap() {
+  await getRuntimeConnection()
+  const app = createApp(App)
+  app.use(createPinia())
+  app.use(router)
+  app.use(ElementPlus, { locale: zhCn })
+  setErrorPanelHandler((err) => {
+    import("element-plus").then(({ ElMessageBox }) => {
+      ElMessageBox.alert(err.detail || err.message, err.message, {
+        type: "error",
+        confirmButtonText: err.action?.label || "OK",
+      }).then(() => err.action?.handler?.())
+    })
+  })
+  setErrorBannerHandler((err) => {
+    import("element-plus").then(({ ElNotification }) => {
+      ElNotification({ title: err.message, message: err.detail || "", type: "warning", duration: 6000 })
+    })
+  })
+
+  app.mount("#app")
+}
+
+void bootstrap()
 
 // ============================================================
 // Register Service Worker (PWA)
 // ============================================================
-if ('serviceWorker' in navigator) {
+if (shouldRegisterServiceWorker() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((registration) => {

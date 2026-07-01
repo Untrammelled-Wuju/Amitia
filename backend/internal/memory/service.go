@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 彭旭
+﻿// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/graph"
+	internalQdrant "github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -338,7 +339,16 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	if limit <= 0 {
 		limit = 5
 	}
-	results, err := qdrantDB.MultiSearch(vector, limit+1, nil)
+	filter := internalQdrant.FilterBuilder{CharacterID: req.CharacterID}.Build()
+	log.Info("VectorSearch with filter",
+		"characterID", filter.CharacterID,
+		"scopeType", filter.ScopeType,
+		"memoryKind", filter.MemoryKind,
+		"query", queryText,
+		"limit", limit,
+	)
+	client := &internalQdrant.QdrantClient{}
+	results, err := client.SearchWithFilter(context.Background(), "memory_embeddings", vector, filter, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("向量检索失败: %w", err)
 	}
@@ -374,9 +384,13 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 			break
 		}
 	}
+	log.Info("VectorSearch completed",
+		"characterID", filter.CharacterID,
+		"results", len(vsResults),
+		"total", len(results),
+	)
 	return vsResults, nil
 }
-
 func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, error) {
 	limit := req.Limit
 	if limit <= 0 {
@@ -1079,7 +1093,6 @@ func (s *service) syncGraph(m *Memory) {
 		"confidence":      m.Confidence,
 		"character_id":    m.CharacterID,
 		"user_id":         userID,
-		"entity_id":       m.EntityID,
 		"entity_type":     m.EntityType,
 		"source_msg_id":   m.SourceMsgID,
 		"source_conv_id":  m.SourceConvID,
@@ -1088,10 +1101,8 @@ func (s *service) syncGraph(m *Memory) {
 		"updated_at":      m.UpdatedAt,
 	})
 	_ = s.graphSvc.SyncNode("user", userID, userID, map[string]interface{}{"user_id": userID})
-	_ = s.graphSvc.SyncEdge("user:"+userID, "memory:"+m.ID, "remembers", float64(m.Importance)/10.0)
 	if m.CharacterID != "" {
 		_ = s.graphSvc.SyncNode("character", m.CharacterID, m.CharacterID, map[string]interface{}{"character_id": m.CharacterID, "user_id": userID})
-		_ = s.graphSvc.SyncEdge("character:"+m.CharacterID, "memory:"+m.ID, "has_memory", float64(m.Confidence)/100.0)
 	}
 	if m.EntityID != "" {
 		entityType := strings.TrimSpace(m.EntityType)
@@ -1099,7 +1110,6 @@ func (s *service) syncGraph(m *Memory) {
 			entityType = "entity"
 		}
 		_ = s.graphSvc.SyncNode(entityType, m.EntityID, m.EntityID, map[string]interface{}{"user_id": userID})
-		_ = s.graphSvc.SyncEdge("memory:"+m.ID, entityType+":"+m.EntityID, "mentions", 1.0)
 	}
 }
 
@@ -1124,21 +1134,28 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 	if qdrantDB.Client == nil {
 		return false
 	}
+	mem, errMem := s.repo.FindByID(memID)
+	scopeType := ""
+	userID := ""
+	if errMem == nil && mem != nil {
+		scopeType = mem.Scope
+		userID = mem.CharacterID
+	}
 	text := key + " " + value
 	vector, err := s.embeddingSvc.Embed(text)
 	if err != nil {
-		log.Error("生成嵌入失败:", memID, err)
 		return false
 	}
-
 	payload := map[string]interface{}{
 		"memory_id":    memID,
 		"character_id": characterID,
 		"memory_type":  memoryType,
-		"key":          key,
+		"scope_type":   scopeType,
+		"memory_kind":  memoryType,
+		"user_id":      userID,
 		"value":        value,
 	}
-	collectionName := collectionNameForMemoryType(memoryType)
+	collectionName := "memory_embeddings"
 	err = qdrantDB.UpsertVectors([]qdrantDB.VectorPoint{
 		{ID: memID, Vector: vector, Payload: payload},
 	}, collectionName)
@@ -1264,7 +1281,7 @@ func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, ti
 		eq := s.db.Table("episodic_memories")
 		if userID != "" {
 			eq = eq.Where("user_id = ?", userID)
-		}
+	}
 		err := eq.Order("created_at DESC").Find(&episodics).Error
 		if err != nil {
 			return nil, 0, err
@@ -1444,3 +1461,7 @@ func (s *service) RetrieveStats() (map[string]interface{}, error) {
 		"totalCount": total,
 	}, nil
 }
+
+
+
+

@@ -169,11 +169,11 @@ func (s *SafeScheduler) fireRules() {
 	type rule struct {
 		id, enabled, maxPerDay, sentToday, randomMinutes            int
 		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
-		charID, lastSentAt                                          string
+		charID, convID, lastSentAt                                  string
 	}
 
 	rows, err := s.db.Table("proactive_rules").
-		Select("id, name, enabled, channel, character_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
+		Select("id, name, enabled, channel, character_id, conversation_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
 		Where("enabled = 1 AND schedule_cron != \"\"").Rows()
 	if err != nil {
 		return
@@ -182,7 +182,7 @@ func (s *SafeScheduler) fireRules() {
 
 	for rows.Next() {
 		var r rule
-		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.ruleType,
+		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.convID, &r.ruleType,
 			&r.cron, &r.quietStart, &r.quietEnd, &r.maxPerDay, &r.sentToday,
 			&r.prompt, &r.randomMinutes, &r.lastSentAt)
 
@@ -237,6 +237,7 @@ func (s *SafeScheduler) fireRules() {
 			randomMinutes: r.randomMinutes, name: r.name, channel: r.channel,
 			ruleType: r.ruleType, cron: r.cron, quietStart: r.quietStart,
 			quietEnd: r.quietEnd, prompt: r.prompt, charID: r.charID,
+			convID: r.convID,
 		})
 	}
 }

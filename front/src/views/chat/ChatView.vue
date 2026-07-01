@@ -65,19 +65,19 @@ import type { Character, Conversation, Message, ApiResponse } from "@/types"
 import { ChatPanel } from "../../ui-index"
 import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import { ElMessage } from "element-plus"
+import { createAuthorizedRequestInit, getApiBaseURL, resolveApiUrl } from "../../runtime/runtime-adapter"
 
-const API = "http://127.0.0.1:8899"
+const apiBaseUrl = ref("")
 
 async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
   try {
     const formData = new FormData()
     formData.append("audio", blob, "voice.webm")
-    const token = localStorage.getItem("ai-companion-token") || ""
-    const res = await fetch(API + "/api/voice/upload", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token },
-      body: formData,
-    })
+    const [url, init] = await Promise.all([
+      resolveApiUrl("/api/voice/upload"),
+      createAuthorizedRequestInit({ method: "POST", body: formData }),
+    ])
+    const res = await fetch(url, init)
     if (!res.ok) throw new Error("Voice upload failed")
     const data = await res.json()
     const audioUrl = (data as any)?.data?.audioUrl || (data as any)?.audioUrl || ""
@@ -147,7 +147,8 @@ const displayMessages = computed(() => {
 })
 
 onMounted(async () => {
-  const { data: c } = await axios.get<ApiResponse<Character[]>>(API + "/api/characters")
+  apiBaseUrl.value = await getApiBaseURL()
+  const { data: c } = await axios.get<ApiResponse<Character[]>>(apiBaseUrl.value + "/api/characters")
   if (c.code === 200 && c.data) characters.value = c.data
   fetchTtsConfig()
 })
@@ -159,11 +160,11 @@ onUnmounted(() => {
 
 async function fetchTtsConfig() {
   try {
-    const { data } = await axios.get<ApiResponse<any[]>>("/api/tts/configs")
+    const { data } = await axios.get<ApiResponse<any[]>>(apiBaseUrl.value + "/api/tts/configs")
     const configs = (data as any)?.data || data || [] ; const arr = Array.isArray(configs) ? configs : (configs?.data || []) ; const cfg = arr.find((c: any) => c.isActive) || arr[0]
     
     if (cfg) {
-      const full = await axios.get<ApiResponse<any>>("/api/tts/configs/" + cfg.id)
+      const full = await axios.get<ApiResponse<any>>(apiBaseUrl.value + "/api/tts/configs/" + cfg.id)
       const fullData = (full.data as any)?.data || full.data || {} ; ttsApiKey.value = fullData?.apiKey || ""
       ttsResourceId.value = fullData?.resourceId || "volc.speech.dialog"
       }
@@ -176,14 +177,14 @@ async function onCharacterChange() {
   timingStatus.value = null
   callActive.value = false
   if (!selectedCharacterId.value) return
-  const { data } = await axios.get<ApiResponse<Conversation[]>>(API + "/api/conversations")
+  const { data } = await axios.get<ApiResponse<Conversation[]>>(apiBaseUrl.value + "/api/conversations")
   if (data.code === 200 && data.data) conversations.value = data.data
   updateCallVoiceType()
 }
 
 async function onConversationChange() {
   if (!currentConversationId.value) { messages.value = []; timingStatus.value = null; disconnectSSE(); callActive.value = false; return }
-  const { data } = await axios.get<ApiResponse<Message[]>>(API + "/api/conversations/" + currentConversationId.value + "/messages")
+  const { data } = await axios.get<ApiResponse<Message[]>>(apiBaseUrl.value + "/api/conversations/" + currentConversationId.value + "/messages")
   if (data.code === 200 && data.data) messages.value = data.data
   await checkTimingStatus()
   connectSSE()
@@ -250,7 +251,7 @@ async function onSend(text: string, imageBase64?: string, videoBase64?: string, 
         const blob = await (await fetch(videoBase64)).blob()
         const formData = new FormData()
         formData.append("video", blob, "video.mp4")
-        const uploadResp = await axios.post(API + "/api/video/upload", formData, {
+        const uploadResp = await axios.post(apiBaseUrl.value + "/api/video/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" }
         })
         if (uploadResp.data?.data?.videoUrl) {
@@ -270,7 +271,7 @@ async function onSend(text: string, imageBase64?: string, videoBase64?: string, 
       payload.conversationId = currentConversationId.value
     }
 
-    const { data } = await axios.post<ApiResponse<any>>(API + "/api/web-chat/send", payload)
+    const { data } = await axios.post<ApiResponse<any>>(apiBaseUrl.value + "/api/web-chat/send", payload)
 
     if (data.code === 200 && data.data) {
       if (data.data.conversationId) {
@@ -301,7 +302,7 @@ async function checkTimingStatus() {
   if (!currentConversationId.value) return
   try {
     const { data } = await axios.get<ApiResponse<any>>(
-      API + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/status"
+      apiBaseUrl.value + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/status"
     )
     if (data.code === 200 && data.data) {
       if (data.data.hasActiveBuffer) {
@@ -334,7 +335,7 @@ function connectSSE() {
   disconnectSSE()
   const cid = currentConversationId.value
   if (!cid) return
-  eventSource = new EventSource(API + "/api/messages/stream?conversationId=" + encodeURIComponent(cid))
+  eventSource = new EventSource(apiBaseUrl.value + "/api/messages/stream?conversationId=" + encodeURIComponent(cid))
   eventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
@@ -363,7 +364,7 @@ async function pollForMessages() {
   if (!currentConversationId.value) return
   try {
     const { data } = await axios.get<ApiResponse<Message[]>>(
-      API + "/api/conversations/" + currentConversationId.value + "/messages"
+      apiBaseUrl.value + "/api/conversations/" + currentConversationId.value + "/messages"
     )
     if (data.code === 200 && data.data) {
       const newMsgs = data.data
@@ -385,7 +386,7 @@ async function pollForMessages() {
 async function onForceReply() {
   if (!currentConversationId.value) return
   try {
-    await axios.post(API + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/force")
+    await axios.post(apiBaseUrl.value + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/force")
     timingStatus.value = "replying"
     ElMessage.success("已触发回复")
   } catch (err: any) {
@@ -396,7 +397,7 @@ async function onForceReply() {
 async function onHoldReply() {
   if (!currentConversationId.value) return
   try {
-    await axios.post(API + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/hold")
+    await axios.post(apiBaseUrl.value + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/hold")
     timingStatus.value = "paused"
     ElMessage.success("已暂停自动回复")
   } catch (err: any) {
@@ -407,7 +408,7 @@ async function onHoldReply() {
 async function onResumeReply() {
   if (!currentConversationId.value) return
   try {
-    await axios.post(API + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/resume")
+    await axios.post(apiBaseUrl.value + "/api/web-chat/conversations/" + currentConversationId.value + "/reply-timing/resume")
     timingStatus.value = "waiting"
     ElMessage.success("已恢复")
     startPolling()

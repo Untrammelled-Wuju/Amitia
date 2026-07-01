@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
@@ -29,55 +30,42 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func setupRouter(ctx *app.AppContext, graphSvc graph.Service) *gin.Engine {
+func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
+	r.Use(middleware.TraceMiddleware())
 	r.Use(security.CorsMiddleware())
-
 	apiGroup := r.Group("/api")
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx)
-		chatRepo := chat.NewRepository(ctx)
-		memRepo := memory.NewRepository(ctx)
-		memSvc := memory.NewService(memRepo, ctx, graphSvc)
-		profRepo := profile.NewRepository(ctx)
-		profSvc := profile.NewService(profRepo, ctx, graphSvc)
-		epiRepo := episodic.NewRepository(ctx)
-		epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
-		wbRepo := worldbook.NewRepository(ctx)
-		wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
-		visionRepo := vision.NewRepository(ctx.DB)
-		visionSvc := vision.NewService(visionRepo)
-		comp := chat.NewCompressor(ctx.DB)
-		chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc, graphSvc)
-		chat.RegisterChatRouter(apiGroup, ctx, chatSvc)
-		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, graphSvc)
+		chat.RegisterChatRouter(apiGroup, ctx, services.Chat)
+		memHandler := memory.RegisterMemoryRouter(apiGroup, services.Memory)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "data": chatSvc.GetPipelineStatus(), "msg": "操作成功"})
+			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
 		})
-
-		profile.RegisterProfileRouter(apiGroup, ctx, graphSvc)
+		profile.RegisterProfileRouter(apiGroup, services.Profile)
 		proactive.RegisterProactiveRouter(apiGroup, ctx)
-		episodic.RegisterEpisodicRouter(apiGroup, ctx, graphSvc)
-		worldbook.RegisterWorldBookRouter(apiGroup, ctx, graphSvc)
+		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
+		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Surreal)
-		agent.RegisterAgentRouter(apiGroup, ctx, profSvc, epiSvc, graphSvc)
+		agent.RegisterAgentRouter(apiGroup, ctx, services.Chat)
 		aicharacter.RegisterAICharacterRouter(apiGroup, ctx)
-		system.RegisterSystemRouter(apiGroup, ctx, profSvc, epiSvc, graphSvc)
-		companion.RegisterCompanionRouter(apiGroup, ctx)
+		system.RegisterSystemRouter(apiGroup, ctx, services.Profile, services.Episodic, services.Graph)
+		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
+		system.RegisterPsycheAPIRouter(apiGroup)
+		system.RegisterPsycheSnapshotRouter(apiGroup)
 	}
-
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")
 	r.Static("/images", "./data/images")

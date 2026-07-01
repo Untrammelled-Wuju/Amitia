@@ -37,8 +37,9 @@ import { ref, onMounted } from "vue"
 import axios from "axios"
 import type { Character, ApiResponse, ImportResult } from "@/types"
 import { ElMessage } from "element-plus"
+import { getApiBaseURL } from "../../runtime/runtime-adapter"
 
-const API = "http://127.0.0.1:8899"
+const apiBaseUrl = ref("")
 const characters = ref<Character[]>([])
 const importType = ref("plaintext")
 const characterId = ref("")
@@ -47,7 +48,8 @@ const importing = ref(false)
 const result = ref("")
 
 onMounted(async () => {
-  const { data } = await axios.get<ApiResponse<Character[]>>(API + "/api/characters")
+  apiBaseUrl.value = await getApiBaseURL()
+  const { data } = await axios.get<ApiResponse<Character[]>>(apiBaseUrl.value + "/api/characters")
   if (data.code === 200 && data.data) characters.value = data.data
 })
 
@@ -56,7 +58,7 @@ async function doImport() {
   if (!rawText.value.trim()) { ElMessage.warning("请输入聊天文本"); return }
   importing.value = true
   try {
-    const { data } = await axios.post<ApiResponse<ImportResult>>(API + "/api/import", {
+    const { data } = await axios.post<ApiResponse<ImportResult>>(apiBaseUrl.value + "/api/import", {
       source: importType.value,
       characterId: characterId.value,
       raw: rawText.value,

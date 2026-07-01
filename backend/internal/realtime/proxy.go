@@ -204,6 +204,11 @@ func HandleSession(c *gin.Context) {
 	}
 	browserConn.WriteJSON(gin.H{"event": "connected", "data": "ok", "dialogId": respDialogId})
 
+	voiceSession := GetOrCreateVoiceSession(sessID, conversationId, "")
+	if voiceSession.CurrentTurn == nil {
+		voiceSession.BeginTurn("turn-"+sessID, "")
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	doneCh := make(chan struct{})
@@ -269,6 +274,9 @@ func HandleSession(c *gin.Context) {
 		}
 	}()
 
+	if voiceSession != nil {
+		voiceSession.EndSession()
+	}
 	wg.Wait()
 }
 

@@ -4,11 +4,9 @@ package companion
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterCompanionRouter(r *gin.RouterGroup, ctx *app.AppContext) {
-	svc := NewService(ctx)
+func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 	handler := NewHandler(svc)
 
 	comp := r.Group("/companion")

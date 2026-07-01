@@ -15,6 +15,7 @@ type Repository interface {
 	Delete(id string) error
 	GetByUserID(userID string, limit int) ([]EpisodicMemory, error)
 	GetRecent(userID string, limit int) ([]EpisodicMemory, error)
+	GetRecentScoped(userID string, limit int) ([]EpisodicMemory, error)
 	GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMemory, []map[string]interface{}, error)
 }
 
@@ -91,6 +92,13 @@ func (r *repository) GetRecent(userID string, limit int) ([]EpisodicMemory, erro
 	return items, err
 }
 
+func (r *repository) GetRecentScoped(userID string, limit int) ([]EpisodicMemory, error) {
+	if userID == "" || userID == "default" {
+		return []EpisodicMemory{}, nil
+	}
+	return r.GetRecent(userID, limit)
+}
+
 func (r *repository) GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMemory, []map[string]interface{}, error) {
 	var m EpisodicMemory
 	err := r.db.Where("id = ?", id).First(&m).Error
@@ -98,8 +106,8 @@ func (r *repository) GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMem
 		return nil, nil, err
 	}
 	var messages []map[string]interface{}
-	if m.MessageIDStart != "" && m.MessageIDEnd != "" {
-		db.Table("messages").Where("id >= ? AND id <= ?", m.MessageIDStart, m.MessageIDEnd).Order("created_at ASC").Find(&messages)
+	if m.MessageTimeStart != "" && m.MessageTimeEnd != "" {
+		db.Table("messages").Where("created_at >= ? AND created_at <= ?", m.MessageTimeStart, m.MessageTimeEnd).Order("created_at ASC").Find(&messages)
 	}
 	if messages == nil {
 		messages = []map[string]interface{}{}

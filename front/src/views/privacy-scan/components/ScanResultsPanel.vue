@@ -1,11 +1,17 @@
-<!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
 <template>
   <el-card class="section-card summary-card">
     <template #header>
-      <span class="card-title">扫描结果</span>
+      <div class="card-header-row">
+        <span class="card-title">扫描结果</span>
+        <div class="header-actions">
+          <el-button size="small" @click="exportReport('csv')">
+            <el-icon><Download /></el-icon> 导出 CSV
+          </el-button>
+          <el-button size="small" @click="exportReport('json')">
+            <el-icon><Download /></el-icon> 导出 JSON
+          </el-button>
+        </div>
+      </div>
     </template>
     <div class="summary-stats">
       <div class="summary-stat">
@@ -141,7 +147,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, reactive, watch } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { getScanResults, postMask } from "../api"
+import { Download } from "@element-plus/icons-vue"
+import { getScanResults, postMask, getExportScanReport } from "../api"
 import { sourceTableLabel } from "../utils"
 
 const props = defineProps<{
@@ -221,6 +228,22 @@ async function batchMask() {
   }
 }
 
+async function exportReport(format: "csv" | "json") {
+  try {
+    const blob = await getExportScanReport({ format })
+    const ext = format === "csv" ? "csv" : "json"
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `privacy-scan-report.${ext}`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`报告已导出为 ${ext.toUpperCase()} 格式`)
+  } catch (err: any) {
+    ElMessage.error("导出失败: " + (err.response?.data?.message || err.message))
+  }
+}
+
 watch(() => props.scanSummary, (val) => {
   if (val) {
     filter.page = 1
@@ -236,6 +259,8 @@ watch(() => props.scanSummary, (val) => {
 <style scoped>
 .section-card { margin-bottom: 16px; border: 1px solid var(--el-border-color-light); }
 .card-title { font-size: 15px; font-weight: 600; }
+.card-header-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.header-actions { display: flex; gap: 6px; }
 
 .summary-stats { display: flex; gap: 20px; }
 .summary-stat {
@@ -278,5 +303,6 @@ watch(() => props.scanSummary, (val) => {
   .filter-bar { flex-direction: column; }
   .filter-bar :deep(.el-select) { width: 100% !important; }
   .batch-actions { flex-direction: column; align-items: flex-start; }
+  .card-header-row { flex-direction: column; align-items: flex-start; }
 }
 </style>

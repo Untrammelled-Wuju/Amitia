@@ -19,6 +19,8 @@ type EpisodicMemory struct {
 	SentimentScore  int    `gorm:"column:sentiment_score;default:0" json:"sentimentScore"`
 	MessageIDStart  string `gorm:"column:message_id_start" json:"messageIdStart"`
 	MessageIDEnd    string `gorm:"column:message_id_end" json:"messageIdEnd"`
+	MessageTimeStart string `gorm:"column:message_time_start" json:"messageTimeStart"`
+	MessageTimeEnd   string `gorm:"column:message_time_end" json:"messageTimeEnd"`
 	SourceConvID    string `gorm:"column:source_conv_id" json:"sourceConvId"`
 	CreatedAt       string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt       string `gorm:"column:updated_at" json:"updatedAt"`
@@ -35,6 +37,7 @@ func (e *EpisodicMemory) BeforeCreate(tx *gorm.DB) error {
 
 type CreateEpisodicRequest struct {
 	UserID          string `json:"userId"`
+	CharacterID     string `json:"characterId"`
 	SceneType       string `json:"sceneType" binding:"required"`
 	Title           string `json:"title" binding:"required"`
 	Content         string `json:"content" binding:"required"`
@@ -48,10 +51,11 @@ type CreateEpisodicRequest struct {
 }
 
 type EpisodicListQuery struct {
-	UserID    string `form:"userId"`
-	SceneType string `form:"sceneType"`
-	Page      int    `form:"page"`
-	PageSize  int    `form:"pageSize"`
+	UserID      string `form:"userId"`
+	CharacterID string `form:"characterId"`
+	SceneType   string `form:"sceneType"`
+	Page        int    `form:"page"`
+	PageSize    int    `form:"pageSize"`
 }
 
 type EpisodicListResponse struct {
@@ -61,3 +65,5 @@ type EpisodicListResponse struct {
 	PageSize   int              `json:"pageSize"`
 	TotalPages int              `json:"totalPages"`
 }
+
+

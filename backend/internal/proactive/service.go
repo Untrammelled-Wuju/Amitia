@@ -10,6 +10,7 @@ import (
 )
 
 type Service interface {
+	QueryAffectNeedSignal(characterID, userID string) (float64, float64, error)
 	ListRules(characterID string) ([]map[string]interface{}, error)
 	CreateRule(req *CreateRuleRequest) (*ProactiveRule, error)
 	UpdateRule(id int, updates map[string]interface{}) (*ProactiveRule, error)
@@ -169,3 +170,16 @@ func (s *service) UpdateReminder(id int, updates map[string]interface{}) (*Remin
 func (s *service) DeleteReminder(id int) error              { return s.repo.DeleteReminder(id) }
 func (s *service) ToggleReminder(id int) (*Reminder, error) { return s.repo.ToggleReminder(id) }
 func (s *service) PendingReminders() ([]Reminder, error)    { return s.repo.PendingReminders() }
+
+func (s *service) QueryAffectNeedSignal(characterID, userID string) (float64, float64, error) {
+	var affectVal, needVal float64
+	err := s.db.Raw("SELECT " +
+		"COALESCE((SELECT p_val FROM psyche_states WHERE character_id = ? AND user_id = ? LIMIT 1), 0.5), " +
+		"COALESCE((SELECT AVG(level) FROM psyche_needs WHERE character_id = ? AND user_id = ? LIMIT 1), 0.5)",
+		characterID, userID, characterID, userID,
+	).Row().Scan(&affectVal, &needVal)
+	if err != nil {
+		return 0.5, 0.5, nil
+	}
+	return affectVal, needVal, nil
+}

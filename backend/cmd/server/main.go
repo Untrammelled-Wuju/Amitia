@@ -5,15 +5,9 @@ package main
 import (
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/companion"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/proactive"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
-	"github.com/u-ai/backend/internal/vision"
-	"github.com/u-ai/backend/internal/worldbook"
 	"gorm.io/gorm"
 	"net"
 	"os"
@@ -94,8 +88,11 @@ func main() {
 	startQdrant()
 	startSurreal()
 
-	compSvc := companion.NewService(ctx)
-	cron := NewProactiveCron(db, compSvc)
+	graphSvc := initGraph()
+	services := NewAppServices(ctx, graphSvc)
+	agenttool.SetMemoryService(services.Memory)
+
+	cron := NewProactiveCron(db, services.Companion)
 	cron.Start()
 	proactive.SchedulerRunning = true
 	defer func() {
@@ -117,39 +114,24 @@ func main() {
 	qqMgr := qq.NewManager("http://127.0.0.1:9877")
 	qq.SetManager(qqMgr)
 
-	graphSvc := initGraph()
-	chatRepo := chat.NewRepository(ctx)
-	memRepo := memory.NewRepository(ctx)
-	memSvc := memory.NewService(memRepo, ctx, graphSvc)
-
 	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
-		memSvc.SyncEmbedding(id, key, value, characterID, memoryType)
-		memSvc.SyncGraphMemory(id)
+		services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
+		services.Memory.SyncGraphMemory(id)
 	})
-	profRepo := profile.NewRepository(ctx)
-	profSvc := profile.NewService(profRepo, ctx, graphSvc)
-	epiRepo := episodic.NewRepository(ctx)
-	epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
 	agenttool.SetOnProfileSaved(func(id string) {
-		profSvc.SyncGraphProfile(id)
+		services.Profile.SyncGraphProfile(id)
 	})
 	agenttool.SetOnEpisodicSaved(func(id string) {
-		epiSvc.SyncGraphEpisodic(id)
+		services.Episodic.SyncGraphEpisodic(id)
 	})
-	wbRepo := worldbook.NewRepository(ctx)
-	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
-	visionRepo := vision.NewRepository(db)
-	visionSvc := vision.NewService(visionRepo)
-	comp := chat.NewCompressor(db)
-	chatSvc := chat.NewService(chatRepo, ctx, memSvc, profSvc, epiSvc, wbSvc, comp, visionSvc, graphSvc)
 	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
 	go func() {
 		time.Sleep(3 * time.Second)
-		chatSvc.EnsureChannelConversation("wechat")
-		chatSvc.EnsureChannelConversation("qq")
+		services.Chat.EnsureChannelConversation("wechat")
+		services.Chat.EnsureChannelConversation("qq")
 		log.Info("频道对话已确保创建")
 	}()
-	count, err := chatSvc.RecalculateMessageCounts()
+	count, err := services.Chat.RecalculateMessageCounts()
 	if err != nil {
 		log.Error("重算消息计数失败:", err)
 	} else {
@@ -158,13 +140,13 @@ func main() {
 	var charIDs []string
 	db.Table("characters").Pluck("id", &charIDs)
 	for _, cid := range charIDs {
-		compSvc.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
+		services.Companion.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
 	}
 	log.Info("今日主动消息任务已生成")
 
 	killExistingServer(serverAddr)
 
-	r := setupRouter(ctx, graphSvc)
+	r := setupRouter(ctx, services)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)
 		cleanup()

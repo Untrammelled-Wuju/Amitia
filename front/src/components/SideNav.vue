@@ -4,128 +4,266 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <nav class="side-nav">
-    <div class="nav-section">
-      <router-link to="/chat" class="nav-item" active-class="nav-active">
-        <el-icon><ChatDotRound /></el-icon>
-        <span>聊天</span>
-      </router-link>
-      <router-link to="/dashboard" class="nav-item" active-class="nav-active">
-        <el-icon><Odometer /></el-icon>
-        <span>概览</span>
-      </router-link>
+    <div class="nav-brand">
+      <div class="brand-mark">A</div>
+      <div class="brand-copy">
+        <strong>Amitia</strong>
+        <span>Desktop</span>
+      </div>
     </div>
-    <div class="nav-divider"></div>
-    <div class="nav-section">
-      <router-link to="/wechat" class="nav-item" active-class="nav-active">
-        <el-icon><Connection /></el-icon>
-        <span>微信连接</span>
-      </router-link>
-      <router-link to="/qq" class="nav-item" active-class="nav-active">
-        <el-icon><ChatDotSquare /></el-icon>
-        <span>QQ 连接</span>
-      </router-link>
-      <router-link to="/model" class="nav-item" active-class="nav-active">
-        <el-icon><Cpu /></el-icon>
-        <span>模型配置</span>
-      </router-link>
-      <router-link to="/character" class="nav-item" active-class="nav-active">
-        <el-icon><UserFilled /></el-icon>
-        <span>角色管理</span>
-      </router-link>
-      <router-link to="/reminders" class="nav-item" active-class="nav-active">
-        <el-icon><Bell /></el-icon>
-        <span>日程提醒</span>
-      </router-link>
+
+    <div class="nav-profile">
+      <div class="profile-avatar">{{ userAvatarText }}</div>
+      <div class="profile-name">{{ displayUsername }}</div>
+      <div class="profile-subtitle">{{ displayRole }}</div>
+      <div class="profile-character">{{ displayCharacter }}</div>
     </div>
-    <div class="nav-divider"></div>
-    <div class="nav-section">
-      <router-link to="/logs" class="nav-item" active-class="nav-active">
-        <el-icon><ChatLineSquare /></el-icon>
-        <span>聊天记录</span>
-      </router-link>
-      <router-link to="/import" class="nav-item" active-class="nav-active">
-        <el-icon><Upload /></el-icon>
-        <span>导入记录</span>
-      </router-link>
+
+    <div class="nav-scroll">
+      <div v-for="group in desktopNavGroups" :key="group.key" class="nav-section">
+        <router-link
+          v-for="item in group.items"
+          :key="item.to"
+          :to="item.to"
+          class="nav-item"
+          :class="{ 'nav-active': isActive(item) }"
+          :aria-current="isActive(item) ? 'page' : undefined"
+        >
+          <el-icon>
+            <component :is="item.icon" />
+          </el-icon>
+          <span>{{ item.label }}</span>
+        </router-link>
+      </div>
     </div>
-    <div class="nav-divider"></div>
-    <div class="nav-section">
-      <router-link to="/memory-manager" class="nav-item" active-class="nav-active">
-        <el-icon><Collection /></el-icon>
-        <span>记忆总览</span>
-      </router-link>
-      <router-link to="/profiles" class="nav-item" active-class="nav-active">
-        <el-icon><User /></el-icon>
-        <span>用户画像</span>
-      </router-link>
-      <router-link to="/episodic" class="nav-item" active-class="nav-active">
-        <el-icon><Timer /></el-icon>
-        <span>情景记忆</span>
-      </router-link>
-      <router-link to="/world-book" class="nav-item" active-class="nav-active">
-        <el-icon><Notebook /></el-icon>
-        <span>世界书</span>
-      </router-link>
-      <router-link to="/graph" class="nav-item" active-class="nav-active">
-        <el-icon><Share /></el-icon>
-        <span>记忆图谱</span>
-      </router-link>
-      <router-link to="/memory-timeline" class="nav-item" active-class="nav-active">
-        <el-icon><Histogram /></el-icon>
-        <span>时间线</span>
-      </router-link>
-    </div>
-    <div class="nav-divider"></div>
-    <div class="nav-section">
-      <router-link to="/safety" class="nav-item" active-class="nav-active">
-        <el-icon><Lock /></el-icon>
-        <span>安全设置</span>
-      </router-link>
-      <router-link to="/long-running" class="nav-item" active-class="nav-active">
-        <el-icon><Clock /></el-icon>
-        <span>长期运行</span>
-      </router-link>
-      <router-link to="/maintenance" class="nav-item" active-class="nav-active">
-        <el-icon><Monitor /></el-icon>
-        <span>维护诊断</span>
-      </router-link>
-      <router-link to="/settings" class="nav-item" active-class="nav-active">
-        <el-icon><Setting /></el-icon>
-        <span>设置</span>
-      </router-link>
+
+    <div class="nav-version">
+      <span>U-Ai</span>
+      <span>local</span>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-import {
-  ChatDotRound, Odometer, Connection, Cpu, UserFilled,
-  Bell, ChatDotSquare, ChatLineSquare, Upload, Lock, Clock, Setting, Monitor,
-  Collection, User, Timer, Notebook, Share, Histogram,
-} from "@element-plus/icons-vue"
+import { computed, inject, type Ref } from "vue"
+import { useRoute } from "vue-router"
+import { desktopNavGroups, isNavItemActive, type AppNavItem } from "@/navigation/app-nav"
+
+const route = useRoute()
+const currentCharName = inject<Ref<string>>("currentCharName")
+const authUsername = inject<Ref<string>>("authUsername")
+
+const displayUsername = computed(() => authUsername?.value || "本地用户")
+const displayRole = computed(() => authUsername?.value ? "已登录账号" : "离线模式")
+const displayCharacter = computed(() => currentCharName?.value || "未选择角色")
+const userAvatarText = computed(() => displayUsername.value.slice(0, 1).toUpperCase())
+
+function isActive(item: AppNavItem) {
+  return isNavItemActive(route.path, item)
+}
 </script>
 
 <style scoped>
 .side-nav {
   width: var(--ac-sidebar-width);
   height: 100%;
-  background: var(--ac-color-surface);
-  border-right: 1px solid var(--ac-color-border-light);
+  background: var(--ac-color-bg-secondary);
   display: flex;
   flex-direction: column;
-  padding: 10px 0;
-  overflow-y: auto;
+  padding: 16px 0;
+  overflow: hidden;
   user-select: none;
   flex-shrink: 0;
 }
-.nav-section { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
-.nav-divider { height: 1px; background: var(--ac-color-border-light); margin: 8px 16px; }
-.nav-item {
-  display: flex; align-items: center; gap: 10px; padding: 9px 14px;
-  border-radius: var(--ac-radius-sm); color: var(--ac-color-text-secondary);
-  text-decoration: none; font-size: var(--ac-font-size-sm); transition: all var(--ac-transition-fast);
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 34px;
+  flex-shrink: 0;
 }
-.nav-item:hover { background: var(--ac-color-surface-hover); color: var(--ac-color-text); }
-.nav-active { background: var(--ac-color-primary-bg); color: var(--ac-color-primary); font-weight: 500; }
-.nav-active:hover { background: var(--ac-color-primary-bg); color: var(--ac-color-primary); }
+
+.brand-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-color-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-copy strong {
+  color: var(--ac-color-text);
+  font-size: 14px;
+  line-height: 17px;
+  font-weight: 700;
+}
+
+.brand-copy span {
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.nav-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 38px 18px 30px;
+  flex-shrink: 0;
+}
+
+.profile-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ac-color-surface);
+  color: var(--ac-color-primary);
+  border: 1px solid var(--ac-color-primary-border);
+  box-shadow: var(--ac-shadow-sm);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.profile-name {
+  width: 100%;
+  margin-top: 12px;
+  color: var(--ac-color-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-subtitle {
+  margin-top: 3px;
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.profile-character {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: var(--ac-shadow-sm);
+}
+
+.nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 8px;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.nav-section + .nav-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ac-color-border-light);
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 50px;
+  padding: 0 28px 0 42px;
+  color: var(--ac-color-text-secondary);
+  text-decoration: none;
+  font-size: var(--ac-font-size-sm);
+  font-weight: 400;
+  transition: color var(--ac-transition-fast), background-color var(--ac-transition-fast);
+}
+
+.nav-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--ac-color-primary);
+  opacity: 0;
+  transition: opacity var(--ac-transition-fast);
+}
+
+.nav-item .el-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: var(--ac-color-surface-hover);
+  color: var(--ac-color-text);
+}
+
+.nav-active {
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-text);
+  font-weight: 600;
+}
+
+.nav-active::before {
+  opacity: 1;
+}
+
+.nav-active:hover {
+  background: var(--ac-color-primary-bg);
+  color: var(--ac-color-text);
+}
+
+.nav-version {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  margin: 10px 16px 0;
+  color: var(--ac-color-text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
 </style>

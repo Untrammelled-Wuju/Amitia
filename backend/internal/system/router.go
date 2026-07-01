@@ -225,4 +225,16 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, profSvc profi
 	r.POST("/video/upload", handler.VideoUpload)
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
+
+}
+
+
+func RegisterShadowRouter(r *gin.RouterGroup, handler *Handler) {
+	g := r.Group("/shadow")
+	g.GET("/status", handler.ShadowModeStatus)
+	g.POST("/start", handler.ShadowModeStart)
+	g.POST("/stop", handler.ShadowModeStop)
+	g.GET("/thresholds", handler.ShadowModeThresholds)
+	g.POST("/compare", handler.ShadowModeCompare)
+	g.POST("/load-sim", handler.ShadowModeLoadSim)
 }

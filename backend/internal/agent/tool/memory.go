@@ -3,11 +3,20 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	memorysvc "github.com/u-ai/backend/internal/memory"
 )
+
+var toolMemoryService memorysvc.Service
+
+func SetMemoryService(svc memorysvc.Service) {
+	toolMemoryService = svc
+}
 
 func init() {
 	RegisterMemory(Tool{
@@ -53,9 +62,19 @@ func init() {
 	}, saveMemory)
 }
 
-func saveMemory(args map[string]interface{}) string {
-	if toolDB == nil {
-		return "ERROR: database not initialized"
+func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+	if err := callCtx.Err(); err != nil {
+		return CancelledResult(err.Error())
+	}
+	scopedCtx, scopeErr := requireScopedWrite(execCtx)
+	if scopeErr != nil {
+		return *scopeErr
+	}
+	execCtx = scopedCtx
+	if toolMemoryService == nil {
+		result := ErrorResult("memory_service_not_initialized", "ERROR: memory service not initialized")
+		result.Audit = map[string]interface{}{"service": "memory"}
+		return result
 	}
 
 	key, _ := args["key"].(string)
@@ -63,11 +82,15 @@ func saveMemory(args map[string]interface{}) string {
 	memoryType, _ := args["memoryType"].(string)
 	importance, _ := args["importance"].(float64)
 	confidence, _ := args["confidence"].(float64)
-	_, _ = args["expiresAt"].(string)
-	_, _ = args["entityId"].(string)
+	expiresAtRaw, _ := args["expiresAt"].(string)
+	entityIDRaw, _ := args["entityId"].(string)
 
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
 	if key == "" || value == "" {
-		return "ERROR: key and value are required"
+		result := ErrorResult("invalid_args", "ERROR: key and value are required")
+		result.Audit = map[string]interface{}{"missing_fields": []string{"key", "value"}}
+		return result
 	}
 	if memoryType == "" {
 		memoryType = "fact"
@@ -85,50 +108,157 @@ func saveMemory(args map[string]interface{}) string {
 		confidence = 100
 	}
 
-	key = strings.TrimSpace(key)
-	value = strings.TrimSpace(value)
-
-	characterID := CurrentCharacterID
-
-	var existingID string
-	if characterID != "" {
-		row := toolDB.QueryRow("SELECT id FROM memories WHERE key = ? AND character_id = ? LIMIT 1", key, characterID)
-		row.Scan(&existingID)
-	} else {
-		row := toolDB.QueryRow("SELECT id FROM memories WHERE key = ? LIMIT 1", key)
-		row.Scan(&existingID)
-	}
-
-	id := uuid.New().String()
-
-	if existingID != "" {
-		_, err := toolDB.Exec("UPDATE memories SET value = ?, memory_type = ?, importance = ?, character_id = ?, confidence = ?, verified_status = 'auto_confirmed', updated_at = datetime('now', 'localtime') WHERE id = ?",
-			value, memoryType, int(importance), characterID, int(confidence), existingID)
-		if err != nil {
-			return fmt.Sprintf("ERROR: %s", err.Error())
-		}
-		toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_edited', ?, ?, ?, ?, 'auto', ?, datetime('now', 'localtime'))",
-			uuid.New().String(), existingID, key, value, memoryType, int(importance), characterID)
-
-		if OnMemorySaved != nil {
-			OnMemorySaved(existingID, key, value, memoryType, characterID)
-		}
-		return fmt.Sprintf("OK (updated) %s: %s (confidence %d)", key, value, int(confidence))
-	}
-
-	_, err := toolDB.Exec("INSERT INTO memories (id, key, value, memory_type, importance, character_id, source, confidence, verified_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'auto', ?, 'auto_confirmed', datetime('now', 'localtime'), datetime('now', 'localtime'))",
-		id, key, value, memoryType, int(importance), characterID, int(confidence))
+	expiresAt, err := normalizeMemoryExpiresAt(expiresAtRaw)
 	if err != nil {
-		return fmt.Sprintf("ERROR: %s", err.Error())
+		result := ErrorResult("invalid_expires_at", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"field": "expiresAt", "value": expiresAtRaw}
+		return result
+	}
+	entityID, err := normalizeMemoryEntityID(entityIDRaw)
+	if err != nil {
+		result := ErrorResult("invalid_entity_id", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"field": "entityId", "value": entityIDRaw}
+		return result
 	}
 
-	toolDB.Exec("INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, 'memory_created', ?, ?, ?, ?, 'auto', ?, datetime('now', 'localtime'))",
-		uuid.New().String(), id, key, value, memoryType, int(importance), characterID)
-
-	if OnMemorySaved != nil {
-		OnMemorySaved(id, key, value, memoryType, characterID)
+	characterID := execCtx.CharacterID
+	if entityID != "" && characterID == "" {
+		result := ErrorResult("invalid_entity_scope", "ERROR: entityId requires character scope")
+		result.Audit = map[string]interface{}{"field": "entityId", "value": entityID}
+		return result
 	}
-	return fmt.Sprintf("OK (created) %s: %s (confidence %d)", key, value, int(confidence))
+	searchResults, err := toolMemoryService.Search(&memorysvc.SearchMemoryRequest{
+		Keyword:     key,
+		CharacterID: characterID,
+		Limit:       50,
+	})
+	if err != nil {
+		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"operation": "search", "key": key, "character_id": characterID}
+		return result
+	}
+
+	var existing *memorysvc.Memory
+	for i := range searchResults {
+		if strings.TrimSpace(searchResults[i].Key) != key {
+			continue
+		}
+		if characterID != "" && searchResults[i].Scope != "user" && searchResults[i].CharacterID != characterID {
+			continue
+		}
+		existing = &searchResults[i]
+		break
+	}
+
+	if existing != nil {
+		updateReq := &memorysvc.UpdateMemoryRequest{
+			Value:          stringPtr(value),
+			MemoryType:     stringPtr(memoryType),
+			CharacterID:    stringPtr(characterID),
+			Importance:     intPtr(int(importance)),
+			Confidence:     intPtr(int(confidence)),
+			VerifiedStatus: stringPtr("auto_confirmed"),
+		}
+		if expiresAt != "" {
+			updateReq.ExpiresAt = stringPtr(expiresAt)
+		}
+		if entityID != "" {
+			updateReq.EntityID = stringPtr(entityID)
+		}
+		updated, err := toolMemoryService.Update(existing.ID, updateReq)
+		if err != nil {
+			result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
+			result.Audit = map[string]interface{}{"operation": "update", "memory_id": existing.ID, "key": key}
+			return result
+		}
+		result := TextResult(fmt.Sprintf("OK (updated) %s: %s (confidence %d)", key, value, int(confidence)))
+		result.ExternalOperationID = updated.ID
+		result.SideEffects = []ToolSideEffect{{Type: "memory_update", TargetID: updated.ID, Confirmed: true}}
+		result.Audit = map[string]interface{}{
+			"key":          key,
+			"memory_type":  memoryType,
+			"character_id": characterID,
+			"expires_at":   updated.ExpiresAt,
+			"entity_id":    updated.EntityID,
+		}
+		return result
+	}
+
+	created, err := toolMemoryService.Create(&memorysvc.CreateMemoryRequest{
+		CharacterID:    characterID,
+		MemoryType:     memoryType,
+		Key:            key,
+		Value:          value,
+		Importance:     int(importance),
+		Confidence:     int(confidence),
+		ExpiresAt:      expiresAt,
+		EntityID:       entityID,
+		VerifiedStatus: "auto_confirmed",
+		Source:         "auto",
+		Scope:          "character",
+		SourceConvID:   execCtx.ConversationID,
+		SourceMsgID:    execCtx.RequestID,
+	})
+	if err != nil {
+		result := ErrorResult("memory_service_error", fmt.Sprintf("ERROR: %s", err.Error()))
+		result.Audit = map[string]interface{}{"operation": "create", "key": key, "character_id": characterID}
+		return result
+	}
+	result := TextResult(fmt.Sprintf("OK (created) %s: %s (confidence %d)", key, value, int(confidence)))
+	result.ExternalOperationID = created.ID
+	result.SideEffects = []ToolSideEffect{{Type: "memory_create", TargetID: created.ID, Confirmed: true}}
+	result.Audit = map[string]interface{}{
+		"key":          key,
+		"memory_type":  memoryType,
+		"character_id": characterID,
+		"expires_at":   created.ExpiresAt,
+		"entity_id":    created.EntityID,
+	}
+	return result
+}
+
+func normalizeMemoryExpiresAt(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		t, err := time.Parse(layout, raw)
+		if err != nil {
+			continue
+		}
+		if layout == "2006-01-02" {
+			return t.Format("2006-01-02"), nil
+		}
+		return t.Format("2006-01-02 15:04:05"), nil
+	}
+	return "", fmt.Errorf("invalid expiresAt, expected ISO date or datetime")
+}
+
+func normalizeMemoryEntityID(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid entityId, expected UUID")
+	}
+	return id.String(), nil
+}
+
+func stringPtr(v string) *string {
+	return &v
+}
+
+func intPtr(v int) *int {
+	return &v
 }
 func init() {
 	Register(Tool{
@@ -162,9 +292,17 @@ func init() {
 	}, saveProfile)
 }
 
-func saveProfile(args map[string]interface{}) string {
+func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+	if err := callCtx.Err(); err != nil {
+		return CancelledResult(err.Error())
+	}
+	scopedCtx, scopeErr := requireScopedWrite(execCtx)
+	if scopeErr != nil {
+		return *scopeErr
+	}
+	execCtx = scopedCtx
 	if toolDB == nil {
-		return "ERROR: database not initialized"
+		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
 	}
 
 	category, _ := args["category"].(string)
@@ -173,7 +311,7 @@ func saveProfile(args map[string]interface{}) string {
 	confidence, _ := args["confidence"].(float64)
 
 	if category == "" || attrName == "" || attrValue == "" {
-		return "ERROR: category, attribute_name and attribute_value are required"
+		return ErrorResult("invalid_args", "ERROR: category, attribute_name and attribute_value are required")
 	}
 
 	if confidence < 1 {
@@ -183,11 +321,8 @@ func saveProfile(args map[string]interface{}) string {
 		confidence = 100
 	}
 
-	userID := "default"
-	convID := CurrentConversationID
-	if convID == "" {
-		convID = "unknown"
-	}
+	userID := execCtx.CharacterID
+	convID := execCtx.ConversationID
 
 	var existingID string
 	var currentConf int
@@ -208,7 +343,11 @@ func saveProfile(args map[string]interface{}) string {
 		if OnProfileSaved != nil {
 			OnProfileSaved(existingID)
 		}
-		return fmt.Sprintf("OK (updated) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf)
+		result := TextResult(fmt.Sprintf("OK (updated) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf))
+		result.ExternalOperationID = existingID
+		result.SideEffects = []ToolSideEffect{{Type: "profile_update", TargetID: existingID, Confirmed: true}}
+		result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": convID, "character_id": userID}
+		return result
 	}
 
 	id := uuid.New().String()
@@ -218,7 +357,11 @@ func saveProfile(args map[string]interface{}) string {
 	if OnProfileSaved != nil {
 		OnProfileSaved(id)
 	}
-	return fmt.Sprintf("OK (created) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf)
+	result := TextResult(fmt.Sprintf("OK (created) %s/%s: %s (confidence %d)", category, attrName, attrValue, newConf))
+	result.ExternalOperationID = id
+	result.SideEffects = []ToolSideEffect{{Type: "profile_create", TargetID: id, Confirmed: true}}
+	result.Audit = map[string]interface{}{"category": category, "attribute_name": attrName, "conversation_id": convID, "character_id": userID}
+	return result
 }
 func init() {
 	Register(Tool{
@@ -252,9 +395,17 @@ func init() {
 	}, saveEpisodicMemory)
 }
 
-func saveEpisodicMemory(args map[string]interface{}) string {
+func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+	if err := callCtx.Err(); err != nil {
+		return CancelledResult(err.Error())
+	}
+	scopedCtx, scopeErr := requireScopedWrite(execCtx)
+	if scopeErr != nil {
+		return *scopeErr
+	}
+	execCtx = scopedCtx
 	if toolDB == nil {
-		return "ERROR: database not initialized"
+		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
 	}
 
 	sceneType, _ := args["scene_type"].(string)
@@ -263,14 +414,11 @@ func saveEpisodicMemory(args map[string]interface{}) string {
 	score, _ := args["sentiment_score"].(float64)
 
 	if sceneType == "" || title == "" || content == "" {
-		return "ERROR: scene_type, title and content are required"
+		return ErrorResult("invalid_args", "ERROR: scene_type, title and content are required")
 	}
 
-	userID := "default"
-	convID := CurrentConversationID
-	if convID == "" {
-		convID = "unknown"
-	}
+	userID := execCtx.CharacterID
+	convID := execCtx.ConversationID
 
 	id := uuid.New().String()
 	toolDB.Exec(
@@ -279,5 +427,9 @@ func saveEpisodicMemory(args map[string]interface{}) string {
 	if OnEpisodicSaved != nil {
 		OnEpisodicSaved(id)
 	}
-	return fmt.Sprintf("OK (created) %s: %s (score %d)", sceneType, title, int(score))
+	result := TextResult(fmt.Sprintf("OK (created) %s: %s (score %d)", sceneType, title, int(score)))
+	result.ExternalOperationID = id
+	result.SideEffects = []ToolSideEffect{{Type: "episodic_memory_create", TargetID: id, Confirmed: true}}
+	result.Audit = map[string]interface{}{"scene_type": sceneType, "conversation_id": convID, "character_id": userID}
+	return result
 }

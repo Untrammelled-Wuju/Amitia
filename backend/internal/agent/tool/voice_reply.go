@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package tool
 
+import "context"
+
 func init() {
 	Register(Tool{
 		Type: "function",
@@ -14,20 +16,13 @@ func init() {
 				Required:   []string{},
 			},
 		},
-	}, func(args map[string]interface{}) string {
-		SetForceVoice()
-		return "OK"
+	}, func(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+		if err := callCtx.Err(); err != nil {
+			return CancelledResult(err.Error())
+		}
+		result := TextResult("OK")
+		result.ForceVoice = true
+		result.Audit = map[string]interface{}{"channel": execCtx.Channel}
+		return result
 	})
-}
-
-var forceVoiceFlag bool
-
-func SetForceVoice() {
-	forceVoiceFlag = true
-}
-
-func GetForceVoice() bool {
-	v := forceVoiceFlag
-	forceVoiceFlag = false
-	return v
 }

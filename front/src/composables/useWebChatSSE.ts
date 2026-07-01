@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, nextTick } from "vue"
+import { resolveApiUrl } from "../runtime/runtime-adapter"
 
 export function useWebChatSSE(
   convId: Ref<string>,
@@ -25,11 +26,11 @@ export function useWebChatSSE(
     })
   }
 
-  function connectSSE() {
+  async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
-    const apiBase = (import.meta as any).env?.VITE_API_URL || ""
-    const url = apiBase + "/api/messages/stream?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
+    const baseUrl = await resolveApiUrl("/api/messages/stream")
+    const url = baseUrl + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
     eventSource.onmessage = function(event) {
       try {
@@ -60,7 +61,7 @@ export function useWebChatSSE(
     }
     eventSource.onerror = () => {
       disconnectSSE()
-      setTimeout(() => { if (convId.value) connectSSE() }, 3000)
+      setTimeout(() => { if (convId.value) void connectSSE() }, 3000)
     }
   }
 
@@ -71,9 +72,10 @@ export function useWebChatSSE(
     }
   }
 
-  function connectProactiveSSE() {
+  async function connectProactiveSSE() {
     try {
-      proactiveSSE = new EventSource("/api/proactive-sse")
+      const url = await resolveApiUrl("/api/proactive-sse")
+      proactiveSSE = new EventSource(url)
       proactiveSSE.addEventListener("proactive_message", (e) => {
         try {
           const msg = JSON.parse(e.data)
@@ -88,8 +90,8 @@ export function useWebChatSSE(
           fetchWechatMsgCount()
           fetchQQStatus()
       })
-      proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(connectProactiveSSE, 5000) }
-    } catch { setTimeout(connectProactiveSSE, 5000) }
+      proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(() => void connectProactiveSSE(), 5000) }
+    } catch { setTimeout(() => void connectProactiveSSE(), 5000) }
   }
 
   function disconnectProactiveSSE() {

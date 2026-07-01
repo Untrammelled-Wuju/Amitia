@@ -32,6 +32,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-select v-model="sourceFilter" placeholder="来源" size="small" style="width:110px" clearable @change="fetchList">
         <el-option v-for="s in SOURCES" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
+      <el-select v-model="scopeTypeFilter" placeholder="范围" size="small" style="width:140px" clearable @change="fetchList">
+        <el-option v-for="s in SCOPE_TYPES" :key="s.value" :label="s.label" :value="s.value" />
+      </el-select>
       <el-select v-model="characterFilter" placeholder="角色" size="small" style="width:130px" clearable @change="fetchList">
         <el-option label="全部角色" value="" />
         <el-option v-for="ch in characters" :key="ch.id" :label="ch.name" :value="ch.id" />
@@ -220,10 +223,20 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-table-column>
       <el-table-column label="范围" width="220">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.scope==='user'?'success':'info'">{{ row.scope==='user'?'共享':'独有' }}</el-tag>
-          <span v-if="row.scope==='character' && row.characterId" class="scope-char-name">{{ charName(row.characterId) }}</span>
-          <el-button v-if="row.scope==='character'" text size="small" type="warning" class="scope-toggle-btn" @click="toggleScope(row)">升级为共享</el-button>
-          <el-button v-if="row.scope==='user'" text size="small" type="info" class="scope-toggle-btn" @click="toggleScope(row)">降级为独享</el-button>
+          <el-tag size="small" :type="scopeTypeTagType(row)">{{ scopeTypeLabel(row) }}</el-tag>
+          <span v-if="rowScopeType(row)==='user_character' && row.characterId" class="scope-char-name">{{ charName(row.characterId) }}</span>
+          <el-button v-if="rowScopeType(row)==='user_character'" text size="small" type="warning" class="scope-toggle-btn" @click="toggleScope(row)">升级为全局</el-button>
+          <el-button v-if="rowScopeType(row)==='user_global'" text size="small" type="info" class="scope-toggle-btn" @click="toggleScope(row)">降级为角色</el-button>
+        </template>
+      </el-table-column>
+      <el-table-column label="权限" width="180">
+        <template #default="{ row }">
+          <div class="permission-tags">
+            <el-tag size="small" :type="sensitivityTagType(rowSensitivity(row))">{{ sensitivityLabel(rowSensitivity(row)) }}</el-tag>
+            <el-tag size="small" :type="rowAllowContextUse(row) ? 'success' : 'info'">{{ rowAllowContextUse(row) ? '可理解' : '禁上下文' }}</el-tag>
+            <el-tag size="small" :type="rowAllowProactiveMention(row) ? 'warning' : 'info'">{{ rowAllowProactiveMention(row) ? '可主动提' : '禁主动提' }}</el-tag>
+            <el-tag v-if="rowRequiresConfirmation(row)" size="small" type="danger">需确认</el-tag>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="140">
@@ -315,10 +328,21 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-slider v-model="form.importance" :max="10" show-input :marks="{1:'低',5:'中',10:'高'}" />
         </el-form-item>
         <el-form-item label="范围">
-          <el-select v-model="form.scope" style="width:100%">
-            <el-option label="仅当前角色" value="character" />
-            <el-option label="跨角色共享" value="user" />
+          <el-select v-model="form.scopeType" style="width:100%">
+            <el-option v-for="s in SCOPE_TYPES" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="敏感等级">
+          <el-select v-model="form.sensitivity" style="width:100%">
+            <el-option v-for="s in SENSITIVITY_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="使用权限">
+          <div class="permission-switches">
+            <el-checkbox v-model="form.allowContextUse">允许用于上下文理解</el-checkbox>
+            <el-checkbox v-model="form.allowProactiveMention">允许主动提及</el-checkbox>
+            <el-checkbox v-model="form.requiresConfirmation">使用前需要确认</el-checkbox>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -410,12 +434,24 @@ const TYPES = [
 const SOURCES = [
   { label:"手动",value:"manual"},{ label:"摘要",value:"summary"},{ label:"提取",value:"extracted"},{ label:"导入",value:"import"},
 ]
+const SCOPE_TYPES = [
+  { label:"用户全局", value:"user_global" },
+  { label:"用户-角色", value:"user_character" },
+  { label:"角色自身", value:"character_self" },
+  { label:"世界", value:"world" },
+]
+const SENSITIVITY_OPTIONS = [
+  { label:"普通", value:"normal" },
+  { label:"敏感", value:"sensitive" },
+  { label:"高敏感", value:"high" },
+]
 
 const memories = ref<any[]>([])
 const candidates = ref<any[]>([])
 const keyword = ref("")
 const typeFilter = ref("")
 const sourceFilter = ref("")
+const scopeTypeFilter = ref("")
 const characterFilter = ref(injectedCharacterId?.value || "")
 const characters = ref<any[]>([])
 const sortBy = ref("importance_desc")
@@ -428,7 +464,20 @@ const editingId = ref("")
 const saving = ref(false)
 const showCandidates = ref(false)
 const conversationList = ref<any[]>([])
-const form = reactive({ key:"", value:"", memoryType:"custom", importance:5, characterId:"", scope:"character", source:"manual" })
+const form = reactive({
+  key:"",
+  value:"",
+  memoryType:"custom",
+  importance:5,
+  characterId:"",
+  scope:"character",
+  scopeType:"user_character",
+  source:"manual",
+  sensitivity:"normal",
+  allowContextUse:true,
+  allowProactiveMention:false,
+  requiresConfirmation:false,
+})
 const editCandidateVisible = ref(false)
 const conflictVisible = ref(false)
 const showGenerateDialog = ref(false)
@@ -500,13 +549,41 @@ function charName(cid: string) {
 function sourceLabel(s: string) { return SOURCES.find(x=>x.value===s)?.label || s }
 function importanceColor(v: number) { return v>=8?'#c85a5a':v>=5?'#c8924a':'#5b7fa5' }
 function isExpired(expiresAt?: string) { return !!expiresAt && new Date(expiresAt).getTime() < Date.now() }
+function legacyScopeToScopeType(scope: string) { return scope === "user" ? "user_global" : "user_character" }
+function rowScopeType(row: any) { return row.scopeType || row.scope_type || legacyScopeToScopeType(row.scope || "character") }
+function scopeTypeToScope(scopeType: string) { return scopeType === "user_global" ? "user" : scopeType === "world" ? "world" : "character" }
+function scopeTypeLabel(row: any) { return SCOPE_TYPES.find(x => x.value === rowScopeType(row))?.label || rowScopeType(row) }
+function rowSensitivity(row: any) { return row.sensitivity || row.sensitivityLevel || row.sensitivity_level || "normal" }
+function sensitivityLabel(value: string) { return SENSITIVITY_OPTIONS.find(x => x.value === value)?.label || value }
+function sensitivityTagType(value: string) { return value === "high" ? "danger" : value === "sensitive" ? "warning" : "info" }
+function readBooleanFlag(row: any, keys: string[], defaultValue: boolean) {
+  for (const key of keys) {
+    const value = row?.[key]
+    if (typeof value === "boolean") return value
+    if (typeof value === "number") return value !== 0
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (["true", "1", "yes", "y", "on"].includes(normalized)) return true
+      if (["false", "0", "no", "n", "off"].includes(normalized)) return false
+    }
+  }
+  return defaultValue
+}
+function rowAllowContextUse(row: any) { return readBooleanFlag(row, ["allowContextUse", "allow_context_use"], true) }
+function rowAllowProactiveMention(row: any) { return readBooleanFlag(row, ["allowProactiveMention", "allow_proactive_mention"], false) }
+function rowRequiresConfirmation(row: any) { return readBooleanFlag(row, ["requiresConfirmation", "requires_confirmation"], false) }
+function scopeTypeTagType(row: any) {
+  const scopeType = rowScopeType(row)
+  return scopeType === "user_global" || scopeType === "world" ? "success" : scopeType === "character_self" ? "warning" : "info"
+}
 
 async function fetchList() {
-  const params: any = { page:page.value, pageSize:pageSize.value }
+  const params: any = { page:page.value, pageSize: pageSize.value }
   if (characterFilter.value) params.characterId = characterFilter.value
   if (keyword.value) params.keyword = keyword.value
   if (typeFilter.value) params.memoryType = typeFilter.value
   if (sourceFilter.value) params.source = sourceFilter.value
+  if (scopeTypeFilter.value) params.scopeType = scopeTypeFilter.value
   if (sortBy.value) params.sortBy = sortBy.value
   try {
     const r = await get<any>("/api/memories", params)
@@ -517,22 +594,60 @@ async function fetchList() {
 
 function showCreate() {
   editing.value = false; editingId.value = ""
-  form.key=""; form.value=""; form.memoryType="custom"; form.importance=5; form.characterId=injectedCharacterId?.value||""; form.source="manual"; form.scope="character"
+  form.key=""
+  form.value=""
+  form.memoryType="custom"
+  form.importance=5
+  form.characterId=injectedCharacterId?.value||""
+  form.source="manual"
+  form.scope="character"
+  form.scopeType="user_character"
+  form.sensitivity="normal"
+  form.allowContextUse=true
+  form.allowProactiveMention=false
+  form.requiresConfirmation=false
   dialogVisible.value = true
 }
 
 function showEdit(row: any) {
   editing.value = true; editingId.value = row.id
-  form.key=row.key; form.value=row.value; form.memoryType=row.memoryType; form.importance=row.importance; form.characterId=row.characterId||""; form.scope=row.scope||"character"; form.source=row.source||"manual"
+  form.key=row.key
+  form.value=row.value
+  form.memoryType=row.memoryType
+  form.importance=row.importance
+  form.characterId=row.characterId||""
+  form.scope=row.scope||"character"
+  form.scopeType=rowScopeType(row)
+  form.source=row.source||"manual"
+  form.sensitivity=rowSensitivity(row)
+  form.allowContextUse=rowAllowContextUse(row)
+  form.allowProactiveMention=rowAllowProactiveMention(row)
+  form.requiresConfirmation=rowRequiresConfirmation(row)
   dialogVisible.value = true
 }
 
-async function toggleScope(row: any) { const newScope = row.scope === "user" ? "character" : "user"; try { await put(`/api/memories/${row.id}`, { scope: newScope }); row.scope = newScope; ElMessage.success(newScope === "user" ? "已升级为共享记忆" : "已降级为独享记忆") } catch {} }
+async function toggleScope(row: any) {
+  const newScopeType = rowScopeType(row) === "user_global" ? "user_character" : "user_global"
+  const newScope = newScopeType === "user_global" ? "user" : "character"
+  try {
+    await put(`/api/memories/${row.id}`, { scope: newScope, scopeType: newScopeType })
+    row.scope = newScope
+    row.scopeType = newScopeType
+    ElMessage.success(newScopeType === "user_global" ? "已升级为全局记忆" : "已降级为角色记忆")
+  } catch {}
+}
 
 async function saveMem() {
   saving.value = true
   try {
-    const payload = {...form, source: form.source || "manual"}
+    const payload = {
+      ...form,
+      source: form.source || "manual",
+      scope: scopeTypeToScope(form.scopeType),
+      allowContextUse: !!form.allowContextUse,
+      allowProactiveMention: !!form.allowProactiveMention,
+      requiresConfirmation: !!form.requiresConfirmation,
+    }
     if (editing.value) await put(`/api/memories/${editingId.value}`, payload)
     else await post("/api/memories", payload)
     dialogVisible.value = false
@@ -590,9 +705,22 @@ async function handleExport() {
     if (characterFilter.value) params.characterId = characterFilter.value
     if (typeFilter.value) params.memoryType = typeFilter.value
     if (sourceFilter.value) params.source = sourceFilter.value
+    if (scopeTypeFilter.value) params.scopeType = scopeTypeFilter.value
     const all = await get<any>("/api/memories", params)
     const items = all?.items || []
-    const data = items.map((m:any)=>({key:m.key,value:m.value,type:m.memoryType,importance:m.importance,source:m.source,scope:m.scope}))
+    const data = items.map((m:any)=>({
+      key:m.key,
+      value:m.value,
+      type:m.memoryType,
+      importance:m.importance,
+      source:m.source,
+      scope:m.scope,
+      scopeType:rowScopeType(m),
+      sensitivity:rowSensitivity(m),
+      allowContextUse:rowAllowContextUse(m),
+      allowProactiveMention:rowAllowProactiveMention(m),
+      requiresConfirmation:rowRequiresConfirmation(m),
+    }))
     const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"})
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a"); a.href=url; a.download="memories-"+new Date().toISOString().slice(0,10)+".json"; a.click()
@@ -606,7 +734,20 @@ async function confirmCandidate(c: any) {
     await post("/api/memory-candidates/" + c.id + "/accept", {})
     ElMessage.success("已保存")
   } catch {
-    await post("/api/memories",{key:c.key,value:c.value,memoryType:c.memoryType||"custom",importance:c.importance||5,source:"manual",scope:"character",characterId:characterFilter.value||injectedCharacterId?.value||""})
+    await post("/api/memories",{
+      key:c.key,
+      value:c.value,
+      memoryType:c.memoryType||"custom",
+      importance:c.importance||5,
+      source:"manual",
+      scope:"character",
+      scopeType:"user_character",
+      characterId:characterFilter.value||injectedCharacterId?.value||"",
+      sensitivity:"normal",
+      allowContextUse:true,
+      allowProactiveMention:false,
+      requiresConfirmation:false,
+    })
     ElMessage.success("已保存")
   }
   candidates.value = candidates.value.filter(x=>x.id!==c.id)
@@ -944,6 +1085,19 @@ onMounted(async () => {
 .scope-toggle-btn {
   margin-left: 4px !important;
   text-decoration: underline !important;
+}
+
+.permission-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.permission-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
 }
 </style>
 

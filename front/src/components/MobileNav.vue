@@ -4,31 +4,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 ﻿<template>
   <nav class="mobile-nav">
-    <router-link to="/chat" class="tab-item" active-class="tab-active">
-      <el-icon><ChatDotRound /></el-icon>
-      <span>聊天</span>
-    </router-link>
-    <router-link to="/character" class="tab-item" active-class="tab-active">
-      <el-icon><UserFilled /></el-icon>
-      <span>角色</span>
-    </router-link>
-    <router-link to="/memory-manager" class="tab-item" active-class="tab-active">
-      <el-icon><Collection /></el-icon>
-      <span>记忆</span>
-    </router-link>
-    <router-link to="/logs" class="tab-item" active-class="tab-active">
-      <el-icon><ChatLineSquare /></el-icon>
-      <span>记录</span>
-    </router-link>
-    <router-link to="/settings" class="tab-item" active-class="tab-active">
-      <el-icon><Setting /></el-icon>
-      <span>设置</span>
+    <router-link
+      v-for="item in mobileNavItems"
+      :key="item.key"
+      :to="item.to"
+      class="tab-item"
+      :class="{ 'tab-active': isActive(item) }"
+      :aria-current="isActive(item) ? 'page' : undefined"
+    >
+      <el-icon><component :is="item.icon" /></el-icon>
+      <span>{{ mobileLabelMap[item.key] || item.label }}</span>
     </router-link>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { ChatDotRound, UserFilled, Collection, ChatLineSquare, Setting } from "@element-plus/icons-vue"
+import { useRoute } from "vue-router"
+import { isNavItemActive, mobileNavItems, type AppNavItem } from "@/navigation/app-nav"
+
+const route = useRoute()
+
+const mobileLabelMap: Record<string, string> = {
+  character: "角色",
+  memoryManager: "记忆",
+  logs: "记录",
+}
+
+function isActive(item: AppNavItem) {
+  return isNavItemActive(route.path, item)
+}
 </script>
 
 <style scoped>

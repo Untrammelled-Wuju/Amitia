@@ -24,6 +24,8 @@ export function useDashboardData() {
   const recentImports = ref<any[]>([])
   const feedbackTotal = ref(0)
   const feedbackByType = ref<Record<string, number>>({})
+  const psycheState = ref<import("../../../types").PsycheStateSnapshot | null>(null)
+  const psycheLoading = ref(false)
 
   const deployLabel = computed(() => health.value?.deployMode === "cloud-web" ? "私有云" : "本地桌面")
   const deployClass = computed(() => health.value?.deployMode === "cloud-web" ? "status-warn" : "status-ok")
@@ -240,6 +242,21 @@ export function useDashboardData() {
     } catch {}
   }
 
+  async function fetchPsycheState() {
+    psycheLoading.value = true
+    try {
+      const r = await get<any>("/api/psyche/state")
+      const data = r?.data || r
+      if (data && data.emotion) {
+        psycheState.value = data as import("../../../types").PsycheStateSnapshot
+      }
+    } catch {
+      psycheState.value = null
+    } finally {
+      psycheLoading.value = false
+    }
+  }
+
   async function fetchFeedbackStats() {
     try {
       const res: any = await get("/api/messages/feedback/stats")
@@ -255,6 +272,7 @@ export function useDashboardData() {
       fetchRecentErrors(), fetchActiveChar(), fetchTodayStats(), fetchRecentImports(),
       fetchCloudRisk(), fetchFeedbackStats(), fetchAccessRisk(), fetchUsageOverview(),
       fetchQQStatus(),
+      fetchPsycheState(),
     ])
   }
 
@@ -273,7 +291,10 @@ export function useDashboardData() {
     fetchRuntimeHealth, runHealthCheck,
     fetchDiagnostics, runDiagnostics,
     fetchRecentErrors, fetchActiveChar, fetchTodayStats, fetchUsageOverview,
-    fetchRecentImports, fetchFeedbackStats,
+    psycheState, psycheLoading,
+    fetchRecentImports, fetchFeedbackStats, fetchPsycheState,
     refreshAll,
   }
 }
+
+

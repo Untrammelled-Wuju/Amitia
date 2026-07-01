@@ -49,11 +49,11 @@ func (e *Executor) ScanRules() {
 	type rule struct {
 		id, enabled, maxPerDay, sentToday, randomMinutes            int
 		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
-		charID, lastSentAt                                          string
+		charID, convID, lastSentAt                                  string
 	}
 
 	rows, err := e.db.Table("proactive_rules").
-		Select("id, name, enabled, channel, character_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
+		Select("id, name, enabled, channel, character_id, conversation_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
 		Where("enabled = 1").Rows()
 	if err != nil {
 		return
@@ -66,7 +66,7 @@ func (e *Executor) ScanRules() {
 
 	for rows.Next() {
 		var r rule
-		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.ruleType,
+		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.convID, &r.ruleType,
 			&r.cron, &r.quietStart, &r.quietEnd, &r.maxPerDay, &r.sentToday,
 			&r.prompt, &r.randomMinutes, &r.lastSentAt)
 
@@ -120,24 +120,16 @@ func (e *Executor) ScanRules() {
 }
 
 func (e *Executor) executeRule(r struct {
-	id, enabled, maxPerDay, sentToday, randomMinutes                                int
-	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, lastSentAt string
+	id, enabled, maxPerDay, sentToday, randomMinutes                                        int
+	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, convID, lastSentAt string
 }) {
-	var charName, identity, convID string
-	if r.charID != "" {
-		row := e.db.Table("characters").Select("name, COALESCE(identity,''), conversation_id").
-			Where("id = ?", r.charID).Limit(1).Row()
-		row.Scan(&charName, &identity, &convID)
-	}
-	if charName == "" || convID == "" {
-		row := e.db.Table("characters").Select("name, identity, conversation_id").
-			Where("is_active = 1").Limit(1).Row()
-		if err := row.Scan(&charName, &identity, &convID); err != nil || convID == "" {
-			return
-		}
+	character, ok := resolveProactiveCharacter(e.db, r.charID, r.convID)
+	if !ok {
+		log.Printf("[Proactive] 规则 id=%d 缺少有效角色作用域", r.id)
+		return
 	}
 
-	content := e.generateContent(r.name, r.ruleType, r.prompt, charName, identity)
+	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity)
 	if content == "" {
 		return
 	}
@@ -146,6 +138,11 @@ func (e *Executor) executeRule(r struct {
 	if channel == "" {
 		channel = "all"
 	}
+	convID := resolveProactiveConversation(e.db, r.convID, character.ID, channel, false)
+	if convID == "" {
+		log.Printf("[Proactive] 规则 id=%d 无可用对话", r.id)
+		return
+	}
 
 	sentWeb, sentWechat, sentQQ := false, false, false
 	if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
@@ -153,14 +150,14 @@ func (e *Executor) executeRule(r struct {
 		sentWeb = true
 	}
 	if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
-		wcID := e.getWechatConvID(convID)
+		wcID := e.getWechatConvID(character.ID)
 		if wcID != "" {
 			e.sendToWechat(wcID, content)
 			sentWechat = true
 		}
 	}
 	if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
-		qqID := e.getQQConvID(r.charID)
+		qqID := e.getQQConvID(character.ID)
 		if qqID != "" {
 			e.sendToQQ(qqID, content)
 			sentQQ = true
@@ -237,18 +234,9 @@ func (e *Executor) executeReminder(r struct {
 }) {
 	convID := r.convID
 	if convID == "" {
-		if r.charID != "" {
-			row := e.db.Table("conversations").Select("id").
-				Where("character_id = ? AND channel = 'web'", r.charID).
-				Limit(1).Row()
-			row.Scan(&convID)
-		}
-		if convID == "" {
-			row := e.db.Table("conversations").Select("id").
-				Where("channel = 'web'").
-				Limit(1).Row()
-			row.Scan(&convID)
-		}
+		convID = resolveProactiveConversation(e.db, "", r.charID, r.channel, false)
+	} else {
+		convID = resolveProactiveConversation(e.db, r.convID, r.charID, r.channel, false)
 	}
 	if convID == "" {
 		log.Printf("[Reminder] 提醒 id=%d 无可用对话", r.id)
@@ -420,12 +408,7 @@ func (e *Executor) sendToWechat(convID, content string) bool {
 	return true
 }
 func (e *Executor) getWechatConvID(charID string) string {
-	var id string
-	e.db.Table("conversations").Select("id").
-		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
-		Order("updated_at DESC").
-		Limit(1).Row().Scan(&id)
-	return id
+	return resolveProactiveConversation(e.db, "", charID, "wechat", true)
 }
 
 func calcNextRemindAt(remindAt, repeatRule, nowDate, nowTime string) string {
@@ -531,27 +514,30 @@ func (e *Executor) sendToQQ(userID, content string) bool {
 	return true
 }
 
-func (e *Executor) ExecuteShareTask(prompt string) string {
-	var charName, identity, convID string
-	row := e.db.Table("characters").Select("name, identity, conversation_id").
-		Where("is_active = 1").Limit(1).Row()
-	if err := row.Scan(&charName, &identity, &convID); err != nil || convID == "" {
-		log.Println("[Proactive] ExecuteShareTask: no active character")
+func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) string {
+	character, ok := resolveProactiveCharacter(e.db, characterID, conversationID)
+	if !ok {
+		log.Println("[Proactive] ExecuteShareTask: missing scoped character")
 		return ""
 	}
-	content := e.generateContent("系统主动消息", "share", prompt, charName, identity)
+	convID := resolveProactiveConversation(e.db, conversationID, character.ID, "all", false)
+	if convID == "" {
+		log.Println("[Proactive] ExecuteShareTask: no scoped conversation")
+		return ""
+	}
+	content := e.generateContent("系统主动消息", "share", prompt, character.Name, character.Identity)
 	if content == "" {
 		return ""
 	}
 	sentWeb, sentWechat, sentQQ := false, false, false
 	e.sendToWeb(convID, content)
 	sentWeb = true
-	wcID := e.getWechatConvID(convID)
+	wcID := e.getWechatConvID(character.ID)
 	if wcID != "" {
 		e.sendToWechat(wcID, content)
 		sentWechat = true
 	}
-	qqID := e.getQQConvID("")
+	qqID := e.getQQConvID(character.ID)
 	if qqID != "" {
 		e.sendToQQ(qqID, content)
 		sentQQ = true
@@ -567,10 +553,5 @@ func (e *Executor) ExecuteShareTask(prompt string) string {
 }
 
 func (e *Executor) getQQConvID(charID string) string {
-	var id string
-	e.db.Table("conversations").Select("id").
-		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
-		Order("updated_at DESC").
-		Limit(1).Row().Scan(&id)
-	return id
+	return resolveProactiveConversation(e.db, "", charID, "qq", true)
 }

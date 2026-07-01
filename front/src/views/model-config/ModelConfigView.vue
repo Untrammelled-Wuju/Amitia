@@ -11,6 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <router-link to="/model/voice" class="sub-nav-item" active-class="sub-nav-active">语音模型</router-link>
       <router-link to="/model/vision" class="sub-nav-item" active-class="sub-nav-active">视觉模型</router-link>
       <router-link to="/model/embedding" class="sub-nav-item" active-class="sub-nav-active">向量模型</router-link>
+      <router-link to="/model/safety" class="sub-nav-item" active-class="sub-nav-active">安全调控</router-link>
     </div>
 
     <router-view />
@@ -56,3 +57,4 @@ onMounted(() => {
   font-weight: 500;
 }
 </style>
+

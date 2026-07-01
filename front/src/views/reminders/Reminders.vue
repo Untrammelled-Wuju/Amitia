@@ -15,6 +15,20 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #title>到达提醒时间后会自动发送消息。一次性提醒发送后自动关闭，重复提醒会按规则循环。</template>
     </el-alert>
 
+    <!-- Filter tabs -->
+    <div class="filter-tabs">
+      <el-radio-group v-model="activeGroup" size="small" @change="onGroupChange">
+        <el-radio-button value="">全部</el-radio-button>
+        <el-radio-button value="overdue">已过期</el-radio-button>
+        <el-radio-button value="upcoming">即将触发</el-radio-button>
+        <el-radio-button value="completed">已完成</el-radio-button>
+        <el-radio-button value="disabled">已停用</el-radio-button>
+      </el-radio-group>
+      <el-select v-model="filterCharacterId" placeholder="全部角色" clearable size="small" style="width:140px" @change="onFilterCharacter" :loading="loadingChars">
+        <el-option v-for="c in characterOptions" :key="c.id" :label="c.name" :value="c.id" />
+      </el-select>
+    </div>
+
     <!-- Status bar -->
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -39,6 +53,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
+    <!-- Prospective Memory Panel -->
+    <ProspectivePanel @refresh="fetchAll" @clear-backpressure="clearBackpressure" />
+
     <!-- Reminder list -->
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -48,7 +65,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </template>
 
-      <el-table :data="reminders" stripe size="small" v-loading="loading" empty-text="暂无提醒">
+      <el-table :data="filteredReminders" stripe size="small" v-loading="loading" empty-text="暂无提醒">
         <el-table-column prop="title" label="标题" min-width="120" show-overflow-tooltip />
         <el-table-column label="启用" width="70">
           <template #default="{ row }"><el-switch :model-value="row.enabled" size="small" @change="(val: boolean) => toggleReminder(row, val)" /></template>
@@ -89,6 +106,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Trigger History Panel -->
+    <TriggerHistoryPanel @refresh="fetchAll" />
 
     <!-- Create/Edit Dialog -->
     <el-dialog v-model="dialogVisible" :title="isEditing ? '编辑提醒' : '新建提醒'" width="520px" destroy-on-close :close-on-click-modal="false">
@@ -144,17 +164,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, computed, onMounted, onUnmounted } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { request } from "../../composables/request"
+import { resolveApiUrl } from "../../runtime/runtime-adapter"
+import type { ReminderGroup } from "../../types"
+import ProspectivePanel from "./components/ProspectivePanel.vue"
+import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue"
 
 interface Reminder {
   id: number; title: string; content: string; channel: string
-  conversationId: string | null; characterId: string | null
+  conversationId: string | null; characterId: string | null; characterName?: string
   remindAt: string; repeatRule: string; enabled: boolean
   lastTriggeredAt: string | null; createdAt: string; updatedAt: string
 }
-
 const reminders = ref<Reminder[]>([])
 const loading = ref(false); const saving = ref(false)
 const dialogVisible = ref(false); const isEditing = ref(false); const editingId = ref<number | null>(null)
@@ -163,12 +186,41 @@ const schedulerRunning = ref(false); const totalCount = ref(0); const dueCount =
 const conversationOptions = ref<{id:string;title:string}[]>([])
 const characterOptions = ref<{id:string;name:string}[]>([])
 const loadingConvs = ref(false); const loadingChars = ref(false); const cleanupDays = ref("0")
+const activeGroup = ref<ReminderGroup | "">("")
+const filterCharacterId = ref("")
 
 const repeatLabels: Record<string, string> = { none: '不重复', daily: '每天', weekly: '每周' }
 function repeatLabel(r: string): string { return repeatLabels[r] || r }
 
+const filteredReminders = computed(() => {
+  let list = reminders.value
+  if (filterCharacterId.value) {
+    list = list.filter(r => r.characterId === filterCharacterId.value)
+  }
+  const now = new Date()
+  switch (activeGroup.value) {
+    case "overdue":
+      return list.filter(r => r.enabled && r.remindAt && new Date(r.remindAt) < now)
+    case "upcoming":
+      return list.filter(r => r.enabled && r.remindAt && new Date(r.remindAt) >= now)
+    case "completed":
+      return list.filter(r => !r.enabled && r.lastTriggeredAt)
+    case "disabled":
+      return list.filter(r => !r.enabled && !r.lastTriggeredAt)
+    default:
+      return list
+  }
+})
+
 const form = ref({ title: '', content: '', channel: 'web', conversationId: '', characterId: '', remindAt: null as any, repeatRule: 'none', enabled: true })
 function resetForm() { form.value = { title: '', content: '', channel: 'web', conversationId: '', characterId: '', remindAt: null as any, repeatRule: 'none', enabled: true } }
+
+function onGroupChange() { /* computed handles filtering */ }
+function onFilterCharacter() { /* computed handles filtering */ }
+
+async function fetchAll() {
+  await Promise.all([fetchReminders(), fetchStatus()])
+}
 
 async function fetchReminders() {
   loading.value = true
@@ -190,19 +242,20 @@ async function fetchConversationOptions() {
   catch { conversationOptions.value = [] }
   finally { loadingConvs.value = false }
 }
+
 async function fetchCharacterOptions() {
   loadingChars.value = true
   try { const r = await request.get("/api/characters"); characterOptions.value = Array.isArray(r) ? r : (r?.data || []) }
   catch { characterOptions.value = [] }
   finally { loadingChars.value = false }
 }
+
 function openCreate() { isEditing.value = false; editingId.value = null; resetForm(); dialogVisible.value = true; fetchConversationOptions(); fetchCharacterOptions() }
 function openEdit(row: Reminder) {
   isEditing.value = true; editingId.value = row.id
   form.value = { title: row.title, content: row.content, channel: row.channel, conversationId: row.conversationId || '', characterId: row.characterId || '', remindAt: row.remindAt, repeatRule: row.repeatRule, enabled: !!row.enabled }
   dialogVisible.value = true; fetchConversationOptions(); fetchCharacterOptions()
 }
-
 async function fetchCleanupConfig() {
   try { const r = await request.get("/api/reminders/cleanup-config"); const rd = (r as any)?.data; cleanupDays.value = (rd?.data?.cleanupDays ?? rd?.cleanupDays) || "0" }
   catch { cleanupDays.value = "0" }
@@ -261,12 +314,21 @@ async function triggerNow(row: Reminder) {
   catch (err: any) { ElMessage.error(err?.message || '发送失败') }
 }
 
+async function clearBackpressure() {
+  try {
+    await request.post("/api/reminders/clear-backpressure")
+    ElMessage.success("背压标记已清除")
+  } catch (err: any) {
+    ElMessage.error(err?.message || "操作失败")
+  }
+}
+
 let reminderSSE: EventSource | null = null
 
-function connectReminderSSE() {
+async function connectReminderSSE() {
   try {
-    const baseUrl = import.meta.env.VITE_API_BASE || ""
-    reminderSSE = new EventSource(baseUrl + "/api/reminders/stream")
+    const url = await resolveApiUrl("/api/reminders/stream")
+    reminderSSE = new EventSource(url)
     reminderSSE.onmessage = (e) => {
       if (e.data) { fetchReminders(); fetchStatus() }
     }
@@ -275,7 +337,7 @@ function connectReminderSSE() {
     })
     reminderSSE.onerror = () => {
       reminderSSE?.close()
-      setTimeout(connectReminderSSE, 5000)
+      setTimeout(() => void connectReminderSSE(), 5000)
     }
   } catch {}
 }
@@ -283,8 +345,9 @@ function connectReminderSSE() {
 onMounted(async () => {
   await fetchReminders()
   await fetchStatus()
-  connectReminderSSE()
+  void connectReminderSSE()
   await fetchCleanupConfig()
+  await fetchCharacterOptions()
 })
 
 onUnmounted(() => {
@@ -303,9 +366,5 @@ onUnmounted(() => {
 .status-label { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); }
 .status-value { font-weight: 600; font-size: var(--ac-font-size-lg); color: var(--ac-color-primary); }
 .msg-preview { white-space: pre-wrap; padding: 8px; background: var(--ac-color-surface-hover); border-radius: var(--ac-radius-sm); font-size: var(--ac-font-size-sm); }
+.filter-tabs { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 </style>
-
-
-
-
-

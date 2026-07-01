@@ -1,0 +1,18 @@
+appId: cn.amitia.desktop
+productName: Amitia
+directories:
+  output: dist-package
+files:
+  - dist/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - nsis
+  artifactName: Amitia-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

@@ -71,7 +71,7 @@ func (h *Handler) GetByUserID(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "userId不能为空", nil)
 		return
 	}
-	profiles, err := h.service.GetByUserID(userID)
+	profiles, err := h.service.GetByUserID(userID, c.Query("characterId"))
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -82,6 +82,7 @@ func (h *Handler) GetByUserID(c *gin.Context) {
 func (h *Handler) Extract(c *gin.Context) {
 	var body struct {
 		UserID         string              `json:"userId"`
+		CharacterID    string              `json:"characterId"`
 		ConversationID string              `json:"conversationId"`
 		Messages       []map[string]string `json:"messages"`
 	}
@@ -89,7 +90,7 @@ func (h *Handler) Extract(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	if err := h.service.ExtractFromConversation(body.UserID, body.ConversationID, body.Messages); err != nil {
+	if err := h.service.ExtractFromConversation(body.UserID, body.ConversationID, body.Messages, body.CharacterID); err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -101,6 +102,6 @@ func (h *Handler) SystemPrompt(c *gin.Context) {
 	if userID == "" {
 		userID = "default"
 	}
-	prompt := h.service.ToSystemPrompt(userID)
+	prompt := h.service.ToSystemPrompt(userID, c.Query("characterId"))
 	util.SuccessResponse(c, map[string]string{"prompt": prompt})
 }

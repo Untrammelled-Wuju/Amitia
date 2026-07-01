@@ -60,12 +60,50 @@ SPDX-License-Identifier: AGPL-3.0-only
           </el-form-item>
         </el-col>
       </el-row>
+      <el-divider content-position="left">节奏治理</el-divider>
+      <el-row :gutter="16">
+        <el-col :span="6">
+          <el-form-item label="未回复降频">
+            <el-switch v-model="settings.unrepliedSlowdownEnabled" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="未回复触发次数">
+            <el-input-number
+              v-model="settings.unrepliedSlowdownAfter"
+              :min="1"
+              :max="10"
+              :disabled="!settings.unrepliedSlowdownEnabled"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="冷却倍数">
+            <el-input-number
+              v-model="settings.unrepliedCooldownMultiplier"
+              :min="1"
+              :max="8"
+              :disabled="!settings.unrepliedSlowdownEnabled"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="回复后恢复">
+            <el-switch
+              v-model="settings.unrepliedRecoveryOnReply"
+              :disabled="!settings.unrepliedSlowdownEnabled"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
     </el-form>
   </el-card>
 </template>
 
 <script setup lang="ts">
-defineProps<{ settings: any; savingSettings: boolean }>()
+import type { ActiveMessageSettings } from "../composables/useProactiveRules"
+
+defineProps<{ settings: ActiveMessageSettings; savingSettings: boolean }>()
 const emit = defineEmits<{ (e: "save"): void }>()
 </script>
 

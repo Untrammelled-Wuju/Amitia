@@ -105,6 +105,56 @@ SPDX-License-Identifier: AGPL-3.0-only
               <el-button text size="small" type="danger" class="mi-delete" @click="delMsg(m.id)">删除</el-button>
             </div>
             <div class="mi-content">{{ m.content }}</div>
+            <div class="mi-psyche-toggle" v-if="m.role === 'assistant'" @click="toggleMessagePsyche(m.id)">
+              <el-tag size="small" :type="psycheMap[m.id] ? 'primary' : 'info'" effect="plain" style="cursor:pointer">
+                {{ psycheMap[m.id] ? '收起心理快照' : '心理快照' }}
+              </el-tag>
+            </div>
+            <div v-if="psycheMap[m.id]" class="mi-psyche-panel">
+              <div class="psyche-section">
+                <div class="psyche-section-title">情绪维度</div>
+                <div class="psyche-bars">
+                  <div class="psyche-bar-row">
+                    <span class="psyche-bar-label">积极</span>
+                    <div class="psyche-bar-track"><div class="psyche-bar-fill psyche-fill-positive" :style="{ width: ((psycheMap[m.id]?.emotion?.positive ?? 0) * 100).toFixed(0) + '%' }"></div></div>
+                    <span class="psyche-bar-val">{{ ((psycheMap[m.id]?.emotion?.positive ?? 0) * 100).toFixed(0) }}</span>
+                  </div>
+                  <div class="psyche-bar-row">
+                    <span class="psyche-bar-label">消极</span>
+                    <div class="psyche-bar-track"><div class="psyche-bar-fill psyche-fill-negative" :style="{ width: ((psycheMap[m.id]?.emotion?.negative ?? 0) * 100).toFixed(0) + '%' }"></div></div>
+                    <span class="psyche-bar-val">{{ ((psycheMap[m.id]?.emotion?.negative ?? 0) * 100).toFixed(0) }}</span>
+                  </div>
+                  <div class="psyche-bar-row">
+                    <span class="psyche-bar-label">唤醒</span>
+                    <div class="psyche-bar-track"><div class="psyche-bar-fill psyche-fill-arousal" :style="{ width: ((psycheMap[m.id]?.emotion?.arousal ?? 0) * 100).toFixed(0) + '%' }"></div></div>
+                    <span class="psyche-bar-val">{{ ((psycheMap[m.id]?.emotion?.arousal ?? 0) * 100).toFixed(0) }}</span>
+                  </div>
+                </div>
+                <div v-if="psycheMap[m.id]?.affectLabel" class="psyche-affect">
+                  <el-tag size="small">{{ psycheMap[m.id]?.affectLabel }}</el-tag>
+                </div>
+              </div>
+              <div v-if="psycheMap[m.id]?.copingStrategy" class="psyche-section">
+                <span class="psyche-section-title">应对策略: </span>
+                <el-tag size="small" type="warning">{{ psycheMap[m.id]?.copingStrategy?.selected }}</el-tag>
+                <div v-if="psycheMap[m.id]?.copingStrategy?.selectionReason" class="psyche-reason">{{ psycheMap[m.id]?.copingStrategy?.selectionReason }}</div>
+              </div>
+              <div v-if="psycheMap[m.id]?.cognitiveAppraisal" class="psyche-section">
+                <span class="psyche-section-title">认知评价</span>
+                <div class="psyche-appraisal-grid">
+                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.primary"><span class="psyche-appraisal-key">初级:</span> {{ psycheMap[m.id]?.cognitiveAppraisal?.primary }}</div>
+                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.secondary"><span class="psyche-appraisal-key">次级:</span> {{ psycheMap[m.id]?.cognitiveAppraisal?.secondary }}</div>
+                  <div v-if="psycheMap[m.id]?.cognitiveAppraisal?.reappraisal"><span class="psyche-appraisal-key">再评价:</span> {{ psycheMap[m.id]?.cognitiveAppraisal?.reappraisal }}</div>
+                </div>
+              </div>
+              <div v-if="psycheMap[m.id]?.stress !== undefined" class="psyche-section">
+                <span class="psyche-section-title">压力: </span>
+                <el-tag :type="(psycheMap[m.id]?.stress ?? 0) > 0.6 ? 'danger' : (psycheMap[m.id]?.stress ?? 0) > 0.3 ? 'warning' : 'success'" size="small">
+                  {{ ((psycheMap[m.id]?.stress ?? 0) * 100).toFixed(0) }}
+                </el-tag>
+              </div>
+            </div>
+            <div v-if="psycheLoadingMap[m.id]" class="mi-psyche-loading">加载心理数据...</div>
             <div class="mi-metadata" v-if="devMode && m.metadata">
               <pre>{{ JSON.stringify(m.metadata, null, 2) }}</pre>
             </div>
@@ -183,6 +233,9 @@ const {
   switchCharacter,
   continueChat,
   loadCharacters,
+  psycheMap,
+  psycheLoadingMap,
+  toggleMessagePsyche,
 } = useConversationLogs()
 
 onMounted(() => { fetchConvs(); loadCharacters() })
@@ -226,4 +279,24 @@ onMounted(() => { fetchConvs(); loadCharacters() })
   .msg-item { padding: 10px; }
   .mi-header { flex-wrap: wrap; gap: 4px; }
 }
+.mi-psyche-toggle { margin-top: 6px; }
+.mi-psyche-loading { margin-top: 6px; font-size: 11px; color: var(--ac-color-text-muted); padding: 4px 0; }
+.mi-psyche-panel { margin-top: 8px; padding: 10px; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); display: flex; flex-direction: column; gap: 8px; }
+.psyche-section-title { font-size: 12px; font-weight: 600; color: var(--ac-color-text-secondary); margin-bottom: 4px; }
+.psyche-bars { display: flex; flex-direction: column; gap: 4px; }
+.psyche-bar-row { display: flex; align-items: center; gap: 6px; }
+.psyche-bar-label { font-size: 11px; color: var(--ac-color-text-muted); width: 32px; flex-shrink: 0; }
+.psyche-bar-track { flex: 1; height: 12px; background: var(--ac-color-border-light); border-radius: 3px; overflow: hidden; }
+.psyche-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; min-width: 2px; }
+.psyche-bar-val { font-size: 11px; font-weight: 600; color: var(--ac-color-text); width: 24px; flex-shrink: 0; text-align: right; }
+.psyche-fill-positive { background: var(--ac-color-success); }
+.psyche-fill-negative { background: var(--ac-color-danger); }
+.psyche-fill-arousal { background: var(--ac-color-warning); }
+.psyche-affect { margin-top: 2px; }
+.psyche-reason { font-size: 11px; color: var(--ac-color-text-muted); margin-top: 2px; }
+.psyche-appraisal-grid { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ac-color-text); }
+.psyche-appraisal-key { font-weight: 600; color: var(--ac-color-text-secondary); }
 </style>
+
+
+

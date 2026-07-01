@@ -23,6 +23,21 @@ export interface ProactiveRule {
   updatedAt: string
 }
 
+export interface ActiveMessageSettings {
+  enabled: boolean
+  activeLevel: number
+  quietStart: string
+  quietEnd: string
+  minInterval: number
+  maxPerDay: number
+  maxDailyCalls: number
+  channel: string
+  unrepliedSlowdownEnabled: boolean
+  unrepliedSlowdownAfter: number
+  unrepliedCooldownMultiplier: number
+  unrepliedRecoveryOnReply: boolean
+}
+
 const CHANNEL_LABELS: Record<string, string> = { all: "全部平台", web: "Web 端", wechat: "微信", "web,wechat": "Web + 微信" }
 
 const PRESET_RULE_NAMES = ["早安问候", "晚安提醒", "工作间歇", "午饭时间", "晚间闲聊", "早安心情", "午间日常", "傍晚时光", "睡前分享"]
@@ -48,7 +63,7 @@ export function useProactiveRules() {
   const testResult = ref<any>(null)
   const schedulerRunning = ref(false)
 
-  const activeMsgSettings = ref({
+  const activeMsgSettings = ref<ActiveMessageSettings>({
     enabled: true,
     activeLevel: 40,
     quietStart: "23:00",
@@ -57,6 +72,10 @@ export function useProactiveRules() {
     maxPerDay: 6,
     maxDailyCalls: 10,
     channel: "all",
+    unrepliedSlowdownEnabled: true,
+    unrepliedSlowdownAfter: 2,
+    unrepliedCooldownMultiplier: 2,
+    unrepliedRecoveryOnReply: true,
   })
   const savingSettings = ref(false)
 

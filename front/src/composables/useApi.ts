@@ -5,6 +5,7 @@ import { ref } from "vue"
 import { ElMessage } from "element-plus"
 import type { ApiResponse } from "@/types"
 import { ERR } from "@/types"
+import { getRuntimeConnection } from "@/runtime/runtime-adapter"
 
 // Import from the unified request module for error classification
 import { request as unifiedRequest } from "./request"
@@ -19,7 +20,9 @@ export const apiClient: AxiosInstance = axios.create({
 })
 
 // Request interceptor: attach auth token
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
+  const runtime = await getRuntimeConnection()
+  config.baseURL = runtime.apiBaseURL
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`

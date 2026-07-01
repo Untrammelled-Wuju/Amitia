@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue"
+import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
 
 export function useMediaUpload(
   onImage: (file: File, base64: string) => void,
@@ -55,8 +56,11 @@ export function useMediaUpload(
     uploadingVideo.value = true
     const formData = new FormData()
     formData.append("video", file)
-    const token = localStorage.getItem("ai-companion-token") || ""
-    fetch("/api/video/upload", { method: "POST", headers: { Authorization: "Bearer " + token }, body: formData })
+    Promise.all([
+      resolveApiUrl("/api/video/upload"),
+      createAuthorizedRequestInit({ method: "POST", body: formData }),
+    ])
+      .then(([url, init]) => fetch(url, init))
       .then((res) => res.json())
       .then((data) => {
         const videoUrl = data?.data?.videoUrl || data?.videoUrl || ""

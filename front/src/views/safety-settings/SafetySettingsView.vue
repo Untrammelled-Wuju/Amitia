@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
@@ -66,6 +66,134 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
+    <el-card shadow="never" class="section-card">
+      <template #header><span class="section-title">BDI 硬约束过滤规则</span></template>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
+        安全卫士启用时，以下硬约束将阻止或覆盖不符合安全边界的候选行为
+      </el-alert>
+      <el-table :data="hardConstraints" stripe size="small" empty-text="暂无约束规则">
+        <el-table-column prop="ruleId" label="规则 ID" width="140" show-overflow-tooltip />
+        <el-table-column prop="candidateKey" label="候选行为" width="140" show-overflow-tooltip />
+        <el-table-column prop="reason" label="拦截原因" show-overflow-tooltip />
+        <el-table-column label="严重程度" width="100">
+          <template #default="{row}">
+            <el-tag :type="row.severity==='block'?'danger':'warning'" size="small">
+              {{ row.severity==='block'?'阻止':'覆盖' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <el-button size="small" @click="addHardConstraint">添加规则</el-button>
+        <el-button size="small" @click="fetchBdiConfig">刷新</el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card">
+      <template #header><span class="section-title">BDI 软偏好加权</span></template>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
+        软偏好维度加权影响候选行为的最终效用评分
+      </el-alert>
+      <el-table :data="softPreferences" stripe size="small" empty-text="暂无偏好维度">
+        <el-table-column prop="dimension" label="维度" width="140" show-overflow-tooltip />
+        <el-table-column label="原始分" width="100">
+          <template #default="{row}">
+            <el-input-number v-model="row.rawScore" :min="0" :max="10" size="small" controls-position="right" style="width:100px" />
+          </template>
+        </el-table-column>
+        <el-table-column label="归一化权重" width="110">
+          <template #default="{row}">
+            <span style="font-size:13px">{{ row.normalizedWeight?.toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="贡献值" width="110">
+          <template #default="{row}">
+            <span style="font-size:13px">{{ row.contribution?.toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <el-button size="small" @click="addSoftPreference">添加维度</el-button>
+        <el-button size="small" type="primary" @click="saveBdiConfig">保存偏好设置</el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card">
+      <template #header><span class="section-title">应对策略选择</span></template>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
+        当 AI 面对冲突或负面事件时，选择默认应对策略
+      </el-alert>
+      <div class="coping-section">
+        <div class="coping-row">
+          <span class="coping-label">当前策略</span>
+          <el-select v-model="copingSelected" style="width:200px" size="small">
+            <el-option label="主动解决问题" value="active" />
+            <el-option label="寻求支持" value="support" />
+            <el-option label="重新评估" value="reframe" />
+            <el-option label="回避转移" value="avoid" />
+            <el-option label="抑制情绪" value="suppress" />
+            <el-option label="接受现状" value="accept" />
+          </el-select>
+        </div>
+        <div class="coping-row">
+          <span class="coping-label">备选策略</span>
+          <el-select v-model="copingAlternatives" multiple style="width:300px" size="small" placeholder="选择备选策略">
+            <el-option label="主动解决问题" value="active" />
+            <el-option label="寻求支持" value="support" />
+            <el-option label="重新评估" value="reframe" />
+            <el-option label="回避转移" value="avoid" />
+            <el-option label="抑制情绪" value="suppress" />
+            <el-option label="接受现状" value="accept" />
+          </el-select>
+        </div>
+        <div class="coping-row">
+          <span class="coping-label">选择理由</span>
+          <el-input v-model="copingReason" type="textarea" :rows="2" placeholder="描述当前策略的选择理由" maxlength="200" show-word-limit style="flex:1" />
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <el-button size="small" type="primary" @click="saveBdiConfig">保存应对策略</el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card">
+      <template #header><span class="section-title">情绪表达控制</span></template>
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
+        控制 AI 在输出中如何显露、抑制或重构情绪表达
+      </el-alert>
+      <div class="emotion-section">
+        <div class="emotion-row">
+          <span class="emotion-label">表达模式</span>
+          <el-radio-group v-model="emotionDisplayMode" size="small">
+            <el-radio value="show">正常显露</el-radio>
+            <el-radio value="suppress">抑制表达</el-radio>
+            <el-radio value="reframe">重构表达</el-radio>
+          </el-radio-group>
+        </div>
+        <div class="emotion-row">
+          <span class="emotion-label">内部强度</span>
+          <div class="emotion-slider-group">
+            <el-slider v-model="emotionInternalIntensity" :min="0" :max="10" :step="0.5" style="width:200px" />
+            <span class="slider-value">{{ emotionInternalIntensity }}</span>
+          </div>
+        </div>
+        <div class="emotion-row">
+          <span class="emotion-label">显示强度</span>
+          <div class="emotion-slider-group">
+            <el-slider v-model="emotionDisplayIntensity" :min="0" :max="10" :step="0.5" style="width:200px" />
+            <span class="slider-value">{{ emotionDisplayIntensity }}</span>
+          </div>
+        </div>
+        <div class="emotion-row">
+          <span class="emotion-label">覆盖理由</span>
+          <el-input v-model="emotionOverrideReason" type="textarea" :rows="2" placeholder="当表达模式非正常显露时，说明原因" maxlength="200" show-word-limit style="flex:1" />
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <el-button size="small" type="primary" @click="saveBdiConfig">保存情绪配置</el-button>
+      </div>
+    </el-card>
+
     <!-- Safety event log -->
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -113,7 +241,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
+import { ref, onMounted, computed } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
 
@@ -137,6 +265,66 @@ const rules = [
 const events = ref<any[]>([])
 const evPage = ref(1)
 const evTotal = ref(0)
+const isBdiEnabled = computed(() => safetyGuard.value)
+
+const hardConstraints = ref<Array<{ruleId:string;candidateKey:string;reason:string;severity:'block'|'override'}>>([])
+const softPreferences = ref<Array<{dimension:string;rawScore:number;normalizedWeight:number;contribution:number}>>([])
+const copingSelected = ref("active")
+const copingAlternatives = ref<string[]>([])
+const copingReason = ref("")
+const emotionDisplayMode = ref<"show"|"suppress"|"reframe">("show")
+const emotionInternalIntensity = ref(5)
+const emotionDisplayIntensity = ref(5)
+const emotionOverrideReason = ref("")
+
+function addHardConstraint() {
+  hardConstraints.value.push({ ruleId:"", candidateKey:"", reason:"", severity:"block" })
+}
+
+function addSoftPreference() {
+  softPreferences.value.push({ dimension:"", rawScore:5, normalizedWeight:0, contribution:0 })
+}
+
+async function fetchBdiConfig() {
+  try {
+    const r = await get<any>("/api/safety/bdi-config")
+    if (r?.hardConstraints) hardConstraints.value = r.hardConstraints
+    if (r?.softPreferences) softPreferences.value = r.softPreferences
+    if (r?.copingStrategy) {
+      copingSelected.value = r.copingStrategy.selected || "active"
+      copingAlternatives.value = r.copingStrategy.alternatives || []
+      copingReason.value = r.copingStrategy.selectionReason || ""
+    }
+    if (r?.emotionExpression) {
+      emotionDisplayMode.value = r.emotionExpression.displayMode || "show"
+      emotionInternalIntensity.value = r.emotionExpression.internalIntensity ?? 5
+      emotionDisplayIntensity.value = r.emotionExpression.displayIntensity ?? 5
+      emotionOverrideReason.value = r.emotionExpression.overrideReason || ""
+    }
+  } catch {}
+}
+
+async function saveBdiConfig() {
+  try {
+    await put("/api/safety/bdi-config", {
+      hardConstraints: hardConstraints.value,
+      softPreferences: softPreferences.value.map(sp => ({ ...sp, rawScore: Number(sp.rawScore) })),
+      copingStrategy: {
+        selected: copingSelected.value,
+        alternatives: copingAlternatives.value,
+        selectionReason: copingReason.value,
+      },
+      emotionExpression: {
+        displayMode: emotionDisplayMode.value,
+        internalIntensity: Number(emotionInternalIntensity.value),
+        displayIntensity: Number(emotionDisplayIntensity.value),
+        overrideReason: emotionOverrideReason.value,
+      },
+    })
+    ElMessage.success("BDI 配置已保存")
+  } catch {}
+}
+
 
 async function loadSettings() {
   try {
@@ -177,7 +365,7 @@ async function clearEvents() {
 
 function fmtDate(d: string) { if(!d)return""; try{return new Date(d).toLocaleString("zh-CN")}catch{return d} }
 
-onMounted(() => { loadSettings(); fetchEvents() })
+onMounted(() => { loadSettings(); fetchBdiConfig(); fetchEvents() })
 </script>
 
 <style scoped>
@@ -201,5 +389,16 @@ onMounted(() => { loadSettings(); fetchEvents() })
 
 .privacy-list { font-size:var(--ac-font-size-sm); color:var(--ac-color-text-secondary); padding-left:18px; line-height:1.8; }
 
+.coping-section { display:flex; flex-direction:column; gap:12px; }
+.coping-row { display:flex; align-items:flex-start; gap:12px; }
+.coping-label { font-size:var(--ac-font-size-sm); font-weight:500; min-width:80px; padding-top:4px; }
+
+.emotion-section { display:flex; flex-direction:column; gap:12px; }
+.emotion-row { display:flex; align-items:center; gap:12px; }
+.emotion-label { font-size:var(--ac-font-size-sm); font-weight:500; min-width:80px; }
+.emotion-slider-group { display:flex; align-items:center; gap:8px; }
+.slider-value { font-size:var(--ac-font-size-sm); color:var(--ac-color-text-secondary); min-width:24px; text-align:right; }
+
 @media (max-width:640px) { .rules-grid { grid-template-columns:1fr; } }
 </style>
+

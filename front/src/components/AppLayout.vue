@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :qq-status="health.qq"
       :model-status="health.model"
       :character-name="currentCharName"
-      :theme="theme.preset"`n      
+      :theme="theme.preset"
       :username="authUsername"
       @toggle-theme="toggleTheme"
       @logout="handleLogout"
@@ -52,6 +52,7 @@ import SideNav from "./SideNav.vue"
 import MobileNav from "./MobileNav.vue"
 import { useTheme } from "../composables/useTheme"
 import { apiClient, getToken, removeToken, isLoggedIn } from "../composables/useApi"
+import { getPageTitle } from "@/navigation/app-nav"
 
 const router = useRouter()
 const { state: theme, resolvedMode: resolvedTheme, toggleLightDark: toggleTheme } = useTheme()
@@ -61,15 +62,7 @@ const isMobile = computed(() => windowWidth.value < 768)
 const isLoginPage = computed(() => router.currentRoute.value.path === "/login")
 
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat")
-const pageTitle = computed(() => {
-  const titles: Record<string, string> = {
-    "/chat": "聊天", "/character": "角色管理",
-    "/logs": "聊天记录", "/settings": "设置", "/dashboard": "概览",
-    "/model": "模型配置", "/reminders": "日程提醒", "/import": "导入", "/safety": "安全设置",
-    "/qq": "QQ连接", "/wechat": "微信", "/login": "登录",
-  }
-  return titles[router.currentRoute.value.path] || "AI-Amitia"
-})
+const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path))
 
 // Health state
 const health = ref({
@@ -102,7 +95,8 @@ async function refreshAll() {
 }
 provide("refreshHealth", refreshAll)
 provide("resolvedTheme", resolvedTheme)
-  provide("currentCharName", currentCharName)
+provide("currentCharName", currentCharName)
+provide("authUsername", authUsername)
 
 // Fetch health
 async function fetchHealth() {

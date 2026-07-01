@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -21,11 +22,11 @@ type Service interface {
 	List(q EpisodicListQuery) (*EpisodicListResponse, error)
 	Create(req *CreateEpisodicRequest) (*EpisodicMemory, error)
 	Delete(id string) error
-	GetByUserID(userID string) ([]EpisodicMemory, error)
+	GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error)
 	GetDetail(id string) (*EpisodicMemory, []map[string]interface{}, error)
-	ExtractFromConversation(userID, convID string, messages []map[string]string) error
-	ToSystemPrompt(userID string) string
-	SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string) (*EpisodicMemory, error)
+	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(userID string, characterID ...string) string
+	SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error)
 	SyncGraphEpisodic(id string) bool
 }
 
@@ -40,6 +41,9 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Se
 }
 
 func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
+	if strings.TrimSpace(q.CharacterID) != "" {
+		q.UserID = strings.TrimSpace(q.CharacterID)
+	}
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
@@ -63,11 +67,12 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	if req.SceneType == "" {
 		return nil, fmt.Errorf("sceneType不能为空")
 	}
-	if req.UserID == "" {
-		req.UserID = "default"
+	scope := s.episodicScope(req.SourceConvID, req.CharacterID, req.UserID)
+	if scope == "" {
+		return nil, fmt.Errorf("character scope required")
 	}
 	m := &EpisodicMemory{
-		UserID:          req.UserID,
+		UserID:          scope,
 		SceneType:       req.SceneType,
 		Title:           req.Title,
 		Content:         req.Content,
@@ -78,6 +83,8 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 		MessageIDStart:  req.MessageIDStart,
 		MessageIDEnd:    req.MessageIDEnd,
 		SourceConvID:    req.SourceConvID,
+		MessageTimeStart: s.resolveMessageTime(req.SourceConvID, req.MessageIDStart),
+		MessageTimeEnd:   s.resolveMessageTime(req.SourceConvID, req.MessageIDEnd),
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
@@ -96,7 +103,10 @@ func (s *service) Delete(id string) error {
 	return nil
 }
 
-func (s *service) GetByUserID(userID string) ([]EpisodicMemory, error) {
+func (s *service) GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error) {
+	if scope := firstScope(characterID...); scope != "" {
+		userID = scope
+	}
 	return s.repo.GetByUserID(userID, 0)
 }
 
@@ -104,17 +114,20 @@ func (s *service) GetDetail(id string) (*EpisodicMemory, []map[string]interface{
 	return s.repo.GetDetailWithMessages(id, s.db)
 }
 
-func (s *service) SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string) (*EpisodicMemory, error) {
-	if userID == "" {
-		userID = "default"
+func (s *service) SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error) {
+	scope := s.episodicScope(convID, characterID...)
+	if scope == "" {
+		return nil, fmt.Errorf("character scope required")
 	}
 	m := &EpisodicMemory{
-		UserID:         userID,
+		UserID:         scope,
 		SceneType:      sceneType,
 		Title:          title,
 		Content:        content,
 		SentimentScore: sentimentScore,
 		SourceConvID:   convID,
+		MessageTimeStart: s.resolveMessageTime(convID, msgStart),
+		MessageTimeEnd:   s.resolveMessageTime(convID, msgEnd),
 		MessageIDStart: msgStart,
 		MessageIDEnd:   msgEnd,
 	}
@@ -134,11 +147,22 @@ func (s *service) SyncGraphEpisodic(id string) bool {
 	return true
 }
 
-func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
-	if userID == "" {
-		userID = "default"
+func (s *service) resolveMessageTime(convID, messageID string) string {
+	if convID == "" || messageID == "" {
+		return ""
 	}
+	var createdAt string
+	s.db.Table("messages").Select("created_at").Where("id = ? AND conversation_id = ?", messageID, convID).Row().Scan(&createdAt)
+	return createdAt
+}
+
+
+func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
 	if len(messages) == 0 {
+		return nil
+	}
+	scope := s.episodicScope(convID, characterID...)
+	if scope == "" {
 		return nil
 	}
 	cfg := s.getActiveModel()
@@ -188,7 +212,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			continue
 		}
 		m := &EpisodicMemory{
-			UserID:          userID,
+			UserID:          scope,
 			SceneType:       st,
 			Title:           title,
 			Content:         desc,
@@ -203,8 +227,12 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	return nil
 }
 
-func (s *service) ToSystemPrompt(userID string) string {
-	memories, err := s.repo.GetRecent(userID, 3)
+func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
+	scope := firstScope(characterID...)
+	if scope == "" {
+		scope = cleanScope(userID)
+	}
+	memories, err := s.repo.GetRecentScoped(scope, 3)
 	if err != nil || len(memories) == 0 {
 		return ""
 	}
@@ -302,7 +330,47 @@ func minInt(a, b int) int {
 func (s *service) Name() string { return "情景记忆" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	return s.ExtractFromConversation("default", convID, messages)
+	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "episodic", 4)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
+	if err := s.ExtractFromConversation("default", convID, pending); err != nil {
+		return err
+	}
+	return pipelinecheckpoint.New(s.db).Advance(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence))
+}
+
+func (s *service) episodicScope(convID string, scopes ...string) string {
+	for _, scope := range scopes {
+		if cleaned := cleanScope(scope); cleaned != "" {
+			return cleaned
+		}
+	}
+	if s.db == nil || strings.TrimSpace(convID) == "" {
+		return ""
+	}
+	var scope string
+	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&scope); err != nil {
+		return ""
+	}
+	return cleanScope(scope)
+}
+
+func firstScope(scopes ...string) string {
+	for _, scope := range scopes {
+		if cleaned := cleanScope(scope); cleaned != "" {
+			return cleaned
+		}
+	}
+	return ""
+}
+
+func cleanScope(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" || scope == "default" {
+		return ""
+	}
+	return scope
 }
 
 func (s *service) syncGraph(m *EpisodicMemory) {
@@ -322,3 +390,4 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 	})
 	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
 }
+

@@ -3,6 +3,7 @@
 import axios, { type AxiosInstance, type AxiosResponse, type AxiosError } from "axios"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { ERR, type ApiResponse } from "@/types"
+import { getRuntimeConnection } from "@/runtime/runtime-adapter"
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || ""
 const TOKEN_KEY = "ai-companion-token"
@@ -132,7 +133,9 @@ export const request: AxiosInstance = axios.create({
 })
 
 // Request interceptor: attach token
-request.interceptors.request.use((config) => {
+request.interceptors.request.use(async (config) => {
+  const runtime = await getRuntimeConnection()
+  config.baseURL = runtime.apiBaseURL
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config

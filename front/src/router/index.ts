@@ -36,6 +36,7 @@ const router = createRouter({
         { path: "voice", name: "modelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
         { path: "embedding", name: "modelEmbedding", component: () => import("@/views/model-config/VectorModelConfigView.vue") },
         { path: "vision", name: "modelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
+        { path: "safety", name: "modelSafety", component: () => import("@/views/model-config/SafetyGovernorView.vue"), meta: { requiresAuth: true } },
       ],
     },
     { path: "/character", name: "character", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
@@ -59,6 +60,7 @@ const router = createRouter({
     { path: "/profiles", name: "profiles", component: () => import("@/views/profile/ProfileView.vue"), meta: { requiresAuth: true } },
     { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
     { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
+    { path: '/decision-viz', name: 'decisionViz', component: () => import('@/views/decision-viz/DecisionVizView.vue'), meta: { requiresAuth: true } },
     { path: "/memory-manager", name: "memoryManager", component: () => import("@/views/memory-manager/MemoryManagerView.vue"), meta: { requiresAuth: true } },
     { path: "/memory-timeline", name: "memoryTimeline", component: () => import("@/views/memory-timeline/MemoryTimeline.vue"), meta: { requiresAuth: true } },
     { path: "/memory", redirect: "/memory-manager" },
@@ -128,3 +130,4 @@ router.beforeEach(async (to, _from, next) => {
 })
 
 export default router
+

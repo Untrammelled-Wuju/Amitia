@@ -21,6 +21,9 @@ type Memory struct {
 	LastVerifiedAt *string `gorm:"column:last_verified_at" json:"lastVerifiedAt"`
 	UseCount       int     `gorm:"column:use_count;default:0" json:"useCount"`
 	LastUsedAt     *string `gorm:"column:last_used_at" json:"lastUsedAt"`
+	SensitivityLevel     string `gorm:"column:sensitivity_level;default:internal" json:"sensitivityLevel"`
+	AllowProactiveMention bool   `gorm:"column:allow_proactive_mention;default:1" json:"allowProactiveMention"`
+	RequiresConfirmation  bool   `gorm:"column:requires_confirmation;default:0" json:"requiresConfirmation"`
 	CreatedAt      string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt      string  `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -41,6 +44,9 @@ type CreateMemoryRequest struct {
 	SourceConvID   string `json:"sourceConvId"`
 	VerifiedStatus string `json:"verifiedStatus"`
 	Source         string `json:"source"`
+	SensitivityLevel     string `json:"sensitivityLevel"`
+	AllowProactiveMention bool   `json:"allowProactiveMention"`
+	RequiresConfirmation  bool   `json:"requiresConfirmation"`
 	Scope          string `json:"scope"`
 }
 
@@ -55,12 +61,16 @@ type UpdateMemoryRequest struct {
 	EntityID       *string `json:"entityId"`
 	EntityType     *string `json:"entityType"`
 	VerifiedStatus *string `json:"verifiedStatus"`
+	SensitivityLevel      *string `json:"sensitivityLevel"`
+	AllowProactiveMention *bool   `json:"allowProactiveMention"`
+	RequiresConfirmation  *bool   `json:"requiresConfirmation"`
 	Scope          *string `json:"scope"`
 }
 
 type SearchMemoryRequest struct {
 	Keyword     string `json:"keyword" binding:"required"`
 	CharacterID string `json:"characterId"`
+	SensitivityLevel string `json:"sensitivityLevel"`
 	Limit       int    `json:"limit"`
 }
 
@@ -69,6 +79,9 @@ type VectorSearchRequest struct {
 	Query       string `json:"query"`
 	CharacterID string `json:"characterId"`
 	Limit       int    `json:"limit"`
+	ConversationID string `json:"conversationId"`
+	RequestID      string `json:"requestId"`
+	Channel        string `json:"channel"`
 }
 
 type MemoryListQuery struct {
@@ -98,10 +111,13 @@ type MemoryCandidateModel struct {
 	Value          string `gorm:"column:value" json:"value"`
 	MemoryType     string `gorm:"column:memory_type;default:custom" json:"memoryType"`
 	Importance     int    `gorm:"column:importance;default:5" json:"importance"`
+	SensitivityLevel     string `gorm:"column:sensitivity_level;default:internal" json:"sensitivityLevel"`
+	AllowProactiveMention bool  `gorm:"column:allow_proactive_mention;default:1" json:"allowProactiveMention"`
+	RequiresConfirmation  bool  `gorm:"column:requires_confirmation;default:0" json:"requiresConfirmation"`
 	SourceText     string `gorm:"column:source_text" json:"sourceText"`
-	ConversationID string `gorm:"column:conversation_id" json:"conversationId"`
 	CharacterID    string `gorm:"column:character_id" json:"characterId"`
 	CreatedAt      string `gorm:"column:created_at" json:"createdAt"`
+	ConversationID string `gorm:"column:conversation_id" json:"conversationId"`
 }
 
 func (MemoryCandidateModel) TableName() string { return "memory_candidates" }

@@ -18,6 +18,8 @@ import {
   fetchContextPreviewApi,
   continueChatApi,
   loadCharactersApi,
+  type MessagePsycheSnapshot,
+  fetchMessagePsycheApi,
 } from "./api"
 
 export function useConversationLogs() {
@@ -180,6 +182,31 @@ export function useConversationLogs() {
     ElMessage.success("已删除")
   }
 
+
+  const psycheMap = ref<Record<string, MessagePsycheSnapshot>>({})
+  const psycheLoadingMap = ref<Record<string, boolean>>({})
+
+  async function loadMessagePsyche(messageId: string) {
+    if (psycheMap.value[messageId] || psycheLoadingMap.value[messageId]) return
+    psycheLoadingMap.value[messageId] = true
+    try {
+      const data = await fetchMessagePsycheApi(messageId)
+      if (data) psycheMap.value[messageId] = data
+    } catch {
+    } finally {
+      psycheLoadingMap.value[messageId] = false
+    }
+  }
+
+  function toggleMessagePsyche(messageId: string) {
+    if (psycheMap.value[messageId]) {
+      const next = { ...psycheMap.value }
+      delete next[messageId]
+      psycheMap.value = next
+      return
+    }
+    loadMessagePsyche(messageId)
+  }
   const devMode = ref(false)
 
   const ctxPreviewVisible = ref(false)
@@ -284,5 +311,13 @@ export function useConversationLogs() {
     switchCharacter,
     continueChat,
     loadCharacters,
+    psycheMap,
+    psycheLoadingMap,
+    loadMessagePsyche,
+    toggleMessagePsyche,
   }
 }
+
+
+
+

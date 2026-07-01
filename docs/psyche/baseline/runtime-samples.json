@@ -1,0 +1,107 @@
+{
+  "capturedAt": "2026-07-01T08:52:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "samples": [
+    {
+      "name": "backend-health",
+      "method": "GET",
+      "url": "http://127.0.0.1:8899/api/health",
+      "status": 200,
+      "response": {
+        "code": 200,
+        "data": {
+          "database": "ok",
+          "deployMode": "desktop-local",
+          "health": true,
+          "model": "configured",
+          "qq": "disconnected",
+          "version": "1.0.0",
+          "web": "enabled",
+          "wechat": "connected"
+        },
+        "msg": "操作成功"
+      }
+    },
+    {
+      "name": "runtime-status",
+      "method": "GET",
+      "url": "http://127.0.0.1:8899/api/runtime/status",
+      "status": 200,
+      "response": {
+        "code": 200,
+        "data": {
+          "cpu": 32,
+          "memory": {
+            "rssMB": 3
+          },
+          "pid": 48536,
+          "status": "running"
+        },
+        "msg": "操作成功"
+      }
+    },
+    {
+      "name": "setup-status",
+      "method": "GET",
+      "url": "http://127.0.0.1:8899/api/setup/status",
+      "status": 200,
+      "response": {
+        "code": 200,
+        "data": {
+          "completed": false,
+          "currentStep": "",
+          "steps": []
+        },
+        "msg": "操作成功"
+      }
+    },
+    {
+      "name": "chat-conversations",
+      "method": "GET",
+      "url": "http://127.0.0.1:8899/api/chats/conversations",
+      "status": 200,
+      "response": {
+        "code": 200,
+        "data": {
+          "items": [
+            {
+              "id": "channel-wechat",
+              "characterId": "",
+              "title": "微信对话",
+              "channel": "wechat",
+              "source": "system",
+              "peerId": "",
+              "messageCount": 0,
+              "createdAt": "2026-06-30 15:07:09",
+              "updatedAt": "2026-06-30 15:07:09"
+            },
+            {
+              "id": "channel-qq",
+              "characterId": "",
+              "title": "QQ对话",
+              "channel": "qq",
+              "source": "system",
+              "peerId": "",
+              "messageCount": 1,
+              "createdAt": "2026-06-30 15:07:09",
+              "updatedAt": "2026-06-30 15:07:09"
+            }
+          ],
+          "total": 2,
+          "page": 1,
+          "pageSize": 20,
+          "totalPages": 1
+        },
+        "msg": "操作成功"
+      }
+    },
+    {
+      "name": "frontend-root",
+      "method": "GET",
+      "url": "http://127.0.0.1:5178",
+      "status": 200,
+      "responsePrefix": "<!DOCTYPE html><html lang=\"zh-CN\">"
+    }
+  ]
+}
+

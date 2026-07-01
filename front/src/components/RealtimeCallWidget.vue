@@ -48,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, watch, onUnmounted } from "vue"
 import { Phone } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
+import { resolveWebSocketUrl } from "../runtime/runtime-adapter"
 
 const props = defineProps<{
   visible: boolean
@@ -131,7 +132,7 @@ async function start() {
   const source = inputCtx.createMediaStreamSource(mediaStream)
   scriptNode = inputCtx.createScriptProcessor(4096, 1, 1)
 
-  const baseUrl = "ws://127.0.0.1:8899/api/realtime/session"
+  const baseUrl = await resolveWebSocketUrl("/api/realtime/session")
   const params = new URLSearchParams({
     apiKey: props.apiKey,
     voiceType: props.voiceType || "zh_female_vv_jupiter_bigtts",

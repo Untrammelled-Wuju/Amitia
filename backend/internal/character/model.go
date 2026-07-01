@@ -127,3 +127,28 @@ type RoleProfileResponse struct {
 	LifeIdentity        string  `json:"lifeIdentity"`
 	UserAddressingStyle *string `json:"userAddressingStyle"`
 }
+
+type RoleRuntimeProfile struct {
+	CharacterID         string                 `json:"characterId"`
+	Name                string                 `json:"name"`
+	Identity            string                 `json:"identity"`
+	Personality         string                 `json:"personality"`
+	SpeakingStyle       string                 `json:"speakingStyle"`
+	RelationshipStyle   string                 `json:"relationshipStyle"`
+	SystemPrompt        string                 `json:"systemPrompt"`
+	BoundaryRules       string                 `json:"boundaryRules"`
+	PersonalitySliders  string                 `json:"personalitySliders"`
+	BasePrompt          string                 `json:"basePrompt"`
+	GeneratedPrompt     string                 `json:"generatedPrompt"`
+	PersonalityConfig   map[string]interface{} `json:"personalityConfig"`
+	ChatStyleConfig     map[string]interface{} `json:"chatStyleConfig"`
+	SceneRules          map[string]interface{} `json:"sceneRules"`
+	Gender              string                 `json:"gender"`
+	GenderLabel         *string                `json:"genderLabel"`
+	Pronoun             string                 `json:"pronoun"`
+	SelfReference       string                 `json:"selfReference"`
+	UserAddressingStyle *string                `json:"userAddressingStyle"`
+	GenderExpression    int                    `json:"genderExpression"`
+	LifeIdentity        string                 `json:"lifeIdentity"`
+	Diagnostics         []string               `json:"diagnostics"`
+}

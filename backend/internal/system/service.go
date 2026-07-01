@@ -73,6 +73,7 @@ type Service interface {
 	GetReplyTimingOverview() map[string]interface{}
 	GetRuntimeHealth() map[string]interface{}
 	GetRuntimeHealthHistory() map[string]interface{}
+	GetIdentityCore(characterID string) map[string]interface{}
 	GetRuntimeMode() map[string]interface{}
 	GetRuntimeStatus() map[string]interface{}
 	GetSecurityAccessConfig() map[string]interface{}
@@ -153,6 +154,7 @@ type Service interface {
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	UpdateLLMConfig(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
+	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
 	UpdateNotificationsSettings(body map[string]interface{}) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}

@@ -72,6 +72,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onUnmounted } from "vue"
 import { ElMessage } from "element-plus"
 import { Phone } from "@element-plus/icons-vue"
+import { resolveWebSocketUrl } from "../../runtime/runtime-adapter"
 
 const voiceList = [
   { name: "zh_female_vv_jupiter_bigtts", label: "vv - 活泼灵动女声" },
@@ -145,7 +146,8 @@ async function startCall() {
   const source = audioCtx.createMediaStreamSource(mediaStream)
   scriptNode = audioCtx.createScriptProcessor(4096, 1, 1)
 
-  const wsUrl = "ws://127.0.0.1:8899/api/realtime/session" +
+  const wsBaseUrl = await resolveWebSocketUrl("/api/realtime/session")
+  const wsUrl = wsBaseUrl +
     "?apiKey=" + encodeURIComponent(config.apiKey) +
     "&voiceType=" + encodeURIComponent(config.voiceType) +
     "&resourceId=" + encodeURIComponent(config.resourceId)

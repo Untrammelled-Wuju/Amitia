@@ -111,7 +111,7 @@ func (r *repository) GetMessages(convID string, page, pageSize int) ([]Message, 
 	var total int64
 	r.db.Model(&Message{}).Where("conversation_id = ?", convID).Count(&total)
 	var msgs []Message
-	err := r.db.Where("conversation_id = ?", convID).Order("created_at ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
+	err := r.db.Where("conversation_id = ?", convID).Order("sequence ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
 	if msgs == nil {
 		msgs = []Message{}
 	}

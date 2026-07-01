@@ -1,0 +1,73 @@
+{
+  "version": "prompt-ir-v1",
+  "sections": [
+    {
+      "type": "system",
+      "priority": 100,
+      "tokenBudget": 15,
+      "source": "system",
+      "sensitivity": "internal",
+      "trimmable": false,
+      "dataOnly": false,
+      "content": "You are a helpful assistant. Follow safety rules. Be respectful. Do not share personal data."
+    },
+    {
+      "type": "current_input",
+      "priority": 90,
+      "tokenBudget": 12,
+      "source": "message",
+      "sensitivity": "user_data",
+      "trimmable": false,
+      "dataOnly": false,
+      "content": "What is the weather like today in Beijing?"
+    },
+    {
+      "type": "memory",
+      "priority": 40,
+      "tokenBudget": 6,
+      "source": "memory",
+      "sensitivity": "user_data",
+      "trimmable": true,
+      "dataOnly": true,
+      "content": "User likes tea. User lives in"
+    },
+    {
+      "type": "history",
+      "priority": 20,
+      "tokenBudget": 1,
+      "source": "history",
+      "sensitivity": "user_data",
+      "trimmable": true,
+      "dataOnly": true,
+      "content": "User:"
+    }
+  ],
+  "audit": {
+    "compilerVersion": "prompt-compiler-v1",
+    "diagnostics": [
+      "clamp_min_token_budget:current_input",
+      "clamp_min_token_budget:history",
+      "clamp_min_token_budget:memory",
+      "forced_data_only:history",
+      "forced_data_only:memory"
+    ],
+    "trimRecords": [
+      {
+        "sectionType": "memory",
+        "source": "memory",
+        "reason": "low_priority_memory_trimmed",
+        "beforeTokens": 11,
+        "afterTokens": 6,
+        "summary": "Beijing. User jogs every morning."
+      },
+      {
+        "sectionType": "history",
+        "source": "history",
+        "reason": "old_history_trimmed",
+        "beforeTokens": 9,
+        "afterTokens": 1,
+        "summary": "Hi Assistant: Hello! User: How are you today?"
+      }
+    ]
+  }
+}

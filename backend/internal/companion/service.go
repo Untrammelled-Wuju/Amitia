@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/embedding"
+	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/pkg/app"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
@@ -233,9 +234,13 @@ func (s *service) GetScheduleToday(characterID string) map[string]interface{} {
 	return s.GetSchedule(time.Now().Format("2006-01-02"), characterID)
 }
 
-func (s *service) getIdleDuration() time.Duration {
+func (s *service) getIdleDuration(characterID string) time.Duration {
 	var lastAt string
-	err := s.db.Table("messages").Select("created_at").Where("role = 'user'").Order("created_at DESC").Limit(1).Row().Scan(&lastAt)
+	err := s.db.Table("messages").
+		Select("messages.created_at").
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("messages.role = 'user' AND conversations.character_id = ?", characterID).
+		Order("messages.created_at DESC").Limit(1).Row().Scan(&lastAt)
 	if err != nil || lastAt == "" {
 		return 0
 	}
@@ -272,12 +277,12 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 			mood = m
 		}
 	}
-	idleDuration := s.getIdleDuration()
+	idleDuration := s.getIdleDuration(characterID)
 	if idleDuration > 48*time.Hour {
 		mood = "depressed"
 	} else if idleDuration > 24*time.Hour {
 		mood = "sad"
-	} else if idleDuration > 12*time.Hour {
+	} else if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
 		mood = "ignored"
 	} else if idleDuration > 6*time.Hour {
 		mood = "lonely"
@@ -339,6 +344,7 @@ func (s *service) GetStateLife(characterID string) map[string]interface{} {
 		"sleeping":        sleeping,
 		"busy":            busy,
 		"available":       available,
+		"unifiedState":   proactive.UnifiedState{Busy: busy, Replyable: available},
 		"sleepSetting":    sleep,
 	}
 	if stateStartedAt != "" {
@@ -1228,13 +1234,15 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 			generated = "你好呀！"
 		}
 	}
-	convRow := s.db.Table("conversations").Select("id").Limit(1).Row()
-	var convID string
-	convRow.Scan(&convID)
 	var channelSetting string
 	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row().Scan(&channelSetting)
 	if channelSetting == "" {
 		channelSetting = "all"
+	}
+	convID := s.resolveConversationID(characterID, channelSetting, "")
+	if convID == "" {
+		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
 	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, messageCreatedAt)
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
@@ -1345,10 +1353,7 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 		}
 
 		if canSend {
-			if convID == "" {
-				row := s.db.Table("conversations").Select("id").Limit(1).Row()
-				row.Scan(&convID)
-			}
+			convID = s.resolveConversationID(characterID, channel, convID)
 			if convID == "" {
 				failed++
 				continue
@@ -1576,9 +1581,7 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 			delayed++
 			continue
 		}
-		convRow := s.db.Table("conversations").Select("id").Limit(1).Row()
-		var convID string
-		convRow.Scan(&convID)
+		convID := s.resolveConversationID(characterID, channelSetting, "")
 		if convID == "" {
 			failed++
 			continue
@@ -2424,12 +2427,12 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	if dailyShareTendency < 30 {
 		maxTasks = 2
 	}
-	idleDuration := s.getIdleDuration()
+	idleDuration := s.getIdleDuration(characterID)
 	if idleDuration > 48*time.Hour {
 		maxTasks = 0
 	} else if idleDuration > 24*time.Hour {
 		maxTasks = 1
-	} else if idleDuration > 12*time.Hour {
+	} else if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
 		if maxTasks > 2 {
 			maxTasks = 2
 		}
@@ -2487,7 +2490,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 
 	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now', 'localtime') WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", date, characterID)
 
-	if idleDuration > 12*time.Hour {
+	if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
 		var lastChase string
 		s.db.Table("active_message_task").Select("due_time").Where("task_type = 'chase_up' AND status IN ('SENT','PROCESSING') AND character_id = ?", characterID).Order("due_time DESC").Limit(1).Row().Scan(&lastChase)
 		if lastChase == "" {
@@ -2881,7 +2884,7 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	displayContent := generated
 
 	var convID string
-	s.db.Table("conversations").Select("id").Limit(1).Row().Scan(&convID)
+	convID = s.resolveConversationID(characterID, "all", "")
 	if convID == "" {
 		return map[string]interface{}{"triggered": false, "reason": "noConversation"}
 	}
@@ -2961,10 +2964,62 @@ func (s *service) isDefaultCharacter(characterID string) bool {
 	return isActive == 1
 }
 
+func (s *service) resolveConversationID(characterID, channel, existingID string) string {
+	if characterID == "" {
+		return ""
+	}
+	if channel == "" {
+		channel = "web"
+	}
+	if existingID != "" {
+		q := s.db.Table("conversations").Select("id").Where("id = ? AND character_id = ?", existingID, characterID)
+		if channel != "all" {
+			q = q.Where("channel = ?", channel)
+		}
+		var id string
+		q.Limit(1).Row().Scan(&id)
+		return id
+	}
+	channels := conversationChannels(channel)
+	var id string
+	s.db.Table("conversations").Select("id").
+		Where("character_id = ? AND channel IN ?", characterID, channels).
+		Order("updated_at DESC").
+		Limit(1).Row().Scan(&id)
+	return id
+}
+
+func conversationChannels(channel string) []string {
+	channel = strings.TrimSpace(channel)
+	if channel == "" {
+		return []string{"web"}
+	}
+	if channel == "all" {
+		return []string{"web", "wechat", "qq"}
+	}
+	fields := strings.FieldsFunc(channel, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '|'
+	})
+	channels := make([]string, 0, len(fields))
+	seen := map[string]bool{}
+	for _, field := range fields {
+		item := strings.TrimSpace(field)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		channels = append(channels, item)
+	}
+	if len(channels) == 0 {
+		return []string{"web"}
+	}
+	return channels
+}
+
 func (s *service) getWechatConvIDForChar(characterID string) string {
 	var id string
 	s.db.Table("conversations").Select("id").
-		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
+		Where("character_id = ? AND channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL", characterID).
 		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id
@@ -2973,7 +3028,7 @@ func (s *service) getWechatConvIDForChar(characterID string) string {
 func (s *service) getQQConvIDForChar(characterID string) string {
 	var id string
 	s.db.Table("conversations").Select("id").
-		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
+		Where("character_id = ? AND channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL", characterID).
 		Order("updated_at DESC").
 		Limit(1).Row().Scan(&id)
 	return id

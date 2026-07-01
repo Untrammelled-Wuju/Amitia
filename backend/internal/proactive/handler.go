@@ -184,17 +184,12 @@ func (h *Handler) TestRule(c *gin.Context) {
 		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
 		return
 	}
-	var charName, identity string
-	if rule.CharacterID != "" {
-		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("id = ?", rule.CharacterID).Limit(1).Row().Scan(&charName, &identity)
+	character, ok := resolveProactiveCharacter(h.db, rule.CharacterID, rule.ConversationID)
+	if !ok {
+		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
+		return
 	}
-	if charName == "" {
-		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("is_active = 1").Limit(1).Row().Scan(&charName, &identity)
-	}
-	if charName == "" {
-		charName = "AI助手"
-	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, charName, identity)
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity)
 	if content == "" {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
 		return
@@ -216,17 +211,12 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
 		return
 	}
-	var charName, identity string
-	if rule.CharacterID != "" {
-		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("id = ?", rule.CharacterID).Limit(1).Row().Scan(&charName, &identity)
+	character, ok := resolveProactiveCharacter(h.db, rule.CharacterID, rule.ConversationID)
+	if !ok {
+		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
+		return
 	}
-	if charName == "" {
-		h.db.Table("characters").Select("name, COALESCE(identity,'')").Where("is_active = 1").Limit(1).Row().Scan(&charName, &identity)
-	}
-	if charName == "" {
-		charName = "AI助手"
-	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, charName, identity)
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity)
 	if content == "" {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
 		return
@@ -235,8 +225,7 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 	if channel == "" {
 		channel = "web"
 	}
-	var convID string
-	h.db.Table("conversations").Select("id").Limit(1).Row().Scan(&convID)
+	convID := resolveProactiveConversation(h.db, rule.ConversationID, character.ID, channel, false)
 	if convID == "" {
 		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
 		return
@@ -247,13 +236,13 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'sent', ?, ?)", rule.ID, convID, content, channel, now, now)
 	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
 	if channel == "wechat" || channel == "all" {
-		wcID := h.getWechatConvIDForTrigger(rule.CharacterID)
+		wcID := h.getWechatConvIDForTrigger(character.ID)
 		if wcID != "" {
 			h.sendToWechatSidecar(wcID, content)
 		}
 	}
 	if channel == "qq" || channel == "all" {
-		qqID := h.getQQConvIDForTrigger(rule.CharacterID)
+		qqID := h.getQQConvIDForTrigger(character.ID)
 		if qqID != "" {
 			h.sendToQQSidecarForTrigger(qqID, content)
 		}
@@ -341,12 +330,9 @@ func (h *Handler) TestReminder(c *gin.Context) {
 	}
 	var convID string
 	if rem.ConversationID != "" {
-		convID = rem.ConversationID
-	} else if rem.CharacterID != "" {
-		h.db.Table("conversations").Select("id").Where("character_id = ?", rem.CharacterID).Limit(1).Row().Scan(&convID)
-	}
-	if convID == "" {
-		h.db.Table("conversations").Select("id").Limit(1).Row().Scan(&convID)
+		convID = resolveProactiveConversation(h.db, rem.ConversationID, rem.CharacterID, rem.Channel, false)
+	} else {
+		convID = resolveProactiveConversation(h.db, "", rem.CharacterID, rem.Channel, false)
 	}
 	content := rem.Content
 	if content == "" {
@@ -379,15 +365,7 @@ func (h *Handler) TriggerReminder(c *gin.Context) {
 }
 
 func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
-	convID = rem.ConversationID
-	if convID == "" && rem.CharacterID != "" {
-		row := h.db.Table("conversations").Select("id").Where("character_id = ? AND channel = ?", rem.CharacterID, rem.Channel).Limit(1).Row()
-		row.Scan(&convID)
-	}
-	if convID == "" {
-		row := h.db.Table("conversations").Select("id").Where("channel = ?", rem.Channel).Limit(1).Row()
-		row.Scan(&convID)
-	}
+	convID = resolveProactiveConversation(h.db, rem.ConversationID, rem.CharacterID, rem.Channel, false)
 	if convID == "" {
 		return
 	}
@@ -574,31 +552,15 @@ func (h *Handler) sendToWechatSidecar(convID, content string) {
 }
 
 func (h *Handler) getWechatConvID(charID string) string {
-	var id string
-	query := h.db.Table("conversations").Select("id")
-	if charID != "" {
-		query = query.Where("character_id = ?", charID)
-	}
-	query.Where("channel = 'wechat' AND source = 'wechat'").Limit(1).Row().Scan(&id)
-	return id
+	return resolveProactiveConversation(h.db, "", charID, "wechat", true)
 }
 
 func (h *Handler) getWechatConvIDForTrigger(charID string) string {
-	var id string
-	h.db.Table("conversations").Select("id").
-		Where("channel = 'wechat' AND peer_id != '' AND peer_id IS NOT NULL").
-		Order("updated_at DESC").
-		Limit(1).Row().Scan(&id)
-	return id
+	return resolveProactiveConversation(h.db, "", charID, "wechat", true)
 }
 
 func (h *Handler) getQQConvIDForTrigger(charID string) string {
-	var id string
-	h.db.Table("conversations").Select("id").
-		Where("channel = 'qq' AND peer_id != '' AND peer_id IS NOT NULL").
-		Order("updated_at DESC").
-		Limit(1).Row().Scan(&id)
-	return id
+	return resolveProactiveConversation(h.db, "", charID, "qq", true)
 }
 
 func (h *Handler) sendToQQSidecarForTrigger(toUserID, content string) {

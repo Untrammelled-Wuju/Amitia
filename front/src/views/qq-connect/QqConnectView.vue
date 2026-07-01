@@ -104,8 +104,9 @@ import { ref, onMounted, onUnmounted } from "vue"
 import { Loading } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import axios from "axios"
+import { getQQApiBaseURL } from "../../runtime/runtime-adapter"
 
-const QQ_API = "http://127.0.0.1:8899/api/qq"
+const qqApiBaseUrl = ref("")
 
 const pageReady = ref(false)
 const loading = ref(false)
@@ -133,7 +134,7 @@ async function doConnect() {
   connecting.value = true
   loginStatus.value = ""
   try {
-    await axios.post(QQ_API + "/connect", {
+    await axios.post(qqApiBaseUrl.value + "/connect", {
       appId: appId.value,
       token: token.value,
       sandbox: sandbox.value,
@@ -167,7 +168,7 @@ async function doConnect() {
 async function doDisconnect() {
   disconnecting.value = true
   try {
-    await axios.post(QQ_API + "/disconnect")
+    await axios.post(qqApiBaseUrl.value + "/disconnect")
     qqOnline.value = false
     accountId.value = null
     loginStatus.value = ""
@@ -177,7 +178,7 @@ async function doDisconnect() {
 
 async function refreshStatus() {
   try {
-    const res = await axios.get(QQ_API + "/status")
+    const res = await axios.get(qqApiBaseUrl.value + "/status")
     const data = res.data?.data || res.data
     qqOnline.value = !!data?.qqOnline
     accountId.value = data?.accountId || null
@@ -196,7 +197,7 @@ async function refreshStatus() {
     }
     if (!qqOnline.value) {
       try {
-        const cfg = await axios.get(QQ_API + "/config")
+        const cfg = await axios.get(qqApiBaseUrl.value + "/config")
         if (cfg.data?.appId) {
           appId.value = cfg.data.appId
           sandbox.value = cfg.data.sandbox || false
@@ -211,6 +212,7 @@ async function refreshStatus() {
 }
 
 onMounted(async () => {
+  qqApiBaseUrl.value = await getQQApiBaseURL()
   await refreshStatus()
   pollTimer = setInterval(refreshStatus, 3000)
 })

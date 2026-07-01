@@ -16,3 +16,16 @@ export async function postMask(ids: number[], confirmToken: string) {
   const res = await apiClient.post("/api/privacy/mask", { ids, confirmToken })
   return res.data?.data || res.data
 }
+
+export async function getScanHistory(params: { page: number; pageSize: number }) {
+  const res = await apiClient.get("/api/privacy/scan-history", { params })
+  return res.data?.data || res.data
+}
+
+export async function getExportScanReport(params: { scanId?: number; format: "csv" | "json" }) {
+  const res = await apiClient.get("/api/privacy/export-report", {
+    params,
+    responseType: "blob",
+  })
+  return res.data
+}

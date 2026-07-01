@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
+import "gorm.io/gorm"
+
 type Conversation struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
 	CharacterID  string `gorm:"column:character_id" json:"characterId"`
@@ -10,6 +12,7 @@ type Conversation struct {
 	Source       string `gorm:"column:source;default:manual" json:"source"`
 	PeerID       string `gorm:"column:peer_id" json:"peerId"`
 	MessageCount int    `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion string `gorm:"column:state_version" json:"stateVersion"`
 	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt    string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -19,6 +22,7 @@ func (Conversation) TableName() string { return "conversations" }
 type Message struct {
 	ID             string  `gorm:"column:id;primaryKey" json:"id"`
 	ConversationID string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Role           string  `gorm:"column:role;not null" json:"role"`
 	Content        string  `gorm:"column:content;not null" json:"content"`
 	MsgType        string  `gorm:"column:msg_type;default:text" json:"msgType"`
@@ -31,9 +35,24 @@ type Message struct {
 	AudioDuration  float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
 	ImageUrl       string  `gorm:"column:image_url;default:" json:"imageUrl"`
 	VideoUrl       string  `gorm:"column:video_url;default:" json:"videoUrl"`
+	RequestID      string  `gorm:"column:request_id;default:" json:"requestId"`
+	CreatedAt      string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt      string  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (Message) TableName() string { return "messages" }
+
+func (m *Message) BeforeCreate(tx *gorm.DB) error {
+	if m.Sequence > 0 || m.ConversationID == "" {
+		return nil
+	}
+	var maxSequence int64
+	if err := tx.Model(&Message{}).Where("conversation_id = ?", m.ConversationID).Select("COALESCE(MAX(sequence), 0)").Scan(&maxSequence).Error; err != nil {
+		return err
+	}
+	m.Sequence = maxSequence + 1
+	return nil
+}
 
 type ModelConfig struct {
 	ID              int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
@@ -67,6 +86,7 @@ type ChatRequest struct {
 	CharacterID    string `json:"characterId" binding:"required"`
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel        string `json:"channel"`
 }
 
@@ -74,6 +94,7 @@ type WebChatRequest struct {
 	CharacterID    string `json:"characterId" binding:"required"`
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 }
 
 type CreateConversationRequest struct {
@@ -96,17 +117,20 @@ type ConversationQuery struct {
 type MessageSearchQuery struct {
 	Keyword        string `form:"keyword" binding:"required"`
 	ConversationID string `form:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Page           int    `form:"page"`
 	PageSize       int    `form:"pageSize"`
 }
 
 type ChatResponse struct {
 	ConversationID string       `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Message        *MessageItem `json:"message"`
 }
 
 type ContextStructureLog struct {
 	ConversationID string `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Round          int    `json:"round"`
 	Sys1Tokens     int    `json:"sys1Tokens"`
 	Sys2Tokens     int    `json:"sys2Tokens"`
@@ -120,6 +144,7 @@ type ContextStructureLog struct {
 type MessageItem struct {
 	ID             string `json:"id"`
 	ConversationID string `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Role           string `json:"role"`
 	Content        string `json:"content"`
 	Tokens         int    `json:"tokens"`
@@ -139,6 +164,7 @@ type ProcessMessageRequest struct {
 	CharacterID    string  `json:"characterId"`
 	Message        string  `json:"message"`
 	ConversationID string  `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel        string  `json:"channel"`
 	Source         string  `json:"source"`
 	PeerID         string  `json:"peerId"`
@@ -147,11 +173,13 @@ type ProcessMessageRequest struct {
 	VoiceMessage   bool    `json:"voiceMessage"`
 	ImageUrl       string  `json:"imageUrl"`
 	VideoUrl       string  `json:"videoUrl"`
+	RequestID      string  `json:"requestId"`
 	ImageContext   string  `json:"-"`
 }
 
 type ProcessMessageResponse struct {
 	ConversationID string       `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply          string       `json:"reply"`
 	CharacterID    string       `json:"characterId"`
 	CharacterName  string       `json:"characterName"`
@@ -160,6 +188,7 @@ type ProcessMessageResponse struct {
 	AudioUrls      []string     `json:"audioUrls"`
 	UserMessage    *MessageItem `json:"userMessage"`
 	UserMessageID  string       `json:"userMessageId"`
+	RequestID      string       `json:"requestId"`
 }
 
 type ChatStatsResponse struct {
@@ -169,6 +198,7 @@ type ChatStatsResponse struct {
 
 type WorkingMemoryState struct {
 	ConversationID string   `json:"conversationId"`
+	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Summary        string   `json:"summary"`
 	KeyPoints      []string `json:"keyPoints"`
 	UpdatedAt      string   `json:"updatedAt"`

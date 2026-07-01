@@ -16,7 +16,8 @@ type Repository interface {
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
 	GetByUserID(userID string) ([]UserProfile, error)
-	GetUserFactSummary(userID string) ([]UserProfile, error)
+	GetScopedByUserID(userID, characterID string) ([]UserProfile, error)
+	GetUserFactSummary(userID string, characterID ...string) ([]UserProfile, error)
 }
 
 type repository struct {
@@ -31,6 +32,9 @@ func (r *repository) List(q ProfileListQuery) ([]UserProfile, int64, error) {
 	query := r.db.Model(&UserProfile{})
 	if q.UserID != "" {
 		query = query.Where("user_id = ?", q.UserID)
+	}
+	if q.CharacterID != "" {
+		query = query.Where("character_id = ?", q.CharacterID)
 	}
 	if q.Category != "" {
 		query = query.Where("category = ?", q.Category)
@@ -59,8 +63,8 @@ func (r *repository) FindByID(id string) (*UserProfile, error) {
 
 func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error) {
 	var existing UserProfile
-	err := r.db.Where("user_id = ? AND category = ? AND attribute_name = ?",
-		profile.UserID, profile.Category, profile.AttributeName).First(&existing).Error
+	err := r.db.Where("user_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
+		profile.UserID, profile.CharacterID, profile.Category, profile.AttributeName).First(&existing).Error
 	if err != nil {
 		if profile.ID == "" {
 			profile.ID = uuid.New().String()
@@ -75,6 +79,7 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	updates := map[string]interface{}{
 		"attribute_value": profile.AttributeValue,
 		"confidence":      newConfidence,
+		"source":          profile.Source,
 		"source_conv_id":  profile.SourceConvID,
 	}
 	if updateErr := r.db.Model(&existing).Updates(updates).Error; updateErr != nil {
@@ -82,6 +87,7 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	}
 	existing.AttributeValue = profile.AttributeValue
 	existing.Confidence = newConfidence
+	existing.Source = profile.Source
 	existing.SourceConvID = profile.SourceConvID
 	return &existing, nil
 }
@@ -96,18 +102,66 @@ func (r *repository) Delete(id string) error {
 
 func (r *repository) GetByUserID(userID string) ([]UserProfile, error) {
 	var items []UserProfile
-	err := r.db.Where("user_id = ?", userID).Order("confidence DESC").Find(&items).Error
+	err := r.db.Where("user_id = ? AND character_id = ''", userID).Order("confidence DESC").Find(&items).Error
 	if items == nil {
 		items = []UserProfile{}
 	}
 	return items, err
 }
 
-func (r *repository) GetUserFactSummary(userID string) ([]UserProfile, error) {
+func (r *repository) GetScopedByUserID(userID, characterID string) ([]UserProfile, error) {
+	return r.getScopedProfiles(userID, characterID, "confidence DESC", 0, false)
+}
+
+func (r *repository) GetUserFactSummary(userID string, characterID ...string) ([]UserProfile, error) {
+	scope := ""
+	if len(characterID) > 0 {
+		scope = characterID[0]
+	}
+	return r.getScopedProfiles(userID, scope, "confidence DESC", 20, true)
+}
+
+func (r *repository) getScopedProfiles(userID, characterID, order string, limit int, onlyFacts bool) ([]UserProfile, error) {
 	var items []UserProfile
-	err := r.db.Where("user_id = ? AND confidence >= 50", userID).Order("confidence DESC").Limit(20).Find(&items).Error
+	query := r.db.Where("user_id = ?", userID)
+	if characterID != "" {
+		query = query.Where("character_id IN ?", []string{characterID, ""})
+	} else {
+		query = query.Where("character_id = ?", "")
+	}
+	if onlyFacts {
+		query = query.Where("confidence >= 50")
+	}
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Order(order).Find(&items).Error
 	if items == nil {
 		items = []UserProfile{}
 	}
-	return items, err
+	if err != nil || characterID == "" {
+		return items, err
+	}
+	return preferCharacterProfiles(items, characterID), nil
+}
+
+func preferCharacterProfiles(items []UserProfile, characterID string) []UserProfile {
+	selected := make(map[string]UserProfile, len(items))
+	for _, item := range items {
+		key := item.Category + "\x00" + item.AttributeName
+		existing, ok := selected[key]
+		if !ok || existing.CharacterID == "" && item.CharacterID == characterID {
+			selected[key] = item
+		}
+	}
+	result := make([]UserProfile, 0, len(selected))
+	for _, item := range items {
+		key := item.Category + "\x00" + item.AttributeName
+		selectedItem, ok := selected[key]
+		if ok && selectedItem.ID == item.ID {
+			result = append(result, item)
+			delete(selected, key)
+		}
+	}
+	return result
 }

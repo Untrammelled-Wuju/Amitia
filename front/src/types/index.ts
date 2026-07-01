@@ -150,6 +150,7 @@ export interface Memory {
   confidence: number
   source: string
   scope: string
+  scopeType?: string
   verifiedStatus: string
   useCount: number
   lastUsedAt?: string | null
@@ -190,4 +191,263 @@ export interface RuntimeModeValidationResult {
 }
 
 export type DeployMode = "desktop-local" | "cloud-web"
+
+export interface RuntimeDebugSnapshot {
+  meta: {
+    generatedAt: string
+    degraded: boolean
+  }
+  summary: {
+    activeInteractions: number
+    queuedTasks: number
+    reconciliationIssues: number
+  }
+  interactions: Array<{
+    scope: string
+    status: string
+    priority: string
+    path: string
+    stateVersion: number
+    deadlineAt?: string | null
+    cancelReason?: string | null
+  }>
+  budgets: Array<{
+    scope: string
+    path: string
+    callsUsed: number
+    callsLimit: number
+    tokensUsed: number
+    tokensLimit: number
+    queueMs: number
+  }>
+  queues: Array<{
+    name: string
+    priority: string
+    depth: number
+    oldestAgeMs: number
+    status: string
+  }>
+  deliveries: Array<{
+    channel: string
+    leaseState: string
+    deliveryState: string
+    attempt: number
+    updatedAt?: string | null
+  }>
+  tools: Array<{
+    tool: string
+    status: string
+    idempotencyKey: string
+    updatedAt?: string | null
+  }>
+  circuits: Array<{
+    dependency: string
+    state: string
+    failures: number
+    openedAt?: string | null
+  }>
+  reconciliation: Array<{
+    category: string
+    severity: "low" | "medium" | "high" | "ok"
+    count: number
+    strategy: string
+    updatedAt?: string | null
+  }>
+  behaviorPlan?: {
+    intention: string
+    strategy: string
+    mustInclude: string[]
+    mayInclude: string[]
+    mustAvoid: string[]
+    questionPolicy: string
+    advicePolicy: string
+    deliveryPolicy: string
+    stateVersion: number
+    winnerCandidate: string
+    rejectedCandidates: string[]
+  }
+  expressionPlan?: {
+    sentenceCount: number
+    maxLength: number
+    directness: number
+    warmth: number
+    emotionDisplay: string
+    useQuestion: boolean
+    voiceParams?: string | null
+    avoidTopics: string[]
+  }  hardConstraintFilters?: Array<{
+    ruleId: string
+    candidateKey: string
+    reason: string
+    severity: "block" | "override"
+  }>
+  softPreferenceScores?: Array<{
+    dimension: string
+    rawScore: number
+    normalizedWeight: number
+    contribution: number
+  }>
+  copingStrategy?: {
+    selected: string
+    alternatives: string[]
+    selectionReason: string
+  }
+  emotionExpression?: {
+    displayMode: "show" | "suppress" | "reframe"
+    internalIntensity: number
+    displayIntensity: number
+    overrideReason: string
+  }
+
+  traces?: Array<{
+    index: number
+    stage: string
+    scope: string
+    interactionId: string
+    step: string
+    durationMs: number
+    status: string
+    detail: string
+    startedAt: string
+  }>
+  metrics?: {
+    totalInteractions: number
+    activeInteractions: number
+    avgLatencyMs: number
+    p95LatencyMs: number
+    cancelRate: number
+    supersedeRate: number
+    deliverySuccessRate: number
+    toolUnknownRate: number
+    circuitBreakerRate: number
+    queueBackpressureRate: number
+    reconciliationOpenIssues: number
+    totalModelCalls: number
+    cacheHitRate: number
+    collectedAt: string
+    version: string
+  }}
+
+export interface RuntimeTraceFrame {
+  index: number
+  stage: string
+  scope: string
+  interactionId: string
+  step: string
+  durationMs: number
+  status: string
+  detail: string
+  startedAt: string
+  metadata: Record<string, string>
+}
+
+export interface RuntimeReconciliationDetail {
+  category: string
+  severity: "low" | "medium" | "high" | "ok"
+  count: number
+  strategy: string
+  updatedAt: string
+  samples: Array<{
+    id: string
+    scope: string
+    description: string
+    autoFix: boolean
+  }>
+}
+
+export interface RuntimeMetrics {
+  totalInteractions: number
+  activeInteractions: number
+  avgLatencyMs: number
+  p95LatencyMs: number
+  cancelRate: number
+  supersedeRate: number
+  deliverySuccessRate: number
+  toolUnknownRate: number
+  circuitBreakerRate: number
+  queueBackpressureRate: number
+  reconciliationOpenIssues: number
+  totalModelCalls: number
+  cacheHitRate: number
+  collectedAt: string
+  version: string
+traces?: Array<{
+    index: number
+    stage: string
+    scope: string
+    interactionId: string
+    step: string
+    durationMs: number
+    status: string
+    detail: string
+    startedAt: string
+  }>
+  metrics?: {
+    totalInteractions: number
+    activeInteractions: number
+    avgLatencyMs: number
+    p95LatencyMs: number
+    cancelRate: number
+    supersedeRate: number
+    deliverySuccessRate: number
+    toolUnknownRate: number
+    circuitBreakerRate: number
+    queueBackpressureRate: number
+    reconciliationOpenIssues: number
+    totalModelCalls: number
+    cacheHitRate: number
+    collectedAt: string
+    version: string
+  }
+
+}
+
+export interface PsycheStateSnapshot {
+  emotion: { positive: number; negative: number; arousal: number; dominance: number }
+  mood: { valence: number; tension: number; pad: string }
+  stress: number
+  needs: Record<string, number>
+  beliefs: Array<{ key: string; value: string; confidence: number; conflicted: boolean }>
+  relationship: { trust: number; familiarity: number; tension: number; security: number }
+  affectLabel: string
+  collectedAt: string
+}
+
+export interface ProspectiveMemory {
+  id: string
+  title: string
+  description: string
+  priority: number
+  status: 'pending' | 'triggered' | 'completed' | 'cancelled'
+  expiresAt: string | null
+  notBefore: string | null
+  triggerReason: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TriggerHistory {
+  id: string
+  triggerId: string
+  triggerType: string
+  title: string
+  channel: string
+  state: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled'
+  priority: string
+  reason: string
+  attemptCount: number
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TriggerQueueSummary {
+  depth: number
+  pendingCount: number
+  oldestAgeMs: number
+  recentFailures: number
+  backpressure: boolean
+}
+
+export type ReminderGroup = 'overdue' | 'upcoming' | 'completed' | 'disabled'
 

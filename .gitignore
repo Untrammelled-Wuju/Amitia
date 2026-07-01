@@ -10,9 +10,7 @@ front/dist/
 backend/data/data/backups/
 *.log
 /logs/
-/log/
 /backend/logs/
-/backend/log/
 /front/logs/
 stderr*.txt
 stdout*.txt

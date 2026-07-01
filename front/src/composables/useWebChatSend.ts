@@ -3,6 +3,7 @@
 import { type Ref, computed } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "./useApi"
+import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -57,12 +58,11 @@ export function useWebChatSend(
     try {
       const formData = new FormData()
       formData.append("audio", blob, "voice.webm")
-      const token = localStorage.getItem("ai-companion-token") || ""
-      const res = await fetch("/api/voice/upload", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + token },
-        body: formData,
-      })
+      const [url, init] = await Promise.all([
+        resolveApiUrl("/api/voice/upload"),
+        createAuthorizedRequestInit({ method: "POST", body: formData }),
+      ])
+      const res = await fetch(url, init)
       if (!res.ok) throw new Error("Voice upload failed")
       const data = await res.json()
       const audioUrl = data?.data?.audioUrl || data?.audioUrl || ""
@@ -129,12 +129,15 @@ export function useWebChatSend(
     sending.value = true
     modelError.value = ""
     try {
-      const token = localStorage.getItem("ai-companion-token") || ""
-      const res = await fetch("/api/web-chat/send-stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl, videoUrl: finalVideoUrl || "" }),
-      })
+      const [url, init] = await Promise.all([
+        resolveApiUrl("/api/web-chat/send-stream"),
+        createAuthorizedRequestInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl, videoUrl: finalVideoUrl || "" }),
+        }),
+      ])
+      const res = await fetch(url, init)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const reader = res.body?.getReader()
       if (!reader) throw new Error("No response stream")

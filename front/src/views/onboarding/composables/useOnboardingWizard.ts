@@ -5,6 +5,7 @@ import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
 import { useApi, setToken } from "../../../ui-index"
 import axios from "axios"
+import { getQQApiBaseURL } from "../../../runtime/runtime-adapter"
 
 export const steps = [
   { label: "欢迎", key: "welcome" },
@@ -61,7 +62,7 @@ export function useOnboardingWizard() {
   const wxError = ref("")
   let wxPollTimer: ReturnType<typeof setInterval> | null = null
 
-  const QQ_API = "http://127.0.0.1:8899/api/qq"
+  const qqApiBaseUrl = ref("")
   const qqConnected = ref(false)
   const qqConnecting = ref(false)
   const qqAccountId = ref("")
@@ -80,6 +81,10 @@ export function useOnboardingWizard() {
 
   watch(() => form.qqEnabled, async (enabled) => {
     if (enabled && current.value === 8) { await refreshQQStatus() }
+  })
+
+  void getQQApiBaseURL().then((url) => {
+    qqApiBaseUrl.value = url
   })
 
   async function detectModels() {
@@ -174,7 +179,7 @@ export function useOnboardingWizard() {
   }
 
   async function resetQQConnection() {
-    try { await axios.post(QQ_API + "/disconnect") } catch {}
+    try { await axios.post(qqApiBaseUrl.value + "/disconnect") } catch {}
     qqConnected.value = false
     form.qqAppId = ""
     form.qqToken = ""
@@ -186,13 +191,13 @@ export function useOnboardingWizard() {
     qqConnecting.value = true
     try {
       if (form.qqAppId && form.qqToken) {
-        await axios.post(QQ_API + "/connect", {
+        await axios.post(qqApiBaseUrl.value + "/connect", {
           appId: form.qqAppId,
           token: form.qqToken,
           sandbox: false,
         })
       } else {
-        await axios.post(QQ_API + "/connect", {})
+        await axios.post(qqApiBaseUrl.value + "/connect", {})
       }
       stopQQPoll()
       const startTime = Date.now()
@@ -217,7 +222,7 @@ export function useOnboardingWizard() {
 
   async function refreshQQStatus() {
     try {
-      const res = await axios.get(QQ_API + "/status")
+      const res = await axios.get(qqApiBaseUrl.value + "/status")
       const data = res.data?.data || res.data
       qqConnected.value = !!data?.qqOnline
       qqAccountId.value = data?.accountId || ""

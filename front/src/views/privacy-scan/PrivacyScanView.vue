@@ -1,7 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
 <template>
   <div class="privacy-scan-view">
     <div class="page-header">
@@ -24,6 +20,8 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ScanScopePanel :scanning="scanning" @scan="runScan" />
 
     <ScanResultsPanel v-if="scanSummary" :scan-summary="scanSummary" />
+
+    <ScanHistoryPanel @view-result="onViewHistoryResult" />
   </div>
 </template>
 
@@ -32,6 +30,7 @@ import { ref } from "vue"
 import { ElMessage } from "element-plus"
 import ScanScopePanel from "./components/ScanScopePanel.vue"
 import ScanResultsPanel from "./components/ScanResultsPanel.vue"
+import ScanHistoryPanel from "./components/ScanHistoryPanel.vue"
 import { postScan } from "./api"
 
 const scanning = ref(false)
@@ -49,6 +48,10 @@ async function runScan(scope: string[]) {
   } finally {
     scanning.value = false
   }
+}
+
+function onViewHistoryResult(scanId: number) {
+  ElMessage.info("历史扫描 ID: " + scanId + "，请重新执行扫描以查看最新结果")
 }
 </script>
 

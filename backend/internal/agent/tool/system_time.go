@@ -3,6 +3,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -19,10 +20,15 @@ func init() {
 				Required:   []string{},
 			},
 		},
-	}, func(args map[string]interface{}) string {
+	}, func(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+		if err := callCtx.Err(); err != nil {
+			return CancelledResult(err.Error())
+		}
 		local := time.Now().Format("2006-01-02 15:04:05")
 		utc := time.Now().UTC().Format("2006-01-02 15:04:05")
 		weekday := time.Now().Weekday().String()
-		return fmt.Sprintf("本地时间: %s (周%s) | UTC: %s", local, weekday, utc)
+		result := TextResult(fmt.Sprintf("本地时间: %s (周%s) | UTC: %s", local, weekday, utc))
+		result.Audit = map[string]interface{}{"channel": execCtx.Channel}
+		return result
 	})
 }

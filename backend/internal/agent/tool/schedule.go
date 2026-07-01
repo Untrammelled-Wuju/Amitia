@@ -3,6 +3,7 @@
 package tool
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -13,18 +14,6 @@ var toolDB *sql.DB
 
 func SetDB(db *sql.DB) {
 	toolDB = db
-}
-
-var CurrentCharacterID string
-
-func SetCurrentCharacterID(id string) {
-	CurrentCharacterID = id
-}
-
-var CurrentConversationID string
-
-func SetCurrentConversationID(id string) {
-	CurrentConversationID = id
 }
 
 var OnMemorySaved func(id, key, value, memoryType, characterID string)
@@ -81,9 +70,17 @@ func init() {
 	}, createSchedule)
 }
 
-func createSchedule(args map[string]interface{}) string {
+func createSchedule(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+	if err := callCtx.Err(); err != nil {
+		return CancelledResult(err.Error())
+	}
+	scopedCtx, scopeErr := requireScopedWrite(execCtx)
+	if scopeErr != nil {
+		return *scopeErr
+	}
+	execCtx = scopedCtx
 	if toolDB == nil {
-		return "ERROR: database not initialized"
+		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
 	}
 
 	title, _ := args["title"].(string)
@@ -91,8 +88,11 @@ func createSchedule(args map[string]interface{}) string {
 	dueTime, _ := args["due_time"].(string)
 	repeat, _ := args["repeat"].(string)
 	channel, _ := args["channel"].(string)
+	if channel == "" {
+		channel = execCtx.Channel
+	}
 	if title == "" || dueTime == "" {
-		return "ERROR: title and due_time are required"
+		return ErrorResult("invalid_args", "ERROR: title and due_time are required")
 	}
 	if repeat == "" {
 		repeat = "none"
@@ -109,9 +109,13 @@ func createSchedule(args map[string]interface{}) string {
 		id, title, desc, dueTime, repeat, channel, now, now,
 	)
 	if err != nil {
-		return fmt.Sprintf("ERROR: %s", err.Error())
+		return ErrorResult("database_error", fmt.Sprintf("ERROR: %s", err.Error()))
 	}
-	return fmt.Sprintf("OK 已创建日程：%s（截止 %s）", title, dueTime)
+	result := TextResult(fmt.Sprintf("OK 已创建日程：%s（截止 %s）", title, dueTime))
+	result.ExternalOperationID = id
+	result.SideEffects = []ToolSideEffect{{Type: "schedule_create", TargetID: id, Confirmed: true}}
+	result.Audit = map[string]interface{}{"channel": channel, "repeat": repeat, "due_time": dueTime, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
+	return result
 }
 
 var activeScheduleVar *bool

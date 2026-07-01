@@ -11,6 +11,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       :cloud-risk="cloudRisk"
     />
 
+    <PsycheStateCard
+      :psyche="psycheState"
+      :loading="psycheLoading"
+    />
+
     <StatusOverviewCards
       :deploy-class="deployClass"
       :deploy-label="deployLabel"
@@ -121,6 +126,7 @@ import UsageStatsPanel from "./components/UsageStatsPanel.vue"
 import DiagnosticsPanel from "./components/DiagnosticsPanel.vue"
 import RecentErrorsPanel from "./components/RecentErrorsPanel.vue"
 import RecentImportsPanel from "./components/RecentImportsPanel.vue"
+import PsycheStateCard from "./components/PsycheStateCard.vue"
 
 const {
   accessRisk, cloudRisk,
@@ -134,6 +140,7 @@ const {
   healthModuleLabel, healthStatusLabel,
   barPercent, formatTokens, fmtDateShort,
   runHealthCheck, fetchRecentErrors, runDiagnostics,
+  psycheState, psycheLoading,
 } = useDashboardData()
 </script>
 
@@ -155,3 +162,6 @@ const {
 .qa-icon.import { color: #c8806a; }
 .qa-icon.logs { color: var(--ac-color-text-secondary); }
 </style>
+
+
+

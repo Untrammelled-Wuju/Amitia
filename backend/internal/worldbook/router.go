@@ -4,13 +4,9 @@ package worldbook
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterWorldBookRouter(r *gin.RouterGroup, ctx *app.AppContext, graphSvc graph.Service) {
-	repo := NewRepository(ctx)
-	svc := NewService(repo, ctx, graphSvc)
+func RegisterWorldBookRouter(r *gin.RouterGroup, svc Service) {
 	handler := NewHandler(svc)
 
 	r.GET("/world-book", handler.List)

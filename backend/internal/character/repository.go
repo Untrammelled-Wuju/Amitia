@@ -3,6 +3,10 @@
 package character
 
 import (
+	"encoding/json"
+	"log"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -18,6 +22,7 @@ type Repository interface {
 	ListTemplates() ([]CharacterTemplate, error)
 	FindTemplateByID(id string) (*CharacterTemplate, error)
 	GetActive() (*Character, error)
+	GetRuntimeProfile(id string) (*RoleRuntimeProfile, error)
 }
 
 type repository struct {
@@ -86,4 +91,76 @@ func (r *repository) GetActive() (*Character, error) {
 	var c Character
 	err := r.db.Where("is_active = 1").First(&c).Error
 	return &c, err
+}
+
+func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
+	var c Character
+	var err error
+	if strings.TrimSpace(id) != "" {
+		err = r.db.Where("id = ?", id).First(&c).Error
+	} else {
+		err = r.db.Where("is_default = 1").Limit(1).First(&c).Error
+		if err != nil {
+			err = r.db.Order("sort_order, created_at").Limit(1).First(&c).Error
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	diagnostics := []string{}
+	personalityConfig := parseRuntimeJSON(c.ID, "personality_config", c.PersonalityConfig, &diagnostics)
+	chatStyleConfig := parseRuntimeJSON(c.ID, "chat_style_config", c.ChatStyleConfig, &diagnostics)
+	sceneRules := parseRuntimeJSON(c.ID, "scene_rules", c.SceneRules, &diagnostics)
+	for _, item := range diagnostics {
+		log.Printf("[RoleRuntimeProfile] %s", item)
+	}
+	return &RoleRuntimeProfile{
+		CharacterID:         c.ID,
+		Name:                c.Name,
+		Identity:            c.Identity,
+		Personality:         c.Personality,
+		SpeakingStyle:       c.SpeakingStyle,
+		RelationshipStyle:   c.RelationshipStyle,
+		SystemPrompt:        c.SystemPrompt,
+		BoundaryRules:       c.BoundaryRules,
+		PersonalitySliders:  c.PersonalitySliders,
+		BasePrompt:          c.BasePrompt,
+		GeneratedPrompt:     c.GeneratedPrompt,
+		PersonalityConfig:   personalityConfig,
+		ChatStyleConfig:     chatStyleConfig,
+		SceneRules:          sceneRules,
+		Gender:              c.Gender,
+		GenderLabel:         c.GenderLabel,
+		Pronoun:             c.Pronoun,
+		SelfReference:       c.SelfReference,
+		UserAddressingStyle: c.UserAddressingStyle,
+		GenderExpression:    c.GenderExpression,
+		LifeIdentity:        c.LifeIdentity,
+		Diagnostics:         diagnostics,
+	}, nil
+}
+
+func parseRuntimeJSON(characterID, field, raw string, diagnostics *[]string) map[string]interface{} {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		*diagnostics = append(*diagnostics, characterID+" "+field+" missing, using runtime-profile-v1 default")
+		return defaultRuntimeJSON()
+	}
+	var decoded map[string]interface{}
+	if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+		*diagnostics = append(*diagnostics, characterID+" "+field+" invalid, using runtime-profile-v1 default: "+err.Error())
+		return defaultRuntimeJSON()
+	}
+	if decoded == nil {
+		*diagnostics = append(*diagnostics, characterID+" "+field+" empty, using runtime-profile-v1 default")
+		return defaultRuntimeJSON()
+	}
+	if _, ok := decoded["version"]; !ok {
+		decoded["version"] = "runtime-profile-v1"
+	}
+	return decoded
+}
+
+func defaultRuntimeJSON() map[string]interface{} {
+	return map[string]interface{}{"version": "runtime-profile-v1"}
 }

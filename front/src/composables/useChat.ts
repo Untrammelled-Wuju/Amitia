@@ -3,6 +3,7 @@
 import { ref, computed } from "vue"
 import { useApi, isLoggedIn, getToken } from "./useApi"
 import type { ApiResponse } from "@/types"
+import { resolveApiUrl } from "../runtime/runtime-adapter"
 
 /**
  * Composable for WebChat state management.
@@ -110,8 +111,7 @@ export function useChat() {
 
     try {
       // Determine base URL for direct fetch (bypass axios for SSE)
-      const apiBase = (import.meta as any).env.VITE_API_URL || ""
-      const url = apiBase + "/api/web-chat/send-stream"
+      const url = await resolveApiUrl("/api/web-chat/send-stream")
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",

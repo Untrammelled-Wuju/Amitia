@@ -61,3 +61,18 @@ export function continueChatApi(body: any) {
 export function loadCharactersApi() {
   return get<any[]>("/api/characters")
 }
+
+export interface MessagePsycheSnapshot {
+  messageId: string
+  emotion?: { positive: number; negative: number; arousal: number; dominance: number }
+  affectLabel?: string
+  copingStrategy?: { selected: string; alternatives: string[]; selectionReason: string }
+  cognitiveAppraisal?: { primary: string; secondary: string; reappraisal: string }
+  stress?: number
+  collectedAt: string
+}
+
+export function fetchMessagePsycheApi(messageId: string) {
+  return get<MessagePsycheSnapshot>(`/api/psyche/messages/${messageId}`)
+}
+

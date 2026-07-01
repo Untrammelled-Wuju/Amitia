@@ -1,0 +1,16 @@
+  {
+    "id": "SIM-001",
+    "category": "runtime_collaboration",
+    "priority": "P1",
+    "clock": "2026-07-01T10:00:00Z",
+    "inputEvent": {"channel": "internal", "type": "longitudinal_sim", "content": "7天纵向仿真-高频角色"},
+    "preState": {"character": "baseline", "mood": "neutral"},
+    "taskPriority": "P1",
+    "allowedDelta": {"decayRate": 0.005},
+    "forbidden": ["参数越界"],
+    "expectedState": "calibrated",
+    "outputFeatures": ["衰减率校验"],
+    "fakeLLM": "none",
+    "fakeChannel": "internal",
+    "faults": []
+  }

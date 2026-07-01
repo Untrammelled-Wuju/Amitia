@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -22,10 +23,10 @@ type Service interface {
 	Create(req *CreateProfileRequest) (*UserProfile, error)
 	Update(id string, req *UpdateProfileRequest) (*UserProfile, error)
 	Delete(id string) error
-	GetByUserID(userID string) ([]UserProfile, error)
-	ExtractFromConversation(userID, convID string, messages []map[string]string) error
-	ToSystemPrompt(userID string) string
-	UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string) (*UserProfile, error)
+	GetByUserID(userID string, characterID ...string) ([]UserProfile, error)
+	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
+	ToSystemPrompt(userID string, characterID ...string) string
+	UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error)
 	SyncGraphProfile(id string) bool
 }
 
@@ -74,10 +75,12 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	}
 	p := &UserProfile{
 		UserID:         req.UserID,
+		CharacterID:    req.CharacterID,
 		Category:       req.Category,
 		AttributeName:  req.AttributeName,
 		AttributeValue: req.AttributeValue,
 		Confidence:     req.Confidence,
+		Source:         req.Source,
 		SourceConvID:   req.SourceConvID,
 	}
 	if p.Confidence == 0 {
@@ -122,19 +125,26 @@ func (s *service) Delete(id string) error {
 			userID = "default"
 		}
 		nodeID := userID + ":" + p.Category + ":" + p.AttributeName
+		if p.CharacterID != "" {
+			nodeID = userID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
+		}
 		_ = s.graphSvc.DeleteNode("profile:" + nodeID)
 	}
 	return nil
 }
 
-func (s *service) GetByUserID(userID string) ([]UserProfile, error) {
+func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfile, error) {
+	if len(characterID) > 0 && characterID[0] != "" {
+		return s.repo.GetScopedByUserID(userID, characterID[0])
+	}
 	return s.repo.GetByUserID(userID)
 }
 
-func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string) (*UserProfile, error) {
+func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
 	if userID == "" {
 		userID = "default"
 	}
+	scope := s.profileScope(convID, characterID...)
 	if category == "" {
 		category = "personal_info"
 	}
@@ -146,6 +156,7 @@ func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, c
 	}
 	p := &UserProfile{
 		UserID:         userID,
+		CharacterID:    scope,
 		Category:       category,
 		AttributeName:  attrName,
 		AttributeValue: attrValue,
@@ -168,7 +179,7 @@ func (s *service) SyncGraphProfile(id string) bool {
 	return true
 }
 
-func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string) error {
+func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
 	if userID == "" {
 		userID = "default"
 	}
@@ -179,6 +190,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	if cfg == nil {
 		return fmt.Errorf("no active model")
 	}
+	scope := s.profileScope(convID, characterID...)
 	conversationText := ""
 	for _, m := range messages {
 		conversationText += m["role"] + ": " + m["content"] + "\n"
@@ -222,6 +234,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 		}
 		result, err := s.repo.UpsertConfidence(&UserProfile{
 			UserID:         userID,
+			CharacterID:    scope,
 			Category:       cat,
 			AttributeName:  name,
 			AttributeValue: val,
@@ -235,8 +248,8 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	return nil
 }
 
-func (s *service) ToSystemPrompt(userID string) string {
-	profiles, err := s.repo.GetUserFactSummary(userID)
+func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
+	profiles, err := s.repo.GetUserFactSummary(userID, firstScope(characterID...))
 	if err != nil || len(profiles) == 0 {
 		return ""
 	}
@@ -353,7 +366,35 @@ func minInt(a, b int) int {
 func (s *service) Name() string { return "用户画像" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	return s.ExtractFromConversation("default", convID, messages)
+	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "profile", 4)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
+	if err := s.ExtractFromConversation("default", convID, pending); err != nil {
+		return err
+	}
+	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile:%s:%d", convID, maxSequence))
+}
+
+func (s *service) profileScope(convID string, characterID ...string) string {
+	if scope := firstScope(characterID...); scope != "" {
+		return scope
+	}
+	if s.db == nil || convID == "" {
+		return ""
+	}
+	var scope string
+	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&scope); err != nil {
+		return ""
+	}
+	return scope
+}
+
+func firstScope(characterID ...string) string {
+	if len(characterID) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(characterID[0])
 }
 
 func (s *service) syncGraph(p *UserProfile) {
@@ -364,9 +405,13 @@ func (s *service) syncGraph(p *UserProfile) {
 		p.UserID = "default"
 	}
 	nodeID := p.UserID + ":" + p.Category + ":" + p.AttributeName
+	if p.CharacterID != "" {
+		nodeID = p.UserID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
+	}
 	_ = s.graphSvc.SyncNode("user", p.UserID, p.UserID, map[string]interface{}{"user_id": p.UserID})
 	_ = s.graphSvc.SyncNode("profile", nodeID, p.AttributeValue, map[string]interface{}{
 		"category":       p.Category,
+		"character_id":   p.CharacterID,
 		"confidence":     p.Confidence,
 		"user_id":        p.UserID,
 		"source_conv_id": p.SourceConvID,
