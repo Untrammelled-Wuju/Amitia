@@ -91,3 +91,24 @@ func TestCancellationRegistryCleanupStaleAtIgnoresInvalidMaxAge(t *testing.T) {
 		t.Fatalf("无效最大年龄不应改变注册表长度, 实际 %d", registry.Len())
 	}
 }
+
+func TestCancellationRegistryRegisterCleansStaleEntries(t *testing.T) {
+	registry := NewCancellationRegistry()
+	registry.entries["expired"] = cancellationEntry{
+		cancel:    func() {},
+		createdAt: time.Now().Add(-cancellationRegistryMaxAge - time.Minute),
+	}
+
+	_, cancel := context.WithCancel(context.Background())
+	registry.Register("fresh", cancel)
+
+	if registry.Cancel("expired") {
+		t.Fatalf("注册新项时应清理陈旧项")
+	}
+	if !registry.Cancel("fresh") {
+		t.Fatalf("新注册项应保留")
+	}
+	if registry.Len() != 1 {
+		t.Fatalf("注册清理后应只剩新项, 实际 %d", registry.Len())
+	}
+}

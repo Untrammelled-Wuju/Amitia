@@ -11,6 +11,8 @@ type CancellationRegistry struct {
 	entries map[string]cancellationEntry
 }
 
+const cancellationRegistryMaxAge = 2 * time.Hour
+
 type cancellationEntry struct {
 	cancel    context.CancelFunc
 	createdAt time.Time
@@ -25,6 +27,7 @@ func (r *CancellationRegistry) Register(interactionID string, cancel context.Can
 		return
 	}
 	r.mu.Lock()
+	r.cleanupStaleLocked(cancellationRegistryMaxAge, time.Now())
 	r.entries[interactionID] = cancellationEntry{cancel: cancel, createdAt: time.Now()}
 	r.mu.Unlock()
 }
@@ -58,6 +61,12 @@ func (r *CancellationRegistry) CleanupStaleAt(maxAge time.Duration, now time.Tim
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	cleaned := 0
+	cleaned = r.cleanupStaleLocked(maxAge, now)
+	return cleaned
+}
+
+func (r *CancellationRegistry) cleanupStaleLocked(maxAge time.Duration, now time.Time) int {
 	cleaned := 0
 	for interactionID, entry := range r.entries {
 		if now.Sub(entry.createdAt) > maxAge {
