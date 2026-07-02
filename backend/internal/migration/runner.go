@@ -5,9 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -97,50 +94,6 @@ func (r Runner) hasPendingMigrations(migrations []Migration) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func (r Runner) CreatePreMigrationBackup() error {
-	if r.DB == nil {
-		return errors.New("db is required")
-	}
-	if err := ensureBackupTables(r.DB); err != nil {
-		return err
-	}
-	sourcePath, err := sqliteMainPath(r.DB)
-	if err != nil {
-		return err
-	}
-	if sourcePath == "" || sourcePath == ":memory:" {
-		return nil
-	}
-	now := time.Now
-	if r.Now != nil {
-		now = r.Now
-	}
-	backupDir := r.BackupDir
-	if backupDir == "" {
-		backupDir = filepath.Join(filepath.Dir(sourcePath), "migration_backups")
-	}
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return err
-	}
-	id := "backup-" + now().UTC().Format("20060102T150405.000000000")
-	backupPath := filepath.Join(backupDir, id+".db")
-	startedAt := now().UTC().Format(time.RFC3339)
-	if err := r.DB.Exec("VACUUM INTO ?", backupPath).Error; err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
-	}
-	size, checksum, err := fileSizeAndChecksum(backupPath)
-	if err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
-	}
-	finishedAt := now().UTC().Format(time.RFC3339)
-	if err := insertBackupRecord(r.DB, id, backupPath, size, checksum, "completed", startedAt, finishedAt, ""); err != nil {
-		return err
-	}
-	return r.DB.Exec("INSERT OR REPLACE INTO backup_contents (id, backup_id, table_name, row_count, checksum) VALUES (?, ?, ?, ?, ?)", id+"-database", id, "sqlite_database", 1, checksum).Error
 }
 
 func (r Runner) applyOne(migration Migration) error {
@@ -303,45 +256,4 @@ func safeIdentifier(name string) bool {
 		}
 	}
 	return true
-}
-
-func ensureBackupTables(db *gorm.DB) error {
-	if err := db.Exec("CREATE TABLE IF NOT EXISTS backup_records (id TEXT PRIMARY KEY, backup_path TEXT NOT NULL DEFAULT '', backup_size INTEGER DEFAULT 0, checksum TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', started_at TEXT DEFAULT '', finished_at TEXT DEFAULT '', error_message TEXT DEFAULT '')").Error; err != nil {
-		return err
-	}
-	return db.Exec("CREATE TABLE IF NOT EXISTS backup_contents (id TEXT PRIMARY KEY, backup_id TEXT NOT NULL DEFAULT '', table_name TEXT NOT NULL DEFAULT '', row_count INTEGER DEFAULT 0, checksum TEXT DEFAULT '')").Error
-}
-
-func sqliteMainPath(db *gorm.DB) (string, error) {
-	var rows []struct {
-		Name string `gorm:"column:name"`
-		File string `gorm:"column:file"`
-	}
-	if err := db.Raw("PRAGMA database_list").Scan(&rows).Error; err != nil {
-		return "", err
-	}
-	for _, row := range rows {
-		if row.Name == "main" {
-			return row.File, nil
-		}
-	}
-	return "", errors.New("main sqlite database not found")
-}
-
-func fileSizeAndChecksum(path string) (int64, string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, "", err
-	}
-	defer file.Close()
-	h := sha256.New()
-	size, err := io.Copy(h, file)
-	if err != nil {
-		return 0, "", err
-	}
-	return size, hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func insertBackupRecord(db *gorm.DB, id, backupPath string, size int64, checksum, status, startedAt, finishedAt, errorMessage string) error {
-	return db.Exec("INSERT OR REPLACE INTO backup_records (id, backup_path, backup_size, checksum, status, started_at, finished_at, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, backupPath, size, checksum, status, startedAt, finishedAt, errorMessage).Error
 }
