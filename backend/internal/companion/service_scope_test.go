@@ -66,6 +66,8 @@ func TestRunActiveMessageTaskDoesNotUseOtherCharacterConversation(t *testing.T) 
 
 func TestRunActiveMessageTaskUsesScopedConversation(t *testing.T) {
 	svc := setupCompanionScopeService(t)
+	fake := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = fake
 	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-other', 'char-2', 'web', '2026-07-01 10:00:00')").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -83,13 +85,19 @@ func TestRunActiveMessageTaskUsesScopedConversation(t *testing.T) {
 	if result["status"] != "SENT" {
 		t.Fatalf("expected SENT, got %#v", result)
 	}
+	if len(fake.requests) != 1 {
+		t.Fatalf("expected one unified entry request, got %d", len(fake.requests))
+	}
+	if fake.requests[0].ConversationID != "conv-target" || fake.requests[0].CharacterID != "char-1" {
+		t.Fatalf("unexpected unified entry scope: %#v", fake.requests[0])
+	}
 
 	var targetCount int64
 	if err := svc.db.Table("messages").Where("conversation_id = ?", "conv-target").Count(&targetCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if targetCount != 1 {
-		t.Fatalf("expected one target message, got %d", targetCount)
+	if targetCount != 0 {
+		t.Fatalf("expected no direct target message, got %d", targetCount)
 	}
 	var otherCount int64
 	if err := svc.db.Table("messages").Where("conversation_id = ?", "conv-other").Count(&otherCount).Error; err != nil {

@@ -3,9 +3,8 @@
 package companion
 
 import (
-	"fmt"
+	"context"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -129,26 +128,6 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 	}
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
-	messageCreatedAt := nowStr
-	if dueTime, ok := task["due_time"].(string); ok && dueTime != "" {
-		messageCreatedAt = dueTime
-	}
-	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
-	generated := s.generateLLMReply(prompt)
-	if generated == "" {
-		switch taskType {
-		case "morning_share":
-			generated = "早上好！新的一天开始了。"
-		case "noon_daily":
-			generated = "午安，记得按时吃饭哦。"
-		case "evening_reflection":
-			generated = "傍晚好，今天辛苦了。"
-		case "bedtime_mood":
-			generated = "夜深了，早点休息。"
-		default:
-			generated = "你好呀！"
-		}
-	}
 	var channelSetting string
 	s.db.Table("active_message_settings").Select("COALESCE(channel, 'all')").Where("character_id = ?", characterID).Limit(1).Row().Scan(&channelSetting)
 	if channelSetting == "" {
@@ -159,24 +138,17 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, generated, messageCreatedAt)
-	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
-	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
-
-	if s.isDefaultCharacter(characterID) {
-		if strings.Contains(channelSetting, "wechat") || channelSetting == "all" {
-			wcID := s.getWechatConvIDForChar(characterID)
-			if wcID != "" {
-				s.sendToWechatSidecar(wcID, generated)
-			}
-		}
-		if strings.Contains(channelSetting, "qq") || channelSetting == "all" {
-			qqID := s.getQQConvIDForChar(characterID)
-			if qqID != "" {
-				s.sendToQQSidecar(qqID, generated)
-			}
-		}
+	result, err := s.submitProactiveMessage(context.Background(), characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id, now))
+	if err != nil {
+		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+		return map[string]interface{}{"id": id, "status": "FAILED", "taskType": taskType, "channel": channelSetting, "error": err.Error()}
 	}
+	messageContent := prompt
+	if result != nil && result.Response != nil && result.Response.Reply != "" {
+		messageContent = result.Response.Reply
+	}
+	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
+	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 
 	log.Printf("[Companion] RunActiveMessageTask sent type=%s id=%d channel=%s", taskType, id, channelSetting)
 	return map[string]interface{}{"id": id, "status": "SENT", "taskType": taskType, "channel": channelSetting}

@@ -3,11 +3,13 @@
 package companion
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/embedding"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -64,6 +66,11 @@ type Service interface {
 	GetShareHistory(characterID string) ShareHistory
 	TriggerDailyRegeneration(characterID string) map[string]interface{}
 	RandomBurstTrigger(characterID string) map[string]interface{}
+	AttachUnifiedEntry(entry *interaction.UnifiedEntry)
+}
+
+type proactiveUnifiedEntry interface {
+	Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error)
 }
 
 type service struct {
@@ -71,6 +78,7 @@ type service struct {
 	embeddingSvc *embedding.Service
 	burstMu      sync.Mutex
 	burstScopes  map[string]burstScopeState
+	unifiedEntry proactiveUnifiedEntry
 }
 
 type burstScopeState struct {
@@ -80,6 +88,10 @@ type burstScopeState struct {
 
 func NewService(ctx *app.AppContext) Service {
 	return &service{db: ctx.DB, embeddingSvc: embedding.NewService(ctx.DB)}
+}
+
+func (s *service) AttachUnifiedEntry(entry *interaction.UnifiedEntry) {
+	s.unifiedEntry = entry
 }
 
 func toJSON(v interface{}) string { b, _ := json.Marshal(v); return string(b) }

@@ -3,6 +3,7 @@
 package companion
 
 import (
+	"context"
 	"fmt"
 	"github.com/u-ai/backend/internal/decision"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -231,21 +232,18 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 	return fmt.Sprintf("\u5f53\u524d\u4f60\u5904\u4e8e %s \u72b6\u6001\uff0c\u5fc3\u60c5 %s\uff0c\u7cbe\u529b %d/100\u3002\u6700\u8fd1\u8bb0\u5fc6\uff1a%s\u3002\u8bf7\u751f\u6210\u4e00\u6761\u50cf\u5fae\u4fe1\u91cc\u7a81\u7136\u60f3\u5230\u5c31\u53d1\u51fa\u7684\u81ea\u7136\u77ed\u6d88\u606f\uff0c1-2\u53e5\uff0c\u4e0d\u8981\u5ba2\u670d\u8154\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981 emoji\uff0c\u907f\u514d\u91cd\u590d\u8fd9\u4e9b\u8bdd\u9898\uff1a%s\u3002", currentState, mood, energy, recentMemoriesStr, recentTopics)
 }
 
-func (s *service) persistAndDeliver(characterID, msgID, convID, content string, now time.Time) {
-	s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)",
-		msgID, convID, content, now.Format("2006-01-02 15:04:05"))
-	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'sent', ?, ?)",
-		convID, content, now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"))
-	if s.isDefaultCharacter(characterID) {
-		wcID := s.getWechatConvIDForChar(characterID)
-		if wcID != "" {
-			s.sendToWechatSidecar(wcID, content)
-		}
-		qqID := s.getQQConvIDForChar(characterID)
-		if qqID != "" {
-			s.sendToQQSidecar(qqID, content)
-		}
+func (s *service) persistAndDeliver(characterID, msgID, convID, content string, now time.Time) error {
+	result, err := s.submitProactiveMessage(context.Background(), characterID, convID, "all", content, msgID)
+	if err != nil {
+		return err
 	}
+	messageContent := content
+	if result != nil && result.Response != nil && result.Response.Reply != "" {
+		messageContent = result.Response.Reply
+	}
+	nowStr := now.Format("2006-01-02 15:04:05")
+	return s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'queued', ?, ?)",
+		convID, messageContent, nowStr, nowStr).Error
 }
 
 func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} {
@@ -301,17 +299,15 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	prompt := s.buildBurstPrompt(characterID, mood, currentState, energy)
 
 	msgID := fmt.Sprintf("burst-%d", now.UnixNano())
-	generated := s.generateLLMReply(prompt)
-	if generated == "" {
-		return map[string]interface{}{"triggered": false, "reason": "llmFailed"}
-	}
 
 	convID := s.resolveConversationID(characterID, "all", "")
 	if convID == "" {
 		return map[string]interface{}{"triggered": false, "reason": "noConversation"}
 	}
 
-	s.persistAndDeliver(characterID, msgID, convID, generated, now)
+	if err := s.persistAndDeliver(characterID, msgID, convID, prompt, now); err != nil {
+		return map[string]interface{}{"triggered": false, "reason": "dispatchFailed", "error": err.Error()}
+	}
 
 	burstCount := s.recordBurstTriggered(characterID, now)
 

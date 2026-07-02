@@ -89,6 +89,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to init data lifecycle schema: " + err.Error())
 	}
 	entry := interaction.NewUnifiedEntry(orch, resolver)
+	compSvc.AttachUnifiedEntry(entry)
 	return &AppServices{
 		Graph:         graphSvc,
 		Memory:        memSvc,

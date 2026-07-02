@@ -3,10 +3,9 @@
 package companion
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"math/rand"
-	"strings"
 	"time"
 )
 
@@ -198,19 +197,8 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 			failed++
 			continue
 		}
-		msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
-		generated := s.generateLLMReply(prompt)
-		if generated == "" {
-			failed++
-			continue
-		}
-		displayContent := generated
-		messageCreatedAt := nowStr
-		if dueTime, ok := t["due_time"].(string); ok && dueTime != "" {
-			messageCreatedAt = dueTime
-		}
-		insErr := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, displayContent, messageCreatedAt).Error
-		if insErr != nil {
+		dispatchResult, dispatchErr := s.submitProactiveMessage(context.Background(), characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id, now))
+		if dispatchErr != nil {
 			retryCount := 0
 			if rc, ok := t["retry_count"]; ok {
 				switch v := rc.(type) {
@@ -232,25 +220,14 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 			continue
 		}
 		taskType, _ := t["task_type"].(string)
-		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'sent', ?, ?)", convID, generated, channelSetting, nowStr, nowStr)
+		messageContent := prompt
+		if dispatchResult != nil && dispatchResult.Response != nil && dispatchResult.Response.Reply != "" {
+			messageContent = dispatchResult.Response.Reply
+		}
+		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
 		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
-
-		if s.isDefaultCharacter(characterID) {
-			if strings.Contains(channelSetting, "wechat") || channelSetting == "all" {
-				wcID := s.getWechatConvIDForChar(characterID)
-				if wcID != "" {
-					s.sendToWechatSidecar(wcID, generated)
-				}
-			}
-			if strings.Contains(channelSetting, "qq") || channelSetting == "all" {
-				qqID := s.getQQConvIDForChar(characterID)
-				if qqID != "" {
-					s.sendToQQSidecar(qqID, generated)
-				}
-			}
-		}
 	}
 	return map[string]interface{}{"processed": processed, "sent": sent, "delayed": delayed, "failed": failed}
 }
