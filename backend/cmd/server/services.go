@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
+	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -31,6 +32,7 @@ type AppServices struct {
 	Chat          chat.Service
 	UnifiedEntry  *interaction.UnifiedEntry
 	DataLifecycle *mindruntime.DataLifecycleCoordinator
+	OutboxRuntime *interaction.OutboxRuntime
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
@@ -54,12 +56,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	outbox := interaction.NewSQLiteOutboxStore(ctx.DB)
+	deadStore := interaction.NewInMemoryDeadLetterStore()
 	if err := tracker.InitSchema(); err != nil {
 		panic("failed to init interaction tracker schema: " + err.Error())
 	}
 	if err := outbox.InitSchema(); err != nil {
 		panic("failed to init outbox schema: " + err.Error())
 	}
+	outboxPublisher := interaction.OutboxPublisherFunc(func(record interaction.OutboxRecord) error {
+		log.Info("interaction outbox event published id=", record.ID, " type=", record.EventType, " aggregate=", record.AggregateID)
+		return nil
+	})
+	outboxRuntime := interaction.NewOutboxRuntime(outbox, deadStore, outboxPublisher, interaction.OutboxWorkerConfig{})
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, outbox)
 	runtimeRegistry := interaction.NewContextLoaderRegistry()
 	runtimeRegistry.Register(interaction.NewChannelContextLoader())
@@ -92,5 +100,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		Chat:          chatSvc,
 		UnifiedEntry:  entry,
 		DataLifecycle: dataLifecycle,
+		OutboxRuntime: outboxRuntime,
 	}
 }

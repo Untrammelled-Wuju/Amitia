@@ -11,11 +11,14 @@ import (
 	"github.com/u-ai/backend/internal/qq"
 	"gorm.io/gorm"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -64,6 +67,9 @@ func main() {
 	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)
 
 	log.InitLogger(filepath.Join(runtimeRoot, "logs"))
+
+	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopRoot()
 
 	db := mysql.NewSQLite(config.AppCfg.Storage.DataDir)
 
@@ -160,7 +166,36 @@ func main() {
 		log.Info("交互启动恢复完成 scanned=", result.Scanned, " recovered=", result.Recovered, " skipped=", result.Skipped, " failed=", result.Failed)
 	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
-	if err := r.Run(serverAddr); err != nil {
+	services.OutboxRuntime.Start(rootCtx)
+	defer services.OutboxRuntime.Stop()
+
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: r,
+	}
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("服务启动失败:", err)
+			cleanup()
+			os.Exit(1)
+		}
+	case <-rootCtx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error("服务关闭失败:", err)
+		}
+		if err := <-serverErr; err != nil && err != http.ErrServerClosed {
+			log.Error("服务退出异常:", err)
+		}
+	}
+	if err := rootCtx.Err(); err != nil && err != context.Canceled {
 		log.Error("服务启动失败:", err)
 		cleanup()
 		os.Exit(1)

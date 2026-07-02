@@ -1,6 +1,7 @@
 package interaction
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -150,6 +151,87 @@ func TestOutboxDispatcherMovesExhaustedFailureToDeadLetter(t *testing.T) {
 	if len(deadLetters) != 1 || deadLetters[0].OutboxID != id || deadLetters[0].LastError != "publish failed" {
 		t.Fatalf("unexpected dead letters: %#v", deadLetters)
 	}
+}
+
+func TestOutboxDispatcherStartProcessesPendingAndStopsWithContext(t *testing.T) {
+	store := NewInMemoryOutboxStore()
+	deadStore := NewInMemoryDeadLetterStore()
+	publisher := &testOutboxPublisher{}
+	id, err := store.Append(&OutboxRecord{
+		EventType:   "interaction.completed",
+		AggregateID: "agg-1",
+		Payload:     []byte(`{"ok":true}`),
+		MaxRetries:  3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	dispatcher := NewOutboxDispatcherWithConfig(store, deadStore, publisher, OutboxWorkerConfig{
+		DispatcherInterval: time.Hour,
+		Concurrency:        1,
+	})
+	dispatcher.Start(ctx)
+	waitFor(t, time.Second, func() bool {
+		return publisher.Count() == 1
+	})
+	cancel()
+	dispatcher.Stop()
+
+	rec, err := store.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Status != OutboxStatusPublished {
+		t.Fatalf("record was not published: %#v", rec)
+	}
+}
+
+func TestDeadLetterRecoveryWorkerStartRecoversPendingAndStops(t *testing.T) {
+	deadStore := NewInMemoryDeadLetterStore()
+	publisher := &testOutboxPublisher{}
+	id, err := deadStore.Append(&DeadLetterRecord{
+		OutboxID:    "outbox-1",
+		EventType:   "interaction.completed",
+		AggregateID: "agg-1",
+		Payload:     []byte(`{"ok":true}`),
+		Status:      DeadLetterStatusPending,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	worker := NewDeadLetterRecoveryWorkerWithConfig(deadStore, publisher, OutboxWorkerConfig{
+		RecoveryInterval: time.Hour,
+	})
+	worker.Start(ctx)
+	waitFor(t, time.Second, func() bool {
+		return publisher.Count() == 1
+	})
+	cancel()
+	worker.Stop()
+
+	rec, err := deadStore.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Status != DeadLetterStatusReplayed {
+		t.Fatalf("dead letter was not replayed: %#v", rec)
+	}
+}
+
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition not met before timeout")
 }
 
 func newTestSQLiteOutboxStore(t *testing.T) *SQLiteOutboxStore {
