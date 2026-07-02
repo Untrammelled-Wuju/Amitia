@@ -84,6 +84,14 @@ type InteractionRecord struct {
 	cancel            context.CancelFunc `json:"-"`
 }
 
+type InteractionMetadataUpdate struct {
+	Priority   *int
+	PathType   *string
+	CommitID   *string
+	ExecutorID *string
+	DeadlineAt *time.Time
+}
+
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
 	return &InteractionRecord{
 		ID:        uuid.New().String(),
@@ -219,6 +227,7 @@ type InteractionTracker interface {
 	GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error)
 	ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
 	ListByScope(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
+	UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error)
 	TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error)
 	RequestCancel(ctx context.Context, id string, reason string) error
 	MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error
@@ -365,6 +374,38 @@ func (t *InMemoryTracker) TransitionCAS(ctx context.Context, id string, expected
 	if err := rec.Transition(target); err != nil {
 		return nil, err
 	}
+	snap := rec.Snapshot()
+	return &snap, nil
+}
+
+func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return nil, ErrInteractionNotFound
+	}
+	rec.mu.Lock()
+	if update.Priority != nil {
+		rec.Priority = *update.Priority
+	}
+	if update.PathType != nil {
+		rec.PathType = *update.PathType
+	}
+	if update.CommitID != nil {
+		rec.CommitID = *update.CommitID
+	}
+	if update.ExecutorID != nil {
+		rec.ExecutorID = *update.ExecutorID
+	}
+	if update.DeadlineAt != nil {
+		rec.DeadlineAt = *update.DeadlineAt
+	}
+	rec.UpdatedAt = time.Now()
+	rec.mu.Unlock()
 	snap := rec.Snapshot()
 	return &snap, nil
 }

@@ -152,6 +152,53 @@ func (t *SQLiteInteractionTracker) TransitionCAS(ctx context.Context, id string,
 	return rec, nil
 }
 
+func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error) {
+	updates := map[string]interface{}{}
+	if update.Priority != nil {
+		updates["priority"] = *update.Priority
+	}
+	if update.PathType != nil {
+		updates["path_type"] = *update.PathType
+	}
+	if update.CommitID != nil {
+		updates["commit_id"] = *update.CommitID
+	}
+	if update.ExecutorID != nil {
+		updates["executor_id"] = *update.ExecutorID
+	}
+	if update.DeadlineAt != nil {
+		updates["deadline_at"] = *update.DeadlineAt
+	}
+	if len(updates) == 0 {
+		rec, ok, err := t.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrInteractionNotFound
+		}
+		return rec, nil
+	}
+	updates["updated_at"] = t.now()
+	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
+		Where("id = ?", id).
+		Updates(updates)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrInteractionNotFound
+	}
+	rec, ok, err := t.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrInteractionNotFound
+	}
+	return rec, nil
+}
+
 func (t *SQLiteInteractionTracker) RequestCancel(ctx context.Context, id string, reason string) error {
 	now := t.now()
 	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).

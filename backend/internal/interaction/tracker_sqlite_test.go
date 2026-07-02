@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -51,6 +52,56 @@ func TestSQLiteInteractionTrackerPersistsFullScopeAndCAS(t *testing.T) {
 	}
 	if _, err := tracker.TransitionCAS(ctx, record.ID, got.StatusVersion, InteractionStatusCompleted); !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("expected version conflict, got %v", err)
+	}
+}
+
+func TestSQLiteInteractionTrackerUpdateMetadata(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	record := NewInteractionRecord(InteractionScope{
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-1",
+		Channel:        "web",
+		RequestID:      "request-metadata",
+	})
+	if err := tracker.Create(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+
+	priority := 2
+	pathType := string(PathTypeStandard)
+	commitID := "msg-1,msg-2"
+	executorID := "worker-1"
+	deadline := time.Now().Add(time.Minute).UTC().Truncate(time.Second)
+	updated, err := tracker.UpdateMetadata(ctx, record.ID, InteractionMetadataUpdate{
+		Priority:   &priority,
+		PathType:   &pathType,
+		CommitID:   &commitID,
+		ExecutorID: &executorID,
+		DeadlineAt: &deadline,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Priority != priority || updated.PathType != pathType || updated.CommitID != commitID || updated.ExecutorID != executorID {
+		t.Fatalf("metadata was not returned: %#v", updated)
+	}
+	got, ok, err := tracker.Get(ctx, record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("record missing")
+	}
+	if got.Priority != priority || got.PathType != pathType || got.CommitID != commitID || got.ExecutorID != executorID {
+		t.Fatalf("metadata was not persisted: %#v", got)
+	}
+	if !got.DeadlineAt.Equal(deadline) {
+		t.Fatalf("deadline was not persisted: got %s want %s", got.DeadlineAt, deadline)
+	}
+	if got.StatusVersion != 0 {
+		t.Fatalf("metadata update should not bump status version: %d", got.StatusVersion)
 	}
 }
 

@@ -52,8 +52,9 @@ func (l runtimeBlockedBeliefLoader) Load(ctx context.Context, scope InteractionS
 
 func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
+	tracker := NewInMemoryTracker()
 	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), outbox)
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
 	registry := NewContextLoaderRegistry()
 	registry.Register(runtimePsycheLoader{})
 	registry.Register(NewChannelContextLoader())
@@ -102,6 +103,25 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	}
 	if !foundRuntimeEvent {
 		t.Fatalf("runtime outbox event missing: %#v", records)
+	}
+	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interaction record missing")
+	}
+	if record.PathType != string(PathTypeStandard) {
+		t.Fatalf("path type was not persisted: %#v", record)
+	}
+	if record.Priority != 2 {
+		t.Fatalf("priority was not persisted: %#v", record)
+	}
+	if record.CommitID != "msg-1" {
+		t.Fatalf("commit id was not persisted: %#v", record)
+	}
+	if record.DeadlineAt.IsZero() {
+		t.Fatalf("deadline was not persisted: %#v", record)
 	}
 }
 

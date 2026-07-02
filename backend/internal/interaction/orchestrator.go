@@ -254,6 +254,12 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	defer o.cancels.Unregister(record.ID)
 
 	runtime := o.pipeline.Assemble(processCtx, scope, req)
+	if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, metadataFromRuntime(runtime, processCtx)); err == nil {
+		record = updated
+	} else {
+		o.tracker.Fail(ctx, record.ID, "metadata_update_failed", err.Error())
+		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
 	req.InteractionID = record.ID
 	req.Runtime = &runtime
 	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusContextReady); err == nil {
@@ -302,6 +308,15 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		return o.buildResult(record, nil, outcome, freshErr), freshErr
 	} else {
 		record = fresh
+	}
+	if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, metadataFromResponse(resp)); err == nil {
+		record = updated
+	} else {
+		log.Printf("[orchestrator] response metadata update failed: %v", err)
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "metadata_update_failed", err.Error()); failErr == nil {
+			record = failed
+		}
+		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
 	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusGenerated); err == nil {
@@ -420,6 +435,42 @@ func (o *Orchestrator) buildScope(req *ProcessRequest) InteractionScope {
 		Source:         req.Source,
 		RequestID:      req.RequestID,
 	}.Normalize()
+}
+
+func metadataFromRuntime(runtime RuntimeAssembly, ctx context.Context) InteractionMetadataUpdate {
+	path := string(runtime.Path)
+	priority := priorityForPath(runtime.Path)
+	update := InteractionMetadataUpdate{
+		PathType: &path,
+		Priority: &priority,
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		update.DeadlineAt = &deadline
+	}
+	return update
+}
+
+func metadataFromResponse(resp *ProcessResponse) InteractionMetadataUpdate {
+	commitID := ""
+	if resp != nil {
+		if len(resp.MessageIDs) > 0 {
+			commitID = strings.Join(resp.MessageIDs, ",")
+		} else {
+			commitID = resp.RequestID
+		}
+	}
+	return InteractionMetadataUpdate{CommitID: &commitID}
+}
+
+func priorityForPath(path PathType) int {
+	switch path {
+	case PathTypeDeep:
+		return 1
+	case PathTypeStandard:
+		return 2
+	default:
+		return 3
+	}
 }
 
 func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID string) error {
