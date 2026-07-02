@@ -53,6 +53,7 @@ func (d *OutboxDispatcher) Stop() {
 	d.mu.Unlock()
 	close(d.stopCh)
 	d.wg.Wait()
+	d.stopCh = make(chan struct{})
 }
 
 func (d *OutboxDispatcher) dispatchLoop(ctx context.Context) {
@@ -73,9 +74,13 @@ func (d *OutboxDispatcher) dispatchLoop(ctx context.Context) {
 }
 
 func (d *OutboxDispatcher) flush(ctx context.Context) {
-	pending, err := d.store.ListPending()
+	if err := d.store.ReleaseExpiredLeases(time.Now()); err != nil {
+		log.Printf("[outbox] release expired leases error: %v", err)
+		return
+	}
+	pending, err := d.store.LeasePending(d.concurrency, time.Now().Add(DefaultOutboxLeaseDuration))
 	if err != nil {
-		log.Printf("[outbox] list pending error: %v", err)
+		log.Printf("[outbox] lease pending error: %v", err)
 		return
 	}
 	if len(pending) == 0 {
@@ -108,7 +113,9 @@ func (d *OutboxDispatcher) processRecord(rec OutboxRecord) {
 	}
 
 	if rec.RetryCount+1 >= rec.MaxRetries {
-		d.store.MarkDead(rec.ID)
+		if markErr := d.store.MarkDead(rec.ID); markErr != nil {
+			log.Printf("[outbox] mark dead error: %v", markErr)
+		}
 		d.moveToDeadLetter(rec, err)
 		return
 	}
@@ -129,7 +136,7 @@ func (d *OutboxDispatcher) moveToDeadLetter(rec OutboxRecord, err error) {
 		Status:      DeadLetterStatusPending,
 		CreatedAt:   time.Now(),
 	}
-	if appendErr, _ := d.deadStore.Append(dl); appendErr != "" {
+	if _, appendErr := d.deadStore.Append(dl); appendErr != nil {
 		log.Printf("[outbox] move to dead letter error: %v", appendErr)
 	}
 }

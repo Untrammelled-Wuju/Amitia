@@ -12,14 +12,16 @@ import (
 type OutboxStatus string
 
 const (
-	OutboxStatusPending   OutboxStatus = "pending"
-	OutboxStatusPublished OutboxStatus = "published"
-	OutboxStatusFailed    OutboxStatus = "failed"
-	OutboxStatusDead      OutboxStatus = "dead"
+	OutboxStatusPending    OutboxStatus = "pending"
+	OutboxStatusProcessing OutboxStatus = "processing"
+	OutboxStatusPublished  OutboxStatus = "published"
+	OutboxStatusFailed     OutboxStatus = "failed"
+	OutboxStatusDead       OutboxStatus = "dead"
 )
 
 const DefaultMaxRetries = 5
 const DefaultRetryBackoff = 2 * time.Second
+const DefaultOutboxLeaseDuration = 30 * time.Second
 
 var (
 	ErrOutboxAlreadyPublished = errors.New("outbox: record already published")
@@ -35,6 +37,7 @@ type OutboxRecord struct {
 	RetryCount  int          `json:"retryCount"`
 	MaxRetries  int          `json:"maxRetries"`
 	NextRetryAt time.Time    `json:"nextRetryAt"`
+	LeasedUntil time.Time    `json:"leasedUntil,omitempty"`
 	LastError   string       `json:"lastError,omitempty"`
 	CreatedAt   time.Time    `json:"createdAt"`
 }
@@ -49,6 +52,8 @@ type OutboxStore interface {
 	MarkFailed(id string, errMsg string) error
 	MarkDead(id string) error
 	ListPending() ([]OutboxRecord, error)
+	LeasePending(limit int, leaseUntil time.Time) ([]OutboxRecord, error)
+	ReleaseExpiredLeases(now time.Time) error
 	Get(id string) (*OutboxRecord, error)
 }
 
@@ -99,6 +104,7 @@ func (s *InMemoryOutboxStore) MarkPublished(id string) error {
 		return ErrOutboxAlreadyPublished
 	}
 	rec.Status = OutboxStatusPublished
+	rec.LeasedUntil = time.Time{}
 	return nil
 }
 
@@ -113,6 +119,7 @@ func (s *InMemoryOutboxStore) MarkFailed(id string, errMsg string) error {
 	rec.LastError = errMsg
 	rec.RetryCount++
 	rec.NextRetryAt = time.Now().Add(DefaultRetryBackoff * time.Duration(rec.RetryCount))
+	rec.LeasedUntil = time.Time{}
 	return nil
 }
 
@@ -127,6 +134,7 @@ func (s *InMemoryOutboxStore) MarkDead(id string) error {
 		return ErrOutboxAlreadyDead
 	}
 	rec.Status = OutboxStatusDead
+	rec.LeasedUntil = time.Time{}
 	return nil
 }
 
@@ -141,6 +149,45 @@ func (s *InMemoryOutboxStore) ListPending() ([]OutboxRecord, error) {
 		}
 	}
 	return result, nil
+}
+
+func (s *InMemoryOutboxStore) LeasePending(limit int, leaseUntil time.Time) ([]OutboxRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 {
+		return nil, nil
+	}
+	now := time.Now()
+	result := make([]OutboxRecord, 0, limit)
+	for _, id := range s.order {
+		rec := s.records[id]
+		if rec == nil {
+			continue
+		}
+		eligible := rec.Status == OutboxStatusPending || (rec.Status == OutboxStatusFailed && !rec.NextRetryAt.After(now) && rec.RetryCount < rec.MaxRetries)
+		if !eligible {
+			continue
+		}
+		rec.Status = OutboxStatusProcessing
+		rec.LeasedUntil = leaseUntil
+		result = append(result, *rec)
+		if len(result) >= limit {
+			break
+		}
+	}
+	return result, nil
+}
+
+func (s *InMemoryOutboxStore) ReleaseExpiredLeases(now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rec := range s.records {
+		if rec.Status == OutboxStatusProcessing && !rec.LeasedUntil.IsZero() && !rec.LeasedUntil.After(now) {
+			rec.Status = OutboxStatusPending
+			rec.LeasedUntil = time.Time{}
+		}
+	}
+	return nil
 }
 
 func (s *InMemoryOutboxStore) Get(id string) (*OutboxRecord, error) {

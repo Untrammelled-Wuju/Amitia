@@ -17,6 +17,7 @@ type OutboxRecordModel struct {
 	RetryCount  int       `gorm:"column:retry_count"`
 	MaxRetries  int       `gorm:"column:max_retries"`
 	NextRetryAt time.Time `gorm:"column:next_retry_at"`
+	LeasedUntil time.Time `gorm:"column:leased_until;index"`
 	LastError   string    `gorm:"column:last_error"`
 	CreatedAt   time.Time `gorm:"column:created_at;index"`
 }
@@ -66,6 +67,7 @@ func (s *SQLiteOutboxStore) Append(record *OutboxRecord) (string, error) {
 		RetryCount:  record.RetryCount,
 		MaxRetries:  record.MaxRetries,
 		NextRetryAt: record.NextRetryAt,
+		LeasedUntil: record.LeasedUntil,
 		LastError:   record.LastError,
 		CreatedAt:   record.CreatedAt,
 	}
@@ -73,7 +75,10 @@ func (s *SQLiteOutboxStore) Append(record *OutboxRecord) (string, error) {
 }
 
 func (s *SQLiteOutboxStore) MarkPublished(id string) error {
-	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Update("status", OutboxStatusPublished)
+	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":       OutboxStatusPublished,
+		"leased_until": time.Time{},
+	})
 	if result.RowsAffected == 0 {
 		return errors.New("outbox: record not found")
 	}
@@ -82,10 +87,11 @@ func (s *SQLiteOutboxStore) MarkPublished(id string) error {
 
 func (s *SQLiteOutboxStore) MarkFailed(id string, errMsg string) error {
 	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"status":       OutboxStatusFailed,
-		"last_error":   errMsg,
-		"retry_count":  gorm.Expr("retry_count + 1"),
+		"status":        OutboxStatusFailed,
+		"last_error":    errMsg,
+		"retry_count":   gorm.Expr("retry_count + 1"),
 		"next_retry_at": time.Now().Add(DefaultRetryBackoff),
+		"leased_until":  time.Time{},
 	})
 	if result.RowsAffected == 0 {
 		return errors.New("outbox: record not found")
@@ -94,7 +100,10 @@ func (s *SQLiteOutboxStore) MarkFailed(id string, errMsg string) error {
 }
 
 func (s *SQLiteOutboxStore) MarkDead(id string) error {
-	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Update("status", OutboxStatusDead)
+	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":       OutboxStatusDead,
+		"leased_until": time.Time{},
+	})
 	if result.RowsAffected == 0 {
 		return errors.New("outbox: record not found")
 	}
@@ -118,6 +127,61 @@ func (s *SQLiteOutboxStore) ListPending() ([]OutboxRecord, error) {
 	return result, nil
 }
 
+func (s *SQLiteOutboxStore) LeasePending(limit int, leaseUntil time.Time) ([]OutboxRecord, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	now := time.Now()
+	leased := make([]OutboxRecord, 0, limit)
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var models []OutboxRecordModel
+		err := tx.Where("status = ? OR (status = ? AND next_retry_at <= ? AND retry_count < max_retries)",
+			string(OutboxStatusPending),
+			string(OutboxStatusFailed),
+			now,
+		).Order("created_at ASC").Limit(limit).Find(&models).Error
+		if err != nil {
+			return err
+		}
+		for _, model := range models {
+			result := tx.Model(&OutboxRecordModel{}).
+				Where("id = ? AND (status = ? OR (status = ? AND next_retry_at <= ? AND retry_count < max_retries))",
+					model.ID,
+					string(OutboxStatusPending),
+					string(OutboxStatusFailed),
+					now,
+				).
+				Updates(map[string]interface{}{
+					"status":       OutboxStatusProcessing,
+					"leased_until": leaseUntil,
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				continue
+			}
+			model.Status = string(OutboxStatusProcessing)
+			model.LeasedUntil = leaseUntil
+			leased = append(leased, modelToOutboxRecord(model))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return leased, nil
+}
+
+func (s *SQLiteOutboxStore) ReleaseExpiredLeases(now time.Time) error {
+	return s.db.Model(&OutboxRecordModel{}).
+		Where("status = ? AND leased_until <= ?", string(OutboxStatusProcessing), now).
+		Updates(map[string]interface{}{
+			"status":       OutboxStatusPending,
+			"leased_until": time.Time{},
+		}).Error
+}
+
 func (s *SQLiteOutboxStore) Get(id string) (*OutboxRecord, error) {
 	var model OutboxRecordModel
 	err := s.db.Where("id = ?", id).First(&model).Error
@@ -138,6 +202,7 @@ func modelToOutboxRecord(m OutboxRecordModel) OutboxRecord {
 		RetryCount:  m.RetryCount,
 		MaxRetries:  m.MaxRetries,
 		NextRetryAt: m.NextRetryAt,
+		LeasedUntil: m.LeasedUntil,
 		LastError:   m.LastError,
 		CreatedAt:   m.CreatedAt,
 	}
