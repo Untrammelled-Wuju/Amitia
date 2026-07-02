@@ -3,6 +3,7 @@ package pipelinecheckpoint
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -88,5 +89,95 @@ func TestAdvanceKeepsMonotonicSequence(t *testing.T) {
 	}
 	if record.IdempotencyKey != "k2" {
 		t.Fatalf("idempotency_key = %q, want k2", record.IdempotencyKey)
+	}
+}
+
+func TestAcquirePendingRangeBlocksDuplicateWhileLeaseActive(t *testing.T) {
+	db := openManagerTestDB(t)
+	for _, row := range []struct {
+		id       string
+		sequence int
+		content  string
+	}{
+		{"m1", 1, "一"},
+		{"m2", 2, "二"},
+	} {
+		if err := db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, 'conv-1', ?, 'user', ?)", row.id, row.sequence, row.content).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	manager := New(db)
+	messages, maxSequence, acquired, err := manager.AcquirePendingRange("conv-1", "episodic", 1, "worker-1", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || maxSequence != 2 || len(messages) != 2 {
+		t.Fatalf("unexpected first acquire: acquired=%v max=%d messages=%d", acquired, maxSequence, len(messages))
+	}
+
+	messages, _, acquired, err = manager.AcquirePendingRange("conv-1", "episodic", 1, "worker-2", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acquired || len(messages) != 0 {
+		t.Fatalf("expected active lease to block duplicate acquire, got acquired=%v messages=%d", acquired, len(messages))
+	}
+
+	record, err := manager.Load("conv-1", "episodic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 0 || record.ProcessingEndSeq != 2 || record.LeaseOwner != "worker-1" {
+		t.Fatalf("unexpected lease record: %#v", record)
+	}
+}
+
+func TestAcquirePendingRangeRecoversExpiredLeaseAndAdvanceRequiresOwner(t *testing.T) {
+	db := openManagerTestDB(t)
+	for _, row := range []struct {
+		id       string
+		sequence int
+		content  string
+	}{
+		{"m1", 1, "一"},
+		{"m2", 2, "二"},
+		{"m3", 3, "三"},
+	} {
+		if err := db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, 'conv-1', ?, 'user', ?)", row.id, row.sequence, row.content).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	manager := New(db)
+	_, maxSequence, acquired, err := manager.AcquirePendingRange("conv-1", "episodic", 1, "worker-1", time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || maxSequence != 3 {
+		t.Fatalf("unexpected first acquire: acquired=%v max=%d", acquired, maxSequence)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	messages, maxSequence, acquired, err := manager.AcquirePendingRange("conv-1", "episodic", 1, "worker-2", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired || maxSequence != 3 || len(messages) != 3 {
+		t.Fatalf("expected expired lease recovery, got acquired=%v max=%d messages=%d", acquired, maxSequence, len(messages))
+	}
+
+	if err := manager.AdvanceLeased("conv-1", "episodic", 3, "old", "worker-1"); err == nil {
+		t.Fatal("expected stale worker advance to fail")
+	}
+	if err := manager.AdvanceLeased("conv-1", "episodic", 3, "new", "worker-2"); err != nil {
+		t.Fatal(err)
+	}
+	record, err := manager.Load("conv-1", "episodic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 3 || record.LeaseOwner != "" || record.ProcessingEndSeq != 0 {
+		t.Fatalf("expected completed checkpoint lease to clear, got %#v", record)
 	}
 }

@@ -72,17 +72,17 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 		return nil, fmt.Errorf("character scope required")
 	}
 	m := &EpisodicMemory{
-		UserID:          scope,
-		SceneType:       req.SceneType,
-		Title:           req.Title,
-		Content:         req.Content,
-		ContextBefore:   req.ContextBefore,
-		ContextAfter:    req.ContextAfter,
-		TriggerKeywords: req.TriggerKeywords,
-		SentimentScore:  req.SentimentScore,
-		MessageIDStart:  req.MessageIDStart,
-		MessageIDEnd:    req.MessageIDEnd,
-		SourceConvID:    req.SourceConvID,
+		UserID:           scope,
+		SceneType:        req.SceneType,
+		Title:            req.Title,
+		Content:          req.Content,
+		ContextBefore:    req.ContextBefore,
+		ContextAfter:     req.ContextAfter,
+		TriggerKeywords:  req.TriggerKeywords,
+		SentimentScore:   req.SentimentScore,
+		MessageIDStart:   req.MessageIDStart,
+		MessageIDEnd:     req.MessageIDEnd,
+		SourceConvID:     req.SourceConvID,
 		MessageTimeStart: s.resolveMessageTime(req.SourceConvID, req.MessageIDStart),
 		MessageTimeEnd:   s.resolveMessageTime(req.SourceConvID, req.MessageIDEnd),
 	}
@@ -120,16 +120,16 @@ func (s *service) SaveFromTool(userID, sceneType, title, content string, sentime
 		return nil, fmt.Errorf("character scope required")
 	}
 	m := &EpisodicMemory{
-		UserID:         scope,
-		SceneType:      sceneType,
-		Title:          title,
-		Content:        content,
-		SentimentScore: sentimentScore,
-		SourceConvID:   convID,
+		UserID:           scope,
+		SceneType:        sceneType,
+		Title:            title,
+		Content:          content,
+		SentimentScore:   sentimentScore,
+		SourceConvID:     convID,
 		MessageTimeStart: s.resolveMessageTime(convID, msgStart),
 		MessageTimeEnd:   s.resolveMessageTime(convID, msgEnd),
-		MessageIDStart: msgStart,
-		MessageIDEnd:   msgEnd,
+		MessageIDStart:   msgStart,
+		MessageIDEnd:     msgEnd,
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
@@ -155,7 +155,6 @@ func (s *service) resolveMessageTime(convID, messageID string) string {
 	s.db.Table("messages").Select("created_at").Where("id = ? AND conversation_id = ?", messageID, convID).Row().Scan(&createdAt)
 	return createdAt
 }
-
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
 	if len(messages) == 0 {
@@ -330,14 +329,16 @@ func minInt(a, b int) int {
 func (s *service) Name() string { return "情景记忆" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "episodic", 4)
-	if err != nil || len(pending) == 0 {
+	manager := pipelinecheckpoint.New(s.db)
+	leaseOwner := fmt.Sprintf("episodic:%s:%d", convID, time.Now().UTC().UnixNano())
+	pending, maxSequence, acquired, err := manager.AcquirePendingRange(convID, "episodic", 4, leaseOwner, 10*time.Minute)
+	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
 	if err := s.ExtractFromConversation("default", convID, pending); err != nil {
 		return err
 	}
-	return pipelinecheckpoint.New(s.db).Advance(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence))
+	return manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner)
 }
 
 func (s *service) episodicScope(convID string, scopes ...string) string {
@@ -390,4 +391,3 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 	})
 	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
 }
-
