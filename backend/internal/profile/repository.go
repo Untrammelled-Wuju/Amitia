@@ -78,7 +78,7 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 		if newConfidence < 5 {
 			newConfidence = 5
 		}
-	} else {
+	} else if hasIndependentProfileEvidence(existing, *profile) {
 		increment := 10 - existing.Confidence/10
 		if increment < 2 {
 			increment = 2
@@ -87,6 +87,8 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 		if newConfidence > 100 {
 			newConfidence = 100
 		}
+	} else {
+		newConfidence = existing.Confidence
 	}
 	updates := map[string]interface{}{
 		"attribute_value": profile.AttributeValue,
@@ -102,6 +104,16 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	existing.Source = profile.Source
 	existing.SourceConvID = profile.SourceConvID
 	return &existing, nil
+}
+
+func hasIndependentProfileEvidence(existing, incoming UserProfile) bool {
+	if incoming.SourceConvID != "" {
+		return incoming.SourceConvID != existing.SourceConvID
+	}
+	if existing.SourceConvID != "" {
+		return false
+	}
+	return incoming.Source != "" && existing.Source != "" && incoming.Source != existing.Source
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
