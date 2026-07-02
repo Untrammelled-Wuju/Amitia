@@ -36,6 +36,7 @@ type ProcessRequest struct {
 	AudioUrl       string           `json:"audioUrl,omitempty"`
 	AudioDuration  float64          `json:"audioDuration,omitempty"`
 	VoiceMessage   bool             `json:"voiceMessage"`
+	ExpressionPlan *ExpressionPlan  `json:"expressionPlan,omitempty"`
 	ImageUrl       string           `json:"imageUrl,omitempty"`
 	VideoUrl       string           `json:"videoUrl,omitempty"`
 	ImageContext   string           `json:"imageContext,omitempty"`

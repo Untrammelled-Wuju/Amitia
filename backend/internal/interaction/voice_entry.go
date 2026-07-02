@@ -31,38 +31,53 @@ var (
 )
 
 type VoiceTurnRequest struct {
-	SessionID      string `json:"sessionId"`
-	TurnID         string `json:"turnId"`
-	Text           string `json:"text"`
-	IsFinal        bool   `json:"isFinal"`
-	ConversationID string `json:"conversationId"`
-	CharacterID    string `json:"characterId"`
-	Channel        string `json:"channel"`
+	SessionID      string          `json:"sessionId"`
+	TurnID         string          `json:"turnId"`
+	Text           string          `json:"text"`
+	IsFinal        bool            `json:"isFinal"`
+	ConversationID string          `json:"conversationId"`
+	CharacterID    string          `json:"characterId"`
+	Channel        string          `json:"channel"`
+	PeerID         string          `json:"peerId,omitempty"`
+	UserID         string          `json:"userId,omitempty"`
+	AudioUrl       string          `json:"audioUrl,omitempty"`
+	AudioDuration  float64         `json:"audioDuration,omitempty"`
+	VoiceMessage   bool            `json:"voiceMessage"`
+	ExpressionPlan *ExpressionPlan `json:"expressionPlan,omitempty"`
 }
 
 type VoiceSession struct {
-	SessionID       string              `json:"sessionId"`
-	ConversationID  string              `json:"conversationId"`
-	CharacterID     string              `json:"characterId"`
-	State           VoiceTurnState      `json:"state"`
-	CurrentTurnID   string              `json:"currentTurnId"`
-	CurrentText     string              `json:"currentText"`
+	SessionID       string               `json:"sessionId"`
+	ConversationID  string               `json:"conversationId"`
+	CharacterID     string               `json:"characterId"`
+	State           VoiceTurnState       `json:"state"`
+	CurrentTurnID   string               `json:"currentTurnId"`
+	CurrentText     string               `json:"currentText"`
 	InterruptPolicy VoiceInterruptPolicy `json:"interruptPolicy"`
-	CreatedAt       time.Time           `json:"createdAt"`
-	LastActivity    time.Time           `json:"lastActivity"`
+	CreatedAt       time.Time            `json:"createdAt"`
+	LastActivity    time.Time            `json:"lastActivity"`
 	mu              sync.RWMutex
 	cancelFn        context.CancelFunc
 }
 
 type VoiceEntry struct {
 	orchestrator *Orchestrator
+	unifiedEntry *UnifiedEntry
 	sessions     map[string]*VoiceSession
 	mu           sync.RWMutex
 }
 
 func NewVoiceEntry(orchestrator *Orchestrator) *VoiceEntry {
+	return NewVoiceEntryWithUnifiedEntry(orchestrator, NewUnifiedEntry(orchestrator, NewScopeResolver(nil)))
+}
+
+func NewVoiceEntryWithUnifiedEntry(orchestrator *Orchestrator, unifiedEntry *UnifiedEntry) *VoiceEntry {
+	if unifiedEntry == nil {
+		unifiedEntry = NewUnifiedEntry(orchestrator, NewScopeResolver(nil))
+	}
 	return &VoiceEntry{
 		orchestrator: orchestrator,
+		unifiedEntry: unifiedEntry,
 		sessions:     make(map[string]*VoiceSession),
 	}
 }
@@ -129,16 +144,21 @@ func (v *VoiceEntry) HandleTurn(ctx context.Context, req *VoiceTurnRequest) (*Or
 
 	v.cancelPreviousForScope(session)
 
-	procReq := &ProcessRequest{
+	result, err := v.unifiedEntry.Handle(ctx, &UnifiedEntryRequest{
 		CharacterID:    session.CharacterID,
 		ConversationID: session.ConversationID,
 		Message:        req.Text,
 		Channel:        req.Channel,
+		PeerID:         req.PeerID,
+		UserID:         req.UserID,
 		Source:         "voice",
 		RequestID:      req.TurnID,
-	}
-
-	result, err := v.orchestrator.Process(ctx, procReq)
+		SessionID:      session.SessionID,
+		AudioUrl:       req.AudioUrl,
+		AudioDuration:  req.AudioDuration,
+		VoiceMessage:   req.VoiceMessage,
+		ExpressionPlan: req.ExpressionPlan,
+	})
 
 	session.mu.Lock()
 	if err != nil {

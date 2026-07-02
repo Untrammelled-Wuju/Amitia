@@ -18,13 +18,14 @@ const (
 	EntrySourceWeb     EntrySource = "web"
 	EntrySourceWeChat  EntrySource = "wechat"
 	EntrySourceQQ      EntrySource = "qq"
+	EntrySourceVoice   EntrySource = "voice"
 	EntrySourceUnknown EntrySource = "unknown"
 )
 
 func ParseEntrySource(source string) EntrySource {
 	s := EntrySource(strings.ToLower(strings.TrimSpace(source)))
 	switch s {
-	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ:
+	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ, EntrySourceVoice:
 		return s
 	default:
 		return EntrySourceUnknown
@@ -98,21 +99,22 @@ var (
 )
 
 type UnifiedEntryRequest struct {
-	Channel        string  `json:"channel"`
-	Message        string  `json:"message"`
-	PeerID         string  `json:"peerId,omitempty"`
-	UserID         string  `json:"userId,omitempty"`
-	Source         string  `json:"source,omitempty"`
-	CharacterID    string  `json:"characterId,omitempty"`
-	ConversationID string  `json:"conversationId,omitempty"`
-	AudioUrl       string  `json:"audioUrl,omitempty"`
-	AudioDuration  float64 `json:"audioDuration,omitempty"`
-	VoiceMessage   bool    `json:"voiceMessage"`
-	ImageUrl       string  `json:"imageUrl,omitempty"`
-	VideoUrl       string  `json:"videoUrl,omitempty"`
-	ImageContext   string  `json:"imageContext,omitempty"`
-	RequestID      string  `json:"requestId,omitempty"`
-	SessionID      string  `json:"sessionId,omitempty"`
+	Channel        string          `json:"channel"`
+	Message        string          `json:"message"`
+	PeerID         string          `json:"peerId,omitempty"`
+	UserID         string          `json:"userId,omitempty"`
+	Source         string          `json:"source,omitempty"`
+	CharacterID    string          `json:"characterId,omitempty"`
+	ConversationID string          `json:"conversationId,omitempty"`
+	AudioUrl       string          `json:"audioUrl,omitempty"`
+	AudioDuration  float64         `json:"audioDuration,omitempty"`
+	VoiceMessage   bool            `json:"voiceMessage"`
+	ExpressionPlan *ExpressionPlan `json:"expressionPlan,omitempty"`
+	ImageUrl       string          `json:"imageUrl,omitempty"`
+	VideoUrl       string          `json:"videoUrl,omitempty"`
+	ImageContext   string          `json:"imageContext,omitempty"`
+	RequestID      string          `json:"requestId,omitempty"`
+	SessionID      string          `json:"sessionId,omitempty"`
 }
 
 type UnifiedEntry struct {
@@ -187,6 +189,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		AudioUrl:       req.AudioUrl,
 		AudioDuration:  req.AudioDuration,
 		VoiceMessage:   req.VoiceMessage,
+		ExpressionPlan: req.ExpressionPlan,
 		ImageUrl:       req.ImageUrl,
 		VideoUrl:       req.VideoUrl,
 		ImageContext:   req.ImageContext,
