@@ -544,6 +544,173 @@ func TestReconciliationDiffSeverity(t *testing.T) {
 	}
 }
 
+func TestRegisterDefaultRuntimeReconciliationCheckersRegistersAvailableTargets(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&DeletionTombstoneModel{}, &OutboxCleanupItemModel{}, &RecalculationTaskModel{}); err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		"CREATE TABLE interaction_outbox_records (id TEXT PRIMARY KEY, aggregate_id TEXT, event_type TEXT, payload TEXT, status TEXT, retry_count INTEGER, last_error TEXT, leased_until DATETIME)",
+		"CREATE TABLE interaction_records (id TEXT PRIMARY KEY, user_id TEXT, character_id TEXT, conversation_id TEXT, request_id TEXT, status TEXT, status_version INTEGER, result_ref TEXT, error_code TEXT, error_message TEXT)",
+		"CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, character_id TEXT, request_id TEXT, status TEXT, content TEXT, updated_at DATETIME)",
+	}
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	engine := NewReconciliationEngine(DefaultReconciliationConfig())
+	if err := RegisterDefaultRuntimeReconciliationCheckers(engine, db); err != nil {
+		t.Fatal(err)
+	}
+	targets := engine.RegisteredTargets()
+	want := map[ReconciliationTarget]bool{
+		ReconciliationTombstoneDerivedData: false,
+		ReconciliationLeaseDelivery:        false,
+		ReconciliationOutboxSideEffect:     false,
+		ReconciliationInteractionRunMsg:    false,
+	}
+	for _, target := range targets {
+		if _, ok := want[target]; ok {
+			want[target] = true
+		}
+	}
+	for target, found := range want {
+		if !found {
+			t.Fatalf("expected registered target %s in %#v", target, targets)
+		}
+	}
+}
+
+func TestTombstoneDerivedDataReconciliationCheckerDetectsMissingDerivedRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&DeletionTombstoneModel{}, &OutboxCleanupItemModel{}, &RecalculationTaskModel{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	if err := db.Create(&DeletionTombstoneModel{
+		ID:               "tombstone-missing",
+		TargetID:         "target-missing",
+		TargetType:       "memory",
+		Scope:            string(DeletionScopeAll),
+		Status:           string(DeletionStatusBlocked),
+		RequestedAt:      now.Add(-time.Hour),
+		BlockedUntil:     now.Add(-time.Hour),
+		RetrievalBlocked: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&OutboxCleanupItemModel{
+		ID:         "outbox-existing",
+		Storage:    "qdrant",
+		TargetID:   "target-missing",
+		TargetKind: "memory",
+		Status:     "queued",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&RecalculationTaskModel{
+		ID:           "recalc-existing",
+		TriggerType:  "deletion",
+		TargetID:     "target-missing",
+		AffectedZone: "belief",
+		Priority:     1,
+		CreatedAt:    now,
+		Status:       "pending",
+		Description:  "test",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	checker := NewTombstoneDerivedDataReconciliationChecker(db)
+	checker.Now = func() time.Time { return now }
+	diffs, err := checker.CheckReconciliation(context.Background(), ReconciliationCheckRequest{
+		Target:    ReconciliationTombstoneDerivedData,
+		Strategy:  StrategyLogicalInvalid,
+		BatchSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDiffTypes(t, diffs, []string{
+		"missing_cleanup_item",
+		"missing_cleanup_item",
+		"missing_cleanup_item",
+		"missing_cleanup_item",
+		"missing_cleanup_item",
+		"missing_recalculation_task",
+		"missing_recalculation_task",
+	})
+}
+
+func TestTombstoneDerivedDataReconciliationCheckerPassesCompleteDerivedRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&DeletionTombstoneModel{}, &OutboxCleanupItemModel{}, &RecalculationTaskModel{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	if err := db.Create(&DeletionTombstoneModel{
+		ID:               "tombstone-complete",
+		TargetID:         "target-complete",
+		TargetType:       "memory",
+		Scope:            string(DeletionScopeAll),
+		Status:           string(DeletionStatusBlocked),
+		RequestedAt:      now.Add(-time.Hour),
+		BlockedUntil:     now.Add(-time.Hour),
+		RetrievalBlocked: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, storage := range []string{"qdrant", "surrealdb", "cache", "summaries", "reflections", "traces"} {
+		if err := db.Create(&OutboxCleanupItemModel{
+			ID:         "outbox-complete-" + storage,
+			Storage:    storage,
+			TargetID:   "target-complete",
+			TargetKind: "memory",
+			Status:     "queued",
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, zone := range []string{"belief", "relationship", "memory"} {
+		if err := db.Create(&RecalculationTaskModel{
+			ID:           "recalc-complete-" + zone,
+			TriggerType:  "deletion",
+			TargetID:     "target-complete",
+			AffectedZone: zone,
+			Priority:     i + 1,
+			CreatedAt:    now,
+			Status:       "pending",
+			Description:  "test",
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	checker := NewTombstoneDerivedDataReconciliationChecker(db)
+	diffs, err := checker.CheckReconciliation(context.Background(), ReconciliationCheckRequest{
+		Target:    ReconciliationTombstoneDerivedData,
+		Strategy:  StrategyLogicalInvalid,
+		BatchSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diffs) != 0 {
+		t.Fatalf("expected no diffs for complete derived rows, got %#v", diffs)
+	}
+}
+
 func assertDiffTypes(t *testing.T, diffs []ReconciliationDiff, expected []string) {
 	t.Helper()
 	got := make(map[string]int)

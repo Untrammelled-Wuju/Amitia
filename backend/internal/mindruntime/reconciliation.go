@@ -131,6 +131,12 @@ func (f ReconciliationStateSourceFunc) ListReconciliationEntities(ctx context.Co
 	return f(ctx, req)
 }
 
+type ReconciliationWorkerTarget struct {
+	Target   ReconciliationTarget
+	Strategy ReconciliationStrategy
+	Cursor   string
+}
+
 type RuntimeReconciliationChecker struct {
 	Source ReconciliationStateSource
 	Target ReconciliationStateSource
@@ -520,6 +526,18 @@ func (e *ReconciliationEngine) RegisterChecker(target ReconciliationTarget, chec
 	}
 	e.checkers[target] = checker
 }
+func (e *ReconciliationEngine) RegisteredTargets() []ReconciliationTarget {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	targets := make([]ReconciliationTarget, 0, len(e.checkers))
+	for target := range e.checkers {
+		targets = append(targets, target)
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i] < targets[j]
+	})
+	return targets
+}
 func (e *ReconciliationEngine) RunScan(ctx context.Context, target ReconciliationTarget, strategy ReconciliationStrategy, startCursor string) (*ReconciliationScan, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -693,6 +711,270 @@ func (e *ReconciliationEngine) IsBudgetExhausted(scanID string) bool {
 		return false
 	}
 	return scan.BudgetUsedMS >= scan.BudgetLimitMS
+}
+
+func (e *ReconciliationEngine) RunWorker(ctx context.Context, interval time.Duration, targets []ReconciliationWorkerTarget) {
+	if e == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	run := func() {
+		for _, target := range targets {
+			if target.Target == "" {
+				continue
+			}
+			strategy := target.Strategy
+			if strategy == "" {
+				strategy = StrategyManualConfirm
+			}
+			_, _ = e.RunScan(ctx, target.Target, strategy, target.Cursor)
+		}
+	}
+	run()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
+}
+
+func DefaultReconciliationWorkerTargets() []ReconciliationWorkerTarget {
+	return []ReconciliationWorkerTarget{
+		{Target: ReconciliationTombstoneDerivedData, Strategy: StrategyLogicalInvalid},
+		{Target: ReconciliationLeaseDelivery, Strategy: StrategyReleaseLease},
+		{Target: ReconciliationOutboxSideEffect, Strategy: StrategyCompensate},
+		{Target: ReconciliationInteractionRunMsg, Strategy: StrategyCompensate},
+	}
+}
+
+func RegisterDefaultRuntimeReconciliationCheckers(engine *ReconciliationEngine, db *gorm.DB) error {
+	if engine == nil {
+		return errors.New("reconciliation engine is nil")
+	}
+	if db == nil {
+		return errors.New("reconciliation db is nil")
+	}
+	engine.RegisterChecker(ReconciliationTombstoneDerivedData, NewTombstoneDerivedDataReconciliationChecker(db))
+	registerGormReconciliationChecker(engine, db, ReconciliationLeaseDelivery, leaseDeliverySource(db), leaseDeliverySource(db))
+	registerGormReconciliationChecker(engine, db, ReconciliationOutboxSideEffect, outboxSideEffectSource(db), outboxSideEffectSource(db))
+	registerGormReconciliationChecker(engine, db, ReconciliationInteractionRunMsg, interactionRunSource(db), interactionMessageSource(db))
+	return nil
+}
+
+func registerGormReconciliationChecker(engine *ReconciliationEngine, db *gorm.DB, target ReconciliationTarget, source GormReconciliationSource, targetSource GormReconciliationSource) {
+	source.Tables = existingReconciliationTables(db, source.Tables)
+	targetSource.Tables = existingReconciliationTables(db, targetSource.Tables)
+	if len(source.Tables) == 0 || len(targetSource.Tables) == 0 {
+		return
+	}
+	engine.RegisterChecker(target, NewRuntimeReconciliationChecker(source, targetSource))
+}
+
+func existingReconciliationTables(db *gorm.DB, tables []GormReconciliationTable) []GormReconciliationTable {
+	existing := make([]GormReconciliationTable, 0, len(tables))
+	for _, table := range tables {
+		if strings.TrimSpace(table.Table) != "" && db.Migrator().HasTable(table.Table) {
+			existing = append(existing, table)
+		}
+	}
+	return existing
+}
+
+func leaseDeliverySource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:             "interaction_outbox_records",
+				Kind:              "outbox",
+				KeyColumns:        []string{"id"},
+				StatusColumn:      "status",
+				VersionColumn:     "retry_count",
+				LeasedUntilColumn: "leased_until",
+				HashColumns:       []string{"aggregate_id", "event_type", "status", "retry_count", "last_error"},
+				FieldColumns:      []string{"aggregate_id", "event_type", "status", "last_error"},
+			},
+		},
+	}
+}
+
+func outboxSideEffectSource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "interaction_outbox_records",
+				Kind:          "outbox_side_effect",
+				KeyColumns:    []string{"aggregate_id", "event_type"},
+				StatusColumn:  "status",
+				VersionColumn: "retry_count",
+				HashColumns:   []string{"payload", "status", "retry_count"},
+				FieldColumns:  []string{"aggregate_id", "event_type", "status", "last_error"},
+			},
+		},
+	}
+}
+
+func interactionRunSource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "interaction_records",
+				Kind:          "interaction",
+				KeyColumns:    []string{"request_id"},
+				StatusColumn:  "status",
+				VersionColumn: "status_version",
+				HashColumns:   []string{"status", "status_version", "result_ref", "error_code", "error_message"},
+				FieldColumns:  []string{"user_id", "character_id", "conversation_id", "request_id", "status", "result_ref"},
+			},
+		},
+	}
+}
+
+func interactionMessageSource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "messages",
+				Kind:          "interaction",
+				KeyColumns:    []string{"request_id"},
+				StatusColumn:  "status",
+				VersionColumn: "updated_at",
+				HashColumns:   []string{"content", "status", "updated_at"},
+				FieldColumns:  []string{"conversation_id", "character_id", "request_id", "status"},
+			},
+		},
+	}
+}
+
+type TombstoneDerivedDataReconciliationChecker struct {
+	DB               *gorm.DB
+	ExpectedStorages []string
+	Now              func() time.Time
+}
+
+func NewTombstoneDerivedDataReconciliationChecker(db *gorm.DB) *TombstoneDerivedDataReconciliationChecker {
+	return &TombstoneDerivedDataReconciliationChecker{
+		DB:               db,
+		ExpectedStorages: []string{"qdrant", "surrealdb", "cache", "summaries", "reflections", "traces"},
+	}
+}
+
+func (c *TombstoneDerivedDataReconciliationChecker) CheckReconciliation(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationDiff, error) {
+	if c == nil || c.DB == nil {
+		return nil, errors.New("tombstone reconciliation checker requires db")
+	}
+	if !c.DB.Migrator().HasTable("deletion_tombstones") {
+		return nil, nil
+	}
+	now := time.Now().UTC()
+	if c.Now != nil {
+		now = c.Now().UTC()
+	}
+	var tombstones []DeletionTombstoneModel
+	query := c.DB.WithContext(ctx).Table("deletion_tombstones").Order("requested_at ASC")
+	if req.BatchSize > 0 {
+		query = query.Limit(req.BatchSize)
+	}
+	if err := query.Find(&tombstones).Error; err != nil {
+		return nil, err
+	}
+	diffs := make([]ReconciliationDiff, 0)
+	for _, tombstone := range tombstones {
+		diffs = append(diffs, c.missingOutboxDiffs(ctx, req, tombstone, now)...)
+		diffs = append(diffs, c.missingRecalculationDiffs(ctx, req, tombstone, now)...)
+	}
+	sort.Slice(diffs, func(i, j int) bool {
+		return diffs[i].DiffType+diffs[i].SourceKey+diffs[i].TargetKey < diffs[j].DiffType+diffs[j].SourceKey+diffs[j].TargetKey
+	})
+	return diffs, nil
+}
+
+func (c *TombstoneDerivedDataReconciliationChecker) missingOutboxDiffs(ctx context.Context, req ReconciliationCheckRequest, tombstone DeletionTombstoneModel, now time.Time) []ReconciliationDiff {
+	if !c.DB.Migrator().HasTable("data_lifecycle_outbox_cleanup_items") {
+		return []ReconciliationDiff{newReconciliationDiff(req, tombstoneEntity(tombstone), ReconciliationEntity{}, "missing_cleanup_table", "critical", true, string(StrategyLogicalInvalid), "cleanup outbox table is missing for tombstone derived data", now)}
+	}
+	diffs := make([]ReconciliationDiff, 0)
+	for _, storage := range c.ExpectedStorages {
+		var count int64
+		err := c.DB.WithContext(ctx).Table("data_lifecycle_outbox_cleanup_items").
+			Where("target_id = ? AND storage = ?", tombstone.TargetID, storage).
+			Count(&count).Error
+		if err != nil {
+			diffs = append(diffs, newReconciliationDiff(req, tombstoneEntity(tombstone), ReconciliationEntity{Store: "sqlite", Kind: "cleanup", Key: tombstone.TargetID + ":" + storage}, "cleanup_query_error", "critical", false, "", err.Error(), now))
+			continue
+		}
+		if count == 0 {
+			diffs = append(diffs, newReconciliationDiff(req, tombstoneEntity(tombstone), ReconciliationEntity{Store: "sqlite", Kind: "cleanup", Key: tombstone.TargetID + ":" + storage}, "missing_cleanup_item", "critical", true, string(StrategyLogicalInvalid), "tombstone is missing cleanup item for "+storage, now))
+		}
+	}
+	return diffs
+}
+
+func (c *TombstoneDerivedDataReconciliationChecker) missingRecalculationDiffs(ctx context.Context, req ReconciliationCheckRequest, tombstone DeletionTombstoneModel, now time.Time) []ReconciliationDiff {
+	if !c.DB.Migrator().HasTable("data_lifecycle_recalculation_tasks") {
+		return nil
+	}
+	zones := expectedRecalculationZones(DeletionScope(tombstone.Scope))
+	diffs := make([]ReconciliationDiff, 0)
+	for _, zone := range zones {
+		var count int64
+		err := c.DB.WithContext(ctx).Table("data_lifecycle_recalculation_tasks").
+			Where("target_id = ? AND affected_zone = ?", tombstone.TargetID, zone).
+			Count(&count).Error
+		if err != nil {
+			diffs = append(diffs, newReconciliationDiff(req, tombstoneEntity(tombstone), ReconciliationEntity{Store: "sqlite", Kind: "recalculation", Key: tombstone.TargetID + ":" + zone}, "recalculation_query_error", "warning", false, "", err.Error(), now))
+			continue
+		}
+		if count == 0 {
+			diffs = append(diffs, newReconciliationDiff(req, tombstoneEntity(tombstone), ReconciliationEntity{Store: "sqlite", Kind: "recalculation", Key: tombstone.TargetID + ":" + zone}, "missing_recalculation_task", "warning", true, string(StrategyRetry), "tombstone is missing recalculation task for "+zone, now))
+		}
+	}
+	return diffs
+}
+
+func expectedRecalculationZones(scope DeletionScope) []string {
+	switch scope {
+	case DeletionScopeAll:
+		return []string{"belief", "relationship", "memory"}
+	case DeletionScopeBelief:
+		return []string{"belief"}
+	case DeletionScopeRelation:
+		return []string{"relationship"}
+	case DeletionScopeMemory:
+		return []string{"memory"}
+	default:
+		return nil
+	}
+}
+
+func tombstoneEntity(tombstone DeletionTombstoneModel) ReconciliationEntity {
+	return ReconciliationEntity{
+		Store:  "sqlite",
+		Kind:   "tombstone",
+		Key:    tombstone.TargetID,
+		Status: tombstone.Status,
+		Fields: map[string]string{
+			"target_type": tombstone.TargetType,
+			"scope":       tombstone.Scope,
+		},
+	}
 }
 
 type ConsistencyCheck struct {

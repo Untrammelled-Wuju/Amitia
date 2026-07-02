@@ -7,12 +7,13 @@ import (
 
 type retrievalAuthorityPolicy struct {
 	CharacterID      string
+	UserID           string
 	ProactiveMention bool
 	Now              time.Time
 }
 
 func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) bool {
-	if policy.CharacterID != "" && m.CharacterID != policy.CharacterID && m.Scope != "user" {
+	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.UserID) {
 		return false
 	}
 	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
@@ -22,6 +23,28 @@ func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) b
 		return false
 	}
 	if policy.ProactiveMention && !m.AllowProactiveMention {
+		return false
+	}
+	return true
+}
+
+func memoryMatchesRetrievalScope(m Memory, characterID, userID string) bool {
+	characterID = strings.TrimSpace(characterID)
+	userID = strings.TrimSpace(userID)
+	scope := strings.ToLower(strings.TrimSpace(m.Scope))
+	if scope == "user" || scope == "user_global" {
+		if userID != "" {
+			return m.CharacterID == userID
+		}
+		if characterID != "" {
+			return m.CharacterID == characterID
+		}
+		return true
+	}
+	if characterID != "" {
+		return m.CharacterID == characterID
+	}
+	if userID != "" {
 		return false
 	}
 	return true

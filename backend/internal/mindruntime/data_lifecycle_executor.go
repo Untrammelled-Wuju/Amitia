@@ -21,14 +21,16 @@ func (e *DefaultOutboxCleanupExecutor) CleanupOutboxItem(item OutboxCleanupItem)
 	switch strings.ToLower(strings.TrimSpace(item.Storage)) {
 	case "qdrant":
 		return e.cleanupQdrant(item)
-	case "surrealdb":
+	case "surrealdb", "primary", "sqlite":
 		return e.cleanupPrimaryStore(item)
 	case "cache":
 		return e.cleanupCache(item)
 	case "summaries":
 		return e.cleanupSummaries(item)
-	case "reflections", "traces":
-		return nil
+	case "reflections":
+		return e.cleanupReflections(item)
+	case "traces":
+		return e.cleanupTraces(item)
 	default:
 		return fmt.Errorf("unsupported cleanup storage %s", item.Storage)
 	}
@@ -52,12 +54,12 @@ func (e *DefaultOutboxCleanupExecutor) cleanupPrimaryStore(item OutboxCleanupIte
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	likeTarget := "%" + escapeLike(targetID) + "%"
 	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("memory_events", "memory_id = ? OR id = ? OR character_id = ? OR source_msg_id = ? OR source_conv_id = ?", targetID, targetID, targetID, targetID, targetID))
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("memories", "id = ? OR character_id = ? OR source_msg_id = ? OR source_conv_id = ?", targetID, targetID, targetID, targetID))
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("memory_candidates", "id = ? OR character_id = ? OR conversation_id = ?", targetID, targetID, targetID))
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("retrieval_logs", "id = ? OR request_id = ? OR conversation_id = ? OR character_id = ? OR retrieved_memory_ids LIKE ? ESCAPE '\\'", targetID, targetID, targetID, targetID, likeTarget))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("memory_events", targetID, nil, "memory_id", "id", "character_id", "source_msg_id", "source_conv_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("memories", targetID, nil, "id", "character_id", "source_msg_id", "source_conv_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("memory_candidates", targetID, nil, "id", "character_id", "conversation_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("retrieval_logs", targetID, []string{"retrieved_memory_ids"}, "id", "request_id", "conversation_id", "character_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("messages", targetID, []string{"content"}, "id", "conversation_id", "character_id"))
 	return joinCleanupErrors(cleanupErrs)
 }
 
@@ -66,10 +68,9 @@ func (e *DefaultOutboxCleanupExecutor) cleanupCache(item OutboxCleanupItem) erro
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	likeTarget := "%" + escapeLike(targetID) + "%"
 	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("memory_embeddings", "memory_id = ?", targetID))
-	cleanupErrs = append(cleanupErrs, e.deleteIfTableExists("retrieval_logs", "id = ? OR request_id = ? OR conversation_id = ? OR character_id = ? OR retrieved_memory_ids LIKE ? ESCAPE '\\'", targetID, targetID, targetID, targetID, likeTarget))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("memory_embeddings", targetID, nil, "memory_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("retrieval_logs", targetID, []string{"retrieved_memory_ids"}, "id", "request_id", "conversation_id", "character_id"))
 	return joinCleanupErrors(cleanupErrs)
 }
 
@@ -78,7 +79,35 @@ func (e *DefaultOutboxCleanupExecutor) cleanupSummaries(item OutboxCleanupItem) 
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	return e.deleteIfTableExists("conversation_summaries", "id = ? OR conversation_id = ? OR parent_summary_id = ?", targetID, targetID, targetID)
+	var cleanupErrs []error
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("conversation_summaries", targetID, nil, "id", "conversation_id", "parent_summary_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("memory_summaries", targetID, []string{"summary"}, "id", "target_id", "memory_id", "conversation_id"))
+	return joinCleanupErrors(cleanupErrs)
+}
+
+func (e *DefaultOutboxCleanupExecutor) cleanupReflections(item OutboxCleanupItem) error {
+	if e.db == nil || strings.TrimSpace(item.TargetID) == "" {
+		return nil
+	}
+	targetID := strings.TrimSpace(item.TargetID)
+	var cleanupErrs []error
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("reflection_candidates", targetID, []string{"source_ids", "evidence"}, "id", "character_id", "target_id", "source_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("reflection_runs", targetID, []string{"source_ids"}, "id", "character_id", "target_id", "source_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("supervisor_decisions", targetID, []string{"target", "reason"}, "id", "target_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("version_history", targetID, []string{"target", "snapshot_hash"}, "id", "target_id"))
+	return joinCleanupErrors(cleanupErrs)
+}
+
+func (e *DefaultOutboxCleanupExecutor) cleanupTraces(item OutboxCleanupItem) error {
+	if e.db == nil || strings.TrimSpace(item.TargetID) == "" {
+		return nil
+	}
+	targetID := strings.TrimSpace(item.TargetID)
+	var cleanupErrs []error
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("runtime_trace_events", targetID, []string{"payload"}, "id", "event_id", "request_id", "conversation_id", "character_id", "parent_id", "causation_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("runtime_replay_records", targetID, []string{"payload"}, "id", "event_id", "request_id", "target_id"))
+	cleanupErrs = append(cleanupErrs, e.deleteByColumns("pipeline_checkpoints", targetID, nil, "id", "conversation_id", "character_id", "last_message_id"))
+	return joinCleanupErrors(cleanupErrs)
 }
 
 func (e *DefaultOutboxCleanupExecutor) deleteIfTableExists(table string, where string, args ...interface{}) error {
@@ -86,6 +115,31 @@ func (e *DefaultOutboxCleanupExecutor) deleteIfTableExists(table string, where s
 		return nil
 	}
 	return e.db.Exec("DELETE FROM "+table+" WHERE "+where, args...).Error
+}
+
+func (e *DefaultOutboxCleanupExecutor) deleteByColumns(table string, targetID string, likeColumns []string, exactColumns ...string) error {
+	if e.db == nil || strings.TrimSpace(targetID) == "" || !e.db.Migrator().HasTable(table) {
+		return nil
+	}
+	whereParts := make([]string, 0, len(exactColumns)+len(likeColumns))
+	args := make([]interface{}, 0, len(exactColumns)+len(likeColumns))
+	for _, column := range exactColumns {
+		if e.db.Migrator().HasColumn(table, column) {
+			whereParts = append(whereParts, column+" = ?")
+			args = append(args, targetID)
+		}
+	}
+	likeTarget := "%" + escapeLike(targetID) + "%"
+	for _, column := range likeColumns {
+		if e.db.Migrator().HasColumn(table, column) {
+			whereParts = append(whereParts, column+" LIKE ? ESCAPE '\\'")
+			args = append(args, likeTarget)
+		}
+	}
+	if len(whereParts) == 0 {
+		return nil
+	}
+	return e.deleteIfTableExists(table, strings.Join(whereParts, " OR "), args...)
 }
 
 func joinCleanupErrors(errs []error) error {

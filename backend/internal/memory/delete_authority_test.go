@@ -49,10 +49,10 @@ func (r *memoryAuthorityRepo) Delete(id string) error { return nil }
 
 func (r *memoryAuthorityRepo) DeleteAll(characterID string) error { return nil }
 
-func (r *memoryAuthorityRepo) Search(keyword, characterID string, limit int) ([]Memory, error) {
+func (r *memoryAuthorityRepo) Search(keyword, characterID, userID string, limit int) ([]Memory, error) {
 	out := make([]Memory, 0, len(r.items))
 	for _, item := range r.items {
-		if characterID != "" && item.CharacterID != characterID && item.Scope != "user" {
+		if !memoryMatchesRetrievalScope(item, characterID, userID) {
 			continue
 		}
 		out = append(out, item)
@@ -124,12 +124,36 @@ func TestGetRankedMemoriesFiltersDeletedInvalidatedAndTombstone(t *testing.T) {
 	}}
 	svc := &service{repo: repo}
 
-	got, err := svc.GetRankedMemories("char-a", "favorite", 10)
+	got, err := svc.GetRankedMemories("char-a", "", "favorite", 10)
 	if err != nil {
 		t.Fatalf("GetRankedMemories error = %v", err)
 	}
 	if len(got) != 1 || got[0].Memory.ID != "active" {
 		t.Fatalf("GetRankedMemories returned %#v, want only active", got)
+	}
+}
+
+func TestSearchRequiresMatchingUserIDForUserScope(t *testing.T) {
+	repo := &memoryAuthorityRepo{items: []Memory{
+		{ID: "character-memory", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", VerifiedStatus: "user_verified"},
+		{ID: "own-user-memory", CharacterID: "user-1", Scope: "user", Key: "favorite", Value: "cake", VerifiedStatus: "user_verified"},
+		{ID: "other-user-memory", CharacterID: "user-2", Scope: "user", Key: "favorite", Value: "coffee", VerifiedStatus: "user_verified"},
+	}}
+	svc := &service{repo: repo}
+
+	got, err := svc.Search(&SearchMemoryRequest{Keyword: "favorite", CharacterID: "char-a", UserID: "user-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("Search returned %d items: %#v, want 2", len(got), got)
+	}
+	ids := map[string]bool{}
+	for _, item := range got {
+		ids[item.ID] = true
+	}
+	if !ids["character-memory"] || !ids["own-user-memory"] || ids["other-user-memory"] {
+		t.Fatalf("Search returned IDs %#v, want character and matching user memory only", ids)
 	}
 }
 

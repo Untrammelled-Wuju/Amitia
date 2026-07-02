@@ -35,7 +35,7 @@ type Service interface {
 	CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error)
 	ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error)
 	AutoResolveConflict(key, value, characterID string, newConfidence int) (*ResolveConflictResponse, error)
-	GetRankedMemories(characterID, query string, limit int) ([]RankedMemory, error)
+	GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error)
 	ExtractCandidates() ([]MemoryCandidate, error)
 	RebuildIndex() (map[string]interface{}, error)
 	RebuildEmbeddings() (map[string]interface{}, error)

@@ -30,11 +30,22 @@ func TestExternalTextEntrypointsUseUnifiedEntry(t *testing.T) {
 	}
 
 	serverRouter := readGuardFile(t, "..", "..", "cmd", "server", "router.go")
+	chatRouter := readGuardFile(t, "..", "chat", "router.go")
+	chatHandler := readGuardFile(t, "..", "chat", "handler.go")
 	if !strings.Contains(serverRouter, "agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)") {
 		t.Fatal("Agent router must be registered with services.UnifiedEntry")
 	}
 	if !strings.Contains(serverRouter, "system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry") {
 		t.Fatal("System router must be registered with services.UnifiedEntry")
+	}
+	if !strings.Contains(serverRouter, "chat.RegisterChatRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry)") {
+		t.Fatal("Chat router must be registered with services.UnifiedEntry")
+	}
+	if !strings.Contains(chatRouter, "func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry)") {
+		t.Fatal("Chat router must accept UnifiedEntry")
+	}
+	if !strings.Contains(chatHandler, "h.unifiedEntry.Handle") {
+		t.Fatal("Chat handler must call UnifiedEntry.Handle")
 	}
 }
 

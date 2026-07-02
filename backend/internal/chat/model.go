@@ -91,6 +91,11 @@ type ChatRequest struct {
 	ConversationID string `json:"conversationId"`
 	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel        string `json:"channel"`
+	Source         string `json:"source"`
+	PeerID         string `json:"peerId"`
+	UserID         string `json:"userId"`
+	SessionID      string `json:"sessionId"`
+	RequestID      string `json:"requestId"`
 }
 
 type WebChatRequest struct {
@@ -98,6 +103,9 @@ type WebChatRequest struct {
 	Message        string `json:"message" binding:"required"`
 	ConversationID string `json:"conversationId"`
 	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	UserID         string `json:"userId"`
+	SessionID      string `json:"sessionId"`
+	RequestID      string `json:"requestId"`
 }
 
 type CreateConversationRequest struct {

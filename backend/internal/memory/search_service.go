@@ -3,14 +3,12 @@
 package memory
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"time"
 
-	internalQdrant "github.com/u-ai/backend/internal/qdrant"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 
 	"github.com/u-ai/backend/log"
@@ -25,12 +23,13 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	if fetchLimit < limit+20 {
 		fetchLimit = limit + 20
 	}
-	items, err := s.repo.Search(req.Keyword, req.CharacterID, fetchLimit)
+	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.UserID, fetchLimit)
 	if err != nil {
 		return nil, err
 	}
 	policy := retrievalAuthorityPolicy{
 		CharacterID: req.CharacterID,
+		UserID:      req.UserID,
 		Now:         time.Now(),
 	}
 	filtered := make([]Memory, 0, min(limit, len(items)))
@@ -65,18 +64,25 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	if limit <= 0 {
 		limit = 5
 	}
-	filter := internalQdrant.FilterBuilder{CharacterID: req.CharacterID}.Build()
+	filters := rankedMemoryVectorFilters(req.CharacterID, req.UserID)
 	log.Info("VectorSearch with filter",
-		"characterID", filter.CharacterID,
-		"scopeType", filter.ScopeType,
-		"memoryKind", filter.MemoryKind,
+		"characterID", req.CharacterID,
+		"userID", req.UserID,
 		"query", queryText,
 		"limit", limit,
 	)
-	client := &internalQdrant.QdrantClient{}
-	results, err := client.SearchWithFilter(context.Background(), "memory_embeddings", vector, filter, limit+1)
-	if err != nil {
-		return nil, fmt.Errorf("向量检索失败: %w", err)
+	results := make([]qdrantDB.CollectionScoredPoint, 0, limit*len(filters))
+	var lastErr error
+	for _, filter := range filters {
+		scopedResults, err := qdrantDB.MultiSearch(vector, limit+1, filter, "memory_embeddings")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		results = append(results, scopedResults...)
+	}
+	if len(results) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("向量检索失败: %w", lastErr)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Point.Score > results[j].Point.Score
@@ -85,6 +91,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	seen := map[string]bool{}
 	policy := retrievalAuthorityPolicy{
 		CharacterID:      req.CharacterID,
+		UserID:           req.UserID,
 		ProactiveMention: req.ProactiveMention,
 		Now:              time.Now(),
 	}
@@ -116,7 +123,8 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 		}
 	}
 	log.Info("VectorSearch completed",
-		"characterID", filter.CharacterID,
+		"characterID", req.CharacterID,
+		"userID", req.UserID,
 		"results", len(vsResults),
 		"total", len(results),
 	)
@@ -143,6 +151,7 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
 		Query:            queryText,
 		CharacterID:      req.CharacterID,
+		UserID:           req.UserID,
 		Limit:            vectorFetchLimit,
 		ConversationID:   req.ConversationID,
 		RequestID:        req.RequestID,
@@ -170,13 +179,14 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		}{m: pr.Memory, vectorScore: pr.VectorScore, collectionName: pr.CollectionName, matchType: pr.MatchType}
 	}
 
-	keywordResults, err := s.repo.Search(queryText, req.CharacterID, limit*2)
+	keywordResults, err := s.repo.Search(queryText, req.CharacterID, req.UserID, limit*2)
 	if err != nil {
 		keywordResults = nil
 	}
 	queryLower := strings.ToLower(queryText)
 	policy := retrievalAuthorityPolicy{
 		CharacterID:      req.CharacterID,
+		UserID:           req.UserID,
 		ProactiveMention: req.ProactiveMention,
 		Now:              time.Now(),
 	}

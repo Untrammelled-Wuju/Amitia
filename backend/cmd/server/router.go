@@ -41,7 +41,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx)
-		chat.RegisterChatRouter(apiGroup, ctx, services.Chat)
+		chat.RegisterChatRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry)
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {

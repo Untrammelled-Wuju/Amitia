@@ -3,6 +3,9 @@
 package memory
 
 import (
+	"strings"
+	"time"
+
 	"github.com/u-ai/backend/log"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
@@ -56,10 +59,20 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 		return false
 	}
 	mem, errMem := s.repo.FindByID(memID)
-	scopeType := ""
+	if errMem != nil || mem == nil {
+		return false
+	}
+	if !memoryAllowedBySQLiteAuthority(*mem, retrievalAuthorityPolicy{Now: time.Now()}) {
+		deleteVectorsFromCollections([]string{memID})
+		return false
+	}
+	key = mem.Key
+	value = mem.Value
+	characterID = mem.CharacterID
+	memoryType = mem.MemoryType
+	scopeType := mem.Scope
 	userID := ""
-	if errMem == nil && mem != nil {
-		scopeType = mem.Scope
+	if strings.EqualFold(strings.TrimSpace(mem.Scope), "user") || strings.EqualFold(strings.TrimSpace(mem.Scope), "user_global") {
 		userID = mem.CharacterID
 	}
 	text := key + " " + value
@@ -76,7 +89,7 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 		"user_id":      userID,
 		"value":        value,
 	}
-	collectionName := "memory_embeddings"
+	collectionName := collectionNameForMemoryType(memoryType)
 	err = qdrantDB.UpsertVectors([]qdrantDB.VectorPoint{
 		{ID: memID, Vector: vector, Payload: payload},
 	}, collectionName)
@@ -100,6 +113,9 @@ func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
 		var memories []Memory
 		s.db.Find(&memories)
 		for _, m := range memories {
+			if !memoryAllowedBySQLiteAuthority(m, retrievalAuthorityPolicy{Now: time.Now()}) {
+				continue
+			}
 			s.syncGraph(&m)
 		}
 		return map[string]interface{}{
@@ -113,6 +129,9 @@ func (s *service) RebuildEmbeddings() (map[string]interface{}, error) {
 	successCount := 0
 	failCount := 0
 	for _, m := range memories {
+		if !memoryAllowedBySQLiteAuthority(m, retrievalAuthorityPolicy{Now: time.Now()}) {
+			continue
+		}
 		if s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType) {
 			successCount++
 		} else {

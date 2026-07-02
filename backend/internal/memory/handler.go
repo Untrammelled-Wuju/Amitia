@@ -323,12 +323,13 @@ func (h *Handler) BatchSetImportance(c *gin.Context) {
 
 func (h *Handler) GetRankedMemories(c *gin.Context) {
 	characterID := c.Query("characterId")
+	userID := c.Query("userId")
 	query := c.Query("query")
 	limit := 10
 	if l := c.Query("limit"); l != "" {
 		fmt.Sscanf(l, "%d", &limit)
 	}
-	ranked, err := h.service.GetRankedMemories(characterID, query, limit)
+	ranked, err := h.service.GetRankedMemories(characterID, userID, query, limit)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return

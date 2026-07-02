@@ -4,6 +4,7 @@ import { ref, type Ref } from "vue"
 import { ElMessage } from "element-plus"
 import { useApi } from "./useApi"
 import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
+import { createRequestEnvelope } from "../utils/requestEnvelope"
 
 export function useMessageSend(
   messages: Ref<any[]>,
@@ -102,14 +103,26 @@ export function useMessageSend(
 
     sending.value = true
     modelError.value = ""
+    abortController = new AbortController()
 
     try {
+      const payload = {
+        ...createRequestEnvelope(),
+        conversationId: convId.value || undefined,
+        characterId: characterId.value || undefined,
+        message: sendContent,
+        imageUrl: imgUrl || "",
+        audioUrl: finalAudioUrl || "",
+        voiceMessage: !!finalAudioUrl,
+        videoUrl: finalVideoUrl || "",
+      }
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/web-chat/send-stream"),
         createAuthorizedRequestInit({
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, imageUrl: imgUrl || "", audioUrl: finalAudioUrl || "", voiceMessage: !!finalAudioUrl, videoUrl: finalVideoUrl || "" }),
+          body: JSON.stringify(payload),
+          signal: abortController.signal,
         }),
       ])
       const res = await fetch(url, init)
@@ -121,6 +134,7 @@ export function useMessageSend(
       const decoder = new TextDecoder()
       let buffer = ""
       let eventType = ""
+      let assistantStreamingId: string | null = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -148,20 +162,44 @@ export function useMessageSend(
             }
 
             if (eventType === "token" && data.content) {
-              messages.value.push({
-                id: data.id || ("msg-" + Date.now()), role: "assistant", content: data.content,
-                status: "streaming", conversationId: data.conversationId || convId.value,
-                createdAt: data.createdAt || new Date().toISOString()
-              })
+              const nextId: string = data.id || assistantStreamingId || ("msg-" + Date.now())
+              const idx = assistantStreamingId ? messages.value.findIndex((m: any) => m.id === assistantStreamingId) : -1
+              if (idx >= 0) {
+                const current = messages.value[idx]
+                const nextContent = `${current.content || ""}${data.content}`
+                messages.value[idx] = { ...current, id: nextId, content: nextContent, conversationId: data.conversationId || current.conversationId || convId.value }
+              } else {
+                messages.value.push({
+                  id: nextId, role: "assistant", content: data.content,
+                  status: "streaming", conversationId: data.conversationId || convId.value,
+                  createdAt: data.createdAt || new Date().toISOString()
+                })
+              }
+              assistantStreamingId = nextId
               scrollToBottom(true)
             }
 
             if (eventType === "voice_audio" && data.audioUrl) {
-              messages.value.push({
-                id: data.messageId || ("msg-" + Date.now()), role: "assistant", content: data.content || "",
-                status: "streaming", conversationId: data.conversationId || convId.value,
-                createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
-              })
+              const nextId: string = data.messageId || assistantStreamingId || ("msg-" + Date.now())
+              const idx = assistantStreamingId ? messages.value.findIndex((m: any) => m.id === assistantStreamingId) : -1
+              if (idx >= 0) {
+                const current = messages.value[idx]
+                messages.value[idx] = {
+                  ...current,
+                  id: nextId,
+                  content: data.content || current.content || "",
+                  conversationId: data.conversationId || current.conversationId || convId.value,
+                  audioUrl: data.audioUrl,
+                  audioDuration: data.duration || 0,
+                }
+              } else {
+                messages.value.push({
+                  id: nextId, role: "assistant", content: data.content || "",
+                  status: "streaming", conversationId: data.conversationId || convId.value,
+                  createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
+                })
+              }
+              assistantStreamingId = nextId
               scrollToBottom(true)
             }
 

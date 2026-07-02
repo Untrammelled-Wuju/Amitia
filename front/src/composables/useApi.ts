@@ -63,10 +63,10 @@ export function useApi() {
     }
   }
 
-  async function post<T>(url: string, data?: any): Promise<T> {
+  async function post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     loading.value = true
     try {
-      const res = await apiClient.post(url, data)
+      const res = await apiClient.post(url, data, config)
       return res.data as T
     } finally {
       loading.value = false

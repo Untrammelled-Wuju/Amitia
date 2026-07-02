@@ -219,6 +219,13 @@ func (e *UnifiedEntry) GetBackpressureStatus() BackpressureStatus {
 	return e.bpState.Status
 }
 
+func (e *UnifiedEntry) IsOrchestratorReady() bool {
+	if e == nil || e.orchestrator == nil {
+		return false
+	}
+	return e.orchestrator.IsReady()
+}
+
 func (e *UnifiedEntry) SetBackpressureConfig(cfg BackpressureConfig) {
 	e.mu.Lock()
 	cfg = normalizeBackpressureConfig(cfg)

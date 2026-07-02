@@ -11,13 +11,14 @@ import (
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
 
-func (s *service) GetRankedMemories(characterID, query string, limit int) ([]RankedMemory, error) {
+func (s *service) GetRankedMemories(characterID, userID, query string, limit int) ([]RankedMemory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
 	allMemories, _, err := s.repo.List(MemoryListQuery{
 		CharacterID: characterID,
+		UserID:      userID,
 		PageSize:    200,
 		Page:        1,
 	})
@@ -26,6 +27,7 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 	}
 	policy := retrievalAuthorityPolicy{
 		CharacterID: characterID,
+		UserID:      userID,
 		Now:         time.Now(),
 	}
 
@@ -33,8 +35,11 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 	if qdrantDB.Client != nil && query != "" {
 		vector, err := s.embeddingSvc.Embed(query)
 		if err == nil {
-			results, err := qdrantDB.MultiSearch(vector, 50, nil)
-			if err == nil {
+			for _, filter := range rankedMemoryVectorFilters(characterID, userID) {
+				results, err := qdrantDB.MultiSearch(vector, 50, filter)
+				if err != nil {
+					continue
+				}
 				for _, r := range results {
 					if val, ok := r.Point.Payload["memory_id"]; ok {
 						rawMemID := val.GetStringValue()
@@ -77,6 +82,22 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 		ranked = ranked[:limit]
 	}
 	return ranked, nil
+}
+
+func rankedMemoryVectorFilters(characterID, userID string) []map[string]interface{} {
+	characterID = strings.TrimSpace(characterID)
+	userID = strings.TrimSpace(userID)
+	filters := make([]map[string]interface{}, 0, 2)
+	if characterID != "" {
+		filters = append(filters, map[string]interface{}{"character_id": characterID})
+	}
+	if userID != "" && userID != characterID {
+		filters = append(filters, map[string]interface{}{"user_id": userID, "scope_type": "user"})
+	}
+	if len(filters) == 0 {
+		filters = append(filters, map[string]interface{}{})
+	}
+	return filters
 }
 
 func (s *service) BatchVerify(ids []string, status string) error {

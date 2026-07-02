@@ -321,6 +321,15 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 		"CREATE TABLE memory_embeddings (memory_id TEXT PRIMARY KEY)",
 		"CREATE TABLE retrieval_logs (id TEXT PRIMARY KEY, request_id TEXT DEFAULT '', conversation_id TEXT DEFAULT '', character_id TEXT DEFAULT '', retrieved_memory_ids TEXT DEFAULT '[]')",
 		"CREATE TABLE conversation_summaries (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, parent_summary_id TEXT DEFAULT '')",
+		"CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT DEFAULT '', character_id TEXT DEFAULT '', content TEXT DEFAULT '')",
+		"CREATE TABLE memory_summaries (id TEXT PRIMARY KEY, target_id TEXT DEFAULT '', memory_id TEXT DEFAULT '', conversation_id TEXT DEFAULT '', summary TEXT DEFAULT '')",
+		"CREATE TABLE reflection_candidates (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '', target_id TEXT DEFAULT '', source_id TEXT DEFAULT '', source_ids TEXT DEFAULT '', evidence TEXT DEFAULT '')",
+		"CREATE TABLE reflection_runs (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '', target_id TEXT DEFAULT '', source_id TEXT DEFAULT '', source_ids TEXT DEFAULT '')",
+		"CREATE TABLE supervisor_decisions (id TEXT PRIMARY KEY, target_id TEXT DEFAULT '', target TEXT DEFAULT '', reason TEXT DEFAULT '')",
+		"CREATE TABLE version_history (id TEXT PRIMARY KEY, target_id TEXT DEFAULT '', target TEXT DEFAULT '', snapshot_hash TEXT DEFAULT '')",
+		"CREATE TABLE runtime_trace_events (id TEXT PRIMARY KEY, event_id TEXT DEFAULT '', request_id TEXT DEFAULT '', conversation_id TEXT DEFAULT '', character_id TEXT DEFAULT '', parent_id TEXT DEFAULT '', causation_id TEXT DEFAULT '', payload TEXT DEFAULT '')",
+		"CREATE TABLE runtime_replay_records (id TEXT PRIMARY KEY, event_id TEXT DEFAULT '', request_id TEXT DEFAULT '', target_id TEXT DEFAULT '', payload TEXT DEFAULT '')",
+		"CREATE TABLE pipeline_checkpoints (id TEXT PRIMARY KEY, conversation_id TEXT DEFAULT '', character_id TEXT DEFAULT '', last_message_id TEXT DEFAULT '')",
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {
@@ -334,6 +343,15 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 		"INSERT INTO memory_embeddings (memory_id) VALUES ('target-memory'), ('kept-memory')",
 		"INSERT INTO retrieval_logs (id, request_id, conversation_id, character_id, retrieved_memory_ids) VALUES ('retrieval-target', 'target-memory', 'target-memory', 'target-memory', '[\"target-memory\"]'), ('retrieval-kept', 'kept', 'kept', 'kept', '[\"kept-memory\"]')",
 		"INSERT INTO conversation_summaries (id, conversation_id, parent_summary_id) VALUES ('summary-target', 'target-memory', 'target-memory'), ('summary-kept', 'kept', 'kept')",
+		"INSERT INTO messages (id, conversation_id, character_id, content) VALUES ('message-target', 'target-memory', 'target-memory', 'mentions target-memory'), ('message-kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO memory_summaries (id, target_id, memory_id, conversation_id, summary) VALUES ('memory-summary-target', 'target-memory', 'target-memory', 'target-memory', 'target-memory summary'), ('memory-summary-kept', 'kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO reflection_candidates (id, character_id, target_id, source_id, source_ids, evidence) VALUES ('reflection-candidate-target', 'target-memory', 'target-memory', 'target-memory', '[\"target-memory\"]', 'target-memory evidence'), ('reflection-candidate-kept', 'kept', 'kept', 'kept', '[\"kept\"]', 'kept')",
+		"INSERT INTO reflection_runs (id, character_id, target_id, source_id, source_ids) VALUES ('reflection-run-target', 'target-memory', 'target-memory', 'target-memory', '[\"target-memory\"]'), ('reflection-run-kept', 'kept', 'kept', 'kept', '[\"kept\"]')",
+		"INSERT INTO supervisor_decisions (id, target_id, target, reason) VALUES ('supervisor-target', 'target-memory', 'target-memory', 'target-memory reason'), ('supervisor-kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO version_history (id, target_id, target, snapshot_hash) VALUES ('version-target', 'target-memory', 'target-memory', 'target-memory hash'), ('version-kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO runtime_trace_events (id, event_id, request_id, conversation_id, character_id, parent_id, causation_id, payload) VALUES ('trace-target', 'target-memory', 'target-memory', 'target-memory', 'target-memory', 'target-memory', 'target-memory', 'target-memory payload'), ('trace-kept', 'kept', 'kept', 'kept', 'kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO runtime_replay_records (id, event_id, request_id, target_id, payload) VALUES ('replay-target', 'target-memory', 'target-memory', 'target-memory', 'target-memory payload'), ('replay-kept', 'kept', 'kept', 'kept', 'kept')",
+		"INSERT INTO pipeline_checkpoints (id, conversation_id, character_id, last_message_id) VALUES ('checkpoint-target', 'target-memory', 'target-memory', 'target-memory'), ('checkpoint-kept', 'kept', 'kept', 'kept')",
 	}
 	for _, statement := range inserts {
 		if err := db.Exec(statement).Error; err != nil {
@@ -387,6 +405,24 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 	assertCount("retrieval_logs", "request_id = ?", 1, "kept")
 	assertCount("conversation_summaries", "conversation_id = ?", 0, "target-memory")
 	assertCount("conversation_summaries", "conversation_id = ?", 1, "kept")
+	assertCount("messages", "id = ?", 0, "message-target")
+	assertCount("messages", "id = ?", 1, "message-kept")
+	assertCount("memory_summaries", "target_id = ?", 0, "target-memory")
+	assertCount("memory_summaries", "target_id = ?", 1, "kept")
+	assertCount("reflection_candidates", "target_id = ?", 0, "target-memory")
+	assertCount("reflection_candidates", "target_id = ?", 1, "kept")
+	assertCount("reflection_runs", "target_id = ?", 0, "target-memory")
+	assertCount("reflection_runs", "target_id = ?", 1, "kept")
+	assertCount("supervisor_decisions", "target_id = ?", 0, "target-memory")
+	assertCount("supervisor_decisions", "target_id = ?", 1, "kept")
+	assertCount("version_history", "target_id = ?", 0, "target-memory")
+	assertCount("version_history", "target_id = ?", 1, "kept")
+	assertCount("runtime_trace_events", "request_id = ?", 0, "target-memory")
+	assertCount("runtime_trace_events", "request_id = ?", 1, "kept")
+	assertCount("runtime_replay_records", "target_id = ?", 0, "target-memory")
+	assertCount("runtime_replay_records", "target_id = ?", 1, "kept")
+	assertCount("pipeline_checkpoints", "last_message_id = ?", 0, "target-memory")
+	assertCount("pipeline_checkpoints", "last_message_id = ?", 1, "kept")
 }
 
 func TestGenerateRecalculationTasksAllScope(t *testing.T) {

@@ -409,6 +409,63 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	}
 }
 
+func TestOrchestratorQueueTurnWaitsForOlderQueuedRecord(t *testing.T) {
+	tracker := NewInMemoryTracker()
+	cfg := DefaultOrchestratorConfig()
+	cfg.SupersedePolicy = SupersedePolicyQueue
+	orch := NewOrchestratorWithStores(cfg, &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	scope := InteractionScope{
+		UserID:         "user-queued-order",
+		CharacterID:    "char-queued-order",
+		ConversationID: "conv-queued-order",
+		Channel:        "web",
+		Source:         "web",
+	}.Normalize()
+	older := NewInteractionRecord(scope)
+	older.CreatedAt = time.Now().Add(-time.Second)
+	if err := tracker.Create(context.Background(), older); err != nil {
+		t.Fatal(err)
+	}
+	older, err := tracker.TransitionCAS(context.Background(), older.ID, older.StatusVersion, InteractionStatusQueued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer := NewInteractionRecord(scope)
+	newer.CreatedAt = time.Now()
+	if err := tracker.Create(context.Background(), newer); err != nil {
+		t.Fatal(err)
+	}
+	newer, err = tracker.TransitionCAS(context.Background(), newer.ID, newer.StatusVersion, InteractionStatusQueued)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	released := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := orch.waitForQueueTurn(context.Background(), scope, newer)
+		done <- err
+		close(released)
+	}()
+
+	select {
+	case <-released:
+		t.Fatal("newer queued record advanced before older queued record finished")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := tracker.Fail(context.Background(), older.ID, older.StatusVersion, "test_done", "done"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("newer queued record did not advance after older queued record finished")
+	}
+}
+
 func waitForRecordCreated(t *testing.T, tracker InteractionTracker, requestID string) {
 	t.Helper()
 	deadline := time.After(2 * time.Second)

@@ -49,6 +49,7 @@ type ProcessRequest struct {
 
 type ProcessResponse struct {
 	ConversationID string         `json:"conversationId"`
+	Sequence       int64          `json:"sequence"`
 	Reply          string         `json:"reply"`
 	CharacterID    string         `json:"characterId"`
 	CharacterName  string         `json:"characterName"`
@@ -580,6 +581,9 @@ func (o *Orchestrator) hasOlderActive(ctx context.Context, scope InteractionScop
 	}
 	for _, rec := range active {
 		if rec.ID == record.ID {
+			continue
+		}
+		if !sameSupersedeScope(scope, rec.Scope) {
 			continue
 		}
 		if rec.CreatedAt.Before(record.CreatedAt) || (rec.CreatedAt.Equal(record.CreatedAt) && rec.ID < record.ID) {

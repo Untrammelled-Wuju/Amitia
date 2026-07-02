@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,16 +12,22 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service Service
+	service      Service
+	unifiedEntry *interaction.UnifiedEntry
 }
 
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
+}
+
+func NewHandlerWithUnifiedEntry(srv Service, entry *interaction.UnifiedEntry) *Handler {
+	return &Handler{service: srv, unifiedEntry: entry}
 }
 
 func (h *Handler) ListConversations(c *gin.Context) {
@@ -143,12 +150,81 @@ func (h *Handler) Chat(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少必要参数", nil)
 		return
 	}
+	if h.unifiedEntry != nil {
+		channel := strings.TrimSpace(req.Channel)
+		if channel == "" {
+			channel = "web"
+		}
+		source := strings.TrimSpace(req.Source)
+		if source == "" {
+			source = "web"
+		}
+		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+			CharacterID:    req.CharacterID,
+			Message:        req.Message,
+			ConversationID: req.ConversationID,
+			Channel:        channel,
+			Source:         source,
+			PeerID:         req.PeerID,
+			UserID:         req.UserID,
+			SessionID:      req.SessionID,
+			RequestID:      req.RequestID,
+		})
+		if err != nil {
+			h.writeUnifiedEntryError(c, err)
+			return
+		}
+		if orchResult == nil || orchResult.Response == nil {
+			util.ErrorResponse(c, response.OperationFailed, "统一入口未返回回复", nil)
+			return
+		}
+		resp := h.chatResponseFromProcessResponse(orchResult.Response)
+		util.SuccessResponse(c, resp)
+		return
+	}
 	resp, err := h.service.Chat(&req)
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)
+}
+
+func (h *Handler) chatResponseFromProcessResponse(resp *interaction.ProcessResponse) *ChatResponse {
+	msgID := ""
+	if len(resp.MessageIDs) > 0 {
+		msgID = resp.MessageIDs[len(resp.MessageIDs)-1]
+	}
+	return &ChatResponse{
+		ConversationID: resp.ConversationID,
+		Sequence:       resp.Sequence,
+		Message: &MessageItem{
+			ID:             msgID,
+			ConversationID: resp.ConversationID,
+			Sequence:       resp.Sequence,
+			Role:           "assistant",
+			Content:        resp.Reply,
+			Source:         "assistant",
+			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
+		},
+	}
+}
+
+func (h *Handler) writeUnifiedEntryError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, interaction.ErrBackpressureShedding), errors.Is(err, interaction.ErrBackpressureCooldown), errors.Is(err, interaction.ErrOrchestratorBusy):
+		util.ErrorResponse(c, response.TooManyRequests, "请求过于频繁", err.Error())
+	case errors.Is(err, interaction.ErrOrchestratorNotReady):
+		util.ErrorResponse(c, response.OperationFailed, "服务尚未就绪", err.Error())
+	case errors.Is(err, interaction.ErrOrchestratorDuplicate):
+		util.ErrorResponse(c, response.OperationFailed, "重复请求", err.Error())
+	case errors.Is(err, interaction.ErrOrchestratorInvalidScope), errors.Is(err, interaction.ErrInvalidChannel), errors.Is(err, interaction.ErrScopeResolutionFailed):
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+	case errors.Is(err, interaction.ErrOrchestratorCancelled), errors.Is(err, interaction.ErrOrchestratorSuperseded):
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+	default:
+		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
+	}
 }
 
 func (h *Handler) ListModels(c *gin.Context) {

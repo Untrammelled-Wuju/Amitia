@@ -70,6 +70,7 @@ type UpdateMemoryRequest struct {
 type SearchMemoryRequest struct {
 	Keyword          string `json:"keyword" binding:"required"`
 	CharacterID      string `json:"characterId"`
+	UserID           string `json:"userId"`
 	SensitivityLevel string `json:"sensitivityLevel"`
 	Limit            int    `json:"limit"`
 }
@@ -78,6 +79,7 @@ type VectorSearchRequest struct {
 	Keyword          string `json:"keyword"`
 	Query            string `json:"query"`
 	CharacterID      string `json:"characterId"`
+	UserID           string `json:"userId"`
 	Limit            int    `json:"limit"`
 	ConversationID   string `json:"conversationId"`
 	RequestID        string `json:"requestId"`
@@ -89,6 +91,7 @@ type MemoryListQuery struct {
 	Page           int    `form:"page"`
 	PageSize       int    `form:"pageSize"`
 	CharacterID    string `form:"characterId"`
+	UserID         string `form:"userId"`
 	Source         string `form:"source"`
 	MemoryType     string `form:"memoryType"`
 	Type           string `form:"type"`

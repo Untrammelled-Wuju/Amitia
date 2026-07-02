@@ -66,6 +66,7 @@ import { ChatPanel } from "../../ui-index"
 import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import { ElMessage } from "element-plus"
 import { createAuthorizedRequestInit, getApiBaseURL, resolveApiUrl } from "../../runtime/runtime-adapter"
+import { createRequestEnvelope } from "../../utils/requestEnvelope"
 
 const apiBaseUrl = ref("")
 
@@ -239,6 +240,7 @@ async function onSend(text: string, imageBase64?: string, videoBase64?: string, 
   loading.value = true
   try {
     const payload: any = {
+      ...createRequestEnvelope(),
       characterId: selectedCharacterId.value,
       message: text,
     }

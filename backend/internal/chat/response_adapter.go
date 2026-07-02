@@ -12,6 +12,7 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 	}
 	return &interaction.ProcessResponse{
 		ConversationID: resp.ConversationID,
+		Sequence:       resp.Sequence,
 		Reply:          resp.Reply,
 		CharacterID:    resp.CharacterID,
 		CharacterName:  resp.CharacterName,

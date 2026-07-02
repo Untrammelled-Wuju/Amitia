@@ -51,7 +51,15 @@ func (r *SupersedeResolver) ResolveExcluding(ctx context.Context, scope Interact
 	if excludeID != "" {
 		filtered := active[:0]
 		for _, rec := range active {
-			if rec.ID != excludeID {
+			if rec.ID != excludeID && sameSupersedeScope(scope, rec.Scope) {
+				filtered = append(filtered, rec)
+			}
+		}
+		active = filtered
+	} else {
+		filtered := active[:0]
+		for _, rec := range active {
+			if sameSupersedeScope(scope, rec.Scope) {
 				filtered = append(filtered, rec)
 			}
 		}

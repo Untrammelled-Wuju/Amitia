@@ -4,11 +4,12 @@ package chat
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service) {
-	handler := NewHandler(svc)
+func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry) {
+	handler := NewHandlerWithUnifiedEntry(svc, entry)
 
 	r.POST("/chat", handler.Chat)
 

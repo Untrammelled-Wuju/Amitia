@@ -17,7 +17,7 @@ type Repository interface {
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
 	DeleteAll(characterID string) error
-	Search(keyword, characterID string, limit int) ([]Memory, error)
+	Search(keyword, characterID, userID string, limit int) ([]Memory, error)
 	SearchByKey(key, characterID string) ([]Memory, error)
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
@@ -42,9 +42,7 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(q MemoryListQuery) ([]Memory, int64, error) {
 	query := r.db.Model(&Memory{})
-	if q.CharacterID != "" {
-		query = query.Where("character_id = ? OR scope = ?", q.CharacterID, "user")
-	}
+	query = applyMemoryScopeQuery(query, q.CharacterID, q.UserID)
 	if q.Source != "" {
 		query = query.Where("source = ?", q.Source)
 	}
@@ -145,11 +143,9 @@ func (r *repository) DeleteAll(characterID string) error {
 	return r.db.Where("1=1").Delete(&Memory{}).Error
 }
 
-func (r *repository) Search(keyword, characterID string, limit int) ([]Memory, error) {
+func (r *repository) Search(keyword, characterID, userID string, limit int) ([]Memory, error) {
 	query := r.db.Where("(key LIKE ? OR value LIKE ?)", "%"+keyword+"%", "%"+keyword+"%")
-	if characterID != "" {
-		query = query.Where("character_id = ? OR scope = ?", characterID, "user")
-	}
+	query = applyMemoryScopeQuery(query, characterID, userID)
 	var items []Memory
 	err := query.Order("importance DESC, confidence DESC, use_count DESC").Limit(limit).Find(&items).Error
 	if items == nil {
@@ -161,7 +157,7 @@ func (r *repository) Search(keyword, characterID string, limit int) ([]Memory, e
 func (r *repository) SearchByKey(key, characterID string) ([]Memory, error) {
 	query := r.db.Where("key = ?", key)
 	if characterID != "" {
-		query = query.Where("character_id = ? OR scope = ?", characterID, "user")
+		query = applyMemoryScopeQuery(query, characterID, "")
 	}
 	var items []Memory
 	err := query.Order("confidence DESC").Find(&items).Error
@@ -211,7 +207,7 @@ func (r *repository) GetConversationMessages(conversationID string, limit int) (
 }
 
 func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Memory, error) {
-	query := r.db.Where("(character_id = ? OR scope = ?)", characterID, "user").
+	query := applyMemoryScopeQuery(r.db.Model(&Memory{}), characterID, "").
 		Order("importance DESC, confidence DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -222,6 +218,21 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 		items = []Memory{}
 	}
 	return items, err
+}
+
+func applyMemoryScopeQuery(query *gorm.DB, characterID, userID string) *gorm.DB {
+	characterID = strings.TrimSpace(characterID)
+	userID = strings.TrimSpace(userID)
+	if characterID != "" && userID != "" {
+		return query.Where("((scope IN (?, ?) AND character_id = ?) OR ((scope IS NULL OR scope = '' OR scope NOT IN (?, ?)) AND character_id = ?))", "user", "user_global", userID, "user", "user_global", characterID)
+	}
+	if userID != "" {
+		return query.Where("scope IN (?, ?) AND character_id = ?", "user", "user_global", userID)
+	}
+	if characterID != "" {
+		return query.Where("character_id = ?", characterID)
+	}
+	return query
 }
 
 func (r *repository) ListCandidates() ([]MemoryCandidateModel, error) {

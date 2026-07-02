@@ -4,6 +4,7 @@ import { ref, computed } from "vue"
 import { useApi, isLoggedIn, getToken } from "./useApi"
 import type { ApiResponse } from "@/types"
 import { resolveApiUrl } from "../runtime/runtime-adapter"
+import { createRequestEnvelope } from "../utils/requestEnvelope"
 
 /**
  * Composable for WebChat state management.
@@ -125,6 +126,7 @@ export function useChat() {
         method: "POST",
         headers,
         body: JSON.stringify({
+          ...createRequestEnvelope(),
           conversationId: convId.value || undefined,
           characterId: charId.value || undefined,
           content: text,
@@ -260,11 +262,14 @@ export function useChat() {
 
     try {
       const res = await post<any>("/api/web-chat/send", {
+        ...createRequestEnvelope(),
         conversationId: convId.value || undefined,
         characterId: charId.value || undefined,
         content: text,
         useMemory: true,
         replyStyle: replyStyle.value,
+      }, {
+        signal: abortController.signal,
       })
 
       const idx = messages.value.findIndex(m => m.id === tempMsg.id)

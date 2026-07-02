@@ -40,7 +40,7 @@ func TestMemoryAllowedBySQLiteAuthorityFiltersScopeExpiryStatusAndProactiveMenti
 			want:   false,
 		},
 		{
-			name: "user scope allowed across character",
+			name: "user scope blocked without matching user",
 			memory: Memory{
 				CharacterID:           "user-1",
 				Scope:                 "user",
@@ -48,6 +48,17 @@ func TestMemoryAllowedBySQLiteAuthorityFiltersScopeExpiryStatusAndProactiveMenti
 				AllowProactiveMention: true,
 			},
 			policy: retrievalAuthorityPolicy{CharacterID: "char-a", ProactiveMention: true, Now: now},
+			want:   false,
+		},
+		{
+			name: "user scope allowed by user id",
+			memory: Memory{
+				CharacterID:           "user-1",
+				Scope:                 "user",
+				VerifiedStatus:        "user_verified",
+				AllowProactiveMention: true,
+			},
+			policy: retrievalAuthorityPolicy{CharacterID: "char-a", UserID: "user-1", ProactiveMention: true, Now: now},
 			want:   true,
 		},
 		{

@@ -189,6 +189,7 @@ func main() {
 			os.Exit(1)
 		}
 	case <-rootCtx.Done():
+		services.UnifiedEntry.SetOrchestratorReady(false)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
