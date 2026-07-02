@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"gorm.io/driver/sqlite"
@@ -82,6 +83,101 @@ func TestSQLiteInteractionTrackerGetByRequestID(t *testing.T) {
 	}
 	if _, ok, err := tracker.GetByRequestID(ctx, "user-1", ""); err != nil || ok {
 		t.Fatalf("unexpected record for empty request id: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSQLiteInteractionTrackerRejectsDuplicateRequestID(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	first := NewInteractionRecord(InteractionScope{
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-1",
+		Channel:        "web",
+		RequestID:      "request-1",
+	})
+	if err := tracker.Create(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := NewInteractionRecord(InteractionScope{
+		UserID:         "user-1",
+		CharacterID:    "char-2",
+		ConversationID: "conv-2",
+		Channel:        "web",
+		RequestID:      "request-1",
+	})
+	if err := tracker.Create(ctx, duplicate); !errors.Is(err, ErrDuplicateRequest) {
+		t.Fatalf("expected duplicate request error, got %v", err)
+	}
+	got, ok, err := tracker.GetByRequestID(ctx, "user-1", "request-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.ID != first.ID {
+		t.Fatalf("duplicate should keep first record, ok=%v got=%#v", ok, got)
+	}
+}
+
+func TestSQLiteInteractionTrackerAllowsSameRequestIDForDifferentUsers(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	for _, userID := range []string{"user-1", "user-2"} {
+		record := NewInteractionRecord(InteractionScope{
+			UserID:         userID,
+			CharacterID:    "char-1",
+			ConversationID: "conv-" + userID,
+			Channel:        "web",
+			RequestID:      "request-1",
+		})
+		if err := tracker.Create(ctx, record); err != nil {
+			t.Fatalf("create for %s: %v", userID, err)
+		}
+	}
+}
+
+func TestSQLiteInteractionTrackerConcurrentDuplicateRequestID(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	const workers = 12
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			record := NewInteractionRecord(InteractionScope{
+				UserID:         "user-1",
+				CharacterID:    "char-1",
+				ConversationID: "conv-1",
+				Channel:        "web",
+				RequestID:      "request-concurrent",
+			})
+			errs <- tracker.Create(ctx, record)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	successes := 0
+	duplicates := 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, ErrDuplicateRequest):
+			duplicates++
+		default:
+			t.Fatalf("unexpected create error: %v", err)
+		}
+	}
+	if successes != 1 || duplicates != workers-1 {
+		t.Fatalf("unexpected results: successes=%d duplicates=%d", successes, duplicates)
+	}
+	var count int64
+	if err := tracker.db.Model(&InteractionRecordModel{}).Where("user_id = ? AND request_id = ?", "user-1", "request-concurrent").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one row, got %d", count)
 	}
 }
 

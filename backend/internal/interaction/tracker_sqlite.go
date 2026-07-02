@@ -55,7 +55,10 @@ func NewSQLiteInteractionTracker(db *gorm.DB) *SQLiteInteractionTracker {
 }
 
 func (t *SQLiteInteractionTracker) InitSchema() error {
-	return t.db.AutoMigrate(&InteractionRecordModel{})
+	if err := t.db.AutoMigrate(&InteractionRecordModel{}); err != nil {
+		return err
+	}
+	return t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(user_id, request_id) WHERE request_id <> ''").Error
 }
 
 func (t *SQLiteInteractionTracker) Create(ctx context.Context, record *InteractionRecord) error {
@@ -70,11 +73,17 @@ func (t *SQLiteInteractionTracker) Create(ctx context.Context, record *Interacti
 	if model.UpdatedAt.IsZero() {
 		model.UpdatedAt = now
 	}
-	result := t.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoNothing: true,
-	}).Create(&model)
-	return result.Error
+	result := t.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&model)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrDuplicateRequest
+	}
+	record.ID = model.ID
+	record.CreatedAt = model.CreatedAt
+	record.UpdatedAt = model.UpdatedAt
+	return nil
 }
 
 func (t *SQLiteInteractionTracker) Get(ctx context.Context, id string) (*InteractionRecord, bool, error) {

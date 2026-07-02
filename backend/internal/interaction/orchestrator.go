@@ -196,6 +196,13 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 
 	record := NewInteractionRecord(scope)
 	if err := o.tracker.Create(ctx, record); err != nil {
+		if errors.Is(err, ErrDuplicateRequest) {
+			if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); getErr != nil {
+				return nil, getErr
+			} else if ok {
+				return o.buildResult(existing, nil, outcomeForRecord(existing), ErrOrchestratorDuplicate), ErrOrchestratorDuplicate
+			}
+		}
 		return nil, err
 	}
 

@@ -55,6 +55,7 @@ var (
 	ErrAlreadyTerminal     = errors.New("interaction: already in terminal state")
 	ErrVersionConflict     = errors.New("interaction: status version conflict")
 	ErrInteractionNotFound = errors.New("interaction: record not found")
+	ErrDuplicateRequest    = errors.New("interaction: duplicate request")
 )
 
 type InteractionRecord struct {
@@ -271,7 +272,11 @@ func (t *InMemoryTracker) Get(ctx context.Context, id string) (*InteractionRecor
 		return nil, false, err
 	}
 	rec, ok := t.records[id]
-	return rec, ok, nil
+	if !ok {
+		return nil, false, nil
+	}
+	snap := rec.Snapshot()
+	return &snap, true, nil
 }
 
 func (t *InMemoryTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
@@ -315,7 +320,8 @@ func (t *InMemoryTracker) ListActive(ctx context.Context, scope InteractionScope
 			continue
 		}
 		if rec.IsActive() && rec.Scope.ConversationID == scope.ConversationID {
-			result = append(result, rec)
+			snap := rec.Snapshot()
+			result = append(result, &snap)
 		}
 	}
 	return result, nil
@@ -336,7 +342,8 @@ func (t *InMemoryTracker) ListByScope(ctx context.Context, scope InteractionScop
 			continue
 		}
 		if rec.Scope.ConversationID == scope.ConversationID {
-			result = append(result, rec)
+			snap := rec.Snapshot()
+			result = append(result, &snap)
 		}
 	}
 	return result, nil
@@ -378,10 +385,12 @@ func (t *InMemoryTracker) RequestCancel(ctx context.Context, id string, reason s
 	if !canSupersedeStatus(rec.Status) {
 		return ErrInvalidTransition
 	}
+	rec.mu.Lock()
 	rec.CancelReason = reason
 	rec.CancelRequestedAt = time.Now()
 	rec.StatusVersion++
 	rec.UpdatedAt = rec.CancelRequestedAt
+	rec.mu.Unlock()
 	return nil
 }
 
@@ -401,11 +410,13 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	if !canSupersedeStatus(rec.Status) {
 		return ErrInvalidTransition
 	}
+	rec.mu.Lock()
 	rec.SupersededByID = supersededByID
 	rec.Status = InteractionStatusSuperseded
 	rec.StatusVersion++
 	rec.CompletedAt = time.Now()
 	rec.UpdatedAt = rec.CompletedAt
+	rec.mu.Unlock()
 	return nil
 }
 
