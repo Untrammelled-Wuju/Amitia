@@ -83,7 +83,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed } from "vue"
 import { FullScreen } from "@element-plus/icons-vue"
-import PersonalitySliders, { type PersonalityConfig } from "../../../components/PersonalitySliders.vue"
+import PersonalitySliders from "../../../components/PersonalitySliders.vue"
+import type { PersonalityConfig } from "../composables/types"
 
 const props = defineProps<{
   activeTab: string

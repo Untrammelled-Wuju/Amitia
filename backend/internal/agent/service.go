@@ -4,6 +4,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,10 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"context"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -39,12 +40,12 @@ const systemFormatInstruction = `【回复格式 - 系统固定规则】
 const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
 
 type service struct {
-	db      *gorm.DB
-	chatSvc chat.Service
+	db           *gorm.DB
+	unifiedEntry *interaction.UnifiedEntry
 }
 
-func NewService(ctx *app.AppContext, chatSvc chat.Service) Service {
-	return &service{db: ctx.DB, chatSvc: chatSvc}
+func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry) Service {
+	return &service{db: ctx.DB, unifiedEntry: unifiedEntry}
 }
 
 func (s *service) Test(characterID, message string) (map[string]interface{}, error) {
@@ -184,8 +185,12 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 			fmt.Printf("[Webhook] 用户语音已保存: %s\n", fname)
 		}
 	}
-	pmReq := &chat.ProcessMessageRequest{
-		CharacterID:    "",
+	if s.unifiedEntry == nil {
+		return nil, fmt.Errorf("统一入口未初始化")
+	}
+	reqCtx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	result, err := s.unifiedEntry.Handle(reqCtx, &interaction.UnifiedEntryRequest{
 		Message:        mergedText,
 		ConversationID: convID,
 		Channel:        channel,
@@ -195,20 +200,22 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 		ImageUrl:       imageUrl,
 		VideoUrl:       videoUrl,
 		AudioUrl:       audioUrl,
-	}
-	result, err := s.chatSvc.ProcessMessage(context.Background(), pmReq)
+	})
 	if err != nil {
 		return nil, err
 	}
-	forceVoice := result.ForceVoice
-	replyText := result.Reply
+	if result.Response == nil {
+		return nil, fmt.Errorf("统一入口未返回回复")
+	}
+	forceVoice := result.Response.ForceVoice
+	replyText := result.Response.Reply
 	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, channel)
 	if channel == "wechat" && forceVoice {
 		forceVoice = false
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.AudioUrls}}, nil
+	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}}, nil
 }
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName string

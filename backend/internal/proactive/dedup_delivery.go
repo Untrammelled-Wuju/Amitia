@@ -155,7 +155,7 @@ var GlobalDedupManager = &DedupManager{
 }
 
 func GenerateCorrelationID(characterID, ruleID string, content string) string {
-	seed := fmt.Sprintf("%s:%s:%s:%d", characterID, ruleID, content, time.Now().UnixNano())
+	seed := fmt.Sprintf("%s:%s:%s", characterID, ruleID, content)
 	hash := sha256.Sum256([]byte(seed))
 	return "corr-" + hex.EncodeToString(hash[:16])
 }

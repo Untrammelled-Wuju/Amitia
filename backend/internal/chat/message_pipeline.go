@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/agent/tool"
-	applog "github.com/u-ai/backend/log")
-
+	"github.com/u-ai/backend/internal/expression"
+	"github.com/u-ai/backend/internal/interaction"
+	applog "github.com/u-ai/backend/log"
+)
 
 func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
 	requestID := strings.TrimSpace(req.RequestID)
@@ -141,6 +141,22 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	if len(sys2Parts) > 0 {
 		messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(sys2Parts, "\n\n")})
 	}
+	if strings.TrimSpace(req.RuntimeContext) != "" {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": req.RuntimeContext})
+	}
+
+	kind := expression.ChannelWeb
+	switch req.Channel {
+	case "wechat":
+		kind = expression.ChannelWechat
+	case "qq":
+		kind = expression.ChannelQQ
+	}
+	prompt := expression.CompileChannelPrompt(kind)
+	if prompt.StyleInstruction != "" {
+		messages = append(messages, map[string]interface{}{"role": "system", "content": prompt.StyleInstruction})
+	}
+
 	userContent := req.Message
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
@@ -166,6 +182,16 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		applog.TraceWarn(trace.WithStage("reply_fallback"), nil, "process message reply fallback")
 		reply = "操作已完成"
 	}
+
+	kind = expression.ChannelWeb
+	switch channel {
+	case "wechat":
+		kind = expression.ChannelWechat
+	case "qq":
+		kind = expression.ChannelQQ
+	}
+	reply = expression.ApplyPostValidation(reply, kind)
+
 	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
 	var realLines []string
 	for _, line := range lines_ {
@@ -184,18 +210,16 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		"reply_line_count": len(realLines),
 		"user_message_id":  userMsgID,
 	}, "process message db commit started")
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		for _, text := range realLines {
-			aiMsgID := uuid.New().String()
-			if err := tx.Create(&Message{ID: aiMsgID, ConversationID: convID, Role: "assistant", Content: text, MsgType: "text", Source: source, RequestID: requestID}).Error; err != nil {
-				return err
-			}
-			msgIDs = append(msgIDs, aiMsgID)
-		}
-		if err := tx.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")}).Error; err != nil {
-			return err
-		}
-		return tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID).Error
+	commitResult, err := s.commitInteraction(messageCommitPlan{
+		Request:       req,
+		Conversation:  convID,
+		Character:     charID,
+		CharacterName: charName,
+		UserMessageID: userMsgID,
+		Reply:         reply,
+		Lines:         realLines,
+		Source:        source,
+		Runtime:       req.Runtime,
 	})
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
@@ -204,6 +228,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		}, err, "process message db commit failed")
 		return nil, err
 	}
+	msgIDs = commitResult.MessageIDs
 	applog.TraceInfo(trace.WithStage("db_commit_completed"), applog.Fields{
 		"user_message_id": userMsgID,
 		"assistant_count": len(msgIDs),
@@ -217,12 +242,27 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "user", "content": req.Message})
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "assistant", "content": reply})
 	if s.pipeline != nil {
-		go s.pipeline.Execute(context.Background(), convID, pipelineMessages, reply)
+		go s.pipeline.Execute(ctx, convID, pipelineMessages, reply)
 	}
-	go s.trimContextWindow(convID)
-	go s.moodRecoveryCheck(convID, charID, source)
+	go func() {
+		if ctx.Err() != nil {
+			return
+		}
+		s.trimContextWindow(convID)
+	}()
+	go func() {
+		if ctx.Err() != nil {
+			return
+		}
+		s.moodRecoveryCheck(convID, charID, source)
+	}()
 	if s.compressor != nil {
-		go s.compressor.MaybeCompress(convID)
+		go func() {
+			if ctx.Err() != nil {
+				return
+			}
+			s.compressor.MaybeCompress(convID)
+		}()
 	}
 
 	applog.TraceInfo(trace.WithStage("completed"), applog.Fields{
@@ -242,6 +282,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		UserMessage:    &MessageItem{ID: userMsgID, ConversationID: convID, Sequence: userMsgSequence, Role: "user", Content: req.Message, Source: source, CreatedAt: userMsgCreatedAt},
 		UserMessageID:  userMsgID,
 		RequestID:      requestID,
+		Events:         commitResult.Events,
 	}, nil
 }
 
@@ -347,7 +388,6 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	return reply, forceVoice, nil
 }
 
-
 func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
 	chatReq := &ProcessMessageRequest{
 		CharacterID:    req.CharacterID,
@@ -363,10 +403,44 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		VideoUrl:       req.VideoUrl,
 		ImageContext:   req.ImageContext,
 		RequestID:      req.RequestID,
+		RuntimeContext: buildRuntimeContextPrompt(req.Runtime),
+		InteractionID:  req.InteractionID,
+		Runtime:        req.Runtime,
 	}
 	resp, err := s.ProcessMessage(ctx, chatReq)
 	if err != nil {
 		return nil, err
 	}
 	return convertProcessMessageResponse(resp), nil
+}
+
+func buildRuntimeContextPrompt(runtime *interaction.RuntimeAssembly) string {
+	if runtime == nil {
+		return ""
+	}
+	payload := map[string]interface{}{
+		"path":        runtime.Path,
+		"safety":      runtime.Safety,
+		"delivery":    runtime.Delivery,
+		"transaction": runtime.Transaction.Name,
+		"context": map[string]interface{}{
+			"snapshotVersion": runtime.Context.SnapshotVersion(),
+			"psyche":          runtime.Context.Psyche,
+			"relationship":    runtime.Context.Relationship,
+			"beliefs":         runtime.Context.Beliefs,
+			"channel":         runtime.Context.Channel,
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return "运行时编排上下文：" + string(raw)
+}
+
+func (s *service) updatePsycheState(charID string) error {
+	if s.psycheStore == nil || charID == "" {
+		return nil
+	}
+	return s.updatePsycheStateWithStore(s.psycheStore, charID)
 }

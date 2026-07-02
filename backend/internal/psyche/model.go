@@ -195,35 +195,35 @@ type MoodDimensions struct {
 }
 
 type PsycheState struct {
-	CharacterID string           `json:"characterId"`
-	Version     string           `json:"version"`
-	StateVersion int             `json:"stateVersion" gorm:"column:state_version;default:0"`
-	Emotion     EmotionDimensions `json:"emotion"`
-	Mood        MoodDimensions    `json:"mood"`
-	Stress      float64           `json:"stress"`
-	Energy      float64           `json:"energy"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	CharacterID  string            `gorm:"primaryKey;column:character_id" json:"characterId"`
+	Version      string            `gorm:"column:version" json:"version"`
+	StateVersion int               `json:"stateVersion" gorm:"column:state_version;default:0"`
+	Emotion      EmotionDimensions `gorm:"-" json:"emotion"`
+	Mood         MoodDimensions    `gorm:"-" json:"mood"`
+	Stress       float64           `gorm:"column:stress" json:"stress"`
+	Energy       float64           `gorm:"column:energy" json:"energy"`
+	CreatedAt    time.Time         `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt    time.Time         `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 type PsycheEvent struct {
-	ID            string    `json:"id"`
-	CharacterID   string    `json:"characterId"`
-	Type          EventType `json:"type"`
-	Source        string    `json:"source"`
-	ValenceDelta  float64   `json:"valenceDelta"`
-	ArousalDelta  float64   `json:"arousalDelta"`
-	DominanceDelta float64  `json:"dominanceDelta"`
-	StressDelta   float64   `json:"stressDelta"`
-	EnergyDelta   float64   `json:"energyDelta"`
-	Timestamp     time.Time `json:"timestamp"`
+	ID             string    `json:"id"`
+	CharacterID    string    `json:"characterId"`
+	Type           EventType `json:"type" gorm:"column:event_type"`
+	Source         string    `json:"source"`
+	ValenceDelta   float64   `json:"valenceDelta"`
+	ArousalDelta   float64   `json:"arousalDelta"`
+	DominanceDelta float64   `json:"dominanceDelta"`
+	StressDelta    float64   `json:"stressDelta"`
+	EnergyDelta    float64   `json:"energyDelta"`
+	Timestamp      time.Time `json:"timestamp" gorm:"column:created_at"`
 }
 
 type PsycheSnapshot struct {
 	ID               string    `json:"id"`
 	CharacterID      string    `json:"characterId"`
 	Version          string    `json:"version"`
-	Timestamp        time.Time `json:"timestamp"`
+	Timestamp        time.Time `json:"timestamp" gorm:"column:created_at"`
 	EmotionValence   float64   `json:"emotionValence"`
 	EmotionArousal   float64   `json:"emotionArousal"`
 	EmotionDominance float64   `json:"emotionDominance"`

@@ -103,7 +103,7 @@ func (s *service) calculateBurstProbability(setting, stateLife map[string]interf
 }
 
 func (s *service) buildBurstPrompt(characterID, mood, currentState string, energy int) string {
-	history := s.getShareHistory()
+	history := s.getShareHistory(characterID)
 	recentTopics := strings.Join(history.RecentTopics, "、")
 	if recentTopics == "" {
 		recentTopics = "无"
@@ -113,7 +113,8 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 	if s.embeddingSvc != nil && qdrantDB.Client != nil {
 		vec, vecErr := s.embeddingSvc.Embed(queryText)
 		if vecErr == nil {
-			points, searchErr := qdrantDB.SearchVectors(vec, 3, nil)
+			filter := map[string]interface{}{"character_id": characterID}
+			points, searchErr := qdrantDB.SearchVectors(vec, 3, filter)
 			if searchErr == nil {
 				var mems []string
 				for _, p := range points {
@@ -126,7 +127,7 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 		}
 	}
 	if recentMemoriesStr == "" {
-		rows, err := s.db.Table("memories").Select("value").Where("importance >= 2").Order("created_at DESC").Limit(3).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND importance >= 2", characterID).Order("created_at DESC").Limit(3).Rows()
 		if err == nil {
 			defer rows.Close()
 			var mems []string

@@ -328,16 +328,26 @@ func (pq *PriorityQueue) ActiveCount() int {
 	return total
 }
 
-func (pq *PriorityQueue) MetricsSnapshot() QueueMetrics {
+func (pq *PriorityQueue) MetricsSnapshot() *QueueMetrics {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	snapshot := *pq.metrics
+	snapshot := &QueueMetrics{
+		TotalEnqueued:       pq.metrics.TotalEnqueued,
+		TotalDropped:        pq.metrics.TotalDropped,
+		TotalCompleted:      pq.metrics.TotalCompleted,
+		TotalCancelled:      pq.metrics.TotalCancelled,
+		TotalExpired:        pq.metrics.TotalExpired,
+		DropReasons:         make(map[DropReason]int64),
+		MergeReasons:        make(map[string]int64),
+		QueueDepthSnapshots: make([]int64, len(pq.metrics.QueueDepthSnapshots)),
+		TaskAgeSamples:      make([]time.Duration, len(pq.metrics.TaskAgeSamples)),
+	}
+	copy(snapshot.QueueDepthSnapshots, pq.metrics.QueueDepthSnapshots)
+	copy(snapshot.TaskAgeSamples, pq.metrics.TaskAgeSamples)
 
-	snapshot.DropReasons = make(map[DropReason]int64)
 	for k, v := range pq.metrics.DropReasons {
 		snapshot.DropReasons[k] = v
 	}
-	snapshot.MergeReasons = make(map[string]int64)
 	for k, v := range pq.metrics.MergeReasons {
 		snapshot.MergeReasons[k] = v
 	}

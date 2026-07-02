@@ -1,79 +1,69 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-        <div class="analysis-panel">
-          <h3 class="ap-title">检索质量分析</h3>
+  <div class="analysis-panel">
+    <h3 class="ap-title">检索质量分析</h3>
 
-          <div class="ap-stats-row">
-            <el-card shadow="hover" class="ap-stat-card">
-              <div class="ap-stat-num">{{ retrievalStats.totalCount }}</div>
-              <div class="ap-stat-label">总检索次数</div>
-            </el-card>
-            <el-card shadow="hover" class="ap-stat-card">
-              <div class="ap-stat-num" v-if="retrievalLogs.length > 0">{{ (retrievalLogs.length / (retrievalStats.totalCount || 1) * 100).toFixed(1) }}%</div>
-              <div class="ap-stat-num" v-else>--</div>
-              <div class="ap-stat-label">最近50条占比</div>
-            </el-card>
-          </div>
+    <div class="ap-stats-row">
+      <el-card shadow="hover" class="ap-stat-card">
+        <div class="ap-stat-num">{{ retrievalStats.totalCount }}</div>
+        <div class="ap-stat-label">总检索次数</div>
+      </el-card>
+      <el-card shadow="hover" class="ap-stat-card">
+        <div class="ap-stat-num" v-if="retrievalLogs.length > 0">{{ (retrievalLogs.length / (retrievalStats.totalCount || 1) * 100).toFixed(1) }}%</div>
+        <div class="ap-stat-num" v-else>--</div>
+        <div class="ap-stat-label">最近50条占比</div>
+      </el-card>
+    </div>
 
-          <h4 class="ap-subtitle">半衰期参数（天）</h4>
-          <div class="ap-sliders">
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">情景记忆</span>
-              <el-slider v-model="halflifeEpisodic" :min="7" :max="90" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">用户画像</span>
-              <el-slider v-model="halflifeProfile" :min="30" :max="180" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">结构化事实</span>
-              <el-slider v-model="halflifeFact" :min="60" :max="365" :step="1" show-input disabled />
-            </div>
-            <div class="ap-slider-item">
-              <span class="ap-slider-label">世界书</span>
-              <el-slider v-model="halflifeWorldbook" :min="180" :max="730" :step="1" show-input disabled />
-            </div>
-          </div>
+    <h4 class="ap-subtitle">半衰期参数（天）</h4>
+    <div class="ap-sliders">
+      <div class="ap-slider-item">
+        <span class="ap-slider-label">情景记忆</span>
+        <el-slider :model-value="halflifeEpisodic" :min="7" :max="90" :step="1" show-input disabled />
+      </div>
+      <div class="ap-slider-item">
+        <span class="ap-slider-label">用户画像</span>
+        <el-slider :model-value="halflifeProfile" :min="30" :max="180" :step="1" show-input disabled />
+      </div>
+      <div class="ap-slider-item">
+        <span class="ap-slider-label">结构化事实</span>
+        <el-slider :model-value="halflifeFact" :min="60" :max="365" :step="1" show-input disabled />
+      </div>
+      <div class="ap-slider-item">
+        <span class="ap-slider-label">世界书</span>
+        <el-slider :model-value="halflifeWorldbook" :min="180" :max="730" :step="1" show-input disabled />
+      </div>
+    </div>
 
-          <h4 class="ap-subtitle">最近检索日志</h4>
-          <el-table :data="retrievalLogs" size="small" max-height="300" style="width:100%">
-            <el-table-column prop="queryText" label="查询文本" min-width="180" show-overflow-tooltip />
-            <el-table-column label="检索记忆数" width="100">
-              <template #default="{ row }">
-                {{ parseMemIDs(row.retrievedMemoryIDs).length }}
-              </template>
-            </el-table-column>
-            <el-table-column label="最高分" width="80">
-              <template #default="{ row }">
-                {{ maxScore(row.scoringDetails) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="createdAt" label="时间" width="160">
-              <template #default="{ row }">{{ fmtDate(row.createdAt) }}</template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
-
-    <!-- Create/Edit Dialog -->
-    <MemoryEditorDialog v-model="dialogVisible" :editing="editing" :editing-id="editingId" :character-id="injectedCharacterId?.value || ''" @memory-saved="fetchList" />
-      <!-- Edit Candidate Dialog -->
-    <CandidateEditorDialog v-model="editCandidateVisible" @candidate-updated="loadCandidates" />
-
-        <!-- Conflict Resolution Dialog -->
-    <ConflictResolverDialog v-model="conflictVisible" @conflict-resolved="fetchList" />
-
-    <!-- 生成候选 Dialog -->
-    <CandidateGenerateDialog v-model="showGenerateDialog" :conversation-list="conversationList" :candidates="candidates" @update:candidates="candidates = $event" @show-candidates="showCandidates = true" />
+    <h4 class="ap-subtitle">最近检索日志</h4>
+    <el-table :data="retrievalLogs" size="small" max-height="300" style="width:100%">
+      <el-table-column prop="queryText" label="查询文本" min-width="180" show-overflow-tooltip />
+      <el-table-column label="检索记忆数" width="100">
+        <template #default="{ row }">
+          {{ parseMemIDs(row.retrievedMemoryIDs).length }}
+        </template>
+      </el-table-column>
+      <el-table-column label="最高分" width="80">
+        <template #default="{ row }">
+          {{ maxScore(row.scoringDetails) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="createdAt" label="时间" width="160">
+        <template #default="{ row }">{{ fmtDate(row.createdAt) }}</template>
+      </el-table-column>
+    </el-table>
+  </div>
 </template>
 
 <script setup lang="ts">
 defineProps<{
   retrievalStats: { totalCount: number }
   retrievalLogs: any[]
-  halflifeEpisodic: number; halflifeProfile: number; halflifeFact: number; halflifeWorldbook: number
+  halflifeEpisodic: number
+  halflifeProfile: number
+  halflifeFact: number
+  halflifeWorldbook: number
 }>()
 
 function fmtDate(d: string) { if (!d) return ""; try { return new Date(d).toLocaleString("zh-CN") } catch { return d } }

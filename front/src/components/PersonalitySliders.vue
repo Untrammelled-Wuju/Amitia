@@ -39,38 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { reactive, computed, watch } from "vue"
-
-export interface PersonalityConfig {
-  familiarity: number
-  formality: number
-  customerServiceAvoidance: number
-  directness: number
-  verbosity: number
-  structureLevel: number
-  shortSentence: number
-  toneWords: number
-  warmth: number
-  emotionalExpression: number
-  comfortLevel: number
-  preachingAvoidance: number
-  rationality: number
-  humor: number
-  teasing: number
-  initiative: number
-  patience: number
-  companionship: number
-  boundary: number
-  dependencyAvoidance: number
-  execution: number
-  explanationDepth: number
-  judgment: number
-  clarification: number
-  intimacyExpression: number
-  flirtiness: number
-  romanticTone: number
-  suggestivenessAvoidance: number
-  intimacyBoundary: number
-}
+import { DEFAULT_PERSONALITY_CONFIG, type PersonalityConfig } from "../views/character-config/composables/types"
 
 const props = defineProps<{
   modelValue: PersonalityConfig
@@ -80,16 +49,7 @@ const emit = defineEmits<{
   (e: "update:modelValue", value: PersonalityConfig): void
 }>()
 
-const DEFAULT_CONFIG: PersonalityConfig = {
-  familiarity: 78, formality: 22, customerServiceAvoidance: 92,
-  directness: 75, verbosity: 32, structureLevel: 40, shortSentence: 85, toneWords: 45,
-  warmth: 58, emotionalExpression: 45, comfortLevel: 55, preachingAvoidance: 88,
-  rationality: 62, humor: 35, teasing: 30, initiative: 50, patience: 60,
-  companionship: 55, boundary: 85, dependencyAvoidance: 85,
-  execution: 75, explanationDepth: 55, judgment: 75, clarification: 35,
-  intimacyExpression: 25, flirtiness: 0, romanticTone: 0,
-  suggestivenessAvoidance: 100, intimacyBoundary: 90,
-}
+const DEFAULT_CONFIG = DEFAULT_PERSONALITY_CONFIG
 
 const parsedModelValue = typeof props.modelValue === 'string' ? JSON.parse(props.modelValue) : props.modelValue
 const model = reactive<PersonalityConfig>({ ...DEFAULT_CONFIG, ...(parsedModelValue || {}) })

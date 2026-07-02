@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
-import "gorm.io/gorm"
+import (
+	"github.com/u-ai/backend/internal/interaction"
+	"gorm.io/gorm"
+)
 
 type Conversation struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
@@ -161,34 +164,38 @@ type ConversationListResponse struct {
 }
 
 type ProcessMessageRequest struct {
-	CharacterID    string  `json:"characterId"`
-	Message        string  `json:"message"`
-	ConversationID string  `json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Channel        string  `json:"channel"`
-	Source         string  `json:"source"`
-	PeerID         string  `json:"peerId"`
-	AudioUrl       string  `json:"audioUrl"`
-	AudioDuration  float64 `json:"audioDuration"`
-	VoiceMessage   bool    `json:"voiceMessage"`
-	ImageUrl       string  `json:"imageUrl"`
-	VideoUrl       string  `json:"videoUrl"`
-	RequestID      string  `json:"requestId"`
-	ImageContext   string  `json:"-"`
+	CharacterID    string                       `json:"characterId"`
+	Message        string                       `json:"message"`
+	ConversationID string                       `json:"conversationId"`
+	Sequence       int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Channel        string                       `json:"channel"`
+	Source         string                       `json:"source"`
+	PeerID         string                       `json:"peerId"`
+	AudioUrl       string                       `json:"audioUrl"`
+	AudioDuration  float64                      `json:"audioDuration"`
+	VoiceMessage   bool                         `json:"voiceMessage"`
+	ImageUrl       string                       `json:"imageUrl"`
+	VideoUrl       string                       `json:"videoUrl"`
+	RequestID      string                       `json:"requestId"`
+	ImageContext   string                       `json:"-"`
+	RuntimeContext string                       `json:"-"`
+	InteractionID  string                       `json:"-"`
+	Runtime        *interaction.RuntimeAssembly `json:"-"`
 }
 
 type ProcessMessageResponse struct {
-	ConversationID string       `json:"conversationId"`
-	Sequence       int64        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Reply          string       `json:"reply"`
-	CharacterID    string       `json:"characterId"`
-	CharacterName  string       `json:"characterName"`
-	MessageIDs     []string     `json:"messageIds"`
-	ForceVoice     bool         `json:"forceVoice"`
-	AudioUrls      []string     `json:"audioUrls"`
-	UserMessage    *MessageItem `json:"userMessage"`
-	UserMessageID  string       `json:"userMessageId"`
-	RequestID      string       `json:"requestId"`
+	ConversationID string                     `json:"conversationId"`
+	Sequence       int64                      `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Reply          string                     `json:"reply"`
+	CharacterID    string                     `json:"characterId"`
+	CharacterName  string                     `json:"characterName"`
+	MessageIDs     []string                   `json:"messageIds"`
+	ForceVoice     bool                       `json:"forceVoice"`
+	AudioUrls      []string                   `json:"audioUrls"`
+	UserMessage    *MessageItem               `json:"userMessage"`
+	UserMessageID  string                     `json:"userMessageId"`
+	RequestID      string                     `json:"requestId"`
+	Events         []interaction.OutboxRecord `json:"-"`
 }
 
 type ChatStatsResponse struct {

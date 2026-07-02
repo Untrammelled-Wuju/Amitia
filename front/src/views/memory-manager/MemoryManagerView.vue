@@ -1,16 +1,17 @@
-<!--
-    <MemoryStatusPanel />
+<template>
+  <div class="mem-page">
+    <h2 class="page-title">记忆管理</h2>
+
     <div class="pipeline-bar" v-if="pipelineStatus">
       <span class="pl-label">管线状态:</span>
       <template v-for="l in pipelineStatus.layers" :key="l.layer">
         <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
-          <span class="pl-dot" :class="'pl-' + l.status" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c'}"></span>
+          <span class="pl-dot" :class="'pl-' + l.status" :style="{ backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c' }"></span>
         </el-tooltip>
       </template>
       <span class="pl-time" v-if="pipelineStatus.endedAt">{{ fmtDate(pipelineStatus.endedAt) }}</span>
     </div>
 
-    <!-- Toolbar -->
     <div class="mem-toolbar">
       <el-input v-model="keyword" placeholder="搜索关键词..." size="small" style="width:180px" clearable @clear="fetchList" @keyup.enter="fetchList">
         <template #prefix><el-icon><Search /></el-icon></template>
@@ -44,6 +45,7 @@
       <el-button size="small" type="danger" plain @click="handleClearAll" :disabled="total === 0">清空全部</el-button>
       <router-link to="/graph"><el-button size="small" type="info" plain>图谱</el-button></router-link>
     </div>
+
     <div class="global-search-bar">
       <el-input v-model="globalQuery" placeholder="全局搜索所有记忆类型..." size="small" clearable @clear="clearGlobalSearch" @keyup.enter="doGlobalSearch">
         <template #prefix><el-icon><Search /></el-icon></template>
@@ -52,16 +54,17 @@
         </template>
       </el-input>
       <el-button size="small" @click="showGlobalResults = !showGlobalResults" v-if="globalSearched">
-        {{ showGlobalResults ? '隐藏结果' : '显示结果(' + globalResultCount + ')' }}
+        {{ showGlobalResults ? "隐藏结果" : "显示结果(" + globalResultCount + ")" }}
       </el-button>
     </div>
+
     <div v-if="showGlobalResults && globalSearched" class="global-results">
       <div v-if="globalResults.memories.length" class="gr-section">
         <h4><el-tooltip content="按角色独立，切换角色后数据不同" placement="top"><span class="gr-label">结构化记忆</span></el-tooltip> ({{ globalResults.memories.length }})</h4>
         <div v-for="m in globalResults.memories" :key="m.id" class="gr-item">
           <el-tag size="small">{{ typeLabel(m.memoryType) }}</el-tag>
           <span>{{ m.key }}: {{ m.value }}</span>
-          <span class="gr-score" v-if="m.score">({{ (m.score*100).toFixed(0) }}%)</span>
+          <span class="gr-score" v-if="m.score">({{ (m.score * 100).toFixed(0) }}%)</span>
         </div>
       </div>
       <div v-if="globalResults.profiles.length" class="gr-section">
@@ -81,76 +84,27 @@
 
     <el-tabs v-model="activeTab" class="mem-tabs">
       <el-tab-pane label="全部记忆" name="list">
-
-        <!-- Vector Memory Index -->
-    <div class="vector-index-bar" v-if="vectorStatus">
-      <div class="vib-info">
-        <span class="vib-label">向量索引:</span>
-        <el-tag :type="vectorStatus.enabled ? 'success' : 'info'" size="small">
-          {{ vectorStatus.enabled ? '已启用' : '已禁用' }}
-        </el-tag>
-        <span class="vib-provider" v-if="vectorStatus.enabled">
-          Provider: {{ vectorStatus.providerName }} | 总向量: {{ vectorStatus.totalEmbeddings || vectorStatus.totalEmbedded || 0 }}
-        </span>
-        <span class="vib-time" v-if="vectorStatus.lastRebuildAt">
-          最近重建: {{ fmtDate(vectorStatus.lastRebuildAt) }}
-        </span>
-      </div>
-      <div class="vib-actions">
-        <el-button size="small" @click="rebuildIndex" :loading="rebuilding">
-          {{ rebuilding ? '重建中...' : '重建索引' }}
-        </el-button>
-        <el-button size="small" @click="searchMemory" :disabled="!vectorStatus.enabled">
-          语义搜索
-        </el-button>
-      </div>
-      <el-table
-        v-if="vectorStatus.collections && vectorStatus.collections.length"
-        :data="vectorStatus.collections"
-        size="small"
-        class="vector-collection-table"
-      >
-        <el-table-column prop="label" label="层级" min-width="100" />
-        <el-table-column prop="name" label="Collection" min-width="160" show-overflow-tooltip />
-        <el-table-column label="向量数" width="90">
-          <template #default="{ row }">{{ row.totalEmbeddings || 0 }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 'ready' ? 'success' : row.status === 'error' ? 'danger' : 'info'">
-              {{ row.status === 'ready' ? '正常' : row.status === 'error' ? '异常' : '未启用' }}
-            </el-tag>
+        <MemoryStatusPanel />
+        <el-alert v-if="candidates.length > 0" type="warning" :closable="false" show-icon style="margin:10px 0">
+          <template #title>
+            有 {{ candidates.length }} 条候选记忆等待确认
+            <el-button type="warning" size="small" link @click="showCandidates = !showCandidates">{{ showCandidates ? "收起" : "查看" }}</el-button>
           </template>
-        </el-table-column>
-      </el-table>
-    </div>
-
-    <!-- Memory Search Dialog -->
-    <MemorySearchDialog v-model="searchDialogVisible" />
-
-<!-- Candidate memories banner -->
-    <el-alert v-if="candidates.length > 0" type="warning" :closable="false" show-icon style="margin:10px 0">
-      <template #title>
-        有 {{ candidates.length }} 条候选记忆等待确认
-        <el-button type="warning" size="small" link @click="showCandidates = !showCandidates">{{ showCandidates ? "收起" : "查看" }}</el-button>
-      </template>
-    </el-alert>
-
-    <!-- Candidate list -->
-    <CandidateMemoryPanel :candidates="candidates" :show-candidates="showCandidates" @confirm="confirmCandidate" @edit="editCandidate" @delete-item="deleteCandidateItem" @toggle-show="showCandidates = !showCandidates" />
-    <MemoryTable :memories="memories" :selected-ids="selectedIds" :page="page" :page-size="pageSize" :total="total" @selection-change="handleSelectionChange" @edit="showEdit" @delete="delMem" @toggle-scope="toggleScope" @page-change="page = $event; fetchList()" />
-      v-model:current-page="page"
-      :page-size="pageSize"
-      :total="total"
-      layout="prev,pager,next"
-      @current-change="fetchList"
-      style="margin-top:12px;justify-content:center"
-    />
-
+        </el-alert>
+        <CandidateMemoryPanel :candidates="candidates" :show-candidates="showCandidates" @confirm="confirmCandidate" @edit="editCandidate" @delete-item="deleteCandidateItem" @toggle-show="showCandidates = !showCandidates" />
+        <MemoryTable :memories="memories" :selected-ids="selectedIds" :page="page" :page-size="pageSize" :total="total" :characters="characters" @selection-change="handleSelectionChange" @edit="showEdit" @delete="delMem" @toggle-scope="toggleScope" @page-change="page = $event; fetchList()" />
       </el-tab-pane>
 
       <el-tab-pane label="检索分析" name="analysis">
-    <RetrievalAnalysisPanel :retrieval-stats="retrievalStats" :retrieval-logs="retrievalLogs" :halflife-episodic="halflifeEpisodic" :halflife-profile="halflifeProfile" :halflife-fact="halflifeFact" :halflife-worldbook="halflifeWorldbook" />
+        <RetrievalAnalysisPanel :retrieval-stats="retrievalStats" :retrieval-logs="retrievalLogs" :halflife-episodic="halflifeEpisodic" :halflife-profile="halflifeProfile" :halflife-fact="halflifeFact" :halflife-worldbook="halflifeWorldbook" />
+      </el-tab-pane>
+    </el-tabs>
+
+    <MemorySearchDialog v-model="searchDialogVisible" />
+    <MemoryEditorDialog v-model="dialogVisible" :editing="editing" :editing-id="editingId" :character-id="injectedCharacterId || ''" @memory-saved="fetchList" />
+    <CandidateEditorDialog v-model="editCandidateVisible" @candidate-updated="loadCandidates" />
+    <ConflictResolverDialog v-model="conflictVisible" @conflict-resolved="fetchList" />
+    <CandidateGenerateDialog v-model="showGenerateDialog" :conversation-list="conversationList" :candidates="candidates" @update:candidates="candidates = $event" @show-candidates="showCandidates = true" />
   </div>
 </template>
 

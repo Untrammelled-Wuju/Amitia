@@ -188,11 +188,11 @@ func (c *Cache) InvalidateByScopePrefix(scopePrefix, reason string) int {
 	return count
 }
 
-func (c *Cache) Metrics() CacheMetrics {
+func (c *Cache) Metrics() *CacheMetrics {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	snapshot := CacheMetrics{
+	snapshot := &CacheMetrics{
 		TotalHits:          c.metrics.TotalHits,
 		TotalMisses:        c.metrics.TotalMisses,
 		TotalInvalidations: c.metrics.TotalInvalidations,

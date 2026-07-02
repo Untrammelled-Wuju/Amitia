@@ -42,5 +42,11 @@ func DefaultMigrations() []Migration {
 				return nil
 			},
 		},
+		MemoryScopeTypeMigration(),
+		MemorySensitivityMigration(),
+		ChatScopeIndexesMigration(),
+		MessageSequenceCheckpointMigration(),
+		TombstoneRebuildMigration(),
+		BackupMigration(),
 	}
 }

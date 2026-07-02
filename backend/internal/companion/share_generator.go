@@ -90,7 +90,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 		if dueTime.Before(now) {
 			return false
 		}
-		prompt := s.GenerateSharePrompt(taskType, schedule, mood, energy)
+		prompt := s.GenerateSharePrompt(characterID, taskType, schedule, mood, energy)
 		tasks = append(tasks, ShareTask{
 			Type: taskType, DueTime: dueTime,
 			Prompt: prompt, Reason: reason,
@@ -193,7 +193,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	}
 }
 
-func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, mood string, energy int) string {
+func (s *service) GenerateSharePrompt(characterID string, taskType string, schedule TodaySchedule, mood string, energy int) string {
 	dateStr := schedule.WakeTime.Format("2006-01-02")
 	sleepSummary := "正常"
 
@@ -207,7 +207,8 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 	if s.embeddingSvc != nil && qdrantDB.Client != nil {
 		vec, vecErr := s.embeddingSvc.Embed(queryText)
 		if vecErr == nil {
-			points, searchErr := qdrantDB.SearchVectors(vec, 5, nil)
+			filter := map[string]interface{}{"character_id": characterID}
+			points, searchErr := qdrantDB.SearchVectors(vec, 5, filter)
 			if searchErr == nil {
 				for _, p := range points {
 					if val, ok := p.Payload["value"]; ok {
@@ -218,7 +219,7 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 		}
 	}
 	if len(recentMemories) == 0 {
-		rows, err := s.db.Table("memories").Select("value").Order("created_at DESC").Limit(5).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ?", characterID).Order("created_at DESC").Limit(5).Rows()
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -231,7 +232,7 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 		}
 	}
 
-	history := s.getShareHistory()
+	history := s.getShareHistory(characterID)
 	recentTopicsStr := strings.Join(history.RecentTopics, "、")
 	if recentTopicsStr == "" {
 		recentTopicsStr = "无"
@@ -283,12 +284,16 @@ func (s *service) GenerateSharePrompt(taskType string, schedule TodaySchedule, m
 	return prompt
 }
 
-func (s *service) GetShareHistory() ShareHistory {
+func (s *service) GetShareHistory(characterID string) ShareHistory {
 	var topics []string
 	var lastAt string
 
 	var rows []map[string]interface{}
-	s.db.Table("proactive_messages").Select("message_content, created_at").Order("created_at DESC").Limit(30).Find(&rows)
+	query := s.db.Table("proactive_messages").Select("message_content, created_at").Order("created_at DESC").Limit(30)
+	if characterID != "" {
+		query = query.Where("character_id = ?", characterID)
+	}
+	query.Find(&rows)
 
 	for _, r := range rows {
 		if content, ok := r["message_content"].(string); ok && len(content) > 0 {
@@ -315,7 +320,7 @@ func (s *service) GetShareHistory() ShareHistory {
 	return ShareHistory{RecentTopics: topics, LastShareAt: lastAt}
 }
 
-func (s *service) getShareHistory() ShareHistory { return s.GetShareHistory() }
+func (s *service) getShareHistory(characterID string) ShareHistory { return s.GetShareHistory(characterID) }
 
 func (s *service) TriggerDailyRegeneration(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-    <el-dialog v-model="editCandidateVisible" title="编辑候选记忆" width="480px" destroy-on-close>
+    <el-dialog v-model="visible" title="编辑候选记忆" width="480px" destroy-on-close>
       <el-form label-position="top">
         <el-form-item label="关键词"><el-input v-model="editForm.key" /></el-form-item>
         <el-form-item label="内容"><el-input v-model="editForm.content" type="textarea" :rows="3" /></el-form-item>
@@ -15,7 +15,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editCandidateVisible = false">取消</el-button>
+        <el-button @click="visible = false">取消</el-button>
         <el-button type="primary" @click="saveEditCandidate" :loading="saving">保存</el-button>
       </template>
     </el-dialog>

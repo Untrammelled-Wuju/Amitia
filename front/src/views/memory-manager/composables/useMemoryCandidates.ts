@@ -1,6 +1,6 @@
 import { ref } from "vue"
 import { ElMessage } from "element-plus"
-import { useApi } from "../../composables/useApi"
+import { useApi } from "../../../composables/useApi"
 
 export function useMemoryCandidates() {
   const { get, post, put, del } = useApi()

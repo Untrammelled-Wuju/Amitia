@@ -153,7 +153,7 @@ const DEFAULT_CONFIG = {
   warmth: 58, comfortLevel: 55, preachingAvoidance: 88,
   companionship: 55, boundary: 85, dependencyAvoidance: 85,
   execution: 75, explanationDepth: 55, judgment: 75, clarification: 35,
-  rationality: 50, humor: 40, initiative: 50, teasing: 30, patience: 60
+  rationality: 50, humor: 40, initiative: 50, teasing: 30, patience: 60,
   intimacyExpression: 25, flirtiness: 0, romanticTone: 0,
   suggestivenessAvoidance: 100, intimacyBoundary: 90,
 }

@@ -1,5 +1,5 @@
 import { ref } from "vue"
-import { useApi } from "../../composables/useApi"
+import { useApi } from "../../../composables/useApi"
 
 export function useMemoryDiagnostics() {
   const { get, post } = useApi()

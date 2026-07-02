@@ -41,7 +41,7 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		body.Channel = "web"
 	}
 	if body.Source == "" {
-		body.Source = "manual"
+		body.Source = "web"
 	}
 	if body.CharacterID != "" {
 		var existingConvID string
@@ -185,7 +185,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
-		ConversationID: convID, Channel: "web", Source: "manual",
+		ConversationID: convID, Channel: "web", Source: "web",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl:     body.ImageUrl,

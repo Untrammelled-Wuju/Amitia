@@ -1,6 +1,6 @@
 import { ref, reactive } from "vue"
-import { ElMessage } from "element-plus"
-import { useApi } from "../../composables/useApi"
+import { ElMessage, ElMessageBox } from "element-plus"
+import { useApi } from "../../../composables/useApi"
 
 export function useMemoryList(injectedCharacterId?: any) {
   const { get, post, put, del } = useApi()

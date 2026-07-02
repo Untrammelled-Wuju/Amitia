@@ -19,31 +19,34 @@ var (
 )
 
 type ProcessRequest struct {
-	CharacterID    string  `json:"characterId,omitempty"`
-	Message        string  `json:"message"`
-	ConversationID string  `json:"conversationId,omitempty"`
-	Channel        string  `json:"channel,omitempty"`
-	Source         string  `json:"source,omitempty"`
-	PeerID         string  `json:"peerId,omitempty"`
-	UserID         string  `json:"userId,omitempty"`
-	AudioUrl       string  `json:"audioUrl,omitempty"`
-	AudioDuration  float64 `json:"audioDuration,omitempty"`
-	VoiceMessage   bool    `json:"voiceMessage"`
-	ImageUrl       string  `json:"imageUrl,omitempty"`
-	VideoUrl       string  `json:"videoUrl,omitempty"`
-	ImageContext   string  `json:"imageContext,omitempty"`
-	RequestID      string  `json:"requestId,omitempty"`
+	CharacterID    string           `json:"characterId,omitempty"`
+	Message        string           `json:"message"`
+	ConversationID string           `json:"conversationId,omitempty"`
+	Channel        string           `json:"channel,omitempty"`
+	Source         string           `json:"source,omitempty"`
+	PeerID         string           `json:"peerId,omitempty"`
+	UserID         string           `json:"userId,omitempty"`
+	AudioUrl       string           `json:"audioUrl,omitempty"`
+	AudioDuration  float64          `json:"audioDuration,omitempty"`
+	VoiceMessage   bool             `json:"voiceMessage"`
+	ImageUrl       string           `json:"imageUrl,omitempty"`
+	VideoUrl       string           `json:"videoUrl,omitempty"`
+	ImageContext   string           `json:"imageContext,omitempty"`
+	RequestID      string           `json:"requestId,omitempty"`
+	InteractionID  string           `json:"-"`
+	Runtime        *RuntimeAssembly `json:"-"`
 }
 
 type ProcessResponse struct {
-	ConversationID string   `json:"conversationId"`
-	Reply          string   `json:"reply"`
-	CharacterID    string   `json:"characterId"`
-	CharacterName  string   `json:"characterName"`
-	MessageIDs     []string `json:"messageIds"`
-	ForceVoice     bool     `json:"forceVoice"`
-	AudioUrls      []string `json:"audioUrls"`
-	RequestID      string   `json:"requestId"`
+	ConversationID string         `json:"conversationId"`
+	Reply          string         `json:"reply"`
+	CharacterID    string         `json:"characterId"`
+	CharacterName  string         `json:"characterName"`
+	MessageIDs     []string       `json:"messageIds"`
+	ForceVoice     bool           `json:"forceVoice"`
+	AudioUrls      []string       `json:"audioUrls"`
+	RequestID      string         `json:"requestId"`
+	Events         []OutboxRecord `json:"-"`
 }
 
 type MessageProcessor interface {
@@ -60,16 +63,16 @@ const (
 )
 
 type OrchestrationResult struct {
-	InteractionID string             `json:"interactionId"`
-	Outcome       Outcome            `json:"outcome"`
-	Response      *ProcessResponse   `json:"response,omitempty"`
-	Error         string             `json:"error,omitempty"`
-	Duration      time.Duration      `json:"duration"`
-	Events        []OutboxRecord     `json:"events,omitempty"`
+	InteractionID string           `json:"interactionId"`
+	Outcome       Outcome          `json:"outcome"`
+	Response      *ProcessResponse `json:"response,omitempty"`
+	Error         string           `json:"error,omitempty"`
+	Duration      time.Duration    `json:"duration"`
+	Events        []OutboxRecord   `json:"events,omitempty"`
 }
 
 type OrchestratorConfig struct {
-	MaxConcurrent int
+	MaxConcurrent   int
 	SupersedePolicy SupersedePolicy
 	DefaultTimeout  time.Duration
 }
@@ -83,25 +86,44 @@ func DefaultOrchestratorConfig() OrchestratorConfig {
 }
 
 type Orchestrator struct {
-	cfg       OrchestratorConfig
-	processor MessageProcessor
-	tracker   InteractionTracker
-	outbox    OutboxStore
-	resolver  *SupersedeResolver
-	mu        sync.Mutex
-	active    int
-	ready     bool
+	cfg        OrchestratorConfig
+	processor  MessageProcessor
+	tracker    InteractionTracker
+	outbox     OutboxStore
+	resolver   *SupersedeResolver
+	pipeline   *RuntimePipeline
+	deadlineFn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)
+	mu         sync.Mutex
+	active     int
+	ready      bool
 }
 
 func NewOrchestrator(cfg OrchestratorConfig, processor MessageProcessor) *Orchestrator {
 	tracker := NewInMemoryTracker()
+	return newOrchestratorWithStores(cfg, processor, tracker, NewInMemoryOutboxStore())
+}
+
+func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
+	return newOrchestratorWithStores(cfg, processor, tracker, outbox)
+}
+
+func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
 	return &Orchestrator{
 		cfg:       cfg,
 		processor: processor,
 		tracker:   tracker,
-		outbox:    NewInMemoryOutboxStore(),
+		outbox:    outbox,
 		resolver:  NewSupersedeResolver(cfg.SupersedePolicy, tracker),
-		ready:     true,
+		pipeline:  NewRuntimePipeline(nil, nil, nil),
+		ready:     false,
+	}
+}
+
+func (e *UnifiedEntry) SetOrchestratorReady(ready bool) {
+	if ready {
+		e.orchestrator.SetReady(true)
+	} else {
+		e.orchestrator.SetReady(false)
 	}
 }
 
@@ -159,17 +181,29 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	}
 
 	if resolution.SupersedeTargetID != "" {
-		o.supersedeTarget(resolution.SupersedeTargetID, record.ID)
-		record.SupersedesID = resolution.SupersedeTargetID
+		if resolution.SupersedeTargetID != record.ID {
+			o.supersedeTarget(resolution.SupersedeTargetID, record.ID)
+			record.SupersedesID = resolution.SupersedeTargetID
+		}
 	}
 
 	if err := record.Transition(InteractionStatusProcessing); err != nil {
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
-	processCtx, cancel := context.WithTimeout(ctx, o.cfg.DefaultTimeout)
+	var processCtx context.Context
+	var cancel context.CancelFunc
+	if o.deadlineFn != nil {
+		processCtx, cancel = o.deadlineFn(ctx, req.RequestID)
+	} else {
+		processCtx, cancel = context.WithTimeout(ctx, o.cfg.DefaultTimeout)
+	}
 	defer cancel()
 	record.SetCancel(cancel)
+
+	runtime := o.pipeline.Assemble(processCtx, scope, req)
+	req.InteractionID = record.ID
+	req.Runtime = &runtime
 
 	start := time.Now()
 	resp, err := o.processor.ProcessMessageCtx(processCtx, req)
@@ -190,7 +224,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		log.Printf("[orchestrator] transition to completed failed: %v", err)
 	}
 
-	events := o.emitOutboxEvents(record, resp)
+	events := resp.Events
+	if len(events) == 0 {
+		events = o.emitOutboxEvents(record, resp, runtime)
+	}
 	result := o.buildResult(record, resp, OutcomeCompleted, nil)
 	result.Duration = duration
 	result.Events = events
@@ -265,9 +302,9 @@ func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessRespo
 	return r
 }
 
-func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *ProcessResponse) []OutboxRecord {
+func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) []OutboxRecord {
 	now := time.Now()
-	events := make([]OutboxRecord, 0, 2)
+	events := make([]OutboxRecord, 0, 3)
 
 	msgPayload, _ := json.Marshal(map[string]interface{}{
 		"interactionId": record.ID,
@@ -309,5 +346,36 @@ func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *Process
 	o.outbox.Append(&stateEvent)
 	events = append(events, stateEvent)
 
+	runtimePayload, _ := json.Marshal(map[string]interface{}{
+		"interactionId": record.ID,
+		"scope":         record.Scope,
+		"path":          runtime.Path,
+		"safety":        runtime.Safety,
+		"delivery":      runtime.Delivery,
+		"timestamp":     now,
+	})
+	runtimeEvent := OutboxRecord{
+		ID:          uuid.New().String(),
+		AggregateID: record.ID,
+		EventType:   "interaction.runtime_assembled",
+		Payload:     runtimePayload,
+		Status:      OutboxStatusPending,
+		MaxRetries:  DefaultMaxRetries,
+		CreatedAt:   now,
+		NextRetryAt: now,
+	}
+	o.outbox.Append(&runtimeEvent)
+	events = append(events, runtimeEvent)
+
 	return events
+}
+func (o *Orchestrator) SetDeadlineProvider(fn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)) {
+	o.deadlineFn = fn
+}
+
+func (o *Orchestrator) SetRuntimePipeline(pipeline *RuntimePipeline) {
+	if pipeline == nil {
+		pipeline = NewRuntimePipeline(nil, nil, nil)
+	}
+	o.pipeline = pipeline
 }

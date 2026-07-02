@@ -1,6 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
+  <el-table ref="tableRef" :data="memories" stripe size="small" style="margin-top:10px" @selection-change="emit('selection-change', $event)">
       <el-table-column type="selection" width="36" />
       <el-table-column prop="key" label="关键词" width="140" show-overflow-tooltip />
       <el-table-column prop="value" label="内容" show-overflow-tooltip />
@@ -42,8 +43,8 @@
         <template #default="{ row }">
           <el-tag size="small" :type="scopeTypeTagType(row)">{{ scopeTypeLabel(row) }}</el-tag>
           <span v-if="rowScopeType(row)==='user_character' && row.characterId" class="scope-char-name">{{ charName(row.characterId) }}</span>
-          <el-button v-if="rowScopeType(row)==='user_character'" text size="small" type="warning" class="scope-toggle-btn" @click="toggleScope(row)">升级为全局</el-button>
-          <el-button v-if="rowScopeType(row)==='user_global'" text size="small" type="info" class="scope-toggle-btn" @click="toggleScope(row)">降级为角色</el-button>
+          <el-button v-if="rowScopeType(row)==='user_character'" text size="small" type="warning" class="scope-toggle-btn" @click="emit('toggle-scope', row)">升级为全局</el-button>
+          <el-button v-if="rowScopeType(row)==='user_global'" text size="small" type="info" class="scope-toggle-btn" @click="emit('toggle-scope', row)">降级为角色</el-button>
         </template>
       </el-table-column>
       <el-table-column label="权限" width="180">
@@ -58,21 +59,28 @@
       </el-table-column>
       <el-table-column label="操作" width="140">
         <template #default="{row}">
-          <el-button text size="small" @click="showEdit(row)">编辑</el-button>
-          <el-button text size="small" type="danger" @click="delMem(row.id)">删除</el-button>
+          <el-button text size="small" @click="emit('edit', row)">编辑</el-button>
+          <el-button text size="small" type="danger" @click="emit('delete', row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <el-pagination
       v-if="total > pageSize"
+      :current-page="page"
+      :page-size="pageSize"
+      :total="total"
+      layout="prev,pager,next"
+      @current-change="emit('page-change', $event)"
+      style="margin-top:12px;justify-content:center"
+    />
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue"
 
 const props = defineProps<{
-  memories: any[]; selectedIds: string[]; page: number; pageSize: number; total: number
+  memories: any[]; selectedIds: string[]; page: number; pageSize: number; total: number; characters?: any[]
 }>()
 const emit = defineEmits<{
   "selection-change": [rows: any[]]; "edit": [row: any]; "delete": [id: string]
@@ -87,6 +95,7 @@ const SCOPE_TYPES = [{ value: "user_character", label: "\u89d2\u8272\u8bb0\u5fc6
 const SENSITIVITY_OPTIONS = [{ value: "normal", label: "\u666e\u901a" }, { value: "sensitive", label: "\u8f83\u654f\u611f" }, { value: "high", label: "\u9ad8\u5ea6\u654f\u611f" }]
 
 function typeLabel(t: string) { return TYPES.find(x => x.value === t)?.label || t }
+function charName(id: string) { return props.characters?.find((x: any) => x.id === id)?.name || id }
 function sourceLabel(s: string) { return SOURCES.find(x => x.value === s)?.label || s }
 function importanceColor(v: number) { return v >= 8 ? "#c85a5a" : v >= 5 ? "#c8924a" : "#5b7fa5" }
 function isExpired(exp?: string) { return !!exp && new Date(exp).getTime() < Date.now() }

@@ -79,7 +79,11 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 			newConfidence = 5
 		}
 	} else {
-		newConfidence = existing.Confidence + 10
+		increment := 10 - existing.Confidence/10
+		if increment < 2 {
+			increment = 2
+		}
+		newConfidence = existing.Confidence + increment
 		if newConfidence > 100 {
 			newConfidence = 100
 		}

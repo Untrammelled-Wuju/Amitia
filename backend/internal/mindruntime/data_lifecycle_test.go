@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewDataLifecycleCoordinator(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 	if c == nil {
 		t.Fatal("coordinator should not be nil")
 	}
@@ -23,7 +23,7 @@ func TestNewDataLifecycleCoordinator(t *testing.T) {
 }
 
 func TestRequestDeletion(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "test-target-001",
@@ -48,7 +48,7 @@ func TestRequestDeletion(t *testing.T) {
 }
 
 func TestIsRetrievalBlocked(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "blocked-target",
@@ -68,7 +68,7 @@ func TestIsRetrievalBlocked(t *testing.T) {
 }
 
 func TestIsRetrievalBlockedCaseInsensitive(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "Case-Sensitive-Target",
@@ -84,7 +84,7 @@ func TestIsRetrievalBlockedCaseInsensitive(t *testing.T) {
 }
 
 func TestGetTombstone(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "get-tombstone-test",
@@ -107,7 +107,7 @@ func TestGetTombstone(t *testing.T) {
 }
 
 func TestGetTombstoneNotFound(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	_, ok := c.GetTombstone("non-existent")
 	if ok {
@@ -116,7 +116,7 @@ func TestGetTombstoneNotFound(t *testing.T) {
 }
 
 func TestExecuteOutboxCleanup(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "outbox-test",
@@ -159,7 +159,7 @@ func TestExecuteOutboxCleanup(t *testing.T) {
 }
 
 func TestGenerateRecalculationTasksAllScope(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	tombstone := DeletionTombstone{
 		ID:         "test-tombstone",
@@ -189,7 +189,7 @@ func TestGenerateRecalculationTasksAllScope(t *testing.T) {
 }
 
 func TestGenerateRecalculationTasksBeliefScope(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	tombstone := DeletionTombstone{
 		ID:         "test-belief",
@@ -208,7 +208,7 @@ func TestGenerateRecalculationTasksBeliefScope(t *testing.T) {
 }
 
 func TestGenerateRecalculationTasksMemoryScope(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	tombstone := DeletionTombstone{
 		ID:         "test-memory",
@@ -227,7 +227,7 @@ func TestGenerateRecalculationTasksMemoryScope(t *testing.T) {
 }
 
 func TestMarkDeletionComplete(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "complete-test",
@@ -250,7 +250,7 @@ func TestMarkDeletionComplete(t *testing.T) {
 }
 
 func TestMarkDeletionCompleteNotFound(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	_, ok := c.MarkDeletionComplete("non-existent")
 	if ok {
@@ -323,7 +323,7 @@ func TestSecurityTestDataLeakage(t *testing.T) {
 }
 
 func TestSecurityTestPostDeletionRecall(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "recall-test",
@@ -343,7 +343,7 @@ func TestSecurityTestPostDeletionRecall(t *testing.T) {
 }
 
 func TestRunAllSecurityTests(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "all-security-test",
@@ -383,7 +383,7 @@ func TestRunAllSecurityTests(t *testing.T) {
 }
 
 func TestCoordinatorStats(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req1 := DeletionRequest{
 		TargetID:   "stats-test-1",
@@ -414,7 +414,7 @@ func TestCoordinatorStats(t *testing.T) {
 }
 
 func TestCoordinatorReset(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "reset-test",
@@ -440,7 +440,7 @@ func TestCoordinatorReset(t *testing.T) {
 }
 
 func TestGetOutboxItems(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "get-outbox-test",
@@ -463,7 +463,7 @@ func TestGetOutboxItems(t *testing.T) {
 }
 
 func TestGetRecalculationTasks(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	tombstone := DeletionTombstone{
 		ID:         "recalc-get-test",
@@ -501,7 +501,7 @@ func TestDetectPromptInjection(t *testing.T) {
 }
 
 func TestMultipleConcurrentDeletionRequests(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
@@ -548,7 +548,7 @@ func TestDeletionScopes(t *testing.T) {
 }
 
 func TestDeletionStatusTransitions(t *testing.T) {
-	c := NewDataLifecycleCoordinator()
+	c := NewDataLifecycleCoordinator(nil)
 
 	req := DeletionRequest{
 		TargetID:   "transition-test",

@@ -11,20 +11,20 @@
         <div class="cc-value">{{ c.value }}</div>
         <div class="cc-source">来源: {{ c.sourceText || "提取" }}</div>
         <div class="cc-actions">
-          <el-button size="small" type="primary" @click="confirmCandidate(c)">确认保存</el-button>
-          <el-button size="small" @click="editCandidate(c)">编辑</el-button>
-          <el-button size="small" type="danger" @click="deleteCandidateItem(c)">删除</el-button>
+          <el-button size="small" type="primary" @click="emit('confirm', c)">确认保存</el-button>
+          <el-button size="small" @click="emit('edit', c)">编辑</el-button>
+          <el-button size="small" type="danger" @click="emit('deleteItem', c)">删除</el-button>
         </div>
       </div>
     </div>
 
-    <!-- Memory list -->
-    <el-table ref="tableRef" :data="memories" stripe size="small" style="margin-top:10px" @selection-change="handleSelectionChange">
 </template>
 
 <script setup lang="ts">
 defineProps<{ candidates: any[]; showCandidates: boolean }>()
 const emit = defineEmits<{ confirm: [c: any]; edit: [c: any]; deleteItem: [c: any]; "toggle-show": [] }>()
+const TYPES = [{ value: "custom", label: "自定义" }, { value: "fact", label: "事实" }, { value: "preference", label: "偏好" }, { value: "experience", label: "经历" }, { value: "rule", label: "规则" }, { value: "belief", label: "信念" }, { value: "emotion", label: "情感" }, { value: "skill", label: "技能" }]
+function typeLabel(t: string) { return TYPES.find(x => x.value === t)?.label || t }
 </script>
 
 <style scoped>

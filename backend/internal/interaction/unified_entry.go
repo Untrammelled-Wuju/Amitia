@@ -187,6 +187,19 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	return e.orchestrator.Process(ctx, procReq)
 }
 
+func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryRequest) (ScopeResolution, error) {
+	source := ParseEntrySource(req.Source)
+	scopeInput := ScopeResolveInput{
+		UserID:         req.UserID,
+		CharacterID:    req.CharacterID,
+		ConversationID: req.ConversationID,
+		Channel:        req.Channel,
+		PeerID:         req.PeerID,
+		Source:         string(source),
+	}
+	return e.resolver.Resolve(ctx, scopeInput)
+}
+
 func (e *UnifiedEntry) GetBackpressureStatus() BackpressureStatus {
 	e.bpState.mu.RLock()
 	defer e.bpState.mu.RUnlock()

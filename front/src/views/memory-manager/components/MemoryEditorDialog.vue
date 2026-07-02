@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑记忆' : '新建记忆'" width="480px" destroy-on-close>
+    <el-dialog v-model="visible" :title="editing ? '编辑记忆' : '新建记忆'" width="480px" destroy-on-close>
       <el-form :model="form" label-position="top">
         <el-form-item label="关键词"><el-input v-model="form.key" placeholder="例如: 喜欢的音乐" /></el-form-item>
         <el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="3" placeholder="例如: 喜欢星期六下午听轻音乐" /></el-form-item>
@@ -30,7 +30,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible=false">取消</el-button>
+        <el-button @click="visible=false">取消</el-button>
         <el-button type="primary" @click="saveMem" :loading="saving">保存</el-button>
       </template>
     </el-dialog>

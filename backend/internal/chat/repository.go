@@ -82,7 +82,6 @@ func (r *repository) GetConversation(id string) (*Conversation, error) {
 }
 
 func (r *repository) CreateConversation(c *Conversation) error {
-	c.ID = c.ID
 	return r.db.Create(c).Error
 }
 

@@ -4,12 +4,12 @@ package agent
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterAgentRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service) {
-	svc := NewService(ctx, chatSvc)
+func RegisterAgentRouter(r *gin.RouterGroup, ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry) {
+	svc := NewService(ctx, unifiedEntry)
 	handler := NewHandler(svc)
 
 	r.POST("/agent/test", handler.Test)

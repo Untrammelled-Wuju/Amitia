@@ -59,8 +59,8 @@ type Service interface {
 	RegenerateSchedule(characterID string) map[string]interface{}
 	RegenerateTimeline(characterID string) map[string]interface{}
 	ScheduleBasedGenerator(date string, characterID string) map[string]interface{}
-	GenerateSharePrompt(taskType string, schedule TodaySchedule, mood string, energy int) string
-	GetShareHistory() ShareHistory
+	GenerateSharePrompt(characterID string, taskType string, schedule TodaySchedule, mood string, energy int) string
+	GetShareHistory(characterID string) ShareHistory
 	TriggerDailyRegeneration(characterID string) map[string]interface{}
 	RandomBurstTrigger(characterID string) map[string]interface{}
 }

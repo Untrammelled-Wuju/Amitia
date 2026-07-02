@@ -13,7 +13,7 @@ func TestNewPsycheStateDefaults(t *testing.T) {
 	if state.CharacterID != "char-001" {
 		t.Fatalf("unexpected character id: %s", state.CharacterID)
 	}
-	if state.Version != StateVersionV1 {
+	if state.Version != StateVersionV1() {
 		t.Fatalf("unexpected version: %s", state.Version)
 	}
 	if state.Emotion.Valence != 0.5 || state.Emotion.Arousal != 0.5 || state.Emotion.Dominance != 0.5 {
@@ -409,7 +409,7 @@ func TestCreateSnapshotPreservesAllDimensions(t *testing.T) {
 	if snap.CharacterID != "char-013" {
 		t.Fatalf("character id mismatch")
 	}
-	if snap.Version != StateVersionV1 {
+	if snap.Version != StateVersionV1() {
 		t.Fatalf("version mismatch")
 	}
 	if snap.EmotionValence != 0.72 {

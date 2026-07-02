@@ -153,6 +153,7 @@ func main() {
 	killExistingServer(serverAddr)
 
 	r := setupRouter(ctx, services)
+	services.UnifiedEntry.SetOrchestratorReady(true)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)
 		cleanup()

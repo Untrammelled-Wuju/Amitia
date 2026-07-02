@@ -125,6 +125,7 @@ var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator(nil)
 
 func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 	return &DataLifecycleCoordinator{
+		db:          db,
 		tombstones:  make(map[string]DeletionTombstone),
 		outbox:      make([]OutboxCleanupItem, 0),
 		recalcTasks: make([]RecalculationTask, 0),
@@ -133,6 +134,9 @@ func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 
 
 func (c *DataLifecycleCoordinator) InitSchema() error {
+	if c.db == nil {
+		return fmt.Errorf("data_lifecycle: db is nil, cannot init schema")
+	}
 	return c.db.AutoMigrate(&DeletionTombstoneModel{})
 }
 func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) DeletionTombstone {

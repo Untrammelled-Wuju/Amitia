@@ -19,5 +19,6 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 		ForceVoice:     resp.ForceVoice,
 		AudioUrls:      resp.AudioUrls,
 		RequestID:      resp.RequestID,
+		Events:         resp.Events,
 	}
 }

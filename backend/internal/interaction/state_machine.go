@@ -35,19 +35,19 @@ var (
 )
 
 type InteractionRecord struct {
-	ID              string            `json:"id"`
-	Scope           InteractionScope  `json:"scope"`
-	Status          InteractionStatus `json:"status"`
-	SupersedesID    string            `json:"supersedesId,omitempty"`
-	SupersededByID  string            `json:"supersededById,omitempty"`
-	CancelReason    string            `json:"cancelReason,omitempty"`
-	ErrorMessage    string            `json:"errorMessage,omitempty"`
-	ResultRef       string            `json:"resultRef,omitempty"`
-	CreatedAt       time.Time         `json:"createdAt"`
-	StartedAt       time.Time         `json:"startedAt,omitempty"`
-	CompletedAt     time.Time         `json:"completedAt,omitempty"`
-	mu              sync.RWMutex      `json:"-"`
-	cancel          context.CancelFunc `json:"-"`
+	ID             string             `json:"id"`
+	Scope          InteractionScope   `json:"scope"`
+	Status         InteractionStatus  `json:"status"`
+	SupersedesID   string             `json:"supersedesId,omitempty"`
+	SupersededByID string             `json:"supersededById,omitempty"`
+	CancelReason   string             `json:"cancelReason,omitempty"`
+	ErrorMessage   string             `json:"errorMessage,omitempty"`
+	ResultRef      string             `json:"resultRef,omitempty"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	StartedAt      time.Time          `json:"startedAt,omitempty"`
+	CompletedAt    time.Time          `json:"completedAt,omitempty"`
+	mu             sync.RWMutex       `json:"-"`
+	cancel         context.CancelFunc `json:"-"`
 }
 
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
@@ -62,10 +62,7 @@ func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
 func (r *InteractionRecord) IsTerminal() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.Status == InteractionStatusCompleted ||
-		r.Status == InteractionStatusSuperseded ||
-		r.Status == InteractionStatusCancelled ||
-		r.Status == InteractionStatusFailed
+	return isTerminalStatus(r.Status)
 }
 
 func (r *InteractionRecord) IsActive() bool {
@@ -98,7 +95,7 @@ func (r *InteractionRecord) transitionLocked(target InteractionStatus) error {
 	if !found {
 		return ErrInvalidTransition
 	}
-	if r.IsTerminal() && target != InteractionStatusPending {
+	if isTerminalStatus(r.Status) && target != InteractionStatusPending {
 		return ErrAlreadyTerminal
 	}
 	r.Status = target
@@ -109,6 +106,13 @@ func (r *InteractionRecord) transitionLocked(target InteractionStatus) error {
 		r.CompletedAt = time.Now()
 	}
 	return nil
+}
+
+func isTerminalStatus(status InteractionStatus) bool {
+	return status == InteractionStatusCompleted ||
+		status == InteractionStatusSuperseded ||
+		status == InteractionStatusCancelled ||
+		status == InteractionStatusFailed
 }
 
 func (r *InteractionRecord) SetCancel(cancel context.CancelFunc) {
@@ -168,10 +172,10 @@ type InteractionTracker interface {
 }
 
 type InMemoryTracker struct {
-	mu       sync.RWMutex
-	records  map[string]*InteractionRecord
-	byConv   map[string]map[string]struct{}
-	byChar   map[string]map[string]struct{}
+	mu      sync.RWMutex
+	records map[string]*InteractionRecord
+	byConv  map[string]map[string]struct{}
+	byChar  map[string]map[string]struct{}
 }
 
 func NewInMemoryTracker() *InMemoryTracker {

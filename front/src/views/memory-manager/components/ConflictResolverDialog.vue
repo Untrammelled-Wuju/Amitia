@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-    <el-dialog v-model="conflictVisible" title="记忆冲突检测" width="550px" destroy-on-close :close-on-click-modal="false">
+    <el-dialog v-model="visible" title="记忆冲突检测" width="550px" destroy-on-close :close-on-click-modal="false">
       <div v-if="conflictList.length === 0">
         <el-form label-position="top">
           <el-form-item label="新记忆类型">
@@ -51,6 +51,43 @@ const conflictList = ref<any[]>([])
 const resolveAction = ref("keep_new")
 const checking = ref(false)
 const resolving = ref(false)
+
+async function checkConflict() {
+  if (!conflictNewContent.value.trim()) return
+  checking.value = true
+  try {
+    const result = await post<any>("/api/memories/check-conflict", {
+      memoryType: conflictNewType.value || "custom",
+      value: conflictNewContent.value.trim(),
+    })
+    conflictList.value = result?.conflicts || result?.items || []
+    if (conflictList.value.length === 0) ElMessage.success("未发现冲突")
+  } catch (err: any) {
+    ElMessage.error(err?.message || "冲突检测失败")
+  } finally {
+    checking.value = false
+  }
+}
+
+async function resolveConflict() {
+  resolving.value = true
+  try {
+    await post("/api/memories/resolve-conflict", {
+      action: resolveAction.value,
+      conflicts: conflictList.value,
+      memoryType: conflictNewType.value || "custom",
+      value: conflictNewContent.value.trim(),
+    })
+    ElMessage.success("冲突已处理")
+    conflictList.value = []
+    emit("conflict-resolved")
+    emit("update:modelValue", false)
+  } catch (err: any) {
+    ElMessage.error(err?.message || "冲突处理失败")
+  } finally {
+    resolving.value = false
+  }
+}
 </script>
 
 <style scoped>

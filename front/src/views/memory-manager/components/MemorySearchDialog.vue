@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-    <el-dialog v-model="searchDialogVisible" title="语义搜索" width="500px">
+    <el-dialog v-model="visible" title="语义搜索" width="500px">
       <el-input v-model="searchQuery" placeholder="输入搜索词..." @keyup.enter="doSearch" />
       <div style="margin-top:12px;max-height:300px;overflow-y:auto">
         <div v-for="r in searchResults" :key="r.id" class="search-result-item">

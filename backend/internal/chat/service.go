@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
@@ -87,6 +88,7 @@ type service struct {
 	repo         Repository
 	charRepo     character.Repository
 	db           *gorm.DB
+	psycheStore  psyche.PsycheStore
 	memorySvc    memory.Service
 	profileSvc   profile.Service
 	episodicSvc  episodic.Service
@@ -129,7 +131,7 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service, graphSvc graph.Service) Service {
+func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service, graphSvc graph.Service, psycheStore psyche.PsycheStore) Service {
 	if visionSvc != nil {
 		SetVisionModelConfigProvider(visionSvc.GetActive)
 	}
@@ -145,5 +147,5 @@ func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, pro
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute), compressor: comp, pipeline: p}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute), compressor: comp, pipeline: p}
 }
