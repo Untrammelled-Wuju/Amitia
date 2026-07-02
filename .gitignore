@@ -40,3 +40,9 @@ release/qdrant/storage/
 release/qdrant/snapshots/
 wechat-chat-extractor/weFlow.zip
 noa.rs-7.cn/
+
+.gocache/
+.php/
+
+.php/
+*.py

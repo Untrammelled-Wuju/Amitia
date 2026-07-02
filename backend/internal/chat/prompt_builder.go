@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -113,7 +114,7 @@ func (s *service) rewriteQueryForSearch(userMessage string) string {
 		{"role": "system", "content": "把用户输入转成用于记忆检索的简洁关键词，去除语气词和寒暄，直接输出关键词不要解释。如果输入已经是简短的关键词则原样返回。"},
 		{"role": "user", "content": userMessage},
 	}
-	rewritten, _, err := s.callLLM(cfg, prompt)
+	rewritten, _, err := s.callLLM(context.Background(), cfg, prompt)
 	if err != nil || rewritten == "" {
 		return userMessage
 	}

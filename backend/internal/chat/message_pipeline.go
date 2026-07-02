@@ -253,7 +253,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			"round":         round,
 			"message_count": len(messages),
 		}, "process message model call started")
-		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(cfg, messages, toolDefs)
+		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(ctx, cfg, messages, toolDefs)
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{

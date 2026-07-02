@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -13,12 +14,12 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 )
 
-func (s *service) callLLM(cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
+func (s *service) callLLM(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	reqBody := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
 	jsonBody, _ := json.Marshal(reqBody)
 	url := baseURL + "/chat/completions"
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", 0, err
 	}
@@ -53,14 +54,14 @@ func (s *service) callLLM(cfg *ModelConfig, messages []map[string]interface{}) (
 	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
 }
 
-func (s *service) callLLMWithTools(cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	reqMap := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
 	if len(tools) > 0 {
 		reqMap["tools"] = tools
 	}
 	reqBody, _ := json.Marshal(reqMap)
-	req, _ := http.NewRequest("POST", base+"/chat/completions", bytes.NewReader(reqBody))
+	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/chat/completions", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)

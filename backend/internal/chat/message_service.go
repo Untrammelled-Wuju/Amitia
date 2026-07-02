@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -84,7 +85,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": s.compiledSystemInstruction(channel)})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
 
-	content, tokens, err := s.callLLM(cfg, apiMessages)
+	content, tokens, err := s.callLLM(context.Background(), cfg, apiMessages)
 	if err != nil {
 		return nil, err
 	}
