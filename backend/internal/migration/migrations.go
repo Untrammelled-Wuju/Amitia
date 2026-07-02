@@ -2,6 +2,7 @@ package migration
 
 func DefaultMigrations() []Migration {
 	return []Migration{
+		BackupMigration(),
 		{
 			Version: "001",
 			Name:    "add_psyche_states_table",
@@ -47,6 +48,5 @@ func DefaultMigrations() []Migration {
 		ChatScopeIndexesMigration(),
 		MessageSequenceCheckpointMigration(),
 		TombstoneRebuildMigration(),
-		BackupMigration(),
 	}
 }
