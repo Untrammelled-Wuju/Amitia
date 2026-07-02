@@ -96,6 +96,7 @@ type service struct {
 	wmCache      *WorkingMemoryCache
 	compressor   *Compressor
 	pipeline     *memory.Pipeline
+	llmWithTools llmWithToolsFunc
 }
 
 var visionModelConfigProviderMu sync.RWMutex

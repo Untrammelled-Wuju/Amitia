@@ -3,16 +3,18 @@
 package chat
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/agent/tool"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-	"github.com/u-ai/backend/internal/agent/tool"
 )
+
+type llmWithToolsFunc func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error)
 
 func (s *service) callLLM(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
@@ -52,6 +54,13 @@ func (s *service) callLLM(ctx context.Context, cfg *ModelConfig, messages []map[
 		return "", 0, fmt.Errorf("API 未返回有效回复")
 	}
 	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
+}
+
+func (s *service) invokeProcessLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	if s.llmWithTools != nil {
+		return s.llmWithTools(ctx, cfg, messages, tools)
+	}
+	return s.callLLMWithTools(ctx, cfg, messages, tools)
 }
 
 func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {

@@ -204,6 +204,9 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	if len(realLines) == 0 {
 		realLines = []string{reply}
 	}
+	if err := s.abortMessageCommitIfCancelled(ctx, trace, userMsgID); err != nil {
+		return nil, err
+	}
 	var msgIDs []string
 	var audioUrls []string
 	applog.TraceInfo(trace.WithStage("db_commit_started"), applog.Fields{
@@ -242,25 +245,20 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "user", "content": req.Message})
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "assistant", "content": reply})
 	if s.pipeline != nil {
-		go s.pipeline.Execute(ctx, convID, pipelineMessages, reply)
+		go func() {
+			postCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			s.pipeline.Execute(postCtx, convID, pipelineMessages, reply)
+		}()
 	}
 	go func() {
-		if ctx.Err() != nil {
-			return
-		}
 		s.trimContextWindow(convID)
 	}()
 	go func() {
-		if ctx.Err() != nil {
-			return
-		}
 		s.moodRecoveryCheck(convID, charID, source)
 	}()
 	if s.compressor != nil {
 		go func() {
-			if ctx.Err() != nil {
-				return
-			}
 			s.compressor.MaybeCompress(convID)
 		}()
 	}
@@ -286,6 +284,17 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	}, nil
 }
 
+func (s *service) abortMessageCommitIfCancelled(ctx context.Context, trace applog.TraceFields, userMsgID string) error {
+	if err := ctx.Err(); err != nil {
+		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		applog.TraceWarn(trace.WithStage("request_cancelled_before_commit"), applog.Fields{
+			"user_message_id": userMsgID,
+		}, "process message request cancelled before db commit")
+		return err
+	}
+	return nil
+}
+
 func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, userMsgID, convID, charID, channel, requestID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, error) {
 	var reply string
 	forceVoice := false
@@ -294,7 +303,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			"round":         round,
 			"message_count": len(messages),
 		}, "process message model call started")
-		aiContent, reasoning, toolCalls, _, llmErr := s.callLLMWithTools(ctx, cfg, messages, toolDefs)
+		aiContent, reasoning, toolCalls, _, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{

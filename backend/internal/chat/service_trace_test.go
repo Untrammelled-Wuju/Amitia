@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -135,5 +136,27 @@ func TestProcessMessageTraceCoversFailedModelRequest(t *testing.T) {
 	}
 	if strings.Contains(rawLogs, "失败请求不应该泄漏完整内容") || strings.Contains(rawLogs, "test-key") {
 		t.Fatalf("failed trace logs leaked sensitive content: %s", rawLogs)
+	}
+}
+
+func TestAbortMessageCommitIfCancelledMarksUserFailed(t *testing.T) {
+	svc, _, cleanup := setupProcessTraceService(t, http.StatusOK)
+	t.Cleanup(cleanup)
+	userMsgID := "user-cancel-before-commit"
+	if err := svc.db.Create(&Message{ID: userMsgID, ConversationID: "conv-cancel-before-commit", Role: "user", Content: "hello", Status: "processing", RequestID: "req-cancel-before-commit"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := svc.abortMessageCommitIfCancelled(ctx, newProcessTrace("req-cancel-before-commit", "conv-cancel-before-commit", "char-trace", "web"), userMsgID)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	var status string
+	if err := svc.db.Model(&Message{}).Select("status").Where("id = ?", userMsgID).Row().Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" {
+		t.Fatalf("expected failed status, got %s", status)
 	}
 }
