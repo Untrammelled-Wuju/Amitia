@@ -135,6 +135,15 @@ func runtimeBudgetModules(snapshot ContextSnapshot, path PathType) []TokenBudget
 	if snapshot.Memories.Status == LoadStatusReady {
 		modules = append(modules, TokenBudgetModule{Name: "memories", Tokens: 420, Priority: BudgetPriorityLowAuthority})
 	}
+	if snapshot.Life.Status == LoadStatusReady {
+		modules = append(modules, TokenBudgetModule{Name: "life", Tokens: 180, Priority: BudgetPriorityHighAuthority})
+	}
+	if snapshot.Needs.Status == LoadStatusReady {
+		modules = append(modules, TokenBudgetModule{Name: "needs", Tokens: 180, Priority: BudgetPriorityHighAuthority})
+	}
+	if snapshot.UnresolvedThreads.Status == LoadStatusReady && snapshot.UnresolvedThreads.Value.Count > 0 {
+		modules = append(modules, TokenBudgetModule{Name: "unresolved_threads", Tokens: 220, Priority: BudgetPriorityHighAuthority})
+	}
 	if path == PathTypeDeep {
 		modules = append(modules, TokenBudgetModule{Name: "deep_reasoning", Tokens: 360, Priority: BudgetPriorityCurrentIntent})
 	}
@@ -155,6 +164,10 @@ func runtimeSafety(snapshot ContextSnapshot) RuntimeSafetyDecision {
 		decision.Level = "blocked"
 		decision.Blocked = true
 		decision.Reasons = append(decision.Reasons, "belief_conflict")
+	}
+	if snapshot.UnresolvedThreads.Status == LoadStatusReady && snapshot.UnresolvedThreads.Value.Count > 0 && decision.Level == "normal" {
+		decision.Level = "conservative"
+		decision.Reasons = append(decision.Reasons, "unresolved_threads")
 	}
 	return decision
 }

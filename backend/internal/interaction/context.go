@@ -6,16 +6,18 @@ import (
 )
 
 type ContextSnapshot struct {
-	Version        string                             `json:"version"`
-	RuntimeProfile SnapshotField[RuntimeProfile]      `json:"runtimeProfile"`
-	Conversation   SnapshotField[ConversationState]   `json:"conversation"`
-	Psyche         SnapshotField[PsycheState]         `json:"psyche"`
-	Relationship   SnapshotField[RelationshipState]   `json:"relationship"`
-	Beliefs        SnapshotField[BeliefSet]           `json:"beliefs"`
-	Memories       SnapshotField[MemorySet]           `json:"memories"`
-	Life           SnapshotField[LifeState]           `json:"life"`
-	Channel        SnapshotField[ChannelCapabilities] `json:"channel"`
-	AssembledAt    time.Time                          `json:"assembledAt"`
+	Version           string                             `json:"version"`
+	RuntimeProfile    SnapshotField[RuntimeProfile]      `json:"runtimeProfile"`
+	Conversation      SnapshotField[ConversationState]   `json:"conversation"`
+	Psyche            SnapshotField[PsycheState]         `json:"psyche"`
+	Relationship      SnapshotField[RelationshipState]   `json:"relationship"`
+	Beliefs           SnapshotField[BeliefSet]           `json:"beliefs"`
+	Memories          SnapshotField[MemorySet]           `json:"memories"`
+	Life              SnapshotField[LifeState]           `json:"life"`
+	Needs             SnapshotField[NeedState]           `json:"needs"`
+	UnresolvedThreads SnapshotField[UnresolvedThreadSet] `json:"unresolvedThreads"`
+	Channel           SnapshotField[ChannelCapabilities] `json:"channel"`
+	AssembledAt       time.Time                          `json:"assembledAt"`
 }
 
 func (s ContextSnapshot) SnapshotVersion() string {
@@ -54,10 +56,32 @@ func FieldError[T any](source string) SnapshotField[T] {
 }
 
 type RuntimeProfile struct {
-	PersonalitySource string             `json:"personalitySource,omitempty"`
-	BehaviorWeights   map[string]float64 `json:"behaviorWeights,omitempty"`
-	SafetyLevel       string             `json:"safetyLevel,omitempty"`
-	Budget            *TokenBudget       `json:"budget,omitempty"`
+	PersonalitySource   string                 `json:"personalitySource,omitempty"`
+	BehaviorWeights     map[string]float64     `json:"behaviorWeights,omitempty"`
+	SafetyLevel         string                 `json:"safetyLevel,omitempty"`
+	Budget              *TokenBudget           `json:"budget,omitempty"`
+	CharacterID         string                 `json:"characterId,omitempty"`
+	Name                string                 `json:"name,omitempty"`
+	Identity            string                 `json:"identity,omitempty"`
+	Personality         string                 `json:"personality,omitempty"`
+	SpeakingStyle       string                 `json:"speakingStyle,omitempty"`
+	RelationshipStyle   string                 `json:"relationshipStyle,omitempty"`
+	SystemPrompt        string                 `json:"systemPrompt,omitempty"`
+	BoundaryRules       string                 `json:"boundaryRules,omitempty"`
+	PersonalitySliders  string                 `json:"personalitySliders,omitempty"`
+	BasePrompt          string                 `json:"basePrompt,omitempty"`
+	GeneratedPrompt     string                 `json:"generatedPrompt,omitempty"`
+	PersonalityConfig   map[string]interface{} `json:"personalityConfig,omitempty"`
+	ChatStyleConfig     map[string]interface{} `json:"chatStyleConfig,omitempty"`
+	SceneRules          map[string]interface{} `json:"sceneRules,omitempty"`
+	Gender              string                 `json:"gender,omitempty"`
+	GenderLabel         *string                `json:"genderLabel,omitempty"`
+	Pronoun             string                 `json:"pronoun,omitempty"`
+	SelfReference       string                 `json:"selfReference,omitempty"`
+	UserAddressingStyle *string                `json:"userAddressingStyle,omitempty"`
+	GenderExpression    int                    `json:"genderExpression,omitempty"`
+	LifeIdentity        string                 `json:"lifeIdentity,omitempty"`
+	Diagnostics         []string               `json:"diagnostics,omitempty"`
 }
 
 type TokenBudget struct {
@@ -66,16 +90,16 @@ type TokenBudget struct {
 }
 
 type ConversationState struct {
-	ConversationID string    `json:"conversationId,omitempty"`
-	MessageCount   int       `json:"messageCount"`
-	LastMessageAt  time.Time `json:"lastMessageAt,omitempty"`
-	CurrentTopic           string              `json:"currentTopic,omitempty"`
-	ActiveThreads          []string            `json:"activeThreads,omitempty"`
-	LastInteractionSummary string              `json:"lastInteractionSummary,omitempty"`
-	AttentionState         *AttentionState     `json:"attentionState,omitempty"`
-	StateVersion           string              `json:"stateVersion,omitempty"`
-	Scope                  *InteractionScope   `json:"scope,omitempty"`
-	EmotionSnapshot        *EmotionSnapshot    `json:"emotionSnapshot,omitempty"`
+	ConversationID         string                `json:"conversationId,omitempty"`
+	MessageCount           int                   `json:"messageCount"`
+	LastMessageAt          time.Time             `json:"lastMessageAt,omitempty"`
+	CurrentTopic           string                `json:"currentTopic,omitempty"`
+	ActiveThreads          []string              `json:"activeThreads,omitempty"`
+	LastInteractionSummary string                `json:"lastInteractionSummary,omitempty"`
+	AttentionState         *AttentionState       `json:"attentionState,omitempty"`
+	StateVersion           string                `json:"stateVersion,omitempty"`
+	Scope                  *InteractionScope     `json:"scope,omitempty"`
+	EmotionSnapshot        *EmotionSnapshot      `json:"emotionSnapshot,omitempty"`
 	RelationshipSnapshot   *RelationshipSnapshot `json:"relationshipSnapshot,omitempty"`
 }
 
@@ -154,13 +178,40 @@ type MemoryItem struct {
 }
 
 type LifeState struct {
-	Mood  string        `json:"mood,omitempty"`
-	Needs []NeedSummary `json:"needs,omitempty"`
+	Mood            string        `json:"mood,omitempty"`
+	Needs           []NeedSummary `json:"needs,omitempty"`
+	Energy          float64       `json:"energy,omitempty"`
+	Busy            bool          `json:"busy"`
+	Available       bool          `json:"available"`
+	CurrentState    string        `json:"currentState,omitempty"`
+	CurrentActivity string        `json:"currentActivity,omitempty"`
+	IdleSeconds     float64       `json:"idleSeconds,omitempty"`
 }
 
 type NeedSummary struct {
-	Kind  string  `json:"kind"`
-	Level float64 `json:"level"`
+	Kind      string  `json:"kind"`
+	Level     float64 `json:"level"`
+	Baseline  float64 `json:"baseline,omitempty"`
+	UpdatedAt string  `json:"updatedAt,omitempty"`
+}
+
+type NeedState struct {
+	Needs []NeedSummary `json:"needs,omitempty"`
+	Count int           `json:"count"`
+}
+
+type UnresolvedThreadSet struct {
+	Threads []UnresolvedThreadSummary `json:"threads,omitempty"`
+	Count   int                       `json:"count"`
+}
+
+type UnresolvedThreadSummary struct {
+	ID              string    `json:"id,omitempty"`
+	Topic           string    `json:"topic,omitempty"`
+	Reason          string    `json:"reason,omitempty"`
+	Severity        float64   `json:"severity"`
+	EscalationLevel int       `json:"escalationLevel"`
+	CreatedAt       time.Time `json:"createdAt,omitempty"`
 }
 
 type ChannelCapabilities struct {

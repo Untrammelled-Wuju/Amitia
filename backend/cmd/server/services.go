@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/episodic"
@@ -69,12 +70,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	})
 	outboxRuntime := interaction.NewOutboxRuntime(outbox, deadStore, outboxPublisher, interaction.OutboxWorkerConfig{})
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, outbox)
-	runtimeRegistry := interaction.NewContextLoaderRegistry()
-	runtimeRegistry.Register(interaction.NewChannelContextLoader())
-	runtimeRegistry.Register(interaction.NewConversationContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewPsycheContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewRelationshipContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewBeliefContextLoader(ctx.DB))
+	charRepo := character.NewRepository(ctx)
+	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo)
 	orch.SetRuntimePipeline(interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400)))
 	deadlineCfg := mindruntime.DefaultDeadlineConfig
 	deadlineCfg.TotalTimeout = 180 * time.Second
@@ -103,4 +100,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		DataLifecycle: dataLifecycle,
 		OutboxRuntime: outboxRuntime,
 	}
+}
+
+func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository) *interaction.ContextLoaderRegistry {
+	runtimeRegistry := interaction.NewContextLoaderRegistry()
+	runtimeRegistry.Register(interaction.NewRoleRuntimeProfileContextLoader(charRepo))
+	runtimeRegistry.Register(interaction.NewChannelContextLoader())
+	runtimeRegistry.Register(interaction.NewConversationContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewPsycheContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewRelationshipContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewBeliefContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewLifeContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
+	return runtimeRegistry
 }

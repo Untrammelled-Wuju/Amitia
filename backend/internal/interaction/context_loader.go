@@ -132,6 +132,10 @@ func applySnapshotField(snapshot *ContextSnapshot, name string, field SnapshotFi
 		setSnapshotField(&snapshot.Memories, field)
 	case "life":
 		setSnapshotField(&snapshot.Life, field)
+	case "needs":
+		setSnapshotField(&snapshot.Needs, field)
+	case "unresolvedThreads":
+		setSnapshotField(&snapshot.UnresolvedThreads, field)
 	case "channel":
 		setSnapshotField(&snapshot.Channel, field)
 	default:

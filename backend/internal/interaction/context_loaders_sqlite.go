@@ -3,8 +3,10 @@ package interaction
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
+	"github.com/u-ai/backend/internal/character"
 	"gorm.io/gorm"
 )
 
@@ -33,6 +35,65 @@ func (l *ChannelContextLoader) Load(ctx context.Context, scope InteractionScope,
 		caps.SupportsImage = true
 	}
 	return FieldReady[any](caps, l.Name(), version), ctx.Err()
+}
+
+type RoleRuntimeProfileContextLoader struct {
+	repo character.Repository
+}
+
+func NewRoleRuntimeProfileContextLoader(repo character.Repository) *RoleRuntimeProfileContextLoader {
+	return &RoleRuntimeProfileContextLoader{repo: repo}
+}
+
+func (l *RoleRuntimeProfileContextLoader) Name() string           { return "runtimeProfile" }
+func (l *RoleRuntimeProfileContextLoader) IsRequired() bool       { return true }
+func (l *RoleRuntimeProfileContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
+func (l *RoleRuntimeProfileContextLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + ":runtimeProfile:" + scope.CharacterID
+}
+func (l *RoleRuntimeProfileContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	if l.repo == nil {
+		return FieldUnavailable[any](l.Name()), errors.New("runtime profile repository unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	profile, err := l.repo.GetRuntimeProfile(scope.CharacterID)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	return FieldReady[any](runtimeProfileFromRole(profile), l.Name(), version), nil
+}
+
+func runtimeProfileFromRole(profile *character.RoleRuntimeProfile) RuntimeProfile {
+	if profile == nil {
+		return RuntimeProfile{}
+	}
+	return RuntimeProfile{
+		PersonalitySource:   "role_runtime_profile",
+		CharacterID:         profile.CharacterID,
+		Name:                profile.Name,
+		Identity:            profile.Identity,
+		Personality:         profile.Personality,
+		SpeakingStyle:       profile.SpeakingStyle,
+		RelationshipStyle:   profile.RelationshipStyle,
+		SystemPrompt:        profile.SystemPrompt,
+		BoundaryRules:       profile.BoundaryRules,
+		PersonalitySliders:  profile.PersonalitySliders,
+		BasePrompt:          profile.BasePrompt,
+		GeneratedPrompt:     profile.GeneratedPrompt,
+		PersonalityConfig:   profile.PersonalityConfig,
+		ChatStyleConfig:     profile.ChatStyleConfig,
+		SceneRules:          profile.SceneRules,
+		Gender:              profile.Gender,
+		GenderLabel:         profile.GenderLabel,
+		Pronoun:             profile.Pronoun,
+		SelfReference:       profile.SelfReference,
+		UserAddressingStyle: profile.UserAddressingStyle,
+		GenderExpression:    profile.GenderExpression,
+		LifeIdentity:        profile.LifeIdentity,
+		Diagnostics:         profile.Diagnostics,
+	}
 }
 
 type ConversationContextLoader struct {
@@ -166,6 +227,173 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 		beliefs = append(beliefs, ResolvedBelief{Key: row.Key, Value: row.Value, Confidence: row.Confidence})
 	}
 	return FieldReady[any](BeliefSet{Beliefs: beliefs}, l.Name(), version), nil
+}
+
+type LifeContextLoader struct {
+	db *gorm.DB
+}
+
+func NewLifeContextLoader(db *gorm.DB) *LifeContextLoader {
+	return &LifeContextLoader{db: db}
+}
+
+func (l *LifeContextLoader) Name() string           { return "life" }
+func (l *LifeContextLoader) IsRequired() bool       { return false }
+func (l *LifeContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
+func (l *LifeContextLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + ":life:" + scope.CharacterID
+}
+func (l *LifeContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	if l.db == nil {
+		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
+	}
+	state := LifeState{
+		Mood:            "neutral",
+		Energy:          0.5,
+		Available:       true,
+		CurrentState:    "IDLE",
+		CurrentActivity: "空闲中",
+	}
+	if l.db.Migrator().HasTable("moods") {
+		var row struct {
+			Mood      string
+			MoodValue string
+		}
+		err := l.db.WithContext(ctx).Table("moods").Select("mood, mood_value").Where("character_id = ?", scope.CharacterID).Order("created_at DESC").Limit(1).Scan(&row).Error
+		if err != nil {
+			return FieldUnavailable[any](l.Name()), err
+		}
+		if row.Mood != "" {
+			state.Mood = row.Mood
+		}
+		if row.MoodValue != "" {
+			state.Mood = row.MoodValue
+		}
+	}
+	if l.db.Migrator().HasTable("psyche_states") {
+		var row struct {
+			Energy float64
+		}
+		err := l.db.WithContext(ctx).Table("psyche_states").Select("energy").Where("character_id = ?", scope.CharacterID).Order("updated_at DESC").Limit(1).Scan(&row).Error
+		if err != nil {
+			return FieldUnavailable[any](l.Name()), err
+		}
+		if row.Energy != 0 {
+			state.Energy = clamp01(row.Energy)
+		}
+	}
+	needs, err := loadNeedSummaries(ctx, l.db, scope.CharacterID)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	state.Needs = needs
+	return FieldReady[any](state, l.Name(), version), nil
+}
+
+type NeedContextLoader struct {
+	db *gorm.DB
+}
+
+func NewNeedContextLoader(db *gorm.DB) *NeedContextLoader {
+	return &NeedContextLoader{db: db}
+}
+
+func (l *NeedContextLoader) Name() string           { return "needs" }
+func (l *NeedContextLoader) IsRequired() bool       { return false }
+func (l *NeedContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
+func (l *NeedContextLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + ":needs:" + scope.CharacterID
+}
+func (l *NeedContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	if l.db == nil {
+		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
+	}
+	needs, err := loadNeedSummaries(ctx, l.db, scope.CharacterID)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	return FieldReady[any](NeedState{Needs: needs, Count: len(needs)}, l.Name(), version), nil
+}
+
+type UnresolvedThreadContextLoader struct {
+	db *gorm.DB
+}
+
+func NewUnresolvedThreadContextLoader(db *gorm.DB) *UnresolvedThreadContextLoader {
+	return &UnresolvedThreadContextLoader{db: db}
+}
+
+func (l *UnresolvedThreadContextLoader) Name() string           { return "unresolvedThreads" }
+func (l *UnresolvedThreadContextLoader) IsRequired() bool       { return false }
+func (l *UnresolvedThreadContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
+func (l *UnresolvedThreadContextLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + ":unresolvedThreads:" + scope.CharacterID + ":" + scope.UserID
+}
+func (l *UnresolvedThreadContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	if l.db == nil {
+		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
+	}
+	if !l.db.Migrator().HasTable("unresolved_threads") {
+		return FieldReady[any](UnresolvedThreadSet{}, l.Name(), version), nil
+	}
+	var rows []struct {
+		ID              string
+		Topic           string
+		Reason          string
+		Severity        float64
+		EscalationLevel int
+		CreatedAt       string
+	}
+	err := l.db.WithContext(ctx).Table("unresolved_threads").
+		Select("id, topic, reason, severity, escalation_level, created_at").
+		Where("character_id = ? AND resolved_at IS NULL", scope.CharacterID).
+		Order("severity DESC, created_at ASC").
+		Limit(5).
+		Scan(&rows).Error
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	threads := make([]UnresolvedThreadSummary, 0, len(rows))
+	for _, row := range rows {
+		thread := UnresolvedThreadSummary{
+			ID:              row.ID,
+			Topic:           row.Topic,
+			Reason:          row.Reason,
+			Severity:        row.Severity,
+			EscalationLevel: row.EscalationLevel,
+		}
+		if parsed, ok := parseSQLiteTime(row.CreatedAt); ok {
+			thread.CreatedAt = parsed
+		}
+		threads = append(threads, thread)
+	}
+	return FieldReady[any](UnresolvedThreadSet{Threads: threads, Count: len(threads)}, l.Name(), version), nil
+}
+
+func loadNeedSummaries(ctx context.Context, db *gorm.DB, characterID string) ([]NeedSummary, error) {
+	if !db.Migrator().HasTable("need_states") {
+		return nil, nil
+	}
+	var rows []struct {
+		NeedKey      string
+		CurrentValue float64
+		Baseline     float64
+		UpdatedAt    string
+	}
+	err := db.WithContext(ctx).Table("need_states").Select("need_key, current_value, baseline, updated_at").Where("character_id = ?", characterID).Order("need_key").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	needs := make([]NeedSummary, 0, len(rows))
+	for _, row := range rows {
+		needs = append(needs, NeedSummary{
+			Kind:      row.NeedKey,
+			Level:     row.CurrentValue,
+			Baseline:  row.Baseline,
+			UpdatedAt: row.UpdatedAt,
+		})
+	}
+	return needs, nil
 }
 
 func parseSQLiteTime(value string) (time.Time, bool) {
