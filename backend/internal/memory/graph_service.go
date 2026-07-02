@@ -19,9 +19,12 @@ func (s *service) syncGraph(m *Memory) {
 	if s.graphSvc == nil || m == nil {
 		return
 	}
-	userID := "default"
+	userID := strings.TrimSpace(m.CharacterID)
 	if m.Scope == "user" && m.CharacterID != "" {
 		userID = m.CharacterID
+	}
+	if userID == "" || userID == "default" {
+		return
 	}
 	label := strings.TrimSpace(m.Key)
 	if label == "" {

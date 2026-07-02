@@ -74,6 +74,29 @@ func TestToolUpsertUsesConversationCharacterScope(t *testing.T) {
 	}
 }
 
+func TestDefaultUserInputDerivesProfileUserScopeFromCharacter(t *testing.T) {
+	svc, db := newProfileTestService(t)
+	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-a", "char-a").Error; err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+
+	item, err := svc.UpsertFromTool("default", "preference", "饮料", "茶", 80, "conv-a")
+	if err != nil {
+		t.Fatalf("upsert from tool: %v", err)
+	}
+	if item.UserID != "char-a" {
+		t.Fatalf("tool profile user scope = %q, want char-a", item.UserID)
+	}
+	if item.CharacterID != "char-a" {
+		t.Fatalf("tool profile character scope = %q, want char-a", item.CharacterID)
+	}
+
+	prompt := svc.ToSystemPrompt("default", "char-a")
+	if !strings.Contains(prompt, "茶") {
+		t.Fatalf("prompt missing derived character profile: %s", prompt)
+	}
+}
+
 func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 	svc, _ := newProfileTestService(t)
 	_, err := svc.Create(&CreateProfileRequest{

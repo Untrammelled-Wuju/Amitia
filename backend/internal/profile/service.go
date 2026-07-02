@@ -18,8 +18,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const DefaultUserID = "default"
-
 type Service interface {
 	List(q ProfileListQuery) (*ProfileListResponse, error)
 	Create(req *CreateProfileRequest) (*UserProfile, error)
@@ -66,8 +64,9 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	if req.Category == "" {
 		return nil, fmt.Errorf("category不能为空")
 	}
-	if req.UserID == "" {
-		req.UserID = DefaultUserID
+	userID := s.profileUserScope("", req.UserID, req.CharacterID)
+	if userID == "" {
+		return nil, fmt.Errorf("user scope required")
 	}
 	if req.Confidence < 0 {
 		req.Confidence = 0
@@ -76,7 +75,7 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 		req.Confidence = 100
 	}
 	p := &UserProfile{
-		UserID:         req.UserID,
+		UserID:         userID,
 		CharacterID:    req.CharacterID,
 		Category:       req.Category,
 		AttributeName:  req.AttributeName,
@@ -122,9 +121,9 @@ func (s *service) Delete(id string) error {
 		return err
 	}
 	if s.graphSvc != nil && p != nil {
-		userID := p.UserID
+		userID := s.profileUserScope(p.SourceConvID, p.UserID, p.CharacterID)
 		if userID == "" {
-			userID = DefaultUserID
+			return nil
 		}
 		nodeID := userID + ":" + p.Category + ":" + p.AttributeName
 		if p.CharacterID != "" {
@@ -143,10 +142,11 @@ func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfi
 }
 
 func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
-	if userID == "" {
-		userID = DefaultUserID
-	}
 	scope := s.profileScope(convID, characterID...)
+	userID = s.profileUserScope(convID, userID, scope)
+	if userID == "" {
+		return nil, fmt.Errorf("user scope required")
+	}
 	if category == "" {
 		category = "personal_info"
 	}
@@ -182,9 +182,6 @@ func (s *service) SyncGraphProfile(id string) bool {
 }
 
 func (s *service) ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error {
-	if userID == "" {
-		userID = DefaultUserID
-	}
 	if len(messages) == 0 {
 		return nil
 	}
@@ -193,6 +190,10 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 		return fmt.Errorf("no active model")
 	}
 	scope := s.profileScope(convID, characterID...)
+	userID = s.profileUserScope(convID, userID, scope)
+	if userID == "" {
+		return nil
+	}
 	conversationText := ""
 	for _, m := range messages {
 		conversationText += m["role"] + ": " + m["content"] + "\n"
@@ -251,7 +252,18 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 }
 
 func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
-	profiles, err := s.repo.GetUserFactSummary(userID, firstScope(characterID...))
+	scope := firstScope(characterID...)
+	userID = cleanUserScope(userID)
+	if userID == "" {
+		userID = scope
+	}
+	if userID == "" {
+		return ""
+	}
+	profiles, err := s.repo.GetUserFactSummary(userID, scope)
+	if (err != nil || len(profiles) == 0) && userID != "default" {
+		profiles, err = s.repo.GetUserFactSummary("default", scope)
+	}
 	if err != nil || len(profiles) == 0 {
 		return ""
 	}
@@ -372,7 +384,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation(DefaultUserID, convID, pending); err != nil {
+	if err := s.ExtractFromConversation("", convID, pending); err != nil {
 		return err
 	}
 	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile:%s:%d", convID, maxSequence))
@@ -392,20 +404,40 @@ func (s *service) profileScope(convID string, characterID ...string) string {
 	return scope
 }
 
+func (s *service) profileUserScope(convID, userID string, characterID ...string) string {
+	if scope := cleanUserScope(userID); scope != "" {
+		return scope
+	}
+	if scope := firstScope(characterID...); scope != "" {
+		return scope
+	}
+	return s.profileScope(convID)
+}
+
 func firstScope(characterID ...string) string {
 	if len(characterID) == 0 {
 		return ""
 	}
-	return strings.TrimSpace(characterID[0])
+	return cleanUserScope(characterID[0])
+}
+
+func cleanUserScope(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" || scope == "default" {
+		return ""
+	}
+	return scope
 }
 
 func (s *service) syncGraph(p *UserProfile) {
 	if s.graphSvc == nil || p == nil {
 		return
 	}
-	if p.UserID == "" {
-		p.UserID = DefaultUserID
+	userID := s.profileUserScope(p.SourceConvID, p.UserID, p.CharacterID)
+	if userID == "" {
+		return
 	}
+	p.UserID = userID
 	nodeID := p.UserID + ":" + p.Category + ":" + p.AttributeName
 	if p.CharacterID != "" {
 		nodeID = p.UserID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName

@@ -6,11 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/pkg/app")
+	"github.com/u-ai/backend/pkg/app"
+	"strings"
+)
 
 func (s *service) compiledSystemInstruction(channel string) string {
 	kind := expression.ChannelKind(strings.ToLower(channel))
@@ -36,7 +37,7 @@ func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage
 		characterID = strings.TrimSpace(profile.CharacterID)
 	}
 	if s.profileSvc != nil {
-		profilePrompt := s.profileSvc.ToSystemPrompt("default", characterID)
+		profilePrompt := s.profileSvc.ToSystemPrompt(characterID, characterID)
 		if profilePrompt != "" {
 			parts = append(parts, profilePrompt)
 		}

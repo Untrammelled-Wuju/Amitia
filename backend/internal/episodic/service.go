@@ -335,7 +335,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation("default", convID, pending); err != nil {
+	if err := s.ExtractFromConversation("", convID, pending); err != nil {
 		return err
 	}
 	return manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner)
@@ -379,7 +379,7 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 		return
 	}
 	if m.UserID == "" {
-		m.UserID = "default"
+		return
 	}
 	_ = s.graphSvc.SyncNode("user", m.UserID, m.UserID, map[string]interface{}{"user_id": m.UserID})
 	_ = s.graphSvc.SyncNode("episodic", m.ID, m.Title, map[string]interface{}{
