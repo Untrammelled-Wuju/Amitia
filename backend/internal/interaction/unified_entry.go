@@ -83,6 +83,9 @@ func (s *BackpressureState) applyCooldownLocked(cfg BackpressureConfig) time.Dur
 	if duration > cfg.CooldownMax {
 		duration = cfg.CooldownMax
 	}
+	if cfg.RecoveryTimeout > 0 && duration > cfg.RecoveryTimeout {
+		duration = cfg.RecoveryTimeout
+	}
 	s.CooldownUntil = time.Now().Add(duration)
 	return duration
 }

@@ -207,6 +207,27 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	}
 }
 
+func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
+	state := &BackpressureState{QueueDepth: 10}
+	cfg := BackpressureConfig{
+		MaxQueueDepth:   10,
+		WarningRatio:    0.5,
+		SheddingRatio:   0.8,
+		CooldownBase:    time.Second,
+		CooldownMax:     time.Minute,
+		RecoveryTimeout: 10 * time.Millisecond,
+	}
+	before := time.Now()
+	duration := state.applyCooldownLocked(cfg)
+	after := time.Now()
+	if duration > cfg.RecoveryTimeout {
+		t.Fatalf("cooldown was not capped by recovery timeout: got %s want <= %s", duration, cfg.RecoveryTimeout)
+	}
+	if state.CooldownUntil.Before(before) || state.CooldownUntil.After(after.Add(cfg.RecoveryTimeout+time.Millisecond)) {
+		t.Fatalf("cooldown until was not bounded by recovery timeout: %s", state.CooldownUntil)
+	}
+}
+
 func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
