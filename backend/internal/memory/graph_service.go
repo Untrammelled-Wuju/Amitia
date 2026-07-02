@@ -4,6 +4,7 @@ package memory
 
 import (
 	"strings"
+	"time"
 )
 
 func (s *service) SyncGraphMemory(id string) bool {
@@ -17,6 +18,10 @@ func (s *service) SyncGraphMemory(id string) bool {
 
 func (s *service) syncGraph(m *Memory) {
 	if s.graphSvc == nil || m == nil {
+		return
+	}
+	if !memoryAllowedForDerivedContent(*m, time.Now()) {
+		s.deleteGraph(m)
 		return
 	}
 	userID := strings.TrimSpace(m.CharacterID)

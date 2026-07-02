@@ -85,18 +85,19 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 	"不能使用markdown格式。"
 
 type service struct {
-	repo         Repository
-	charRepo     character.Repository
-	db           *gorm.DB
-	psycheStore  psyche.PsycheStore
-	memorySvc    memory.Service
-	profileSvc   profile.Service
-	episodicSvc  episodic.Service
-	worldBookSvc worldbook.Service
-	wmCache      *WorkingMemoryCache
-	compressor   *Compressor
-	pipeline     *memory.Pipeline
-	llmWithTools llmWithToolsFunc
+	repo          Repository
+	charRepo      character.Repository
+	db            *gorm.DB
+	psycheStore   psyche.PsycheStore
+	memorySvc     memory.Service
+	profileSvc    profile.Service
+	episodicSvc   episodic.Service
+	worldBookSvc  worldbook.Service
+	wmCache       *WorkingMemoryCache
+	stateProvider *ConversationStateProvider
+	compressor    *Compressor
+	pipeline      *memory.Pipeline
+	llmWithTools  llmWithToolsFunc
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -140,13 +141,15 @@ func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, pro
 	if graphLayer == nil {
 		graphLayer = graph.NewStubService()
 	}
+	wmCache := NewWorkingMemoryCache(30 * time.Minute)
+	stateProvider := NewConversationStateProvider(wmCache)
 	p := memory.NewPipeline(
-		memory.NewWorkingMemoryService(),
+		memory.NewWorkingMemoryService(stateProvider),
 		profSvc.(memory.PipelineLayer),
 		epiSvc.(memory.PipelineLayer),
 		memSvc.(memory.PipelineLayer),
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: NewWorkingMemoryCache(30 * time.Minute), compressor: comp, pipeline: p}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p}
 }

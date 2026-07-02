@@ -131,6 +131,7 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	}
 	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
 		deleteVectorsFromCollections([]string{m.ID})
+		_ = s.repo.UnmarkEmbedded(m.ID)
 		s.deleteGraph(m)
 		s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		return m, nil
@@ -148,6 +149,7 @@ func (s *service) Delete(id string) error {
 	}
 	s.logEvent(id, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	deleteVectorsFromCollections([]string{id})
+	_ = s.repo.UnmarkEmbedded(id)
 	s.deleteGraph(m)
 	return s.repo.Delete(id)
 }
@@ -163,6 +165,9 @@ func (s *service) DeleteAll(characterID string) error {
 		s.logEvent("", "memory_deleted_all", "", "", "", 0, "", characterID)
 	}
 	deleteVectorsFromCollections(ids)
+	for _, id := range ids {
+		_ = s.repo.UnmarkEmbedded(id)
+	}
 	if s.graphSvc != nil {
 		for _, id := range ids {
 			_ = s.graphSvc.DeleteNode("memory:" + id)

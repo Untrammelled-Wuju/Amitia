@@ -112,6 +112,7 @@ func (s *service) BatchVerify(ids []string, status string) error {
 		if memoryStatusBlocksRetrieval(status) {
 			if m, err := s.repo.FindByID(id); err == nil {
 				deleteVectorsFromCollections([]string{id})
+				_ = s.repo.UnmarkEmbedded(id)
 				s.deleteGraph(m)
 			}
 		}

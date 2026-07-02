@@ -59,11 +59,21 @@ func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage
 
 func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage string) []string {
 	parts := []string{s.compiledSystemInstruction(channel)}
-	if s.wmCache != nil {
+	workingSummary := ""
+	if s.stateProvider != nil {
+		state := s.stateProvider.GetState(convID)
+		if state != nil && state.LastInteractionSummary != "" {
+			workingSummary = state.LastInteractionSummary
+		}
+	}
+	if workingSummary == "" && s.wmCache != nil {
 		wm := s.wmCache.Get(convID)
 		if wm != nil && wm.State != nil && wm.State.Summary != "" {
-			parts = append(parts, "【工作记忆】\n"+wm.State.Summary)
+			workingSummary = wm.State.Summary
 		}
+	}
+	if workingSummary != "" {
+		parts = append(parts, "【工作记忆】\n"+workingSummary)
 	}
 	if s.compressor != nil {
 		status := s.compressor.GetCompressionStatus(convID)

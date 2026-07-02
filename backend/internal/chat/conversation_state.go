@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/memory"
 )
 
 type ConversationStateProvider struct {
@@ -59,6 +60,43 @@ func (p *ConversationStateProvider) UpsertState(convID string, state *interactio
 	entry.UpdatedAt = time.Now()
 	state.StateVersion = fmt.Sprintf("%d", entry.Version)
 	entry.State = state
+}
+
+func (p *ConversationStateProvider) GetWorkingMemoryState(convID string) (memory.ConversationWorkingMemoryState, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	entry, ok := p.store[convID]
+	if !ok || entry.State == nil {
+		return memory.ConversationWorkingMemoryState{}, false
+	}
+	return memory.ConversationWorkingMemoryState{
+		ConversationID:         entry.State.ConversationID,
+		MessageCount:           entry.State.MessageCount,
+		LastMessageAt:          entry.State.LastMessageAt,
+		ActiveThreads:          append([]string(nil), entry.State.ActiveThreads...),
+		LastInteractionSummary: entry.State.LastInteractionSummary,
+	}, true
+}
+
+func (p *ConversationStateProvider) UpsertWorkingMemoryState(convID string, state memory.ConversationWorkingMemoryState) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	entry, ok := p.store[convID]
+	if !ok {
+		entry = &ConversationStateEntry{State: &interaction.ConversationState{ConversationID: convID}}
+		p.store[convID] = entry
+	}
+	if entry.State == nil {
+		entry.State = &interaction.ConversationState{ConversationID: convID}
+	}
+	entry.State.ConversationID = convID
+	entry.State.MessageCount = state.MessageCount
+	entry.State.LastMessageAt = state.LastMessageAt
+	entry.State.ActiveThreads = append([]string(nil), state.ActiveThreads...)
+	entry.State.LastInteractionSummary = state.LastInteractionSummary
+	entry.Version++
+	entry.UpdatedAt = time.Now()
+	entry.State.StateVersion = fmt.Sprintf("%d", entry.Version)
 }
 
 func (p *ConversationStateProvider) BuildFromWorkingMemory(convID string, scope interaction.InteractionScope) *interaction.ConversationState {

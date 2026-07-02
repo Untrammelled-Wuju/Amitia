@@ -1,10 +1,12 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/memory"
 )
 
 func TestNewConversationStateProvider(t *testing.T) {
@@ -234,6 +236,34 @@ func TestUpdateSummary(t *testing.T) {
 	}
 }
 
+func TestWorkingMemoryStateAdapterWritesConversationState(t *testing.T) {
+	cache := NewWorkingMemoryCache(5 * time.Minute)
+	p := NewConversationStateProvider(cache)
+	now := time.Now()
+
+	p.UpsertWorkingMemoryState("wm-state", memory.ConversationWorkingMemoryState{
+		ConversationID:         "wm-state",
+		MessageCount:           3,
+		LastMessageAt:          now,
+		ActiveThreads:          []string{"计划"},
+		LastInteractionSummary: "ConversationState摘要",
+	})
+
+	state := p.GetState("wm-state")
+	if state == nil {
+		t.Fatal("state not written")
+	}
+	if state.LastInteractionSummary != "ConversationState摘要" {
+		t.Fatalf("bad summary: %s", state.LastInteractionSummary)
+	}
+	if state.MessageCount != 3 {
+		t.Fatalf("bad count: %d", state.MessageCount)
+	}
+	if len(state.ActiveThreads) != 1 || state.ActiveThreads[0] != "计划" {
+		t.Fatalf("bad threads: %v", state.ActiveThreads)
+	}
+}
+
 func TestRemoveState(t *testing.T) {
 	cache := NewWorkingMemoryCache(5 * time.Minute)
 	p := NewConversationStateProvider(cache)
@@ -298,5 +328,34 @@ func TestFullWorkflow(t *testing.T) {
 	}
 	if final.StateVersion != "6" {
 		t.Fatalf("expected stateVersion 6, got %s", final.StateVersion)
+	}
+}
+
+func TestSys2BuilderPrefersConversationStateWorkingMemory(t *testing.T) {
+	cache := NewWorkingMemoryCache(5 * time.Minute)
+	cache.UpdateSummary("conv-state", "旧cache摘要")
+	provider := NewConversationStateProvider(cache)
+	provider.UpdateSummary("conv-state", "新ConversationState摘要")
+	s := &service{wmCache: cache, stateProvider: provider}
+
+	parts := s.sys2Builder("conv-state", "char1", "req1", "web", "")
+	joined := strings.Join(parts, "\n")
+	if !strings.Contains(joined, "新ConversationState摘要") {
+		t.Fatalf("missing state summary: %s", joined)
+	}
+	if strings.Contains(joined, "旧cache摘要") {
+		t.Fatalf("used cache summary instead of state: %s", joined)
+	}
+}
+
+func TestSys2BuilderFallsBackToWorkingMemoryCache(t *testing.T) {
+	cache := NewWorkingMemoryCache(5 * time.Minute)
+	cache.UpdateSummary("cache-only", "旧cache摘要")
+	s := &service{wmCache: cache, stateProvider: NewConversationStateProvider(cache)}
+
+	parts := s.sys2Builder("cache-only", "char1", "req1", "web", "")
+	joined := strings.Join(parts, "\n")
+	if !strings.Contains(joined, "旧cache摘要") {
+		t.Fatalf("missing cache fallback summary: %s", joined)
 	}
 }

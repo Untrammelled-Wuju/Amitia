@@ -6,8 +6,10 @@ import (
 )
 
 type memoryAuthorityRepo struct {
-	items   []Memory
-	updated map[string]map[string]interface{}
+	items    []Memory
+	updated  map[string]map[string]interface{}
+	deleted  []string
+	unmarked []string
 }
 
 func (r *memoryAuthorityRepo) List(q MemoryListQuery) ([]Memory, int64, error) {
@@ -45,7 +47,10 @@ func (r *memoryAuthorityRepo) Update(id string, updates map[string]interface{}) 
 	return errors.New("not found")
 }
 
-func (r *memoryAuthorityRepo) Delete(id string) error { return nil }
+func (r *memoryAuthorityRepo) Delete(id string) error {
+	r.deleted = append(r.deleted, id)
+	return nil
+}
 
 func (r *memoryAuthorityRepo) DeleteAll(characterID string) error { return nil }
 
@@ -72,6 +77,11 @@ func (r *memoryAuthorityRepo) RecordUse(id string) error { return nil }
 func (r *memoryAuthorityRepo) VectorStatus() (totalMem, embedded int64) { return 0, 0 }
 
 func (r *memoryAuthorityRepo) MarkEmbedded(id string) error { return nil }
+
+func (r *memoryAuthorityRepo) UnmarkEmbedded(id string) error {
+	r.unmarked = append(r.unmarked, id)
+	return nil
+}
 
 func (r *memoryAuthorityRepo) GetConversationMessages(conversationID string, limit int) ([]map[string]interface{}, error) {
 	return nil, nil
@@ -172,5 +182,44 @@ func TestBatchVerifyInvalidatingStatusPersistsAndStaysFiltered(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("Search returned %#v after invalidation, want none", got)
+	}
+	if len(repo.unmarked) != 1 || repo.unmarked[0] != "memory-1" {
+		t.Fatalf("UnmarkEmbedded calls = %#v, want memory-1", repo.unmarked)
+	}
+}
+
+func TestUpdateInvalidatingStatusClearsEmbeddingMarker(t *testing.T) {
+	status := "deleted"
+	repo := &memoryAuthorityRepo{items: []Memory{
+		{ID: "memory-1", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", Importance: 10, VerifiedStatus: "user_verified"},
+	}}
+	svc := &service{repo: repo}
+
+	got, err := svc.Update("memory-1", &UpdateMemoryRequest{VerifiedStatus: &status})
+	if err != nil {
+		t.Fatalf("Update error = %v", err)
+	}
+	if got.VerifiedStatus != status {
+		t.Fatalf("VerifiedStatus = %q, want %q", got.VerifiedStatus, status)
+	}
+	if len(repo.unmarked) != 1 || repo.unmarked[0] != "memory-1" {
+		t.Fatalf("UnmarkEmbedded calls = %#v, want memory-1", repo.unmarked)
+	}
+}
+
+func TestDeleteClearsEmbeddingMarker(t *testing.T) {
+	repo := &memoryAuthorityRepo{items: []Memory{
+		{ID: "memory-1", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "tea", Importance: 10, VerifiedStatus: "user_verified"},
+	}}
+	svc := &service{repo: repo}
+
+	if err := svc.Delete("memory-1"); err != nil {
+		t.Fatalf("Delete error = %v", err)
+	}
+	if len(repo.unmarked) != 1 || repo.unmarked[0] != "memory-1" {
+		t.Fatalf("UnmarkEmbedded calls = %#v, want memory-1", repo.unmarked)
+	}
+	if len(repo.deleted) != 1 || repo.deleted[0] != "memory-1" {
+		t.Fatalf("Delete calls = %#v, want memory-1", repo.deleted)
 	}
 }

@@ -84,6 +84,9 @@ func (s *service) GetTimeline(page, pageSize int, userID, source, memoryType, ti
 }
 
 func (s *service) logEvent(memoryID, eventType, key, value, memoryType string, importance int, source, characterID string) {
+	if s.db == nil {
+		return
+	}
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	s.db.Exec(

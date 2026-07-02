@@ -36,6 +36,30 @@ type AppServices struct {
 	OutboxRuntime *interaction.OutboxRuntime
 }
 
+type reflectionMemoryServiceAdapter struct {
+	memory memory.Service
+}
+
+func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.ReflectionMemoryCreateRequest) error {
+	_, err := a.memory.Create(&memory.CreateMemoryRequest{
+		CharacterID:           req.CharacterID,
+		MemoryType:            req.MemoryType,
+		Key:                   req.Key,
+		Value:                 req.Value,
+		Importance:            req.Importance,
+		Confidence:            req.Confidence,
+		SourceMsgID:           req.SourceMsgID,
+		SourceConvID:          req.SourceConvID,
+		VerifiedStatus:        req.VerifiedStatus,
+		Source:                req.Source,
+		SensitivityLevel:      req.SensitivityLevel,
+		AllowProactiveMention: req.AllowProactiveMention,
+		RequiresConfirmation:  req.RequiresConfirmation,
+		Scope:                 req.Scope,
+	})
+	return err
+}
+
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx, graphSvc)
@@ -64,10 +88,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := outbox.InitSchema(); err != nil {
 		panic("failed to init outbox schema: " + err.Error())
 	}
-	outboxPublisher := interaction.OutboxPublisherFunc(func(record interaction.OutboxRecord) error {
+	loggingOutboxPublisher := interaction.OutboxPublisherFunc(func(record interaction.OutboxRecord) error {
 		log.Info("interaction outbox event published id=", record.ID, " type=", record.EventType, " aggregate=", record.AggregateID)
 		return nil
 	})
+	outboxPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryServiceAdapter{memory: memSvc}, loggingOutboxPublisher)
 	outboxRuntime := interaction.NewOutboxRuntime(outbox, deadStore, outboxPublisher, interaction.OutboxWorkerConfig{})
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, outbox)
 	charRepo := character.NewRepository(ctx)

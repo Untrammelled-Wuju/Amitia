@@ -5,17 +5,25 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 )
 
 func (s *service) Name() string { return "结构化事实" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	candidates, err := s.GenerateCandidates(convID)
-	if err != nil || len(candidates) == 0 {
-		return nil
+	manager := pipelinecheckpoint.New(s.db)
+	leaseOwner := fmt.Sprintf("memory:%s:%d", convID, time.Now().UTC().UnixNano())
+	pending, maxSequence, acquired, err := manager.AcquirePendingRange(convID, "memory", 0, leaseOwner, 10*time.Minute)
+	if err != nil || !acquired || len(pending) == 0 {
+		return err
+	}
+	candidates, err := s.generateCandidatesFromMessages(convID, pending)
+	if err != nil {
+		return err
 	}
 	existingKeys := make(map[string]bool)
 	var existingMemories []struct {
@@ -39,7 +47,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 			s.SyncEmbedding(mem.ID, mem.Key, mem.Value, mem.CharacterID, mem.MemoryType)
 		}
 	}
-	return nil
+	return manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner)
 }
 
 func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult) {

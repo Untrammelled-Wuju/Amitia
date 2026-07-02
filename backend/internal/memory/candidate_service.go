@@ -16,6 +16,22 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 	if err != nil || len(messages) == 0 {
 		return nil, err
 	}
+	typedMessages := make([]map[string]string, 0, len(messages))
+	for _, msg := range messages {
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		typedMessages = append(typedMessages, map[string]string{
+			"role":    role,
+			"content": content,
+		})
+	}
+	return s.generateCandidatesFromMessages(conversationID, typedMessages)
+}
+
+func (s *service) generateCandidatesFromMessages(conversationID string, messages []map[string]string) ([]MemoryCandidate, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
 	var characterID string
 	s.db.Table("conversations").Select("character_id").Where("id = ?", conversationID).Row().Scan(&characterID)
 	cfg := s.getActiveModel()
@@ -24,8 +40,8 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 	}
 	conversationText := ""
 	for _, msg := range messages {
-		role, _ := msg["role"].(string)
-		content, _ := msg["content"].(string)
+		role := msg["role"]
+		content := msg["content"]
 		conversationText += role + ": " + content + "\n"
 	}
 	systemPrompt := `你是一个记忆提取器。从对话中提取值得长期记忆的事实，返回JSON数组。

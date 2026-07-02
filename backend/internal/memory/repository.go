@@ -22,6 +22,7 @@ type Repository interface {
 	RecordUse(id string) error
 	VectorStatus() (totalMem, embedded int64)
 	MarkEmbedded(id string) error
+	UnmarkEmbedded(id string) error
 	GetConversationMessages(conversationID string, limit int) ([]map[string]interface{}, error)
 	GetRankedByImportance(characterID string, limit int) ([]Memory, error)
 	ListCandidates() ([]MemoryCandidateModel, error)
@@ -185,6 +186,10 @@ func (r *repository) MarkEmbedded(id string) error {
 		"INSERT OR REPLACE INTO memory_embeddings (memory_id, created_at) VALUES (?, datetime('now', 'localtime'))",
 		id,
 	).Error
+}
+
+func (r *repository) UnmarkEmbedded(id string) error {
+	return r.db.Exec("DELETE FROM memory_embeddings WHERE memory_id = ?", id).Error
 }
 
 func (r *repository) GetConversationMessages(conversationID string, limit int) ([]map[string]interface{}, error) {

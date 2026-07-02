@@ -16,13 +16,20 @@ func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) b
 	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.UserID) {
 		return false
 	}
-	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
-		return false
-	}
-	if memoryExpired(m.ExpiresAt, policy.Now) {
+	if !memoryAllowedForDerivedContent(m, policy.Now) {
 		return false
 	}
 	if policy.ProactiveMention && !m.AllowProactiveMention {
+		return false
+	}
+	return true
+}
+
+func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {
+	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
+		return false
+	}
+	if memoryExpired(m.ExpiresAt, now) {
 		return false
 	}
 	return true

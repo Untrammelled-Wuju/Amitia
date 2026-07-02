@@ -4,6 +4,7 @@ package memory
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/graph"
@@ -128,6 +129,8 @@ type service struct {
 	db           *gorm.DB
 	embeddingSvc *embedding.Service
 	graphSvc     graph.Service
+	embedMu      sync.Mutex
+	embedLocks   map[string]*sync.Mutex
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service) Service {
@@ -140,6 +143,7 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service)
 		db:           ctx.DB,
 		embeddingSvc: embedding.NewService(ctx.DB),
 		graphSvc:     gs,
+		embedLocks:   map[string]*sync.Mutex{},
 	}
 }
 

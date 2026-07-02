@@ -4,6 +4,7 @@ package memory
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/log"
@@ -58,12 +59,17 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 	if qdrantDB.Client == nil {
 		return false
 	}
+	unlock := s.acquireEmbeddingLock(memID)
+	defer unlock()
 	mem, errMem := s.repo.FindByID(memID)
 	if errMem != nil || mem == nil {
+		deleteVectorsFromCollections([]string{memID})
+		_ = s.repo.UnmarkEmbedded(memID)
 		return false
 	}
 	if !memoryAllowedBySQLiteAuthority(*mem, retrievalAuthorityPolicy{Now: time.Now()}) {
 		deleteVectorsFromCollections([]string{memID})
+		_ = s.repo.UnmarkEmbedded(memID)
 		return false
 	}
 	key = mem.Key
@@ -75,9 +81,24 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 	if strings.EqualFold(strings.TrimSpace(mem.Scope), "user") || strings.EqualFold(strings.TrimSpace(mem.Scope), "user_global") {
 		userID = mem.CharacterID
 	}
+	signature := memoryEmbeddingSignature(*mem)
 	text := key + " " + value
 	vector, err := s.embeddingSvc.Embed(text)
 	if err != nil {
+		return false
+	}
+	current, errCurrent := s.repo.FindByID(memID)
+	if errCurrent != nil || current == nil {
+		deleteVectorsFromCollections([]string{memID})
+		_ = s.repo.UnmarkEmbedded(memID)
+		return false
+	}
+	if !memoryAllowedBySQLiteAuthority(*current, retrievalAuthorityPolicy{Now: time.Now()}) {
+		deleteVectorsFromCollections([]string{memID})
+		_ = s.repo.UnmarkEmbedded(memID)
+		return false
+	}
+	if memoryEmbeddingSignature(*current) != signature {
 		return false
 	}
 	payload := map[string]interface{}{
@@ -97,10 +118,44 @@ func (s *service) SyncEmbedding(memID, key, value, characterID, memoryType strin
 		log.Error("存储嵌入失败:", memID, err)
 		return false
 	}
+	current, errCurrent = s.repo.FindByID(memID)
+	if errCurrent != nil || current == nil || !memoryAllowedBySQLiteAuthority(*current, retrievalAuthorityPolicy{Now: time.Now()}) || memoryEmbeddingSignature(*current) != signature {
+		deleteVectorsFromCollections([]string{memID})
+		_ = s.repo.UnmarkEmbedded(memID)
+		return false
+	}
 	if err := s.repo.MarkEmbedded(memID); err != nil {
 		log.Warn("标记嵌入状态失败:", memID, err)
 	}
 	return true
+}
+
+func (s *service) acquireEmbeddingLock(memID string) func() {
+	s.embedMu.Lock()
+	if s.embedLocks == nil {
+		s.embedLocks = map[string]*sync.Mutex{}
+	}
+	lock := s.embedLocks[memID]
+	if lock == nil {
+		lock = &sync.Mutex{}
+		s.embedLocks[memID] = lock
+	}
+	s.embedMu.Unlock()
+	lock.Lock()
+	return lock.Unlock
+}
+
+func memoryEmbeddingSignature(m Memory) string {
+	return strings.Join([]string{
+		m.ID,
+		m.Key,
+		m.Value,
+		m.CharacterID,
+		m.MemoryType,
+		m.Scope,
+		m.VerifiedStatus,
+		m.UpdatedAt,
+	}, "\x00")
 }
 
 func (s *service) RebuildIndex() (map[string]interface{}, error) {
