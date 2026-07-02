@@ -24,6 +24,10 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 	if err != nil {
 		return nil, err
 	}
+	policy := retrievalAuthorityPolicy{
+		CharacterID: characterID,
+		Now:         time.Now(),
+	}
 
 	vectorScores := make(map[string]float64)
 	if qdrantDB.Client != nil && query != "" {
@@ -46,6 +50,9 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 	queryLower := strings.ToLower(query)
 	var ranked []RankedMemory
 	for _, m := range allMemories {
+		if !memoryAllowedBySQLiteAuthority(m, policy) {
+			continue
+		}
 		vs := vectorScores[m.ID]
 		ks := keywordMatchScore(queryLower, m.Key, m.Value)
 		is := float64(m.Importance) / 10.0

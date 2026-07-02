@@ -75,13 +75,14 @@ type SearchMemoryRequest struct {
 }
 
 type VectorSearchRequest struct {
-	Keyword        string `json:"keyword"`
-	Query          string `json:"query"`
-	CharacterID    string `json:"characterId"`
-	Limit          int    `json:"limit"`
-	ConversationID string `json:"conversationId"`
-	RequestID      string `json:"requestId"`
-	Channel        string `json:"channel"`
+	Keyword          string `json:"keyword"`
+	Query            string `json:"query"`
+	CharacterID      string `json:"characterId"`
+	Limit            int    `json:"limit"`
+	ConversationID   string `json:"conversationId"`
+	RequestID        string `json:"requestId"`
+	Channel          string `json:"channel"`
+	ProactiveMention bool   `json:"proactiveMention"`
 }
 
 type MemoryListQuery struct {

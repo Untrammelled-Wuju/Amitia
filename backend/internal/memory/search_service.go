@@ -8,9 +8,10 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	internalQdrant "github.com/u-ai/backend/internal/qdrant"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 
 	"github.com/u-ai/backend/log"
 )
@@ -60,6 +61,11 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	})
 	var vsResults []VectorSearchResult
 	seen := map[string]bool{}
+	policy := retrievalAuthorityPolicy{
+		CharacterID:      req.CharacterID,
+		ProactiveMention: req.ProactiveMention,
+		Now:              time.Now(),
+	}
 	for _, r := range results {
 		memID := ""
 		if val, ok := r.Point.Payload["memory_id"]; ok {
@@ -72,7 +78,7 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 		if err != nil {
 			continue
 		}
-		if req.CharacterID != "" && m.CharacterID != req.CharacterID {
+		if !memoryAllowedBySQLiteAuthority(*m, policy) {
 			continue
 		}
 		seen[memID] = true
@@ -113,9 +119,10 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		vectorFetchLimit = 20
 	}
 	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
-		Query:       queryText,
-		CharacterID: req.CharacterID,
-		Limit:       vectorFetchLimit,
+		Query:            queryText,
+		CharacterID:      req.CharacterID,
+		Limit:            vectorFetchLimit,
+		ProactiveMention: req.ProactiveMention,
 	})
 
 	scorer := &RetrievalScorer{}
@@ -143,7 +150,15 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		keywordResults = nil
 	}
 	queryLower := strings.ToLower(queryText)
+	policy := retrievalAuthorityPolicy{
+		CharacterID:      req.CharacterID,
+		ProactiveMention: req.ProactiveMention,
+		Now:              time.Now(),
+	}
 	for _, m := range keywordResults {
+		if !memoryAllowedBySQLiteAuthority(m, policy) {
+			continue
+		}
 		item, exists := merged[m.ID]
 		if !exists {
 			item = &struct {
