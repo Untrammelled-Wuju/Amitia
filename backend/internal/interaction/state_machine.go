@@ -449,8 +449,8 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	if !ok {
 		return ErrInteractionNotFound
 	}
-	if rec.Status == InteractionStatusSuperseded && rec.SupersededByID == supersededByID {
-		return nil
+	if rec.IsTerminal() {
+		return ErrAlreadyTerminal
 	}
 	if !canSupersedeStatus(rec.Status) {
 		return ErrInvalidTransition

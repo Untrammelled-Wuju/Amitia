@@ -242,8 +242,8 @@ func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID 
 			}
 			return err
 		}
-		if target.Status == string(InteractionStatusSuperseded) && target.SupersededByID == supersededByID {
-			return nil
+		if isTerminalStatus(InteractionStatus(target.Status)) {
+			return ErrAlreadyTerminal
 		}
 		if !canSupersedeStatus(InteractionStatus(target.Status)) {
 			return ErrInvalidTransition

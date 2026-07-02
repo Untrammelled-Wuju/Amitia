@@ -397,7 +397,7 @@ func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testin
 	}
 }
 
-func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomicAndIdempotent(t *testing.T) {
+func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomic(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
 	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
@@ -422,8 +422,52 @@ func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomicAndIdempot
 	if got.StatusVersion != target.StatusVersion+1 || got.CompletedAt.IsZero() {
 		t.Fatalf("supersede should bump version and complete target: %#v", got)
 	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); !errors.Is(err, ErrAlreadyTerminal) {
+		t.Fatalf("expected terminal target supersede to fail, got %v", err)
+	}
+	after, ok, err := tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || after.Status != InteractionStatusSuperseded || after.SupersededByID != superseder.ID || after.StatusVersion != got.StatusVersion {
+		t.Fatalf("terminal supersede retry should not mutate target: ok=%v record=%#v", ok, after)
+	}
+}
+
+func TestInMemoryInteractionTrackerTerminalGuardsMatchSQLite(t *testing.T) {
+	tracker := NewInMemoryTracker()
+	ctx := context.Background()
+	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	target := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	superseder := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, superseder); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.Archive(ctx, target.ID); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("expected active archive to fail, got %v", err)
+	}
 	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); err != nil {
-		t.Fatalf("expected idempotent supersede, got %v", err)
+		t.Fatal(err)
+	}
+	got, ok, err := tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.Status != InteractionStatusSuperseded || got.SupersededByID != superseder.ID {
+		t.Fatalf("target was not superseded: ok=%v record=%#v", ok, got)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); !errors.Is(err, ErrAlreadyTerminal) {
+		t.Fatalf("expected terminal target supersede to fail, got %v", err)
+	}
+	after, ok, err := tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || after.Status != InteractionStatusSuperseded || after.StatusVersion != got.StatusVersion {
+		t.Fatalf("terminal supersede retry should not mutate target: ok=%v record=%#v", ok, after)
 	}
 }
 
