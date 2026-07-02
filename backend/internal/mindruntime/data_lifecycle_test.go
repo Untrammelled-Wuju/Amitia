@@ -2,7 +2,11 @@ package mindruntime
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestNewDataLifecycleCoordinator(t *testing.T) {
@@ -567,5 +571,83 @@ func TestDeletionStatusTransitions(t *testing.T) {
 	}
 	if completed.Status != DeletionStatusCompleted {
 		t.Fatalf("final status should be completed, got %s", completed.Status)
+	}
+}
+
+func TestDataLifecyclePersistenceRestoresDerivedCleanupState(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "data_lifecycle.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer sqlDB.Close()
+
+	c := NewDataLifecycleCoordinator(db)
+	if err := c.InitSchema(); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+
+	req := DeletionRequest{
+		TargetID:   "persist-derived-target",
+		TargetType: "memory",
+		Scope:      DeletionScopeAll,
+		Reason:     "test",
+	}
+	tombstone := c.RequestDeletion(req)
+	c.ExecuteOutboxCleanup()
+	c.GenerateRecalculationTasks(tombstone)
+	completed, ok := c.MarkDeletionComplete(req.TargetID)
+	if !ok {
+		t.Fatal("should mark persisted deletion complete")
+	}
+	if completed.CompletedAt == nil {
+		t.Fatal("completedAt should be set before reload")
+	}
+
+	reloaded := NewDataLifecycleCoordinator(db)
+	if err := reloaded.InitSchema(); err != nil {
+		t.Fatalf("reload schema: %v", err)
+	}
+
+	found, ok := reloaded.GetTombstone(req.TargetID)
+	if !ok {
+		t.Fatal("reloaded coordinator should find persisted tombstone")
+	}
+	if found.Status != DeletionStatusCompleted {
+		t.Fatalf("expected completed tombstone after reload, got %s", found.Status)
+	}
+	if !reloaded.IsRetrievalBlocked(req.TargetID) {
+		t.Fatal("retrieval block should survive reload")
+	}
+
+	items := reloaded.GetOutboxItems()
+	if len(items) != 6 {
+		t.Fatalf("expected 6 persisted outbox items, got %d", len(items))
+	}
+	for _, item := range items {
+		if item.Status != "completed" {
+			t.Fatalf("expected persisted outbox item completed, got %s", item.Status)
+		}
+		if item.CleanedAt == nil {
+			t.Fatal("persisted outbox item should keep cleanedAt")
+		}
+	}
+
+	tasks := reloaded.GetRecalculationTasks()
+	if len(tasks) != 3 {
+		t.Fatalf("expected 3 persisted recalculation tasks, got %d", len(tasks))
+	}
+	zones := map[string]bool{}
+	for _, task := range tasks {
+		zones[task.AffectedZone] = true
+		if task.Status != "pending" {
+			t.Fatalf("expected persisted recalc task pending, got %s", task.Status)
+		}
+	}
+	if !zones["belief"] || !zones["relationship"] || !zones["memory"] {
+		t.Fatal("persisted recalculation tasks should cover all derived zones")
 	}
 }

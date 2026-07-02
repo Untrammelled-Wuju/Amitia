@@ -1,13 +1,14 @@
 package mindruntime
 
 import (
-	"gorm.io/gorm"
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type DeletionScope string
@@ -93,8 +94,6 @@ type DeletionRequest struct {
 	Reason     string        `json:"reason"`
 }
 
-
-
 // DeletionTombstoneModel is the GORM model for SQLite persistence.
 type DeletionTombstoneModel struct {
 	ID               string     `gorm:"primaryKey;column:id" json:"id"`
@@ -112,6 +111,33 @@ type DeletionTombstoneModel struct {
 }
 
 func (DeletionTombstoneModel) TableName() string { return "deletion_tombstones" }
+
+type OutboxCleanupItemModel struct {
+	ID         string     `gorm:"primaryKey;column:id" json:"id"`
+	Storage    string     `gorm:"column:storage;index" json:"storage"`
+	TargetID   string     `gorm:"column:target_id;index" json:"targetId"`
+	TargetKind string     `gorm:"column:target_kind" json:"targetKind"`
+	Status     string     `gorm:"column:status;index" json:"status"`
+	Attempts   int        `gorm:"column:attempts" json:"attempts"`
+	LastError  string     `gorm:"column:last_error" json:"lastError,omitempty"`
+	CleanedAt  *time.Time `gorm:"column:cleaned_at" json:"cleanedAt,omitempty"`
+}
+
+func (OutboxCleanupItemModel) TableName() string { return "data_lifecycle_outbox_cleanup_items" }
+
+type RecalculationTaskModel struct {
+	ID           string    `gorm:"primaryKey;column:id" json:"id"`
+	TriggerType  string    `gorm:"column:trigger_type;index" json:"triggerType"`
+	TargetID     string    `gorm:"column:target_id;index" json:"targetId"`
+	AffectedZone string    `gorm:"column:affected_zone" json:"affectedZone"`
+	Priority     int       `gorm:"column:priority" json:"priority"`
+	CreatedAt    time.Time `gorm:"column:created_at" json:"createdAt"`
+	Status       string    `gorm:"column:status;index" json:"status"`
+	Description  string    `gorm:"column:description" json:"description"`
+}
+
+func (RecalculationTaskModel) TableName() string { return "data_lifecycle_recalculation_tasks" }
+
 type DataLifecycleCoordinator struct {
 	db          *gorm.DB
 	mu          sync.RWMutex
@@ -132,12 +158,14 @@ func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 	}
 }
 
-
 func (c *DataLifecycleCoordinator) InitSchema() error {
 	if c.db == nil {
 		return fmt.Errorf("data_lifecycle: db is nil, cannot init schema")
 	}
-	return c.db.AutoMigrate(&DeletionTombstoneModel{})
+	if err := c.db.AutoMigrate(&DeletionTombstoneModel{}, &OutboxCleanupItemModel{}, &RecalculationTaskModel{}); err != nil {
+		return err
+	}
+	return c.loadPersistedState()
 }
 func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) DeletionTombstone {
 	c.mu.Lock()
@@ -161,7 +189,9 @@ func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) Deletion
 	}
 
 	c.tombstones[id] = tombstone
-	c.scheduleOutboxCleanup(tombstone)
+	items := c.scheduleOutboxCleanup(tombstone)
+	c.persistTombstoneLocked(tombstone)
+	c.persistOutboxItemsLocked(items)
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "deletion_requests", 1)
 
 	return tombstone
@@ -193,8 +223,9 @@ func (c *DataLifecycleCoordinator) GetTombstone(targetID string) (DeletionTombst
 	return DeletionTombstone{}, false
 }
 
-func (c *DataLifecycleCoordinator) scheduleOutboxCleanup(tombstone DeletionTombstone) {
+func (c *DataLifecycleCoordinator) scheduleOutboxCleanup(tombstone DeletionTombstone) []OutboxCleanupItem {
 	storages := []string{"qdrant", "surrealdb", "cache", "summaries", "reflections", "traces"}
+	items := make([]OutboxCleanupItem, 0, len(storages))
 	for _, storage := range storages {
 		item := OutboxCleanupItem{
 			ID:         fmt.Sprintf("outbox_%s_%s", tombstone.ID, storage),
@@ -205,7 +236,9 @@ func (c *DataLifecycleCoordinator) scheduleOutboxCleanup(tombstone DeletionTombs
 			Attempts:   0,
 		}
 		c.outbox = append(c.outbox, item)
+		items = append(items, item)
 	}
+	return items
 }
 
 func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() []OutboxCleanupItem {
@@ -221,6 +254,7 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() []OutboxCleanupItem {
 			now := time.Now().UTC()
 			item.CleanedAt = &now
 			item.LastError = ""
+			c.persistOutboxItemLocked(*item)
 		}
 		results = append(results, *item)
 	}
@@ -280,6 +314,7 @@ func (c *DataLifecycleCoordinator) GenerateRecalculationTasks(tombstone Deletion
 	}
 
 	c.recalcTasks = append(c.recalcTasks, tasks...)
+	c.persistRecalculationTasksLocked(tasks)
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "recalc_tasks_generated", int64(len(tasks)))
 
 	return tasks
@@ -296,6 +331,7 @@ func (c *DataLifecycleCoordinator) MarkDeletionComplete(targetID string) (Deleti
 			t.Status = DeletionStatusCompleted
 			t.CompletedAt = &now
 			c.tombstones[key] = t
+			c.persistTombstoneLocked(t)
 			return t, true
 		}
 	}
@@ -594,4 +630,157 @@ func generateTombstoneID(targetID string, targetType string) string {
 
 func normalizeTargetID(id string) string {
 	return strings.ToLower(strings.TrimSpace(id))
+}
+
+func (c *DataLifecycleCoordinator) loadPersistedState() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var tombstoneModels []DeletionTombstoneModel
+	if err := c.db.Find(&tombstoneModels).Error; err != nil {
+		return err
+	}
+	tombstones := make(map[string]DeletionTombstone, len(tombstoneModels))
+	for _, model := range tombstoneModels {
+		tombstone := tombstoneFromModel(model)
+		tombstones[tombstone.ID] = tombstone
+	}
+
+	var outboxModels []OutboxCleanupItemModel
+	if err := c.db.Find(&outboxModels).Error; err != nil {
+		return err
+	}
+	outbox := make([]OutboxCleanupItem, 0, len(outboxModels))
+	for _, model := range outboxModels {
+		outbox = append(outbox, outboxItemFromModel(model))
+	}
+
+	var taskModels []RecalculationTaskModel
+	if err := c.db.Find(&taskModels).Error; err != nil {
+		return err
+	}
+	tasks := make([]RecalculationTask, 0, len(taskModels))
+	for _, model := range taskModels {
+		tasks = append(tasks, recalculationTaskFromModel(model))
+	}
+
+	c.tombstones = tombstones
+	c.outbox = outbox
+	c.recalcTasks = tasks
+	return nil
+}
+
+func (c *DataLifecycleCoordinator) persistTombstoneLocked(tombstone DeletionTombstone) {
+	if c.db == nil {
+		return
+	}
+	_ = c.db.Save(tombstoneToModel(tombstone)).Error
+}
+
+func (c *DataLifecycleCoordinator) persistOutboxItemsLocked(items []OutboxCleanupItem) {
+	for _, item := range items {
+		c.persistOutboxItemLocked(item)
+	}
+}
+
+func (c *DataLifecycleCoordinator) persistOutboxItemLocked(item OutboxCleanupItem) {
+	if c.db == nil {
+		return
+	}
+	_ = c.db.Save(outboxItemToModel(item)).Error
+}
+
+func (c *DataLifecycleCoordinator) persistRecalculationTasksLocked(tasks []RecalculationTask) {
+	if c.db == nil {
+		return
+	}
+	for _, task := range tasks {
+		_ = c.db.Save(recalculationTaskToModel(task)).Error
+	}
+}
+
+func tombstoneToModel(tombstone DeletionTombstone) *DeletionTombstoneModel {
+	return &DeletionTombstoneModel{
+		ID:               tombstone.ID,
+		TargetID:         tombstone.TargetID,
+		TargetType:       tombstone.TargetType,
+		Scope:            string(tombstone.Scope),
+		Status:           string(tombstone.Status),
+		ItemsCount:       tombstone.ItemsCount,
+		CleanedCount:     tombstone.CleanedCount,
+		FailedCount:      tombstone.FailedCount,
+		RequestedAt:      tombstone.RequestedAt,
+		BlockedUntil:     tombstone.BlockedUntil,
+		CompletedAt:      tombstone.CompletedAt,
+		RetrievalBlocked: tombstone.RetrievalBlocked,
+	}
+}
+
+func tombstoneFromModel(model DeletionTombstoneModel) DeletionTombstone {
+	return DeletionTombstone{
+		ID:               model.ID,
+		TargetID:         model.TargetID,
+		TargetType:       model.TargetType,
+		Scope:            DeletionScope(model.Scope),
+		Status:           DeletionStatus(model.Status),
+		ItemsCount:       model.ItemsCount,
+		CleanedCount:     model.CleanedCount,
+		FailedCount:      model.FailedCount,
+		RequestedAt:      model.RequestedAt,
+		BlockedUntil:     model.BlockedUntil,
+		CompletedAt:      model.CompletedAt,
+		RetrievalBlocked: model.RetrievalBlocked,
+	}
+}
+
+func outboxItemToModel(item OutboxCleanupItem) *OutboxCleanupItemModel {
+	return &OutboxCleanupItemModel{
+		ID:         item.ID,
+		Storage:    item.Storage,
+		TargetID:   item.TargetID,
+		TargetKind: item.TargetKind,
+		Status:     item.Status,
+		Attempts:   item.Attempts,
+		LastError:  item.LastError,
+		CleanedAt:  item.CleanedAt,
+	}
+}
+
+func outboxItemFromModel(model OutboxCleanupItemModel) OutboxCleanupItem {
+	return OutboxCleanupItem{
+		ID:         model.ID,
+		Storage:    model.Storage,
+		TargetID:   model.TargetID,
+		TargetKind: model.TargetKind,
+		Status:     model.Status,
+		Attempts:   model.Attempts,
+		LastError:  model.LastError,
+		CleanedAt:  model.CleanedAt,
+	}
+}
+
+func recalculationTaskToModel(task RecalculationTask) *RecalculationTaskModel {
+	return &RecalculationTaskModel{
+		ID:           task.ID,
+		TriggerType:  task.TriggerType,
+		TargetID:     task.TargetID,
+		AffectedZone: task.AffectedZone,
+		Priority:     task.Priority,
+		CreatedAt:    task.CreatedAt,
+		Status:       task.Status,
+		Description:  task.Description,
+	}
+}
+
+func recalculationTaskFromModel(model RecalculationTaskModel) RecalculationTask {
+	return RecalculationTask{
+		ID:           model.ID,
+		TriggerType:  model.TriggerType,
+		TargetID:     model.TargetID,
+		AffectedZone: model.AffectedZone,
+		Priority:     model.Priority,
+		CreatedAt:    model.CreatedAt,
+		Status:       model.Status,
+		Description:  model.Description,
+	}
 }
