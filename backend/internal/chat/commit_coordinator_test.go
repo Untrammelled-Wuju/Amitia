@@ -25,7 +25,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
-	if err := db.AutoMigrate(&Conversation{}, &Message{}, &relationshipStateRecord{}, &relationshipEventRecord{}); err != nil {
+	if err := db.AutoMigrate(&Conversation{}, &Message{}, &relationshipStateRecord{}, &relationshipEventRecord{}, &interaction.InteractionRecordModel{}); err != nil {
 		t.Fatal(err)
 	}
 	store := psyche.NewSQLitePsycheStore(db)
@@ -42,6 +42,21 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 		t.Fatal(err)
 	}
 	if err := db.Create(&Message{ID: "user-commit", ConversationID: convID, Role: "user", Content: "hello", MsgType: "text", Source: "system", Status: "processing", RequestID: "req-commit"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&interaction.InteractionRecordModel{
+		ID:             "interaction-commit",
+		UserID:         "user:web",
+		CharacterID:    "char-commit",
+		ConversationID: convID,
+		Channel:        "web",
+		PeerID:         "peer-commit",
+		RequestID:      "req-commit",
+		Status:         string(interaction.InteractionStatusContextReady),
+		StatusVersion:  2,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 	return db, &service{db: db, psycheStore: store}, convID
@@ -68,14 +83,15 @@ func runtimeForCommitTest() *interaction.RuntimeAssembly {
 func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, true)
 	req := &ProcessMessageRequest{
-		CharacterID:    "char-commit",
-		ConversationID: convID,
-		Channel:        "web",
-		Source:         "system",
-		PeerID:         "peer-commit",
-		RequestID:      "req-commit",
-		InteractionID:  "interaction-commit",
-		Runtime:        runtimeForCommitTest(),
+		CharacterID:           "char-commit",
+		ConversationID:        convID,
+		Channel:               "web",
+		Source:                "system",
+		PeerID:                "peer-commit",
+		RequestID:             "req-commit",
+		InteractionID:         "interaction-commit",
+		ExpectedStatusVersion: 2,
+		Runtime:               runtimeForCommitTest(),
 	}
 	result, err := svc.commitInteraction(messageCommitPlan{
 		Request:       req,
@@ -141,14 +157,15 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, false)
 	req := &ProcessMessageRequest{
-		CharacterID:    "char-commit",
-		ConversationID: convID,
-		Channel:        "web",
-		Source:         "system",
-		PeerID:         "peer-commit",
-		RequestID:      "req-commit",
-		InteractionID:  "interaction-commit",
-		Runtime:        runtimeForCommitTest(),
+		CharacterID:           "char-commit",
+		ConversationID:        convID,
+		Channel:               "web",
+		Source:                "system",
+		PeerID:                "peer-commit",
+		RequestID:             "req-commit",
+		InteractionID:         "interaction-commit",
+		ExpectedStatusVersion: 2,
+		Runtime:               runtimeForCommitTest(),
 	}
 	_, err := svc.commitInteraction(messageCommitPlan{
 		Request:       req,
@@ -191,5 +208,107 @@ func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 	}
 	if relationshipCount != 0 {
 		t.Fatalf("relationship state was not rolled back: %d", relationshipCount)
+	}
+}
+
+func TestCommitInteractionRejectsStaleInteractionRecord(t *testing.T) {
+	cases := []struct {
+		name   string
+		update map[string]interface{}
+	}{
+		{
+			name: "version_conflict",
+			update: map[string]interface{}{
+				"status_version": int64(3),
+			},
+		},
+		{
+			name: "cancel_requested",
+			update: map[string]interface{}{
+				"cancel_requested_at": time.Now(),
+				"status_version":      int64(3),
+			},
+		},
+		{
+			name: "superseded",
+			update: map[string]interface{}{
+				"status":           string(interaction.InteractionStatusSuperseded),
+				"superseded_by_id": "interaction-new",
+				"status_version":   int64(3),
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, svc, convID := setupCommitCoordinatorTest(t, true)
+			if err := db.Model(&interaction.InteractionRecordModel{}).Where("id = ?", "interaction-commit").Updates(tc.update).Error; err != nil {
+				t.Fatal(err)
+			}
+			req := &ProcessMessageRequest{
+				CharacterID:           "char-commit",
+				ConversationID:        convID,
+				Channel:               "web",
+				Source:                "system",
+				PeerID:                "peer-commit",
+				RequestID:             "req-commit",
+				InteractionID:         "interaction-commit",
+				ExpectedStatusVersion: 2,
+				Runtime:               runtimeForCommitTest(),
+			}
+			_, err := svc.commitInteraction(messageCommitPlan{
+				Request:       req,
+				Conversation:  convID,
+				Character:     "char-commit",
+				CharacterName: "Amitia",
+				UserMessageID: "user-commit",
+				Reply:         "stale",
+				Lines:         []string{"stale"},
+				Source:        "system",
+				Runtime:       req.Runtime,
+			})
+			if err == nil {
+				t.Fatal("expected stale interaction commit to fail")
+			}
+			assertNoCommitSideEffects(t, db, convID)
+		})
+	}
+}
+
+func assertNoCommitSideEffects(t *testing.T, db *gorm.DB, convID string) {
+	t.Helper()
+	var assistantCount int64
+	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ?", convID, "assistant").Count(&assistantCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if assistantCount != 0 {
+		t.Fatalf("assistant message was committed: %d", assistantCount)
+	}
+	var status string
+	if err := db.Model(&Message{}).Select("status").Where("id = ?", "user-commit").Row().Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "processing" {
+		t.Fatalf("user status changed, got %s", status)
+	}
+	var psycheCount int64
+	if err := db.Table("psyche_states").Where("character_id = ?", "char-commit").Count(&psycheCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if psycheCount != 0 {
+		t.Fatalf("psyche state was committed: %d", psycheCount)
+	}
+	var relationshipCount int64
+	if err := db.Model(&relationshipStateRecord{}).Where("character_id = ?", "char-commit").Count(&relationshipCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if relationshipCount != 0 {
+		t.Fatalf("relationship state was committed: %d", relationshipCount)
+	}
+	var outboxCount int64
+	if err := db.Model(&interaction.OutboxRecordModel{}).Where("aggregate_id = ?", "interaction-commit").Count(&outboxCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if outboxCount != 0 {
+		t.Fatalf("outbox records were committed: %d", outboxCount)
 	}
 }

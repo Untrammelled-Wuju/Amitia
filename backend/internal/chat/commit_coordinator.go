@@ -58,6 +58,9 @@ type messageCommitResult struct {
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := ensureInteractionCommitFreshTx(tx, plan.Request); err != nil {
+			return err
+		}
 		for _, text := range plan.Lines {
 			aiMsgID := uuid.New().String()
 			if err := tx.Create(&Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, RequestID: plan.Request.RequestID}).Error; err != nil {
@@ -91,6 +94,30 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		return nil, err
 	}
 	return result, nil
+}
+
+func ensureInteractionCommitFreshTx(tx *gorm.DB, req *ProcessMessageRequest) error {
+	if !shouldCommitRuntime(req) {
+		return nil
+	}
+	var record interaction.InteractionRecordModel
+	err := tx.Where("id = ?", req.InteractionID).Take(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return interaction.ErrInteractionNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if record.StatusVersion != req.ExpectedStatusVersion {
+		return interaction.ErrVersionConflict
+	}
+	if interaction.InteractionStatus(record.Status) != interaction.InteractionStatusContextReady {
+		return fmt.Errorf("%w: stale status %s", interaction.ErrInvalidTransition, record.Status)
+	}
+	if record.SupersededByID != "" || !record.CancelRequestedAt.IsZero() {
+		return interaction.ErrVersionConflict
+	}
+	return nil
 }
 
 func shouldCommitRuntime(req *ProcessMessageRequest) bool {

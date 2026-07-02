@@ -283,6 +283,308 @@ func (p *supersedeSQLiteProcessor) ProcessMessageCtx(ctx context.Context, req *P
 	}, nil
 }
 
+type queueSerialProcessor struct {
+	current       atomic.Int32
+	max           atomic.Int32
+	firstStarted  chan struct{}
+	secondStarted chan struct{}
+	releaseFirst  chan struct{}
+}
+
+func (p *queueSerialProcessor) ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
+	n := p.current.Add(1)
+	defer p.current.Add(-1)
+	for {
+		max := p.max.Load()
+		if n <= max || p.max.CompareAndSwap(max, n) {
+			break
+		}
+	}
+	switch req.RequestID {
+	case "queue-1":
+		close(p.firstStarted)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-p.releaseFirst:
+		}
+	case "queue-2":
+		close(p.secondStarted)
+	}
+	return &ProcessResponse{
+		ConversationID: req.ConversationID,
+		Reply:          req.RequestID,
+		CharacterID:    req.CharacterID,
+		RequestID:      req.RequestID,
+	}, nil
+}
+
+type postSuccessDriftProcessor struct {
+	mutate func(ctx context.Context, req *ProcessRequest) error
+}
+
+func (p postSuccessDriftProcessor) ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
+	if p.mutate != nil {
+		if err := p.mutate(ctx, req); err != nil {
+			return nil, err
+		}
+	}
+	return &ProcessResponse{
+		ConversationID: req.ConversationID,
+		Reply:          "ok",
+		CharacterID:    req.CharacterID,
+		MessageIDs:     []string{"msg-success"},
+		RequestID:      req.RequestID,
+	}, nil
+}
+
+func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
+	tracker := NewInMemoryTracker()
+	processor := &queueSerialProcessor{
+		firstStarted:  make(chan struct{}),
+		secondStarted: make(chan struct{}),
+		releaseFirst:  make(chan struct{}),
+	}
+	cfg := DefaultOrchestratorConfig()
+	cfg.SupersedePolicy = SupersedePolicyQueue
+	cfg.MaxConcurrent = 10
+	orch := NewOrchestratorWithStores(cfg, processor, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := orch.Process(context.Background(), &ProcessRequest{
+			UserID:         "user-queue",
+			CharacterID:    "char-queue",
+			ConversationID: "conv-queue",
+			Channel:        "web",
+			Source:         "web",
+			Message:        "first",
+			RequestID:      "queue-1",
+		})
+		firstDone <- err
+	}()
+
+	select {
+	case <-processor.firstStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first processor call did not start")
+	}
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := orch.Process(context.Background(), &ProcessRequest{
+			UserID:         "user-queue",
+			CharacterID:    "char-queue",
+			ConversationID: "conv-queue",
+			Channel:        "web",
+			Source:         "web",
+			Message:        "second",
+			RequestID:      "queue-2",
+		})
+		secondDone <- err
+	}()
+
+	waitForRecordStatus(t, tracker, "queue-2", InteractionStatusQueued)
+	select {
+	case <-processor.secondStarted:
+		t.Fatal("second processor call started before first completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(processor.releaseFirst)
+	if err := <-firstDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-processor.secondStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second processor call did not start after first completed")
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatal(err)
+	}
+	if got := processor.max.Load(); got != 1 {
+		t.Fatalf("queue policy allowed concurrent processors: max=%d", got)
+	}
+}
+
+func waitForRecordStatus(t *testing.T, tracker InteractionTracker, requestID string, status InteractionStatus) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	lastStatus := InteractionStatus("")
+	for {
+		matched := false
+		ready := false
+		err := tracker.Range(context.Background(), func(record *InteractionRecord) bool {
+			if record.Scope.RequestID != requestID {
+				return true
+			}
+			matched = true
+			lastStatus = record.Status
+			ready = record.Status == status
+			return !ready
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if matched && ready {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("record %s did not reach status %s, last status %s matched %v", requestID, status, lastStatus, matched)
+		case <-tick.C:
+		}
+	}
+}
+
+func TestOrchestratorSuccessReturnDoesNotCompleteWhenInteractionDrifts(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(ctx context.Context, tracker *InMemoryTracker, req *ProcessRequest) error
+		wantStatus  InteractionStatus
+		wantOutcome Outcome
+		wantErr     error
+	}{
+		{
+			name: "cancel_requested",
+			mutate: func(ctx context.Context, tracker *InMemoryTracker, req *ProcessRequest) error {
+				return tracker.RequestCancel(ctx, req.InteractionID, "test_cancel")
+			},
+			wantStatus:  InteractionStatusCancelled,
+			wantOutcome: OutcomeCancelled,
+			wantErr:     ErrOrchestratorCancelled,
+		},
+		{
+			name: "superseded",
+			mutate: func(ctx context.Context, tracker *InMemoryTracker, req *ProcessRequest) error {
+				scope := InteractionScope{
+					UserID:         req.UserID,
+					CharacterID:    req.CharacterID,
+					ConversationID: req.ConversationID,
+					Channel:        req.Channel,
+					PeerID:         req.PeerID,
+					SessionID:      req.SessionID,
+					Source:         req.Source,
+					RequestID:      "superseder-" + req.RequestID,
+				}.Normalize()
+				superseder := NewInteractionRecord(scope)
+				if err := tracker.Create(ctx, superseder); err != nil {
+					return err
+				}
+				return tracker.MarkSuperseded(ctx, req.InteractionID, superseder.ID)
+			},
+			wantStatus:  InteractionStatusSuperseded,
+			wantOutcome: OutcomeSuperseded,
+			wantErr:     ErrOrchestratorSuperseded,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := NewInMemoryTracker()
+			outbox := NewInMemoryOutboxStore()
+			processor := postSuccessDriftProcessor{
+				mutate: func(ctx context.Context, req *ProcessRequest) error {
+					return tt.mutate(ctx, tracker, req)
+				},
+			}
+			orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+			orch.SetReady(true)
+
+			result, err := orch.Process(context.Background(), &ProcessRequest{
+				UserID:         "user-drift",
+				CharacterID:    "char-drift",
+				ConversationID: "conv-drift",
+				Channel:        "web",
+				Source:         "web",
+				Message:        "hello",
+				RequestID:      "req-" + tt.name,
+			})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+			if result == nil || result.Outcome != tt.wantOutcome {
+				t.Fatalf("unexpected result: %#v", result)
+			}
+			stored, ok, getErr := tracker.Get(context.Background(), result.InteractionID)
+			if getErr != nil {
+				t.Fatal(getErr)
+			}
+			if !ok {
+				t.Fatal("interaction record missing")
+			}
+			if stored.Status != tt.wantStatus {
+				t.Fatalf("expected status %s, got %#v", tt.wantStatus, stored)
+			}
+			records, listErr := outbox.ListPending()
+			if listErr != nil {
+				t.Fatal(listErr)
+			}
+			if len(records) != 0 {
+				t.Fatalf("outbox records should not be appended after %s drift: %#v", tt.name, records)
+			}
+		})
+	}
+}
+
+func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *testing.T) {
+	db := newTestInteractionDB(t)
+	tracker := NewSQLiteInteractionTracker(db)
+	if err := tracker.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	outbox := NewSQLiteOutboxStore(db)
+	if err := outbox.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	processor := postSuccessDriftProcessor{
+		mutate: func(ctx context.Context, req *ProcessRequest) error {
+			return db.WithContext(ctx).Model(&InteractionRecordModel{}).
+				Where("id = ?", req.InteractionID).
+				Update("status_version", gorm.Expr("status_version + 1")).Error
+		},
+	}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-version-drift",
+		CharacterID:    "char-version-drift",
+		ConversationID: "conv-version-drift",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-version-drift",
+	})
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got result=%#v err=%v", result, err)
+	}
+	if result == nil || result.Outcome == OutcomeCompleted {
+		t.Fatalf("version drift should not complete interaction: %#v", result)
+	}
+	stored, ok, getErr := tracker.Get(context.Background(), result.InteractionID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if !ok {
+		t.Fatal("interaction record missing")
+	}
+	if stored.Status == InteractionStatusCompleted {
+		t.Fatalf("version drift should not complete stored interaction: %#v", stored)
+	}
+	records, listErr := outbox.ListPending()
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(records) != 0 {
+		t.Fatalf("outbox records should not be appended after version drift: %#v", records)
+	}
+}
+
 func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	processor := &supersedeSQLiteProcessor{firstStarted: make(chan struct{})}

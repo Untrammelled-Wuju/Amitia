@@ -164,23 +164,24 @@ type ConversationListResponse struct {
 }
 
 type ProcessMessageRequest struct {
-	CharacterID    string                       `json:"characterId"`
-	Message        string                       `json:"message"`
-	ConversationID string                       `json:"conversationId"`
-	Sequence       int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Channel        string                       `json:"channel"`
-	Source         string                       `json:"source"`
-	PeerID         string                       `json:"peerId"`
-	AudioUrl       string                       `json:"audioUrl"`
-	AudioDuration  float64                      `json:"audioDuration"`
-	VoiceMessage   bool                         `json:"voiceMessage"`
-	ImageUrl       string                       `json:"imageUrl"`
-	VideoUrl       string                       `json:"videoUrl"`
-	RequestID      string                       `json:"requestId"`
-	ImageContext   string                       `json:"-"`
-	RuntimeContext string                       `json:"-"`
-	InteractionID  string                       `json:"-"`
-	Runtime        *interaction.RuntimeAssembly `json:"-"`
+	CharacterID           string                       `json:"characterId"`
+	Message               string                       `json:"message"`
+	ConversationID        string                       `json:"conversationId"`
+	Sequence              int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Channel               string                       `json:"channel"`
+	Source                string                       `json:"source"`
+	PeerID                string                       `json:"peerId"`
+	AudioUrl              string                       `json:"audioUrl"`
+	AudioDuration         float64                      `json:"audioDuration"`
+	VoiceMessage          bool                         `json:"voiceMessage"`
+	ImageUrl              string                       `json:"imageUrl"`
+	VideoUrl              string                       `json:"videoUrl"`
+	RequestID             string                       `json:"requestId"`
+	ImageContext          string                       `json:"-"`
+	RuntimeContext        string                       `json:"-"`
+	InteractionID         string                       `json:"-"`
+	ExpectedStatusVersion int64                        `json:"-"`
+	Runtime               *interaction.RuntimeAssembly `json:"-"`
 }
 
 type ProcessMessageResponse struct {

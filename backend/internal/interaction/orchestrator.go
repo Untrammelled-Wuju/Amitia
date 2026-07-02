@@ -26,24 +26,25 @@ var (
 )
 
 type ProcessRequest struct {
-	CharacterID    string           `json:"characterId,omitempty"`
-	Message        string           `json:"message"`
-	ConversationID string           `json:"conversationId,omitempty"`
-	Channel        string           `json:"channel,omitempty"`
-	Source         string           `json:"source,omitempty"`
-	PeerID         string           `json:"peerId,omitempty"`
-	UserID         string           `json:"userId,omitempty"`
-	SessionID      string           `json:"sessionId,omitempty"`
-	AudioUrl       string           `json:"audioUrl,omitempty"`
-	AudioDuration  float64          `json:"audioDuration,omitempty"`
-	VoiceMessage   bool             `json:"voiceMessage"`
-	ExpressionPlan *ExpressionPlan  `json:"expressionPlan,omitempty"`
-	ImageUrl       string           `json:"imageUrl,omitempty"`
-	VideoUrl       string           `json:"videoUrl,omitempty"`
-	ImageContext   string           `json:"imageContext,omitempty"`
-	RequestID      string           `json:"requestId,omitempty"`
-	InteractionID  string           `json:"-"`
-	Runtime        *RuntimeAssembly `json:"-"`
+	CharacterID           string           `json:"characterId,omitempty"`
+	Message               string           `json:"message"`
+	ConversationID        string           `json:"conversationId,omitempty"`
+	Channel               string           `json:"channel,omitempty"`
+	Source                string           `json:"source,omitempty"`
+	PeerID                string           `json:"peerId,omitempty"`
+	UserID                string           `json:"userId,omitempty"`
+	SessionID             string           `json:"sessionId,omitempty"`
+	AudioUrl              string           `json:"audioUrl,omitempty"`
+	AudioDuration         float64          `json:"audioDuration,omitempty"`
+	VoiceMessage          bool             `json:"voiceMessage"`
+	ExpressionPlan        *ExpressionPlan  `json:"expressionPlan,omitempty"`
+	ImageUrl              string           `json:"imageUrl,omitempty"`
+	VideoUrl              string           `json:"videoUrl,omitempty"`
+	ImageContext          string           `json:"imageContext,omitempty"`
+	RequestID             string           `json:"requestId,omitempty"`
+	InteractionID         string           `json:"-"`
+	ExpectedStatusVersion int64            `json:"-"`
+	Runtime               *RuntimeAssembly `json:"-"`
 }
 
 type ProcessResponse struct {
@@ -247,6 +248,17 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		}
 	}
 
+	if resolution.Enqueue {
+		record, err = o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusQueued)
+		if err != nil {
+			return o.buildResult(record, nil, OutcomeFailed, err), err
+		}
+		record, err = o.waitForQueueTurn(ctx, scope, record)
+		if err != nil {
+			return o.buildResult(record, nil, outcomeFromQueueWaitError(err), err), err
+		}
+	}
+
 	record, err = o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
 	if err != nil {
 		return o.buildResult(record, nil, OutcomeFailed, err), err
@@ -279,6 +291,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		o.tracker.Fail(ctx, record.ID, "context_ready_failed", err.Error())
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
+	req.ExpectedStatusVersion = record.StatusVersion
 	if runtime.Safety.Blocked {
 		blockErr := ErrOrchestratorSafetyBlocked
 		if len(runtime.Safety.Reasons) > 0 {
@@ -501,6 +514,57 @@ func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID stri
 	}
 	o.cancels.Cancel(targetID)
 	return nil
+}
+
+func (o *Orchestrator) waitForQueueTurn(ctx context.Context, scope InteractionScope, record *InteractionRecord) (*InteractionRecord, error) {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		fresh, _, err := o.ensureFresh(ctx, record.ID)
+		if err != nil {
+			return fresh, err
+		}
+		record = fresh
+		older, err := o.hasOlderActive(ctx, scope, record)
+		if err != nil {
+			return record, err
+		}
+		if !older {
+			return record, nil
+		}
+		select {
+		case <-ctx.Done():
+			return record, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func (o *Orchestrator) hasOlderActive(ctx context.Context, scope InteractionScope, record *InteractionRecord) (bool, error) {
+	active, err := o.tracker.ListActive(ctx, scope)
+	if err != nil {
+		return false, err
+	}
+	for _, rec := range active {
+		if rec.ID == record.ID {
+			continue
+		}
+		if rec.CreatedAt.Before(record.CreatedAt) || (rec.CreatedAt.Equal(record.CreatedAt) && rec.ID < record.ID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func outcomeFromQueueWaitError(err error) Outcome {
+	switch {
+	case errors.Is(err, ErrOrchestratorCancelled), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return OutcomeCancelled
+	case errors.Is(err, ErrOrchestratorSuperseded):
+		return OutcomeSuperseded
+	default:
+		return OutcomeFailed
+	}
 }
 
 func (o *Orchestrator) ensureFresh(ctx context.Context, id string) (*InteractionRecord, Outcome, error) {
