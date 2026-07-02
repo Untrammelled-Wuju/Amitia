@@ -160,6 +160,9 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 	if update.PathType != nil {
 		updates["path_type"] = *update.PathType
 	}
+	if update.SupersedesID != nil {
+		updates["supersedes_id"] = *update.SupersedesID
+	}
 	if update.CommitID != nil {
 		updates["commit_id"] = *update.CommitID
 	}

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/graph"
@@ -153,6 +154,11 @@ func main() {
 	killExistingServer(serverAddr)
 
 	r := setupRouter(ctx, services)
+	if result, err := services.UnifiedEntry.RecoverStaleInteractions(context.Background(), time.Now()); err != nil {
+		log.Error("交互启动恢复失败:", err)
+	} else if result.Recovered > 0 || result.Failed > 0 {
+		log.Info("交互启动恢复完成 scanned=", result.Scanned, " recovered=", result.Recovered, " skipped=", result.Skipped, " failed=", result.Failed)
+	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
 	if err := r.Run(serverAddr); err != nil {
 		log.Error("服务启动失败:", err)

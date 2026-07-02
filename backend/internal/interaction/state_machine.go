@@ -85,11 +85,12 @@ type InteractionRecord struct {
 }
 
 type InteractionMetadataUpdate struct {
-	Priority   *int
-	PathType   *string
-	CommitID   *string
-	ExecutorID *string
-	DeadlineAt *time.Time
+	Priority     *int
+	PathType     *string
+	SupersedesID *string
+	CommitID     *string
+	ExecutorID   *string
+	DeadlineAt   *time.Time
 }
 
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
@@ -394,6 +395,9 @@ func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update 
 	}
 	if update.PathType != nil {
 		rec.PathType = *update.PathType
+	}
+	if update.SupersedesID != nil {
+		rec.SupersedesID = *update.SupersedesID
 	}
 	if update.CommitID != nil {
 		rec.CommitID = *update.CommitID

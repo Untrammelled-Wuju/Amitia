@@ -233,7 +233,14 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 				}
 				return o.buildResult(record, nil, OutcomeFailed, err), err
 			}
-			record.SupersedesID = resolution.SupersedeTargetID
+			if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, InteractionMetadataUpdate{SupersedesID: &resolution.SupersedeTargetID}); err == nil {
+				record = updated
+			} else {
+				if failed, failErr := o.tracker.Fail(ctx, record.ID, "metadata_update_failed", err.Error()); failErr == nil {
+					record = failed
+				}
+				return o.buildResult(record, nil, OutcomeFailed, err), err
+			}
 		}
 	}
 
