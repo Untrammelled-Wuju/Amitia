@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
+import "strings"
+
 func (s *service) detectEpisodicMoment(convID, charID string) {
 	if s.episodicSvc == nil {
 		return
@@ -21,7 +23,7 @@ func (s *service) extractProfile(convID, charID string) {
 	if len(messages) == 0 {
 		return
 	}
-	s.profileSvc.ExtractFromConversation("default", convID, messages, charID)
+	s.profileSvc.ExtractFromConversation(s.profileExtractionUserID(convID, charID), convID, messages, charID)
 }
 
 func (s *service) autoExtractMemories(convID, charID string) {
@@ -53,4 +55,20 @@ func (s *service) autoExtractMemories(convID, charID string) {
 		existingKeys[c.Key+"|"+c.Value] = true
 		s.memorySvc.AcceptCandidate(c.ID)
 	}
+}
+
+func (s *service) profileExtractionUserID(convID, charID string) string {
+	fallback := strings.TrimSpace(charID)
+	if s.db == nil || strings.TrimSpace(convID) == "" {
+		return fallback
+	}
+	var peerID string
+	if err := s.db.Table("conversations").Select("peer_id").Where("id = ?", convID).Row().Scan(&peerID); err != nil {
+		return fallback
+	}
+	peerID = strings.TrimSpace(peerID)
+	if peerID == "" || peerID == "default" {
+		return fallback
+	}
+	return peerID
 }

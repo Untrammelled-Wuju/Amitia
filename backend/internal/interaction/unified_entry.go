@@ -160,6 +160,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		return nil, ErrBackpressureShedding
 	}
 
+	requestID := stableRequestID(req.RequestID)
 	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
 		UserID:         req.UserID,
@@ -168,6 +169,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
 		SessionID:      req.SessionID,
+		RequestID:      requestID,
 		Source:         source,
 	}
 
@@ -185,7 +187,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		PeerID:         resolution.Scope.PeerID,
 		UserID:         resolution.Scope.UserID,
 		SessionID:      resolution.Scope.SessionID,
-		RequestID:      stableRequestID(req.RequestID),
+		RequestID:      requestID,
 		AudioUrl:       req.AudioUrl,
 		AudioDuration:  req.AudioDuration,
 		VoiceMessage:   req.VoiceMessage,

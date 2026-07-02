@@ -667,6 +667,339 @@ func TestInteractionTrackerTerminalOperationsRejectStaleVersion(t *testing.T) {
 	}
 }
 
+func TestInteractionTrackerRequestCancelBumpsVersion(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name, func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-cancel-version", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			initialVersion := record.StatusVersion
+			if err := tracker.RequestCancel(ctx, record.ID, "first"); err != nil {
+				t.Fatal(err)
+			}
+			first, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || first.StatusVersion != initialVersion+1 || first.CancelReason != "first" || first.CancelRequestedAt.IsZero() {
+				t.Fatalf("first cancel request did not bump version: ok=%v record=%#v", ok, first)
+			}
+			if err := tracker.RequestCancel(ctx, record.ID, "second"); err != nil {
+				t.Fatal(err)
+			}
+			second, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || second.StatusVersion != first.StatusVersion+1 || second.CancelReason != "second" || second.CancelRequestedAt.Before(first.CancelRequestedAt) {
+				t.Fatalf("second cancel request did not bump version: ok=%v record=%#v first=%#v", ok, second, first)
+			}
+		})
+	}
+}
+
+func TestInteractionTrackerCompleteRejectsCancelledAndSuperseded(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name+"/cancelled", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-cancelled", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.RequestCancel(ctx, record.ID, "cancel"); err != nil {
+				t.Fatal(err)
+			}
+			cancelRequested, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("record missing")
+			}
+			cancelled, err := tracker.TransitionCAS(ctx, record.ID, cancelRequested.StatusVersion, InteractionStatusCancelled)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tracker.Complete(ctx, record.ID, cancelled.StatusVersion, "late"); !errors.Is(err, ErrAlreadyTerminal) {
+				t.Fatalf("expected cancelled complete to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusCancelled || after.StatusVersion != cancelled.StatusVersion || after.ResultRef != "" {
+				t.Fatalf("cancelled complete mutated record: ok=%v record=%#v", ok, after)
+			}
+		})
+
+		t.Run(impl.name+"/superseded", func(t *testing.T) {
+			tracker := impl.new(t)
+			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-complete-superseded", Channel: "web"}
+			target := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, target); err != nil {
+				t.Fatal(err)
+			}
+			superseder := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, superseder); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); err != nil {
+				t.Fatal(err)
+			}
+			superseded, ok, err := tracker.Get(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("record missing")
+			}
+			if _, err := tracker.Complete(ctx, target.ID, superseded.StatusVersion, "late"); !errors.Is(err, ErrAlreadyTerminal) {
+				t.Fatalf("expected superseded complete to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusSuperseded || after.StatusVersion != superseded.StatusVersion || after.ResultRef != "" {
+				t.Fatalf("superseded complete mutated record: ok=%v record=%#v", ok, after)
+			}
+		})
+	}
+}
+
+func TestInteractionTrackerMarkSupersededRejectsCommittedAndTerminalTargets(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name+"/committed_status", func(t *testing.T) {
+			tracker := impl.new(t)
+			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-committed", Channel: "web"}
+			target := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, target); err != nil {
+				t.Fatal(err)
+			}
+			superseder := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, superseder); err != nil {
+				t.Fatal(err)
+			}
+			processing, err := tracker.TransitionCAS(ctx, target.ID, target.StatusVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			generated, err := tracker.TransitionCAS(ctx, target.ID, processing.StatusVersion, InteractionStatusGenerated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			committed, err := tracker.TransitionCAS(ctx, target.ID, generated.StatusVersion, InteractionStatusCommitted)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); !errors.Is(err, ErrInvalidTransition) {
+				t.Fatalf("expected committed supersede to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusCommitted || after.StatusVersion != committed.StatusVersion || after.SupersededByID != "" {
+				t.Fatalf("committed supersede mutated record: ok=%v record=%#v", ok, after)
+			}
+		})
+
+		t.Run(impl.name+"/commit_marker", func(t *testing.T) {
+			tracker := impl.new(t)
+			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-commit-marker", Channel: "web"}
+			target := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, target); err != nil {
+				t.Fatal(err)
+			}
+			superseder := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, superseder); err != nil {
+				t.Fatal(err)
+			}
+			commitID := "commit-1"
+			updated, err := tracker.UpdateMetadata(ctx, target.ID, InteractionMetadataUpdate{CommitID: &commitID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); !errors.Is(err, ErrInvalidTransition) {
+				t.Fatalf("expected commit marker supersede to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusReceived || after.StatusVersion != updated.StatusVersion || after.SupersededByID != "" || after.CommitID != commitID {
+				t.Fatalf("commit marker supersede mutated record: ok=%v record=%#v", ok, after)
+			}
+		})
+
+		t.Run(impl.name+"/terminal", func(t *testing.T) {
+			tracker := impl.new(t)
+			scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-supersede-terminal", Channel: "web"}
+			target := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, target); err != nil {
+				t.Fatal(err)
+			}
+			superseder := NewInteractionRecord(scope)
+			if err := tracker.Create(ctx, superseder); err != nil {
+				t.Fatal(err)
+			}
+			failed, err := tracker.Fail(ctx, target.ID, target.StatusVersion, "failed", "failed")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); !errors.Is(err, ErrAlreadyTerminal) {
+				t.Fatalf("expected terminal supersede to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, target.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusFailed || after.StatusVersion != failed.StatusVersion || after.SupersededByID != "" {
+				t.Fatalf("terminal supersede mutated record: ok=%v record=%#v", ok, after)
+			}
+		})
+	}
+}
+
+func TestInteractionTrackerArchiveOnlyAllowsTerminalStatuses(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name, func(t *testing.T) {
+			for _, status := range allInteractionStatusesForTest() {
+				if status == InteractionStatusArchived {
+					continue
+				}
+				t.Run(string(status), func(t *testing.T) {
+					tracker := impl.new(t)
+					record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-archive-" + string(status), Channel: "web"})
+					record.Status = status
+					if status != InteractionStatusReceived {
+						record.StatusVersion = 1
+					}
+					if err := tracker.Create(ctx, record); err != nil {
+						t.Fatal(err)
+					}
+					err := tracker.Archive(ctx, record.ID, record.StatusVersion)
+					if isTerminalStatus(status) {
+						if err != nil {
+							t.Fatalf("expected terminal archive to succeed, got %v", err)
+						}
+						after, ok, err := tracker.Get(ctx, record.ID)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !ok || after.Status != InteractionStatusArchived {
+							t.Fatalf("terminal archive did not archive record: ok=%v record=%#v", ok, after)
+						}
+						return
+					}
+					if !errors.Is(err, ErrInvalidTransition) {
+						t.Fatalf("expected active archive to fail, got %v", err)
+					}
+					after, ok, err := tracker.Get(ctx, record.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok || after.Status != status || after.StatusVersion != record.StatusVersion {
+						t.Fatalf("active archive mutated record: ok=%v record=%#v", ok, after)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestSQLiteInteractionTrackerListActiveMatchesIsActive(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-active-consistency", Channel: "web"}
+	wantActive := map[string]bool{}
+	for _, status := range allInteractionStatusesForTest() {
+		record := NewInteractionRecord(scope)
+		record.Status = status
+		record.StatusVersion = int64(len(wantActive))
+		if err := tracker.Create(ctx, record); err != nil {
+			t.Fatal(err)
+		}
+		wantActive[record.ID] = record.IsActive()
+	}
+
+	active, err := tracker.ListActive(ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotActive := map[string]bool{}
+	for _, record := range active {
+		gotActive[record.ID] = true
+		if !record.IsActive() {
+			t.Fatalf("ListActive returned inactive record: %#v", record)
+		}
+	}
+	for id, want := range wantActive {
+		if gotActive[id] != want {
+			t.Fatalf("ListActive mismatch for %s: got %v want %v", id, gotActive[id], want)
+		}
+	}
+}
+
+func allInteractionStatusesForTest() []InteractionStatus {
+	return []InteractionStatus{
+		InteractionStatusReceived,
+		InteractionStatusNormalized,
+		InteractionStatusQueued,
+		InteractionStatusProcessing,
+		InteractionStatusContextReady,
+		InteractionStatusDecided,
+		InteractionStatusGenerated,
+		InteractionStatusCommitted,
+		InteractionStatusDeliveryPending,
+		InteractionStatusDelivered,
+		InteractionStatusCompleted,
+		InteractionStatusSuperseded,
+		InteractionStatusCancelled,
+		InteractionStatusFailed,
+		InteractionStatusInterrupted,
+		InteractionStatusArchived,
+	}
+}
+
 func TestSupersedeResolverExcludesCurrentRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()

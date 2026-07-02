@@ -923,3 +923,62 @@ func TestDataLifecyclePersistenceRestoresDerivedCleanupState(t *testing.T) {
 		t.Fatal("persisted recalculation tasks should cover all derived zones")
 	}
 }
+
+func TestDataLifecyclePersistedCleanupQueueExecutesAfterReload(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "data_lifecycle_reload.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer sqlDB.Close()
+
+	c := NewDataLifecycleCoordinator(db)
+	if err := c.InitSchema(); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
+	req := DeletionRequest{
+		TargetID:   "reload-cleanup-target",
+		TargetType: "memory",
+		Scope:      DeletionScopeAll,
+		Reason:     "test",
+	}
+	c.RequestDeletion(req)
+
+	reloaded := NewDataLifecycleCoordinator(db)
+	executor := &recordingCleanupExecutor{}
+	reloaded.SetOutboxCleanupExecutor(executor)
+	if err := reloaded.InitSchema(); err != nil {
+		t.Fatalf("reload schema: %v", err)
+	}
+	results, err := reloaded.ExecuteOutboxCleanup()
+	if err != nil {
+		t.Fatalf("reloaded cleanup should succeed: %v", err)
+	}
+	if len(results) != 6 {
+		t.Fatalf("expected 6 cleanup results, got %d", len(results))
+	}
+	if len(executor.calls) != 6 {
+		t.Fatalf("expected 6 cleanup calls after reload, got %d", len(executor.calls))
+	}
+	for _, item := range results {
+		if item.Status != "completed" {
+			t.Fatalf("expected completed item after reload cleanup, got %s", item.Status)
+		}
+	}
+	tombstone, ok := reloaded.GetTombstone(req.TargetID)
+	if !ok {
+		t.Fatal("reloaded coordinator should keep tombstone")
+	}
+	if tombstone.Status != DeletionStatusCleaning {
+		t.Fatalf("expected cleaning tombstone, got %s", tombstone.Status)
+	}
+	if tombstone.ItemsCount != 6 || tombstone.CleanedCount != 6 || tombstone.FailedCount != 0 {
+		t.Fatalf("unexpected tombstone progress: %#v", tombstone)
+	}
+	if tombstone.CompletedAt != nil {
+		t.Fatal("cleanup execution should not bypass explicit deletion completion")
+	}
+}

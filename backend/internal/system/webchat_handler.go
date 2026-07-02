@@ -25,6 +25,7 @@ type webChatSendRequest struct {
 	PeerID          string  `json:"peerId"`
 	RequestID       string  `json:"requestId"`
 	SessionID       string  `json:"sessionId"`
+	Source          string  `json:"source"`
 	ClientMessageID string  `json:"clientMessageId"`
 	MessageID       string  `json:"messageId"`
 	VoiceMessage    bool    `json:"voiceMessage"`
@@ -177,14 +178,16 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		convID = "web-" + uuid.New().String()[:8]
 	}
 	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
-	sessionID := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID")
+	sessionID := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id")
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := resolveHeaderBackedValue(c, body.UserID, "X-User-ID")
-	peerID := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID")
+	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
+	source := resolveSource(c, body.Source, "web")
 	c.Header("X-Request-ID", requestID)
 	c.Header("X-Session-ID", sessionID)
+	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
@@ -202,7 +205,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
-		ConversationID: convID, Channel: "web", Source: "web",
+		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
@@ -214,7 +217,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID})
+	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
 }
 
 func (h *Handler) WebChatFromImport(c *gin.Context) {
@@ -224,7 +227,7 @@ func (h *Handler) WebChatFromImport(c *gin.Context) {
 }
 
 func resolveRequestID(c *gin.Context, candidates ...string) string {
-	candidates = append(candidates, c.GetHeader("X-Request-ID"), c.GetHeader("X-Idempotency-Key"))
+	candidates = append(candidates, c.GetHeader("X-Request-ID"), c.GetHeader("X-Idempotency-Key"), c.Query("requestId"), c.Query("request_id"), c.Query("idempotencyKey"))
 	for _, candidate := range candidates {
 		candidate = strings.TrimSpace(candidate)
 		if candidate != "" {
@@ -235,9 +238,31 @@ func resolveRequestID(c *gin.Context, candidates ...string) string {
 }
 
 func resolveHeaderBackedValue(c *gin.Context, bodyValue string, headerName string) string {
+	return resolveRequestBackedValue(c, bodyValue, headerName)
+}
+
+func resolveRequestBackedValue(c *gin.Context, bodyValue string, headerName string, queryNames ...string) string {
 	bodyValue = strings.TrimSpace(bodyValue)
 	if bodyValue != "" {
 		return bodyValue
 	}
-	return strings.TrimSpace(c.GetHeader(headerName))
+	headerValue := strings.TrimSpace(c.GetHeader(headerName))
+	if headerValue != "" {
+		return headerValue
+	}
+	for _, queryName := range queryNames {
+		queryValue := strings.TrimSpace(c.Query(queryName))
+		if queryValue != "" {
+			return queryValue
+		}
+	}
+	return ""
+}
+
+func resolveSource(c *gin.Context, bodyValue string, fallback string) string {
+	source := resolveRequestBackedValue(c, bodyValue, "X-Source", "source")
+	if source != "" {
+		return source
+	}
+	return strings.TrimSpace(fallback)
 }

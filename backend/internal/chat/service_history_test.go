@@ -172,9 +172,9 @@ func TestSys1BuilderUsesCharacterScopedProfilePrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := []profile.UserProfile{
-		{ID: "global-1", UserID: "default", CharacterID: "", Category: "preference", AttributeName: "饮品", AttributeValue: "茶", Confidence: 80},
-		{ID: "char-1", UserID: "default", CharacterID: "char-1", Category: "preference", AttributeName: "称呼", AttributeValue: "小安", Confidence: 90},
-		{ID: "char-2", UserID: "default", CharacterID: "char-2", Category: "preference", AttributeName: "称呼", AttributeValue: "小北", Confidence: 95},
+		{ID: "global-1", UserID: "char-1", CharacterID: "", Category: "preference", AttributeName: "饮品", AttributeValue: "茶", Confidence: 80},
+		{ID: "char-1", UserID: "char-1", CharacterID: "char-1", Category: "preference", AttributeName: "称呼", AttributeValue: "小安", Confidence: 90},
+		{ID: "char-2", UserID: "char-1", CharacterID: "char-2", Category: "preference", AttributeName: "称呼", AttributeValue: "小北", Confidence: 95},
 	}
 	for _, row := range rows {
 		if err := db.Create(&row).Error; err != nil {

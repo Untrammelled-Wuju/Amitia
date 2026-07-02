@@ -248,6 +248,9 @@ func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID 
 		if !canSupersedeStatus(InteractionStatus(target.Status)) {
 			return ErrInvalidTransition
 		}
+		if target.CommitID != "" || !target.CommittedAt.IsZero() {
+			return ErrInvalidTransition
+		}
 		if supersededByID == "" || supersededByID == targetID {
 			return ErrInvalidTransition
 		}
@@ -470,18 +473,25 @@ func transitionUpdates(r *InteractionRecord) map[string]interface{} {
 }
 
 func activeStatusStrings() []string {
-	return []string{
-		string(InteractionStatusReceived),
-		string(InteractionStatusNormalized),
-		string(InteractionStatusQueued),
-		string(InteractionStatusProcessing),
-		string(InteractionStatusContextReady),
-		string(InteractionStatusDecided),
-		string(InteractionStatusGenerated),
-		string(InteractionStatusCommitted),
-		string(InteractionStatusDeliveryPending),
-		string(InteractionStatusDelivered),
+	statuses := []InteractionStatus{
+		InteractionStatusReceived,
+		InteractionStatusNormalized,
+		InteractionStatusQueued,
+		InteractionStatusProcessing,
+		InteractionStatusContextReady,
+		InteractionStatusDecided,
+		InteractionStatusGenerated,
+		InteractionStatusCommitted,
+		InteractionStatusDeliveryPending,
+		InteractionStatusDelivered,
 	}
+	result := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		if isActiveStatus(status) {
+			result = append(result, string(status))
+		}
+	}
+	return result
 }
 
 func supersedableStatusStrings() []string {

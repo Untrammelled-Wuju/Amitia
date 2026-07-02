@@ -234,3 +234,22 @@ func TestSystemPromptUsesRequestedCharacterScope(t *testing.T) {
 		t.Fatalf("prompt missing global profile fallback: %s", prompt)
 	}
 }
+
+func TestSystemPromptDoesNotFallbackToDefaultUser(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+	_, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "default",
+		Category:       "preference",
+		AttributeName:  "内部默认偏好",
+		AttributeValue: "不应进入提示",
+		Confidence:     80,
+	})
+	if err != nil {
+		t.Fatalf("create default profile: %v", err)
+	}
+
+	prompt := svc.ToSystemPrompt("user-without-profile", "char-a")
+	if prompt != "" {
+		t.Fatalf("prompt leaked default profile: %s", prompt)
+	}
+}

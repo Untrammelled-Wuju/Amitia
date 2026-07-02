@@ -116,6 +116,57 @@ func TestSQLiteOutboxLeasePendingIsExclusiveAndRecoverable(t *testing.T) {
 	}
 }
 
+func TestSQLiteOutboxFailedRecordRespectsRetryBackoffBeforeLease(t *testing.T) {
+	store := newTestSQLiteOutboxStore(t)
+	id, err := store.Append(&OutboxRecord{
+		EventType:   "interaction.completed",
+		AggregateID: "agg-retry",
+		Payload:     []byte(`{"retry":true}`),
+		MaxRetries:  3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leased, err := store.LeasePending(1, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leased) != 1 {
+		t.Fatalf("expected initial lease, got %#v", leased)
+	}
+	beforeFailure := time.Now()
+	if err := store.MarkFailed(id, "temporary publish failure"); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := store.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Status != OutboxStatusFailed || rec.RetryCount != 1 {
+		t.Fatalf("unexpected failed record: %#v", rec)
+	}
+	if rec.NextRetryAt.Before(beforeFailure.Add(DefaultRetryBackoff - 100*time.Millisecond)) {
+		t.Fatalf("next retry was not backed off: %s", rec.NextRetryAt)
+	}
+	leasedAgain, err := store.LeasePending(1, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leasedAgain) != 0 {
+		t.Fatalf("failed record was leased before backoff: %#v", leasedAgain)
+	}
+	if err := store.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Update("next_retry_at", time.Now().Add(-time.Second)).Error; err != nil {
+		t.Fatal(err)
+	}
+	retryLease, err := store.LeasePending(1, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(retryLease) != 1 || retryLease[0].ID != id || retryLease[0].RetryCount != 1 {
+		t.Fatalf("failed record was not leased after backoff: %#v", retryLease)
+	}
+}
+
 func TestOutboxDispatcherMovesExhaustedFailureToDeadLetter(t *testing.T) {
 	store := NewInMemoryOutboxStore()
 	deadStore := NewInMemoryDeadLetterStore()

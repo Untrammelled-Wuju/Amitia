@@ -57,12 +57,16 @@ created_at TEXT DEFAULT (datetime('now'))
 		CharacterID string
 		Mood        string
 		Level       int
+		CreatedAt   string
 	}
-	if err := db.Table("moods").Select("character_id, mood, level").Order("id DESC").Limit(1).Row().Scan(&got.CharacterID, &got.Mood, &got.Level); err != nil {
+	if err := db.Table("moods").Select("character_id, mood, level, created_at").Order("id DESC").Limit(1).Row().Scan(&got.CharacterID, &got.Mood, &got.Level, &got.CreatedAt); err != nil {
 		t.Fatal(err)
 	}
 	if got.CharacterID != "char-1" || got.Mood != "anxious" || got.Level != 35 {
 		t.Fatalf("unexpected mood row: %#v", got)
+	}
+	if _, err := time.ParseInLocation(moodRecoveryTimeLayout, got.CreatedAt, time.Local); err != nil {
+		t.Fatalf("created_at should use mood recovery layout, got %q: %v", got.CreatedAt, err)
 	}
 }
 

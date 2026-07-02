@@ -131,14 +131,16 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		convID = "web-" + uuid.New().String()[:8]
 	}
 	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
-	sessionID := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID")
+	sessionID := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id")
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := resolveHeaderBackedValue(c, body.UserID, "X-User-ID")
-	peerID := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID")
+	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
+	source := resolveSource(c, body.Source, "web")
 	c.Header("X-Request-ID", requestID)
 	c.Header("X-Session-ID", sessionID)
+	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
@@ -161,7 +163,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
-		ConversationID: convID, Channel: "web", Source: "web",
+		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
@@ -277,7 +279,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
-	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "userId": userID}
+	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}
 	db, _ := json.Marshal(doneData)
 	fmt.Fprintf(c.Writer, "event: done\ndata: %s\n\n", string(db))
 	flusher.Flush()

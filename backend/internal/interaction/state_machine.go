@@ -112,7 +112,7 @@ func (r *InteractionRecord) IsTerminal() bool {
 func (r *InteractionRecord) IsActive() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return !isTerminalStatus(r.Status)
+	return isActiveStatus(r.Status)
 }
 
 func (r *InteractionRecord) Transition(target InteractionStatus) error {
@@ -163,6 +163,24 @@ func isTerminalStatus(status InteractionStatus) bool {
 		status == InteractionStatusFailed ||
 		status == InteractionStatusInterrupted ||
 		status == InteractionStatusArchived
+}
+
+func isActiveStatus(status InteractionStatus) bool {
+	switch status {
+	case InteractionStatusReceived,
+		InteractionStatusNormalized,
+		InteractionStatusQueued,
+		InteractionStatusProcessing,
+		InteractionStatusContextReady,
+		InteractionStatusDecided,
+		InteractionStatusGenerated,
+		InteractionStatusCommitted,
+		InteractionStatusDeliveryPending,
+		InteractionStatusDelivered:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *InteractionRecord) SetCancel(cancel context.CancelFunc) {
@@ -455,6 +473,9 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	if !canSupersedeStatus(rec.Status) {
 		return ErrInvalidTransition
 	}
+	if rec.CommitID != "" || !rec.CommittedAt.IsZero() {
+		return ErrInvalidTransition
+	}
 	if supersededByID == "" || supersededByID == targetID {
 		return ErrInvalidTransition
 	}
@@ -488,6 +509,9 @@ func (t *InMemoryTracker) Complete(ctx context.Context, id string, expectedVersi
 	if rec.StatusVersion != expectedVersion {
 		return nil, ErrVersionConflict
 	}
+	if rec.IsTerminal() {
+		return nil, ErrAlreadyTerminal
+	}
 	if err := rec.Transition(InteractionStatusCompleted); err != nil {
 		return nil, err
 	}
@@ -508,6 +532,9 @@ func (t *InMemoryTracker) Fail(ctx context.Context, id string, expectedVersion i
 	}
 	if rec.StatusVersion != expectedVersion {
 		return nil, ErrVersionConflict
+	}
+	if rec.IsTerminal() {
+		return nil, ErrAlreadyTerminal
 	}
 	if err := rec.Transition(InteractionStatusFailed); err != nil {
 		return nil, err

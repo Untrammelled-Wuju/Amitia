@@ -85,3 +85,20 @@ func TestWebhookHandlerPassesEnvelopeAndContext(t *testing.T) {
 		t.Fatalf("unexpected payload envelope: %#v", svc.req)
 	}
 }
+
+func TestStableWebhookSourcePrefersRequestSource(t *testing.T) {
+	req := WebhookRequest{Channel: "wechat", Source: "qq"}
+	if got := stableWebhookSource(req); got != "qq" {
+		t.Fatalf("unexpected source: %s", got)
+	}
+
+	req = WebhookRequest{Channel: "wechat"}
+	if got := stableWebhookSource(req); got != "wechat" {
+		t.Fatalf("unexpected channel fallback source: %s", got)
+	}
+
+	req = WebhookRequest{}
+	if got := stableWebhookSource(req); got != "webhook" {
+		t.Fatalf("unexpected default source: %s", got)
+	}
+}

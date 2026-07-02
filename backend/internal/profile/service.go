@@ -252,6 +252,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 }
 
 func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
+	requestedUserID := strings.TrimSpace(userID)
 	scope := firstScope(characterID...)
 	userID = cleanUserScope(userID)
 	if userID == "" {
@@ -261,8 +262,8 @@ func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
 		return ""
 	}
 	profiles, err := s.repo.GetUserFactSummary(userID, scope)
-	if (err != nil || len(profiles) == 0) && userID != "default" {
-		profiles, err = s.repo.GetUserFactSummary("default", scope)
+	if (err != nil || len(profiles) == 0) && requestedUserID == "default" && scope != "" {
+		profiles, err = s.legacyDefaultCharacterProfiles(scope)
 	}
 	if err != nil || len(profiles) == 0 {
 		return ""
@@ -284,6 +285,18 @@ func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
 		return ""
 	}
 	return "【用户画像】\n" + strings.Join(parts, "\n\n")
+}
+
+func (s *service) legacyDefaultCharacterProfiles(scope string) ([]UserProfile, error) {
+	if s.db == nil || scope == "" {
+		return []UserProfile{}, nil
+	}
+	var items []UserProfile
+	err := s.db.Where("user_id = ? AND character_id = ? AND confidence >= 50", "default", scope).Order("confidence DESC").Limit(20).Find(&items).Error
+	if items == nil {
+		items = []UserProfile{}
+	}
+	return items, err
 }
 
 func categoryLabel(cat string) string {

@@ -168,6 +168,9 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "body-peer" {
 		t.Fatalf("unexpected peer id: %s", got)
 	}
+	if got := resolveSource(c, body.Source, "web"); got != "web" {
+		t.Fatalf("unexpected body source fallback: %s", got)
+	}
 
 	body = webChatSendRequest{}
 	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "header-request" {
@@ -181,5 +184,39 @@ func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
 	}
 	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "header-peer" {
 		t.Fatalf("unexpected header peer id: %s", got)
+	}
+}
+
+func TestWebChatEnvelopeResolvesQueryAndSource(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	req := httptest.NewRequest(http.MethodPost, "/web-chat/send?requestId=query-request&sessionId=query-session&userId=query-user&peerId=query-peer&source=wechat", bytes.NewReader(nil))
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	body := webChatSendRequest{}
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "query-request" {
+		t.Fatalf("unexpected query request id: %s", got)
+	}
+	if got := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id"); got != "query-session" {
+		t.Fatalf("unexpected query session id: %s", got)
+	}
+	if got := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id"); got != "query-user" {
+		t.Fatalf("unexpected query user id: %s", got)
+	}
+	if got := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id"); got != "query-peer" {
+		t.Fatalf("unexpected query peer id: %s", got)
+	}
+	if got := resolveSource(c, body.Source, "web"); got != "wechat" {
+		t.Fatalf("unexpected query source: %s", got)
+	}
+
+	req.Header.Set("X-Source", "qq")
+	if got := resolveSource(c, body.Source, "web"); got != "qq" {
+		t.Fatalf("unexpected header source: %s", got)
+	}
+
+	body.Source = "voice"
+	if got := resolveSource(c, body.Source, "web"); got != "voice" {
+		t.Fatalf("unexpected body source: %s", got)
 	}
 }

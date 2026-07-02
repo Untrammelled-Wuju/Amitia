@@ -86,17 +86,27 @@ func (s *SQLiteOutboxStore) MarkPublished(id string) error {
 }
 
 func (s *SQLiteOutboxStore) MarkFailed(id string, errMsg string) error {
-	result := s.db.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"status":        OutboxStatusFailed,
-		"last_error":    errMsg,
-		"retry_count":   gorm.Expr("retry_count + 1"),
-		"next_retry_at": time.Now().Add(DefaultRetryBackoff),
-		"leased_until":  time.Time{},
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var model OutboxRecordModel
+		if err := tx.Where("id = ?", id).First(&model).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("outbox: record not found")
+			}
+			return err
+		}
+		retryCount := model.RetryCount + 1
+		result := tx.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"status":        OutboxStatusFailed,
+			"last_error":    errMsg,
+			"retry_count":   retryCount,
+			"next_retry_at": time.Now().Add(DefaultRetryBackoff * time.Duration(retryCount)),
+			"leased_until":  time.Time{},
+		})
+		if result.RowsAffected == 0 {
+			return errors.New("outbox: record not found")
+		}
+		return result.Error
 	})
-	if result.RowsAffected == 0 {
-		return errors.New("outbox: record not found")
-	}
-	return result.Error
 }
 
 func (s *SQLiteOutboxStore) MarkDead(id string) error {

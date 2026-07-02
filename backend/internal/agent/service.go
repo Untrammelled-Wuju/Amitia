@@ -35,6 +35,7 @@ type WebhookRequest struct {
 	ConversationID string
 	SenderID       string
 	UserID         string
+	Source         string
 	MessageID      string
 	RequestID      string
 	SessionID      string
@@ -181,6 +182,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	}
 	sessionID := stableWebhookSessionID(req, convID)
 	userID := stableWebhookUserID(req)
+	source := stableWebhookSource(req)
 
 	var mergedText string
 	if req.SkipTiming {
@@ -217,7 +219,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		Message:        mergedText,
 		ConversationID: convID,
 		Channel:        req.Channel,
-		Source:         req.Channel,
+		Source:         source,
 		PeerID:         req.SenderID,
 		UserID:         userID,
 		SessionID:      sessionID,
@@ -241,7 +243,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID}, nil
+	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}, nil
 }
 
 func stableWebhookRequestID(req WebhookRequest) string {
@@ -273,6 +275,17 @@ func stableWebhookUserID(req WebhookRequest) string {
 	}
 	return ""
 }
+
+func stableWebhookSource(req WebhookRequest) string {
+	for _, candidate := range []string{req.Source, req.Channel} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return "webhook"
+}
+
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName string
 	var temp, maxTokens, topP float64

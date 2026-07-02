@@ -13,11 +13,29 @@ type moodRecoveryState struct {
 	Level int
 }
 
+type moodRecoveryRecord struct {
+	CharacterID string `gorm:"column:character_id"`
+	Mood        string `gorm:"column:mood"`
+	Level       int    `gorm:"column:level"`
+	CreatedAt   string `gorm:"column:created_at"`
+}
+
+func (moodRecoveryRecord) TableName() string { return "moods" }
+
+const (
+	moodRecoveryIdleThreshold = 6 * time.Hour
+	moodRecoveryFullDuration  = 18 * time.Hour
+	moodRecoveryTimeLayout    = "2006-01-02 15:04:05"
+	moodRecoveryISOLayout     = "2006-01-02T15:04:05Z"
+	moodRecoveryProactive     = "proactive"
+	moodRecoverySystem        = "system"
+)
+
 func (s *service) moodRecoveryCheck(ctx context.Context, convID, charID, source string) {
 	if ctx.Err() != nil {
 		return
 	}
-	if source == "proactive" || source == "system" {
+	if source == moodRecoveryProactive || source == moodRecoverySystem {
 		return
 	}
 	var lastAt string
@@ -25,15 +43,15 @@ func (s *service) moodRecoveryCheck(ctx context.Context, convID, charID, source 
 	if err != nil || lastAt == "" {
 		return
 	}
-	t, err := time.ParseInLocation("2006-01-02 15:04:05", lastAt, time.Local)
+	t, err := time.ParseInLocation(moodRecoveryTimeLayout, lastAt, time.Local)
 	if err != nil {
-		t, err = time.Parse("2006-01-02T15:04:05Z", lastAt)
+		t, err = time.Parse(moodRecoveryISOLayout, lastAt)
 	}
 	if err != nil {
 		return
 	}
 	idleDur := time.Since(t)
-	if idleDur > 6*time.Hour {
+	if idleDur > moodRecoveryIdleThreshold {
 		if ctx.Err() != nil {
 			return
 		}
@@ -41,7 +59,12 @@ func (s *service) moodRecoveryCheck(ctx context.Context, convID, charID, source 
 		if !ok {
 			return
 		}
-		s.db.WithContext(ctx).Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))", charID, state.Mood, state.Level)
+		s.db.WithContext(ctx).Create(&moodRecoveryRecord{
+			CharacterID: charID,
+			Mood:        state.Mood,
+			Level:       state.Level,
+			CreatedAt:   time.Now().Format(moodRecoveryTimeLayout),
+		})
 	}
 }
 
@@ -72,11 +95,11 @@ func recoverMoodLevel(level int, idleDur time.Duration) int {
 }
 
 func recoverMoodValue(value float64, idleDur time.Duration) float64 {
-	if idleDur <= 6*time.Hour {
+	if idleDur <= moodRecoveryIdleThreshold {
 		return value
 	}
-	hours := idleDur.Hours() - 6
-	ratio := math.Min(1, hours/18)
+	hours := idleDur.Hours() - moodRecoveryIdleThreshold.Hours()
+	ratio := math.Min(1, hours/moodRecoveryFullDuration.Hours())
 	return value + (0.5-value)*ratio
 }
 

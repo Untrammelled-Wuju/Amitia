@@ -94,7 +94,8 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 
 func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	tracker := NewInMemoryTracker()
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
 
@@ -114,6 +115,16 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	}
 	if result.Response == nil || result.Response.RequestID != processor.req.RequestID {
 		t.Fatalf("generated request id was not returned: response=%#v req=%#v", result.Response, processor.req)
+	}
+	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interaction record was not persisted")
+	}
+	if record.Scope.RequestID != processor.req.RequestID {
+		t.Fatalf("generated request id was not reused in scope: record=%#v req=%#v", record.Scope, processor.req)
 	}
 }
 

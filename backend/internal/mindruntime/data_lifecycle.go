@@ -202,6 +202,8 @@ func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) Deletion
 
 	c.tombstones[id] = tombstone
 	items := c.scheduleOutboxCleanup(tombstone)
+	tombstone.ItemsCount = len(items)
+	c.tombstones[id] = tombstone
 	c.persistTombstoneLocked(tombstone)
 	c.persistOutboxItemsLocked(items)
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "deletion_requests", 1)
@@ -257,6 +259,7 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.loadPersistedOutboxItemsLocked()
 	results := make([]OutboxCleanupItem, 0)
 	var cleanupErrs []error
 	for i := range c.outbox {
@@ -280,6 +283,7 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 				item.LastError = ""
 			}
 			c.persistOutboxItemLocked(*item)
+			c.recomputeTombstoneProgressLocked(item.TargetID, item.TargetKind)
 		}
 		results = append(results, *item)
 	}
@@ -288,6 +292,62 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "outbox_cleanups", 1)
 
 	return results, errors.Join(cleanupErrs...)
+}
+
+func (c *DataLifecycleCoordinator) loadPersistedOutboxItemsLocked() {
+	if c.db == nil {
+		return
+	}
+	known := make(map[string]int, len(c.outbox))
+	for i := range c.outbox {
+		known[c.outbox[i].ID] = i
+	}
+	var models []OutboxCleanupItemModel
+	if err := c.db.Find(&models).Error; err != nil {
+		return
+	}
+	for _, model := range models {
+		item := outboxItemFromModel(model)
+		if idx, ok := known[item.ID]; ok {
+			c.outbox[idx] = item
+			continue
+		}
+		c.outbox = append(c.outbox, item)
+	}
+}
+
+func (c *DataLifecycleCoordinator) recomputeTombstoneProgressLocked(targetID string, targetKind string) {
+	if targetID == "" {
+		return
+	}
+	for key, tombstone := range c.tombstones {
+		if tombstone.TargetID != targetID || tombstone.TargetType != targetKind {
+			continue
+		}
+		itemsCount := 0
+		cleanedCount := 0
+		failedCount := 0
+		for _, item := range c.outbox {
+			if item.TargetID != targetID || item.TargetKind != targetKind {
+				continue
+			}
+			itemsCount++
+			if item.Status == "completed" {
+				cleanedCount++
+			} else if item.Attempts > 0 {
+				failedCount++
+			}
+		}
+		tombstone.ItemsCount = itemsCount
+		tombstone.CleanedCount = cleanedCount
+		tombstone.FailedCount = failedCount
+		if cleanedCount > 0 || failedCount > 0 {
+			tombstone.Status = DeletionStatusCleaning
+		}
+		c.tombstones[key] = tombstone
+		c.persistTombstoneLocked(tombstone)
+		return
+	}
 }
 
 func (c *DataLifecycleCoordinator) GenerateRecalculationTasks(tombstone DeletionTombstone) []RecalculationTask {
