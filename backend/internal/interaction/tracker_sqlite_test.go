@@ -471,6 +471,116 @@ func TestInMemoryInteractionTrackerTerminalGuardsMatchSQLite(t *testing.T) {
 	}
 }
 
+func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name+"/cancel_archive_keeps_record", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.RequestCancel(ctx, record.ID, "user_cancelled"); err != nil {
+				t.Fatal(err)
+			}
+			cancelRequested, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("record missing after cancel request")
+			}
+			if cancelRequested.Status != InteractionStatusReceived || cancelRequested.CancelReason != "user_cancelled" || cancelRequested.CancelRequestedAt.IsZero() || cancelRequested.StatusVersion != 1 {
+				t.Fatalf("cancel request semantics mismatch: %#v", cancelRequested)
+			}
+			cancelled, err := tracker.TransitionCAS(ctx, record.ID, cancelRequested.StatusVersion, InteractionStatusCancelled)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cancelled.Status != InteractionStatusCancelled || cancelled.StatusVersion != 2 {
+				t.Fatalf("cancel transition mismatch: %#v", cancelled)
+			}
+			if err := tracker.Archive(ctx, record.ID); err != nil {
+				t.Fatal(err)
+			}
+			archived, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || archived.Status != InteractionStatusArchived || archived.CancelReason != "user_cancelled" {
+				t.Fatalf("archive should keep cancelled record: ok=%v record=%#v", ok, archived)
+			}
+		})
+
+		t.Run(impl.name+"/committed_rejects_late_cancel", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-2", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			processing, err := tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			generated, err := tracker.TransitionCAS(ctx, record.ID, processing.StatusVersion, InteractionStatusGenerated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			committed, err := tracker.TransitionCAS(ctx, record.ID, generated.StatusVersion, InteractionStatusCommitted)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.RequestCancel(ctx, record.ID, "too_late"); !errors.Is(err, ErrInvalidTransition) {
+				t.Fatalf("expected committed cancel to fail, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusCommitted || after.StatusVersion != committed.StatusVersion || after.CancelReason != "" {
+				t.Fatalf("late cancel should not mutate committed record: ok=%v record=%#v", ok, after)
+			}
+		})
+
+		t.Run(impl.name+"/completed_late_cancel_is_idempotent", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-3", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			processing, err := tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed, err := tracker.Complete(ctx, record.ID, "result-ref")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if completed.Status != InteractionStatusCompleted || completed.StatusVersion != processing.StatusVersion+1 {
+				t.Fatalf("complete semantics mismatch: %#v", completed)
+			}
+			if err := tracker.RequestCancel(ctx, record.ID, "too_late"); err != nil {
+				t.Fatalf("terminal cancel should be idempotent, got %v", err)
+			}
+			after, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || after.Status != InteractionStatusCompleted || after.StatusVersion != completed.StatusVersion || after.CancelReason != "" || after.ResultRef != "result-ref" {
+				t.Fatalf("terminal cancel should not mutate completed record: ok=%v record=%#v", ok, after)
+			}
+		})
+	}
+}
+
 func TestSupersedeResolverExcludesCurrentRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
