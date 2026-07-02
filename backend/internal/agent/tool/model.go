@@ -30,6 +30,7 @@ type Property struct {
 }
 
 type ToolExecutionContext struct {
+	Context        context.Context `json:"-"`
 	ConversationID string
 	CharacterID    string
 	Channel        string

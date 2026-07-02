@@ -45,7 +45,7 @@ func Execute(name, argsJSON string) (string, bool) {
 }
 
 func ExecuteWithContext(ctx ToolExecutionContext, name, argsJSON string) (ToolCallResult, bool) {
-	return ExecuteWithContextAndCancel(context.Background(), ctx, name, argsJSON)
+	return ExecuteWithContextAndCancel(callContextFromExecutionContext(ctx), ctx, name, argsJSON)
 }
 
 func ExecuteWithContextAndCancel(callCtx context.Context, execCtx ToolExecutionContext, name, argsJSON string) (ToolCallResult, bool) {
@@ -112,7 +112,7 @@ func ExecuteMemory(name, argsJSON string) (string, bool) {
 }
 
 func ExecuteMemoryWithContext(ctx ToolExecutionContext, name, argsJSON string) (ToolCallResult, bool) {
-	return ExecuteMemoryWithContextAndCancel(context.Background(), ctx, name, argsJSON)
+	return ExecuteMemoryWithContextAndCancel(callContextFromExecutionContext(ctx), ctx, name, argsJSON)
 }
 
 func ExecuteMemoryWithContextAndCancel(callCtx context.Context, execCtx ToolExecutionContext, name, argsJSON string) (ToolCallResult, bool) {
@@ -143,6 +143,13 @@ func ExecuteMemoryWithContextAndCancel(callCtx context.Context, execCtx ToolExec
 	result = normalizeResult(result, execCtx)
 	recordToolCallResult(intentID, execCtx, name, result)
 	return result, true
+}
+
+func callContextFromExecutionContext(execCtx ToolExecutionContext) context.Context {
+	if execCtx.Context != nil {
+		return execCtx.Context
+	}
+	return context.Background()
 }
 
 func defaultIdempotencyKey(ctx ToolExecutionContext, name, argsJSON string) string {

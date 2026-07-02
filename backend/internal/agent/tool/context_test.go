@@ -326,6 +326,32 @@ func TestCancelledToolDoesNotWriteSideEffect(t *testing.T) {
 	}
 }
 
+func TestExecuteWithContextInheritsCancelledContext(t *testing.T) {
+	callCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	execCtx := ToolExecutionContext{Context: callCtx, ConversationID: "conv-cancel", CharacterID: "char-cancel", Channel: "web"}
+	result, ok := ExecuteWithContext(execCtx, "create_schedule", `{"title":"提醒","due_time":"2026-07-01 18:00"}`)
+	if !ok {
+		t.Fatal("tool execute failed")
+	}
+	if result.Status != ToolStatusCancelled {
+		t.Fatalf("expected cancelled, got %#v", result)
+	}
+}
+
+func TestExecuteMemoryWithContextInheritsCancelledContext(t *testing.T) {
+	callCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	execCtx := ToolExecutionContext{Context: callCtx, ConversationID: "conv-cancel", CharacterID: "char-cancel", Channel: "web"}
+	result, ok := ExecuteMemoryWithContext(execCtx, "summarize_memories", `{"topic":"颜色"}`)
+	if !ok {
+		t.Fatal("memory tool execute failed")
+	}
+	if result.Status != ToolStatusCancelled {
+		t.Fatalf("expected cancelled, got %#v", result)
+	}
+}
+
 func TestToolResultAuditTablesAreWritten(t *testing.T) {
 	gormDB, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
 	if err != nil {
