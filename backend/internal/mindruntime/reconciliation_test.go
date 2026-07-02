@@ -1,6 +1,8 @@
 package mindruntime
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -104,8 +106,8 @@ func TestReconciliationEngineComplete(t *testing.T) {
 	if retrieved.Status != ReconciliationStatusCompleted {
 		t.Fatalf("expected completed, got %s", retrieved.Status)
 	}
-if retrieved.EndedAt.Before(retrieved.StartedAt) {
-t.Fatal("expected endedAt not before startedAt")
+	if retrieved.EndedAt.Before(retrieved.StartedAt) {
+		t.Fatal("expected endedAt not before startedAt")
 	}
 	if engine.Status() != ReconciliationStatusIdle {
 		t.Fatalf("expected idle after completion, got %s", engine.Status())
@@ -142,31 +144,31 @@ func TestReconciliationEngineAddDiff(t *testing.T) {
 	engine := NewReconciliationEngine(config)
 	scan := engine.StartScan(ReconciliationOutboxSideEffect, StrategyCompensate, "")
 	diff1 := ReconciliationDiff{
-		ID:            "diff-001",
-		ScanID:        scan.ID,
-		Source:        "sqlite",
-		Target:        "qdrant",
-		DiffType:      "missing",
-		SourceKey:     "doc-001",
-		TargetKey:     "qt-001",
-		Description:   "Document exists in SQLite but missing from Qdrant",
-		Severity:      "warning",
+		ID:             "diff-001",
+		ScanID:         scan.ID,
+		Source:         "sqlite",
+		Target:         "qdrant",
+		DiffType:       "missing",
+		SourceKey:      "doc-001",
+		TargetKey:      "qt-001",
+		Description:    "Document exists in SQLite but missing from Qdrant",
+		Severity:       "warning",
 		AutoRepairable: true,
-		RepairAction:  "reindex",
-		FoundAt:       time.Now().UTC(),
+		RepairAction:   "reindex",
+		FoundAt:        time.Now().UTC(),
 	}
 	diff2 := ReconciliationDiff{
-		ID:            "diff-002",
-		ScanID:        scan.ID,
-		Source:        "sqlite",
-		Target:        "surrealdb",
-		DiffType:      "stale",
-		SourceKey:     "rec-002",
-		TargetKey:     "sr-002",
-		Description:   "Record version mismatch",
-		Severity:      "critical",
+		ID:             "diff-002",
+		ScanID:         scan.ID,
+		Source:         "sqlite",
+		Target:         "surrealdb",
+		DiffType:       "stale",
+		SourceKey:      "rec-002",
+		TargetKey:      "sr-002",
+		Description:    "Record version mismatch",
+		Severity:       "critical",
 		AutoRepairable: false,
-		FoundAt:       time.Now().UTC(),
+		FoundAt:        time.Now().UTC(),
 	}
 	engine.AddDiff(scan.ID, diff1)
 	engine.AddDiff(scan.ID, diff2)
@@ -177,6 +179,85 @@ func TestReconciliationEngineAddDiff(t *testing.T) {
 	}
 	if retrieved.DiffsFound != 2 {
 		t.Fatalf("expected 2 diffs found, got %d", retrieved.DiffsFound)
+	}
+}
+
+func TestReconciliationEngineRunScanUsesRegisteredChecker(t *testing.T) {
+	config := DefaultReconciliationConfig()
+	engine := NewReconciliationEngine(config)
+	engine.RegisterChecker(ReconciliationTombstoneDerivedData, ReconciliationCheckerFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationDiff, error) {
+		if req.Target != ReconciliationTombstoneDerivedData {
+			t.Fatalf("unexpected target %s", req.Target)
+		}
+		if req.BatchSize != config.BatchSize {
+			t.Fatalf("unexpected batch size %d", req.BatchSize)
+		}
+		return []ReconciliationDiff{
+			{
+				Source:         "deletion_tombstones",
+				Target:         "data_lifecycle_outbox_cleanup_items",
+				DiffType:       "missing_derived_cleanup",
+				SourceKey:      "tombstone-1",
+				TargetKey:      "outbox-tombstone-1",
+				Description:    "tombstone has no derived cleanup item",
+				Severity:       "critical",
+				AutoRepairable: true,
+				RepairAction:   string(StrategyLogicalInvalid),
+			},
+		}, nil
+	}))
+
+	scan, err := engine.RunScan(context.Background(), ReconciliationTombstoneDerivedData, StrategyLogicalInvalid, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan.Status != ReconciliationStatusCompleted {
+		t.Fatalf("expected completed, got %s", scan.Status)
+	}
+	if scan.TotalScanned != 1 || scan.DiffsFound != 1 {
+		t.Fatalf("expected one scanned diff, got scanned=%d diffs=%d", scan.TotalScanned, scan.DiffsFound)
+	}
+	if len(scan.Diffs) != 1 {
+		t.Fatalf("expected one diff, got %d", len(scan.Diffs))
+	}
+	if scan.Diffs[0].ScanID != scan.ID || scan.Diffs[0].ID == "" || scan.Diffs[0].FoundAt.IsZero() {
+		t.Fatalf("diff metadata was not populated: %#v", scan.Diffs[0])
+	}
+	if engine.Status() != ReconciliationStatusIdle {
+		t.Fatalf("expected idle after run, got %s", engine.Status())
+	}
+}
+
+func TestReconciliationEngineRunScanRecordsCheckerErrors(t *testing.T) {
+	engine := NewReconciliationEngine(DefaultReconciliationConfig())
+	wantErr := errors.New("source unavailable")
+	engine.RegisterChecker(ReconciliationOutboxSideEffect, ReconciliationCheckerFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationDiff, error) {
+		return nil, wantErr
+	}))
+
+	scan, err := engine.RunScan(context.Background(), ReconciliationOutboxSideEffect, StrategyCompensate, "")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected checker error, got %v", err)
+	}
+	if scan.Status != ReconciliationStatusCancelled {
+		t.Fatalf("expected cancelled failed scan, got %s", scan.Status)
+	}
+	if scan.DiffsSkipped != 1 || len(scan.Diffs) != 1 {
+		t.Fatalf("expected recorded error diff, skipped=%d diffs=%d", scan.DiffsSkipped, len(scan.Diffs))
+	}
+	if scan.Diffs[0].DiffType != "scan_error" || scan.Diffs[0].Description != wantErr.Error() {
+		t.Fatalf("unexpected error diff: %#v", scan.Diffs[0])
+	}
+}
+
+func TestReconciliationEngineRunScanRequiresChecker(t *testing.T) {
+	engine := NewReconciliationEngine(DefaultReconciliationConfig())
+	scan, err := engine.RunScan(context.Background(), ReconciliationLeaseDelivery, StrategyReleaseLease, "")
+	if err == nil {
+		t.Fatal("expected missing checker error")
+	}
+	if scan.Status != ReconciliationStatusCancelled {
+		t.Fatalf("expected cancelled scan without checker, got %s", scan.Status)
 	}
 }
 
@@ -263,12 +344,12 @@ func TestDefaultReconciliationConfig(t *testing.T) {
 
 func TestReconciliationDiffSeverity(t *testing.T) {
 	diff := ReconciliationDiff{
-		ID:            "diff-sev",
-		Severity:      "critical",
+		ID:             "diff-sev",
+		Severity:       "critical",
 		AutoRepairable: false,
-		DiffType:      "orphan",
-		Description:   "Orphan record with no source reference",
-		FoundAt:       time.Now().UTC(),
+		DiffType:       "orphan",
+		Description:    "Orphan record with no source reference",
+		FoundAt:        time.Now().UTC(),
 	}
 	if diff.Severity != "critical" {
 		t.Fatalf("expected critical, got %s", diff.Severity)
