@@ -29,7 +29,7 @@ func RecoverStaleInteractions(ctx context.Context, tracker InteractionTracker, c
 			result.Skipped++
 			return true
 		}
-		_, err := tracker.Fail(ctx, record.ID, "startup_recovered", "interaction was interrupted by process restart")
+		_, err := tracker.Fail(ctx, record.ID, record.StatusVersion, "startup_recovered", "interaction was interrupted by process restart")
 		if err == nil {
 			result.Recovered++
 			return true

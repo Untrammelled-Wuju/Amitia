@@ -292,14 +292,14 @@ func TestSQLiteInteractionTrackerCancelAndArchiveKeepsRecord(t *testing.T) {
 	if got.StatusVersion != record.StatusVersion+1 {
 		t.Fatalf("cancel request should bump status version: got %d want %d", got.StatusVersion, record.StatusVersion+1)
 	}
-	if err := tracker.Archive(ctx, record.ID); !errors.Is(err, ErrInvalidTransition) {
+	if err := tracker.Archive(ctx, record.ID, got.StatusVersion); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("expected active archive to fail, got %v", err)
 	}
 	got, err = tracker.TransitionCAS(ctx, record.ID, got.StatusVersion, InteractionStatusCancelled)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tracker.Archive(ctx, record.ID); err != nil {
+	if err := tracker.Archive(ctx, record.ID, got.StatusVersion); err != nil {
 		t.Fatal(err)
 	}
 	got, ok, err = tracker.Get(ctx, record.ID)
@@ -336,17 +336,17 @@ func TestSQLiteInteractionTrackerTerminalOperationsRespectStateMachine(t *testin
 	if err := tracker.RequestCancel(ctx, record.ID, "late_cancel"); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("expected committed cancel to fail, got %v", err)
 	}
-	completed, err := tracker.Complete(ctx, record.ID, "result")
+	completed, err := tracker.Complete(ctx, record.ID, committed.StatusVersion, "result")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if completed.Status != InteractionStatusCompleted || completed.StatusVersion != committed.StatusVersion+1 {
 		t.Fatalf("complete did not follow state machine: %#v", completed)
 	}
-	if _, err := tracker.Complete(ctx, record.ID, "again"); !errors.Is(err, ErrAlreadyTerminal) {
+	if _, err := tracker.Complete(ctx, record.ID, completed.StatusVersion, "again"); !errors.Is(err, ErrAlreadyTerminal) {
 		t.Fatalf("expected terminal complete to fail, got %v", err)
 	}
-	if _, err := tracker.Fail(ctx, record.ID, "late", "late"); !errors.Is(err, ErrAlreadyTerminal) {
+	if _, err := tracker.Fail(ctx, record.ID, completed.StatusVersion, "late", "late"); !errors.Is(err, ErrAlreadyTerminal) {
 		t.Fatalf("expected terminal fail to fail, got %v", err)
 	}
 }
@@ -382,7 +382,7 @@ func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testin
 	if err := tracker.Create(ctx, terminalSuperseder); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tracker.Fail(ctx, terminalSuperseder.ID, "failed", "failed"); err != nil {
+	if _, err := tracker.Fail(ctx, terminalSuperseder.ID, terminalSuperseder.StatusVersion, "failed", "failed"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tracker.MarkSuperseded(ctx, target.ID, terminalSuperseder.ID); !errors.Is(err, ErrInvalidTransition) {
@@ -446,7 +446,7 @@ func TestInMemoryInteractionTrackerTerminalGuardsMatchSQLite(t *testing.T) {
 	if err := tracker.Create(ctx, superseder); err != nil {
 		t.Fatal(err)
 	}
-	if err := tracker.Archive(ctx, target.ID); !errors.Is(err, ErrInvalidTransition) {
+	if err := tracker.Archive(ctx, target.ID, target.StatusVersion); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("expected active archive to fail, got %v", err)
 	}
 	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); err != nil {
@@ -508,7 +508,7 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 			if cancelled.Status != InteractionStatusCancelled || cancelled.StatusVersion != 2 {
 				t.Fatalf("cancel transition mismatch: %#v", cancelled)
 			}
-			if err := tracker.Archive(ctx, record.ID); err != nil {
+			if err := tracker.Archive(ctx, record.ID, cancelled.StatusVersion); err != nil {
 				t.Fatal(err)
 			}
 			archived, ok, err := tracker.Get(ctx, record.ID)
@@ -560,7 +560,7 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			completed, err := tracker.Complete(ctx, record.ID, "result-ref")
+			completed, err := tracker.Complete(ctx, record.ID, processing.StatusVersion, "result-ref")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -576,6 +576,92 @@ func TestInteractionTrackerImplementationsShareTerminalSemantics(t *testing.T) {
 			}
 			if !ok || after.Status != InteractionStatusCompleted || after.StatusVersion != completed.StatusVersion || after.CancelReason != "" || after.ResultRef != "result-ref" {
 				t.Fatalf("terminal cancel should not mutate completed record: ok=%v record=%#v", ok, after)
+			}
+		})
+	}
+}
+
+func TestInteractionTrackerTerminalOperationsRejectStaleVersion(t *testing.T) {
+	ctx := context.Background()
+	implementations := []struct {
+		name string
+		new  func(t *testing.T) InteractionTracker
+	}{
+		{name: "sqlite", new: func(t *testing.T) InteractionTracker { return newTestSQLiteInteractionTracker(t) }},
+		{name: "memory", new: func(t *testing.T) InteractionTracker { return NewInMemoryTracker() }},
+	}
+
+	for _, impl := range implementations {
+		t.Run(impl.name+"/complete", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-complete", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			staleVersion := record.StatusVersion
+			processing, err := tracker.TransitionCAS(ctx, record.ID, staleVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tracker.Complete(ctx, record.ID, staleVersion, "result"); !errors.Is(err, ErrVersionConflict) {
+				t.Fatalf("expected stale complete to fail, got %v", err)
+			}
+			got, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || got.Status != InteractionStatusProcessing || got.StatusVersion != processing.StatusVersion || got.ResultRef != "" {
+				t.Fatalf("stale complete mutated record: ok=%v record=%#v", ok, got)
+			}
+		})
+
+		t.Run(impl.name+"/fail", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-fail", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			staleVersion := record.StatusVersion
+			processing, err := tracker.TransitionCAS(ctx, record.ID, staleVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tracker.Fail(ctx, record.ID, staleVersion, "late", "late"); !errors.Is(err, ErrVersionConflict) {
+				t.Fatalf("expected stale fail to fail, got %v", err)
+			}
+			got, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || got.Status != InteractionStatusProcessing || got.StatusVersion != processing.StatusVersion || got.ErrorCode != "" || got.ErrorMessage != "" {
+				t.Fatalf("stale fail mutated record: ok=%v record=%#v", ok, got)
+			}
+		})
+
+		t.Run(impl.name+"/archive", func(t *testing.T) {
+			tracker := impl.new(t)
+			record := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-stale-archive", Channel: "web"})
+			if err := tracker.Create(ctx, record); err != nil {
+				t.Fatal(err)
+			}
+			staleVersion := record.StatusVersion
+			processing, err := tracker.TransitionCAS(ctx, record.ID, staleVersion, InteractionStatusProcessing)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed, err := tracker.Complete(ctx, record.ID, processing.StatusVersion, "result")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.Archive(ctx, record.ID, processing.StatusVersion); !errors.Is(err, ErrVersionConflict) {
+				t.Fatalf("expected stale archive to fail, got %v", err)
+			}
+			got, ok, err := tracker.Get(ctx, record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok || got.Status != InteractionStatusCompleted || got.StatusVersion != completed.StatusVersion {
+				t.Fatalf("stale archive mutated record: ok=%v record=%#v", ok, got)
 			}
 		})
 	}

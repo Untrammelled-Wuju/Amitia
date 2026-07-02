@@ -281,16 +281,16 @@ func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID 
 	})
 }
 
-func (t *SQLiteInteractionTracker) Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error) {
-	return t.finish(ctx, id, InteractionStatusCompleted, map[string]interface{}{"result_ref": resultRef})
+func (t *SQLiteInteractionTracker) Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error) {
+	return t.finish(ctx, id, expectedVersion, InteractionStatusCompleted, map[string]interface{}{"result_ref": resultRef})
 }
 
-func (t *SQLiteInteractionTracker) Fail(ctx context.Context, id string, code string, message string) (*InteractionRecord, error) {
-	return t.finish(ctx, id, InteractionStatusFailed, map[string]interface{}{"error_code": code, "error_message": message})
+func (t *SQLiteInteractionTracker) Fail(ctx context.Context, id string, expectedVersion int64, code string, message string) (*InteractionRecord, error) {
+	return t.finish(ctx, id, expectedVersion, InteractionStatusFailed, map[string]interface{}{"error_code": code, "error_message": message})
 }
 
-func (t *SQLiteInteractionTracker) Archive(ctx context.Context, id string) error {
-	_, err := t.transitionWithoutExpectedVersion(ctx, id, InteractionStatusArchived, nil)
+func (t *SQLiteInteractionTracker) Archive(ctx context.Context, id string, expectedVersion int64) error {
+	_, err := t.transitionWithExpectedVersion(ctx, id, expectedVersion, InteractionStatusArchived, nil)
 	return err
 }
 
@@ -339,17 +339,20 @@ func (t *SQLiteInteractionTracker) list(ctx context.Context, scope InteractionSc
 	return result, nil
 }
 
-func (t *SQLiteInteractionTracker) finish(ctx context.Context, id string, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
-	return t.transitionWithoutExpectedVersion(ctx, id, status, fields)
+func (t *SQLiteInteractionTracker) finish(ctx context.Context, id string, expectedVersion int64, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
+	return t.transitionWithExpectedVersion(ctx, id, expectedVersion, status, fields)
 }
 
-func (t *SQLiteInteractionTracker) transitionWithoutExpectedVersion(ctx context.Context, id string, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
+func (t *SQLiteInteractionTracker) transitionWithExpectedVersion(ctx context.Context, id string, expectedVersion int64, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
 	rec, ok, err := t.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, ErrInteractionNotFound
+	}
+	if rec.StatusVersion != expectedVersion {
+		return nil, ErrVersionConflict
 	}
 	if rec.IsTerminal() && status != InteractionStatusArchived {
 		return nil, ErrAlreadyTerminal

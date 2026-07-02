@@ -232,9 +232,9 @@ type InteractionTracker interface {
 	TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error)
 	RequestCancel(ctx context.Context, id string, reason string) error
 	MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error
-	Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error)
-	Fail(ctx context.Context, id string, code string, message string) (*InteractionRecord, error)
-	Archive(ctx context.Context, id string) error
+	Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error)
+	Fail(ctx context.Context, id string, expectedVersion int64, code string, message string) (*InteractionRecord, error)
+	Archive(ctx context.Context, id string, expectedVersion int64) error
 	Range(ctx context.Context, fn func(record *InteractionRecord) bool) error
 }
 
@@ -475,7 +475,7 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	return nil
 }
 
-func (t *InMemoryTracker) Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error) {
+func (t *InMemoryTracker) Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -484,6 +484,9 @@ func (t *InMemoryTracker) Complete(ctx context.Context, id string, resultRef str
 	rec, ok := t.records[id]
 	if !ok {
 		return nil, ErrInteractionNotFound
+	}
+	if rec.StatusVersion != expectedVersion {
+		return nil, ErrVersionConflict
 	}
 	if err := rec.Transition(InteractionStatusCompleted); err != nil {
 		return nil, err
@@ -493,7 +496,7 @@ func (t *InMemoryTracker) Complete(ctx context.Context, id string, resultRef str
 	return &snap, nil
 }
 
-func (t *InMemoryTracker) Fail(ctx context.Context, id string, code string, message string) (*InteractionRecord, error) {
+func (t *InMemoryTracker) Fail(ctx context.Context, id string, expectedVersion int64, code string, message string) (*InteractionRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -502,6 +505,9 @@ func (t *InMemoryTracker) Fail(ctx context.Context, id string, code string, mess
 	rec, ok := t.records[id]
 	if !ok {
 		return nil, ErrInteractionNotFound
+	}
+	if rec.StatusVersion != expectedVersion {
+		return nil, ErrVersionConflict
 	}
 	if err := rec.Transition(InteractionStatusFailed); err != nil {
 		return nil, err
@@ -512,7 +518,7 @@ func (t *InMemoryTracker) Fail(ctx context.Context, id string, code string, mess
 	return &snap, nil
 }
 
-func (t *InMemoryTracker) Archive(ctx context.Context, id string) error {
+func (t *InMemoryTracker) Archive(ctx context.Context, id string, expectedVersion int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -521,6 +527,9 @@ func (t *InMemoryTracker) Archive(ctx context.Context, id string) error {
 	rec, ok := t.records[id]
 	if !ok {
 		return ErrInteractionNotFound
+	}
+	if rec.StatusVersion != expectedVersion {
+		return ErrVersionConflict
 	}
 	return rec.Transition(InteractionStatusArchived)
 }
