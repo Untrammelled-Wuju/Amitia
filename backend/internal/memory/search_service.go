@@ -144,6 +144,9 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		Query:            queryText,
 		CharacterID:      req.CharacterID,
 		Limit:            vectorFetchLimit,
+		ConversationID:   req.ConversationID,
+		RequestID:        req.RequestID,
+		Channel:          req.Channel,
 		ProactiveMention: req.ProactiveMention,
 	})
 
@@ -234,7 +237,7 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		memoryIDs[i] = r.Memory.ID
 	}
 
-	s.logRetrieval(req.CharacterID, queryText, memoryIDs, results)
+	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results)
 
 	return results, nil
 }

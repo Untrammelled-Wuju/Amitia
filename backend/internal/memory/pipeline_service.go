@@ -42,7 +42,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	return nil
 }
 
-func (s *service) logRetrieval(characterID, queryText string, memoryIDs []string, results []HybridSearchResult) {
+func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult) {
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	memIDsJSON, _ := json.Marshal(memoryIDs)
@@ -58,8 +58,8 @@ func (s *service) logRetrieval(characterID, queryText string, memoryIDs []string
 	}
 	detailsJSON, _ := json.Marshal(scoringDetails)
 	s.db.Exec(
-		"INSERT INTO retrieval_logs (id, conversation_id, character_id, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		id, "", characterID, queryText, string(memIDsJSON), string(detailsJSON), now,
+		"INSERT INTO retrieval_logs (id, conversation_id, character_id, request_id, channel, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		id, conversationID, characterID, requestID, channel, queryText, string(memIDsJSON), string(detailsJSON), now,
 	)
 }
 
