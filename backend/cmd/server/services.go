@@ -11,18 +11,20 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 )
 
 type AppServices struct {
-	Graph     graph.Service
-	Memory    memory.Service
-	Profile   profile.Service
-	Episodic  episodic.Service
-	WorldBook worldbook.Service
-	Vision    vision.Service
-	Companion companion.Service
-	Chat      chat.Service
+	Graph        graph.Service
+	Memory       memory.Service
+	Profile      profile.Service
+	Episodic     episodic.Service
+	WorldBook    worldbook.Service
+	Vision       vision.Service
+	Companion    companion.Service
+	Chat         chat.Service
+	UnifiedEntry *interaction.UnifiedEntry
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
@@ -39,14 +41,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	compSvc := companion.NewService(ctx)
 	compressor := chat.NewCompressor(ctx.DB)
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc)
+	orchCfg := interaction.DefaultOrchestratorConfig()
+	orch := interaction.NewOrchestrator(orchCfg, chatSvc.(interaction.MessageProcessor))
+	resolver := interaction.NewScopeResolver(nil)
+	entry := interaction.NewUnifiedEntry(orch, resolver)
 	return &AppServices{
-		Graph:     graphSvc,
-		Memory:    memSvc,
-		Profile:   profSvc,
-		Episodic:  epiSvc,
-		WorldBook: wbSvc,
-		Vision:    visionSvc,
-		Companion: compSvc,
-		Chat:      chatSvc,
+		Graph:        graphSvc,
+		Memory:       memSvc,
+		Profile:      profSvc,
+		Episodic:     epiSvc,
+		WorldBook:    wbSvc,
+		Vision:       visionSvc,
+		Companion:    compSvc,
+		Chat:         chatSvc,
+		UnifiedEntry: entry,
 	}
 }

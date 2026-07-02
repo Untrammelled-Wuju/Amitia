@@ -361,6 +361,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		VoiceMessage:   req.VoiceMessage,
 		ImageUrl:       req.ImageUrl,
 		VideoUrl:       req.VideoUrl,
+		ImageContext:   req.ImageContext,
 		RequestID:      req.RequestID,
 	}
 	resp, err := s.ProcessMessage(ctx, chatReq)

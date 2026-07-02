@@ -5,6 +5,7 @@ package system
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/memory"
@@ -13,9 +14,9 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
 	svc := NewService(ctx)
-	handler := NewHandler(svc, ctx.DB, chatSvc)
+	handler := NewHandler(svc, ctx.DB, chatSvc, unifiedEntry)
 
 	r.GET("/health", handler.Health)
 	r.GET("/diagnostics", handler.Diagnostics)

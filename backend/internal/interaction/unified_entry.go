@@ -97,11 +97,19 @@ var (
 )
 
 type UnifiedEntryRequest struct {
-	Channel    string `json:"channel"`
-	Message    string `json:"message"`
-	PeerID     string `json:"peerId,omitempty"`
-	UserID     string `json:"userId,omitempty"`
-	Source     string `json:"source,omitempty"`
+	Channel        string  `json:"channel"`
+	Message        string  `json:"message"`
+	PeerID         string  `json:"peerId,omitempty"`
+	UserID         string  `json:"userId,omitempty"`
+	Source         string  `json:"source,omitempty"`
+	CharacterID    string  `json:"characterId,omitempty"`
+	ConversationID string  `json:"conversationId,omitempty"`
+	AudioUrl       string  `json:"audioUrl,omitempty"`
+	AudioDuration  float64 `json:"audioDuration,omitempty"`
+	VoiceMessage   bool    `json:"voiceMessage"`
+	ImageUrl       string  `json:"imageUrl,omitempty"`
+	VideoUrl       string  `json:"videoUrl,omitempty"`
+	ImageContext   string  `json:"imageContext,omitempty"`
 }
 
 type UnifiedEntry struct {
@@ -147,10 +155,12 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 
 	source := ParseEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
-		UserID:  req.UserID,
-		Channel: req.Channel,
-		PeerID:  req.PeerID,
-		Source:  string(source),
+		UserID:         req.UserID,
+		CharacterID:    req.CharacterID,
+		ConversationID: req.ConversationID,
+		Channel:        req.Channel,
+		PeerID:         req.PeerID,
+		Source:         string(source),
 	}
 
 	resolution, err := e.resolver.Resolve(ctx, scopeInput)
@@ -166,6 +176,12 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Source:         string(source),
 		PeerID:         req.PeerID,
 		UserID:         req.UserID,
+		AudioUrl:       req.AudioUrl,
+		AudioDuration:  req.AudioDuration,
+		VoiceMessage:   req.VoiceMessage,
+		ImageUrl:       req.ImageUrl,
+		VideoUrl:       req.VideoUrl,
+		ImageContext:   req.ImageContext,
 	}
 
 	return e.orchestrator.Process(ctx, procReq)

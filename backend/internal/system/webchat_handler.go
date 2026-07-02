@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -182,7 +183,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
-	result, err := h.chatSvc.ProcessMessage(c.Request.Context(), &chat.ProcessMessageRequest{
+	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: "manual",
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
@@ -195,7 +196,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	util.SuccessResponse(c, gin.H{"conversationId": result.ConversationID, "reply": result.Reply, "messageIds": result.MessageIDs, "characterName": result.CharacterName})
+	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName})
 }
 
 func (h *Handler) WebChatFromImport(c *gin.Context) {

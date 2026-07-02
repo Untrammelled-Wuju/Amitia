@@ -31,6 +31,7 @@ type ProcessRequest struct {
 	VoiceMessage   bool    `json:"voiceMessage"`
 	ImageUrl       string  `json:"imageUrl,omitempty"`
 	VideoUrl       string  `json:"videoUrl,omitempty"`
+	ImageContext   string  `json:"imageContext,omitempty"`
 	RequestID      string  `json:"requestId,omitempty"`
 }
 
