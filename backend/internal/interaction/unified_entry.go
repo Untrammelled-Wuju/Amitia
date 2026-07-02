@@ -179,7 +179,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ConversationID: resolution.Scope.ConversationID,
 		Message:        req.Message,
 		Channel:        resolution.Scope.Channel,
-		Source:         resolution.Scope.Source,
+		Source:         resolution.Source,
 		PeerID:         resolution.Scope.PeerID,
 		UserID:         resolution.Scope.UserID,
 		SessionID:      resolution.Scope.SessionID,
