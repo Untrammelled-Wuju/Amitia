@@ -102,9 +102,8 @@ func (r *ContextLoaderRegistry) LoadAll(ctx context.Context, scope InteractionSc
 
 			mu.Lock()
 			stats[idx] = st
-			mu.Unlock()
-
 			applySnapshotField(&snapshot, l.Name(), field)
+			mu.Unlock()
 		}(i, loader)
 	}
 

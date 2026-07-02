@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type EntrySource string
@@ -31,9 +34,9 @@ func ParseEntrySource(source string) EntrySource {
 type BackpressureStatus string
 
 const (
-	BackpressureNormal     BackpressureStatus = "normal"
-	BackpressureWarning    BackpressureStatus = "warning"
-	BackpressureShedding   BackpressureStatus = "shedding"
+	BackpressureNormal   BackpressureStatus = "normal"
+	BackpressureWarning  BackpressureStatus = "warning"
+	BackpressureShedding BackpressureStatus = "shedding"
 )
 
 type BackpressureConfig struct {
@@ -57,16 +60,13 @@ func DefaultBackpressureConfig() BackpressureConfig {
 }
 
 type BackpressureState struct {
-	Status       BackpressureStatus `json:"status"`
-	QueueDepth   int                `json:"queueDepth"`
-	CooldownUntil time.Time         `json:"cooldownUntil"`
-	mu           sync.RWMutex
+	Status        BackpressureStatus `json:"status"`
+	QueueDepth    int                `json:"queueDepth"`
+	CooldownUntil time.Time          `json:"cooldownUntil"`
 }
 
-func (s *BackpressureState) updateStatus(cfg BackpressureConfig) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ratio := float64(s.QueueDepth) / float64(cfg.MaxQueueDepth)
+func (s *BackpressureState) updateStatusLocked(cfg BackpressureConfig) {
+	ratio := queueRatio(s.QueueDepth, cfg.MaxQueueDepth)
 	switch {
 	case ratio >= cfg.SheddingRatio:
 		s.Status = BackpressureShedding
@@ -77,10 +77,8 @@ func (s *BackpressureState) updateStatus(cfg BackpressureConfig) {
 	}
 }
 
-func (s *BackpressureState) applyCooldown(cfg BackpressureConfig) time.Duration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ratio := float64(s.QueueDepth) / float64(cfg.MaxQueueDepth)
+func (s *BackpressureState) applyCooldownLocked(cfg BackpressureConfig) time.Duration {
+	ratio := queueRatio(s.QueueDepth, cfg.MaxQueueDepth)
 	duration := time.Duration(float64(cfg.CooldownBase) * (1.0 + ratio))
 	if duration > cfg.CooldownMax {
 		duration = cfg.CooldownMax
@@ -93,7 +91,7 @@ var (
 	ErrBackpressureShedding  = errors.New("unified_entry: shedding due to backpressure")
 	ErrBackpressureCooldown  = errors.New("unified_entry: in cooldown period")
 	ErrInvalidChannel        = errors.New("unified_entry: invalid channel")
-	ErrScopeResolutionFailed  = errors.New("unified_entry: scope resolution failed")
+	ErrScopeResolutionFailed = errors.New("unified_entry: scope resolution failed")
 )
 
 type UnifiedEntryRequest struct {
@@ -110,14 +108,16 @@ type UnifiedEntryRequest struct {
 	ImageUrl       string  `json:"imageUrl,omitempty"`
 	VideoUrl       string  `json:"videoUrl,omitempty"`
 	ImageContext   string  `json:"imageContext,omitempty"`
+	RequestID      string  `json:"requestId,omitempty"`
+	SessionID      string  `json:"sessionId,omitempty"`
 }
 
 type UnifiedEntry struct {
-	orchestrator   *Orchestrator
-	resolver       ScopeResolver
-	bpCfg          BackpressureConfig
-	bpState        *BackpressureState
-	mu             sync.Mutex
+	orchestrator *Orchestrator
+	resolver     ScopeResolver
+	bpCfg        BackpressureConfig
+	bpState      *BackpressureState
+	mu           sync.Mutex
 }
 
 func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver) *UnifiedEntry {
@@ -137,19 +137,21 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		return nil, ErrBackpressureCooldown
 	}
 	e.bpState.QueueDepth++
-	e.bpState.updateStatus(e.bpCfg)
+	e.bpState.updateStatusLocked(e.bpCfg)
 	status := e.bpState.Status
 	e.mu.Unlock()
 
 	defer func() {
 		e.mu.Lock()
 		e.bpState.QueueDepth--
-		e.bpState.updateStatus(e.bpCfg)
+		e.bpState.updateStatusLocked(e.bpCfg)
 		e.mu.Unlock()
 	}()
 
 	if status == BackpressureShedding {
-		e.bpState.applyCooldown(e.bpCfg)
+		e.mu.Lock()
+		e.bpState.applyCooldownLocked(e.bpCfg)
+		e.mu.Unlock()
 		return nil, ErrBackpressureShedding
 	}
 
@@ -176,6 +178,8 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Source:         string(source),
 		PeerID:         req.PeerID,
 		UserID:         req.UserID,
+		SessionID:      req.SessionID,
+		RequestID:      stableRequestID(req.RequestID),
 		AudioUrl:       req.AudioUrl,
 		AudioDuration:  req.AudioDuration,
 		VoiceMessage:   req.VoiceMessage,
@@ -201,14 +205,16 @@ func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryReques
 }
 
 func (e *UnifiedEntry) GetBackpressureStatus() BackpressureStatus {
-	e.bpState.mu.RLock()
-	defer e.bpState.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.bpState.Status
 }
 
 func (e *UnifiedEntry) SetBackpressureConfig(cfg BackpressureConfig) {
 	e.mu.Lock()
+	cfg = normalizeBackpressureConfig(cfg)
 	e.bpCfg = cfg
+	e.bpState.updateStatusLocked(cfg)
 	e.mu.Unlock()
 }
 
@@ -222,4 +228,49 @@ func (e *UnifiedEntry) CancelByPeer(channel, peerID string) int {
 	count := e.orchestrator.CancelByScope(scope)
 	log.Printf("[unified_entry] cancelled %d interactions for channel=%s peer=%s", count, channel, peerID)
 	return count
+}
+
+func normalizeBackpressureConfig(cfg BackpressureConfig) BackpressureConfig {
+	defaults := DefaultBackpressureConfig()
+	if cfg.MaxQueueDepth <= 0 {
+		cfg.MaxQueueDepth = defaults.MaxQueueDepth
+	}
+	if cfg.WarningRatio <= 0 || cfg.WarningRatio > 1 || math.IsNaN(cfg.WarningRatio) || math.IsInf(cfg.WarningRatio, 0) {
+		cfg.WarningRatio = defaults.WarningRatio
+	}
+	if cfg.SheddingRatio <= 0 || cfg.SheddingRatio > 1 || math.IsNaN(cfg.SheddingRatio) || math.IsInf(cfg.SheddingRatio, 0) {
+		cfg.SheddingRatio = defaults.SheddingRatio
+	}
+	if cfg.WarningRatio > cfg.SheddingRatio {
+		cfg.WarningRatio = defaults.WarningRatio
+		cfg.SheddingRatio = defaults.SheddingRatio
+	}
+	if cfg.CooldownBase <= 0 {
+		cfg.CooldownBase = defaults.CooldownBase
+	}
+	if cfg.CooldownMax <= 0 || cfg.CooldownMax < cfg.CooldownBase {
+		cfg.CooldownMax = defaults.CooldownMax
+	}
+	if cfg.RecoveryTimeout <= 0 {
+		cfg.RecoveryTimeout = defaults.RecoveryTimeout
+	}
+	return cfg
+}
+
+func queueRatio(depth int, maxDepth int) float64 {
+	if maxDepth <= 0 {
+		return 0
+	}
+	if depth < 0 {
+		depth = 0
+	}
+	return float64(depth) / float64(maxDepth)
+}
+
+func stableRequestID(requestID string) string {
+	requestID = strings.TrimSpace(requestID)
+	if requestID != "" {
+		return requestID
+	}
+	return uuid.New().String()
 }

@@ -12,50 +12,84 @@ import (
 type InteractionStatus string
 
 const (
-	InteractionStatusPending    InteractionStatus = "pending"
-	InteractionStatusProcessing InteractionStatus = "processing"
-	InteractionStatusCompleted  InteractionStatus = "completed"
-	InteractionStatusSuperseded InteractionStatus = "superseded"
-	InteractionStatusCancelled  InteractionStatus = "cancelled"
-	InteractionStatusFailed     InteractionStatus = "failed"
+	InteractionStatusReceived        InteractionStatus = "received"
+	InteractionStatusNormalized      InteractionStatus = "normalized"
+	InteractionStatusQueued          InteractionStatus = "queued"
+	InteractionStatusProcessing      InteractionStatus = "processing"
+	InteractionStatusContextReady    InteractionStatus = "context_ready"
+	InteractionStatusDecided         InteractionStatus = "decided"
+	InteractionStatusGenerated       InteractionStatus = "generated"
+	InteractionStatusCommitted       InteractionStatus = "committed"
+	InteractionStatusDeliveryPending InteractionStatus = "delivery_pending"
+	InteractionStatusDelivered       InteractionStatus = "delivered"
+	InteractionStatusCompleted       InteractionStatus = "completed"
+	InteractionStatusSuperseded      InteractionStatus = "superseded"
+	InteractionStatusCancelled       InteractionStatus = "cancelled"
+	InteractionStatusFailed          InteractionStatus = "failed"
+	InteractionStatusInterrupted     InteractionStatus = "interrupted"
+	InteractionStatusArchived        InteractionStatus = "archived"
+	InteractionStatusPending         InteractionStatus = InteractionStatusReceived
 )
 
 var validTransitions = map[InteractionStatus][]InteractionStatus{
-	InteractionStatusPending:    {InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded},
-	InteractionStatusProcessing: {InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
-	InteractionStatusCompleted:  {InteractionStatusSuperseded},
-	InteractionStatusFailed:     {InteractionStatusPending},
-	InteractionStatusSuperseded: {},
-	InteractionStatusCancelled:  {InteractionStatusPending},
+	InteractionStatusReceived:        {InteractionStatusNormalized, InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
+	InteractionStatusNormalized:      {InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
+	InteractionStatusQueued:          {InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
+	InteractionStatusProcessing:      {InteractionStatusContextReady, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusInterrupted},
+	InteractionStatusContextReady:    {InteractionStatusDecided, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
+	InteractionStatusDecided:         {InteractionStatusGenerated, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
+	InteractionStatusGenerated:       {InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
+	InteractionStatusCommitted:       {InteractionStatusDeliveryPending, InteractionStatusDelivered, InteractionStatusCompleted, InteractionStatusFailed},
+	InteractionStatusDeliveryPending: {InteractionStatusDelivered, InteractionStatusCompleted, InteractionStatusFailed},
+	InteractionStatusDelivered:       {InteractionStatusCompleted},
+	InteractionStatusCompleted:       {InteractionStatusArchived},
+	InteractionStatusFailed:          {InteractionStatusArchived},
+	InteractionStatusSuperseded:      {InteractionStatusArchived},
+	InteractionStatusCancelled:       {InteractionStatusArchived},
+	InteractionStatusInterrupted:     {InteractionStatusArchived},
+	InteractionStatusArchived:        {},
 }
 
 var (
-	ErrInvalidTransition = errors.New("interaction: invalid state transition")
-	ErrAlreadyTerminal   = errors.New("interaction: already in terminal state")
+	ErrInvalidTransition   = errors.New("interaction: invalid state transition")
+	ErrAlreadyTerminal     = errors.New("interaction: already in terminal state")
+	ErrVersionConflict     = errors.New("interaction: status version conflict")
+	ErrInteractionNotFound = errors.New("interaction: record not found")
 )
 
 type InteractionRecord struct {
-	ID             string             `json:"id"`
-	Scope          InteractionScope   `json:"scope"`
-	Status         InteractionStatus  `json:"status"`
-	SupersedesID   string             `json:"supersedesId,omitempty"`
-	SupersededByID string             `json:"supersededById,omitempty"`
-	CancelReason   string             `json:"cancelReason,omitempty"`
-	ErrorMessage   string             `json:"errorMessage,omitempty"`
-	ResultRef      string             `json:"resultRef,omitempty"`
-	CreatedAt      time.Time          `json:"createdAt"`
-	StartedAt      time.Time          `json:"startedAt,omitempty"`
-	CompletedAt    time.Time          `json:"completedAt,omitempty"`
-	mu             sync.RWMutex       `json:"-"`
-	cancel         context.CancelFunc `json:"-"`
+	ID                string             `json:"id"`
+	Scope             InteractionScope   `json:"scope"`
+	Priority          int                `json:"priority"`
+	PathType          string             `json:"pathType,omitempty"`
+	Status            InteractionStatus  `json:"status"`
+	StatusVersion     int64              `json:"statusVersion"`
+	SupersedesID      string             `json:"supersedesId,omitempty"`
+	SupersededByID    string             `json:"supersededById,omitempty"`
+	CancelReason      string             `json:"cancelReason,omitempty"`
+	ErrorCode         string             `json:"errorCode,omitempty"`
+	ErrorMessage      string             `json:"errorMessage,omitempty"`
+	ResultRef         string             `json:"resultRef,omitempty"`
+	CommitID          string             `json:"commitId,omitempty"`
+	ExecutorID        string             `json:"executorId,omitempty"`
+	DeadlineAt        time.Time          `json:"deadlineAt,omitempty"`
+	CancelRequestedAt time.Time          `json:"cancelRequestedAt,omitempty"`
+	CreatedAt         time.Time          `json:"createdAt"`
+	StartedAt         time.Time          `json:"startedAt,omitempty"`
+	CommittedAt       time.Time          `json:"committedAt,omitempty"`
+	CompletedAt       time.Time          `json:"completedAt,omitempty"`
+	UpdatedAt         time.Time          `json:"updatedAt"`
+	mu                sync.RWMutex       `json:"-"`
+	cancel            context.CancelFunc `json:"-"`
 }
 
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
 	return &InteractionRecord{
 		ID:        uuid.New().String(),
 		Scope:     scope.Normalize(),
-		Status:    InteractionStatusPending,
+		Status:    InteractionStatusReceived,
 		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 }
 
@@ -68,7 +102,7 @@ func (r *InteractionRecord) IsTerminal() bool {
 func (r *InteractionRecord) IsActive() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.Status == InteractionStatusPending || r.Status == InteractionStatusProcessing
+	return !isTerminalStatus(r.Status)
 }
 
 func (r *InteractionRecord) Transition(target InteractionStatus) error {
@@ -95,14 +129,18 @@ func (r *InteractionRecord) transitionLocked(target InteractionStatus) error {
 	if !found {
 		return ErrInvalidTransition
 	}
-	if isTerminalStatus(r.Status) && target != InteractionStatusPending {
+	if isTerminalStatus(r.Status) && target != InteractionStatusArchived {
 		return ErrAlreadyTerminal
 	}
 	r.Status = target
+	r.StatusVersion++
+	r.UpdatedAt = time.Now()
 	switch target {
 	case InteractionStatusProcessing:
 		r.StartedAt = time.Now()
-	case InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusCancelled, InteractionStatusSuperseded:
+	case InteractionStatusCommitted:
+		r.CommittedAt = time.Now()
+	case InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusInterrupted:
 		r.CompletedAt = time.Now()
 	}
 	return nil
@@ -112,7 +150,9 @@ func isTerminalStatus(status InteractionStatus) bool {
 	return status == InteractionStatusCompleted ||
 		status == InteractionStatusSuperseded ||
 		status == InteractionStatusCancelled ||
-		status == InteractionStatusFailed
+		status == InteractionStatusFailed ||
+		status == InteractionStatusInterrupted ||
+		status == InteractionStatusArchived
 }
 
 func (r *InteractionRecord) SetCancel(cancel context.CancelFunc) {
@@ -148,27 +188,42 @@ func (r *InteractionRecord) Snapshot() InteractionRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return InteractionRecord{
-		ID:             r.ID,
-		Scope:          r.Scope,
-		Status:         r.Status,
-		SupersedesID:   r.SupersedesID,
-		SupersededByID: r.SupersededByID,
-		CancelReason:   r.CancelReason,
-		ErrorMessage:   r.ErrorMessage,
-		ResultRef:      r.ResultRef,
-		CreatedAt:      r.CreatedAt,
-		StartedAt:      r.StartedAt,
-		CompletedAt:    r.CompletedAt,
+		ID:                r.ID,
+		Scope:             r.Scope,
+		Priority:          r.Priority,
+		PathType:          r.PathType,
+		Status:            r.Status,
+		StatusVersion:     r.StatusVersion,
+		SupersedesID:      r.SupersedesID,
+		SupersededByID:    r.SupersededByID,
+		CancelReason:      r.CancelReason,
+		ErrorCode:         r.ErrorCode,
+		ErrorMessage:      r.ErrorMessage,
+		ResultRef:         r.ResultRef,
+		CommitID:          r.CommitID,
+		ExecutorID:        r.ExecutorID,
+		DeadlineAt:        r.DeadlineAt,
+		CancelRequestedAt: r.CancelRequestedAt,
+		CreatedAt:         r.CreatedAt,
+		StartedAt:         r.StartedAt,
+		CommittedAt:       r.CommittedAt,
+		CompletedAt:       r.CompletedAt,
+		UpdatedAt:         r.UpdatedAt,
 	}
 }
 
 type InteractionTracker interface {
-	Track(record *InteractionRecord)
-	Get(id string) (*InteractionRecord, bool)
-	GetActiveByScope(scope InteractionScope) []*InteractionRecord
-	GetByScope(scope InteractionScope) []*InteractionRecord
-	Remove(id string)
-	Range(fn func(record *InteractionRecord) bool)
+	Create(ctx context.Context, record *InteractionRecord) error
+	Get(ctx context.Context, id string) (*InteractionRecord, bool, error)
+	ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
+	ListByScope(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
+	TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error)
+	RequestCancel(ctx context.Context, id string, reason string) error
+	MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error
+	Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error)
+	Fail(ctx context.Context, id string, code string, message string) (*InteractionRecord, error)
+	Archive(ctx context.Context, id string) error
+	Range(ctx context.Context, fn func(record *InteractionRecord) bool) error
 }
 
 type InMemoryTracker struct {
@@ -186,9 +241,12 @@ func NewInMemoryTracker() *InMemoryTracker {
 	}
 }
 
-func (t *InMemoryTracker) Track(record *InteractionRecord) {
+func (t *InMemoryTracker) Create(ctx context.Context, record *InteractionRecord) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	t.records[record.ID] = record
 	if record.Scope.ConversationID != "" {
 		if t.byConv[record.Scope.ConversationID] == nil {
@@ -202,18 +260,25 @@ func (t *InMemoryTracker) Track(record *InteractionRecord) {
 		}
 		t.byChar[record.Scope.CharacterID][record.ID] = struct{}{}
 	}
+	return nil
 }
 
-func (t *InMemoryTracker) Get(id string) (*InteractionRecord, bool) {
+func (t *InMemoryTracker) Get(ctx context.Context, id string) (*InteractionRecord, bool, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	rec, ok := t.records[id]
-	return rec, ok
+	return rec, ok, nil
 }
 
-func (t *InMemoryTracker) GetActiveByScope(scope InteractionScope) []*InteractionRecord {
+func (t *InMemoryTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	scope = scope.Normalize()
 	var result []*InteractionRecord
 	candidates := t.scopeCandidatesLocked(scope)
@@ -226,12 +291,15 @@ func (t *InMemoryTracker) GetActiveByScope(scope InteractionScope) []*Interactio
 			result = append(result, rec)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (t *InMemoryTracker) GetByScope(scope InteractionScope) []*InteractionRecord {
+func (t *InMemoryTracker) ListByScope(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	scope = scope.Normalize()
 	var result []*InteractionRecord
 	candidates := t.scopeCandidatesLocked(scope)
@@ -244,23 +312,124 @@ func (t *InMemoryTracker) GetByScope(scope InteractionScope) []*InteractionRecor
 			result = append(result, rec)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (t *InMemoryTracker) Remove(id string) {
+func (t *InMemoryTracker) TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	rec, ok := t.records[id]
 	if !ok {
-		return
+		return nil, ErrInteractionNotFound
 	}
-	delete(t.byConv[rec.Scope.ConversationID], id)
-	delete(t.byChar[rec.Scope.CharacterID], id)
-	delete(t.records, id)
+	if rec.StatusVersion != expectedVersion {
+		return nil, ErrVersionConflict
+	}
+	if err := rec.Transition(target); err != nil {
+		return nil, err
+	}
+	snap := rec.Snapshot()
+	return &snap, nil
 }
 
-func (t *InMemoryTracker) Range(fn func(record *InteractionRecord) bool) {
+func (t *InMemoryTracker) RequestCancel(ctx context.Context, id string, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return ErrInteractionNotFound
+	}
+	rec.CancelReason = reason
+	rec.CancelRequestedAt = time.Now()
+	rec.UpdatedAt = rec.CancelRequestedAt
+	return nil
+}
+
+func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	rec, ok := t.records[targetID]
+	if !ok {
+		return ErrInteractionNotFound
+	}
+	rec.SupersededByID = supersededByID
+	rec.Status = InteractionStatusSuperseded
+	rec.StatusVersion++
+	rec.CompletedAt = time.Now()
+	rec.UpdatedAt = rec.CompletedAt
+	return nil
+}
+
+func (t *InMemoryTracker) Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return nil, ErrInteractionNotFound
+	}
+	rec.ResultRef = resultRef
+	rec.Status = InteractionStatusCompleted
+	rec.StatusVersion++
+	rec.CompletedAt = time.Now()
+	rec.UpdatedAt = rec.CompletedAt
+	snap := rec.Snapshot()
+	return &snap, nil
+}
+
+func (t *InMemoryTracker) Fail(ctx context.Context, id string, code string, message string) (*InteractionRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return nil, ErrInteractionNotFound
+	}
+	rec.ErrorCode = code
+	rec.ErrorMessage = message
+	rec.Status = InteractionStatusFailed
+	rec.StatusVersion++
+	rec.CompletedAt = time.Now()
+	rec.UpdatedAt = rec.CompletedAt
+	snap := rec.Snapshot()
+	return &snap, nil
+}
+
+func (t *InMemoryTracker) Archive(ctx context.Context, id string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return ErrInteractionNotFound
+	}
+	rec.Status = InteractionStatusArchived
+	rec.StatusVersion++
+	rec.UpdatedAt = time.Now()
+	return nil
+}
+
+func (t *InMemoryTracker) Range(ctx context.Context, fn func(record *InteractionRecord) bool) error {
 	t.mu.RLock()
+	if err := ctx.Err(); err != nil {
+		t.mu.RUnlock()
+		return err
+	}
 	snaps := make([]*InteractionRecord, 0, len(t.records))
 	for _, rec := range t.records {
 		snap := rec.Snapshot()
@@ -272,6 +441,7 @@ func (t *InMemoryTracker) Range(fn func(record *InteractionRecord) bool) {
 			break
 		}
 	}
+	return nil
 }
 
 func (t *InMemoryTracker) scopeCandidatesLocked(scope InteractionScope) []string {

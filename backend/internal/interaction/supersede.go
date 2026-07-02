@@ -1,6 +1,7 @@
 package interaction
 
 import (
+	"context"
 	"errors"
 	"sync"
 )
@@ -35,11 +36,14 @@ func NewSupersedeResolver(policy SupersedePolicy, tracker InteractionTracker) *S
 	}
 }
 
-func (r *SupersedeResolver) Resolve(scope InteractionScope) (*SupersedeResolution, error) {
+func (r *SupersedeResolver) Resolve(ctx context.Context, scope InteractionScope) (*SupersedeResolution, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	active := r.tracker.GetActiveByScope(scope)
+	active, err := r.tracker.ListActive(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
 	if len(active) == 0 {
 		return &SupersedeResolution{}, nil
 	}

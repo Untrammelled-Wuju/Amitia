@@ -2,15 +2,18 @@ package interaction
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
 
 type runtimeCaptureProcessor struct {
-	got *RuntimeAssembly
+	got   *RuntimeAssembly
+	calls int
 }
 
 func (p *runtimeCaptureProcessor) ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
+	p.calls++
 	p.got = req.Runtime
 	return &ProcessResponse{
 		ConversationID: req.ConversationID,
@@ -32,6 +35,18 @@ func (l runtimePsycheLoader) CacheKey(scope InteractionScope, version string) st
 }
 func (l runtimePsycheLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	return FieldReady[any](PsycheState{Stress: 0.9, Fatigue: 0.2, Arousal: 0.3}, "psyche", version), nil
+}
+
+type runtimeBlockedBeliefLoader struct{}
+
+func (l runtimeBlockedBeliefLoader) Name() string           { return "beliefs" }
+func (l runtimeBlockedBeliefLoader) IsRequired() bool       { return false }
+func (l runtimeBlockedBeliefLoader) Timeout() time.Duration { return time.Second }
+func (l runtimeBlockedBeliefLoader) CacheKey(scope InteractionScope, version string) string {
+	return version + scope.CharacterID
+}
+func (l runtimeBlockedBeliefLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
+	return FieldReady[any](BeliefSet{Conflict: &BeliefConflict{KeyA: "a", ValueA: "1", KeyB: "b", ValueB: "2", RiskLevel: "blocked"}}, "beliefs", version), nil
 }
 
 func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
@@ -86,5 +101,46 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	}
 	if !foundRuntimeEvent {
 		t.Fatalf("runtime outbox event missing: %#v", records)
+	}
+}
+
+func TestOrchestratorSafetyBlockedSkipsProcessor(t *testing.T) {
+	processor := &runtimeCaptureProcessor{}
+	tracker := NewInMemoryTracker()
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	registry := NewContextLoaderRegistry()
+	registry.Register(runtimeBlockedBeliefLoader{})
+	orch.SetRuntimePipeline(NewRuntimePipeline(registry, NewPathClassifier(), NewTokenBudgetManager(1200)))
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		CharacterID:    "char-safety",
+		ConversationID: "conv-safety",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "test",
+		RequestID:      "req-safety",
+	})
+	if err == nil {
+		t.Fatal("expected safety blocked error")
+	}
+	if !errors.Is(err, ErrOrchestratorSafetyBlocked) {
+		t.Fatalf("expected ErrOrchestratorSafetyBlocked, got %v", err)
+	}
+	if processor.calls != 0 {
+		t.Fatalf("processor should not be called when safety blocks, got %d", processor.calls)
+	}
+	if result == nil || result.Outcome != OutcomeFailed {
+		t.Fatalf("expected failed result, got %#v", result)
+	}
+	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interaction record missing")
+	}
+	if record.Status != InteractionStatusFailed || record.ErrorCode != "safety_blocked" {
+		t.Fatalf("expected failed safety record, got %#v", record)
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,10 +14,11 @@ import (
 )
 
 var (
-	ErrOrchestratorNotReady     = errors.New("orchestrator: not ready")
-	ErrOrchestratorBusy         = errors.New("orchestrator: too many concurrent interactions")
-	ErrOrchestratorCancelled    = errors.New("orchestrator: cancelled")
-	ErrOrchestratorInvalidScope = errors.New("orchestrator: invalid scope")
+	ErrOrchestratorNotReady      = errors.New("orchestrator: not ready")
+	ErrOrchestratorBusy          = errors.New("orchestrator: too many concurrent interactions")
+	ErrOrchestratorCancelled     = errors.New("orchestrator: cancelled")
+	ErrOrchestratorInvalidScope  = errors.New("orchestrator: invalid scope")
+	ErrOrchestratorSafetyBlocked = errors.New("orchestrator: safety blocked")
 )
 
 type ProcessRequest struct {
@@ -26,6 +29,7 @@ type ProcessRequest struct {
 	Source         string           `json:"source,omitempty"`
 	PeerID         string           `json:"peerId,omitempty"`
 	UserID         string           `json:"userId,omitempty"`
+	SessionID      string           `json:"sessionId,omitempty"`
 	AudioUrl       string           `json:"audioUrl,omitempty"`
 	AudioDuration  float64          `json:"audioDuration,omitempty"`
 	VoiceMessage   bool             `json:"voiceMessage"`
@@ -92,6 +96,7 @@ type Orchestrator struct {
 	outbox     OutboxStore
 	resolver   *SupersedeResolver
 	pipeline   *RuntimePipeline
+	cancels    *CancellationRegistry
 	deadlineFn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)
 	mu         sync.Mutex
 	active     int
@@ -108,6 +113,7 @@ func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcesso
 }
 
 func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
+	cfg = normalizeOrchestratorConfig(cfg)
 	return &Orchestrator{
 		cfg:       cfg,
 		processor: processor,
@@ -115,8 +121,23 @@ func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcesso
 		outbox:    outbox,
 		resolver:  NewSupersedeResolver(cfg.SupersedePolicy, tracker),
 		pipeline:  NewRuntimePipeline(nil, nil, nil),
+		cancels:   NewCancellationRegistry(),
 		ready:     false,
 	}
+}
+
+func normalizeOrchestratorConfig(cfg OrchestratorConfig) OrchestratorConfig {
+	defaults := DefaultOrchestratorConfig()
+	if cfg.MaxConcurrent <= 0 {
+		cfg.MaxConcurrent = defaults.MaxConcurrent
+	}
+	if cfg.DefaultTimeout <= 0 {
+		cfg.DefaultTimeout = defaults.DefaultTimeout
+	}
+	if cfg.SupersedePolicy == "" {
+		cfg.SupersedePolicy = defaults.SupersedePolicy
+	}
+	return cfg
 }
 
 func (e *UnifiedEntry) SetOrchestratorReady(ready bool) {
@@ -164,30 +185,47 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	}
 
 	record := NewInteractionRecord(scope)
-	o.tracker.Track(record)
+	if req.RequestID == "" {
+		req.RequestID = uuid.New().String()
+	}
+	record.Scope.RequestID = req.RequestID
+	if err := o.tracker.Create(ctx, record); err != nil {
+		return nil, err
+	}
 
-	resolution, err := o.resolver.Resolve(scope)
+	resolution, err := o.resolver.Resolve(ctx, scope)
 	if err != nil {
-		record.Transition(InteractionStatusFailed)
 		record.SetError(err.Error())
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "supersede_resolve_failed", err.Error()); failErr == nil {
+			record = failed
+		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
 	if resolution.RejectNew {
-		record.Transition(InteractionStatusFailed)
 		err := errors.New("orchestrator: too many queued interactions")
 		record.SetError(err.Error())
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "queue_full", err.Error()); failErr == nil {
+			record = failed
+		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
 	if resolution.SupersedeTargetID != "" {
 		if resolution.SupersedeTargetID != record.ID {
-			o.supersedeTarget(resolution.SupersedeTargetID, record.ID)
+			if err := o.supersedeTarget(ctx, resolution.SupersedeTargetID, record.ID); err != nil {
+				record.SetError(err.Error())
+				if failed, failErr := o.tracker.Fail(ctx, record.ID, "supersede_failed", err.Error()); failErr == nil {
+					record = failed
+				}
+				return o.buildResult(record, nil, OutcomeFailed, err), err
+			}
 			record.SupersedesID = resolution.SupersedeTargetID
 		}
 	}
 
-	if err := record.Transition(InteractionStatusProcessing); err != nil {
+	record, err = o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
+	if err != nil {
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
@@ -199,11 +237,30 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		processCtx, cancel = context.WithTimeout(ctx, o.cfg.DefaultTimeout)
 	}
 	defer cancel()
-	record.SetCancel(cancel)
+	o.cancels.Register(record.ID, cancel)
+	defer o.cancels.Unregister(record.ID)
 
 	runtime := o.pipeline.Assemble(processCtx, scope, req)
 	req.InteractionID = record.ID
 	req.Runtime = &runtime
+	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusContextReady); err == nil {
+		record = next
+	} else {
+		o.tracker.Fail(ctx, record.ID, "context_ready_failed", err.Error())
+		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
+	if runtime.Safety.Blocked {
+		blockErr := ErrOrchestratorSafetyBlocked
+		if len(runtime.Safety.Reasons) > 0 {
+			blockErr = fmt.Errorf("%w: %s", ErrOrchestratorSafetyBlocked, strings.Join(runtime.Safety.Reasons, ","))
+		}
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "safety_blocked", blockErr.Error()); failErr == nil {
+			record = failed
+		} else {
+			return o.buildResult(record, nil, OutcomeFailed, failErr), failErr
+		}
+		return o.buildResult(record, nil, OutcomeFailed, blockErr), blockErr
+	}
 
 	start := time.Now()
 	resp, err := o.processor.ProcessMessageCtx(processCtx, req)
@@ -211,17 +268,45 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			record.Transition(InteractionStatusCancelled)
 			record.CancelReason = err.Error()
+			if cancelErr := o.tracker.RequestCancel(ctx, record.ID, err.Error()); cancelErr != nil {
+				return o.buildResult(record, nil, OutcomeFailed, cancelErr), cancelErr
+			}
+			if cancelled, failErr := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCancelled); failErr == nil {
+				record = cancelled
+			}
 			return o.buildResult(record, nil, OutcomeCancelled, err), err
 		}
-		record.Transition(InteractionStatusFailed)
 		record.SetError(err.Error())
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "processor_failed", err.Error()); failErr == nil {
+			record = failed
+		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
-	if err := record.Transition(InteractionStatusCompleted); err != nil {
+	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusGenerated); err == nil {
+		record = next
+	} else {
+		log.Printf("[orchestrator] transition to generated failed: %v", err)
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "generated_transition_failed", err.Error()); failErr == nil {
+			record = failed
+		}
+		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
+	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCommitted); err == nil {
+		record = next
+	} else {
+		log.Printf("[orchestrator] transition to committed failed: %v", err)
+		if failed, failErr := o.tracker.Fail(ctx, record.ID, "commit_transition_failed", err.Error()); failErr == nil {
+			record = failed
+		}
+		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
+	if completed, err := o.tracker.Complete(ctx, record.ID, "processor_response"); err == nil {
+		record = completed
+	} else {
 		log.Printf("[orchestrator] transition to completed failed: %v", err)
+		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
 	events := resp.Events
@@ -236,26 +321,44 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 }
 
 func (o *Orchestrator) Cancel(interactionID string) error {
-	rec, ok := o.tracker.Get(interactionID)
+	ctx := context.Background()
+	rec, ok, err := o.tracker.Get(ctx, interactionID)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return errors.New("orchestrator: interaction not found")
 	}
 	if rec.IsTerminal() {
 		return nil
 	}
-	rec.Cancel()
-	rec.Transition(InteractionStatusCancelled)
-	return nil
+	if err := o.tracker.RequestCancel(ctx, interactionID, "cancel_requested"); err != nil {
+		return err
+	}
+	o.cancels.Cancel(interactionID)
+	_, err = o.tracker.TransitionCAS(ctx, rec.ID, rec.StatusVersion, InteractionStatusCancelled)
+	return err
 }
 
 func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
-	active := o.tracker.GetActiveByScope(scope)
+	ctx := context.Background()
+	active, err := o.tracker.ListActive(ctx, scope)
+	if err != nil {
+		log.Printf("[orchestrator] list active failed during cancel: %v", err)
+		return 0
+	}
 	count := 0
 	for _, rec := range active {
-		if rec.Cancel() {
+		if err := o.tracker.RequestCancel(ctx, rec.ID, "scope_cancel_requested"); err != nil {
+			log.Printf("[orchestrator] request cancel failed: %v", err)
+			continue
+		}
+		if o.cancels.Cancel(rec.ID) {
 			count++
 		}
-		rec.Transition(InteractionStatusCancelled)
+		if _, err := o.tracker.TransitionCAS(ctx, rec.ID, rec.StatusVersion, InteractionStatusCancelled); err != nil {
+			log.Printf("[orchestrator] cancel transition failed: %v", err)
+		}
 	}
 	return count
 }
@@ -275,19 +378,18 @@ func (o *Orchestrator) buildScope(req *ProcessRequest) InteractionScope {
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
+		SessionID:      req.SessionID,
 		Source:         req.Source,
 		RequestID:      req.RequestID,
 	}.Normalize()
 }
 
-func (o *Orchestrator) supersedeTarget(targetID, newID string) {
-	rec, ok := o.tracker.Get(targetID)
-	if !ok {
-		return
+func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID string) error {
+	if err := o.tracker.MarkSuperseded(ctx, targetID, newID); err != nil {
+		return err
 	}
-	rec.Cancel()
-	rec.Transition(InteractionStatusSuperseded)
-	rec.SetSupersededBy(newID)
+	o.cancels.Cancel(targetID)
+	return nil
 }
 
 func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessResponse, outcome Outcome, err error) *OrchestrationResult {

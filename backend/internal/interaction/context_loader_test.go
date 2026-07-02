@@ -291,3 +291,59 @@ func TestParallelLoading(t *testing.T) {
 		t.Fatalf("parallel loading too slow: %v (expect < 200ms with 5x50ms loaders)", elapsed)
 	}
 }
+
+func TestLoadAllConcurrentSnapshotWrites(t *testing.T) {
+	reg := NewContextLoaderRegistry()
+	reg.Register(&mockLoader{
+		name:     "runtimeProfile",
+		required: false,
+		timeout:  time.Second,
+		loadResult: SnapshotField[any]{
+			Value:   RuntimeProfile{PersonalitySource: "test"},
+			Source:  "test",
+			Status:  LoadStatusReady,
+			Version: "v1",
+		},
+	})
+	reg.Register(&mockLoader{
+		name:     "conversation",
+		required: false,
+		timeout:  time.Second,
+		loadResult: SnapshotField[any]{
+			Value:   ConversationState{ConversationID: "conv-1"},
+			Source:  "test",
+			Status:  LoadStatusReady,
+			Version: "v1",
+		},
+	})
+	reg.Register(&mockLoader{
+		name:     "psyche",
+		required: false,
+		timeout:  time.Second,
+		loadResult: SnapshotField[any]{
+			Value:   PsycheState{Stress: 0.1},
+			Source:  "test",
+			Status:  LoadStatusReady,
+			Version: "v1",
+		},
+	})
+	reg.Register(&mockLoader{
+		name:     "relationship",
+		required: false,
+		timeout:  time.Second,
+		loadResult: SnapshotField[any]{
+			Value:   RelationshipState{Trust: 0.7},
+			Source:  "test",
+			Status:  LoadStatusReady,
+			Version: "v1",
+		},
+	})
+
+	snapshot := reg.LoadAll(context.Background(), InteractionScope{UserID: "u1", CharacterID: "c1", ConversationID: "conv-1"}, "v1")
+	if snapshot.RuntimeProfile.Status != LoadStatusReady ||
+		snapshot.Conversation.Status != LoadStatusReady ||
+		snapshot.Psyche.Status != LoadStatusReady ||
+		snapshot.Relationship.Status != LoadStatusReady {
+		t.Fatalf("snapshot fields were not all applied: %#v", snapshot)
+	}
+}

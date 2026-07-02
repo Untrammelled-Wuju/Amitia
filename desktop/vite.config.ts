@@ -1,23 +1,38 @@
 import { resolve } from "node:path"
-import { defineConfig } from "vite"
+import vue from "@vitejs/plugin-vue"
+import { defineConfig } from "vitest/config"
 import electron from "vite-plugin-electron/simple"
 
 export default defineConfig({
+  root: resolve(__dirname, "../front"),
   publicDir: false,
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "../front/src"),
+      "/src": resolve(__dirname, "../front/src"),
+    },
+  },
   build: {
     emptyOutDir: true,
-    outDir: "dist/renderer",
+    outDir: resolve(__dirname, "dist/renderer"),
     rollupOptions: {
       input: resolve(__dirname, "../front/index.html"),
     },
   },
+  test: {
+    root: __dirname,
+    environment: "jsdom",
+    include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
+    passWithNoTests: true,
+  },
   plugins: [
+    vue(),
     electron({
       main: {
-        entry: "src/main/index.ts",
+        entry: resolve(__dirname, "src/main/index.ts"),
         vite: {
           build: {
-            outDir: "dist/main",
+            outDir: resolve(__dirname, "dist/main"),
             rollupOptions: {
               external: ["electron"],
             },
@@ -25,10 +40,10 @@ export default defineConfig({
         },
       },
       preload: {
-        input: "src/preload/index.ts",
+        input: resolve(__dirname, "src/preload/index.ts"),
         vite: {
           build: {
-            outDir: "dist/preload",
+            outDir: resolve(__dirname, "dist/preload"),
             rollupOptions: {
               external: ["electron"],
             },
