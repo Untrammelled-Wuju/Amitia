@@ -70,7 +70,9 @@ WHERE conversation_id = ''
 		t.Fatal(err)
 	}
 
-	initDatabase(db)
+	if err := initDatabase(db); err != nil {
+		t.Fatal(err)
+	}
 
 	var realLegacy int
 	if err := db.Raw("SELECT legacy FROM retrieval_logs WHERE id = 'row-1'").Scan(&realLegacy).Error; err != nil {
@@ -145,7 +147,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conver
 		config.AppCfg = originalCfg
 	})
 
-	initDatabase(db)
+	if err := initDatabase(db); err != nil {
+		t.Fatal(err)
+	}
 
 	type indexRow struct {
 		Name    string `gorm:"column:name"`

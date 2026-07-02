@@ -75,7 +75,10 @@ func main() {
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
-	initDatabase(db)
+	if err := initDatabase(db); err != nil {
+		log.Error("sql.sql建表失败:", err)
+		os.Exit(1)
+	}
 	migRunner := migration.Runner{DB: db}
 	if err := migRunner.Apply(migration.DefaultMigrations()); err != nil {
 		log.Error("数据库迁移失败:", err)
@@ -202,43 +205,20 @@ func main() {
 	}
 }
 
-func initDatabase(db *gorm.DB) {
+func initDatabase(db *gorm.DB) error {
 	sqlPath := filepath.Join(config.AppCfg.Storage.DataDir, "sql.sql")
-	data, err := os.ReadFile(sqlPath)
-	if err != nil {
+	if _, err := os.Stat(sqlPath); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
 		log.Warn("sql.sql未找到，跳过建表:", err)
-		return
+		return nil
 	}
-	raw := string(data)
-	lines := strings.Split(raw, "\n")
-	var current strings.Builder
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
-			continue
-		}
-		current.WriteString(trimmed)
-		current.WriteString(" ")
-		if strings.HasSuffix(trimmed, ";") {
-			stmt := strings.TrimSpace(current.String())
-			stmt = strings.TrimSuffix(stmt, ";")
-			current.Reset()
-			if stmt != "" {
-				result := db.Exec(stmt)
-				if result.Error != nil && !strings.Contains(result.Error.Error(), "duplicate column name") {
-					log.Warn("SQL执行错误:", result.Error)
-				}
-			}
-		}
-	}
-	stmt := strings.TrimSpace(current.String())
-	if stmt != "" {
-		result := db.Exec(stmt)
-		if result.Error != nil && !strings.Contains(result.Error.Error(), "duplicate column name") {
-			log.Warn("SQL执行错误:", result.Error)
-		}
+	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
+		return err
 	}
 	log.Info("sql.sql建表完成")
+	return nil
 }
 
 func startQdrant() {
