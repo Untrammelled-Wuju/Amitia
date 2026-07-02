@@ -21,7 +21,29 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	return s.repo.Search(req.Keyword, req.CharacterID, limit)
+	fetchLimit := limit * 3
+	if fetchLimit < limit+20 {
+		fetchLimit = limit + 20
+	}
+	items, err := s.repo.Search(req.Keyword, req.CharacterID, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	policy := retrievalAuthorityPolicy{
+		CharacterID: req.CharacterID,
+		Now:         time.Now(),
+	}
+	filtered := make([]Memory, 0, min(limit, len(items)))
+	for _, m := range items {
+		if !memoryAllowedBySQLiteAuthority(m, policy) {
+			continue
+		}
+		filtered = append(filtered, m)
+		if len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered, nil
 }
 
 func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error) {

@@ -82,10 +82,18 @@ func (s *service) GetRankedMemories(characterID, query string, limit int) ([]Ran
 func (s *service) BatchVerify(ids []string, status string) error {
 	for _, id := range ids {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		s.repo.Update(id, map[string]interface{}{
+		if err := s.repo.Update(id, map[string]interface{}{
 			"verified_status":  status,
 			"last_verified_at": now,
-		})
+		}); err != nil {
+			return err
+		}
+		if memoryStatusBlocksRetrieval(status) {
+			if m, err := s.repo.FindByID(id); err == nil {
+				deleteVectorsFromCollections([]string{id})
+				s.deleteGraph(m)
+			}
+		}
 	}
 	return nil
 }

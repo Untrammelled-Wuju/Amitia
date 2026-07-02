@@ -4,8 +4,6 @@ package memory
 
 import (
 	"fmt"
-
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
 
 func (s *service) List(q MemoryListQuery) (*MemoryListResponse, error) {
@@ -131,6 +129,12 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	if before != nil && before.MemoryType != m.MemoryType {
 		deleteVectorsFromCollections([]string{m.ID}, collectionNameForMemoryType(before.MemoryType))
 	}
+	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
+		deleteVectorsFromCollections([]string{m.ID})
+		s.deleteGraph(m)
+		s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+		return m, nil
+	}
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.syncGraph(m)
 	s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
@@ -143,7 +147,7 @@ func (s *service) Delete(id string) error {
 		return err
 	}
 	s.logEvent(id, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
-	deleteVectorsFromCollections([]string{id}, qdrantDB.CollectionNames()...)
+	deleteVectorsFromCollections([]string{id})
 	s.deleteGraph(m)
 	return s.repo.Delete(id)
 }
@@ -158,7 +162,7 @@ func (s *service) DeleteAll(characterID string) error {
 	if characterID != "" {
 		s.logEvent("", "memory_deleted_all", "", "", "", 0, "", characterID)
 	}
-	deleteVectorsFromCollections(ids, qdrantDB.CollectionNames()...)
+	deleteVectorsFromCollections(ids)
 	if s.graphSvc != nil {
 		for _, id := range ids {
 			_ = s.graphSvc.DeleteNode("memory:" + id)
