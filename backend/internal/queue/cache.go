@@ -65,7 +65,19 @@ func NewCacheMetrics() *CacheMetrics {
 
 func NewCache(cfg CacheConfig) *Cache {
 	if cfg.MaxEntries <= 0 {
-		cfg = DefaultCacheConfig
+		cfg.MaxEntries = DefaultCacheConfig.MaxEntries
+	}
+	if cfg.DefaultTTL <= 0 {
+		cfg.DefaultTTL = DefaultCacheConfig.DefaultTTL
+	}
+	if cfg.HighAuthorityTTL <= 0 {
+		cfg.HighAuthorityTTL = DefaultCacheConfig.HighAuthorityTTL
+	}
+	if cfg.StableTTL <= 0 {
+		cfg.StableTTL = DefaultCacheConfig.StableTTL
+	}
+	if cfg.UserStateTTL <= 0 {
+		cfg.UserStateTTL = DefaultCacheConfig.UserStateTTL
 	}
 	return &Cache{
 		entries: make(map[string]*CacheEntry),
