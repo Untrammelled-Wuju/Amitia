@@ -186,6 +186,43 @@ func TestSQLiteInteractionTrackerAllowsSameRequestIDForDifferentUsers(t *testing
 	}
 }
 
+func TestSQLiteInteractionTrackerListActiveIncludesDelivered(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	record := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+	processing, err := tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated, err := tracker.TransitionCAS(ctx, record.ID, processing.StatusVersion, InteractionStatusGenerated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	committed, err := tracker.TransitionCAS(ctx, record.ID, generated.StatusVersion, InteractionStatusCommitted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered, err := tracker.TransitionCAS(ctx, record.ID, committed.StatusVersion, InteractionStatusDelivered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !delivered.IsActive() {
+		t.Fatalf("expected delivered record to be active")
+	}
+
+	active, err := tracker.ListActive(ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].ID != record.ID || active[0].Status != InteractionStatusDelivered {
+		t.Fatalf("expected delivered record in active list, got %#v", active)
+	}
+}
+
 func TestSQLiteInteractionTrackerConcurrentDuplicateRequestID(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()
