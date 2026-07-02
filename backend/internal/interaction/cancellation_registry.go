@@ -46,6 +46,28 @@ func (r *CancellationRegistry) Unregister(interactionID string) {
 	r.mu.Unlock()
 }
 
+func (r *CancellationRegistry) CleanupStale(maxAge time.Duration) int {
+	return r.CleanupStaleAt(maxAge, time.Now())
+}
+
+func (r *CancellationRegistry) CleanupStaleAt(maxAge time.Duration, now time.Time) int {
+	if maxAge <= 0 {
+		return 0
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cleaned := 0
+	for interactionID, entry := range r.entries {
+		if now.Sub(entry.createdAt) > maxAge {
+			delete(r.entries, interactionID)
+			cleaned++
+		}
+	}
+	return cleaned
+}
+
 func (r *CancellationRegistry) Len() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()

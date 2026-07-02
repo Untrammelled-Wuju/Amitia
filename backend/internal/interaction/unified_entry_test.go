@@ -24,6 +24,33 @@ func (p *captureRequestProcessor) ProcessMessageCtx(ctx context.Context, req *Pr
 	}, nil
 }
 
+type blockingListTracker struct {
+	*InMemoryTracker
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingListTracker() *blockingListTracker {
+	return &blockingListTracker{
+		InMemoryTracker: NewInMemoryTracker(),
+		entered:         make(chan struct{}),
+		release:         make(chan struct{}),
+	}
+}
+
+func (t *blockingListTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
+	t.once.Do(func() {
+		close(t.entered)
+	})
+	select {
+	case <-t.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return t.InMemoryTracker.ListActive(ctx, scope)
+}
+
 func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
@@ -216,6 +243,50 @@ func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
+	processor := &captureRequestProcessor{}
+	tracker := newBlockingListTracker()
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+
+	done := make(chan struct{})
+	go func() {
+		entry.CancelByPeer("web", "peer-1")
+		close(done)
+	}()
+
+	select {
+	case <-tracker.entered:
+	case <-time.After(time.Second):
+		t.Fatal("cancel did not enter tracker")
+	}
+
+	configDone := make(chan struct{})
+	go func() {
+		entry.SetBackpressureConfig(BackpressureConfig{
+			MaxQueueDepth: 10,
+			WarningRatio:  0.2,
+			SheddingRatio: 0.8,
+			CooldownBase:  time.Millisecond,
+			CooldownMax:   10 * time.Millisecond,
+		})
+		close(configDone)
+	}()
+
+	select {
+	case <-configDone:
+	case <-time.After(time.Second):
+		t.Fatal("backpressure config was blocked by cancel")
+	}
+
+	close(tracker.release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancel did not finish")
+	}
 }
 
 func TestOrchestratorNormalizesZeroValueConfig(t *testing.T) {

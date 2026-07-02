@@ -215,6 +215,7 @@ func (r *InteractionRecord) Snapshot() InteractionRecord {
 type InteractionTracker interface {
 	Create(ctx context.Context, record *InteractionRecord) error
 	Get(ctx context.Context, id string) (*InteractionRecord, bool, error)
+	GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error)
 	ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
 	ListByScope(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error)
 	TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error)
@@ -271,6 +272,32 @@ func (t *InMemoryTracker) Get(ctx context.Context, id string) (*InteractionRecor
 	}
 	rec, ok := t.records[id]
 	return rec, ok, nil
+}
+
+func (t *InMemoryTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	scope := InteractionScope{UserID: userID, RequestID: requestID}.Normalize()
+	if scope.RequestID == "" {
+		return nil, false, nil
+	}
+	var selected *InteractionRecord
+	for _, rec := range t.records {
+		if rec.Scope.UserID != scope.UserID || rec.Scope.RequestID != scope.RequestID {
+			continue
+		}
+		if selected == nil || rec.CreatedAt.After(selected.CreatedAt) {
+			selected = rec
+		}
+	}
+	if selected == nil {
+		return nil, false, nil
+	}
+	snap := selected.Snapshot()
+	return &snap, true, nil
 }
 
 func (t *InMemoryTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {

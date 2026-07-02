@@ -89,6 +89,25 @@ func (t *SQLiteInteractionTracker) Get(ctx context.Context, id string) (*Interac
 	return modelToInteractionRecord(model), true, nil
 }
 
+func (t *SQLiteInteractionTracker) GetByRequestID(ctx context.Context, userID string, requestID string) (*InteractionRecord, bool, error) {
+	scope := InteractionScope{UserID: userID, RequestID: requestID}.Normalize()
+	if scope.RequestID == "" {
+		return nil, false, nil
+	}
+	var model InteractionRecordModel
+	err := t.db.WithContext(ctx).
+		Where("user_id = ? AND request_id = ?", scope.UserID, scope.RequestID).
+		Order("created_at DESC").
+		First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return modelToInteractionRecord(model), true, nil
+}
+
 func (t *SQLiteInteractionTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
 	return t.list(ctx, scope, true)
 }

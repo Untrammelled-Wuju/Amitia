@@ -146,6 +146,58 @@ func TestOrchestratorSafetyBlockedSkipsProcessor(t *testing.T) {
 	}
 }
 
+func TestOrchestratorDuplicateRequestIDDoesNotReprocess(t *testing.T) {
+	processor := &runtimeCaptureProcessor{}
+	tracker := NewInMemoryTracker()
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+	req := ProcessRequest{
+		UserID:         "user-1",
+		CharacterID:    "char-duplicate",
+		ConversationID: "conv-duplicate",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-duplicate",
+	}
+
+	first, err := orch.Process(context.Background(), &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Outcome != OutcomeCompleted {
+		t.Fatalf("unexpected first outcome: %s", first.Outcome)
+	}
+	second, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-1",
+		CharacterID:    "char-duplicate",
+		ConversationID: "conv-duplicate",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello again",
+		RequestID:      "req-duplicate",
+	})
+	if !errors.Is(err, ErrOrchestratorDuplicate) {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+	if second == nil || second.InteractionID != first.InteractionID {
+		t.Fatalf("duplicate did not return existing interaction: first=%#v second=%#v", first, second)
+	}
+	if processor.calls != 1 {
+		t.Fatalf("processor should be called once, got %d", processor.calls)
+	}
+	count := 0
+	if err := tracker.Range(context.Background(), func(record *InteractionRecord) bool {
+		count++
+		return true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one interaction record, got %d", count)
+	}
+}
+
 type supersedeSQLiteProcessor struct {
 	calls        atomic.Int32
 	firstStarted chan struct{}

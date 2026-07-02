@@ -112,17 +112,7 @@ func (h *Handler) RemindersStream(c *gin.Context) {
 }
 
 func (h *Handler) WebChatSendStream(c *gin.Context) {
-	var body struct {
-		ConversationID string  `json:"conversationId"`
-		Content        string  `json:"content"`
-		Message        string  `json:"message"`
-		CharacterID    string  `json:"characterId"`
-		VoiceMessage   bool    `json:"voiceMessage"`
-		AudioUrl       string  `json:"audioUrl"`
-		AudioDuration  float64 `json:"audioDuration"`
-		ImageUrl       string  `json:"imageUrl"`
-		VideoUrl       string  `json:"videoUrl"`
-	}
+	var body webChatSendRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
@@ -140,6 +130,15 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	if convID == "" {
 		convID = "web-" + uuid.New().String()[:8]
 	}
+	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
+	sessionID := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID")
+	if sessionID == "" {
+		sessionID = convID
+	}
+	userID := resolveHeaderBackedValue(c, body.UserID, "X-User-ID")
+	peerID := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID")
+	c.Header("X-Request-ID", requestID)
+	c.Header("X-Session-ID", sessionID)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
@@ -147,7 +146,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
-		c.JSON(200, gin.H{"code": 0, "data": gin.H{"status": "queued", "conversationId": convID}})
+		c.JSON(200, gin.H{"code": 0, "data": gin.H{"status": "queued", "conversationId": convID, "requestId": requestID, "sessionId": sessionID}})
 		return
 	}
 
@@ -163,6 +162,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: "web",
+		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl:     body.ImageUrl,
@@ -277,7 +277,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
-	doneData := gin.H{"conversationId": result.ConversationID}
+	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "userId": userID}
 	db, _ := json.Marshal(doneData)
 	fmt.Fprintf(c.Writer, "event: done\ndata: %s\n\n", string(db))
 	flusher.Flush()

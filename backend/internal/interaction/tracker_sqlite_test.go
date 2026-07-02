@@ -53,6 +53,38 @@ func TestSQLiteInteractionTrackerPersistsFullScopeAndCAS(t *testing.T) {
 	}
 }
 
+func TestSQLiteInteractionTrackerGetByRequestID(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	record := NewInteractionRecord(InteractionScope{
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-1",
+		Channel:        "web",
+		RequestID:      "request-1",
+	})
+	if err := tracker.Create(ctx, record); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok, err := tracker.GetByRequestID(ctx, "user-1", "request-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("record missing by request id")
+	}
+	if got.ID != record.ID || got.Scope.UserID != "user-1" || got.Scope.RequestID != "request-1" {
+		t.Fatalf("unexpected record: %#v", got)
+	}
+	if _, ok, err := tracker.GetByRequestID(ctx, "user-2", "request-1"); err != nil || ok {
+		t.Fatalf("unexpected record for different user: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := tracker.GetByRequestID(ctx, "user-1", ""); err != nil || ok {
+		t.Fatalf("unexpected record for empty request id: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestSQLiteInteractionTrackerCancelAndArchiveKeepsRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()

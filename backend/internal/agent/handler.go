@@ -39,7 +39,10 @@ func (h *Handler) Webhook(c *gin.Context) {
 		AccountID      string `json:"accountId"`
 		ConversationID string `json:"conversationId"`
 		SenderID       string `json:"senderId"`
+		UserID         string `json:"userId"`
 		MessageID      string `json:"messageId"`
+		RequestID      string `json:"requestId"`
+		SessionID      string `json:"sessionId"`
 		Text           string `json:"text"`
 		VoiceMessage   bool   `json:"voiceMessage"`
 		MsgType        string `json:"type"`
@@ -52,7 +55,22 @@ func (h *Handler) Webhook(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	result, err := h.service.Webhook(body.Channel, body.SenderID, body.ConversationID, body.Text, body.VoiceMessage, body.ImageUrl, body.VideoUrl, body.AudioBase64, body.SkipTiming)
+	result, err := h.service.Webhook(c.Request.Context(), WebhookRequest{
+		Channel:        body.Channel,
+		AccountID:      body.AccountID,
+		ConversationID: body.ConversationID,
+		SenderID:       body.SenderID,
+		UserID:         body.UserID,
+		MessageID:      body.MessageID,
+		RequestID:      body.RequestID,
+		SessionID:      body.SessionID,
+		Text:           body.Text,
+		VoiceMessage:   body.VoiceMessage,
+		ImageUrl:       body.ImageUrl,
+		VideoUrl:       body.VideoUrl,
+		AudioBase64:    body.AudioBase64,
+		SkipTiming:     body.SkipTiming,
+	})
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, "AI 调用失败: "+err.Error(), nil)
 		return

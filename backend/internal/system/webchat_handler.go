@@ -16,6 +16,24 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
+type webChatSendRequest struct {
+	ConversationID  string  `json:"conversationId"`
+	Content         string  `json:"content"`
+	Message         string  `json:"message"`
+	CharacterID     string  `json:"characterId"`
+	UserID          string  `json:"userId"`
+	PeerID          string  `json:"peerId"`
+	RequestID       string  `json:"requestId"`
+	SessionID       string  `json:"sessionId"`
+	ClientMessageID string  `json:"clientMessageId"`
+	MessageID       string  `json:"messageId"`
+	VoiceMessage    bool    `json:"voiceMessage"`
+	AudioUrl        string  `json:"audioUrl"`
+	AudioDuration   float64 `json:"audioDuration"`
+	ImageUrl        string  `json:"imageUrl"`
+	VideoUrl        string  `json:"videoUrl"`
+}
+
 func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	var body struct {
 		Title       string `json:"title"`
@@ -140,17 +158,7 @@ func (h *Handler) WebChatMessageStatus(c *gin.Context) {
 }
 
 func (h *Handler) WebChatSend(c *gin.Context) {
-	var body struct {
-		ConversationID string  `json:"conversationId"`
-		Content        string  `json:"content"`
-		Message        string  `json:"message"`
-		CharacterID    string  `json:"characterId"`
-		VoiceMessage   bool    `json:"voiceMessage"`
-		AudioUrl       string  `json:"audioUrl"`
-		AudioDuration  float64 `json:"audioDuration"`
-		ImageUrl       string  `json:"imageUrl"`
-		VideoUrl       string  `json:"videoUrl"`
-	}
+	var body webChatSendRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
@@ -168,6 +176,15 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	if convID == "" {
 		convID = "web-" + uuid.New().String()[:8]
 	}
+	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
+	sessionID := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID")
+	if sessionID == "" {
+		sessionID = convID
+	}
+	userID := resolveHeaderBackedValue(c, body.UserID, "X-User-ID")
+	peerID := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID")
+	c.Header("X-Request-ID", requestID)
+	c.Header("X-Session-ID", sessionID)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
 	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
@@ -175,7 +192,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
 	if bufErr != nil {
-		util.SuccessResponse(c, gin.H{"status": "queued", "conversationId": convID})
+		util.SuccessResponse(c, gin.H{"status": "queued", "conversationId": convID, "requestId": requestID, "sessionId": sessionID})
 		return
 	}
 
@@ -186,6 +203,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: "web",
+		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl:     body.ImageUrl,
@@ -196,11 +214,30 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName})
+	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID})
 }
 
 func (h *Handler) WebChatFromImport(c *gin.Context) {
 	var body map[string]interface{}
 	c.ShouldBindJSON(&body)
 	util.SuccessResponse(c, map[string]interface{}{"imported": true, "conversationId": ""})
+}
+
+func resolveRequestID(c *gin.Context, candidates ...string) string {
+	candidates = append(candidates, c.GetHeader("X-Request-ID"), c.GetHeader("X-Idempotency-Key"))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return uuid.New().String()
+}
+
+func resolveHeaderBackedValue(c *gin.Context, bodyValue string, headerName string) string {
+	bodyValue = strings.TrimSpace(bodyValue)
+	if bodyValue != "" {
+		return bodyValue
+	}
+	return strings.TrimSpace(c.GetHeader(headerName))
 }

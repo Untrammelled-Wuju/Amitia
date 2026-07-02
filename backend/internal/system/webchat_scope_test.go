@@ -139,3 +139,47 @@ func TestWebChatCreateConvCreatesExternalConversationForExplicitPeerTarget(t *te
 		t.Fatalf("unexpected conversation: %#v", data)
 	}
 }
+
+func TestWebChatEnvelopeResolvesStableIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	req := httptest.NewRequest(http.MethodPost, "/web-chat/send", bytes.NewReader(nil))
+	req.Header.Set("X-Request-ID", "header-request")
+	req.Header.Set("X-Session-ID", "header-session")
+	req.Header.Set("X-User-ID", "header-user")
+	req.Header.Set("X-Peer-ID", "header-peer")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	body := webChatSendRequest{
+		RequestID: "body-request",
+		SessionID: "body-session",
+		UserID:    "body-user",
+		PeerID:    "body-peer",
+	}
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "body-request" {
+		t.Fatalf("unexpected request id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "body-session" {
+		t.Fatalf("unexpected session id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.UserID, "X-User-ID"); got != "body-user" {
+		t.Fatalf("unexpected user id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "body-peer" {
+		t.Fatalf("unexpected peer id: %s", got)
+	}
+
+	body = webChatSendRequest{}
+	if got := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID); got != "header-request" {
+		t.Fatalf("unexpected header request id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.SessionID, "X-Session-ID"); got != "header-session" {
+		t.Fatalf("unexpected header session id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.UserID, "X-User-ID"); got != "header-user" {
+		t.Fatalf("unexpected header user id: %s", got)
+	}
+	if got := resolveHeaderBackedValue(c, body.PeerID, "X-Peer-ID"); got != "header-peer" {
+		t.Fatalf("unexpected header peer id: %s", got)
+	}
+}

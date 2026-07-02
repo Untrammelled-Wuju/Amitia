@@ -26,7 +26,24 @@ import (
 type Service interface {
 	Test(characterID, message string) (map[string]interface{}, error)
 	ContextPreview(convID string) (map[string]interface{}, error)
-	Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, audioBase64 string, skipTiming bool) (map[string]interface{}, error)
+	Webhook(ctx context.Context, req WebhookRequest) (map[string]interface{}, error)
+}
+
+type WebhookRequest struct {
+	Channel        string
+	AccountID      string
+	ConversationID string
+	SenderID       string
+	UserID         string
+	MessageID      string
+	RequestID      string
+	SessionID      string
+	Text           string
+	VoiceMessage   bool
+	ImageUrl       string
+	VideoUrl       string
+	AudioBase64    string
+	SkipTiming     bool
 }
 
 const systemFormatInstruction = `【回复格式 - 系统固定规则】
@@ -150,35 +167,38 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}, nil
 }
 
-func (s *service) Webhook(channel, senderID, conversationID, text string, voiceMessage bool, imageUrl string, videoUrl string, audioBase64 string, skipTiming bool) (map[string]interface{}, error) {
-	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", channel, text[:min(len(text), 80)], voiceMessage, len(imageUrl), skipTiming)
-	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", channel, text[:min(len(text), 50)], len(imageUrl), len(videoUrl))
-	text = strings.TrimSpace(text)
-	if text == "" && imageUrl == "" && videoUrl == "" {
-		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
+func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]interface{}, error) {
+	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", req.Channel, req.Text[:min(len(req.Text), 80)], req.VoiceMessage, len(req.ImageUrl), req.SkipTiming)
+	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", req.Channel, req.Text[:min(len(req.Text), 50)], len(req.ImageUrl), len(req.VideoUrl))
+	req.Text = strings.TrimSpace(req.Text)
+	requestID := stableWebhookRequestID(req)
+	if req.Text == "" && req.ImageUrl == "" && req.VideoUrl == "" {
+		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "requestId": requestID}, nil
 	}
-	convID := conversationID
+	convID := req.ConversationID
 	if convID == "" {
-		convID = "channel-" + channel
+		convID = "channel-" + req.Channel
 	}
+	sessionID := stableWebhookSessionID(req, convID)
+	userID := stableWebhookUserID(req)
 
 	var mergedText string
-	if skipTiming {
-		mergedText = text
+	if req.SkipTiming {
+		mergedText = req.Text
 	} else {
-		msgs, bufErr := chat.GetBuffer().Buffer(convID, text)
+		msgs, bufErr := chat.GetBuffer().Buffer(convID, req.Text)
 		if bufErr != nil {
-			return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}}, nil
+			return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID}, nil
 		}
 		mergedText = strings.Join(msgs, "\n")
 	}
 
 	audioUrl := ""
-	if audioBase64 != "" {
+	if req.AudioBase64 != "" {
 		voiceDir := "data/voice_msg"
 		os.MkdirAll(voiceDir, 0755)
 		fname := uuid.New().String() + ".mp3"
-		data, err := base64.StdEncoding.DecodeString(audioBase64)
+		data, err := base64.StdEncoding.DecodeString(req.AudioBase64)
 		if err == nil {
 			os.WriteFile(filepath.Join(voiceDir, fname), data, 0644)
 			audioUrl = "/voice/" + fname
@@ -188,17 +208,23 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 	if s.unifiedEntry == nil {
 		return nil, fmt.Errorf("统一入口未初始化")
 	}
-	reqCtx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	result, err := s.unifiedEntry.Handle(reqCtx, &interaction.UnifiedEntryRequest{
 		Message:        mergedText,
 		ConversationID: convID,
-		Channel:        channel,
-		Source:         channel,
-		PeerID:         senderID,
-		VoiceMessage:   voiceMessage,
-		ImageUrl:       imageUrl,
-		VideoUrl:       videoUrl,
+		Channel:        req.Channel,
+		Source:         req.Channel,
+		PeerID:         req.SenderID,
+		UserID:         userID,
+		SessionID:      sessionID,
+		RequestID:      requestID,
+		VoiceMessage:   req.VoiceMessage,
+		ImageUrl:       req.ImageUrl,
+		VideoUrl:       req.VideoUrl,
 		AudioUrl:       audioUrl,
 	})
 	if err != nil {
@@ -209,13 +235,43 @@ func (s *service) Webhook(channel, senderID, conversationID, text string, voiceM
 	}
 	forceVoice := result.Response.ForceVoice
 	replyText := result.Response.Reply
-	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, channel)
-	if channel == "wechat" && forceVoice {
+	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, req.Channel)
+	if req.Channel == "wechat" && forceVoice {
 		forceVoice = false
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}}, nil
+	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID}, nil
+}
+
+func stableWebhookRequestID(req WebhookRequest) string {
+	for _, candidate := range []string{req.RequestID, req.MessageID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return uuid.New().String()
+}
+
+func stableWebhookSessionID(req WebhookRequest, convID string) string {
+	for _, candidate := range []string{req.SessionID, req.ConversationID, convID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return "channel-" + strings.TrimSpace(req.Channel)
+}
+
+func stableWebhookUserID(req WebhookRequest) string {
+	for _, candidate := range []string{req.UserID, req.SenderID, req.AccountID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName string

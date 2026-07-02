@@ -18,6 +18,7 @@ var (
 	ErrOrchestratorBusy          = errors.New("orchestrator: too many concurrent interactions")
 	ErrOrchestratorCancelled     = errors.New("orchestrator: cancelled")
 	ErrOrchestratorSuperseded    = errors.New("orchestrator: superseded")
+	ErrOrchestratorDuplicate     = errors.New("orchestrator: duplicate request")
 	ErrOrchestratorInvalidScope  = errors.New("orchestrator: invalid scope")
 	ErrOrchestratorSafetyBlocked = errors.New("orchestrator: safety blocked")
 )
@@ -180,16 +181,20 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		o.mu.Unlock()
 	}()
 
+	if req.RequestID == "" {
+		req.RequestID = uuid.New().String()
+	}
 	scope := o.buildScope(req)
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
+	if existing, ok, err := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); err != nil {
+		return nil, err
+	} else if ok {
+		return o.buildResult(existing, nil, outcomeForRecord(existing), ErrOrchestratorDuplicate), ErrOrchestratorDuplicate
+	}
 
 	record := NewInteractionRecord(scope)
-	if req.RequestID == "" {
-		req.RequestID = uuid.New().String()
-	}
-	record.Scope.RequestID = req.RequestID
 	if err := o.tracker.Create(ctx, record); err != nil {
 		return nil, err
 	}
@@ -451,6 +456,22 @@ func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessRespo
 		r.Error = err.Error()
 	}
 	return r
+}
+
+func outcomeForRecord(record *InteractionRecord) Outcome {
+	if record == nil {
+		return OutcomeFailed
+	}
+	switch record.Status {
+	case InteractionStatusCompleted, InteractionStatusCommitted, InteractionStatusDeliveryPending, InteractionStatusDelivered:
+		return OutcomeCompleted
+	case InteractionStatusCancelled:
+		return OutcomeCancelled
+	case InteractionStatusSuperseded:
+		return OutcomeSuperseded
+	default:
+		return OutcomeFailed
+	}
 }
 
 func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) []OutboxRecord {

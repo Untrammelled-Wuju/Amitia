@@ -222,8 +222,6 @@ func (e *UnifiedEntry) SetBackpressureConfig(cfg BackpressureConfig) {
 }
 
 func (e *UnifiedEntry) CancelByPeer(channel, peerID string) int {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	scope := InteractionScope{
 		Channel: channel,
 		PeerID:  peerID,

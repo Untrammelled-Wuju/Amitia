@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 func (s *service) moodRecoveryCheck(convID, charID, source string) {
 	if source == "proactive" || source == "system" {
@@ -25,7 +22,6 @@ func (s *service) moodRecoveryCheck(convID, charID, source string) {
 	}
 	idleDur := time.Since(t)
 	if idleDur > 6*time.Hour {
-		idleHours := int(idleDur.Hours())
-		s.db.Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, 'happy', 7, datetime('now', 'localtime'))", charID, fmt.Sprintf("用户回来了 (冷落%d小时)", idleHours))
+		s.db.Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, 'happy', 7, datetime('now', 'localtime'))", charID)
 	}
 }
