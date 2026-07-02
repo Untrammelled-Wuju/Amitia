@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestReconciliationEngineStartScan(t *testing.T) {
@@ -261,6 +264,183 @@ func TestReconciliationEngineRunScanRequiresChecker(t *testing.T) {
 	}
 }
 
+func TestRuntimeReconciliationCheckerDetectsRealStateDiffs(t *testing.T) {
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	req := ReconciliationCheckRequest{
+		Target:   ReconciliationSQLiteQdrant,
+		Strategy: StrategyReindex,
+	}
+	source := ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+		return []ReconciliationEntity{
+			{Store: "sqlite", Kind: "memory", Key: "missing", Version: "1", Hash: "a", Status: "committed"},
+			{Store: "sqlite", Kind: "memory", Key: "changed", Version: "2", Hash: "b", Status: "committed", References: map[string]string{"run": "run-1"}},
+			{Store: "sqlite", Kind: "memory", Key: "deleted", Deleted: true, Status: "completed"},
+			{Store: "sqlite", Kind: "outbox", Key: "lease", Status: "processing", LeasedUntil: now.Add(-time.Minute)},
+		}, nil
+	})
+	target := ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+		return []ReconciliationEntity{
+			{Store: "qdrant", Kind: "memory", Key: "changed", Version: "3", Hash: "c", Status: "indexed", References: map[string]string{"run": "run-2"}},
+			{Store: "qdrant", Kind: "memory", Key: "deleted", Deleted: false, Status: "indexed"},
+			{Store: "qdrant", Kind: "memory", Key: "orphan", Version: "1", Hash: "z", Status: "indexed"},
+			{Store: "dispatcher", Kind: "outbox", Key: "lease", Status: "processing", LeasedUntil: now.Add(-time.Second)},
+		}, nil
+	})
+	checker := NewRuntimeReconciliationChecker(source, target)
+	checker.Now = func() time.Time { return now }
+
+	diffs, err := checker.CheckReconciliation(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDiffTypes(t, diffs, []string{
+		"expired_source_lease",
+		"expired_target_lease",
+		"hash_mismatch",
+		"missing_target",
+		"orphan_target",
+		"reference_mismatch",
+		"status_mismatch",
+		"status_mismatch",
+		"tombstone_target_present",
+		"version_mismatch",
+	})
+	for _, diff := range diffs {
+		if diff.FoundAt.IsZero() {
+			t.Fatalf("expected found time on diff %#v", diff)
+		}
+		if diff.Description == "" {
+			t.Fatalf("expected description on diff %#v", diff)
+		}
+	}
+}
+
+func TestRuntimeReconciliationCheckerPropagatesSourceErrors(t *testing.T) {
+	wantErr := errors.New("sqlite unavailable")
+	checker := NewRuntimeReconciliationChecker(
+		ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+			return nil, wantErr
+		}),
+		ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+			return nil, nil
+		}),
+	)
+	_, err := checker.CheckReconciliation(context.Background(), ReconciliationCheckRequest{Target: ReconciliationSQLiteQdrant})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected source error, got %v", err)
+	}
+}
+
+func TestGormReconciliationSourceScansSQLiteRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&DeletionTombstoneModel{}, &OutboxCleanupItemModel{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	cleanedAt := now.Add(-time.Minute)
+	if err := db.Create(&DeletionTombstoneModel{
+		ID:               "tombstone-1",
+		TargetID:         "target-1",
+		TargetType:       "memory",
+		Scope:            string(DeletionScopeAll),
+		Status:           string(DeletionStatusCompleted),
+		ItemsCount:       6,
+		CleanedCount:     6,
+		FailedCount:      0,
+		RequestedAt:      now.Add(-time.Hour),
+		BlockedUntil:     now.Add(-time.Hour),
+		CompletedAt:      &cleanedAt,
+		RetrievalBlocked: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&OutboxCleanupItemModel{
+		ID:         "outbox-1",
+		Storage:    "qdrant",
+		TargetID:   "target-1",
+		TargetKind: "memory",
+		Status:     "completed",
+		Attempts:   1,
+		CleanedAt:  &cleanedAt,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	source := GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "deletion_tombstones",
+				Kind:          "tombstone",
+				KeyColumns:    []string{"target_id"},
+				StatusColumn:  "status",
+				DeletedColumn: "retrieval_blocked",
+				HashColumns:   []string{"status", "items_count", "cleaned_count", "failed_count"},
+				FieldColumns:  []string{"target_type", "scope", "status"},
+			},
+			{
+				Table:        "data_lifecycle_outbox_cleanup_items",
+				Kind:         "cleanup",
+				KeyColumns:   []string{"target_id", "storage"},
+				StatusColumn: "status",
+				HashColumns:  []string{"status", "attempts"},
+				FieldColumns: []string{"target_kind", "storage", "status"},
+				ReferenceColumns: map[string]string{
+					"target": "target_id",
+				},
+			},
+		},
+	}
+	entities, err := source.ListReconciliationEntities(context.Background(), ReconciliationCheckRequest{BatchSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != 2 {
+		t.Fatalf("expected 2 scanned entities, got %d", len(entities))
+	}
+	if entities[0].Store != "sqlite" || entities[0].Key == "" || entities[0].Hash == "" {
+		t.Fatalf("unexpected first entity: %#v", entities[0])
+	}
+	var cleanup ReconciliationEntity
+	for _, entity := range entities {
+		if entity.Kind == "cleanup" {
+			cleanup = entity
+			break
+		}
+	}
+	if cleanup.References["target"] != "target-1" {
+		t.Fatalf("expected scanned reference, got %#v", cleanup.References)
+	}
+}
+
+func TestRunScanWithRuntimeCheckerUpdatesRealDiffCounts(t *testing.T) {
+	engine := NewReconciliationEngine(DefaultReconciliationConfig())
+	engine.RegisterChecker(ReconciliationInteractionRunMsg, NewRuntimeReconciliationChecker(
+		ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+			return []ReconciliationEntity{{Store: "interaction_runs", Kind: "run", Key: "run-1", Status: "committed", Version: "4"}}, nil
+		}),
+		ReconciliationStateSourceFunc(func(ctx context.Context, req ReconciliationCheckRequest) ([]ReconciliationEntity, error) {
+			return []ReconciliationEntity{{Store: "messages", Kind: "run", Key: "run-1", Status: "persisted", Version: "3"}}, nil
+		}),
+	))
+
+	scan, err := engine.RunScan(context.Background(), ReconciliationInteractionRunMsg, StrategyCompensate, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan.Status != ReconciliationStatusCompleted {
+		t.Fatalf("expected completed, got %s", scan.Status)
+	}
+	if scan.DiffsFound != 2 || len(scan.Diffs) != 2 {
+		t.Fatalf("expected two real diffs, found=%d len=%d %#v", scan.DiffsFound, len(scan.Diffs), scan.Diffs)
+	}
+	assertDiffTypes(t, scan.Diffs, []string{"status_mismatch", "version_mismatch"})
+}
+
 func TestReconciliationEngineMultipleScans(t *testing.T) {
 	config := DefaultReconciliationConfig()
 	engine := NewReconciliationEngine(config)
@@ -361,5 +541,21 @@ func TestReconciliationDiffSeverity(t *testing.T) {
 	diff.RepairedAt = time.Now().UTC()
 	if !diff.Repaired {
 		t.Fatal("diff should be repaired after setting")
+	}
+}
+
+func assertDiffTypes(t *testing.T, diffs []ReconciliationDiff, expected []string) {
+	t.Helper()
+	got := make(map[string]int)
+	for _, diff := range diffs {
+		got[diff.DiffType]++
+	}
+	for _, diffType := range expected {
+		if got[diffType] == 0 {
+			t.Fatalf("expected diff type %s in %#v", diffType, diffs)
+		}
+	}
+	if len(diffs) != len(expected) {
+		t.Fatalf("expected %d diffs, got %d: %#v", len(expected), len(diffs), diffs)
 	}
 }
