@@ -233,7 +233,14 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 }
 
 func (s *service) persistAndDeliver(characterID, msgID, convID, content string, now time.Time) error {
-	result, err := s.submitProactiveMessage(context.Background(), characterID, convID, "all", content, msgID)
+	return s.persistAndDeliverContext(context.TODO(), characterID, msgID, convID, content, now)
+}
+
+func (s *service) persistAndDeliverContext(ctx context.Context, characterID, msgID, convID, content string, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result, err := s.submitProactiveMessage(ctx, characterID, convID, "all", content, msgID)
 	if err != nil {
 		return err
 	}
@@ -247,6 +254,13 @@ func (s *service) persistAndDeliver(characterID, msgID, convID, content string, 
 }
 
 func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} {
+	return s.RandomBurstTriggerContext(context.TODO(), characterID)
+}
+
+func (s *service) RandomBurstTriggerContext(ctx context.Context, characterID string) map[string]interface{} {
+	if err := ctx.Err(); err != nil {
+		return map[string]interface{}{"triggered": false, "reason": "cancelled", "error": err.Error()}
+	}
 	setting := s.GetActiveMessageSetting(characterID)
 	stateLife := s.GetStateLife(characterID)
 	currentState, _ := stateLife["currentState"].(string)
@@ -305,7 +319,7 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 		return map[string]interface{}{"triggered": false, "reason": "noConversation"}
 	}
 
-	if err := s.persistAndDeliver(characterID, msgID, convID, prompt, now); err != nil {
+	if err := s.persistAndDeliverContext(ctx, characterID, msgID, convID, prompt, now); err != nil {
 		return map[string]interface{}{"triggered": false, "reason": "dispatchFailed", "error": err.Error()}
 	}
 

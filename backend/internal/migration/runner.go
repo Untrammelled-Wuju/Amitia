@@ -28,9 +28,10 @@ type Record struct {
 }
 
 type Runner struct {
-	DB        *gorm.DB
-	Now       func() time.Time
-	BackupDir string
+	DB         *gorm.DB
+	Now        func() time.Time
+	BackupDir  string
+	SkipBackup bool
 }
 
 type Step struct {
@@ -66,7 +67,7 @@ func (r Runner) Apply(migrations []Migration) error {
 	if err != nil {
 		return err
 	}
-	if pending {
+	if pending && !r.SkipBackup {
 		if err := r.CreatePreMigrationBackup(); err != nil {
 			return err
 		}

@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -89,5 +90,101 @@ func TestPriorityQueueRecordsDropAndDepthMetrics(t *testing.T) {
 	}
 	if snap.QueueDepth != 1 {
 		t.Fatalf("expected depth metric 1, got %d", snap.QueueDepth)
+	}
+}
+
+func TestPriorityQueueCheckpointRestoresPendingTasks(t *testing.T) {
+	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+
+	for _, task := range []*Task{
+		{ID: "p2", Path: "/p2", Priority: PriorityP2, Scope: "test"},
+		{ID: "p0", Path: "/p0", Priority: PriorityP0, Scope: "test"},
+	} {
+		ok, reason := pq.Enqueue(task)
+		if !ok {
+			t.Fatalf("enqueue %s failed: %s", task.ID, reason)
+		}
+	}
+	if err := pq.LastPersistenceError(); err != nil {
+		t.Fatalf("unexpected persistence error: %v", err)
+	}
+
+	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	if restored.Depth() != 2 {
+		t.Fatalf("expected restored depth 2, got %d", restored.Depth())
+	}
+
+	first := restored.Dequeue()
+	if first == nil || first.ID != "p0" || first.Status != TaskRunning {
+		t.Fatalf("expected restored p0 running first, got %#v", first)
+	}
+	restored.Complete(first)
+
+	second := restored.Dequeue()
+	if second == nil || second.ID != "p2" {
+		t.Fatalf("expected restored p2 second, got %#v", second)
+	}
+}
+
+func TestPriorityQueueCheckpointRestoresRunningTasksAsPending(t *testing.T) {
+	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
+	pq := NewPriorityQueue(PriorityQueueConfig{
+		MaxQueueSize:   10,
+		CheckpointPath: checkpointPath,
+		Configs: map[PriorityLevel]PriorityConfig{
+			PriorityP0: {MaxConcurrency: 2},
+		},
+	})
+
+	pq.Enqueue(&Task{ID: "same", Path: "/a", Priority: PriorityP0, Scope: "test"})
+	pq.Enqueue(&Task{ID: "same", Path: "/b", Priority: PriorityP0, Scope: "test"})
+	first := pq.Dequeue()
+	second := pq.Dequeue()
+	if first == nil || second == nil {
+		t.Fatalf("expected two running tasks, got first=%#v second=%#v", first, second)
+	}
+	if pq.ActiveCount() != 2 {
+		t.Fatalf("expected active count 2, got %d", pq.ActiveCount())
+	}
+
+	restored := NewPriorityQueue(PriorityQueueConfig{
+		MaxQueueSize:   10,
+		CheckpointPath: checkpointPath,
+		Configs: map[PriorityLevel]PriorityConfig{
+			PriorityP0: {MaxConcurrency: 2},
+		},
+	})
+	if restored.ActiveCount() != 0 {
+		t.Fatalf("expected no active tasks after restore, got %d", restored.ActiveCount())
+	}
+	if restored.Depth() != 2 {
+		t.Fatalf("expected running tasks restored as pending, got depth %d", restored.Depth())
+	}
+
+	restoredFirst := restored.Dequeue()
+	restoredSecond := restored.Dequeue()
+	if restoredFirst == nil || restoredSecond == nil {
+		t.Fatalf("expected two restored tasks, got first=%#v second=%#v", restoredFirst, restoredSecond)
+	}
+}
+
+func TestPriorityQueueCheckpointRemovesCompletedTasks(t *testing.T) {
+	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+
+	ok, reason := pq.Enqueue(&Task{ID: "done", Path: "/done", Priority: PriorityP0, Scope: "test"})
+	if !ok {
+		t.Fatalf("enqueue failed: %s", reason)
+	}
+	task := pq.Dequeue()
+	if task == nil {
+		t.Fatal("expected dequeued task")
+	}
+	pq.Complete(task)
+
+	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	if restored.Depth() != 0 {
+		t.Fatalf("expected empty queue after completed task checkpoint, got %d", restored.Depth())
 	}
 }

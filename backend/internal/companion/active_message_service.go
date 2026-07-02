@@ -116,6 +116,13 @@ func (s *service) RegenerateActiveMessageTasks(characterID string) map[string]in
 }
 
 func (s *service) RunActiveMessageTask(id int, characterID string) map[string]interface{} {
+	return s.RunActiveMessageTaskContext(context.TODO(), id, characterID)
+}
+
+func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, characterID string) map[string]interface{} {
+	if err := ctx.Err(); err != nil {
+		return map[string]interface{}{"id": id, "status": "CANCELLED", "error": err.Error()}
+	}
 	var task map[string]interface{}
 	s.db.Table("active_message_task").Where("id = ? AND character_id = ?", id, characterID).Limit(1).Find(&task)
 	if len(task) == 0 {
@@ -138,7 +145,7 @@ func (s *service) RunActiveMessageTask(id int, characterID string) map[string]in
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
-	result, err := s.submitProactiveMessage(context.Background(), characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id, now))
+	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id, now))
 	if err != nil {
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "FAILED", "taskType": taskType, "channel": channelSetting, "error": err.Error()}

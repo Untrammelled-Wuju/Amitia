@@ -106,7 +106,7 @@ func HandleSession(c *gin.Context) {
 
 	appLog.Info("volc headers: AppID=" + realtimeAppId + " AccessKey=" + realtimeAccessToken + " ResourceId=" + resourceId)
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	volcanoConn, resp, err := dialer.Dial(volcanoRealtimeUri, volcanoHeaders)
+	volcanoConn, resp, err := dialer.Dial(volcanoRealtimeURI(), volcanoHeaders)
 	if err != nil {
 		sc := 0
 		if resp != nil {
@@ -123,6 +123,7 @@ func HandleSession(c *gin.Context) {
 		return
 	}
 	appLog.Info("volc WS connected")
+	defer volcanoConn.Close()
 	appLog.Info("volc dial success, sending StartConnection...")
 
 	sessID := uuid.New().String()
@@ -208,14 +209,26 @@ func HandleSession(c *gin.Context) {
 	if voiceSession.CurrentTurn == nil {
 		voiceSession.BeginTurn("turn-"+sessID, "")
 	}
+	defer func() {
+		voiceSession.EndSession()
+		RemoveVoiceSession(sessID)
+	}()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	doneCh := make(chan struct{})
+	closeOnce := sync.Once{}
+	closeConnections := func() {
+		closeOnce.Do(func() {
+			_ = browserConn.Close()
+			_ = volcanoConn.Close()
+		})
+	}
 
 	go func() {
 		defer wg.Done()
 		defer close(doneCh)
+		defer closeConnections()
 		for {
 			msgType, data, err := volcanoConn.ReadMessage()
 			if err != nil {
@@ -247,6 +260,7 @@ func HandleSession(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
+		defer closeConnections()
 		for {
 			select {
 			case <-doneCh:
@@ -274,9 +288,6 @@ func HandleSession(c *gin.Context) {
 		}
 	}()
 
-	if voiceSession != nil {
-		voiceSession.EndSession()
-	}
 	wg.Wait()
 }
 

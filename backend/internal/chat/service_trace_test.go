@@ -139,6 +139,34 @@ func TestProcessMessageTraceCoversFailedModelRequest(t *testing.T) {
 	}
 }
 
+func TestProcessMessageCancelledBeforeModelCall(t *testing.T) {
+	svc, logs, cleanup := setupProcessTraceService(t, http.StatusOK)
+	t.Cleanup(cleanup)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := svc.ProcessMessage(ctx, &ProcessMessageRequest{
+		CharacterID: "char-trace",
+		Message:     "取消请求不应进入模型",
+		Channel:     "web",
+		Source:      "system",
+		RequestID:   "req-cancel-before-model",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	var status string
+	if err := svc.db.Model(&Message{}).Select("status").Where("request_id = ? AND role = ?", "req-cancel-before-model", "user").Row().Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" {
+		t.Fatalf("expected failed status, got %s", status)
+	}
+	rawLogs := logs.String()
+	if strings.Contains(rawLogs, "model_call_started") {
+		t.Fatalf("cancelled request should not start model call: %s", rawLogs)
+	}
+}
+
 func TestAbortMessageCommitIfCancelledMarksUserFailed(t *testing.T) {
 	svc, _, cleanup := setupProcessTraceService(t, http.StatusOK)
 	t.Cleanup(cleanup)

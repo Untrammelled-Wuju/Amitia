@@ -75,13 +75,8 @@ func main() {
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
-	if err := initDatabase(db); err != nil {
-		log.Error("sql.sql建表失败:", err)
-		os.Exit(1)
-	}
-	migRunner := migration.Runner{DB: db}
-	if err := migRunner.Apply(migration.DefaultMigrations()); err != nil {
-		log.Error("数据库迁移失败:", err)
+	if err := applyDatabaseStartupMigrations(db); err != nil {
+		log.Error("数据库启动迁移失败:", err)
 		os.Exit(1)
 	}
 	ctx := app.NewAppContext(db, nil)
@@ -204,6 +199,34 @@ func main() {
 		cleanup()
 		os.Exit(1)
 	}
+}
+
+func applyDatabaseStartupMigrations(db *gorm.DB) error {
+	existingDatabase, err := hasExistingDatabaseTables(db)
+	if err != nil {
+		return fmt.Errorf("check existing database: %w", err)
+	}
+	migRunner := migration.Runner{DB: db, SkipBackup: existingDatabase}
+	if existingDatabase {
+		if err := migRunner.CreatePreMigrationBackup(); err != nil {
+			return fmt.Errorf("create pre-initial-sql backup: %w", err)
+		}
+	}
+	if err := initDatabase(db); err != nil {
+		return fmt.Errorf("apply initial sql: %w", err)
+	}
+	if err := migRunner.Apply(migration.DefaultMigrations()); err != nil {
+		return fmt.Errorf("apply versioned migrations: %w", err)
+	}
+	return nil
+}
+
+func hasExistingDatabaseTables(db *gorm.DB) (bool, error) {
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func initDatabase(db *gorm.DB) error {

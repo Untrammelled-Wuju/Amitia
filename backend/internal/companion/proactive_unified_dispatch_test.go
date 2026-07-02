@@ -10,11 +10,16 @@ import (
 
 type fakeProactiveUnifiedEntry struct {
 	requests []*interaction.UnifiedEntryRequest
+	ctxs     []context.Context
 	err      error
 }
 
 func (f *fakeProactiveUnifiedEntry) Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error) {
+	f.ctxs = append(f.ctxs, ctx)
 	f.requests = append(f.requests, req)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -42,6 +47,9 @@ func TestProcessDueActiveMessageTasksUsesUnifiedEntryWithoutDirectMessageWrite(t
 		t.Fatal(err)
 	}
 	if err := svc.db.Exec("INSERT INTO active_message_settings (character_id, channel) VALUES ('char-1', 'wechat')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO sleep_settings (character_id, bed_time, wake_time, enabled) VALUES ('char-1', '23:59', '00:00', 1)").Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.Exec("INSERT INTO active_message_task (id, character_id, task_type, due_time, prompt, status) VALUES (2, 'char-1', 'morning_share', ?, '早安 prompt', 'PENDING')", now).Error; err != nil {
@@ -76,5 +84,31 @@ func TestProcessDueActiveMessageTasksUsesUnifiedEntryWithoutDirectMessageWrite(t
 	}
 	if proactiveStatus != "queued" {
 		t.Fatalf("expected queued proactive audit status, got %q", proactiveStatus)
+	}
+}
+
+func TestPersistAndDeliverStopsBeforeUnifiedEntryWhenContextCancelled(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	fake := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = fake
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-cancelled', 'char-1', 'web', 'peer-1', '2026-07-02 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := svc.persistAndDeliverContext(ctx, "char-1", "burst-cancelled", "conv-cancelled", "prompt", time.Now())
+	if err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if len(fake.requests) != 0 {
+		t.Fatalf("expected cancelled context to stop before unified entry, got %d requests", len(fake.requests))
+	}
+	var count int64
+	if err := svc.db.Table("proactive_messages").Where("conversation_id = ?", "conv-cancelled").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no proactive audit row after cancellation, got %d", count)
 	}
 }

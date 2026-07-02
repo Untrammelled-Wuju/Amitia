@@ -160,6 +160,13 @@ func (s *service) ProcessActiveMessagesDebug(characterID string) map[string]inte
 }
 
 func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]interface{} {
+	return s.ProcessDueActiveMessageTasksContext(context.TODO(), characterID)
+}
+
+func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, characterID string) map[string]interface{} {
+	if err := ctx.Err(); err != nil {
+		return map[string]interface{}{"processed": 0, "sent": 0, "delayed": 0, "failed": 0, "status": "cancelled", "error": err.Error()}
+	}
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
 	s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now', 'localtime') WHERE status='PROCESSING' AND updated_at < datetime('now', 'localtime', '-5 minutes') AND character_id = ?", characterID)
@@ -173,6 +180,9 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 		channelSetting = "all"
 	}
 	for _, t := range tasks {
+		if err := ctx.Err(); err != nil {
+			return map[string]interface{}{"processed": processed, "sent": sent, "delayed": delayed, "failed": failed, "status": "cancelled", "error": err.Error()}
+		}
 		processed++
 		id, _ := t["id"]
 		prompt, _ := t["prompt"].(string)
@@ -197,7 +207,7 @@ func (s *service) ProcessDueActiveMessageTasks(characterID string) map[string]in
 			failed++
 			continue
 		}
-		dispatchResult, dispatchErr := s.submitProactiveMessage(context.Background(), characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id, now))
+		dispatchResult, dispatchErr := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id, now))
 		if dispatchErr != nil {
 			retryCount := 0
 			if rc, ok := t["retry_count"]; ok {

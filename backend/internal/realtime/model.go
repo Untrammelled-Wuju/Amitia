@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package realtime
 
-const volcanoRealtimeUri = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+const defaultVolcanoRealtimeURI = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+
+var volcanoRealtimeURI = func() string {
+	return defaultVolcanoRealtimeURI
+}
 
 type RealtimeEvent struct {
 	EventType string      `json:"event_type"`

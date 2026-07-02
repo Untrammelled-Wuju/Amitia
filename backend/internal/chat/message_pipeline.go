@@ -174,6 +174,9 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	defer cancelTools()
 	forceVoice := false
 
+	if err := s.abortMessageCommitIfCancelled(ctx, trace, userMsgID); err != nil {
+		return nil, err
+	}
 	reply, forceVoice, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
