@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const StateVersionV1 = "psyche-state-v1"
+func StateVersionV1() string { return fmt.Sprintf("psyche-state-%d", time.Now().UnixNano()) }
 
 var ErrVersionConflict = errors.New("psyche: version conflict detected")
 
@@ -106,7 +106,7 @@ func (s *SQLitePsycheStore) SaveState(state *PsycheState) error {
 			"mood":         state.Mood,
 			"stress":       state.Stress,
 			"energy":       state.Energy,
-			"version":      StateVersionV1,
+			"version":      StateVersionV1(),
 			"state_version": nextVersion,
 			"updated_at":   time.Now().UTC(),
 		})
@@ -127,7 +127,7 @@ func (s *SQLitePsycheStore) SaveState(state *PsycheState) error {
 		return fmt.Errorf("%w: character %s version mismatch", ErrVersionConflict, state.CharacterID)
 	}
 	state.StateVersion = nextVersion
-	state.Version = StateVersionV1
+	state.Version = StateVersionV1()
 	return nil
 }
 
@@ -176,7 +176,7 @@ func NewPsycheState(characterID string) PsycheState {
 	now := time.Now().UTC()
 	return PsycheState{
 		CharacterID: characterID,
-		Version:     StateVersionV1,
+		Version:     StateVersionV1(),
 		StateVersion: 1,
 		Emotion: EmotionDimensions{
 			Valence:   0.5,
