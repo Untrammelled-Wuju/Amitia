@@ -22,6 +22,7 @@ type RuntimeDeliveryIntent struct {
 
 type RuntimeAssembly struct {
 	Version     string                `json:"version"`
+	ExecutorID  string                `json:"executorId,omitempty"`
 	Context     ContextSnapshot       `json:"context"`
 	Path        PathType              `json:"path"`
 	Budget      []TokenBudgetPlan     `json:"budget"`

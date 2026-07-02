@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -261,6 +262,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	defer o.cancels.Unregister(record.ID)
 
 	runtime := o.pipeline.Assemble(processCtx, scope, req)
+	runtime.ExecutorID = executorIDForProcessor(o.processor)
 	if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, metadataFromRuntime(runtime, processCtx)); err == nil {
 		record = updated
 	} else {
@@ -451,10 +453,27 @@ func metadataFromRuntime(runtime RuntimeAssembly, ctx context.Context) Interacti
 		PathType: &path,
 		Priority: &priority,
 	}
+	if executorID := strings.TrimSpace(runtime.ExecutorID); executorID != "" {
+		update.ExecutorID = &executorID
+	}
 	if deadline, ok := ctx.Deadline(); ok {
 		update.DeadlineAt = &deadline
 	}
 	return update
+}
+
+func executorIDForProcessor(processor MessageProcessor) string {
+	if processor == nil {
+		return ""
+	}
+	t := reflect.TypeOf(processor)
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.PkgPath() == "" || t.Name() == "" {
+		return t.String()
+	}
+	return t.PkgPath() + "." + t.Name()
 }
 
 func metadataFromResponse(resp *ProcessResponse) InteractionMetadataUpdate {

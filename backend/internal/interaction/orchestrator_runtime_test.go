@@ -90,6 +90,10 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	if processor.got.Transaction.Name != TransactionBoundaryAll {
 		t.Fatalf("expected all transaction boundary, got %s", processor.got.Transaction.Name)
 	}
+	wantExecutorID := executorIDForProcessor(processor)
+	if processor.got.ExecutorID != wantExecutorID {
+		t.Fatalf("runtime executor id mismatch: got %q want %q", processor.got.ExecutorID, wantExecutorID)
+	}
 	records, err := outbox.ListPending()
 	if err != nil {
 		t.Fatal(err)
@@ -120,8 +124,45 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	if record.CommitID != "msg-1" {
 		t.Fatalf("commit id was not persisted: %#v", record)
 	}
+	if record.ExecutorID != wantExecutorID {
+		t.Fatalf("executor id was not persisted: got %q want %q", record.ExecutorID, wantExecutorID)
+	}
 	if record.DeadlineAt.IsZero() {
 		t.Fatalf("deadline was not persisted: %#v", record)
+	}
+}
+
+func TestOrchestratorPersistsRuntimeExecutorIDToSQLite(t *testing.T) {
+	processor := &runtimeCaptureProcessor{}
+	tracker := newTestSQLiteInteractionTracker(t)
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-sqlite",
+		CharacterID:    "char-sqlite",
+		ConversationID: "conv-sqlite",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-sqlite-executor",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != OutcomeCompleted {
+		t.Fatalf("unexpected outcome: %s", result.Outcome)
+	}
+	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interaction record missing")
+	}
+	wantExecutorID := executorIDForProcessor(processor)
+	if record.ExecutorID != wantExecutorID {
+		t.Fatalf("executor id was not persisted to sqlite: got %q want %q", record.ExecutorID, wantExecutorID)
 	}
 }
 
