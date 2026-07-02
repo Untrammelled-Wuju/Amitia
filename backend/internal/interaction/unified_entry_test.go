@@ -90,6 +90,64 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	}
 }
 
+func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
+	processor := &captureRequestProcessor{}
+	tracker := NewInMemoryTracker()
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+	entry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
+		{
+			ID:             "bind-1",
+			UserID:         "bound-user",
+			CharacterID:    "bound-char",
+			ConversationID: "bound-conv",
+			Channel:        "wechat",
+			PeerID:         "peer-1",
+			Source:         "wechat",
+			State:          ScopeBindingStateActive,
+		},
+	}}))
+
+	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
+		Channel:   "wechat",
+		PeerID:    "peer-1",
+		SessionID: "session-1",
+		RequestID: "request-1",
+		Message:   "hello",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if processor.req == nil {
+		t.Fatal("processor was not called")
+	}
+	if processor.req.UserID != "bound-user" || processor.req.CharacterID != "bound-char" || processor.req.ConversationID != "bound-conv" {
+		t.Fatalf("processor did not receive resolved target scope: %#v", processor.req)
+	}
+	if processor.req.Channel != "wechat" || processor.req.PeerID != "peer-1" || processor.req.Source != "wechat" {
+		t.Fatalf("processor did not receive resolved channel scope: %#v", processor.req)
+	}
+	if processor.req.SessionID != "session-1" || processor.req.RequestID != "request-1" {
+		t.Fatalf("processor envelope was not preserved: %#v", processor.req)
+	}
+	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interaction record was not persisted")
+	}
+	if record.Scope.UserID != "bound-user" || record.Scope.CharacterID != "bound-char" || record.Scope.ConversationID != "bound-conv" {
+		t.Fatalf("persisted scope did not use resolved target scope: %#v", record.Scope)
+	}
+	if record.Scope.Channel != "wechat" || record.Scope.PeerID != "peer-1" || record.Scope.Source != "wechat" {
+		t.Fatalf("persisted scope did not use resolved channel scope: %#v", record.Scope)
+	}
+	if record.Scope.SessionID != "session-1" || record.Scope.RequestID != "request-1" {
+		t.Fatalf("persisted envelope was not preserved: %#v", record.Scope)
+	}
+}
+
 func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())

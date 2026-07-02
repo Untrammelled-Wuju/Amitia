@@ -37,12 +37,25 @@ func NewSupersedeResolver(policy SupersedePolicy, tracker InteractionTracker) *S
 }
 
 func (r *SupersedeResolver) Resolve(ctx context.Context, scope InteractionScope) (*SupersedeResolution, error) {
+	return r.ResolveExcluding(ctx, scope, "")
+}
+
+func (r *SupersedeResolver) ResolveExcluding(ctx context.Context, scope InteractionScope, excludeID string) (*SupersedeResolution, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	active, err := r.tracker.ListActive(ctx, scope)
 	if err != nil {
 		return nil, err
+	}
+	if excludeID != "" {
+		filtered := active[:0]
+		for _, rec := range active {
+			if rec.ID != excludeID {
+				filtered = append(filtered, rec)
+			}
+		}
+		active = filtered
 	}
 	if len(active) == 0 {
 		return &SupersedeResolution{}, nil

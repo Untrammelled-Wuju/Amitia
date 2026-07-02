@@ -17,6 +17,7 @@ var (
 	ErrOrchestratorNotReady      = errors.New("orchestrator: not ready")
 	ErrOrchestratorBusy          = errors.New("orchestrator: too many concurrent interactions")
 	ErrOrchestratorCancelled     = errors.New("orchestrator: cancelled")
+	ErrOrchestratorSuperseded    = errors.New("orchestrator: superseded")
 	ErrOrchestratorInvalidScope  = errors.New("orchestrator: invalid scope")
 	ErrOrchestratorSafetyBlocked = errors.New("orchestrator: safety blocked")
 )
@@ -193,7 +194,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		return nil, err
 	}
 
-	resolution, err := o.resolver.Resolve(ctx, scope)
+	resolution, err := o.resolver.ResolveExcluding(ctx, scope, record.ID)
 	if err != nil {
 		record.SetError(err.Error())
 		if failed, failErr := o.tracker.Fail(ctx, record.ID, "supersede_resolve_failed", err.Error()); failErr == nil {
@@ -284,23 +285,48 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
+	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+		record = fresh
+		return o.buildResult(record, nil, outcome, freshErr), freshErr
+	} else {
+		record = fresh
+	}
+
 	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusGenerated); err == nil {
 		record = next
 	} else {
 		log.Printf("[orchestrator] transition to generated failed: %v", err)
+		if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+			return o.buildResult(fresh, nil, outcome, freshErr), freshErr
+		}
 		if failed, failErr := o.tracker.Fail(ctx, record.ID, "generated_transition_failed", err.Error()); failErr == nil {
 			record = failed
 		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
+	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+		record = fresh
+		return o.buildResult(record, nil, outcome, freshErr), freshErr
+	} else {
+		record = fresh
+	}
 	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCommitted); err == nil {
 		record = next
 	} else {
 		log.Printf("[orchestrator] transition to committed failed: %v", err)
+		if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+			return o.buildResult(fresh, nil, outcome, freshErr), freshErr
+		}
 		if failed, failErr := o.tracker.Fail(ctx, record.ID, "commit_transition_failed", err.Error()); failErr == nil {
 			record = failed
 		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
+	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+		record = fresh
+		return o.buildResult(record, nil, outcome, freshErr), freshErr
+	} else {
+		record = fresh
 	}
 	if completed, err := o.tracker.Complete(ctx, record.ID, "processor_response"); err == nil {
 		record = completed
@@ -392,11 +418,34 @@ func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID stri
 	return nil
 }
 
+func (o *Orchestrator) ensureFresh(ctx context.Context, id string) (*InteractionRecord, Outcome, error) {
+	rec, ok, err := o.tracker.Get(ctx, id)
+	if err != nil {
+		return nil, OutcomeFailed, err
+	}
+	if !ok {
+		return nil, OutcomeFailed, ErrInteractionNotFound
+	}
+	switch rec.Status {
+	case InteractionStatusCancelled:
+		return rec, OutcomeCancelled, ErrOrchestratorCancelled
+	case InteractionStatusSuperseded:
+		return rec, OutcomeSuperseded, ErrOrchestratorSuperseded
+	}
+	if !rec.CancelRequestedAt.IsZero() {
+		cancelled, err := o.tracker.TransitionCAS(ctx, rec.ID, rec.StatusVersion, InteractionStatusCancelled)
+		if err != nil {
+			return rec, OutcomeFailed, err
+		}
+		return cancelled, OutcomeCancelled, ErrOrchestratorCancelled
+	}
+	return rec, OutcomeCompleted, nil
+}
+
 func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessResponse, outcome Outcome, err error) *OrchestrationResult {
-	r := &OrchestrationResult{
-		InteractionID: record.ID,
-		Outcome:       outcome,
-		Response:      resp,
+	r := &OrchestrationResult{Outcome: outcome, Response: resp}
+	if record != nil {
+		r.InteractionID = record.ID
 	}
 	if err != nil {
 		r.Error = err.Error()

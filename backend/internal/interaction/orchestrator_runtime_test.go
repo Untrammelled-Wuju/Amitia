@@ -3,6 +3,7 @@ package interaction
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -142,5 +143,93 @@ func TestOrchestratorSafetyBlockedSkipsProcessor(t *testing.T) {
 	}
 	if record.Status != InteractionStatusFailed || record.ErrorCode != "safety_blocked" {
 		t.Fatalf("expected failed safety record, got %#v", record)
+	}
+}
+
+type supersedeSQLiteProcessor struct {
+	calls        atomic.Int32
+	firstStarted chan struct{}
+}
+
+func (p *supersedeSQLiteProcessor) ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
+	call := p.calls.Add(1)
+	if call == 1 {
+		close(p.firstStarted)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return &ProcessResponse{
+		ConversationID: req.ConversationID,
+		Reply:          "new",
+		CharacterID:    req.CharacterID,
+		RequestID:      req.RequestID,
+	}, nil
+}
+
+func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	processor := &supersedeSQLiteProcessor{firstStarted: make(chan struct{})}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+
+	firstDone := make(chan *OrchestrationResult, 1)
+	firstErr := make(chan error, 1)
+	go func() {
+		result, err := orch.Process(context.Background(), &ProcessRequest{
+			UserID:         "user-1",
+			CharacterID:    "char-1",
+			ConversationID: "conv-1",
+			Channel:        "web",
+			Source:         "web",
+			Message:        "old",
+			RequestID:      "request-old",
+		})
+		firstDone <- result
+		firstErr <- err
+	}()
+
+	select {
+	case <-processor.firstStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first processor call did not start")
+	}
+
+	second, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-1",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "new",
+		RequestID:      "request-new",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Outcome != OutcomeCompleted {
+		t.Fatalf("expected second interaction completed, got %#v", second)
+	}
+
+	var first *OrchestrationResult
+	select {
+	case first = <-firstDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first interaction did not finish after supersede")
+	}
+	if err := <-firstErr; err == nil {
+		t.Fatal("expected first interaction to be cancelled by supersede")
+	}
+	if first == nil || first.InteractionID == "" {
+		t.Fatalf("first result missing interaction id: %#v", first)
+	}
+	oldRecord, ok, err := tracker.Get(context.Background(), first.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("old interaction missing")
+	}
+	if oldRecord.Status != InteractionStatusSuperseded || oldRecord.SupersededByID != second.InteractionID {
+		t.Fatalf("old interaction was not superseded by second: %#v", oldRecord)
 	}
 }

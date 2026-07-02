@@ -155,14 +155,15 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		return nil, ErrBackpressureShedding
 	}
 
-	source := ParseEntrySource(req.Source)
+	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
 		UserID:         req.UserID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
-		Source:         string(source),
+		SessionID:      req.SessionID,
+		Source:         source,
 	}
 
 	resolution, err := e.resolver.Resolve(ctx, scopeInput)
@@ -175,10 +176,10 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ConversationID: resolution.Scope.ConversationID,
 		Message:        req.Message,
 		Channel:        resolution.Scope.Channel,
-		Source:         string(source),
-		PeerID:         req.PeerID,
-		UserID:         req.UserID,
-		SessionID:      req.SessionID,
+		Source:         resolution.Scope.Source,
+		PeerID:         resolution.Scope.PeerID,
+		UserID:         resolution.Scope.UserID,
+		SessionID:      resolution.Scope.SessionID,
 		RequestID:      stableRequestID(req.RequestID),
 		AudioUrl:       req.AudioUrl,
 		AudioDuration:  req.AudioDuration,
@@ -192,14 +193,16 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 }
 
 func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryRequest) (ScopeResolution, error) {
-	source := ParseEntrySource(req.Source)
+	source := parseOptionalEntrySource(req.Source)
 	scopeInput := ScopeResolveInput{
 		UserID:         req.UserID,
 		CharacterID:    req.CharacterID,
 		ConversationID: req.ConversationID,
 		Channel:        req.Channel,
 		PeerID:         req.PeerID,
-		Source:         string(source),
+		SessionID:      req.SessionID,
+		RequestID:      req.RequestID,
+		Source:         source,
 	}
 	return e.resolver.Resolve(ctx, scopeInput)
 }
@@ -273,4 +276,11 @@ func stableRequestID(requestID string) string {
 		return requestID
 	}
 	return uuid.New().String()
+}
+
+func parseOptionalEntrySource(source string) string {
+	if strings.TrimSpace(source) == "" {
+		return ""
+	}
+	return string(ParseEntrySource(source))
 }

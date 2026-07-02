@@ -345,8 +345,15 @@ func (t *InMemoryTracker) RequestCancel(ctx context.Context, id string, reason s
 	if !ok {
 		return ErrInteractionNotFound
 	}
+	if rec.Status == InteractionStatusCancelled || rec.Status == InteractionStatusSuperseded || rec.IsTerminal() {
+		return nil
+	}
+	if !canSupersedeStatus(rec.Status) {
+		return ErrInvalidTransition
+	}
 	rec.CancelReason = reason
 	rec.CancelRequestedAt = time.Now()
+	rec.StatusVersion++
 	rec.UpdatedAt = rec.CancelRequestedAt
 	return nil
 }
@@ -360,6 +367,12 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	rec, ok := t.records[targetID]
 	if !ok {
 		return ErrInteractionNotFound
+	}
+	if rec.Status == InteractionStatusSuperseded && rec.SupersededByID == supersededByID {
+		return nil
+	}
+	if !canSupersedeStatus(rec.Status) {
+		return ErrInvalidTransition
 	}
 	rec.SupersededByID = supersededByID
 	rec.Status = InteractionStatusSuperseded
@@ -379,11 +392,10 @@ func (t *InMemoryTracker) Complete(ctx context.Context, id string, resultRef str
 	if !ok {
 		return nil, ErrInteractionNotFound
 	}
+	if err := rec.Transition(InteractionStatusCompleted); err != nil {
+		return nil, err
+	}
 	rec.ResultRef = resultRef
-	rec.Status = InteractionStatusCompleted
-	rec.StatusVersion++
-	rec.CompletedAt = time.Now()
-	rec.UpdatedAt = rec.CompletedAt
 	snap := rec.Snapshot()
 	return &snap, nil
 }
@@ -398,12 +410,11 @@ func (t *InMemoryTracker) Fail(ctx context.Context, id string, code string, mess
 	if !ok {
 		return nil, ErrInteractionNotFound
 	}
+	if err := rec.Transition(InteractionStatusFailed); err != nil {
+		return nil, err
+	}
 	rec.ErrorCode = code
 	rec.ErrorMessage = message
-	rec.Status = InteractionStatusFailed
-	rec.StatusVersion++
-	rec.CompletedAt = time.Now()
-	rec.UpdatedAt = rec.CompletedAt
 	snap := rec.Snapshot()
 	return &snap, nil
 }
@@ -418,10 +429,7 @@ func (t *InMemoryTracker) Archive(ctx context.Context, id string) error {
 	if !ok {
 		return ErrInteractionNotFound
 	}
-	rec.Status = InteractionStatusArchived
-	rec.StatusVersion++
-	rec.UpdatedAt = time.Now()
-	return nil
+	return rec.Transition(InteractionStatusArchived)
 }
 
 func (t *InMemoryTracker) Range(ctx context.Context, fn func(record *InteractionRecord) bool) error {
@@ -465,3 +473,18 @@ func (t *InMemoryTracker) scopeCandidatesLocked(scope InteractionScope) []string
 }
 
 var _ InteractionTracker = (*InMemoryTracker)(nil)
+
+func canSupersedeStatus(status InteractionStatus) bool {
+	switch status {
+	case InteractionStatusReceived,
+		InteractionStatusNormalized,
+		InteractionStatusQueued,
+		InteractionStatusProcessing,
+		InteractionStatusContextReady,
+		InteractionStatusDecided,
+		InteractionStatusGenerated:
+		return true
+	default:
+		return false
+	}
+}

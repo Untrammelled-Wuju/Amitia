@@ -127,23 +127,28 @@ func (t *SQLiteInteractionTracker) TransitionCAS(ctx context.Context, id string,
 func (t *SQLiteInteractionTracker) RequestCancel(ctx context.Context, id string, reason string) error {
 	now := t.now()
 	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ? AND status NOT IN ?", id, terminalStatusStrings()).
+		Where("id = ? AND status IN ?", id, cancellableStatusStrings()).
 		Updates(map[string]interface{}{
 			"cancel_reason":       reason,
 			"cancel_requested_at": now,
+			"status_version":      gorm.Expr("status_version + 1"),
 			"updated_at":          now,
 		})
 	if result.Error != nil {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		_, ok, err := t.Get(ctx, id)
+		rec, ok, err := t.Get(ctx, id)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return ErrInteractionNotFound
 		}
+		if rec.Status == InteractionStatusCancelled || rec.Status == InteractionStatusSuperseded || rec.IsTerminal() {
+			return nil
+		}
+		return ErrInvalidTransition
 	}
 	return nil
 }
@@ -151,7 +156,7 @@ func (t *SQLiteInteractionTracker) RequestCancel(ctx context.Context, id string,
 func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error {
 	now := t.now()
 	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ? AND status NOT IN ?", targetID, terminalStatusStrings()).
+		Where("id = ? AND status IN ?", targetID, supersedableStatusStrings()).
 		Updates(map[string]interface{}{
 			"status":           string(InteractionStatusSuperseded),
 			"status_version":   gorm.Expr("status_version + 1"),
@@ -163,13 +168,17 @@ func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID 
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		_, ok, err := t.Get(ctx, targetID)
+		rec, ok, err := t.Get(ctx, targetID)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return ErrInteractionNotFound
 		}
+		if rec.Status == InteractionStatusSuperseded && rec.SupersededByID == supersededByID {
+			return nil
+		}
+		return ErrInvalidTransition
 	}
 	return nil
 }
@@ -183,21 +192,8 @@ func (t *SQLiteInteractionTracker) Fail(ctx context.Context, id string, code str
 }
 
 func (t *SQLiteInteractionTracker) Archive(ctx context.Context, id string) error {
-	now := t.now()
-	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"status":         string(InteractionStatusArchived),
-			"status_version": gorm.Expr("status_version + 1"),
-			"updated_at":     now,
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrInteractionNotFound
-	}
-	return nil
+	_, err := t.transitionWithoutExpectedVersion(ctx, id, InteractionStatusArchived, nil)
+	return err
 }
 
 func (t *SQLiteInteractionTracker) Range(ctx context.Context, fn func(record *InteractionRecord) bool) error {
@@ -246,32 +242,41 @@ func (t *SQLiteInteractionTracker) list(ctx context.Context, scope InteractionSc
 }
 
 func (t *SQLiteInteractionTracker) finish(ctx context.Context, id string, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
-	now := t.now()
-	fields["status"] = string(status)
-	fields["status_version"] = gorm.Expr("status_version + 1")
-	fields["completed_at"] = now
-	fields["updated_at"] = now
-	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ? AND status NOT IN ?", id, terminalStatusStrings()).
-		Updates(fields)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected == 0 {
-		_, ok, err := t.Get(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, ErrInteractionNotFound
-		}
-	}
+	return t.transitionWithoutExpectedVersion(ctx, id, status, fields)
+}
+
+func (t *SQLiteInteractionTracker) transitionWithoutExpectedVersion(ctx context.Context, id string, status InteractionStatus, fields map[string]interface{}) (*InteractionRecord, error) {
 	rec, ok, err := t.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, ErrInteractionNotFound
+	}
+	if rec.IsTerminal() && status != InteractionStatusArchived {
+		return nil, ErrAlreadyTerminal
+	}
+	if err := rec.Transition(status); err != nil {
+		return nil, err
+	}
+	now := t.now()
+	if fields == nil {
+		fields = map[string]interface{}{}
+	}
+	fields["status"] = string(status)
+	fields["status_version"] = rec.StatusVersion
+	fields["started_at"] = rec.StartedAt
+	fields["committed_at"] = rec.CommittedAt
+	fields["completed_at"] = rec.CompletedAt
+	fields["updated_at"] = now
+	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
+		Where("id = ? AND status_version = ?", id, rec.StatusVersion-1).
+		Updates(fields)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrVersionConflict
 	}
 	return rec, nil
 }
@@ -374,6 +379,23 @@ func activeStatusStrings() []string {
 		string(InteractionStatusGenerated),
 		string(InteractionStatusCommitted),
 		string(InteractionStatusDeliveryPending),
+		string(InteractionStatusDelivered),
+	}
+}
+
+func supersedableStatusStrings() []string {
+	return cancellableStatusStrings()
+}
+
+func cancellableStatusStrings() []string {
+	return []string{
+		string(InteractionStatusReceived),
+		string(InteractionStatusNormalized),
+		string(InteractionStatusQueued),
+		string(InteractionStatusProcessing),
+		string(InteractionStatusContextReady),
+		string(InteractionStatusDecided),
+		string(InteractionStatusGenerated),
 	}
 }
 
