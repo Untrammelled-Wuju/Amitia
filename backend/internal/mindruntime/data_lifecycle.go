@@ -1,6 +1,7 @@
 package mindruntime
 
 import (
+	"gorm.io/gorm"
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
@@ -92,7 +93,27 @@ type DeletionRequest struct {
 	Reason     string        `json:"reason"`
 }
 
+
+
+// DeletionTombstoneModel is the GORM model for SQLite persistence.
+type DeletionTombstoneModel struct {
+	ID               string     `gorm:"primaryKey;column:id" json:"id"`
+	TargetID         string     `gorm:"column:target_id;index" json:"targetId"`
+	TargetType       string     `gorm:"column:target_type" json:"targetType"`
+	Scope            string     `gorm:"column:scope" json:"scope"`
+	Status           string     `gorm:"column:status;index" json:"status"`
+	ItemsCount       int        `gorm:"column:items_count" json:"itemsCount"`
+	CleanedCount     int        `gorm:"column:cleaned_count" json:"cleanedCount"`
+	FailedCount      int        `gorm:"column:failed_count" json:"failedCount"`
+	RequestedAt      time.Time  `gorm:"column:requested_at" json:"requestedAt"`
+	BlockedUntil     time.Time  `gorm:"column:blocked_until" json:"blockedUntil"`
+	CompletedAt      *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
+	RetrievalBlocked bool       `gorm:"column:retrieval_blocked;default:false" json:"retrievalBlocked"`
+}
+
+func (DeletionTombstoneModel) TableName() string { return "deletion_tombstones" }
 type DataLifecycleCoordinator struct {
+	db          *gorm.DB
 	mu          sync.RWMutex
 	tombstones  map[string]DeletionTombstone
 	outbox      []OutboxCleanupItem
@@ -100,9 +121,9 @@ type DataLifecycleCoordinator struct {
 	lastClean   time.Time
 }
 
-var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator()
+var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator(nil)
 
-func NewDataLifecycleCoordinator() *DataLifecycleCoordinator {
+func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 	return &DataLifecycleCoordinator{
 		tombstones:  make(map[string]DeletionTombstone),
 		outbox:      make([]OutboxCleanupItem, 0),
@@ -110,6 +131,10 @@ func NewDataLifecycleCoordinator() *DataLifecycleCoordinator {
 	}
 }
 
+
+func (c *DataLifecycleCoordinator) InitSchema() error {
+	return c.db.AutoMigrate(&DeletionTombstoneModel{})
+}
 func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) DeletionTombstone {
 	c.mu.Lock()
 	defer c.mu.Unlock()

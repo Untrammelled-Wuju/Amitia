@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/memory"
@@ -14,9 +15,9 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
 	svc := NewService(ctx)
-	handler := NewHandler(svc, ctx.DB, chatSvc, unifiedEntry)
+	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry)
 
 	r.GET("/health", handler.Health)
 	r.GET("/diagnostics", handler.Diagnostics)
@@ -123,6 +124,11 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/privacy/mask", handler.PrivacyMask)
 	r.GET("/privacy/scan-results", handler.PrivacyScanResultsGet)
 	r.DELETE("/privacy/scan-results", handler.PrivacyScanResults)
+	r.POST("/privacy/deletion/request", handler.PrivacyDeletionRequest)
+	r.GET("/privacy/deletion/status/:id", handler.PrivacyDeletionStatus)
+	r.GET("/privacy/deletion/stats", handler.PrivacyDeletionStats)
+	r.POST("/privacy/deletion/cleanup", handler.PrivacyDeletionCleanup)
+	r.POST("/privacy/deletion/security-tests", handler.PrivacyDeletionSecurityTests)
 
 	r.POST("/update/check", handler.UpdateCheck)
 	r.PUT("/update/config", handler.UpdateConfig_Update)

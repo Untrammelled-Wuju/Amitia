@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )
@@ -30,12 +31,13 @@ type Handler struct {
 	service     Service
 	db          *gorm.DB
 	chatSvc     chat.Service
+	dataLifecycle *mindruntime.DataLifecycleCoordinator
 	unifiedEntry *interaction.UnifiedEntry
 	versionInfo atomic.Value
 }
 
-func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry) *Handler {
-	h := &Handler{service: srv, db: db, chatSvc: chatSvc, unifiedEntry: unifiedEntry}
+func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry) *Handler {
+	h := &Handler{service: srv, db: db, chatSvc: chatSvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -24,7 +25,8 @@ type AppServices struct {
 	Vision       vision.Service
 	Companion    companion.Service
 	Chat         chat.Service
-	UnifiedEntry *interaction.UnifiedEntry
+	UnifiedEntry     *interaction.UnifiedEntry
+	DataLifecycle    *mindruntime.DataLifecycleCoordinator
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
@@ -44,6 +46,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	orch := interaction.NewOrchestrator(orchCfg, chatSvc.(interaction.MessageProcessor))
 	resolver := interaction.NewScopeResolver(nil)
+	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
+	dataLifecycle.InitSchema()
 	entry := interaction.NewUnifiedEntry(orch, resolver)
 	return &AppServices{
 		Graph:        graphSvc,
@@ -54,6 +58,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		Vision:       visionSvc,
 		Companion:    compSvc,
 		Chat:         chatSvc,
-		UnifiedEntry: entry,
+		UnifiedEntry:  entry,
+		DataLifecycle: dataLifecycle,
 	}
 }
