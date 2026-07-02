@@ -1,6 +1,10 @@
 package profile
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -46,6 +50,93 @@ func TestCreatePreservesCharacterScope(t *testing.T) {
 	}
 	if item.CharacterID != "char-a" {
 		t.Fatalf("character scope lost: %q", item.CharacterID)
+	}
+}
+
+func TestProcessUsesCheckpointIncrementally(t *testing.T) {
+	svc, db := newProfileTestService(t)
+	var requests []string
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var body struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(body.Messages) < 2 {
+			t.Fatalf("unexpected messages: %#v", body.Messages)
+		}
+		requests = append(requests, body.Messages[1].Content)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"[]"}}],"usage":{"total_tokens":1}}`))
+	}))
+	t.Cleanup(modelServer.Close)
+
+	if err := db.Exec(`CREATE TABLE messages (id text primary key, conversation_id text not null, sequence integer not null default 0, role text not null, content text not null, created_at text default '')`).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE pipeline_checkpoints (conversation_id text not null, pipeline_type text not null, last_message_sequence integer not null default 0, checkpoint_version integer not null default 1, idempotency_key text default '', created_at text default '', updated_at text default '', primary key (conversation_id, pipeline_type))`).Error; err != nil {
+		t.Fatalf("create checkpoints: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, is_active integer not null default 0)`).Error; err != nil {
+		t.Fatalf("create model configs: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`, "model-1", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
+		t.Fatalf("insert model config: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-inc", "char-a").Error; err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	for _, row := range []struct {
+		id       string
+		sequence int
+		role     string
+		content  string
+	}{
+		{"m1", 1, "user", "第一条用户事实"},
+		{"m2", 2, "assistant", "第一条回复"},
+	} {
+		if err := db.Exec(`INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, ?, ?, ?, ?)`, row.id, "conv-inc", row.sequence, row.role, row.content).Error; err != nil {
+			t.Fatalf("insert message: %v", err)
+		}
+	}
+
+	if err := svc.Process(context.Background(), "conv-inc", nil, ""); err != nil {
+		t.Fatalf("first process: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("llm calls after first process = %d, want 1", len(requests))
+	}
+	if !strings.Contains(requests[0], "第一条用户事实") || !strings.Contains(requests[0], "第一条回复") {
+		t.Fatalf("first request missing initial messages: %s", requests[0])
+	}
+
+	if err := svc.Process(context.Background(), "conv-inc", nil, ""); err != nil {
+		t.Fatalf("second process: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("llm calls after duplicate process = %d, want 1", len(requests))
+	}
+
+	if err := db.Exec(`INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, ?, ?, ?, ?)`, "m3", "conv-inc", 3, "user", "第二条新增事实").Error; err != nil {
+		t.Fatalf("insert new message: %v", err)
+	}
+	if err := svc.Process(context.Background(), "conv-inc", nil, ""); err != nil {
+		t.Fatalf("third process: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("llm calls after new message = %d, want 2", len(requests))
+	}
+	if strings.Contains(requests[1], "第一条用户事实") || strings.Contains(requests[1], "第一条回复") {
+		t.Fatalf("incremental request repeated old messages: %s", requests[1])
+	}
+	if !strings.Contains(requests[1], "第二条新增事实") {
+		t.Fatalf("incremental request missing new message: %s", requests[1])
 	}
 }
 

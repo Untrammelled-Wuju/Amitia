@@ -380,7 +380,7 @@ func minInt(a, b int) int {
 func (s *service) Name() string { return "用户画像" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "profile", 4)
+	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "profile", 0)
 	if err != nil || len(pending) == 0 {
 		return err
 	}
