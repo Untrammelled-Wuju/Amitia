@@ -233,32 +233,52 @@ func (t *SQLiteInteractionTracker) RequestCancel(ctx context.Context, id string,
 
 func (t *SQLiteInteractionTracker) MarkSuperseded(ctx context.Context, targetID string, supersededByID string) error {
 	now := t.now()
-	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ? AND status IN ?", targetID, supersedableStatusStrings()).
-		Updates(map[string]interface{}{
-			"status":           string(InteractionStatusSuperseded),
-			"status_version":   gorm.Expr("status_version + 1"),
-			"superseded_by_id": supersededByID,
-			"completed_at":     now,
-			"updated_at":       now,
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		rec, ok, err := t.Get(ctx, targetID)
+	return t.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var target InteractionRecordModel
+		err := tx.Where("id = ?", targetID).First(&target).Error
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInteractionNotFound
+			}
 			return err
 		}
-		if !ok {
-			return ErrInteractionNotFound
-		}
-		if rec.Status == InteractionStatusSuperseded && rec.SupersededByID == supersededByID {
+		if target.Status == string(InteractionStatusSuperseded) && target.SupersededByID == supersededByID {
 			return nil
 		}
-		return ErrInvalidTransition
-	}
-	return nil
+		if !canSupersedeStatus(InteractionStatus(target.Status)) {
+			return ErrInvalidTransition
+		}
+		if supersededByID == "" || supersededByID == targetID {
+			return ErrInvalidTransition
+		}
+		var superseder InteractionRecordModel
+		err = tx.Where("id = ?", supersededByID).First(&superseder).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInteractionNotFound
+			}
+			return err
+		}
+		if isTerminalStatus(InteractionStatus(superseder.Status)) || !sameSupersedeScope(modelToInteractionRecord(target).Scope, modelToInteractionRecord(superseder).Scope) {
+			return ErrInvalidTransition
+		}
+		result := tx.Model(&InteractionRecordModel{}).
+			Where("id = ? AND status_version = ? AND status IN ?", targetID, target.StatusVersion, supersedableStatusStrings()).
+			Updates(map[string]interface{}{
+				"status":           string(InteractionStatusSuperseded),
+				"status_version":   gorm.Expr("status_version + 1"),
+				"superseded_by_id": supersededByID,
+				"completed_at":     now,
+				"updated_at":       now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrVersionConflict
+		}
+		return nil
+	})
 }
 
 func (t *SQLiteInteractionTracker) Complete(ctx context.Context, id string, resultRef string) (*InteractionRecord, error) {

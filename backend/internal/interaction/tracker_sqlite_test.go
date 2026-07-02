@@ -314,6 +314,82 @@ func TestSQLiteInteractionTrackerTerminalOperationsRespectStateMachine(t *testin
 	}
 }
 
+func TestSQLiteInteractionTrackerMarkSupersededRequiresValidSuperseder(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	target := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, "missing"); !errors.Is(err, ErrInteractionNotFound) {
+		t.Fatalf("expected missing superseder to fail, got %v", err)
+	}
+	got, ok, err := tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.Status != InteractionStatusReceived || got.SupersededByID != "" {
+		t.Fatalf("target should remain active after failed supersede: ok=%v record=%#v", ok, got)
+	}
+
+	otherScope := NewInteractionRecord(InteractionScope{UserID: "user-1", CharacterID: "char-2", ConversationID: "conv-2", Channel: "web"})
+	if err := tracker.Create(ctx, otherScope); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, otherScope.ID); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("expected cross-scope superseder to fail, got %v", err)
+	}
+
+	terminalSuperseder := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, terminalSuperseder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tracker.Fail(ctx, terminalSuperseder.ID, "failed", "failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, terminalSuperseder.ID); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("expected terminal superseder to fail, got %v", err)
+	}
+	got, ok, err = tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.Status != InteractionStatusReceived || got.SupersededByID != "" {
+		t.Fatalf("target should remain active after invalid superseders: ok=%v record=%#v", ok, got)
+	}
+}
+
+func TestSQLiteInteractionTrackerMarkSupersededValidSupersederIsAtomicAndIdempotent(t *testing.T) {
+	tracker := newTestSQLiteInteractionTracker(t)
+	ctx := context.Background()
+	scope := InteractionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"}
+	target := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	superseder := NewInteractionRecord(scope)
+	if err := tracker.Create(ctx, superseder); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := tracker.Get(ctx, target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.Status != InteractionStatusSuperseded || got.SupersededByID != superseder.ID {
+		t.Fatalf("target was not superseded by valid superseder: ok=%v record=%#v", ok, got)
+	}
+	if got.StatusVersion != target.StatusVersion+1 || got.CompletedAt.IsZero() {
+		t.Fatalf("supersede should bump version and complete target: %#v", got)
+	}
+	if err := tracker.MarkSuperseded(ctx, target.ID, superseder.ID); err != nil {
+		t.Fatalf("expected idempotent supersede, got %v", err)
+	}
+}
+
 func TestSupersedeResolverExcludesCurrentRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	ctx := context.Background()

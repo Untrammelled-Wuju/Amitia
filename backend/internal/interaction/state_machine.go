@@ -455,6 +455,16 @@ func (t *InMemoryTracker) MarkSuperseded(ctx context.Context, targetID string, s
 	if !canSupersedeStatus(rec.Status) {
 		return ErrInvalidTransition
 	}
+	if supersededByID == "" || supersededByID == targetID {
+		return ErrInvalidTransition
+	}
+	superseder, ok := t.records[supersededByID]
+	if !ok {
+		return ErrInteractionNotFound
+	}
+	if superseder.IsTerminal() || !sameSupersedeScope(rec.Scope, superseder.Scope) {
+		return ErrInvalidTransition
+	}
 	rec.mu.Lock()
 	rec.SupersededByID = supersededByID
 	rec.Status = InteractionStatusSuperseded
@@ -570,4 +580,14 @@ func canSupersedeStatus(status InteractionStatus) bool {
 	default:
 		return false
 	}
+}
+
+func sameSupersedeScope(a InteractionScope, b InteractionScope) bool {
+	a = a.Normalize()
+	b = b.Normalize()
+	return a.UserID == b.UserID &&
+		a.CharacterID == b.CharacterID &&
+		a.ConversationID == b.ConversationID &&
+		a.Channel == b.Channel &&
+		a.PeerID == b.PeerID
 }
