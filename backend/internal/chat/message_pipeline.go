@@ -244,24 +244,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	pipelineMessages = append(pipelineMessages, history...)
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "user", "content": req.Message})
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "assistant", "content": reply})
-	if s.pipeline != nil {
-		go func() {
-			postCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			s.pipeline.Execute(postCtx, convID, pipelineMessages, reply)
-		}()
-	}
-	go func() {
-		s.trimContextWindow(convID)
-	}()
-	go func() {
-		s.moodRecoveryCheck(convID, charID, source)
-	}()
-	if s.compressor != nil {
-		go func() {
-			s.compressor.MaybeCompress(convID)
-		}()
-	}
+	s.startPostProcessing(ctx, trace, convID, charID, source, pipelineMessages, reply)
 
 	applog.TraceInfo(trace.WithStage("completed"), applog.Fields{
 		"user_message_id": userMsgID,
@@ -282,6 +265,42 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		RequestID:      requestID,
 		Events:         commitResult.Events,
 	}, nil
+}
+
+func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, convID, charID, source string, pipelineMessages []map[string]string, reply string) {
+	if err := ctx.Err(); err != nil {
+		applog.TraceWarn(trace.WithStage("postprocess_skipped_cancelled"), applog.Fields{
+			"conversation_id": convID,
+		}, "process message postprocess skipped because request context was cancelled")
+		return
+	}
+	if s.pipeline != nil {
+		go func() {
+			postCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			if postCtx.Err() != nil {
+				return
+			}
+			s.pipeline.Execute(postCtx, convID, pipelineMessages, reply)
+		}()
+	}
+	go func() {
+		postCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		s.trimContextWindow(postCtx, convID)
+	}()
+	go func() {
+		postCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		s.moodRecoveryCheck(postCtx, convID, charID, source)
+	}()
+	if s.compressor != nil {
+		go func() {
+			postCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			s.compressor.MaybeCompress(postCtx, convID)
+		}()
+	}
 }
 
 func (s *service) abortMessageCommitIfCancelled(ctx context.Context, trace applog.TraceFields, userMsgID string) error {

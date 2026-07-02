@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
-func (s *service) moodRecoveryCheck(convID, charID, source string) {
+func (s *service) moodRecoveryCheck(ctx context.Context, convID, charID, source string) {
+	if ctx.Err() != nil {
+		return
+	}
 	if source == "proactive" || source == "system" {
 		return
 	}
 	var lastAt string
-	err := s.db.Table("messages").Select("created_at").Where("role = 'user' AND conversation_id = ?", convID).Order("created_at DESC").Offset(1).Limit(1).Row().Scan(&lastAt)
+	err := s.db.WithContext(ctx).Table("messages").Select("created_at").Where("role = 'user' AND conversation_id = ?", convID).Order("created_at DESC").Offset(1).Limit(1).Row().Scan(&lastAt)
 	if err != nil || lastAt == "" {
 		return
 	}
@@ -22,6 +28,9 @@ func (s *service) moodRecoveryCheck(convID, charID, source string) {
 	}
 	idleDur := time.Since(t)
 	if idleDur > 6*time.Hour {
-		s.db.Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, 'happy', 7, datetime('now', 'localtime'))", charID)
+		if ctx.Err() != nil {
+			return
+		}
+		s.db.WithContext(ctx).Exec("INSERT INTO moods (character_id, mood, level, created_at) VALUES (?, 'happy', 7, datetime('now', 'localtime'))", charID)
 	}
 }

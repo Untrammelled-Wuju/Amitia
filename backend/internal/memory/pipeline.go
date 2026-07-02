@@ -90,6 +90,12 @@ func (p *Pipeline) Execute(ctx context.Context, convID string, messages []map[st
 			Layer: i + 1,
 			Name:  layer.Name(),
 		}
+		if err := ctx.Err(); err != nil {
+			lr.Status = "cancelled"
+			lr.Error = err.Error()
+			run.Layers = append(run.Layers, lr)
+			break
+		}
 		start := time.Now()
 		err := layer.Process(ctx, convID, messages, newReply)
 		elapsed := time.Since(start).Milliseconds()

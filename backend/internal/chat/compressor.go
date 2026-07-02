@@ -4,6 +4,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -34,14 +35,20 @@ func NewCompressor(db *gorm.DB) *Compressor {
 	return &Compressor{db: db}
 }
 
-func (c *Compressor) MaybeCompress(convID string) {
+func (c *Compressor) MaybeCompress(ctx context.Context, convID string) {
+	if ctx.Err() != nil {
+		return
+	}
+	db := c.db.WithContext(ctx)
 	var totalMsgCount int64
-	c.db.Table("messages").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Count(&totalMsgCount)
+	if err := db.Table("messages").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Count(&totalMsgCount).Error; err != nil {
+		return
+	}
 
 	totalRounds := int(totalMsgCount / 2)
 
 	var lastSummary ConversationSummary
-	err := c.db.Where("conversation_id = ?", convID).Order("round_end DESC").First(&lastSummary).Error
+	err := db.Where("conversation_id = ?", convID).Order("round_end DESC").First(&lastSummary).Error
 
 	var nextRoundStart int
 	if err == nil {
@@ -56,8 +63,10 @@ func (c *Compressor) MaybeCompress(convID string) {
 	}
 
 	var messages []Message
-	c.db.Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).
-		Order("created_at ASC").Limit(8).Find(&messages)
+	if err := db.Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).
+		Order("created_at ASC").Limit(8).Find(&messages).Error; err != nil {
+		return
+	}
 
 	if len(messages) < 4 {
 		return
@@ -82,8 +91,11 @@ func (c *Compressor) MaybeCompress(convID string) {
 		parentSummaryID = lastSummary.ID
 	}
 
-	summary := c.generateSummary(convText.String(), parentSummaryText)
+	summary := c.generateSummary(ctx, convText.String(), parentSummaryText)
 	if summary == "" {
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
@@ -97,15 +109,20 @@ func (c *Compressor) MaybeCompress(convID string) {
 		ParentSummaryID: parentSummaryID,
 		CompressedAt:    time.Now().Format("2006-01-02 15:04:05"),
 	}
-	c.db.Create(cs)
+	if err := db.Create(cs).Error; err != nil {
+		return
+	}
 
-	c.db.Model(&Message{}).Where("id IN ?", msgIDs).Update("include_in_context", 0)
+	if ctx.Err() != nil {
+		return
+	}
+	db.Model(&Message{}).Where("id IN ?", msgIDs).Update("include_in_context", 0)
 }
 
-func (c *Compressor) generateSummary(conversationText, parentSummary string) string {
+func (c *Compressor) generateSummary(ctx context.Context, conversationText, parentSummary string) string {
 	var baseURL, apiKey, modelName string
 	var temperature, maxTokens float64
-	err := c.db.Table("model_configs").
+	err := c.db.WithContext(ctx).Table("model_configs").
 		Select("base_url, api_key, model_name, temperature, max_tokens").
 		Where("is_active = 1").Limit(1).Row().
 		Scan(&baseURL, &apiKey, &modelName, &temperature, &maxTokens)
@@ -135,7 +152,10 @@ func (c *Compressor) generateSummary(conversationText, parentSummary string) str
 		"stream":      false,
 	}
 	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	if err != nil {
+		return ""
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 

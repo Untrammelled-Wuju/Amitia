@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ created_at TEXT DEFAULT (datetime('now'))
 		t.Fatal(err)
 	}
 	svc := &service{db: db}
-	svc.moodRecoveryCheck("c1", "char-1", "manual")
+	svc.moodRecoveryCheck(context.Background(), "c1", "char-1", "manual")
 	var got struct {
 		CharacterID string
 		Mood        string
@@ -58,5 +59,55 @@ created_at TEXT DEFAULT (datetime('now'))
 	}
 	if got.CharacterID != "char-1" || got.Mood != "happy" || got.Level != 7 {
 		t.Fatalf("unexpected mood row: %#v", got)
+	}
+}
+
+func TestMoodRecoveryCheckSkipsWhenContextCancelled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB.Close()
+	})
+	if err := db.Exec(`CREATE TABLE messages (
+id TEXT PRIMARY KEY,
+conversation_id TEXT,
+role TEXT,
+created_at TEXT DEFAULT ''
+)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE moods (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+character_id TEXT DEFAULT '',
+mood TEXT DEFAULT '',
+level INTEGER DEFAULT 50,
+created_at TEXT DEFAULT (datetime('now'))
+)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	previousAt := time.Now().Add(-7 * time.Hour).Format("2006-01-02 15:04:05")
+	currentAt := time.Now().Format("2006-01-02 15:04:05")
+	if err := db.Exec("INSERT INTO messages (id, conversation_id, role, created_at) VALUES ('u1', 'c1', 'user', ?)", previousAt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO messages (id, conversation_id, role, created_at) VALUES ('u2', 'c1', 'user', ?)", currentAt).Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc := &service{db: db}
+	svc.moodRecoveryCheck(ctx, "c1", "char-1", "manual")
+	var count int64
+	if err := db.Table("moods").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no mood rows after cancellation, got %d", count)
 	}
 }
