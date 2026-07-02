@@ -3,17 +3,16 @@
 package companion
 
 import (
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
-	"github.com/u-ai/backend/internal/decision"
 	"fmt"
+	"github.com/u-ai/backend/internal/decision"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"log"
 	"math/rand"
 	"strings"
 	"time"
 )
 
-
-func (s *service) checkBurstEligibility(setting map[string]interface{}, currentState string, now time.Time) (bool, string) {
+func (s *service) checkBurstEligibility(characterID string, setting map[string]interface{}, currentState string, now time.Time) (bool, string) {
 	enabled, _ := setting["enabled"].(bool)
 	if !enabled {
 		return false, "disabled"
@@ -40,18 +39,55 @@ func (s *service) checkBurstEligibility(setting map[string]interface{}, currentS
 			return false, "quiet:" + quietStart + "-" + quietEnd
 		}
 	}
-	if s.lastBurstAt.Format("2006-01-02") != now.Format("2006-01-02") {
-		s.todayBurstCount = 0
-	}
+	scope := s.getBurstScopeState(characterID, now)
 	minInterval, _ := setting["minInterval"].(int)
-	if time.Since(s.lastBurstAt) < time.Duration(minInterval)*time.Minute {
+	if now.Sub(scope.lastAt) < time.Duration(minInterval)*time.Minute {
 		return false, "minInterval"
 	}
 	maxPerDay, _ := setting["maxPerDay"].(int)
-	if s.todayBurstCount >= maxPerDay {
+	if scope.todayCount >= maxPerDay {
 		return false, "maxPerDay"
 	}
 	return true, ""
+}
+
+func (s *service) getBurstScopeState(characterID string, now time.Time) burstScopeState {
+	s.burstMu.Lock()
+	defer s.burstMu.Unlock()
+	if s.burstScopes == nil {
+		s.burstScopes = map[string]burstScopeState{}
+	}
+	scope := s.burstScopes[characterID]
+	if !scope.lastAt.IsZero() && scope.lastAt.Format("2006-01-02") != now.Format("2006-01-02") {
+		scope.todayCount = 0
+		s.burstScopes[characterID] = scope
+	}
+	return scope
+}
+
+func (s *service) recordBurstTriggered(characterID string, now time.Time) int {
+	s.burstMu.Lock()
+	defer s.burstMu.Unlock()
+	if s.burstScopes == nil {
+		s.burstScopes = map[string]burstScopeState{}
+	}
+	scope := s.burstScopes[characterID]
+	if !scope.lastAt.IsZero() && scope.lastAt.Format("2006-01-02") != now.Format("2006-01-02") {
+		scope.todayCount = 0
+	}
+	scope.lastAt = now
+	scope.todayCount++
+	s.burstScopes[characterID] = scope
+	return scope.todayCount
+}
+
+func (s *service) countTodayProactiveMessages(characterID, todayStr string) int64 {
+	var count int64
+	s.db.Table("proactive_messages AS pm").
+		Joins("JOIN conversations AS c ON c.id = pm.conversation_id").
+		Where("date(pm.created_at) = date(?) AND c.character_id = ?", todayStr, characterID).
+		Count(&count)
+	return count
 }
 
 func (s *service) calculateBurstProbability(setting, stateLife map[string]interface{}, currentState string, todayLLMCalls, maxDailyCalls int) (float64, float64, float64, float64, float64) {
@@ -170,7 +206,7 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	currentState, _ := stateLife["currentState"].(string)
 	now := time.Now()
 
-	eligible, reason := s.checkBurstEligibility(setting, currentState, now)
+	eligible, reason := s.checkBurstEligibility(characterID, setting, currentState, now)
 	if !eligible {
 		return map[string]interface{}{"triggered": false, "reason": reason}
 	}
@@ -180,8 +216,7 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 		maxDailyCalls = 10
 	}
 	todayStr := now.Format("2006-01-02")
-	var todayLLMCalls int64
-	s.db.Table("proactive_messages").Where("date(created_at) = date(?)", todayStr).Count(&todayLLMCalls)
+	todayLLMCalls := s.countTodayProactiveMessages(characterID, todayStr)
 	if int(todayLLMCalls) >= maxDailyCalls {
 		return map[string]interface{}{"triggered": false, "reason": "maxDailyCalls"}
 	}
@@ -213,7 +248,6 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 		return map[string]interface{}{"triggered": false, "reason": "arbitration_rejected", "prob": finalProb}
 	}
 
-
 	mood, _ := stateLife["mood"].(string)
 	energy, _ := stateLife["energy"].(int)
 	prompt := s.buildBurstPrompt(characterID, mood, currentState, energy)
@@ -231,9 +265,8 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 
 	s.persistAndDeliver(characterID, msgID, convID, generated, now)
 
-	s.lastBurstAt = now
-	s.todayBurstCount++
+	burstCount := s.recordBurstTriggered(characterID, now)
 
 	log.Printf("[Companion] RandomBurst triggered: prob=%.4f energyMod=%.2f moodMod=%.2f stateMod=%.2f budgetMod=%.2f", finalProb, energyMod, moodMod, stateMod, budgetMod)
-	return map[string]interface{}{"triggered": true, "prob": finalProb, "burstCount": s.todayBurstCount, "prompt": prompt}
+	return map[string]interface{}{"triggered": true, "prob": finalProb, "burstCount": burstCount, "prompt": prompt}
 }

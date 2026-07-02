@@ -136,3 +136,64 @@ func TestIdleDurationUsesCharacterMessagesOnly(t *testing.T) {
 		t.Fatalf("expected char-1 idle duration to ignore other character recent message, got %s", got)
 	}
 }
+
+func TestRandomBurstEligibilityUsesCharacterScope(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	now := time.Date(2026, 7, 2, 14, 0, 0, 0, time.Local)
+	svc.burstScopes = map[string]burstScopeState{
+		"char-2": {lastAt: now.Add(-time.Hour), todayCount: 1},
+	}
+	setting := map[string]interface{}{
+		"enabled":     true,
+		"quietStart":  "23:59",
+		"quietEnd":    "00:01",
+		"minInterval": 60,
+		"maxPerDay":   1,
+	}
+
+	eligible, reason := svc.checkBurstEligibility("char-1", setting, "IDLE", now)
+	if !eligible {
+		t.Fatalf("expected char-1 eligible without char-2 budget, got %q", reason)
+	}
+	eligible, reason = svc.checkBurstEligibility("char-2", setting, "IDLE", now)
+	if eligible || reason != "maxPerDay" {
+		t.Fatalf("expected char-2 maxPerDay, eligible=%v reason=%q", eligible, reason)
+	}
+
+	count := svc.recordBurstTriggered("char-1", now)
+	if count != 1 {
+		t.Fatalf("expected char-1 burst count 1, got %d", count)
+	}
+	if got := svc.getBurstScopeState("char-2", now).todayCount; got != 1 {
+		t.Fatalf("expected char-2 burst count unchanged, got %d", got)
+	}
+}
+
+func TestCountTodayProactiveMessagesUsesCharacterConversationScope(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-target', 'char-1', 'web', '2026-07-02 09:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-other', 'char-2', 'web', '2026-07-02 09:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO proactive_messages (conversation_id, message_content, channel, status, created_at) VALUES ('conv-target', 'target today', 'web', 'sent', '2026-07-02 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO proactive_messages (conversation_id, message_content, channel, status, created_at) VALUES ('conv-other', 'other today 1', 'web', 'sent', '2026-07-02 10:30:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO proactive_messages (conversation_id, message_content, channel, status, created_at) VALUES ('conv-other', 'other today 2', 'web', 'sent', '2026-07-02 11:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO proactive_messages (conversation_id, message_content, channel, status, created_at) VALUES ('conv-target', 'target yesterday', 'web', 'sent', '2026-07-01 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if got := svc.countTodayProactiveMessages("char-1", "2026-07-02"); got != 1 {
+		t.Fatalf("expected char-1 count 1, got %d", got)
+	}
+	if got := svc.countTodayProactiveMessages("char-2", "2026-07-02"); got != 2 {
+		t.Fatalf("expected char-2 count 2, got %d", got)
+	}
+}

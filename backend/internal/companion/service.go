@@ -4,6 +4,7 @@ package companion
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/embedding"
@@ -66,10 +67,15 @@ type Service interface {
 }
 
 type service struct {
-	db              *gorm.DB
-	embeddingSvc    *embedding.Service
-	lastBurstAt     time.Time
-	todayBurstCount int
+	db           *gorm.DB
+	embeddingSvc *embedding.Service
+	burstMu      sync.Mutex
+	burstScopes  map[string]burstScopeState
+}
+
+type burstScopeState struct {
+	lastAt     time.Time
+	todayCount int
 }
 
 func NewService(ctx *app.AppContext) Service {
