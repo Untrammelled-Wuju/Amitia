@@ -108,14 +108,6 @@ func main() {
 	services := NewAppServices(ctx, graphSvc)
 	agenttool.SetMemoryService(services.Memory)
 
-	cron := NewProactiveCron(db, services.Companion)
-	cron.Start()
-	proactive.SchedulerRunning = true
-	defer func() {
-		proactive.SchedulerRunning = false
-		cron.Stop()
-	}()
-
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
 	fmt.Printf("    %s Backend Server\n", config.AppCfg.App.Name)
@@ -169,8 +161,16 @@ func main() {
 		log.Info("交互启动恢复完成 scanned=", result.Scanned, " recovered=", result.Recovered, " skipped=", result.Skipped, " failed=", result.Failed)
 	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
+	defer services.UnifiedEntry.SetOrchestratorReady(false)
 	services.OutboxRuntime.Start(rootCtx)
 	defer services.OutboxRuntime.Stop()
+	cron := NewProactiveCron(db, services.Companion)
+	cron.Start()
+	proactive.SchedulerRunning = true
+	defer func() {
+		proactive.SchedulerRunning = false
+		cron.Stop()
+	}()
 
 	srv := &http.Server{
 		Addr:    serverAddr,
