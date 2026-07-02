@@ -4,6 +4,7 @@ package companion
 
 import (
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
+	"github.com/u-ai/backend/internal/decision"
 	"fmt"
 	"log"
 	"math/rand"
@@ -190,6 +191,27 @@ func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} 
 	if rng.Float64() >= finalProb {
 		return map[string]interface{}{"triggered": false, "reason": "probability", "prob": finalProb}
 	}
+
+	burstCandidate := decision.BehaviorCandidate{
+		ID:         "random_burst",
+		Tag:        decision.BehaviorTagProactiveCheck,
+		Channel:    decision.BehaviorChannelProactive,
+		BaseScore:  finalProb,
+		FinalScore: finalProb,
+		Reasons: []decision.BehaviorReason{
+			{Source: "companion", Key: "random_burst", Delta: 0},
+		},
+	}
+	arbInput := decision.ArbitrationInput{
+		Candidates: []decision.BehaviorCandidate{burstCandidate},
+		Now:        now,
+	}
+	arbLayer := decision.DefaultArbitrationLayer()
+	arbResult := arbLayer.Arbitrate(arbInput)
+	if arbResult.FallbackUsed {
+		return map[string]interface{}{"triggered": false, "reason": "arbitration_rejected", "prob": finalProb}
+	}
+
 
 	mood, _ := stateLife["mood"].(string)
 	energy, _ := stateLife["energy"].(int)
