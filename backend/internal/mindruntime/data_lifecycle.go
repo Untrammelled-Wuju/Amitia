@@ -2,6 +2,7 @@ package mindruntime
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -94,6 +95,10 @@ type DeletionRequest struct {
 	Reason     string        `json:"reason"`
 }
 
+type OutboxCleanupExecutor interface {
+	CleanupOutboxItem(item OutboxCleanupItem) error
+}
+
 // DeletionTombstoneModel is the GORM model for SQLite persistence.
 type DeletionTombstoneModel struct {
 	ID               string     `gorm:"primaryKey;column:id" json:"id"`
@@ -139,12 +144,13 @@ type RecalculationTaskModel struct {
 func (RecalculationTaskModel) TableName() string { return "data_lifecycle_recalculation_tasks" }
 
 type DataLifecycleCoordinator struct {
-	db          *gorm.DB
-	mu          sync.RWMutex
-	tombstones  map[string]DeletionTombstone
-	outbox      []OutboxCleanupItem
-	recalcTasks []RecalculationTask
-	lastClean   time.Time
+	db              *gorm.DB
+	mu              sync.RWMutex
+	tombstones      map[string]DeletionTombstone
+	outbox          []OutboxCleanupItem
+	recalcTasks     []RecalculationTask
+	lastClean       time.Time
+	cleanupExecutor OutboxCleanupExecutor
 }
 
 var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator(nil)
@@ -156,6 +162,12 @@ func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 		outbox:      make([]OutboxCleanupItem, 0),
 		recalcTasks: make([]RecalculationTask, 0),
 	}
+}
+
+func (c *DataLifecycleCoordinator) SetOutboxCleanupExecutor(executor OutboxCleanupExecutor) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanupExecutor = executor
 }
 
 func (c *DataLifecycleCoordinator) InitSchema() error {
@@ -241,19 +253,32 @@ func (c *DataLifecycleCoordinator) scheduleOutboxCleanup(tombstone DeletionTombs
 	return items
 }
 
-func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() []OutboxCleanupItem {
+func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	results := make([]OutboxCleanupItem, 0)
+	var cleanupErrs []error
 	for i := range c.outbox {
 		item := &c.outbox[i]
 		if item.Status == "queued" || item.Status == "retry" {
-			item.Status = "completed"
 			item.Attempts++
-			now := time.Now().UTC()
-			item.CleanedAt = &now
-			item.LastError = ""
+			if c.cleanupExecutor == nil {
+				err := fmt.Errorf("data_lifecycle: cleanup executor is not configured for %s", item.Storage)
+				item.Status = "retry"
+				item.LastError = err.Error()
+				cleanupErrs = append(cleanupErrs, err)
+			} else if err := c.cleanupExecutor.CleanupOutboxItem(*item); err != nil {
+				wrapped := fmt.Errorf("data_lifecycle: cleanup %s/%s in %s: %w", item.TargetKind, item.TargetID, item.Storage, err)
+				item.Status = "retry"
+				item.LastError = wrapped.Error()
+				cleanupErrs = append(cleanupErrs, wrapped)
+			} else {
+				item.Status = "completed"
+				now := time.Now().UTC()
+				item.CleanedAt = &now
+				item.LastError = ""
+			}
 			c.persistOutboxItemLocked(*item)
 		}
 		results = append(results, *item)
@@ -262,7 +287,7 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() []OutboxCleanupItem {
 	c.lastClean = time.Now().UTC()
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "outbox_cleanups", 1)
 
-	return results
+	return results, errors.Join(cleanupErrs...)
 }
 
 func (c *DataLifecycleCoordinator) GenerateRecalculationTasks(tombstone DeletionTombstone) []RecalculationTask {

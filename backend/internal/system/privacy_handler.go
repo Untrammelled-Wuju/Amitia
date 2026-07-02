@@ -3,10 +3,10 @@
 package system
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
-	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) PrivacyScan(c *gin.Context) { util.SuccessResponse(c, h.service.PrivacyScan()) }
@@ -20,8 +20,6 @@ func (h *Handler) PrivacyScanResults(c *gin.Context) {
 func (h *Handler) PrivacyScanResultsGet(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetPrivacyScanResult(c.Param("id")))
 }
-
-
 
 func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
 	var req mindruntime.DeletionRequest
@@ -49,7 +47,11 @@ func (h *Handler) PrivacyDeletionStats(c *gin.Context) {
 }
 
 func (h *Handler) PrivacyDeletionCleanup(c *gin.Context) {
-	results := h.dataLifecycle.ExecuteOutboxCleanup()
+	results, err := h.dataLifecycle.ExecuteOutboxCleanup()
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "deletion cleanup failed", err.Error())
+		return
+	}
 	util.SuccessResponse(c, gin.H{"cleaned": len(results), "items": results})
 }
 
