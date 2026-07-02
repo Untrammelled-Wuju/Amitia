@@ -3,9 +3,13 @@ package interaction
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type runtimeCaptureProcessor struct {
@@ -345,4 +349,118 @@ func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
 	if oldRecord.Status != InteractionStatusSuperseded || oldRecord.SupersededByID != second.InteractionID {
 		t.Fatalf("old interaction was not superseded by second: %#v", oldRecord)
 	}
+}
+
+func TestOrchestratorCompletedEventFallbackUsesSQLiteTransaction(t *testing.T) {
+	db := newTestInteractionDB(t)
+	tracker := NewSQLiteInteractionTracker(db)
+	if err := tracker.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	outbox := NewSQLiteOutboxStore(db)
+	if err := outbox.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	processor := &runtimeCaptureProcessor{}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-events",
+		CharacterID:    "char-events",
+		ConversationID: "conv-events",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-empty-events",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != OutcomeCompleted {
+		t.Fatalf("expected completed outcome, got %#v", result)
+	}
+	if len(result.Events) != 3 {
+		t.Fatalf("expected fallback completed events, got %#v", result.Events)
+	}
+	records, err := outbox.ListPending()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("expected 3 pending outbox records, got %#v", records)
+	}
+	gotCompleted := false
+	for _, record := range records {
+		if record.EventType == "interaction.completed" {
+			gotCompleted = true
+		}
+	}
+	if !gotCompleted {
+		t.Fatalf("completed outbox event missing: %#v", records)
+	}
+	stored, ok, err := tracker.Get(context.Background(), result.InteractionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || stored.Status != InteractionStatusCompleted {
+		t.Fatalf("interaction should be completed with fallback events: ok=%v record=%#v", ok, stored)
+	}
+}
+
+func TestOrchestratorCompletedEventAppendFailureRollsBackSQLiteComplete(t *testing.T) {
+	db := newTestInteractionDB(t)
+	tracker := NewSQLiteInteractionTracker(db)
+	if err := tracker.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	outbox := NewSQLiteOutboxStore(db)
+	processor := &runtimeCaptureProcessor{}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-append-fail",
+		CharacterID:    "char-append-fail",
+		ConversationID: "conv-append-fail",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-append-fail",
+	})
+	if err == nil {
+		t.Fatal("expected outbox append failure")
+	}
+	if result == nil || result.InteractionID == "" {
+		t.Fatalf("failed result should keep interaction id: %#v", result)
+	}
+	stored, ok, getErr := tracker.Get(context.Background(), result.InteractionID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if !ok {
+		t.Fatal("interaction record missing")
+	}
+	if stored.Status == InteractionStatusCompleted {
+		t.Fatalf("complete should roll back when fallback outbox append fails: %#v", stored)
+	}
+	if stored.Status != InteractionStatusCommitted {
+		t.Fatalf("expected record to remain committed after rollback, got %#v", stored)
+	}
+}
+
+func newTestInteractionDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "interaction.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
+	return db
 }

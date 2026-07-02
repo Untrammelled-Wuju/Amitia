@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 var (
@@ -365,16 +366,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	} else {
 		record = fresh
 	}
-	if completed, err := o.tracker.Complete(ctx, record.ID, "processor_response"); err == nil {
-		record = completed
-	} else {
-		log.Printf("[orchestrator] transition to completed failed: %v", err)
+	record, events, err := o.completeWithOutboxEvents(ctx, record, resp, runtime)
+	if err != nil {
+		log.Printf("[orchestrator] complete with outbox events failed: %v", err)
 		return o.buildResult(record, nil, OutcomeFailed, err), err
-	}
-
-	events := resp.Events
-	if len(events) == 0 {
-		events = o.emitOutboxEvents(record, resp, runtime)
 	}
 	result := o.buildResult(record, resp, OutcomeCompleted, nil)
 	result.Duration = duration
@@ -543,6 +538,52 @@ func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessRespo
 	return r
 }
 
+func (o *Orchestrator) completeWithOutboxEvents(ctx context.Context, record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) (*InteractionRecord, []OutboxRecord, error) {
+	events := resp.Events
+	if len(events) > 0 {
+		completed, err := o.tracker.Complete(ctx, record.ID, "processor_response")
+		if err != nil {
+			return record, nil, err
+		}
+		return completed, events, nil
+	}
+	if tracker, ok := o.tracker.(*SQLiteInteractionTracker); ok {
+		if outbox, ok := o.outbox.(*SQLiteOutboxStore); ok && tracker.db == outbox.db {
+			var completed *InteractionRecord
+			var appended []OutboxRecord
+			err := tracker.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				txTracker := NewSQLiteInteractionTracker(tx)
+				txTracker.clock = tracker.clock
+				txOutbox := NewSQLiteOutboxStore(tx)
+				next, err := txTracker.Complete(ctx, record.ID, "processor_response")
+				if err != nil {
+					return err
+				}
+				created, err := o.emitOutboxEventsTo(txOutbox, next, resp, runtime)
+				if err != nil {
+					return err
+				}
+				completed = next
+				appended = created
+				return nil
+			})
+			if err != nil {
+				return record, nil, err
+			}
+			return completed, appended, nil
+		}
+	}
+	completed, err := o.tracker.Complete(ctx, record.ID, "processor_response")
+	if err != nil {
+		return record, nil, err
+	}
+	created, err := o.emitOutboxEventsTo(o.outbox, completed, resp, runtime)
+	if err != nil {
+		return completed, nil, err
+	}
+	return completed, created, nil
+}
+
 func outcomeForRecord(record *InteractionRecord) Outcome {
 	if record == nil {
 		return OutcomeFailed
@@ -559,7 +600,7 @@ func outcomeForRecord(record *InteractionRecord) Outcome {
 	}
 }
 
-func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) []OutboxRecord {
+func (o *Orchestrator) emitOutboxEventsTo(outbox OutboxStore, record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) ([]OutboxRecord, error) {
 	now := time.Now()
 	events := make([]OutboxRecord, 0, 3)
 
@@ -579,7 +620,9 @@ func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *Process
 		CreatedAt:   now,
 		NextRetryAt: now,
 	}
-	o.outbox.Append(&msgEvent)
+	if _, err := outbox.Append(&msgEvent); err != nil {
+		return nil, err
+	}
 	events = append(events, msgEvent)
 
 	statePayload, _ := json.Marshal(map[string]interface{}{
@@ -600,7 +643,9 @@ func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *Process
 		CreatedAt:   now,
 		NextRetryAt: now,
 	}
-	o.outbox.Append(&stateEvent)
+	if _, err := outbox.Append(&stateEvent); err != nil {
+		return nil, err
+	}
 	events = append(events, stateEvent)
 
 	runtimePayload, _ := json.Marshal(map[string]interface{}{
@@ -621,10 +666,12 @@ func (o *Orchestrator) emitOutboxEvents(record *InteractionRecord, resp *Process
 		CreatedAt:   now,
 		NextRetryAt: now,
 	}
-	o.outbox.Append(&runtimeEvent)
+	if _, err := outbox.Append(&runtimeEvent); err != nil {
+		return nil, err
+	}
 	events = append(events, runtimeEvent)
 
-	return events
+	return events, nil
 }
 func (o *Orchestrator) SetDeadlineProvider(fn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)) {
 	o.deadlineFn = fn
