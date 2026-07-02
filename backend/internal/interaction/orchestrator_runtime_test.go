@@ -385,7 +385,7 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 		secondDone <- err
 	}()
 
-	waitForRecordStatus(t, tracker, "queue-2", InteractionStatusQueued)
+	waitForRecordCreated(t, tracker, "queue-2")
 	select {
 	case <-processor.secondStarted:
 		t.Fatal("second processor call started before first completed")
@@ -406,6 +406,34 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	}
 	if got := processor.max.Load(); got != 1 {
 		t.Fatalf("queue policy allowed concurrent processors: max=%d", got)
+	}
+}
+
+func waitForRecordCreated(t *testing.T, tracker InteractionTracker, requestID string) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		found := false
+		err := tracker.Range(context.Background(), func(record *InteractionRecord) bool {
+			if record.Scope.RequestID == requestID {
+				found = true
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("record %s was not created", requestID)
+		case <-tick.C:
+		}
 	}
 }
 

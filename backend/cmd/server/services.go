@@ -85,6 +85,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := dataLifecycle.InitSchema(); err != nil {
 		panic("failed to init data lifecycle schema: " + err.Error())
 	}
+	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB))
 	entry := interaction.NewUnifiedEntry(orch, resolver)
 	compSvc.AttachUnifiedEntry(entry)
 	return &AppServices{

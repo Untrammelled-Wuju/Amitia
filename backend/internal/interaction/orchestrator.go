@@ -327,7 +327,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 
-	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
+	if fresh, outcome, freshErr := o.ensureFreshAtVersion(ctx, record.ID, record.StatusVersion); freshErr != nil {
 		record = fresh
 		return o.buildResult(record, nil, outcome, freshErr), freshErr
 	} else {
@@ -589,6 +589,17 @@ func (o *Orchestrator) ensureFresh(ctx context.Context, id string) (*Interaction
 		return cancelled, OutcomeCancelled, ErrOrchestratorCancelled
 	}
 	return rec, OutcomeCompleted, nil
+}
+
+func (o *Orchestrator) ensureFreshAtVersion(ctx context.Context, id string, expectedVersion int64) (*InteractionRecord, Outcome, error) {
+	rec, outcome, err := o.ensureFresh(ctx, id)
+	if err != nil {
+		return rec, outcome, err
+	}
+	if rec.StatusVersion != expectedVersion {
+		return rec, OutcomeFailed, ErrVersionConflict
+	}
+	return rec, outcome, nil
 }
 
 func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessResponse, outcome Outcome, err error) *OrchestrationResult {

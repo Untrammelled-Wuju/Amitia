@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
 )
 
@@ -294,6 +295,98 @@ func TestExecuteOutboxCleanupRetriesFailedItem(t *testing.T) {
 	if len(executor.calls) != 7 {
 		t.Fatalf("executor should be called for 6 initial items and 1 retry, got %d", len(executor.calls))
 	}
+}
+
+func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
+	oldQdrantClient := qdrantDB.Client
+	qdrantDB.Client = nil
+	defer func() {
+		qdrantDB.Client = oldQdrantClient
+	}()
+
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "default_executor.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer sqlDB.Close()
+
+	statements := []string{
+		"CREATE TABLE memories (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '', source_msg_id TEXT DEFAULT '', source_conv_id TEXT DEFAULT '')",
+		"CREATE TABLE memory_events (id TEXT PRIMARY KEY, memory_id TEXT DEFAULT '', character_id TEXT DEFAULT '', source_msg_id TEXT DEFAULT '', source_conv_id TEXT DEFAULT '')",
+		"CREATE TABLE memory_candidates (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '', conversation_id TEXT DEFAULT '')",
+		"CREATE TABLE memory_embeddings (memory_id TEXT PRIMARY KEY)",
+		"CREATE TABLE retrieval_logs (id TEXT PRIMARY KEY, request_id TEXT DEFAULT '', conversation_id TEXT DEFAULT '', character_id TEXT DEFAULT '', retrieved_memory_ids TEXT DEFAULT '[]')",
+		"CREATE TABLE conversation_summaries (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, parent_summary_id TEXT DEFAULT '')",
+	}
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatalf("create test table: %v", err)
+		}
+	}
+	inserts := []string{
+		"INSERT INTO memories (id, character_id, source_msg_id, source_conv_id) VALUES ('target-memory', 'target-memory', 'target-memory', 'target-memory'), ('kept-memory', 'kept', 'kept', 'kept')",
+		"INSERT INTO memory_events (id, memory_id, character_id, source_msg_id, source_conv_id) VALUES ('event-target', 'target-memory', 'target-memory', 'target-memory', 'target-memory'), ('event-kept', 'kept-memory', 'kept', 'kept', 'kept')",
+		"INSERT INTO memory_candidates (id, character_id, conversation_id) VALUES ('candidate-target', 'target-memory', 'target-memory'), ('candidate-kept', 'kept', 'kept')",
+		"INSERT INTO memory_embeddings (memory_id) VALUES ('target-memory'), ('kept-memory')",
+		"INSERT INTO retrieval_logs (id, request_id, conversation_id, character_id, retrieved_memory_ids) VALUES ('retrieval-target', 'target-memory', 'target-memory', 'target-memory', '[\"target-memory\"]'), ('retrieval-kept', 'kept', 'kept', 'kept', '[\"kept-memory\"]')",
+		"INSERT INTO conversation_summaries (id, conversation_id, parent_summary_id) VALUES ('summary-target', 'target-memory', 'target-memory'), ('summary-kept', 'kept', 'kept')",
+	}
+	for _, statement := range inserts {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatalf("insert test data: %v", err)
+		}
+	}
+
+	c := NewDataLifecycleCoordinator(db)
+	c.SetOutboxCleanupExecutor(NewDefaultOutboxCleanupExecutor(db))
+	if err := c.InitSchema(); err != nil {
+		t.Fatalf("init lifecycle schema: %v", err)
+	}
+	c.RequestDeletion(DeletionRequest{
+		TargetID:   "target-memory",
+		TargetType: "memory",
+		Scope:      DeletionScopeAll,
+		Reason:     "test",
+	})
+
+	results, err := c.ExecuteOutboxCleanup()
+	if err != nil {
+		t.Fatalf("default cleanup should succeed: %v", err)
+	}
+	if len(results) != 6 {
+		t.Fatalf("expected 6 cleanup results, got %d", len(results))
+	}
+	for _, item := range results {
+		if item.Status != "completed" {
+			t.Fatalf("expected completed cleanup item, got %s for %s", item.Status, item.Storage)
+		}
+	}
+
+	assertCount := func(table string, where string, expected int64, args ...interface{}) {
+		var count int64
+		if err := db.Table(table).Where(where, args...).Count(&count).Error; err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if count != expected {
+			t.Fatalf("expected %s count %d, got %d", table, expected, count)
+		}
+	}
+	assertCount("memories", "id = ?", 0, "target-memory")
+	assertCount("memories", "id = ?", 1, "kept-memory")
+	assertCount("memory_events", "memory_id = ?", 0, "target-memory")
+	assertCount("memory_events", "memory_id = ?", 1, "kept-memory")
+	assertCount("memory_candidates", "character_id = ?", 0, "target-memory")
+	assertCount("memory_candidates", "character_id = ?", 1, "kept")
+	assertCount("memory_embeddings", "memory_id = ?", 0, "target-memory")
+	assertCount("memory_embeddings", "memory_id = ?", 1, "kept-memory")
+	assertCount("retrieval_logs", "request_id = ?", 0, "target-memory")
+	assertCount("retrieval_logs", "request_id = ?", 1, "kept")
+	assertCount("conversation_summaries", "conversation_id = ?", 0, "target-memory")
+	assertCount("conversation_summaries", "conversation_id = ?", 1, "kept")
 }
 
 func TestGenerateRecalculationTasksAllScope(t *testing.T) {
