@@ -169,6 +169,49 @@ func TestRandomBurstEligibilityUsesCharacterScope(t *testing.T) {
 	}
 }
 
+func TestRandomBurstScopeRestoresFromPersistedMessages(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-target', 'char-1', 'web', '2026-07-02 09:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-other', 'char-2', 'web', '2026-07-02 09:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES ('burst-1', 'conv-target', 'assistant', 'target 1', 'proactive', '2026-07-02 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES ('burst-2', 'conv-target', 'assistant', 'target 2', 'proactive', '2026-07-02 13:30:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES ('burst-other', 'conv-other', 'assistant', 'other', 'proactive', '2026-07-02 12:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO messages (id, conversation_id, role, content, source, created_at) VALUES ('manual-1', 'conv-target', 'assistant', 'manual', 'proactive', '2026-07-02 13:45:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := &service{db: svc.db}
+	now := time.Date(2026, 7, 2, 14, 0, 0, 0, time.Local)
+	scope := restarted.getBurstScopeState("char-1", now)
+	if scope.todayCount != 2 {
+		t.Fatalf("expected restored burst count 2, got %d", scope.todayCount)
+	}
+	if scope.lastAt.Format("2006-01-02 15:04:05") != "2026-07-02 13:30:00" {
+		t.Fatalf("expected restored last burst at 13:30, got %s", scope.lastAt.Format("2006-01-02 15:04:05"))
+	}
+	setting := map[string]interface{}{
+		"enabled":     true,
+		"quietStart":  "23:59",
+		"quietEnd":    "00:01",
+		"minInterval": 1,
+		"maxPerDay":   2,
+	}
+	eligible, reason := restarted.checkBurstEligibility("char-1", setting, "IDLE", now)
+	if eligible || reason != "maxPerDay" {
+		t.Fatalf("expected restored budget to block char-1, eligible=%v reason=%q", eligible, reason)
+	}
+}
+
 func TestCountTodayProactiveMessagesUsesCharacterConversationScope(t *testing.T) {
 	svc := setupCompanionScopeService(t)
 	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, updated_at) VALUES ('conv-target', 'char-1', 'web', '2026-07-02 09:00:00')").Error; err != nil {

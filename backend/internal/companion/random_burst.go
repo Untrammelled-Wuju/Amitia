@@ -53,16 +53,64 @@ func (s *service) checkBurstEligibility(characterID string, setting map[string]i
 
 func (s *service) getBurstScopeState(characterID string, now time.Time) burstScopeState {
 	s.burstMu.Lock()
-	defer s.burstMu.Unlock()
 	if s.burstScopes == nil {
 		s.burstScopes = map[string]burstScopeState{}
 	}
-	scope := s.burstScopes[characterID]
+	scope, ok := s.burstScopes[characterID]
+	s.burstMu.Unlock()
+	if !ok {
+		scope = s.loadBurstScopeState(characterID, now)
+		s.burstMu.Lock()
+		if s.burstScopes == nil {
+			s.burstScopes = map[string]burstScopeState{}
+		}
+		if existing, exists := s.burstScopes[characterID]; exists {
+			scope = existing
+		} else {
+			s.burstScopes[characterID] = scope
+		}
+		s.burstMu.Unlock()
+	}
 	if !scope.lastAt.IsZero() && scope.lastAt.Format("2006-01-02") != now.Format("2006-01-02") {
 		scope.todayCount = 0
+		s.burstMu.Lock()
 		s.burstScopes[characterID] = scope
+		s.burstMu.Unlock()
 	}
 	return scope
+}
+
+func (s *service) loadBurstScopeState(characterID string, now time.Time) burstScopeState {
+	var scope burstScopeState
+	var lastAt string
+	err := s.db.Table("messages AS m").
+		Select("m.created_at").
+		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
+		Where("c.character_id = ? AND m.id LIKE ? AND m.role = ? AND m.source = ?", characterID, "burst-%", "assistant", "proactive").
+		Order("datetime(m.created_at) DESC").
+		Limit(1).
+		Scan(&lastAt).Error
+	if err == nil && lastAt != "" {
+		scope.lastAt = parseBurstTime(lastAt)
+	}
+	var count int64
+	if err := s.db.Table("messages AS m").
+		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
+		Where("date(m.created_at) = date(?) AND c.character_id = ? AND m.id LIKE ? AND m.role = ? AND m.source = ?", now.Format("2006-01-02"), characterID, "burst-%", "assistant", "proactive").
+		Count(&count).Error; err == nil {
+		scope.todayCount = int(count)
+	}
+	return scope
+}
+
+func parseBurstTime(value string) time.Time {
+	layouts := []string{"2006-01-02 15:04:05", time.RFC3339Nano, time.RFC3339}
+	for _, layout := range layouts {
+		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
 }
 
 func (s *service) recordBurstTriggered(characterID string, now time.Time) int {
