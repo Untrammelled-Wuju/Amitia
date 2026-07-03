@@ -51,15 +51,18 @@ type messageCommitPlan struct {
 }
 
 type messageCommitResult struct {
-	MessageIDs   []string
-	LastSequence int64
-	Events       []interaction.OutboxRecord
+	CommitID           string
+	MessageIDs         []string
+	LastSequence       int64
+	Events             []interaction.OutboxRecord
+	StateVersions      map[string]int64
+	DeliveryIntentIDs  []string
 }
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := ensureInteractionCommitFreshTx(tx, plan.Request); err != nil {
+		if err := s.acquireAndValidateCommitTokenTx(tx, plan); err != nil {
 			return err
 		}
 		for _, text := range plan.Lines {
@@ -85,11 +88,15 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			if err := s.updateRelationshipStateTx(tx, plan); err != nil {
 				return err
 			}
-			events, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
+			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
 			if err != nil {
 				return err
 			}
 			result.Events = events
+			result.DeliveryIntentIDs = deliveryIntentIDs
+		}
+		if err := s.transitionInteractionCommittedTx(tx, plan, result); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -99,19 +106,19 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 	return result, nil
 }
 
-func ensureInteractionCommitFreshTx(tx *gorm.DB, req *ProcessMessageRequest) error {
-	if !shouldCommitRuntime(req) {
+func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan messageCommitPlan) error {
+	if !shouldCommitRuntime(plan.Request) {
 		return nil
 	}
 	var record interaction.InteractionRecordModel
-	err := tx.Where("id = ?", req.InteractionID).Take(&record).Error
+	err := tx.Where("id = ?", plan.Request.InteractionID).Take(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return interaction.ErrInteractionNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if record.StatusVersion != req.ExpectedStatusVersion {
+	if record.StatusVersion != plan.Request.ExpectedStatusVersion {
 		return interaction.ErrVersionConflict
 	}
 	if interaction.InteractionStatus(record.Status) != interaction.InteractionStatusContextReady {
@@ -119,6 +126,52 @@ func ensureInteractionCommitFreshTx(tx *gorm.DB, req *ProcessMessageRequest) err
 	}
 	if record.SupersededByID != "" || !record.CancelRequestedAt.IsZero() {
 		return interaction.ErrVersionConflict
+	}
+	token := uuid.New().String()
+	owner := uuid.New().String()
+	now := time.Now().UTC()
+	res := tx.Model(&interaction.InteractionRecordModel{}).
+		Where("id = ? AND status_version = ? AND status = ? AND (superseded_by_id = '' OR superseded_by_id IS NULL)",
+			plan.Request.InteractionID, record.StatusVersion, string(interaction.InteractionStatusContextReady)).
+		Updates(map[string]interface{}{
+			"commit_token":       token,
+			"commit_owner":       owner,
+			"commit_acquired_at": now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return interaction.ErrCommitTokenUnavailable
+	}
+	return nil
+}
+
+func (s *service) transitionInteractionCommittedTx(tx *gorm.DB, plan messageCommitPlan, result *messageCommitResult) error {
+	if !shouldCommitRuntime(plan.Request) {
+		return nil
+	}
+	commitID := uuid.New().String()
+	result.CommitID = commitID
+	msgIDsJSON, _ := json.Marshal(result.MessageIDs)
+	deliveryIDsJSON, _ := json.Marshal(result.DeliveryIntentIDs)
+	now := time.Now().UTC()
+	res := tx.Model(&interaction.InteractionRecordModel{}).
+		Where("id = ? AND status_version = ? AND status = ?",
+			plan.Request.InteractionID, plan.Request.ExpectedStatusVersion, string(interaction.InteractionStatusContextReady)).
+		Updates(map[string]interface{}{
+			"status":              string(interaction.InteractionStatusCommitted),
+			"status_version":      plan.Request.ExpectedStatusVersion + 1,
+			"commit_id":           commitID,
+			"result_message_ids":  string(msgIDsJSON),
+			"delivery_intent_ids": string(deliveryIDsJSON),
+			"updated_at":          now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return fmt.Errorf("%w: interaction commit transition failed", interaction.ErrVersionConflict)
 	}
 	return nil
 }
@@ -266,8 +319,9 @@ func clampRelationshipValue(value float64) float64 {
 	return value
 }
 
-func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, error) {
+func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, []string, error) {
 	now := time.Now()
+	deliveryIntentIDs := []string{}
 	events := []interaction.OutboxRecord{
 		newInteractionOutboxRecord(plan.Request.InteractionID, "interaction.completed", map[string]interface{}{
 			"interactionId":  plan.Request.InteractionID,
@@ -282,7 +336,7 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 			"conversationId": plan.Conversation,
 			"characterId":    plan.Character,
 			"channel":        plan.Request.Channel,
-			"status":         "completed",
+			"status":         "committed",
 			"timestamp":      now,
 		}, now),
 		newInteractionOutboxRecord(plan.Request.InteractionID, "interaction.runtime_assembled", map[string]interface{}{
@@ -308,10 +362,10 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 			CreatedAt:   event.CreatedAt,
 		}
 		if err := tx.Create(&model).Error; err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return events, nil
+	return events, deliveryIntentIDs, nil
 }
 
 func newInteractionOutboxRecord(aggregateID, eventType string, payload map[string]interface{}, now time.Time) interaction.OutboxRecord {
