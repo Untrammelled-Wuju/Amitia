@@ -1,4 +1,4 @@
-package chat
+﻿package chat
 
 import (
 	"encoding/json"
@@ -212,7 +212,7 @@ func (s *service) updatePsycheStateWithStore(store psyche.PsycheStore, charID st
 			CharacterID: charID,
 			Type:        psyche.EventTypeInteraction,
 			Source:      "chat.process_message",
-			EnergyDelta: -0.01,
+			EnergyDelta: computePsycheEnergyDelta(*state),
 			Timestamp:   time.Now().UTC(),
 		}
 		newState := psyche.ApplyEvent(*state, event)
@@ -253,9 +253,12 @@ func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan)
 	if existing.RelationData != "" {
 		_ = json.Unmarshal([]byte(existing.RelationData), &data)
 	}
-	data["familiarity"] = clampRelationshipValue(data["familiarity"] + 0.01)
-	data["trust"] = clampRelationshipValue(data["trust"] + 0.002)
-	data["security"] = clampRelationshipValue(data["security"] + 0.001)
+	famDelta := computeRelationshipFamiliarityDelta(data)
+	trustDelta := computeRelationshipTrustDelta(data)
+	secDelta := computeRelationshipSecurityDelta(data)
+	data["familiarity"] = clampRelationshipValue(data["familiarity"] + famDelta)
+	data["trust"] = clampRelationshipValue(data["trust"] + trustDelta)
+	data["security"] = clampRelationshipValue(data["security"] + secDelta)
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -279,9 +282,9 @@ func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan)
 		"requestId":      plan.Request.RequestID,
 		"relationType":   relationType,
 		"delta": map[string]float64{
-			"familiarity": 0.01,
-			"trust":       0.002,
-			"security":    0.001,
+			"familiarity": famDelta,
+			"trust":       trustDelta,
+			"security":    secDelta,
 		},
 	})
 	if err != nil {
@@ -317,6 +320,53 @@ func clampRelationshipValue(value float64) float64 {
 		return 1
 	}
 	return value
+}
+
+func computePsycheEnergyDelta(state psyche.PsycheState) float64 {
+	baseDecay := -0.005
+	stressDecay := state.Stress * -0.015
+	energyDecay := state.Energy * -0.002
+	return baseDecay + stressDecay + energyDecay
+}
+
+func computeRelationshipFamiliarityDelta(data map[string]float64) float64 {
+	trust := data["trust"]
+	familiarity := data["familiarity"]
+	if familiarity > 0.8 {
+		return 0.001
+	}
+	if trust > 0.6 {
+		return 0.003
+	}
+	return 0.006
+}
+
+func computeRelationshipTrustDelta(data map[string]float64) float64 {
+	familiarity := data["familiarity"]
+	tension := data["tension"]
+	base := 0.002
+	if familiarity < 0.2 {
+		base = 0.004
+	}
+	tensionPenalty := tension * 0.002
+	delta := base - tensionPenalty
+	if delta < 0 {
+		return 0
+	}
+	return delta
+}
+
+func computeRelationshipSecurityDelta(data map[string]float64) float64 {
+	trust := data["trust"]
+	familiarity := data["familiarity"]
+	tension := data["tension"]
+	base := 0.0005 * trust * (1.0 + familiarity)
+	tensionPenalty := tension * 0.001
+	delta := base - tensionPenalty
+	if delta < 0 {
+		return 0
+	}
+	return delta
 }
 
 func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, []string, error) {
