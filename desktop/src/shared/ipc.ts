@@ -4,6 +4,9 @@ export const IPC_CHANNELS = {
   saveDeploymentConfig: "amitia:deployment:save",
   getRuntimeStatus: "amitia:runtime:status",
   openLogsDirectory: "amitia:logs:open",
+  minimizeWindow: "amitia:window:minimize",
+  toggleMaximizeWindow: "amitia:window:toggle-maximize",
+  closeWindow: "amitia:window:close",
   runtimeStatusChanged: "amitia:runtime:status-changed",
 } as const
 

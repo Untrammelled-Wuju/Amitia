@@ -18,6 +18,15 @@ const api = {
   openLogsDirectory(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.openLogsDirectory)
   },
+  minimizeWindow(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.minimizeWindow)
+  },
+  toggleMaximizeWindow(): Promise<boolean> {
+    return ipcRenderer.invoke(IPC_CHANNELS.toggleMaximizeWindow)
+  },
+  closeWindow(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.closeWindow)
+  },
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, status: RuntimeStatus) => callback(status)
     ipcRenderer.on(IPC_CHANNELS.runtimeStatusChanged, listener)
@@ -26,3 +35,10 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld("amitiaDesktop", api)
+contextBridge.exposeInMainWorld("electronWindowApi", {
+  minimize: () => api.minimizeWindow(),
+  toggleMaximize: () => api.toggleMaximizeWindow(),
+  close: () => api.closeWindow(),
+  isMaximized: () => Promise.resolve(false),
+  getWindowType: () => Promise.resolve("main"),
+})

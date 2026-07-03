@@ -1,10 +1,13 @@
-import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
 import { app, BrowserWindow, Menu, nativeImage, shell, Tray } from "electron"
 import { configToLabel } from "../shared/deployment"
 import type { DeploymentModeConfig } from "../shared/types"
 
+const currentDir = dirname(fileURLToPath(import.meta.url))
+
 export function createAppTray(win: BrowserWindow, getConfig: () => DeploymentModeConfig): Tray {
-  const icon = nativeImage.createFromPath(join(__dirname, "../../resources/tray.svg"))
+  const icon = nativeImage.createFromPath(join(currentDir, "../../resources/tray.svg"))
   const tray = new Tray(icon.resize({ width: 16, height: 16 }))
   tray.setToolTip("Amitia")
 

@@ -1,4 +1,4 @@
-import { app, ipcMain, shell } from "electron"
+import { app, BrowserWindow, ipcMain, shell } from "electron"
 import { IPC_CHANNELS } from "../shared/ipc"
 import type { DeploymentModeConfig } from "../shared/types"
 import { ConfigStore } from "./config-store"
@@ -31,5 +31,24 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.openLogsDirectory, async () => {
     await shell.openPath(app.getPath("logs"))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.minimizeWindow, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.toggleMaximizeWindow, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+    if (win.isMaximized()) {
+      win.unmaximize()
+      return false
+    }
+    win.maximize()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.closeWindow, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
   })
 }
