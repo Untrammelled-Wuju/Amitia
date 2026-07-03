@@ -218,7 +218,7 @@ func modelToRecord(m OutboxRecordModel, owner, token string, leasedUntil time.Ti
 		EventType:      m.EventType,
 		Payload:        payload,
 		PayloadVersion: m.PayloadVersion,
-		Status:         OutboxStatus(m.Status),
+		Status:         OutboxStatusLeased,
 		LeaseOwner:     owner,
 		LeaseToken:     token,
 		LeasedUntil:    leasedUntil,
