@@ -36,6 +36,12 @@ func ApplyInitialSQL(db *gorm.DB, raw string) error {
 				if isDuplicateColumnError(err) {
 					continue
 				}
+				if shouldRepairMessageSequenceBackfill(stmt, err) {
+					if repairErr := repairMessageSequenceBackfill(tx); repairErr != nil {
+						return fmt.Errorf("repair initial sql statement %d failed: %w", i+1, repairErr)
+					}
+					continue
+				}
 				if shouldDeferInitialSQL(stmt, err) {
 					deferred = append(deferred, deferredStatement{number: i + 1, sql: stmt})
 					continue
@@ -46,6 +52,12 @@ func ApplyInitialSQL(db *gorm.DB, raw string) error {
 		for _, item := range deferred {
 			if err := tx.Exec(item.sql).Error; err != nil {
 				if isDuplicateColumnError(err) {
+					continue
+				}
+				if shouldRepairMessageSequenceBackfill(item.sql, err) {
+					if repairErr := repairMessageSequenceBackfill(tx); repairErr != nil {
+						return fmt.Errorf("repair deferred initial sql statement %d failed after retry: %w", item.number, repairErr)
+					}
 					continue
 				}
 				return fmt.Errorf("execute deferred initial sql statement %d failed after retry: %w", item.number, err)
@@ -96,4 +108,34 @@ func shouldDeferInitialSQL(stmt string, err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "no such column") || strings.Contains(msg, "no such table")
+}
+
+func shouldRepairMessageSequenceBackfill(stmt string, err error) bool {
+	if err == nil {
+		return false
+	}
+	normalizedStmt := strings.Join(strings.Fields(strings.ToLower(stmt)), " ")
+	if !strings.HasPrefix(normalizedStmt, "update messages set sequence = (") {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint failed: messages.conversation_id, messages.sequence")
+}
+
+func repairMessageSequenceBackfill(db *gorm.DB) error {
+	return db.Exec(`
+WITH invalid AS (
+	SELECT id, conversation_id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS rn
+	FROM messages
+	WHERE sequence IS NULL OR sequence <= 0
+),
+maxseq AS (
+	SELECT conversation_id, COALESCE(MAX(sequence), 0) AS base
+	FROM messages
+	WHERE sequence > 0
+	GROUP BY conversation_id
+)
+UPDATE messages
+SET sequence = COALESCE((SELECT base FROM maxseq WHERE maxseq.conversation_id = messages.conversation_id), 0) + (SELECT rn FROM invalid WHERE invalid.id = messages.id)
+WHERE id IN (SELECT id FROM invalid)`).Error
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
+	promptir "github.com/u-ai/backend/internal/prompt"
 	applog "github.com/u-ai/backend/log"
 )
 
@@ -77,12 +78,15 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		}, "process message idempotent hit")
 		msgIDs := make([]string, 0, len(existingAssistants))
 		parts := make([]string, 0, len(existingAssistants))
+		lastSequence := int64(0)
 		for _, msg := range existingAssistants {
 			msgIDs = append(msgIDs, msg.ID)
 			parts = append(parts, msg.Content)
+			lastSequence = msg.Sequence
 		}
 		return &ProcessMessageResponse{
 			ConversationID: convID,
+			Sequence:       lastSequence,
 			Reply:          strings.Join(parts, "\n"),
 			CharacterID:    charID,
 			CharacterName:  charName,
@@ -131,20 +135,6 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	history := s.loadHistoryExcluding(convID, userMsgID)
 	sys2Parts := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
 
-	messages := []map[string]interface{}{}
-	if len(sys1Parts) > 0 {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(sys1Parts, "\n\n")})
-	}
-	for _, m := range history {
-		messages = append(messages, map[string]interface{}{"role": m["role"], "content": m["content"]})
-	}
-	if len(sys2Parts) > 0 {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": strings.Join(sys2Parts, "\n\n")})
-	}
-	if strings.TrimSpace(req.RuntimeContext) != "" {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": req.RuntimeContext})
-	}
-
 	kind := expression.ChannelWeb
 	switch req.Channel {
 	case "wechat":
@@ -152,22 +142,26 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	case "qq":
 		kind = expression.ChannelQQ
 	}
-	prompt := expression.CompileChannelPrompt(kind)
-	if prompt.StyleInstruction != "" {
-		messages = append(messages, map[string]interface{}{"role": "system", "content": prompt.StyleInstruction})
-	}
+	channelPrompt := expression.CompileChannelPrompt(kind)
 
 	userContent := req.Message
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
+	messages := buildProcessPromptMessages(processPromptInput{
+		Sys1Parts:        sys1Parts,
+		Sys2Parts:        sys2Parts,
+		History:          history,
+		Runtime:          req.Runtime,
+		StyleInstruction: channelPrompt.StyleInstruction,
+		UserContent:      userContent,
+	})
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
 		"history_count":      len(history),
 		"system_part_count":  len(sys1Parts) + len(sys2Parts),
 		"tool_count":         len(tool.GetAll()),
 		"image_context_size": len(req.ImageContext),
 	}, "process message prompt ready")
-	messages = append(messages, map[string]interface{}{"role": "user", "content": userContent})
 	toolDefs := tool.GetAll()
 	seenTools := map[string]bool{}
 	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
@@ -257,6 +251,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	}, "process message completed")
 	return &ProcessMessageResponse{
 		ConversationID: convID,
+		Sequence:       commitResult.LastSequence,
 		Reply:          reply,
 		CharacterID:    charID,
 		CharacterName:  charName,
@@ -419,6 +414,117 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	return reply, forceVoice, nil
 }
 
+type processPromptInput struct {
+	Sys1Parts        []string
+	Sys2Parts        []string
+	History          []map[string]string
+	Runtime          *interaction.RuntimeAssembly
+	StyleInstruction string
+	UserContent      string
+}
+
+func buildProcessPromptMessages(input processPromptInput) []map[string]interface{} {
+	sections := make([]promptir.Section, 0, 6)
+	addSection := func(sectionType promptir.SectionType, priority, tokenBudget int, source string, sensitivity promptir.SensitivityLevel, trimmable, dataOnly bool, content string) {
+		if strings.TrimSpace(content) == "" {
+			return
+		}
+		cleaned := promptir.SanitizeContent(content, sensitivity)
+		sections = append(sections, promptir.Section{
+			Type:        sectionType,
+			Priority:    priority,
+			TokenBudget: tokenBudget,
+			Source:      source,
+			Sensitivity: sensitivity,
+			Trimmable:   trimmable,
+			DataOnly:    dataOnly,
+			Content:     cleaned.Content,
+		})
+	}
+	addSection(promptir.SectionTypeIdentity, 1000, 700, "chat.sys1", promptir.SensitivityInternal, false, false, strings.Join(input.Sys1Parts, "\n\n"))
+	addSection(promptir.SectionTypeSystem, 980, 700, "chat.sys2", promptir.SensitivityInternal, false, false, strings.Join(input.Sys2Parts, "\n\n"))
+	addSection(promptir.SectionTypeBehaviorPlan, 940, 520, "interaction.runtime", promptir.SensitivityInternal, false, true, buildRuntimeContextPrompt(input.Runtime))
+	addSection(promptir.SectionTypeBehaviorPlan, 920, 260, "expression.channel", promptir.SensitivityInternal, false, false, input.StyleInstruction)
+	addSection(promptir.SectionTypeHistory, 700, 900, "chat.history", promptir.SensitivityUserData, true, true, renderHistoryForPromptIR(input.History))
+	addSection(promptir.SectionTypeCurrentInput, 1100, 620, "chat.current_input", promptir.SensitivityUserData, false, false, input.UserContent)
+
+	ir := promptir.CompileIR(sections, promptir.CompileOptions{
+		MaxSections:       16,
+		MaxTokenBudget:    1200,
+		DropEmptySections: true,
+	})
+	budgeted := promptir.ApplyBudget(ir, promptir.BudgetPolicy{
+		MaxPromptTokens: runtimePromptBudget(input.Runtime),
+		SectionLimits: map[promptir.SectionType]promptir.SectionBudget{
+			promptir.SectionTypeHistory:      {MaxTokens: 900, MinTokens: 0, TrimReason: "history_window_trimmed"},
+			promptir.SectionTypeMemory:       {MaxTokens: 700, MinTokens: 0, TrimReason: "memory_window_trimmed"},
+			promptir.SectionTypeWorldbook:    {MaxTokens: 500, MinTokens: 0, TrimReason: "worldbook_window_trimmed"},
+			promptir.SectionTypeCurrentInput: {MaxTokens: 620, MinTokens: 64, TrimReason: "current_input_trimmed"},
+		},
+	})
+
+	messages := make([]map[string]interface{}, 0, len(budgeted.Sections))
+	currentInputs := make([]string, 0, 1)
+	for _, section := range budgeted.Sections {
+		content := strings.TrimSpace(section.Content)
+		if content == "" {
+			continue
+		}
+		if section.Type == promptir.SectionTypeCurrentInput {
+			currentInputs = append(currentInputs, content)
+			continue
+		}
+		messages = append(messages, map[string]interface{}{"role": "system", "content": renderPromptIRSection(section)})
+	}
+	for _, content := range currentInputs {
+		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
+	}
+	return messages
+}
+
+func runtimePromptBudget(runtime *interaction.RuntimeAssembly) int {
+	if runtime == nil || len(runtime.Budget) == 0 {
+		return 3600
+	}
+	total := 0
+	for _, plan := range runtime.Budget {
+		if plan.Allocated > 0 {
+			total += plan.Allocated
+		}
+	}
+	if total < 1200 {
+		return 1200
+	}
+	if total > 4800 {
+		return 4800
+	}
+	return total
+}
+
+func renderHistoryForPromptIR(history []map[string]string) string {
+	lines := make([]string, 0, len(history))
+	for _, msg := range history {
+		role := strings.TrimSpace(msg["role"])
+		content := strings.TrimSpace(msg["content"])
+		if content == "" {
+			continue
+		}
+		if role == "" {
+			role = "unknown"
+		}
+		lines = append(lines, role+": "+content)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderPromptIRSection(section promptir.Section) string {
+	header := "[" + string(section.Type) + "]"
+	if section.DataOnly {
+		header += "[data_only]"
+	}
+	return header + "\n" + strings.TrimSpace(section.Content)
+}
+
 func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
 	chatReq := &ProcessMessageRequest{
 		CharacterID:           req.CharacterID,
@@ -434,7 +540,6 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		VideoUrl:              req.VideoUrl,
 		ImageContext:          req.ImageContext,
 		RequestID:             req.RequestID,
-		RuntimeContext:        buildRuntimeContextPrompt(req.Runtime),
 		InteractionID:         req.InteractionID,
 		ExpectedStatusVersion: req.ExpectedStatusVersion,
 		Runtime:               req.Runtime,
@@ -452,6 +557,7 @@ func buildRuntimeContextPrompt(runtime *interaction.RuntimeAssembly) string {
 	}
 	payload := map[string]interface{}{
 		"path":        runtime.Path,
+		"budget":      runtime.Budget,
 		"safety":      runtime.Safety,
 		"delivery":    runtime.Delivery,
 		"transaction": runtime.Transaction.Name,

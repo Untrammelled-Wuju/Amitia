@@ -10,6 +10,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -113,6 +114,9 @@ func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	if resp.Reply != "第一句\n第二句" || len(resp.MessageIDs) != 2 {
 		t.Fatalf("unexpected response: %#v", resp)
 	}
+	if resp.Sequence == 0 {
+		t.Fatalf("expected response sequence to be set: %#v", resp)
+	}
 	var assistantCount int64
 	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ? AND request_id = ?", convID, "assistant", "req-ok").Count(&assistantCount).Error; err != nil {
 		t.Fatal(err)
@@ -126,5 +130,106 @@ func TestProcessMessageCommitsAssistantAfterGenerationSucceeds(t *testing.T) {
 	}
 	if status != "sent" {
 		t.Fatalf("expected user message sent, got %s", status)
+	}
+	replayed, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID:    "char-process",
+		ConversationID: convID,
+		Channel:        "web",
+		Source:         "manual",
+		Message:        "你好",
+		RequestID:      "req-ok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.Sequence != resp.Sequence {
+		t.Fatalf("expected idempotent response sequence %d, got %d", resp.Sequence, replayed.Sequence)
+	}
+}
+
+func TestProcessMessageBuildsPromptThroughIR(t *testing.T) {
+	var captured []map[string]interface{}
+	_, svc, convID := setupProcessMessageTest(t, func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		captured = messages
+		return "收到", "", nil, 8, nil
+	})
+	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID:    "char-process",
+		ConversationID: convID,
+		Channel:        "web",
+		Source:         "manual",
+		Message:        "你好",
+		RequestID:      "req-ir",
+		Runtime: &interaction.RuntimeAssembly{
+			Path:        interaction.PathTypeDeep,
+			Safety:      interaction.RuntimeSafetyDecision{Level: "conservative", Reasons: []string{"high_stress"}},
+			Delivery:    interaction.RuntimeDeliveryIntent{Channel: "web", RequiresText: true},
+			Transaction: interaction.TransactionDefinition{Name: interaction.TransactionBoundaryAll},
+			Context:     interaction.ContextSnapshot{Version: "context-snapshot-v1"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(captured) == 0 {
+		t.Fatal("expected prompt messages")
+	}
+	last := captured[len(captured)-1]
+	if last["role"] != "user" || last["content"] != "你好" {
+		t.Fatalf("expected current input as final user message, got %#v", last)
+	}
+	joined := ""
+	for _, msg := range captured {
+		if content, ok := msg["content"].(string); ok {
+			joined += content + "\n"
+		}
+	}
+	if !strings.Contains(joined, "[behavior_plan][data_only]") {
+		t.Fatalf("runtime context was not rendered as data-only IR section: %s", joined)
+	}
+	if !strings.Contains(joined, `"path":"deep"`) || !strings.Contains(joined, `"transaction":"all"`) {
+		t.Fatalf("runtime decisions missing from IR prompt: %s", joined)
+	}
+}
+
+func TestBuildProcessPromptMessagesKeepsRuntimeDataOnlyAndUserLast(t *testing.T) {
+	messages := buildProcessPromptMessages(processPromptInput{
+		Sys1Parts: []string{"你是 Amitia"},
+		Sys2Parts: []string{"遵守当前渠道策略"},
+		History: []map[string]string{
+			{"role": "user", "content": "上一轮"},
+			{"role": "assistant", "content": "上一轮回复"},
+		},
+		Runtime: &interaction.RuntimeAssembly{
+			Path:        interaction.PathTypeStandard,
+			Safety:      interaction.RuntimeSafetyDecision{Level: "normal"},
+			Delivery:    interaction.RuntimeDeliveryIntent{Channel: "web", RequiresText: true},
+			Transaction: interaction.TransactionDefinition{Name: interaction.TransactionBoundaryAll},
+			Context:     interaction.ContextSnapshot{Version: "context-snapshot-v1"},
+		},
+		StyleInstruction: "保持简洁",
+		UserContent:      "当前输入",
+	})
+	if len(messages) == 0 {
+		t.Fatal("expected prompt messages")
+	}
+	last := messages[len(messages)-1]
+	if last["role"] != "user" || last["content"] != "当前输入" {
+		t.Fatalf("expected current input as final user message, got %#v", last)
+	}
+	joined := ""
+	for _, msg := range messages[:len(messages)-1] {
+		if msg["role"] != "system" {
+			t.Fatalf("expected non-current sections to render as system messages, got %#v", msg)
+		}
+		if content, ok := msg["content"].(string); ok {
+			joined += content + "\n"
+		}
+	}
+	if !strings.Contains(joined, "[behavior_plan][data_only]") {
+		t.Fatalf("missing runtime data-only section: %s", joined)
+	}
+	if !strings.Contains(joined, "[history][data_only]") {
+		t.Fatalf("missing history data-only section: %s", joined)
 	}
 }

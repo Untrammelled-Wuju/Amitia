@@ -51,8 +51,9 @@ type messageCommitPlan struct {
 }
 
 type messageCommitResult struct {
-	MessageIDs []string
-	Events     []interaction.OutboxRecord
+	MessageIDs   []string
+	LastSequence int64
+	Events       []interaction.OutboxRecord
 }
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
@@ -63,10 +64,12 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		}
 		for _, text := range plan.Lines {
 			aiMsgID := uuid.New().String()
-			if err := tx.Create(&Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, RequestID: plan.Request.RequestID}).Error; err != nil {
+			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, RequestID: plan.Request.RequestID}
+			if err := tx.Create(aiMsg).Error; err != nil {
 				return err
 			}
 			result.MessageIDs = append(result.MessageIDs, aiMsgID)
+			result.LastSequence = aiMsg.Sequence
 		}
 		now := time.Now().Format("2006-01-02 15:04:05")
 		if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {

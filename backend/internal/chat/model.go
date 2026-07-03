@@ -186,7 +186,6 @@ type ProcessMessageRequest struct {
 	VideoUrl              string                       `json:"videoUrl"`
 	RequestID             string                       `json:"requestId"`
 	ImageContext          string                       `json:"-"`
-	RuntimeContext        string                       `json:"-"`
 	InteractionID         string                       `json:"-"`
 	ExpectedStatusVersion int64                        `json:"-"`
 	Runtime               *interaction.RuntimeAssembly `json:"-"`

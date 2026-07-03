@@ -74,6 +74,47 @@ ALTER TABLE profiles ADD COLUMN display_name TEXT DEFAULT '';
 	}
 }
 
+func TestApplyInitialSQLRepairsRepeatedMessageSequenceBackfillConflict(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	if err := db.Exec(`
+CREATE TABLE messages (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL,
+	content TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT '',
+	sequence INTEGER NOT NULL DEFAULT 0
+)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX idx_messages_conv_sequence_unique ON messages(conversation_id, sequence)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO messages (id, conversation_id, content, created_at, sequence) VALUES (?, ?, ?, ?, ?)", "m1", "c1", "a", "2026-01-01 00:00:02", 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO messages (id, conversation_id, content, created_at, sequence) VALUES (?, ?, ?, ?, ?)", "m2", "c1", "b", "2026-01-01 00:00:01", 0).Error; err != nil {
+		t.Fatal(err)
+	}
+	err := ApplyInitialSQL(db, `
+UPDATE messages SET sequence = (
+    SELECT rn FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS rn
+        FROM messages
+    ) ranked WHERE ranked.id = messages.id
+) WHERE sequence IS NULL OR sequence <= 0;
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sequence int64
+	if err := db.Raw("SELECT sequence FROM messages WHERE id = ?", "m2").Scan(&sequence).Error; err != nil {
+		t.Fatal(err)
+	}
+	if sequence != 2 {
+		t.Fatalf("sequence = %d, want 2", sequence)
+	}
+}
+
 func TestApplyInitialSQLRetriesIndexesAfterColumnsAreAdded(t *testing.T) {
 	db := openInitialSQLTestDB(t)
 	err := ApplyInitialSQL(db, `

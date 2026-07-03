@@ -21,6 +21,9 @@ func TestBuildRuntimeContextPromptIncludesPipelineDecisions(t *testing.T) {
 			RequiresText: true,
 		},
 		Transaction: interaction.TransactionDefinition{Name: interaction.TransactionBoundaryAll},
+		Budget: []interaction.TokenBudgetPlan{
+			{Module: interaction.TokenBudgetModule{Name: "memories", Tokens: 420, Priority: interaction.BudgetPriorityLowAuthority}, Allocated: 200, Trimmed: true},
+		},
 		Context: interaction.ContextSnapshot{
 			Version:     "context-snapshot-v1",
 			AssembledAt: time.Now(),
@@ -41,6 +44,9 @@ func TestBuildRuntimeContextPromptIncludesPipelineDecisions(t *testing.T) {
 	}
 	if !strings.Contains(prompt, `"transaction":"all"`) {
 		t.Fatalf("missing transaction boundary: %s", prompt)
+	}
+	if !strings.Contains(prompt, `"budget"`) || !strings.Contains(prompt, `"Allocated":200`) {
+		t.Fatalf("missing runtime budget: %s", prompt)
 	}
 	if !strings.Contains(prompt, `"level":"conservative"`) {
 		t.Fatalf("missing safety level: %s", prompt)
