@@ -68,12 +68,7 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user scope required")
 	}
-	if req.Confidence < 0 {
-		req.Confidence = 0
-	}
-	if req.Confidence > 100 {
-		req.Confidence = 100
-	}
+	req.Confidence = clampProfileConfidence(req.Confidence)
 	p := &UserProfile{
 		UserID:         userID,
 		CharacterID:    req.CharacterID,
@@ -83,9 +78,6 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 		Confidence:     req.Confidence,
 		Source:         req.Source,
 		SourceConvID:   req.SourceConvID,
-	}
-	if p.Confidence == 0 {
-		p.Confidence = 50
 	}
 	result, err := s.repo.UpsertConfidence(p)
 	if err == nil && result != nil {
@@ -100,7 +92,7 @@ func (s *service) Update(id string, req *UpdateProfileRequest) (*UserProfile, er
 		updates["attribute_value"] = *req.AttributeValue
 	}
 	if req.Confidence != nil {
-		updates["confidence"] = *req.Confidence
+		updates["confidence"] = clampProfileConfidence(*req.Confidence)
 	}
 	if req.Verified != nil && *req.Verified {
 		updates["verified_at"] = time.Now().Format("2006-01-02 15:04:05")
@@ -153,9 +145,7 @@ func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, c
 	if confidence < 1 {
 		confidence = 50
 	}
-	if confidence > 100 {
-		confidence = 100
-	}
+	confidence = clampProfileConfidence(confidence)
 	p := &UserProfile{
 		UserID:         userID,
 		CharacterID:    scope,

@@ -53,6 +53,71 @@ func TestCreatePreservesCharacterScope(t *testing.T) {
 	}
 }
 
+func TestCreateClampsConfidence(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+
+	low, err := svc.Create(&CreateProfileRequest{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "低置信度",
+		AttributeValue: "测试",
+		Confidence:     -1,
+	})
+	if err != nil {
+		t.Fatalf("create low confidence profile: %v", err)
+	}
+	if low.Confidence != 0 {
+		t.Fatalf("created low confidence = %d, want 0", low.Confidence)
+	}
+
+	high, err := svc.Create(&CreateProfileRequest{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "高置信度",
+		AttributeValue: "测试",
+		Confidence:     101,
+	})
+	if err != nil {
+		t.Fatalf("create high confidence profile: %v", err)
+	}
+	if high.Confidence != 100 {
+		t.Fatalf("created high confidence = %d, want 100", high.Confidence)
+	}
+}
+
+func TestServiceUpdateClampsConfidence(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+
+	item, err := svc.Create(&CreateProfileRequest{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "服务更新置信度",
+		AttributeValue: "测试",
+		Confidence:     50,
+	})
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	low := -5
+	item, err = svc.Update(item.ID, &UpdateProfileRequest{Confidence: &low})
+	if err != nil {
+		t.Fatalf("update low confidence: %v", err)
+	}
+	if item.Confidence != 0 {
+		t.Fatalf("service low confidence = %d, want 0", item.Confidence)
+	}
+
+	high := 105
+	item, err = svc.Update(item.ID, &UpdateProfileRequest{Confidence: &high})
+	if err != nil {
+		t.Fatalf("update high confidence: %v", err)
+	}
+	if item.Confidence != 100 {
+		t.Fatalf("service high confidence = %d, want 100", item.Confidence)
+	}
+}
+
 func TestProcessUsesCheckpointIncrementally(t *testing.T) {
 	svc, db := newProfileTestService(t)
 	var requests []string

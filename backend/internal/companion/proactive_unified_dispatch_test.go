@@ -67,6 +67,9 @@ func TestProcessDueActiveMessageTasksUsesUnifiedEntryWithoutDirectMessageWrite(t
 	if req.ConversationID != "conv-target" || req.CharacterID != "char-1" || req.Channel != "wechat" || req.PeerID != "peer-1" {
 		t.Fatalf("unexpected unified request scope: %#v", req)
 	}
+	if req.Source != "proactive" || req.UserID != "peer-1" {
+		t.Fatalf("expected proactive source and peer user scope, got source=%q userID=%q", req.Source, req.UserID)
+	}
 	if req.Message != "早安 prompt" {
 		t.Fatalf("expected prompt to be submitted to unified entry, got %q", req.Message)
 	}

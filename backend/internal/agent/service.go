@@ -211,7 +211,7 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		return nil, fmt.Errorf("统一入口未初始化")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, fmt.Errorf("请求上下文不能为空")
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()

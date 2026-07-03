@@ -54,7 +54,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	if processor.req.CharacterID != "char-bound" || processor.req.ConversationID != "conv-bound" {
 		t.Fatalf("voice turn did not use unified resolved scope: %#v", processor.req)
 	}
-	if processor.req.Channel != "voice" || processor.req.PeerID != "peer-voice" || processor.req.Source != "voice-binding" {
+	if processor.req.Channel != "voice" || processor.req.PeerID != "peer-voice" || processor.req.Source != "voice" {
 		t.Fatalf("voice turn did not preserve unified channel source: %#v", processor.req)
 	}
 	if processor.req.RequestID != "turn-voice" || processor.req.SessionID != "session-voice" {
@@ -73,7 +73,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	if !ok {
 		t.Fatal("interaction record was not persisted")
 	}
-	if record.Scope.CharacterID != "char-bound" || record.Scope.ConversationID != "conv-bound" || record.Scope.Source != "voice-binding" {
+	if record.Scope.CharacterID != "char-bound" || record.Scope.ConversationID != "conv-bound" || record.Scope.Source != "voice" {
 		t.Fatalf("persisted scope did not come from unified entry: %#v", record.Scope)
 	}
 }

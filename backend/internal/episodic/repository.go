@@ -107,7 +107,11 @@ func (r *repository) GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMem
 	}
 	var messages []map[string]interface{}
 	if m.MessageTimeStart != "" && m.MessageTimeEnd != "" {
-		db.Table("messages").Where("created_at >= ? AND created_at <= ?", m.MessageTimeStart, m.MessageTimeEnd).Order("created_at ASC").Find(&messages)
+		query := db.Table("messages").Where("created_at >= ? AND created_at <= ?", m.MessageTimeStart, m.MessageTimeEnd)
+		if m.SourceConvID != "" {
+			query = query.Where("conversation_id = ?", m.SourceConvID)
+		}
+		query.Order("created_at ASC").Find(&messages)
 	}
 	if messages == nil {
 		messages = []map[string]interface{}{}

@@ -62,6 +62,8 @@ func (r *repository) FindByID(id string) (*UserProfile, error) {
 }
 
 func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error) {
+	profile.Confidence = clampProfileConfidence(profile.Confidence)
+	clampedConfidence := profile.Confidence
 	var existing UserProfile
 	err := r.db.Where("user_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
 		profile.UserID, profile.CharacterID, profile.Category, profile.AttributeName).First(&existing).Error
@@ -69,7 +71,11 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 		if profile.ID == "" {
 			profile.ID = uuid.New().String()
 		}
-		createErr := r.db.Create(profile).Error
+		createErr := r.db.Select("*").Create(profile).Error
+		if createErr == nil && profile.Confidence != clampedConfidence {
+			profile.Confidence = clampedConfidence
+			createErr = r.db.Model(&UserProfile{}).Where("id = ?", profile.ID).Update("confidence", clampedConfidence).Error
+		}
 		return profile, createErr
 	}
 	var newConfidence int
@@ -90,6 +96,7 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	} else {
 		newConfidence = existing.Confidence
 	}
+	newConfidence = clampProfileConfidence(newConfidence)
 	updates := map[string]interface{}{
 		"attribute_value": profile.AttributeValue,
 		"confidence":      newConfidence,
@@ -117,6 +124,9 @@ func hasIndependentProfileEvidence(existing, incoming UserProfile) bool {
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
+	if confidence, ok := updates["confidence"]; ok {
+		updates["confidence"] = clampProfileConfidenceValue(confidence)
+	}
 	return r.db.Model(&UserProfile{}).Where("id = ?", id).Updates(updates).Error
 }
 

@@ -147,7 +147,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 	return ScopeResolution{
 		Scope:      merged,
 		BindingID:  binding.ID,
-		Source:     normalizeResolutionSource(binding.Source),
+		Source:     normalizeResolutionSource(merged.Source),
 		Confidence: ScopeConfidenceBound,
 	}, nil
 }

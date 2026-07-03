@@ -51,6 +51,33 @@ func TestScopeResolverResolvesBoundPeer(t *testing.T) {
 	}
 }
 
+func TestScopeResolverPreservesEntrySourceWhenBindingHasSource(t *testing.T) {
+	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
+		{
+			ID:             "bind-1",
+			UserID:         "user-1",
+			CharacterID:    "char-1",
+			ConversationID: "conv-1",
+			Channel:        "wechat",
+			PeerID:         "peer-1",
+			Source:         "binding",
+			State:          ScopeBindingStateActive,
+		},
+	}})
+
+	result, err := resolver.Resolve(context.Background(), ScopeResolveInput{
+		Channel: "wechat",
+		PeerID:  "peer-1",
+		Source:  "wechat",
+	})
+	if err != nil {
+		t.Fatalf("expected scope to resolve, got %v", err)
+	}
+	if result.Source != "wechat" || result.Scope.Source != "wechat" {
+		t.Fatalf("entry source was not preserved: %#v", result)
+	}
+}
+
 func TestScopeResolverRejectsAmbiguousBindings(t *testing.T) {
 	resolver := NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{ID: "bind-1", UserID: "user-1", CharacterID: "char-1", Channel: "qq", PeerID: "peer-1", State: ScopeBindingStateActive},

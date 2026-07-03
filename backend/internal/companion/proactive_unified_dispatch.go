@@ -28,7 +28,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 		Message:        prompt,
 		PeerID:         scope.peerID,
 		UserID:         scope.userID,
-		Source:         scope.channel,
+		Source:         "proactive",
 		CharacterID:    characterID,
 		ConversationID: conversationID,
 		RequestID:      requestID,
@@ -45,6 +45,10 @@ func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting s
 		scope.channel = normalizeProactiveChannel(channel)
 	}
 	scope.peerID = strings.TrimSpace(peerID)
+	scope.userID = scope.peerID
+	if scope.userID == "" {
+		scope.userID = interaction.DefaultUserID
+	}
 	if scope.channel == "" {
 		scope.channel = "web"
 	}

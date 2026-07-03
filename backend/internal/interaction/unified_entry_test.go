@@ -163,7 +163,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	if processor.req.UserID != "bound-user" || processor.req.CharacterID != "bound-char" || processor.req.ConversationID != "bound-conv" {
 		t.Fatalf("processor did not receive resolved target scope: %#v", processor.req)
 	}
-	if processor.req.Channel != "wechat" || processor.req.PeerID != "peer-1" || processor.req.Source != "binding" {
+	if processor.req.Channel != "wechat" || processor.req.PeerID != "peer-1" || processor.req.Source != "wechat" {
 		t.Fatalf("processor did not receive resolved channel scope: %#v", processor.req)
 	}
 	if processor.req.SessionID != "session-1" || processor.req.RequestID != "request-1" {
@@ -179,7 +179,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	if record.Scope.UserID != "bound-user" || record.Scope.CharacterID != "bound-char" || record.Scope.ConversationID != "bound-conv" {
 		t.Fatalf("persisted scope did not use resolved target scope: %#v", record.Scope)
 	}
-	if record.Scope.Channel != "wechat" || record.Scope.PeerID != "peer-1" || record.Scope.Source != "binding" {
+	if record.Scope.Channel != "wechat" || record.Scope.PeerID != "peer-1" || record.Scope.Source != "wechat" {
 		t.Fatalf("persisted scope did not use resolved channel scope: %#v", record.Scope)
 	}
 	if record.Scope.SessionID != "session-1" || record.Scope.RequestID != "request-1" {

@@ -19,6 +19,46 @@ type UserProfile struct {
 
 func (UserProfile) TableName() string { return "user_profiles" }
 
+func clampProfileConfidence(confidence int) int {
+	if confidence < 0 {
+		return 0
+	}
+	if confidence > 100 {
+		return 100
+	}
+	return confidence
+}
+
+func clampProfileConfidenceValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case int:
+		return clampProfileConfidence(v)
+	case int8:
+		return clampProfileConfidence(int(v))
+	case int16:
+		return clampProfileConfidence(int(v))
+	case int32:
+		return clampProfileConfidence(int(v))
+	case int64:
+		return clampProfileConfidence(int(v))
+	case uint:
+		return clampProfileConfidence(int(v))
+	case uint8:
+		return clampProfileConfidence(int(v))
+	case uint16:
+		return clampProfileConfidence(int(v))
+	case uint32:
+		return clampProfileConfidence(int(v))
+	case uint64:
+		if v > 100 {
+			return 100
+		}
+		return int(v)
+	default:
+		return value
+	}
+}
+
 type CreateProfileRequest struct {
 	UserID         string `json:"userId"`
 	CharacterID    string `json:"characterId"`
@@ -37,11 +77,11 @@ type UpdateProfileRequest struct {
 }
 
 type ProfileListQuery struct {
-	UserID   string `form:"userId"`
+	UserID      string `form:"userId"`
 	CharacterID string `form:"characterId"`
-	Category string `form:"category"`
-	Page     int    `form:"page"`
-	PageSize int    `form:"pageSize"`
+	Category    string `form:"category"`
+	Page        int    `form:"page"`
+	PageSize    int    `form:"pageSize"`
 }
 
 type ProfileListResponse struct {
