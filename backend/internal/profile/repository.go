@@ -152,7 +152,7 @@ func hasHigherAuthority(incoming, existing string) bool {
 			return 0
 		}
 	}
-	return auth(incoming) >= auth(existing)
+	return auth(incoming) > auth(existing)
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {

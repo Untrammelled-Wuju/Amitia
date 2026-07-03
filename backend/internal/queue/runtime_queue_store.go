@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ type RuntimeQueueStore interface {
 	LoadByScope(ctx context.Context, scope string) ([]RuntimeQueueRecord, error)
 	DeleteByScope(ctx context.Context, scope string) (int64, error)
 	CountByScope(ctx context.Context, scope string) (int64, error)
+	Claim(ctx context.Context, owner string, leaseDuration time.Duration, limit int) ([]RuntimeQueueRecord, error)
+	Release(ctx context.Context, taskID string, owner string) error
 }
 
 type SQLiteRuntimeQueueStore struct {
@@ -97,4 +100,58 @@ func (s *SQLiteRuntimeQueueStore) CountByScope(ctx context.Context, scope string
 	var count int64
 	err := s.db.WithContext(ctx).Model(&RuntimeQueueRecord{}).Where("scope = ? AND status = ?", scope, "pending").Count(&count).Error
 	return count, err
+}
+
+var ErrQueueLeaseConflict = errors.New("queue: lease conflict")
+
+func (s *SQLiteRuntimeQueueStore) Claim(ctx context.Context, owner string, leaseDuration time.Duration, limit int) ([]RuntimeQueueRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var records []RuntimeQueueRecord
+	err := s.db.WithContext(ctx).
+		Where("status IN ?", []string{"pending", "retry"}).
+		Where("available_at <= ?", time.Now()).
+		Order("priority ASC, available_at ASC").
+		Limit(limit).
+		Find(&records).Error
+	if err != nil {
+		return nil, err
+	}
+	claimed := make([]RuntimeQueueRecord, 0, len(records))
+	for _, r := range records {
+		res := s.db.WithContext(ctx).Model(&RuntimeQueueRecord{}).
+			Where("task_id = ? AND status IN ? AND (lease = ? OR lease = '' OR lease IS NULL)", r.TaskID, []string{"pending", "retry"}, r.Lease).
+			Updates(map[string]interface{}{
+				"status":  "leased",
+				"lease":   owner,
+				"attempt": r.Attempt + 1,
+			})
+		if res.Error != nil {
+			continue
+		}
+		if res.RowsAffected > 0 {
+			r.Status = "leased"
+			r.Lease = owner
+			r.Attempt++
+			claimed = append(claimed, r)
+		}
+	}
+	return claimed, nil
+}
+
+func (s *SQLiteRuntimeQueueStore) Release(ctx context.Context, taskID string, owner string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res := s.db.WithContext(ctx).Model(&RuntimeQueueRecord{}).
+		Where("task_id = ? AND lease = ?", taskID, owner).
+		Updates(map[string]interface{}{
+			"status": "completed",
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrQueueLeaseConflict
+	}
+	return nil
 }

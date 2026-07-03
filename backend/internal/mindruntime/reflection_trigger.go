@@ -30,10 +30,10 @@ func DefaultReflectionTriggerConfig() ReflectionTriggerConfig {
 }
 
 type ReflectionTriggerState struct {
-	LastReflectionAt      time.Time
-	EventCountSinceLast   int
-	RelationChangeCount   int
-	MaxAnomalyScore       float64
+	LastReflectionAt    time.Time
+	EventCountSinceLast int
+	RelationChangeCount int
+	MaxAnomalyScore     float64
 }
 
 type TriggerResult struct {
@@ -95,10 +95,10 @@ func EvaluateTrigger(state ReflectionTriggerState, config ReflectionTriggerConfi
 
 func ResetTriggerState() ReflectionTriggerState {
 	return ReflectionTriggerState{
-		LastReflectionAt: time.Now().UTC(),
-		EventCountSinceLast:   0,
-		RelationChangeCount:   0,
-		MaxAnomalyScore:       0,
+		LastReflectionAt:    time.Now().UTC(),
+		EventCountSinceLast: 0,
+		RelationChangeCount: 0,
+		MaxAnomalyScore:     0,
 	}
 }
 

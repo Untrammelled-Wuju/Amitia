@@ -111,6 +111,10 @@ func (r Runner) applyOne(migration Migration) error {
 	var existing Record
 	err := r.DB.Where("version = ?", migration.Version).First(&existing).Error
 	if err == nil && existing.Status == "applied" {
+		currentChecksum := r.computeMigrationChecksum(migration)
+		if existing.Checksum != "" && currentChecksum != "" && existing.Checksum != currentChecksum {
+			return fmt.Errorf("checksum mismatch for migration %s: recorded=%s current=%s", migration.Version, existing.Checksum, currentChecksum)
+		}
 		return nil
 	}
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -245,6 +249,14 @@ func checksumFor(parts []string) string {
 		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (r Runner) computeMigrationChecksum(migration Migration) string {
+	step := &Step{}
+	if err := migration.Up(step); err != nil {
+		return ""
+	}
+	return checksumFor(step.operations)
 }
 
 func safeIdentifier(name string) bool {

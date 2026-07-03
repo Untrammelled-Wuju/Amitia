@@ -11,20 +11,20 @@ import (
 type SupervisorDecision string
 
 const (
-	SupervisorApproved    SupervisorDecision = "APPROVED"
-	SupervisorRejected    SupervisorDecision = "REJECTED"
-	SupervisorEscalate    SupervisorDecision = "ESCALATE"
-	SupervisorRolledBack  SupervisorDecision = "ROLLED_BACK"
-	SupervisorSuperseded  SupervisorDecision = "SUPERSEDED"
+	SupervisorApproved   SupervisorDecision = "APPROVED"
+	SupervisorRejected   SupervisorDecision = "REJECTED"
+	SupervisorEscalate   SupervisorDecision = "ESCALATE"
+	SupervisorRolledBack SupervisorDecision = "ROLLED_BACK"
+	SupervisorSuperseded SupervisorDecision = "SUPERSEDED"
 )
 
 type SupervisorTarget string
 
 const (
-	SupervisorTargetPersonality  SupervisorTarget = "personality"
-	SupervisorTargetSummary      SupervisorTarget = "summary"
-	SupervisorTargetReflection   SupervisorTarget = "reflection"
-	SupervisorTargetGrowth       SupervisorTarget = "growth"
+	SupervisorTargetPersonality SupervisorTarget = "personality"
+	SupervisorTargetSummary     SupervisorTarget = "summary"
+	SupervisorTargetReflection  SupervisorTarget = "reflection"
+	SupervisorTargetGrowth      SupervisorTarget = "growth"
 )
 
 type SupervisorInput struct {
@@ -43,25 +43,25 @@ type SupervisorInput struct {
 }
 
 type SupervisorDecisionRecord struct {
-	Version        SupervisorVersion `json:"version"`
-	ID             string            `json:"id"`
-	Target         SupervisorTarget  `json:"target"`
-	CharacterID    string            `json:"characterId"`
-	RequestID      string            `json:"requestId,omitempty"`
+	Version        SupervisorVersion  `json:"version"`
+	ID             string             `json:"id"`
+	Target         SupervisorTarget   `json:"target"`
+	CharacterID    string             `json:"characterId"`
+	RequestID      string             `json:"requestId,omitempty"`
 	Decision       SupervisorDecision `json:"decision"`
-	EvidenceCount  int               `json:"evidenceCount"`
-	Counterexample int               `json:"counterexample"`
-	Authority      int               `json:"authority"`
-	Sensitive      bool              `json:"sensitive"`
-	BudgetUsed     float64           `json:"budgetUsed"`
-	BudgetLimit    float64           `json:"budgetLimit"`
-	CreatedAt      time.Time         `json:"createdAt"`
-	ExpiresAt      time.Time         `json:"expiresAt,omitempty"`
-	Reason         string            `json:"reason"`
-	RevertedBy     string            `json:"revertedBy,omitempty"`
-	RevertedAt     time.Time         `json:"revertedAt,omitempty"`
-	PreviousRuns   []string          `json:"previousRuns,omitempty"`
-	DerivedFrom    []string          `json:"derivedFrom,omitempty"`
+	EvidenceCount  int                `json:"evidenceCount"`
+	Counterexample int                `json:"counterexample"`
+	Authority      int                `json:"authority"`
+	Sensitive      bool               `json:"sensitive"`
+	BudgetUsed     float64            `json:"budgetUsed"`
+	BudgetLimit    float64            `json:"budgetLimit"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	ExpiresAt      time.Time          `json:"expiresAt,omitempty"`
+	Reason         string             `json:"reason"`
+	RevertedBy     string             `json:"revertedBy,omitempty"`
+	RevertedAt     time.Time          `json:"revertedAt,omitempty"`
+	PreviousRuns   []string           `json:"previousRuns,omitempty"`
+	DerivedFrom    []string           `json:"derivedFrom,omitempty"`
 }
 
 func NewSupervisorVersion() SupervisorVersion {
@@ -165,14 +165,14 @@ type RollbackTarget struct {
 
 func CreateRollbackEvent(target RollbackTarget, originalRecord SupervisorDecisionRecord) SupervisorDecisionRecord {
 	record := SupervisorDecisionRecord{
-		Version:   NewSupervisorVersion(),
-		ID:        rollbackEventID(target, originalRecord),
-		Target:    originalRecord.Target,
-		CharacterID: strings.TrimSpace(target.CharacterID),
-		RequestID: strings.TrimSpace(target.RequestID),
-		Decision:  SupervisorRolledBack,
-		CreatedAt: time.Now().UTC(),
-		Reason:    strings.TrimSpace(target.Reason),
+		Version:      NewSupervisorVersion(),
+		ID:           rollbackEventID(target, originalRecord),
+		Target:       originalRecord.Target,
+		CharacterID:  strings.TrimSpace(target.CharacterID),
+		RequestID:    strings.TrimSpace(target.RequestID),
+		Decision:     SupervisorRolledBack,
+		CreatedAt:    time.Now().UTC(),
+		Reason:       strings.TrimSpace(target.Reason),
 		PreviousRuns: []string{originalRecord.ID},
 	}
 	reason := strings.TrimSpace(target.Reason)
@@ -315,4 +315,3 @@ func normalizeSupervisorRefs(items []string) []string {
 	}
 	return result
 }
-

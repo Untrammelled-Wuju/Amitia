@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/pkg/app"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

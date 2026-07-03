@@ -97,16 +97,16 @@ func TestScoreMotivationAllComponentsBounded(t *testing.T) {
 
 func TestScoreSuppressionFatigueBusy(t *testing.T) {
 	rested := ScoreSuppression(SuppressionInput{
-		UnifiedState:    UnifiedState{Energy: 1.0, Fatigue: 0.0, Busy: false},
-		UserActiveNow:   true,
+		UnifiedState:  UnifiedState{Energy: 1.0, Fatigue: 0.0, Busy: false},
+		UserActiveNow: true,
 	})
 	fatigued := ScoreSuppression(SuppressionInput{
-		UnifiedState:    UnifiedState{Energy: 0.3, Fatigue: 0.8, Busy: false},
-		UserActiveNow:   true,
+		UnifiedState:  UnifiedState{Energy: 0.3, Fatigue: 0.8, Busy: false},
+		UserActiveNow: true,
 	})
 	busy := ScoreSuppression(SuppressionInput{
-		UnifiedState:    UnifiedState{Energy: 0.5, Fatigue: 0.5, Busy: true},
-		UserActiveNow:   true,
+		UnifiedState:  UnifiedState{Energy: 0.5, Fatigue: 0.5, Busy: true},
+		UserActiveNow: true,
 	})
 	if rested >= fatigued {
 		t.Fatalf("expected fatigued to have higher suppression than rested, got %d %d", rested, fatigued)

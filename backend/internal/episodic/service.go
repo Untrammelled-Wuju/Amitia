@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -31,16 +32,24 @@ type Service interface {
 }
 
 type service struct {
-	repo     Repository
-	db       *gorm.DB
-	graphSvc graph.Service
+	repo                     Repository
+	db                       *gorm.DB
+	graphSvc                 graph.Service
+	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Service {
 	return &service{repo: repo, db: ctx.DB, graphSvc: graphSvc}
 }
 
+func (s *service) SetDataLifecycleCoordinator(coordinator *mindruntime.DataLifecycleCoordinator) {
+	s.dataLifecycleCoordinator = coordinator
+}
+
 func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
+	if s.dataLifecycleCoordinator != nil && q.CharacterID != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(q.CharacterID) {
+		return &EpisodicListResponse{Items: []EpisodicMemory{}, Total: 0, Page: 1, PageSize: 20, TotalPages: 1}, nil
+	}
 	if strings.TrimSpace(q.CharacterID) != "" {
 		q.UserID = strings.TrimSpace(q.CharacterID)
 	}

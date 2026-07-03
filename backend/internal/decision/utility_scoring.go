@@ -43,9 +43,9 @@ type ObjectiveScore struct {
 }
 
 type MultiObjectiveResult struct {
-	CandidateID string          `json:"candidateId"`
+	CandidateID string           `json:"candidateId"`
 	Scores      []ObjectiveScore `json:"scores"`
-	Composite   float64         `json:"composite"`
+	Composite   float64          `json:"composite"`
 }
 
 type UtilityScoringContext struct {
@@ -176,7 +176,7 @@ func computeRelationshipHarmony(candidate BehaviorCandidate, rel RelationshipSna
 	if v, ok := rel.Dimensions[RelationshipConflict]; ok {
 		conflictVal = v.Value
 	}
-	harmony := trustVal*(1.0-conflictVal)
+	harmony := trustVal * (1.0 - conflictVal)
 	if candidate.ID == "chat_reply" || candidate.ID == "express_emotion" {
 		harmony += 0.1
 	}

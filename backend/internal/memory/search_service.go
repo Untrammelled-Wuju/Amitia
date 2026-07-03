@@ -27,6 +27,7 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	if err != nil {
 		return nil, err
 	}
+	tombstoneBlocked := tombstoneTargetsFromMemorySearch(s.dataLifecycleCoordinator, req.CharacterID)
 	policy := retrievalAuthorityPolicy{
 		CharacterID: req.CharacterID,
 		UserID:      req.UserID,
@@ -34,6 +35,9 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	}
 	filtered := make([]Memory, 0, min(limit, len(items)))
 	for _, m := range items {
+		if tombstoneBlocked != nil && tombstoneBlocked[m.CharacterID] {
+			continue
+		}
 		if !memoryAllowedBySQLiteAuthority(m, policy) {
 			continue
 		}
@@ -48,6 +52,9 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error) {
 	if qdrantDB.Client == nil {
 		return nil, fmt.Errorf("向量数据库未初始化")
+	}
+	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(req.CharacterID) {
+		return nil, fmt.Errorf("数据已标记删除")
 	}
 	queryText := req.Query
 	if queryText == "" {

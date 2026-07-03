@@ -94,6 +94,9 @@ func (s *SQLiteOutboxStore) MarkFailed(id string, errMsg string) error {
 			}
 			return err
 		}
+		if model.Status != string(OutboxStatusProcessing) {
+			return errors.New("outbox: cannot mark failed, invalid status: " + model.Status)
+		}
 		retryCount := model.RetryCount + 1
 		result := tx.Model(&OutboxRecordModel{}).Where("id = ?", id).Updates(map[string]interface{}{
 			"status":        OutboxStatusFailed,

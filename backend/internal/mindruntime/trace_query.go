@@ -7,15 +7,15 @@ import (
 )
 
 type CausalChainFilter struct {
-	Kinds        []TraceEventKind
-	Status       string
-	Reason       string
-	CharacterID  string
+	Kinds         []TraceEventKind
+	Status        string
+	Reason        string
+	CharacterID   string
 	InteractionID string
-	DeliveryID   string
-	ToolID       string
-	EventID      string
-	Scope        string
+	DeliveryID    string
+	ToolID        string
+	EventID       string
+	Scope         string
 }
 
 type MetricAggregation struct {
@@ -28,16 +28,16 @@ type MetricAggregation struct {
 }
 
 type CausalChainSummary struct {
-	TotalEvents      int                    `json:"totalEvents"`
-	ByKind           map[TraceEventKind]int `json:"byKind"`
-	ByStatus         map[string]int         `json:"byStatus"`
-	CancelledCount   int                    `json:"cancelledCount"`
-	SupersededCount  int                    `json:"supersededCount"`
-	ToolCalls        int                    `json:"toolCalls"`
-	Deliveries       int                    `json:"deliveries"`
-	Compensations    int                    `json:"compensations"`
-	Validations      int                    `json:"validations"`
-	Duration         time.Duration          `json:"duration"`
+	TotalEvents     int                    `json:"totalEvents"`
+	ByKind          map[TraceEventKind]int `json:"byKind"`
+	ByStatus        map[string]int         `json:"byStatus"`
+	CancelledCount  int                    `json:"cancelledCount"`
+	SupersededCount int                    `json:"supersededCount"`
+	ToolCalls       int                    `json:"toolCalls"`
+	Deliveries      int                    `json:"deliveries"`
+	Compensations   int                    `json:"compensations"`
+	Validations     int                    `json:"validations"`
+	Duration        time.Duration          `json:"duration"`
 }
 
 type TraceQueryResult struct {
@@ -47,18 +47,18 @@ type TraceQueryResult struct {
 }
 
 type RuntimeExtendedQuery struct {
-	Kind           TraceEventKind
-	Status         string
-	RequestID      string
-	EventID        string
-	InteractionID  string
-	DeliveryID     string
-	ToolID         string
-	CharacterID    string
-	Scope          string
-	MinQueueMs     int64
-	MinBudgetUsed  float64
-	MinCandidates  int
+	Kind          TraceEventKind
+	Status        string
+	RequestID     string
+	EventID       string
+	InteractionID string
+	DeliveryID    string
+	ToolID        string
+	CharacterID   string
+	Scope         string
+	MinQueueMs    int64
+	MinBudgetUsed float64
+	MinCandidates int
 }
 
 func FilterCausalChain(events []RuntimeCausalEvent, filter CausalChainFilter) TraceQueryResult {

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -13,21 +14,21 @@ import (
 )
 
 type ComputeResult struct {
-	RequestID           string
-	ConversationID      string
-	CharacterID         string
-	CharacterName       string
-	UserMessageID       string
-	UserMessageSequence int64
+	RequestID            string
+	ConversationID       string
+	CharacterID          string
+	CharacterName        string
+	UserMessageID        string
+	UserMessageSequence  int64
 	UserMessageCreatedAt string
-	Reply               string
-	Lines               []string
-	Source              string
-	ForceVoice          bool
-	HasExistingUser     bool
-	Channel             string
-	Trace               applog.TraceFields
-	PipelineMessages    []map[string]string
+	Reply                string
+	Lines                []string
+	Source               string
+	ForceVoice           bool
+	HasExistingUser      bool
+	Channel              string
+	Trace                applog.TraceFields
+	PipelineMessages     []map[string]string
 }
 
 func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageRequest) (*ComputeResult, error) {
@@ -89,14 +90,14 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	existingUser, existingAssistants, hasExistingUser := s.findRequestMessages(convID, requestID)
 	if len(existingAssistants) > 0 {
 		return &ComputeResult{
-			RequestID:           requestID,
-			ConversationID:      convID,
-			CharacterID:         charID,
-			CharacterName:       charName,
-			UserMessageID:       existingUser.ID,
-			UserMessageSequence: existingUser.Sequence,
+			RequestID:            requestID,
+			ConversationID:       convID,
+			CharacterID:          charID,
+			CharacterName:        charName,
+			UserMessageID:        existingUser.ID,
+			UserMessageSequence:  existingUser.Sequence,
 			UserMessageCreatedAt: existingUser.CreatedAt,
-			Reply:               strings.TrimSpace(strings.Join(func() []string {
+			Reply: strings.TrimSpace(strings.Join(func() []string {
 				parts := make([]string, len(existingAssistants))
 				for i, msg := range existingAssistants {
 					parts[i] = msg.Content
@@ -113,20 +114,28 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	userMsgSequence := existingUser.Sequence
 	userMsgCreatedAt := existingUser.CreatedAt
 	if !hasExistingUser {
-		userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: "user", Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID}
-		userMsgID = userMsg.ID
-		if err := s.repo.CreateMessage(userMsg); err != nil {
-			applog.TraceError(trace.WithStage("user_message_persist_failed"), applog.Fields{
+		if req.IsInternal {
+			userMsgID = uuid.New().String()
+		} else {
+			msgRole := "user"
+			if source == "proactive" {
+				msgRole = "system"
+			}
+			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID}
+			userMsgID = userMsg.ID
+			if err := s.repo.CreateMessage(userMsg); err != nil {
+				applog.TraceError(trace.WithStage("user_message_persist_failed"), applog.Fields{
+					"user_message_id": userMsgID,
+				}, err, "process message user message persist failed")
+				return nil, err
+			}
+			userMsgSequence = userMsg.Sequence
+			userMsgCreatedAt = userMsg.CreatedAt
+			applog.TraceInfo(trace.WithStage("user_message_persisted"), applog.Fields{
 				"user_message_id": userMsgID,
-			}, err, "process message user message persist failed")
-			return nil, err
+				"status":          "processing",
+			}, "process message user message persisted")
 		}
-		userMsgSequence = userMsg.Sequence
-		userMsgCreatedAt = userMsg.CreatedAt
-		applog.TraceInfo(trace.WithStage("user_message_persisted"), applog.Fields{
-			"user_message_id": userMsgID,
-			"status":          "processing",
-		}, "process message user message persisted")
 	} else {
 		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "processing", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		applog.TraceInfo(trace.WithStage("user_message_reused"), applog.Fields{
@@ -220,21 +229,21 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	pipelineMessages = append(pipelineMessages, map[string]string{"role": "assistant", "content": reply})
 
 	return &ComputeResult{
-		RequestID:           requestID,
-		ConversationID:      convID,
-		CharacterID:         charID,
-		CharacterName:       charName,
-		UserMessageID:       userMsgID,
-		UserMessageSequence: userMsgSequence,
+		RequestID:            requestID,
+		ConversationID:       convID,
+		CharacterID:          charID,
+		CharacterName:        charName,
+		UserMessageID:        userMsgID,
+		UserMessageSequence:  userMsgSequence,
 		UserMessageCreatedAt: userMsgCreatedAt,
-		Reply:               reply,
-		Lines:               realLines,
-		Source:              source,
-		ForceVoice:          forceVoice,
-		HasExistingUser:     hasExistingUser,
-		Channel:             channel,
-		Trace:               trace,
-		PipelineMessages:    pipelineMessages,
+		Reply:                reply,
+		Lines:                realLines,
+		Source:               source,
+		ForceVoice:           forceVoice,
+		HasExistingUser:      hasExistingUser,
+		Channel:              channel,
+		Trace:                trace,
+		PipelineMessages:     pipelineMessages,
 	}, nil
 }
 
@@ -245,5 +254,19 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(result.ConversationID, result.Reply)
 	}
+	s.persistPostProcessingIntent(result)
 	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.PipelineMessages, result.Reply)
+}
+
+func (s *service) persistPostProcessingIntent(result *ComputeResult) {
+	if s.outboxStore == nil {
+		return
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"conversation_id": result.ConversationID,
+		"character_id":    result.CharacterID,
+		"source":          result.Source,
+		"reply":           result.Reply,
+	})
+	s.outboxStore.AppendOutbox(result.ConversationID, "chat.post_process", payload)
 }

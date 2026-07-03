@@ -189,6 +189,7 @@ type ProcessMessageRequest struct {
 	InteractionID         string                       `json:"-"`
 	ExpectedStatusVersion int64                        `json:"-"`
 	Runtime               *interaction.RuntimeAssembly `json:"-"`
+	IsInternal            bool                         `json:"-"`
 }
 
 type ProcessMessageResponse struct {

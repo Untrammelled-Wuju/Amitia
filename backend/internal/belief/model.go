@@ -3,9 +3,9 @@ package belief
 import "time"
 
 type EvidenceSpan struct {
-	SourceMsgID  string `json:"sourceMsgID"`
-	SourceStart  int    `json:"sourceStart"`
-	SourceEnd    int    `json:"sourceEnd"`
+	SourceMsgID string `json:"sourceMsgID"`
+	SourceStart int    `json:"sourceStart"`
+	SourceEnd   int    `json:"sourceEnd"`
 }
 
 type EngineVersion string
@@ -24,13 +24,13 @@ const (
 )
 
 type Candidate struct {
-	ID         string     `json:"id,omitempty"`
-	Key        string     `json:"key"`
-	Value      string     `json:"value"`
-	Source     SourceKind `json:"source"`
-	Confidence float64    `json:"confidence"`
-	ObservedAt time.Time  `json:"observedAt,omitempty"`
-	ExpiresAt  time.Time     `json:"expiresAt,omitempty"`
+	ID         string       `json:"id,omitempty"`
+	Key        string       `json:"key"`
+	Value      string       `json:"value"`
+	Source     SourceKind   `json:"source"`
+	Confidence float64      `json:"confidence"`
+	ObservedAt time.Time    `json:"observedAt,omitempty"`
+	ExpiresAt  time.Time    `json:"expiresAt,omitempty"`
 	Evidence   EvidenceSpan `json:"evidence,omitempty"`
 }
 

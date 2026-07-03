@@ -16,29 +16,29 @@ type CacheKey struct {
 }
 
 type CacheEntry struct {
-	Key         CacheKey
-	Value       interface{}
-	Authority   int
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	LastAccess  time.Time
-	HitCount    int64
-	Stable      bool
+	Key        CacheKey
+	Value      interface{}
+	Authority  int
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastAccess time.Time
+	HitCount   int64
+	Stable     bool
 }
 
 type CacheConfig struct {
-	MaxEntries     int
-	DefaultTTL     time.Duration
+	MaxEntries       int
+	DefaultTTL       time.Duration
 	HighAuthorityTTL time.Duration
-	StableTTL      time.Duration
-	UserStateTTL   time.Duration
+	StableTTL        time.Duration
+	UserStateTTL     time.Duration
 }
 
 type CacheMetrics struct {
-	mu               sync.Mutex
-	TotalHits         int64
-	TotalMisses       int64
-	TotalInvalidations int64
+	mu                  sync.Mutex
+	TotalHits           int64
+	TotalMisses         int64
+	TotalInvalidations  int64
 	InvalidationReasons map[string]int64
 }
 
@@ -50,11 +50,11 @@ type Cache struct {
 }
 
 var DefaultCacheConfig = CacheConfig{
-	MaxEntries:      500,
-	DefaultTTL:      5 * time.Minute,
+	MaxEntries:       500,
+	DefaultTTL:       5 * time.Minute,
 	HighAuthorityTTL: 30 * time.Minute,
-	StableTTL:       1 * time.Hour,
-	UserStateTTL:    30 * time.Second,
+	StableTTL:        1 * time.Hour,
+	UserStateTTL:     30 * time.Second,
 }
 
 func NewCacheMetrics() *CacheMetrics {
@@ -205,9 +205,9 @@ func (c *Cache) Metrics() *CacheMetrics {
 	defer c.mu.RUnlock()
 
 	snapshot := &CacheMetrics{
-		TotalHits:          c.metrics.TotalHits,
-		TotalMisses:        c.metrics.TotalMisses,
-		TotalInvalidations: c.metrics.TotalInvalidations,
+		TotalHits:           c.metrics.TotalHits,
+		TotalMisses:         c.metrics.TotalMisses,
+		TotalInvalidations:  c.metrics.TotalInvalidations,
 		InvalidationReasons: make(map[string]int64),
 	}
 	for k, v := range c.metrics.InvalidationReasons {

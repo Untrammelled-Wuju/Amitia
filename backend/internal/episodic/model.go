@@ -8,22 +8,22 @@ import (
 )
 
 type EpisodicMemory struct {
-	ID              string `gorm:"column:id;primaryKey" json:"id"`
-	UserID          string `gorm:"column:user_id;not null;default:default" json:"userId"`
-	SceneType       string `gorm:"column:scene_type;not null" json:"sceneType"`
-	Title           string `gorm:"column:title;not null" json:"title"`
-	Content         string `gorm:"column:content;not null" json:"content"`
-	ContextBefore   string `gorm:"column:context_before" json:"contextBefore"`
-	ContextAfter    string `gorm:"column:context_after" json:"contextAfter"`
-	TriggerKeywords string `gorm:"column:trigger_keywords" json:"triggerKeywords"`
-	SentimentScore  int    `gorm:"column:sentiment_score;default:0" json:"sentimentScore"`
-	MessageIDStart  string `gorm:"column:message_id_start" json:"messageIdStart"`
-	MessageIDEnd    string `gorm:"column:message_id_end" json:"messageIdEnd"`
+	ID               string `gorm:"column:id;primaryKey" json:"id"`
+	UserID           string `gorm:"column:user_id;not null;default:default" json:"userId"`
+	SceneType        string `gorm:"column:scene_type;not null" json:"sceneType"`
+	Title            string `gorm:"column:title;not null" json:"title"`
+	Content          string `gorm:"column:content;not null" json:"content"`
+	ContextBefore    string `gorm:"column:context_before" json:"contextBefore"`
+	ContextAfter     string `gorm:"column:context_after" json:"contextAfter"`
+	TriggerKeywords  string `gorm:"column:trigger_keywords" json:"triggerKeywords"`
+	SentimentScore   int    `gorm:"column:sentiment_score;default:0" json:"sentimentScore"`
+	MessageIDStart   string `gorm:"column:message_id_start" json:"messageIdStart"`
+	MessageIDEnd     string `gorm:"column:message_id_end" json:"messageIdEnd"`
 	MessageTimeStart string `gorm:"column:message_time_start" json:"messageTimeStart"`
 	MessageTimeEnd   string `gorm:"column:message_time_end" json:"messageTimeEnd"`
-	SourceConvID    string `gorm:"column:source_conv_id" json:"sourceConvId"`
-	CreatedAt       string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt       string `gorm:"column:updated_at" json:"updatedAt"`
+	SourceConvID     string `gorm:"column:source_conv_id" json:"sourceConvId"`
+	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (EpisodicMemory) TableName() string { return "episodic_memories" }
@@ -65,5 +65,3 @@ type EpisodicListResponse struct {
 	PageSize   int              `json:"pageSize"`
 	TotalPages int              `json:"totalPages"`
 }
-
-

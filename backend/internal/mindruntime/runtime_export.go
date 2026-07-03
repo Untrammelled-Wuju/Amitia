@@ -5,20 +5,20 @@ import (
 )
 
 type ModuleRuntimeStatus struct {
-	Module            string             `json:"module"`
-	Healthy           bool               `json:"healthy"`
-	CheckedAt         time.Time          `json:"checkedAt"`
-	ComponentChecks   []ComponentCheck   `json:"componentChecks,omitempty"`
+	Module          string           `json:"module"`
+	Healthy         bool             `json:"healthy"`
+	CheckedAt       time.Time        `json:"checkedAt"`
+	ComponentChecks []ComponentCheck `json:"componentChecks,omitempty"`
 }
 
 type AggregatedRuntimeExport struct {
-	ExportedAt         time.Time                   `json:"exportedAt"`
-	Version            string                      `json:"version"`
-	Modules            []ModuleRuntimeStatus       `json:"modules"`
-	MetricsSnapshot    RuntimeMetricsSnapshot      `json:"metricsSnapshot"`
-	AllHealthy         bool                        `json:"allHealthy"`
-	HealthyCount       int                         `json:"healthyCount"`
-	TotalModules       int                         `json:"totalModules"`
+	ExportedAt      time.Time              `json:"exportedAt"`
+	Version         string                 `json:"version"`
+	Modules         []ModuleRuntimeStatus  `json:"modules"`
+	MetricsSnapshot RuntimeMetricsSnapshot `json:"metricsSnapshot"`
+	AllHealthy      bool                   `json:"allHealthy"`
+	HealthyCount    int                    `json:"healthyCount"`
+	TotalModules    int                    `json:"totalModules"`
 }
 
 func ExportRuntimeSnapshot() AggregatedRuntimeExport {

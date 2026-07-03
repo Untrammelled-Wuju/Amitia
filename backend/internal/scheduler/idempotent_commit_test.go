@@ -185,9 +185,9 @@ func TestRetryPolicyDelayRange(t *testing.T) {
 func TestRetryPolicyCircuitBreaker(t *testing.T) {
 	open := true
 	rp := RetryPolicy{
-		MaxRetries:    3,
-		BaseDelay:     10 * time.Millisecond,
-		JitterFactor:  0.1,
+		MaxRetries:     3,
+		BaseDelay:      10 * time.Millisecond,
+		JitterFactor:   0.1,
 		CircuitBreaker: func() bool { return open },
 	}
 	if rp.ShouldRetry(0, errIdemTest) {
@@ -413,12 +413,12 @@ func TestIdempotentExecutorGetRecord(t *testing.T) {
 	ie := NewIdempotentExecutor()
 
 	ie.Commit(IdempotentCommitInput{
-		Kind:        IdempotentOpReflection,
-		UserID:      "u1",
-		CharacterID: "c1",
-		OperationID: "reflect-1",
+		Kind:         IdempotentOpReflection,
+		UserID:       "u1",
+		CharacterID:  "c1",
+		OperationID:  "reflect-1",
 		StateVersion: 7,
-		Status:      "active",
+		Status:       "active",
 	})
 
 	key := BuildIdempotencyKey(IdempotentOpReflection, "u1", "c1", "reflect-1")

@@ -192,7 +192,7 @@ func TestMapExpressionToVoice_OnlyFiveTiersExposed(t *testing.T) {
 
 func TestMapExpressionToVoice_RepairingToneMapsToCaring(t *testing.T) {
 	plan := interaction.ExpressionPlan{
-		ID: "plan-repair",
+		ID:    "plan-repair",
 		Tones: []interaction.ExpressionTone{interaction.ExpressionToneRepairing},
 	}
 	vp := MapExpressionToVoice(plan)

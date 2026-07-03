@@ -7,11 +7,11 @@ import (
 type BatchOperation string
 
 const (
-	BatchEmbedding    BatchOperation = "embedding"
-	BatchGraphSync    BatchOperation = "graph_sync"
-	BatchDeleteClean  BatchOperation = "delete_cleanup"
-	BatchReflection   BatchOperation = "reflection"
-	BatchStats        BatchOperation = "stats"
+	BatchEmbedding   BatchOperation = "embedding"
+	BatchGraphSync   BatchOperation = "graph_sync"
+	BatchDeleteClean BatchOperation = "delete_cleanup"
+	BatchReflection  BatchOperation = "reflection"
+	BatchStats       BatchOperation = "stats"
 )
 
 type BatchRequest struct {

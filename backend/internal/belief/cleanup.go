@@ -11,9 +11,9 @@ type CleanupInput struct {
 }
 
 type CleanupResult struct {
-	Removed   int
-	Alive     int
-	Expired   []string
+	Removed int
+	Alive   int
+	Expired []string
 }
 
 func CleanupExpiredBeliefs(input CleanupInput) CleanupResult {

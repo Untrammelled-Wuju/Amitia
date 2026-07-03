@@ -19,25 +19,25 @@ func DefaultArbitrationConfig() ArbitrationConfig {
 }
 
 type ArbitrationInput struct {
-	Candidates    []BehaviorCandidate
-	Goals         []Goal
-	Intentions    []Intention
-	Relationship  RelationshipSnapshot
-	Psyche        PsycheSignalSet
-	Life          LifeSnapshot
-	History       BehaviorHistory
-	SoftPrefs     SoftPreferenceInput
-	Filter        HardConstraintFilter
-	Now           time.Time
+	Candidates   []BehaviorCandidate
+	Goals        []Goal
+	Intentions   []Intention
+	Relationship RelationshipSnapshot
+	Psyche       PsycheSignalSet
+	Life         LifeSnapshot
+	History      BehaviorHistory
+	SoftPrefs    SoftPreferenceInput
+	Filter       HardConstraintFilter
+	Now          time.Time
 }
 
 type ArbitrationResult struct {
-	Selected      BehaviorCandidate
-	Alternatives  []BehaviorCandidate
-	Blocked       []BehaviorCandidate
-	ConflictLog   []string
-	FallbackUsed  bool
-	Audit         BehaviorAudit
+	Selected     BehaviorCandidate
+	Alternatives []BehaviorCandidate
+	Blocked      []BehaviorCandidate
+	ConflictLog  []string
+	FallbackUsed bool
+	Audit        BehaviorAudit
 }
 
 type ArbitrationLayer struct {

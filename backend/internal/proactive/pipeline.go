@@ -1,4 +1,4 @@
-﻿package proactive
+package proactive
 
 import (
 	"log"

@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/config"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-	"github.com/u-ai/backend/config")
+)
 
 func analyzeImageInternal(imageUrl string) (string, string) {
 	cfg, err := getVisionModelConfig()

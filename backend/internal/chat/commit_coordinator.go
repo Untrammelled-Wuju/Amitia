@@ -1,4 +1,4 @@
-﻿package chat
+package chat
 
 import (
 	"encoding/json"
@@ -48,15 +48,17 @@ type messageCommitPlan struct {
 	Lines         []string
 	Source        string
 	Runtime       *interaction.RuntimeAssembly
+	CommitToken   string
+	CommitOwner   string
 }
 
 type messageCommitResult struct {
-	CommitID           string
-	MessageIDs         []string
-	LastSequence       int64
-	Events             []interaction.OutboxRecord
-	StateVersions      map[string]int64
-	DeliveryIntentIDs  []string
+	CommitID          string
+	MessageIDs        []string
+	LastSequence      int64
+	Events            []interaction.OutboxRecord
+	StateVersions     map[string]int64
+	DeliveryIntentIDs []string
 }
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
@@ -76,17 +78,18 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		}
 		now := time.Now().Format("2006-01-02 15:04:05")
 		if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {
-			return err
+			if plan.Source != "proactive" {
+				return err
+			}
 		}
 		if err := tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", now, plan.Conversation, plan.Conversation).Error; err != nil {
 			return err
 		}
-		if err := s.updatePsycheStateTx(tx, plan.Character); err != nil {
-			return err
-		}
 		if shouldCommitRuntime(plan.Request) {
-			if err := s.updateRelationshipStateTx(tx, plan); err != nil {
-				return err
+			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
+				if err := s.applyAppraisalResultTx(tx, plan); err != nil {
+					return err
+				}
 			}
 			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
 			if err != nil {
@@ -144,6 +147,8 @@ func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan messageCommi
 	if res.RowsAffected != 1 {
 		return interaction.ErrCommitTokenUnavailable
 	}
+	plan.CommitToken = token
+	plan.CommitOwner = owner
 	return nil
 }
 
@@ -157,8 +162,8 @@ func (s *service) transitionInteractionCommittedTx(tx *gorm.DB, plan messageComm
 	deliveryIDsJSON, _ := json.Marshal(result.DeliveryIntentIDs)
 	now := time.Now().UTC()
 	res := tx.Model(&interaction.InteractionRecordModel{}).
-		Where("id = ? AND status_version = ? AND status = ?",
-			plan.Request.InteractionID, plan.Request.ExpectedStatusVersion, string(interaction.InteractionStatusContextReady)).
+		Where("id = ? AND status_version = ? AND status = ? AND commit_token = ? AND commit_owner = ?",
+			plan.Request.InteractionID, plan.Request.ExpectedStatusVersion, string(interaction.InteractionStatusContextReady), plan.CommitToken, plan.CommitOwner).
 		Updates(map[string]interface{}{
 			"status":              string(interaction.InteractionStatusCommitted),
 			"status_version":      plan.Request.ExpectedStatusVersion + 1,
@@ -323,50 +328,19 @@ func clampRelationshipValue(value float64) float64 {
 }
 
 func computePsycheEnergyDelta(state psyche.PsycheState) float64 {
-	baseDecay := -0.005
-	stressDecay := state.Stress * -0.015
-	energyDecay := state.Energy * -0.002
-	return baseDecay + stressDecay + energyDecay
+	return 0
 }
 
 func computeRelationshipFamiliarityDelta(data map[string]float64) float64 {
-	trust := data["trust"]
-	familiarity := data["familiarity"]
-	if familiarity > 0.8 {
-		return 0.001
-	}
-	if trust > 0.6 {
-		return 0.003
-	}
-	return 0.006
+	return 0
 }
 
 func computeRelationshipTrustDelta(data map[string]float64) float64 {
-	familiarity := data["familiarity"]
-	tension := data["tension"]
-	base := 0.002
-	if familiarity < 0.2 {
-		base = 0.004
-	}
-	tensionPenalty := tension * 0.002
-	delta := base - tensionPenalty
-	if delta < 0 {
-		return 0
-	}
-	return delta
+	return 0
 }
 
 func computeRelationshipSecurityDelta(data map[string]float64) float64 {
-	trust := data["trust"]
-	familiarity := data["familiarity"]
-	tension := data["tension"]
-	base := 0.0005 * trust * (1.0 + familiarity)
-	tensionPenalty := tension * 0.001
-	delta := base - tensionPenalty
-	if delta < 0 {
-		return 0
-	}
-	return delta
+	return 0
 }
 
 func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, []string, error) {
@@ -415,7 +389,34 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 			return nil, nil, err
 		}
 	}
+	if plan.Runtime != nil && plan.Runtime.Delivery.Channel != "" {
+		deliveryIntentIDs = createDeliveryIntentsInTx(tx, plan, messageIDs, now)
+	}
 	return events, deliveryIntentIDs, nil
+}
+
+func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) []string {
+	ids := []string{}
+	channel := plan.Runtime.Delivery.Channel
+	peerID := ""
+	if plan.Runtime.Delivery.PeerID != "" {
+		peerID = plan.Runtime.Delivery.PeerID
+	} else if plan.Request.PeerID != "" {
+		peerID = plan.Request.PeerID
+	}
+	for _, msgID := range messageIDs {
+		stableID := fmt.Sprintf("di-%s-%s-%s-%s", plan.Request.InteractionID, channel, peerID, msgID)
+		payload, _ := json.Marshal(map[string]interface{}{
+			"messageId":      msgID,
+			"conversationId": plan.Conversation,
+			"characterId":    plan.Character,
+			"content":        plan.Reply,
+		})
+		tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			stableID, plan.Request.InteractionID, channel, peerID, "text", string(payload), "pending", now.Format("2006-01-02 15:04:05"), 5)
+		ids = append(ids, stableID)
+	}
+	return ids
 }
 
 func newInteractionOutboxRecord(aggregateID, eventType string, payload map[string]interface{}, now time.Time) interaction.OutboxRecord {
@@ -430,4 +431,76 @@ func newInteractionOutboxRecord(aggregateID, eventType string, payload map[strin
 		CreatedAt:   now,
 		NextRetryAt: now,
 	}
+}
+
+func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) error {
+	if plan.Runtime == nil || plan.Runtime.Appraisal == nil {
+		return nil
+	}
+	appraisal := plan.Runtime.Appraisal
+	if s.psycheStore != nil && appraisal.PsycheDelta != 0 {
+		charID := plan.Character
+		var store psyche.PsycheStore = s.psycheStore
+		if sqliteStore, ok := s.psycheStore.(*psyche.SQLitePsycheStore); ok {
+			store = sqliteStore.WithDB(tx)
+		}
+		state, err := store.LoadState(charID)
+		if err != nil {
+			if errors.Is(err, psyche.ErrStateNotFound) {
+				initial := psyche.NewPsycheState(charID)
+				if err := store.SaveState(&initial); err != nil {
+					return err
+				}
+				state = &initial
+			} else {
+				return err
+			}
+		}
+		event := psyche.PsycheEvent{
+			ID:          uuid.New().String(),
+			CharacterID: charID,
+			Type:        psyche.EventTypeInteraction,
+			Source:      "appraisal.delta",
+			EnergyDelta: appraisal.PsycheDelta * 0.02,
+			Timestamp:   time.Now().UTC(),
+		}
+		newState := psyche.ApplyEvent(*state, event)
+		if err := store.SaveState(&newState); err != nil {
+			return err
+		}
+		if err := store.AppendEvent(&event); err != nil {
+			return err
+		}
+	}
+	if appraisal.RelationshipDelta != 0 {
+		relationType := relationshipTypeForRequest(plan.Request)
+		now := time.Now().Format("2006-01-02 15:04:05")
+		var existing relationshipStateRecord
+		err := tx.Where("character_id = ? AND relation_type = ?", plan.Character, relationType).Order("updated_at DESC").Take(&existing).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		data := map[string]float64{
+			"trust": 0.5, "familiarity": 0, "security": 0.5,
+			"tension": 0, "repairConfidence": 0.5, "boundary": 0.5,
+		}
+		if existing.RelationData != "" {
+			_ = json.Unmarshal([]byte(existing.RelationData), &data)
+		}
+		data["familiarity"] = clampRelationshipValue(data["familiarity"] + appraisal.RelationshipDelta*0.01)
+		data["trust"] = clampRelationshipValue(data["trust"] + appraisal.RelationshipDelta*0.01)
+		if existing.ID == "" {
+			existing = relationshipStateRecord{
+				ID: uuid.New().String(), CharacterID: plan.Character,
+				RelationType: relationType, CreatedAt: now,
+			}
+		}
+		raw, _ := json.Marshal(data)
+		existing.RelationData = string(raw)
+		existing.UpdatedAt = now
+		if err := tx.Save(&existing).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -118,7 +118,7 @@ func TestRecognizePatterns_MaxPatternsPerRun(t *testing.T) {
 	for _, k := range kinds {
 		for i := 0; i < 3; i++ {
 			events = append(events, PatternEvent{
-				ID: k + "-" + string(rune('a'+i)),
+				ID:   k + "-" + string(rune('a'+i)),
 				Kind: k, Summary: k, Importance: 0.5,
 				Timestamp: now,
 			})

@@ -8,9 +8,9 @@ import (
 )
 
 type testLifecycleComponent struct {
-	phase    LifecyclePhase
-	startErr error
-	drainErr error
+	phase          LifecyclePhase
+	startErr       error
+	drainErr       error
 	shutdownCalled bool
 	drainCalled    bool
 }

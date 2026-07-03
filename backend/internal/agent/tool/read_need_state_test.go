@@ -160,7 +160,7 @@ func TestReadNeedStateWithHistoryFlag(t *testing.T) {
 	defer cleanup()
 
 	result := readNeedState(context.Background(), ToolExecutionContext{CharacterID: "char-hist"}, map[string]interface{}{
-		"character_id":   "char-hist",
+		"character_id":    "char-hist",
 		"include_history": true,
 	})
 	if result.Status != ToolStatusSuccess {

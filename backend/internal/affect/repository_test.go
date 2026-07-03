@@ -106,10 +106,10 @@ func TestSQLiteRepositoryOverwriteUpdatesExisting(t *testing.T) {
 	now := time.Date(2026, 7, 1, 15, 0, 0, 0, time.UTC)
 
 	first := AffectState{
-		Version: StateVersionV1,
-		Emotion: EmotionState{Positive: 0.5, Negative: 0.1, UpdatedAt: now},
-		Mood:    MoodState{Valence: 0.3, UpdatedAt: now},
-		Stress:  0.2,
+		Version:   StateVersionV1,
+		Emotion:   EmotionState{Positive: 0.5, Negative: 0.1, UpdatedAt: now},
+		Mood:      MoodState{Valence: 0.3, UpdatedAt: now},
+		Stress:    0.2,
 		UpdatedAt: now,
 	}
 	if err := repo.SaveState("char-overwrite", first); err != nil {
@@ -117,10 +117,10 @@ func TestSQLiteRepositoryOverwriteUpdatesExisting(t *testing.T) {
 	}
 
 	second := AffectState{
-		Version: StateVersionV1,
-		Emotion: EmotionState{Positive: 0.8, Negative: 0.05, UpdatedAt: now},
-		Mood:    MoodState{Valence: 0.6, UpdatedAt: now},
-		Stress:  0.1,
+		Version:   StateVersionV1,
+		Emotion:   EmotionState{Positive: 0.8, Negative: 0.05, UpdatedAt: now},
+		Mood:      MoodState{Valence: 0.6, UpdatedAt: now},
+		Stress:    0.1,
 		UpdatedAt: now,
 	}
 	if err := repo.SaveState("char-overwrite", second); err != nil {
@@ -145,17 +145,17 @@ func TestSQLiteRepositoryMultipleCharactersIsolated(t *testing.T) {
 	now := time.Date(2026, 7, 1, 16, 0, 0, 0, time.UTC)
 
 	if err := repo.SaveState("char-a", AffectState{
-		Version: StateVersionV1,
-		Emotion: EmotionState{Positive: 0.9, UpdatedAt: now},
-		Mood:    MoodState{UpdatedAt: now},
+		Version:   StateVersionV1,
+		Emotion:   EmotionState{Positive: 0.9, UpdatedAt: now},
+		Mood:      MoodState{UpdatedAt: now},
 		UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("save char-a: %v", err)
 	}
 	if err := repo.SaveState("char-b", AffectState{
-		Version: StateVersionV1,
-		Emotion: EmotionState{Positive: 0.1, UpdatedAt: now},
-		Mood:    MoodState{UpdatedAt: now},
+		Version:   StateVersionV1,
+		Emotion:   EmotionState{Positive: 0.1, UpdatedAt: now},
+		Mood:      MoodState{UpdatedAt: now},
 		UpdatedAt: now,
 	}); err != nil {
 		t.Fatalf("save char-b: %v", err)

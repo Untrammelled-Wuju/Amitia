@@ -8,8 +8,8 @@ import (
 func TestResolveBeliefs_EmptyAdjustments(t *testing.T) {
 	config := DefaultBeliefResolverConfig()
 	candidate := ReflectionCandidate{
-		CharacterID:   "char-1",
-		Confidence:    0.8,
+		CharacterID:       "char-1",
+		Confidence:        0.8,
 		BeliefAdjustments: nil,
 	}
 	applied := ResolveBeliefs(candidate, config)

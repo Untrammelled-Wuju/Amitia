@@ -9,10 +9,10 @@ import (
 )
 
 type ProspectiveIntegrator struct {
-	db              *gorm.DB
-	prospectiveSvc  *memory.ProspectiveMemoryService
-	checkInterval   time.Duration
-	stopCh          chan struct{}
+	db             *gorm.DB
+	prospectiveSvc *memory.ProspectiveMemoryService
+	checkInterval  time.Duration
+	stopCh         chan struct{}
 }
 
 func NewProspectiveIntegrator(db *gorm.DB, checkInterval time.Duration) *ProspectiveIntegrator {

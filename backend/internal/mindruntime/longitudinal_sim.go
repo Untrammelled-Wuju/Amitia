@@ -9,37 +9,37 @@ import (
 type SimInteractionFrequency string
 
 const (
-	SimFreqHigh    SimInteractionFrequency = "high"
-	SimFreqMedium  SimInteractionFrequency = "medium"
-	SimFreqLow     SimInteractionFrequency = "low"
+	SimFreqHigh   SimInteractionFrequency = "high"
+	SimFreqMedium SimInteractionFrequency = "medium"
+	SimFreqLow    SimInteractionFrequency = "low"
 )
 
 type SimRoleConfig struct {
-	RoleID           string                   `json:"roleId"`
-	CharacterID      string                   `json:"characterId"`
-	Frequency        SimInteractionFrequency  `json:"frequency"`
-	PersonalityKind  string                   `json:"personalityKind"`
-	Enabled          bool                     `json:"enabled"`
-	SafetyCap        float64                  `json:"safetyCap"`
+	RoleID          string                  `json:"roleId"`
+	CharacterID     string                  `json:"characterId"`
+	Frequency       SimInteractionFrequency `json:"frequency"`
+	PersonalityKind string                  `json:"personalityKind"`
+	Enabled         bool                    `json:"enabled"`
+	SafetyCap       float64                 `json:"safetyCap"`
 }
 
 type SimUserBehavior struct {
-	BehaviorID    string    `json:"behaviorId"`
-	ActionType    string    `json:"actionType"`
-	TargetRoleID  string    `json:"targetRoleId"`
-	Intensity     float64   `json:"intensity"`
-	Timestamp     time.Time `json:"timestamp"`
-	Channel       string    `json:"channel"`
-	MessageLen    int       `json:"messageLen"`
-	EmotionTag    string    `json:"emotionTag,omitempty"`
+	BehaviorID   string    `json:"behaviorId"`
+	ActionType   string    `json:"actionType"`
+	TargetRoleID string    `json:"targetRoleId"`
+	Intensity    float64   `json:"intensity"`
+	Timestamp    time.Time `json:"timestamp"`
+	Channel      string    `json:"channel"`
+	MessageLen   int       `json:"messageLen"`
+	EmotionTag   string    `json:"emotionTag,omitempty"`
 }
 
 type LongitudinalSimConfig struct {
-	SimDuration      time.Duration        `json:"simDuration"`
-	StepInterval     time.Duration        `json:"stepInterval"`
-	Roles            []SimRoleConfig     `json:"roles"`
-	BehaviorsPerStep int                  `json:"behaviorsPerStep"`
-	Seed             int64                `json:"seed"`
+	SimDuration      time.Duration   `json:"simDuration"`
+	StepInterval     time.Duration   `json:"stepInterval"`
+	Roles            []SimRoleConfig `json:"roles"`
+	BehaviorsPerStep int             `json:"behaviorsPerStep"`
+	Seed             int64           `json:"seed"`
 }
 
 type SimStepResult struct {
@@ -51,13 +51,13 @@ type SimStepResult struct {
 }
 
 type LongitudinalSimResult struct {
-	Config        SimConfigSnapshot       `json:"config"`
-	StartedAt     time.Time               `json:"startedAt"`
-	EndedAt       time.Time               `json:"endedAt"`
-	TotalSteps    int                     `json:"totalSteps"`
-	Steps         []SimStepResult         `json:"steps"`
-	Aggregations  SimAggregations         `json:"aggregations"`
-	Parameters    CalibratedParams        `json:"parameters"`
+	Config       SimConfigSnapshot `json:"config"`
+	StartedAt    time.Time         `json:"startedAt"`
+	EndedAt      time.Time         `json:"endedAt"`
+	TotalSteps   int               `json:"totalSteps"`
+	Steps        []SimStepResult   `json:"steps"`
+	Aggregations SimAggregations   `json:"aggregations"`
+	Parameters   CalibratedParams  `json:"parameters"`
 }
 
 type SimConfigSnapshot struct {
@@ -68,14 +68,14 @@ type SimConfigSnapshot struct {
 }
 
 type SimAggregations struct {
-	TotalMessages     int                     `json:"totalMessages"`
-	ByChannel         map[string]int          `json:"byChannel"`
-	ByRole            map[string]int          `json:"byRole"`
-	ByActionType      map[string]int          `json:"byActionType"`
-	ByFrequency       map[string]int          `json:"byFrequency"`
-	PeakMessagesStep  int                     `json:"peakMessagesStep"`
-	PeakMessagesCount int                     `json:"peakMessagesCount"`
-	AvgMessagesPerStep float64                `json:"avgMessagesPerStep"`
+	TotalMessages      int            `json:"totalMessages"`
+	ByChannel          map[string]int `json:"byChannel"`
+	ByRole             map[string]int `json:"byRole"`
+	ByActionType       map[string]int `json:"byActionType"`
+	ByFrequency        map[string]int `json:"byFrequency"`
+	PeakMessagesStep   int            `json:"peakMessagesStep"`
+	PeakMessagesCount  int            `json:"peakMessagesCount"`
+	AvgMessagesPerStep float64        `json:"avgMessagesPerStep"`
 }
 
 func DefaultLongitudinalSimConfig() LongitudinalSimConfig {
@@ -161,13 +161,13 @@ func RunLongitudinalSim(config LongitudinalSimConfig) LongitudinalSimResult {
 		TotalSteps: totalSteps,
 		Steps:      steps,
 		Aggregations: SimAggregations{
-			TotalMessages:     totalMessages,
-			ByChannel:         byChannel,
-			ByRole:            byRole,
-			ByActionType:      byActionType,
-			ByFrequency:       byFrequency,
-			PeakMessagesStep:  peakStep,
-			PeakMessagesCount: peakCount,
+			TotalMessages:      totalMessages,
+			ByChannel:          byChannel,
+			ByRole:             byRole,
+			ByActionType:       byActionType,
+			ByFrequency:        byFrequency,
+			PeakMessagesStep:   peakStep,
+			PeakMessagesCount:  peakCount,
 			AvgMessagesPerStep: safeDiv(float64(totalMessages), float64(totalSteps)),
 		},
 		Parameters: calibrated,

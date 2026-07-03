@@ -1,11 +1,11 @@
-﻿package qdrant
+package qdrant
 
 import (
 	"context"
 	"fmt"
 
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"github.com/u-ai/backend/log"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
 
 type QdrantFilter struct {
@@ -24,6 +24,7 @@ type FilterBuilder struct {
 	Status      string
 	UserID      string
 }
+
 func (fb FilterBuilder) Validate() error {
 	if fb.CharacterID == "" {
 		return fmt.Errorf("FilterBuilder: CharacterID cannot be empty")
@@ -42,7 +43,7 @@ func (fb FilterBuilder) Build() QdrantFilter {
 	}
 }
 
-type QdrantClient struct{
+type QdrantClient struct {
 }
 
 func NewQdrantClient() *QdrantClient {

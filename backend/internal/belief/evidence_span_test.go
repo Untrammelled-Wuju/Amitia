@@ -30,13 +30,13 @@ func TestEvidenceSpanZeroValues(t *testing.T) {
 
 func TestMemoryCandidateWithEvidence(t *testing.T) {
 	candidate := MemoryCandidate{
-		ID: "cand-1",
-		Key: "hobby",
-		Value: "likes hiking",
-		Evidence: EvidenceSpan{SourceMsgID: "msg-005", SourceStart: 10, SourceEnd: 25},
+		ID:         "cand-1",
+		Key:        "hobby",
+		Value:      "likes hiking",
+		Evidence:   EvidenceSpan{SourceMsgID: "msg-005", SourceStart: 10, SourceEnd: 25},
 		Confidence: 0.85,
 		ObservedAt: time.Now(),
-		Source: SourceKindUser,
+		Source:     SourceKindUser,
 	}
 	if candidate.Evidence.SourceMsgID != "msg-005" {
 		t.Fatal("expected evidence source msg id")

@@ -155,10 +155,10 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 		messageContent = result.Response.Reply
 	}
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
-	s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
+	s.db.Exec("UPDATE active_message_task SET status='QUEUED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 
-	log.Printf("[Companion] RunActiveMessageTask sent type=%s id=%d channel=%s", taskType, id, channelSetting)
-	return map[string]interface{}{"id": id, "status": "SENT", "taskType": taskType, "channel": channelSetting}
+	log.Printf("[Companion] RunActiveMessageTask queued type=%s id=%d channel=%s", taskType, id, channelSetting)
+	return map[string]interface{}{"id": id, "status": "QUEUED", "taskType": taskType, "channel": channelSetting}
 }
 
 func (s *service) CancelActiveMessageTask(id int, characterID string) map[string]interface{} {

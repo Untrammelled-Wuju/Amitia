@@ -343,16 +343,16 @@ func TestDefaultSupervisorConfig(t *testing.T) {
 func TestIsRolledBack(t *testing.T) {
 	config := DefaultSupervisorConfig()
 	original := ReviewCandidate(SupervisorInput{
-		Target:      SupervisorTargetSummary,
-		CharacterID: "char-rb",
-		RequestID:   "req-rb",
-		EvidenceCount: 4,
+		Target:         SupervisorTargetSummary,
+		CharacterID:    "char-rb",
+		RequestID:      "req-rb",
+		EvidenceCount:  4,
 		Counterexample: 0,
-		Authority:  6,
-		Sensitive:  false,
-		BudgetUsed: 0.2,
-		BudgetLimit: 1.0,
-		CreatedAt:  time.Now(),
+		Authority:      6,
+		Sensitive:      false,
+		BudgetUsed:     0.2,
+		BudgetLimit:    1.0,
+		CreatedAt:      time.Now(),
 	}, config)
 	rollback := CreateRollbackEvent(RollbackTarget{
 		OriginalRecordID: original.ID,

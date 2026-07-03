@@ -9,10 +9,10 @@ func TestStateRecoversOverTime(t *testing.T) {
 	now := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
 	personality := PersonalityReference{Sensitivity: 0.5, Stability: 0.5, RecoveryBias: 0.5, MoodStickiness: 0.5, Boundary: 0.5}
 	initial := AffectState{
-		Version: StateVersionV1,
-		Emotion: EmotionState{Positive: 0.3, Negative: 0.2, Arousal: 0.4, Dominance: 0.35, UpdatedAt: now},
-		Mood:    MoodState{Valence: 0.1, Tension: 0.15, UpdatedAt: now},
-		Stress:  0.25,
+		Version:   StateVersionV1,
+		Emotion:   EmotionState{Positive: 0.3, Negative: 0.2, Arousal: 0.4, Dominance: 0.35, UpdatedAt: now},
+		Mood:      MoodState{Valence: 0.1, Tension: 0.15, UpdatedAt: now},
+		Stress:    0.25,
 		UpdatedAt: now,
 	}
 

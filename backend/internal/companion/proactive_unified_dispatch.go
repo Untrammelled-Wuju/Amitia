@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 )
 
@@ -23,7 +22,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 	if s.unifiedEntry == nil {
 		return nil, errProactiveUnifiedEntryMissing
 	}
-	scope := s.resolveProactiveDeliveryScope(conversationID, channelSetting)
+	scope := s.resolveProactiveDeliveryScope(conversationID, channelSetting, characterID)
 	req := &interaction.UnifiedEntryRequest{
 		Channel:        scope.channel,
 		Message:        prompt,
@@ -34,21 +33,27 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 		ConversationID: conversationID,
 		RequestID:      requestID,
 		SessionID:      "proactive:" + characterID,
+		IsInternal:     true,
 	}
 	return s.unifiedEntry.Handle(ctx, req)
 }
 
-func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting string) proactiveDeliveryScope {
+func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, characterID string) proactiveDeliveryScope {
 	scope := proactiveDeliveryScope{channel: normalizeProactiveChannel(channelSetting)}
-	var channel, peerID string
-	s.db.Table("conversations").Select("channel, peer_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&channel, &peerID)
+	var channel, peerID, userID string
+	s.db.Table("conversations").Select("channel, peer_id, user_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&channel, &peerID, &userID)
 	if strings.TrimSpace(channel) != "" {
 		scope.channel = normalizeProactiveChannel(channel)
 	}
 	scope.peerID = strings.TrimSpace(peerID)
-	scope.userID = scope.peerID
-	if scope.userID == "" {
-		scope.userID = interaction.DefaultUserID
+	if userIDFromDB := strings.TrimSpace(userID); userIDFromDB != "" {
+		scope.userID = userIDFromDB
+	} else {
+		if trimmedPeerID := strings.TrimSpace(peerID); trimmedPeerID != "" {
+			scope.userID = trimmedPeerID
+		} else {
+			scope.userID = "character:" + strings.TrimSpace(characterID)
+		}
 	}
 	if scope.channel == "" {
 		scope.channel = "web"
@@ -58,8 +63,11 @@ func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting s
 
 func normalizeProactiveChannel(channel string) string {
 	channel = strings.ToLower(strings.TrimSpace(channel))
-	if channel == "" || channel == "all" {
+	if channel == "" {
 		return "web"
+	}
+	if channel == "all" {
+		return "all"
 	}
 	if strings.Contains(channel, "wechat") {
 		return "wechat"
@@ -74,5 +82,16 @@ func normalizeProactiveChannel(channel string) string {
 }
 
 func proactiveRequestID(prefix string, id interface{}, now time.Time) string {
-	return fmt.Sprintf("%s-%v-%s", prefix, id, uuid.New().String())
+	return fmt.Sprintf("%s-%v-%d", prefix, id, now.Unix())
+}
+
+func (s *service) DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error) {
+	result, err := s.submitProactiveMessage(ctx, characterID, conversationID, channel, prompt, requestID)
+	if err != nil {
+		return "", err
+	}
+	if result.Response != nil {
+		return result.Response.Reply, nil
+	}
+	return "", nil
 }

@@ -10,35 +10,35 @@ import (
 )
 
 type PersonalityParameter struct {
-	Name        string
-	Current     float64
-	Min         float64
-	Max         float64
-	Target      float64
-	Velocity    float64
+	Name     string
+	Current  float64
+	Min      float64
+	Max      float64
+	Target   float64
+	Velocity float64
 }
 
 type PersonalityGrowthConfig struct {
-	Enabled             bool
-	GrowthRate          float64
-	MessageInterval     int
-	DecayFactor         float64
-	MaxTotalChange      float64
-	MinChangePerCycle   float64
-	SmoothingWindow     int
-	ParameterCount      int
+	Enabled           bool
+	GrowthRate        float64
+	MessageInterval   int
+	DecayFactor       float64
+	MaxTotalChange    float64
+	MinChangePerCycle float64
+	SmoothingWindow   int
+	ParameterCount    int
 }
 
 func DefaultPersonalityGrowthConfig() PersonalityGrowthConfig {
 	return PersonalityGrowthConfig{
-		Enabled:            true,
-		GrowthRate:         0.001,
-		MessageInterval:    200,
-		DecayFactor:        0.95,
-		MaxTotalChange:     0.3,
-		MinChangePerCycle:  0.0001,
-		SmoothingWindow:    10,
-		ParameterCount:     5,
+		Enabled:           true,
+		GrowthRate:        0.001,
+		MessageInterval:   200,
+		DecayFactor:       0.95,
+		MaxTotalChange:    0.3,
+		MinChangePerCycle: 0.0001,
+		SmoothingWindow:   10,
+		ParameterCount:    5,
 	}
 }
 
@@ -54,11 +54,11 @@ type GrowthTracker struct {
 }
 
 type GrowthRecord struct {
-	ID             string
-	CycleAt        time.Time
-	MessageCount   int
+	ID              string
+	CycleAt         time.Time
+	MessageCount    int
 	ParameterDeltas []ParameterDelta
-	TotalDelta     float64
+	TotalDelta      float64
 }
 
 type ParameterDelta struct {

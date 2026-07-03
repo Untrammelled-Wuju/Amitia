@@ -141,16 +141,16 @@ func TestApplyEventInteractionIncreasesPositiveEmotion(t *testing.T) {
 	state := NewPsycheState("char-005")
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-001",
-		CharacterID:   "char-005",
-		Type:          EventTypeInteraction,
-		Source:        "user_message",
-		ValenceDelta:  0.15,
-		ArousalDelta:  0.1,
+		ID:             "evt-001",
+		CharacterID:    "char-005",
+		Type:           EventTypeInteraction,
+		Source:         "user_message",
+		ValenceDelta:   0.15,
+		ArousalDelta:   0.1,
 		DominanceDelta: 0.05,
-		StressDelta:   0,
-		EnergyDelta:   -0.05,
-		Timestamp:     now,
+		StressDelta:    0,
+		EnergyDelta:    -0.05,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -176,16 +176,16 @@ func TestApplyEventNegativeReducesValenceAndIncreasesStress(t *testing.T) {
 	state := NewPsycheState("char-006")
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-002",
-		CharacterID:   "char-006",
-		Type:          EventTypeAppraisal,
-		Source:        "rejection",
-		ValenceDelta:  -0.2,
-		ArousalDelta:  0.15,
+		ID:             "evt-002",
+		CharacterID:    "char-006",
+		Type:           EventTypeAppraisal,
+		Source:         "rejection",
+		ValenceDelta:   -0.2,
+		ArousalDelta:   0.15,
 		DominanceDelta: -0.1,
-		StressDelta:   0.2,
-		EnergyDelta:   -0.1,
-		Timestamp:     now,
+		StressDelta:    0.2,
+		EnergyDelta:    -0.1,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -215,16 +215,16 @@ func TestApplyEventRecoveryReducesStressIncreasesEnergy(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-003",
-		CharacterID:   "char-007",
-		Type:          EventTypeRecovery,
-		Source:        "rest",
-		ValenceDelta:  0.1,
-		ArousalDelta:  -0.1,
+		ID:             "evt-003",
+		CharacterID:    "char-007",
+		Type:           EventTypeRecovery,
+		Source:         "rest",
+		ValenceDelta:   0.1,
+		ArousalDelta:   -0.1,
 		DominanceDelta: 0.05,
-		StressDelta:   -0.2,
-		EnergyDelta:   0.15,
-		Timestamp:     now,
+		StressDelta:    -0.2,
+		EnergyDelta:    0.15,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -244,16 +244,16 @@ func TestApplyEventInternal(t *testing.T) {
 	state := NewPsycheState("char-008")
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-004",
-		CharacterID:   "char-008",
-		Type:          EventTypeInternal,
-		Source:        "rumination",
-		ValenceDelta:  -0.05,
-		ArousalDelta:  0.05,
+		ID:             "evt-004",
+		CharacterID:    "char-008",
+		Type:           EventTypeInternal,
+		Source:         "rumination",
+		ValenceDelta:   -0.05,
+		ArousalDelta:   0.05,
 		DominanceDelta: -0.02,
-		StressDelta:   0.05,
-		EnergyDelta:   0,
-		Timestamp:     now,
+		StressDelta:    0.05,
+		EnergyDelta:    0,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -274,16 +274,16 @@ func TestApplyEventClampsAtBounds(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-005",
-		CharacterID:   "char-009",
-		Type:          EventTypeInteraction,
-		Source:        "overflow_test",
-		ValenceDelta:  0.2,
-		ArousalDelta:  1.5,
+		ID:             "evt-005",
+		CharacterID:    "char-009",
+		Type:           EventTypeInteraction,
+		Source:         "overflow_test",
+		ValenceDelta:   0.2,
+		ArousalDelta:   1.5,
 		DominanceDelta: 2.0,
-		StressDelta:   0.2,
-		EnergyDelta:   -0.2,
-		Timestamp:     now,
+		StressDelta:    0.2,
+		EnergyDelta:    -0.2,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -313,14 +313,14 @@ func TestApplyEventClampsAtFloor(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-006",
-		CharacterID:   "char-010",
-		Type:          EventTypeAppraisal,
-		Source:        "underflow_test",
-		ValenceDelta:  -0.2,
+		ID:             "evt-006",
+		CharacterID:    "char-010",
+		Type:           EventTypeAppraisal,
+		Source:         "underflow_test",
+		ValenceDelta:   -0.2,
 		DominanceDelta: -0.5,
-		StressDelta:   -0.2,
-		Timestamp:     now,
+		StressDelta:    -0.2,
+		Timestamp:      now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -343,13 +343,13 @@ func TestApplyEventMoodTransfer(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-007",
-		CharacterID:   "char-011",
-		Type:          EventTypeInteraction,
-		Source:        "mood_test",
-		ValenceDelta:  0.3,
-		ArousalDelta:  0.2,
-		Timestamp:     now,
+		ID:           "evt-007",
+		CharacterID:  "char-011",
+		Type:         EventTypeInteraction,
+		Source:       "mood_test",
+		ValenceDelta: 0.3,
+		ArousalDelta: 0.2,
+		Timestamp:    now,
 	}
 
 	result := ApplyEvent(state, event)
@@ -374,16 +374,16 @@ func TestApplyEventDeterministic(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := PsycheEvent{
-		ID:            "evt-008",
-		CharacterID:   "char-012",
-		Type:          EventTypeInteraction,
-		Source:        "test",
-		ValenceDelta:  0.12,
-		ArousalDelta:  -0.08,
+		ID:             "evt-008",
+		CharacterID:    "char-012",
+		Type:           EventTypeInteraction,
+		Source:         "test",
+		ValenceDelta:   0.12,
+		ArousalDelta:   -0.08,
 		DominanceDelta: 0.03,
-		StressDelta:   -0.04,
-		EnergyDelta:   -0.02,
-		Timestamp:     now,
+		StressDelta:    -0.04,
+		EnergyDelta:    -0.02,
+		Timestamp:      now,
 	}
 
 	first := ApplyEvent(state, event)
@@ -489,12 +489,12 @@ func TestJSONRoundTripPsycheState(t *testing.T) {
 func TestJSONRoundTripPsycheEvent(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	event := PsycheEvent{
-		ID:            "evt-json-001",
-		CharacterID:   "char-016",
-		Type:          EventTypeInteraction,
-		Source:        "test",
-		ValenceDelta:  0.1,
-		Timestamp:     now,
+		ID:           "evt-json-001",
+		CharacterID:  "char-016",
+		Type:         EventTypeInteraction,
+		Source:       "test",
+		ValenceDelta: 0.1,
+		Timestamp:    now,
 	}
 
 	raw, err := json.Marshal(event)

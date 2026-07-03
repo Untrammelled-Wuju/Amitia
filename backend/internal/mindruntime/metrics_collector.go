@@ -27,21 +27,21 @@ type RuntimeMetricsCollector struct {
 }
 
 type RuntimeMetricsSnapshot struct {
-	TotalInteractions     int64   `json:"totalInteractions"`
-	ActiveInteractions    int64   `json:"activeInteractions"`
-	AvgLatencyMs          float64 `json:"avgLatencyMs"`
-	P95LatencyMs          float64 `json:"p95LatencyMs"`
-	CancelRate            float64 `json:"cancelRate"`
-	SupersedeRate         float64 `json:"supersedeRate"`
-	DeliverySuccessRate   float64 `json:"deliverySuccessRate"`
-	ToolUnknownRate       float64 `json:"toolUnknownRate"`
-	CircuitBreakerRate    float64 `json:"circuitBreakerRate"`
-	QueueBackpressureRate float64 `json:"queueBackpressureRate"`
-	ReconciliationOpenIssues int64 `json:"reconciliationOpenIssues"`
-	TotalModelCalls       int64   `json:"totalModelCalls"`
-	CacheHitRate          float64 `json:"cacheHitRate"`
-	CollectedAt           string  `json:"collectedAt"`
-	Version               string  `json:"version"`
+	TotalInteractions        int64   `json:"totalInteractions"`
+	ActiveInteractions       int64   `json:"activeInteractions"`
+	AvgLatencyMs             float64 `json:"avgLatencyMs"`
+	P95LatencyMs             float64 `json:"p95LatencyMs"`
+	CancelRate               float64 `json:"cancelRate"`
+	SupersedeRate            float64 `json:"supersedeRate"`
+	DeliverySuccessRate      float64 `json:"deliverySuccessRate"`
+	ToolUnknownRate          float64 `json:"toolUnknownRate"`
+	CircuitBreakerRate       float64 `json:"circuitBreakerRate"`
+	QueueBackpressureRate    float64 `json:"queueBackpressureRate"`
+	ReconciliationOpenIssues int64   `json:"reconciliationOpenIssues"`
+	TotalModelCalls          int64   `json:"totalModelCalls"`
+	CacheHitRate             float64 `json:"cacheHitRate"`
+	CollectedAt              string  `json:"collectedAt"`
+	Version                  string  `json:"version"`
 }
 
 var DefaultMetricsCollector = NewRuntimeMetricsCollector()
@@ -51,7 +51,10 @@ func NewRuntimeMetricsCollector() *RuntimeMetricsCollector {
 		counters: make(map[MetricKey]int64),
 		gauges:   make(map[MetricKey]float64),
 		latency:  make(map[MetricKey][]float64),
-		rates:    make(map[MetricKey]struct{ success int64; total int64 }),
+		rates: make(map[MetricKey]struct {
+			success int64
+			total   int64
+		}),
 	}
 }
 
@@ -185,7 +188,10 @@ func (c *RuntimeMetricsCollector) Reset() {
 	c.counters = make(map[MetricKey]int64)
 	c.gauges = make(map[MetricKey]float64)
 	c.latency = make(map[MetricKey][]float64)
-	c.rates = make(map[MetricKey]struct{ success int64; total int64 })
+	c.rates = make(map[MetricKey]struct {
+		success int64
+		total   int64
+	})
 }
 
 func computeRate(numerator, denominator int64) float64 {

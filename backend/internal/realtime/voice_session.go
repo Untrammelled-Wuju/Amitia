@@ -14,29 +14,29 @@ const (
 )
 
 type VoiceTurn struct {
-	TurnID       string              `json:"turnId"`
-	SessionID    string              `json:"sessionId"`
-	ConversationID string            `json:"conversationId"`
-	CharacterID  string              `json:"characterId"`
-	Text         string              `json:"text"`
-	Status       TranscriptionStatus `json:"status"`
-	StartedAt    time.Time           `json:"startedAt"`
-	EndedAt      time.Time           `json:"endedAt,omitempty"`
-	SupersededBy string              `json:"supersededBy,omitempty"`
-	Cancelled    bool                `json:"cancelled"`
+	TurnID         string              `json:"turnId"`
+	SessionID      string              `json:"sessionId"`
+	ConversationID string              `json:"conversationId"`
+	CharacterID    string              `json:"characterId"`
+	Text           string              `json:"text"`
+	Status         TranscriptionStatus `json:"status"`
+	StartedAt      time.Time           `json:"startedAt"`
+	EndedAt        time.Time           `json:"endedAt,omitempty"`
+	SupersededBy   string              `json:"supersededBy,omitempty"`
+	Cancelled      bool                `json:"cancelled"`
 }
 
 type VoiceSessionState struct {
-	SessionID          string        `json:"sessionId"`
-	ConversationID     string        `json:"conversationId"`
-	CharacterID        string        `json:"characterId"`
-	LastCommittedEvent string        `json:"lastCommittedEvent"`
-	CurrentTurn        *VoiceTurn    `json:"currentTurn,omitempty"`
-	CompletedTurns     []VoiceTurn   `json:"completedTurns"`
-	StateVersion       int64         `json:"stateVersion"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	EndedAt            time.Time     `json:"endedAt,omitempty"`
-	mu                 sync.RWMutex  `json:"-"`
+	SessionID          string       `json:"sessionId"`
+	ConversationID     string       `json:"conversationId"`
+	CharacterID        string       `json:"characterId"`
+	LastCommittedEvent string       `json:"lastCommittedEvent"`
+	CurrentTurn        *VoiceTurn   `json:"currentTurn,omitempty"`
+	CompletedTurns     []VoiceTurn  `json:"completedTurns"`
+	StateVersion       int64        `json:"stateVersion"`
+	CreatedAt          time.Time    `json:"createdAt"`
+	EndedAt            time.Time    `json:"endedAt,omitempty"`
+	mu                 sync.RWMutex `json:"-"`
 }
 
 var activeVoiceSessions sync.Map
@@ -83,13 +83,13 @@ func (s *VoiceSessionState) BeginTurn(turnID, text string) *VoiceTurn {
 		s.CompletedTurns = append(s.CompletedTurns, *s.CurrentTurn)
 	}
 	turn := &VoiceTurn{
-		TurnID:       turnID,
-		SessionID:    s.SessionID,
+		TurnID:         turnID,
+		SessionID:      s.SessionID,
 		ConversationID: s.ConversationID,
-		CharacterID:  s.CharacterID,
-		Text:         text,
-		Status:       TranscriptionInterim,
-		StartedAt:    time.Now(),
+		CharacterID:    s.CharacterID,
+		Text:           text,
+		Status:         TranscriptionInterim,
+		StartedAt:      time.Now(),
 	}
 	s.CurrentTurn = turn
 	return turn

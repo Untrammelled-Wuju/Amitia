@@ -6,16 +6,26 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
+	newoutbox "github.com/u-ai/backend/internal/outbox"
+	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
+	"github.com/u-ai/backend/internal/psyche/appraisal"
+	"github.com/u-ai/backend/internal/psyche/budget"
+	"github.com/u-ai/backend/internal/queue"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
@@ -23,17 +33,24 @@ import (
 )
 
 type AppServices struct {
-	Graph         graph.Service
-	Memory        memory.Service
-	Profile       profile.Service
-	Episodic      episodic.Service
-	WorldBook     worldbook.Service
-	Vision        vision.Service
-	Companion     companion.Service
-	Chat          chat.Service
-	UnifiedEntry  *interaction.UnifiedEntry
-	DataLifecycle *mindruntime.DataLifecycleCoordinator
-	OutboxRuntime *interaction.OutboxRuntime
+	DeliveryStore   *delivery.SQLiteDeliveryStore
+	Graph           graph.Service
+	Memory          memory.Service
+	Profile         profile.Service
+	Episodic        episodic.Service
+	WorldBook       worldbook.Service
+	Vision          vision.Service
+	Companion       companion.Service
+	Chat            chat.Service
+	UnifiedEntry    *interaction.UnifiedEntry
+	DataLifecycle   *mindruntime.DataLifecycleCoordinator
+	RuntimeQueue    *queue.SQLiteRuntimeQueueStore
+	NewOutbox       *newoutbox.SQLiteOutboxStore
+	OutboxRuntime   *interaction.OutboxRuntime
+	OutboxWorker    *newoutbox.Worker
+	Reconciliation  *mindruntime.ReconciliationEngine
+	CircuitBreakers *mindruntime.CircuitBreakerRegistry
+	VoiceEntry      *interaction.VoiceEntry
 }
 
 type reflectionMemoryServiceAdapter struct {
@@ -97,10 +114,31 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	})
 	outboxPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryServiceAdapter{memory: memSvc}, loggingOutboxPublisher)
 	outboxRuntime := interaction.NewOutboxRuntime(outbox, deadStore, outboxPublisher, interaction.OutboxWorkerConfig{})
+	newOutboxStore := newoutbox.NewSQLiteOutboxStore(ctx.DB, newoutbox.DefaultOutboxStoreConfig())
+	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
+	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
+	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
+	chatSvc.SetDeliveryStore(deliveryAdapter)
+
+	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
+	chatSvc.SetOutboxStore(outboxAdapter)
+	if err := runtimeQueue.InitSchema(); err != nil {
+		panic("failed to init runtime queue schema: " + err.Error())
+	}
+	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, newoutbox.PublisherFunc(func(record newoutbox.OutboxRecord) error {
+		log.Info("new outbox event dispatched", "id", record.ID, "type", record.EventType, "aggregate", record.AggregateID)
+		return nil
+	}), newoutbox.DefaultWorkerConfig())
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, outbox)
 	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo)
-	orch.SetRuntimePipeline(interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400)))
+	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
+	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
+	runtimePipeline.SetSafetyGovernor(safety.NewGovernor(safety.DefaultGovernorConfig()))
+	runtimePipeline.SetBeliefResolver(belief.ResolveBelief)
+	runtimePipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))
+	runtimePipeline.SetBudgetController(budget.NewBudgetController(0.5))
+	orch.SetRuntimePipeline(runtimePipeline)
 	deadlineCfg := mindruntime.DefaultDeadlineConfig
 	deadlineCfg.TotalTimeout = 180 * time.Second
 	deadlineCfg.GenerationTimeout = 120 * time.Second
@@ -114,20 +152,59 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to init data lifecycle schema: " + err.Error())
 	}
 	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB))
+	if coordinatorSetter, ok := interface{}(memSvc).(interface {
+		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
+	}); ok {
+		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
+	}
+	if coordinatorSetter, ok := interface{}(profSvc).(interface {
+		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
+	}); ok {
+		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
+	}
+	if coordinatorSetter, ok := interface{}(epiSvc).(interface {
+		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
+	}); ok {
+		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
+	}
 	entry := interaction.NewUnifiedEntry(orch, resolver)
 	compSvc.AttachUnifiedEntry(entry)
+	if coordinatorSetter, ok := interface{}(compSvc).(interface {
+		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
+	}); ok {
+		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
+	}
+	reconciliationEngine := mindruntime.NewReconciliationEngine(mindruntime.DefaultReconciliationConfig())
+	if err := mindruntime.RegisterDefaultRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB); err != nil {
+		log.Warn("reconciliation checkers registration warning: ", err)
+	}
+	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
+	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
+	cbRegistry.Register("surrealdb", mindruntime.DefaultCircuitBreakerConfig())
+	cbRegistry.Register("model_api", mindruntime.DefaultCircuitBreakerConfig())
+	voiceEntry := interaction.NewVoiceEntryWithUnifiedEntry(orch, entry)
+	if err := deliveryStore.InitSchema(); err != nil {
+		panic("failed to init delivery store schema: " + err.Error())
+	}
 	return &AppServices{
-		Graph:         graphSvc,
-		Memory:        memSvc,
-		Profile:       profSvc,
-		Episodic:      epiSvc,
-		WorldBook:     wbSvc,
-		Vision:        visionSvc,
-		Companion:     compSvc,
-		Chat:          chatSvc,
-		UnifiedEntry:  entry,
-		DataLifecycle: dataLifecycle,
-		OutboxRuntime: outboxRuntime,
+		Graph:           graphSvc,
+		Memory:          memSvc,
+		Profile:         profSvc,
+		Episodic:        epiSvc,
+		WorldBook:       wbSvc,
+		Vision:          visionSvc,
+		Companion:       compSvc,
+		Chat:            chatSvc,
+		UnifiedEntry:    entry,
+		DataLifecycle:   dataLifecycle,
+		RuntimeQueue:    runtimeQueue,
+		NewOutbox:       newOutboxStore,
+		OutboxRuntime:   outboxRuntime,
+		DeliveryStore:   deliveryStore,
+		OutboxWorker:    newOutboxWorker,
+		Reconciliation:  reconciliationEngine,
+		CircuitBreakers: cbRegistry,
+		VoiceEntry:      voiceEntry,
 	}
 }
 
@@ -143,4 +220,36 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
 	return runtimeRegistry
+}
+
+type chatOutboxAdapter struct {
+	store *newoutbox.SQLiteOutboxStore
+}
+
+func (a *chatOutboxAdapter) AppendOutbox(aggregateID, eventType string, payload []byte) error {
+	record := newoutbox.OutboxRecord{
+		ID:          uuid.New().String(),
+		AggregateID: aggregateID,
+		EventType:   eventType,
+		Payload:     payload,
+		Status:      newoutbox.OutboxStatusPending,
+		MaxRetries:  newoutbox.DefaultMaxRetries,
+		AvailableAt: time.Now(),
+		CreatedAt:   time.Now(),
+	}
+	return a.store.Append(record)
+}
+
+type chatDeliveryAdapter struct {
+	store *delivery.SQLiteDeliveryStore
+}
+
+func (a *chatDeliveryAdapter) CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error {
+	intent := delivery.NewDeliveryIntent(interactionID, channel, peerID, contentType, payload)
+	return a.store.CreateIntent(intent)
+}
+
+func (a *chatDeliveryAdapter) CreateOutputLease(interactionID, characterID, userID, channel string) error {
+	lease := delivery.NewOutputLease(interactionID, characterID, userID, channel)
+	return a.store.CreateLease(lease)
 }

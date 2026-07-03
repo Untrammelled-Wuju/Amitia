@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-
 func appendTimelineEntry(entries []TimelineEntry, start, end time.Time, state, sourceType string, priority int, reason string) []TimelineEntry {
 	if end.Before(start) || end.Equal(start) {
 		return entries
@@ -20,7 +19,6 @@ func appendTimelineEntry(entries []TimelineEntry, start, end time.Time, state, s
 		Priority: priority, Reason: reason,
 	})
 }
-
 
 func (s *service) loadWorkSchedule(characterID string, date string) (bool, time.Time, time.Time, WorkProfile) {
 	var workStart, workEnd time.Time
@@ -43,7 +41,6 @@ func (s *service) loadWorkSchedule(characterID string, date string) (bool, time.
 	}
 	return hasWork, workStart, workEnd, wp
 }
-
 
 func mergeTimelineEntries(entries []TimelineEntry) []TimelineEntry {
 	if len(entries) == 0 {
@@ -68,7 +65,6 @@ func mergeTimelineEntries(entries []TimelineEntry) []TimelineEntry {
 	}
 	return merged
 }
-
 
 func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID string) []TimelineEntry {
 	today := parseDate(date)
@@ -107,7 +103,6 @@ func (s *service) buildTimeline(date string, schedule TodaySchedule, characterID
 	entries = appendTimelineEntry(entries, sleep, nextMidnight, "SLEEPING", "schedule", 100, "\u7761\u7720\u65f6\u95f4")
 	return mergeTimelineEntries(entries)
 }
-
 
 func (s *service) buildWorkDayTimeline(entries []TimelineEntry, afterWake, workStart, workEnd, lunch, dinner, sleep time.Time, schedule TodaySchedule, rng *rand.Rand) []TimelineEntry {
 	commuteStart := afterWake
@@ -241,7 +236,6 @@ func (s *service) buildNoWorkTimeline(entries []TimelineEntry, afterWake, lunch,
 	entries = appendTimelineEntry(entries, beforeSleep, sleep, "BEFORE_SLEEP", "schedule", 80, "\u7761\u524d\u51c6\u5907")
 	return entries
 }
-
 
 func (s *service) buildClassEntries(date string, characterID string) []TimelineEntry {
 	var entries []TimelineEntry

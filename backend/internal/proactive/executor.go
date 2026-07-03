@@ -4,6 +4,7 @@ package proactive
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -23,10 +24,15 @@ import (
 type Executor struct {
 	db           *gorm.DB
 	runningRules sync.Map
+	dispatch     ProactiveDispatch
 }
 
 func NewExecutor(db *gorm.DB) *Executor {
 	return &Executor{db: db}
+}
+
+func (e *Executor) SetDispatch(d ProactiveDispatch) {
+	e.dispatch = d
 }
 
 func (e *Executor) isRuleRunning(id int) bool {
@@ -131,11 +137,6 @@ func (e *Executor) executeRule(r struct {
 		return
 	}
 
-	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity)
-	if content == "" {
-		return
-	}
-
 	channel := r.channel
 	if channel == "" {
 		channel = "all"
@@ -143,6 +144,35 @@ func (e *Executor) executeRule(r struct {
 	convID := resolveProactiveConversation(e.db, r.convID, character.ID, channel, false)
 	if convID == "" {
 		log.Printf("[Proactive] 规则 id=%d 无可用对话", r.id)
+		return
+	}
+
+	if e.dispatch != nil {
+		requestID := fmt.Sprintf("proactive-rule-%d-%d", r.id, time.Now().Unix())
+		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+			CharacterID:    character.ID,
+			ConversationID: convID,
+			Channel:        channel,
+			Prompt:         r.prompt,
+			RequestID:      requestID,
+		})
+		status := "pending"
+		content := ""
+		if err != nil || (result != nil && !result.Success) {
+			status = "failed"
+			log.Printf("[Proactive] 规则 id=%d 统一调度失败: %v", r.id, err)
+		} else if result != nil {
+			content = result.Content
+		}
+		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
+			r.id, convID, content, channel, status)
+		e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?",
+			time.Now(), time.Now(), r.id)
+		return
+	}
+
+	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity)
+	if content == "" {
 		return
 	}
 
@@ -166,7 +196,7 @@ func (e *Executor) executeRule(r struct {
 		}
 	}
 
-	status := "sent"
+	status := "pending"
 	if !sentWeb && !sentWechat && !sentQQ {
 		status = "failed"
 	}
@@ -255,6 +285,29 @@ func (e *Executor) executeReminder(r struct {
 		channel = "web"
 	}
 
+	if e.dispatch != nil {
+		requestID := fmt.Sprintf("proactive-reminder-%d-%d", r.id, time.Now().Unix())
+		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+			CharacterID:    r.charID,
+			ConversationID: convID,
+			Channel:        channel,
+			Prompt:         content,
+			RequestID:      requestID,
+		})
+		status := "pending"
+		contentStr := ""
+		if err != nil || (result != nil && !result.Success) {
+			status = "failed"
+		}
+		if result != nil {
+			contentStr = result.Content
+		}
+		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
+			r.id, convID, contentStr, channel, status)
+		log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度发送", r.id, r.title)
+		return
+	}
+
 	sentWeb, sentWechat, sentQQ := false, false, false
 	if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
 		e.sendToWeb(convID, content)
@@ -274,7 +327,7 @@ func (e *Executor) executeReminder(r struct {
 		}
 	}
 
-	status := "sent"
+	status := "pending"
 	if !sentWeb && !sentWechat && !sentQQ {
 		status = "failed"
 	}
@@ -379,7 +432,7 @@ func (e *Executor) sendToWeb(convID, content string) {
 		}
 	}
 
-	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, audio_url, audio_duration, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?, ?, ?)",
+	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, audio_url, audio_duration, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 0, ?, ?, ?)",
 		msgID, convID, displayContent, audioUrl, audioDuration, now)
 }
 
@@ -438,7 +491,6 @@ func calcNextRemindAt(remindAt, repeatRule, nowDate, nowTime string) string {
 func parseCronMinute(cron string) int {
 	parts := strings.Fields(cron)
 	if len(parts) < 2 {
-		// Try HH:MM format
 		t, err := time.Parse("15:04", cron)
 		if err == nil {
 			return t.Hour()*60 + t.Minute()
@@ -509,7 +561,7 @@ func (e *Executor) sendToQQ(userID, content string) bool {
 	now := time.Now()
 	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
 	displayContent := content
-	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)",
+	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 0, ?)",
 		msgID, convID, displayContent, now)
 
 	log.Printf("[Proactive] QQ已发送 to=%s voice=%v voiceOK=%v", targetID, useVoice, voiceOK)
@@ -527,6 +579,29 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 		log.Println("[Proactive] ExecuteShareTask: no scoped conversation")
 		return ""
 	}
+
+	if e.dispatch != nil {
+		requestID := fmt.Sprintf("proactive-share-%d", time.Now().UnixNano())
+		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+			CharacterID:    character.ID,
+			ConversationID: convID,
+			Channel:        "all",
+			Prompt:         prompt,
+			RequestID:      requestID,
+		})
+		status := "pending"
+		content := ""
+		if err != nil || (result != nil && !result.Success) {
+			status = "failed"
+		} else if result != nil {
+			content = result.Content
+		}
+		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
+			convID, content, "all", status, time.Now(), time.Now())
+		log.Printf("[Proactive] ExecuteShareTask dispatched via unified entry: success=%v", err == nil && result != nil && result.Success)
+		return content
+	}
+
 	content := e.generateContent("系统主动消息", "share", prompt, character.Name, character.Identity)
 	if content == "" {
 		return ""
@@ -544,7 +619,7 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 		e.sendToQQ(qqID, content)
 		sentQQ = true
 	}
-	status := "sent"
+	status := "pending"
 	if !sentWeb && !sentWechat && !sentQQ {
 		status = "failed"
 	}

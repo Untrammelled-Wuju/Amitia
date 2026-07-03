@@ -626,7 +626,3 @@ func TestMapSupervisorTargetToCompensation(t *testing.T) {
 		}
 	}
 }
-
-
-
-

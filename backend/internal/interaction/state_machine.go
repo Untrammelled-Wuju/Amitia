@@ -51,12 +51,13 @@ var validTransitions = map[InteractionStatus][]InteractionStatus{
 }
 
 var (
-	ErrInvalidTransition   = errors.New("interaction: invalid state transition")
-	ErrAlreadyTerminal     = errors.New("interaction: already in terminal state")
-	ErrVersionConflict     = errors.New("interaction: status version conflict")
-	ErrInteractionNotFound = errors.New("interaction: record not found")
-	ErrDuplicateRequest    = errors.New("interaction: duplicate request")
+	ErrInvalidTransition      = errors.New("interaction: invalid state transition")
+	ErrAlreadyTerminal        = errors.New("interaction: already in terminal state")
+	ErrVersionConflict        = errors.New("interaction: status version conflict")
+	ErrInteractionNotFound    = errors.New("interaction: record not found")
+	ErrDuplicateRequest       = errors.New("interaction: duplicate request")
 	ErrCommitTokenUnavailable = errors.New("interaction: commit token unavailable")
+	ErrInteractionCASConflict = errors.New("interaction: CAS metadata conflict")
 )
 
 type InteractionRecord struct {
@@ -95,19 +96,21 @@ type InteractionRecord struct {
 }
 
 type InteractionMetadataUpdate struct {
-	Priority          *int
-	PathType          *string
-	SupersedesID      *string
-	CommitID          *string
-	ExecutorID        *string
-	OwnerInstanceID   *string
-	CommitToken       *string
-	CommitOwner       *string
-	ResultMessageIDs  *string
-	DeliveryIntentIDs *string
-	CorrelationID     *string
-	CausationID       *string
-	DeadlineAt        *time.Time
+	Priority              *int
+	PathType              *string
+	SupersedesID          *string
+	CommitID              *string
+	ExecutorID            *string
+	OwnerInstanceID       *string
+	CommitToken           *string
+	CommitOwner           *string
+	ResultMessageIDs      *string
+	DeliveryIntentIDs     *string
+	CorrelationID         *string
+	CausationID           *string
+	DeadlineAt            *time.Time
+	ExpectedStatusVersion *int64
+	ExpectedOwner         *string
 }
 
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
@@ -285,9 +288,9 @@ type InteractionTracker interface {
 
 type CommitToken struct {
 	InteractionID string
-	Version      int64
-	Owner        string
-	Token        string
+	Version       int64
+	Owner         string
+	Token         string
 }
 type InMemoryTracker struct {
 	mu      sync.RWMutex

@@ -4,21 +4,22 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type TraceSpan struct {
-	ID          string                 `json:"id"`
-	ParentID    string                 `json:"parentId,omitempty"`
-	Name        string                 `json:"name"`
-	StartTime   time.Time              `json:"startTime"`
-	EndTime     time.Time              `json:"endTime,omitempty"`
-	Status      string                 `json:"status"`
-	Attributes  map[string]interface{} `json:"attributes"`
-	Events      []TraceEvent           `json:"events"`
-	Error       string                 `json:"error,omitempty"`
+	ID         string                 `json:"id"`
+	ParentID   string                 `json:"parentId,omitempty"`
+	Name       string                 `json:"name"`
+	StartTime  time.Time              `json:"startTime"`
+	EndTime    time.Time              `json:"endTime,omitempty"`
+	Status     string                 `json:"status"`
+	Attributes map[string]interface{} `json:"attributes"`
+	Events     []TraceEvent           `json:"events"`
+	Error      string                 `json:"error,omitempty"`
 }
 
 type TraceEvent struct {
@@ -28,17 +29,18 @@ type TraceEvent struct {
 }
 
 type InteractionTrace struct {
-	TraceID      string      `json:"traceId"`
-	RequestID    string      `json:"requestId"`
-	Scope        string      `json:"scope"`
-	Spans        []TraceSpan `json:"spans"`
-	ContextHash  string      `json:"contextHash"`
-	CommitHash   string      `json:"commitHash"`
-	StartTime    time.Time   `json:"startTime"`
-	EndTime      time.Time   `json:"endTime,omitempty"`
+	TraceID     string      `json:"traceId"`
+	RequestID   string      `json:"requestId"`
+	Scope       string      `json:"scope"`
+	Spans       []TraceSpan `json:"spans"`
+	ContextHash string      `json:"contextHash"`
+	CommitHash  string      `json:"commitHash"`
+	StartTime   time.Time   `json:"startTime"`
+	EndTime     time.Time   `json:"endTime,omitempty"`
 }
 
 type Tracer struct {
+	mu          sync.Mutex
 	activeSpans map[string]*TraceSpan
 }
 
@@ -49,20 +51,24 @@ func NewTracer() *Tracer {
 }
 
 func (t *Tracer) StartSpan(name string, parentID string) *TraceSpan {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	span := &TraceSpan{
-		ID:        uuid.New().String(),
-		ParentID:  parentID,
-		Name:      name,
-		StartTime: time.Now().UTC(),
-		Status:    "running",
+		ID:         uuid.New().String(),
+		ParentID:   parentID,
+		Name:       name,
+		StartTime:  time.Now().UTC(),
+		Status:     "running",
 		Attributes: map[string]interface{}{},
-		Events:    []TraceEvent{},
+		Events:     []TraceEvent{},
 	}
 	t.activeSpans[span.ID] = span
 	return span
 }
 
 func (t *Tracer) EndSpan(span *TraceSpan, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	span.EndTime = time.Now().UTC()
 	if err != nil {
 		span.Status = "error"

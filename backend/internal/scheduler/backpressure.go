@@ -7,10 +7,10 @@ import (
 type BackpressureState string
 
 const (
-	BackpressureNormal    BackpressureState = "normal"
-	BackpressureWarning   BackpressureState = "warning"
-	BackpressureCritical  BackpressureState = "critical"
-	BackpressureShedding  BackpressureState = "shedding"
+	BackpressureNormal   BackpressureState = "normal"
+	BackpressureWarning  BackpressureState = "warning"
+	BackpressureCritical BackpressureState = "critical"
+	BackpressureShedding BackpressureState = "shedding"
 )
 
 type BackpressureConfig struct {
@@ -22,25 +22,25 @@ type BackpressureConfig struct {
 }
 
 type BackpressureController struct {
-	config           BackpressureConfig
-	state            BackpressureState
-	recentLoads      []float64
-	lastStateChange  time.Time
+	config          BackpressureConfig
+	state           BackpressureState
+	recentLoads     []float64
+	lastStateChange time.Time
 }
 
 type DeferredTaskCategory string
 
 const (
-	DeferredEmbedding    DeferredTaskCategory = "embedding"
-	DeferredGraph        DeferredTaskCategory = "graph"
-	DeferredReflection   DeferredTaskCategory = "reflection"
-	DeferredStats        DeferredTaskCategory = "stats"
-	DeferredProactive    DeferredTaskCategory = "proactive"
+	DeferredEmbedding  DeferredTaskCategory = "embedding"
+	DeferredGraph      DeferredTaskCategory = "graph"
+	DeferredReflection DeferredTaskCategory = "reflection"
+	DeferredStats      DeferredTaskCategory = "stats"
+	DeferredProactive  DeferredTaskCategory = "proactive"
 )
 
 type DeferredTask struct {
-	Category  DeferredTaskCategory
-	Task      *Task
+	Category   DeferredTaskCategory
+	Task       *Task
 	DeferredAt time.Time
 }
 

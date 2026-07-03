@@ -6,11 +6,11 @@ import (
 )
 
 type MotivationInput struct {
-	IdleDuration    time.Duration
-	IntimacyScore   float64
-	PendingItems    int
-	InitiativeScore float64
-	UnresolvedThreadCount int
+	IdleDuration           time.Duration
+	IntimacyScore          float64
+	PendingItems           int
+	InitiativeScore        float64
+	UnresolvedThreadCount  int
 	ProspectiveDueCount    int
 	QueueBackpressureLevel BackpressureLevel
 }

@@ -8,9 +8,9 @@ import (
 func TestComputeInterruptionRiskLateNight(t *testing.T) {
 	now := time.Date(2026, 7, 1, 3, 0, 0, 0, time.UTC)
 	input := InterruptionRiskInput{
-		Now:            now,
-		UserActivity:   UserActivityIdle,
-		IntimacyLevel:  0.8,
+		Now:           now,
+		UserActivity:  UserActivityIdle,
+		IntimacyLevel: 0.8,
 	}
 	risk := ComputeInterruptionRisk(input)
 	if risk < 30 {
@@ -35,8 +35,8 @@ func TestComputeInterruptionRiskUserDoNotDisturb(t *testing.T) {
 func TestComputeInterruptionRiskSleepingUser(t *testing.T) {
 	now := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 	input := InterruptionRiskInput{
-		Now:          now,
-		UserActivity: UserActivitySleeping,
+		Now:           now,
+		UserActivity:  UserActivitySleeping,
 		IntimacyLevel: 0.3,
 	}
 	risk := ComputeInterruptionRisk(input)

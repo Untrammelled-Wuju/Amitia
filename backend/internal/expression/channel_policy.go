@@ -155,6 +155,7 @@ func RegisterChannelPolicy(kind ChannelKind, policy ChannelPolicy) {
 func KnownChannels() []ChannelKind {
 	return []ChannelKind{ChannelWechat, ChannelQQ, ChannelWeb, ChannelVoice}
 }
+
 const ChannelStateVersionKey = "channel-state-version"
 
 func ChannelStateVersionMapping() map[ChannelKind]string {

@@ -6,17 +6,17 @@ import (
 )
 
 type CompiledPersonality struct {
-	Version          string                 `json:"version"`
-	CharacterID      string                 `json:"characterId"`
-	SchemaVersion    string                 `json:"schemaVersion"`
-	CognitiveSens    float64                `json:"cognitiveSens"`
-	RecoverySpeed    float64                `json:"recoverySpeed"`
-	BehaviorBias     map[string]float64     `json:"behaviorBias"`
-	ExpressionStyle  map[string]float64     `json:"expressionStyle"`
-	ImmutableCore    map[string]string      `json:"immutableCore"`
-	CompiledAt       time.Time              `json:"compiledAt"`
-	SourceConfig     map[string]interface{} `json:"sourceConfig"`
-	Diagnostics      []string               `json:"diagnostics"`
+	Version         string                 `json:"version"`
+	CharacterID     string                 `json:"characterId"`
+	SchemaVersion   string                 `json:"schemaVersion"`
+	CognitiveSens   float64                `json:"cognitiveSens"`
+	RecoverySpeed   float64                `json:"recoverySpeed"`
+	BehaviorBias    map[string]float64     `json:"behaviorBias"`
+	ExpressionStyle map[string]float64     `json:"expressionStyle"`
+	ImmutableCore   map[string]string      `json:"immutableCore"`
+	CompiledAt      time.Time              `json:"compiledAt"`
+	SourceConfig    map[string]interface{} `json:"sourceConfig"`
+	Diagnostics     []string               `json:"diagnostics"`
 }
 
 type CompilerConfig struct {
@@ -62,8 +62,8 @@ func (c *Compiler) Compile(characterID string, rawConfig map[string]interface{})
 	}
 
 	cp.ExpressionStyle = map[string]float64{
-		"verbosity":   extractFloat(rawConfig, "verbosity", 0.5),
-		"formality":   extractFloat(rawConfig, "formality", 0.5),
+		"verbosity":    extractFloat(rawConfig, "verbosity", 0.5),
+		"formality":    extractFloat(rawConfig, "formality", 0.5),
 		"emotionality": extractFloat(rawConfig, "emotionality", 0.5),
 	}
 

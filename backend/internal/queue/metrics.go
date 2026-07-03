@@ -6,20 +6,20 @@ import (
 )
 
 type QueueMetricsRecord struct {
-	mu                  sync.Mutex
-	CacheInvalidations  int64
-	QueueDepth          int64
-	MaxQueueDepth       int64
-	TaskAgeSum          time.Duration
-	TaskAgeCount        int64
-	MaxTaskAge          time.Duration
-	MergeReasons        map[string]int64
-	DropReasons         map[string]int64
-	TotalEnqueued       int64
-	TotalDequeued       int64
-	TotalCompleted      int64
-	TotalDropped        int64
-	TotalCancelled      int64
+	mu                 sync.Mutex
+	CacheInvalidations int64
+	QueueDepth         int64
+	MaxQueueDepth      int64
+	TaskAgeSum         time.Duration
+	TaskAgeCount       int64
+	MaxTaskAge         time.Duration
+	MergeReasons       map[string]int64
+	DropReasons        map[string]int64
+	TotalEnqueued      int64
+	TotalDequeued      int64
+	TotalCompleted     int64
+	TotalDropped       int64
+	TotalCancelled     int64
 }
 
 type QueueMetricsSnapshot struct {

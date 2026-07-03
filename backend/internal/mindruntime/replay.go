@@ -37,19 +37,19 @@ type RuntimeReplayQuery struct {
 }
 
 type ReconstructedCausalChain struct {
-	RootEvent     RuntimeCausalEvent   `json:"rootEvent"`
-	Children      map[string][]RuntimeCausalEvent `json:"children"`
-	Ancestors     map[string][]RuntimeCausalEvent `json:"ancestors"`
-	TotalDepth    int                  `json:"totalDepth"`
-	EventCount    int                  `json:"eventCount"`
+	RootEvent  RuntimeCausalEvent              `json:"rootEvent"`
+	Children   map[string][]RuntimeCausalEvent `json:"children"`
+	Ancestors  map[string][]RuntimeCausalEvent `json:"ancestors"`
+	TotalDepth int                             `json:"totalDepth"`
+	EventCount int                             `json:"eventCount"`
 }
 
 type ReplaySideEffect struct {
-	EventID    string   `json:"eventId"`
+	EventID    string         `json:"eventId"`
 	Kind       TraceEventKind `json:"kind"`
-	Applied    bool     `json:"applied"`
-	RolledBack bool     `json:"rolledBack"`
-	RecordedAt time.Time `json:"recordedAt"`
+	Applied    bool           `json:"applied"`
+	RolledBack bool           `json:"rolledBack"`
+	RecordedAt time.Time      `json:"recordedAt"`
 }
 
 type ReplaySideEffectLog struct {

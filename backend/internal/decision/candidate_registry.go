@@ -5,15 +5,15 @@ import "sync"
 type CandidateActionType string
 
 const (
-	CandidateActionChat       CandidateActionType = "chat"
-	CandidateActionProactive  CandidateActionType = "proactive"
-	CandidateActionToolCall   CandidateActionType = "tool_call"
-	CandidateActionAskClarify CandidateActionType = "ask_clarify"
-	CandidateActionOfferHelp  CandidateActionType = "offer_help"
+	CandidateActionChat        CandidateActionType = "chat"
+	CandidateActionProactive   CandidateActionType = "proactive"
+	CandidateActionToolCall    CandidateActionType = "tool_call"
+	CandidateActionAskClarify  CandidateActionType = "ask_clarify"
+	CandidateActionOfferHelp   CandidateActionType = "offer_help"
 	CandidateActionSetBoundary CandidateActionType = "set_boundary"
-	CandidateActionExpress    CandidateActionType = "express"
-	CandidateActionWait       CandidateActionType = "wait"
-	CandidateActionDefault    CandidateActionType = "default"
+	CandidateActionExpress     CandidateActionType = "express"
+	CandidateActionWait        CandidateActionType = "wait"
+	CandidateActionDefault     CandidateActionType = "default"
 )
 
 type CandidateActionDef struct {

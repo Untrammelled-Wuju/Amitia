@@ -20,49 +20,49 @@ const RollbackEngineVersion RollbackVersion = "rollback-engine-v1"
 type CascadeAction string
 
 const (
-	CascadeActionInvalidate  CascadeAction = "INVALIDATE"
-	CascadeActionRequeue     CascadeAction = "REQUEUE"
-	CascadeActionSkip        CascadeAction = "SKIP"
+	CascadeActionInvalidate CascadeAction = "INVALIDATE"
+	CascadeActionRequeue    CascadeAction = "REQUEUE"
+	CascadeActionSkip       CascadeAction = "SKIP"
 )
 
 type CompensationTarget string
 
 const (
-	CompensationTargetBelief    CompensationTarget = "belief"
-	CompensationTargetSummary   CompensationTarget = "summary"
-	CompensationTargetProfile   CompensationTarget = "profile"
-	CompensationTargetReflect   CompensationTarget = "reflect"
-	CompensationTargetGrowth    CompensationTarget = "growth"
+	CompensationTargetBelief  CompensationTarget = "belief"
+	CompensationTargetSummary CompensationTarget = "summary"
+	CompensationTargetProfile CompensationTarget = "profile"
+	CompensationTargetReflect CompensationTarget = "reflect"
+	CompensationTargetGrowth  CompensationTarget = "growth"
 )
 
 type VersionRecord struct {
-	EngineVersion RollbackVersion        `json:"engineVersion"`
-	ID            string                 `json:"id"`
-	CharacterID   string                 `json:"characterId"`
-	Target        SupervisorTarget       `json:"target"`
-	Version       int                    `json:"version"`
-	SnapshotID    string                 `json:"snapshotId,omitempty"`
-	DecisionID    string                 `json:"decisionId,omitempty"`
-	CreatedAt     time.Time              `json:"createdAt"`
-	RolledBackAt  time.Time              `json:"rolledBackAt,omitempty"`
-	RolledBackBy  string                 `json:"rolledBackBy,omitempty"`
-	DerivedIDs    []string               `json:"derivedIds,omitempty"`
-	Metadata      map[string]string      `json:"metadata,omitempty"`
+	EngineVersion RollbackVersion   `json:"engineVersion"`
+	ID            string            `json:"id"`
+	CharacterID   string            `json:"characterId"`
+	Target        SupervisorTarget  `json:"target"`
+	Version       int               `json:"version"`
+	SnapshotID    string            `json:"snapshotId,omitempty"`
+	DecisionID    string            `json:"decisionId,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	RolledBackAt  time.Time         `json:"rolledBackAt,omitempty"`
+	RolledBackBy  string            `json:"rolledBackBy,omitempty"`
+	DerivedIDs    []string          `json:"derivedIds,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 
 type CompensationEvent struct {
-	EngineVersion RollbackVersion      `json:"engineVersion"`
-	ID            string               `json:"id"`
-	CharacterID   string               `json:"characterId"`
-	Target        CompensationTarget   `json:"target"`
-	SourceVersion int                  `json:"sourceVersion"`
-	TargetVersion int                  `json:"targetVersion"`
-	Reason        string               `json:"reason"`
-	CreatedAt     time.Time            `json:"createdAt"`
-	Processed     bool                 `json:"processed"`
-	ProcessedAt   time.Time            `json:"processedAt,omitempty"`
-	DerivedEvents []string             `json:"derivedEvents,omitempty"`
-	Metadata      map[string]string    `json:"metadata,omitempty"`
+	EngineVersion RollbackVersion    `json:"engineVersion"`
+	ID            string             `json:"id"`
+	CharacterID   string             `json:"characterId"`
+	Target        CompensationTarget `json:"target"`
+	SourceVersion int                `json:"sourceVersion"`
+	TargetVersion int                `json:"targetVersion"`
+	Reason        string             `json:"reason"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	Processed     bool               `json:"processed"`
+	ProcessedAt   time.Time          `json:"processedAt,omitempty"`
+	DerivedEvents []string           `json:"derivedEvents,omitempty"`
+	Metadata      map[string]string  `json:"metadata,omitempty"`
 }
 
 type VersionHistory struct {
@@ -74,16 +74,16 @@ type VersionHistory struct {
 }
 
 type RollbackPlan struct {
-	EngineVersion   RollbackVersion        `json:"engineVersion"`
-	ID              string                 `json:"id"`
-	CharacterID     string                 `json:"characterId"`
-	Target          SupervisorTarget       `json:"target"`
-	FromVersion     int                    `json:"fromVersion"`
-	ToVersion       int                    `json:"toVersion"`
-	Compensations   []CompensationEvent    `json:"compensations"`
-	Cascades        []CascadeInstruction   `json:"cascades"`
-	CreatedAt       time.Time              `json:"createdAt"`
-	Reason          string                 `json:"reason"`
+	EngineVersion RollbackVersion      `json:"engineVersion"`
+	ID            string               `json:"id"`
+	CharacterID   string               `json:"characterId"`
+	Target        SupervisorTarget     `json:"target"`
+	FromVersion   int                  `json:"fromVersion"`
+	ToVersion     int                  `json:"toVersion"`
+	Compensations []CompensationEvent  `json:"compensations"`
+	Cascades      []CascadeInstruction `json:"cascades"`
+	CreatedAt     time.Time            `json:"createdAt"`
+	Reason        string               `json:"reason"`
 }
 
 type CascadeInstruction struct {
@@ -163,11 +163,11 @@ type VersionRollbackEngine struct {
 }
 
 type RollbackEngineConfig struct {
-	Enabled                  bool
-	MaxHistoryPerTarget      int
-	RequireCompensation      bool
-	AutoCascade              bool
-	DefaultCascadeAction     CascadeAction
+	Enabled              bool
+	MaxHistoryPerTarget  int
+	RequireCompensation  bool
+	AutoCascade          bool
+	DefaultCascadeAction CascadeAction
 }
 
 func DefaultRollbackEngineConfig() RollbackEngineConfig {
@@ -322,13 +322,13 @@ func (e *VersionRollbackEngine) BuildCompensationChain(
 }
 
 type RollbackSummary struct {
-	EngineVersion             RollbackVersion    `json:"engineVersion"`
-	TotalHistories            int                `json:"totalHistories"`
-	TotalRecords              int                `json:"totalRecords"`
-	ActiveRecords             int                `json:"activeRecords"`
-	RolledBackRecords         int                `json:"rolledBackRecords"`
-	PendingCompensations      int                `json:"pendingCompensations"`
-	ProcessedCompensations    int                `json:"processedCompensations"`
+	EngineVersion          RollbackVersion `json:"engineVersion"`
+	TotalHistories         int             `json:"totalHistories"`
+	TotalRecords           int             `json:"totalRecords"`
+	ActiveRecords          int             `json:"activeRecords"`
+	RolledBackRecords      int             `json:"rolledBackRecords"`
+	PendingCompensations   int             `json:"pendingCompensations"`
+	ProcessedCompensations int             `json:"processedCompensations"`
 }
 
 func (e *VersionRollbackEngine) Summary(

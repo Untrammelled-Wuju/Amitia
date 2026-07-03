@@ -2,9 +2,9 @@ package tool
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
-	"database/sql"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -23,7 +23,9 @@ func setupSummaryTestDB(t *testing.T) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER DEFAULT 0, confidence INTEGER DEFAULT 50, scope TEXT, last_used_at TEXT, created_at TEXT, updated_at TEXT)"); err != nil { t.Fatal(err) }
+	if _, err := sqlDB.Exec("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER DEFAULT 0, confidence INTEGER DEFAULT 50, scope TEXT, last_used_at TEXT, created_at TEXT, updated_at TEXT)"); err != nil {
+		t.Fatal(err)
+	}
 	schema := []string{
 		"CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER DEFAULT 0, confidence INTEGER DEFAULT 50, scope TEXT, last_used_at TEXT, created_at TEXT, updated_at TEXT)",
 		"CREATE TABLE IF NOT EXISTS tool_call_intents (id TEXT PRIMARY KEY, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, args_json TEXT, idempotency_key TEXT, status TEXT, created_at TEXT, updated_at TEXT)",
@@ -197,6 +199,3 @@ func TestSummarizeMemoriesCancelledContext(t *testing.T) {
 		t.Fatalf("expected cancelled status, got: %s", result.Status)
 	}
 }
-
-
-

@@ -19,17 +19,17 @@ func (b *BehaviorPlanBuilder) Build(candidate BehaviorCandidate, input Arbitrati
 		now = time.Now().UTC()
 	}
 	plan := BehaviorPlan{
-		Version:     PlanVersionV1,
-		ID:          "plan-" + now.Format("20060102150405"),
-		UserID:      "",
-		CharacterID: "",
-		CreatedAt:   now,
-		Selected:    candidate,
-		Priority:    derivePlanPriority(candidate),
-		SafetyLevel: derivePlanSafety(candidate),
-		Psyche:      input.Psyche,
+		Version:      PlanVersionV1,
+		ID:           "plan-" + now.Format("20060102150405"),
+		UserID:       "",
+		CharacterID:  "",
+		CreatedAt:    now,
+		Selected:     candidate,
+		Priority:     derivePlanPriority(candidate),
+		SafetyLevel:  derivePlanSafety(candidate),
+		Psyche:       input.Psyche,
 		Relationship: input.Relationship,
-		Life:        input.Life,
+		Life:         input.Life,
 		Audit: BehaviorAudit{
 			FormulaVersion: string(BehaviorFormulaVersionV1),
 		},

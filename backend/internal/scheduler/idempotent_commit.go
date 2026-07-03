@@ -47,15 +47,15 @@ const (
 )
 
 type IdempotentCommitRecord struct {
-	Key             string                   `json:"key"`
-	Kind            IdempotentOperationKind  `json:"kind"`
-	UserID          string                   `json:"userId"`
-	CharacterID     string                   `json:"characterId"`
-	StateVersion    int                      `json:"stateVersion"`
-	GenerationToken string                   `json:"generationToken,omitempty"`
-	CommittedAt     time.Time                `json:"committedAt"`
-	Result          interface{}              `json:"result,omitempty"`
-	Status          CommitStatus             `json:"status"`
+	Key             string                  `json:"key"`
+	Kind            IdempotentOperationKind `json:"kind"`
+	UserID          string                  `json:"userId"`
+	CharacterID     string                  `json:"characterId"`
+	StateVersion    int                     `json:"stateVersion"`
+	GenerationToken string                  `json:"generationToken,omitempty"`
+	CommittedAt     time.Time               `json:"committedAt"`
+	Result          interface{}             `json:"result,omitempty"`
+	Status          CommitStatus            `json:"status"`
 }
 
 type OptimisticLock struct {

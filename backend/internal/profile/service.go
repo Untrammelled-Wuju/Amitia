@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -31,16 +32,24 @@ type Service interface {
 }
 
 type service struct {
-	repo     Repository
-	db       *gorm.DB
-	graphSvc graph.Service
+	repo                     Repository
+	db                       *gorm.DB
+	graphSvc                 graph.Service
+	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Service {
 	return &service{repo: repo, db: ctx.DB, graphSvc: graphSvc}
 }
 
+func (s *service) SetDataLifecycleCoordinator(coordinator *mindruntime.DataLifecycleCoordinator) {
+	s.dataLifecycleCoordinator = coordinator
+}
+
 func (s *service) List(q ProfileListQuery) (*ProfileListResponse, error) {
+	if s.dataLifecycleCoordinator != nil && q.CharacterID != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(q.CharacterID) {
+		return &ProfileListResponse{Items: []UserProfile{}, Total: 0, Page: 1, PageSize: 20, TotalPages: 1}, nil
+	}
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
@@ -127,6 +136,9 @@ func (s *service) Delete(id string) error {
 }
 
 func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfile, error) {
+	if s.dataLifecycleCoordinator != nil && len(characterID) > 0 && characterID[0] != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID[0]) {
+		return []UserProfile{}, nil
+	}
 	if len(characterID) > 0 && characterID[0] != "" {
 		return s.repo.GetScopedByUserID(userID, characterID[0])
 	}

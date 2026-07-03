@@ -8,48 +8,48 @@ import (
 type ShadowPhase string
 
 const (
-	ShadowPhaseInteraction   ShadowPhase = "interaction"
-	ShadowPhaseStateVersion  ShadowPhase = "state_version"
-	ShadowPhasePsyche        ShadowPhase = "psyche"
-	ShadowPhaseBelief        ShadowPhase = "belief"
-	ShadowPhaseBDI           ShadowPhase = "bdi"
-	ShadowPhaseDelivery      ShadowPhase = "delivery"
+	ShadowPhaseInteraction    ShadowPhase = "interaction"
+	ShadowPhaseStateVersion   ShadowPhase = "state_version"
+	ShadowPhasePsyche         ShadowPhase = "psyche"
+	ShadowPhaseBelief         ShadowPhase = "belief"
+	ShadowPhaseBDI            ShadowPhase = "bdi"
+	ShadowPhaseDelivery       ShadowPhase = "delivery"
 	ShadowPhaseReconciliation ShadowPhase = "reconciliation"
-	ShadowPhaseProactive     ShadowPhase = "proactive"
-	ShadowPhaseReflection    ShadowPhase = "reflection"
+	ShadowPhaseProactive      ShadowPhase = "proactive"
+	ShadowPhaseReflection     ShadowPhase = "reflection"
 )
 
 type ShadowModeStatus string
 
 const (
-	ShadowModeOff      ShadowModeStatus = "off"
-	ShadowModeShadow   ShadowModeStatus = "shadow"
-	ShadowModeGray     ShadowModeStatus = "gray"
-	ShadowModeFull     ShadowModeStatus = "full"
+	ShadowModeOff    ShadowModeStatus = "off"
+	ShadowModeShadow ShadowModeStatus = "shadow"
+	ShadowModeGray   ShadowModeStatus = "gray"
+	ShadowModeFull   ShadowModeStatus = "full"
 )
 
 type ShadowDecision struct {
-	ID               string      `json:"id"`
-	Phase            ShadowPhase `json:"phase"`
-	ComputedState    string      `json:"computedState"`
-	ComputedDecision string      `json:"computedDecision"`
-	CollaborationRef string      `json:"collaborationRef,omitempty"`
-	SentToAuthority  bool        `json:"sentToAuthority"`
-	GeneratedAt      time.Time   `json:"generatedAt"`
+	ID               string        `json:"id"`
+	Phase            ShadowPhase   `json:"phase"`
+	ComputedState    string        `json:"computedState"`
+	ComputedDecision string        `json:"computedDecision"`
+	CollaborationRef string        `json:"collaborationRef,omitempty"`
+	SentToAuthority  bool          `json:"sentToAuthority"`
+	GeneratedAt      time.Time     `json:"generatedAt"`
 	Metrics          ShadowMetrics `json:"metrics"`
 }
 
 type ShadowMetrics struct {
-	LatencyMs        int64   `json:"latencyMs"`
-	ErrorCount       int     `json:"errorCount"`
-	CancelCount      int     `json:"cancelCount"`
-	QueueDepth       int     `json:"queueDepth"`
-	DeliveryStatus   string  `json:"deliveryStatus"`
-	SafetyScore      float64 `json:"safetyScore"`
-	ConsistencyDiffs int     `json:"consistencyDiffs"`
-	UnknownBacklog   int     `json:"unknownBacklog"`
-	DuplicateDeliveries int  `json:"duplicateDeliveries"`
-	QueueAgeMs       int64   `json:"queueAgeMs"`
+	LatencyMs           int64   `json:"latencyMs"`
+	ErrorCount          int     `json:"errorCount"`
+	CancelCount         int     `json:"cancelCount"`
+	QueueDepth          int     `json:"queueDepth"`
+	DeliveryStatus      string  `json:"deliveryStatus"`
+	SafetyScore         float64 `json:"safetyScore"`
+	ConsistencyDiffs    int     `json:"consistencyDiffs"`
+	UnknownBacklog      int     `json:"unknownBacklog"`
+	DuplicateDeliveries int     `json:"duplicateDeliveries"`
+	QueueAgeMs          int64   `json:"queueAgeMs"`
 }
 
 type ShadowComparatorResult struct {
@@ -67,49 +67,49 @@ type ShadowComparatorResult struct {
 }
 
 type AutoRollbackThresholds struct {
-	MaxErrorRate         float64       `json:"maxErrorRate"`
-	MaxP95Latency        time.Duration `json:"maxP95Latency"`
-	MaxDuplicateDeliveries int         `json:"maxDuplicateDeliveries"`
-	MaxUnknownBacklog    int           `json:"maxUnknownBacklog"`
-	MaxConsistencyDiffs  int           `json:"maxConsistencyDiffs"`
-	MaxPostCancelSubmit  int           `json:"maxPostCancelSubmit"`
-	MaxQueueAge          time.Duration `json:"maxQueueAge"`
+	MaxErrorRate           float64       `json:"maxErrorRate"`
+	MaxP95Latency          time.Duration `json:"maxP95Latency"`
+	MaxDuplicateDeliveries int           `json:"maxDuplicateDeliveries"`
+	MaxUnknownBacklog      int           `json:"maxUnknownBacklog"`
+	MaxConsistencyDiffs    int           `json:"maxConsistencyDiffs"`
+	MaxPostCancelSubmit    int           `json:"maxPostCancelSubmit"`
+	MaxQueueAge            time.Duration `json:"maxQueueAge"`
 }
 
 type ShadowRollbackEvent struct {
-	ID            string      `json:"id"`
-	Phase         ShadowPhase `json:"phase"`
-	FromStatus    ShadowModeStatus `json:"fromStatus"`
-	ToStatus      ShadowModeStatus `json:"toStatus"`
-	TriggerReason string      `json:"triggerReason"`
-	TriggerMetric string      `json:"triggerMetric"`
-	TriggerValue  float64     `json:"triggerValue"`
-	Threshold     float64     `json:"threshold"`
-	RolledBackAt  time.Time   `json:"rolledBackAt"`
-	PreservedEvents []string  `json:"preservedEvents"`
+	ID              string           `json:"id"`
+	Phase           ShadowPhase      `json:"phase"`
+	FromStatus      ShadowModeStatus `json:"fromStatus"`
+	ToStatus        ShadowModeStatus `json:"toStatus"`
+	TriggerReason   string           `json:"triggerReason"`
+	TriggerMetric   string           `json:"triggerMetric"`
+	TriggerValue    float64          `json:"triggerValue"`
+	Threshold       float64          `json:"threshold"`
+	RolledBackAt    time.Time        `json:"rolledBackAt"`
+	PreservedEvents []string         `json:"preservedEvents"`
 }
 
 type ShadowState struct {
-	CurrentPhase     ShadowPhase           `json:"currentPhase"`
-	Status           ShadowModeStatus      `json:"status"`
-	ActiveSince      time.Time             `json:"activeSince"`
-	Decisions        []ShadowDecision      `json:"decisions"`
-	Comparisons      []ShadowComparatorResult `json:"comparisons"`
-	Rollbacks        []ShadowRollbackEvent `json:"rollbacks"`
-	Thresholds       AutoRollbackThresholds `json:"thresholds"`
-	MetricsSnapshot  ShadowMetrics         `json:"metricsSnapshot"`
-	PhasesCompleted  []ShadowPhase         `json:"phasesCompleted"`
+	CurrentPhase    ShadowPhase              `json:"currentPhase"`
+	Status          ShadowModeStatus         `json:"status"`
+	ActiveSince     time.Time                `json:"activeSince"`
+	Decisions       []ShadowDecision         `json:"decisions"`
+	Comparisons     []ShadowComparatorResult `json:"comparisons"`
+	Rollbacks       []ShadowRollbackEvent    `json:"rollbacks"`
+	Thresholds      AutoRollbackThresholds   `json:"thresholds"`
+	MetricsSnapshot ShadowMetrics            `json:"metricsSnapshot"`
+	PhasesCompleted []ShadowPhase            `json:"phasesCompleted"`
 }
 
 func DefaultAutoRollbackThresholds() AutoRollbackThresholds {
 	return AutoRollbackThresholds{
-		MaxErrorRate:          0.10,
-		MaxP95Latency:         5 * time.Second,
+		MaxErrorRate:           0.10,
+		MaxP95Latency:          5 * time.Second,
 		MaxDuplicateDeliveries: 3,
-		MaxUnknownBacklog:     10,
-		MaxConsistencyDiffs:   5,
-		MaxPostCancelSubmit:   2,
-		MaxQueueAge:           30 * time.Second,
+		MaxUnknownBacklog:      10,
+		MaxConsistencyDiffs:    5,
+		MaxPostCancelSubmit:    2,
+		MaxQueueAge:            30 * time.Second,
 	}
 }
 
@@ -145,20 +145,20 @@ func ComputeShadowDecision(input RuntimeObservabilityInput, phase ShadowPhase) S
 func CompareShadowResults(oldMetrics, newMetrics ShadowMetrics) ShadowComparatorResult {
 	result := ShadowComparatorResult{
 		OldReplyFeatures: map[string]interface{}{
-			"latencyMs":    oldMetrics.LatencyMs,
-			"errorCount":   oldMetrics.ErrorCount,
-			"cancelCount":  oldMetrics.CancelCount,
-			"queueDepth":   oldMetrics.QueueDepth,
+			"latencyMs":      oldMetrics.LatencyMs,
+			"errorCount":     oldMetrics.ErrorCount,
+			"cancelCount":    oldMetrics.CancelCount,
+			"queueDepth":     oldMetrics.QueueDepth,
 			"deliveryStatus": oldMetrics.DeliveryStatus,
-			"safetyScore":  oldMetrics.SafetyScore,
+			"safetyScore":    oldMetrics.SafetyScore,
 		},
 		NewReplyFeatures: map[string]interface{}{
-			"latencyMs":    newMetrics.LatencyMs,
-			"errorCount":   newMetrics.ErrorCount,
-			"cancelCount":  newMetrics.CancelCount,
-			"queueDepth":   newMetrics.QueueDepth,
+			"latencyMs":      newMetrics.LatencyMs,
+			"errorCount":     newMetrics.ErrorCount,
+			"cancelCount":    newMetrics.CancelCount,
+			"queueDepth":     newMetrics.QueueDepth,
 			"deliveryStatus": newMetrics.DeliveryStatus,
-			"safetyScore":  newMetrics.SafetyScore,
+			"safetyScore":    newMetrics.SafetyScore,
 		},
 		LatencyDiff:      newMetrics.LatencyMs - oldMetrics.LatencyMs,
 		ErrorRateChange:  safeDiv(float64(newMetrics.ErrorCount-oldMetrics.ErrorCount), float64(oldMetrics.ErrorCount+1)),
@@ -288,16 +288,16 @@ func AllShadowPhases() []ShadowPhase {
 
 func buildShadowMetrics(input RuntimeObservabilityInput) ShadowMetrics {
 	return ShadowMetrics{
-		LatencyMs:        durationMillis(input.TotalDuration),
-		ErrorCount:       countDiagnosticSeverity(input.Snapshot.Diagnostics, DiagnosticSeverityWarning),
-		CancelCount:      boolToInt(input.CancellationReason != ""),
-		QueueDepth:       input.QueueDepth,
-		DeliveryStatus:   input.DeliveryStatus,
-		SafetyScore:      0.95,
-		ConsistencyDiffs: input.ConsistencyDiffs,
-		UnknownBacklog:   boolToInt(stringsEqualFold(input.DeliveryStatus, "unknown")),
+		LatencyMs:           durationMillis(input.TotalDuration),
+		ErrorCount:          countDiagnosticSeverity(input.Snapshot.Diagnostics, DiagnosticSeverityWarning),
+		CancelCount:         boolToInt(input.CancellationReason != ""),
+		QueueDepth:          input.QueueDepth,
+		DeliveryStatus:      input.DeliveryStatus,
+		SafetyScore:         0.95,
+		ConsistencyDiffs:    input.ConsistencyDiffs,
+		UnknownBacklog:      boolToInt(stringsEqualFold(input.DeliveryStatus, "unknown")),
 		DuplicateDeliveries: boolToInt(input.OutboxStatus == "duplicate"),
-		QueueAgeMs:       durationMillis(input.QueueDuration),
+		QueueAgeMs:          durationMillis(input.QueueDuration),
 	}
 }
 

@@ -21,12 +21,12 @@ type DayEvents struct {
 }
 
 type ConsolidationResult struct {
-	CompressedEvents  []DayEvent
-	PreservedEvents   []DayEvent
+	CompressedEvents   []DayEvent
+	PreservedEvents    []DayEvent
 	MemoryAbstractions []MemoryAbstraction
 	GeneratedSummaries []MemorySummaryRecord
-	Date              string
-	CharacterID       string
+	Date               string
+	CharacterID        string
 }
 
 type ConsolidationConfig struct {

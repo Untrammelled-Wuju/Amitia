@@ -195,6 +195,3 @@ func TestBackpressureCooldown(t *testing.T) {
 		t.Fatalf("expected normal state after load drops with no cooldown, got %s", bc.State())
 	}
 }
-
-
-

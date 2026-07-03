@@ -8,9 +8,9 @@ import (
 )
 
 type testStartupComponent struct {
-	phaseName    StartupPhase
-	startupErr   error
-	healthResult HealthCheckResult
+	phaseName     StartupPhase
+	startupErr    error
+	healthResult  HealthCheckResult
 	startupCalled bool
 }
 

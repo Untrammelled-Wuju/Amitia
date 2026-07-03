@@ -14,11 +14,11 @@ const (
 type IntentionStatus string
 
 const (
-	IntentionStatusFormed     IntentionStatus = "formed"
-	IntentionStatusExecuting  IntentionStatus = "executing"
-	IntentionStatusSuspended  IntentionStatus = "suspended"
-	IntentionStatusCompleted  IntentionStatus = "completed"
-	IntentionStatusAbandoned  IntentionStatus = "abandoned"
+	IntentionStatusFormed    IntentionStatus = "formed"
+	IntentionStatusExecuting IntentionStatus = "executing"
+	IntentionStatusSuspended IntentionStatus = "suspended"
+	IntentionStatusCompleted IntentionStatus = "completed"
+	IntentionStatusAbandoned IntentionStatus = "abandoned"
 )
 
 type IntentionPlan struct {
@@ -28,18 +28,18 @@ type IntentionPlan struct {
 }
 
 type Intention struct {
-	ID          string            `json:"id"`
-	GoalID      string            `json:"goalId"`
-	GoalType    GoalType          `json:"goalType"`
-	GoalDesc    string            `json:"goalDesc,omitempty"`
-	UserID      string            `json:"userId,omitempty"`
-	CharacterID string            `json:"characterId,omitempty"`
+	ID          string             `json:"id"`
+	GoalID      string             `json:"goalId"`
+	GoalType    GoalType           `json:"goalType"`
+	GoalDesc    string             `json:"goalDesc,omitempty"`
+	UserID      string             `json:"userId,omitempty"`
+	CharacterID string             `json:"characterId,omitempty"`
 	Commitment  CommitmentStrength `json:"commitment"`
-	Status      IntentionStatus   `json:"status"`
-	Deadline    time.Time         `json:"deadline,omitempty"`
-	Plan        IntentionPlan     `json:"plan"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	Status      IntentionStatus    `json:"status"`
+	Deadline    time.Time          `json:"deadline,omitempty"`
+	Plan        IntentionPlan      `json:"plan"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	UpdatedAt   time.Time          `json:"updatedAt"`
 }
 
 func DeriveIntention(goal Goal, commitment CommitmentStrength, deadline time.Time) Intention {

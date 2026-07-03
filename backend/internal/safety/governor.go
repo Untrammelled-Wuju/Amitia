@@ -110,6 +110,12 @@ func (g *Governor) CheckToolExec(input ToolExecInput) ToolExecOutput {
 	if input.ToolName == "" {
 		return ToolExecOutput{Allowed: false, Reasons: []string{"empty_tool"}}
 	}
+	if strings.TrimSpace(input.Scope) == "" {
+		return ToolExecOutput{Allowed: false, Reasons: []string{"missing_scope"}}
+	}
+	if len(input.ToolArgs) == 0 {
+		return ToolExecOutput{Allowed: false, Reasons: []string{"missing_args"}}
+	}
 	return ToolExecOutput{Allowed: true}
 }
 
@@ -140,5 +146,5 @@ func (g *Governor) CheckPreDeliver(input PreDeliverInput) PreDeliverOutput {
 }
 
 func NewAuditID() string {
-	return "safety-" + time.Now().Format("20060102150405")
+	return "safety-" + time.Now().UTC().Format("20060102150405.000000000")
 }

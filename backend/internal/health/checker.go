@@ -49,13 +49,28 @@ func (c *Checker) Register(name string, check func() error) {
 
 func (c *Checker) RunAll() HealthStatus {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	checkNames := make([]string, 0, len(c.checks))
+	for name := range c.checks {
+		checkNames = append(checkNames, name)
+	}
+	c.mu.Unlock()
 
 	allUp := true
 	now := time.Now().UTC()
 	result := map[string]DependencyInfo{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	for name, check := range c.checks {
+	for _, name := range checkNames {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			c.mu.RLock()
+			check, ok := c.checks[name]
+			c.mu.RUnlock()
+			if !ok {
+				return
+			}
 		start := time.Now()
 		err := check()
 		latency := time.Since(start)
@@ -69,14 +84,22 @@ func (c *Checker) RunAll() HealthStatus {
 		if err != nil {
 			info.Status = DependencyDown
 			info.Error = err.Error()
+			mu.Lock()
 			allUp = false
+			mu.Unlock()
 		} else {
 			info.Status = DependencyUp
 		}
 
+			c.mu.Lock()
 		c.deps[name] = info
+			c.mu.Unlock()
+			mu.Lock()
 		result[name] = info
+			mu.Unlock()
+		}(name)
 	}
+	wg.Wait()
 
 	overall := "healthy"
 	if !allUp {

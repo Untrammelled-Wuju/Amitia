@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -125,12 +126,13 @@ type HybridSearchResult struct {
 }
 
 type service struct {
-	repo         Repository
-	db           *gorm.DB
-	embeddingSvc *embedding.Service
-	graphSvc     graph.Service
-	embedMu      sync.Mutex
-	embedLocks   map[string]*sync.Mutex
+	repo                     Repository
+	db                       *gorm.DB
+	embeddingSvc             *embedding.Service
+	graphSvc                 graph.Service
+	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
+	embedMu                  sync.Mutex
+	embedLocks               map[string]*sync.Mutex
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service) Service {
@@ -145,6 +147,10 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service)
 		graphSvc:     gs,
 		embedLocks:   map[string]*sync.Mutex{},
 	}
+}
+
+func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordinator) {
+	s.dataLifecycleCoordinator = c
 }
 
 func extractJSONArray(s string) string {

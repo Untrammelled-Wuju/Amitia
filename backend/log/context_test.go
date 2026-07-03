@@ -154,10 +154,10 @@ func TestMergeTrace_EmptyUpdates(t *testing.T) {
 
 func TestClone(t *testing.T) {
 	tf := TraceFields{
-		RequestID:  "req-1",
-		Character:  "char-1",
-		Channel:    "web",
-		Stage:      "start",
+		RequestID: "req-1",
+		Character: "char-1",
+		Channel:   "web",
+		Stage:     "start",
 	}
 
 	clone := tf.Clone()

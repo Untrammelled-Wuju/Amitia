@@ -124,7 +124,7 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
 				}
 			} else {
-				s.db.Exec("UPDATE delayed_replies SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id = ?", nowStr, id)
+				s.db.Exec("UPDATE delayed_replies SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id = ?", nowStr, id)
 				sendProactiveNotification(s.db, convID, msgID, content)
 				sent++
 			}

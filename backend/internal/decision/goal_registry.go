@@ -30,26 +30,26 @@ const (
 type GoalStatus string
 
 const (
-	GoalStatusPending    GoalStatus = "pending"
-	GoalStatusActive     GoalStatus = "active"
-	GoalStatusSuspended  GoalStatus = "suspended"
-	GoalStatusAchieved   GoalStatus = "achieved"
-	GoalStatusAbandoned  GoalStatus = "abandoned"
-	GoalStatusWish       GoalStatus = "wish"
+	GoalStatusPending   GoalStatus = "pending"
+	GoalStatusActive    GoalStatus = "active"
+	GoalStatusSuspended GoalStatus = "suspended"
+	GoalStatusAchieved  GoalStatus = "achieved"
+	GoalStatusAbandoned GoalStatus = "abandoned"
+	GoalStatusWish      GoalStatus = "wish"
 )
 
 type Goal struct {
-	ID          string       `json:"id"`
-	UserID      string       `json:"userId,omitempty"`
-	CharacterID string       `json:"characterId,omitempty"`
-	Type        GoalType     `json:"type"`
-	Priority    GoalPriority `json:"priority"`
-	Status      GoalStatus   `json:"status"`
-	Progress    float64      `json:"progress"`
-	Description string       `json:"description,omitempty"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	UpdatedAt   time.Time    `json:"updatedAt"`
-	ExpiresAt   time.Time    `json:"expiresAt,omitempty"`
+	ID          string         `json:"id"`
+	UserID      string         `json:"userId,omitempty"`
+	CharacterID string         `json:"characterId,omitempty"`
+	Type        GoalType       `json:"type"`
+	Priority    GoalPriority   `json:"priority"`
+	Status      GoalStatus     `json:"status"`
+	Progress    float64        `json:"progress"`
+	Description string         `json:"description,omitempty"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	ExpiresAt   time.Time      `json:"expiresAt,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 

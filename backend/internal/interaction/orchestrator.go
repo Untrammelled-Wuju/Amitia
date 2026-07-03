@@ -2,7 +2,6 @@ package interaction
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 var (
@@ -46,6 +44,7 @@ type ProcessRequest struct {
 	InteractionID         string           `json:"-"`
 	ExpectedStatusVersion int64            `json:"-"`
 	Runtime               *RuntimeAssembly `json:"-"`
+	IsInternal            bool             `json:"-"`
 }
 
 type ProcessResponse struct {
@@ -68,10 +67,10 @@ type MessageProcessor interface {
 type Outcome string
 
 const (
-	OutcomeCompleted  Outcome = "completed"
-	OutcomeFailed     Outcome = "failed"
-	OutcomeCancelled  Outcome = "cancelled"
-	OutcomeSuperseded Outcome = "superseded"
+	OutcomeCompleted       Outcome = "completed"
+	OutcomeFailed          Outcome = "failed"
+	OutcomeCancelled       Outcome = "cancelled"
+	OutcomeSuperseded      Outcome = "superseded"
 	OutcomeDeliveryUnknown Outcome = "delivery_unknown"
 )
 
@@ -325,97 +324,62 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	duration := time.Since(start)
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			record.CancelReason = err.Error()
-			if cancelErr := o.tracker.RequestCancel(ctx, record.ID, err.Error()); cancelErr != nil {
-				return o.buildResult(record, nil, OutcomeFailed, cancelErr), cancelErr
-			}
-			if fresh, ok, getErr := o.tracker.Get(ctx, record.ID); getErr != nil {
-				return o.buildResult(record, nil, OutcomeFailed, getErr), getErr
-			} else if ok {
-				record = fresh
-			}
-			if cancelled, failErr := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCancelled); failErr == nil {
-				record = cancelled
-			}
-			return o.buildResult(record, nil, OutcomeCancelled, err), err
-		}
-		record.SetError(err.Error())
-		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "processor_failed", err.Error()); failErr == nil {
-			record = failed
-		}
-		return o.buildResult(record, nil, OutcomeFailed, err), err
+		return o.handleProcessorError(ctx, record, req, resp, duration, err)
 	}
 
-	if fresh, outcome, freshErr := o.ensureFreshAtVersion(ctx, record.ID, record.StatusVersion); freshErr != nil {
-		record = fresh
-		return o.buildResult(record, nil, outcome, freshErr), freshErr
-	} else {
+	if fresh, ok, getErr := o.tracker.Get(processCtx, record.ID); getErr == nil && ok {
 		record = fresh
 	}
-	if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, metadataFromResponse(resp)); err == nil {
-		record = updated
-	} else {
-		log.Printf("[orchestrator] response metadata update failed: %v", err)
-		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "metadata_update_failed", err.Error()); failErr == nil {
-			record = failed
-		}
-		return o.buildResult(record, nil, OutcomeFailed, err), err
+	if record.Status == InteractionStatusCommitted || record.Status == InteractionStatusCompleted {
+		resp.RequestID = req.RequestID
+		resp.ConversationID = req.ConversationID
+		resp.CharacterID = req.CharacterID
+		result := o.buildResult(record, resp, OutcomeCompleted, nil)
+		result.Duration = duration
+		result.Events = resp.Events
+		return result, nil
 	}
+	return nil, fmt.Errorf("orchestrator: processor did not commit interaction status=%s", record.Status)
+}
 
-	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusGenerated); err == nil {
-		record = next
-	} else {
-		log.Printf("[orchestrator] transition to generated failed: %v", err)
-		if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
-			return o.buildResult(fresh, nil, outcome, freshErr), freshErr
-		}
-		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "generated_transition_failed", err.Error()); failErr == nil {
-			record = failed
-		}
-		return o.buildResult(record, nil, OutcomeFailed, err), err
-	}
-	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
-		record = fresh
-		return o.buildResult(record, nil, outcome, freshErr), freshErr
-	} else {
+func (o *Orchestrator) handleProcessorError(ctx context.Context, record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, duration time.Duration, procErr error) (*OrchestrationResult, error) {
+	if fresh, ok, getErr := o.tracker.Get(ctx, record.ID); getErr == nil && ok {
 		record = fresh
 	}
-	if next, err := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCommitted); err == nil {
-		record = next
-	} else {
-		log.Printf("[orchestrator] transition to committed failed: %v", err)
-		if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
-			return o.buildResult(fresh, nil, outcome, freshErr), freshErr
+	if record.Status == InteractionStatusCommitted || record.Status == InteractionStatusCompleted {
+		log.Printf("[orchestrator] interaction %s committed despite processor error: %v", record.ID, procErr)
+		if resp != nil {
+			resp.RequestID = req.RequestID
+			resp.ConversationID = req.ConversationID
+			resp.CharacterID = req.CharacterID
 		}
-		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "commit_transition_failed", err.Error()); failErr == nil {
-			record = failed
+		result := o.buildResult(record, resp, OutcomeCompleted, nil)
+		result.Duration = duration
+		if resp != nil {
+			result.Events = resp.Events
 		}
-		return o.buildResult(record, nil, OutcomeFailed, err), err
+		return result, nil
 	}
-	if fresh, outcome, freshErr := o.ensureFresh(ctx, record.ID); freshErr != nil {
-		record = fresh
-		return o.buildResult(record, nil, outcome, freshErr), freshErr
-	} else {
-		record = fresh
-	}
-	record, events, err := o.completeWithOutboxEvents(ctx, record, resp, runtime)
-	if err != nil {
-		log.Printf("[orchestrator] complete with outbox events failed: %v", err)
-		if fresh, outcome, finalErr := o.resolveCompletionConflict(ctx, record.ID, record, err); finalErr != err || outcome != OutcomeFailed {
-			var finalResp *ProcessResponse
-			if outcome == OutcomeCompleted {
-				finalResp = resp
-			}
-			return o.buildResult(fresh, finalResp, outcome, finalErr), finalErr
+	if errors.Is(procErr, context.Canceled) || errors.Is(procErr, context.DeadlineExceeded) {
+		record.CancelReason = procErr.Error()
+		if cancelErr := o.tracker.RequestCancel(ctx, record.ID, procErr.Error()); cancelErr != nil {
+			return o.buildResult(record, nil, OutcomeFailed, cancelErr), cancelErr
 		}
-		return o.buildResult(record, nil, OutcomeFailed, err), err
+		if fresh, ok, getErr := o.tracker.Get(ctx, record.ID); getErr != nil {
+			return o.buildResult(record, nil, OutcomeFailed, getErr), getErr
+		} else if ok {
+			record = fresh
+		}
+		if cancelled, failErr := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCancelled); failErr == nil {
+			record = cancelled
+		}
+		return o.buildResult(record, nil, OutcomeCancelled, procErr), procErr
 	}
-	result := o.buildResult(record, resp, OutcomeCompleted, nil)
-	result.Duration = duration
-	result.Events = events
-
-	return result, nil
+	record.SetError(procErr.Error())
+	if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "processor_failed", procErr.Error()); failErr == nil {
+		record = failed
+	}
+	return o.buildResult(record, nil, OutcomeFailed, procErr), procErr
 }
 
 func (o *Orchestrator) Cancel(interactionID string) error {
@@ -788,52 +752,6 @@ func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessRespo
 	return r
 }
 
-func (o *Orchestrator) completeWithOutboxEvents(ctx context.Context, record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) (*InteractionRecord, []OutboxRecord, error) {
-	events := resp.Events
-	if len(events) > 0 {
-		completed, err := o.tracker.Complete(ctx, record.ID, record.StatusVersion, "processor_response")
-		if err != nil {
-			return record, nil, err
-		}
-		return completed, events, nil
-	}
-	if tracker, ok := o.tracker.(*SQLiteInteractionTracker); ok {
-		if outbox, ok := o.outbox.(*SQLiteOutboxStore); ok && tracker.db == outbox.db {
-			var completed *InteractionRecord
-			var appended []OutboxRecord
-			err := tracker.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-				txTracker := NewSQLiteInteractionTracker(tx)
-				txTracker.clock = tracker.clock
-				txOutbox := NewSQLiteOutboxStore(tx)
-				next, err := txTracker.Complete(ctx, record.ID, record.StatusVersion, "processor_response")
-				if err != nil {
-					return err
-				}
-				created, err := o.emitOutboxEventsTo(txOutbox, next, resp, runtime)
-				if err != nil {
-					return err
-				}
-				completed = next
-				appended = created
-				return nil
-			})
-			if err != nil {
-				return record, nil, err
-			}
-			return completed, appended, nil
-		}
-	}
-	completed, err := o.tracker.Complete(ctx, record.ID, record.StatusVersion, "processor_response")
-	if err != nil {
-		return record, nil, err
-	}
-	created, err := o.emitOutboxEventsTo(o.outbox, completed, resp, runtime)
-	if err != nil {
-		return completed, nil, err
-	}
-	return completed, created, nil
-}
-
 func outcomeForRecord(record *InteractionRecord) Outcome {
 	if record == nil {
 		return OutcomeFailed
@@ -852,79 +770,6 @@ func outcomeForRecord(record *InteractionRecord) Outcome {
 	}
 }
 
-func (o *Orchestrator) emitOutboxEventsTo(outbox OutboxStore, record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) ([]OutboxRecord, error) {
-	now := time.Now()
-	events := make([]OutboxRecord, 0, 3)
-
-	msgPayload, _ := json.Marshal(map[string]interface{}{
-		"interactionId": record.ID,
-		"scope":         record.Scope,
-		"reply":         resp.Reply,
-		"messageIds":    resp.MessageIDs,
-	})
-	msgEvent := OutboxRecord{
-		ID:          uuid.New().String(),
-		AggregateID: record.ID,
-		EventType:   "interaction.completed",
-		Payload:     msgPayload,
-		Status:      OutboxStatusPending,
-		MaxRetries:  DefaultMaxRetries,
-		CreatedAt:   now,
-		NextRetryAt: now,
-	}
-	if _, err := outbox.Append(&msgEvent); err != nil {
-		return nil, err
-	}
-	events = append(events, msgEvent)
-
-	statePayload, _ := json.Marshal(map[string]interface{}{
-		"interactionId":  record.ID,
-		"conversationId": record.Scope.ConversationID,
-		"characterId":    record.Scope.CharacterID,
-		"channel":        record.Scope.Channel,
-		"status":         "completed",
-		"timestamp":      now,
-	})
-	stateEvent := OutboxRecord{
-		ID:          uuid.New().String(),
-		AggregateID: record.ID,
-		EventType:   "interaction.state_changed",
-		Payload:     statePayload,
-		Status:      OutboxStatusPending,
-		MaxRetries:  DefaultMaxRetries,
-		CreatedAt:   now,
-		NextRetryAt: now,
-	}
-	if _, err := outbox.Append(&stateEvent); err != nil {
-		return nil, err
-	}
-	events = append(events, stateEvent)
-
-	runtimePayload, _ := json.Marshal(map[string]interface{}{
-		"interactionId": record.ID,
-		"scope":         record.Scope,
-		"path":          runtime.Path,
-		"safety":        runtime.Safety,
-		"delivery":      runtime.Delivery,
-		"timestamp":     now,
-	})
-	runtimeEvent := OutboxRecord{
-		ID:          uuid.New().String(),
-		AggregateID: record.ID,
-		EventType:   "interaction.runtime_assembled",
-		Payload:     runtimePayload,
-		Status:      OutboxStatusPending,
-		MaxRetries:  DefaultMaxRetries,
-		CreatedAt:   now,
-		NextRetryAt: now,
-	}
-	if _, err := outbox.Append(&runtimeEvent); err != nil {
-		return nil, err
-	}
-	events = append(events, runtimeEvent)
-
-	return events, nil
-}
 func (o *Orchestrator) SetDeadlineProvider(fn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)) {
 	o.deadlineFn = fn
 }

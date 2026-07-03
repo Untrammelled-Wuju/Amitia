@@ -192,12 +192,17 @@ func (s *service) calculateBurstProbability(setting, stateLife map[string]interf
 func (s *service) buildBurstPrompt(characterID, mood, currentState string, energy int) string {
 	history := s.getShareHistory(characterID)
 	recentTopics := strings.Join(history.RecentTopics, "、")
+	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID) {
+		return fmt.Sprintf("当前你处于%s状态，心情%s，精力%d/100。请生成一条自然短消息。", currentState, mood, energy)
+	}
 	if recentTopics == "" {
 		recentTopics = "无"
 	}
 	var recentMemoriesStr string
 	queryText := fmt.Sprintf("\u5fc3\u60c5%s \u72b6\u6001%s", mood, currentState)
-	if s.embeddingSvc != nil && qdrantDB.Client != nil {
+	if !s.isMemoryAccessAllowed(characterID) {
+		recentMemoriesStr = "无"
+	} else if s.embeddingSvc != nil && qdrantDB.Client != nil {
 		vec, vecErr := s.embeddingSvc.Embed(queryText)
 		if vecErr == nil {
 			filter := map[string]interface{}{"character_id": characterID}
@@ -214,7 +219,7 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 		}
 	}
 	if recentMemoriesStr == "" {
-		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND importance >= 2", characterID).Order("created_at DESC").Limit(3).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND importance >= 2 AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > datetime('now'))", characterID).Order("created_at DESC").Limit(3).Rows()
 		if err == nil {
 			defer rows.Close()
 			var mems []string

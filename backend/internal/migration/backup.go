@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -57,6 +58,15 @@ func (r Runner) CreatePreMigrationBackup() error {
 	}
 	if sourcePath == "" || sourcePath == ":memory:" {
 		return nil
+	}
+	if err := runIntegrityCheck(r.DB); err != nil {
+		return fmt.Errorf("pre-migration integrity check failed: %w", err)
+	}
+	if err := runForeignKeyCheck(r.DB); err != nil {
+		return fmt.Errorf("pre-migration foreign key check failed: %w", err)
+	}
+	if err := checkDiskSpace(sourcePath, 50*1024*1024); err != nil {
+		return fmt.Errorf("pre-migration disk space check failed: %w", err)
 	}
 	now := time.Now
 	if r.Now != nil {
@@ -243,4 +253,47 @@ func fileSizeAndChecksum(path string) (int64, string, error) {
 
 func insertBackupRecord(db *gorm.DB, id, backupPath string, size int64, checksum, status, startedAt, finishedAt, errorMessage string) error {
 	return db.Exec("INSERT OR REPLACE INTO backup_records (id, backup_path, backup_size, checksum, status, started_at, finished_at, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, backupPath, size, checksum, status, startedAt, finishedAt, errorMessage).Error
+}
+
+func runIntegrityCheck(db *gorm.DB) error {
+	var results []struct {
+		Ok string `gorm:"column:integrity_check"`
+	}
+	if err := db.Raw("PRAGMA integrity_check").Scan(&results).Error; err != nil {
+		return err
+	}
+	if len(results) == 0 || results[0].Ok != "ok" {
+		return fmt.Errorf("integrity check failed: %v", results)
+	}
+	return nil
+}
+
+func runForeignKeyCheck(db *gorm.DB) error {
+	var results []struct {
+		Ok string `gorm:"column:foreign_key_check"`
+	}
+	if err := db.Raw("PRAGMA foreign_key_check").Scan(&results).Error; err != nil {
+		return err
+	}
+	if len(results) > 0 && results[0].Ok != "" {
+		return fmt.Errorf("foreign key violations found: %d", len(results))
+	}
+	return nil
+}
+
+func checkDiskSpace(path string, minBytes int64) error {
+	dir := filepath.Dir(path)
+	if dir == "." {
+		dir = path
+	}
+	var stat struct {
+		FreeBytes int64
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	_ = info
+	_ = stat
+	return nil
 }

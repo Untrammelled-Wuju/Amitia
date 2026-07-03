@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/qq"
 	"gorm.io/gorm"
@@ -159,7 +160,9 @@ func main() {
 	defer services.UnifiedEntry.SetOrchestratorReady(false)
 	services.OutboxRuntime.Start(rootCtx)
 	defer services.OutboxRuntime.Stop()
-	cron := NewProactiveCron(db, services.Companion)
+	services.OutboxWorker.Start(rootCtx)
+	defer services.OutboxWorker.Stop()
+	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true
 	defer func() {
@@ -167,10 +170,26 @@ func main() {
 		cron.Stop()
 	}()
 
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				services.DataLifecycle.ExecuteOutboxCleanup()
+			case <-rootCtx.Done():
+				return
+			}
+		}
+	}()
+
+	go services.Reconciliation.RunWorker(rootCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
+
 	srv := &http.Server{
 		Addr:    serverAddr,
 		Handler: r,
 	}
+	log.Info("所有服务已就绪，开始监听 ", serverAddr)
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- srv.ListenAndServe()
@@ -184,7 +203,9 @@ func main() {
 			os.Exit(1)
 		}
 	case <-rootCtx.Done():
+		log.Info("收到关闭信号，开始排水...")
 		services.UnifiedEntry.SetOrchestratorReady(false)
+		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -209,7 +230,7 @@ func applyDatabaseStartupMigrations(db *gorm.DB) error {
 	migRunner := migration.Runner{DB: db, SkipBackup: existingDatabase}
 	if existingDatabase {
 		if err := migRunner.CreatePreMigrationBackup(); err != nil {
-			log.Warn("预迁移备份失败(非致命):", err)
+			return fmt.Errorf("预迁移备份失败: %w", err)
 		}
 	}
 	if err := initDatabase(db); err != nil {

@@ -1,17 +1,19 @@
 package mindruntime
 
 import (
+	"context"
+	"sync"
 	"time"
 )
 
 type HealthCheckTarget string
 
 const (
-	HealthCheckAffect       HealthCheckTarget = "affect"
-	HealthCheckBelief       HealthCheckTarget = "belief"
-	HealthCheckSnapshot     HealthCheckTarget = "snapshot"
-	HealthCheckPsyche       HealthCheckTarget = "psyche"
-	HealthCheckRelationship HealthCheckTarget = "relationship"
+	HealthCheckAffect        HealthCheckTarget = "affect"
+	HealthCheckBelief        HealthCheckTarget = "belief"
+	HealthCheckSnapshot      HealthCheckTarget = "snapshot"
+	HealthCheckPsyche        HealthCheckTarget = "psyche"
+	HealthCheckRelationship  HealthCheckTarget = "relationship"
 	HealthCheckDataLifecycle HealthCheckTarget = "data_lifecycle"
 )
 
@@ -44,25 +46,110 @@ func RunHealthCheck(input HealthCheckInput) HealthCheckResult {
 		Checks:    make([]ComponentCheck, 0),
 	}
 
-	switch input.Target {
+	result.Checks = resolveHealthChecks(input.Target)
+
+	allPassed := true
+	for _, c := range result.Checks {
+		if !c.Passed {
+			allPassed = false
+			break
+		}
+	}
+	result.Healthy = allPassed
+
+	if allPassed {
+		result.Summary = string(input.Target) + " health check passed"
+	} else {
+		failedCount := 0
+		for _, c := range result.Checks {
+			if !c.Passed {
+				failedCount++
+			}
+		}
+		result.Summary = string(input.Target) + " health check: " + formatInt(failedCount) + " check(s) failed"
+	}
+
+	DefaultMetricsCollector.IncrementCounter(string(input.Target), "health_check_runs", 1)
+	if !allPassed {
+		DefaultMetricsCollector.IncrementCounter(string(input.Target), "health_check_failures", 1)
+	}
+
+	return result
+}
+
+func resolveHealthChecks(target HealthCheckTarget) []ComponentCheck {
+	switch target {
 	case HealthCheckAffect:
-		result.Checks = healthCheckAffect()
+		return healthCheckAffect()
 	case HealthCheckBelief:
-		result.Checks = healthCheckBelief()
+		return healthCheckBelief()
 	case HealthCheckSnapshot:
-		result.Checks = healthCheckSnapshot()
+		return healthCheckSnapshot()
 	case HealthCheckPsyche:
-		result.Checks = healthCheckPsyche()
+		return healthCheckPsyche()
 	case HealthCheckRelationship:
-		result.Checks = healthCheckRelationship()
+		return healthCheckRelationship()
 	case HealthCheckDataLifecycle:
-		result.Checks = healthCheckDataLifecycle()
+		return healthCheckDataLifecycle()
 	default:
-		result.Checks = append(result.Checks, ComponentCheck{
+		return []ComponentCheck{{
 			Name:    "target_resolution",
 			Passed:  false,
-			Message: "unknown health check target: " + string(input.Target),
-		})
+			Message: "unknown health check target: " + string(target),
+		}}
+	}
+}
+
+type healthCheckRunner func(ctx context.Context) []ComponentCheck
+
+func resolveHealthCheckRunners(target HealthCheckTarget) []healthCheckRunner {
+	checks := resolveHealthChecks(target)
+	runners := make([]healthCheckRunner, len(checks))
+	for i, c := range checks {
+		check := c
+		runners[i] = func(ctx context.Context) []ComponentCheck {
+			select {
+			case <-ctx.Done():
+				return []ComponentCheck{{
+					Name:    check.Name,
+					Passed:  false,
+					Message: "health check timed out: " + check.Name,
+				}}
+			default:
+				return []ComponentCheck{check}
+			}
+		}
+	}
+	return runners
+}
+
+func RunHealthCheckWithContext(ctx context.Context, input HealthCheckInput, perCheckTimeout time.Duration) HealthCheckResult {
+	now := time.Now().UTC()
+	result := HealthCheckResult{
+		Target:    input.Target,
+		CheckedAt: now,
+		Checks:    make([]ComponentCheck, 0),
+	}
+
+	runners := resolveHealthCheckRunners(input.Target)
+	resultsCh := make(chan []ComponentCheck, len(runners))
+	var wg sync.WaitGroup
+
+	for _, runner := range runners {
+		wg.Add(1)
+		go func(r healthCheckRunner) {
+			defer wg.Done()
+			checkCtx, cancel := context.WithTimeout(ctx, perCheckTimeout)
+			defer cancel()
+			resultsCh <- r(checkCtx)
+		}(runner)
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	for checks := range resultsCh {
+		result.Checks = append(result.Checks, checks...)
 	}
 
 	allPassed := true
@@ -193,7 +280,6 @@ func healthCheckRelationship() []ComponentCheck {
 		},
 	}
 }
-
 
 func healthCheckDataLifecycle() []ComponentCheck {
 	stats := DefaultDataLifecycleCoordinator.Stats()

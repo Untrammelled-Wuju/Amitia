@@ -47,13 +47,13 @@ const (
 )
 
 type PhaseResult struct {
-	Phase      StartupPhase     `json:"phase"`
-	Status     StartupStatus    `json:"status"`
-	StartedAt  time.Time        `json:"startedAt"`
-	EndedAt    time.Time        `json:"endedAt,omitempty"`
-	Duration   time.Duration    `json:"duration"`
-	Error      string           `json:"error,omitempty"`
-	Checks     []ComponentCheck `json:"checks,omitempty"`
+	Phase     StartupPhase     `json:"phase"`
+	Status    StartupStatus    `json:"status"`
+	StartedAt time.Time        `json:"startedAt"`
+	EndedAt   time.Time        `json:"endedAt,omitempty"`
+	Duration  time.Duration    `json:"duration"`
+	Error     string           `json:"error,omitempty"`
+	Checks    []ComponentCheck `json:"checks,omitempty"`
 }
 
 type StartupComponent interface {

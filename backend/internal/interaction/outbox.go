@@ -38,6 +38,8 @@ type OutboxRecord struct {
 	MaxRetries  int          `json:"maxRetries"`
 	NextRetryAt time.Time    `json:"nextRetryAt"`
 	LeasedUntil time.Time    `json:"leasedUntil,omitempty"`
+	LeaseOwner  string       `json:"leaseOwner,omitempty"`
+	LeaseToken  string       `json:"leaseToken,omitempty"`
 	LastError   string       `json:"lastError,omitempty"`
 	CreatedAt   time.Time    `json:"createdAt"`
 }

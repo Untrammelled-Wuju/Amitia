@@ -12,23 +12,23 @@ import (
 type AbstractionLevel string
 
 const (
-	AbstractionSpecific    AbstractionLevel = "specific"
-	AbstractionGeneral     AbstractionLevel = "general"
-	AbstractionHighLevel   AbstractionLevel = "high_level"
+	AbstractionSpecific  AbstractionLevel = "specific"
+	AbstractionGeneral   AbstractionLevel = "general"
+	AbstractionHighLevel AbstractionLevel = "high_level"
 )
 
 type HierarchicalAbstraction struct {
-	ID            string
-	Topic         string
-	CharacterID   string
-	Level         AbstractionLevel
-	Abstract      string
-	SourceIDs     []string
-	ParentID      string
-	ChildrenIDs   []string
-	SourceCount   int
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	ID          string
+	Topic       string
+	CharacterID string
+	Level       AbstractionLevel
+	Abstract    string
+	SourceIDs   []string
+	ParentID    string
+	ChildrenIDs []string
+	SourceCount int
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
 }
 
 type AbstractionHierarchyConfig struct {

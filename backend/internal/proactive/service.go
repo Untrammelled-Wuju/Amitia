@@ -173,8 +173,8 @@ func (s *service) PendingReminders() ([]Reminder, error)    { return s.repo.Pend
 
 func (s *service) QueryAffectNeedSignal(characterID, userID string) (float64, float64, error) {
 	var affectVal, needVal float64
-	err := s.db.Raw("SELECT " +
-		"COALESCE((SELECT p_val FROM psyche_states WHERE character_id = ? AND user_id = ? LIMIT 1), 0.5), " +
+	err := s.db.Raw("SELECT "+
+		"COALESCE((SELECT p_val FROM psyche_states WHERE character_id = ? AND user_id = ? LIMIT 1), 0.5), "+
 		"COALESCE((SELECT AVG(level) FROM psyche_needs WHERE character_id = ? AND user_id = ? LIMIT 1), 0.5)",
 		characterID, userID, characterID, userID,
 	).Row().Scan(&affectVal, &needVal)

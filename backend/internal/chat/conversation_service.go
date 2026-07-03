@@ -4,8 +4,8 @@ package chat
 
 import (
 	"fmt"
-	"time"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"time"
 )
 
 func (s *service) ListConversations(q ConversationQuery) (*ConversationListResponse, error) {

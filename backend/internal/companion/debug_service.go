@@ -235,7 +235,7 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 			messageContent = dispatchResult.Response.Reply
 		}
 		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
-		s.db.Exec("UPDATE active_message_task SET status='SENT', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
+		s.db.Exec("UPDATE active_message_task SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
 	}

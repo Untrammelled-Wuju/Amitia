@@ -10,14 +10,14 @@ import (
 )
 
 type AppliedBeliefAdjustment struct {
-	ID            string
-	BeliefKey     string
-	OldStrength   float64
-	NewStrength   float64
-	AppliedAt     time.Time
-	SourceRefID   string
-	CandidateID   string
-	CharacterID   string
+	ID          string
+	BeliefKey   string
+	OldStrength float64
+	NewStrength float64
+	AppliedAt   time.Time
+	SourceRefID string
+	CandidateID string
+	CharacterID string
 }
 
 type ResolvedRelationNarrative struct {

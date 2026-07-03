@@ -18,11 +18,11 @@ func TestCompilerCompileBasic(t *testing.T) {
 func TestCompilerCompileFullConfig(t *testing.T) {
 	c := NewCompiler(DefaultCompilerConfig())
 	cp := c.Compile("char-2", map[string]interface{}{
-		"identity":            "测试角色",
-		"coreBoundary":        "不讨论政治",
+		"identity":             "测试角色",
+		"coreBoundary":         "不讨论政治",
 		"cognitiveSensitivity": 0.8,
-		"warmth":              0.7,
-		"directness":          0.3,
+		"warmth":               0.7,
+		"directness":           0.3,
 	})
 	if cp.CognitiveSens != 0.8 {
 		t.Errorf("expected 0.8, got %f", cp.CognitiveSens)

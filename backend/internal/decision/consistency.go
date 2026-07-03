@@ -1,10 +1,10 @@
 package decision
 
 type ConsistencyResult struct {
-	Consistent      bool
-	Score           float64
-	Violations      []string
-	FallbackAction  string
+	Consistent     bool
+	Score          float64
+	Violations     []string
+	FallbackAction string
 }
 
 type ConsistencyChecker struct {
@@ -57,9 +57,9 @@ func (c *ConsistencyChecker) VerifyWithFallback(plan BehaviorPlan, goals []Goal,
 		SafetyLevel: BehaviorSafetyLevelConservative,
 		DoNotSend:   false,
 		Audit: BehaviorAudit{
-			FormulaVersion:   string(BehaviorFormulaVersionV1),
-			Diagnostics:      result.Violations,
-			SnapshotID:       "consistency-fallback",
+			FormulaVersion: string(BehaviorFormulaVersionV1),
+			Diagnostics:    result.Violations,
+			SnapshotID:     "consistency-fallback",
 		},
 	}
 	return fallback

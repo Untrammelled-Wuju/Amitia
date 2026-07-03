@@ -162,7 +162,7 @@ func buildRuntimeCausalChain(input RuntimeObservabilityInput) []RuntimeCausalEve
 		events = append(events, RuntimeCausalEvent{
 			Kind: TraceEventInteraction, ID: snapshot.InteractionID, ParentID: parentID,
 			Status: strings.TrimSpace(input.InteractionStatus),
-			Scope: strings.TrimSpace(input.Scope), ContextVersion: input.ContextVersion,
+			Scope:  strings.TrimSpace(input.Scope), ContextVersion: input.ContextVersion,
 			BudgetUsed: input.BudgetUsed, BudgetLimit: input.BudgetLimit,
 			CandidateCount: input.CandidateCount, ValidationResult: strings.TrimSpace(input.ValidationResult),
 		})

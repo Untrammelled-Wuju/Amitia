@@ -11,8 +11,8 @@ const (
 )
 
 type TransactionDefinition struct {
-	Name       TransactionBoundary  `json:"name"`
-	Stages     []TransactionStage   `json:"stages"`
+	Name       TransactionBoundary   `json:"name"`
+	Stages     []TransactionStage    `json:"stages"`
 	RollbackOn []TransactionBoundary `json:"rollbackOn"`
 }
 

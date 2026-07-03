@@ -5,17 +5,17 @@ import (
 )
 
 type CalibratedParams struct {
-	DecayRate            float64       `json:"decayRate"`
-	ChangeBudget         float64       `json:"changeBudget"`
-	RelationshipSpeed    float64       `json:"relationshipSpeed"`
-	ProactiveThreshold   float64       `json:"proactiveThreshold"`
-	QueueConcurrency     int           `json:"queueConcurrency"`
-	BackpressureThreshold int          `json:"backpressureThreshold"`
-	CircuitBreakerWindow time.Duration `json:"circuitBreakerWindow"`
-	ReflectionThreshold  float64       `json:"reflectionThreshold"`
-	CalibratedAt         time.Time     `json:"calibratedAt"`
-	Version              int           `json:"version"`
-	SourceObservedCount  int           `json:"sourceObservedCount"`
+	DecayRate             float64       `json:"decayRate"`
+	ChangeBudget          float64       `json:"changeBudget"`
+	RelationshipSpeed     float64       `json:"relationshipSpeed"`
+	ProactiveThreshold    float64       `json:"proactiveThreshold"`
+	QueueConcurrency      int           `json:"queueConcurrency"`
+	BackpressureThreshold int           `json:"backpressureThreshold"`
+	CircuitBreakerWindow  time.Duration `json:"circuitBreakerWindow"`
+	ReflectionThreshold   float64       `json:"reflectionThreshold"`
+	CalibratedAt          time.Time     `json:"calibratedAt"`
+	Version               int           `json:"version"`
+	SourceObservedCount   int           `json:"sourceObservedCount"`
 }
 
 type CalibrationInput struct {
@@ -27,42 +27,42 @@ type CalibrationInput struct {
 }
 
 type CalibrationConfig struct {
-	MinDecayRate            float64
-	MaxDecayRate            float64
-	MinChangeBudget         float64
-	MaxChangeBudget         float64
-	MinRelationshipSpeed    float64
-	MaxRelationshipSpeed    float64
-	MinProactiveThreshold   float64
-	MaxProactiveThreshold   float64
-	MinQueueConcurrency     int
-	MaxQueueConcurrency     int
+	MinDecayRate             float64
+	MaxDecayRate             float64
+	MinChangeBudget          float64
+	MaxChangeBudget          float64
+	MinRelationshipSpeed     float64
+	MaxRelationshipSpeed     float64
+	MinProactiveThreshold    float64
+	MaxProactiveThreshold    float64
+	MinQueueConcurrency      int
+	MaxQueueConcurrency      int
 	MinBackpressureThreshold int
 	MaxBackpressureThreshold int
-	MinCircuitBreakerWindow time.Duration
-	MaxCircuitBreakerWindow time.Duration
-	MinReflectionThreshold  float64
-	MaxReflectionThreshold  float64
+	MinCircuitBreakerWindow  time.Duration
+	MaxCircuitBreakerWindow  time.Duration
+	MinReflectionThreshold   float64
+	MaxReflectionThreshold   float64
 }
 
 func DefaultCalibrationConfig() CalibrationConfig {
 	return CalibrationConfig{
-		MinDecayRate:            0.01,
-		MaxDecayRate:            0.10,
-		MinChangeBudget:         0.05,
-		MaxChangeBudget:         0.50,
-		MinRelationshipSpeed:    0.01,
-		MaxRelationshipSpeed:    0.20,
-		MinProactiveThreshold:   0.30,
-		MaxProactiveThreshold:   0.80,
-		MinQueueConcurrency:     1,
-		MaxQueueConcurrency:     50,
+		MinDecayRate:             0.01,
+		MaxDecayRate:             0.10,
+		MinChangeBudget:          0.05,
+		MaxChangeBudget:          0.50,
+		MinRelationshipSpeed:     0.01,
+		MaxRelationshipSpeed:     0.20,
+		MinProactiveThreshold:    0.30,
+		MaxProactiveThreshold:    0.80,
+		MinQueueConcurrency:      1,
+		MaxQueueConcurrency:      50,
 		MinBackpressureThreshold: 10,
 		MaxBackpressureThreshold: 1000,
-		MinCircuitBreakerWindow: 5 * time.Second,
-		MaxCircuitBreakerWindow: 300 * time.Second,
-		MinReflectionThreshold:  0.10,
-		MaxReflectionThreshold:  0.70,
+		MinCircuitBreakerWindow:  5 * time.Second,
+		MaxCircuitBreakerWindow:  300 * time.Second,
+		MinReflectionThreshold:   0.10,
+		MaxReflectionThreshold:   0.70,
 	}
 }
 

@@ -9,11 +9,11 @@ import (
 type BackpressureLevel int
 
 const (
-	BackpressureNone  BackpressureLevel = 0
-	BackpressureLow   BackpressureLevel = 1
-	BackpressureMed   BackpressureLevel = 2
-	BackpressureHigh  BackpressureLevel = 3
-	BackpressureFull  BackpressureLevel = 4
+	BackpressureNone BackpressureLevel = 0
+	BackpressureLow  BackpressureLevel = 1
+	BackpressureMed  BackpressureLevel = 2
+	BackpressureHigh BackpressureLevel = 3
+	BackpressureFull BackpressureLevel = 4
 )
 
 func (l BackpressureLevel) String() string {
@@ -43,14 +43,14 @@ type QueueItem struct {
 }
 
 type QueueBackpressure struct {
-	queue        []*QueueItem
-	maxSize      int
-	highWater    float64
-	lowWater     float64
-	mu           sync.Mutex
-	enqueueCh    chan struct{}
-	outboxFunc   func(*QueueItem) bool
-	stopCh       chan struct{}
+	queue      []*QueueItem
+	maxSize    int
+	highWater  float64
+	lowWater   float64
+	mu         sync.Mutex
+	enqueueCh  chan struct{}
+	outboxFunc func(*QueueItem) bool
+	stopCh     chan struct{}
 }
 
 func NewQueueBackpressure(maxSize int, highWater, lowWater float64, outbox func(*QueueItem) bool) *QueueBackpressure {

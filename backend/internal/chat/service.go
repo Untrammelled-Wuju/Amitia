@@ -52,6 +52,8 @@ type Service interface {
 	GetCompressionStatus(convID string) map[string]interface{}
 	GetPipelineStatus() interface{}
 	ListProviders() []ProviderInfo
+	SetOutboxStore(store OutboxStore)
+	SetDeliveryStore(store DeliveryStore)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -98,6 +100,8 @@ type service struct {
 	compressor    *Compressor
 	pipeline      *memory.Pipeline
 	llmWithTools  llmWithToolsFunc
+	outboxStore   OutboxStore
+	deliveryStore DeliveryStore
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -110,6 +114,22 @@ type ModelDetectItem struct {
 
 var _ interaction.MessageProcessor = (*service)(nil)
 
+type DeliveryStore interface {
+	CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error
+	CreateOutputLease(interactionID, characterID, userID, channel string) error
+}
+
+type OutboxStore interface {
+	AppendOutbox(aggregateID, eventType string, payload []byte) error
+}
+
+func (s *service) SetOutboxStore(store OutboxStore) {
+	s.outboxStore = store
+}
+
+func (s *service) SetDeliveryStore(store DeliveryStore) {
+	s.deliveryStore = store
+}
 func SetVisionModelConfigProvider(provider func() (*visioncfg.VisionConfig, error)) {
 	visionModelConfigProviderMu.Lock()
 	visionModelConfigProvider = provider

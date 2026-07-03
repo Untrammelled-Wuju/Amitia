@@ -5,49 +5,49 @@ import "time"
 type ExpressionType string
 
 const (
-	ExpressionTypeText        ExpressionType = "text"
-	ExpressionTypeEmoji       ExpressionType = "emoji"
-	ExpressionTypeQuestion    ExpressionType = "question"
-	ExpressionTypeStatement   ExpressionType = "statement"
-	ExpressionTypeGreeting    ExpressionType = "greeting"
-	ExpressionTypeBoundary    ExpressionType = "boundary"
-	ExpressionTypeSilence     ExpressionType = "silence"
+	ExpressionTypeText      ExpressionType = "text"
+	ExpressionTypeEmoji     ExpressionType = "emoji"
+	ExpressionTypeQuestion  ExpressionType = "question"
+	ExpressionTypeStatement ExpressionType = "statement"
+	ExpressionTypeGreeting  ExpressionType = "greeting"
+	ExpressionTypeBoundary  ExpressionType = "boundary"
+	ExpressionTypeSilence   ExpressionType = "silence"
 )
 
 type ExpressionTone string
 
 const (
-	ExpressionToneWarm     ExpressionTone = "warm"
-	ExpressionToneNeutral  ExpressionTone = "neutral"
-	ExpressionToneFirm     ExpressionTone = "firm"
-	ExpressionToneSoft     ExpressionTone = "soft"
-	ExpressionTonePlayful  ExpressionTone = "playful"
+	ExpressionToneWarm      ExpressionTone = "warm"
+	ExpressionToneNeutral   ExpressionTone = "neutral"
+	ExpressionToneFirm      ExpressionTone = "firm"
+	ExpressionToneSoft      ExpressionTone = "soft"
+	ExpressionTonePlayful   ExpressionTone = "playful"
 	ExpressionToneConcerned ExpressionTone = "concerned"
 )
 
 type ExpressionLength string
 
 const (
-	ExpressionLengthShort   ExpressionLength = "short"
-	ExpressionLengthMedium  ExpressionLength = "medium"
-	ExpressionLengthLong    ExpressionLength = "long"
+	ExpressionLengthShort  ExpressionLength = "short"
+	ExpressionLengthMedium ExpressionLength = "medium"
+	ExpressionLengthLong   ExpressionLength = "long"
 )
 
 type ExpressionPlan struct {
-	ID              string              `json:"id"`
-	BehaviorPlanID  string              `json:"behaviorPlanId"`
-	CreatedAt       time.Time           `json:"createdAt"`
-	ExpressionType  ExpressionType      `json:"expressionType"`
-	Tone            ExpressionTone      `json:"tone"`
-	Length          ExpressionLength    `json:"length"`
-	EmotionIntensity float64            `json:"emotionIntensity"`
-	ScaleFactor     float64             `json:"scaleFactor"`
-	Suppressed      bool                `json:"suppressed"`
-	CopingStrategy  CopingStrategy      `json:"copingStrategy,omitempty"`
-	Channel         BehaviorChannel     `json:"channel"`
-	DoNotSend       bool                `json:"doNotSend"`
-	SafetyBlocked   bool                `json:"safetyBlocked"`
-	Metadata        map[string]any      `json:"metadata,omitempty"`
+	ID               string           `json:"id"`
+	BehaviorPlanID   string           `json:"behaviorPlanId"`
+	CreatedAt        time.Time        `json:"createdAt"`
+	ExpressionType   ExpressionType   `json:"expressionType"`
+	Tone             ExpressionTone   `json:"tone"`
+	Length           ExpressionLength `json:"length"`
+	EmotionIntensity float64          `json:"emotionIntensity"`
+	ScaleFactor      float64          `json:"scaleFactor"`
+	Suppressed       bool             `json:"suppressed"`
+	CopingStrategy   CopingStrategy   `json:"copingStrategy,omitempty"`
+	Channel          BehaviorChannel  `json:"channel"`
+	DoNotSend        bool             `json:"doNotSend"`
+	SafetyBlocked    bool             `json:"safetyBlocked"`
+	Metadata         map[string]any   `json:"metadata,omitempty"`
 }
 
 type ExpressionPlanInput struct {

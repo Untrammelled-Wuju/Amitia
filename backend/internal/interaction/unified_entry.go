@@ -115,6 +115,7 @@ type UnifiedEntryRequest struct {
 	ImageContext   string          `json:"imageContext,omitempty"`
 	RequestID      string          `json:"requestId,omitempty"`
 	SessionID      string          `json:"sessionId,omitempty"`
+	IsInternal     bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -195,6 +196,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ImageUrl:       req.ImageUrl,
 		VideoUrl:       req.VideoUrl,
 		ImageContext:   req.ImageContext,
+		IsInternal:     req.IsInternal,
 	}
 
 	return e.orchestrator.Process(ctx, procReq)

@@ -120,10 +120,10 @@ func readNeedState(callCtx context.Context, execCtx ToolExecutionContext, args m
 
 	result := TextResult(strings.Join(lines, "\n"))
 	result.Audit = map[string]interface{}{
-		"character_id":   characterID,
-		"need_count":     len(output.Needs),
+		"character_id":    characterID,
+		"need_count":      len(output.Needs),
 		"include_history": includeHistory,
-		"raw":            string(raw),
+		"raw":             string(raw),
 	}
 	return result
 }

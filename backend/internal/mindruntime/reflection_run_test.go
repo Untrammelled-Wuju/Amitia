@@ -142,12 +142,12 @@ func TestMergeReflectionCandidates(t *testing.T) {
 	c1 := ReflectionCandidate{
 		ID: "ref-1", CharacterID: "char-1",
 		BeliefAdjustments: []BeliefAdjustment{{BeliefKey: "k1"}},
-		Confidence: 0.5, CreatedAt: now,
+		Confidence:        0.5, CreatedAt: now,
 	}
 	c2 := ReflectionCandidate{
 		ID: "ref-2", CharacterID: "char-1",
 		BeliefAdjustments: []BeliefAdjustment{{BeliefKey: "k2"}},
-		Confidence: 0.7, CreatedAt: now,
+		Confidence:        0.7, CreatedAt: now,
 	}
 	merged := MergeReflectionCandidates([]ReflectionCandidate{c1, c2})
 	if len(merged.BeliefAdjustments) != 2 {
@@ -163,12 +163,12 @@ func TestMergeReflectionCandidates_DeDupRefs(t *testing.T) {
 	c1 := ReflectionCandidate{
 		ID: "ref-1", CharacterID: "char-1",
 		EvidenceRefs: []string{"event:1", "event:2"},
-		CreatedAt: now,
+		CreatedAt:    now,
 	}
 	c2 := ReflectionCandidate{
 		ID: "ref-2", CharacterID: "char-1",
 		EvidenceRefs: []string{"event:2", "event:3"},
-		CreatedAt: now,
+		CreatedAt:    now,
 	}
 	merged := MergeReflectionCandidates([]ReflectionCandidate{c1, c2})
 	if len(merged.EvidenceRefs) != 3 {

@@ -23,18 +23,18 @@ const (
 )
 
 type InterruptionRiskInput struct {
-	Now             time.Time
-	UserActivity    UserActivity
-	IntimacyLevel   float64
+	Now              time.Time
+	UserActivity     UserActivity
+	IntimacyLevel    float64
 	RecentInterrupts int
 	UserDoNotDisturb bool
 }
 
 func DefaultInterruptionRiskInput() InterruptionRiskInput {
 	return InterruptionRiskInput{
-		Now:             time.Now().UTC(),
-		UserActivity:    UserActivityUnknown,
-		IntimacyLevel:   0.5,
+		Now:              time.Now().UTC(),
+		UserActivity:     UserActivityUnknown,
+		IntimacyLevel:    0.5,
 		RecentInterrupts: 0,
 		UserDoNotDisturb: false,
 	}

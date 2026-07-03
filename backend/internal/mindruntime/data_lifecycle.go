@@ -709,6 +709,12 @@ func (c *DataLifecycleCoordinator) Reset() {
 	c.tombstones = make(map[string]DeletionTombstone)
 	c.outbox = make([]OutboxCleanupItem, 0)
 	c.recalcTasks = make([]RecalculationTask, 0)
+
+	if c.db != nil {
+		c.db.Where("1 = 1").Delete(&DeletionTombstoneModel{})
+		c.db.Where("1 = 1").Delete(&OutboxCleanupItemModel{})
+		c.db.Where("1 = 1").Delete(&RecalculationTaskModel{})
+	}
 }
 
 func generateTombstoneID(targetID string, targetType string) string {

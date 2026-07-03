@@ -7,7 +7,7 @@ func TestApplySoftPreferencesUsesPersonalityWeights(t *testing.T) {
 		PersonalityWeights: map[BehaviorTag]float64{
 			BehaviorTagOfferSupport: 0.8,
 		},
-		Relationship: RelationshipSnapshot{},
+		Relationship:    RelationshipSnapshot{},
 		UserPreferences: nil,
 	}
 	config := DefaultSoftPreferenceConfig()

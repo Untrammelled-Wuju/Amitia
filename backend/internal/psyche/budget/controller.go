@@ -26,8 +26,8 @@ type BudgetResult struct {
 
 func (bc *BudgetController) Allocate(severity float64, candidates []CandidateDelta) BudgetResult {
 	totalBudget := severity * bc.MaxTotalDelta
-	if totalBudget <= 0 {
-		totalBudget = 0.01
+	if severity <= 0 || totalBudget <= 0 {
+		totalBudget = 0
 	}
 
 	result := BudgetResult{

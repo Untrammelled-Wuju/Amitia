@@ -19,20 +19,20 @@ func ResolveBatch(input BatchInput) BatchResult {
 }
 
 type ExpandedResolveInput struct {
-	Key        string      `json:"key"`
-	Candidates []Candidate `json:"candidates"`
+	Key        string         `json:"key"`
+	Candidates []Candidate    `json:"candidates"`
 	Policy     ResolverPolicy `json:"policy"`
-	Now        time.Time   `json:"now"`
+	Now        time.Time      `json:"now"`
 }
 
 type MemoryCandidate struct {
-	ID         string        `json:"id"`
-	Key        string    `json:"key"`
-	Value      string    `json:"value"`
-	Evidence   EvidenceSpan  `json:"evidence"`
-	Confidence float64   `json:"confidence"`
-	ObservedAt time.Time `json:"observedAt"`
-	Source     SourceKind `json:"source"`
+	ID         string       `json:"id"`
+	Key        string       `json:"key"`
+	Value      string       `json:"value"`
+	Evidence   EvidenceSpan `json:"evidence"`
+	Confidence float64      `json:"confidence"`
+	ObservedAt time.Time    `json:"observedAt"`
+	Source     SourceKind   `json:"source"`
 }
 
 func ConvertMemoryCandidates(key string, mems []MemoryCandidate, now time.Time, evidence EvidenceSpan) []Candidate {
@@ -48,7 +48,7 @@ func ConvertMemoryCandidates(key string, mems []MemoryCandidate, now time.Time, 
 			Source:     m.Source,
 			Confidence: m.Confidence,
 			ObservedAt: m.ObservedAt,
-				ExpiresAt:  expiresAt.Add(0),
+			ExpiresAt:  expiresAt.Add(0),
 		}
 		if c.Source == "" {
 			c.Source = SourceKindMemory

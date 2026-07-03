@@ -8,9 +8,9 @@ import (
 type State string
 
 const (
-	StateClosed     State = "closed"
-	StateOpen       State = "open"
-	StateHalfOpen   State = "half_open"
+	StateClosed   State = "closed"
+	StateOpen     State = "open"
+	StateHalfOpen State = "half_open"
 )
 
 type CircuitBreaker struct {
@@ -21,9 +21,10 @@ type CircuitBreaker struct {
 	successCount int
 	lastFailure  time.Time
 
-	maxFailures  int
-	timeout      time.Duration
-	halfOpenMax  int
+	maxFailures int
+	timeout     time.Duration
+	halfOpenMax int
+	inFlight    int
 }
 
 func New(name string, maxFailures int, timeout time.Duration, halfOpenMax int) *CircuitBreaker {
@@ -62,7 +63,11 @@ func (cb *CircuitBreaker) Allow() bool {
 	case StateOpen:
 		return false
 	case StateHalfOpen:
-		return cb.successCount < cb.halfOpenMax
+		if cb.inFlight < cb.halfOpenMax {
+			cb.inFlight++
+			return true
+		}
+		return false
 	}
 	return false
 }
@@ -72,6 +77,9 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	defer cb.mu.Unlock()
 
 	cb.currentState()
+	if cb.inFlight > 0 {
+		cb.inFlight--
+	}
 	cb.failureCount = 0
 	if cb.state == StateHalfOpen {
 		cb.successCount++
@@ -87,6 +95,9 @@ func (cb *CircuitBreaker) RecordFailure() {
 	defer cb.mu.Unlock()
 
 	cb.currentState()
+	if cb.inFlight > 0 {
+		cb.inFlight--
+	}
 	cb.failureCount++
 	cb.lastFailure = time.Now()
 

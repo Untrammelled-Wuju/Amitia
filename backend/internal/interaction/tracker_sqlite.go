@@ -217,12 +217,26 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 	}
 	updates["updated_at"] = t.now()
 	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
-		Where("id = ?", id).
-		Updates(updates)
+		Where("id = ?", id)
+
+	casSet := false
+	if update.ExpectedStatusVersion != nil {
+		result = result.Where("status_version = ?", *update.ExpectedStatusVersion)
+		casSet = true
+	}
+	if update.ExpectedOwner != nil {
+		result = result.Where("commit_owner = ?", *update.ExpectedOwner)
+		casSet = true
+	}
+
+	result = result.Updates(updates)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
+		if casSet {
+			return nil, ErrInteractionCASConflict
+		}
 		return nil, ErrInteractionNotFound
 	}
 	rec, ok, err := t.Get(ctx, id)

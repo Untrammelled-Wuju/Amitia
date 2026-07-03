@@ -55,7 +55,7 @@ func TestRunDayConsolidation_CompressLimit(t *testing.T) {
 	events := make([]DayEvent, 5)
 	for i := 0; i < 5; i++ {
 		events[i] = DayEvent{
-			ID: "evt-" + string(rune('a'+i)),
+			ID:   "evt-" + string(rune('a'+i)),
 			Kind: "chat", Summary: "对话", Importance: 0.1, Timestamp: now,
 		}
 	}

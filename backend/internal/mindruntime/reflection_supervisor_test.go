@@ -104,8 +104,8 @@ func TestApproveReflectionCandidate_TooManyAdjustments(t *testing.T) {
 	}
 	candidate := ReflectionCandidate{
 		ID: "ref-004", CharacterID: "char-1",
-		Confidence:            0.9,
-		BeliefAdjustments:     adjustments,
+		Confidence:        0.9,
+		BeliefAdjustments: adjustments,
 	}
 	result := rs.ApproveReflectionCandidate(candidate, 5)
 	if result.Approved {
@@ -125,8 +125,8 @@ func TestApproveReflectionCandidate_TooManyAbstractions(t *testing.T) {
 	}
 	candidate := ReflectionCandidate{
 		ID: "ref-005", CharacterID: "char-1",
-		Confidence:          0.9,
-		MemoryAbstractions:  abstractions,
+		Confidence:         0.9,
+		MemoryAbstractions: abstractions,
 	}
 	result := rs.ApproveReflectionCandidate(candidate, 5)
 	if result.Approved {

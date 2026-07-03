@@ -10,17 +10,19 @@ import (
 
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/queue"
 	"gorm.io/gorm"
 )
 
 type ProactiveCron struct {
-	db        *gorm.DB
-	compSvc   companion.Service
-	executor  *proactive.Executor
-	scheduler *proactive.SafeScheduler
-	running   bool
-	mu        sync.Mutex
-	stopCh    chan struct{}
+	db         *gorm.DB
+	compSvc    companion.Service
+	queueStore *queue.SQLiteRuntimeQueueStore
+	executor   *proactive.Executor
+	scheduler  *proactive.SafeScheduler
+	running    bool
+	mu         sync.Mutex
+	stopCh     chan struct{}
 
 	scheduled          map[int]int
 	lastClean          string
@@ -29,14 +31,16 @@ type ProactiveCron struct {
 	todayBurstCount    int
 }
 
-func NewProactiveCron(db *gorm.DB, compSvc companion.Service) *ProactiveCron {
+func NewProactiveCron(db *gorm.DB, compSvc companion.Service, queueStore *queue.SQLiteRuntimeQueueStore) *ProactiveCron {
 	exec := proactive.NewExecutor(db)
+	exec.SetDispatch(&proactiveDispatchAdapter{compSvc: compSvc})
 	return &ProactiveCron{
 		db:                 db,
 		compSvc:            compSvc,
 		executor:           exec,
 		scheduler:          proactive.NewSafeScheduler(db, exec),
 		scheduled:          make(map[int]int),
+		queueStore:         queueStore,
 		lastRegenerateDate: time.Now().Format("2006-01-02"),
 	}
 }
@@ -242,4 +246,20 @@ func (c *ProactiveCron) cleanupOldReminders() {
 	}
 	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
 	c.db.Exec("DELETE FROM reminders WHERE enabled = 0 AND last_triggered_at < ?", cutoff)
+}
+
+type proactiveDispatchAdapter struct {
+	compSvc companion.Service
+}
+
+func (a *proactiveDispatchAdapter) DispatchProactive(ctx context.Context, req proactive.ProactiveDispatchRequest) (*proactive.ProactiveDispatchResult, error) {
+	if a.compSvc == nil {
+		return &proactive.ProactiveDispatchResult{Success: false}, nil
+	}
+	content, err := a.compSvc.DispatchProactiveMessage(ctx, req.CharacterID, req.ConversationID, req.Channel, req.Prompt, req.RequestID)
+	if err != nil {
+		log.Printf("[ProactiveCron] DispatchProactive failed: %v", err)
+		return &proactive.ProactiveDispatchResult{Success: false}, nil
+	}
+	return &proactive.ProactiveDispatchResult{Success: true, Content: content}, nil
 }

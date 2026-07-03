@@ -22,7 +22,10 @@ func normalizeProactiveChannel(channel string) string {
 
 func primaryConversationChannel(channel string) string {
 	channel = normalizeProactiveChannel(channel)
-	if channel == "all" || strings.Contains(channel, "web") {
+	if channel == "all" {
+		return "all"
+	}
+	if strings.Contains(channel, "web") {
 		return "web"
 	}
 	if strings.Contains(channel, "wechat") {
@@ -43,7 +46,9 @@ func resolveProactiveConversation(db *gorm.DB, conversationID, characterID, chan
 			query = query.Where("character_id = ?", characterID)
 		}
 		if targetChannel != "" {
-			query = query.Where("channel = ?", targetChannel)
+			if targetChannel != "" && targetChannel != "all" {
+				query = query.Where("channel = ?", targetChannel)
+			}
 		}
 		if requirePeer {
 			query = query.Where("peer_id != '' AND peer_id IS NOT NULL")
@@ -52,7 +57,11 @@ func resolveProactiveConversation(db *gorm.DB, conversationID, characterID, chan
 		if characterID == "" {
 			return ""
 		}
-		query = query.Where("character_id = ? AND channel = ?", characterID, targetChannel)
+		if targetChannel == "all" {
+			query = query.Where("character_id = ?", characterID)
+		} else {
+			query = query.Where("character_id = ? AND channel = ?", characterID, targetChannel)
+		}
 		if requirePeer {
 			query = query.Where("peer_id != '' AND peer_id IS NOT NULL")
 		}

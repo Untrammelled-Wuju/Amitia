@@ -34,11 +34,11 @@ func init() {
 }
 
 type psycheStateOutput struct {
-	Emotion   emotionBlock   `json:"emotion"`
-	Mood      moodBlock      `json:"mood"`
-	Stress    float64        `json:"stress"`
-	Beliefs   []beliefBlock  `json:"beliefs,omitempty"`
-	UpdatedAt string         `json:"updatedAt"`
+	Emotion   emotionBlock  `json:"emotion"`
+	Mood      moodBlock     `json:"mood"`
+	Stress    float64       `json:"stress"`
+	Beliefs   []beliefBlock `json:"beliefs,omitempty"`
+	UpdatedAt string        `json:"updatedAt"`
 }
 
 type emotionBlock struct {
@@ -156,9 +156,9 @@ func readPsycheState(callCtx context.Context, execCtx ToolExecutionContext, args
 
 	result := TextResult(strings.Join(lines, "\n"))
 	result.Audit = map[string]interface{}{
-		"character_id":   characterID,
+		"character_id":    characterID,
 		"include_beliefs": includeBeliefs,
-		"raw":            string(raw),
+		"raw":             string(raw),
 	}
 	return result
 }

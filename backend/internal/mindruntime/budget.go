@@ -47,9 +47,9 @@ type BudgetSnapshot struct {
 }
 
 type BudgetTracker struct {
-	mu       sync.Mutex
-	budgets  map[string]*BudgetRecord
-	active   map[string]*BudgetRecord
+	mu        sync.Mutex
+	budgets   map[string]*BudgetRecord
+	active    map[string]*BudgetRecord
 	snapshots []BudgetSnapshot
 }
 
@@ -66,8 +66,8 @@ type BudgetRecord struct {
 
 func NewBudgetTracker() *BudgetTracker {
 	return &BudgetTracker{
-		budgets:  make(map[string]*BudgetRecord),
-		active:   make(map[string]*BudgetRecord),
+		budgets:   make(map[string]*BudgetRecord),
+		active:    make(map[string]*BudgetRecord),
 		snapshots: make([]BudgetSnapshot, 0),
 	}
 }
@@ -254,13 +254,13 @@ func (bt *BudgetTracker) Reset(path string) {
 	}
 
 	snap := BudgetSnapshot{
-		Path:         path,
-		ActualCalls:  record.ActualCalls,
-		CacheHits:    record.CacheHits,
-		InputTokens:  record.InputTokens,
-		Status:       BudgetNormal,
-		MaxCalls:     record.Config.MaxModelCalls,
-		MaxTokens:    record.Config.MaxInputTokens,
+		Path:        path,
+		ActualCalls: record.ActualCalls,
+		CacheHits:   record.CacheHits,
+		InputTokens: record.InputTokens,
+		Status:      BudgetNormal,
+		MaxCalls:    record.Config.MaxModelCalls,
+		MaxTokens:   record.Config.MaxInputTokens,
 	}
 	bt.snapshots = append(bt.snapshots, snap)
 

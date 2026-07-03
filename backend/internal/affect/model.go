@@ -1,6 +1,7 @@
 package affect
 
 import "time"
+
 type Repository interface {
 	LoadState(characterID string) (*AffectState, error)
 	SaveState(characterID string, state AffectState) error

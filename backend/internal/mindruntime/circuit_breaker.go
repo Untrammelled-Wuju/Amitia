@@ -32,18 +32,18 @@ func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 }
 
 type CircuitBreaker struct {
-	Name         string              `json:"name"`
-	State        CircuitState        `json:"state"`
-	Config       CircuitBreakerConfig `json:"config"`
-	Failures     int                 `json:"failures"`
-	Successes    int                 `json:"successes"`
-	LastFailure  time.Time           `json:"lastFailure"`
-	LastSuccess  time.Time           `json:"lastSuccess"`
-	OpenedAt     time.Time           `json:"openedAt"`
-	TotalCalls   int64               `json:"totalCalls"`
-	TotalFail    int64               `json:"totalFail"`
-	HalfOpenCount int                `json:"halfOpenCount"`
-	mu           sync.RWMutex
+	Name          string               `json:"name"`
+	State         CircuitState         `json:"state"`
+	Config        CircuitBreakerConfig `json:"config"`
+	Failures      int                  `json:"failures"`
+	Successes     int                  `json:"successes"`
+	LastFailure   time.Time            `json:"lastFailure"`
+	LastSuccess   time.Time            `json:"lastSuccess"`
+	OpenedAt      time.Time            `json:"openedAt"`
+	TotalCalls    int64                `json:"totalCalls"`
+	TotalFail     int64                `json:"totalFail"`
+	HalfOpenCount int                  `json:"halfOpenCount"`
+	mu            sync.RWMutex
 }
 
 func NewCircuitBreaker(name string, config CircuitBreakerConfig) *CircuitBreaker {
@@ -105,33 +105,33 @@ func (cb *CircuitBreaker) RecordSuccess() {
 }
 
 func (cb *CircuitBreaker) RecordFailure() {
- 	cb.mu.Lock()
- 	defer cb.mu.Unlock()
- 	cb.TotalCalls++
- 	cb.TotalFail++
- 	cb.LastFailure = time.Now().UTC()
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.TotalCalls++
+	cb.TotalFail++
+	cb.LastFailure = time.Now().UTC()
 	effectiveState := cb.State
 	if cb.State == CircuitOpen && time.Since(cb.OpenedAt) >= cb.Config.OpenTimeout {
 		effectiveState = CircuitHalfOpen
 	}
 	switch effectiveState {
- 	case CircuitClosed:
- 		cb.Failures++
- 		if cb.Failures >= cb.Config.FailureThreshold {
- 			cb.State = CircuitOpen
- 			cb.OpenedAt = time.Now().UTC()
- 			cb.Successes = 0
- 			cb.HalfOpenCount = 0
- 		}
- 	case CircuitHalfOpen:
- 		cb.State = CircuitOpen
- 		cb.OpenedAt = time.Now().UTC()
- 		cb.Failures = 0
- 		cb.Successes = 0
- 		cb.HalfOpenCount = 0
- 	case CircuitOpen:
- 	}
-	
+	case CircuitClosed:
+		cb.Failures++
+		if cb.Failures >= cb.Config.FailureThreshold {
+			cb.State = CircuitOpen
+			cb.OpenedAt = time.Now().UTC()
+			cb.Successes = 0
+			cb.HalfOpenCount = 0
+		}
+	case CircuitHalfOpen:
+		cb.State = CircuitOpen
+		cb.OpenedAt = time.Now().UTC()
+		cb.Failures = 0
+		cb.Successes = 0
+		cb.HalfOpenCount = 0
+	case CircuitOpen:
+	}
+
 }
 
 func (cb *CircuitBreaker) Reset() {

@@ -3,6 +3,8 @@ package memory
 import (
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/mindruntime"
 )
 
 type retrievalAuthorityPolicy struct {
@@ -23,6 +25,16 @@ func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) b
 		return false
 	}
 	return true
+}
+
+func tombstoneTargetsFromMemorySearch(coordinator *mindruntime.DataLifecycleCoordinator, characterID string) map[string]bool {
+	if coordinator == nil {
+		return nil
+	}
+	if coordinator.IsRetrievalBlocked(characterID) {
+		return map[string]bool{characterID: true}
+	}
+	return nil
 }
 
 func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {

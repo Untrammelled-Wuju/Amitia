@@ -33,7 +33,7 @@ type TokenBudgetModule struct {
 }
 
 type TokenBudgetPlan struct {
-	Module   TokenBudgetModule
+	Module    TokenBudgetModule
 	Allocated int
 	Trimmed   bool
 }

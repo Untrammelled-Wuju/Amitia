@@ -15,6 +15,9 @@ func (s *service) GetRankedMemories(characterID, userID, query string, limit int
 	if limit <= 0 {
 		limit = 10
 	}
+	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID) {
+		return nil, nil
+	}
 
 	allMemories, _, err := s.repo.List(MemoryListQuery{
 		CharacterID: characterID,

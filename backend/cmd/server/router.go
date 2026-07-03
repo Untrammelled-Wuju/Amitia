@@ -65,6 +65,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup)
+		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
+		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry)
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")

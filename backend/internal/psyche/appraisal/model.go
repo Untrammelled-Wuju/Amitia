@@ -38,34 +38,34 @@ type AppraisalConfig struct {
 
 func DefaultAppraisalConfig() AppraisalConfig {
 	return AppraisalConfig{
-		RelationshipRelevanceWeight: 1.5,
-		NormViolationWeight:         1.3,
-		BoundaryViolationWeight:     1.2,
-		GoalRelevanceWeight:         1.0,
-		GoalCongruenceWeight:        1.0,
-		ExpectednessWeight:          0.8,
-		NoveltyWeight:               0.7,
-		ControllabilityWeight:       0.6,
-		ResponsibilityWeight:        0.5,
-		CausalUncertaintyWeight:     0.4,
-		MemoryResonanceWeight:       0.3,
+		RelationshipRelevanceWeight:  1.5,
+		NormViolationWeight:          1.3,
+		BoundaryViolationWeight:      1.2,
+		GoalRelevanceWeight:          1.0,
+		GoalCongruenceWeight:         1.0,
+		ExpectednessWeight:           0.8,
+		NoveltyWeight:                0.7,
+		ControllabilityWeight:        0.6,
+		ResponsibilityWeight:         0.5,
+		CausalUncertaintyWeight:      0.4,
+		MemoryResonanceWeight:        0.3,
 		AlternativeExplanationWeight: 0.2,
 	}
 }
 
 type AppraisalInput struct {
-	EventType                string  `json:"eventType"`
-	Source                   string  `json:"source"`
-	IsUserInitiated          bool    `json:"isUserInitiated"`
-	RelatesToGoal            bool    `json:"relatesToGoal"`
-	GoalCongruent            bool    `json:"goalCongruent"`
-	IsExpected               float64 `json:"isExpected"`
-	InvolvesRelation         bool    `json:"involvesRelation"`
-	NormViolated             bool    `json:"normViolated"`
-	BoundaryViolated         bool    `json:"boundaryViolated"`
-	HasAlternativeExplanation bool   `json:"hasAlternativeExplanation"`
-	SimilarPastEvents        int     `json:"similarPastEvents"`
-	Controllable             bool    `json:"controllable"`
-	Responsibility           float64 `json:"responsibility"`
-	Uncertainty              float64 `json:"uncertainty"`
+	EventType                 string  `json:"eventType"`
+	Source                    string  `json:"source"`
+	IsUserInitiated           bool    `json:"isUserInitiated"`
+	RelatesToGoal             bool    `json:"relatesToGoal"`
+	GoalCongruent             bool    `json:"goalCongruent"`
+	IsExpected                float64 `json:"isExpected"`
+	InvolvesRelation          bool    `json:"involvesRelation"`
+	NormViolated              bool    `json:"normViolated"`
+	BoundaryViolated          bool    `json:"boundaryViolated"`
+	HasAlternativeExplanation bool    `json:"hasAlternativeExplanation"`
+	SimilarPastEvents         int     `json:"similarPastEvents"`
+	Controllable              bool    `json:"controllable"`
+	Responsibility            float64 `json:"responsibility"`
+	Uncertainty               float64 `json:"uncertainty"`
 }

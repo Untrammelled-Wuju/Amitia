@@ -29,13 +29,13 @@ func DefaultReflectionApprovalConfig() ReflectionApprovalConfig {
 }
 
 type ReflectionSupervisor struct {
-	Supervisor        *VersionRollbackEngine
-	HistoryBellief    VersionHistory
-	HistoryNarrative  VersionHistory
+	Supervisor         *VersionRollbackEngine
+	HistoryBellief     VersionHistory
+	HistoryNarrative   VersionHistory
 	HistoryAbstraction VersionHistory
-	HistoryGrowth     VersionHistory
-	Config            ReflectionApprovalConfig
-	SupervisorConfig  SupervisorConfig
+	HistoryGrowth      VersionHistory
+	Config             ReflectionApprovalConfig
+	SupervisorConfig   SupervisorConfig
 }
 
 func NewReflectionSupervisor(characterID string, approvalConfig ReflectionApprovalConfig, supervisorConfig SupervisorConfig) ReflectionSupervisor {

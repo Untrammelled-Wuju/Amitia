@@ -9,11 +9,11 @@ import (
 type LifecyclePhase string
 
 const (
-	LifecyclePhaseInit          LifecyclePhase = "init"
-	LifecyclePhaseRunning       LifecyclePhase = "running"
-	LifecyclePhaseDraining      LifecyclePhase = "draining"
-	LifecyclePhaseShuttingDown  LifecyclePhase = "shutting_down"
-	LifecyclePhaseTerminated    LifecyclePhase = "terminated"
+	LifecyclePhaseInit         LifecyclePhase = "init"
+	LifecyclePhaseRunning      LifecyclePhase = "running"
+	LifecyclePhaseDraining     LifecyclePhase = "draining"
+	LifecyclePhaseShuttingDown LifecyclePhase = "shutting_down"
+	LifecyclePhaseTerminated   LifecyclePhase = "terminated"
 )
 
 type LifecycleState struct {

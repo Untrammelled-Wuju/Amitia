@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,9 +11,12 @@ type DeliveryStatus string
 
 const (
 	DeliveryStatusPending   DeliveryStatus = "pending"
+	DeliveryStatusLeased    DeliveryStatus = "leased"
+	DeliveryStatusSent      DeliveryStatus = "sent"
 	DeliveryStatusDelivered DeliveryStatus = "delivered"
 	DeliveryStatusFailed    DeliveryStatus = "failed"
 	DeliveryStatusUnknown   DeliveryStatus = "unknown"
+	DeliveryStatusCancelled DeliveryStatus = "cancelled"
 )
 
 type DeliveryIntent struct {
@@ -56,8 +60,9 @@ type IntentStore interface {
 }
 
 func NewDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) DeliveryIntent {
+	stableID := fmt.Sprintf("di-%s-%s-%s-%s", interactionID, channel, peerID, contentType)
 	return DeliveryIntent{
-		ID:            uuid.New().String(),
+		ID:            stableID,
 		InteractionID: interactionID,
 		Channel:       channel,
 		PeerID:        peerID,

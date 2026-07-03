@@ -9,41 +9,41 @@ import (
 type LoadProfile string
 
 const (
-	LoadProfileBurst       LoadProfile = "burst"
-	LoadProfileSustained   LoadProfile = "sustained"
-	LoadProfileStep        LoadProfile = "step"
-	LoadProfileChaotic     LoadProfile = "chaotic"
+	LoadProfileBurst     LoadProfile = "burst"
+	LoadProfileSustained LoadProfile = "sustained"
+	LoadProfileStep      LoadProfile = "step"
+	LoadProfileChaotic   LoadProfile = "chaotic"
 )
 
 type FaultType string
 
 const (
-	FaultChannelOffline    FaultType = "channel_offline"
-	FaultDependencyFail    FaultType = "dependency_fail"
-	FaultTimeout           FaultType = "timeout"
-	FaultPartition         FaultType = "partition"
+	FaultChannelOffline FaultType = "channel_offline"
+	FaultDependencyFail FaultType = "dependency_fail"
+	FaultTimeout        FaultType = "timeout"
+	FaultPartition      FaultType = "partition"
 )
 
 type InjectedFault struct {
-	FaultType  FaultType `json:"faultType"`
-	Target     string    `json:"target"`
-	StartAt    time.Time `json:"startAt"`
-	EndAt      time.Time `json:"endAt"`
-	Active     bool      `json:"active"`
+	FaultType FaultType `json:"faultType"`
+	Target    string    `json:"target"`
+	StartAt   time.Time `json:"startAt"`
+	EndAt     time.Time `json:"endAt"`
+	Active    bool      `json:"active"`
 }
 
 type LoadInjectorConfig struct {
-	Profile         LoadProfile       `json:"profile"`
-	Duration        time.Duration     `json:"duration"`
-	BurstRate       int               `json:"burstRate"`
-	BurstInterval   time.Duration     `json:"burstInterval"`
-	SustainedRPS    int               `json:"sustainedRps"`
-	StepIncrement   int               `json:"stepIncrement"`
-	StepInterval    time.Duration     `json:"stepInterval"`
-	Faults          []InjectedFault   `json:"faults"`
-	BatchSize       int               `json:"batchSize"`
-	IndexJobs       int               `json:"indexJobs"`
-	DeleteJobs      int               `json:"deleteJobs"`
+	Profile       LoadProfile     `json:"profile"`
+	Duration      time.Duration   `json:"duration"`
+	BurstRate     int             `json:"burstRate"`
+	BurstInterval time.Duration   `json:"burstInterval"`
+	SustainedRPS  int             `json:"sustainedRps"`
+	StepIncrement int             `json:"stepIncrement"`
+	StepInterval  time.Duration   `json:"stepInterval"`
+	Faults        []InjectedFault `json:"faults"`
+	BatchSize     int             `json:"batchSize"`
+	IndexJobs     int             `json:"indexJobs"`
+	DeleteJobs    int             `json:"deleteJobs"`
 }
 
 type LoadInjectionResult struct {
@@ -58,10 +58,10 @@ type LoadInjectionResult struct {
 }
 
 type LoadTimeSeriesPoint struct {
-	Timestamp   time.Time `json:"timestamp"`
-	MessageRate int       `json:"messageRate"`
-	QueueDepth  int       `json:"queueDepth"`
-	ActiveFaults int      `json:"activeFaults"`
+	Timestamp    time.Time `json:"timestamp"`
+	MessageRate  int       `json:"messageRate"`
+	QueueDepth   int       `json:"queueDepth"`
+	ActiveFaults int       `json:"activeFaults"`
 }
 
 func DefaultLoadInjectorConfig() LoadInjectorConfig {

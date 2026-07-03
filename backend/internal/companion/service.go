@@ -10,11 +10,13 @@ import (
 
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
 type Service interface {
+	DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error)
 	GetSleepSetting(characterID string) map[string]interface{}
 	UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{}
 	GetSchedule(date string, characterID string) map[string]interface{}
@@ -75,11 +77,12 @@ type proactiveUnifiedEntry interface {
 }
 
 type service struct {
-	db           *gorm.DB
-	embeddingSvc *embedding.Service
-	burstMu      sync.Mutex
-	burstScopes  map[string]burstScopeState
-	unifiedEntry proactiveUnifiedEntry
+	db                       *gorm.DB
+	embeddingSvc             *embedding.Service
+	burstMu                  sync.Mutex
+	burstScopes              map[string]burstScopeState
+	unifiedEntry             proactiveUnifiedEntry
+	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 }
 
 type burstScopeState struct {
@@ -93,6 +96,17 @@ func NewService(ctx *app.AppContext) Service {
 
 func (s *service) AttachUnifiedEntry(entry *interaction.UnifiedEntry) {
 	s.unifiedEntry = entry
+}
+
+func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordinator) {
+	s.dataLifecycleCoordinator = c
+}
+
+func (s *service) isMemoryAccessAllowed(characterID string) bool {
+	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID) {
+		return false
+	}
+	return true
 }
 
 func toJSON(v interface{}) string { b, _ := json.Marshal(v); return string(b) }

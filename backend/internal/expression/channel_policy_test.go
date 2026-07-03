@@ -1,8 +1,8 @@
 package expression
 
 import (
-	"testing"
 	"github.com/u-ai/backend/internal/interaction"
+	"testing"
 )
 
 func TestGetChannelPolicy_Wechat(t *testing.T) {

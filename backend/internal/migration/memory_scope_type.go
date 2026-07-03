@@ -1,4 +1,4 @@
-﻿package migration
+package migration
 
 func MemoryScopeTypeMigration() Migration {
 	return Migration{

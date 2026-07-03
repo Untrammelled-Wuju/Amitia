@@ -17,23 +17,23 @@ const (
 )
 
 type ChannelSwitchEvent struct {
-	EventID       string       `json:"eventId"`
-	CharacterID   string       `json:"characterId"`
-	FromChannel   string       `json:"fromChannel"`
-	ToChannel     string       `json:"toChannel"`
-	FromGroup     ChannelGroup `json:"fromGroup"`
-	ToGroup       ChannelGroup `json:"toGroup"`
-	Reason        string       `json:"reason"`
-	SwitchedAt    time.Time    `json:"switchedAt"`
+	EventID     string       `json:"eventId"`
+	CharacterID string       `json:"characterId"`
+	FromChannel string       `json:"fromChannel"`
+	ToChannel   string       `json:"toChannel"`
+	FromGroup   ChannelGroup `json:"fromGroup"`
+	ToGroup     ChannelGroup `json:"toGroup"`
+	Reason      string       `json:"reason"`
+	SwitchedAt  time.Time    `json:"switchedAt"`
 }
 
 type ChannelBelief struct {
-	CharacterID       string              `json:"characterId"`
-	ActiveChannel     string              `json:"activeChannel"`
-	ActiveGroup       ChannelGroup        `json:"activeGroup"`
-	LastSwitch        time.Time           `json:"lastSwitch"`
-	SwitchHistory     []ChannelSwitchEvent `json:"switchHistory"`
-	mu                sync.RWMutex
+	CharacterID   string               `json:"characterId"`
+	ActiveChannel string               `json:"activeChannel"`
+	ActiveGroup   ChannelGroup         `json:"activeGroup"`
+	LastSwitch    time.Time            `json:"lastSwitch"`
+	SwitchHistory []ChannelSwitchEvent `json:"switchHistory"`
+	mu            sync.RWMutex
 }
 
 var channelBeliefs sync.Map

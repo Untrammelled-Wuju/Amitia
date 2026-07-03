@@ -72,14 +72,14 @@ func TestRecalibrateWithNewData(t *testing.T) {
 func TestValidateParams(t *testing.T) {
 	config := DefaultCalibrationConfig()
 	validParams := CalibratedParams{
-		DecayRate:            0.05,
-		ChangeBudget:         0.20,
-		RelationshipSpeed:    0.05,
-		ProactiveThreshold:   0.50,
-		QueueConcurrency:     10,
+		DecayRate:             0.05,
+		ChangeBudget:          0.20,
+		RelationshipSpeed:     0.05,
+		ProactiveThreshold:    0.50,
+		QueueConcurrency:      10,
 		BackpressureThreshold: 100,
-		CircuitBreakerWindow: 30 * time.Second,
-		ReflectionThreshold:  0.30,
+		CircuitBreakerWindow:  30 * time.Second,
+		ReflectionThreshold:   0.30,
 	}
 
 	if !ValidateParams(validParams, config) {

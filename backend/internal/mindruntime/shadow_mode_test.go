@@ -31,10 +31,10 @@ func TestComputeShadowDecision(t *testing.T) {
 			StateVersion:  5,
 			CreatedAt:     time.Now().UTC(),
 		},
-		RequestID:     "req-001",
-		TotalDuration: 150 * time.Millisecond,
-		QueueDuration: 20 * time.Millisecond,
-		QueueDepth:    5,
+		RequestID:      "req-001",
+		TotalDuration:  150 * time.Millisecond,
+		QueueDuration:  20 * time.Millisecond,
+		QueueDepth:     5,
 		DeliveryStatus: "delivered",
 	}
 
@@ -56,22 +56,22 @@ func TestComputeShadowDecision(t *testing.T) {
 
 func TestCompareShadowResults(t *testing.T) {
 	oldMetrics := ShadowMetrics{
-		LatencyMs:       200,
-		ErrorCount:      3,
-		CancelCount:     2,
-		QueueDepth:      15,
-		DeliveryStatus:  "delivered",
-		SafetyScore:     0.90,
+		LatencyMs:        200,
+		ErrorCount:       3,
+		CancelCount:      2,
+		QueueDepth:       15,
+		DeliveryStatus:   "delivered",
+		SafetyScore:      0.90,
 		ConsistencyDiffs: 1,
 	}
 
 	newMetrics := ShadowMetrics{
-		LatencyMs:       150,
-		ErrorCount:      1,
-		CancelCount:     1,
-		QueueDepth:      10,
-		DeliveryStatus:  "delivered",
-		SafetyScore:     0.95,
+		LatencyMs:        150,
+		ErrorCount:       1,
+		CancelCount:      1,
+		QueueDepth:       10,
+		DeliveryStatus:   "delivered",
+		SafetyScore:      0.95,
 		ConsistencyDiffs: 0,
 	}
 
@@ -101,16 +101,16 @@ func TestCheckAutoRollback(t *testing.T) {
 	thresholds := DefaultAutoRollbackThresholds()
 
 	currentMetrics := ShadowMetrics{
-		LatencyMs:        6000,
-		ErrorCount:       100,
-		CancelCount:      10,
-		QueueDepth:       200,
-		DeliveryStatus:   "unknown",
-		SafetyScore:      0.50,
-		ConsistencyDiffs: 20,
-		UnknownBacklog:   50,
+		LatencyMs:           6000,
+		ErrorCount:          100,
+		CancelCount:         10,
+		QueueDepth:          200,
+		DeliveryStatus:      "unknown",
+		SafetyScore:         0.50,
+		ConsistencyDiffs:    20,
+		UnknownBacklog:      50,
 		DuplicateDeliveries: 10,
-		QueueAgeMs:       40000,
+		QueueAgeMs:          40000,
 	}
 
 	shouldRollback, event := CheckAutoRollback(state, currentMetrics, thresholds)
@@ -133,16 +133,16 @@ func TestCheckAutoRollbackNoTrigger(t *testing.T) {
 	thresholds := DefaultAutoRollbackThresholds()
 
 	currentMetrics := ShadowMetrics{
-		LatencyMs:        100,
-		ErrorCount:       0,
-		CancelCount:      0,
-		QueueDepth:       5,
-		DeliveryStatus:   "delivered",
-		SafetyScore:      0.95,
-		ConsistencyDiffs: 0,
-		UnknownBacklog:   0,
+		LatencyMs:           100,
+		ErrorCount:          0,
+		CancelCount:         0,
+		QueueDepth:          5,
+		DeliveryStatus:      "delivered",
+		SafetyScore:         0.95,
+		ConsistencyDiffs:    0,
+		UnknownBacklog:      0,
 		DuplicateDeliveries: 0,
-		QueueAgeMs:       100,
+		QueueAgeMs:          100,
 	}
 
 	shouldRollback, _ := CheckAutoRollback(state, currentMetrics, thresholds)

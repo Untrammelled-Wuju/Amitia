@@ -3,8 +3,8 @@
 package companion
 
 import (
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"fmt"
+	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"math/rand"
 	"sort"
 	"strings"
@@ -204,7 +204,8 @@ func (s *service) GenerateSharePrompt(characterID string, taskType string, sched
 	} else if taskType == "evening_reflection" || taskType == "bedtime_mood" {
 		queryText = fmt.Sprintf("晚上 睡觉前 心情%s", mood)
 	}
-	if s.embeddingSvc != nil && qdrantDB.Client != nil {
+	if !s.isMemoryAccessAllowed(characterID) {
+	} else if s.embeddingSvc != nil && qdrantDB.Client != nil {
 		vec, vecErr := s.embeddingSvc.Embed(queryText)
 		if vecErr == nil {
 			filter := map[string]interface{}{"character_id": characterID}
@@ -219,7 +220,7 @@ func (s *service) GenerateSharePrompt(characterID string, taskType string, sched
 		}
 	}
 	if len(recentMemories) == 0 {
-		rows, err := s.db.Table("memories").Select("value").Where("character_id = ?", characterID).Order("created_at DESC").Limit(5).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > datetime('now'))", characterID).Order("created_at DESC").Limit(5).Rows()
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -320,7 +321,9 @@ func (s *service) GetShareHistory(characterID string) ShareHistory {
 	return ShareHistory{RecentTopics: topics, LastShareAt: lastAt}
 }
 
-func (s *service) getShareHistory(characterID string) ShareHistory { return s.GetShareHistory(characterID) }
+func (s *service) getShareHistory(characterID string) ShareHistory {
+	return s.GetShareHistory(characterID)
+}
 
 func (s *service) TriggerDailyRegeneration(characterID string) map[string]interface{} {
 	today := time.Now().Format("2006-01-02")

@@ -21,10 +21,10 @@ type SoftPreferenceInput struct {
 }
 
 type PreferencesResult struct {
-	PersonalityMatch  float64
-	RelationshipBias  float64
-	UserPreference    float64
-	WeightedTotal     float64
+	PersonalityMatch float64
+	RelationshipBias float64
+	UserPreference   float64
+	WeightedTotal    float64
 }
 
 func ApplySoftPreferences(candidate BehaviorCandidate, input SoftPreferenceInput, config SoftPreferenceConfig) PreferencesResult {

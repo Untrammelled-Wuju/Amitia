@@ -232,8 +232,8 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 	}
 	now := time.Now()
 	msgID := uuid.New().String()
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, content, now)
-	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'sent', ?, ?)", rule.ID, convID, content, channel, now, now)
+	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, now)
+	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)", rule.ID, convID, content, channel, now, now)
 	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
 	if channel == "wechat" || channel == "all" {
 		wcID := h.getWechatConvIDForTrigger(character.ID)
@@ -375,11 +375,11 @@ func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
 	}
 	msgID = uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)", msgID, convID, content, now)
+	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, now)
 	h.db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=? WHERE id=?", now, convID)
 	h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", now, now, rem.ID)
 	sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive"})
-	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'sent', ?)", rem.ID, convID, content, rem.Channel, now)
+	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, content, rem.Channel, now)
 	return
 }
 

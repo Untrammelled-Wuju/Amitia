@@ -22,20 +22,20 @@ const (
 )
 
 type VoiceParams struct {
-	Speed        float64         `json:"speed"`
-	Pause        float64         `json:"pause"`
-	EmotionTier  VoiceEmotionTier `json:"emotionTier"`
-	Intensity    float64         `json:"intensity"`
-	Trace        VoiceTrace      `json:"trace,omitempty"`
+	Speed       float64          `json:"speed"`
+	Pause       float64          `json:"pause"`
+	EmotionTier VoiceEmotionTier `json:"emotionTier"`
+	Intensity   float64          `json:"intensity"`
+	Trace       VoiceTrace       `json:"trace,omitempty"`
 }
 
 type VoiceTrace struct {
-	SourcePlanID     string    `json:"sourcePlanId,omitempty"`
-	MappedTones      []string  `json:"mappedTones,omitempty"`
-	MappedEmotions   []string  `json:"mappedEmotions,omitempty"`
-	FallbackReason   string    `json:"fallbackReason,omitempty"`
-	GeneratedAt      time.Time `json:"generatedAt"`
-	SafetyClamped    bool      `json:"safetyClamped"`
+	SourcePlanID   string    `json:"sourcePlanId,omitempty"`
+	MappedTones    []string  `json:"mappedTones,omitempty"`
+	MappedEmotions []string  `json:"mappedEmotions,omitempty"`
+	FallbackReason string    `json:"fallbackReason,omitempty"`
+	GeneratedAt    time.Time `json:"generatedAt"`
+	SafetyClamped  bool      `json:"safetyClamped"`
 }
 
 func neutralVoiceParams() VoiceParams {

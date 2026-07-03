@@ -91,7 +91,7 @@ func TestHighStressAffectsProactive(t *testing.T) {
 func TestBusyLifeBlocksProactive(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		Now: time.Now().UTC(),
+		Now:  time.Now().UTC(),
 		Life: LifeSnapshot{Busy: 0.95, Energy: 0.5},
 	}
 
