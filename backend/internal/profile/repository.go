@@ -82,16 +82,29 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	if existing.AttributeValue != profile.AttributeValue {
 		newConfidence = existing.Confidence / 2
 		if newConfidence < 5 {
-			newConfidence = 5
+			if existing.Confidence >= 95 {
+				newConfidence = existing.Confidence - 5
+			} else {
+				newConfidence = 5
+			}
 		}
 	} else if hasIndependentProfileEvidence(existing, *profile) {
-		increment := 10 - existing.Confidence/10
-		if increment < 2 {
-			increment = 2
-		}
-		newConfidence = existing.Confidence + increment
-		if newConfidence > 100 {
-			newConfidence = 100
+		maxAllowed := 95
+		if existing.Confidence >= maxAllowed {
+			newConfidence = existing.Confidence
+		} else {
+			increment := 10 - existing.Confidence/10
+			if increment < 2 {
+				increment = 2
+			}
+			remaining := maxAllowed - existing.Confidence
+			if remaining < increment {
+				increment = remaining
+			}
+			newConfidence = existing.Confidence + increment
+			if newConfidence > 100 {
+				newConfidence = 100
+			}
 		}
 	} else {
 		newConfidence = existing.Confidence
@@ -115,12 +128,31 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 
 func hasIndependentProfileEvidence(existing, incoming UserProfile) bool {
 	if incoming.SourceConvID != "" {
-		return incoming.SourceConvID != existing.SourceConvID
+		if incoming.SourceConvID != existing.SourceConvID {
+			return hasHigherAuthority(incoming.Source, existing.Source)
+		}
+		return false
 	}
 	if existing.SourceConvID != "" {
 		return false
 	}
-	return incoming.Source != "" && existing.Source != "" && incoming.Source != existing.Source
+	return incoming.Source != "" && existing.Source != "" && incoming.Source != existing.Source && hasHigherAuthority(incoming.Source, existing.Source)
+}
+
+func hasHigherAuthority(incoming, existing string) bool {
+	auth := func(s string) int {
+		switch s {
+		case "admin_settings", "system", "config":
+			return 3
+		case "user_update", "user_input", "user_settings":
+			return 2
+		case "agent_inference", "active_inference", "extraction", "profile_inference":
+			return 1
+		default:
+			return 0
+		}
+	}
+	return auth(incoming) >= auth(existing)
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {

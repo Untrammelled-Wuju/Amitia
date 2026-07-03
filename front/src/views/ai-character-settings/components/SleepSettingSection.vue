@@ -37,5 +37,5 @@ const SLEEP_OFF_MODE_OPTIONS = [
   { label: "显示系统提示", value: "SYSTEM_NOTICE" },
 ]
 
-const sleepForm = defineModel<any>("sleepForm", { required: true })
+let sleepForm = defineModel<any>("sleepForm", { required: true })
 </script>

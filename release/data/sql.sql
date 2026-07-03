@@ -2,6 +2,16 @@
 -- U-Ai 数据库初始化脚本
 -- ============================================
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    checksum TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    error_message TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL DEFAULT '',
+    finished_at TEXT NOT NULL DEFAULT ''
+);
+
 -- 用户认证
 CREATE TABLE IF NOT EXISTS auth_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,6 +105,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     msg_type TEXT DEFAULT 'text',
@@ -107,10 +118,63 @@ CREATE TABLE IF NOT EXISTS messages (
     audio_duration REAL DEFAULT 0,
     image_url TEXT DEFAULT '',
     video_url TEXT DEFAULT '',
+    request_id TEXT DEFAULT '',
     tool_call_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
+    conversation_id TEXT NOT NULL,
+    pipeline_type TEXT NOT NULL,
+    last_message_sequence INTEGER NOT NULL DEFAULT 0,
+    checkpoint_version INTEGER NOT NULL DEFAULT 1,
+    idempotency_key TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
+    PRIMARY KEY (conversation_id, pipeline_type)
+);
+
+CREATE TABLE IF NOT EXISTS tool_call_intents (
+    id TEXT PRIMARY KEY,
+    request_id TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    channel TEXT DEFAULT '',
+    tool_call_id TEXT DEFAULT '',
+    tool_name TEXT NOT NULL,
+    args_json TEXT DEFAULT '',
+    idempotency_key TEXT DEFAULT '',
+    status TEXT DEFAULT 'PENDING',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tool_call_results (
+    id TEXT PRIMARY KEY,
+    intent_id TEXT DEFAULT '',
+    request_id TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    character_id TEXT DEFAULT '',
+    channel TEXT DEFAULT '',
+    tool_call_id TEXT DEFAULT '',
+    tool_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    error_code TEXT DEFAULT '',
+    visible_text TEXT DEFAULT '',
+    side_effects_json TEXT DEFAULT '[]',
+    external_operation_id TEXT DEFAULT '',
+    idempotency_key TEXT DEFAULT '',
+    audit_json TEXT DEFAULT '{}',
+    confidence REAL DEFAULT 0,
+    force_voice INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_call_intents_request ON tool_call_intents(request_id, tool_name);
+CREATE INDEX IF NOT EXISTS idx_tool_call_intents_idempotency ON tool_call_intents(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_tool_call_results_request ON tool_call_results(request_id, status);
 
 CREATE TABLE IF NOT EXISTS model_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -397,6 +461,7 @@ CREATE TABLE IF NOT EXISTS memories (
     confidence INTEGER DEFAULT 50,
     source TEXT DEFAULT 'manual',
     scope TEXT DEFAULT 'character',
+    scope_type TEXT DEFAULT 'user_character',
     character_id TEXT DEFAULT '',
     entity_id TEXT DEFAULT '',
     entity_type TEXT DEFAULT '',
@@ -441,6 +506,8 @@ ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
 ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'character';
+ALTER TABLE memories ADD COLUMN scope_type TEXT DEFAULT 'user_character';
+UPDATE memories SET scope_type = CASE WHEN scope_type IN ('character_self', 'world') THEN scope_type WHEN scope = 'user' THEN 'user_global' WHEN scope_type = 'user_global' THEN 'user_global' WHEN scope = 'character' THEN 'user_character' ELSE 'user_character' END WHERE scope_type IS NULL OR scope_type = '' OR scope_type IN ('user', 'character', 'user_character');
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
     id TEXT PRIMARY KEY,
@@ -458,6 +525,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, con
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
 CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_memories_importance_conf ON memories(character_id, importance, confidence);
+CREATE INDEX IF NOT EXISTS idx_memories_scope_type ON memories(scope_type);
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
     created_at TEXT DEFAULT (datetime('now'))
@@ -568,8 +636,18 @@ CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time);
 CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(status, due_time);
 CREATE INDEX IF NOT EXISTS idx_active_task_char ON active_message_task(character_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence ON messages(conversation_id, sequence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_conv_sequence_unique ON messages(conversation_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_conv_ctx ON messages(conversation_id, include_in_context);
+CREATE INDEX IF NOT EXISTS idx_messages_conv_ctx_role_created ON messages(conversation_id, include_in_context, role, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, role, request_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_conversation ON pipeline_checkpoints(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_updated ON pipeline_checkpoints(updated_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
+CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conversations(character_id, channel, updated_at);
 
 
 -- ============================================
@@ -588,6 +666,11 @@ UPDATE special_events SET reply_mode = 'SHORT_REPLY' WHERE reply_mode IS NULL;
 CREATE TABLE IF NOT EXISTS retrieval_logs (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    request_id TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT '',
+    retrieval_version TEXT NOT NULL DEFAULT '',
+    legacy INTEGER NOT NULL DEFAULT 0,
     query_text TEXT NOT NULL DEFAULT '',
     retrieved_memory_ids TEXT DEFAULT '[]',
     scoring_details TEXT DEFAULT '{}',
@@ -595,6 +678,17 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_request_created ON retrieval_logs(request_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_character_created ON retrieval_logs(character_id, created_at);
+ALTER TABLE retrieval_logs ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN request_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN channel TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN retrieval_version TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN legacy INTEGER NOT NULL DEFAULT 0;
+UPDATE retrieval_logs
+SET legacy = 1
+WHERE conversation_id = ''
+   OR conversation_id NOT IN (SELECT id FROM conversations);
 ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT "character";
 
 ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
@@ -605,6 +699,32 @@ ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
 ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+ALTER TABLE messages ADD COLUMN request_id TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0;
+UPDATE messages SET sequence = (
+    SELECT rn FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS rn
+        FROM messages
+    ) ranked WHERE ranked.id = messages.id
+) WHERE sequence IS NULL OR sequence <= 0;
+CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
+    conversation_id TEXT NOT NULL,
+    pipeline_type TEXT NOT NULL,
+    last_message_sequence INTEGER NOT NULL DEFAULT 0,
+    checkpoint_version INTEGER NOT NULL DEFAULT 1,
+    idempotency_key TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
+    PRIMARY KEY (conversation_id, pipeline_type)
+);
+ALTER TABLE memories ADD COLUMN scope_type TEXT DEFAULT 'user_character';
+UPDATE memories SET scope_type = CASE WHEN scope_type IN ('character_self', 'world') THEN scope_type WHEN scope = 'user' THEN 'user_global' WHEN scope_type = 'user_global' THEN 'user_global' WHEN scope = 'character' THEN 'user_character' ELSE 'user_character' END WHERE scope_type IS NULL OR scope_type = '' OR scope_type IN ('user', 'character', 'user_character');
+CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, role, request_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence ON messages(conversation_id, sequence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_conv_sequence_unique ON messages(conversation_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_conversation ON pipeline_checkpoints(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_updated ON pipeline_checkpoints(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_scope_type ON memories(scope_type);
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
     id TEXT PRIMARY KEY,
@@ -630,3 +750,8 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+ALTER TABLE memories ADD COLUMN source_start INTEGER DEFAULT 0;
+ALTER TABLE memories ADD COLUMN source_end INTEGER DEFAULT 0;
+ALTER TABLE memory_candidates ADD COLUMN source_start INTEGER DEFAULT 0;
+ALTER TABLE memory_candidates ADD COLUMN source_end INTEGER DEFAULT 0;

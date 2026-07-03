@@ -62,7 +62,7 @@ created_at TEXT DEFAULT (datetime('now'))
 	if err := db.Table("moods").Select("character_id, mood, level, created_at").Order("id DESC").Limit(1).Row().Scan(&got.CharacterID, &got.Mood, &got.Level, &got.CreatedAt); err != nil {
 		t.Fatal(err)
 	}
-	if got.CharacterID != "char-1" || got.Mood != "anxious" || got.Level != 35 {
+	if got.CharacterID != "char-1" || got.Mood != "low" || got.Level != 35 {
 		t.Fatalf("unexpected mood row: %#v", got)
 	}
 	if _, err := time.ParseInLocation(moodRecoveryTimeLayout, got.CreatedAt, time.Local); err != nil {

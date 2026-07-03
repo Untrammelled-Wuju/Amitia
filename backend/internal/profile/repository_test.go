@@ -197,3 +197,99 @@ func TestUpsertConfidenceIncreasesForDifferentSourceWhenNoConversationEvidence(t
 		t.Fatalf("different source evidence confidence = %d, want greater than 65", item.Confidence)
 	}
 }
+func TestUpsertConfidenceDoesNotIncreaseAtHighConfidence(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+
+	_, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "高置信度锁定",
+		AttributeValue: "测试值",
+		Confidence:     95,
+		SourceConvID:   "conv-a",
+	})
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	item, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "高置信度锁定",
+		AttributeValue: "测试值",
+		Confidence:     95,
+		SourceConvID:   "conv-b",
+	})
+	if err != nil {
+		t.Fatalf("upsert high confidence: %v", err)
+	}
+	if item.Confidence != 95 {
+		t.Fatalf("high confidence = %d, want 95 (no auto-increase)", item.Confidence)
+	}
+}
+
+func TestUpsertConfidenceDoesNotIncreaseForLowerAuthority(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+
+	_, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "管理员设置",
+		AttributeValue: "正式值",
+		Confidence:     80,
+		Source:         "admin",
+		SourceConvID:   "conv-a",
+	})
+	if err != nil {
+		t.Fatalf("create admin profile: %v", err)
+	}
+
+	item, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "管理员设置",
+		AttributeValue: "正式值",
+		Confidence:     80,
+		Source:         "extract",
+		SourceConvID:   "conv-b",
+	})
+	if err != nil {
+		t.Fatalf("upsert lower authority: %v", err)
+	}
+	if item.Confidence != 80 {
+		t.Fatalf("lower authority confidence = %d, want 80 (no increase)", item.Confidence)
+	}
+}
+
+func TestUpsertConfidenceIncreasesForHigherAuthority(t *testing.T) {
+	svc, _ := newProfileTestService(t)
+
+	_, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "工具提取",
+		AttributeValue: "旧值",
+		Confidence:     60,
+		Source:         "extract",
+		SourceConvID:   "conv-a",
+	})
+	if err != nil {
+		t.Fatalf("create extract profile: %v", err)
+	}
+
+	item, err := svc.repo.UpsertConfidence(&UserProfile{
+		UserID:         "user-1",
+		Category:       "preference",
+		AttributeName:  "工具提取",
+		AttributeValue: "旧值",
+		Confidence:     60,
+		Source:         "admin",
+		SourceConvID:   "conv-b",
+	})
+	if err != nil {
+		t.Fatalf("upsert higher authority: %v", err)
+	}
+	if item.Confidence <= 60 {
+		t.Fatalf("higher authority confidence = %d, want greater than 60", item.Confidence)
+	}
+}

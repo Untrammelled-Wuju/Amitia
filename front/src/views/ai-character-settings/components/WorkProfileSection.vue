@@ -108,7 +108,7 @@ const props = defineProps<{
 
 const { updateWorkProfile } = useWorkProfile()
 
-const workForm = defineModel<any>("workForm", { required: true })
+let workForm = defineModel<any>("workForm", { required: true })
 
 const workSaving = ref(false)
 

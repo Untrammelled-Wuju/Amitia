@@ -59,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { watch } from "vue"
 import { GENDER_OPTIONS, PRONOUN_OPTIONS, ADDRESSING_OPTIONS, GENDER_PRONOUN_MAP } from "../../../composables/useRoleProfile"
 
-const genderForm = defineModel<any>("genderForm", { required: true })
+let genderForm = defineModel<any>("genderForm", { required: true })
 
 watch(() => genderForm.value.gender, (newGender) => {
   if (newGender !== "CUSTOM" && GENDER_PRONOUN_MAP[newGender]) {

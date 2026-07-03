@@ -76,6 +76,7 @@ func (s *service) recoveredMoodState(ctx context.Context, charID string, idleDur
 	err := s.db.WithContext(ctx).Table("moods").Select("mood, level").Where("character_id = ? AND mood != ''", charID).Order("created_at DESC").Limit(1).Row().Scan(&current.Mood, &current.Level)
 	if err == nil && current.Mood != "" {
 		current.Level = recoverMoodLevel(current.Level, idleDur)
+		current.Mood = moodLabelFromValence(float64(current.Level) / 100)
 		return current, true
 	}
 	if s.psycheStore == nil {

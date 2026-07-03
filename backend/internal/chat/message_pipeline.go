@@ -33,6 +33,8 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	trace := newProcessTrace(requestID, strings.TrimSpace(req.ConversationID), strings.TrimSpace(req.CharacterID), channel)
 	if strings.TrimSpace(req.PeerID) != "" {
 		trace.User = strings.TrimSpace(req.PeerID)
+	} else if strings.TrimSpace(req.CharacterID) != "" {
+		trace.User = strings.TrimSpace(req.CharacterID)
 	}
 	applog.TraceInfo(trace.WithStage("input_received"), applog.Fields{
 		"source":        source,
