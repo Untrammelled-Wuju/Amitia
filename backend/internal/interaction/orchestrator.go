@@ -400,6 +400,13 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	record, events, err := o.completeWithOutboxEvents(ctx, record, resp, runtime)
 	if err != nil {
 		log.Printf("[orchestrator] complete with outbox events failed: %v", err)
+		if fresh, outcome, finalErr := o.resolveCompletionConflict(ctx, record.ID, record, err); finalErr != err || outcome != OutcomeFailed {
+			var finalResp *ProcessResponse
+			if outcome == OutcomeCompleted {
+				finalResp = resp
+			}
+			return o.buildResult(fresh, finalResp, outcome, finalErr), finalErr
+		}
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 	result := o.buildResult(record, resp, OutcomeCompleted, nil)
@@ -422,7 +429,7 @@ func (o *Orchestrator) Cancel(interactionID string) error {
 		return nil
 	}
 	if err := o.tracker.RequestCancel(ctx, interactionID, "cancel_requested"); err != nil {
-		return err
+		return o.resolveCancelConflict(ctx, interactionID, err)
 	}
 	o.cancels.Cancel(interactionID)
 	fresh, ok, err := o.tracker.Get(ctx, interactionID)
@@ -433,7 +440,10 @@ func (o *Orchestrator) Cancel(interactionID string) error {
 		return errors.New("orchestrator: interaction not found")
 	}
 	_, err = o.tracker.TransitionCAS(ctx, fresh.ID, fresh.StatusVersion, InteractionStatusCancelled)
-	return err
+	if err != nil {
+		return o.resolveCancelConflict(ctx, interactionID, err)
+	}
+	return nil
 }
 
 func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
@@ -462,7 +472,9 @@ func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
 			continue
 		}
 		if _, err := o.tracker.TransitionCAS(ctx, fresh.ID, fresh.StatusVersion, InteractionStatusCancelled); err != nil {
-			log.Printf("[orchestrator] cancel transition failed: %v", err)
+			if resolveErr := o.resolveCancelConflict(ctx, rec.ID, err); resolveErr != nil {
+				log.Printf("[orchestrator] cancel transition failed: %v", resolveErr)
+			}
 		}
 	}
 	return count
@@ -661,6 +673,61 @@ func (o *Orchestrator) ensureFreshAtVersion(ctx context.Context, id string, expe
 		return rec, OutcomeFailed, ErrVersionConflict
 	}
 	return rec, outcome, nil
+}
+
+func (o *Orchestrator) resolveCompletionConflict(ctx context.Context, id string, fallback *InteractionRecord, err error) (*InteractionRecord, Outcome, error) {
+	if !isInteractionConflictError(err) {
+		return fallback, OutcomeFailed, err
+	}
+	rec, ok, getErr := o.tracker.Get(ctx, id)
+	if getErr != nil {
+		return fallback, OutcomeFailed, getErr
+	}
+	if !ok {
+		return fallback, OutcomeFailed, ErrInteractionNotFound
+	}
+	switch rec.Status {
+	case InteractionStatusCancelled:
+		return rec, OutcomeCancelled, ErrOrchestratorCancelled
+	case InteractionStatusSuperseded:
+		return rec, OutcomeSuperseded, ErrOrchestratorSuperseded
+	case InteractionStatusCompleted:
+		return rec, OutcomeCompleted, nil
+	}
+	if !rec.CancelRequestedAt.IsZero() {
+		cancelled, cancelErr := o.tracker.TransitionCAS(ctx, rec.ID, rec.StatusVersion, InteractionStatusCancelled)
+		if cancelErr == nil {
+			return cancelled, OutcomeCancelled, ErrOrchestratorCancelled
+		}
+		if isInteractionConflictError(cancelErr) {
+			return o.resolveCompletionConflict(ctx, id, rec, cancelErr)
+		}
+		return rec, OutcomeFailed, cancelErr
+	}
+	return rec, OutcomeFailed, err
+}
+
+func (o *Orchestrator) resolveCancelConflict(ctx context.Context, id string, err error) error {
+	if !isInteractionConflictError(err) {
+		return err
+	}
+	rec, ok, getErr := o.tracker.Get(ctx, id)
+	if getErr != nil {
+		return getErr
+	}
+	if !ok {
+		return ErrInteractionNotFound
+	}
+	if rec.IsTerminal() || !canSupersedeStatus(rec.Status) {
+		return nil
+	}
+	return err
+}
+
+func isInteractionConflictError(err error) bool {
+	return errors.Is(err, ErrVersionConflict) ||
+		errors.Is(err, ErrAlreadyTerminal) ||
+		errors.Is(err, ErrInvalidTransition)
 }
 
 func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessResponse, outcome Outcome, err error) *OrchestrationResult {

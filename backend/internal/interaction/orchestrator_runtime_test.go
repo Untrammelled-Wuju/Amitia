@@ -338,6 +338,45 @@ func (p postSuccessDriftProcessor) ProcessMessageCtx(ctx context.Context, req *P
 	}, nil
 }
 
+type completeConflictTracker struct {
+	InteractionTracker
+	base   *InMemoryTracker
+	status InteractionStatus
+}
+
+func (t *completeConflictTracker) Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error) {
+	t.base.mu.Lock()
+	if rec, ok := t.base.records[id]; ok {
+		rec.Status = t.status
+		rec.StatusVersion++
+		rec.CompletedAt = time.Now()
+		rec.UpdatedAt = rec.CompletedAt
+	}
+	t.base.mu.Unlock()
+	return nil, ErrVersionConflict
+}
+
+type cancelTransitionConflictTracker struct {
+	InteractionTracker
+	base *InMemoryTracker
+}
+
+func (t *cancelTransitionConflictTracker) TransitionCAS(ctx context.Context, id string, expectedVersion int64, target InteractionStatus) (*InteractionRecord, error) {
+	if target != InteractionStatusCancelled {
+		return t.InteractionTracker.TransitionCAS(ctx, id, expectedVersion, target)
+	}
+	t.base.mu.Lock()
+	if rec, ok := t.base.records[id]; ok {
+		rec.Status = InteractionStatusCompleted
+		rec.StatusVersion++
+		rec.ResultRef = "completed_elsewhere"
+		rec.CompletedAt = time.Now()
+		rec.UpdatedAt = rec.CompletedAt
+	}
+	t.base.mu.Unlock()
+	return nil, ErrVersionConflict
+}
+
 func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	tracker := NewInMemoryTracker()
 	processor := &queueSerialProcessor{
@@ -667,6 +706,72 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 	}
 	if len(records) != 0 {
 		t.Fatalf("outbox records should not be appended after version drift: %#v", records)
+	}
+}
+
+func TestOrchestratorMapsFinalCompleteCancelConflict(t *testing.T) {
+	base := NewInMemoryTracker()
+	tracker := &completeConflictTracker{InteractionTracker: base, base: base, status: InteractionStatusCancelled}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	orch.SetReady(true)
+
+	result, err := orch.Process(context.Background(), &ProcessRequest{
+		UserID:         "user-final-cancel",
+		CharacterID:    "char-final-cancel",
+		ConversationID: "conv-final-cancel",
+		Channel:        "web",
+		Source:         "web",
+		Message:        "hello",
+		RequestID:      "req-final-cancel",
+	})
+	if !errors.Is(err, ErrOrchestratorCancelled) {
+		t.Fatalf("expected cancel outcome, got result=%#v err=%v", result, err)
+	}
+	if result == nil || result.Outcome != OutcomeCancelled || result.Response != nil {
+		t.Fatalf("cancel conflict should not return success response: %#v", result)
+	}
+	stored, ok, getErr := tracker.Get(context.Background(), result.InteractionID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if !ok || stored.Status != InteractionStatusCancelled || stored.ResultRef != "" {
+		t.Fatalf("cancel conflict mutated incorrectly: ok=%v record=%#v", ok, stored)
+	}
+}
+
+func TestOrchestratorCancelIgnoresCompletedTransitionRace(t *testing.T) {
+	base := NewInMemoryTracker()
+	tracker := &cancelTransitionConflictTracker{InteractionTracker: base, base: base}
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	record := NewInteractionRecord(InteractionScope{
+		UserID:         "user-cancel-race",
+		CharacterID:    "char-cancel-race",
+		ConversationID: "conv-cancel-race",
+		Channel:        "web",
+		Source:         "web",
+		RequestID:      "req-cancel-race",
+	}.Normalize())
+	if err := tracker.Create(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	processing, err := tracker.TransitionCAS(context.Background(), record.ID, record.StatusVersion, InteractionStatusProcessing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contextReady, err := tracker.TransitionCAS(context.Background(), processing.ID, processing.StatusVersion, InteractionStatusContextReady)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := orch.Cancel(contextReady.ID); err != nil {
+		t.Fatalf("completed transition race should be idempotent, got %v", err)
+	}
+	stored, ok, getErr := tracker.Get(context.Background(), contextReady.ID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if !ok || stored.Status != InteractionStatusCompleted || stored.ResultRef != "completed_elsewhere" {
+		t.Fatalf("unexpected final record after cancel race: ok=%v record=%#v", ok, stored)
 	}
 }
 
