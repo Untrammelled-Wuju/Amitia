@@ -1,0 +1,400 @@
+#### R08｜在权威事务中原子获取Commit Token
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 消除取消检查与业务写入之间的检查—写入竞态。  
+**关联审计问题：** P0-01, P0-02, P1-07, P2-11  
+**对应原168步：** 第37、79、159步  
+**主要修改范围：** `backend/internal/interaction/tracker_sqlite.go`, `backend/internal/chat/commit_coordinator.go`
+
+**具体实施方法：**
+
+1. Commit开始时执行带expected_version、allowed_status、cancel_requested_at IS NULL的UPDATE，原子取得commit_token。
+2. 未取得token立即返回Cancelled、Superseded或VersionConflict，不进入任何业务写入。
+3. Commit Token包含interaction_id、version、owner和随机令牌；后续事务写入必须携带。
+4. 取消、替代和恢复只能在未持有有效Commit Token时改变提交资格；提交后通过补偿事件处理。
+5. UpdateMetadata也必须使用版本或owner校验，避免迟到线程覆盖。
+
+**数据库与迁移：**
+
+1. interaction_records增加commit_token、commit_owner、commit_acquired_at或等价字段。
+2. 创建用于待提交状态扫描的索引。
+
+**必须新增或更新的测试：**
+
+1. 取消与Commit同时发生的1000次竞态测试，过期提交率为0。
+2. 替代与Commit竞争测试。
+3. 旧owner使用过期token提交必须失败。
+4. go test -race覆盖token获取和取消注册。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R09｜把旧Chat Processor拆成纯计算与权威提交两段
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 旧处理器不得在Orchestrator确认新鲜度和决策前写AI消息、心理、关系或Outbox。  
+**关联审计问题：** P0-01, P0-02, P0-04, P1-30, P1-36  
+**对应原168步：** 第31、39、77—130、159步  
+**主要修改范围：** `backend/internal/chat/service.go`, `backend/internal/chat/message_pipeline.go`, `backend/internal/chat/commit_coordinator.go`, `backend/internal/interaction/orchestrator.go`
+
+**具体实施方法：**
+
+1. 新增ComputeInteractionResult，只做上下文、模型、工具和候选结果计算，不写长期状态。
+2. 把AI消息、心理、关系、审计和Outbox写入全部迁入Commit Coordinator。
+3. 短期缓存只能在提交成功后更新；失败和取消不更新缓存。
+4. 异步记忆提取、摘要和反思改为持久化Outbox，不使用请求goroutine直接写入。
+5. 保留旧ProcessMessage兼容适配器，但内部必须调用统一Orchestrator，不得反向绕过。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. Compute阶段取消后数据库无AI消息、心理、关系和Outbox。
+2. 模型成功但Commit失败时无半完成结果。
+3. 兼容入口与UnifiedEntry生成同一事务链。
+4. 故障注入覆盖消息、心理、关系、Outbox任一写入失败。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R10｜重构Commit Coordinator为单一SQLite权威事务
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 在一个事务中提交Interaction、消息、状态版本、审计、DeliveryIntent和Outbox。  
+**关联审计问题：** P0-01, P0-02, P0-03, P1-35, P1-36  
+**对应原168步：** 第79、100、109—112、159、168步  
+**主要修改范围：** `backend/internal/chat/commit_coordinator.go`, `backend/internal/interaction/tracker_sqlite.go`, `backend/internal/outbox/**`, `backend/internal/delivery/**`
+
+**具体实施方法：**
+
+1. 事务顺序固定：校验Commit Token→写AI消息→写Psyche/Relationship事件与CAS状态→写Trace→写DeliveryIntent→写Outbox→Interaction转Committed。
+2. 任何一步失败回滚整个事务。
+3. Committed后只允许通过补偿事件修正，禁止静默删除已提交状态。
+4. 事务结果返回commit_id、message_ids、state_versions、delivery_intent_ids和outbox_ids。
+5. Completed只在用户可见投递策略满足后设置；需要投递的交互先进入DeliveryPending。
+
+**数据库与迁移：**
+
+1. 增加commit_runs或等价审计记录，保存输入版本、输出版本和事务引用。
+2. DeliveryIntent、Outbox与Interaction建立外键或可验证引用。
+
+**必须新增或更新的测试：**
+
+1. 每个写入点故障注入后事务完全回滚。
+2. 并发同scope状态版本连续、无丢失更新。
+3. 崩溃模拟后可通过commit_id恢复一致状态。
+4. Committed记录必然具有完整消息、状态和Outbox引用。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R11｜修复取消、替代、补偿和终态语义
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 按交互阶段决定取消、替代、重算或补偿，确保过期结果不落库。  
+**关联审计问题：** P0-02, P1-08, P1-09, P2-12  
+**对应原168步：** 第37、39—41、159步  
+**主要修改范围：** `backend/internal/interaction/supersede.go`, `backend/internal/interaction/orchestrator.go`, `backend/internal/interaction/startup_recovery.go`
+
+**具体实施方法：**
+
+1. Received/Normalized/ContextReady允许取消或替代；Generated未提交可废弃；Committed只能写补偿事件。
+2. 查询目标和标记旧交互在同一scope串行或数据库事务中执行。
+3. 取消注册表只负责进程内CancelFunc，SQLite记录负责权威取消请求和状态。
+4. 服务重启扫描全部非终态状态，按commit引用、owner心跳和Outbox事实收敛。
+5. Outcome必须区分Cancelled、Superseded、Failed、Committed和DeliveryUnknown。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 连续短消息替代测试。
+2. LLM返回与取消竞争测试。
+3. Committed后替代产生补偿事件测试。
+4. 进程在各状态崩溃后的恢复矩阵。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R12｜统一P0—P5 Priority Scheduler和持久化队列
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 删除重复调度体系，建立唯一优先级、背压、检查点和恢复语义。  
+**关联审计问题：** P1-10, P1-11, P1-12, P2-13  
+**对应原168步：** 第36—40、134、140、158步  
+**主要修改范围：** `backend/internal/queue/**`, `backend/internal/scheduler/**`, `backend/internal/interaction/**`, `backend/internal/proactive/**`
+
+**具体实施方法：**
+
+1. 选择一个生产Priority Scheduler，其余模块改为适配器或删除未使用实现。
+2. 队列状态存SQLite，不使用JSON文件作为权威检查点。
+3. P0/P1不可丢弃；P3可取消/延期；P4/P5可合并批处理，并设置最大延期时间。
+4. 同一user+character的权威提交串行，不同角色允许并行。
+5. Enqueue必须真实入队，Worker按优先级和公平性出队。
+
+**数据库与迁移：**
+
+1. 新增runtime_queue表：task_id、scope、priority、status、available_at、deadline、lease、attempt、payload_version。
+2. 建立priority+available_at、scope+sequence和lease索引。
+
+**必须新增或更新的测试：**
+
+1. P0/P1在过载时不丢失。
+2. P3被实时用户输入抢占。
+3. P4/P5批处理和饥饿保护测试。
+4. 重启后队列恢复且不重复执行。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R13｜统一Deadline、Context和异步任务边界
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 取消必须传播到LLM、工具、Qdrant、SurrealDB、TTS、ASR和所有可取消处理。  
+**关联审计问题：** P1-29, P1-30, P1-33  
+**对应原168步：** 第12、34、37、42、157步  
+**主要修改范围：** `backend/internal/agent/service.go`, `backend/internal/chat/**`, `backend/internal/memory/**`, `backend/internal/interaction/deadline.go`
+
+**具体实施方法：**
+
+1. 禁止从context.Background重新派生请求链Context，使用上游Context并设置子Deadline。
+2. 所有外部客户端和工具统一接收Context。
+3. 请求完成后需要继续执行的工作写入Outbox，不能继续使用请求Context裸goroutine。
+4. 定义总Deadline及Context、检索、评价、生成、验证、投递子预算。
+5. 提交前执行Context和Interaction新鲜度双重检查。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 取消后所有Fake依赖收到Done。
+2. 超时后无迟到写入。
+3. 服务Drain时在途请求按策略完成或取消。
+4. goroutine泄漏测试。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R14｜阶段门G1：Interaction与权威事务验收
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 确认请求幂等、取消、替代、原子Commit和队列达到生产基础要求。  
+**关联审计问题：** P0-01, P0-02, P0-13, P1-07, P1-08, P1-09  
+**对应原168步：** 第8、16、30、31、37—40、159步  
+**主要修改范围：** `docs/psyche/evidence/G1/**`
+
+**具体实施方法：**
+
+1. 运行Interaction状态矩阵、1000次竞态、崩溃恢复和幂等测试。
+2. 检查数据库不存在半完成消息、断层版本、僵尸记录和重复Outbox。
+3. G1未通过不得接入心理、主动或删除新功能。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 新增覆盖正常、失败、重试和并发场景的自动化测试。
+
+**验收标准：**
+
+1. 取消后过期结果提交率=0。
+2. 相同request_id重复业务写入=0。
+3. 状态版本连续，非法转换=0。
+4. 事务故障注入半完成记录=0。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+### 第三阶段｜完整Mind Runtime、Prompt与安全
+
+#### R15｜补齐生产Context Loader与必需数据契约
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** ContextSnapshot必须包含完整角色、权威记忆、心理、关系、需求、生活和未解决线程。  
+**关联审计问题：** P1-33, P1-34, P1-35  
+**对应原168步：** 第33、34、43、55、93、99、105、107步  
+**主要修改范围：** `backend/internal/interaction/context_loaders_sqlite.go`, `backend/cmd/server/services.go`
+
+**具体实施方法：**
+
+1. 注册RoleRuntimeProfile、MemoryGovernance、Belief、Psyche、Relationship、Need、Life、ConversationState和UnresolvedThread Loader。
+2. 每个Loader声明required/optional、Deadline、fallback和版本。
+3. required失败必须中止或进入明确保守路径，禁止用零值继续写长期状态。
+4. 所有JSON损坏和旧版本回退写结构化诊断。
+5. Snapshot记录每段来源版本和加载耗时。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 缺表、损坏JSON、超时和依赖熔断测试。
+2. 多角色scope隔离测试。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R16｜统一Memory/Belief权威过滤与墓碑否决接口
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 所有进入Prompt、行为决策和主动消息的数据必须先回SQLite验证。  
+**关联审计问题：** P0-07, P1-25, P1-26, P2-07  
+**对应原168步：** 第57—74、162、167步  
+**主要修改范围：** `backend/internal/memory/**`, `backend/internal/belief/**`, `backend/internal/companion/**`, `backend/internal/mindruntime/data_lifecycle.go`
+
+**具体实施方法：**
+
+1. 提供统一AuthorityFilter接口，检查scope、status、expiry、version、sensitivity、proactive_permission和DeletionTombstone。
+2. 标准Memory、RandomBurst、ShareGenerator、Profile、Episodic、Graph和Prompt Loader全部调用同一接口。
+3. Qdrant和SurrealDB只返回候选ID，内容和有效性从SQLite权威记录读取。
+4. 被墓碑阻断的数据立即返回不可用，不等待物理删除。
+5. 记录被拒绝候选的原因和来源，支持审计。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 删除提交后所有检索召回率为0。
+2. 跨角色候选全部拒绝。
+3. 过期和禁止主动提及记忆不进入主动消息。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。
+
+**禁止越界：**
+
+1. 不得以仅新增类型、目录或模拟测试代替生产接线。
+
+---
+
+#### R17｜接通Personality Compiler和角色核心边界
+
+**依赖：** 按所在阶段顺序执行  
+**目标：** 人格配置编译为评价、恢复、行为和表达参数，不再只是自由Prompt文本。  
+**关联审计问题：** P0-04, P1-31  
+**对应原168步：** 第43—51步  
+**主要修改范围：** `backend/internal/character/**`, `backend/internal/personality/**`, `backend/internal/interaction/runtime_pipeline.go`
+
+**具体实施方法：**
+
+1. 从RoleRuntimeProfile生成版本化CompiledPersonality。
+2. 明确认知敏感度、恢复速度、行为倾向、表达策略和不可变核心边界。
+3. 损坏配置使用版本化默认值并记录诊断。
+4. 核心身份、安全和权限不可由成长或模型输出覆盖。
+5. CompiledPersonality进入ContextSnapshot并被Appraisal/Decision消费。
+
+**数据库与迁移：**
+
+1. 本步骤不新增业务表；如需字段调整，必须通过幂等迁移并保留旧字段兼容窗口。
+
+**必须新增或更新的测试：**
+
+1. 新增覆盖正常、失败、重试和并发场景的自动化测试。
+
+**验收标准：**
+
+1. 相关问题具备代码、测试、迁移和回滚证据后方可关闭。
+
+**回滚方式：**
+
+1. 通过功能开关或兼容读取回退；不删除已产生的权威事件和审计记录。

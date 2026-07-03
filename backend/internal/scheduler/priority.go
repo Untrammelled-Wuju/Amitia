@@ -46,5 +46,5 @@ type QueueConfig = queue.PriorityQueueConfig
 type QueueMetrics = queue.QueueMetricsSnapshot
 
 func NewPriorityQueue(cfg QueueConfig) *PriorityQueue {
-	return queue.NewPriorityQueue(queue.PriorityQueueConfig(cfg))
+	return queue.NewPriorityQueue(cfg)
 }

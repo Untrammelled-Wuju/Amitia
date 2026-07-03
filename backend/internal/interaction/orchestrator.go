@@ -419,7 +419,8 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 }
 
 func (o *Orchestrator) Cancel(interactionID string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	rec, ok, err := o.tracker.Get(ctx, interactionID)
 	if err != nil {
 		return err
@@ -452,7 +453,8 @@ func (o *Orchestrator) Cancel(interactionID string) error {
 }
 
 func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	active, err := o.tracker.ListActive(ctx, scope)
 	if err != nil {
 		log.Printf("[orchestrator] list active failed during cancel: %v", err)
@@ -688,6 +690,9 @@ func (o *Orchestrator) ensureFreshAtVersion(ctx context.Context, id string, expe
 	}
 	if rec.StatusVersion != expectedVersion {
 		return rec, OutcomeFailed, ErrVersionConflict
+	}
+	if err := ctx.Err(); err != nil {
+		return rec, OutcomeCancelled, fmt.Errorf("context expired before version check: %w", err)
 	}
 	return rec, outcome, nil
 }

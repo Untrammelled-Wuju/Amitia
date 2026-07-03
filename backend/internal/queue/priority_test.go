@@ -1,13 +1,89 @@
 package queue
 
 import (
-	"path/filepath"
+	"context"
+	"sync"
 	"testing"
 	"time"
 )
 
+type mockRuntimeQueueStore struct {
+	mu      sync.Mutex
+	records map[string]*RuntimeQueueRecord
+}
+
+func newMockRuntimeQueueStore() *mockRuntimeQueueStore {
+	return &mockRuntimeQueueStore{records: make(map[string]*RuntimeQueueRecord)}
+}
+
+func (m *mockRuntimeQueueStore) InitSchema() error { return nil }
+
+func (m *mockRuntimeQueueStore) Upsert(ctx context.Context, record *RuntimeQueueRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.records[record.TaskID] = record
+	return nil
+}
+
+func (m *mockRuntimeQueueStore) Delete(ctx context.Context, taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.records, taskID)
+	return nil
+}
+
+func (m *mockRuntimeQueueStore) LoadPending(ctx context.Context) ([]RuntimeQueueRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []RuntimeQueueRecord
+	for _, r := range m.records {
+		if r.Status == "pending" {
+			result = append(result, *r)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockRuntimeQueueStore) LoadByScope(ctx context.Context, scope string) ([]RuntimeQueueRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []RuntimeQueueRecord
+	for _, r := range m.records {
+		if r.Scope == scope && r.Status == "pending" {
+			result = append(result, *r)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockRuntimeQueueStore) DeleteByScope(ctx context.Context, scope string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for id, r := range m.records {
+		if r.Scope == scope && r.Status == "pending" {
+			delete(m.records, id)
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockRuntimeQueueStore) CountByScope(ctx context.Context, scope string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for _, r := range m.records {
+		if r.Scope == scope && r.Status == "pending" {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func TestPriorityQueueOrdersP0ToP5(t *testing.T) {
-	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10})
+	store := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store})
 
 	for _, task := range []*Task{
 		{ID: "p5", Priority: PriorityP5, Scope: "test"},
@@ -36,11 +112,13 @@ func TestPriorityQueueOrdersP0ToP5(t *testing.T) {
 }
 
 func TestPriorityQueueUsesDefaultConfigsWithPartialOverrides(t *testing.T) {
+	store := newMockRuntimeQueueStore()
 	pq := NewPriorityQueue(PriorityQueueConfig{
 		MaxQueueSize: 10,
 		Configs: map[PriorityLevel]PriorityConfig{
 			PriorityP0: {MaxConcurrency: 1},
 		},
+		Store: store,
 	})
 
 	pq.Enqueue(&Task{ID: "p0-a", Priority: PriorityP0, Scope: "test"})
@@ -66,7 +144,8 @@ func TestPriorityQueueUsesDefaultConfigsWithPartialOverrides(t *testing.T) {
 }
 
 func TestPriorityQueueRecordsDropAndDepthMetrics(t *testing.T) {
-	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 1})
+	store := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 1, Store: store})
 
 	ok, reason := pq.Enqueue(&Task{ID: "expired", Priority: PriorityP0, Scope: "test", Deadline: time.Now().UTC().Add(-time.Second)})
 	if ok {
@@ -93,9 +172,49 @@ func TestPriorityQueueRecordsDropAndDepthMetrics(t *testing.T) {
 	}
 }
 
+func TestPriorityQueueP0P1NotEvicted(t *testing.T) {
+	store := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 2, Store: store})
+
+	ok, _ := pq.Enqueue(&Task{ID: "p5-a", Priority: PriorityP5, Scope: "test"})
+	if !ok {
+		t.Fatal("expected p5 enqueue success")
+	}
+	ok, _ = pq.Enqueue(&Task{ID: "p5-b", Priority: PriorityP5, Scope: "test"})
+	if !ok {
+		t.Fatal("expected second p5 enqueue success")
+	}
+
+	ok, reason := pq.Enqueue(&Task{ID: "p0", Priority: PriorityP0, Scope: "test"})
+	if !ok {
+		t.Fatalf("expected P0 to not be dropped even when full, got reason %s", reason)
+	}
+
+	if pq.Depth() < 3 {
+		t.Fatalf("expected P0 to stay in queue, depth is %d", pq.Depth())
+	}
+}
+
+func TestPriorityQueueP4P5EvictedForP0P1(t *testing.T) {
+	store := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 1, Store: store})
+
+	pq.Enqueue(&Task{ID: "p5", Priority: PriorityP5, Scope: "test"})
+
+	ok, reason := pq.Enqueue(&Task{ID: "p0", Priority: PriorityP0, Scope: "test"})
+	if !ok {
+		t.Fatalf("expected P0 to enqueue by evicting P5, got reason %s", reason)
+	}
+
+	first := pq.Dequeue()
+	if first == nil || first.ID != "p0" {
+		t.Fatalf("expected P0 first after eviction, got %v", first)
+	}
+}
+
 func TestPriorityQueueCheckpointRestoresPendingTasks(t *testing.T) {
-	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
-	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	store1 := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store1})
 
 	for _, task := range []*Task{
 		{ID: "p2", Path: "/p2", Priority: PriorityP2, Scope: "test"},
@@ -106,11 +225,8 @@ func TestPriorityQueueCheckpointRestoresPendingTasks(t *testing.T) {
 			t.Fatalf("enqueue %s failed: %s", task.ID, reason)
 		}
 	}
-	if err := pq.LastPersistenceError(); err != nil {
-		t.Fatalf("unexpected persistence error: %v", err)
-	}
 
-	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store1})
 	if restored.Depth() != 2 {
 		t.Fatalf("expected restored depth 2, got %d", restored.Depth())
 	}
@@ -128,17 +244,17 @@ func TestPriorityQueueCheckpointRestoresPendingTasks(t *testing.T) {
 }
 
 func TestPriorityQueueCheckpointRestoresRunningTasksAsPending(t *testing.T) {
-	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
+	store := newMockRuntimeQueueStore()
 	pq := NewPriorityQueue(PriorityQueueConfig{
-		MaxQueueSize:   10,
-		CheckpointPath: checkpointPath,
+		MaxQueueSize: 10,
+		Store:        store,
 		Configs: map[PriorityLevel]PriorityConfig{
 			PriorityP0: {MaxConcurrency: 2},
 		},
 	})
 
-	pq.Enqueue(&Task{ID: "same", Path: "/a", Priority: PriorityP0, Scope: "test"})
-	pq.Enqueue(&Task{ID: "same", Path: "/b", Priority: PriorityP0, Scope: "test"})
+	pq.Enqueue(&Task{ID: "run-a", Path: "/a", Priority: PriorityP0, Scope: "test"})
+	pq.Enqueue(&Task{ID: "run-b", Path: "/b", Priority: PriorityP0, Scope: "test"})
 	first := pq.Dequeue()
 	second := pq.Dequeue()
 	if first == nil || second == nil {
@@ -149,8 +265,8 @@ func TestPriorityQueueCheckpointRestoresRunningTasksAsPending(t *testing.T) {
 	}
 
 	restored := NewPriorityQueue(PriorityQueueConfig{
-		MaxQueueSize:   10,
-		CheckpointPath: checkpointPath,
+		MaxQueueSize: 10,
+		Store:        store,
 		Configs: map[PriorityLevel]PriorityConfig{
 			PriorityP0: {MaxConcurrency: 2},
 		},
@@ -170,8 +286,8 @@ func TestPriorityQueueCheckpointRestoresRunningTasksAsPending(t *testing.T) {
 }
 
 func TestPriorityQueueCheckpointRemovesCompletedTasks(t *testing.T) {
-	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
-	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	store := newMockRuntimeQueueStore()
+	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store})
 
 	ok, reason := pq.Enqueue(&Task{ID: "done", Path: "/done", Priority: PriorityP0, Scope: "test"})
 	if !ok {
@@ -183,7 +299,7 @@ func TestPriorityQueueCheckpointRemovesCompletedTasks(t *testing.T) {
 	}
 	pq.Complete(task)
 
-	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+	restored := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store})
 	if restored.Depth() != 0 {
 		t.Fatalf("expected empty queue after completed task checkpoint, got %d", restored.Depth())
 	}

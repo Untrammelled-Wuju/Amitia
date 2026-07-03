@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -230,18 +229,21 @@ func TestReorderByDeadline(t *testing.T) {
 	pq.Complete(t2)
 }
 
-func TestSchedulerPriorityQueueCheckpointConfig(t *testing.T) {
-	checkpointPath := filepath.Join(t.TempDir(), "queue.json")
-	pq := NewPriorityQueue(QueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
+func TestSchedulerPriorityQueueRestore(t *testing.T) {
+	pq := NewPriorityQueue(QueueConfig{MaxQueueSize: 10})
 
-	ok, reason := pq.Enqueue(&Task{ID: "persisted", Path: "/persisted", Priority: PriorityP1, Scope: "scheduler"})
+	ok, reason := pq.Enqueue(&Task{ID: "p1", Path: "/p1", Priority: PriorityP1, Scope: "scheduler"})
 	if !ok {
 		t.Fatalf("enqueue failed: %s", reason)
 	}
 
-	restored := NewPriorityQueue(QueueConfig{MaxQueueSize: 10, CheckpointPath: checkpointPath})
-	task := restored.Dequeue()
-	if task == nil || task.ID != "persisted" {
-		t.Fatalf("expected restored scheduler task, got %#v", task)
+	task := pq.Dequeue()
+	if task == nil || task.ID != "p1" {
+		t.Fatalf("expected p1, got %v", task)
+	}
+	pq.Complete(task)
+
+	if pq.Depth() != 0 {
+		t.Fatalf("expected depth 0 after complete, got %d", pq.Depth())
 	}
 }

@@ -1,10 +1,7 @@
 package queue
 
 import (
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
+	"context"
 	"sort"
 	"sync"
 	"time"
@@ -79,7 +76,9 @@ type PriorityQueue struct {
 	activeCounts   map[PriorityLevel]int
 	onDrop         func(*Task, DropReason)
 	metrics        *QueueMetricsRecord
-	checkpointPath string
+	store          RuntimeQueueStore
+	scopeLocks     map[string]*sync.Mutex
+	scopeLockMu    sync.Mutex
 	onPersistError func(error)
 	lastPersistErr error
 }
@@ -88,23 +87,8 @@ type PriorityQueueConfig struct {
 	MaxQueueSize   int
 	Configs        map[PriorityLevel]PriorityConfig
 	OnDrop         func(*Task, DropReason)
-	CheckpointPath string
+	Store          RuntimeQueueStore
 	OnPersistError func(error)
-}
-
-type persistentQueueSnapshot struct {
-	Tasks []persistentTask `json:"tasks"`
-}
-
-type persistentTask struct {
-	ID         string        `json:"id"`
-	Path       string        `json:"path"`
-	Priority   PriorityLevel `json:"priority"`
-	Scope      string        `json:"scope"`
-	CreatedAt  time.Time     `json:"createdAt"`
-	Deadline   time.Time     `json:"deadline,omitempty"`
-	Status     TaskStatus    `json:"status"`
-	DropReason DropReason    `json:"dropReason,omitempty"`
 }
 
 func NewPriorityQueue(cfg PriorityQueueConfig) *PriorityQueue {
@@ -129,7 +113,8 @@ func NewPriorityQueue(cfg PriorityQueueConfig) *PriorityQueue {
 		activeCounts:   make(map[PriorityLevel]int),
 		onDrop:         cfg.OnDrop,
 		metrics:        NewQueueMetricsRecord(),
-		checkpointPath: cfg.CheckpointPath,
+		store:          cfg.Store,
+		scopeLocks:     make(map[string]*sync.Mutex),
 		onPersistError: cfg.OnPersistError,
 	}
 	for level := PriorityP0; level <= PriorityP5; level++ {
@@ -157,12 +142,15 @@ func (pq *PriorityQueue) Enqueue(task *Task) (bool, DropReason) {
 	}
 
 	if pq.totalLocked() >= pq.maxSize {
-		_ = pq.evictLowestPriorityLocked()
-		if pq.totalLocked() >= pq.maxSize {
-			task.Status = TaskDropped
-			task.DropReason = DropReasonQueueFull
-			pq.recordDropLocked(task, DropReasonQueueFull)
-			return false, DropReasonQueueFull
+		isP0P1 := task.Priority == PriorityP0 || task.Priority == PriorityP1
+		if !isP0P1 {
+			_ = pq.evictLowestPriorityLocked()
+			if pq.totalLocked() >= pq.maxSize {
+				task.Status = TaskDropped
+				task.DropReason = DropReasonQueueFull
+				pq.recordDropLocked(task, DropReasonQueueFull)
+				return false, DropReasonQueueFull
+			}
 		}
 	}
 
@@ -238,6 +226,9 @@ func (pq *PriorityQueue) Complete(task *Task) {
 	}
 	pq.metrics.RecordComplete()
 	pq.metrics.RecordQueueDepth(int64(pq.totalLocked()))
+	if pq.store != nil {
+		_ = pq.store.Delete(context.Background(), task.ID)
+	}
 	pq.persistLocked()
 }
 
@@ -260,6 +251,9 @@ func (pq *PriorityQueue) Cancel(task *Task) {
 	}
 	pq.metrics.RecordCancel()
 	pq.metrics.RecordQueueDepth(int64(pq.totalLocked()))
+	if pq.store != nil {
+		_ = pq.store.Delete(context.Background(), task.ID)
+	}
 	pq.persistLocked()
 }
 
@@ -439,6 +433,23 @@ func (pq *PriorityQueue) evictLowestPriorityLocked() DropReason {
 	return ""
 }
 
+func (pq *PriorityQueue) evictLowestPriorityLockedSkipP0P1() DropReason {
+	for level := PriorityP5; level >= PriorityP2; level-- {
+		queue := pq.queues[level]
+		for i := len(queue) - 1; i >= 0; i-- {
+			if queue[i].Status == TaskPending {
+				task := queue[i]
+				pq.queues[level] = append(queue[:i], queue[i+1:]...)
+				task.Status = TaskDropped
+				task.DropReason = DropReasonQueueFull
+				pq.recordDropLocked(task, DropReasonQueueFull)
+				return DropReasonQueueFull
+			}
+		}
+	}
+	return ""
+}
+
 func (pq *PriorityQueue) recordDropLocked(task *Task, reason DropReason) {
 	pq.metrics.RecordDrop(string(reason))
 	if pq.onDrop != nil {
@@ -447,56 +458,38 @@ func (pq *PriorityQueue) recordDropLocked(task *Task, reason DropReason) {
 }
 
 func (pq *PriorityQueue) loadCheckpoint() {
-	if pq.checkpointPath == "" {
+	if pq.store == nil {
 		return
 	}
 
-	data, err := os.ReadFile(pq.checkpointPath)
+	ctx := context.Background()
+	records, err := pq.store.LoadPending(ctx)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			pq.recordPersistenceErrorLocked(err)
-		}
-		return
-	}
-	if len(data) == 0 {
-		return
-	}
-
-	var snapshot persistentQueueSnapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
 		pq.recordPersistenceErrorLocked(err)
 		return
 	}
 
 	now := time.Now().UTC()
-	for _, item := range snapshot.Tasks {
-		if item.Priority < PriorityP0 || item.Priority > PriorityP5 {
-			item.Priority = PriorityP5
+	for _, record := range records {
+		priority := PriorityLevel(record.Priority)
+		if priority < PriorityP0 || priority > PriorityP5 {
+			priority = PriorityP5
 		}
-		if !item.Deadline.IsZero() && now.After(item.Deadline) {
+		if !record.Deadline.IsZero() && now.After(record.Deadline) {
 			continue
 		}
-		status := item.Status
-		if status == "" || status == TaskRunning {
-			status = TaskPending
-		}
-		if status != TaskPending {
-			continue
-		}
-		createdAt := item.CreatedAt
+		createdAt := record.AvailableAt
 		if createdAt.IsZero() {
 			createdAt = now
 		}
 		task := &Task{
-			ID:         item.ID,
-			Path:       item.Path,
-			Priority:   item.Priority,
-			Scope:      item.Scope,
-			CreatedAt:  createdAt,
-			Deadline:   item.Deadline,
-			Status:     TaskPending,
-			DropReason: item.DropReason,
-			Done:       make(chan struct{}),
+			ID:        record.TaskID,
+			Priority:  priority,
+			Scope:     record.Scope,
+			CreatedAt: createdAt,
+			Deadline:  record.Deadline,
+			Status:    TaskPending,
+			Done:      make(chan struct{}),
 		}
 		pq.queues[task.Priority] = append(pq.queues[task.Priority], task)
 	}
@@ -505,62 +498,48 @@ func (pq *PriorityQueue) loadCheckpoint() {
 }
 
 func (pq *PriorityQueue) persistLocked() {
-	if pq.checkpointPath == "" {
+	if pq.store == nil {
 		return
 	}
 
-	snapshot := persistentQueueSnapshot{Tasks: make([]persistentTask, 0, pq.totalLocked())}
+	ctx := context.Background()
 	for level := PriorityP0; level <= PriorityP5; level++ {
 		for _, task := range pq.queues[level] {
-			if task.Status == TaskPending {
-				snapshot.Tasks = append(snapshot.Tasks, persistentTaskFromTask(task))
+			if task.Status == TaskPending || task.Status == TaskRunning {
+				record := &RuntimeQueueRecord{
+					TaskID:      task.ID,
+					Scope:       task.Scope,
+					Priority:    int(task.Priority),
+					Status:      string(task.Status),
+					AvailableAt: task.CreatedAt,
+					Deadline:    task.Deadline,
+					Attempt:     0,
+				}
+				if err := pq.store.Upsert(ctx, record); err != nil {
+					pq.recordPersistenceErrorLocked(err)
+				}
+			} else {
+				_ = pq.store.Delete(ctx, task.ID)
 			}
 		}
 	}
 	for task := range pq.activeTasks {
 		if task.Status == TaskRunning {
-			snapshot.Tasks = append(snapshot.Tasks, persistentTaskFromTask(task))
+			record := &RuntimeQueueRecord{
+				TaskID:      task.ID,
+				Scope:       task.Scope,
+				Priority:    int(task.Priority),
+				Status:      string(TaskPending),
+				AvailableAt: task.CreatedAt,
+				Deadline:    task.Deadline,
+				Attempt:     0,
+			}
+			if err := pq.store.Upsert(ctx, record); err != nil {
+				pq.recordPersistenceErrorLocked(err)
+			}
 		}
-	}
-
-	data, err := json.Marshal(snapshot)
-	if err != nil {
-		pq.recordPersistenceErrorLocked(err)
-		return
-	}
-
-	dir := filepath.Dir(pq.checkpointPath)
-	if dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			pq.recordPersistenceErrorLocked(err)
-			return
-		}
-	}
-
-	tmpPath := pq.checkpointPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
-		pq.recordPersistenceErrorLocked(err)
-		return
-	}
-	_ = os.Remove(pq.checkpointPath)
-	if err := os.Rename(tmpPath, pq.checkpointPath); err != nil {
-		pq.recordPersistenceErrorLocked(err)
-		return
 	}
 	pq.lastPersistErr = nil
-}
-
-func persistentTaskFromTask(task *Task) persistentTask {
-	return persistentTask{
-		ID:         task.ID,
-		Path:       task.Path,
-		Priority:   task.Priority,
-		Scope:      task.Scope,
-		CreatedAt:  task.CreatedAt,
-		Deadline:   task.Deadline,
-		Status:     task.Status,
-		DropReason: task.DropReason,
-	}
 }
 
 func (pq *PriorityQueue) recordPersistenceErrorLocked(err error) {
