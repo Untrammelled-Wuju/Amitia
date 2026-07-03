@@ -209,7 +209,7 @@ func applyDatabaseStartupMigrations(db *gorm.DB) error {
 	migRunner := migration.Runner{DB: db, SkipBackup: existingDatabase}
 	if existingDatabase {
 		if err := migRunner.CreatePreMigrationBackup(); err != nil {
-			return fmt.Errorf("create pre-initial-sql backup: %w", err)
+			log.Warn("预迁移备份失败(非致命):", err)
 		}
 	}
 	if err := initDatabase(db); err != nil {

@@ -71,6 +71,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	cb.currentState()
 	cb.failureCount = 0
 	if cb.state == StateHalfOpen {
 		cb.successCount++
@@ -85,6 +86,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	cb.currentState()
 	cb.failureCount++
 	cb.lastFailure = time.Now()
 
