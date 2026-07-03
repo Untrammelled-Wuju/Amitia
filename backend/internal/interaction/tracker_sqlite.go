@@ -235,6 +235,31 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 	return rec, nil
 }
 
+func (t *SQLiteInteractionTracker) AcquireCommitToken(ctx context.Context, id string, expectedVersion int64) (*CommitToken, error) {
+	token := uuid.New().String()
+	owner := uuid.New().String()
+	now := t.now()
+	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).
+		Where("id = ? AND status_version = ? AND status = ?",
+			id, expectedVersion, string(InteractionStatusGenerated)).
+		Updates(map[string]interface{}{
+			"commit_token":       token,
+			"commit_owner":       owner,
+			"commit_acquired_at": now,
+		})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return nil, ErrCommitTokenUnavailable
+	}
+	return &CommitToken{
+		InteractionID: id,
+		Version:       expectedVersion,
+		Owner:         owner,
+		Token:         token,
+	}, nil
+}
 func (t *SQLiteInteractionTracker) RequestCancel(ctx context.Context, id string, reason string) error {
 	now := t.now()
 	result := t.db.WithContext(ctx).Model(&InteractionRecordModel{}).

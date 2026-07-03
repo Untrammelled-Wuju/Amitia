@@ -56,6 +56,7 @@ var (
 	ErrVersionConflict     = errors.New("interaction: status version conflict")
 	ErrInteractionNotFound = errors.New("interaction: record not found")
 	ErrDuplicateRequest    = errors.New("interaction: duplicate request")
+	ErrCommitTokenUnavailable = errors.New("interaction: commit token unavailable")
 )
 
 type InteractionRecord struct {
@@ -278,9 +279,16 @@ type InteractionTracker interface {
 	Complete(ctx context.Context, id string, expectedVersion int64, resultRef string) (*InteractionRecord, error)
 	Fail(ctx context.Context, id string, expectedVersion int64, code string, message string) (*InteractionRecord, error)
 	Archive(ctx context.Context, id string, expectedVersion int64) error
+	AcquireCommitToken(ctx context.Context, id string, expectedVersion int64) (*CommitToken, error)
 	Range(ctx context.Context, fn func(record *InteractionRecord) bool) error
 }
 
+type CommitToken struct {
+	InteractionID string
+	Version      int64
+	Owner        string
+	Token        string
+}
 type InMemoryTracker struct {
 	mu      sync.RWMutex
 	records map[string]*InteractionRecord
@@ -570,6 +578,35 @@ func (t *InMemoryTracker) Fail(ctx context.Context, id string, expectedVersion i
 	return &snap, nil
 }
 
+func (t *InMemoryTracker) AcquireCommitToken(ctx context.Context, id string, expectedVersion int64) (*CommitToken, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rec, ok := t.records[id]
+	if !ok {
+		return nil, ErrInteractionNotFound
+	}
+	if rec.StatusVersion != expectedVersion {
+		return nil, ErrVersionConflict
+	}
+	if rec.Status != InteractionStatusGenerated {
+		return nil, ErrCommitTokenUnavailable
+	}
+	token := uuid.New().String()
+	owner := uuid.New().String()
+	now := time.Now()
+	rec.CommitToken = token
+	rec.CommitOwner = owner
+	rec.CommitAcquiredAt = now
+	return &CommitToken{
+		InteractionID: id,
+		Version:       expectedVersion,
+		Owner:         owner,
+		Token:         token,
+	}, nil
+}
 func (t *InMemoryTracker) Archive(ctx context.Context, id string, expectedVersion int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
