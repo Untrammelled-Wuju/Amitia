@@ -38,19 +38,120 @@ func (s *service) GetStorageBackups() map[string]interface{} {
 }
 
 func (s *service) GetStorageMigrations() map[string]interface{} {
-	migFile := filepath.Join(s.dataDir, ".migration_version")
-	data, err := os.ReadFile(migFile)
-	version := "0"
-	if err == nil {
-		version = strings.TrimSpace(string(data))
+	legacyVersion, hasLegacy := s.readLegacyMigrationVersion()
+	records, err := s.readSchemaMigrationRecords()
+	if err == nil && len(records) > 0 {
+		migrations := make([]interface{}, 0, len(records))
+		currentVersion := "0"
+		appliedCount := 0
+		for _, record := range records {
+			applied := record.Status == "applied"
+			if applied {
+				appliedCount++
+				if record.Version > currentVersion {
+					currentVersion = record.Version
+				}
+			}
+			migrations = append(migrations, map[string]interface{}{
+				"name":       record.Name,
+				"version":    record.Version,
+				"status":     record.Status,
+				"applied":    applied,
+				"startedAt":  record.StartedAt,
+				"finishedAt": record.FinishedAt,
+				"source":     "schema_migrations",
+			})
+		}
+		result := map[string]interface{}{
+			"migrations":      migrations,
+			"currentVersion":  currentVersion,
+			"totalMigrations": len(records),
+			"appliedCount":    appliedCount,
+			"pendingCount":    len(records) - appliedCount,
+			"source":          "schema_migrations",
+		}
+		if hasLegacy {
+			result["legacyVersion"] = legacyVersion
+		}
+		return result
 	}
-	return map[string]interface{}{"migrations": []interface{}{map[string]interface{}{"name": "initial", "version": version, "applied": err == nil}}}
+	return legacyMigrationResult(legacyVersion, hasLegacy)
 }
 
 func (s *service) CheckStorageMigrations() map[string]interface{} {
-	migFile := filepath.Join(s.dataDir, ".migration_version")
-	_, err := os.Stat(migFile)
-	return map[string]interface{}{"needsMigration": os.IsNotExist(err)}
+	legacyVersion, hasLegacy := s.readLegacyMigrationVersion()
+	records, err := s.readSchemaMigrationRecords()
+	if err == nil && len(records) > 0 {
+		needsMigration := false
+		for _, record := range records {
+			if record.Status != "applied" {
+				needsMigration = true
+				break
+			}
+		}
+		result := map[string]interface{}{"needsMigration": needsMigration, "source": "schema_migrations"}
+		if hasLegacy {
+			result["legacyVersion"] = legacyVersion
+		}
+		return result
+	}
+	return map[string]interface{}{"needsMigration": !hasLegacy, "source": "legacy_file", "legacyVersion": legacyVersion}
+}
+
+type storageMigrationRecord struct {
+	Version    string `gorm:"column:version"`
+	Name       string `gorm:"column:name"`
+	Status     string `gorm:"column:status"`
+	StartedAt  string `gorm:"column:started_at"`
+	FinishedAt string `gorm:"column:finished_at"`
+}
+
+func (s *service) readSchemaMigrationRecords() ([]storageMigrationRecord, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("db is nil")
+	}
+	var tableCount int64
+	if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", "schema_migrations").Scan(&tableCount).Error; err != nil {
+		return nil, err
+	}
+	if tableCount == 0 {
+		return nil, fmt.Errorf("schema_migrations table not found")
+	}
+	var records []storageMigrationRecord
+	err := s.db.Table("schema_migrations").Select("version, name, status, started_at, finished_at").Order("version ASC").Scan(&records).Error
+	return records, err
+}
+
+func (s *service) readLegacyMigrationVersion() (string, bool) {
+	data, err := os.ReadFile(filepath.Join(s.dataDir, ".migration_version"))
+	if err != nil {
+		return "0", false
+	}
+	return strings.TrimSpace(string(data)), true
+}
+
+func legacyMigrationResult(version string, applied bool) map[string]interface{} {
+	return map[string]interface{}{
+		"migrations": []interface{}{map[string]interface{}{
+			"name":    "initial",
+			"version": version,
+			"applied": applied,
+			"source":  "legacy_file",
+		}},
+		"currentVersion":  version,
+		"totalMigrations": 1,
+		"appliedCount":    boolToInt(applied),
+		"pendingCount":    boolToInt(!applied),
+		"source":          "legacy_file",
+		"legacyVersion":   version,
+	}
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func (s *service) StorageBackup() map[string]interface{} {

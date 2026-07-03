@@ -81,12 +81,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	outbox := interaction.NewSQLiteOutboxStore(ctx.DB)
-	deadStore := interaction.NewInMemoryDeadLetterStore()
+	deadStore := interaction.NewSQLiteDeadLetterStore(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
 		panic("failed to init interaction tracker schema: " + err.Error())
 	}
 	if err := outbox.InitSchema(); err != nil {
 		panic("failed to init outbox schema: " + err.Error())
+	}
+	if err := deadStore.InitSchema(); err != nil {
+		panic("failed to init dead letter schema: " + err.Error())
 	}
 	loggingOutboxPublisher := interaction.OutboxPublisherFunc(func(record interaction.OutboxRecord) error {
 		log.Info("interaction outbox event published id=", record.ID, " type=", record.EventType, " aggregate=", record.AggregateID)

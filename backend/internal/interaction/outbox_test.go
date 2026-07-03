@@ -167,6 +167,58 @@ func TestSQLiteOutboxFailedRecordRespectsRetryBackoffBeforeLease(t *testing.T) {
 	}
 }
 
+func TestSQLiteDeadLetterStorePersistsPendingRecords(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "dead-letter.db")
+	db := openTestSQLiteDB(t, dbPath)
+	store := NewSQLiteDeadLetterStore(db)
+	if err := store.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.Append(&DeadLetterRecord{
+		OutboxID:    "outbox-1",
+		EventType:   "interaction.completed",
+		AggregateID: "agg-1",
+		Payload:     []byte(`{"ok":true}`),
+		LastError:   "publish failed",
+		RetryCount:  3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeTestSQLiteDB(t, db)
+
+	reopenedDB := openTestSQLiteDB(t, dbPath)
+	defer closeTestSQLiteDB(t, reopenedDB)
+	reopened := NewSQLiteDeadLetterStore(reopenedDB)
+	pending, err := reopened.ListPending()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].ID != id || string(pending[0].Payload) != `{"ok":true}` {
+		t.Fatalf("unexpected pending records: %#v", pending)
+	}
+	if err := reopened.MarkReplaying(id); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := reopened.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Status != DeadLetterStatusReplaying {
+		t.Fatalf("record was not marked replaying: %#v", rec)
+	}
+	if err := reopened.MarkReplayed(id); err != nil {
+		t.Fatal(err)
+	}
+	rec, err = reopened.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Status != DeadLetterStatusReplayed || rec.ReplayedAt.IsZero() {
+		t.Fatalf("record was not marked replayed: %#v", rec)
+	}
+}
+
 func TestOutboxDispatcherMovesExhaustedFailureToDeadLetter(t *testing.T) {
 	store := NewInMemoryOutboxStore()
 	deadStore := NewInMemoryDeadLetterStore()
@@ -287,20 +339,39 @@ func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
 
 func newTestSQLiteOutboxStore(t *testing.T) *SQLiteOutboxStore {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "outbox.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = sqlDB.Close()
-	})
+	db := newTestSQLiteDB(t, "outbox.db")
 	store := NewSQLiteOutboxStore(db)
 	if err := store.InitSchema(); err != nil {
 		t.Fatal(err)
 	}
 	return store
+}
+
+func newTestSQLiteDB(t *testing.T, name string) *gorm.DB {
+	t.Helper()
+	db := openTestSQLiteDB(t, filepath.Join(t.TempDir(), name))
+	t.Cleanup(func() {
+		closeTestSQLiteDB(t, db)
+	})
+	return db
+}
+
+func openTestSQLiteDB(t *testing.T, path string) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
+func closeTestSQLiteDB(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

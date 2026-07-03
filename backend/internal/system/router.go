@@ -5,11 +5,11 @@ package system
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
@@ -63,6 +63,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.PUT("/auth/session-settings", handler.UpdateSessionSettings)
 
 	r.GET("/runtime/health", handler.RuntimeHealth)
+	r.GET("/runtime/modules/health", handler.RuntimeModulesHealth)
 	r.POST("/runtime/check-db-integrity", handler.CheckDBIntegrity)
 	r.POST("/runtime/check-now", handler.CheckNow)
 	r.POST("/runtime/cleanup-temp", handler.CleanupTemp)

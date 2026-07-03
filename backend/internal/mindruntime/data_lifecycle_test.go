@@ -194,6 +194,22 @@ func TestExecuteOutboxCleanup(t *testing.T) {
 	if stats["outboxItems"].(int) != len(results) {
 		t.Fatal("stats should reflect outbox items count")
 	}
+	if stats["completed"].(int) != 1 {
+		t.Fatalf("tombstone should be completed after all cleanup items complete, got %d", stats["completed"])
+	}
+	tombstone, ok := c.GetTombstone(req.TargetID)
+	if !ok {
+		t.Fatal("tombstone should still be available after cleanup")
+	}
+	if tombstone.Status != DeletionStatusCompleted {
+		t.Fatalf("expected tombstone status completed, got %s", tombstone.Status)
+	}
+	if tombstone.CompletedAt == nil {
+		t.Fatal("completedAt should be set when cleanup finishes all items")
+	}
+	if tombstone.CleanedCount != len(results) {
+		t.Fatalf("expected cleaned count %d, got %d", len(results), tombstone.CleanedCount)
+	}
 }
 
 func TestExecuteOutboxCleanupRequiresExecutor(t *testing.T) {
@@ -678,8 +694,8 @@ func TestCoordinatorStats(t *testing.T) {
 	if stats["tombstones"].(int) != 2 {
 		t.Fatalf("expected 2 tombstones, got %d", stats["tombstones"])
 	}
-	if stats["completed"].(int) != 1 {
-		t.Fatalf("expected 1 completed, got %d", stats["completed"])
+	if stats["completed"].(int) != 2 {
+		t.Fatalf("expected 2 completed, got %d", stats["completed"])
 	}
 }
 
@@ -871,9 +887,12 @@ func TestDataLifecyclePersistenceRestoresDerivedCleanupState(t *testing.T) {
 		t.Fatalf("outbox cleanup should succeed: %v", err)
 	}
 	c.GenerateRecalculationTasks(tombstone)
-	completed, ok := c.MarkDeletionComplete(req.TargetID)
+	completed, ok := c.GetTombstone(req.TargetID)
 	if !ok {
-		t.Fatal("should mark persisted deletion complete")
+		t.Fatal("should find persisted deletion after cleanup")
+	}
+	if completed.Status != DeletionStatusCompleted {
+		t.Fatalf("expected completed tombstone before reload, got %s", completed.Status)
 	}
 	if completed.CompletedAt == nil {
 		t.Fatal("completedAt should be set before reload")
@@ -972,13 +991,13 @@ func TestDataLifecyclePersistedCleanupQueueExecutesAfterReload(t *testing.T) {
 	if !ok {
 		t.Fatal("reloaded coordinator should keep tombstone")
 	}
-	if tombstone.Status != DeletionStatusCleaning {
-		t.Fatalf("expected cleaning tombstone, got %s", tombstone.Status)
+	if tombstone.Status != DeletionStatusCompleted {
+		t.Fatalf("expected completed tombstone, got %s", tombstone.Status)
 	}
 	if tombstone.ItemsCount != 6 || tombstone.CleanedCount != 6 || tombstone.FailedCount != 0 {
 		t.Fatalf("unexpected tombstone progress: %#v", tombstone)
 	}
-	if tombstone.CompletedAt != nil {
-		t.Fatal("cleanup execution should not bypass explicit deletion completion")
+	if tombstone.CompletedAt == nil {
+		t.Fatal("completedAt should be set after reloaded cleanup finishes all items")
 	}
 }

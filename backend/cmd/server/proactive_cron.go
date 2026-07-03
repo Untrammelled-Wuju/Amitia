@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -166,21 +167,50 @@ func (c *ProactiveCron) runRandomBurstTrigger() {
 			go c.runRandomBurstTrigger()
 		}
 	}()
+	ctx, cancel := contextFromStopCh(c.stopCh)
+	defer cancel()
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			if c.compSvc != nil {
-				var charIDs []string
-				c.db.Table("characters").Pluck("id", &charIDs)
-				for _, cid := range charIDs {
-					c.compSvc.RandomBurstTrigger(cid)
-				}
-			}
+			c.triggerRandomBurst(ctx)
 		case <-c.stopCh:
 			return
 		}
+	}
+}
+
+func contextFromStopCh(stopCh <-chan struct{}) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		select {
+		case <-stopCh:
+			cancel()
+		case <-done:
+		}
+	}()
+	return ctx, func() {
+		once.Do(func() {
+			close(done)
+			cancel()
+		})
+	}
+}
+
+func (c *ProactiveCron) triggerRandomBurst(ctx context.Context) {
+	if c.compSvc == nil {
+		return
+	}
+	var charIDs []string
+	c.db.Table("characters").Pluck("id", &charIDs)
+	for _, cid := range charIDs {
+		if ctx.Err() != nil {
+			return
+		}
+		c.compSvc.RandomBurstTriggerContext(ctx, cid)
 	}
 }
 

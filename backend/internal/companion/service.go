@@ -66,6 +66,7 @@ type Service interface {
 	GetShareHistory(characterID string) ShareHistory
 	TriggerDailyRegeneration(characterID string) map[string]interface{}
 	RandomBurstTrigger(characterID string) map[string]interface{}
+	RandomBurstTriggerContext(ctx context.Context, characterID string) map[string]interface{}
 	AttachUnifiedEntry(entry *interaction.UnifiedEntry)
 }
 

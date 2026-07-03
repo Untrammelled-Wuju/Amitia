@@ -341,7 +341,11 @@ func (c *DataLifecycleCoordinator) recomputeTombstoneProgressLocked(targetID str
 		tombstone.ItemsCount = itemsCount
 		tombstone.CleanedCount = cleanedCount
 		tombstone.FailedCount = failedCount
-		if cleanedCount > 0 || failedCount > 0 {
+		if itemsCount > 0 && cleanedCount == itemsCount && failedCount == 0 {
+			now := time.Now().UTC()
+			tombstone.Status = DeletionStatusCompleted
+			tombstone.CompletedAt = &now
+		} else if cleanedCount > 0 || failedCount > 0 {
 			tombstone.Status = DeletionStatusCleaning
 		}
 		c.tombstones[key] = tombstone
