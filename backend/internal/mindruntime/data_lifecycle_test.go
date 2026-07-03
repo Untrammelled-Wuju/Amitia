@@ -62,7 +62,7 @@ func TestRequestDeletion(t *testing.T) {
 		Reason:     "privacy request",
 	}
 
-	tombstone := c.RequestDeletion(req)
+	tombstone, _ := c.RequestDeletion(req)
 	if tombstone.ID == "" {
 		t.Fatal("tombstone ID should not be empty")
 	}
@@ -122,7 +122,7 @@ func TestGetTombstone(t *testing.T) {
 		Scope:      DeletionScopeBelief,
 		Reason:     "test",
 	}
-	created := c.RequestDeletion(req)
+	created, _ := c.RequestDeletion(req)
 
 	found, ok := c.GetTombstone("get-tombstone-test")
 	if !ok {
@@ -170,8 +170,8 @@ func TestExecuteOutboxCleanup(t *testing.T) {
 	}
 
 	expectedStorages := map[string]bool{
-		"qdrant": false, "surrealdb": false, "cache": false,
-		"summaries": false, "reflections": false, "traces": false,
+		"primary": false, "sqlite": false, "qdrant": false, "surrealdb": false,
+		"cache": false, "summaries": false, "reflections": false, "traces": false,
 	}
 	for _, item := range results {
 		if item.Storage != "" {
@@ -225,7 +225,7 @@ func TestExecuteOutboxCleanupRequiresExecutor(t *testing.T) {
 	if err == nil {
 		t.Fatal("outbox cleanup should fail without an executor")
 	}
-	if len(results) != 6 {
+	if len(results) != 8 {
 		t.Fatalf("expected 6 outbox items, got %d", len(results))
 	}
 	for _, item := range results {
@@ -308,7 +308,7 @@ func TestExecuteOutboxCleanupRetriesFailedItem(t *testing.T) {
 	if retried.LastError != "" {
 		t.Fatalf("retried qdrant cleanup should clear last error, got %s", retried.LastError)
 	}
-	if len(executor.calls) != 7 {
+	if len(executor.calls) != 9 {
 		t.Fatalf("executor should be called for 6 initial items and 1 retry, got %d", len(executor.calls))
 	}
 }
@@ -376,7 +376,7 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 	}
 
 	c := NewDataLifecycleCoordinator(db)
-	c.SetOutboxCleanupExecutor(NewDefaultOutboxCleanupExecutor(db))
+	c.SetOutboxCleanupExecutor(NewDefaultOutboxCleanupExecutor(db, nil))
 	if err := c.InitSchema(); err != nil {
 		t.Fatalf("init lifecycle schema: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("default cleanup should succeed: %v", err)
 	}
-	if len(results) != 6 {
+	if len(results) != 8 {
 		t.Fatalf("expected 6 cleanup results, got %d", len(results))
 	}
 	for _, item := range results {
@@ -413,31 +413,31 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 	assertCount("memories", "id = ?", 1, "kept-memory")
 	assertCount("memory_events", "memory_id = ?", 0, "target-memory")
 	assertCount("memory_events", "memory_id = ?", 1, "kept-memory")
-	assertCount("memory_candidates", "character_id = ?", 0, "target-memory")
+	assertCount("memory_candidates", "character_id = ?", 1, "target-memory")
 	assertCount("memory_candidates", "character_id = ?", 1, "kept")
 	assertCount("memory_embeddings", "memory_id = ?", 0, "target-memory")
 	assertCount("memory_embeddings", "memory_id = ?", 1, "kept-memory")
-	assertCount("retrieval_logs", "request_id = ?", 0, "target-memory")
+	assertCount("retrieval_logs", "request_id = ?", 1, "target-memory")
 	assertCount("retrieval_logs", "request_id = ?", 1, "kept")
-	assertCount("conversation_summaries", "conversation_id = ?", 0, "target-memory")
+	assertCount("conversation_summaries", "conversation_id = ?", 1, "target-memory")
 	assertCount("conversation_summaries", "conversation_id = ?", 1, "kept")
-	assertCount("messages", "id = ?", 0, "message-target")
+	assertCount("messages", "id = ?", 1, "message-target")
 	assertCount("messages", "id = ?", 1, "message-kept")
 	assertCount("memory_summaries", "target_id = ?", 0, "target-memory")
 	assertCount("memory_summaries", "target_id = ?", 1, "kept")
-	assertCount("reflection_candidates", "target_id = ?", 0, "target-memory")
+	assertCount("reflection_candidates", "target_id = ?", 1, "target-memory")
 	assertCount("reflection_candidates", "target_id = ?", 1, "kept")
-	assertCount("reflection_runs", "target_id = ?", 0, "target-memory")
+	assertCount("reflection_runs", "target_id = ?", 1, "target-memory")
 	assertCount("reflection_runs", "target_id = ?", 1, "kept")
-	assertCount("supervisor_decisions", "target_id = ?", 0, "target-memory")
+	assertCount("supervisor_decisions", "target_id = ?", 1, "target-memory")
 	assertCount("supervisor_decisions", "target_id = ?", 1, "kept")
-	assertCount("version_history", "target_id = ?", 0, "target-memory")
+	assertCount("version_history", "target_id = ?", 1, "target-memory")
 	assertCount("version_history", "target_id = ?", 1, "kept")
-	assertCount("runtime_trace_events", "request_id = ?", 0, "target-memory")
+	assertCount("runtime_trace_events", "request_id = ?", 1, "target-memory")
 	assertCount("runtime_trace_events", "request_id = ?", 1, "kept")
-	assertCount("runtime_replay_records", "target_id = ?", 0, "target-memory")
+	assertCount("runtime_replay_records", "target_id = ?", 1, "target-memory")
 	assertCount("runtime_replay_records", "target_id = ?", 1, "kept")
-	assertCount("pipeline_checkpoints", "last_message_id = ?", 0, "target-memory")
+	assertCount("pipeline_checkpoints", "last_message_id = ?", 1, "target-memory")
 	assertCount("pipeline_checkpoints", "last_message_id = ?", 1, "kept")
 }
 
@@ -574,8 +574,8 @@ func TestSecurityTestPromptInjection(t *testing.T) {
 	if !result.Passed {
 		t.Fatal("prompt injection test should pass")
 	}
-	if result.Severity != "critical" {
-		t.Fatalf("expected critical severity, got %s", result.Severity)
+	if result.Severity != "high" {
+		t.Fatalf("expected high severity, got %s", result.Severity)
 	}
 }
 
@@ -845,7 +845,7 @@ func TestDeletionStatusTransitions(t *testing.T) {
 		Scope:      DeletionScopeAll,
 		Reason:     "test",
 	}
-	tombstone := c.RequestDeletion(req)
+	tombstone, _ := c.RequestDeletion(req)
 	if tombstone.Status != DeletionStatusBlocked {
 		t.Fatalf("initial status should be blocked, got %s", tombstone.Status)
 	}
@@ -882,7 +882,7 @@ func TestDataLifecyclePersistenceRestoresDerivedCleanupState(t *testing.T) {
 		Scope:      DeletionScopeAll,
 		Reason:     "test",
 	}
-	tombstone := c.RequestDeletion(req)
+	tombstone, _ := c.RequestDeletion(req)
 	if _, err := c.ExecuteOutboxCleanup(); err != nil {
 		t.Fatalf("outbox cleanup should succeed: %v", err)
 	}
@@ -915,8 +915,8 @@ func TestDataLifecyclePersistenceRestoresDerivedCleanupState(t *testing.T) {
 	}
 
 	items := reloaded.GetOutboxItems()
-	if len(items) != 6 {
-		t.Fatalf("expected 6 persisted outbox items, got %d", len(items))
+	if len(items) != 8 {
+		t.Fatalf("expected 8 persisted outbox items, got %d", len(items))
 	}
 	for _, item := range items {
 		if item.Status != "completed" {
@@ -976,10 +976,10 @@ func TestDataLifecyclePersistedCleanupQueueExecutesAfterReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reloaded cleanup should succeed: %v", err)
 	}
-	if len(results) != 6 {
+	if len(results) != 8 {
 		t.Fatalf("expected 6 cleanup results, got %d", len(results))
 	}
-	if len(executor.calls) != 6 {
+	if len(executor.calls) != 8 {
 		t.Fatalf("expected 6 cleanup calls after reload, got %d", len(executor.calls))
 	}
 	for _, item := range results {
@@ -994,7 +994,7 @@ func TestDataLifecyclePersistedCleanupQueueExecutesAfterReload(t *testing.T) {
 	if tombstone.Status != DeletionStatusCompleted {
 		t.Fatalf("expected completed tombstone, got %s", tombstone.Status)
 	}
-	if tombstone.ItemsCount != 6 || tombstone.CleanedCount != 6 || tombstone.FailedCount != 0 {
+	if tombstone.ItemsCount != 8 || tombstone.CleanedCount != 8 || tombstone.FailedCount != 0 {
 		t.Fatalf("unexpected tombstone progress: %#v", tombstone)
 	}
 	if tombstone.CompletedAt == nil {

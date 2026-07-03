@@ -217,6 +217,9 @@ func (s *Step) ColumnExists(table, column string) (bool, error) {
 	if !safeIdentifier(table) || !safeIdentifier(column) {
 		return false, fmt.Errorf("unsafe table or column name: %s.%s", table, column)
 	}
+	if s.db == nil {
+		return false, nil
+	}
 	var rows []struct {
 		Name string `gorm:"column:name"`
 	}
@@ -234,6 +237,9 @@ func (s *Step) ColumnExists(table, column string) (bool, error) {
 func (s *Step) IndexExists(name string) (bool, error) {
 	if !safeIdentifier(name) {
 		return false, fmt.Errorf("unsafe index name: %s", name)
+	}
+	if s.db == nil {
+		return false, nil
 	}
 	var count int64
 	if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?", name).Scan(&count).Error; err != nil {

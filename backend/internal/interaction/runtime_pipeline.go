@@ -308,6 +308,9 @@ func (p *RuntimePipeline) runAppraisal(snapshot ContextSnapshot, scope Interacti
 	if p.appraisalEngine == nil {
 		return nil
 	}
+	if req.IsInternal {
+		return nil
+	}
 	a := p.appraisalEngine.Evaluate(appraisal.AppraisalInput{
 		EventType:         appraisalEventType(req.Message, path),
 		RelatesToGoal:     strings.Contains(req.Message, "目标") || strings.Contains(req.Message, "goal"),

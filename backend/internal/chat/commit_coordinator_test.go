@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
+	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/psyche"
 	"gorm.io/gorm"
 )
@@ -33,7 +35,10 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 		t.Fatal(err)
 	}
 	if withOutbox {
-		if err := interaction.NewSQLiteOutboxStore(db).InitSchema(); err != nil {
+		if err := db.AutoMigrate(&newoutbox.OutboxRecordModel{}, &newoutbox.DeadLetterRecordModel{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := delivery.NewSQLiteDeliveryStore(db).InitSchema(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -146,7 +151,7 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 		t.Fatalf("expected relationship familiarity to increase: %#v", relationData)
 	}
 	var outboxCount int64
-	if err := db.Model(&interaction.OutboxRecordModel{}).Where("aggregate_id = ?", "interaction-commit").Count(&outboxCount).Error; err != nil {
+	if err := db.Model(&newoutbox.OutboxRecordModel{}).Where("aggregate_id = ?", "interaction-commit").Count(&outboxCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if outboxCount != 3 {
@@ -305,7 +310,7 @@ func assertNoCommitSideEffects(t *testing.T, db *gorm.DB, convID string) {
 		t.Fatalf("relationship state was committed: %d", relationshipCount)
 	}
 	var outboxCount int64
-	if err := db.Model(&interaction.OutboxRecordModel{}).Where("aggregate_id = ?", "interaction-commit").Count(&outboxCount).Error; err != nil {
+	if err := db.Model(&newoutbox.OutboxRecordModel{}).Where("aggregate_id = ?", "interaction-commit").Count(&outboxCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if outboxCount != 0 {

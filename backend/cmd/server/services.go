@@ -34,6 +34,7 @@ import (
 
 type AppServices struct {
 	DeliveryStore   *delivery.SQLiteDeliveryStore
+	DeliveryWorker  *delivery.Worker
 	Graph           graph.Service
 	Memory          memory.Service
 	Profile         profile.Service
@@ -46,7 +47,6 @@ type AppServices struct {
 	DataLifecycle   *mindruntime.DataLifecycleCoordinator
 	RuntimeQueue    *queue.SQLiteRuntimeQueueStore
 	NewOutbox       *newoutbox.SQLiteOutboxStore
-	OutboxRuntime   *interaction.OutboxRuntime
 	OutboxWorker    *newoutbox.Worker
 	Reconciliation  *mindruntime.ReconciliationEngine
 	CircuitBreakers *mindruntime.CircuitBreakerRegistry
@@ -97,26 +97,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
-	outbox := interaction.NewSQLiteOutboxStore(ctx.DB)
-	deadStore := interaction.NewSQLiteDeadLetterStore(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
 		panic("failed to init interaction tracker schema: " + err.Error())
 	}
-	if err := outbox.InitSchema(); err != nil {
-		panic("failed to init outbox schema: " + err.Error())
-	}
-	if err := deadStore.InitSchema(); err != nil {
-		panic("failed to init dead letter schema: " + err.Error())
-	}
-	loggingOutboxPublisher := interaction.OutboxPublisherFunc(func(record interaction.OutboxRecord) error {
-		log.Info("interaction outbox event published id=", record.ID, " type=", record.EventType, " aggregate=", record.AggregateID)
-		return nil
-	})
-	outboxPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryServiceAdapter{memory: memSvc}, loggingOutboxPublisher)
-	outboxRuntime := interaction.NewOutboxRuntime(outbox, deadStore, outboxPublisher, interaction.OutboxWorkerConfig{})
 	newOutboxStore := newoutbox.NewSQLiteOutboxStore(ctx.DB, newoutbox.DefaultOutboxStoreConfig())
+	if err := ctx.DB.AutoMigrate(&newoutbox.OutboxRecordModel{}, &newoutbox.DeadLetterRecordModel{}); err != nil {
+		panic("failed to init outbox store schema: " + err.Error())
+	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
+	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
+		delivery.NewQQChannelAdapter("http://127.0.0.1:9877"),
+		delivery.NewWechatChannelAdapter("http://127.0.0.1:9876"),
+	}, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 
@@ -125,11 +118,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := runtimeQueue.InitSchema(); err != nil {
 		panic("failed to init runtime queue schema: " + err.Error())
 	}
-	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, newoutbox.PublisherFunc(func(record newoutbox.OutboxRecord) error {
-		log.Info("new outbox event dispatched", "id", record.ID, "type", record.EventType, "aggregate", record.AggregateID)
-		return nil
-	}), newoutbox.DefaultWorkerConfig())
-	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, outbox)
+
+	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
+
+	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
+	orch := interaction.NewOrchestrator(orchCfg, chatSvc.(interaction.MessageProcessor))
 	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
@@ -151,7 +144,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := dataLifecycle.InitSchema(); err != nil {
 		panic("failed to init data lifecycle schema: " + err.Error())
 	}
-	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB))
+	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB, graphSvc))
 	if coordinatorSetter, ok := interface{}(memSvc).(interface {
 		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
 	}); ok {
@@ -199,8 +192,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		DataLifecycle:   dataLifecycle,
 		RuntimeQueue:    runtimeQueue,
 		NewOutbox:       newOutboxStore,
-		OutboxRuntime:   outboxRuntime,
 		DeliveryStore:   deliveryStore,
+		DeliveryWorker:  deliveryWorker,
 		OutboxWorker:    newOutboxWorker,
 		Reconciliation:  reconciliationEngine,
 		CircuitBreakers: cbRegistry,

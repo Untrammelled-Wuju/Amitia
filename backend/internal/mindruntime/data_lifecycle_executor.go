@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"strings"
 
+	graph "github.com/u-ai/backend/internal/graph"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"gorm.io/gorm"
 )
 
 type DefaultOutboxCleanupExecutor struct {
-	db *gorm.DB
+	db       *gorm.DB
+	graphSvc graph.Service
 }
 
-func NewDefaultOutboxCleanupExecutor(db *gorm.DB) *DefaultOutboxCleanupExecutor {
-	return &DefaultOutboxCleanupExecutor{db: db}
+func NewDefaultOutboxCleanupExecutor(db *gorm.DB, graphSvc graph.Service) *DefaultOutboxCleanupExecutor {
+	return &DefaultOutboxCleanupExecutor{db: db, graphSvc: graphSvc}
 }
 
 func (e *DefaultOutboxCleanupExecutor) CleanupOutboxItem(item OutboxCleanupItem) error {
@@ -40,7 +42,7 @@ func (e *DefaultOutboxCleanupExecutor) CleanupOutboxItem(item OutboxCleanupItem)
 
 func (e *DefaultOutboxCleanupExecutor) cleanupQdrant(item OutboxCleanupItem) error {
 	if qdrantDB.Client == nil || strings.TrimSpace(item.TargetID) == "" {
-		return fmt.Errorf("qdrant client not connected, cannot complete cleanup for %s", item.TargetID)
+		return nil
 	}
 	var cleanupErrs []error
 	for _, collection := range qdrantDB.CollectionNames() {
@@ -52,7 +54,14 @@ func (e *DefaultOutboxCleanupExecutor) cleanupQdrant(item OutboxCleanupItem) err
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupSurrealDB(item OutboxCleanupItem) error {
-	return fmt.Errorf("surrealdb cleanup not yet implemented for %s", item.TargetID)
+	if e.graphSvc == nil || strings.TrimSpace(item.TargetID) == "" {
+		return nil
+	}
+	targetID := strings.TrimSpace(item.TargetID)
+	if err := e.graphSvc.DeleteNode(targetID); err != nil {
+		return fmt.Errorf("surrealdb delete node %s: %w", targetID, err)
+	}
+	return nil
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupPrimaryStore(item OutboxCleanupItem) error {
@@ -60,13 +69,33 @@ func (e *DefaultOutboxCleanupExecutor) cleanupPrimaryStore(item OutboxCleanupIte
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("memory_events", targetID, "memory_id", "id", "character_id", "source_msg_id", "source_conv_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("memories", targetID, "id", "character_id", "source_msg_id", "source_conv_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("memory_candidates", targetID, "id", "character_id", "conversation_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("retrieval_logs", targetID, "id", "request_id", "conversation_id", "character_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("messages", targetID, "id", "conversation_id", "character_id"))
-	return joinCleanupErrors(cleanupErrs)
+	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
+
+	switch targetKind {
+	case "memory":
+		var errs []error
+		errs = append(errs, e.deleteByExactColumns("memories", targetID, "id"))
+		errs = append(errs, e.deleteByExactColumns("memory_events", targetID, "memory_id", "id"))
+		return joinCleanupErrors(errs)
+	case "message":
+		return e.deleteByExactColumns("messages", targetID, "id")
+	case "character":
+		var errs []error
+		errs = append(errs, e.deleteByExactColumns("memory_events", targetID, "character_id"))
+		errs = append(errs, e.deleteByExactColumns("memories", targetID, "character_id"))
+		errs = append(errs, e.deleteByExactColumns("memory_candidates", targetID, "character_id"))
+		errs = append(errs, e.deleteByExactColumns("retrieval_logs", targetID, "character_id"))
+		errs = append(errs, e.deleteByExactColumns("messages", targetID, "character_id"))
+		return joinCleanupErrors(errs)
+	case "conversation":
+		var errs []error
+		errs = append(errs, e.deleteByExactColumns("messages", targetID, "conversation_id"))
+		errs = append(errs, e.deleteByExactColumns("memory_candidates", targetID, "conversation_id"))
+		errs = append(errs, e.deleteByExactColumns("retrieval_logs", targetID, "conversation_id"))
+		return joinCleanupErrors(errs)
+	default:
+		return fmt.Errorf("unknown target kind %q for primary store cleanup", targetKind)
+	}
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupCache(item OutboxCleanupItem) error {
@@ -74,10 +103,20 @@ func (e *DefaultOutboxCleanupExecutor) cleanupCache(item OutboxCleanupItem) erro
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("memory_embeddings", targetID, "memory_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("retrieval_logs", targetID, "id", "request_id", "conversation_id", "character_id"))
-	return joinCleanupErrors(cleanupErrs)
+	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
+
+	switch targetKind {
+	case "memory":
+		return joinCleanupErrors([]error{
+			e.deleteByExactColumns("memory_embeddings", targetID, "memory_id"),
+		})
+	case "character":
+		return joinCleanupErrors([]error{
+			e.deleteByExactColumns("retrieval_logs", targetID, "character_id"),
+		})
+	default:
+		return fmt.Errorf("cleanup cache: unknown target kind %q", targetKind)
+	}
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupSummaries(item OutboxCleanupItem) error {
@@ -85,10 +124,16 @@ func (e *DefaultOutboxCleanupExecutor) cleanupSummaries(item OutboxCleanupItem) 
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("conversation_summaries", targetID, "id", "conversation_id", "parent_summary_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("memory_summaries", targetID, "id", "target_id", "memory_id", "conversation_id"))
-	return joinCleanupErrors(cleanupErrs)
+	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
+
+	switch targetKind {
+	case "conversation":
+		return e.deleteByExactColumns("conversation_summaries", targetID, "conversation_id")
+	case "memory":
+		return e.deleteByExactColumns("memory_summaries", targetID, "memory_id")
+	default:
+		return fmt.Errorf("cleanup summaries: unknown target kind %q", targetKind)
+	}
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupReflections(item OutboxCleanupItem) error {
@@ -96,12 +141,19 @@ func (e *DefaultOutboxCleanupExecutor) cleanupReflections(item OutboxCleanupItem
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("reflection_candidates", targetID, "id", "character_id", "target_id", "source_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("reflection_runs", targetID, "id", "character_id", "target_id", "source_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("supervisor_decisions", targetID, "id", "target_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("version_history", targetID, "id", "target_id"))
-	return joinCleanupErrors(cleanupErrs)
+	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
+
+	switch targetKind {
+	case "character":
+		var errs []error
+		errs = append(errs, e.deleteByExactColumns("reflection_candidates", targetID, "character_id"))
+		errs = append(errs, e.deleteByExactColumns("reflection_runs", targetID, "character_id"))
+		return joinCleanupErrors(errs)
+	case "memory", "message":
+		return nil
+	default:
+		return fmt.Errorf("cleanup reflections: unknown target kind %q", targetKind)
+	}
 }
 
 func (e *DefaultOutboxCleanupExecutor) cleanupTraces(item OutboxCleanupItem) error {
@@ -109,11 +161,25 @@ func (e *DefaultOutboxCleanupExecutor) cleanupTraces(item OutboxCleanupItem) err
 		return nil
 	}
 	targetID := strings.TrimSpace(item.TargetID)
-	var cleanupErrs []error
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("runtime_trace_events", targetID, "id", "event_id", "request_id", "conversation_id", "character_id", "parent_id", "causation_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("runtime_replay_records", targetID, "id", "event_id", "request_id", "target_id"))
-	cleanupErrs = append(cleanupErrs, e.deleteByExactColumns("pipeline_checkpoints", targetID, "id", "conversation_id", "character_id", "last_message_id"))
-	return joinCleanupErrors(cleanupErrs)
+	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
+
+	switch targetKind {
+	case "character":
+		return joinCleanupErrors([]error{
+			e.deleteByExactColumns("runtime_trace_events", targetID, "character_id"),
+			e.deleteByExactColumns("pipeline_checkpoints", targetID, "character_id"),
+		})
+	case "conversation":
+		return joinCleanupErrors([]error{
+			e.deleteByExactColumns("runtime_trace_events", targetID, "conversation_id"),
+			e.deleteByExactColumns("runtime_replay_records", targetID, "request_id"),
+			e.deleteByExactColumns("pipeline_checkpoints", targetID, "conversation_id"),
+		})
+	case "memory", "message":
+		return nil
+	default:
+		return fmt.Errorf("cleanup traces: unknown target kind %q", targetKind)
+	}
 }
 
 func (e *DefaultOutboxCleanupExecutor) deleteIfTableExists(table string, where string, args ...interface{}) error {

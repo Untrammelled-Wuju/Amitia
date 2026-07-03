@@ -31,10 +31,17 @@ func tombstoneTargetsFromMemorySearch(coordinator *mindruntime.DataLifecycleCoor
 	if coordinator == nil {
 		return nil
 	}
+	blocked := make(map[string]bool)
 	if coordinator.IsRetrievalBlocked(characterID) {
-		return map[string]bool{characterID: true}
+		blocked[characterID] = true
 	}
-	return nil
+	for _, id := range coordinator.BlockedEntityIDsByType("memory") {
+		blocked[id] = true
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+	return blocked
 }
 
 func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {

@@ -27,7 +27,11 @@ func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 		return
 	}
-	tombstone := h.dataLifecycle.RequestDeletion(req)
+	tombstone, err := h.dataLifecycle.RequestDeletion(req)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "deletion request failed", err.Error())
+		return
+	}
 	util.SuccessResponse(c, tombstone)
 }
 

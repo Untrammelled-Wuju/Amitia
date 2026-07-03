@@ -1,6 +1,8 @@
 package delivery
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -20,6 +22,10 @@ type DeliveryIntentModel struct {
 	RetryCount    int    `gorm:"column:retry_count"`
 	MaxRetries    int    `gorm:"column:max_retries"`
 	LastError     string `gorm:"column:last_error"`
+	LeaseOwner    string `gorm:"column:lease_owner"`
+	LeaseToken    string `gorm:"column:lease_token"`
+	LeaseUntil    string `gorm:"column:lease_until"`
+	NextRetry     string `gorm:"column:next_retry"`
 }
 
 func (DeliveryIntentModel) TableName() string {
@@ -174,6 +180,123 @@ func (s *SQLiteDeliveryStore) RenewLease(id string, newExpiry time.Time) error {
 		return errors.New("lease not found or not active")
 	}
 	return nil
+}
+
+func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent, error) {
+	now := time.Now().UTC()
+	leasedUntil := now.Add(60 * time.Second).Format("2006-01-02 15:04:05")
+	nowStr := now.Format("2006-01-02 15:04:05")
+	owner := "delivery-worker"
+	token := generateDeliveryLeaseToken()
+
+	var models []DeliveryIntentModel
+	err := s.db.Where("status IN ? AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
+		[]string{string(DeliveryStatusPending), string(DeliveryStatusRetry)}, nowStr).
+		Order("created_at ASC").Limit(batchSize).Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+
+	intents := make([]DeliveryIntent, 0, len(models))
+	for _, m := range models {
+		res := s.db.Model(&DeliveryIntentModel{}).Where("id = ? AND status IN ? AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
+			m.ID, []string{string(DeliveryStatusPending), string(DeliveryStatusRetry)}, nowStr).
+			Updates(map[string]interface{}{
+				"status":      string(DeliveryStatusLeased),
+				"lease_owner": owner,
+				"lease_token": token,
+				"lease_until": leasedUntil,
+			})
+		if res.Error != nil || res.RowsAffected != 1 {
+			continue
+		}
+		intent := modelToIntent(&m)
+		intent.Status = DeliveryStatusLeased
+		intents = append(intents, *intent)
+	}
+	return intents, nil
+}
+
+func (s *SQLiteDeliveryStore) MarkSent(id string) error {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	res := s.db.Model(&DeliveryIntentModel{}).
+		Where("id = ? AND status = ? AND lease_until > ?",
+			id, string(DeliveryStatusLeased), now).
+		Updates(map[string]interface{}{
+			"status":       string(DeliveryStatusSent),
+			"delivered_at": now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
+}
+
+func (s *SQLiteDeliveryStore) MarkDelivered(id string) error {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	res := s.db.Model(&DeliveryIntentModel{}).
+		Where("id = ? AND status IN ? AND lease_until > ?",
+			id, []string{string(DeliveryStatusLeased), string(DeliveryStatusSent)}, now).
+		Updates(map[string]interface{}{
+			"status":       string(DeliveryStatusDelivered),
+			"delivered_at": now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
+}
+
+func (s *SQLiteDeliveryStore) MarkFailed(id, errMsg string) error {
+	now := time.Now().UTC()
+	nowStr := now.Format("2006-01-02 15:04:05")
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var m DeliveryIntentModel
+		if err := tx.Where("id = ? AND status = ? AND lease_until > ?",
+			id, string(DeliveryStatusLeased), nowStr).Take(&m).Error; err != nil {
+			return errors.New("lease conflict or expired")
+		}
+		newCount := m.RetryCount + 1
+		newStatus := DeliveryStatusRetry
+		if newCount >= m.MaxRetries {
+			newStatus = DeliveryStatusFailed
+		}
+		nextRetry := now.Add(time.Duration(newCount) * 2 * time.Second).Format("2006-01-02 15:04:05")
+		res := tx.Model(&DeliveryIntentModel{}).
+			Where("id = ? AND status = ?", id, string(DeliveryStatusLeased)).
+			Updates(map[string]interface{}{
+				"status":      string(newStatus),
+				"retry_count": newCount,
+				"next_retry":  nextRetry,
+				"last_error":  errMsg,
+				"lease_owner": "",
+				"lease_token": "",
+				"lease_until": "",
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		return nil
+	})
+}
+
+func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	res := s.db.Model(&DeliveryIntentModel{}).
+		Where("status = ? AND lease_until != '' AND lease_until <= ?", string(DeliveryStatusLeased), now).
+		Updates(map[string]interface{}{
+			"status":      string(DeliveryStatusPending),
+			"lease_owner": "",
+			"lease_token": "",
+			"lease_until": "",
+		})
+	return res.RowsAffected, res.Error
+}
+
+func generateDeliveryLeaseToken() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func modelToIntent(m *DeliveryIntentModel) *DeliveryIntent {

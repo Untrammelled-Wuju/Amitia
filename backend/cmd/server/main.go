@@ -158,10 +158,10 @@ func main() {
 	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
 	defer services.UnifiedEntry.SetOrchestratorReady(false)
-	services.OutboxRuntime.Start(rootCtx)
-	defer services.OutboxRuntime.Stop()
 	services.OutboxWorker.Start(rootCtx)
 	defer services.OutboxWorker.Stop()
+	services.DeliveryWorker.Start(rootCtx)
+	defer services.DeliveryWorker.Stop()
 	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true

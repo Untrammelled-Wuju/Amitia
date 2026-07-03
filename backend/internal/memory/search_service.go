@@ -35,7 +35,7 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	}
 	filtered := make([]Memory, 0, min(limit, len(items)))
 	for _, m := range items {
-		if tombstoneBlocked != nil && tombstoneBlocked[m.CharacterID] {
+		if tombstoneBlocked != nil && (tombstoneBlocked[m.CharacterID] || tombstoneBlocked[m.ID]) {
 			continue
 		}
 		if !memoryAllowedBySQLiteAuthority(m, policy) {
@@ -57,6 +57,17 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 		return nil, fmt.Errorf("数据已标记删除")
 	}
 	queryText := req.Query
+
+	var blockedMemoryIDs map[string]bool
+	if s.dataLifecycleCoordinator != nil {
+		memoryBlockedIDs := s.dataLifecycleCoordinator.BlockedEntityIDsByType("memory")
+		if len(memoryBlockedIDs) > 0 {
+			blockedMemoryIDs = make(map[string]bool, len(memoryBlockedIDs))
+			for _, id := range memoryBlockedIDs {
+				blockedMemoryIDs[id] = true
+			}
+		}
+	}
 	if queryText == "" {
 		queryText = req.Keyword
 	}
@@ -117,6 +128,9 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 		if !memoryAllowedBySQLiteAuthority(*m, policy) {
 			continue
 		}
+		if blockedMemoryIDs != nil && blockedMemoryIDs[memID] {
+			continue
+		}
 		seen[memID] = true
 		vsResults = append(vsResults, VectorSearchResult{
 			Memory:         *m,
@@ -150,6 +164,17 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 	if queryText == "" {
 		return nil, fmt.Errorf("缺少查询文本")
 	}
+	var blockedMemoryIDs map[string]bool
+	if s.dataLifecycleCoordinator != nil {
+		memoryBlockedIDs := s.dataLifecycleCoordinator.BlockedEntityIDsByType("memory")
+		if len(memoryBlockedIDs) > 0 {
+			blockedMemoryIDs = make(map[string]bool, len(memoryBlockedIDs))
+			for _, id := range memoryBlockedIDs {
+				blockedMemoryIDs[id] = true
+			}
+		}
+	}
+
 
 	vectorFetchLimit := limit * 2
 	if vectorFetchLimit < 20 {
@@ -199,6 +224,9 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 	}
 	for _, m := range keywordResults {
 		if !memoryAllowedBySQLiteAuthority(m, policy) {
+			continue
+		}
+		if blockedMemoryIDs != nil && blockedMemoryIDs[m.ID] {
 			continue
 		}
 		item, exists := merged[m.ID]

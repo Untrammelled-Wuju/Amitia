@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -254,19 +253,5 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(result.ConversationID, result.Reply)
 	}
-	s.persistPostProcessingIntent(result)
 	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.PipelineMessages, result.Reply)
-}
-
-func (s *service) persistPostProcessingIntent(result *ComputeResult) {
-	if s.outboxStore == nil {
-		return
-	}
-	payload, _ := json.Marshal(map[string]interface{}{
-		"conversation_id": result.ConversationID,
-		"character_id":    result.CharacterID,
-		"source":          result.Source,
-		"reply":           result.Reply,
-	})
-	s.outboxStore.AppendOutbox(result.ConversationID, "chat.post_process", payload)
 }

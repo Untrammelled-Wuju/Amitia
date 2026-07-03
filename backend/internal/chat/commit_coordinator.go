@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
+	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/psyche"
 	"gorm.io/gorm"
 )
@@ -64,7 +65,7 @@ type messageCommitResult struct {
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.acquireAndValidateCommitTokenTx(tx, plan); err != nil {
+		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 			return err
 		}
 		for _, text := range plan.Lines {
@@ -87,8 +88,10 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		}
 		if shouldCommitRuntime(plan.Request) {
 			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
-				if err := s.applyAppraisalResultTx(tx, plan); err != nil {
-					return err
+				if !plan.Request.IsInternal {
+					if err := s.applyAppraisalResultTx(tx, plan); err != nil {
+						return err
+					}
 				}
 			}
 			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
@@ -109,7 +112,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 	return result, nil
 }
 
-func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan messageCommitPlan) error {
+func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan *messageCommitPlan) error {
 	if !shouldCommitRuntime(plan.Request) {
 		return nil
 	}
@@ -373,29 +376,33 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 		}, now),
 	}
 	for _, event := range events {
-		model := interaction.OutboxRecordModel{
-			ID:          event.ID,
-			AggregateID: event.AggregateID,
-			EventType:   event.EventType,
-			Payload:     string(event.Payload),
-			Status:      string(event.Status),
-			RetryCount:  event.RetryCount,
-			MaxRetries:  event.MaxRetries,
-			NextRetryAt: event.NextRetryAt,
-			LastError:   event.LastError,
-			CreatedAt:   event.CreatedAt,
+		model := newoutbox.OutboxRecordModel{
+			ID:             event.ID,
+			AggregateID:    event.AggregateID,
+			EventType:      event.EventType,
+			Payload:        string(event.Payload),
+			Status:         string(newoutbox.OutboxStatusPending),
+			MaxRetries:     newoutbox.DefaultMaxRetries,
+			NextRetryAt:    now.Format("2006-01-02 15:04:05"),
+			AvailableAt:    now.Format("2006-01-02 15:04:05"),
+			CreatedAt:      now.Format("2006-01-02 15:04:05"),
+			UpdatedAt:      now.Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(&model).Error; err != nil {
 			return nil, nil, err
 		}
 	}
 	if plan.Runtime != nil && plan.Runtime.Delivery.Channel != "" {
-		deliveryIntentIDs = createDeliveryIntentsInTx(tx, plan, messageIDs, now)
+		var diErr error
+		deliveryIntentIDs, diErr = createDeliveryIntentsInTx(tx, plan, messageIDs, now)
+		if diErr != nil {
+			return nil, nil, diErr
+		}
 	}
 	return events, deliveryIntentIDs, nil
 }
 
-func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) []string {
+func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) ([]string, error) {
 	ids := []string{}
 	channel := plan.Runtime.Delivery.Channel
 	peerID := ""
@@ -412,11 +419,17 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs [
 			"characterId":    plan.Character,
 			"content":        plan.Reply,
 		})
-		tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			stableID, plan.Request.InteractionID, channel, peerID, "text", string(payload), "pending", now.Format("2006-01-02 15:04:05"), 5)
+		if result.Error != nil {
+			return ids, result.Error
+		}
+		if result.RowsAffected != 1 {
+			continue
+		}
 		ids = append(ids, stableID)
 	}
-	return ids
+	return ids, nil
 }
 
 func newInteractionOutboxRecord(aggregateID, eventType string, payload map[string]interface{}, now time.Time) interaction.OutboxRecord {

@@ -69,12 +69,12 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 		return
 	}
 	if s.pipeline != nil {
-		s.appendPostProcessOutbox(convID, "chat.pipeline", map[string]interface{}{"conv_id": convID, "reply": reply})
+		go s.pipeline.Execute(context.Background(), convID, pipelineMessages, reply)
 	}
-	s.appendPostProcessOutbox(convID, "chat.trim_context", map[string]interface{}{"conv_id": convID})
-	s.appendPostProcessOutbox(convID, "chat.mood_recovery", map[string]interface{}{"conv_id": convID, "char_id": charID, "source": source})
+	go s.trimContextWindow(context.Background(), convID)
+	go s.moodRecoveryCheck(context.Background(), convID, charID, source)
 	if s.compressor != nil {
-		s.appendPostProcessOutbox(convID, "chat.compress", map[string]interface{}{"conv_id": convID})
+		go s.compressor.MaybeCompress(context.Background(), convID)
 	}
 }
 
