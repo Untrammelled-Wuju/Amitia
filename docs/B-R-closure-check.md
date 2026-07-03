@@ -1,51 +1,59 @@
 # B-01 ~ B-20 Bug修复与关闭条件验证
 
-| 编号 | Bug描述 | 关闭条件 | 验证方式 | 状态 |
-|------|---------|----------|----------|------|
-| B-01 | 情绪值positive/negative越界 | emotion_range检查通过 | healthCheckAffect | CLOSED |
-| B-02 | 情绪arousal/dominance越界 | emotion_range检查通过 | healthCheckAffect | CLOSED |
-| B-03 | 心境valence越界[-1,1] | mood_range检查通过 | healthCheckAffect | CLOSED |
-| B-04 | 心境tension越界[0,1] | mood_range检查通过 | healthCheckAffect | CLOSED |
-| B-05 | 压力值越界[0,1] | stress_level检查通过 | healthCheckAffect | CLOSED |
-| B-06 | 信念置信度越界[0,1] | confidence_range检查通过 | healthCheckBelief | CLOSED |
-| B-07 | 冲突消解公式缺失 | conflict_resolution检查通过 | healthCheckBelief | CLOSED |
-| B-08 | 过期候选项未排除 | expiry_handling检查通过 | healthCheckBelief | CLOSED |
-| B-09 | 状态版本号倒退 | version_ordering检查通过 | healthCheckSnapshot | CLOSED |
-| B-10 | 快照引用完整性缺失 | reference_integrity检查通过 | healthCheckSnapshot | CLOSED |
-| B-11 | 追踪帧排序错乱 | trace_ordering检查通过 | healthCheckSnapshot | CLOSED |
-| B-12 | 人格配置解析失败 | config_resolution检查通过 | healthCheckPsyche | CLOSED |
-| B-13 | 运行时状态值越界 | runtime_state检查通过 | healthCheckPsyche | CLOSED |
-| B-14 | 调制计算不可用 | modulation_available检查通过 | healthCheckPsyche | CLOSED |
-| B-15 | 关系亲密度越界[-1,1] | intimacy_range检查通过 | healthCheckRelationship | CLOSED |
-| B-16 | 信任度越界[-1,1] | trust_range检查通过 | healthCheckRelationship | CLOSED |
-| B-17 | 未解决事件积压 | unresolved_events检查通过 | healthCheckRelationship | CLOSED |
-| B-18 | 断路器不自动重置 | TestCircuitBreakerTripAndReset通过 | go test | CLOSED |
-| B-19 | 预算泄漏 | TestBudgetReset通过 | go test | CLOSED |
-| B-20 | Outbox租约丢失 | TestOutboxLeaseReturnDrill通过 | go test | CLOSED |
+> **V9审计反证 - 历史关闭记录失效：** 以下全部CLOSED状态已于2026-07-03审计V9.0发现反证后标记为失效(HISTORICAL_INVALID)。
+> 失效原因：V9审计确认83项问题中对应原B/R编号的问题实际未修复或只有模拟/单元测试覆盖，缺乏生产链路接线。
+> 原关闭证据基于旧代码基线(02dd1d79之前)，未绑定统一InteractionRun、Commit和Outbox链路。
+> 修复步骤参照：Amitia-develop_6_168步V3.1审计问题详细修复实施文档_V2.1.md R02。
+> 
+> 状态重新定义为：OPEN | IN_PROGRESS | CODE_DONE | TESTED | ACCEPTED | REOPENED
+> 关闭证据必须包含：提交、文件、迁移、命令、结果、回滚和残余风险。
 
-# R-01 ~ R-20 风险缓解与关闭条件验证
+## B-01 ~ B-20 缺陷状态（V9审计后重新评估）
 
-| 编号 | 风险描述 | 缓解措施 | 验证方式 | 状态 |
-|------|---------|----------|----------|------|
-| R-01 | 情绪劫持攻击 | detectEmotionalManipulation | TestSecurityTestEmotionalHijacking | CLOSED |
-| R-02 | 排他依赖崩溃 | 依赖链fallback检查 | TestSecurityTestExclusiveDependency | CLOSED |
-| R-03 | 提示注入绕过 | detectPromptInjection | TestSecurityTestPromptInjection | CLOSED |
-| R-04 | 数据泄漏 | 5向量扫描 | TestSecurityTestDataLeakage | CLOSED |
-| R-05 | 删除后召回 | 4路径阻断验证 | TestSecurityTestPostDeletionRecall | CLOSED |
-| R-06 | 并发删除竞态 | mutex保护 | TestMultipleConcurrentDeletionRequests | CLOSED |
-| R-07 | 删除范围失控 | 5种scope枚举 | TestDeletionScopes | CLOSED |
-| R-08 | 状态转换异常 | 状态机验证 | TestDeletionStatusTransitions | CLOSED |
-| R-09 | 大小写绕过检索阻断 | normalizeTargetID | TestIsRetrievalBlockedCaseInsensitive | CLOSED |
-| R-10 | Outbox清理遗漏 | 6存储全量覆盖 | TestExecuteOutboxCleanup | CLOSED |
-| R-11 | 重算任务遗漏 | 3zone覆盖 | TestGenerateRecalculationTasksAllScope | CLOSED |
-| R-12 | Tombstone未清理 | MarkDeletionComplete | TestMarkDeletionComplete | CLOSED |
-| R-13 | 统计信息不准确 | Stats方法 | TestCoordinatorStats | CLOSED |
-| R-14 | Reset不彻底 | Reset方法 | TestCoordinatorReset | CLOSED |
-| R-15 | Outbox查询不安全 | 副本返回 | TestGetOutboxItems | CLOSED |
-| R-16 | 重算任务查询不安全 | 副本返回 | TestGetRecalculationTasks | CLOSED |
-| R-17 | 误报风险 | detectEmotionalManipulation | TestDetectEmotionalManipulation | CLOSED |
-| R-18 | 注入检测遗漏 | detectPromptInjection | TestDetectPromptInjection | CLOSED |
-| R-19 | Tombstone查找失败 | 大小写不敏感 | TestGetTombstone | CLOSED |
-| R-20 | 全量安全测试不完整 | 5项测试枚举 | TestRunAllSecurityTests | CLOSED |
+| 编号 | 原状态 | V9审计状态 | V9关联 | 主修步骤 | Bug描述 |
+|------|--------|-----------|--------|----------|---------|
+| B-01 | HISTORICAL_INVALID | OPEN | P0-01,P0-02 | R07,R09 | 上下文重复/消息注入 |
+| B-02 | HISTORICAL_INVALID | OPEN | P0-04 | R17 | 角色配置不完整 |
+| B-03 | HISTORICAL_INVALID | OPEN | P0-03 | R20 | 心理表不存在 |
+| B-04 | HISTORICAL_INVALID | OPEN | P0-01 | R06,R12 | 空闲时间scope错误 |
+| B-05 | HISTORICAL_INVALID | OPEN | P1-34 | R18 | 用户画像scope |
+| B-06 | HISTORICAL_INVALID | OPEN | P1-26 | R16,R38 | 记忆生成缺character_id |
+| B-07 | HISTORICAL_INVALID | OPEN | P1-25 | R16 | 全量读取无检查点 |
+| B-08 | HISTORICAL_INVALID | OPEN | P1-10 | R12,R37 | 主动消息scope |
+| B-09 | HISTORICAL_INVALID | OPEN | P0-05 | R36,R37 | 主动消息未接入Runtime |
+| B-10 | HISTORICAL_INVALID | OPEN | P0-01 | R06,R07 | 包级可变变量 |
+| B-11 | HISTORICAL_INVALID | OPEN | P0-01 | R06,R07 | 包级forceVoiceFlag |
+| B-12 | HISTORICAL_INVALID | OPEN | P1-33 | R15 | 服务容器重复实例 |
+| B-13 | HISTORICAL_INVALID | OPEN | P1-33 | R15 | 情景详情UUID查询 |
+| B-14 | HISTORICAL_INVALID | OPEN | P1-06 | R29,R31 | 记忆字段丢弃 |
+| B-15 | HISTORICAL_INVALID | OPEN | P2-14 | R03 | retrieval_log字段错误 |
+| B-16 | HISTORICAL_INVALID | OPEN | P0-03 | R20 | 生活状态源错误 |
+| B-17 | HISTORICAL_INVALID | OPEN | P0-07 | R16,R38 | RandomBurst无scope过滤 |
+| B-18 | HISTORICAL_INVALID | OPEN | P1-24 | R32,R39 | 主动消息存Prompt非内容 |
+| B-19 | HISTORICAL_INVALID | OPEN | P2-14 | R03 | 前端两套PersonalityConfig |
+| B-20 | HISTORICAL_INVALID | OPEN | P1-34 | R18 | 画像重复事实膨胀 |
 
-全部40项 (B-01~B-20 + R-01~R-20) 均已 CLOSED。
+## R-01 ~ R-20 风险状态（V9审计后重新评估）
+
+| 编号 | 原状态 | V9审计状态 | V9关联 | 主修步骤 | 风险描述 |
+|------|--------|-----------|--------|----------|---------|
+| R-01 | HISTORICAL_INVALID | OPEN | P1-31 | R26 | 情绪劫持攻击 |
+| R-02 | HISTORICAL_INVALID | OPEN | P1-37 | R29,R53 | 排他依赖崩溃 |
+| R-03 | HISTORICAL_INVALID | OPEN | P1-24 | R32 | 跨渠道消息重复 |
+| R-04 | HISTORICAL_INVALID | OPEN | P2-20 | R04,R57 | 调试追溯困难 |
+| R-05 | HISTORICAL_INVALID | OPEN | P1-35 | R10,R47 | 迁移旧数据不可读 |
+| R-06 | HISTORICAL_INVALID | OPEN | P0-01 | R06,R08 | 并发状态版本混乱 |
+| R-07 | HISTORICAL_INVALID | OPEN | P1-32 | R25 | 心理状态Prompt超长 |
+| R-08 | HISTORICAL_INVALID | OPEN | P1-37 | R29,R53 | LLM熔断降级 |
+| R-09 | HISTORICAL_INVALID | OPEN | P1-20 | R37 | 主动消息频率过高 |
+| R-10 | HISTORICAL_INVALID | OPEN | P1-06 | R29,R31 | 工具结果误作事实 |
+| R-11 | HISTORICAL_INVALID | OPEN | P1-31 | R26 | 人格参数越界 |
+| R-12 | HISTORICAL_INVALID | OPEN | P0-07 | R42,R44 | 删除未传播 |
+| R-13 | HISTORICAL_INVALID | OPEN | P1-34 | R18 | 反思修改信念 |
+| R-14 | HISTORICAL_INVALID | OPEN | P1-28 | R40 | 语音打断丢上下文 |
+| R-15 | HISTORICAL_INVALID | OPEN | P1-10 | R12,R13 | 队列积压延迟 |
+| R-16 | HISTORICAL_INVALID | OPEN | P1-33 | R15 | 缓存过时数据 |
+| R-17 | HISTORICAL_INVALID | OPEN | P1-29 | R13,R52 | 优雅关闭丢交互 |
+| R-18 | HISTORICAL_INVALID | OPEN | P0-01 | R06 | scope错位 |
+| R-19 | HISTORICAL_INVALID | OPEN | P1-36 | R20,R22 | 心理状态漂移 |
+| R-20 | HISTORICAL_INVALID | OPEN | P1-29 | R13 | Deadline不足 |

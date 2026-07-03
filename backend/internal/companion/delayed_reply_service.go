@@ -4,6 +4,8 @@ package companion
 
 import (
 	"fmt"
+
+	"github.com/google/uuid"
 	"math/rand"
 	"time"
 
@@ -100,7 +102,7 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				channel = "web"
 			}
 
-			msgID := fmt.Sprintf("reply-%d", now.UnixNano())
+			msgID := fmt.Sprintf("reply-%s", uuid.New().String())
 			displayContent := "💬 " + content
 			err := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'delayed_reply', 'normal', 'sent', 1, ?)",
 				msgID, convID, displayContent, nowStr).Error

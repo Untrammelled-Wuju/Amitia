@@ -6,6 +6,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/google/uuid"
 	"strings"
 	"time"
 )
@@ -103,7 +105,7 @@ func createSchedule(callCtx context.Context, execCtx ToolExecutionContext, args 
 	title = strings.TrimSpace(title)
 	desc = strings.TrimSpace(desc)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	id := fmt.Sprintf("sched-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("sched-%s", uuid.New().String())
 	_, err := toolDB.Exec(
 		"INSERT INTO schedules (id, title, description, due_time, repeat_mode, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
 		id, title, desc, dueTime, repeat, channel, now, now,

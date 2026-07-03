@@ -32,6 +32,15 @@ type InteractionRecordModel struct {
 	ResultRef         string    `gorm:"column:result_ref"`
 	CommitID          string    `gorm:"column:commit_id"`
 	ExecutorID        string    `gorm:"column:executor_id;index"`
+	OwnerInstanceID   string    `gorm:"column:owner_instance_id"`
+	HeartbeatAt       time.Time `gorm:"column:heartbeat_at"`
+	CommitToken       string    `gorm:"column:commit_token"`
+	CommitOwner       string    `gorm:"column:commit_owner"`
+	CommitAcquiredAt  time.Time `gorm:"column:commit_acquired_at"`
+	ResultMessageIDs  string    `gorm:"column:result_message_ids"`
+	DeliveryIntentIDs string    `gorm:"column:delivery_intent_ids"`
+	CorrelationID     string    `gorm:"column:correlation_id"`
+	CausationID       string    `gorm:"column:causation_id"`
 	DeadlineAt        time.Time `gorm:"column:deadline_at"`
 	CancelRequestedAt time.Time `gorm:"column:cancel_requested_at"`
 	CreatedAt         time.Time `gorm:"column:created_at;index"`
@@ -58,7 +67,10 @@ func (t *SQLiteInteractionTracker) InitSchema() error {
 	if err := t.db.AutoMigrate(&InteractionRecordModel{}); err != nil {
 		return err
 	}
-	return t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(user_id, request_id) WHERE request_id <> ''").Error
+	if err := t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(user_id, request_id) WHERE request_id <> ''").Error; err != nil {
+		return err
+	}
+	return t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_conv_request_unique ON interaction_records(conversation_id, request_id) WHERE request_id <> ''").Error
 }
 
 func (t *SQLiteInteractionTracker) Create(ctx context.Context, record *InteractionRecord) error {
@@ -168,6 +180,27 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 	}
 	if update.ExecutorID != nil {
 		updates["executor_id"] = *update.ExecutorID
+	}
+	if update.OwnerInstanceID != nil {
+		updates["owner_instance_id"] = *update.OwnerInstanceID
+	}
+	if update.CommitToken != nil {
+		updates["commit_token"] = *update.CommitToken
+	}
+	if update.CommitOwner != nil {
+		updates["commit_owner"] = *update.CommitOwner
+	}
+	if update.ResultMessageIDs != nil {
+		updates["result_message_ids"] = *update.ResultMessageIDs
+	}
+	if update.DeliveryIntentIDs != nil {
+		updates["delivery_intent_ids"] = *update.DeliveryIntentIDs
+	}
+	if update.CorrelationID != nil {
+		updates["correlation_id"] = *update.CorrelationID
+	}
+	if update.CausationID != nil {
+		updates["causation_id"] = *update.CausationID
 	}
 	if update.DeadlineAt != nil {
 		updates["deadline_at"] = *update.DeadlineAt
@@ -416,6 +449,15 @@ func recordToModel(r *InteractionRecord) InteractionRecordModel {
 		ResultRef:         r.ResultRef,
 		CommitID:          r.CommitID,
 		ExecutorID:        r.ExecutorID,
+		OwnerInstanceID:   r.OwnerInstanceID,
+		HeartbeatAt:       r.HeartbeatAt,
+		CommitToken:       r.CommitToken,
+		CommitOwner:       r.CommitOwner,
+		CommitAcquiredAt:  r.CommitAcquiredAt,
+		ResultMessageIDs:  r.ResultMessageIDs,
+		DeliveryIntentIDs: r.DeliveryIntentIDs,
+		CorrelationID:     r.CorrelationID,
+		CausationID:       r.CausationID,
 		DeadlineAt:        r.DeadlineAt,
 		CancelRequestedAt: r.CancelRequestedAt,
 		CreatedAt:         r.CreatedAt,
@@ -451,6 +493,15 @@ func modelToInteractionRecord(m InteractionRecordModel) *InteractionRecord {
 		ResultRef:         m.ResultRef,
 		CommitID:          m.CommitID,
 		ExecutorID:        m.ExecutorID,
+		OwnerInstanceID:   m.OwnerInstanceID,
+		HeartbeatAt:       m.HeartbeatAt,
+		CommitToken:       m.CommitToken,
+		CommitOwner:       m.CommitOwner,
+		CommitAcquiredAt:  m.CommitAcquiredAt,
+		ResultMessageIDs:  m.ResultMessageIDs,
+		DeliveryIntentIDs: m.DeliveryIntentIDs,
+		CorrelationID:     m.CorrelationID,
+		CausationID:       m.CausationID,
 		DeadlineAt:        m.DeadlineAt,
 		CancelRequestedAt: m.CancelRequestedAt,
 		CreatedAt:         m.CreatedAt,

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 )
 
@@ -73,5 +74,5 @@ func normalizeProactiveChannel(channel string) string {
 }
 
 func proactiveRequestID(prefix string, id interface{}, now time.Time) string {
-	return fmt.Sprintf("%s-%v-%d", prefix, id, now.UnixNano())
+	return fmt.Sprintf("%s-%v-%s", prefix, id, uuid.New().String())
 }

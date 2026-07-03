@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"github.com/google/uuid"
 	"io"
 	"log"
 	"net/http"
@@ -346,7 +348,7 @@ func (e *Executor) getActiveModelCron() map[string]string {
 
 func (e *Executor) sendToWeb(convID, content string) {
 	now := time.Now()
-	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
+	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
 	displayContent := content
 	audioUrl := ""
 	var audioDuration float64
@@ -505,7 +507,7 @@ func (e *Executor) sendToQQ(userID, content string) bool {
 	}
 
 	now := time.Now()
-	msgID := fmt.Sprintf("proactive-%d", now.UnixNano())
+	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
 	displayContent := content
 	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'sent', 1, ?)",
 		msgID, convID, displayContent, now)

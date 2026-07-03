@@ -242,11 +242,14 @@ func TestOrchestratorDuplicateRequestIDDoesNotReprocess(t *testing.T) {
 		Message:        "hello again",
 		RequestID:      "req-duplicate",
 	})
-	if !errors.Is(err, ErrOrchestratorDuplicate) {
-		t.Fatalf("expected duplicate error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected nil error for idempotent completed request, got %v", err)
 	}
 	if second == nil || second.InteractionID != first.InteractionID {
-		t.Fatalf("duplicate did not return existing interaction: first=%#v second=%#v", first, second)
+		t.Fatalf("idempotent hit did not return existing interaction: first=%#v second=%#v", first, second)
+	}
+	if second.Outcome != OutcomeCompleted {
+		t.Fatalf("idempotent hit should return completed outcome, got %s", second.Outcome)
 	}
 	if processor.calls != 1 {
 		t.Fatalf("processor should be called once, got %d", processor.calls)

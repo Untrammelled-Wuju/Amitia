@@ -5,6 +5,8 @@ package companion
 import (
 	"context"
 	"fmt"
+
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/decision"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"log"
@@ -312,7 +314,7 @@ func (s *service) RandomBurstTriggerContext(ctx context.Context, characterID str
 	energy, _ := stateLife["energy"].(int)
 	prompt := s.buildBurstPrompt(characterID, mood, currentState, energy)
 
-	msgID := fmt.Sprintf("burst-%d", now.UnixNano())
+	msgID := fmt.Sprintf("burst-%s", uuid.New().String())
 
 	convID := s.resolveConversationID(characterID, "all", "")
 	if convID == "" {

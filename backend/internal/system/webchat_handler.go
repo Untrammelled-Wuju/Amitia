@@ -3,6 +3,7 @@
 package system
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -213,6 +214,10 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		VideoUrl:     body.VideoUrl,
 		ImageContext: imageCtx,
 	})
+	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
+		util.SuccessResponse(c, gin.H{"status": "processing", "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
+		return
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return

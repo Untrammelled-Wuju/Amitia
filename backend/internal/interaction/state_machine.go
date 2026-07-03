@@ -73,6 +73,15 @@ type InteractionRecord struct {
 	ResultRef         string             `json:"resultRef,omitempty"`
 	CommitID          string             `json:"commitId,omitempty"`
 	ExecutorID        string             `json:"executorId,omitempty"`
+	OwnerInstanceID   string             `json:"ownerInstanceId,omitempty"`
+	HeartbeatAt       time.Time          `json:"heartbeatAt,omitempty"`
+	CommitToken       string             `json:"commitToken,omitempty"`
+	CommitOwner       string             `json:"commitOwner,omitempty"`
+	CommitAcquiredAt  time.Time          `json:"commitAcquiredAt,omitempty"`
+	ResultMessageIDs  string             `json:"resultMessageIds,omitempty"`
+	DeliveryIntentIDs string             `json:"deliveryIntentIds,omitempty"`
+	CorrelationID     string             `json:"correlationId,omitempty"`
+	CausationID       string             `json:"causationId,omitempty"`
 	DeadlineAt        time.Time          `json:"deadlineAt,omitempty"`
 	CancelRequestedAt time.Time          `json:"cancelRequestedAt,omitempty"`
 	CreatedAt         time.Time          `json:"createdAt"`
@@ -85,12 +94,19 @@ type InteractionRecord struct {
 }
 
 type InteractionMetadataUpdate struct {
-	Priority     *int
-	PathType     *string
-	SupersedesID *string
-	CommitID     *string
-	ExecutorID   *string
-	DeadlineAt   *time.Time
+	Priority          *int
+	PathType          *string
+	SupersedesID      *string
+	CommitID          *string
+	ExecutorID        *string
+	OwnerInstanceID   *string
+	CommitToken       *string
+	CommitOwner       *string
+	ResultMessageIDs  *string
+	DeliveryIntentIDs *string
+	CorrelationID     *string
+	CausationID       *string
+	DeadlineAt        *time.Time
 }
 
 func NewInteractionRecord(scope InteractionScope) *InteractionRecord {
@@ -230,6 +246,15 @@ func (r *InteractionRecord) Snapshot() InteractionRecord {
 		ResultRef:         r.ResultRef,
 		CommitID:          r.CommitID,
 		ExecutorID:        r.ExecutorID,
+		OwnerInstanceID:   r.OwnerInstanceID,
+		HeartbeatAt:       r.HeartbeatAt,
+		CommitToken:       r.CommitToken,
+		CommitOwner:       r.CommitOwner,
+		CommitAcquiredAt:  r.CommitAcquiredAt,
+		ResultMessageIDs:  r.ResultMessageIDs,
+		DeliveryIntentIDs: r.DeliveryIntentIDs,
+		CorrelationID:     r.CorrelationID,
+		CausationID:       r.CausationID,
 		DeadlineAt:        r.DeadlineAt,
 		CancelRequestedAt: r.CancelRequestedAt,
 		CreatedAt:         r.CreatedAt,

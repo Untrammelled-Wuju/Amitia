@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	ErrOrchestratorProcessing    = errors.New("orchestrator: request still processing")
 	ErrOrchestratorNotReady      = errors.New("orchestrator: not ready")
 	ErrOrchestratorBusy          = errors.New("orchestrator: too many concurrent interactions")
 	ErrOrchestratorCancelled     = errors.New("orchestrator: cancelled")
@@ -199,7 +200,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	if existing, ok, err := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); err != nil {
 		return nil, err
 	} else if ok {
-		return o.buildResult(existing, nil, outcomeForRecord(existing), ErrOrchestratorDuplicate), ErrOrchestratorDuplicate
+		return o.handleIdempotentHit(existing)
 	}
 
 	record := NewInteractionRecord(scope)
@@ -208,7 +209,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 			if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.UserID, scope.RequestID); getErr != nil {
 				return nil, getErr
 			} else if ok {
-				return o.buildResult(existing, nil, outcomeForRecord(existing), ErrOrchestratorDuplicate), ErrOrchestratorDuplicate
+				return o.handleIdempotentHit(existing)
 			}
 		}
 		return nil, err
@@ -728,6 +729,31 @@ func isInteractionConflictError(err error) bool {
 	return errors.Is(err, ErrVersionConflict) ||
 		errors.Is(err, ErrAlreadyTerminal) ||
 		errors.Is(err, ErrInvalidTransition)
+}
+
+func (o *Orchestrator) handleIdempotentHit(existing *InteractionRecord) (*OrchestrationResult, error) {
+	outcome := outcomeForRecord(existing)
+	switch existing.Status {
+	case InteractionStatusCompleted, InteractionStatusCommitted, InteractionStatusDeliveryPending, InteractionStatusDelivered:
+		var resp *ProcessResponse
+		if existing.ResultRef != "" {
+			resp = &ProcessResponse{
+				RequestID:      existing.Scope.RequestID,
+				ConversationID: existing.Scope.ConversationID,
+				CharacterID:    existing.Scope.CharacterID,
+				Reply:          existing.ResultRef,
+			}
+		}
+		return o.buildResult(existing, resp, outcome, nil), nil
+	case InteractionStatusReceived, InteractionStatusNormalized, InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusContextReady, InteractionStatusDecided, InteractionStatusGenerated:
+		return o.buildResult(existing, nil, outcome, nil), ErrOrchestratorProcessing
+	case InteractionStatusFailed:
+		return o.buildResult(existing, nil, outcome, nil), ErrOrchestratorDuplicate
+	case InteractionStatusCancelled, InteractionStatusSuperseded:
+		return o.buildResult(existing, nil, outcome, nil), ErrOrchestratorDuplicate
+	default:
+		return o.buildResult(existing, nil, outcome, nil), ErrOrchestratorDuplicate
+	}
 }
 
 func (o *Orchestrator) buildResult(record *InteractionRecord, resp *ProcessResponse, outcome Outcome, err error) *OrchestrationResult {

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"errors"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -171,6 +172,10 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		VideoUrl:     body.VideoUrl,
 		ImageContext: imageCtx,
 	})
+	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
+		util.ErrorResponse(c, response.InternalError, "请求处理中", nil)
+		return
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
