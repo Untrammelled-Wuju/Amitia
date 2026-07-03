@@ -47,7 +47,8 @@ func DefaultMigrations() []Migration {
 		MemorySensitivityMigration(),
 		ChatScopeIndexesMigration(),
 		MessageSequenceCheckpointMigration(),
-		TombstoneRebuildMigration(),
+	TombstoneRebuildMigration(),
+	InteractionRecordsCreateMigration(),
 	InteractionRecordsV2Migration(),
 	RuntimeQueueMigration(),
 	}

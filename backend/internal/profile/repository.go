@@ -142,11 +142,11 @@ func hasIndependentProfileEvidence(existing, incoming UserProfile) bool {
 func hasHigherAuthority(incoming, existing string) bool {
 	auth := func(s string) int {
 		switch s {
-		case "admin_settings", "system", "config":
+		case "admin_settings", "system", "config", "admin":
 			return 3
 		case "user_update", "user_input", "user_settings":
 			return 2
-		case "agent_inference", "active_inference", "extraction", "profile_inference":
+		case "agent_inference", "active_inference", "extraction", "profile_inference", "extract":
 			return 1
 		default:
 			return 0
