@@ -29,6 +29,25 @@ func RecoverStaleInteractions(ctx context.Context, tracker InteractionTracker, c
 			result.Skipped++
 			return true
 		}
+		if record.Status == InteractionStatusCommitted {
+			if record.CommitID != "" {
+				result.Recovered++
+				return true
+			}
+		}
+		if record.Status == InteractionStatusDeliveryPending {
+			_, err := tracker.Fail(ctx, record.ID, record.StatusVersion, "delivery_timeout", "delivery pending timed out after restart")
+			if err == nil {
+				result.Recovered++
+				return true
+			}
+			if errors.Is(err, ErrVersionConflict) || errors.Is(err, ErrAlreadyTerminal) {
+				result.Skipped++
+				return true
+			}
+			result.Failed++
+			return true
+		}
 		_, err := tracker.Fail(ctx, record.ID, record.StatusVersion, "startup_recovered", "interaction was interrupted by process restart")
 		if err == nil {
 			result.Recovered++
@@ -63,6 +82,10 @@ func shouldStartupRecover(record *InteractionRecord, cutoff time.Time) bool {
 		InteractionStatusDecided,
 		InteractionStatusGenerated:
 		return true
+	case InteractionStatusCommitted:
+		return true
+	case InteractionStatusDeliveryPending:
+		return record.HeartbeatAt.IsZero() || time.Since(record.HeartbeatAt) > 5*time.Minute
 	default:
 		return false
 	}

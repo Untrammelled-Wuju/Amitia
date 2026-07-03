@@ -72,6 +72,7 @@ const (
 	OutcomeFailed     Outcome = "failed"
 	OutcomeCancelled  Outcome = "cancelled"
 	OutcomeSuperseded Outcome = "superseded"
+	OutcomeDeliveryUnknown Outcome = "delivery_unknown"
 )
 
 type OrchestrationResult struct {
@@ -429,6 +430,9 @@ func (o *Orchestrator) Cancel(interactionID string) error {
 	if rec.IsTerminal() {
 		return nil
 	}
+	if rec.Status == InteractionStatusCommitted || rec.Status == InteractionStatusDeliveryPending || rec.Status == InteractionStatusDelivered {
+		return o.writeCompensationEvent(ctx, rec, "cancel_after_commit")
+	}
 	if err := o.tracker.RequestCancel(ctx, interactionID, "cancel_requested"); err != nil {
 		return o.resolveCancelConflict(ctx, interactionID, err)
 	}
@@ -479,6 +483,11 @@ func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
 		}
 	}
 	return count
+}
+
+func (o *Orchestrator) writeCompensationEvent(ctx context.Context, rec *InteractionRecord, reason string) error {
+	log.Printf("[orchestrator] compensation event for committed interaction %s: %s (compensation outbox deferred)", rec.ID, reason)
+	return nil
 }
 
 func (o *Orchestrator) GetTracker() InteractionTracker {
@@ -556,6 +565,13 @@ func priorityForPath(path PathType) int {
 }
 
 func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID string) error {
+	rec, ok, err := o.tracker.Get(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	if ok && (rec.Status == InteractionStatusCommitted || rec.Status == InteractionStatusDeliveryPending || rec.Status == InteractionStatusDelivered) {
+		return o.writeCompensationEvent(ctx, rec, "supersede_after_commit:"+newID)
+	}
 	if err := o.tracker.MarkSuperseded(ctx, targetID, newID); err != nil {
 		return err
 	}
@@ -818,8 +834,10 @@ func outcomeForRecord(record *InteractionRecord) Outcome {
 		return OutcomeFailed
 	}
 	switch record.Status {
-	case InteractionStatusCompleted, InteractionStatusCommitted, InteractionStatusDeliveryPending, InteractionStatusDelivered:
+	case InteractionStatusCompleted:
 		return OutcomeCompleted
+	case InteractionStatusCommitted, InteractionStatusDeliveryPending, InteractionStatusDelivered:
+		return OutcomeDeliveryUnknown
 	case InteractionStatusCancelled:
 		return OutcomeCancelled
 	case InteractionStatusSuperseded:
