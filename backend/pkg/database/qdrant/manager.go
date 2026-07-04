@@ -89,7 +89,9 @@ func StartQdrant() error {
 	}
 
 	if _, err := os.Stat(qdrantPath); os.IsNotExist(err) {
-		return fmt.Errorf("Qdrant程序不存在: %s", qdrantPath)
+		if err := ensureQdrantBinary(qdrantPath, qdrantDir); err != nil {
+			return err
+		}
 	}
 
 	cmd := exec.Command(qdrantPath, "--config-path", configPath)
@@ -104,6 +106,28 @@ func StartQdrant() error {
 	qdrantCmd = cmd
 	log.Info("Qdrant已启动", "port", cfg.Port, "pid", cmd.Process.Pid)
 	return nil
+}
+
+func ensureQdrantBinary(qdrantPath, qdrantDir string) error {
+	if _, err := os.Stat(qdrantPath); err == nil {
+		return nil
+	}
+
+	for _, name := range []string{"qdrant.exe.zip", "qdrant.zip"} {
+		zipPath := filepath.Join(qdrantDir, name)
+		if _, err := os.Stat(zipPath); err == nil {
+			log.Info("正在解压Qdrant程序", "zip", zipPath)
+			if err := util.UnzipFile(zipPath, qdrantDir); err != nil {
+				return fmt.Errorf("解压Qdrant程序失败: %w", err)
+			}
+			if _, err := os.Stat(qdrantPath); err == nil {
+				return nil
+			}
+			return fmt.Errorf("Qdrant压缩包中未找到程序: %s", qdrantPath)
+		}
+	}
+
+	return fmt.Errorf("Qdrant程序不存在: %s", qdrantPath)
 }
 
 func StopQdrant() {
