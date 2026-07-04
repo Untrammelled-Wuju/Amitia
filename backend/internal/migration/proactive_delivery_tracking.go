@@ -9,8 +9,8 @@ func ProactiveDeliveryTrackingMigration() Migration {
 				name string
 				def  string
 			}{
-			{"interaction_id", "TEXT DEFAULT ''"},
-			{"delivery_intent_id", "TEXT DEFAULT ''"},
+				{"interaction_id", "TEXT DEFAULT ''"},
+				{"delivery_intent_id", "TEXT DEFAULT ''"},
 				{"delivery_id", "TEXT DEFAULT ''"},
 				{"request_id", "TEXT DEFAULT ''"},
 				{"delivery_status", "TEXT DEFAULT 'PENDING'"},
@@ -18,14 +18,8 @@ func ProactiveDeliveryTrackingMigration() Migration {
 				{"error_message", "TEXT DEFAULT ''"},
 			}
 			for _, col := range cols {
-				exists, err := step.ColumnExists("proactive_messages", col.name)
-				if err != nil {
+				if err := step.AddColumn("proactive_messages", col.name, col.def); err != nil {
 					return err
-				}
-				if !exists {
-					if err := step.AddColumn("proactive_messages", col.name, col.def); err != nil {
-						return err
-					}
 				}
 			}
 			return nil
