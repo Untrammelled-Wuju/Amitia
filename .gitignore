@@ -8,7 +8,6 @@ front/dist/
 *.db-journal
 backend/data/data/backups/
 backend/data/migration_backups/
-release/data/
 *.log
 /logs/
 /backend/logs/
@@ -37,8 +36,6 @@ qdrant/snapshots/
 
 backend/qdrant/storage/
 backend/qdrant/qdrant_linux_*
-release/qdrant/storage/
-release/qdrant/snapshots/
 wechat-chat-extractor/weFlow.zip
 noa.rs-7.cn/
 
@@ -47,15 +44,3 @@ noa.rs-7.cn/
 
 .php/
 *.py
-
-# P0-13: release编译产物与运行时文件
-release/server.exe
-release/*.log
-release/release-*.log
-release/logs/
-release/data/migration_backups/
-release/qdrant/.qdrant-initialized
-release/qdrant/qdrant.exe
-release/qdrant/qdrant_linux_*
-release/surrealdb/surreal.exe
-release/surrealdb/surreal.exe.zip
