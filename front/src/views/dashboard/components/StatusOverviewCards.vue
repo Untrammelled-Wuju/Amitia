@@ -96,15 +96,12 @@ const runtimeHealthLabel = computed(() =>
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
   border-radius: 13px;
-  background: linear-gradient(135deg, #4f8df7, #5b6dff);
-  box-shadow: 0 14px 24px rgba(79, 141, 247, 0.24);
+  background: rgba(74, 222, 128, 0.2); color: #86efac;
 }
-.status-card:nth-child(2) .sc-icon { background: linear-gradient(135deg, #a071ff, #7048e8); }
-.status-card:nth-child(3) .sc-icon { background: linear-gradient(135deg, #54d98a, #22c55e); }
-.status-card:nth-child(4) .sc-icon { background: linear-gradient(135deg, #ffb84d, #ff8a1f); }
-.status-card:nth-child(5) .sc-icon { background: linear-gradient(135deg, #59d98f, #22c55e); }
+.status-off .sc-icon { background: rgba(248, 113, 113, 0.2); color: #fca5a5; }
+.status-warn .sc-icon { background: rgba(248, 113, 113, 0.2); color: #fca5a5; }
+
 .sc-body { flex: 1; min-width: 0; }
 .sc-label { font-size: 16px; font-weight: 650; color: var(--console-text); margin-bottom: 8px; }
 .sc-value {
@@ -114,12 +111,12 @@ const runtimeHealthLabel = computed(() =>
   padding: 3px 10px;
   border-radius: 7px;
   background: var(--console-value-ok-bg);
-  color: #12a150;
+  color: #86efac;
   font-size: 13px;
   font-weight: 700;
 }
-.status-warn .sc-value { background: var(--console-value-warn-bg); color: #f97316; }
-.status-off .sc-value { background: var(--console-value-off-bg); color: #f43f5e; }
+.status-warn .sc-value { background: var(--console-value-off-bg); color: #fca5a5; }
+.status-off .sc-value { background: var(--console-value-off-bg); color: #fca5a5; }
 .sc-sub { font-size: 14px; color: var(--console-text-muted); margin-top: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1280px) {

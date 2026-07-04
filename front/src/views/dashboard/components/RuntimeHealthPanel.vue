@@ -69,12 +69,12 @@ const emit = defineEmits<{
 .module-icon { display: flex; color: var(--console-text-muted); font-size: 18px; }
 .hmi-body { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .hmi-label { min-width: 76px; font-size: 14px; font-weight: 600; color: var(--console-text-secondary); }
-.hmi-status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #16a34a; }
-.hmi-status::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: #22c55e; }
-.hmi-status.warning { color: #f97316; }
-.hmi-status.warning::before { background: #f59e0b; }
-.hmi-status.error { color: #ef4444; }
-.hmi-status.error::before { background: #ef4444; }
+.hmi-status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #86efac; }
+.hmi-status::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: rgba(74, 222, 128, 0.2); }
+.hmi-status.warning { color: #fca5a5; }
+.hmi-status.warning::before { background: rgba(248, 113, 113, 0.2); }
+.hmi-status.error { color: #fca5a5; }
+.hmi-status.error::before { background: rgba(248, 113, 113, 0.2); }
 .hmi-detail { font-size: 13px; color: var(--console-text-muted); word-break: break-all; }
 
 @media (max-width: 768px) {
