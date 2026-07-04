@@ -2,6 +2,7 @@ package mindruntime
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -32,6 +34,37 @@ const (
 	DeletionStatusFailed    DeletionStatus = "failed"
 )
 
+type CleanupItemStatus string
+
+const (
+	CleanupItemStatusQueued    CleanupItemStatus = "queued"
+	CleanupItemStatusClaimed   CleanupItemStatus = "claimed"
+	CleanupItemStatusRetry     CleanupItemStatus = "retry"
+	CleanupItemStatusCompleted CleanupItemStatus = "completed"
+	CleanupItemStatusDead      CleanupItemStatus = "dead"
+)
+
+type RecalculationTaskStatus string
+
+const (
+	RecalculationTaskStatusPending   RecalculationTaskStatus = "pending"
+	RecalculationTaskStatusClaimed   RecalculationTaskStatus = "claimed"
+	RecalculationTaskStatusRunning   RecalculationTaskStatus = "running"
+	RecalculationTaskStatusCompleted RecalculationTaskStatus = "completed"
+	RecalculationTaskStatusFailed    RecalculationTaskStatus = "failed"
+	RecalculationTaskStatusDead      RecalculationTaskStatus = "dead"
+)
+
+const (
+	DefaultCleanupMaxAttempts      = 5
+	DefaultCleanupBatchSize        = 3
+	DefaultCleanupLeaseDuration    = 120 * time.Second
+	DefaultCleanupRetryBackoffBase = 30 * time.Second
+	DefaultRecalcMaxAttempts       = 3
+	DefaultRecalcLeaseDuration     = 300 * time.Second
+	DefaultRecalcBatchSize         = 5
+)
+
 type DeletionTombstone struct {
 	ID               string         `json:"id"`
 	TargetID         string         `json:"targetId"`
@@ -48,25 +81,38 @@ type DeletionTombstone struct {
 }
 
 type OutboxCleanupItem struct {
-	ID         string     `json:"id"`
-	Storage    string     `json:"storage"`
-	TargetID   string     `json:"targetId"`
-	TargetKind string     `json:"targetKind"`
-	Status     string     `json:"status"`
-	Attempts   int        `json:"attempts"`
-	LastError  string     `json:"lastError,omitempty"`
-	CleanedAt  *time.Time `json:"cleanedAt,omitempty"`
+	ID          string           `json:"id"`
+	Storage     string           `json:"storage"`
+	TargetID    string           `json:"targetId"`
+	TargetKind  string           `json:"targetKind"`
+	Status      CleanupItemStatus `json:"status"`
+	Attempts    int              `json:"attempts"`
+	MaxAttempts int              `json:"maxAttempts"`
+	NextRetryAt time.Time        `json:"nextRetryAt"`
+	LeaseOwner  string           `json:"leaseOwner"`
+	LeaseToken  string           `json:"leaseToken"`
+	LeasedUntil time.Time        `json:"leasedUntil"`
+	LastError   string           `json:"lastError,omitempty"`
+	CleanedAt   *time.Time       `json:"cleanedAt,omitempty"`
 }
 
 type RecalculationTask struct {
-	ID           string    `json:"id"`
-	TriggerType  string    `json:"triggerType"`
-	TargetID     string    `json:"targetId"`
-	AffectedZone string    `json:"affectedZone"`
-	Priority     int       `json:"priority"`
-	CreatedAt    time.Time `json:"createdAt"`
-	Status       string    `json:"status"`
-	Description  string    `json:"description"`
+	ID           string                  `json:"id"`
+	TriggerType  string                  `json:"triggerType"`
+	TargetID     string                  `json:"targetId"`
+	AffectedZone string                  `json:"affectedZone"`
+	Priority     int                     `json:"priority"`
+	CreatedAt    time.Time               `json:"createdAt"`
+	Status       RecalculationTaskStatus `json:"status"`
+	Description  string                  `json:"description"`
+	Attempts     int                     `json:"attempts"`
+	MaxAttempts  int                     `json:"maxAttempts"`
+	NextRetryAt  time.Time               `json:"nextRetryAt"`
+	LeaseOwner   string                  `json:"leaseOwner"`
+	LeaseToken   string                  `json:"leaseToken"`
+	LeasedUntil  time.Time               `json:"leasedUntil"`
+	LastError    string                  `json:"lastError,omitempty"`
+	CompletedAt  *time.Time              `json:"completedAt,omitempty"`
 }
 
 type SecurityTestKind string
@@ -99,6 +145,10 @@ type OutboxCleanupExecutor interface {
 	CleanupOutboxItem(item OutboxCleanupItem) error
 }
 
+type RecalculationTaskExecutor interface {
+	ExecuteRecalculation(task RecalculationTask) error
+}
+
 type DeletionTombstoneModel struct {
 	ID               string     `gorm:"primaryKey;column:id" json:"id"`
 	TargetID         string     `gorm:"column:target_id;index" json:"targetId"`
@@ -117,49 +167,71 @@ type DeletionTombstoneModel struct {
 func (DeletionTombstoneModel) TableName() string { return "deletion_tombstones" }
 
 type OutboxCleanupItemModel struct {
-	ID         string     `gorm:"primaryKey;column:id" json:"id"`
-	Storage    string     `gorm:"column:storage;index" json:"storage"`
-	TargetID   string     `gorm:"column:target_id;index" json:"targetId"`
-	TargetKind string     `gorm:"column:target_kind" json:"targetKind"`
-	Status     string     `gorm:"column:status;index" json:"status"`
-	Attempts   int        `gorm:"column:attempts" json:"attempts"`
-	LastError  string     `gorm:"column:last_error" json:"lastError,omitempty"`
-	CleanedAt  *time.Time `gorm:"column:cleaned_at" json:"cleanedAt,omitempty"`
+	ID          string     `gorm:"primaryKey;column:id" json:"id"`
+	Storage     string     `gorm:"column:storage;index" json:"storage"`
+	TargetID    string     `gorm:"column:target_id;index" json:"targetId"`
+	TargetKind  string     `gorm:"column:target_kind" json:"targetKind"`
+	Status      string     `gorm:"column:status;index" json:"status"`
+	Attempts    int        `gorm:"column:attempts" json:"attempts"`
+	MaxAttempts int        `gorm:"column:max_attempts;default:5" json:"maxAttempts"`
+	NextRetryAt time.Time  `gorm:"column:next_retry_at" json:"nextRetryAt"`
+	LeaseOwner  string     `gorm:"column:lease_owner" json:"leaseOwner"`
+	LeaseToken  string     `gorm:"column:lease_token" json:"leaseToken"`
+	LeasedUntil time.Time  `gorm:"column:leased_until;index" json:"leasedUntil"`
+	LastError   string     `gorm:"column:last_error" json:"lastError,omitempty"`
+	CleanedAt   *time.Time `gorm:"column:cleaned_at" json:"cleanedAt,omitempty"`
 }
 
 func (OutboxCleanupItemModel) TableName() string { return "data_lifecycle_outbox_cleanup_items" }
 
 type RecalculationTaskModel struct {
-	ID           string    `gorm:"primaryKey;column:id" json:"id"`
-	TriggerType  string    `gorm:"column:trigger_type;index" json:"triggerType"`
-	TargetID     string    `gorm:"column:target_id;index" json:"targetId"`
-	AffectedZone string    `gorm:"column:affected_zone" json:"affectedZone"`
-	Priority     int       `gorm:"column:priority" json:"priority"`
-	CreatedAt    time.Time `gorm:"column:created_at" json:"createdAt"`
-	Status       string    `gorm:"column:status;index" json:"status"`
-	Description  string    `gorm:"column:description" json:"description"`
+	ID           string     `gorm:"primaryKey;column:id" json:"id"`
+	TriggerType  string     `gorm:"column:trigger_type;index" json:"triggerType"`
+	TargetID     string     `gorm:"column:target_id;index" json:"targetId"`
+	AffectedZone string     `gorm:"column:affected_zone" json:"affectedZone"`
+	Priority     int        `gorm:"column:priority" json:"priority"`
+	CreatedAt    time.Time  `gorm:"column:created_at" json:"createdAt"`
+	Status       string     `gorm:"column:status;index" json:"status"`
+	Description  string     `gorm:"column:description" json:"description"`
+	Attempts     int        `gorm:"column:attempts" json:"attempts"`
+	MaxAttempts  int        `gorm:"column:max_attempts;default:3" json:"maxAttempts"`
+	NextRetryAt  time.Time  `gorm:"column:next_retry_at" json:"nextRetryAt"`
+	LeaseOwner   string     `gorm:"column:lease_owner" json:"leaseOwner"`
+	LeaseToken   string     `gorm:"column:lease_token" json:"leaseToken"`
+	LeasedUntil  time.Time  `gorm:"column:leased_until;index" json:"leasedUntil"`
+	LastError    string     `gorm:"column:last_error" json:"lastError,omitempty"`
+	CompletedAt  *time.Time `gorm:"column:completed_at" json:"completedAt,omitempty"`
 }
 
 func (RecalculationTaskModel) TableName() string { return "data_lifecycle_recalculation_tasks" }
 
 type DataLifecycleCoordinator struct {
-	db              *gorm.DB
-	mu              sync.RWMutex
-	tombstones      map[string]DeletionTombstone
-	outbox          []OutboxCleanupItem
-	recalcTasks     []RecalculationTask
-	lastClean       time.Time
-	cleanupExecutor OutboxCleanupExecutor
+	db                   *gorm.DB
+	mu                   sync.RWMutex
+	tombstones           map[string]DeletionTombstone
+	outbox               []OutboxCleanupItem
+	recalcTasks          []RecalculationTask
+	lastClean            time.Time
+	cleanupExecutor      OutboxCleanupExecutor
+	recalcExecutor       RecalculationTaskExecutor
+	cleanupBatchSize     int
+	recalcBatchSize      int
+	cleanupLeaseDuration time.Duration
+	recalcLeaseDuration  time.Duration
 }
 
 var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator(nil)
 
 func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 	return &DataLifecycleCoordinator{
-		db:          db,
-		tombstones:  make(map[string]DeletionTombstone),
-		outbox:      make([]OutboxCleanupItem, 0),
-		recalcTasks: make([]RecalculationTask, 0),
+		db:                   db,
+		tombstones:           make(map[string]DeletionTombstone),
+		outbox:               make([]OutboxCleanupItem, 0),
+		recalcTasks:          make([]RecalculationTask, 0),
+		cleanupBatchSize:     DefaultCleanupBatchSize,
+		recalcBatchSize:      DefaultRecalcBatchSize,
+		cleanupLeaseDuration: DefaultCleanupLeaseDuration,
+		recalcLeaseDuration:  DefaultRecalcLeaseDuration,
 	}
 }
 
@@ -167,6 +239,12 @@ func (c *DataLifecycleCoordinator) SetOutboxCleanupExecutor(executor OutboxClean
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cleanupExecutor = executor
+}
+
+func (c *DataLifecycleCoordinator) SetRecalculationTaskExecutor(executor RecalculationTaskExecutor) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.recalcExecutor = executor
 }
 
 func (c *DataLifecycleCoordinator) InitSchema() error {
@@ -178,6 +256,7 @@ func (c *DataLifecycleCoordinator) InitSchema() error {
 	}
 	return c.loadPersistedState()
 }
+
 func (c *DataLifecycleCoordinator) RequestDeletion(req DeletionRequest) (DeletionTombstone, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -277,6 +356,7 @@ func (c *DataLifecycleCoordinator) BlockedEntityIDsByType(targetType string) []s
 	}
 	return ids
 }
+
 func (c *DataLifecycleCoordinator) GetTombstone(targetID string) (DeletionTombstone, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -293,57 +373,547 @@ func (c *DataLifecycleCoordinator) GetTombstone(targetID string) (DeletionTombst
 func (c *DataLifecycleCoordinator) scheduleOutboxCleanupLocked(tombstone DeletionTombstone) []OutboxCleanupItem {
 	storages := []string{"primary", "sqlite", "qdrant", "surrealdb", "cache", "summaries", "reflections", "traces"}
 	items := make([]OutboxCleanupItem, 0, len(storages))
+	now := time.Now().UTC()
 	for _, storage := range storages {
 		item := OutboxCleanupItem{
-			ID:         fmt.Sprintf("outbox_%s_%s", tombstone.ID, storage),
-			Storage:    storage,
-			TargetID:   tombstone.TargetID,
-			TargetKind: tombstone.TargetType,
-			Status:     "queued",
-			Attempts:   0,
+			ID:          fmt.Sprintf("outbox_%s_%s", tombstone.ID, storage),
+			Storage:     storage,
+			TargetID:    tombstone.TargetID,
+			TargetKind:  tombstone.TargetType,
+			Status:      CleanupItemStatusQueued,
+			Attempts:    0,
+			MaxAttempts: DefaultCleanupMaxAttempts,
+			NextRetryAt: now,
 		}
 		items = append(items, item)
 	}
 	return items
 }
 
-func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *DataLifecycleCoordinator) ReleaseExpiredCleanupLeases() {
+	if c.db == nil {
+		return
+	}
+	now := time.Now().UTC()
+	c.db.Model(&OutboxCleanupItemModel{}).
+		Where("status = ? AND leased_until <= ?", string(CleanupItemStatusClaimed), now).
+		Updates(map[string]interface{}{
+			"status":       CleanupItemStatusQueued,
+			"lease_owner":  "",
+			"lease_token":  "",
+			"leased_until": time.Time{},
+		})
+}
 
-	c.loadPersistedOutboxItemsLocked()
-	results := make([]OutboxCleanupItem, 0)
-	var cleanupErrs []error
+func (c *DataLifecycleCoordinator) ReleaseExpiredRecalcLeases() {
+	if c.db == nil {
+		return
+	}
+	now := time.Now().UTC()
+	c.db.Model(&RecalculationTaskModel{}).
+		Where("status = ? AND leased_until <= ?", string(RecalculationTaskStatusClaimed), now).
+		Updates(map[string]interface{}{
+			"status":       RecalculationTaskStatusPending,
+			"lease_owner":  "",
+			"lease_token":  "",
+			"leased_until": time.Time{},
+		})
+}
+
+func (c *DataLifecycleCoordinator) LeaseCleanupBatch() ([]OutboxCleanupItem, error) {
+	if c.db == nil {
+		return nil, nil
+	}
+	now := time.Now().UTC()
+	leaseOwner := uuid.New().String()
+	leaseToken := generateItemToken()
+	leaseUntil := now.Add(c.cleanupLeaseDuration)
+
+	leased := make([]OutboxCleanupItem, 0, c.cleanupBatchSize)
+
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var models []OutboxCleanupItemModel
+		err := tx.Where(
+			"status IN ? AND next_retry_at <= ? AND (lease_owner = '' OR leased_until <= ?)",
+			[]string{string(CleanupItemStatusQueued), string(CleanupItemStatusRetry)},
+			now, now,
+		).Order("next_retry_at ASC").Limit(c.cleanupBatchSize).Find(&models).Error
+		if err != nil {
+			return err
+		}
+		for _, model := range models {
+			result := tx.Model(&OutboxCleanupItemModel{}).
+				Where("id = ? AND status IN ? AND (lease_owner = '' OR leased_until <= ?)",
+					model.ID,
+					[]string{string(CleanupItemStatusQueued), string(CleanupItemStatusRetry)},
+					now,
+				).
+				Updates(map[string]interface{}{
+					"status":       CleanupItemStatusClaimed,
+					"lease_owner":  leaseOwner,
+					"lease_token":  leaseToken,
+					"leased_until": leaseUntil,
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				continue
+			}
+			model.Status = string(CleanupItemStatusClaimed)
+			model.LeaseOwner = leaseOwner
+			model.LeaseToken = leaseToken
+			model.LeasedUntil = leaseUntil
+			leased = append(leased, outboxItemFromModel(model))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return leased, nil
+}
+
+
+func (c *DataLifecycleCoordinator) collectInMemoryItems() []OutboxCleanupItem {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	items := make([]OutboxCleanupItem, 0, c.cleanupBatchSize)
 	for i := range c.outbox {
 		item := &c.outbox[i]
-		if item.Status == "queued" || item.Status == "retry" {
-			item.Attempts++
-			if c.cleanupExecutor == nil {
-				err := fmt.Errorf("data_lifecycle: cleanup executor is not configured for %s", item.Storage)
-				item.Status = "retry"
-				item.LastError = err.Error()
-				cleanupErrs = append(cleanupErrs, err)
-			} else if err := c.cleanupExecutor.CleanupOutboxItem(*item); err != nil {
-				wrapped := fmt.Errorf("data_lifecycle: cleanup %s/%s in %s: %w", item.TargetKind, item.TargetID, item.Storage, err)
-				item.Status = "retry"
-				item.LastError = wrapped.Error()
-				cleanupErrs = append(cleanupErrs, wrapped)
-			} else {
-				item.Status = "completed"
-				now := time.Now().UTC()
-				item.CleanedAt = &now
-				item.LastError = ""
-			}
-			c.persistOutboxItemLocked(*item)
-			c.recomputeTombstoneProgressLocked(item.TargetID, item.TargetKind)
+		if item.Status != CleanupItemStatusQueued && item.Status != CleanupItemStatusRetry {
+			continue
 		}
-		results = append(results, *item)
+		if item.MaxAttempts > 0 && item.Attempts >= item.MaxAttempts {
+			item.Status = CleanupItemStatusDead
+			continue
+		}
+		item.Status = CleanupItemStatusClaimed
+		items = append(items, *item)
+
+	}
+	return items
+}
+
+func (c *DataLifecycleCoordinator) markInMemoryCleanupDone(itemID string, status CleanupItemStatus) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now().UTC()
+	for i := range c.outbox {
+		if c.outbox[i].ID == itemID {
+			c.outbox[i].Status = status
+			c.outbox[i].CleanedAt = &now
+			c.outbox[i].LastError = ""
+			c.outbox[i].LeaseOwner = ""
+			c.outbox[i].LeaseToken = ""
+			c.outbox[i].LeasedUntil = time.Time{}
+			return
+		}
+	}
+}
+
+func (c *DataLifecycleCoordinator) markInMemoryCleanupFailed(itemID string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.outbox {
+		if c.outbox[i].ID == itemID {
+			c.outbox[i].LastError = err.Error()
+			c.outbox[i].LeaseOwner = ""
+			c.outbox[i].LeaseToken = ""
+			c.outbox[i].LeasedUntil = time.Time{}
+			return
+		}
+	}
+}
+
+func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, error) {
+	if c.db != nil {
+		c.ReleaseExpiredCleanupLeases()
+	}
+	var allResults []OutboxCleanupItem
+	var allErrs []error
+	for {
+		items, err := c.LeaseCleanupBatch()
+		if err != nil {
+			return nil, fmt.Errorf("lease cleanup batch: %w", err)
+		}
+		if len(items) == 0 {
+			if c.db == nil {
+				items = c.collectInMemoryItems()
+			}
+			if len(items) == 0 {
+				break
+			}
+		}
+		executor := c.getCleanupExecutorLocked()
+		results := make([]OutboxCleanupItem, 0, len(items))
+		var batchErrs []error
+		now := time.Now().UTC()
+	for i := range items {
+		item := items[i]
+		if executor == nil {
+			err := fmt.Errorf("data_lifecycle: cleanup executor is not configured for %s", item.Storage)
+			c.MarkCleanupFailed(item.ID, item.LeaseOwner, item.LeaseToken, err)
+			items[i].Attempts++
+			items[i].LastError = err.Error()
+			if items[i].MaxAttempts <= 0 {
+				items[i].MaxAttempts = DefaultCleanupMaxAttempts
+			}
+			if items[i].Attempts >= items[i].MaxAttempts {
+					items[i].Status = CleanupItemStatusDead
+				} else {
+					items[i].Status = CleanupItemStatusRetry
+					items[i].NextRetryAt = now.Add(DefaultCleanupRetryBackoffBase * time.Duration(items[i].Attempts))
+				}
+				batchErrs = append(batchErrs, err)
+				continue
+			}
+			cleanErr := executor.CleanupOutboxItem(item)
+			if cleanErr != nil {
+				wrapped := fmt.Errorf("data_lifecycle: cleanup %s/%s in %s: %w", item.TargetKind, item.TargetID, item.Storage, cleanErr)
+				c.MarkCleanupFailed(item.ID, item.LeaseOwner, item.LeaseToken, wrapped)
+				items[i].Attempts++
+				items[i].LastError = wrapped.Error()
+				if items[i].MaxAttempts <= 0 {
+					items[i].MaxAttempts = DefaultCleanupMaxAttempts
+				}
+				if items[i].Attempts >= items[i].MaxAttempts {
+					items[i].Status = CleanupItemStatusDead
+				} else {
+					items[i].Status = CleanupItemStatusRetry
+					items[i].NextRetryAt = now.Add(DefaultCleanupRetryBackoffBase * time.Duration(items[i].Attempts))
+				}
+				batchErrs = append(batchErrs, wrapped)
+		} else {
+			c.MarkCleanupCompleted(item.ID, item.LeaseOwner, item.LeaseToken)
+			items[i].Status = CleanupItemStatusCompleted
+			items[i].LastError = ""
+			items[i].CleanedAt = &now
+		}
+		}
+		results = append(results, items...)
+		c.persistOutboxResults(items)
+		c.updateTombstoneAfterCleanup(items)
+		allResults = append(allResults, results...)
+		allErrs = append(allErrs, batchErrs...)
+		if c.db == nil {
+			break
+		}
 	}
 
+	c.mu.Lock()
 	c.lastClean = time.Now().UTC()
+	c.mu.Unlock()
+
 	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "outbox_cleanups", 1)
 
-	return results, errors.Join(cleanupErrs...)
+	return allResults, errors.Join(allErrs...)
+}
+
+func (c *DataLifecycleCoordinator) getCleanupExecutorLocked() OutboxCleanupExecutor {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.cleanupExecutor
+}
+
+func (c *DataLifecycleCoordinator) MarkCleanupCompleted(itemID string, leaseOwner string, leaseToken string) {
+	if c.db == nil {
+		c.markInMemoryCleanupDone(itemID, CleanupItemStatusCompleted)
+		return
+	}
+	now := time.Now().UTC()
+	c.db.Model(&OutboxCleanupItemModel{}).
+		Where("id = ? AND lease_owner = ? AND lease_token = ? AND status = ?",
+			itemID, leaseOwner, leaseToken, string(CleanupItemStatusClaimed)).
+		Updates(map[string]interface{}{
+			"status":       CleanupItemStatusCompleted,
+			"cleaned_at":   now,
+			"last_error":   "",
+			"lease_owner":  "",
+			"lease_token":  "",
+			"leased_until": time.Time{},
+		})
+}
+
+func (c *DataLifecycleCoordinator) MarkCleanupFailed(itemID string, leaseOwner string, leaseToken string, err error) {
+	if c.db == nil {
+		c.markInMemoryCleanupFailed(itemID, err)
+		return
+	}
+	var model OutboxCleanupItemModel
+	if txErr := c.db.Where("id = ? AND lease_owner = ? AND lease_token = ?",
+		itemID, leaseOwner, leaseToken).First(&model).Error; txErr != nil {
+		return
+	}
+	attempts := model.Attempts + 1
+	maxAttempts := model.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = DefaultCleanupMaxAttempts
+	}
+	now := time.Now().UTC()
+	if attempts >= maxAttempts {
+		c.db.Model(&OutboxCleanupItemModel{}).
+			Where("id = ? AND lease_owner = ? AND lease_token = ?", itemID, leaseOwner, leaseToken).
+			Updates(map[string]interface{}{
+				"status":       CleanupItemStatusDead,
+				"attempts":     attempts,
+				"last_error":   err.Error(),
+				"lease_owner":  "",
+				"lease_token":  "",
+				"leased_until": time.Time{},
+			})
+		c.moveCleanupToDeadItem(model, err)
+		return
+	}
+	nextRetry := now.Add(DefaultCleanupRetryBackoffBase * time.Duration(attempts))
+	c.db.Model(&OutboxCleanupItemModel{}).
+		Where("id = ? AND lease_owner = ? AND lease_token = ?", itemID, leaseOwner, leaseToken).
+		Updates(map[string]interface{}{
+			"status":        CleanupItemStatusRetry,
+			"attempts":      attempts,
+			"next_retry_at": nextRetry,
+			"last_error":    err.Error(),
+			"lease_owner":   "",
+			"lease_token":   "",
+			"leased_until":  time.Time{},
+		})
+}
+
+func (c *DataLifecycleCoordinator) moveCleanupToDeadItem(model OutboxCleanupItemModel, err error) {
+	deadItem := OutboxCleanupItem{
+		ID:          model.ID,
+		Storage:     model.Storage,
+		TargetID:    model.TargetID,
+		TargetKind:  model.TargetKind,
+		Status:      CleanupItemStatusDead,
+		Attempts:    model.Attempts + 1,
+		MaxAttempts: model.MaxAttempts,
+		LastError:   err.Error(),
+	}
+	_ = deadItem
+}
+
+func (c *DataLifecycleCoordinator) persistOutboxResults(items []OutboxCleanupItem) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, item := range items {
+		for i := range c.outbox {
+			if c.outbox[i].ID == item.ID {
+				c.outbox[i] = item
+				break
+			}
+		}
+	}
+}
+
+func (c *DataLifecycleCoordinator) updateTombstoneAfterCleanup(items []OutboxCleanupItem) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, item := range items {
+		for key, tombstone := range c.tombstones {
+			if tombstone.TargetID != item.TargetID || tombstone.TargetType != item.TargetKind {
+				continue
+			}
+			itemsCount := 0
+			cleanedCount := 0
+			failedCount := 0
+			for _, oi := range c.outbox {
+				if oi.TargetID != item.TargetID || oi.TargetKind != item.TargetKind {
+					continue
+				}
+				itemsCount++
+				if oi.Status == CleanupItemStatusCompleted {
+					cleanedCount++
+				} else if oi.Status == CleanupItemStatusDead {
+					failedCount++
+				}
+			}
+			tombstone.ItemsCount = itemsCount
+			tombstone.CleanedCount = cleanedCount
+			tombstone.FailedCount = failedCount
+			if itemsCount > 0 && cleanedCount == itemsCount && failedCount == 0 {
+				now := time.Now().UTC()
+				tombstone.Status = DeletionStatusCompleted
+				tombstone.CompletedAt = &now
+			} else if cleanedCount > 0 || failedCount > 0 {
+				tombstone.Status = DeletionStatusCleaning
+			}
+			c.tombstones[key] = tombstone
+			_ = c.persistTombstoneLocked(tombstone)
+			break
+		}
+	}
+}
+
+func (c *DataLifecycleCoordinator) ExecuteRecalculationTasks() ([]RecalculationTask, error) {
+	if c.db != nil {
+		c.ReleaseExpiredRecalcLeases()
+	}
+	tasks, err := c.LeaseRecalcBatch()
+	if err != nil {
+		return nil, fmt.Errorf("lease recalc batch: %w", err)
+	}
+	if len(tasks) == 0 {
+		return nil, nil
+	}
+	executor := c.getRecalcExecutorLocked()
+	results := make([]RecalculationTask, 0, len(tasks))
+	var execErrs []error
+	for i := range tasks {
+		task := tasks[i]
+		if executor == nil {
+			err := fmt.Errorf("data_lifecycle: recalc executor is not configured")
+			c.MarkRecalcFailed(task.ID, task.LeaseOwner, task.LeaseToken, err)
+			execErrs = append(execErrs, err)
+			continue
+		}
+		execErr := executor.ExecuteRecalculation(task)
+		if execErr != nil {
+			wrapped := fmt.Errorf("data_lifecycle: recalc %s/%s zone=%s: %w", task.TriggerType, task.TargetID, task.AffectedZone, execErr)
+			c.MarkRecalcFailed(task.ID, task.LeaseOwner, task.LeaseToken, wrapped)
+			execErrs = append(execErrs, wrapped)
+		} else {
+			c.MarkRecalcCompleted(task.ID, task.LeaseOwner, task.LeaseToken)
+		}
+	}
+	results = append(results, tasks...)
+	c.persistRecalcResults(tasks)
+
+	DefaultMetricsCollector.IncrementCounter("data_lifecycle", "recalc_executions", 1)
+
+	return results, errors.Join(execErrs...)
+}
+
+func (c *DataLifecycleCoordinator) getRecalcExecutorLocked() RecalculationTaskExecutor {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.recalcExecutor
+}
+
+func (c *DataLifecycleCoordinator) LeaseRecalcBatch() ([]RecalculationTask, error) {
+	if c.db == nil {
+		return nil, nil
+	}
+	now := time.Now().UTC()
+	leaseOwner := uuid.New().String()
+	leaseToken := generateItemToken()
+	leaseUntil := now.Add(c.recalcLeaseDuration)
+
+	leased := make([]RecalculationTask, 0, c.recalcBatchSize)
+
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var models []RecalculationTaskModel
+		err := tx.Where(
+			"status IN ? AND next_retry_at <= ? AND (lease_owner = '' OR leased_until <= ?)",
+			[]string{string(RecalculationTaskStatusPending), string(RecalculationTaskStatusFailed)},
+			now, now,
+		).Order("priority ASC, next_retry_at ASC").Limit(c.recalcBatchSize).Find(&models).Error
+		if err != nil {
+			return err
+		}
+		for _, model := range models {
+			result := tx.Model(&RecalculationTaskModel{}).
+				Where("id = ? AND status IN ? AND (lease_owner = '' OR leased_until <= ?)",
+					model.ID,
+					[]string{string(RecalculationTaskStatusPending), string(RecalculationTaskStatusFailed)},
+					now,
+				).
+				Updates(map[string]interface{}{
+					"status":       RecalculationTaskStatusClaimed,
+					"lease_owner":  leaseOwner,
+					"lease_token":  leaseToken,
+					"leased_until": leaseUntil,
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				continue
+			}
+			model.Status = string(RecalculationTaskStatusClaimed)
+			model.LeaseOwner = leaseOwner
+			model.LeaseToken = leaseToken
+			model.LeasedUntil = leaseUntil
+			leased = append(leased, recalculationTaskFromModel(model))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return leased, nil
+}
+
+func (c *DataLifecycleCoordinator) MarkRecalcCompleted(taskID string, leaseOwner string, leaseToken string) {
+	if c.db == nil {
+		return
+	}
+	now := time.Now().UTC()
+	c.db.Model(&RecalculationTaskModel{}).
+		Where("id = ? AND lease_owner = ? AND lease_token = ? AND status = ?",
+			taskID, leaseOwner, leaseToken, string(RecalculationTaskStatusClaimed)).
+		Updates(map[string]interface{}{
+			"status":       RecalculationTaskStatusCompleted,
+			"completed_at": now,
+			"lease_owner":  "",
+			"lease_token":  "",
+			"leased_until": time.Time{},
+		})
+}
+
+func (c *DataLifecycleCoordinator) MarkRecalcFailed(taskID string, leaseOwner string, leaseToken string, err error) {
+	if c.db == nil {
+		return
+	}
+	var model RecalculationTaskModel
+	if txErr := c.db.Where("id = ? AND lease_owner = ? AND lease_token = ?",
+		taskID, leaseOwner, leaseToken).First(&model).Error; txErr != nil {
+		return
+	}
+	attempts := model.Attempts + 1
+	maxAttempts := model.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = DefaultRecalcMaxAttempts
+	}
+	now := time.Now().UTC()
+	if attempts >= maxAttempts {
+		c.db.Model(&RecalculationTaskModel{}).
+			Where("id = ? AND lease_owner = ? AND lease_token = ?", taskID, leaseOwner, leaseToken).
+			Updates(map[string]interface{}{
+				"status":       RecalculationTaskStatusDead,
+				"attempts":     attempts,
+				"last_error":   err.Error(),
+				"lease_owner":  "",
+				"lease_token":  "",
+				"leased_until": time.Time{},
+			})
+		return
+	}
+	nextRetry := now.Add(time.Minute * time.Duration(attempts*2))
+	c.db.Model(&RecalculationTaskModel{}).
+		Where("id = ? AND lease_owner = ? AND lease_token = ?", taskID, leaseOwner, leaseToken).
+		Updates(map[string]interface{}{
+			"status":        RecalculationTaskStatusFailed,
+			"attempts":      attempts,
+			"next_retry_at": nextRetry,
+			"last_error":    err.Error(),
+			"lease_owner":   "",
+			"lease_token":   "",
+			"leased_until":  time.Time{},
+		})
+}
+
+func (c *DataLifecycleCoordinator) persistRecalcResults(tasks []RecalculationTask) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, task := range tasks {
+		for i := range c.recalcTasks {
+			if c.recalcTasks[i].ID == task.ID {
+				c.recalcTasks[i] = task
+				break
+			}
+		}
+	}
 }
 
 func (c *DataLifecycleCoordinator) loadPersistedOutboxItemsLocked() {
@@ -368,46 +938,9 @@ func (c *DataLifecycleCoordinator) loadPersistedOutboxItemsLocked() {
 	}
 }
 
-func (c *DataLifecycleCoordinator) recomputeTombstoneProgressLocked(targetID string, targetKind string) {
-	if targetID == "" {
-		return
-	}
-	for key, tombstone := range c.tombstones {
-		if tombstone.TargetID != targetID || tombstone.TargetType != targetKind {
-			continue
-		}
-		itemsCount := 0
-		cleanedCount := 0
-		failedCount := 0
-		for _, item := range c.outbox {
-			if item.TargetID != targetID || item.TargetKind != targetKind {
-				continue
-			}
-			itemsCount++
-			if item.Status == "completed" {
-				cleanedCount++
-			} else if item.Attempts > 0 {
-				failedCount++
-			}
-		}
-		tombstone.ItemsCount = itemsCount
-		tombstone.CleanedCount = cleanedCount
-		tombstone.FailedCount = failedCount
-		if itemsCount > 0 && cleanedCount == itemsCount && failedCount == 0 {
-			now := time.Now().UTC()
-			tombstone.Status = DeletionStatusCompleted
-			tombstone.CompletedAt = &now
-		} else if cleanedCount > 0 || failedCount > 0 {
-			tombstone.Status = DeletionStatusCleaning
-		}
-		c.tombstones[key] = tombstone
-		_ = c.persistTombstoneLocked(tombstone)
-		return
-	}
-}
-
 func (c *DataLifecycleCoordinator) buildRecalculationTasksLocked(tombstone DeletionTombstone) []RecalculationTask {
 	tasks := make([]RecalculationTask, 0)
+	now := time.Now().UTC()
 
 	if tombstone.Scope == DeletionScopeAll || tombstone.Scope == DeletionScopeBelief {
 		task := RecalculationTask{
@@ -416,8 +949,10 @@ func (c *DataLifecycleCoordinator) buildRecalculationTasksLocked(tombstone Delet
 			TargetID:     tombstone.TargetID,
 			AffectedZone: "belief",
 			Priority:     1,
-			CreatedAt:    time.Now().UTC(),
-			Status:       "pending",
+			CreatedAt:    now,
+			Status:       RecalculationTaskStatusPending,
+			MaxAttempts:  DefaultRecalcMaxAttempts,
+			NextRetryAt:  now,
 			Description:  fmt.Sprintf("recalculate belief resolution after deletion of %s/%s", tombstone.TargetType, tombstone.TargetID),
 		}
 		tasks = append(tasks, task)
@@ -430,8 +965,10 @@ func (c *DataLifecycleCoordinator) buildRecalculationTasksLocked(tombstone Delet
 			TargetID:     tombstone.TargetID,
 			AffectedZone: "relationship",
 			Priority:     2,
-			CreatedAt:    time.Now().UTC(),
-			Status:       "pending",
+			CreatedAt:    now,
+			Status:       RecalculationTaskStatusPending,
+			MaxAttempts:  DefaultRecalcMaxAttempts,
+			NextRetryAt:  now,
 			Description:  fmt.Sprintf("recalculate relationship narrative after deletion of %s/%s", tombstone.TargetType, tombstone.TargetID),
 		}
 		tasks = append(tasks, task)
@@ -444,8 +981,10 @@ func (c *DataLifecycleCoordinator) buildRecalculationTasksLocked(tombstone Delet
 			TargetID:     tombstone.TargetID,
 			AffectedZone: "memory",
 			Priority:     3,
-			CreatedAt:    time.Now().UTC(),
-			Status:       "pending",
+			CreatedAt:    now,
+			Status:       RecalculationTaskStatusPending,
+			MaxAttempts:  DefaultRecalcMaxAttempts,
+			NextRetryAt:  now,
 			Description:  fmt.Sprintf("recalculate memory summaries after deletion of %s/%s", tombstone.TargetType, tombstone.TargetID),
 		}
 		tasks = append(tasks, task)
@@ -635,6 +1174,12 @@ func generateTombstoneID(targetID, targetType string) string {
 	return fmt.Sprintf("tomb_%x", hash[:12])
 }
 
+func generateItemToken() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func normalizeTargetID(targetID string) string {
 	return strings.ToLower(strings.TrimSpace(targetID))
 }
@@ -658,14 +1203,19 @@ func tombstoneToModel(t DeletionTombstone) DeletionTombstoneModel {
 
 func outboxItemToModel(item OutboxCleanupItem) OutboxCleanupItemModel {
 	return OutboxCleanupItemModel{
-		ID:         item.ID,
-		Storage:    item.Storage,
-		TargetID:   item.TargetID,
-		TargetKind: item.TargetKind,
-		Status:     item.Status,
-		Attempts:   item.Attempts,
-		LastError:  item.LastError,
-		CleanedAt:  item.CleanedAt,
+		ID:          item.ID,
+		Storage:     item.Storage,
+		TargetID:    item.TargetID,
+		TargetKind:  item.TargetKind,
+		Status:      string(item.Status),
+		Attempts:    item.Attempts,
+		MaxAttempts: item.MaxAttempts,
+		NextRetryAt: item.NextRetryAt,
+		LeaseOwner:  item.LeaseOwner,
+		LeaseToken:  item.LeaseToken,
+		LeasedUntil: item.LeasedUntil,
+		LastError:   item.LastError,
+		CleanedAt:   item.CleanedAt,
 	}
 }
 
@@ -677,21 +1227,55 @@ func recalculationTaskToModel(task RecalculationTask) RecalculationTaskModel {
 		AffectedZone: task.AffectedZone,
 		Priority:     task.Priority,
 		CreatedAt:    task.CreatedAt,
-		Status:       task.Status,
+		Status:       string(task.Status),
 		Description:  task.Description,
+		Attempts:     task.Attempts,
+		MaxAttempts:  task.MaxAttempts,
+		NextRetryAt:  task.NextRetryAt,
+		LeaseOwner:   task.LeaseOwner,
+		LeaseToken:   task.LeaseToken,
+		LeasedUntil:  task.LeasedUntil,
+		LastError:    task.LastError,
+		CompletedAt:  task.CompletedAt,
 	}
 }
 
 func outboxItemFromModel(m OutboxCleanupItemModel) OutboxCleanupItem {
 	return OutboxCleanupItem{
-		ID:         m.ID,
-		Storage:    m.Storage,
-		TargetID:   m.TargetID,
-		TargetKind: m.TargetKind,
-		Status:     m.Status,
-		Attempts:   m.Attempts,
-		LastError:  m.LastError,
-		CleanedAt:  m.CleanedAt,
+		ID:          m.ID,
+		Storage:     m.Storage,
+		TargetID:    m.TargetID,
+		TargetKind:  m.TargetKind,
+		Status:      CleanupItemStatus(m.Status),
+		Attempts:    m.Attempts,
+		MaxAttempts: m.MaxAttempts,
+		NextRetryAt: m.NextRetryAt,
+		LeaseOwner:  m.LeaseOwner,
+		LeaseToken:  m.LeaseToken,
+		LeasedUntil: m.LeasedUntil,
+		LastError:   m.LastError,
+		CleanedAt:   m.CleanedAt,
+	}
+}
+
+func recalculationTaskFromModel(m RecalculationTaskModel) RecalculationTask {
+	return RecalculationTask{
+		ID:           m.ID,
+		TriggerType:  m.TriggerType,
+		TargetID:     m.TargetID,
+		AffectedZone: m.AffectedZone,
+		Priority:     m.Priority,
+		CreatedAt:    m.CreatedAt,
+		Status:       RecalculationTaskStatus(m.Status),
+		Description:  m.Description,
+		Attempts:     m.Attempts,
+		MaxAttempts:  m.MaxAttempts,
+		NextRetryAt:  m.NextRetryAt,
+		LeaseOwner:   m.LeaseOwner,
+		LeaseToken:   m.LeaseToken,
+		LeasedUntil:  m.LeasedUntil,
+		LastError:    m.LastError,
+		CompletedAt:  m.CompletedAt,
 	}
 }
 
@@ -730,16 +1314,7 @@ func (c *DataLifecycleCoordinator) loadPersistedState() error {
 	var recalcModels []RecalculationTaskModel
 	if err := c.db.Find(&recalcModels).Error; err == nil {
 		for _, rm := range recalcModels {
-			c.recalcTasks = append(c.recalcTasks, RecalculationTask{
-				ID:           rm.ID,
-				TriggerType:  rm.TriggerType,
-				TargetID:     rm.TargetID,
-				AffectedZone: rm.AffectedZone,
-				Priority:     rm.Priority,
-				CreatedAt:    rm.CreatedAt,
-				Status:       rm.Status,
-				Description:  rm.Description,
-			})
+			c.recalcTasks = append(c.recalcTasks, recalculationTaskFromModel(rm))
 		}
 	}
 

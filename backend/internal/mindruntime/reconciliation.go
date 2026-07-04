@@ -765,8 +765,8 @@ func RegisterDefaultRuntimeReconciliationCheckers(engine *ReconciliationEngine, 
 		return errors.New("reconciliation db is nil")
 	}
 	engine.RegisterChecker(ReconciliationTombstoneDerivedData, NewTombstoneDerivedDataReconciliationChecker(db))
-	registerGormReconciliationChecker(engine, db, ReconciliationLeaseDelivery, leaseDeliverySource(db), leaseDeliverySource(db))
-	registerGormReconciliationChecker(engine, db, ReconciliationOutboxSideEffect, outboxSideEffectSource(db), outboxSideEffectSource(db))
+	registerGormReconciliationChecker(engine, db, ReconciliationLeaseDelivery, leaseDeliverySource(db), deliveryIntentSource(db))
+	registerGormReconciliationChecker(engine, db, ReconciliationOutboxSideEffect, outboxSideEffectSource(db), outboxChannelReceiptSource(db))
 	registerGormReconciliationChecker(engine, db, ReconciliationInteractionRunMsg, interactionRunSource(db), interactionMessageSource(db))
 	return nil
 }
@@ -796,7 +796,7 @@ func leaseDeliverySource(db *gorm.DB) GormReconciliationSource {
 		Store: "sqlite",
 		Tables: []GormReconciliationTable{
 			{
-				Table:             "interaction_outbox_records",
+				Table:             "outbox_records",
 				Kind:              "outbox",
 				KeyColumns:        []string{"id"},
 				StatusColumn:      "status",
@@ -815,7 +815,7 @@ func outboxSideEffectSource(db *gorm.DB) GormReconciliationSource {
 		Store: "sqlite",
 		Tables: []GormReconciliationTable{
 			{
-				Table:         "interaction_outbox_records",
+				Table:         "outbox_records",
 				Kind:          "outbox_side_effect",
 				KeyColumns:    []string{"aggregate_id", "event_type"},
 				StatusColumn:  "status",
@@ -1155,5 +1155,41 @@ func BuildSanitizedExport() SanitizedExport {
 		PanelData:   BuildDebugPanelData(),
 		AuditLog:    make([]AuditEntry, 0),
 		Sanitized:   true,
+	}
+}
+
+func deliveryIntentSource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "sqlite",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "delivery_intents",
+				Kind:          "delivery_intent",
+				KeyColumns:    []string{"request_id"},
+				StatusColumn:  "status",
+				VersionColumn: "retry_count",
+				HashColumns:   []string{"status", "channel", "retry_count", "last_error"},
+				FieldColumns:  []string{"request_id", "channel", "status", "last_error"},
+			},
+		},
+	}
+}
+
+func outboxChannelReceiptSource(db *gorm.DB) GormReconciliationSource {
+	return GormReconciliationSource{
+		DB:    db,
+		Store: "channel_receipt",
+		Tables: []GormReconciliationTable{
+			{
+				Table:         "delivery_intents",
+				Kind:          "delivery_receipt",
+				KeyColumns:    []string{"request_id"},
+				StatusColumn:  "status",
+				VersionColumn: "retry_count",
+				HashColumns:   []string{"status", "channel", "retry_count"},
+				FieldColumns:  []string{"request_id", "channel", "status"},
+			},
+		},
 	}
 }
