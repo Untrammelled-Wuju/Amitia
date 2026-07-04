@@ -3,24 +3,24 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <el-card shadow="never" class="section-card" v-if="diagResult">
-    <template #header>
-      <div class="section-header-row">
-        <div class="header-left-group">
-          <span class="panel-title">诊断报告</span>
-          <span class="diag-time">{{ fmtDateShort(diagResult.timestamp) }}</span>
-        </div>
-        <el-button size="small" text :loading="diagLoading" @click="emit('runDiagnostics')">
-          <el-icon v-if="!diagLoading"><Refresh /></el-icon>
-          运行诊断
+  <section class="section-card">
+    <div class="section-header-row">
+      <span class="panel-title">D. 诊断报告</span>
+      <div class="header-actions">
+        <span v-if="diagResult" class="diag-time">
+          <el-icon><Clock /></el-icon>
+          {{ fmtDateShort(diagResult.timestamp) }}
+        </span>
+        <el-button text :loading="diagLoading" @click="emit('runDiagnostics')">
+          查看完整报告
+          <el-icon v-if="!diagLoading"><Right /></el-icon>
         </el-button>
       </div>
-    </template>
-    <div class="diag-summary">
+    </div>
+    <div v-if="diagResult" class="diag-summary">
       <div class="ds-overall" :class="diagResult.overallStatus">
-        <el-tag :type="diagResult.overallStatus === 'healthy' ? 'success' : diagResult.overallStatus === 'degraded' ? 'warning' : 'danger'" size="large">
-          {{ diagResult.overallStatus === 'healthy' ? '健康' : diagResult.overallStatus === 'degraded' ? '部分异常' : '存在错误' }}
-        </el-tag>
+        <span class="status-dot"></span>
+        {{ diagResult.overallStatus === 'healthy' ? '全部正常' : diagResult.overallStatus === 'degraded' ? '部分异常' : '存在错误' }}
       </div>
       <div class="ds-items">
         <div v-for="item in diagResult.items" :key="item.name" class="ds-item" :class="item.status">
@@ -42,11 +42,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
     </div>
-  </el-card>
+    <div v-else class="empty-hint">
+      <span class="status-dot"></span>
+      正在等待诊断结果
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { Refresh, CircleCheck, Warning, CircleClose, QuestionFilled } from "@element-plus/icons-vue"
+import { CircleCheck, Warning, CircleClose, QuestionFilled, Clock, Right } from "@element-plus/icons-vue"
 
 defineProps<{
   diagResult: any
@@ -62,28 +66,36 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.section-card { margin-bottom: 14px; }
+.section-card {
+  min-height: 286px;
+  padding: 22px;
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  background: var(--console-card);
+  box-shadow: var(--console-shadow);
+}
 .section-header-row { display: flex; justify-content: space-between; align-items: center; }
-.panel-title { font-size: var(--ac-font-size-sm); font-weight: 600; color: var(--ac-color-text); }
-.header-left-group { display: flex; align-items: center; gap: 10px; }
-.diag-time { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); }
+.panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
+.header-actions { display: flex; align-items: center; gap: 18px; }
+.diag-time { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--console-text-muted); }
 
-.diag-summary { display: flex; flex-direction: column; gap: 10px; }
-.ds-overall { display: flex; align-items: center; gap: 8px; }
-.ds-items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.diag-summary { margin-top: 16px; display: flex; flex-direction: column; gap: 0; border: 1px solid var(--console-border-soft); border-radius: 9px; overflow: hidden; }
+.ds-overall { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: #f97316; background: var(--console-diagnostic-warn-bg); font-size: 15px; font-weight: 750; }
+.ds-overall.healthy { color: #16a34a; background: var(--console-diagnostic-ok-bg); }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.ds-items { display: grid; grid-template-columns: 1fr; }
 @media (max-width: 640px) { .ds-items { grid-template-columns: 1fr; } }
-.ds-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--ac-radius-sm); background: var(--ac-color-bg-secondary); font-size: var(--ac-font-size-sm); }
-.ds-item.warn { border-left: 2px solid var(--ac-color-warning); }
-.ds-item.error { border-left: 2px solid var(--ac-color-error, #f56c6c); }
-.dsi-status.ok { color: var(--ac-color-success); }
-.dsi-status.warn { color: var(--ac-color-warning); }
-.dsi-status.error { color: var(--ac-color-error, #f56c6c); }
-.dsi-status.unknown { color: var(--ac-color-text-muted); }
+.ds-item { display: grid; grid-template-columns: 22px minmax(130px, 1fr) minmax(140px, 1.2fr); align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-top: 1px solid var(--console-border-soft); background: var(--console-card); font-size: 14px; }
+.dsi-status.ok { color: #16a34a; }
+.dsi-status.warn { color: #f97316; }
+.dsi-status.error { color: #ef4444; }
+.dsi-status.unknown { color: #98a2b3; }
 .dsi-name { font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-.dsi-msg { color: var(--ac-color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.dsi-msg { color: var(--console-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
 
 .ds-suggestions { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-.ds-suggestion-item { display: flex; align-items: flex-start; gap: 6px; padding: 6px 10px; border-radius: var(--ac-radius-sm); background: var(--ac-color-warning-bg, #fef0e6); font-size: var(--ac-font-size-xs); color: var(--ac-color-text-secondary); line-height: 1.5; }
+.ds-suggestion-item { display: flex; align-items: flex-start; gap: 6px; padding: 8px 12px; border-radius: 8px; background: var(--console-diagnostic-warn-bg); font-size: 12px; color: var(--console-text-muted); line-height: 1.5; }
 .dss-name { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .dss-text { word-break: break-all; }
+.empty-hint { margin-top: 18px; display: flex; align-items: center; gap: 8px; color: var(--console-text-muted); font-size: 14px; }
 </style>

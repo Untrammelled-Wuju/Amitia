@@ -4,27 +4,24 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
-    <!-- Desktop: top status bar -->
-    <StatusBar
-      v-if="!isMobile"
-      :deploy-mode="health.deployMode"
-      :wechat-status="health.wechat"
-      :qq-status="health.qq"
-      :model-status="health.model"
-      :character-name="currentCharName"
-      :theme="theme.preset"
-      :username="authUsername"
-      @toggle-theme="toggleTheme"
-      @logout="handleLogout"
-    />
-
     <div class="app-body">
-      <!-- Desktop: side nav -->
       <SideNav v-if="!isMobile" />
 
-      <!-- Main content -->
-      <main class="app-content" :class="{ 'is-login': isLoginPage }">
-        <!-- Mobile: compact status bar -->
+      <div class="app-main">
+        <StatusBar
+          v-if="!isMobile"
+          :deploy-mode="health.deployMode"
+          :wechat-status="health.wechat"
+          :qq-status="health.qq"
+          :model-status="health.model"
+          :character-name="currentCharName"
+          :theme="resolvedTheme"
+          :username="authUsername"
+          @toggle-theme="toggleTheme"
+          @logout="handleLogout"
+        />
+
+        <main class="app-content" :class="{ 'is-login': isLoginPage }">
         <header v-if="isMobile && !isLoginPage" class="mobile-header">
           <span class="mobile-title">{{ pageTitle }}</span>
           <span class="mobile-status">
@@ -36,10 +33,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="content-scroll" :class="{ 'no-padding': isChatPage || isLoginPage }">
           <slot />
         </div>
-      </main>
+        </main>
+      </div>
     </div>
 
-    <!-- Mobile: bottom tab nav -->
     <MobileNav v-if="isMobile && !isLoginPage" />
   </div>
 </template>
@@ -199,12 +196,20 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--ac-color-bg);
+  background: var(--console-bg);
 }
 
 .app-body {
   display: flex;
   flex: 1;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -218,14 +223,15 @@ onMounted(() => {
 .app-content.is-login {
   align-items: center;
   justify-content: center;
-  background: var(--ac-color-bg);
+  background: var(--console-bg);
 }
 
 .content-scroll {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 24px;
+  padding: 24px 32px;
+  background: var(--console-bg);
 }
 
 .content-scroll.no-padding {

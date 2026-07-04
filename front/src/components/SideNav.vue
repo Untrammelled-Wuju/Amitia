@@ -4,14 +4,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <nav class="side-nav">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div class="brand-name">Amitia</div>
+    </div>
     <div class="nav-section">
-      <router-link to="/chat" class="nav-item" active-class="nav-active">
-        <el-icon><ChatDotRound /></el-icon>
-        <span>聊天</span>
-      </router-link>
       <router-link to="/dashboard" class="nav-item" active-class="nav-active">
         <el-icon><Odometer /></el-icon>
         <span>概览</span>
+      </router-link>
+      <router-link to="/chat" class="nav-item" active-class="nav-active">
+        <el-icon><ChatDotRound /></el-icon>
+        <span>聊天</span>
       </router-link>
     </div>
     <div class="nav-divider"></div>
@@ -109,23 +113,53 @@ import {
 .side-nav {
   width: var(--ac-sidebar-width);
   height: 100%;
-  background: var(--ac-color-surface);
-  border-right: 1px solid var(--ac-color-border-light);
+  background: var(--console-sidebar);
+  border-right: 1px solid var(--console-border);
   display: flex;
   flex-direction: column;
-  padding: 10px 0;
+  padding: 24px 14px 18px;
   overflow-y: auto;
   user-select: none;
   flex-shrink: 0;
 }
-.nav-section { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
-.nav-divider { height: 1px; background: var(--ac-color-border-light); margin: 8px 16px; }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 24px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 22px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4f7cff 12%, #7c3aed 48%, #28d8b8 100%);
+  box-shadow: 0 12px 24px rgba(79, 124, 255, 0.22);
+}
+
+.brand-name {
+  color: var(--console-text);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.nav-section { display: flex; flex-direction: column; gap: 2px; }
+.nav-divider { height: 1px; background: var(--console-border-soft); margin: 8px 16px; }
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 14px;
-  border-radius: var(--ac-radius-sm); color: var(--ac-color-text-secondary);
-  text-decoration: none; font-size: var(--ac-font-size-sm); transition: all var(--ac-transition-fast);
+  border-radius: 7px; color: var(--console-text-secondary);
+  text-decoration: none; font-size: var(--ac-font-size-base); transition: all var(--ac-transition-fast);
 }
-.nav-item:hover { background: var(--ac-color-surface-hover); color: var(--ac-color-text); }
-.nav-active { background: var(--ac-color-primary-bg); color: var(--ac-color-primary); font-weight: 500; }
-.nav-active:hover { background: var(--ac-color-primary-bg); color: var(--ac-color-primary); }
+.nav-item:hover { background: var(--console-card-soft); color: #4f8df7; }
+.nav-active { background: rgba(79, 141, 247, 0.12); color: #2f6fff; font-weight: 600; }
+.nav-active:hover { background: rgba(79, 141, 247, 0.12); color: #2f6fff; }
+
 </style>

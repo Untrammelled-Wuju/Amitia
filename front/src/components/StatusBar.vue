@@ -4,14 +4,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <header class="status-bar">
-    <div class="status-left">
-      <span class="status-brand">AI-Amitia</span>
-      <el-tag :type="deployTagType" size="small" class="status-tag">
-        {{ deployLabel }}
-      </el-tag>
+    <div class="status-search">
+      <el-icon><Search /></el-icon>
+      <span>搜索功能、角色、会话、记忆...</span>
     </div>
     <div class="status-center">
       <div class="status-indicators">
+        <span class="status-dot status-on" :title="deployLabel">
+          <span class="dot"></span>
+          <span class="dot-label">核心服务正常</span>
+        </span>
         <span class="status-dot" :class="wechatClass" :title="wechatLabel">
           <span class="dot"></span>
           <span class="dot-label">{{ wechatLabel }}</span>
@@ -22,33 +24,36 @@ SPDX-License-Identifier: AGPL-3.0-only
         </span>
         <span class="status-dot" :class="modelClass" :title="modelLabel">
           <span class="dot"></span>
-          <span class="dot-label">{{ modelLabel }}</span>
-        </span>
-        <span class="status-dot" :class="characterClass" :title="characterLabel">
-          <span class="dot"></span>
-          <span class="dot-label">{{ characterLabel }}</span>
+          <span class="dot-label">模型服务{{ modelStatus === "configured" ? "正常" : "待配置" }}</span>
         </span>
       </div>
     </div>
     <div class="status-right">
-      <el-button text size="small" @click="$emit('toggleTheme')">
+      <el-button text circle class="icon-button" @click="$emit('toggleTheme')">
         <el-icon><component :is="themeIcon" /></el-icon>
       </el-button>
       <el-dropdown v-if="username" trigger="click">
-        <el-button text size="small">{{ username }}</el-button>
+        <button class="user-button">
+          <span class="avatar"><el-icon><UserFilled /></el-icon></span>
+          <span>{{ username }}</span>
+        </button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item @click="$emit('logout')">退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+      <button v-else class="user-button">
+        <span class="avatar"><el-icon><UserFilled /></el-icon></span>
+        <span>管理员</span>
+      </button>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
-import { Sunny, Moon } from "@element-plus/icons-vue"
+import { Moon, Search, Sunny, UserFilled } from "@element-plus/icons-vue"
 
 const props = defineProps<{
   deployMode?: string
@@ -68,22 +73,19 @@ defineEmits<{
 const deployLabel = computed(() =>
   props.deployMode === "cloud-web" ? "私有云" : "本地"
 )
-const deployTagType = computed(() =>
-  props.deployMode === "cloud-web" ? "warning" : "success"
-)
 
 const wechatClass = computed(() =>
   props.wechatStatus === "connected" ? "status-on" : "status-off"
 )
 const wechatLabel = computed(() =>
-  props.wechatStatus === "connected" ? "微信已连" : "微信未连"
+  props.wechatStatus === "connected" ? "微信已连接" : "微信未连接"
 )
 
 const qqClass = computed(() =>
   props.qqStatus === "connected" || props.qqStatus === "online" ? "status-on" : "status-off"
 )
 const qqLabel = computed(() =>
-  props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ已连" : "QQ未连"
+  props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ已连接" : "QQ未连接"
 )
 
 const modelClass = computed(() =>
@@ -93,18 +95,7 @@ const modelLabel = computed(() =>
   props.modelStatus === "configured" ? "模型已配" : "模型未配"
 )
 
-const characterClass = computed(() =>
-  props.characterName ? "status-on" : "status-off"
-)
-const characterLabel = computed(() =>
-  props.characterName || "未选角色"
-)
-
-const themeIcon = computed(() => {
-  if (props.theme === "dark") return Sunny
-  return Moon
-})
-
+const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
 </script>
 
 <style scoped>
@@ -112,29 +103,29 @@ const themeIcon = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: var(--ac-statusbar-height);
-  padding: 0 16px;
-  background: var(--ac-color-surface);
-  border-bottom: 1px solid var(--ac-color-border-light);
+  gap: 12px;
+  height: 56px;
+  padding: 0 12px;
+  background: var(--console-topbar);
+  border-bottom: 1px solid var(--console-border);
   flex-shrink: 0;
   user-select: none;
+  backdrop-filter: blur(14px);
 }
 
-.status-left {
+.status-search {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.status-brand {
-  font-weight: 600;
-  font-size: var(--ac-font-size-sm);
-  color: var(--ac-color-text);
-  white-space: nowrap;
-}
-
-.status-tag {
-  font-size: var(--ac-font-size-xs);
+  width: min(348px, 28vw);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--console-border);
+  border-radius: 10px;
+  background: var(--console-search-bg);
+  color: var(--console-search-text);
+  box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02);
+  font-size: 12px;
 }
 
 .status-center {
@@ -145,15 +136,20 @@ const themeIcon = computed(() => {
 
 .status-indicators {
   display: flex;
-  gap: 16px;
+  gap: 10px;
 }
 
 .status-dot {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-secondary);
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(34, 197, 94, 0.16);
+  border-radius: 9px;
+  background: var(--console-status-ok-bg);
+  font-size: 12px;
+  color: var(--console-text-secondary);
   cursor: default;
 }
 
@@ -165,12 +161,17 @@ const themeIcon = computed(() => {
 }
 
 .status-on .dot {
-  background: var(--ac-color-success);
-  box-shadow: 0 0 4px rgba(82, 168, 121, 0.4);
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.32);
 }
 
 .status-off .dot {
-  background: var(--ac-color-text-muted);
+  background: #f59e0b;
+}
+
+.status-off {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: var(--console-status-warn-bg);
 }
 
 .dot-label {
@@ -180,7 +181,36 @@ const themeIcon = computed(() => {
 .status-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.icon-button {
+  color: var(--console-text);
+  font-size: 16px;
+}
+
+.user-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--console-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--console-text-muted);
+  background: var(--console-avatar-bg);
 }
 
 @media (max-width: 768px) {

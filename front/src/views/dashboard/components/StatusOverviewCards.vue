@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="status-card" :class="deployClass">
       <div class="sc-icon"><el-icon :size="22"><Monitor /></el-icon></div>
       <div class="sc-body">
-        <div class="sc-label">部署模式</div>
+        <div class="sc-label">本地桌面</div>
         <div class="sc-value">{{ deployLabel }}</div>
       </div>
     </div>
@@ -77,14 +77,52 @@ const runtimeHealthLabel = computed(() =>
 </script>
 
 <style scoped>
-.status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.status-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--ac-radius-md); background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light); transition: border-color var(--ac-transition-fast); }
-.status-card.status-ok { border-left: 3px solid var(--ac-color-success); }
-.status-card.status-warn { border-left: 3px solid var(--ac-color-warning); }
-.status-card.status-off { border-left: 3px solid var(--ac-color-text-muted); }
-.sc-icon { flex-shrink: 0; color: var(--ac-color-text-secondary); }
+.status-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 138px;
+  padding: 24px 20px;
+  border-radius: 14px;
+  background: var(--console-card);
+  border: 1px solid var(--console-border);
+  box-shadow: var(--console-shadow);
+}
+.sc-icon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #4f8df7, #5b6dff);
+  box-shadow: 0 14px 24px rgba(79, 141, 247, 0.24);
+}
+.status-card:nth-child(2) .sc-icon { background: linear-gradient(135deg, #a071ff, #7048e8); }
+.status-card:nth-child(3) .sc-icon { background: linear-gradient(135deg, #54d98a, #22c55e); }
+.status-card:nth-child(4) .sc-icon { background: linear-gradient(135deg, #ffb84d, #ff8a1f); }
+.status-card:nth-child(5) .sc-icon { background: linear-gradient(135deg, #59d98f, #22c55e); }
 .sc-body { flex: 1; min-width: 0; }
-.sc-label { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); margin-bottom: 2px; }
-.sc-value { font-size: var(--ac-font-size-base); font-weight: 600; color: var(--ac-color-text); }
-.sc-sub { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-label { font-size: 16px; font-weight: 650; color: var(--console-text); margin-bottom: 8px; }
+.sc-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: var(--console-value-ok-bg);
+  color: #12a150;
+  font-size: 13px;
+  font-weight: 700;
+}
+.status-warn .sc-value { background: var(--console-value-warn-bg); color: #f97316; }
+.status-off .sc-value { background: var(--console-value-off-bg); color: #f43f5e; }
+.sc-sub { font-size: 14px; color: var(--console-text-muted); margin-top: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1280px) {
+  .status-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+}
 </style>

@@ -3,7 +3,7 @@
 import { ref, watch } from "vue"
 import { apiClient } from "./useApi"
 
-export type ThemePreset = "system" | "dark" | "light" | "calm-blue" | "warm-gray" | "mint" | "navy"
+export type ThemePreset = "system" | "dark" | "light"
 
 export interface ThemeState {
   preset: ThemePreset
@@ -12,9 +12,14 @@ export interface ThemeState {
 }
 
 const STORAGE_KEY = "ai-companion-theme"
+const VALID_PRESETS: ThemePreset[] = ["system", "light", "dark"]
+
+function normalizePreset(preset: unknown): ThemePreset {
+  return VALID_PRESETS.includes(preset as ThemePreset) ? preset as ThemePreset : "system"
+}
 
 const state = ref<ThemeState>({
-  preset: (localStorage.getItem(STORAGE_KEY) as ThemePreset) || "system",
+  preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
   accentColor: "",
   customTheme: null,
 })
@@ -28,12 +33,8 @@ applyTheme(state.value.preset)
 
 export const THEME_PRESETS: { id: ThemePreset; name: string; description: string }[] = [
   { id: "system", name: "跟随系统", description: "自动跟随操作系统主题设置" },
-  { id: "dark", name: "深色", description: "护眼深色模式" },
   { id: "light", name: "亮色", description: "明亮浅色模式" },
-  { id: "calm-blue", name: "静谧蓝", description: "克制的蓝色中性风格" },
-  { id: "warm-gray", name: "暖灰", description: "温暖中性灰色调" },
-  { id: "mint", name: "薄荷绿", description: "清新薄荷浅色风格" },
-  { id: "navy", name: "深邃蓝", description: "深海暗色护眼风格" },
+  { id: "dark", name: "暗色", description: "深色控制台模式" },
 ]
 
 function getSystemPreference(): "light" | "dark" {
@@ -111,9 +112,9 @@ async function loadFromServer() {
     const res = await apiClient.get("/api/theme")
     const d = (res.data as any)?.data || res.data
     if (d?.preset) {
-      state.value.preset = d.preset
+      state.value.preset = normalizePreset(d.preset)
       state.value.accentColor = d.accentColor || ""
-      applyTheme(d.preset)
+      applyTheme(state.value.preset)
     }
     themeLoaded.value = true
   } catch {
@@ -133,9 +134,9 @@ async function saveToServer(preset: ThemePreset, accentColor?: string) {
 
 export function useTheme() {
   function setPreset(preset: ThemePreset) {
-    state.value.preset = preset
+    state.value.preset = normalizePreset(preset)
     saveToServer(preset, state.value.accentColor)
-    if (preset === "light" || preset === "calm-blue" || preset === "warm-gray" || preset === "mint") {
+    if (state.value.preset === "light") {
       preferredLight.value = preset
     }
   }

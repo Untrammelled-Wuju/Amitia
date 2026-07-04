@@ -5,9 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="health-modules" v-if="runtimeHealth">
     <div class="health-header">
-      <span class="panel-title">服务状态</span>
-      <el-button size="small" :loading="runtimeHealthLoading" @click="emit('runHealthCheck')">
-        <el-icon :size="14" style="margin-right:4px"><Refresh /></el-icon>立即检查
+      <span class="panel-title">A. 服务状态</span>
+      <el-button text circle :loading="runtimeHealthLoading" @click="emit('runHealthCheck')">
+        <el-icon :size="16"><Refresh /></el-icon>
       </el-button>
     </div>
     <div class="health-module-grid">
@@ -17,20 +17,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         class="health-module-item"
         :class="'hm-' + m.status"
       >
-        <div class="hmi-indicator" :class="m.status"></div>
+        <div class="module-icon"><el-icon><Cpu /></el-icon></div>
         <div class="hmi-body">
           <div class="hmi-label">{{ healthModuleLabel(m.module) }}</div>
-          <div class="hmi-status">{{ healthStatusLabel(m.status) }}</div>
+          <div class="hmi-status" :class="m.status">{{ healthStatusLabel(m.status) }}</div>
         </div>
         <div class="hmi-detail" v-if="m.detail">{{ m.detail }}</div>
-        <div class="hmi-suggestion" v-if="m.suggestion">{{ m.suggestion }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Refresh } from "@element-plus/icons-vue"
+import { Cpu, Refresh } from "@element-plus/icons-vue"
 
 defineProps<{
   runtimeHealth: any
@@ -45,26 +44,38 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.health-modules { margin-top: 12px; margin-bottom: 14px; }
-.health-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.panel-title { font-size: var(--ac-font-size-sm); font-weight: 600; color: var(--ac-color-text); }
-.health-module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-.health-module-item {
-  background: var(--ac-color-bg-secondary); border-radius: 6px; padding: 12px;
-  border: 1px solid var(--ac-color-border-light); display: flex; flex-direction: column; gap: 4px;
+.health-modules {
+  min-height: 336px;
+  padding: 22px;
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  background: var(--console-card);
+  box-shadow: var(--console-shadow);
 }
-.health-module-item.hm-error { border-left: 3px solid #d4644c; background: #fdf5f4; }
-.health-module-item.hm-warning { border-left: 3px solid #b8952e; background: #fdf8ef; }
-.hmi-indicator { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.hmi-indicator.ok { background: #5a9e6f; }
-.hmi-indicator.warning { background: #b8952e; }
-.hmi-indicator.error { background: #d4644c; }
-.hmi-indicator.unknown { background: #aaa; }
-.hmi-body { display: flex; align-items: center; gap: 10px; }
-.hmi-label { font-size: 13px; font-weight: 600; color: var(--ac-color-text); }
-.hmi-status { font-size: 11px; color: var(--ac-color-text-muted); }
-.hmi-detail { font-size: 11px; color: var(--ac-color-text-secondary); word-break: break-all; }
-.hmi-suggestion { font-size: 11px; color: #8b6914; margin-top: 2px; }
+.health-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
+.health-module-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.health-module-item {
+  min-height: 54px;
+  background: var(--console-card);
+  border-radius: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--console-border-soft);
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.module-icon { display: flex; color: var(--console-text-muted); font-size: 18px; }
+.hmi-body { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.hmi-label { min-width: 76px; font-size: 14px; font-weight: 600; color: var(--console-text-secondary); }
+.hmi-status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #16a34a; }
+.hmi-status::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: #22c55e; }
+.hmi-status.warning { color: #f97316; }
+.hmi-status.warning::before { background: #f59e0b; }
+.hmi-status.error { color: #ef4444; }
+.hmi-status.error::before { background: #ef4444; }
+.hmi-detail { font-size: 13px; color: var(--console-text-muted); word-break: break-all; }
 
 @media (max-width: 768px) {
   .health-module-grid { grid-template-columns: 1fr; }

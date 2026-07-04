@@ -3,76 +3,65 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="info-grid">
-    <el-card shadow="never" class="info-panel">
-      <template #header>
-        <span class="panel-title">今日数据</span>
-      </template>
-      <div class="today-chart">
-        <div class="tc-row">
-          <span class="tc-label">消息</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-msg" :style="{ width: barPercent(todayMessages) }"></div>
-          </div>
-          <span class="tc-num">{{ todayMessages }}</span>
-        </div>
-        <div class="tc-row">
-          <span class="tc-label">会话</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-conv" :style="{ width: barPercent(totalConvs) }"></div>
-          </div>
-          <span class="tc-num">{{ totalConvs }}</span>
-        </div>
-        <div class="tc-row">
-          <span class="tc-label">记忆</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-mem" :style="{ width: barPercent(totalMemories) }"></div>
-          </div>
-          <span class="tc-num">{{ totalMemories }}</span>
-        </div>
-        <div class="tc-row">
-          <span class="tc-label">角色</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-char" :style="{ width: barPercent(totalChars) }"></div>
-          </div>
-          <span class="tc-num">{{ totalChars }}</span>
-        </div>
-        <div class="tc-row">
-          <span class="tc-label">模型调用</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-usage" :style="{ width: barPercent(todayCalls) }"></div>
-          </div>
-          <span class="tc-num">{{ todayCalls }}</span>
-        </div>
-        <div class="tc-row">
-          <span class="tc-label">消耗Token</span>
-          <div class="tc-bar-wrap">
-            <div class="tc-bar tc-bar-token" :style="{ width: barPercent(Math.min(todayTokens, maxTodayStat)) }"></div>
-          </div>
-          <span class="tc-num">{{ formatTokens(todayTokens) }}</span>
+  <section class="stats-panel">
+    <div class="panel-title">B. 今日数据</div>
+    <div class="stats-grid">
+      <div class="stat-item blue">
+        <div class="stat-icon"><el-icon><ChatDotRound /></el-icon></div>
+        <div>
+          <div class="stat-label">消息</div>
+          <div class="stat-value">{{ todayMessages }}</div>
         </div>
       </div>
-    </el-card>
-
-    <el-card shadow="never" class="info-panel">
-      <template #header>
-        <span class="panel-title">Feedback</span>
-      </template>
-      <div v-if="feedbackTotal > 0" class="feedback-summary">
-        <div class="fb-total">{{ feedbackTotal }} total</div>
-        <div class="fb-bars">
-          <div v-for="(cnt, type) in feedbackByType" :key="type" class="fb-bar-row">
-            <span class="fb-type">{{ type }}</span>
-            <span class="fb-cnt">{{ cnt }}</span>
-          </div>
+      <div class="stat-item purple">
+        <div class="stat-icon"><el-icon><User /></el-icon></div>
+        <div>
+          <div class="stat-label">会话</div>
+          <div class="stat-value">{{ totalConvs }}</div>
         </div>
       </div>
-      <div v-else class="empty-hint">No feedback yet</div>
-    </el-card>
-  </div>
+      <div class="stat-item violet">
+        <div class="stat-icon"><el-icon><Grape /></el-icon></div>
+        <div>
+          <div class="stat-label">记忆</div>
+          <div class="stat-value">{{ totalMemories }}</div>
+        </div>
+      </div>
+      <div class="stat-item orange">
+        <div class="stat-icon"><el-icon><UserFilled /></el-icon></div>
+        <div>
+          <div class="stat-label">角色</div>
+          <div class="stat-value">{{ totalChars }}</div>
+        </div>
+      </div>
+      <div class="stat-item amber">
+        <div class="stat-icon"><el-icon><Box /></el-icon></div>
+        <div>
+          <div class="stat-label">模型调用</div>
+          <div class="stat-value">{{ todayCalls }}</div>
+        </div>
+      </div>
+      <div class="stat-item green">
+        <div class="stat-icon"><el-icon><Coin /></el-icon></div>
+        <div>
+          <div class="stat-label">消耗Token</div>
+          <div class="stat-value">{{ formatTokens(todayTokens) }}</div>
+        </div>
+      </div>
+      <div class="stat-item green feedback">
+        <div class="stat-icon"><el-icon><Pointer /></el-icon></div>
+        <div>
+          <div class="stat-label">Feedback</div>
+          <div class="stat-value">{{ feedbackTotal }} <span>total</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
+import { Box, ChatDotRound, Coin, Grape, Pointer, User, UserFilled } from "@element-plus/icons-vue"
+
 defineProps<{
   todayMessages: number
   totalConvs: number
@@ -89,30 +78,71 @@ defineProps<{
 </script>
 
 <style scoped>
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-@media (max-width: 640px) { .info-grid { grid-template-columns: 1fr; } }
-.info-panel { min-height: 100px; }
-.panel-title { font-size: var(--ac-font-size-sm); font-weight: 600; color: var(--ac-color-text); }
+.stats-panel {
+  min-height: 336px;
+  padding: 22px;
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  background: var(--console-card);
+  box-shadow: var(--console-shadow);
+}
 
-.today-chart { display: flex; flex-direction: column; gap: 10px; }
-.tc-row { display: flex; align-items: center; gap: 10px; }
-.tc-label { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-secondary); width: 32px; flex-shrink: 0; text-align: right; }
-.tc-bar-wrap { flex: 1; height: 20px; background: var(--ac-color-bg-secondary); border-radius: 4px; overflow: hidden; }
-.tc-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; min-width: 2px; }
-.tc-bar-msg { background: var(--ac-color-primary); }
-.tc-bar-conv { background: #5a9e6f; }
-.tc-bar-mem { background: #b8952e; }
-.tc-bar-char { background: #8b7ec8; }
-.tc-bar-usage { background: #c8806a; }
-.tc-bar-token { background: #6a8fc8; }
-.tc-num { font-size: var(--ac-font-size-sm); font-weight: 700; color: var(--ac-color-text); width: 40px; flex-shrink: 0; text-align: right; }
+.panel-title { margin-bottom: 20px; font-size: 18px; font-weight: 800; color: var(--console-text); }
 
-.feedback-summary { display: flex; flex-direction: column; gap: 10px; }
-.fb-total { font-size: var(--ac-font-size-base); font-weight: 500; color: var(--ac-color-text); }
-.fb-bars { display: flex; flex-direction: column; gap: 6px; }
-.fb-bar-row { display: flex; justify-content: space-between; align-items: center; font-size: var(--ac-font-size-sm); }
-.fb-type { color: var(--ac-color-text-secondary); }
-.fb-cnt { font-weight: 600; color: var(--ac-color-text); }
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
 
-.empty-hint { font-size: var(--ac-font-size-sm); color: var(--ac-color-text-muted); padding: 8px 0; }
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 66px;
+  padding: 6px 20px 14px 0;
+  border-bottom: 1px solid var(--console-border-soft);
+}
+
+.stat-item:nth-child(odd) {
+  border-right: 1px solid var(--console-border-soft);
+}
+
+.stat-item:nth-child(even) {
+  padding-left: 20px;
+}
+
+.stat-item.feedback {
+  border-bottom: 0;
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  font-size: 22px;
+}
+
+.blue .stat-icon { color: #2563eb; background: var(--console-blue-soft); }
+.purple .stat-icon { color: #7c3aed; background: var(--console-purple-soft); }
+.violet .stat-icon { color: #6d5dfc; background: var(--console-violet-soft); }
+.orange .stat-icon { color: #f97316; background: var(--console-orange-soft); }
+.amber .stat-icon { color: #f97316; background: var(--console-amber-soft); }
+.green .stat-icon { color: #16a34a; background: var(--console-green-soft); }
+
+.stat-label { margin-bottom: 4px; color: var(--console-text-muted); font-size: 14px; }
+.stat-value { color: var(--console-text); font-size: 22px; font-weight: 750; line-height: 1.1; }
+.stat-value span { font-size: 14px; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-item,
+  .stat-item:nth-child(even) {
+    padding-left: 0;
+    border-right: 0;
+  }
+}
 </style>

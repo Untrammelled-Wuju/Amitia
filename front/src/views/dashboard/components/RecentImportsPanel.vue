@@ -3,21 +3,28 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <el-card shadow="never" class="section-card">
-    <template #header>
-      <span class="panel-title">最近导入批次</span>
-    </template>
+  <section class="section-card">
+    <div class="section-header-row">
+      <span class="panel-title">E. 最近导入批次</span>
+    </div>
     <div v-if="recentImports.length > 0" class="list-compact">
       <div v-for="b in recentImports" :key="b.id" class="list-item">
         <span class="li-title">{{ b.title }}</span>
         <span class="li-meta">{{ b.itemCount || 0 }}条 · {{ fmtDateShort(b.createdAt) }}</span>
       </div>
     </div>
-    <div v-else class="empty-hint">暂无导入记录</div>
-  </el-card>
+    <div v-else class="empty-hint">
+      <div class="empty-illustration">
+        <el-icon><Download /></el-icon>
+      </div>
+      <span>暂无导入记录</span>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
+import { Download } from "@element-plus/icons-vue"
+
 defineProps<{
   recentImports: any[]
   fmtDateShort: (d: string) => string
@@ -25,13 +32,41 @@ defineProps<{
 </script>
 
 <style scoped>
-.section-card { margin-bottom: 14px; }
-.panel-title { font-size: var(--ac-font-size-sm); font-weight: 600; color: var(--ac-color-text); }
+.section-card {
+  min-height: 286px;
+  padding: 22px;
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  background: var(--console-card);
+  box-shadow: var(--console-shadow);
+}
+.section-header-row { display: flex; justify-content: space-between; align-items: center; }
+.panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
 
-.list-compact { display: flex; flex-direction: column; gap: 6px; }
-.list-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: var(--ac-font-size-sm); }
+.list-compact { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.list-item { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 9px; background: var(--console-card-soft); font-size: 14px; }
 .li-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.li-meta { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); white-space: nowrap; margin-left: 8px; }
+.li-meta { font-size: 12px; color: var(--console-text-muted); white-space: nowrap; margin-left: 8px; }
 
-.empty-hint { font-size: var(--ac-font-size-sm); color: var(--ac-color-text-muted); padding: 8px 0; }
+.empty-hint {
+  height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--console-text-muted);
+  font-size: 15px;
+}
+.empty-illustration {
+  width: 88px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  border: 4px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 46px;
+}
 </style>

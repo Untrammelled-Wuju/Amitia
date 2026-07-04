@@ -348,13 +348,9 @@ async function loadAbout() {
 .theme-preset-item:hover { border-color: var(--ac-color-primary); background: var(--ac-color-surface-hover); }
 .theme-preset-item.active { border-color: var(--ac-color-primary); background: var(--ac-color-primary-bg); }
 .theme-preset-preview { width: 48px; height: 48px; border-radius: 8px; flex-shrink: 0; border: 1px solid var(--ac-color-border); }
-.preview-light { background: linear-gradient(135deg, #F8FAF4 0%, #7DAA84 100%); }
-.preview-dark { background: #1A1B1E; }
-.preview-system { background: linear-gradient(135deg, #F8FAF4 50%, #1A1B1E 50%); }
-.preview-calm-blue { background: linear-gradient(135deg, #3B82F6 0%, #DBEAFE 100%); }
-.preview-warm-gray { background: linear-gradient(135deg, #8A8178 0%, #EDE8E2 100%); }
-.preview-mint { background: linear-gradient(135deg, #089B8A 0%, #F6FDF9 100%); }
-.preview-navy { background: linear-gradient(135deg, #0F172A 0%, #60A5FA 100%); }
+.preview-light { background: linear-gradient(135deg, #F7FAFF 0%, #FFFFFF 52%, #3B82F6 100%); }
+.preview-dark { background: linear-gradient(135deg, #070B10 0%, #111820 58%, #3B82F6 100%); }
+.preview-system { background: linear-gradient(135deg, #F7FAFF 0 50%, #070B10 50% 100%); }
 .theme-preset-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .theme-preset-name { font-size: var(--ac-font-size-sm); font-weight: 500; color: var(--ac-color-text); }
 .theme-preset-desc { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); }
