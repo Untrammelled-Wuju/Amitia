@@ -34,6 +34,15 @@ backend/data/tts_cache/
 qdrant/storage/
 qdrant/snapshots/
 
+# release runtime data
+release/qdrant/storage/
+release/qdrant/snapshots/
+release/data/migration_backups/
+release/data/backups/
+release/logs/
+release/*.log
+release/qdrant/.qdrant-initialized
+
 backend/qdrant/storage/
 backend/qdrant/qdrant_linux_*
 wechat-chat-extractor/weFlow.zip
