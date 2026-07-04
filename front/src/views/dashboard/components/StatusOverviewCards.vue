@@ -97,10 +97,10 @@ const runtimeHealthLabel = computed(() =>
   align-items: center;
   justify-content: center;
   border-radius: 13px;
-  background: rgba(74, 222, 128, 0.2); color: #86efac;
+  background: var(--status-ok-bg); color: var(--status-ok-color);
 }
-.status-off .sc-icon { background: rgba(248, 113, 113, 0.2); color: #fca5a5; }
-.status-warn .sc-icon { background: rgba(248, 113, 113, 0.2); color: #fca5a5; }
+.status-off .sc-icon { background: var(--status-off-bg); color: var(--status-off-color); }
+.status-warn .sc-icon { background: var(--status-off-bg); color: var(--status-off-color); }
 
 .sc-body { flex: 1; min-width: 0; }
 .sc-label { font-size: 16px; font-weight: 650; color: var(--console-text); margin-bottom: 8px; }
@@ -111,12 +111,12 @@ const runtimeHealthLabel = computed(() =>
   padding: 3px 10px;
   border-radius: 7px;
   background: var(--console-value-ok-bg);
-  color: #86efac;
+  color: #12a150;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
 }
-.status-warn .sc-value { background: var(--console-value-off-bg); color: #fca5a5; }
-.status-off .sc-value { background: var(--console-value-off-bg); color: #fca5a5; }
+.status-warn .sc-value { background: var(--console-value-off-bg); color: #f97316; }
+.status-off .sc-value { background: var(--console-value-off-bg); color: #f43f5e; }
 .sc-sub { font-size: 14px; color: var(--console-text-muted); margin-top: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1280px) {

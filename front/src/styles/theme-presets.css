@@ -18,6 +18,11 @@ html[data-theme="light"] {
   --nav-hover-color: #4f8df7;
   --nav-hover-bg: rgba(79, 141, 247, 0.06);
 
+  --status-ok-bg: rgba(34, 197, 94, 0.45);
+  --status-ok-color: #ffffff;
+  --status-off-bg: rgba(239, 68, 68, 0.45);
+  --status-off-color: #ffffff;
+
   --tp-bg: #F8FAF4;
   --tp-bg-secondary: #F0F3EC;
   --tp-surface: #FFFFFF;
@@ -79,6 +84,11 @@ html[data-theme="dark"] {
   --nav-active-bg: rgba(255, 255, 255, 0.07);
   --nav-hover-color: #c8cdd5;
   --nav-hover-bg: rgba(255, 255, 255, 0.04);
+
+  --status-ok-bg: rgba(74, 222, 128, 0.2);
+  --status-ok-color: #86efac;
+  --status-off-bg: rgba(248, 113, 113, 0.2);
+  --status-off-color: #fca5a5;
 
   --tp-bg: #0B0B0B;
   --tp-bg-secondary: #101010;

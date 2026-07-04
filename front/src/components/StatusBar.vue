@@ -160,9 +160,9 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   flex-shrink: 0;
 }
 
-.status-on .dot { background: #86efac; }
+.status-on .dot { background: var(--status-ok-color); }
 
-.status-off .dot { background: #fca5a5; }
+.status-off .dot { background: var(--status-off-color); }
 
 .status-off {
   border-color: rgba(245, 158, 11, 0.22);
