@@ -210,10 +210,7 @@
 }
 
 /* ---- Menu / Nav ---- */
-.el-menu-item.is-active {
-  color: var(--ac-color-primary);
-  border-bottom-color: var(--ac-color-primary);
-}
+.el-menu-item.is-active { color: var(--nav-active-color); border-bottom-color: var(--nav-active-color); }
 
 /* ---- Tabs ---- */
 .el-tabs__item.is-active {

@@ -111,6 +111,7 @@ import {
 
 <style scoped>
 .side-nav {
+  transition: background-color 0.3s ease;
   width: var(--ac-sidebar-width);
   height: 100%;
   background: var(--console-sidebar);
@@ -158,8 +159,8 @@ import {
   border-radius: 7px; color: var(--console-text-secondary);
   text-decoration: none; font-size: var(--ac-font-size-base); transition: all var(--ac-transition-fast);
 }
-.nav-item:hover { background: var(--console-card-soft); color: #4f8df7; }
-.nav-active { background: rgba(79, 141, 247, 0.12); color: #2f6fff; font-weight: 600; }
-.nav-active:hover { background: rgba(79, 141, 247, 0.12); color: #2f6fff; }
+.nav-item:hover { background: var(--nav-hover-bg); color: var(--nav-hover-color); }
+.nav-active { background: var(--nav-active-bg); color: var(--nav-active-color); font-weight: 600; }
+.nav-active:hover { background: var(--nav-active-bg); color: var(--nav-active-color); }
 
 </style>

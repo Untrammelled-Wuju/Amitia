@@ -193,6 +193,7 @@ onMounted(() => {
 
 <style scoped>
 .app-shell {
+  transition: background-color 0.3s ease;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -227,6 +228,7 @@ onMounted(() => {
 }
 
 .content-scroll {
+  transition: background-color 0.3s ease;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -287,6 +289,7 @@ onMounted(() => {
 /* Mobile adjustments */
 /* Mobile adjustments */
 .is-mobile .content-scroll {
+  transition: background-color 0.3s ease;
   padding: 10px 12px;
   padding-bottom: calc(10px + var(--ac-safe-area-bottom));
 }

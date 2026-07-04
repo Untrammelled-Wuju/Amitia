@@ -69,8 +69,5 @@ function isActive(item: AppNavItem) {
   font-size: 22px;
 }
 
-.tab-active {
-  color: var(--ac-color-primary);
-  font-weight: 500;
-}
+.tab-active { color: var(--nav-active-color); font-weight: 500; }
 </style>

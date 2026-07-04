@@ -13,6 +13,11 @@ html[data-theme="light"] {
   --tp-primary-bg: rgba(125, 170, 132, 0.08);
   --tp-primary-border: rgba(125, 170, 132, 0.2);
 
+  --nav-active-color: #2f6fff;
+  --nav-active-bg: rgba(79, 141, 247, 0.12);
+  --nav-hover-color: #4f8df7;
+  --nav-hover-bg: rgba(79, 141, 247, 0.06);
+
   --tp-bg: #F8FAF4;
   --tp-bg-secondary: #F0F3EC;
   --tp-surface: #FFFFFF;
@@ -34,9 +39,9 @@ html[data-theme="light"] {
   --tp-shadow-md: 0 2px 8px rgba(0,0,0,0.08);
   --tp-shadow-lg: 0 4px 16px rgba(0,0,0,0.1);
 
-  --console-bg: radial-gradient(circle at 55% 12%, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 255, 0.96) 42%, #F7FAFF 100%);
+  --console-bg: radial-gradient(circle at 55% 12%, rgba(248, 250, 253, 0.98) 0%, rgba(244, 247, 251, 0.96) 42%, #F3F6FA 100%);
   --console-sidebar: rgba(248, 251, 255, 0.96);
-  --console-topbar: rgba(255, 255, 255, 0.9);
+  --console-topbar: var(--console-sidebar);
   --console-card: #FFFFFF;
   --console-card-soft: #F8FAFC;
   --console-border: #E6EBF4;
@@ -70,12 +75,17 @@ html[data-theme="dark"] {
   --tp-primary-bg: rgba(59, 130, 246, 0.14);
   --tp-primary-border: rgba(59, 130, 246, 0.34);
 
-  --tp-bg: #0B0F12;
-  --tp-bg-secondary: #0C0E11;
-  --tp-surface: #12151A;
-  --tp-surface-hover: #171B21;
-  --tp-border: #252A31;
-  --tp-border-light: #1E232A;
+  --nav-active-color: #d4d8df;
+  --nav-active-bg: rgba(255, 255, 255, 0.07);
+  --nav-hover-color: #c8cdd5;
+  --nav-hover-bg: rgba(255, 255, 255, 0.04);
+
+  --tp-bg: #0B0B0B;
+  --tp-bg-secondary: #101010;
+  --tp-surface: #151515;
+  --tp-surface-hover: #1B1B1B;
+  --tp-border: #2A2A2A;
+  --tp-border-light: #222222;
 
   --tp-text: #F3F6FB;
   --tp-text-secondary: #C4CCD8;
@@ -91,17 +101,17 @@ html[data-theme="dark"] {
   --tp-shadow-md: 0 2px 10px rgba(0,0,0,0.36);
   --tp-shadow-lg: 0 18px 60px rgba(0,0,0,0.42);
 
-  --console-bg: #0B0F12;
-  --console-sidebar: #0C0E11;
-  --console-topbar: #0C0E11;
-  --console-card: #12151A;
-  --console-card-soft: #0C0E11;
+  --console-bg: #0E0E0E;
+  --console-sidebar: #101010;
+  --console-topbar: #101010;
+  --console-card: #151515;
+  --console-card-soft: #101010;
   --console-border: rgba(255, 255, 255, 0.09);
   --console-border-soft: rgba(255, 255, 255, 0.07);
   --console-text: #F5F7FB;
   --console-text-secondary: #C9D1DD;
   --console-text-muted: #98A2B3;
-  --console-search-bg: #0C0E11;
+  --console-search-bg: #101010;
   --console-search-text: #AEB8C6;
   --console-shadow: 0 18px 56px rgba(0, 0, 0, 0.28);
   --console-status-ok-bg: rgba(46, 204, 113, 0.09);

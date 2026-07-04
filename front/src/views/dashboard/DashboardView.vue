@@ -4,11 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="dashboard">
-    <section class="dashboard-hero">
-      <h1>早上好，管理员<span>👋</span></h1>
-      <p>系统运行正常，所有核心服务均处于健康状态</p>
-    </section>
-
     <StatusOverviewCards
       :deploy-class="deployClass"
       :deploy-label="deployLabel"
@@ -102,28 +97,6 @@ const {
   color: var(--console-text);
 }
 
-.dashboard-hero {
-  margin-bottom: 22px;
-}
-
-.dashboard-hero h1 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 28px;
-  line-height: 1.25;
-  font-weight: 800;
-  letter-spacing: 0;
-  color: #0f172a;
-  color: var(--console-text);
-}
-
-.dashboard-hero p {
-  margin-top: 8px;
-  font-size: 14px;
-  color: var(--console-text-muted);
-}
-
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.08fr 1.2fr 1fr;
@@ -159,12 +132,5 @@ const {
       "diagnostics"
       "imports";
   }
-
-  .dashboard-hero h1 {
-    font-size: 24px;
-  }
 }
 </style>
-
-
-

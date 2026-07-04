@@ -131,7 +131,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
 .status-center {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .status-indicators {
@@ -205,7 +205,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
 .avatar {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: 22px;
   height: 22px;
   border-radius: 50%;
