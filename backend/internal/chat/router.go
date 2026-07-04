@@ -10,7 +10,15 @@ import (
 
 func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry) {
 	handler := NewHandlerWithUnifiedEntry(svc, entry)
+	registerChatRoutes(r, handler)
+}
 
+func RegisterChatRouterWithDelivery(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry, ds DeliveryStore) {
+	handler := NewHandlerWithUnifiedEntryAndDelivery(svc, entry, ds)
+	registerChatRoutes(r, handler)
+}
+
+func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
 	r.POST("/chat", handler.Chat)
 
 	chatsGroup := r.Group("/chats")

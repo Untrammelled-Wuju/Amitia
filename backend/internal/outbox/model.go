@@ -68,8 +68,6 @@ const (
 
 func ValidTransitions() map[OutboxStatus][]OutboxStatus {
 
-
-
 	return map[OutboxStatus][]OutboxStatus{
 		OutboxStatusPending:   {OutboxStatusLeased},
 		OutboxStatusLeased:    {OutboxStatusPublished, OutboxStatusFailed, OutboxStatusRetry},

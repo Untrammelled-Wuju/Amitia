@@ -116,7 +116,10 @@ var _ interaction.MessageProcessor = (*service)(nil)
 
 type DeliveryStore interface {
 	CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error
+	PreemptActiveOutputLeases(characterID string) error
 	CreateOutputLease(interactionID, characterID, userID, channel string) error
+	AcquireOutputLease(interactionID, characterID, userID, channel string) (leaseID string, ownerToken string, err error)
+	ReleaseOutputLease(leaseID, ownerToken string) error
 }
 
 type OutboxStore interface {

@@ -8,15 +8,15 @@ import (
 )
 
 type DispatchedPublisher struct {
-	mu         sync.RWMutex
-	handlers   map[string]Publisher
-	fallback   Publisher
+	mu       sync.RWMutex
+	handlers map[string]Publisher
+	fallback Publisher
 }
 
 func NewDispatchedPublisher(fallback Publisher) *DispatchedPublisher {
 	return &DispatchedPublisher{
-		handlers:   make(map[string]Publisher),
-		fallback:   fallback,
+		handlers: make(map[string]Publisher),
+		fallback: fallback,
 	}
 }
 

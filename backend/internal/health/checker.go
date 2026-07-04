@@ -71,31 +71,31 @@ func (c *Checker) RunAll() HealthStatus {
 			if !ok {
 				return
 			}
-		start := time.Now()
-		err := check()
-		latency := time.Since(start)
+			start := time.Now()
+			err := check()
+			latency := time.Since(start)
 
-		info := DependencyInfo{
-			Name:      name,
-			LastCheck: now,
-			Latency:   latency,
-		}
+			info := DependencyInfo{
+				Name:      name,
+				LastCheck: now,
+				Latency:   latency,
+			}
 
-		if err != nil {
-			info.Status = DependencyDown
-			info.Error = err.Error()
-			mu.Lock()
-			allUp = false
-			mu.Unlock()
-		} else {
-			info.Status = DependencyUp
-		}
+			if err != nil {
+				info.Status = DependencyDown
+				info.Error = err.Error()
+				mu.Lock()
+				allUp = false
+				mu.Unlock()
+			} else {
+				info.Status = DependencyUp
+			}
 
 			c.mu.Lock()
-		c.deps[name] = info
+			c.deps[name] = info
 			c.mu.Unlock()
 			mu.Lock()
-		result[name] = info
+			result[name] = info
 			mu.Unlock()
 		}(name)
 	}

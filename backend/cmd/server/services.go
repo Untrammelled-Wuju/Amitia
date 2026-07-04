@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
+	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/vision"
@@ -33,24 +34,25 @@ import (
 )
 
 type AppServices struct {
-	DeliveryStore   *delivery.SQLiteDeliveryStore
-	DeliveryWorker  *delivery.Worker
-	Graph           graph.Service
-	Memory          memory.Service
-	Profile         profile.Service
-	Episodic        episodic.Service
-	WorldBook       worldbook.Service
-	Vision          vision.Service
-	Companion       companion.Service
-	Chat            chat.Service
-	UnifiedEntry    *interaction.UnifiedEntry
-	DataLifecycle   *mindruntime.DataLifecycleCoordinator
-	RuntimeQueue    *queue.SQLiteRuntimeQueueStore
-	NewOutbox       *newoutbox.SQLiteOutboxStore
-	OutboxWorker    *newoutbox.Worker
-	Reconciliation  *mindruntime.ReconciliationEngine
-	CircuitBreakers *mindruntime.CircuitBreakerRegistry
-	VoiceEntry      *interaction.VoiceEntry
+	DeliveryStore       *delivery.SQLiteDeliveryStore
+	ChatDeliveryAdapter chat.DeliveryStore
+	DeliveryWorker      *delivery.Worker
+	Graph               graph.Service
+	Memory              memory.Service
+	Profile             profile.Service
+	Episodic            episodic.Service
+	WorldBook           worldbook.Service
+	Vision              vision.Service
+	Companion           companion.Service
+	Chat                chat.Service
+	UnifiedEntry        *interaction.UnifiedEntry
+	DataLifecycle       *mindruntime.DataLifecycleCoordinator
+	RuntimeQueue        *queue.SQLiteRuntimeQueueStore
+	NewOutbox           *newoutbox.SQLiteOutboxStore
+	OutboxWorker        *newoutbox.Worker
+	Reconciliation      *mindruntime.ReconciliationEngine
+	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
+	VoiceEntry          *interaction.VoiceEntry
 }
 
 type reflectionMemoryServiceAdapter struct {
@@ -162,13 +164,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 	entry := interaction.NewUnifiedEntry(orch, resolver)
 	compSvc.AttachUnifiedEntry(entry)
+	compSvc.AttachDeliveryStore(deliveryStore)
 	if coordinatorSetter, ok := interface{}(compSvc).(interface {
 		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
 	}); ok {
 		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
 	}
 	reconciliationEngine := mindruntime.NewReconciliationEngine(mindruntime.DefaultReconciliationConfig())
-	if err := mindruntime.RegisterDefaultRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB); err != nil {
+	graphReconAdapter := &graphReconciliationAdapter{graphSvc: graphSvc}
+	qdrantReconAdapter := &qdrantReconciliationAdapter{qdrantClient: qdrant.NewQdrantClient()}
+	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB, graphReconAdapter, qdrantReconAdapter); err != nil {
 		log.Warn("reconciliation checkers registration warning: ", err)
 	}
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
@@ -180,24 +185,25 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to init delivery store schema: " + err.Error())
 	}
 	return &AppServices{
-		Graph:           graphSvc,
-		Memory:          memSvc,
-		Profile:         profSvc,
-		Episodic:        epiSvc,
-		WorldBook:       wbSvc,
-		Vision:          visionSvc,
-		Companion:       compSvc,
-		Chat:            chatSvc,
-		UnifiedEntry:    entry,
-		DataLifecycle:   dataLifecycle,
-		RuntimeQueue:    runtimeQueue,
-		NewOutbox:       newOutboxStore,
-		DeliveryStore:   deliveryStore,
-		DeliveryWorker:  deliveryWorker,
-		OutboxWorker:    newOutboxWorker,
-		Reconciliation:  reconciliationEngine,
-		CircuitBreakers: cbRegistry,
-		VoiceEntry:      voiceEntry,
+		Graph:               graphSvc,
+		ChatDeliveryAdapter: deliveryAdapter,
+		Memory:              memSvc,
+		Profile:             profSvc,
+		Episodic:            epiSvc,
+		WorldBook:           wbSvc,
+		Vision:              visionSvc,
+		Companion:           compSvc,
+		Chat:                chatSvc,
+		UnifiedEntry:        entry,
+		DataLifecycle:       dataLifecycle,
+		RuntimeQueue:        runtimeQueue,
+		NewOutbox:           newOutboxStore,
+		DeliveryStore:       deliveryStore,
+		DeliveryWorker:      deliveryWorker,
+		OutboxWorker:        newOutboxWorker,
+		Reconciliation:      reconciliationEngine,
+		CircuitBreakers:     cbRegistry,
+		VoiceEntry:          voiceEntry,
 	}
 }
 
@@ -245,4 +251,55 @@ func (a *chatDeliveryAdapter) CreateDeliveryIntent(interactionID, channel, peerI
 func (a *chatDeliveryAdapter) CreateOutputLease(interactionID, characterID, userID, channel string) error {
 	lease := delivery.NewOutputLease(interactionID, characterID, userID, channel)
 	return a.store.CreateLease(lease)
+}
+
+func (a *chatDeliveryAdapter) AcquireOutputLease(interactionID, characterID, userID, channel string) (string, string, error) {
+	lease := delivery.NewOutputLease(interactionID, characterID, userID, channel)
+	if err := a.store.CreateLease(lease); err != nil {
+		return "", "", err
+	}
+	return lease.ID, lease.OwnerToken, nil
+}
+
+func (a *chatDeliveryAdapter) ReleaseOutputLease(leaseID, ownerToken string) error {
+	return a.store.ReleaseLease(leaseID, ownerToken)
+}
+
+func (a *chatDeliveryAdapter) PreemptActiveOutputLeases(characterID string) error {
+	_, err := a.store.PreemptActiveLeasesByCharacter(characterID)
+	return err
+}
+
+type graphReconciliationAdapter struct {
+	graphSvc graph.Service
+}
+
+func (a *graphReconciliationAdapter) Name() string { return "graph" }
+
+func (a *graphReconciliationAdapter) CheckSideEffectExists(ctx context.Context, aggregateID, eventType string) (bool, error) {
+	if a.graphSvc == nil {
+		return false, nil
+	}
+	nodes, err := a.graphSvc.GetAllNodes(aggregateID)
+	if err != nil {
+		return false, err
+	}
+	return len(nodes) > 0, nil
+}
+
+type qdrantReconciliationAdapter struct {
+	qdrantClient *qdrant.QdrantClient
+}
+
+func (a *qdrantReconciliationAdapter) Name() string { return "qdrant" }
+
+func (a *qdrantReconciliationAdapter) CheckSideEffectExists(ctx context.Context, aggregateID, eventType string) (bool, error) {
+	if a.qdrantClient == nil {
+		return false, nil
+	}
+	_, err := a.qdrantClient.SearchWithFilter(ctx, "memory_embeddings", nil, qdrant.QdrantFilter{CharacterID: aggregateID}, 1)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
 }

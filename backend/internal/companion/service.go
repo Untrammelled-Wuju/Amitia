@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
@@ -70,6 +71,7 @@ type Service interface {
 	RandomBurstTrigger(characterID string) map[string]interface{}
 	RandomBurstTriggerContext(ctx context.Context, characterID string) map[string]interface{}
 	AttachUnifiedEntry(entry *interaction.UnifiedEntry)
+	AttachDeliveryStore(store *delivery.SQLiteDeliveryStore)
 }
 
 type proactiveUnifiedEntry interface {
@@ -82,6 +84,7 @@ type service struct {
 	burstMu                  sync.Mutex
 	burstScopes              map[string]burstScopeState
 	unifiedEntry             proactiveUnifiedEntry
+	deliveryStore            *delivery.SQLiteDeliveryStore
 	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 }
 
@@ -96,6 +99,10 @@ func NewService(ctx *app.AppContext) Service {
 
 func (s *service) AttachUnifiedEntry(entry *interaction.UnifiedEntry) {
 	s.unifiedEntry = entry
+}
+
+func (s *service) AttachDeliveryStore(store *delivery.SQLiteDeliveryStore) {
+	s.deliveryStore = store
 }
 
 func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordinator) {

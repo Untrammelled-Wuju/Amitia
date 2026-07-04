@@ -28,10 +28,15 @@ type DeliveryIntent struct {
 	Payload       []byte         `json:"payload"`
 	Status        DeliveryStatus `json:"status"`
 	CreatedAt     time.Time      `json:"createdAt"`
+	SentAt        *time.Time     `json:"sentAt"`
 	DeliveredAt   *time.Time     `json:"deliveredAt"`
 	RetryCount    int            `json:"retryCount"`
 	MaxRetries    int            `json:"maxRetries"`
 	LastError     string         `json:"lastError"`
+	LeaseOwner    string         `json:"leaseOwner"`
+	LeaseToken    string         `json:"leaseToken"`
+	LeaseUntil    *time.Time     `json:"leaseUntil"`
+	NextRetry     *time.Time     `json:"nextRetry"`
 }
 
 type OutputLease struct {
@@ -40,6 +45,8 @@ type OutputLease struct {
 	CharacterID   string     `json:"characterId"`
 	UserID        string     `json:"userId"`
 	Channel       string     `json:"channel"`
+	OwnerToken    string     `json:"ownerToken"`
+	Generation    int        `json:"generation"`
 	Status        string     `json:"status"`
 	AcquiredAt    time.Time  `json:"acquiredAt"`
 	ExpiresAt     time.Time  `json:"expiresAt"`
@@ -59,10 +66,13 @@ type IntentStore interface {
 	ListPending(limit int) ([]DeliveryIntent, error)
 }
 
+func GenerateDeliveryID(interactionID, channel, peerID, discriminator string) string {
+	return fmt.Sprintf("di-%s-%s-%s-%s", interactionID, channel, peerID, discriminator)
+}
+
 func NewDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) DeliveryIntent {
-	stableID := fmt.Sprintf("di-%s-%s-%s-%s", interactionID, channel, peerID, contentType)
 	return DeliveryIntent{
-		ID:            stableID,
+		ID:            GenerateDeliveryID(interactionID, channel, peerID, uuid.New().String()),
 		InteractionID: interactionID,
 		Channel:       channel,
 		PeerID:        peerID,
@@ -81,6 +91,8 @@ func NewOutputLease(interactionID, characterID, userID, channel string) OutputLe
 		CharacterID:   characterID,
 		UserID:        userID,
 		Channel:       channel,
+		OwnerToken:    uuid.New().String(),
+		Generation:    1,
 		Status:        "active",
 		AcquiredAt:    time.Now().UTC(),
 		ExpiresAt:     time.Now().UTC().Add(30 * time.Second),

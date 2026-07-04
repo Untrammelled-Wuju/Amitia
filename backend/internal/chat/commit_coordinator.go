@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/psyche"
@@ -40,17 +41,19 @@ func (relationshipEventRecord) TableName() string {
 }
 
 type messageCommitPlan struct {
-	Request       *ProcessMessageRequest
-	Conversation  string
-	Character     string
-	CharacterName string
-	UserMessageID string
-	Reply         string
-	Lines         []string
-	Source        string
-	Runtime       *interaction.RuntimeAssembly
-	CommitToken   string
-	CommitOwner   string
+	Request         *ProcessMessageRequest
+	Conversation    string
+	Character       string
+	CharacterName   string
+	UserMessageID   string
+	Reply           string
+	Lines           []string
+	Source          string
+	Runtime         *interaction.RuntimeAssembly
+	CommitToken     string
+	CommitOwner     string
+	LeaseID         string
+	LeaseOwnerToken string
 }
 
 type messageCommitResult struct {
@@ -64,6 +67,17 @@ type messageCommitResult struct {
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
+
+	if s.deliveryStore != nil && plan.Request != nil && plan.Request.InteractionID != "" {
+		leaseID, ownerToken, err := s.deliveryStore.AcquireOutputLease(
+			plan.Request.InteractionID, plan.Character, plan.Request.UserID, plan.Request.Channel)
+		if err != nil {
+			return nil, fmt.Errorf("failed to acquire output lease: %w", err)
+		}
+		plan.LeaseID = leaseID
+		plan.LeaseOwnerToken = ownerToken
+	}
+
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 			return err
@@ -107,7 +121,14 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		return nil
 	})
 	if err != nil {
+		if plan.LeaseID != "" {
+			_ = s.deliveryStore.ReleaseOutputLease(plan.LeaseID, plan.LeaseOwnerToken)
+		}
 		return nil, err
+	}
+
+	if plan.LeaseID != "" {
+		_ = s.deliveryStore.ReleaseOutputLease(plan.LeaseID, plan.LeaseOwnerToken)
 	}
 	return result, nil
 }
@@ -377,16 +398,16 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 	}
 	for _, event := range events {
 		model := newoutbox.OutboxRecordModel{
-			ID:             event.ID,
-			AggregateID:    event.AggregateID,
-			EventType:      event.EventType,
-			Payload:        string(event.Payload),
-			Status:         string(newoutbox.OutboxStatusPending),
-			MaxRetries:     newoutbox.DefaultMaxRetries,
-			NextRetryAt:    now.Format("2006-01-02 15:04:05"),
-			AvailableAt:    now.Format("2006-01-02 15:04:05"),
-			CreatedAt:      now.Format("2006-01-02 15:04:05"),
-			UpdatedAt:      now.Format("2006-01-02 15:04:05"),
+			ID:          event.ID,
+			AggregateID: event.AggregateID,
+			EventType:   event.EventType,
+			Payload:     string(event.Payload),
+			Status:      string(newoutbox.OutboxStatusPending),
+			MaxRetries:  newoutbox.DefaultMaxRetries,
+			NextRetryAt: now.Format("2006-01-02 15:04:05"),
+			AvailableAt: now.Format("2006-01-02 15:04:05"),
+			CreatedAt:   now.Format("2006-01-02 15:04:05"),
+			UpdatedAt:   now.Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(&model).Error; err != nil {
 			return nil, nil, err
@@ -412,7 +433,7 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs [
 		peerID = plan.Request.PeerID
 	}
 	for _, msgID := range messageIDs {
-		stableID := fmt.Sprintf("di-%s-%s-%s-%s", plan.Request.InteractionID, channel, peerID, msgID)
+		stableID := delivery.GenerateDeliveryID(plan.Request.InteractionID, channel, peerID, msgID)
 		payload, _ := json.Marshal(map[string]interface{}{
 			"messageId":      msgID,
 			"conversationId": plan.Conversation,

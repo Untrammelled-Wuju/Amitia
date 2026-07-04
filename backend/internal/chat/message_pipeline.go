@@ -318,6 +318,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Channel:               req.Channel,
 		Source:                req.Source,
 		PeerID:                req.PeerID,
+		UserID:                req.UserID,
 		AudioUrl:              req.AudioUrl,
 		AudioDuration:         req.AudioDuration,
 		VoiceMessage:          req.VoiceMessage,

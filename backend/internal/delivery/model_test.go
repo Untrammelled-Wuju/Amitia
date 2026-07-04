@@ -83,6 +83,25 @@ func TestOutputLeaseRelease(t *testing.T) {
 	}
 }
 
+func TestGenerateDeliveryID(t *testing.T) {
+	id := GenerateDeliveryID("int-a", "ws", "peer-x", "msg-1")
+	expected := "di-int-a-ws-peer-x-msg-1"
+	if id != expected {
+		t.Errorf("expected %s, got %s", expected, id)
+	}
+}
+
+func TestNewDeliveryIntentUsesGenerateDeliveryID(t *testing.T) {
+	intent := NewDeliveryIntent("int-x", "qq", "peer-y", "text", []byte("data"))
+	expectedPrefix := "di-int-x-qq-peer-y-"
+	if len(intent.ID) <= len(expectedPrefix) {
+		t.Errorf("expected ID with prefix %s, got %s", expectedPrefix, intent.ID)
+	}
+	if intent.ContentType != "text" {
+		t.Errorf("expected ContentType text, got %s", intent.ContentType)
+	}
+}
+
 func TestDeliveryStatusValues(t *testing.T) {
 	if DeliveryStatusPending != "pending" {
 		t.Errorf("expected pending, got %s", DeliveryStatusPending)

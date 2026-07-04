@@ -6,6 +6,8 @@ import (
 	"context"
 	"log"
 	"time"
+
+	"github.com/u-ai/backend/internal/delivery"
 )
 
 func (s *service) GetActiveMessageSetting(characterID string) map[string]interface{} {
@@ -145,7 +147,11 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
-	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id, now))
+
+	scope := s.resolveProactiveDeliveryScope(convID, channelSetting, characterID)
+	userID := scope.userID
+
+	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id))
 	if err != nil {
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "FAILED", "taskType": taskType, "channel": channelSetting, "error": err.Error()}
@@ -154,10 +160,33 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	if result != nil && result.Response != nil && result.Response.Reply != "" {
 		messageContent = result.Response.Reply
 	}
-	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
+	interactionID := ""
+	requestID := ""
+	if result != nil {
+		interactionID = result.InteractionID
+		if result.Response != nil {
+			requestID = result.Response.RequestID
+		}
+	}
+
+	var deliveryID string
+	if s.deliveryStore != nil && interactionID != "" {
+		lease := delivery.NewOutputLease(interactionID, characterID, userID, scope.channel)
+		_ = s.deliveryStore.CreateLease(lease)
+
+		intent := delivery.NewDeliveryIntent(interactionID, scope.channel, scope.peerID, "text/plain", []byte(messageContent))
+		if err := s.deliveryStore.CreateIntent(intent); err == nil {
+			deliveryID = intent.ID
+		}
+	}
+	if deliveryID == "" {
+		deliveryID = "di-proactive-fallback"
+	}
+
+	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)
 	s.db.Exec("UPDATE active_message_task SET status='QUEUED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 
-	log.Printf("[Companion] RunActiveMessageTask queued type=%s id=%d channel=%s", taskType, id, channelSetting)
+	log.Printf("[Companion] RunActiveMessageTask queued type=%s id=%d channel=%s deliveryID=%s", taskType, id, channelSetting, deliveryID)
 	return map[string]interface{}{"id": id, "status": "QUEUED", "taskType": taskType, "channel": channelSetting}
 }
 

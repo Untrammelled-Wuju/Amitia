@@ -60,6 +60,7 @@ const (
 	DefaultCleanupBatchSize        = 3
 	DefaultCleanupLeaseDuration    = 120 * time.Second
 	DefaultCleanupRetryBackoffBase = 30 * time.Second
+	DefaultMaxCleanupIterations    = 10
 	DefaultRecalcMaxAttempts       = 3
 	DefaultRecalcLeaseDuration     = 300 * time.Second
 	DefaultRecalcBatchSize         = 5
@@ -81,19 +82,19 @@ type DeletionTombstone struct {
 }
 
 type OutboxCleanupItem struct {
-	ID          string           `json:"id"`
-	Storage     string           `json:"storage"`
-	TargetID    string           `json:"targetId"`
-	TargetKind  string           `json:"targetKind"`
+	ID          string            `json:"id"`
+	Storage     string            `json:"storage"`
+	TargetID    string            `json:"targetId"`
+	TargetKind  string            `json:"targetKind"`
 	Status      CleanupItemStatus `json:"status"`
-	Attempts    int              `json:"attempts"`
-	MaxAttempts int              `json:"maxAttempts"`
-	NextRetryAt time.Time        `json:"nextRetryAt"`
-	LeaseOwner  string           `json:"leaseOwner"`
-	LeaseToken  string           `json:"leaseToken"`
-	LeasedUntil time.Time        `json:"leasedUntil"`
-	LastError   string           `json:"lastError,omitempty"`
-	CleanedAt   *time.Time       `json:"cleanedAt,omitempty"`
+	Attempts    int               `json:"attempts"`
+	MaxAttempts int               `json:"maxAttempts"`
+	NextRetryAt time.Time         `json:"nextRetryAt"`
+	LeaseOwner  string            `json:"leaseOwner"`
+	LeaseToken  string            `json:"leaseToken"`
+	LeasedUntil time.Time         `json:"leasedUntil"`
+	LastError   string            `json:"lastError,omitempty"`
+	CleanedAt   *time.Time        `json:"cleanedAt,omitempty"`
 }
 
 type RecalculationTask struct {
@@ -474,7 +475,6 @@ func (c *DataLifecycleCoordinator) LeaseCleanupBatch() ([]OutboxCleanupItem, err
 	return leased, nil
 }
 
-
 func (c *DataLifecycleCoordinator) collectInMemoryItems() []OutboxCleanupItem {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -532,7 +532,12 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 	}
 	var allResults []OutboxCleanupItem
 	var allErrs []error
+	iter := 0
 	for {
+		iter++
+		if iter > DefaultMaxCleanupIterations {
+			break
+		}
 		items, err := c.LeaseCleanupBatch()
 		if err != nil {
 			return nil, fmt.Errorf("lease cleanup batch: %w", err)
@@ -549,17 +554,17 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 		results := make([]OutboxCleanupItem, 0, len(items))
 		var batchErrs []error
 		now := time.Now().UTC()
-	for i := range items {
-		item := items[i]
-		if executor == nil {
-			err := fmt.Errorf("data_lifecycle: cleanup executor is not configured for %s", item.Storage)
-			c.MarkCleanupFailed(item.ID, item.LeaseOwner, item.LeaseToken, err)
-			items[i].Attempts++
-			items[i].LastError = err.Error()
-			if items[i].MaxAttempts <= 0 {
-				items[i].MaxAttempts = DefaultCleanupMaxAttempts
-			}
-			if items[i].Attempts >= items[i].MaxAttempts {
+		for i := range items {
+			item := items[i]
+			if executor == nil {
+				err := fmt.Errorf("data_lifecycle: cleanup executor is not configured for %s", item.Storage)
+				c.MarkCleanupFailed(item.ID, item.LeaseOwner, item.LeaseToken, err)
+				items[i].Attempts++
+				items[i].LastError = err.Error()
+				if items[i].MaxAttempts <= 0 {
+					items[i].MaxAttempts = DefaultCleanupMaxAttempts
+				}
+				if items[i].Attempts >= items[i].MaxAttempts {
 					items[i].Status = CleanupItemStatusDead
 				} else {
 					items[i].Status = CleanupItemStatusRetry
@@ -584,12 +589,12 @@ func (c *DataLifecycleCoordinator) ExecuteOutboxCleanup() ([]OutboxCleanupItem, 
 					items[i].NextRetryAt = now.Add(DefaultCleanupRetryBackoffBase * time.Duration(items[i].Attempts))
 				}
 				batchErrs = append(batchErrs, wrapped)
-		} else {
-			c.MarkCleanupCompleted(item.ID, item.LeaseOwner, item.LeaseToken)
-			items[i].Status = CleanupItemStatusCompleted
-			items[i].LastError = ""
-			items[i].CleanedAt = &now
-		}
+			} else {
+				c.MarkCleanupCompleted(item.ID, item.LeaseOwner, item.LeaseToken)
+				items[i].Status = CleanupItemStatusCompleted
+				items[i].LastError = ""
+				items[i].CleanedAt = &now
+			}
 		}
 		results = append(results, items...)
 		c.persistOutboxResults(items)

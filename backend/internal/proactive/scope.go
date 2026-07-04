@@ -23,7 +23,7 @@ func normalizeProactiveChannel(channel string) string {
 func primaryConversationChannel(channel string) string {
 	channel = normalizeProactiveChannel(channel)
 	if channel == "all" {
-		return "all"
+		return "web"
 	}
 	if strings.Contains(channel, "web") {
 		return "web"

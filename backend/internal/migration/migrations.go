@@ -50,6 +50,7 @@ func DefaultMigrations() []Migration {
 		TombstoneRebuildMigration(),
 		InteractionRecordsCreateMigration(),
 		InteractionRecordsV2Migration(),
+		ProactiveDeliveryTrackingMigration(),
 		RuntimeQueueMigration(),
 		LegacyDataMigration(),
 	}

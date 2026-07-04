@@ -177,6 +177,7 @@ func main() {
 			select {
 			case <-ticker.C:
 				services.DataLifecycle.ExecuteOutboxCleanup()
+				services.DataLifecycle.ExecuteRecalculationTasks()
 			case <-rootCtx.Done():
 				return
 			}

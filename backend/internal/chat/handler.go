@@ -13,13 +13,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service      Service
-	unifiedEntry *interaction.UnifiedEntry
+	service       Service
+	deliveryStore DeliveryStore
+	unifiedEntry  *interaction.UnifiedEntry
 }
 
 func NewHandler(srv Service) *Handler {
@@ -27,7 +29,11 @@ func NewHandler(srv Service) *Handler {
 }
 
 func NewHandlerWithUnifiedEntry(srv Service, entry *interaction.UnifiedEntry) *Handler {
-	return &Handler{service: srv, unifiedEntry: entry}
+	return &Handler{service: srv, unifiedEntry: entry, deliveryStore: nil}
+}
+
+func NewHandlerWithUnifiedEntryAndDelivery(srv Service, entry *interaction.UnifiedEntry, ds DeliveryStore) *Handler {
+	return &Handler{service: srv, unifiedEntry: entry, deliveryStore: ds}
 }
 
 func (h *Handler) ListConversations(c *gin.Context) {
@@ -159,6 +165,14 @@ func (h *Handler) Chat(c *gin.Context) {
 		if source == "" {
 			source = "web"
 		}
+
+		if req.CharacterID != "" {
+			proactive.CancelLowPriorityOnUserInput(req.CharacterID)
+			if h.deliveryStore != nil {
+				_ = h.deliveryStore.PreemptActiveOutputLeases(req.CharacterID)
+			}
+		}
+
 		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 			CharacterID:    req.CharacterID,
 			Message:        req.Message,

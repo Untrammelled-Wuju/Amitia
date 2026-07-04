@@ -3,9 +3,13 @@
 package system
 
 import (
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -69,7 +73,7 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 	})
 }
 
-func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceEntry) {
+func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceEntry, ttsService tts.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
 	r.POST("/voice/session", func(c *gin.Context) {
 		var body struct {
 			SessionID      string `json:"sessionId"`
@@ -95,6 +99,11 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 			util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 			return
 		}
+
+		if req.CharacterID != "" {
+			_, _ = deliveryStore.PreemptActiveLeasesByCharacter(req.CharacterID)
+		}
+
 		result, err := voiceEntry.HandleTurn(c.Request.Context(), &req)
 		if err != nil {
 			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
@@ -108,10 +117,24 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 		if result.Response != nil {
 			reply = result.Response.Reply
 		}
+
+		var audioUrl string
+		if reply != "" {
+			lease := delivery.NewOutputLease(result.InteractionID, req.CharacterID, req.UserID, req.Channel)
+			_ = deliveryStore.CreateLease(lease)
+
+			ttsResult, ttsErr := ttsService.SynthesizeWithActive(reply)
+			if ttsErr == nil {
+				audioUrl = ttsResult.AudioURL
+				audioIntent := delivery.NewDeliveryIntent(result.InteractionID, req.Channel, req.PeerID, "audio", serializeVoiceDeliveryPayload(audioUrl, ttsResult.Duration, reply))
+				_ = deliveryStore.CreateIntent(audioIntent)
+			}
+		}
 		util.SuccessResponse(c, gin.H{
-			"status":  "final",
-			"reply":   reply,
-			"message": result.Response,
+			"status":   "final",
+			"reply":    reply,
+			"audioUrl": audioUrl,
+			"message":  result.Response,
 		})
 	})
 
@@ -153,4 +176,13 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 			"currentText":    session.GetCurrentText(),
 		})
 	})
+}
+
+func serializeVoiceDeliveryPayload(audioUrl string, duration float64, text string) []byte {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"audioUrl": audioUrl,
+		"duration": duration,
+		"text":     text,
+	})
+	return payload
 }

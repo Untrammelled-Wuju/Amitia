@@ -41,7 +41,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx)
-		chat.RegisterChatRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry)
+		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
@@ -66,7 +66,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
-		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry)
+		ttsRepo := tts.NewRepository(ctx.DB)
+		ttsSvc := tts.NewService(ttsRepo)
+		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry, ttsSvc, services.DeliveryStore)
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")

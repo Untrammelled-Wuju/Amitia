@@ -175,7 +175,6 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 		}
 	}
 
-
 	vectorFetchLimit := limit * 2
 	if vectorFetchLimit < 20 {
 		vectorFetchLimit = 20

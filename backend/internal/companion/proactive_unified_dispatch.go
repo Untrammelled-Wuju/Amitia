@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
 )
@@ -58,6 +57,9 @@ func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, 
 	if scope.channel == "" {
 		scope.channel = "web"
 	}
+	if scope.channel == "all" {
+		scope.channel = "web"
+	}
 	return scope
 }
 
@@ -67,7 +69,7 @@ func normalizeProactiveChannel(channel string) string {
 		return "web"
 	}
 	if channel == "all" {
-		return "all"
+		return "web"
 	}
 	if strings.Contains(channel, "wechat") {
 		return "wechat"
@@ -81,8 +83,8 @@ func normalizeProactiveChannel(channel string) string {
 	return channel
 }
 
-func proactiveRequestID(prefix string, id interface{}, now time.Time) string {
-	return fmt.Sprintf("%s-%v-%d", prefix, id, now.Unix())
+func proactiveRequestID(prefix string, id interface{}) string {
+	return fmt.Sprintf("%s-%v", prefix, id)
 }
 
 func (s *service) DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error) {

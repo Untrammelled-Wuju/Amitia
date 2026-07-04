@@ -8,11 +8,11 @@ import (
 )
 
 type Worker struct {
-	store      *SQLiteDeliveryStore
-	adapters   []ChannelAdapter
-	batchSize  int
-	interval   time.Duration
-	done       chan struct{}
+	store     *SQLiteDeliveryStore
+	adapters  []ChannelAdapter
+	batchSize int
+	interval  time.Duration
+	done      chan struct{}
 }
 
 type WorkerConfig struct {
@@ -76,8 +76,6 @@ func (w *Worker) processBatch(ctx context.Context) {
 			applog.Error("delivery worker send failed", "id", intent.ID, "channel", intent.Channel, "error", err)
 			continue
 		}
-		w.store.MarkSent(intent.ID)
-		applog.Info("delivery worker sent", "id", intent.ID, "channel", intent.Channel)
 	}
 }
 
@@ -92,7 +90,7 @@ func (w *Worker) deliver(ctx context.Context, intent DeliveryIntent) error {
 		return err
 	}
 
-	w.store.MarkDelivered(intent.ID)
+	w.store.MarkSent(intent.ID)
 	return nil
 }
 

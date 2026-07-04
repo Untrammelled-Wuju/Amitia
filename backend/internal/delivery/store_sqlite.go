@@ -18,6 +18,7 @@ type DeliveryIntentModel struct {
 	Payload       []byte `gorm:"column:payload"`
 	Status        string `gorm:"column:status;index"`
 	CreatedAt     string `gorm:"column:created_at"`
+	SentAt        string `gorm:"column:sent_at"`
 	DeliveredAt   string `gorm:"column:delivered_at"`
 	RetryCount    int    `gorm:"column:retry_count"`
 	MaxRetries    int    `gorm:"column:max_retries"`
@@ -38,6 +39,8 @@ type OutputLeaseModel struct {
 	CharacterID   string `gorm:"column:character_id;index"`
 	UserID        string `gorm:"column:user_id"`
 	Channel       string `gorm:"column:channel"`
+	OwnerToken    string `gorm:"column:owner_token"`
+	Generation    int    `gorm:"column:generation"`
 	Status        string `gorm:"column:status"`
 	AcquiredAt    string `gorm:"column:acquired_at"`
 	ExpiresAt     string `gorm:"column:expires_at"`
@@ -95,7 +98,10 @@ func (s *SQLiteDeliveryStore) UpdateStatus(id string, status DeliveryStatus, err
 		"status":     string(status),
 		"last_error": errMsg,
 	}
-	if status == DeliveryStatusDelivered || status == DeliveryStatusSent {
+	if status == DeliveryStatusSent {
+		updates["sent_at"] = now
+	}
+	if status == DeliveryStatusDelivered {
 		updates["delivered_at"] = now
 	}
 	if status == DeliveryStatusFailed || status == DeliveryStatusRetry {
@@ -125,11 +131,11 @@ func (s *SQLiteDeliveryStore) CreateLease(lease OutputLease) error {
 	return s.db.Create(&model).Error
 }
 
-func (s *SQLiteDeliveryStore) GetActiveLease(characterID, channel string) (*OutputLease, error) {
+func (s *SQLiteDeliveryStore) GetActiveLease(characterID, userID, channel string) (*OutputLease, error) {
 	var model OutputLeaseModel
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	err := s.db.Where("character_id = ? AND channel = ? AND status = ? AND expires_at > ?",
-		characterID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
+	err := s.db.Where("character_id = ? AND user_id = ? AND channel = ? AND status = ? AND expires_at > ?",
+		characterID, userID, channel, "active", now).Order("acquired_at DESC").Take(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -156,12 +162,13 @@ func (s *SQLiteDeliveryStore) PreemptLease(id, byID string) error {
 	return nil
 }
 
-func (s *SQLiteDeliveryStore) ReleaseLease(id string) error {
+func (s *SQLiteDeliveryStore) ReleaseLease(id, ownerToken string) error {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	result := s.db.Model(&OutputLeaseModel{}).Where("id = ? AND status = ?", id, "active").
+	result := s.db.Model(&OutputLeaseModel{}).Where("id = ? AND status = ? AND owner_token = ?", id, "active", ownerToken).
 		Updates(map[string]interface{}{
 			"status":      "released",
 			"released_at": now,
+			"generation":  gorm.Expr("generation + 1"),
 		})
 	if result.Error != nil {
 		return result.Error
@@ -169,9 +176,9 @@ func (s *SQLiteDeliveryStore) ReleaseLease(id string) error {
 	return nil
 }
 
-func (s *SQLiteDeliveryStore) RenewLease(id string, newExpiry time.Time) error {
+func (s *SQLiteDeliveryStore) RenewLease(id, ownerToken string, newExpiry time.Time) error {
 	expiresStr := newExpiry.UTC().Format("2006-01-02 15:04:05")
-	result := s.db.Model(&OutputLeaseModel{}).Where("id = ? AND status = ?", id, "active").
+	result := s.db.Model(&OutputLeaseModel{}).Where("id = ? AND status = ? AND owner_token = ?", id, "active", ownerToken).
 		Update("expires_at", expiresStr)
 	if result.Error != nil {
 		return result.Error
@@ -223,8 +230,8 @@ func (s *SQLiteDeliveryStore) MarkSent(id string) error {
 		Where("id = ? AND status = ? AND lease_until > ?",
 			id, string(DeliveryStatusLeased), now).
 		Updates(map[string]interface{}{
-			"status":       string(DeliveryStatusSent),
-			"delivered_at": now,
+			"status":  string(DeliveryStatusSent),
+			"sent_at": now,
 		})
 	if res.Error != nil {
 		return res.Error
@@ -281,6 +288,7 @@ func (s *SQLiteDeliveryStore) MarkFailed(id, errMsg string) error {
 }
 
 func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {
+
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	res := s.db.Model(&DeliveryIntentModel{}).
 		Where("status = ? AND lease_until != '' AND lease_until <= ?", string(DeliveryStatusLeased), now).
@@ -293,14 +301,43 @@ func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {
 	return res.RowsAffected, res.Error
 }
 
+func (s *SQLiteDeliveryStore) PreemptActiveLeasesByCharacter(characterID string) (int64, error) {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	res := s.db.Model(&OutputLeaseModel{}).
+		Where("character_id = ? AND status = ? AND expires_at > ?", characterID, "active", now).
+		Updates(map[string]interface{}{
+			"status":       "preempted",
+			"preempted_by": "user_input",
+			"released_at":  now,
+		})
+	return res.RowsAffected, res.Error
+}
+
 func generateDeliveryLeaseToken() string {
 	b := make([]byte, 8)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
+func parseOptionalTime(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
 func modelToIntent(m *DeliveryIntentModel) *DeliveryIntent {
-	var deliveredAt *time.Time
+	var sentAt, deliveredAt *time.Time
+	if m.SentAt != "" {
+		t, err := time.Parse("2006-01-02 15:04:05", m.SentAt)
+		if err == nil {
+			sentAt = &t
+		}
+	}
 	if m.DeliveredAt != "" {
 		t, err := time.Parse("2006-01-02 15:04:05", m.DeliveredAt)
 		if err == nil {
@@ -317,10 +354,15 @@ func modelToIntent(m *DeliveryIntentModel) *DeliveryIntent {
 		Payload:       m.Payload,
 		Status:        DeliveryStatus(m.Status),
 		CreatedAt:     createdAt,
+		SentAt:        sentAt,
 		DeliveredAt:   deliveredAt,
 		RetryCount:    m.RetryCount,
 		MaxRetries:    m.MaxRetries,
 		LastError:     m.LastError,
+		LeaseOwner:    m.LeaseOwner,
+		LeaseToken:    m.LeaseToken,
+		LeaseUntil:    parseOptionalTime(m.LeaseUntil),
+		NextRetry:     parseOptionalTime(m.NextRetry),
 	}
 }
 
@@ -331,6 +373,8 @@ func leaseToModel(l *OutputLease) *OutputLeaseModel {
 		CharacterID:   l.CharacterID,
 		UserID:        l.UserID,
 		Channel:       l.Channel,
+		OwnerToken:    l.OwnerToken,
+		Generation:    l.Generation,
 		Status:        l.Status,
 		AcquiredAt:    l.AcquiredAt.UTC().Format("2006-01-02 15:04:05"),
 		ExpiresAt:     l.ExpiresAt.UTC().Format("2006-01-02 15:04:05"),
@@ -352,6 +396,8 @@ func modelToLease(m *OutputLeaseModel) *OutputLease {
 		CharacterID:   m.CharacterID,
 		UserID:        m.UserID,
 		Channel:       m.Channel,
+		OwnerToken:    m.OwnerToken,
+		Generation:    m.Generation,
 		Status:        m.Status,
 		AcquiredAt:    acquiredAt,
 		ExpiresAt:     expiresAt,

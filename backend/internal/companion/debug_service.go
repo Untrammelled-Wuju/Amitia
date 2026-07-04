@@ -4,6 +4,7 @@ package companion
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"log"
 	"math/rand"
 	"time"
@@ -207,7 +208,7 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 			failed++
 			continue
 		}
-		dispatchResult, dispatchErr := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id, now))
+		dispatchResult, dispatchErr := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id))
 		if dispatchErr != nil {
 			retryCount := 0
 			if rc, ok := t["retry_count"]; ok {
@@ -234,7 +235,16 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 		if dispatchResult != nil && dispatchResult.Response != nil && dispatchResult.Response.Reply != "" {
 			messageContent = dispatchResult.Response.Reply
 		}
-		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?)", convID, messageContent, channelSetting, nowStr, nowStr)
+		interactionID := ""
+		requestID := ""
+		if dispatchResult != nil {
+			interactionID = dispatchResult.InteractionID
+			if dispatchResult.Response != nil {
+				requestID = dispatchResult.Response.RequestID
+			}
+		}
+		deliveryID := uuid.New().String()
+		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)
 		s.db.Exec("UPDATE active_message_task SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++

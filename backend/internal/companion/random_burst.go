@@ -256,8 +256,17 @@ func (s *service) persistAndDeliverContext(ctx context.Context, characterID, msg
 		messageContent = result.Response.Reply
 	}
 	nowStr := now.Format("2006-01-02 15:04:05")
-	return s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'queued', ?, ?)",
-		convID, messageContent, nowStr, nowStr).Error
+	interactionID := ""
+	requestID := ""
+	if result != nil {
+		interactionID = result.InteractionID
+		if result.Response != nil {
+			requestID = result.Response.RequestID
+		}
+	}
+	deliveryID := uuid.New().String()
+	return s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, 'all', 'queued', ?, ?, ?, 'PENDING', ?, ?)",
+		convID, messageContent, interactionID, deliveryID, requestID, nowStr, nowStr).Error
 }
 
 func (s *service) RandomBurstTrigger(characterID string) map[string]interface{} {
