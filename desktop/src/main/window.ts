@@ -75,8 +75,8 @@ const desktopTitleBarCSS = String.raw`
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: var(--ac-color-surface, #ffffff);
+    justify-content: space-between;
+  background: var(--console-sidebar, rgba(248,251,255,0.96));
   border-bottom: 1px solid var(--ac-color-border-light, #e5e7eb);
   color: var(--ac-color-text, #1f2937);
   font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

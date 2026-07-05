@@ -128,6 +128,14 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   font-size: 12px;
 }
 
+.status-search span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
 .status-center {
   flex: 1;
   display: flex;
