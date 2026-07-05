@@ -1,0 +1,53 @@
+server:
+  port: 8899
+  host: "127.0.0.1"
+  mode: "debug"
+
+storage:
+  dataDir: "data"
+
+jwt:
+  secret: "u-ai-secret-key-change-me"
+  expireDays: 7
+
+app:
+  name: "U-Ai"
+  version: "1.0.0"
+  deployMode: "desktop-local"
+chat:
+  mergeWindowMs: 6000
+  contextWindowMaxRounds: 20
+
+qdrant:
+  host: "127.0.0.1"
+  port: 9178
+  collectionName: "memory_embeddings"
+  vectorDim: 1536
+  limit: 10
+  collections:
+    memory_embeddings:
+      name: "memory_embeddings"
+      vectorDim: 1536
+    working_memory:
+      name: "working_memory"
+      vectorDim: 1536
+    user_profiles:
+      name: "user_profiles"
+      vectorDim: 1536
+    episodic_memories:
+      name: "episodic_memories"
+      vectorDim: 1536
+
+embedding:
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
+  apiKey: ""
+
+surrealdb:
+  host: "127.0.0.1"
+  port: 8000
+  namespace: "uai"
+  database: "memory_graph"
+  username: "root"
+  password: "root"
+  dataPath: "data/graph.db"

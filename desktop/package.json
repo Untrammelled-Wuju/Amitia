@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && vite build",
+    "dist:win": "electron-builder --win --x64",
+    "dist:win:dir": "electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "package": "pnpm run build && electron-builder --win --x64"

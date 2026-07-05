@@ -1,18 +1,35 @@
 appId: cn.amitia.desktop
 productName: Amitia
 directories:
-  output: dist-package
+  output: release
 files:
   - dist/**/*
   - package.json
+extraResources:
+  - from: resources/core
+    to: core
+  - from: resources/bridge
+    to: bridge
+  - from: resources/migrations
+    to: migrations
+  - from: resources/config-template
+    to: config-template
 asar: true
 win:
+  signAndEditExecutable: false
+  icon: build/icon.ico
   target:
-    - nsis
-  artifactName: Amitia-${version}-${arch}.${ext}
+    - target: nsis
+      arch:
+        - x64
+  artifactName: AmitiaSetup-${version}-${arch}.${ext}
 nsis:
   oneClick: false
   perMachine: false
+  allowElevation: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  shortcutName: Amitia
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false

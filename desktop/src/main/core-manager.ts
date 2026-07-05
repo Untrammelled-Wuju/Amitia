@@ -20,7 +20,10 @@ export function getCoreResourcesPath(): string {
 }
 
 export function getAmitiaDataDir(): string {
-  return path.join(app.getPath("userData"), "data")
+  if (app.isPackaged) {
+    return path.resolve(path.dirname(app.getPath("exe")), "..", "AmitiaData")
+  }
+  return path.resolve(process.cwd(), "..", "AmitiaData")
 }
 
 export function ensureAmitiaDataDir(): string {
