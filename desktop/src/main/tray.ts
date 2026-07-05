@@ -20,7 +20,7 @@ export function createAppTray(win: BrowserWindow, getConfig: () => DeploymentMod
       { label: `当前部署模式：${configToLabel(config)}`, enabled: false },
       { type: "separator" },
       { label: "打开日志目录", click: () => void shell.openPath(app.getPath("logs")) },
-      { label: "退出 Amitia", click: () => { app.exit(0) } },
+      { label: "退出 Amitia", click: () => { app.quit() } },
     ]))
   }
 

@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { spawn, ChildProcessWithoutNullStreams } from "child_process"
+import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process"
 import http from "http"
 import path from "path"
 import fs from "fs"
@@ -162,7 +162,25 @@ export function startCore(): void {
 export function stopCore(): void {
   if (coreProcess && !coreProcess.killed) {
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid)
-    coreProcess.kill()
+    const pid = coreProcess.pid
+    if (process.platform === "win32" && pid) {
+      coreProcess.kill("SIGTERM")
+      setTimeout(() => {
+        try {
+          exec(`taskkill /PID ${pid} /T /F`, { windowsHide: true }, (error, stdout) => {
+            if (error) {
+              console.error("[CoreManager] taskkill失败:", error.message)
+            } else {
+              console.log("[CoreManager] 进程树已终止:", stdout.trim())
+            }
+          })
+        } catch (e) {
+          console.error("[CoreManager] taskkill异常:", e)
+        }
+      }, 3000)
+    } else {
+      coreProcess.kill("SIGTERM")
+    }
     coreProcess = null
   }
 }

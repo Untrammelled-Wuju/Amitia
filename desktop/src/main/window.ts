@@ -70,7 +70,7 @@ const desktopTitleBarCSS = String.raw`
   top: 0;
   left: 0;
   right: 0;
-  z-index: 2147483647;
+  z-index: 1000;
   height: 34px;
   box-sizing: border-box;
   display: flex;
@@ -149,6 +149,13 @@ html.amitia-desktop-shell #app {
 }
 html.amitia-desktop-shell #app > .app-shell {
   height: 100%;
+}
+
+html.amitia-desktop-shell .el-message {
+  top: 54px !important;
+}
+html.amitia-desktop-shell .el-notification {
+  top: 54px !important;
 }
 `
 
