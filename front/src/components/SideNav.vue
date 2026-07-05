@@ -3,10 +3,10 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <nav class="side-nav" :class="{ 'is-collapsed': isCollapsed }">
+  <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }">
     <div class="brand">
       <div class="brand-mark">A</div>
-      <div v-show="!isCollapsed" class="brand-name">Amitia</div>
+      <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
     </div>
     <el-menu
       :default-active="activeIndex"
@@ -66,7 +66,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <div class="side-nav-bottom">
       <div class="version-bar" @click="handleCheckUpdate">
-        <span v-show="!isCollapsed" class="version-label">v{{ version }}</span>
+        <span v-show="!appStore.sidebarCollapsed" class="version-label">v{{ version }}</span>
         <el-icon v-if="checking" class="version-spinner"><Loading /></el-icon>
       </div>
     </div>
@@ -74,8 +74,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, inject } from "vue"
-import type { Ref } from "vue"
+import { computed, ref, onMounted } from "vue"
 
 import { useRoute } from "vue-router"
 import { ElMessage } from "element-plus"
@@ -83,13 +82,14 @@ import {
   ChatDotRound, Odometer, Connection, UserFilled,
   ChatDotSquare, Setting, Loading,
 } from "@element-plus/icons-vue"
+import { useAppStore } from "@/stores/app"
 
 const route = useRoute()
 
 const version = ref("1.0.0")
 const checking = ref(false)
 
-const isCollapsed = inject<Ref<boolean>>("isSidebarCollapsed", ref(false))
+const appStore = useAppStore()
 
 const CHAR_PATHS = [
   "/character", "/reminders", "/memory-manager", "/episodic",

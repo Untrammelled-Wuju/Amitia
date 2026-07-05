@@ -61,7 +61,6 @@ const isLoginPage = computed(() => router.currentRoute.value.path === "/login")
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat")
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path))
 
-// Health state
 const health = ref({
   appStatus: "running",
   deployMode: "desktop-local",
@@ -72,18 +71,14 @@ const health = ref({
   web: "enabled",
 })
 
-// Character name
 const currentCharName = ref("")
 
-// Auth
 const authUsername = ref("")
 
-// Model status computed
 const modelClass = computed(() =>
   health.value.model === "configured" ? "status-on" : "status-off"
 )
 
-// Provide theme
 provide("theme", theme)
 async function refreshAll() {
   await fetchHealth()
@@ -95,13 +90,6 @@ provide("resolvedTheme", resolvedTheme)
 provide("currentCharName", currentCharName)
 provide("authUsername", authUsername)
 
-const isSidebarCollapsed = ref(false)
-function toggleSidebar() {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-}
-provide("isSidebarCollapsed", isSidebarCollapsed)
-provide("toggleSidebar", toggleSidebar)
-// Fetch health
 async function fetchHealth() {
   try {
     const res = await apiClient.get("/api/health")
@@ -109,7 +97,6 @@ async function fetchHealth() {
       health.value = { ...health.value, ...res.data }
     }
   } catch {
-    // Core not available yet
   }
 }
 
@@ -126,7 +113,6 @@ async function fetchQQStatus() {
   }
 }
 
-// Fetch active character
 async function fetchActiveCharacter() {
   const cached = localStorage.getItem("uai-default-char")
   if (cached) {
@@ -153,11 +139,9 @@ async function fetchActiveCharacter() {
       }
     }
   } catch {
-    // Ignore
   }
 }
 
-// Fetch user info
 async function fetchUserInfo() {
   if (!isLoggedIn()) return
   try {
@@ -191,7 +175,6 @@ onMounted(() => {
     fetchUserInfo()
   }
 
-  // Poll health every 30s
   const interval = setInterval(() => { fetchHealth(); fetchQQStatus() }, 30000)
   onUnmounted(() => clearInterval(interval))
 })
@@ -246,7 +229,6 @@ onMounted(() => {
   padding: 0;
 }
 
-/* Mobile header */
 .mobile-header {
   display: flex;
   align-items: center;
@@ -292,8 +274,6 @@ onMounted(() => {
   background: var(--ac-color-text-muted);
 }
 
-/* Mobile adjustments */
-/* Mobile adjustments */
 .is-mobile .content-scroll {
   transition: background-color 0.3s ease;
   padding: 10px 12px;

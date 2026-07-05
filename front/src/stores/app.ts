@@ -13,5 +13,10 @@ export const useAppStore = defineStore("app", () => {
   function setConversations(list: Conversation[]) { conversations.value = list }
   function selectCharacter(c: Character) { currentCharacter.value = c }
 
-  return { characters, conversations, currentCharacter, setCharacters, setConversations, selectCharacter }
+  const sidebarCollapsed = ref(false)
+  function toggleSidebar() {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+
+  return { characters, conversations, currentCharacter, setCharacters, setConversations, selectCharacter, sidebarCollapsed, toggleSidebar }
 })

@@ -4,8 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <header class="status-bar">
-    <div class="collapse-btn" @click="toggleSidebar">
-      <el-icon :class="{ 'is-collapsed': isSidebarCollapsed }"><DArrowLeft /></el-icon>
+    <div class="collapse-btn" @click="appStore.toggleSidebar">
+      <el-icon :class="{ 'is-collapsed': appStore.sidebarCollapsed }"><DArrowLeft /></el-icon>
     </div>
     <div class="status-search" @click="searchModal?.open()">
       <el-icon><Search /></el-icon>
@@ -56,10 +56,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, ref, inject } from "vue"
-import type { Ref } from "vue"
+import { computed, ref } from "vue"
 import { DArrowLeft, Moon, Search, Sunny, UserFilled } from "@element-plus/icons-vue"
 import SearchModal from "./SearchModal.vue"
+import { useAppStore } from "@/stores/app"
+
 const props = defineProps<{
   deployMode?: string
   wechatStatus?: string
@@ -75,8 +76,7 @@ defineEmits<{
   logout: []
 }>()
 
-const isSidebarCollapsed = inject<Ref<boolean>>("isSidebarCollapsed", ref(false))
-const toggleSidebar = inject<() => void>("toggleSidebar", () => {})
+const appStore = useAppStore()
 
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null)
 
