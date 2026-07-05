@@ -46,11 +46,15 @@ release/qdrant/.qdrant-initialized
 backend/qdrant/storage/
 backend/qdrant/qdrant_linux_*
 release/surrealdb/surreal.exe
+release/qdrant/qdrant.exe
 release/server.exe
 release/server.exe~
 backend/server.exe
 desktop/release2/
-desktop/resources/core/AmitiaCore.exe
+desktop/release/
+desktop/build/
+desktop/dist-types/
+desktop/resources/core/
 wechat-chat-extractor/weFlow.zip
 noa.rs-7.cn/
 

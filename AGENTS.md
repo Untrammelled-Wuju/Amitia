@@ -13,3 +13,12 @@
 启动=启动完整项目。
 重启=重启完整项目。
 启动后端必须使用release文件夹中的编译后程序(server.exe)，禁止使用源码go run启动。
+
+Git上传规则：
+构建产物不上传git（desktop/release/、desktop/build/、desktop/dist-types/等编译输出目录）
+依赖不上传git（node_modules/等）
+release文件夹需要上传git，但其中的exe文件不上传，只上传对应的zip压缩包
+surreal.exe有自动解压机制，上传surreal.zip即可
+qdrant.exe有自动解压机制，上传qdrant.zip即可
+server.exe上传server.zip即可
+根目录的release文件夹整体结构需要保留并上传
