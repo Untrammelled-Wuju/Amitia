@@ -3,6 +3,7 @@
 package companion
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/u-ai/backend/internal/proactive"
@@ -265,4 +266,109 @@ func calculateEnergy(now time.Time, schedule TodaySchedule, currentState string)
 		return 20 + hashInt(now.Minute())%26
 	}
 	return 50 + hashInt(now.Minute())%31
+}
+
+func (s *service) GetMindState(characterID string) map[string]interface{} {
+	result := map[string]interface{}{}
+
+	psyche := s.readPsycheState(characterID)
+	if psyche != nil {
+		result["psyche"] = psyche
+	}
+
+	relationships := s.readRelationshipState(characterID)
+	result["relationships"] = relationships
+
+	needs := s.readNeedState(characterID)
+	result["needs"] = needs
+
+	return result
+}
+
+type psycheRecordLocal struct {
+	CharacterID  string  `gorm:"column:character_id"`
+	Version      string  `gorm:"column:version"`
+	StateVersion int     `gorm:"column:state_version"`
+	Emotion      string  `gorm:"column:emotion"`
+	Mood         string  `gorm:"column:mood"`
+	Stress       float64 `gorm:"column:stress"`
+	Energy       float64 `gorm:"column:energy"`
+	UpdatedAt    string  `gorm:"column:updated_at"`
+}
+
+func (psycheRecordLocal) TableName() string { return "psyche_states" }
+
+type needStateLocalRecord struct {
+	ID           string  `gorm:"column:id"`
+	CharacterID  string  `gorm:"column:character_id"`
+	NeedKey      string  `gorm:"column:need_key"`
+	CurrentValue float64 `gorm:"column:current_value"`
+	Baseline     float64 `gorm:"column:baseline"`
+	Trend        float64 `gorm:"column:trend"`
+	Saturated    bool    `gorm:"column:saturated"`
+	UpdatedAt    string  `gorm:"column:updated_at"`
+}
+
+func (needStateLocalRecord) TableName() string { return "need_states" }
+
+func (s *service) readPsycheState(characterID string) map[string]interface{} {
+	var record psycheRecordLocal
+	err := s.db.Where("character_id = ?", characterID).Take(&record).Error
+	if err != nil {
+		return nil
+	}
+	result := map[string]interface{}{
+		"version":      record.Version,
+		"stateVersion": record.StateVersion,
+		"stress":       record.Stress,
+		"energy":       record.Energy,
+		"updatedAt":    record.UpdatedAt,
+	}
+	if record.Emotion != "" {
+		var emotion map[string]interface{}
+		if json.Unmarshal([]byte(record.Emotion), &emotion) == nil {
+			result["emotion"] = emotion
+		}
+	}
+	if record.Mood != "" {
+		var mood map[string]interface{}
+		if json.Unmarshal([]byte(record.Mood), &mood) == nil {
+			result["mood"] = mood
+		}
+	}
+	return result
+}
+
+func (s *service) readRelationshipState(characterID string) []map[string]interface{} {
+	var records []map[string]interface{}
+	s.db.Table("relationship_states").Where("character_id = ?", characterID).Order("updated_at DESC").Find(&records)
+	if records == nil {
+		records = []map[string]interface{}{}
+	}
+	for i, record := range records {
+		if dataStr, ok := record["relation_data"].(string); ok && dataStr != "" {
+			var data map[string]interface{}
+			if json.Unmarshal([]byte(dataStr), &data) == nil {
+				records[i]["data"] = data
+			}
+		}
+	}
+	return records
+}
+
+func (s *service) readNeedState(characterID string) []map[string]interface{} {
+	var records []needStateLocalRecord
+	s.db.Where("character_id = ?", characterID).Order("need_key ASC").Find(&records)
+	result := make([]map[string]interface{}, 0, len(records))
+	for _, r := range records {
+		result = append(result, map[string]interface{}{
+			"needKey":      r.NeedKey,
+			"currentValue": r.CurrentValue,
+			"baseline":     r.Baseline,
+			"trend":        r.Trend,
+			"saturated":    r.Saturated,
+			"updatedAt":    r.UpdatedAt,
+		})
+	}
+	return result
 }

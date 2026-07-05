@@ -4,6 +4,10 @@ import http from "http"
 import path from "path"
 import fs from "fs"
 import { getAmitiaDataDir, ensureAmitiaDataDir, getInstallDir } from "./path-manager"
+import { validateCorePrerequisites } from "./core-prereq"
+import type { CorePrerequisiteResult } from "./core-prereq"
+
+export type { CorePrerequisiteResult }
 
 let coreProcess: ChildProcessWithoutNullStreams | null = null
 
@@ -21,12 +25,13 @@ export function getCoreResourcesPath(): string {
   return path.join(getInstallDir(), "resources")
 }
 
-export function ensureDataAndConfig(): string {
+export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
   const dataDir = ensureAmitiaDataDir()
   ensureDefaultConfig(dataDir)
   ensureInitialSQL(dataDir)
   ensureCoreBinaries(dataDir)
-  return dataDir
+  const validation = validateCorePrerequisites(dataDir, getCorePath())
+  return { ok: validation.ok, errors: validation.missing }
 }
 
 function ensureDefaultConfig(dataDir: string): void {
@@ -93,8 +98,9 @@ export function startCore(): void {
   console.log("[CoreManager] 核心文件存在:", fs.existsSync(corePath))
   console.log("[CoreManager] 核心文件大小:", fs.existsSync(corePath) ? fs.statSync(corePath).size : 0)
 
-  if (!fs.existsSync(corePath)) {
-    const msg = `Amitia Core未找到: ${corePath}`
+  const prereq = validateCorePrerequisites(dataDir, corePath)
+  if (!prereq.ok) {
+    const msg = `Amitia Core启动前置条件不满足，缺失以下文件:\n${prereq.missing.map((m) => `  - ${m}`).join("\n")}`
     console.error("[CoreManager]", msg)
     throw new Error(msg)
   }

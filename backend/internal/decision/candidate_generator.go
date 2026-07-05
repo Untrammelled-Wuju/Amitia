@@ -5,15 +5,16 @@ import (
 )
 
 type CandidateGenerationContext struct {
-	UserID       string
-	CharacterID  string
-	Goals        []Goal
-	Intentions   []Intention
-	Psyche       PsycheSignalSet
-	Relationship RelationshipSnapshot
-	Life         LifeSnapshot
-	Beliefs      BeliefSnapshot
-	Now          time.Time
+	UserID            string
+	CharacterID       string
+	Goals             []Goal
+	Intentions        []Intention
+	Psyche            PsycheSignalSet
+	Relationship      RelationshipSnapshot
+	Life              LifeSnapshot
+	Beliefs           BeliefSnapshot
+	PersonalityWeights map[BehaviorTag]float64
+	Now               time.Time
 }
 
 func GenerateCandidates(ctx CandidateGenerationContext, registry *CandidateRegistry) []BehaviorCandidate {
@@ -29,6 +30,7 @@ func GenerateCandidates(ctx CandidateGenerationContext, registry *CandidateRegis
 		candidate = enrichFromRelationship(candidate, ctx.Relationship)
 		candidate = enrichFromPsyche(candidate, ctx.Psyche)
 		candidate = enrichFromLife(candidate, ctx.Life)
+		candidate = enrichFromPersonality(candidate, ctx.PersonalityWeights)
 		candidates = append(candidates, candidate)
 	}
 	return candidates
@@ -47,6 +49,7 @@ func GenerateCandidatesWithExcludes(ctx CandidateGenerationContext, registry *Ca
 		candidate = enrichFromRelationship(candidate, ctx.Relationship)
 		candidate = enrichFromPsyche(candidate, ctx.Psyche)
 		candidate = enrichFromLife(candidate, ctx.Life)
+		candidate = enrichFromPersonality(candidate, ctx.PersonalityWeights)
 		candidates = append(candidates, candidate)
 	}
 	return candidates
@@ -127,6 +130,25 @@ func enrichFromLife(candidate BehaviorCandidate, life LifeSnapshot) BehaviorCand
 	}
 	if life.Energy < 0.3 {
 		candidate.RiskScore = round4(candidate.RiskScore + (0.3-life.Energy)*0.5)
+	}
+	return candidate
+}
+
+func enrichFromPersonality(candidate BehaviorCandidate, weights map[BehaviorTag]float64) BehaviorCandidate {
+	if weights == nil {
+		return candidate
+	}
+	tag := candidate.Tag
+	if tag == "" {
+		return candidate
+	}
+	if w, ok := weights[tag]; ok {
+		candidate.PersonalityScore = round4(candidate.PersonalityScore + w)
+		candidate.Reasons = append(candidate.Reasons, BehaviorReason{
+			Source: "personality",
+			Key:    string(tag),
+			Delta:  round4(w),
+		})
 	}
 	return candidate
 }

@@ -189,7 +189,7 @@ func (h *Handler) TestRule(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
 	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity)
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity, character.ID)
 	if content == "" {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
 		return
@@ -216,7 +216,7 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
 	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity)
+	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity, character.ID)
 	if content == "" {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
 		return
@@ -465,7 +465,8 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now', 'localtime'))", body.CleanupDays)
 	util.SuccessMsgResponse(c, "已更新", nil)
 }
-func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity string) string {
+
+func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity, characterID string) string {
 	if identity == "" {
 		identity = "一个AI伙伴"
 	}
@@ -473,8 +474,13 @@ func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity
 		prompt = "发一条自然的主动消息。"
 	}
 
+	personalityPrompt := h.loadPersonalityPrompt(characterID)
+
 	now := time.Now()
 	sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity, now.Format("15:04"), now.Weekday().String())
+	if personalityPrompt != "" {
+		sys = sys + "\n" + personalityPrompt
+	}
 	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
 
 	cfg := h.getActiveModelConfig()
@@ -513,6 +519,64 @@ func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity
 		return strings.TrimSpace(r.Choices[0].Message.Content)
 	}
 	return ""
+}
+
+func (h *Handler) loadPersonalityPrompt(characterID string) string {
+	if characterID == "" {
+		return ""
+	}
+	var personality, personalityConfig string
+	h.db.Table("characters").Select("COALESCE(personality,''), COALESCE(personality_config,'')").Where("id = ?", characterID).Limit(1).Row().Scan(&personality, &personalityConfig)
+	if personality == "" && personalityConfig == "" {
+		return ""
+	}
+	prompt := "【性格特征】"
+	if personality != "" {
+		prompt += personality
+	}
+	if personalityConfig != "" && personalityConfig != "{}" {
+		var cfg map[string]interface{}
+		if json.Unmarshal([]byte(personalityConfig), &cfg) == nil {
+			for key, val := range cfg {
+				if v, ok := val.(float64); ok {
+					label := personalitySliderLabel(key)
+					if label != "" {
+						prompt += fmt.Sprintf("\n%s: %.0f/100", label, v)
+					}
+				}
+			}
+		}
+	}
+	return prompt
+}
+
+func personalitySliderLabel(key string) string {
+	switch key {
+	case "initiative":
+		return "主动性"
+	case "sensitivity":
+		return "敏感度"
+	case "tolerance":
+		return "包容度"
+	case "stability":
+		return "情绪稳定性"
+	case "boundary":
+		return "边界感"
+	case "warmth":
+		return "温暖度"
+	case "directness":
+		return "直接度"
+	case "humor":
+		return "幽默感"
+	case "affection":
+		return "亲密度"
+	case "verbosity":
+		return "话量"
+	case "conflictAvoidance":
+		return "冲突回避"
+	default:
+		return ""
+	}
 }
 
 func (h *Handler) getActiveModelConfig() map[string]string {

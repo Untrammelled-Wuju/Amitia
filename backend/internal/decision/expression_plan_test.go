@@ -94,7 +94,7 @@ func TestMapExpressionType(t *testing.T) {
 func TestDeriveExpressionToneSetBoundary(t *testing.T) {
 	psyche := PsycheSignalSet{}
 	candidate := BehaviorCandidate{Tag: BehaviorTagSetBoundary}
-	tone := deriveExpressionTone(psyche, candidate)
+	tone := deriveExpressionTone(psyche, candidate, nil)
 	if tone != ExpressionToneFirm {
 		t.Fatalf("SetBoundary 应为 Firm 语气, 实际 %s", tone)
 	}

@@ -52,7 +52,10 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		BoundaryRules: req.BoundaryRules, Description: req.Description,
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
 		GenderExpression: req.GenderExpression, LifeIdentity: req.LifeIdentity,
-		Status: "enabled", PersonalityConfig: "{}", ChatStyleConfig: "{}", SceneRules: "{}",
+		Status: "enabled",
+		PersonalityConfig: string(req.PersonalityConfig),
+		ChatStyleConfig: req.ChatStyleConfig,
+		SceneRules: req.SceneRules,
 		VoiceType: req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID,
 	}
@@ -70,6 +73,15 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	}
 	if c.LifeIdentity == "" {
 		c.LifeIdentity = "CUSTOM"
+	}
+	if c.PersonalityConfig == "" || c.PersonalityConfig == "null" {
+		c.PersonalityConfig = "{}"
+	}
+	if c.ChatStyleConfig == "" {
+		c.ChatStyleConfig = "{}"
+	}
+	if c.SceneRules == "" {
+		c.SceneRules = "{}"
 	}
 	if c.VoiceType == "" {
 		c.VoiceType = "zh_female_vv_uranus_bigtts"
@@ -90,7 +102,6 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	if err := s.repo.Create(c); err != nil {
 		return nil, fmt.Errorf("创建角色失败: %w", err)
 	}
-	// Auto-create preset proactive rules for the new character
 	presetRules := []struct {
 		Name, Channel, RuleType, ScheduleCron, PromptTemplate string
 		MaxPerDay, RandomMinutes                              int
@@ -194,7 +205,7 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 		updates["silence_duration"] = *req.SilenceDuration
 	}
 	if req.PersonalityConfig != nil {
-		updates["personality_config"] = *req.PersonalityConfig
+		updates["personality_config"] = string(*req.PersonalityConfig)
 	}
 	if req.IsDefault != nil {
 		if *req.IsDefault {

@@ -51,12 +51,13 @@ type ExpressionPlan struct {
 }
 
 type ExpressionPlanInput struct {
-	BehaviorPlan   BehaviorPlan
-	Psyche         PsycheSignalSet
-	ExpressionCtrl ExpressionControlInput
-	CopingStrategy CopingStrategy
-	SafetyResult   SafetyCheckResult
-	Now            time.Time
+	BehaviorPlan              BehaviorPlan
+	Psyche                    PsycheSignalSet
+	ExpressionCtrl            ExpressionControlInput
+	CopingStrategy            CopingStrategy
+	SafetyResult              SafetyCheckResult
+	PersonalityExpressionStyle map[string]float64
+	Now                       time.Time
 }
 
 func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {
@@ -75,8 +76,8 @@ func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {
 	ctrlConfig := DefaultExpressionControlConfig()
 	ctrlResult := ControlExpression(input.ExpressionCtrl, ctrlConfig)
 	plan.ExpressionType = mapExpressionType(input.BehaviorPlan.Selected.Tag)
-	plan.Tone = deriveExpressionTone(input.Psyche, input.BehaviorPlan.Selected)
-	plan.Length = deriveExpressionLength(input.BehaviorPlan.Selected)
+	plan.Tone = deriveExpressionTone(input.Psyche, input.BehaviorPlan.Selected, input.PersonalityExpressionStyle)
+	plan.Length = deriveExpressionLength(input.BehaviorPlan.Selected, input.PersonalityExpressionStyle)
 	plan.EmotionIntensity = ClampEmotionIntensity(input.ExpressionCtrl.EmotionIntensity, ctrlConfig.SafetyCeiling)
 	plan.ScaleFactor = ctrlResult.ScaleFactor
 	plan.Suppressed = ctrlResult.Suppressed
@@ -109,7 +110,7 @@ func mapExpressionType(tag BehaviorTag) ExpressionType {
 	}
 }
 
-func deriveExpressionTone(psyche PsycheSignalSet, candidate BehaviorCandidate) ExpressionTone {
+func deriveExpressionTone(psyche PsycheSignalSet, candidate BehaviorCandidate, personalityStyle map[string]float64) ExpressionTone {
 	stressVal := psyche.Stress.Value
 	posEmotion := 0.0
 	negEmotion := 0.0
@@ -121,29 +122,89 @@ func deriveExpressionTone(psyche PsycheSignalSet, candidate BehaviorCandidate) E
 			negEmotion += e.Intensity
 		}
 	}
+
+	emotionalExpr := getStyleValue(personalityStyle, "emotionalExpression", 0.5)
+	formality := getStyleValue(personalityStyle, "formality", 0.5)
+	toneWords := getStyleValue(personalityStyle, "toneWords", 0.5)
+
 	if candidate.Tag == BehaviorTagSetBoundary {
 		return ExpressionToneFirm
 	}
 	if candidate.Tag == BehaviorTagOfferSupport && posEmotion > 0.4 {
-		return ExpressionToneWarm
+		if emotionalExpr > 0.6 {
+			return ExpressionToneWarm
+		}
 	}
 	if negEmotion > 0.6 || stressVal > 0.7 {
-		return ExpressionToneConcerned
+		if emotionalExpr > 0.5 {
+			return ExpressionToneConcerned
+		}
+		if formality > 0.6 {
+			return ExpressionToneFirm
+		}
+		return ExpressionToneSoft
 	}
 	if posEmotion > 0.5 && stressVal < 0.4 {
-		return ExpressionTonePlayful
+		if toneWords > 0.6 {
+			return ExpressionTonePlayful
+		}
+		if emotionalExpr > 0.5 {
+			return ExpressionToneWarm
+		}
+		return ExpressionToneNeutral
 	}
 	if posEmotion > 0.3 {
+		if toneWords > 0.5 {
+			return ExpressionTonePlayful
+		}
+		if emotionalExpr > 0.4 {
+			return ExpressionToneWarm
+		}
 		return ExpressionToneWarm
 	}
 	if negEmotion > 0.3 {
+		if emotionalExpr > 0.4 {
+			return ExpressionToneConcerned
+		}
 		return ExpressionToneSoft
+	}
+	if formality > 0.7 {
+		return ExpressionToneFirm
 	}
 	return ExpressionToneNeutral
 }
 
-func deriveExpressionLength(candidate BehaviorCandidate) ExpressionLength {
-	switch candidate.Tag {
+func deriveExpressionLength(candidate BehaviorCandidate, personalityStyle map[string]float64) ExpressionLength {
+	verbosity := getStyleValue(personalityStyle, "verbosity", 0.5)
+	shortSentence := getStyleValue(personalityStyle, "shortSentence", 0.5)
+
+	baseLength := baseExpressionLength(candidate.Tag)
+
+	if verbosity > 0.7 && baseLength == ExpressionLengthShort {
+		return ExpressionLengthMedium
+	}
+	if verbosity > 0.7 && baseLength == ExpressionLengthMedium {
+		return ExpressionLengthLong
+	}
+	if verbosity < 0.3 && baseLength == ExpressionLengthLong {
+		return ExpressionLengthMedium
+	}
+	if verbosity < 0.3 && baseLength == ExpressionLengthMedium {
+		return ExpressionLengthShort
+	}
+	if shortSentence > 0.7 {
+		if baseLength == ExpressionLengthLong {
+			return ExpressionLengthMedium
+		}
+		if baseLength == ExpressionLengthMedium {
+			return ExpressionLengthShort
+		}
+	}
+	return baseLength
+}
+
+func baseExpressionLength(tag BehaviorTag) ExpressionLength {
+	switch tag {
 	case BehaviorTagReply:
 		return ExpressionLengthMedium
 	case BehaviorTagAskClarify:
@@ -159,4 +220,14 @@ func deriveExpressionLength(candidate BehaviorCandidate) ExpressionLength {
 	default:
 		return ExpressionLengthShort
 	}
+}
+
+func getStyleValue(style map[string]float64, key string, defaultVal float64) float64 {
+	if style == nil {
+		return defaultVal
+	}
+	if v, ok := style[key]; ok {
+		return v
+	}
+	return defaultVal
 }

@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type relationshipStateRecord struct {
+type RelationshipStateRecord struct {
 	ID           string `gorm:"primaryKey;column:id"`
 	CharacterID  string `gorm:"column:character_id"`
 	RelationType string `gorm:"column:relation_type"`
@@ -24,7 +24,7 @@ type relationshipStateRecord struct {
 	UpdatedAt    string `gorm:"column:updated_at"`
 }
 
-func (relationshipStateRecord) TableName() string {
+func (RelationshipStateRecord) TableName() string {
 	return "relationship_states"
 }
 
@@ -106,6 +106,14 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 					if err := s.applyAppraisalResultTx(tx, plan); err != nil {
 						return err
 					}
+				}
+			}
+			if !plan.Request.IsInternal {
+				if err := s.updateRelationshipStateTx(tx, plan); err != nil {
+					return err
+				}
+				if err := s.updateNeedStateTx(tx, plan); err != nil {
+					return err
 				}
 			}
 			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
@@ -266,7 +274,7 @@ func (s *service) updatePsycheStateWithStore(store psyche.PsycheStore, charID st
 func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan) error {
 	relationType := relationshipTypeForRequest(plan.Request)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	var existing relationshipStateRecord
+	var existing RelationshipStateRecord
 	err := tx.Where("character_id = ? AND relation_type = ?", plan.Character, relationType).Order("updated_at DESC").Take(&existing).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -293,7 +301,7 @@ func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan)
 		return err
 	}
 	if existing.ID == "" {
-		existing = relationshipStateRecord{
+		existing = RelationshipStateRecord{
 			ID:           uuid.New().String(),
 			CharacterID:  plan.Character,
 			RelationType: relationType,
@@ -351,20 +359,62 @@ func clampRelationshipValue(value float64) float64 {
 	return value
 }
 
+func clampNeedValue(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func getOrDefaultFloat(data map[string]float64, key string, defaultValue float64) float64 {
+	if v, ok := data[key]; ok {
+		return v
+	}
+	return defaultValue
+}
+
 func computePsycheEnergyDelta(state psyche.PsycheState) float64 {
-	return 0
+	now := time.Now().UTC()
+	hour := float64(now.Hour()) + float64(now.Minute())/60.0
+	timeFactor := 1.0
+	if hour >= 22 || hour < 6 {
+		timeFactor = 1.5
+	} else if hour >= 14 && hour < 16 {
+		timeFactor = 1.2
+	}
+	stressFactor := 1.0 + state.Stress*1.5
+	baseCost := -0.03
+	return baseCost * timeFactor * stressFactor
 }
 
 func computeRelationshipFamiliarityDelta(data map[string]float64) float64 {
-	return 0
+	fam := getOrDefaultFloat(data, "familiarity", 0)
+	baseGain := 0.005
+	if fam < 0.3 {
+		return baseGain * 3
+	}
+	return baseGain * (1 - fam)
 }
 
 func computeRelationshipTrustDelta(data map[string]float64) float64 {
-	return 0
+	trust := getOrDefaultFloat(data, "trust", 0.5)
+	baseGain := 0.003
+	if trust < 0.3 {
+		return baseGain * 2
+	}
+	return baseGain * (1 - trust) * 0.5
 }
 
 func computeRelationshipSecurityDelta(data map[string]float64) float64 {
-	return 0
+	security := getOrDefaultFloat(data, "security", 0.5)
+	baseGain := 0.002
+	if security < 0.3 {
+		return baseGain * 4
+	}
+	return baseGain * (1 - security) * 0.3
 }
 
 func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, []string, error) {
@@ -509,7 +559,7 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 	if appraisal.RelationshipDelta != 0 {
 		relationType := relationshipTypeForRequest(plan.Request)
 		now := time.Now().Format("2006-01-02 15:04:05")
-		var existing relationshipStateRecord
+		var existing RelationshipStateRecord
 		err := tx.Where("character_id = ? AND relation_type = ?", plan.Character, relationType).Order("updated_at DESC").Take(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -524,7 +574,7 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 		data["familiarity"] = clampRelationshipValue(data["familiarity"] + appraisal.RelationshipDelta*0.01)
 		data["trust"] = clampRelationshipValue(data["trust"] + appraisal.RelationshipDelta*0.01)
 		if existing.ID == "" {
-			existing = relationshipStateRecord{
+			existing = RelationshipStateRecord{
 				ID: uuid.New().String(), CharacterID: plan.Character,
 				RelationType: relationType, CreatedAt: now,
 			}
@@ -534,6 +584,83 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 		existing.UpdatedAt = now
 		if err := tx.Save(&existing).Error; err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+type NeedStateRecord struct {
+	ID          string `gorm:"primaryKey;column:id"`
+	CharacterID string `gorm:"column:character_id;index"`
+	NeedKey     string `gorm:"column:need_key"`
+	CurrentValue float64 `gorm:"column:current_value"`
+	Baseline    float64 `gorm:"column:baseline"`
+	Trend       float64 `gorm:"column:trend"`
+	Saturated   bool    `gorm:"column:saturated"`
+	CreatedAt   string  `gorm:"column:created_at"`
+	UpdatedAt   string  `gorm:"column:updated_at"`
+}
+
+func (NeedStateRecord) TableName() string {
+	return "need_states"
+}
+
+func (s *service) updateNeedStateTx(tx *gorm.DB, plan messageCommitPlan) error {
+	if plan.Character == "" {
+		return nil
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	needsDefaults := map[string]struct {
+		Value    float64
+		Baseline float64
+	}{
+		"reassurance": {0.5, 0.6},
+		"connection":  {0.5, 0.5},
+		"autonomy":    {0.5, 0.5},
+		"clarity":     {0.5, 0.5},
+		"rest":        {0.5, 0.5},
+		"expression":  {0.5, 0.5},
+		"novelty":     {0.5, 0.5},
+	}
+	hasAppraisal := plan.Request != nil && plan.Runtime != nil && plan.Runtime.Appraisal != nil
+	var needDeltas map[string]float64
+	if hasAppraisal {
+		needDeltas = plan.Runtime.Appraisal.NeedDeltas
+	}
+	for key, def := range needsDefaults {
+		var existing NeedStateRecord
+		err := tx.Where("character_id = ? AND need_key = ?", plan.Character, key).Take(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			record := NeedStateRecord{
+				ID:           uuid.New().String(),
+				CharacterID:  plan.Character,
+				NeedKey:      key,
+				CurrentValue: def.Value,
+				Baseline:     def.Baseline,
+				Trend:        0,
+				Saturated:    false,
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			if createErr := tx.Create(&record).Error; createErr != nil {
+				return createErr
+			}
+		} else if err != nil {
+			return err
+		} else {
+			delta := 0.0
+			if needDeltas != nil {
+				if d, ok := needDeltas[key]; ok {
+					delta = d
+				}
+			}
+			drift := (def.Baseline - existing.CurrentValue) * 0.05
+			existing.CurrentValue = clampNeedValue(existing.CurrentValue + delta + drift)
+			existing.Trend = delta
+			existing.UpdatedAt = now
+			if saveErr := tx.Save(&existing).Error; saveErr != nil {
+				return saveErr
+			}
 		}
 	}
 	return nil

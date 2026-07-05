@@ -25,6 +25,7 @@ type Service interface {
 	GetScheduleToday(characterID string) map[string]interface{}
 	GetStateLife(characterID string) map[string]interface{}
 	GetState(characterID string) map[string]interface{}
+	GetMindState(characterID string) map[string]interface{}
 	GetTimelineToday(characterID string) map[string]interface{}
 	ListFixedEvents(date string, characterID string) []map[string]interface{}
 	GetFixedEvent(id int) map[string]interface{}

@@ -79,7 +79,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	systemParts := buildRoleSystemParts(runtimeProfile)
+	systemParts := buildRoleSystemParts(runtimeProfile, nil)
 	apiMessages := []map[string]interface{}{}
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": s.compiledSystemInstruction(channel)})

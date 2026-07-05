@@ -6,6 +6,9 @@ export type TemplateItem = {
 }
 
 export interface PersonalityConfig {
+  affection: number
+  conflictAvoidance: number
+  emotionality: number
   familiarity: number
   formality: number
   customerServiceAvoidance: number
@@ -38,6 +41,7 @@ export interface PersonalityConfig {
 }
 
 export const DEFAULT_PERSONALITY_CONFIG: PersonalityConfig = {
+  affection: 45, conflictAvoidance: 50, emotionality: 50,
   familiarity: 78, formality: 22, customerServiceAvoidance: 92,
   directness: 75, verbosity: 32, structureLevel: 40, shortSentence: 85, toneWords: 45,
   warmth: 58, emotionalExpression: 45, comfortLevel: 55, preachingAvoidance: 88,

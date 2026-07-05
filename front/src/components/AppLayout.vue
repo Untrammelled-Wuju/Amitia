@@ -288,36 +288,3 @@ onMounted(() => {
   padding-bottom: 0;
 }
 </style>
-
-<style>
-html.amitia-desktop-shell body {
-  padding-top: 34px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-html.amitia-desktop-shell #app {
-  height: calc(100vh - 34px);
-}
-html.amitia-desktop-shell #app > .app-shell {
-  height: 100%;
-}
-html.amitia-desktop-shell .el-message {
-  top: 54px !important;
-}
-html.amitia-desktop-shell .el-notification {
-  top: 54px !important;
-}
-html.amitia-desktop-shell .el-drawer.ltr,
-html.amitia-desktop-shell .el-drawer.rtl,
-html.amitia-desktop-shell .el-drawer.ttb,
-html.amitia-desktop-shell .el-drawer.btt {
-  height: calc(100% - 34px) !important;
-  top: 34px !important;
-}
-html.amitia-desktop-shell .el-overlay {
-  top: 34px !important;
-}
-html.amitia-desktop-shell .search-overlay {
-  top: 34px !important;
-}
-</style>

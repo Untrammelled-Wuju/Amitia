@@ -86,10 +86,21 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld("amitiaDesktop", api)
+
 contextBridge.exposeInMainWorld("electronWindowApi", {
-  minimize: () => api.minimizeWindow(),
-  toggleMaximize: () => api.toggleMaximizeWindow(),
-  close: () => api.closeWindow(),
-  isMaximized: () => Promise.resolve(false),
-  getWindowType: () => Promise.resolve("main"),
+  minimize: (windowType: string = "main") => {
+    if (windowType === "main") {
+      return ipcRenderer.invoke("window-minimize", "main")
+    }
+    return ipcRenderer.invoke("window-minimize", "child")
+  },
+  toggleMaximize: () => ipcRenderer.invoke("window-toggle-maximize"),
+  close: (windowType: string = "main") => {
+    if (windowType === "main") {
+      return ipcRenderer.invoke("window-close", "main")
+    }
+    return ipcRenderer.invoke("window-close", "child")
+  },
+  isMaximized: () => ipcRenderer.invoke("window-is-maximized"),
+  getWindowType: () => ipcRenderer.invoke("get-window-type"),
 })

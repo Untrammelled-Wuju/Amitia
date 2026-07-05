@@ -19,6 +19,7 @@ func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 		comp.POST("/schedule/regenerate", handler.RegenerateSchedule)
 		comp.GET("/state/life", handler.GetStateLife)
 		comp.GET("/state", handler.GetState)
+		comp.GET("/mind-state", handler.GetMindState)
 		comp.GET("/timeline/today", handler.GetTimelineToday)
 		comp.POST("/timeline/regenerate", handler.RegenerateTimeline)
 

@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
 import vue from "@vitejs/plugin-vue"
 import { defineConfig } from "vitest/config"
-import electron from "vite-plugin-electron"
+import electron from "vite-plugin-electron/simple"
 
 export default defineConfig({
   root: resolve(__dirname, "../front"),
@@ -35,8 +35,8 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    electron([
-      {
+    electron({
+      main: {
         entry: resolve(__dirname, "src/main/index.ts"),
         vite: {
           build: {
@@ -47,23 +47,20 @@ export default defineConfig({
           },
         },
       },
-      {
-        entry: resolve(__dirname, "src/preload/index.ts"),
-        onstart(options) {
-          options.reload()
-        },
+      preload: {
+        input: resolve(__dirname, "src/preload/index.ts"),
         vite: {
           build: {
             outDir: resolve(__dirname, "dist/preload"),
             rollupOptions: {
               external: ["electron"],
               output: {
-                entryFileNames: "index.mjs",
+                entryFileNames: "index.cjs",
               },
             },
           },
         },
       },
-    ]),
+    }),
   ],
 })

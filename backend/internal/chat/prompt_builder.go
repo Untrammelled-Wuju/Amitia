@@ -6,10 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
+
 	"strings"
 )
 
@@ -30,8 +34,8 @@ func (s *service) compiledChannelPrompt(channel string) expression.CompiledPromp
 	return expression.CompileChannelPrompt(kind)
 }
 
-func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string) []string {
-	parts := buildRoleSystemParts(profile)
+func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) []string {
+	parts := buildRoleSystemParts(profile, runtime)
 	characterID := ""
 	if profile != nil {
 		characterID = strings.TrimSpace(profile.CharacterID)
@@ -151,7 +155,7 @@ func shouldRetrieveMemory(msg string) bool {
 	return true
 }
 
-func buildRoleSystemParts(profile *character.RoleRuntimeProfile) []string {
+func buildRoleSystemParts(profile *character.RoleRuntimeProfile, runtime *interaction.RuntimeAssembly) []string {
 	parts := []string{}
 	if profile == nil {
 		return parts
@@ -176,6 +180,7 @@ func buildRoleSystemParts(profile *character.RoleRuntimeProfile) []string {
 	if profile.BoundaryRules != "" {
 		parts = append(parts, "【场景规则】\n"+profile.BoundaryRules)
 	}
+	appendCompiledPersonality(runtime, &parts)
 	appendRuntimeConfig := func(label string, data map[string]interface{}) {
 		if len(data) == 0 {
 			return
@@ -190,10 +195,150 @@ func buildRoleSystemParts(profile *character.RoleRuntimeProfile) []string {
 			parts = append(parts, label+"\n"+string(raw))
 		}
 	}
-	appendRuntimeConfig("【性格配置】", profile.PersonalityConfig)
 	appendRuntimeConfig("【对话风格配置】", profile.ChatStyleConfig)
 	appendRuntimeConfig("【场景配置】", profile.SceneRules)
 	return parts
+}
+
+func appendCompiledPersonality(runtime *interaction.RuntimeAssembly, parts *[]string) {
+	if runtime == nil || runtime.Personality == nil {
+		return
+	}
+	summary := runtime.Personality.ToPersonalitySummary()
+	if summary != "" {
+		*parts = append(*parts, "【性格行为指令 - 编译自滑块配置】\n"+summary)
+	}
+
+	if runtime.BehaviorPlan != nil {
+		bpSummary := renderBehaviorPlanSummary(runtime.BehaviorPlan)
+		if bpSummary != "" {
+			*parts = append(*parts, "【本轮行为策略】\n"+bpSummary)
+		}
+	}
+
+	if runtime.ExpressionPlan != nil {
+		epSummary := renderExpressionPlanSummary(runtime.ExpressionPlan)
+		if epSummary != "" {
+			*parts = append(*parts, "【本轮表达约束】\n"+epSummary)
+		}
+	}
+}
+
+func renderBehaviorPlanSummary(plan *decision.BehaviorPlan) string {
+	if plan == nil {
+		return ""
+	}
+	var lines []string
+
+	if plan.Intent != "" {
+		lines = append(lines, "- 意图: "+plan.Intent)
+	}
+	if plan.Strategy != "" {
+		lines = append(lines, "- 策略: "+plan.Strategy)
+	}
+	if plan.ResponseGoal != "" {
+		lines = append(lines, "- 回复目标: "+plan.ResponseGoal)
+	}
+	if plan.ToneHint != "" {
+		lines = append(lines, "- 语气提示: "+plan.ToneHint)
+	}
+	if len(plan.AllowedTopics) > 0 {
+		lines = append(lines, "- 允许话题: "+strings.Join(plan.AllowedTopics, "、"))
+	}
+	if len(plan.ForbiddenTopics) > 0 {
+		lines = append(lines, "- 禁止话题: "+strings.Join(plan.ForbiddenTopics, "、"))
+	}
+	if plan.Priority != "" {
+		lines = append(lines, "- 优先级: "+string(plan.Priority))
+	}
+	if plan.SafetyLevel != "" {
+		lines = append(lines, "- 安全级别: "+string(plan.SafetyLevel))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func renderExpressionPlanSummary(plan *decision.ExpressionPlan) string {
+	if plan == nil {
+		return ""
+	}
+	var lines []string
+
+	if plan.Tone != "" {
+		lines = append(lines, "- 语气: "+toneLabel(plan.Tone))
+	}
+	if plan.Length != "" {
+		lines = append(lines, "- 回复长度: "+string(plan.Length))
+	}
+	if plan.EmotionIntensity > 0 {
+		lines = append(lines, fmt.Sprintf("- 情绪强度: %.0f%%", plan.EmotionIntensity*100))
+	}
+	if plan.Suppressed {
+		lines = append(lines, "- 表达抑制: 是")
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func behaviorTagLabel(tag decision.BehaviorTag) string {
+	switch tag {
+	case decision.BehaviorTagReply:
+		return "正常回复"
+	case decision.BehaviorTagAskClarify:
+		return "请求澄清"
+	case decision.BehaviorTagOfferSupport:
+		return "提供支持"
+	case decision.BehaviorTagSetBoundary:
+		return "设立边界"
+	case decision.BehaviorTagRepair:
+		return "关系修复"
+	case decision.BehaviorTagProactiveCheck:
+		return "主动关心"
+	case decision.BehaviorTagDelay:
+		return "延迟/观察"
+	default:
+		return string(tag)
+	}
+}
+
+func strategyFromTag(tag decision.BehaviorTag) string {
+	switch tag {
+	case decision.BehaviorTagReply:
+		return "自然回应，保持对话流畅"
+	case decision.BehaviorTagAskClarify:
+		return "温和追问，帮助澄清模糊内容"
+	case decision.BehaviorTagOfferSupport:
+		return "提供情感支持或实际帮助"
+	case decision.BehaviorTagSetBoundary:
+		return "礼貌但坚定地设立边界"
+	case decision.BehaviorTagRepair:
+		return "修复关系裂痕，重建信任"
+	case decision.BehaviorTagProactiveCheck:
+		return "主动表达关心和陪伴"
+	case decision.BehaviorTagDelay:
+		return "保持克制，等待观察"
+	default:
+		return "保持自然沟通"
+	}
+}
+
+func toneLabel(tone decision.ExpressionTone) string {
+	switch tone {
+	case decision.ExpressionToneWarm:
+		return "温暖"
+	case decision.ExpressionToneNeutral:
+		return "中性"
+	case decision.ExpressionToneFirm:
+		return "坚定"
+	case decision.ExpressionToneSoft:
+		return "轻柔"
+	case decision.ExpressionTonePlayful:
+		return "俏皮"
+	case decision.ExpressionToneConcerned:
+		return "关切"
+	default:
+		return string(tone)
+	}
 }
 
 func (s *service) getRoleRuntimeProfile(characterID string) (*character.RoleRuntimeProfile, error) {

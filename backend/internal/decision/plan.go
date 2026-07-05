@@ -99,6 +99,12 @@ type BehaviorPlan struct {
 	Relationship     RelationshipSnapshot   `json:"relationship"`
 	Life             LifeSnapshot           `json:"life"`
 	Audit            BehaviorAudit          `json:"audit"`
+	Intent           string                 `json:"intent"`
+	Strategy         string                 `json:"strategy"`
+	AllowedTopics    []string               `json:"allowedTopics,omitempty"`
+	ForbiddenTopics  []string               `json:"forbiddenTopics,omitempty"`
+	ResponseGoal     string                 `json:"responseGoal"`
+	ToneHint         string                 `json:"toneHint"`
 }
 
 type PsycheSignalSet struct {

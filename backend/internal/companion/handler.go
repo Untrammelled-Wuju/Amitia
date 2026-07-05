@@ -41,6 +41,10 @@ func (h *Handler) GetStateLife(c *gin.Context) {
 func (h *Handler) GetState(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetState(c.Query("characterId")))
 }
+
+func (h *Handler) GetMindState(c *gin.Context) {
+	util.SuccessResponse(c, h.service.GetMindState(c.Query("characterId")))
+}
 func (h *Handler) GetTimelineToday(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetTimelineToday(c.Query("characterId")))
 }

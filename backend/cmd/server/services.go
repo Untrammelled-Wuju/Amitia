@@ -96,6 +96,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := psycheStore.InitSchema(); err != nil {
 		panic("failed to init psyche store schema: " + err.Error())
 	}
+	if err := ctx.DB.AutoMigrate(&chat.RelationshipStateRecord{}, &chat.NeedStateRecord{}); err != nil {
+		panic("failed to init relationship/need store schema: " + err.Error())
+	}
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)

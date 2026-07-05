@@ -171,7 +171,7 @@ func (e *Executor) executeRule(r struct {
 		return
 	}
 
-	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity)
+	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity, character.ID)
 	if content == "" {
 		return
 	}
@@ -338,7 +338,36 @@ func (e *Executor) executeReminder(r struct {
 	log.Printf("[Reminder] 提醒 id=%d title=%s 已发送 (web=%v wechat=%v qq=%v)", r.id, r.title, sentWeb, sentWechat, sentQQ)
 }
 
-func (e *Executor) generateContent(name, ruleType, prompt, charName, identity string) string {
+func (e *Executor) loadPersonalityPrompt(characterID string) string {
+	if characterID == "" {
+		return ""
+	}
+	var personality, personalityConfig string
+	e.db.Table("characters").Select("COALESCE(personality,''), COALESCE(personality_config,'')").Where("id = ?", characterID).Limit(1).Row().Scan(&personality, &personalityConfig)
+	if personality == "" && personalityConfig == "" {
+		return ""
+	}
+	prompt := "【性格特征】"
+	if personality != "" {
+		prompt += personality
+	}
+	if personalityConfig != "" && personalityConfig != "{}" {
+		var cfg map[string]interface{}
+		if json.Unmarshal([]byte(personalityConfig), &cfg) == nil {
+			for key, val := range cfg {
+				if v, ok := val.(float64); ok {
+					label := personalitySliderLabel(key)
+					if label != "" {
+						prompt += fmt.Sprintf("\n%s: %.0f/100", label, v)
+					}
+				}
+			}
+		}
+	}
+	return prompt
+}
+
+func (e *Executor) generateContent(name, ruleType, prompt, charName, identity, characterID string) string {
 	if identity == "" {
 		identity = "一个AI伙伴"
 	}
@@ -346,7 +375,12 @@ func (e *Executor) generateContent(name, ruleType, prompt, charName, identity st
 		prompt = "发一条自然的主动消息。"
 	}
 
+	personalityPrompt := e.loadPersonalityPrompt(characterID)
+
 	sys := fmt.Sprintf("你是%s，%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。", charName, identity)
+	if personalityPrompt != "" {
+		sys = sys + "\n" + personalityPrompt
+	}
 	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
 
 	cfg := e.getActiveModelCron()
@@ -602,7 +636,7 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 		return content
 	}
 
-	content := e.generateContent("系统主动消息", "share", prompt, character.Name, character.Identity)
+	content := e.generateContent("系统主动消息", "share", prompt, character.Name, character.Identity, character.ID)
 	if content == "" {
 		return ""
 	}

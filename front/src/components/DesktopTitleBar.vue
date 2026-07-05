@@ -50,7 +50,7 @@ async function handleClose() {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: 10000;
   height: 34px;
   box-sizing: border-box;
   display: flex;

@@ -286,7 +286,7 @@ func buildProcessPromptMessages(input processPromptInput) []map[string]interface
 	}
 	addSection(promptir.SectionTypeIdentity, 1000, 700, "chat.sys1", promptir.SensitivityInternal, false, false, strings.Join(input.Sys1Parts, "\n\n"))
 	addSection(promptir.SectionTypeSystem, 980, 700, "chat.sys2", promptir.SensitivityInternal, false, false, strings.Join(input.Sys2Parts, "\n\n"))
-	addSection(promptir.SectionTypeBehaviorPlan, 940, 520, "interaction.runtime", promptir.SensitivityInternal, false, true, buildRuntimeContextPrompt(input.Runtime))
+	addSection(promptir.SectionTypeBehaviorPlan, 940, 520, "interaction.runtime", promptir.SensitivityInternal, false, true, buildBehaviorPlanFromRuntime(input.Runtime))
 	addSection(promptir.SectionTypeBehaviorPlan, 920, 260, "expression.channel", promptir.SensitivityInternal, false, false, input.StyleInstruction)
 	addSection(promptir.SectionTypeHistory, 700, 900, "chat.history", promptir.SensitivityUserData, true, true, renderHistoryForPromptIR(input.History))
 	addSection(promptir.SectionTypeCurrentInput, 1100, 620, "chat.current_input", promptir.SensitivityUserData, false, false, input.UserContent)
@@ -431,29 +431,51 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	}, nil
 }
 
-func buildRuntimeContextPrompt(runtime *interaction.RuntimeAssembly) string {
+func buildBehaviorPlanFromRuntime(runtime *interaction.RuntimeAssembly) string {
 	if runtime == nil {
 		return ""
 	}
-	payload := map[string]interface{}{
-		"path":        runtime.Path,
-		"budget":      runtime.Budget,
-		"safety":      runtime.Safety,
-		"delivery":    runtime.Delivery,
-		"transaction": runtime.Transaction.Name,
-		"context": map[string]interface{}{
-			"snapshotVersion": runtime.Context.SnapshotVersion(),
-			"psyche":          runtime.Context.Psyche,
-			"relationship":    runtime.Context.Relationship,
-			"beliefs":         runtime.Context.Beliefs,
-			"channel":         runtime.Context.Channel,
-		},
+	if runtime.BehaviorPlan == nil {
+		return buildMinimalRuntimeContextPrompt(runtime)
 	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return ""
+	bp := runtime.BehaviorPlan
+	var lines []string
+	if bp.Intent != "" {
+		lines = append(lines, "意图: "+bp.Intent)
 	}
-	return "运行时编排上下文：" + string(raw)
+	if bp.Strategy != "" {
+		lines = append(lines, "策略: "+bp.Strategy)
+	}
+	if bp.ResponseGoal != "" {
+		lines = append(lines, "回复目标: "+bp.ResponseGoal)
+	}
+	if bp.ToneHint != "" {
+		lines = append(lines, "语气提示: "+bp.ToneHint)
+	}
+	if len(bp.AllowedTopics) > 0 {
+		lines = append(lines, "允许话题: "+strings.Join(bp.AllowedTopics, " / "))
+	}
+	if len(bp.ForbiddenTopics) > 0 {
+		lines = append(lines, "禁止话题: "+strings.Join(bp.ForbiddenTopics, " / "))
+	}
+	if bp.Priority != "" {
+		lines = append(lines, "优先级: "+string(bp.Priority))
+	}
+	if bp.SafetyLevel != "" {
+		lines = append(lines, "安全级别: "+string(bp.SafetyLevel))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func buildMinimalRuntimeContextPrompt(runtime *interaction.RuntimeAssembly) string {
+	var lines []string
+	if runtime.Path != "" {
+		lines = append(lines, "路径: "+string(runtime.Path))
+	}
+	if len(runtime.Safety.Reasons) > 0 {
+		lines = append(lines, "安全因素: "+strings.Join(runtime.Safety.Reasons, ", "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (s *service) updatePsycheState(charID string) error {

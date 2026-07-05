@@ -27,7 +27,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
-	if err := db.AutoMigrate(&Conversation{}, &Message{}, &relationshipStateRecord{}, &relationshipEventRecord{}, &interaction.InteractionRecordModel{}); err != nil {
+	if err := db.AutoMigrate(&Conversation{}, &Message{}, &RelationshipStateRecord{}, &relationshipEventRecord{}, &interaction.InteractionRecordModel{}); err != nil {
 		t.Fatal(err)
 	}
 	store := psyche.NewSQLitePsycheStore(db)
@@ -139,7 +139,7 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 	if state.StateVersion != 2 || state.Energy >= 0.7 {
 		t.Fatalf("unexpected psyche state: version=%d energy=%f", state.StateVersion, state.Energy)
 	}
-	var relationship relationshipStateRecord
+	var relationship RelationshipStateRecord
 	if err := db.Where("character_id = ? AND relation_type = ?", "char-commit", "peer:peer-commit").Take(&relationship).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 		t.Fatalf("psyche state was not rolled back: %d", psycheCount)
 	}
 	var relationshipCount int64
-	if err := db.Model(&relationshipStateRecord{}).Where("character_id = ?", "char-commit").Count(&relationshipCount).Error; err != nil {
+	if err := db.Model(&RelationshipStateRecord{}).Where("character_id = ?", "char-commit").Count(&relationshipCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if relationshipCount != 0 {
@@ -303,7 +303,7 @@ func assertNoCommitSideEffects(t *testing.T, db *gorm.DB, convID string) {
 		t.Fatalf("psyche state was committed: %d", psycheCount)
 	}
 	var relationshipCount int64
-	if err := db.Model(&relationshipStateRecord{}).Where("character_id = ?", "char-commit").Count(&relationshipCount).Error; err != nil {
+	if err := db.Model(&RelationshipStateRecord{}).Where("character_id = ?", "char-commit").Count(&relationshipCount).Error; err != nil {
 		t.Fatal(err)
 	}
 	if relationshipCount != 0 {

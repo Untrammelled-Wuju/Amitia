@@ -100,6 +100,8 @@ const groups: SliderGroup[] = [
       { key: "emotionalExpression", label: "情感表达", desc: "表达情感的强度", left: "克制", right: "充沛" },
       { key: "comfortLevel", label: "舒适感", desc: "带来的安心舒适程度", left: "中立", right: "舒适" },
       { key: "preachingAvoidance", label: "反说教", desc: "避免说教的强度", left: "允许", right: "严禁" },
+      { key: "affection", label: "深情度", desc: "情感依恋表达程度", left: "克制", right: "深情" },
+      { key: "emotionality", label: "感性度", desc: "感性表达 vs 理性克制", left: "理性", right: "感性" },
     ],
   },
   {
@@ -118,6 +120,7 @@ const groups: SliderGroup[] = [
       { key: "companionship", label: "陪伴感", desc: "陪伴的存在感", left: "独立", right: "陪伴" },
       { key: "boundary", label: "边界感", desc: "关系边界的清晰度", left: "放松", right: "严谨" },
       { key: "dependencyAvoidance", label: "反依赖", desc: "避免用户依赖的强度", left: "允许", right: "严禁" },
+      { key: "conflictAvoidance", label: "回避冲突", desc: "面对冲突时的回避倾向", left: "直面", right: "回避" },
     ],
   },
   {

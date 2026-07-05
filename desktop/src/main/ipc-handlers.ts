@@ -51,4 +51,33 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.closeWindow, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })
+
+  ipcMain.handle("window-minimize", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+
+  ipcMain.handle("window-toggle-maximize", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+    if (win.isMaximized()) {
+      win.unmaximize()
+      return false
+    }
+    win.maximize()
+    return true
+  })
+
+  ipcMain.handle("window-close", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
+  })
+
+  ipcMain.handle("window-is-maximized", () => {
+    return BrowserWindow.getFocusedWindow()?.isMaximized() || false
+  })
+
+  ipcMain.handle("get-window-type", (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    const allWindows = BrowserWindow.getAllWindows()
+    return senderWindow === allWindows[0] ? "main" : "child"
+  })
 }

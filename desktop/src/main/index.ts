@@ -93,7 +93,10 @@ async function enterMainApp(): Promise<void> {
     currentConfig = config
   })
 
-  ensureDataAndConfig()
+  const ensureResult = ensureDataAndConfig()
+  if (!ensureResult.ok) {
+    console.warn("[AmitiaDesktop] 数据目录初始化存在缺失:", ensureResult.errors.join(", "))
+  }
 
   mainWindow = createMainWindow()
   tray = createAppTray(mainWindow, () => currentConfig)

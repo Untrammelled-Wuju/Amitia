@@ -98,3 +98,100 @@ func TestGetRuntimeProfileUsesVersionedDefaultForBrokenJSON(t *testing.T) {
 		t.Fatalf("expected diagnostics for broken json, got %#v", profile.Diagnostics)
 	}
 }
+
+func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB.Close()
+	})
+	if err := db.AutoMigrate(&Character{}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := app.NewAppContext(db, nil)
+	repo := NewRepository(ctx)
+	svc := NewService(repo, ctx)
+
+	created, err := svc.Create(&CreateCharacterRequest{
+		Name:              "测试角色",
+		Identity:          "一个测试角色",
+		PersonalityConfig: `{"warmth":80,"sensitivity":60,"tolerance":70}`,
+		ChatStyleConfig:   `{"pace":"fast","emotion":"rich"}`,
+		SceneRules:        `{"place":"office","time":"day"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.PersonalityConfig != `{"warmth":80,"sensitivity":60,"tolerance":70}` {
+		t.Fatalf("personalityConfig not saved: %s", created.PersonalityConfig)
+	}
+	if created.ChatStyleConfig != `{"pace":"fast","emotion":"rich"}` {
+		t.Fatalf("chatStyleConfig not saved: %s", created.ChatStyleConfig)
+	}
+	if created.SceneRules != `{"place":"office","time":"day"}` {
+		t.Fatalf("sceneRules not saved: %s", created.SceneRules)
+	}
+
+	read, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.PersonalityConfig != `{"warmth":80,"sensitivity":60,"tolerance":70}` {
+		t.Fatalf("personalityConfig read mismatch: %s", read.PersonalityConfig)
+	}
+	if read.ChatStyleConfig != `{"pace":"fast","emotion":"rich"}` {
+		t.Fatalf("chatStyleConfig read mismatch: %s", read.ChatStyleConfig)
+	}
+	if read.SceneRules != `{"place":"office","time":"day"}` {
+		t.Fatalf("sceneRules read mismatch: %s", read.SceneRules)
+	}
+
+	newConfig := `{"warmth":80,"sensitivity":60,"tolerance":30}`
+	cfg := newConfig
+	updated, err := svc.Update(created.ID, &UpdateCharacterRequest{
+		PersonalityConfig: &cfg,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PersonalityConfig != newConfig {
+		t.Fatalf("personalityConfig update not persisted: %s", updated.PersonalityConfig)
+	}
+	if updated.ChatStyleConfig != `{"pace":"fast","emotion":"rich"}` {
+		t.Fatalf("chatStyleConfig should not change: %s", updated.ChatStyleConfig)
+	}
+	if updated.SceneRules != `{"place":"office","time":"day"}` {
+		t.Fatalf("sceneRules should not change: %s", updated.SceneRules)
+	}
+
+	read2, err := svc.GetByID(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read2.PersonalityConfig != newConfig {
+		t.Fatalf("re-read personalityConfig mismatch: %s", read2.PersonalityConfig)
+	}
+
+	profile, err := repo.GetRuntimeProfile(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.PersonalityConfig["warmth"].(float64) != 80 {
+		t.Fatalf("runtime warmth mismatch: %v", profile.PersonalityConfig["warmth"])
+	}
+	if profile.PersonalityConfig["tolerance"].(float64) != 30 {
+		t.Fatalf("runtime tolerance mismatch: %v", profile.PersonalityConfig["tolerance"])
+	}
+	if profile.ChatStyleConfig["pace"] != "fast" {
+		t.Fatalf("runtime chatStyleConfig mismatch: %v", profile.ChatStyleConfig["pace"])
+	}
+	if profile.SceneRules["place"] != "office" {
+		t.Fatalf("runtime sceneRules mismatch: %v", profile.SceneRules["place"])
+	}
+}
