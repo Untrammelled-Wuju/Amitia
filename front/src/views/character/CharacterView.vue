@@ -44,6 +44,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-tab-pane label="调试" name="debug">
             <CompanionDebugView v-if="activeTab==='debug'" :key="`dbg-${selectedId}`" />
           </el-tab-pane>
+          <el-tab-pane label="心理状态" name="psyche">
+            <CharacterPsycheView v-if="activeTab==='psyche'" :key="`psyche-${selectedId}`" />
+          </el-tab-pane>
         </el-tabs>
       </template>
       <el-empty v-else description="左侧选择一个角色" :image-size="60" style="margin-top:80px" />
@@ -97,6 +100,7 @@ import { useRouter, useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { apiClient } from "@/composables/useApi"
 import { AiCharacterSettingsView, CharacterVoiceView, ProactiveRulesView, CompanionDebugView } from "../../ui-index"
+import CharacterPsycheView from "./CharacterPsycheView.vue"
 
 const router = useRouter()
 const route = useRoute()
@@ -141,6 +145,7 @@ const activeTab = computed(() => {
   if (p.endsWith("/voice")) return "voice"
   if (p.endsWith("/proactive")) return "proactive"
   if (p.endsWith("/debug")) return "debug"
+  if (p.endsWith("/psyche")) return "psyche"
   return "life-rules"
 })
 

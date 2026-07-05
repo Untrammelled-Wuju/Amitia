@@ -9,10 +9,21 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="brand-name">Amitia</div>
     </div>
     <div class="nav-section">
-      <router-link to="/dashboard" class="nav-item" active-class="nav-active">
-        <el-icon><Odometer /></el-icon>
-        <span>概览</span>
-      </router-link>
+      <div class="nav-parent" :class="{ expanded: navExpanded }">
+        <div class="nav-item nav-parent-label" @click="goDashboardData" :class="{ 'nav-active': isDashboardActive }">
+          <el-icon><Odometer /></el-icon>
+          <span>概览</span>
+          <el-icon class="nav-arrow" :class="{ rotated: navExpanded }"><ArrowRight /></el-icon>
+        </div>
+        <div class="nav-children" :class="{ open: navExpanded }">
+          <router-link to="/dashboard/run" class="nav-item nav-child" active-class="nav-active">
+            <span class="nav-child-label">运行</span>
+          </router-link>
+          <router-link to="/dashboard/data" class="nav-item nav-child" active-class="nav-active">
+            <span class="nav-child-label">数据</span>
+          </router-link>
+        </div>
+      </div>
       <router-link to="/chat" class="nav-item" active-class="nav-active">
         <el-icon><ChatDotRound /></el-icon>
         <span>聊天</span>
@@ -85,10 +96,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-icon><Lock /></el-icon>
         <span>安全设置</span>
       </router-link>
-      <router-link to="/long-running" class="nav-item" active-class="nav-active">
-        <el-icon><Clock /></el-icon>
-        <span>长期运行</span>
-      </router-link>
       <router-link to="/maintenance" class="nav-item" active-class="nav-active">
         <el-icon><Monitor /></el-icon>
         <span>维护诊断</span>
@@ -102,11 +109,33 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from "vue"
+import { useRoute } from "vue-router"
 import {
+  ArrowRight,
   ChatDotRound, Odometer, Connection, Cpu, UserFilled,
-  Bell, ChatDotSquare, ChatLineSquare, Upload, Lock, Clock, Setting, Monitor,
+  Bell, ChatDotSquare, ChatLineSquare, Upload, Lock, Setting, Monitor,
   Collection, User, Timer, Notebook, Share, Histogram,
 } from "@element-plus/icons-vue"
+
+const route = useRoute()
+
+import { watch } from "vue"
+
+watch(() => route.path, (path) => {
+  if (path.startsWith("/dashboard")) {
+    navExpanded.value = true
+  }
+}, { immediate: true })
+const navExpanded = ref(false)
+
+const isDashboardActive = computed(() => {
+  return route.path.startsWith("/dashboard")
+})
+
+function goDashboardData() {
+  navExpanded.value = !navExpanded.value
+}
 </script>
 
 <style scoped>
@@ -157,10 +186,46 @@ import {
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 14px;
   border-radius: 7px; color: var(--console-text-secondary);
-  text-decoration: none; font-size: var(--ac-font-size-base); transition: all var(--ac-transition-fast);
+  text-decoration: none; font-size: var(--ac-font-size-sm); transition: all var(--ac-transition-fast);
 }
 .nav-item:hover { background: var(--nav-hover-bg); color: var(--nav-hover-color); }
 .nav-active { background: var(--nav-active-bg); color: var(--nav-active-color); font-weight: 600; }
 .nav-active:hover { background: var(--nav-active-bg); color: var(--nav-active-color); }
 
+.nav-parent-label {
+  cursor: pointer;
+}
+.nav-arrow {
+  margin-left: auto;
+  font-size: 12px;
+  transition: transform var(--ac-transition-fast);
+  color: var(--console-text-muted);
+}
+.nav-arrow.rotated {
+  transform: rotate(90deg);
+}
+.nav-children {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  margin-left: 10px;
+  margin-top: 0;
+  border-left: 1px solid transparent;
+  transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease, border-color 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 12px;
+}
+.nav-children.open {
+  max-height: 90px;
+  opacity: 1;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  border-left-color: var(--console-border);
+}
+.nav-child {
+  padding: 7px 12px;
+  border-radius: 6px;
+}
 </style>

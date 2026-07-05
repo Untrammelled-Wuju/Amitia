@@ -4,7 +4,6 @@ import {
   ChatDotRound,
   ChatDotSquare,
   ChatLineSquare,
-  Clock,
   Collection,
   Connection,
   Cpu,
@@ -76,7 +75,6 @@ export const desktopNavGroups: AppNavGroup[] = [
     key: "system",
     items: [
       { key: "safety", to: "/safety", label: "安全设置", icon: Lock },
-      { key: "longRunning", to: "/long-running", label: "长期运行", icon: Clock },
       { key: "maintenance", to: "/maintenance", label: "维护诊断", icon: Monitor },
       { key: "runtimeDebug", to: "/runtime-debug", label: "运行时调试", icon: Opportunity },
       { key: 'decisionViz', to: '/decision-viz', label: '决策可视化', icon: Share },
