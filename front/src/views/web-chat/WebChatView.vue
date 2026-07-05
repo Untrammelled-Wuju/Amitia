@@ -166,7 +166,7 @@ async function fetchTtsConfig() {
 async function handleToggleCall() {
   await fetchTtsConfig()
   if (!ttsApiKey.value) {
-    router.push("/model/voice")
+    router.push("/settings/model/voice")
     return
   }
   callActive.value = !callActive.value
@@ -422,3 +422,4 @@ onUnmounted(() => {
   border-color: var(--ac-color-primary, #409eff);
 }
 </style>
+

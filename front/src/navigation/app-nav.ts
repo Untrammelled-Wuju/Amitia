@@ -1,24 +1,12 @@
 import type { Component } from "vue"
 import {
-  Bell,
   ChatDotRound,
   ChatDotSquare,
-  ChatLineSquare,
-  Collection,
   Connection,
-  Cpu,
-  Histogram,
-  Lock,
-  Monitor,
-  Opportunity,
-  Notebook,
   Odometer,
+  Opportunity,
   Setting,
   Share,
-  Timer,
-  Upload,
-  User,
-  UserFilled,
 } from "@element-plus/icons-vue"
 
 export type AppNavItem = {
@@ -44,38 +32,15 @@ export const desktopNavGroups: AppNavGroup[] = [
     ],
   },
   {
-    key: "setup",
+    key: "links",
     items: [
       { key: "wechat", to: "/wechat", label: "微信连接", icon: Connection },
       { key: "qq", to: "/qq", label: "QQ 连接", icon: ChatDotSquare },
-      { key: "model", to: "/model", label: "模型配置", icon: Cpu, match: ["/model/"] },
-      { key: "character", to: "/character", label: "角色管理", icon: UserFilled, match: ["/character/"], mobile: true },
-      { key: "reminders", to: "/reminders", label: "日程提醒", icon: Bell },
-    ],
-  },
-  {
-    key: "records",
-    items: [
-      { key: "logs", to: "/logs", label: "聊天记录", icon: ChatLineSquare, mobile: true },
-      { key: "import", to: "/import", label: "导入记录", icon: Upload },
-    ],
-  },
-  {
-    key: "memory",
-    items: [
-      { key: "memoryManager", to: "/memory-manager", label: "记忆总览", icon: Collection, mobile: true },
-      { key: "profiles", to: "/profiles", label: "用户画像", icon: User },
-      { key: "episodic", to: "/episodic", label: "情景记忆", icon: Timer },
-      { key: "worldBook", to: "/world-book", label: "世界书", icon: Notebook },
-      { key: "graph", to: "/graph", label: "记忆图谱", icon: Share },
-      { key: "memoryTimeline", to: "/memory-timeline", label: "时间线", icon: Histogram },
     ],
   },
   {
     key: "system",
     items: [
-      { key: "safety", to: "/safety", label: "安全设置", icon: Lock },
-      { key: "maintenance", to: "/maintenance", label: "维护诊断", icon: Monitor },
       { key: "runtimeDebug", to: "/runtime-debug", label: "运行时调试", icon: Opportunity },
       { key: 'decisionViz', to: '/decision-viz', label: '决策可视化', icon: Share },
       { key: "settings", to: "/settings", label: "设置", icon: Setting, mobile: true },

@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>
           模型未配置 &mdash;
-          <router-link to="/model" class="banner-link">去配置模型</router-link>
+          <router-link to="/settings/model" class="banner-link">去配置模型</router-link>
         </template>
       </el-alert>
     </div>
@@ -137,3 +137,4 @@ defineEmits<{
   margin-top: 4px;
 }
 </style>
+

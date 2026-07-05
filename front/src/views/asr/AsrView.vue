@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <el-alert v-if="!apiKeyConfigured" type="warning" :closable="false" show-icon style="margin-bottom:14px">
       <template #title>
-        请先在 <router-link to="/model">模型配置</router-link> 中设置语音识别 API Key
+        请先在 <router-link to="/settings/model">模型配置</router-link> 中设置语音识别 API Key
       </template>
     </el-alert>
 
@@ -202,3 +202,4 @@ async function pollResult() {
 .result-box { margin-top: 12px; padding: 14px; background: var(--el-fill-color-light); border-radius: 8px; white-space: pre-wrap; font-size: 14px; line-height: 1.7; }
 .form-hint { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px; }
 </style>
+

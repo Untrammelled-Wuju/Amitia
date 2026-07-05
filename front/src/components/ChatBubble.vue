@@ -189,13 +189,13 @@ async function copyContent() {
 }
 
 .chat-bubble.user .bubble-content {
-  background: var(--ac-color-bg-primary);
+  background: #ffffff;
   border: 1px solid var(--ac-color-border-light);
   border-top-right-radius: 2px;
 }
 .chat-bubble.assistant .bubble-content {
-  background: var(--ac-color-primary);
-  color: #fff;
+  background: #ffffff;
+  border: 1px solid var(--ac-color-border-light);
   border-top-left-radius: 2px;
 }
 .chat-bubble.is-streaming .bubble-content {
@@ -235,6 +235,13 @@ async function copyContent() {
 @media (max-width: 768px) {
   .bubble-body { max-width: 88%; }
   .bubble-actions { opacity: 1; }
+}
+
+html.dark .chat-bubble.user .bubble-content {
+  background: #1a1a1a;
+}
+html.dark .chat-bubble.assistant .bubble-content {
+  background: #1a1a1a;
 }
 
 .bubble-status {

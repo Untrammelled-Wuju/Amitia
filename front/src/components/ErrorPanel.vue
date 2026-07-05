@@ -73,7 +73,7 @@ function handleAction() {
 }
 
 function goToModelConfig() {
-  window.location.hash = "#/model"
+  window.location.hash = "#/settings/model"
   dismiss()
 }
 
@@ -158,3 +158,4 @@ defineExpose({ show, dismiss, setStartCoreHandler })
   opacity: 0;
 }
 </style>
+

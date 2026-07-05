@@ -235,7 +235,7 @@ function exportRules() {
 </script>
 
 <style scoped>
-.worldbook-page { padding: 24px; max-width: 900px; margin: 0 auto; }
+.worldbook-page { max-width: 900px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h2 { margin: 0; font-size: 24px; }
 .header-actions { display: flex; gap: 8px; }
