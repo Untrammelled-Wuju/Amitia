@@ -191,7 +191,7 @@ function httpHealthCheck(url: string, timeoutMs: number): Promise<boolean> {
 
 export async function waitForCoreReady(timeoutMs = 60000): Promise<void> {
   const startedAt = Date.now()
-  const healthUrl = "http://127.0.0.1:18080/api/health"
+  const healthUrl = "http://127.0.0.1:18899/api/health"
 
   while (Date.now() - startedAt < timeoutMs) {
     if (!isCoreRunning() && Date.now() - startedAt > 2000) {
