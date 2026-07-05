@@ -41,6 +41,11 @@ nsis:
   deleteAppDataOnUninstall: false
 
 
+publish:
+  - provider: github
+    owner: Untrammelled-Wuju
+    repo: Amitia
+
 
 
 

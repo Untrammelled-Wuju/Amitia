@@ -154,7 +154,7 @@ async function handleDelete(id: string) {
 </script>
 
 <style scoped>
-.episodic-page { padding: 24px; max-width: 820px; margin: 0 auto; }
+.episodic-page { max-width: 100%; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { margin: 0; font-size: 24px; }
 .header-controls { display: flex; align-items: center; gap: 10px; }

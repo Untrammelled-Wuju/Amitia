@@ -6,7 +6,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && node -e \"const{cpSync}=require('fs');cpSync('src/renderer/update-check','dist/renderer/update-check',{recursive:true})\"",
     "dist:win": "electron-builder --win --x64",
     "dist:win:dir": "electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "electron-is-dev": "^3.0.1"
+    "electron-is-dev": "^3.0.1",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

@@ -60,6 +60,14 @@ AI：那就休息一下。
         <el-upload :auto-upload="false" :show-file-list="false" :on-change="(file: any) => $emit('fileChange', file)">
           <el-button :icon="Upload">上传 .txt / .md</el-button>
         </el-upload>
+        <div class="default-role-picker">
+          <span class="fp-label">默认导入为：</span>
+          <el-radio-group :model-value="defaultRole" size="small" @update:model-value="$emit('update:defaultRole', $event)">
+            <el-radio-button value="user">用户</el-radio-button>
+            <el-radio-button value="assistant">AI</el-radio-button>
+            <el-radio-button value="system">系统</el-radio-button>
+          </el-radio-group>
+        </div>
       </div>
     </div>
   </el-card>
@@ -76,6 +84,7 @@ defineProps<{
   showSpeakerOptions: string[]
   userSpeakerInput: string
   assistantSpeakerInput: string
+  defaultRole: string
 }>()
 
 defineEmits<{
@@ -85,6 +94,7 @@ defineEmits<{
   'update:showSpeakerOptions': [value: string[]]
   'update:userSpeakerInput': [value: string]
   'update:assistantSpeakerInput': [value: string]
+  'update:defaultRole': [value: string]
   parse: []
   fileChange: [file: any]
 }>()
@@ -102,10 +112,11 @@ defineEmits<{
 .input-options { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .format-picker { display: flex; align-items: center; gap: 6px; }
 .fp-label { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-secondary); white-space: nowrap; }
-.input-actions { display: flex; gap: 8px; }
+.input-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .speaker-options { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
 .so-group { display: flex; flex-direction: column; gap: 4px; }
 .so-label { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-secondary); }
+.default-role-picker { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
 @media (max-width: 768px) {
   .input-options { flex-direction: column; align-items: stretch; }
 }

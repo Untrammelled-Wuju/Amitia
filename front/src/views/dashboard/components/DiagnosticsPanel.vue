@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <section class="section-card">
     <div class="section-header-row">
-      <span class="panel-title">D. 诊断报告</span>
+      <span class="panel-title">诊断报告</span>
       <div class="header-actions">
         <span v-if="diagResult" class="diag-time">
           <el-icon><Clock /></el-icon>

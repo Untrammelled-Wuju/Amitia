@@ -214,9 +214,9 @@ onMounted(() => fetchTimeline())
 </script>
 
 <style scoped>
-.page { max-width: 900px; margin: 0 auto; }
+.page { max-width: 100%; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.page-title { margin: 0; }
+.page-title { margin: 0; font-size: 24px; }
 .header-filters { display: flex; gap: 6px; }
 
 .timeline { position: relative; padding-left: 24px; }

@@ -57,6 +57,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="性格"><el-input v-model="form.personality" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="提示词"><el-input v-model="form.systemPrompt" type="textarea" :rows="4" /></el-form-item>
 
         <el-divider content-position="left">语音配置</el-divider>
 
@@ -121,6 +122,7 @@ const globalApiKey = ref("")
 
 const form = reactive({
   name: "", description: "", personality: "",
+  systemPrompt: "",
   voiceType: "zh_female_vv_uranus_bigtts",
   voiceSpeed: 1.0, voicePitch: 0, voiceVolume: 1.0,
   customVoiceId: "",
@@ -212,6 +214,7 @@ function editCurrent() {
   form.name = selectedChar.value.name || ""
   form.description = selectedChar.value.description || ""
   form.personality = selectedChar.value.personality || ""
+  form.systemPrompt = selectedChar.value.systemPrompt || ""
   form.voiceType = selectedChar.value.voiceType || "zh_female_vv_uranus_bigtts"
   form.voiceSpeed = selectedChar.value.voiceSpeed ?? 1.0
   form.voicePitch = selectedChar.value.voicePitch ?? 0
@@ -314,6 +317,7 @@ async function saveCharacter() {
       name: form.name,
       description: form.description,
       personality: form.personality,
+      systemPrompt: form.systemPrompt,
       voiceType: form.voiceType,
       voiceSpeed: form.voiceSpeed,
       voicePitch: form.voicePitch,

@@ -6,7 +6,7 @@ import cors from "@fastify/cors"
 import { qqSidecarConfig } from "./config.js"
 import { QQBotClient } from "./qqbot-client.js"
 import type { QQMessage } from "./qqbot-client.js"
-import { loadQQBotConfig, saveQQBotConfig } from "./qqbot-persist.js"
+import { loadQQBotConfig, saveQQBotConfig, clearQQBotConfig } from "./qqbot-persist.js"
 import { FileRouter, createDefaultRouter } from "./file-router.js"
 import path from "node:path"
 import fs from "node:fs"
@@ -289,6 +289,7 @@ app.post("/api/connect", async (req, reply) => {
 
 app.post("/api/disconnect", async (_req, reply) => {
   qq.disconnect()
+  clearQQBotConfig()
   return reply.send({ success: true })
 })
 

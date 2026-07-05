@@ -34,3 +34,14 @@ export function saveQQBotConfig(config: { appId: string; token: string; sandbox:
     console.error("[QQBot] 持久化凭证失败:", err.message)
   }
 }
+
+export function clearQQBotConfig(): void {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      fs.unlinkSync(CONFIG_FILE)
+      console.log("[QQBot] 持久化凭证已清除")
+    }
+  } catch (err: any) {
+    console.error("[QQBot] 清除凭证失败:", err.message)
+  }
+}

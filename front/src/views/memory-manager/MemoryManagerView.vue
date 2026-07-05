@@ -658,7 +658,7 @@ onMounted(async () => {
 
 <style scoped>
 .mem-page { }
-.page-title { font-size:var(--ac-font-size-lg); font-weight:600; margin-bottom:12px; }
+.page-title { font-size:24px; font-weight:600; margin-bottom:12px; }
 .mem-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .toolbar-spacer { flex:1; }
 .candidate-list { display:flex; flex-direction:column; gap:8px; margin:10px 0; }

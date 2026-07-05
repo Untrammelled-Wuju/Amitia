@@ -12,6 +12,7 @@ import {
   extractMemoryCandidates,
   confirmMemories,
   createConversationFromImport,
+  fetchCharactersApi,
   fetchBatchesApi,
   fetchBatchDetailApi,
   deleteBatchApi,
@@ -20,6 +21,9 @@ import {
 export function useImportWizard() {
   const router = useRouter()
 
+  const characters = ref<any[]>([])
+  const characterId = ref("")
+
   const rawText = ref("")
   const batchTitle = ref("")
   const parseFormat = ref("auto")
@@ -27,6 +31,7 @@ export function useImportWizard() {
   const showSpeakerOptions = ref<string[]>([])
   const userSpeakerInput = ref("")
   const assistantSpeakerInput = ref("")
+  const defaultRole = ref("user")
 
   const parseResult = ref<any>(null)
   const editableItems = ref<any[]>([])
@@ -40,6 +45,13 @@ export function useImportWizard() {
   const extractLoading = ref(false)
   const memCandidates = ref<any[]>([])
 
+  async function fetchCharacters() {
+    try {
+      const result = await fetchCharactersApi()
+      characters.value = Array.isArray(result) ? result : (result?.characters || result?.data || [])
+    } catch {}
+  }
+
   async function handleParse() {
     if (!rawText.value.trim()) return
     parsing.value = true
@@ -48,6 +60,7 @@ export function useImportWizard() {
         rawText: rawText.value,
         format: parseFormat.value,
         title: batchTitle.value || undefined,
+        defaultRole: defaultRole.value,
       }
       const userNames = parseSpeakerNames(userSpeakerInput.value)
       const assistantNames = parseSpeakerNames(assistantSpeakerInput.value)
@@ -89,8 +102,11 @@ export function useImportWizard() {
     confirming.value = true
     try {
       const result = await confirmImport({
+        items: editableItems.value.map(({ lineNo, _sensitive, ...item }) => item),
         batchId: parseResult.value?.batchId,
         title: batchTitle.value || "已导入的聊天",
+        characterId: characterId.value,
+        defaultRole: defaultRole.value,
       })
       importedBatchId.value = result?.batchId || parseResult.value?.batchId
       importedConvId.value = result?.conversationId || ""
@@ -111,12 +127,10 @@ export function useImportWizard() {
     try {
       const result = await generateSummary(importedBatchId.value)
       if (result?.summary) {
-        // summary data stored by caller if needed
       }
       try {
         const saved = await getBatchSummary(importedBatchId.value)
         if (saved?.summary) {
-          // stored by caller
         }
       } catch {}
       ElMessage.success("摘要生成成功")
@@ -193,6 +207,7 @@ export function useImportWizard() {
     showSpeakerOptions,
     userSpeakerInput,
     assistantSpeakerInput,
+    defaultRole,
     parseResult,
     editableItems,
     confirming,
@@ -203,6 +218,9 @@ export function useImportWizard() {
     genSummaryLoading,
     extractLoading,
     memCandidates,
+    characters,
+    characterId,
+    fetchCharacters,
     handleParse,
     onFileChange,
     handleConfirm,

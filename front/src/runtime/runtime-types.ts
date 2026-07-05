@@ -41,4 +41,6 @@ export interface AmitiaDesktopAPI {
   getRuntimeStatus(): Promise<RuntimeStatus>
   openLogsDirectory(): Promise<void>
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void
+  getVersion(): Promise<string>
+  checkUpdate(): Promise<unknown>
 }

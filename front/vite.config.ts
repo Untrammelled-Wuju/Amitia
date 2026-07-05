@@ -15,7 +15,7 @@ export default defineConfig({
     port: 5178,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8899",
+        target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
       "/bridge": {
@@ -23,19 +23,19 @@ export default defineConfig({
         changeOrigin: true,
       },
       "/voice": {
-        target: "http://127.0.0.1:8899",
+        target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
       "/audio": {
-        target: "http://127.0.0.1:8899",
+        target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
       "/images": {
-        target: "http://127.0.0.1:8899",
+        target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
       "/videos": {
-        target: "http://127.0.0.1:8899",
+        target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
     },

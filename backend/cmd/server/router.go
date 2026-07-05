@@ -64,7 +64,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		system.RegisterPsycheAPIRouter(apiGroup)
-		system.RegisterPsycheSnapshotRouter(apiGroup)
+		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
 		ttsRepo := tts.NewRepository(ctx.DB)
 		ttsSvc := tts.NewService(ttsRepo)

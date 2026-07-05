@@ -239,7 +239,7 @@ onUnmounted(() => {
 
 <style scoped>
 .graph-page { height: 100%; display: flex; flex-direction: column; }
-.page-title { font-size: var(--ac-font-size-lg); font-weight: 600; margin-bottom: 12px; }
+.page-title { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
 .graph-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .slider-label { color: #909399; font-size: 13px; white-space: nowrap; }
 .graph-stats { display: flex; gap: 16px; margin-bottom: 8px; font-size: 13px; color: #606266; flex-wrap: wrap; }

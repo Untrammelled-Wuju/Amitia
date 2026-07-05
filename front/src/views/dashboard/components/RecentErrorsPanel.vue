@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <section class="section-card">
     <div class="section-header-row">
-      <span class="panel-title">C. 最近错误</span>
+      <span class="panel-title">最近错误</span>
       <el-button text circle @click="emit('refresh')">
         <el-icon><Refresh /></el-icon>
       </el-button>

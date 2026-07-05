@@ -173,6 +173,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/usage/overview", handler.UsageOverview)
 	r.GET("/usage/daily", handler.UsageDaily)
+	r.GET("/usage/periodic", handler.UsageDaily)
 	r.GET("/usage/models", handler.UsageModels)
 	r.GET("/usage/sources", handler.UsageSources)
 	r.DELETE("/usage/clear", handler.UsageClear)

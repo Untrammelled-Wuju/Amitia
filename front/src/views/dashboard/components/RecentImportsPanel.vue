@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <section class="section-card">
     <div class="section-header-row">
-      <span class="panel-title">E. 最近导入批次</span>
+      <span class="panel-title">最近导入批次</span>
     </div>
     <div v-if="recentImports.length > 0" class="list-compact">
       <div v-for="b in recentImports" :key="b.id" class="list-item">

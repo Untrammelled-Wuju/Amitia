@@ -84,20 +84,80 @@ func (s *service) UploadImports(body map[string]interface{}) map[string]interfac
 }
 
 func (s *service) ParseImportsText(body map[string]interface{}) map[string]interface{} {
-	text, _ := body["text"].(string)
+	text, _ := body["rawText"].(string)
+	defaultRole, _ := body["defaultRole"].(string)
+	if defaultRole == "" {
+		defaultRole = "user"
+	}
 	lines := strings.Split(text, "\n")
 	messages := []interface{}{}
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" {
-			messages = append(messages, map[string]interface{}{"role": "user", "content": line})
+			messages = append(messages, map[string]interface{}{"role": defaultRole, "content": line})
 		}
 	}
 	return map[string]interface{}{"parsed": true, "messages": messages, "count": len(messages)}
 }
 
 func (s *service) ConfirmImports(body map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{"confirmed": true, "confirmedAt": time.Now().Format(time.DateTime)}
+	charID, _ := body["characterId"].(string)
+	title, _ := body["title"].(string)
+	if charID == "" {
+		return map[string]interface{}{"code": -1, "message": "请选择目标角色"}
+	}
+	if title == "" {
+		title = "已导入的聊天"
+	}
+
+	itemsRaw, ok := body["items"]
+	if !ok {
+		return map[string]interface{}{"code": -1, "message": "没有可导入的消息"}
+	}
+	items, ok := itemsRaw.([]interface{})
+	if !ok || len(items) == 0 {
+		return map[string]interface{}{"code": -1, "message": "没有可导入的消息"}
+	}
+
+	now := time.Now()
+	convID := uuid.New().String()
+
+	s.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		convID, charID, title, "web", "import", now, now)
+
+	count := 0
+	for _, item := range items {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		role, _ := m["role"].(string)
+		content, _ := m["content"].(string)
+		if role == "" {
+			defaultRole, _ := body["defaultRole"].(string)
+			if defaultRole != "" {
+				role = defaultRole
+			} else {
+				role = "user"
+			}
+		}
+		if content == "" {
+			continue
+		}
+		msgID := uuid.New().String()
+		s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+			msgID, convID, role, content, now.Format("2006-01-02 15:04:05"))
+		count++
+	}
+
+	batchId := fmt.Sprintf("imp_%d", now.Unix())
+
+	return map[string]interface{}{
+		"batchId":        batchId,
+		"conversationId": convID,
+		"messageCount":   count,
+		"confirmed":      true,
+	}
 }
 
 func (s *service) ImportData(body map[string]interface{}) map[string]interface{} {

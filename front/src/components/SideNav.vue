@@ -3,13 +3,14 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <nav class="side-nav">
+  <nav class="side-nav" :class="{ 'is-collapsed': isCollapsed }">
     <div class="brand">
       <div class="brand-mark">A</div>
-      <div class="brand-name">Amitia</div>
+      <div v-show="!isCollapsed" class="brand-name">Amitia</div>
     </div>
     <el-menu
       :default-active="activeIndex"
+      unique-opened
       router
       class="side-menu"
     >
@@ -62,18 +63,33 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span>设置</span>
       </el-menu-item>
     </el-menu>
+
+    <div class="side-nav-bottom">
+      <div class="version-bar" @click="handleCheckUpdate">
+        <span v-show="!isCollapsed" class="version-label">v{{ version }}</span>
+        <el-icon v-if="checking" class="version-spinner"><Loading /></el-icon>
+      </div>
+    </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref, onMounted, inject } from "vue"
+import type { Ref } from "vue"
+
 import { useRoute } from "vue-router"
+import { ElMessage } from "element-plus"
 import {
   ChatDotRound, Odometer, Connection, UserFilled,
-  ChatDotSquare, Setting,
+  ChatDotSquare, Setting, Loading,
 } from "@element-plus/icons-vue"
 
 const route = useRoute()
+
+const version = ref("1.0.0")
+const checking = ref(false)
+
+const isCollapsed = inject<Ref<boolean>>("isSidebarCollapsed", ref(false))
 
 const CHAR_PATHS = [
   "/character", "/reminders", "/memory-manager", "/episodic",
@@ -91,6 +107,31 @@ const activeIndex = computed(() => {
   }
   return path
 })
+
+async function handleCheckUpdate() {
+  if (checking.value) return
+  checking.value = true
+  try {
+    if (window.amitiaDesktop) {
+      await window.amitiaDesktop.checkUpdate()
+    } else {
+      ElMessage.info("当前为浏览器环境，无法检查更新")
+    }
+  } catch (e) {
+    ElMessage.error("检查更新失败")
+  } finally {
+    checking.value = false
+  }
+}
+
+onMounted(async () => {
+  if (window.amitiaDesktop) {
+    try {
+      version.value = await window.amitiaDesktop.getVersion()
+    } catch {
+    }
+  }
+})
 </script>
 
 <style scoped>
@@ -101,17 +142,26 @@ const activeIndex = computed(() => {
   border-right: 1px solid var(--console-border);
   display: flex;
   flex-direction: column;
-  padding: 24px 0 18px;
-  overflow-y: auto;
+  padding: 24px 0 0;
   user-select: none;
   flex-shrink: 0;
+  transition: width 0.3s ease;
+}
+
+.side-nav.is-collapsed {
+  width: 72px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 24px 24px;
+  padding: 0 14px 24px;
+  flex-shrink: 0;
+}
+
+.side-nav.is-collapsed .brand {
+  justify-content: center;
 }
 
 .brand-mark {
@@ -126,6 +176,7 @@ const activeIndex = computed(() => {
   border-radius: 10px;
   background: linear-gradient(135deg, #4f7cff 12%, #7c3aed 48%, #28d8b8 100%);
   box-shadow: 0 12px 24px rgba(79, 124, 255, 0.22);
+  flex-shrink: 0;
 }
 
 .brand-name {
@@ -133,20 +184,25 @@ const activeIndex = computed(() => {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .side-menu {
   border-right: none;
   background: transparent;
   flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .side-menu :deep(.el-menu-item),
 .side-menu :deep(.el-sub-menu__title) {
   height: 40px;
   line-height: 40px;
-  font-size: var(--ac-font-size-sm);
+  font-size: calc(var(--ac-font-size-base) - 1px);
   margin: 0 12px;
+  padding: 0 20px 0 12px !important;
   border-radius: 7px;
 }
 
@@ -170,12 +226,79 @@ const activeIndex = computed(() => {
   padding-left: 52px !important;
   height: 36px;
   line-height: 36px;
-  font-size: var(--ac-font-size-xs);
+  font-size: var(--ac-font-size-sm);
 }
 
 .menu-divider {
   height: 1px;
   background: var(--console-border-soft);
   margin: 8px 28px;
+}
+
+.side-nav.is-collapsed .side-menu :deep(.el-sub-menu .el-menu-item) {
+  padding-left: 14px !important;
+}
+
+.side-nav.is-collapsed .side-menu :deep(.el-menu-item) span,
+.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__title) span {
+  display: none !important;
+}
+
+.side-nav.is-collapsed .side-menu :deep(.el-menu-item) .el-icon,
+.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__title) .el-icon {
+  margin-right: 0 !important;
+}
+
+.side-nav.is-collapsed .menu-divider {
+  margin: 8px 14px;
+}
+
+.side-nav-bottom {
+  flex-shrink: 0;
+  border-top: 1px solid var(--console-border-soft);
+  margin: 0 12px;
+  padding: 8px 0;
+}
+
+.side-nav.is-collapsed .side-nav-bottom {
+  margin: 0 8px;
+}
+
+.version-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.2s;
+  padding: 6px 0 4px;
+  justify-content: center;
+}
+
+.version-bar:hover {
+  opacity: 0.8;
+}
+
+.version-label {
+  font-size: 12px;
+  color: var(--console-text);
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.version-spinner {
+  font-size: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__icon-arrow) {
+  display: none !important;
 }
 </style>

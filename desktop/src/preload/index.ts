@@ -32,6 +32,57 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.runtimeStatusChanged, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.runtimeStatusChanged, listener)
   },
+  getDataDir(): Promise<string> {
+    return ipcRenderer.invoke("app:get-data-dir")
+  },
+  getVersion(): Promise<string> {
+    return ipcRenderer.invoke("app:get-version")
+  },
+  checkUpdate(): Promise<unknown> {
+    return ipcRenderer.invoke("update:check-on-startup")
+  },
+  checkNow(): Promise<unknown> {
+    return ipcRenderer.invoke("update:check-now")
+  },
+  downloadUpdate(): Promise<void> {
+    return ipcRenderer.invoke("update:download")
+  },
+  installUpdateNow(): Promise<void> {
+    return ipcRenderer.invoke("update:install-now")
+  },
+  cancelAndEnter(): Promise<void> {
+    return ipcRenderer.invoke("update:cancel-and-enter")
+  },
+  getCurrentVersion(): Promise<string> {
+    return ipcRenderer.invoke("update:get-current-version")
+  },
+  openGiteeRelease(): Promise<void> {
+    return ipcRenderer.invoke("update:open-gitee-release")
+  },
+  onUpdateChecking(callback: () => void): () => void {
+    ipcRenderer.on("update:checking", callback)
+    return () => ipcRenderer.removeListener("update:checking", callback)
+  },
+  onUpdateAvailable(callback: (_event: Electron.IpcRendererEvent, data: unknown) => void): () => void {
+    ipcRenderer.on("update:available", callback)
+    return () => ipcRenderer.removeListener("update:available", callback)
+  },
+  onUpdateNotAvailable(callback: () => void): () => void {
+    ipcRenderer.on("update:not-available", callback)
+    return () => ipcRenderer.removeListener("update:not-available", callback)
+  },
+  onUpdateDownloadProgress(callback: (_event: Electron.IpcRendererEvent, data: unknown) => void): () => void {
+    ipcRenderer.on("update:download-progress", callback)
+    return () => ipcRenderer.removeListener("update:download-progress", callback)
+  },
+  onUpdateDownloaded(callback: (_event: Electron.IpcRendererEvent, data: unknown) => void): () => void {
+    ipcRenderer.on("update:downloaded", callback)
+    return () => ipcRenderer.removeListener("update:downloaded", callback)
+  },
+  onUpdateError(callback: (_event: Electron.IpcRendererEvent, data: unknown) => void): () => void {
+    ipcRenderer.on("update:error", callback)
+    return () => ipcRenderer.removeListener("update:error", callback)
+  },
 }
 
 contextBridge.exposeInMainWorld("amitiaDesktop", api)

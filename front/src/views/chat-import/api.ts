@@ -56,3 +56,7 @@ export function fetchBatchDetailApi(id: string) {
 export function deleteBatchApi(id: string) {
   return apiDel(`/api/imports/batches/${id}`)
 }
+
+export function fetchCharactersApi() {
+  return apiGet("/api/characters")
+}

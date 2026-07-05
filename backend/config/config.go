@@ -85,7 +85,7 @@ func InitConfig(configPath string) {
 	v.AddConfigPath(configPath)
 	v.AddConfigPath(".")
 
-	v.SetDefault("server.port", 8900)
+	v.SetDefault("server.port", 18899)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")

@@ -118,6 +118,7 @@ export function useWebChatConversation(
       } else {
         messages.value = []
       }
+      messages.value.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       setLastPolledMsgId(messages.value[messages.value.length - 1]?.id || null)
       connectSSE()
     } catch {
@@ -158,7 +159,7 @@ export function useWebChatConversation(
           if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
           return m
         })
-        hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE
+        messages.value.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
         const cid = conv.characterId || conv.character_id
         if (cid && cid !== characterId.value) {
           const c = characters.value.find((x: any) => x.id === cid)

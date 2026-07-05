@@ -95,6 +95,12 @@ provide("resolvedTheme", resolvedTheme)
 provide("currentCharName", currentCharName)
 provide("authUsername", authUsername)
 
+const isSidebarCollapsed = ref(false)
+function toggleSidebar() {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
+provide("isSidebarCollapsed", isSidebarCollapsed)
+provide("toggleSidebar", toggleSidebar)
 // Fetch health
 async function fetchHealth() {
   try {

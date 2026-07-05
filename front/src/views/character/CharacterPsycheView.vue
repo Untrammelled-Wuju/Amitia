@@ -71,7 +71,7 @@ async function loadPsycheState() {
   psycheLoading.value = true
   psycheError.value = ""
   try {
-    const { data } = await apiClient.get("/api/runtime/psyche-snapshot", {
+    const { data } = await apiClient.get("/api/psyche/snapshot", {
       params: { characterId: currentCharacterId.value }
     })
     if ((data as any)?.data) {

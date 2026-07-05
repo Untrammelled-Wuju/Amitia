@@ -243,7 +243,7 @@ onMounted(() => { fetchConvs(); loadCharacters() })
 
 <style scoped>
 .logs-page { padding: 0; }
-.page-title { font-size: var(--ac-font-size-lg); font-weight: 600; margin: 0 0 14px 0; color: var(--ac-color-text); }
+.page-title { font-size: 24px; font-weight: 600; margin: 0 0 14px 0; color: var(--ac-color-text); }
 .logs-layout { display: flex; gap: 0; height: calc(100vh - 200px); min-height: 400px; border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-md); overflow: hidden; }
 .msg-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; padding: 12px; }
 .msg-detail.empty { align-items: center; justify-content: center; }

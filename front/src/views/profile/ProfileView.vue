@@ -172,11 +172,7 @@ async function handleDelete(id: string) {
 </script>
 
 <style scoped>
-.profile-page {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
+  .profile-page { max-width: 100%; }
 .page-header {
   display: flex;
   justify-content: space-between;

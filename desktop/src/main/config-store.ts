@@ -1,14 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { app } from "electron"
 import { validateDeploymentConfig } from "../shared/deployment"
 import type { DeploymentModeConfig } from "../shared/types"
+import { getAmitiaDataDir } from "./path-manager"
 
 export class ConfigStore {
   private readonly filePath: string
 
-  constructor(filePath = join(app.getPath("userData"), "deployment-config.json")) {
-    this.filePath = filePath
+  constructor(filePath?: string) {
+    this.filePath = filePath || join(getAmitiaDataDir(), "config", "deployment-config.json")
   }
 
   async getDeploymentConfig(): Promise<DeploymentModeConfig> {

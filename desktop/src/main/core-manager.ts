@@ -3,6 +3,7 @@ import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process"
 import http from "http"
 import path from "path"
 import fs from "fs"
+import { getAmitiaDataDir, ensureAmitiaDataDir, getInstallDir } from "./path-manager"
 
 let coreProcess: ChildProcessWithoutNullStreams | null = null
 
@@ -10,41 +11,18 @@ export function getCorePath(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "core", "AmitiaCore.exe")
   }
-  return path.join(process.cwd(), "resources", "core", "AmitiaCore.exe")
+  return path.join(getInstallDir(), "resources", "core", "AmitiaCore.exe")
 }
 
 export function getCoreResourcesPath(): string {
   if (app.isPackaged) {
     return process.resourcesPath
   }
-  return path.join(process.cwd(), "resources")
+  return path.join(getInstallDir(), "resources")
 }
 
-export function getAmitiaDataDir(): string {
-  if (app.isPackaged) {
-    return path.resolve(path.dirname(app.getPath("exe")), "..", "AmitiaData")
-  }
-  return path.resolve(process.cwd(), "..", "AmitiaData")
-}
-
-export function ensureAmitiaDataDir(): string {
-  const dataDir = getAmitiaDataDir()
-  const dirs = [
-    dataDir,
-    path.join(dataDir, "config"),
-    path.join(dataDir, "data"),
-    path.join(dataDir, "logs"),
-    path.join(dataDir, "uploads"),
-    path.join(dataDir, "qdrant"),
-    path.join(dataDir, "surrealdb"),
-    path.join(dataDir, "memory"),
-    path.join(dataDir, "runtime"),
-  ]
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-  }
+export function ensureDataAndConfig(): string {
+  const dataDir = ensureAmitiaDataDir()
   ensureDefaultConfig(dataDir)
   ensureInitialSQL(dataDir)
   ensureCoreBinaries(dataDir)
@@ -108,7 +86,7 @@ export function startCore(): void {
   }
 
   const corePath = getCorePath()
-  const dataDir = ensureAmitiaDataDir()
+  const dataDir = getAmitiaDataDir()
 
   console.log("[CoreManager] 核心路径:", corePath)
   console.log("[CoreManager] 数据目录:", dataDir)

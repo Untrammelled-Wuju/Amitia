@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="health-modules" v-if="runtimeHealth">
     <div class="health-header">
-      <span class="panel-title">A. 服务状态</span>
+      <span class="panel-title">服务状态</span>
       <el-button text circle :loading="runtimeHealthLoading" @click="emit('runHealthCheck')">
         <el-icon :size="16"><Refresh /></el-icon>
       </el-button>

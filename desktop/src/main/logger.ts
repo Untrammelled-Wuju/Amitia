@@ -1,15 +1,15 @@
-import { app } from "electron"
 import path from "path"
 import fs from "fs"
+import { getAmitiaDataDir } from "./path-manager"
 
 let logStream: fs.WriteStream | null = null
 
 export function initLogger(): void {
-  const logDir = path.join(app.getPath("userData"), "data", "logs")
+  const logDir = path.join(getAmitiaDataDir(), "logs")
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true })
   }
-  const logPath = path.join(logDir, "electron-main.log")
+  const logPath = path.join(logDir, "electron.log")
   logStream = fs.createWriteStream(logPath, { flags: "a" })
 
   const origLog = console.log

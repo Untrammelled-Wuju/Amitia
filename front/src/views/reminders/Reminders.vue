@@ -355,9 +355,8 @@ onUnmounted(() => {
 })
 </script>
 <style scoped>
-.reminders-page { padding: 20px; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.page-title { margin: 0; font-size: var(--ac-font-size-xl); color: var(--ac-color-text); }
+.page-title { margin: 0; font-size: 24px; color: var(--ac-color-text); }
 .section-card { margin-bottom: 16px; }
 .section-title { font-weight: 600; font-size: var(--ac-font-size-base); }
 .card-header-row { display: flex; justify-content: space-between; align-items: center; }

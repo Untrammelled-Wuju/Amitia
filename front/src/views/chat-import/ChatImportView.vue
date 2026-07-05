@@ -12,6 +12,25 @@ SPDX-License-Identifier: AGPL-3.0-only
       </template>
     </el-alert>
 
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <span class="step-badge">0</span> 选择目标角色
+      </template>
+      <el-select
+        v-model="characterId"
+        placeholder="选择导入到哪个角色"
+        style="width: 300px"
+        clearable
+      >
+        <el-option
+          v-for="c in characters"
+          :key="c.id"
+          :label="c.name"
+          :value="c.id"
+        />
+      </el-select>
+    </el-card>
+
     <ImportInputPanel
       :raw-text="rawText"
       :batch-title="batchTitle"
@@ -20,12 +39,14 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-speaker-options="showSpeakerOptions"
       :user-speaker-input="userSpeakerInput"
       :assistant-speaker-input="assistantSpeakerInput"
+      :default-role="defaultRole"
       @update:raw-text="rawText = $event"
       @update:batch-title="batchTitle = $event"
       @update:parse-format="parseFormat = $event"
       @update:show-speaker-options="showSpeakerOptions = $event"
       @update:user-speaker-input="userSpeakerInput = $event"
       @update:assistant-speaker-input="assistantSpeakerInput = $event"
+      @update:default-role="defaultRole = $event"
       @parse="handleParse"
       @file-change="onFileChange"
     />
@@ -117,6 +138,7 @@ const {
   showSpeakerOptions,
   userSpeakerInput,
   assistantSpeakerInput,
+  defaultRole,
   parseResult,
   editableItems,
   confirming,
@@ -127,6 +149,9 @@ const {
   genSummaryLoading,
   extractLoading,
   memCandidates,
+  characters,
+  characterId,
+  fetchCharacters,
   handleParse,
   onFileChange,
   handleConfirm,
@@ -141,12 +166,15 @@ const {
   router,
 } = useImportWizard()
 
-onMounted(fetchBatches)
+onMounted(() => {
+  fetchCharacters()
+  fetchBatches()
+})
 </script>
 
 <style scoped>
 .import-page { }
-.page-title { font-size: var(--ac-font-size-lg); font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
+.page-title { font-size: 24px; font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
 .section-card { margin-bottom: 12px; }
 
 .step-badge {

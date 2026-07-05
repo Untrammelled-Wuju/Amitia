@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <section class="stats-panel">
-    <div class="panel-title">B. 今日数据</div>
+    <div class="panel-title">今日数据</div>
     <div class="stats-grid">
       <div class="stat-item blue">
         <div class="stat-icon"><el-icon><ChatDotRound /></el-icon></div>

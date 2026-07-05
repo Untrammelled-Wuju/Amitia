@@ -4,7 +4,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <header class="status-bar">
-    <div class="status-search">
+    <div class="collapse-btn" @click="toggleSidebar">
+      <el-icon :class="{ 'is-collapsed': isSidebarCollapsed }"><DArrowLeft /></el-icon>
+    </div>
+    <div class="status-search" @click="searchModal?.open()">
       <el-icon><Search /></el-icon>
       <span>搜索功能、角色、会话、记忆...</span>
     </div>
@@ -48,13 +51,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span>管理员</span>
       </button>
     </div>
+    <SearchModal ref="searchModal" />
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
-import { Moon, Search, Sunny, UserFilled } from "@element-plus/icons-vue"
-
+import { computed, ref, inject } from "vue"
+import type { Ref } from "vue"
+import { DArrowLeft, Moon, Search, Sunny, UserFilled } from "@element-plus/icons-vue"
+import SearchModal from "./SearchModal.vue"
 const props = defineProps<{
   deployMode?: string
   wechatStatus?: string
@@ -69,6 +74,11 @@ defineEmits<{
   toggleTheme: []
   logout: []
 }>()
+
+const isSidebarCollapsed = inject<Ref<boolean>>("isSidebarCollapsed", ref(false))
+const toggleSidebar = inject<() => void>("toggleSidebar", () => {})
+
+const searchModal = ref<InstanceType<typeof SearchModal> | null>(null)
 
 const deployLabel = computed(() =>
   props.deployMode === "cloud-web" ? "私有云" : "本地"
@@ -113,6 +123,30 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   backdrop-filter: blur(14px);
 }
 
+.collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.2s;
+  color: var(--console-text);
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.collapse-btn:hover {
+  opacity: 0.8;
+  background: var(--nav-hover-bg);
+}
+
+.collapse-btn .is-collapsed {
+  transform: rotate(180deg);
+
+}
+
 .status-search {
   display: flex;
   align-items: center;
@@ -123,6 +157,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   border: 1px solid var(--console-border);
   border-radius: 10px;
   background: var(--console-search-bg);
+  cursor: pointer;
   color: var(--console-search-text);
   box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02);
   font-size: 12px;

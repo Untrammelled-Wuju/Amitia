@@ -1,4 +1,3 @@
-import{createRequire as __cr}from"node:module";globalThis.require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -12,7 +11,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -38570,6 +38573,7 @@ var QQBotClient = class {
   accessToken = "";
   accessTokenExpiry = 0;
   _messageCount = 0;
+  _manualDisconnect = false;
   lastErrorMessage = "";
   get apiBase() {
     if (!this.config) return "https://api.sgroup.qq.com";
@@ -38609,6 +38613,7 @@ var QQBotClient = class {
     this.reconnectAttempts = 0;
     this.identifyRetries = 0;
     this.lastErrorMessage = "";
+    this._manualDisconnect = false;
     await this._doConnect(config);
   }
   async _doConnect(config) {
@@ -38627,7 +38632,7 @@ var QQBotClient = class {
       this.debugLog(`\u83B7\u53D6Gateway\u5931\u8D25: ` + err.message);
       this.lastErrorMessage = `Gateway\u8BF7\u6C42\u5931\u8D25: ` + err.message;
       this.loginStatus = "disconnected";
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (!this._manualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect();
       }
     }
@@ -38690,8 +38695,12 @@ var QQBotClient = class {
         return;
       }
       if (this.loginStatus !== "disconnected") {
-        this.loginStatus = "connecting";
-        this.scheduleReconnect();
+        if (this._manualDisconnect) {
+          this.loginStatus = "disconnected";
+        } else {
+          this.loginStatus = "connecting";
+          this.scheduleReconnect();
+        }
       }
     });
     this.ws.on("error", (err) => {
@@ -39164,6 +39173,7 @@ var QQBotClient = class {
   }
   disconnect() {
     console.log("[QQBot] \u65AD\u5F00\u8FDE\u63A5");
+    this._manualDisconnect = true;
     this.loginStatus = "disconnected";
     this.stopHeartbeat();
     if (this.reconnectTimer) {
@@ -39188,6 +39198,10 @@ var QQBotClient = class {
     }
   }
   scheduleReconnect() {
+    if (this._manualDisconnect) {
+      this.debugLog("\u624B\u52A8\u65AD\u5F00\uFF0C\u8DF3\u8FC7\u81EA\u52A8\u91CD\u8FDE");
+      return;
+    }
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.debugLog("\u91CD\u8FDE\u6B21\u6570\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u505C\u6B62\u91CD\u8FDE");
       this.lastErrorMessage = "\u91CD\u8FDE\u6B21\u6570\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u548C\u51ED\u8BC1";
@@ -39235,6 +39249,16 @@ function saveQQBotConfig(config) {
     console.log("[QQBot] \u51ED\u8BC1\u5DF2\u6301\u4E45\u5316\u5230\u78C1\u76D8");
   } catch (err) {
     console.error("[QQBot] \u6301\u4E45\u5316\u51ED\u8BC1\u5931\u8D25:", err.message);
+  }
+}
+function clearQQBotConfig() {
+  try {
+    if (fs2.existsSync(CONFIG_FILE)) {
+      fs2.unlinkSync(CONFIG_FILE);
+      console.log("[QQBot] \u6301\u4E45\u5316\u51ED\u8BC1\u5DF2\u6E05\u9664");
+    }
+  } catch (err) {
+    console.error("[QQBot] \u6E05\u9664\u51ED\u8BC1\u5931\u8D25:", err.message);
   }
 }
 
@@ -39649,6 +39673,7 @@ app.post("/api/connect", async (req, reply) => {
 });
 app.post("/api/disconnect", async (_req, reply) => {
   qq.disconnect();
+  clearQQBotConfig();
   return reply.send({ success: true });
 });
 app.post("/api/send", async (req, reply) => {
