@@ -54,6 +54,7 @@ type Service interface {
 	ListProviders() []ProviderInfo
 	SetOutboxStore(store OutboxStore)
 	SetDeliveryStore(store DeliveryStore)
+	ReplayPostProcess(eventType string, payload []byte) error
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -124,6 +125,7 @@ type DeliveryStore interface {
 
 type OutboxStore interface {
 	AppendOutbox(aggregateID, eventType string, payload []byte) error
+	AppendOutboxWithKey(aggregateID, eventType, idempotencyKey string, payload []byte) error
 }
 
 func (s *service) SetOutboxStore(store OutboxStore) {

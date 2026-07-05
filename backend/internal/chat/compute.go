@@ -253,5 +253,5 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	if s.wmCache != nil {
 		s.wmCache.UpdateSummary(result.ConversationID, result.Reply)
 	}
-	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.PipelineMessages, result.Reply)
+	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.RequestID, result.PipelineMessages, result.Reply)
 }

@@ -122,6 +122,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 
 	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
+	postProcessAdapter := &postProcessPublisherAdapter{chatSvc: chatSvc}
+	dispatchedPublisher.Register("postprocess.pipeline.execute", postProcessAdapter)
+	dispatchedPublisher.Register("postprocess.context.trim", postProcessAdapter)
+	dispatchedPublisher.Register("postprocess.mood.recovery", postProcessAdapter)
+	dispatchedPublisher.Register("postprocess.compressor.maybe", postProcessAdapter)
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 	orch := interaction.NewOrchestrator(orchCfg, chatSvc.(interaction.MessageProcessor))
@@ -239,6 +244,21 @@ func (a *chatOutboxAdapter) AppendOutbox(aggregateID, eventType string, payload 
 	return a.store.Append(record)
 }
 
+func (a *chatOutboxAdapter) AppendOutboxWithKey(aggregateID, eventType, idempotencyKey string, payload []byte) error {
+	record := newoutbox.OutboxRecord{
+		ID:             uuid.New().String(),
+		AggregateID:    aggregateID,
+		EventType:      eventType,
+		Payload:        payload,
+		Status:         newoutbox.OutboxStatusPending,
+		MaxRetries:     newoutbox.DefaultMaxRetries,
+		AvailableAt:    time.Now(),
+		IdempotencyKey: idempotencyKey,
+		CreatedAt:      time.Now(),
+	}
+	return a.store.Append(record)
+}
+
 type chatDeliveryAdapter struct {
 	store *delivery.SQLiteDeliveryStore
 }
@@ -302,4 +322,12 @@ func (a *qdrantReconciliationAdapter) CheckSideEffectExists(ctx context.Context,
 		return false, nil
 	}
 	return true, nil
+}
+
+type postProcessPublisherAdapter struct {
+	chatSvc chat.Service
+}
+
+func (a *postProcessPublisherAdapter) Publish(record newoutbox.OutboxRecord) error {
+	return a.chatSvc.ReplayPostProcess(record.EventType, record.Payload)
 }
