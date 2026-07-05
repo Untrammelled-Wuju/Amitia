@@ -12,8 +12,14 @@ extraResources:
     to: bridge
   - from: resources/migrations
     to: migrations
+  - from: resources/data
+    to: data
   - from: resources/config-template
     to: config-template
+  - from: resources/qdrant
+    to: qdrant
+  - from: resources/surrealdb
+    to: surrealdb
 asar: true
 win:
   signAndEditExecutable: false
@@ -33,3 +39,10 @@ nsis:
   shortcutName: Amitia
   runAfterFinish: true
   deleteAppDataOnUninstall: false
+
+
+
+
+
+
+

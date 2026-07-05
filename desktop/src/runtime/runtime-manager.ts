@@ -67,6 +67,10 @@ export class DesktopRuntimeManager implements RuntimeManager {
     this.status = this.createStatus()
   }
 
+  setStatus(state: RuntimeStatus["state"], message?: string): void {
+    this.status = this.createStatus(state, message)
+  }
+
   private createStatus(state?: RuntimeStatus["state"], message?: string): RuntimeStatus {
     const fallbackState = this.config.mode === "local" ? "not-installed" : "ready"
     return {

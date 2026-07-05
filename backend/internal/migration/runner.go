@@ -111,8 +111,11 @@ func (r Runner) applyOne(migration Migration) error {
 	var existing Record
 	err := r.DB.Where("version = ?", migration.Version).First(&existing).Error
 	if err == nil && existing.Status == "applied" {
-		currentChecksum := r.computeMigrationChecksum(migration)
-		if existing.Checksum != "" && currentChecksum != "" && existing.Checksum != currentChecksum {
+		currentChecksum, csErr := r.computeMigrationChecksum(migration)
+		if csErr != nil {
+			return fmt.Errorf("migration checksum compute failed %s: %w", migration.Version, csErr)
+		}
+		if existing.Checksum != "" && currentChecksum != existing.Checksum {
 			return fmt.Errorf("checksum mismatch for migration %s: recorded=%s current=%s", migration.Version, existing.Checksum, currentChecksum)
 		}
 		return nil
@@ -257,12 +260,12 @@ func checksumFor(parts []string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (r Runner) computeMigrationChecksum(migration Migration) string {
+func (r Runner) computeMigrationChecksum(migration Migration) (string, error) {
 	step := &Step{db: r.DB}
 	if err := migration.Up(step); err != nil {
-		return ""
+		return "", err
 	}
-	return checksumFor(step.operations)
+	return checksumFor(step.operations), nil
 }
 
 func safeIdentifier(name string) bool {

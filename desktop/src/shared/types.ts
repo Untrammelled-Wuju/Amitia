@@ -14,7 +14,7 @@ export interface RuntimeConnection {
   accessToken?: string
 }
 
-export type RuntimeState = "not-installed" | "not-ready" | "ready" | "failed"
+export type RuntimeState = "not-installed" | "starting" | "not-ready" | "ready" | "failed"
 
 export interface RuntimeStatus {
   state: RuntimeState

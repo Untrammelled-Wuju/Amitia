@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
-import { BrowserWindow, shell } from "electron"
+import { app, BrowserWindow, shell } from "electron"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
@@ -43,7 +43,7 @@ export function createMainWindow(): BrowserWindow {
   })
 
   const devServerURL = process.env.VITE_DEV_SERVER_URL || process.env.AMITIA_DESKTOP_DEV_SERVER_URL || "http://127.0.0.1:5178"
-  if (!process.env.NODE_ENV || process.env.NODE_ENV === "development") {
+  if (!app.isPackaged) {
     void win.loadURL(devServerURL)
     win.webContents.openDevTools({ mode: "detach" })
   } else {

@@ -38,7 +38,7 @@ import type { RuntimeModeResponse, RuntimeModeValidationResult, DeployMode } fro
 const mode = reactive<RuntimeModeResponse>({
   deployMode: "desktop-local",
   host: "127.0.0.1",
-  port: 8899,
+  port: 18080,
   web: { enabled: true, publicBaseUrl: "", requireAuth: true },
   bridge: { enabled: true, mode: "cloud", host: "127.0.0.1", port: 8898 },
   storage: { dataDir: "./data" },

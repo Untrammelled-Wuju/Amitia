@@ -146,7 +146,7 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 		return
 	}
 
-	fullAudioUrl := "http://127.0.0.1:8899" + body.AudioUrl
+	fullAudioUrl := "http://127.0.0.1:18080" + body.AudioUrl
 
 	taskID, submitErr := asr.SubmitTask(apiKey, fullAudioUrl, "zh-CN")
 	if submitErr != nil {

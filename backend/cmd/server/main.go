@@ -41,7 +41,8 @@ func killExistingServer(addr string) {
 	}
 	conn.Close()
 	log.Warn("检测到服务端口已被占用，正在终止旧进程...")
-	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :8899 | findstr LISTENING").Output()
+	_, port, _ := net.SplitHostPort(addr)
+	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :"+port+" | findstr LISTENING").Output()
 	fields := strings.Fields(string(out))
 	for _, f := range fields {
 		if pid, err2 := strconv.Atoi(f); err2 == nil {
@@ -257,8 +258,7 @@ func initDatabase(db *gorm.DB) error {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		log.Warn("sql.sql未找到，跳过建表:", err)
-		return nil
+		return fmt.Errorf("sql.sql未找到: %w", err)
 	}
 	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
 		return err
