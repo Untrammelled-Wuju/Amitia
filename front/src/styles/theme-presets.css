@@ -44,7 +44,7 @@ html[data-theme="light"] {
   --tp-shadow-md: 0 2px 8px rgba(0,0,0,0.08);
   --tp-shadow-lg: 0 4px 16px rgba(0,0,0,0.1);
 
-  --console-bg: radial-gradient(circle at 55% 12%, rgba(248, 250, 253, 0.98) 0%, rgba(244, 247, 251, 0.96) 42%, #F3F6FA 100%);
+  --console-bg: #F7F9FC;
   --console-sidebar: rgba(248, 251, 255, 0.96);
   --console-topbar: var(--console-sidebar);
   --console-card: #FFFFFF;

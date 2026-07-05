@@ -127,7 +127,7 @@ const desktopTitleBarCSS = String.raw`
   -webkit-app-region: no-drag;
 }
 #WindowControlButtons .icon:hover {
-  background: var(--ac-color-fill-light, #f3f4f6);
+  background: rgba(128, 128, 128, 0.2);
   color: var(--ac-color-text, #111827);
 }
 #WindowControlButtons .icon.close:hover {
