@@ -22,3 +22,12 @@ surreal.exe有自动解压机制，上传surreal.zip即可
 qdrant.exe有自动解压机制，上传qdrant.zip即可
 server.exe上传server.zip即可
 根目录的release文件夹整体结构需要保留并上传
+
+桌面端构建规则：
+桌面端运行时使用AmitiaCore.exe作为核心后端服务，该文件由Go后端编译产物server.exe重命名而来。
+构建桌面端安装包前必须执行以下步骤：
+1. 编译Go后端：cd backend && go build -o release/server.exe ./cmd/server/
+2. 复制到桌面端资源目录：Copy-Item backend/release/server.exe desktop/resources/core/AmitiaCore.exe
+3. 同步更新server.exe和server.zip：Copy-Item backend/release/server.exe desktop/resources/core/server.exe; Compress-Archive backend/release/server.exe desktop/resources/core/server.zip
+4. 最后执行pnpm run dist:win打包安装程序
+如果不更新AmitiaCore.exe，打包出的安装程序将使用过时的后端，安装后会出现Core service not running错误。
