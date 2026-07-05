@@ -3,6 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
+  <DesktopTitleBar />
   <PrivacyConsent v-if="!isPublicPage" />
   <AppLayout v-if="!isPublicPage">
     <router-view />
@@ -16,6 +17,7 @@ import { useRouter, useRoute } from "vue-router"
 import { AppLayout } from "./ui-index"
 import { apiClient } from "./ui-index"
 import PrivacyConsent from "./components/PrivacyConsent.vue"
+import DesktopTitleBar from "./components/DesktopTitleBar.vue"
 import { useTheme } from "./ui-index"
 
 const router = useRouter()
@@ -31,13 +33,11 @@ function getToken(): string | null {
 }
 
 onMounted(async () => {
-  // Initialize theme
   try {
     const { loadFromServer } = useTheme()
     await loadFromServer()
   } catch {}
 
-  // Already on a public page, let the router guard handle it
   if (publicPaths.some(p => route.path === p)) {
     return
   }
@@ -45,7 +45,6 @@ onMounted(async () => {
   const token = getToken()
 
   try {
-    // Step 1: Check onboarding
     const onboardingRes = await apiClient.get("/api/onboarding/status")
     const onboardingData = onboardingRes.data?.data || onboardingRes.data
     if (!onboardingData?.completed) {
@@ -53,7 +52,6 @@ onMounted(async () => {
       return
     }
 
-    // Step 2: Check auth status
     try {
       const authRes = await apiClient.get("/api/auth/status")
       const authData = authRes.data?.data || authRes.data
@@ -63,13 +61,11 @@ onMounted(async () => {
         return
       }
 
-      // Step 3: If no token, redirect to login
       if (!token) {
         router.replace("/login")
         return
       }
 
-      // Step 4: Validate existing token
       try {
         const meRes = await apiClient.get("/api/auth/me")
         const userData = meRes.data?.data || meRes.data
@@ -82,7 +78,6 @@ onMounted(async () => {
         router.replace("/login")
       }
     } catch {
-      // auth/status not available, try token validation directly
       if (token) {
         try {
           const meRes = await apiClient.get("/api/auth/me")
@@ -98,7 +93,6 @@ onMounted(async () => {
       }
     }
   } catch {
-    // Core may not be running yet
   }
 })
 </script>
