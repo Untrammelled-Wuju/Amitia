@@ -137,57 +137,22 @@ manager.onMessage(async (msg) => {
         console.log('[OpenClaw] Reply (' + reply.length + ' chars): ' + reply.substring(0, 200))
         
         const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
-        // 微信iLink平台不支持主动推送语音消息，只能发文字，禁止改为true
         const shouldSendVoice = false
         console.log('[OpenClaw][DIAG] Voice决策: wasVoice=' + wasVoice + ' shouldSendVoice=' + shouldSendVoice + ' forceVoice=' + forceVoice + ' replyLen=' + reply.length)
         
-        if (shouldSendVoice && reply.length > 0) {
-          try {
-            const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
-            let voiceSent = false
-            for (let i = 0; i < parts.length; i++) {
-              const part = parts[i]
-              try {
-                console.log("[OpenClaw][DIAG] TTS合成: part" + (i+1) + " text=" + part.substring(0,30));
-                const ttsResp = await fetch(sidecarConfig.coreUrl + "/api/tts/synthesize", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ text: part }),
-                  signal: AbortSignal.timeout(180000),
-                })
-                const ttsJson = await ttsResp.json() as any; console.log("[OpenClaw][DIAG] TTS响应: ok=" + ttsResp.ok + " code=" + (ttsJson.code || "?") + " hasAudio=" + !!ttsJson?.data?.audioUrl)
-                const audioUrl = ttsJson?.data?.audioUrl
-                if (audioUrl) {
-                  const fullAudioUrl = sidecarConfig.coreUrl + audioUrl
-                  const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
-                  if (audioResp.ok) {
-                    const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
-                    await manager.sendVoiceMessage(last.fromUserId, audioBuffer, 7, 0, last.contextToken)
-                    console.log('[OpenClaw] Voice part ' + (i+1) + ' sent OK')
-                    voiceSent = true
-                  }
-                }
-              } catch (partErr: any) {
-                console.error('[OpenClaw] Voice part ' + (i+1) + ' error: ' + (partErr?.message || String(partErr)))
-              }
-              if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
-            }
-            if (voiceSent) return
-            console.log('[OpenClaw][DIAG] 语音发送全部失败，fallback到文字')
-          } catch (ttsErr: any) {
-            console.error('[OpenClaw] TTS/voice error: ' + (ttsErr?.message || String(ttsErr)) + ', falling back to text')
-          }
-        }
-        
-        const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
-        console.log('[OpenClaw][DIAG] 文字发送: parts=' + parts.length + ' toUserId=' + last.fromUserId.substring(0,10) + '...')
-        for (let i = 0; i < parts.length; i++) {
-          console.log("[OpenClaw][DIAG] sendText part" + (i+1) + "/" + parts.length + " len=" + parts[i].length + " text=" + parts[i].substring(0,40));
-          await manager.sendTextMessage(last.fromUserId, parts[i], last.contextToken).catch(
-            (err: any) => console.error('[OpenClaw] Part ' + (i+1) + '/' + parts.length + ' failed:', err.message)
-          )
-          if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800 + Math.random() * 1200))
-        }
+        const deliveryResp = await fetch(`${sidecarConfig.coreUrl}/api/delivery/submit`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel: "wechat",
+            peerId: last.fromUserId,
+            text: reply,
+            interactionId: json?.data?.requestId || "",
+            messageId: last.messageId,
+          }),
+          signal: AbortSignal.timeout(10000),
+        })
+        const deliveryJson = await deliveryResp.json() as any
+        console.log('[Sidecar] delivery提交: inserted=' + deliveryJson?.data?.inserted + ' id=' + deliveryJson?.data?.id + ' maxRetries=' + deliveryJson?.data?.maxRetries)
       }
     } catch (err: any) { console.error("[Sidecar] Forward failed:", err.message) }
   }, BUFFER_MS)

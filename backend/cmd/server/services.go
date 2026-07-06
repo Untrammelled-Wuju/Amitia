@@ -56,6 +56,18 @@ type AppServices struct {
 	VoiceEntry          *interaction.VoiceEntry
 }
 
+type defaultCharacterProvider struct {
+	repo character.Repository
+}
+
+func (p *defaultCharacterProvider) GetDefaultCharacterID(ctx context.Context) (string, error) {
+	profile, err := p.repo.GetRuntimeProfile("")
+	if err != nil {
+		return "", err
+	}
+	return profile.CharacterID, nil
+}
+
 type reflectionMemoryServiceAdapter struct {
 	memory memory.Service
 }
@@ -151,7 +163,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	orch.SetDeadlineProvider(func(ctx context.Context, requestID string) (context.Context, context.CancelFunc) {
 		return dp.ContextWithDeadline(ctx, requestID, mindruntime.DeadlineStageGeneration)
 	})
-	resolver := interaction.NewScopeResolver(interaction.NewConversationScopeBindingLookup(ctx.DB))
+	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), &defaultCharacterProvider{repo: charRepo})
 	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
 	if err := dataLifecycle.InitSchema(); err != nil {
 		log.Error("failed to init data lifecycle schema:", err); panic("failed to init data lifecycle schema")

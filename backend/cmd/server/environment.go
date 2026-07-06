@@ -236,7 +236,7 @@ func startEnvironment() *Environment {
 	}
 	if useBundled {
 		sidecarCmd = "node"
-		sidecarArgs = []string{"bundle.mjs"}
+		sidecarArgs = []string{"launcher.mjs"}
 		sidecarDir = "sidecar"
 	}
 	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 9876, nil)
@@ -246,7 +246,7 @@ func startEnvironment() *Environment {
 	qqSidecarDir := "backend/qq-sidecar"
 	if useBundled {
 		qqSidecarCmd = "node"
-		qqSidecarArgs = []string{"bundle.mjs"}
+		qqSidecarArgs = []string{"launcher.mjs"}
 		qqSidecarDir = "qq-sidecar"
 	}
 	env.AddService("qq-sidecar", qqSidecarDir, qqSidecarCmd, qqSidecarArgs, 9877, nil)

@@ -64,6 +64,27 @@ func (s *SQLiteDeliveryStore) InitSchema() error {
 	return s.db.AutoMigrate(&DeliveryIntentModel{}, &OutputLeaseModel{})
 }
 
+func (s *SQLiteDeliveryStore) SubmitIntent(intent DeliveryIntent) (bool, error) {
+	now := intent.CreatedAt.Format("2006-01-02 15:04:05")
+	model := DeliveryIntentModel{
+		ID:            intent.ID,
+		InteractionID: intent.InteractionID,
+		Channel:       intent.Channel,
+		PeerID:        intent.PeerID,
+		ContentType:   intent.ContentType,
+		Payload:       intent.Payload,
+		Status:        string(intent.Status),
+		CreatedAt:     now,
+		MaxRetries:    intent.MaxRetries,
+	}
+	result := s.db.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		model.ID, model.InteractionID, model.Channel, model.PeerID, model.ContentType, model.Payload, model.Status, model.CreatedAt, model.MaxRetries)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
 func (s *SQLiteDeliveryStore) CreateIntent(intent DeliveryIntent) error {
 	now := intent.CreatedAt.Format("2006-01-02 15:04:05")
 	model := DeliveryIntentModel{

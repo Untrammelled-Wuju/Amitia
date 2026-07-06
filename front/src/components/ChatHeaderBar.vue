@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="header-info">
       <span class="header-char-name">{{ charName || "选择角色" }}</span>
       <span class="header-char-desc" v-if="charName">{{ charIdentity || '暂无角色描述' }}</span>
-      <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span>
+      <!-- <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span> -->
     </div>
     <div class="header-style-select">
       <el-dropdown trigger="click" @command="(v: string) => $emit('update:replyStyle', v)">

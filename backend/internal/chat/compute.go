@@ -79,12 +79,16 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
 		}
 	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
-		applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
-			"conversation_id": convID,
-			"channel":         channel,
-			"character_id":    charID,
-		}, err, "process message conversation scope invalid")
-		return nil, fmt.Errorf("会话与角色或渠道不匹配")
+		if strings.Contains(err.Error(), "会话不存在") {
+			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
+		} else {
+			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
+				"conversation_id": convID,
+				"channel":         channel,
+				"character_id":    charID,
+			}, err, "process message conversation scope invalid")
+			return nil, fmt.Errorf("会话与角色或渠道不匹配")
+		}
 	}
 	trace = updateProcessTraceScope(trace, convID, charID, channel)
 	existingUser, existingAssistants, hasExistingUser := s.findRequestMessages(convID, requestID)

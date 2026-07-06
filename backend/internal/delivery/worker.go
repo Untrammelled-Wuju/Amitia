@@ -23,7 +23,7 @@ type WorkerConfig struct {
 func DefaultWorkerConfig() WorkerConfig {
 	return WorkerConfig{
 		BatchSize: 10,
-		Interval:  5 * time.Second,
+		Interval:  1 * time.Second,
 	}
 }
 

@@ -580,6 +580,9 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) ([]string, error) {
 	ids := []string{}
 	channel := plan.Runtime.Delivery.Channel
+	if plan.Request != nil && (plan.Request.Source == "wechat" || plan.Request.Source == "qq") {
+		return ids, nil
+	}
 	peerID := ""
 	if plan.Runtime.Delivery.PeerID != "" {
 		peerID = plan.Runtime.Delivery.PeerID

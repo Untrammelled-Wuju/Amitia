@@ -62,12 +62,21 @@ type ScopeBindingLookup interface {
 	FindScopeBindings(ctx context.Context, channel, peerID string) ([]ScopeBinding, error)
 }
 
+type DefaultCharacterProvider interface {
+	GetDefaultCharacterID(ctx context.Context) (string, error)
+}
+
 type ScopeResolver struct {
 	lookup ScopeBindingLookup
+	defaultCharProvider DefaultCharacterProvider
 }
 
 func NewScopeResolver(lookup ScopeBindingLookup) ScopeResolver {
-	return ScopeResolver{lookup: lookup}
+	return NewScopeResolverWithDefaultChar(lookup, nil)
+}
+
+func NewScopeResolverWithDefaultChar(lookup ScopeBindingLookup, defaultCharProvider DefaultCharacterProvider) ScopeResolver {
+	return ScopeResolver{lookup: lookup, defaultCharProvider: defaultCharProvider}
 }
 
 func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (ScopeResolution, error) {
@@ -99,6 +108,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 		if err := scope.Validate(); err != nil {
 			return ScopeResolution{}, err
 		}
+		scope = r.resolveDefaultCharacter(ctx, scope)
 		return ScopeResolution{Scope: scope, Source: normalizeResolutionSource(scope.Source), Confidence: ScopeConfidenceUnboundExplicit}, nil
 	}
 
@@ -113,6 +123,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 		if err := scope.Validate(); err != nil {
 			return ScopeResolution{}, err
 		}
+		scope = r.resolveDefaultCharacter(ctx, scope)
 		return ScopeResolution{Scope: scope, Source: normalizeResolutionSource(scope.Source), Confidence: ScopeConfidenceUnboundExplicit}, nil
 	}
 	active := make([]ScopeBinding, 0, len(bindings))
@@ -195,4 +206,16 @@ func normalizeResolutionSource(source string) string {
 		return "request"
 	}
 	return source
+}
+
+func (r ScopeResolver) resolveDefaultCharacter(ctx context.Context, scope InteractionScope) InteractionScope {
+	if scope.CharacterID != "" || r.defaultCharProvider == nil {
+		return scope
+	}
+	id, err := r.defaultCharProvider.GetDefaultCharacterID(ctx)
+	if err != nil {
+		return scope
+	}
+	scope.CharacterID = id
+	return scope
 }

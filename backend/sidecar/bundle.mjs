@@ -1,4 +1,3 @@
-import{createRequire as __cr}from"node:module";globalThis.require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -116249,7 +116248,7 @@ var sidecarConfig = {
   host: envStr("SIDECAR_HOST", "127.0.0.1"),
   port: parseInt(envStr("SIDECAR_PORT", "9876"), 10),
   // Core URL for forwarding incoming messages
-  coreUrl: envStr("CORE_URL", "http://127.0.0.1:8899"),
+  coreUrl: envStr("CORE_URL", "http://127.0.0.1:18899"),
   // Bridge API token for auth
   bridgeApiToken: (() => {
     const t = process.env.BRIDGE_API_TOKEN;
@@ -118453,6 +118452,7 @@ app.addHook("onSend", async (_req, reply) => {
   void reply.header("X-Powered-By", "");
 });
 var manager = getWechatManager();
+var contextTokenCache = /* @__PURE__ */ new Map();
 var msgBuffers = /* @__PURE__ */ new Map();
 manager.onMessage(async (msg) => {
   const BUFFER_MS = sidecarConfig.mergeWindowMs;
@@ -118460,6 +118460,9 @@ manager.onMessage(async (msg) => {
   const existing = msgBuffers.get(key);
   console.log(`[Sidecar][DIAG] buffer\u5165: text="${msg.text.substring(0, 60)}" isVoice=${msg.isVoice} hasImage=${!!msg.imageUrl}`);
   const item = { text: msg.text, contextToken: msg.contextToken || "", fromUserId: msg.fromUserId, toUserId: msg.toUserId, messageId: msg.messageId, createdAt: msg.createdAt, audioBase64: msg.audioBase64 || "", isVoice: msg.isVoice || false, imageUrl: msg.imageUrl || "", imageBase64: msg.imageBase64 || "", aeskey: msg.aeskey || "" };
+  if (msg.contextToken) {
+    contextTokenCache.set(msg.fromUserId, msg.contextToken);
+  }
   if (existing) {
     clearTimeout(existing.timer);
     existing.msgs.push(item);
@@ -118750,7 +118753,8 @@ app.post("/api/send", async (req, reply) => {
         message: "toUserId and text are required"
       });
     }
-    await manager.sendTextMessage(body.toUserId, body.text, body.contextToken);
+    const ctxToken = body.contextToken || contextTokenCache.get(body.toUserId) || "";
+    await manager.sendTextMessage(body.toUserId, body.text, ctxToken);
     return reply.send({ success: true, message: "Sent" });
   } catch (err) {
     console.error("[Sidecar]", err);

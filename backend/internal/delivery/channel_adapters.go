@@ -22,9 +22,10 @@ func (a *QQChannelAdapter) Name() string {
 }
 
 func (a *QQChannelAdapter) Deliver(intent DeliveryIntent) error {
+	content := extractContentFromPayload(intent.Payload)
 	body, _ := json.Marshal(map[string]string{
 		"toUserId": intent.PeerID,
-		"text":     string(intent.Payload),
+		"text":     content,
 	})
 	req, _ := http.NewRequest("POST", a.sidecarURL+"/api/send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -55,9 +56,10 @@ func (a *WechatChannelAdapter) Name() string {
 }
 
 func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
+	content := extractContentFromPayload(intent.Payload)
 	body, _ := json.Marshal(map[string]string{
 		"toUserId": intent.PeerID,
-		"text":     string(intent.Payload),
+		"text":     content,
 	})
 	req, _ := http.NewRequest("POST", a.sidecarURL+"/api/send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -73,4 +75,15 @@ func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
 	}
 	applog.Info("Wechat delivered", "peerId", intent.PeerID)
 	return nil
+}
+
+func extractContentFromPayload(payload []byte) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return string(payload)
+	}
+	if content, ok := data["content"].(string); ok {
+		return content
+	}
+	return string(payload)
 }

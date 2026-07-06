@@ -23,9 +23,10 @@ function notifyStatus(runtimeManager: DesktopRuntimeManager, state: RuntimeStatu
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.runtimeStatusChanged, runtimeManager.getStatus())
   }
-}
+  }
 
-const lock = app.requestSingleInstanceLock()
+const lockKey = app.isPackaged ? undefined : `amitia-dev-${Date.now()}-${Math.random().toString(36).slice(2)}`
+const lock = app.requestSingleInstanceLock(lockKey)
 if (!lock) {
   app.quit()
 } else {
