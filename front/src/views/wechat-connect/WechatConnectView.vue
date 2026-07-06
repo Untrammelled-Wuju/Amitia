@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="wechat-page">
     <h2 class="page-title">微信连接</h2>
-    <div v-if="!pageReady" style="text-align:center;padding:40px 0;color:#909399">
+    <div v-if="!pageReady" style="padding:40px 0;color:#909399">
       <el-icon class="is-loading" :size="24"><Loading /></el-icon>
       <p style="margin-top:8px">检测连接状态...</p>
     </div>
@@ -323,17 +323,12 @@ onUnmounted(() => {
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .card-header-title { font-weight: 600; font-size: var(--ac-font-size-sm); }
 
-.login-layout {
-  display: flex;
-  gap: 28px;
-  align-items: flex-start;
-  max-width: 520px;
-}
+.login-layout { display: flex; gap: 28px; align-items: flex-start; }
 @media (max-width: 560px) {
   .login-layout { flex-direction: column-reverse; align-items: center; }
 }
 
-.login-steps { min-width: 0; }
+.login-steps { flex: 0 0 auto; min-width: 0; }
 .login-qr { flex-shrink: 0; }
 
 .qr-frame {
@@ -364,7 +359,7 @@ onUnmounted(() => {
   margin-top: 14px;
   font-size: 12px;
   color: #909399;
-  text-align: center;
+  text-align: left;
 }
 
 .qr-step-row {

@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="wechat-page">
     <h2 class="page-title">QQ 连接</h2>
-    <div v-if="!pageReady" style="text-align:center;padding:40px 0;color:#909399">
+    <div v-if="!pageReady" style="padding:40px 0;color:#909399">
       <el-icon class="is-loading" :size="24"><Loading /></el-icon>
       <p style="margin-top:8px">检测连接状态...</p>
     </div>
@@ -59,10 +59,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="pwd-login">
           <el-form label-width="70px" @submit.prevent="doConnect">
             <el-form-item label="AppID">
-              <el-input v-model="appId" placeholder="输入Bot AppID" style="width:280px" />
+              <el-input v-model="appId" placeholder="输入Bot AppID" style="width:100%;max-width:400px" />
             </el-form-item>
             <el-form-item label="Token">
-              <el-input v-model="token" type="password" placeholder="输入Bot Token" style="width:280px" show-password />
+              <el-input v-model="token" type="password" placeholder="输入Bot Token" style="width:100%;max-width:400px" show-password />
             </el-form-item>
             <el-form-item label="沙箱模式">
               <el-switch v-model="sandbox" />
