@@ -34,35 +34,54 @@ func (s *service) compiledChannelPrompt(channel string) expression.CompiledPromp
 	return expression.CompileChannelPrompt(kind)
 }
 
-func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) []string {
+type sys1Result struct {
+	CharacterConfig string
+	ProfileContext  string
+	EpisodicContext string
+	Worldbook       string
+}
+
+func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) sys1Result {
 	parts := buildRoleSystemParts(profile, runtime)
 	characterID := ""
 	if profile != nil {
 		characterID = strings.TrimSpace(profile.CharacterID)
 	}
+	var profileCtx, epiCtx, wbCtx string
 	if s.profileSvc != nil {
 		profilePrompt := s.profileSvc.ToSystemPrompt(characterID, characterID)
 		if profilePrompt != "" {
-			parts = append(parts, profilePrompt)
+			profileCtx = profilePrompt
 		}
 	}
 	if s.episodicSvc != nil {
 		epiPrompt := s.episodicSvc.ToSystemPrompt(characterID)
 		if epiPrompt != "" {
-			parts = append(parts, epiPrompt)
+			epiCtx = epiPrompt
 		}
 	}
 	if s.worldBookSvc != nil {
 		wbPrompt := s.worldBookSvc.ToSystemPrompt(userMessage, "")
 		if wbPrompt != "" {
-			parts = append(parts, wbPrompt)
+			wbCtx = wbPrompt
 		}
 	}
-	return parts
+	return sys1Result{
+		CharacterConfig: strings.Join(parts, "\n\n"),
+		ProfileContext:  profileCtx,
+		EpisodicContext: epiCtx,
+		Worldbook:       wbCtx,
+	}
 }
 
-func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage string) []string {
-	parts := []string{s.compiledSystemInstruction(channel)}
+type sys2Result struct {
+	SystemInstruction string
+	MemoryContext     string
+}
+
+func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage string) sys2Result {
+	sysInstruction := s.compiledSystemInstruction(channel)
+	var internalParts []string
 	workingSummary := ""
 	if s.stateProvider != nil {
 		state := s.stateProvider.GetState(convID)
@@ -77,12 +96,12 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 		}
 	}
 	if workingSummary != "" {
-		parts = append(parts, "【工作记忆】\n"+workingSummary)
+		internalParts = append(internalParts, "【工作记忆】\n"+workingSummary)
 	}
 	if s.compressor != nil {
 		status := s.compressor.GetCompressionStatus(convID)
 		if summary, ok := status["latestSummary"].(string); ok && summary != "" {
-			parts = append(parts, "【对话历史摘要】\n"+summary)
+			internalParts = append(internalParts, "【对话历史摘要】\n"+summary)
 		}
 	}
 	if s.memorySvc != nil && userMessage != "" {
@@ -112,12 +131,15 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 			}
 			for _, layer := range layerOrder {
 				if lines := layerLines[layer]; len(lines) > 0 {
-					parts = append(parts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
+					internalParts = append(internalParts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
 				}
 			}
 		}
 	}
-	return parts
+	return sys2Result{
+		SystemInstruction: sysInstruction,
+		MemoryContext:     strings.Join(internalParts, "\n\n"),
+	}
 }
 
 func (s *service) rewriteQueryForSearch(userMessage string) string {

@@ -314,8 +314,7 @@ onUnmounted(() => {
 
 <style scoped>
 .wechat-page {
-  max-width: 640px;
-  margin: 0 auto;
+  margin:  0;
   padding: 20px 16px;
 }
 .page-title { font-size: 20px; font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
@@ -328,12 +327,13 @@ onUnmounted(() => {
   display: flex;
   gap: 28px;
   align-items: flex-start;
+  max-width: 520px;
 }
 @media (max-width: 560px) {
   .login-layout { flex-direction: column-reverse; align-items: center; }
 }
 
-.login-steps { flex: 1; min-width: 0; }
+.login-steps { min-width: 0; }
 .login-qr { flex-shrink: 0; }
 
 .qr-frame {

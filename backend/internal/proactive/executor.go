@@ -389,11 +389,11 @@ func (e *Executor) generateContent(name, ruleType, prompt, charName, identity, c
 
 	personalityPrompt := e.loadPersonalityPrompt(characterID)
 
-	sys := fmt.Sprintf("你是%s，%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。", charName, identity)
-	if personalityPrompt != "" {
-		sys = sys + "\n" + personalityPrompt
-	}
+	sys := fmt.Sprintf("你是%s，%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity)
 	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
+	if personalityPrompt != "" {
+		usr = usr + "\n\n【角色风格约束】\n" + personalityPrompt
+	}
 
 	cfg := e.getActiveModelCron()
 	if cfg == nil {
@@ -401,7 +401,6 @@ func (e *Executor) generateContent(name, ruleType, prompt, charName, identity, c
 	}
 
 	msgs := []map[string]interface{}{
-		{"role": "system", "content": "【系统规则】回复中不要使用任何emoji表情符号。"},
 		{"role": "system", "content": sys},
 		{"role": "user", "content": usr},
 	}

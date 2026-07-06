@@ -81,7 +81,7 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsMarkdown:  true,
 				SupportsMedia:     true,
 				SupportsVoice:     false,
-				SupportsSegmented: false,
+				SupportsSegmented: true,
 			},
 			SegmentHint: "full_paragraph",
 		}

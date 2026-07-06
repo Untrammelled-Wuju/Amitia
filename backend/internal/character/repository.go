@@ -97,15 +97,24 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 	var c Character
 	var err error
 	if strings.TrimSpace(id) != "" {
-		err = r.db.Where("id = ?", id).First(&c).Error
+		err = r.db.Where("id = ? AND status = ?", id, "enabled").First(&c).Error
 	} else {
-		err = r.db.Where("is_default = 1").Limit(1).First(&c).Error
+		err = r.db.Where("is_default = 1 AND status = ?", "enabled").Limit(1).First(&c).Error
 		if err != nil {
-			err = r.db.Order("sort_order, created_at").Limit(1).First(&c).Error
+			err = r.db.Where("status = ?", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
 		}
 	}
 	if err != nil {
-		return nil, err
+		if strings.TrimSpace(id) != "" {
+			log.Printf("[RoleRuntimeProfile] requested character %s not found or disabled, trying fallback", id)
+			err = r.db.Where("is_default = 1 AND status = ?", "enabled").Limit(1).First(&c).Error
+			if err != nil {
+				err = r.db.Where("status = ?", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	diagnostics := []string{}
 	personalityConfig := parseRuntimeJSON(c.ID, "personality_config", c.PersonalityConfig, &diagnostics)

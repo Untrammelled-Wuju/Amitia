@@ -21,7 +21,16 @@ var injectionPatterns = []struct {
 	{regexp.MustCompile(`(?i)forget\s+(everything|all)\s+(you\s+know|about|above)`), "forget_everything"},
 	{regexp.MustCompile(`(?i)you\s+must\s+(not\s+)?(follow|obey)\s+your\s+(system\s+)?(prompt|instructions|rules)`), "system_override"},
 	{regexp.MustCompile(`(?i)priority\s+(override|shift|change|swap)`), "priority_override"},
-	{regexp.MustCompile(`(?i)act\s+as\s+if\s+(your|the)\s+(system\s+)?(prompt|instructions|rules)\s+(is|are|were|don.t\s+(exist|apply))`), "act_as_if"},
+	{regexp.MustCompile("(?i)act\\s+as\\s+if\\s+(your|the)\\s+(system\\s+)?(prompt|instructions|rules)\\s+(is|are|were|don['’]t\\s+(exist|apply))"), "act_as_if"},
+	{regexp.MustCompile(`.*忽略之前.*`), "ignore_previous_cn"},
+	{regexp.MustCompile(`.*忽略前面.*`), "ignore_previous_cn"},
+	{regexp.MustCompile(`.*无视以上.*`), "ignore_previous_cn"},
+	{regexp.MustCompile(`.*系统提示词.*`), "system_prompt_leak_cn"},
+	{regexp.MustCompile(`.*开发者提示词.*`), "system_prompt_leak_cn"},
+	{regexp.MustCompile(`.*隐藏规则.*`), "system_prompt_leak_cn"},
+	{regexp.MustCompile(`.*你现在是\s*system.*`), "role_confusion_cn"},
+	{regexp.MustCompile(`.*你现在是\s*系统.*`), "role_confusion_cn"},
+	{regexp.MustCompile(`.*你现在是\s*developer.*`), "role_confusion_cn"},
 }
 
 type SanitizeResult struct {
@@ -55,7 +64,7 @@ func SanitizeContent(content string, sensitivity SensitivityLevel) SanitizeResul
 		return SanitizeResult{Content: content, Clean: true, TruncatedAt: truncatedAt}
 	}
 
-	if sensitivity == SensitivitySecret || sensitivity == SensitivityPrivate {
+	if sensitivity == SensitivityPrivate {
 		return SanitizeResult{Content: "[redacted]", Clean: false, Flags: flags, TruncatedAt: truncatedAt}
 	}
 
@@ -103,9 +112,8 @@ func redactInjectionSpans(content string, flags []string) string {
 	}
 	result := content
 	for _, entry := range injectionPatterns {
-		loc := entry.Pattern.FindStringIndex(result)
-		if loc != nil {
-			result = result[:loc[0]] + "[filtered]" + result[loc[1]:]
+		if entry.Pattern.MatchString(result) {
+			result = entry.Pattern.ReplaceAllString(result, "[filtered]")
 		}
 	}
 	return strings.TrimSpace(result)

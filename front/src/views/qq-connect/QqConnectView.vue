@@ -232,7 +232,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.wechat-page { max-width: 600px; margin: 0 auto; padding: 20px 16px 60px; }
+.wechat-page { margin: 0; padding: 20px 16px 60px; }
 .page-title { font-size: 20px; font-weight: 700; color: var(--ac-color-text); margin-bottom: 16px; }
 .section-card { margin-bottom: 16px; }
 .card-header-row { display: flex; align-items: center; justify-content: space-between; }

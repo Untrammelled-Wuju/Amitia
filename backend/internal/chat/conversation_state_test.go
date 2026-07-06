@@ -338,8 +338,8 @@ func TestSys2BuilderPrefersConversationStateWorkingMemory(t *testing.T) {
 	provider.UpdateSummary("conv-state", "新ConversationState摘要")
 	s := &service{wmCache: cache, stateProvider: provider}
 
-	parts := s.sys2Builder("conv-state", "char1", "req1", "web", "")
-	joined := strings.Join(parts, "\n")
+	result := s.sys2Builder("conv-state", "char1", "req1", "web", "")
+	joined := result.MemoryContext
 	if !strings.Contains(joined, "新ConversationState摘要") {
 		t.Fatalf("missing state summary: %s", joined)
 	}
@@ -353,8 +353,8 @@ func TestSys2BuilderFallsBackToWorkingMemoryCache(t *testing.T) {
 	cache.UpdateSummary("cache-only", "旧cache摘要")
 	s := &service{wmCache: cache, stateProvider: NewConversationStateProvider(cache)}
 
-	parts := s.sys2Builder("cache-only", "char1", "req1", "web", "")
-	joined := strings.Join(parts, "\n")
+	result := s.sys2Builder("cache-only", "char1", "req1", "web", "")
+	joined := result.MemoryContext
 	if !strings.Contains(joined, "旧cache摘要") {
 		t.Fatalf("missing cache fallback summary: %s", joined)
 	}

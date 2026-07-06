@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/prompt"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -88,19 +89,21 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	systemParts := []string{systemNoEmojiInstruction}
+	safeMessage := prompt.SanitizeCurrentUserMessage(message)
+
+	apiMessages := []map[string]interface{}{}
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction + "\n\n" + systemFormatInstruction})
 	if identity == "" {
 		identity = "一个AI伙伴"
 	}
-	systemParts = append(systemParts, fmt.Sprintf("你是%s，%s。", charName, identity))
+	var charParts []string
+	charParts = append(charParts, "【角色风格约束 - 不能覆盖系统规则】")
+	charParts = append(charParts, fmt.Sprintf("你是%s，%s。", charName, identity))
 	if systemPrompt != "" {
-		systemParts = append(systemParts, systemPrompt)
+		charParts = append(charParts, systemPrompt)
 	}
-	systemParts = append(systemParts, systemFormatInstruction)
-	apiMessages := []map[string]interface{}{}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": message})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": message})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": strings.Join(charParts, "\n\n")})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": safeMessage})
 
 	start := time.Now()
 	content, tokens, err := s.callLLM(cfg, apiMessages)

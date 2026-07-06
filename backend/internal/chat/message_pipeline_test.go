@@ -175,7 +175,8 @@ func TestProcessMessageBuildsPromptThroughIR(t *testing.T) {
 		t.Fatal("expected prompt messages")
 	}
 	last := captured[len(captured)-1]
-	if last["role"] != "user" || last["content"] != "你好" {
+	lastContent, _ := last["content"].(string)
+	if last["role"] != "user" || !strings.Contains(lastContent, "你好") {
 		t.Fatalf("expected current input as final user message, got %#v", last)
 	}
 	joined := ""
@@ -184,18 +185,21 @@ func TestProcessMessageBuildsPromptThroughIR(t *testing.T) {
 			joined += content + "\n"
 		}
 	}
-	if !strings.Contains(joined, "[behavior_plan][data_only]") {
-		t.Fatalf("runtime context was not rendered as data-only IR section: %s", joined)
+	if !strings.Contains(joined, "runtime_plan") {
+		t.Fatalf("runtime plan/expression not rendered in prompt: %s", joined)
 	}
-	if !strings.Contains(joined, `"path":"deep"`) || !strings.Contains(joined, `"transaction":"all"`) {
-		t.Fatalf("runtime decisions missing from IR prompt: %s", joined)
+	if !strings.Contains(joined, "路径: deep") {
+		t.Fatalf("runtime path missing from prompt: %s", joined)
+	}
+	if !strings.Contains(joined, "high_stress") {
+		t.Fatalf("runtime safety reasons missing from prompt: %s", joined)
 	}
 }
 
-func TestBuildProcessPromptMessagesKeepsRuntimeDataOnlyAndUserLast(t *testing.T) {
+func TestBuildProcessPromptMessagesGatewayOnlyFirstSystem(t *testing.T) {
 	messages := buildProcessPromptMessages(processPromptInput{
-		Sys1Parts: []string{"你是 Amitia"},
-		Sys2Parts: []string{"遵守当前渠道策略"},
+		CharacterConfig:   "你是 Amitia",
+		PersonalityConfig: "遵守当前渠道策略",
 		History: []map[string]string{
 			{"role": "user", "content": "上一轮"},
 			{"role": "assistant", "content": "上一轮回复"},
@@ -213,23 +217,39 @@ func TestBuildProcessPromptMessagesKeepsRuntimeDataOnlyAndUserLast(t *testing.T)
 	if len(messages) == 0 {
 		t.Fatal("expected prompt messages")
 	}
-	last := messages[len(messages)-1]
-	if last["role"] != "user" || last["content"] != "当前输入" {
-		t.Fatalf("expected current input as final user message, got %#v", last)
+
+	if messages[0]["role"] != "system" {
+		t.Fatalf("first message must be system, got %#v", messages[0])
 	}
-	joined := ""
-	for _, msg := range messages[:len(messages)-1] {
-		if msg["role"] != "system" {
-			t.Fatalf("expected non-current sections to render as system messages, got %#v", msg)
+
+	for i := 1; i < len(messages); i++ {
+		if messages[i]["role"] == "system" {
+			t.Fatalf("message %d must not be system", i)
 		}
+	}
+
+	last := messages[len(messages)-1]
+	if last["role"] != "user" {
+		t.Fatalf("last message must be user, got %#v", last)
+	}
+	lastContent, _ := last["content"].(string)
+	if !strings.Contains(lastContent, "当前输入") {
+		t.Fatalf("last message missing user content: %s", lastContent)
+	}
+	if !strings.Contains(lastContent, "<current_user_message>") {
+		t.Fatalf("last message missing current_user_message tag")
+	}
+
+	joined := ""
+	for _, msg := range messages {
 		if content, ok := msg["content"].(string); ok {
 			joined += content + "\n"
 		}
 	}
-	if !strings.Contains(joined, "[behavior_plan][data_only]") {
-		t.Fatalf("missing runtime data-only section: %s", joined)
+	if !strings.Contains(joined, "<untrusted_data") {
+		t.Fatalf("history should be in untrusted_data: %s", joined)
 	}
-	if !strings.Contains(joined, "[history][data_only]") {
-		t.Fatalf("missing history data-only section: %s", joined)
+	if !strings.Contains(joined, "runtime_plan") && !strings.Contains(joined, "character_contract") {
+		t.Fatalf("missing runtime/character section: %s", joined)
 	}
 }

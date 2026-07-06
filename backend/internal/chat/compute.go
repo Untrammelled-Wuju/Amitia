@@ -95,7 +95,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			CharacterID:          charID,
 			CharacterName:        charName,
 			UserMessageID:        existingUser.ID,
-			UserMessageSequence:  existingUser.Sequence,
+			UserMessageSequence:  assistantMaxSequence(existingAssistants),
 			UserMessageCreatedAt: existingUser.CreatedAt,
 			Reply: strings.TrimSpace(strings.Join(func() []string {
 				parts := make([]string, len(existingAssistants))
@@ -153,9 +153,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	sys1Parts := s.sys1Builder(runtimeProfile, req.Message, req.Runtime)
+	sys1Result := s.sys1Builder(runtimeProfile, req.Message, req.Runtime)
 	history := s.loadHistoryExcluding(convID, userMsgID)
-	sys2Parts := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
+	sys2Result := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
 
 	kind := expression.ChannelWeb
 	switch req.Channel {
@@ -171,16 +171,19 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
 	messages := buildProcessPromptMessages(processPromptInput{
-		Sys1Parts:        sys1Parts,
-		Sys2Parts:        sys2Parts,
-		History:          history,
-		Runtime:          req.Runtime,
-		StyleInstruction: channelPrompt.StyleInstruction,
-		UserContent:      userContent,
+		CharacterConfig:   sys1Result.CharacterConfig,
+		PersonalityConfig: sys2Result.SystemInstruction,
+		ProfileContext:    mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
+		MemoryContext:     sys2Result.MemoryContext,
+		Worldbook:         sys1Result.Worldbook,
+		History:           history,
+		Runtime:           req.Runtime,
+		StyleInstruction:  channelPrompt.StyleInstruction,
+		UserContent:       userContent,
 	})
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
 		"history_count":      len(history),
-		"system_part_count":  len(sys1Parts) + len(sys2Parts),
+		"system_part_count":  len(sys1Result.CharacterConfig) + len(sys2Result.SystemInstruction),
 		"tool_count":         len(tool.GetAll()),
 		"image_context_size": len(req.ImageContext),
 	}, "process message prompt ready")
@@ -237,14 +240,17 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = applyExpressionLengthLimit(reply, req.Runtime)
 	}
 
-	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
+	policy := expression.GetChannelPolicy(kind)
 	var realLines []string
-	for _, line := range lines_ {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+	if policy.Capabilities.SupportsSegmented {
+		lines_ := strings.Split(strings.TrimSpace(reply), "\n")
+		for _, line := range lines_ {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			realLines = append(realLines, line)
 		}
-		realLines = append(realLines, line)
 	}
 	if len(realLines) == 0 {
 		realLines = []string{reply}
@@ -284,7 +290,6 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.RequestID, result.PipelineMessages, result.Reply)
 }
 
-
 func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {
 	if rt == nil || rt.ExpressionPlan == nil {
 		return reply
@@ -302,10 +307,33 @@ func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) s
 	}
 }
 
+func mergeContext(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + "\n\n" + b
+}
+
 func truncateToRuneLimit(s string, limit int) string {
 	runes := []rune(s)
 	if len(runes) <= limit {
 		return s
 	}
 	return string(runes[:limit])
+}
+
+func assistantMaxSequence(msgs []Message) int64 {
+	if len(msgs) == 0 {
+		return 0
+	}
+	max := msgs[0].Sequence
+	for _, m := range msgs[1:] {
+		if m.Sequence > max {
+			max = m.Sequence
+		}
+	}
+	return max
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -193,7 +194,17 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "SSE not supported", nil)
 		return
 	}
-	lines := strings.Split(strings.TrimSpace(result.Reply), "\n")
+	channelKind := expression.ChannelWeb
+	policy := expression.GetChannelPolicy(channelKind)
+	var lines []string
+	if policy.Capabilities.SupportsSegmented {
+		lines = strings.Split(strings.TrimSpace(result.Reply), "\n")
+	} else {
+		trimmed := strings.TrimSpace(result.Reply)
+		if trimmed != "" {
+			lines = []string{trimmed}
+		}
+	}
 	msgIDIdx := 0
 
 	voiceChance := 0.20

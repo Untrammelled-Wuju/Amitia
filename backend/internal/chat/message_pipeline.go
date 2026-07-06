@@ -258,8 +258,11 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 }
 
 type processPromptInput struct {
-	Sys1Parts        []string
-	Sys2Parts        []string
+	CharacterConfig   string
+	PersonalityConfig string
+	ProfileContext    string
+	MemoryContext     string
+	Worldbook         string
 	History          []map[string]string
 	Runtime          *interaction.RuntimeAssembly
 	StyleInstruction string
@@ -267,82 +270,52 @@ type processPromptInput struct {
 }
 
 func buildProcessPromptMessages(input processPromptInput) []map[string]interface{} {
-	sections := make([]promptir.Section, 0, 6)
-	addSection := func(sectionType promptir.SectionType, priority, tokenBudget int, source string, sensitivity promptir.SensitivityLevel, trimmable, dataOnly bool, content string) {
-		if strings.TrimSpace(content) == "" {
-			return
+	gateway := promptir.NewGateway()
+
+	runtimePlan := buildBehaviorPlanFromRuntime(input.Runtime)
+	expressionPlan := buildExpressionPlanFromRuntime(input.Runtime)
+	if input.StyleInstruction != "" {
+		if expressionPlan != "" {
+			expressionPlan += "\n" + input.StyleInstruction
+		} else {
+			expressionPlan = input.StyleInstruction
 		}
-		cleaned := promptir.SanitizeContent(content, sensitivity)
-		sections = append(sections, promptir.Section{
-			Type:        sectionType,
-			Priority:    priority,
-			TokenBudget: tokenBudget,
-			Source:      source,
-			Sensitivity: sensitivity,
-			Trimmable:   trimmable,
-			DataOnly:    dataOnly,
-			Content:     cleaned.Content,
+	}
+
+	gwMessages, err := gateway.BuildMessages(promptir.BuildRequest{
+		CharacterConfig:     input.CharacterConfig,
+		CompiledPersonality: input.PersonalityConfig,
+		ProfileContext:      input.ProfileContext,
+		MemoryContext:       input.MemoryContext,
+		Worldbook:           input.Worldbook,
+		RuntimePlan:         runtimePlan,
+		ExpressionPlan:      expressionPlan,
+		History:             renderHistoryForPromptIR(input.History),
+		CurrentUserInput:    input.UserContent,
+	})
+	if err != nil {
+		applog.Warn("prompt gateway build failed, trying minimal build", applog.Fields{"error": err.Error()})
+		gwMessages, err = gateway.BuildMessages(promptir.BuildRequest{
+			CharacterConfig:     input.CharacterConfig,
+			CompiledPersonality: input.PersonalityConfig,
+			RuntimePlan:         runtimePlan,
+			ExpressionPlan:      expressionPlan,
+			CurrentUserInput:    input.UserContent,
 		})
-	}
-	addSection(promptir.SectionTypeIdentity, 1000, 700, "chat.sys1", promptir.SensitivityInternal, false, false, strings.Join(input.Sys1Parts, "\n\n"))
-	addSection(promptir.SectionTypeSystem, 980, 700, "chat.sys2", promptir.SensitivityInternal, false, false, strings.Join(input.Sys2Parts, "\n\n"))
-	addSection(promptir.SectionTypeBehaviorPlan, 940, 520, "interaction.runtime", promptir.SensitivityInternal, false, true, buildBehaviorPlanFromRuntime(input.Runtime))
-		addSection(promptir.SectionTypeBehaviorPlan, 930, 380, "interaction.expression", promptir.SensitivityInternal, false, true, buildExpressionPlanFromRuntime(input.Runtime))
-	addSection(promptir.SectionTypeBehaviorPlan, 920, 260, "expression.channel", promptir.SensitivityInternal, false, false, input.StyleInstruction)
-	addSection(promptir.SectionTypeHistory, 700, 900, "chat.history", promptir.SensitivityUserData, true, true, renderHistoryForPromptIR(input.History))
-	addSection(promptir.SectionTypeCurrentInput, 1100, 620, "chat.current_input", promptir.SensitivityUserData, false, false, input.UserContent)
-
-	ir := promptir.CompileIR(sections, promptir.CompileOptions{
-		MaxSections:       16,
-		MaxTokenBudget:    1200,
-		DropEmptySections: true,
-	})
-	budgeted := promptir.ApplyBudget(ir, promptir.BudgetPolicy{
-		MaxPromptTokens: runtimePromptBudget(input.Runtime),
-		SectionLimits: map[promptir.SectionType]promptir.SectionBudget{
-			promptir.SectionTypeHistory:      {MaxTokens: 900, MinTokens: 0, TrimReason: "history_window_trimmed"},
-			promptir.SectionTypeMemory:       {MaxTokens: 700, MinTokens: 0, TrimReason: "memory_window_trimmed"},
-			promptir.SectionTypeWorldbook:    {MaxTokens: 500, MinTokens: 0, TrimReason: "worldbook_window_trimmed"},
-			promptir.SectionTypeCurrentInput: {MaxTokens: 620, MinTokens: 64, TrimReason: "current_input_trimmed"},
-		},
-	})
-
-	messages := make([]map[string]interface{}, 0, len(budgeted.Sections))
-	currentInputs := make([]string, 0, 1)
-	for _, section := range budgeted.Sections {
-		content := strings.TrimSpace(section.Content)
-		if content == "" {
-			continue
+		if err != nil {
+			applog.Warn("minimal prompt build also failed, falling back to raw", applog.Fields{"error": err.Error()})
+			safeContent := promptir.SanitizeCurrentUserMessage(input.UserContent)
+			return []map[string]interface{}{
+				{"role": "user", "content": "<current_user_message>\n" + safeContent + "\n</current_user_message>"},
+			}
 		}
-		if section.Type == promptir.SectionTypeCurrentInput {
-			currentInputs = append(currentInputs, content)
-			continue
-		}
-		messages = append(messages, map[string]interface{}{"role": "system", "content": renderPromptIRSection(section)})
 	}
-	for _, content := range currentInputs {
-		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
+
+	messages := make([]map[string]interface{}, 0, len(gwMessages))
+	for _, m := range gwMessages {
+		messages = append(messages, map[string]interface{}{"role": m.Role, "content": m.Content})
 	}
 	return messages
-}
-
-func runtimePromptBudget(runtime *interaction.RuntimeAssembly) int {
-	if runtime == nil || len(runtime.Budget) == 0 {
-		return 3600
-	}
-	total := 0
-	for _, plan := range runtime.Budget {
-		if plan.Allocated > 0 {
-			total += plan.Allocated
-		}
-	}
-	if total < 1200 {
-		return 1200
-	}
-	if total > 4800 {
-		return 4800
-	}
-	return total
 }
 
 func renderHistoryForPromptIR(history []map[string]string) string {
@@ -359,14 +332,6 @@ func renderHistoryForPromptIR(history []map[string]string) string {
 		lines = append(lines, role+": "+content)
 	}
 	return strings.Join(lines, "\n")
-}
-
-func renderPromptIRSection(section promptir.Section) string {
-	header := "[" + string(section.Type) + "]"
-	if section.DataOnly {
-		header += "[data_only]"
-	}
-	return header + "\n" + strings.TrimSpace(section.Content)
 }
 
 func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
@@ -546,9 +511,13 @@ func buildExpressionPlanFromRuntime(runtime *interaction.RuntimeAssembly) string
 		lines = append(lines, "表达抑制: 已启用 - 整体表达应该更加克制和收敛")
 	}
 
-	return strings.Join(lines, "\\n")
-}
+	lines = append(lines, "内容密度: 每次回复必须包含有效信息，不使用无意义附和")
+	lines = append(lines, "结论优先: 对技术/项目/代码/架构/审计/方案类问题，先给明确结论再解释")
+	lines = append(lines, "禁用默认开头: 不得使用\"嗯嗯\"\"你说得对\"\"这个想法挺好\"\"我理解你\"\"确实可以\"\"稍微优化一下\"作为默认开头或万能缓冲句")
+	lines = append(lines, "可以反驳: 允许指出用户错误和不完整，不默认认同用户")
 
+	return strings.Join(lines, "\n")
+}
 
 func (s *service) updatePsycheState(charID string) error {
 	if s.psycheStore == nil || charID == "" {

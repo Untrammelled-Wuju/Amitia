@@ -10,14 +10,14 @@ import (
 
 func TestBuildBehaviorPlanFromRuntimeWithPlan(t *testing.T) {
 	bp := &decision.BehaviorPlan{
-		Intent:        "正常回复",
-		Strategy:      "自然回应，保持对话流畅",
-		AllowedTopics: []string{"日常对话", "感受表达", "开放式交流", "当前话题延伸"},
+		Intent:          "正常回复",
+		Strategy:        "自然回应，保持对话流畅",
+		AllowedTopics:   []string{"日常对话", "感受表达", "开放式交流", "当前话题延伸"},
 		ForbiddenTopics: []string{"不适当的亲密关系请求", "违法违规内容"},
-		ResponseGoal:  "让对话自然流畅地继续",
-		ToneHint:      "自然友好",
-		Priority:      decision.BehaviorPriorityNormal,
-		SafetyLevel:   decision.BehaviorSafetyLevelNormal,
+		ResponseGoal:    "让对话自然流畅地继续",
+		ToneHint:        "自然友好",
+		Priority:        decision.BehaviorPriorityNormal,
+		SafetyLevel:     decision.BehaviorSafetyLevelNormal,
 	}
 
 	runtime := &interaction.RuntimeAssembly{

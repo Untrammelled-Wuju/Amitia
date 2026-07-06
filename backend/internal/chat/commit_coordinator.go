@@ -586,13 +586,13 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs [
 	} else if plan.Request.PeerID != "" {
 		peerID = plan.Request.PeerID
 	}
-	for _, msgID := range messageIDs {
+	for i, msgID := range messageIDs {
 		stableID := delivery.GenerateDeliveryID(plan.Request.InteractionID, channel, peerID, msgID)
 		payload, _ := json.Marshal(map[string]interface{}{
 			"messageId":      msgID,
 			"conversationId": plan.Conversation,
 			"characterId":    plan.Character,
-			"content":        plan.Reply,
+			"content":        plan.Lines[i],
 		})
 		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			stableID, plan.Request.InteractionID, channel, peerID, "text", string(payload), "pending", now.Format("2006-01-02 15:04:05"), 5)
@@ -697,15 +697,15 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 }
 
 type NeedStateRecord struct {
-	ID          string `gorm:"primaryKey;column:id"`
-	CharacterID string `gorm:"column:character_id;index"`
-	NeedKey     string `gorm:"column:need_key"`
+	ID           string  `gorm:"primaryKey;column:id"`
+	CharacterID  string  `gorm:"column:character_id;index"`
+	NeedKey      string  `gorm:"column:need_key"`
 	CurrentValue float64 `gorm:"column:current_value"`
-	Baseline    float64 `gorm:"column:baseline"`
-	Trend       float64 `gorm:"column:trend"`
-	Saturated   bool    `gorm:"column:saturated"`
-	CreatedAt   string  `gorm:"column:created_at"`
-	UpdatedAt   string  `gorm:"column:updated_at"`
+	Baseline     float64 `gorm:"column:baseline"`
+	Trend        float64 `gorm:"column:trend"`
+	Saturated    bool    `gorm:"column:saturated"`
+	CreatedAt    string  `gorm:"column:created_at"`
+	UpdatedAt    string  `gorm:"column:updated_at"`
 }
 
 func (NeedStateRecord) TableName() string {

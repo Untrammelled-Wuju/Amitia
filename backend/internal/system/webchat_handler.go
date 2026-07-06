@@ -204,10 +204,18 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
 
+	characterID := body.CharacterID
+	if characterID == "" && body.ConversationID != "" {
+		var dbCharID string
+		if scanErr := h.db.Table("conversations").Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+			characterID = dbCharID
+		}
+	}
+
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-		CharacterID: body.CharacterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+		CharacterID: characterID, Message: mergedContent,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage: body.VoiceMessage,
 		ImageUrl:     body.ImageUrl,

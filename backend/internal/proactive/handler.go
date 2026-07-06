@@ -720,12 +720,12 @@ type ProspectiveReminder struct {
 
 func (h *Handler) Prospective(c *gin.Context) {
 	characterID := c.Query("characterId")
-	if characterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "缺少characterId", nil)
-		return
-	}
 	var items []ProspectiveReminder
-	h.db.Table("prospective_memories").Where("character_id = ? AND status = ?", characterID, "pending").Order("remind_at ASC").Limit(20).Find(&items)
+	query := h.db.Table("prospective_memories").Where("status = ?", "pending")
+	if characterID != "" {
+		query = query.Where("character_id = ?", characterID)
+	}
+	query.Order("remind_at ASC").Limit(20).Find(&items)
 	if items == nil {
 		items = []ProspectiveReminder{}
 	}

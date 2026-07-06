@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/prompt"
 	"gorm.io/gorm"
 )
 
@@ -56,6 +57,8 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListRespons
 }
 
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
+	safeMessage := prompt.SanitizeCurrentUserMessage(req.Message)
+
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" {
 		channel = "web"
@@ -83,7 +86,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	apiMessages := []map[string]interface{}{}
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
 	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": s.compiledSystemInstruction(channel)})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": req.Message})
+	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": safeMessage})
 
 	content, tokens, err := s.callLLM(context.Background(), cfg, apiMessages)
 	if err != nil {
