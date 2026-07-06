@@ -53,5 +53,7 @@ func DefaultMigrations() []Migration {
 		ProactiveDeliveryTrackingMigration(),
 		RuntimeQueueMigration(),
 		LegacyDataMigration(),
+		TriggerHistoryMigration(),
+		RelationshipScopeMigration(),
 	}
 }

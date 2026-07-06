@@ -125,6 +125,8 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 
 let connectPollTimer: ReturnType<typeof setInterval> | null = null
 
+let lastShownError: string = ""
+
 function stopConnectPoll() {
   if (connectPollTimer) { clearInterval(connectPollTimer); connectPollTimer = null }
 }
@@ -193,7 +195,13 @@ async function refreshStatus() {
     }
     const err = data?.error || ""
     if (err && loginStatus.value !== "connecting" && loginStatus.value !== "online") {
-      ElMessage.error(err)
+      if (err !== lastShownError) {
+        lastShownError = err
+        ElMessage.error(err)
+      }
+    }
+    if (!err) {
+      lastShownError = ""
     }
     if (!qqOnline.value) {
       try {

@@ -287,6 +287,7 @@ func buildProcessPromptMessages(input processPromptInput) []map[string]interface
 	addSection(promptir.SectionTypeIdentity, 1000, 700, "chat.sys1", promptir.SensitivityInternal, false, false, strings.Join(input.Sys1Parts, "\n\n"))
 	addSection(promptir.SectionTypeSystem, 980, 700, "chat.sys2", promptir.SensitivityInternal, false, false, strings.Join(input.Sys2Parts, "\n\n"))
 	addSection(promptir.SectionTypeBehaviorPlan, 940, 520, "interaction.runtime", promptir.SensitivityInternal, false, true, buildBehaviorPlanFromRuntime(input.Runtime))
+		addSection(promptir.SectionTypeBehaviorPlan, 930, 380, "interaction.expression", promptir.SensitivityInternal, false, true, buildExpressionPlanFromRuntime(input.Runtime))
 	addSection(promptir.SectionTypeBehaviorPlan, 920, 260, "expression.channel", promptir.SensitivityInternal, false, false, input.StyleInstruction)
 	addSection(promptir.SectionTypeHistory, 700, 900, "chat.history", promptir.SensitivityUserData, true, true, renderHistoryForPromptIR(input.History))
 	addSection(promptir.SectionTypeCurrentInput, 1100, 620, "chat.current_input", promptir.SensitivityUserData, false, false, input.UserContent)
@@ -478,9 +479,80 @@ func buildMinimalRuntimeContextPrompt(runtime *interaction.RuntimeAssembly) stri
 	return strings.Join(lines, "\n")
 }
 
+func buildExpressionPlanFromRuntime(runtime *interaction.RuntimeAssembly) string {
+	if runtime == nil || runtime.ExpressionPlan == nil {
+		return ""
+	}
+	ep := runtime.ExpressionPlan
+	var lines []string
+
+	lines = append(lines, "【回复约束 - 必须遵守】")
+
+	switch ep.Length {
+	case "short":
+		lines = append(lines, "回复长度: 短（1-3句话，不超过80字）")
+	case "medium":
+		lines = append(lines, "回复长度: 中（3-6句话）")
+	case "long":
+		lines = append(lines, "回复长度: 长（5句以上，可充分展开）")
+	default:
+		lines = append(lines, "回复长度: 适中")
+	}
+
+	switch ep.Tone {
+	case "warm":
+		lines = append(lines, "语气: 温暖亲切，用词柔和有温度")
+	case "neutral":
+		lines = append(lines, "语气: 中性平和，客观自然")
+	case "firm":
+		lines = append(lines, "语气: 坚定明确，态度清晰")
+	case "soft":
+		lines = append(lines, "语气: 柔和克制，避免强烈表达")
+	case "playful":
+		lines = append(lines, "语气: 俏皮活泼，可适当幽默")
+	case "concerned":
+		lines = append(lines, "语气: 关切体贴，表达在意和关注")
+	default:
+		lines = append(lines, "语气: 自然适中")
+	}
+
+	if ep.EmotionIntensity > 0 {
+		var emotionLabel string
+		switch {
+		case ep.EmotionIntensity < 0.3:
+			emotionLabel = "低（克制冷静，减少情绪化表达）"
+		case ep.EmotionIntensity < 0.6:
+			emotionLabel = "中（适度表达情绪）"
+		default:
+			emotionLabel = "高（充分表达情绪感受）"
+		}
+		lines = append(lines, "情绪表达强度: "+emotionLabel)
+	}
+
+	switch ep.ExpressionType {
+	case "question":
+		lines = append(lines, "表达类型: 提问 - 应在回复中包含追问以推进对话")
+	case "statement":
+		lines = append(lines, "表达类型: 陈述 - 以提供信息和建议为主")
+	case "greeting":
+		lines = append(lines, "表达类型: 问候 - 以打招呼和寒暄为主")
+	case "boundary":
+		lines = append(lines, "表达类型: 设立边界 - 明确表达底线，不展开")
+	case "silence":
+		lines = append(lines, "表达类型: 沉默 - 尽量简短或不回复实质内容")
+	}
+
+	if ep.Suppressed {
+		lines = append(lines, "表达抑制: 已启用 - 整体表达应该更加克制和收敛")
+	}
+
+	return strings.Join(lines, "\\n")
+}
+
+
 func (s *service) updatePsycheState(charID string) error {
 	if s.psycheStore == nil || charID == "" {
 		return nil
 	}
-	return s.updatePsycheStateWithStore(s.psycheStore, charID)
+	return s.updatePsycheStateWithStore(s.psycheStore, charID, nil)
 }

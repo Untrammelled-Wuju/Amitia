@@ -40,7 +40,7 @@ export function useOnboardingWizard() {
     baseUrl: "https://api.deepseek.com/v1",
     apiKey: "",
     modelName: "",
-    charName: "小暖",
+    charName: "阿米提亚",
     charIdentity: "AI 虚拟陪伴角色",
     charPersonality: "温和、体贴、有耐心",
     webChatEnabled: true,

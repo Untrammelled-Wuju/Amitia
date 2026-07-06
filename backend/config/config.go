@@ -92,7 +92,7 @@ func InitConfig(configPath string) {
 	v.SetDefault("jwt.secret", "u-ai-secret-key-change-me")
 	v.SetDefault("jwt.expireDays", 7)
 	v.SetDefault("app.name", "U-Ai")
-	v.SetDefault("app.version", "1.0.0")
+	v.SetDefault("app.version", "1.0.0-beta")
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
 	v.SetDefault("chat.mergeWindowMs", 6000)

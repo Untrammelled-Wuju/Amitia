@@ -38,6 +38,10 @@ interface GatewayPayload {
   t?: string
 }
 
+function isTokenExpiredError(errMsg: string): boolean {
+  return /token not exist or expire/i.test(errMsg) || /11244/.test(errMsg)
+}
+
 export class QQBotClient {
   private ws: WebSocket | null = null
   private config: QQBotConfig | null = null
@@ -112,7 +116,20 @@ export class QQBotClient {
       this.debugLog(`获取Gateway失败: ` + err.message)
       this.lastErrorMessage = `Gateway请求失败: ` + err.message
       this.loginStatus = "disconnected"
-      if (!this._manualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (isTokenExpiredError(err.message)) {
+        this.accessToken = ""
+        this.accessTokenExpiry = 0
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.lastErrorMessage = `Token已过期，正在重连 (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`
+          this.debugLog(`Token已过期，尝试重连 (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`)
+          if (!this._manualDisconnect) {
+            this.scheduleReconnect()
+          }
+        } else {
+          this.lastErrorMessage = `Token已过期，重连次数已用完(${this.maxReconnectAttempts}次)，请检查AppID和Token后手动重连`
+          this.debugLog(`Token已过期，重连次数已用完`)
+        }
+      } else if (!this._manualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect()
       }
     }
@@ -176,7 +193,14 @@ export class QQBotClient {
       if (code === 4004 || code === 4009 || code === 4010 || code === 4011 || code === 4012 || code === 4013 || code === 4014) {
         this.debugLog(`鉴权失败 (code=${code})，停止重连`); this.lastErrorMessage = `鉴权失败: WebSocket关闭码=${code}`
         this.loginStatus = "disconnected"
-        this.reconnectAttempts = this.maxReconnectAttempts
+        this.accessToken = ""
+        this.accessTokenExpiry = 0
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          this.lastErrorMessage = `QQ Bot鉴权失败(WebSocket关闭码=${code})，重连次数已用完，请检查AppID和Token后手动重连`
+        } else {
+          this.lastErrorMessage = `鉴权失败: WebSocket关闭码=${code}，正在重连 (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`
+          this.scheduleReconnect()
+        }
         return
       }
       if (this.loginStatus !== "disconnected") {

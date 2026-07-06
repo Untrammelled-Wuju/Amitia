@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <p class="step-desc">给你的 AI 陪伴角色一个名字和性格，让它更有人情味。</p>
     <el-form label-position="top" size="default">
       <el-form-item label="角色名称">
-        <el-input v-model="charNameModel" placeholder="例如：小暖" />
+        <el-input v-model="charNameModel" placeholder="例如：阿米提亚" />
       </el-form-item>
       <el-form-item label="角色身份">
         <el-input v-model="charIdentityModel" placeholder="AI 虚拟陪伴角色" />

@@ -181,7 +181,11 @@ func (l *RelationshipContextLoader) Load(ctx context.Context, scope InteractionS
 	var row struct {
 		RelationData string
 	}
-	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ?", scope.CharacterID).Order("updated_at DESC").Take(&row).Error
+	userID := scope.UserID
+	if userID == "" {
+		userID = "default"
+	}
+	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND user_id = ?", scope.CharacterID, userID).Order("updated_at DESC").Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}

@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process"
+import { spawn, execSync, ChildProcessWithoutNullStreams } from "child_process"
 import http from "http"
 import path from "path"
 import fs from "fs"
@@ -148,22 +148,20 @@ export function stopCore(): void {
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid)
     const pid = coreProcess.pid
     if (process.platform === "win32" && pid) {
-      coreProcess.kill("SIGTERM")
-      setTimeout(() => {
-        try {
-          exec(`taskkill /PID ${pid} /T /F`, { windowsHide: true }, (error, stdout) => {
-            if (error) {
-              console.error("[CoreManager] taskkill失败:", error.message)
-            } else {
-              console.log("[CoreManager] 进程树已终止:", stdout.trim())
-            }
-          })
-        } catch (e) {
-          console.error("[CoreManager] taskkill异常:", e)
-        }
-      }, 3000)
+      try {
+        execSync(`taskkill /PID ${pid} /T /F`, { windowsHide: true, stdio: "pipe" })
+        console.log("[CoreManager] 进程树已终止")
+        execSync(`taskkill /F /IM qdrant.exe`, { windowsHide: true, stdio: "pipe" })
+      } catch (e) {
+        console.error("[CoreManager] taskkill异常:", e)
+      }
+      try {
+        execSync(`taskkill /F /IM surreal.exe`, { windowsHide: true, stdio: "pipe" })
+      } catch (_) {}
     } else {
       coreProcess.kill("SIGTERM")
+      try { execSync("pkill -9 qdrant", { stdio: "pipe" }) } catch (_) {}
+      try { execSync("pkill -9 surreal", { stdio: "pipe" }) } catch (_) {}
     }
     coreProcess = null
   }

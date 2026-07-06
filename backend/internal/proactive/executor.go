@@ -272,6 +272,7 @@ func (e *Executor) executeReminder(r struct {
 	}
 	if convID == "" {
 		log.Printf("[Reminder] 提醒 id=%d 无可用对话", r.id)
+		e.recordTriggerHistory(r.id, r.title, "reminder", r.channel, "failed", "无可用对话")
 		return
 	}
 
@@ -304,6 +305,11 @@ func (e *Executor) executeReminder(r struct {
 		}
 		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
 			r.id, convID, contentStr, channel, status)
+		finalState := "sent"
+		if status == "failed" {
+			finalState = "failed"
+		}
+		e.recordTriggerHistory(r.id, r.title, "reminder", channel, finalState, "")
 		log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度发送", r.id, r.title)
 		return
 	}
@@ -336,6 +342,12 @@ func (e *Executor) executeReminder(r struct {
 		r.id, convID, content, channel, status)
 
 	log.Printf("[Reminder] 提醒 id=%d title=%s 已发送 (web=%v wechat=%v qq=%v)", r.id, r.title, sentWeb, sentWechat, sentQQ)
+
+	finalState := "sent"
+	if status == "failed" {
+		finalState = "failed"
+	}
+	e.recordTriggerHistory(r.id, r.title, "reminder", channel, finalState, "")
 }
 
 func (e *Executor) loadPersonalityPrompt(characterID string) string {
@@ -665,4 +677,10 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 
 func (e *Executor) getQQConvID(charID string) string {
 	return resolveProactiveConversation(e.db, "", charID, "qq", true)
+}
+
+func (e *Executor) recordTriggerHistory(triggerID int, title, triggerType, channel, state, lastError string) {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	id := uuid.New().String()
+	e.db.Exec("INSERT INTO trigger_histories (id, trigger_id, trigger_type, title, channel, state, priority, reason, attempt_count, last_error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'normal', '系统触发', 0, ?, ?, ?)", id, fmt.Sprintf("%d", triggerID), triggerType, title, channel, state, lastError, now, now)
 }

@@ -46,6 +46,23 @@ type Reminder struct {
 
 func (Reminder) TableName() string { return "reminders" }
 
+type TriggerHistory struct {
+	ID           string `gorm:"column:id;primaryKey" json:"id"`
+	TriggerID    string `gorm:"column:trigger_id" json:"triggerId"`
+	TriggerType  string `gorm:"column:trigger_type" json:"triggerType"`
+	Title        string `gorm:"column:title" json:"title"`
+	Channel      string `gorm:"column:channel" json:"channel"`
+	State        string `gorm:"column:state;default:pending" json:"state"`
+	Priority     string `gorm:"column:priority;default:normal" json:"priority"`
+	Reason       string `gorm:"column:reason" json:"reason"`
+	AttemptCount int    `gorm:"column:attempt_count;default:0" json:"attemptCount"`
+	LastError    string `gorm:"column:last_error" json:"lastError"`
+	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt    string `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+func (TriggerHistory) TableName() string { return "trigger_histories" }
+
 type CreateRuleRequest struct {
 	Name           string `json:"name" binding:"required"`
 	Enabled        *bool  `json:"enabled"`

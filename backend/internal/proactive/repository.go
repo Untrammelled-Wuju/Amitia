@@ -23,6 +23,7 @@ type Repository interface {
 	DeleteReminder(id int) error
 	ToggleReminder(id int) (*Reminder, error)
 	PendingReminders() ([]Reminder, error)
+	ListTriggerHistory(page, pageSize int, state string) ([]TriggerHistory, int64, error)
 }
 
 type repository struct {
@@ -114,4 +115,20 @@ func (r *repository) PendingReminders() ([]Reminder, error) {
 		items = []Reminder{}
 	}
 	return items, err
+}
+
+func (r *repository) ListTriggerHistory(page, pageSize int, state string) ([]TriggerHistory, int64, error) {
+	var items []TriggerHistory
+	var total int64
+	q := r.db.Model(&TriggerHistory{})
+	if state != "" {
+		q = q.Where("state = ?", state)
+	}
+	q.Count(&total)
+	offset := (page - 1) * pageSize
+	err := q.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&items).Error
+	if items == nil {
+		items = []TriggerHistory{}
+	}
+	return items, total, err
 }

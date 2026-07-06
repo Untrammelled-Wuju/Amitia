@@ -168,7 +168,7 @@ const form = reactive({
 })
 
 const genderForm = reactive({
-  roleName: "小暖",
+  roleName: "阿米提亚",
   gender: "UNSPECIFIED" as string,
   genderLabel: null as string | null,
   pronoun: "TA",
@@ -271,7 +271,7 @@ onMounted(async () => {
   try {
     const rp = await getRoleProfile(injectedCharacterId?.value ?? undefined)
     if (rp) {
-      genderForm.roleName = rp.roleName || "小暖"
+      genderForm.roleName = rp.roleName || "阿米提亚"
       genderForm.gender = rp.gender || "UNSPECIFIED"
       genderForm.genderLabel = rp.genderLabel
       genderForm.pronoun = rp.pronoun || "TA"

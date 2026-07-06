@@ -24,6 +24,7 @@ type Service interface {
 	DeleteReminder(id int) error
 	ToggleReminder(id int) (*Reminder, error)
 	PendingReminders() ([]Reminder, error)
+	ListTriggerHistory(page, pageSize int, state string) ([]TriggerHistory, int64, error)
 }
 
 type service struct {
@@ -170,6 +171,10 @@ func (s *service) UpdateReminder(id int, updates map[string]interface{}) (*Remin
 func (s *service) DeleteReminder(id int) error              { return s.repo.DeleteReminder(id) }
 func (s *service) ToggleReminder(id int) (*Reminder, error) { return s.repo.ToggleReminder(id) }
 func (s *service) PendingReminders() ([]Reminder, error)    { return s.repo.PendingReminders() }
+
+func (s *service) ListTriggerHistory(page, pageSize int, state string) ([]TriggerHistory, int64, error) {
+	return s.repo.ListTriggerHistory(page, pageSize, state)
+}
 
 func (s *service) QueryAffectNeedSignal(characterID, userID string) (float64, float64, error) {
 	var affectVal, needVal float64

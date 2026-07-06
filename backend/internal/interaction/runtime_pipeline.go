@@ -442,6 +442,125 @@ type AppraisalResult struct {
 	BudgetAllocated   float64 `json:"budgetAllocated"`
 }
 
+type AppraisalEventCategory string
+
+const (
+	AppraisalCatPraise        AppraisalEventCategory = "praise"
+	AppraisalCatCold          AppraisalEventCategory = "cold"
+	AppraisalCatHelp          AppraisalEventCategory = "help"
+	AppraisalCatBoundaryCross AppraisalEventCategory = "boundary_cross"
+	AppraisalCatApology       AppraisalEventCategory = "apology"
+	AppraisalCatComplaint     AppraisalEventCategory = "complaint"
+	AppraisalCatEmotional     AppraisalEventCategory = "emotional"
+	AppraisalCatChat          AppraisalEventCategory = "chat"
+)
+
+type appraisalSensitivities struct {
+	boundaryStrength  float64
+	warmth            float64
+	rejectionSens     float64
+	affection         float64
+	conflictAvoidance float64
+}
+
+func extractAppraisalSensitivities(snapshot ContextSnapshot) appraisalSensitivities {
+	s := appraisalSensitivities{
+		boundaryStrength:  0.7,
+		warmth:            0.5,
+		rejectionSens:     0.5,
+		affection:         0.45,
+		conflictAvoidance: 0.5,
+	}
+	if snapshot.RuntimeProfile.Status != LoadStatusReady {
+		return s
+	}
+	cfg := snapshot.RuntimeProfile.Value.PersonalityConfig
+	if cfg == nil {
+		return s
+	}
+	s.boundaryStrength = extractSensFloat(cfg, "boundary", s.boundaryStrength)
+	s.warmth = extractSensFloat(cfg, "warmth", s.warmth)
+	s.affection = extractSensFloat(cfg, "affection", s.affection)
+	s.conflictAvoidance = extractSensFloat(cfg, "conflictAvoidance", s.conflictAvoidance)
+	directness := extractSensFloat(cfg, "directness", 0.5)
+	s.rejectionSens = (s.conflictAvoidance*0.6 + (1.0-directness)*0.4)
+	return s
+}
+
+func extractSensFloat(cfg map[string]interface{}, key string, defaultVal float64) float64 {
+	v, ok := cfg[key]
+	if !ok {
+		return defaultVal
+	}
+	switch val := v.(type) {
+	case float64:
+		if val > 1 {
+			return clampFloat(val/100, 0, 1)
+		}
+		return clampFloat(val, 0, 1)
+	case int:
+		f := float64(val)
+		if f > 1 {
+			return clampFloat(f/100, 0, 1)
+		}
+		return clampFloat(f, 0, 1)
+	case int64:
+		f := float64(val)
+		if f > 1 {
+			return clampFloat(f/100, 0, 1)
+		}
+		return clampFloat(f, 0, 1)
+	default:
+		return defaultVal
+	}
+}
+
+func clampFloat(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func classifyAppraisalEvent(message string, path PathType) AppraisalEventCategory {
+	if path == PathTypeDeep {
+		return AppraisalCatEmotional
+	}
+	msg := strings.ToLower(message)
+	if containsAny(msg, praiseMarkers) {
+		return AppraisalCatPraise
+	}
+	if containsAny(msg, apologyMarkers) {
+		return AppraisalCatApology
+	}
+	if containsAny(msg, boundaryCrossMarkers) {
+		return AppraisalCatBoundaryCross
+	}
+	if containsAny(msg, complaintMarkers) {
+		return AppraisalCatComplaint
+	}
+	if containsAny(msg, helpMarkers) {
+		return AppraisalCatHelp
+	}
+	if containsAny(msg, coldMarkers) {
+		return AppraisalCatCold
+	}
+	if isEmotionalMessage(message) {
+		return AppraisalCatEmotional
+	}
+	return AppraisalCatChat
+}
+
+var praiseMarkers = []string{"谢谢", "感谢", "很棒", "厉害", "优秀", "佩服", "真好", "太棒", "多谢", "thank", "great", "awesome", "amazing", "wonderful", "称赞", "表扬"}
+var apologyMarkers = []string{"对不起", "抱歉", "我的错", "怪我", "不好意思", "sorry", "apologize", "原谅", "forgive", "我错了", "悔", "道歉"}
+var boundaryCrossMarkers = []string{"爱你", "想见你", "私聊", "加好友", "私人", "私下", "单独", "love you", "private", "personal", "电话号码", "地址"}
+var complaintMarkers = []string{"不满", "失望", "讨厌", "烦", "生气", "无语", "糟糕", "差劲", "hate", "disappointed", "angry", "upset", "抱怨", "投诉"}
+var helpMarkers = []string{"帮我", "求助", "怎么办", "不知道", "教", "请问", "help", "need", "需要", "帮忙", "能不能", "可以吗", "建议", "advice"}
+var coldMarkers = []string{"哦", "嗯", "行吧", "随便", "无所谓", "fine", "whatever", "k", "呵呵", "好吧"}
+
 func (p *RuntimePipeline) runAppraisal(snapshot ContextSnapshot, scope InteractionScope, req *ProcessRequest, path PathType) *AppraisalResult {
 	if p.appraisalEngine == nil {
 		return nil
@@ -450,47 +569,56 @@ func (p *RuntimePipeline) runAppraisal(snapshot ContextSnapshot, scope Interacti
 		return nil
 	}
 
-	relatesToGoal := semanticRelatesToGoal(req.Message)
-	goalCongruent := semanticGoalCongruent(req.Message)
-	isExpected := semanticIsExpected(req.Message, snapshot)
-	controllable := semanticControllable(req.Message)
-	responsibility := semanticResponsibility(req.Message)
-	uncertainty := semanticUncertainty(req.Message)
+	sens := extractAppraisalSensitivities(snapshot)
+	eventCat := classifyAppraisalEvent(req.Message, path)
+
+	relatesToGoal := semanticRelatesToGoal(req.Message, snapshot, eventCat)
+	goalCongruent := semanticGoalCongruent(req.Message, snapshot, eventCat, sens)
+	isExpected := semanticIsExpected(req.Message, snapshot, eventCat, sens)
+	controllable := semanticControllable(req.Message, eventCat)
+	responsibility := semanticResponsibility(req.Message, snapshot, eventCat, sens)
+	uncertainty := semanticUncertainty(req.Message, snapshot, eventCat, sens)
 	involvesRelation := snapshot.Relationship.Status == LoadStatusReady && snapshot.Relationship.Value.Familiarity > 0.1
-	normViolated := semanticNormViolated(req.Message)
-	boundaryViolated := semanticBoundaryViolated(req.Message, snapshot)
-	similarPastCount := semanticSimilarPastCount(req.Message, snapshot)
+	normViolated := semanticNormViolated(req.Message, snapshot, eventCat, sens)
+	boundaryViolated := semanticBoundaryViolated(req.Message, snapshot, eventCat, sens)
+	similarPastCount := semanticSimilarPastCount(req.Message, snapshot, eventCat)
+	hasAlternativeExplanation := semanticHasAlternativeExplanation(req.Message, eventCat)
 
 	a := p.appraisalEngine.Evaluate(appraisal.AppraisalInput{
-		EventType:         appraisalEventType(req.Message, path),
-		RelatesToGoal:     relatesToGoal,
-		GoalCongruent:     goalCongruent,
-		IsExpected:        isExpected,
-		Controllable:      controllable,
-		Responsibility:    responsibility,
-		Uncertainty:       uncertainty,
-		InvolvesRelation:  involvesRelation,
-		NormViolated:      normViolated,
-		BoundaryViolated:  boundaryViolated,
-		SimilarPastEvents: similarPastCount,
+		EventType:                 string(eventCat),
+		Source:                    "user_message",
+		IsUserInitiated:           true,
+		RelatesToGoal:             relatesToGoal,
+		GoalCongruent:             goalCongruent,
+		IsExpected:                isExpected,
+		Controllable:              controllable,
+		Responsibility:            responsibility,
+		Uncertainty:               uncertainty,
+		InvolvesRelation:          involvesRelation,
+		NormViolated:              normViolated,
+		BoundaryViolated:          boundaryViolated,
+		HasAlternativeExplanation: hasAlternativeExplanation,
+		SimilarPastEvents:         similarPastCount,
 	})
 
 	severity := budget.ComputeEventSeverity(a.OverallSeverity, a.GoalRelevance, a.NormViolation, a.BoundaryViolation)
+
+	psyScale, relScale, needScales := eventCategoryScales(eventCat, sens)
 	result := &AppraisalResult{
-		PsycheDelta:       a.GoalCongruence - 0.5,
-		RelationshipDelta: a.RelationshipRelevance - 0.5,
+		PsycheDelta:       (a.GoalCongruence - 0.5) * psyScale,
+		RelationshipDelta: (a.RelationshipRelevance - 0.5) * relScale,
 		Severity:          severity,
-		EventType:         string(a.EventType),
+		EventType:         string(eventCat),
 	}
 
 	result.NeedDeltas = map[string]float64{
-		"reassurance": (a.GoalCongruence - 0.5) * 0.1,
-		"connection":  (a.RelationshipRelevance - 0.5) * 0.1,
-		"autonomy":    (a.Controllability - 0.5) * 0.1,
-		"clarity":     ((1.0 - a.CausalUncertainty) - 0.5) * 0.1,
-		"novelty":     (a.Novelty - 0.5) * 0.1,
-		"expression":  (a.Responsibility - 0.5) * 0.1,
-		"rest":        0,
+		"reassurance": (a.GoalCongruence - 0.5) * needScales["reassurance"],
+		"connection":  (a.RelationshipRelevance - 0.5) * needScales["connection"],
+		"autonomy":    (a.Controllability - 0.5) * needScales["autonomy"],
+		"clarity":     ((1.0 - a.CausalUncertainty) - 0.5) * needScales["clarity"],
+		"novelty":     (a.Novelty - 0.5) * needScales["novelty"],
+		"expression":  (a.Responsibility - 0.5) * needScales["expression"],
+		"rest":        -severity * 0.05,
 	}
 
 	if p.budgetController != nil {
@@ -519,21 +647,56 @@ func (p *RuntimePipeline) runAppraisal(snapshot ContextSnapshot, scope Interacti
 	return result
 }
 
-func appraisalEventType(message string, path PathType) string {
-	if path == PathTypeDeep {
-		return "deep_interaction"
+func eventCategoryScales(cat AppraisalEventCategory, sens appraisalSensitivities) (float64, float64, map[string]float64) {
+	switch cat {
+	case AppraisalCatPraise:
+		return 0.35, 0.40, map[string]float64{
+			"reassurance": 0.35, "connection": 0.40, "autonomy": 0.15,
+			"clarity": 0.20, "novelty": 0.10, "expression": 0.25,
+		}
+	case AppraisalCatApology:
+		return 0.45, 0.50, map[string]float64{
+			"reassurance": 0.45, "connection": 0.50, "autonomy": 0.20,
+			"clarity": 0.35, "novelty": 0.15, "expression": 0.40,
+		}
+	case AppraisalCatComplaint:
+		return 0.35, -0.40, map[string]float64{
+			"reassurance": -0.35, "connection": -0.40, "autonomy": -0.10,
+			"clarity": -0.25, "novelty": -0.10, "expression": -0.30,
+		}
+	case AppraisalCatBoundaryCross:
+		scale := 0.4 + sens.boundaryStrength*0.4
+		return scale, -scale, map[string]float64{
+			"reassurance": -scale, "connection": -scale, "autonomy": -scale * 0.5,
+			"clarity": -scale * 0.6, "novelty": -scale * 0.4, "expression": -scale * 0.5,
+		}
+	case AppraisalCatCold:
+		rejScale := 0.25 + sens.rejectionSens*0.5
+		return rejScale, -rejScale, map[string]float64{
+			"reassurance": -rejScale, "connection": -rejScale, "autonomy": -0.10,
+			"clarity": -0.15, "novelty": -0.05, "expression": -rejScale * 0.6,
+		}
+	case AppraisalCatHelp:
+		return 0.20, 0.25, map[string]float64{
+			"reassurance": 0.20, "connection": 0.25, "autonomy": 0.10,
+			"clarity": 0.30, "novelty": 0.15, "expression": 0.15,
+		}
+	case AppraisalCatEmotional:
+		emoScale := 0.30 + sens.warmth*0.3
+		return emoScale, emoScale * 0.8, map[string]float64{
+			"reassurance": emoScale, "connection": emoScale * 0.8, "autonomy": 0.10,
+			"clarity": 0.15, "novelty": emoScale * 0.5, "expression": emoScale,
+		}
+	default:
+		return 0.10, 0.10, map[string]float64{
+			"reassurance": 0.10, "connection": 0.10, "autonomy": 0.05,
+			"clarity": 0.08, "novelty": 0.08, "expression": 0.10,
+		}
 	}
-	if isEmotionalMessage(message) {
-		return "emotional"
-	}
-	return "chat"
 }
 
-
-func semanticRelatesToGoal(message string) bool {
-	msg := strings.ToLower(message)
-	goalMarkers := []string{"目标", "goal", "计划", "plan", "想要", "want", "需要", "need", "希望", "hope", "决定", "decide"}
-	for _, m := range goalMarkers {
+func containsAny(msg string, markers []string) bool {
+	for _, m := range markers {
 		if strings.Contains(msg, m) {
 			return true
 		}
@@ -541,7 +704,31 @@ func semanticRelatesToGoal(message string) bool {
 	return false
 }
 
-func semanticGoalCongruent(message string) bool {
+func semanticRelatesToGoal(message string, snapshot ContextSnapshot, cat AppraisalEventCategory) bool {
+	if cat == AppraisalCatHelp || cat == AppraisalCatApology || cat == AppraisalCatComplaint || cat == AppraisalCatCold || cat == AppraisalCatBoundaryCross {
+		return true
+	}
+	msg := strings.ToLower(message)
+	goalMarkers := []string{"目标", "goal", "计划", "plan", "想要", "want", "需要", "need", "希望", "hope", "决定", "decide"}
+	for _, m := range goalMarkers {
+		if strings.Contains(msg, m) {
+			return true
+		}
+	}
+	return cat == AppraisalCatPraise
+}
+
+func semanticGoalCongruent(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) bool {
+	switch cat {
+	case AppraisalCatPraise:
+		return true
+	case AppraisalCatComplaint, AppraisalCatBoundaryCross, AppraisalCatCold:
+		return false
+	case AppraisalCatApology:
+		return snapshot.Relationship.Status == LoadStatusReady && snapshot.Relationship.Value.Tension < 0.4
+	case AppraisalCatHelp:
+		return true
+	}
 	msg := strings.ToLower(message)
 	negativeMarkers := []string{"失败", "fail", "放弃", "give up", "做不到", "can't", "不行", "impossible", "绝望", "hopeless"}
 	for _, m := range negativeMarkers {
@@ -555,26 +742,74 @@ func semanticGoalCongruent(message string) bool {
 			return true
 		}
 	}
-	return true
+	if snapshot.Memories.Status == LoadStatusReady {
+		recentPositive := 0
+		recentNegative := 0
+		for _, mem := range snapshot.Memories.Value.Memories {
+			mv := strings.ToLower(mem.Value)
+			if containsAny(mv, positiveMarkers) {
+				recentPositive++
+			}
+			if containsAny(mv, negativeMarkers) {
+				recentNegative++
+			}
+		}
+		if recentPositive > recentNegative {
+			return true
+		}
+		if recentNegative > recentPositive {
+			return false
+		}
+	}
+	return sens.warmth > 0.3
 }
 
-func semanticIsExpected(message string, snapshot ContextSnapshot) float64 {
-	if snapshot.Relationship.Status != LoadStatusReady {
-		return 0.5
+func semanticIsExpected(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) float64 {
+	base := 0.5
+	if snapshot.Relationship.Status == LoadStatusReady {
+		base = snapshot.Relationship.Value.Familiarity*0.4 + 0.3
 	}
-	familiarity := snapshot.Relationship.Value.Familiarity
-	if familiarity > 0.6 {
-		return 0.75
-	}
-	if familiarity > 0.3 {
-		return 0.6
-	}
-	return 0.4
-}
 
-func semanticControllable(message string) bool {
+	switch cat {
+	case AppraisalCatPraise, AppraisalCatChat:
+		base += 0.15
+	case AppraisalCatBoundaryCross:
+		base -= 0.30
+	case AppraisalCatApology:
+		base -= 0.20
+	case AppraisalCatComplaint:
+		base -= 0.15
+	case AppraisalCatCold:
+		base += 0.10
+	case AppraisalCatEmotional:
+		base -= 0.05
+	}
+
 	msg := strings.ToLower(message)
-	uncontrollableMarkers := []string{"地震", "earthquake", "意外", "accident", "突然", "sudden", "死亡", "death", "灾难", "disaster"}
+	surpriseCount := 0
+	surpriseMarkers := []string{"居然", "没想到", "竟然", "突然", "surprise", "unexpected", "震惊", "怎么会"}
+	for _, m := range surpriseMarkers {
+		if strings.Contains(msg, m) {
+			surpriseCount++
+		}
+	}
+	base -= float64(surpriseCount) * 0.10
+
+	boundaryMod := (1.0 - sens.boundaryStrength) * 0.15
+	base -= boundaryMod
+
+	return clampFloat(base, 0.05, 0.95)
+}
+
+func semanticControllable(message string, cat AppraisalEventCategory) bool {
+	switch cat {
+	case AppraisalCatBoundaryCross, AppraisalCatApology:
+		return false
+	case AppraisalCatHelp, AppraisalCatEmotional:
+		return true
+	}
+	msg := strings.ToLower(message)
+	uncontrollableMarkers := []string{"地震", "earthquake", "意外", "accident", "突然", "sudden", "死亡", "death", "灾难", "disaster", "生病", "sick", "被迫", "forced"}
 	for _, m := range uncontrollableMarkers {
 		if strings.Contains(msg, m) {
 			return false
@@ -583,24 +818,55 @@ func semanticControllable(message string) bool {
 	return true
 }
 
-func semanticResponsibility(message string) float64 {
+func semanticResponsibility(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) float64 {
+	base := 0.5
+	switch cat {
+	case AppraisalCatApology:
+		base = 0.85
+	case AppraisalCatComplaint:
+		base = 0.25
+	case AppraisalCatPraise:
+		base = 0.60
+	case AppraisalCatBoundaryCross:
+		base = 0.30
+	}
 	msg := strings.ToLower(message)
 	selfBlame := []string{"我错了", "my fault", "怪我", "blame me", "对不起", "sorry", "是我的错", "I was wrong"}
 	for _, m := range selfBlame {
 		if strings.Contains(msg, m) {
-			return 0.85
+			base = 0.90
+			break
 		}
 	}
 	otherBlame := []string{"你错了", "your fault", "怪你", "blame you", "是你的问题", "your problem"}
 	for _, m := range otherBlame {
 		if strings.Contains(msg, m) {
-			return 0.15
+			base = 0.10
+			break
 		}
 	}
-	return 0.5
+	if snapshot.Relationship.Status == LoadStatusReady {
+		tensionMod := snapshot.Relationship.Value.Tension * 0.30
+		base -= tensionMod
+	}
+	base += (sens.affection - 0.5) * 0.20
+	return clampFloat(base, 0.05, 0.95)
 }
 
-func semanticUncertainty(message string) float64 {
+func semanticUncertainty(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) float64 {
+	base := 0.35
+	switch cat {
+	case AppraisalCatHelp:
+		base = 0.65
+	case AppraisalCatApology:
+		base = 0.50
+	case AppraisalCatBoundaryCross:
+		base = 0.20
+	case AppraisalCatComplaint:
+		base = 0.30
+	case AppraisalCatCold:
+		base = 0.45
+	}
 	msg := strings.ToLower(message)
 	uncertainMarkers := []string{"可能", "maybe", "也许", "perhaps", "不知道", "don't know", "不确定", "unsure", "好像", "似乎", "大概"}
 	uncertainCount := 0
@@ -609,27 +875,35 @@ func semanticUncertainty(message string) float64 {
 			uncertainCount++
 		}
 	}
-	if uncertainCount >= 3 {
-		return 0.75
+	base += float64(uncertainCount) * 0.12
+	if snapshot.Relationship.Status == LoadStatusReady {
+		securityMod := (1.0 - snapshot.Relationship.Value.Security) * 0.20
+		base += securityMod
 	}
-	if uncertainCount >= 1 {
-		return 0.5
-	}
-	return 0.2
+	base += (sens.rejectionSens - 0.5) * 0.15
+	return clampFloat(base, 0.05, 0.95)
 }
 
-func semanticNormViolated(message string) bool {
-	msg := strings.ToLower(message)
-	violationMarkers := []string{"骂", "侮辱", "insult", "人身攻击", "personal attack", "威胁", "threat", "骚扰", "harass"}
-	for _, m := range violationMarkers {
-		if strings.Contains(msg, m) {
-			return true
+func semanticNormViolated(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) bool {
+	if cat == AppraisalCatComplaint {
+		msg := strings.ToLower(message)
+		violationMarkers := []string{"骂", "侮辱", "insult", "人身攻击", "personal attack", "威胁", "threat", "骚扰", "harass"}
+		for _, m := range violationMarkers {
+			if strings.Contains(msg, m) {
+				return true
+			}
 		}
 	}
-	return isEmotionalMessage(message)
+	if cat == AppraisalCatBoundaryCross && sens.boundaryStrength > 0.6 {
+		return true
+	}
+	return cat == AppraisalCatBoundaryCross || cat == AppraisalCatComplaint && isEmotionalMessage(message)
 }
 
-func semanticBoundaryViolated(message string, snapshot ContextSnapshot) bool {
+func semanticBoundaryViolated(message string, snapshot ContextSnapshot, cat AppraisalEventCategory, sens appraisalSensitivities) bool {
+	if cat == AppraisalCatBoundaryCross {
+		return true
+	}
 	msg := strings.ToLower(message)
 	boundaryMarkers := []string{"爱", "love", "喜欢", "like", "想见", "want to meet", "私聊", "private", "加好友", "add friend"}
 	for _, m := range boundaryMarkers {
@@ -639,21 +913,77 @@ func semanticBoundaryViolated(message string, snapshot ContextSnapshot) bool {
 			}
 		}
 	}
+	if snapshot.Relationship.Status == LoadStatusReady {
+		boundaryThreshold := 0.15 + sens.boundaryStrength*0.25
+		if snapshot.Relationship.Value.Familiarity < boundaryThreshold && isEmotionalMessage(message) {
+			return true
+		}
+	}
 	return false
 }
 
-func semanticSimilarPastCount(message string, snapshot ContextSnapshot) int {
+func semanticSimilarPastCount(message string, snapshot ContextSnapshot, cat AppraisalEventCategory) int {
 	if snapshot.Memories.Status != LoadStatusReady {
 		return 0
 	}
+	msgLower := strings.ToLower(message)
+	tokens := tokenizeForMemory(msgLower)
 	count := 0
 	for _, mem := range snapshot.Memories.Value.Memories {
-		if strings.Contains(strings.ToLower(mem.Value), strings.ToLower(message[:minInt(len(message), 20)])) {
+		memLower := strings.ToLower(mem.Value)
+		matchCount := 0
+		for _, t := range tokens {
+			if len(t) < 2 {
+				continue
+			}
+			if strings.Contains(memLower, t) {
+				matchCount++
+			}
+		}
+		matchRatio := float64(matchCount) / float64(maxInt(1, len(tokens)))
+		if matchRatio > 0.3 {
 			count++
 		}
 	}
 	return count
 }
+
+func semanticHasAlternativeExplanation(message string, cat AppraisalEventCategory) bool {
+	switch cat {
+	case AppraisalCatApology:
+		return true
+	case AppraisalCatComplaint:
+		return true
+	case AppraisalCatCold:
+		return true
+	default:
+		return false
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func tokenizeForMemory(text string) []string {
+	parts := strings.Fields(text)
+	result := make([]string, 0, len(parts)*2)
+	for _, p := range parts {
+		runes := []rune(p)
+		if len(runes) <= 1 {
+			continue
+		}
+		result = append(result, p)
+		if len(runes) >= 4 {
+			result = append(result, string(runes[:len(runes)/2]))
+		}
+	}
+	return result
+}
+
 
 func minInt(a, b int) int {
 	if a < b {

@@ -1,0 +1,45 @@
+package safety
+
+import "gorm.io/gorm"
+
+type HardConstraint struct {
+	RuleID       string `json:"ruleId"`
+	CandidateKey string `json:"candidateKey"`
+	Reason       string `json:"reason"`
+	Severity     string `json:"severity"`
+}
+
+type SoftPreference struct {
+	Dimension        string  `json:"dimension"`
+	RawScore         float64 `json:"rawScore"`
+	NormalizedWeight float64 `json:"normalizedWeight"`
+	Contribution     float64 `json:"contribution"`
+}
+
+type CopingStrategy struct {
+	Selected        string   `json:"selected"`
+	Alternatives    []string `json:"alternatives"`
+	SelectionReason string   `json:"selectionReason"`
+}
+
+type EmotionExpression struct {
+	DisplayMode       string `json:"displayMode"`
+	InternalIntensity int    `json:"internalIntensity"`
+	DisplayIntensity  int    `json:"displayIntensity"`
+	OverrideReason    string `json:"overrideReason"`
+}
+
+type BdiConfig struct {
+	HardConstraints   []HardConstraint   `json:"hardConstraints"`
+	SoftPreferences   []SoftPreference   `json:"softPreferences"`
+	CopingStrategy    *CopingStrategy    `json:"copingStrategy"`
+	EmotionExpression *EmotionExpression `json:"emotionExpression"`
+}
+
+type Handler struct {
+	db *gorm.DB
+}
+
+func NewHandler(db *gorm.DB) *Handler {
+	return &Handler{db: db}
+}

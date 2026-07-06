@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
@@ -132,7 +133,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	dispatchedPublisher.Register("postprocess.compressor.maybe", postProcessAdapter)
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
-	orch := interaction.NewOrchestrator(orchCfg, chatSvc.(interaction.MessageProcessor))
+	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, interaction.NewInMemoryOutboxStore())
 	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
@@ -141,6 +142,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	runtimePipeline.SetBeliefResolver(belief.ResolveBelief)
 	runtimePipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))
 	runtimePipeline.SetBudgetController(budget.NewBudgetController(0.5))
+	runtimePipeline.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 	orch.SetRuntimePipeline(runtimePipeline)
 	deadlineCfg := mindruntime.DefaultDeadlineConfig
 	deadlineCfg.TotalTimeout = 180 * time.Second

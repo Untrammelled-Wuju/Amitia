@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/user"
@@ -69,6 +70,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		ttsRepo := tts.NewRepository(ctx.DB)
 		ttsSvc := tts.NewService(ttsRepo)
 		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry, ttsSvc, services.DeliveryStore)
+		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")

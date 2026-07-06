@@ -58,6 +58,7 @@ func GenerateCandidatesWithExcludes(ctx CandidateGenerationContext, registry *Ca
 func behaviorFromActionDef(def CandidateActionDef) BehaviorCandidate {
 	return BehaviorCandidate{
 		ID:        def.ID,
+		Tag:       def.Tag,
 		BaseScore: def.BaseScore,
 	}
 }

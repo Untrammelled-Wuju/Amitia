@@ -143,8 +143,7 @@ func TestBuildRoleSystemPartsUsesRuntimeProfile(t *testing.T) {
 		BoundaryRules:     "不越界",
 		PersonalityConfig: map[string]interface{}{"version": "runtime-profile-v1", "openness": 72},
 		ChatStyleConfig:   map[string]interface{}{"version": "runtime-profile-v1", "pace": "slow"},
-		SceneRules:        map[string]interface{}{"version": "runtime-profile-v1"},
-	})
+	}, nil)
 	joined := strings.Join(parts, "\n")
 	for _, want := range []string{"你是Amitia，心理模拟伙伴。", "【角色性格】", "温和、敏锐", "【聊天风格】", "短句回应", "【关系风格】", "稳定陪伴", "【场景规则】", "不越界", "openness", "pace"} {
 		if !strings.Contains(joined, want) {
@@ -190,7 +189,7 @@ func TestSys1BuilderUsesCharacterScopedProfilePrompt(t *testing.T) {
 		CharacterID: "char-1",
 		Name:        "Amitia",
 		Identity:    "心理模拟伙伴",
-	}, "你好")
+	}, "你好", nil)
 	joined := strings.Join(parts, "\n")
 	if !strings.Contains(joined, "小安") {
 		t.Fatalf("expected scoped profile prompt to include char-1 profile, got %s", joined)

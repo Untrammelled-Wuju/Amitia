@@ -36,4 +36,7 @@ func RegisterProactiveRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.GET("/reminders/pending", handler.PendingReminders)
 	r.GET("/reminders/cleanup-config", handler.GetCleanupConfig)
 	r.PUT("/reminders/cleanup-config", handler.SetCleanupConfig)
+	r.GET("/reminders/trigger-history", handler.ListTriggerHistory)
+	r.GET("/reminders/queue-summary", handler.QueueSummary)
+	r.GET("/reminders/prospective", handler.Prospective)
 }

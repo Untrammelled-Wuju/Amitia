@@ -663,3 +663,71 @@ func (h *Handler) CleanupTriggeredReminders() {
 	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
 	h.db.Exec("DELETE FROM reminders WHERE enabled = 0 AND last_triggered_at < ?", cutoff)
 }
+
+func (h *Handler) ListTriggerHistory(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	state := c.Query("state")
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	items, total, err := h.service.ListTriggerHistory(page, pageSize, state)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": items, "total": total})
+}
+
+func (h *Handler) QueueSummary(c *gin.Context) {
+	var pendingCount int64
+	h.db.Model(&Reminder{}).Where("enabled = 1").Count(&pendingCount)
+
+	var recentFailures int64
+	cutoff := time.Now().Add(-24 * time.Hour).Format("2006-01-02 15:04:05")
+	h.db.Model(&TriggerHistory{}).Where("state = 'failed' AND created_at > ?", cutoff).Count(&recentFailures)
+
+	depth := int(pendingCount)
+	backpressure := pendingCount > 50 || recentFailures > 10
+
+	var oldestAgeMs int64
+	var oldestCreated string
+	if err := h.db.Model(&Reminder{}).Where("enabled = 1").Select("MIN(created_at)").Row().Scan(&oldestCreated); err == nil && oldestCreated != "" {
+		if t, e := time.Parse("2006-01-02 15:04:05", oldestCreated); e == nil {
+			oldestAgeMs = time.Since(t).Milliseconds()
+		}
+	}
+
+	util.SuccessResponse(c, gin.H{
+		"depth":          depth,
+		"pendingCount":   pendingCount,
+		"oldestAgeMs":    oldestAgeMs,
+		"recentFailures": recentFailures,
+		"backpressure":   backpressure,
+	})
+}
+
+type ProspectiveReminder struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	RemindAt string `json:"remindAt"`
+	Status   string `json:"status"`
+}
+
+func (h *Handler) Prospective(c *gin.Context) {
+	characterID := c.Query("characterId")
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少characterId", nil)
+		return
+	}
+	var items []ProspectiveReminder
+	h.db.Table("prospective_memories").Where("character_id = ? AND status = ?", characterID, "pending").Order("remind_at ASC").Limit(20).Find(&items)
+	if items == nil {
+		items = []ProspectiveReminder{}
+	}
+	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
+}

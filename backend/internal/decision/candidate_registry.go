@@ -19,6 +19,7 @@ const (
 type CandidateActionDef struct {
 	ID          string              `json:"id"`
 	Type        CandidateActionType `json:"type"`
+	Tag         BehaviorTag         `json:"tag"`
 	Label       string              `json:"label"`
 	Description string              `json:"description,omitempty"`
 	BaseScore   float64             `json:"baseScore"`
@@ -42,30 +43,35 @@ func DefaultCandidateRegistry() *CandidateRegistry {
 	r.Register(CandidateActionDef{
 		ID:        "chat_reply",
 		Type:      CandidateActionChat,
+		Tag:       BehaviorTagReply,
 		Label:     "聊天回复",
 		BaseScore: 0.60,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "proactive_greet",
 		Type:      CandidateActionProactive,
+		Tag:       BehaviorTagProactiveCheck,
 		Label:     "主动问候",
 		BaseScore: 0.30,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "ask_clarify",
 		Type:      CandidateActionAskClarify,
+		Tag:       BehaviorTagAskClarify,
 		Label:     "请求澄清",
 		BaseScore: 0.40,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "offer_support",
 		Type:      CandidateActionOfferHelp,
+		Tag:       BehaviorTagOfferSupport,
 		Label:     "提供支持",
 		BaseScore: 0.50,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "set_boundary",
 		Type:      CandidateActionSetBoundary,
+		Tag:       BehaviorTagSetBoundary,
 		Label:     "设立边界",
 		BaseScore: 0.20,
 		Preconds:  []string{"boundary_crossed"},
@@ -73,18 +79,21 @@ func DefaultCandidateRegistry() *CandidateRegistry {
 	r.Register(CandidateActionDef{
 		ID:        "express_emotion",
 		Type:      CandidateActionExpress,
+		Tag:       BehaviorTagReply,
 		Label:     "表达情绪",
 		BaseScore: 0.35,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "wait_observe",
 		Type:      CandidateActionWait,
+		Tag:       BehaviorTagDelay,
 		Label:     "等待观察",
 		BaseScore: 0.10,
 	})
 	r.Register(CandidateActionDef{
 		ID:        "tool_search",
 		Type:      CandidateActionToolCall,
+		Tag:       BehaviorTagReply,
 		Label:     "工具搜索",
 		BaseScore: 0.25,
 	})

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/expression"
+	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
 )
 
@@ -191,6 +192,30 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if err := s.abortMessageCommitIfCancelled(ctx, trace, userMsgID); err != nil {
 		return nil, err
 	}
+	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
+		ep := req.Runtime.ExpressionPlan
+		if ep.SafetyBlocked || ep.DoNotSend {
+			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "blocked", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+			applog.TraceWarn(trace.WithStage("expression_blocked"), applog.Fields{
+				"safety_blocked": ep.SafetyBlocked,
+				"do_not_send":    ep.DoNotSend,
+			}, "process message blocked by expression plan")
+			return &ComputeResult{
+				RequestID:            requestID,
+				ConversationID:       convID,
+				CharacterID:          charID,
+				CharacterName:        charName,
+				UserMessageID:        userMsgID,
+				UserMessageSequence:  userMsgSequence,
+				UserMessageCreatedAt: userMsgCreatedAt,
+				Reply:                "",
+				Source:               source,
+				ForceVoice:           false,
+				Channel:              channel,
+				Trace:                trace,
+			}, nil
+		}
+	}
 	reply, forceVoice, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
@@ -208,6 +233,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		kind = expression.ChannelQQ
 	}
 	reply = expression.ApplyPostValidation(reply, kind)
+	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
+		reply = applyExpressionLengthLimit(reply, req.Runtime)
+	}
 
 	lines_ := strings.Split(strings.TrimSpace(reply), "\n")
 	var realLines []string
@@ -254,4 +282,30 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 		s.wmCache.UpdateSummary(result.ConversationID, result.Reply)
 	}
 	s.startPostProcessing(ctx, result.Trace, result.ConversationID, result.CharacterID, result.Source, result.RequestID, result.PipelineMessages, result.Reply)
+}
+
+
+func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {
+	if rt == nil || rt.ExpressionPlan == nil {
+		return reply
+	}
+	ep := rt.ExpressionPlan
+	switch ep.Length {
+	case "short":
+		return truncateToRuneLimit(reply, 120)
+	case "medium":
+		return truncateToRuneLimit(reply, 350)
+	case "long":
+		return truncateToRuneLimit(reply, 800)
+	default:
+		return reply
+	}
+}
+
+func truncateToRuneLimit(s string, limit int) string {
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
+	}
+	return string(runes[:limit])
 }
