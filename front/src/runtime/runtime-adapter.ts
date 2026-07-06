@@ -40,8 +40,8 @@ async function createDesktopConnection(): Promise<RuntimeConnection> {
   }
   return {
     mode: "desktop-local",
-    apiBaseURL: "http://127.0.0.1:18080",
-    websocketBaseURL: "ws://127.0.0.1:18080",
+    apiBaseURL: "http://127.0.0.1:18899",
+    websocketBaseURL: "ws://127.0.0.1:18899",
   }
 }
 

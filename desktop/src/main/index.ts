@@ -6,15 +6,24 @@ import { createMainWindow } from "./window"
 import { createAppTray } from "./tray"
 import { DesktopRuntimeManager } from "../runtime/runtime-manager"
 import type { DeploymentModeConfig } from "../shared/types"
+import type { RuntimeStatus } from "../shared/types"
 import { startCore, stopCore, waitForCoreReady, isCoreRunning, ensureDataAndConfig } from "./core-manager"
 import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager"
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager"
 import { ipcMain } from "electron"
+import { IPC_CHANNELS } from "../shared/ipc"
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let currentConfig: DeploymentModeConfig = { mode: "local" }
 let quitting = false
+
+function notifyStatus(runtimeManager: DesktopRuntimeManager, state: RuntimeStatus["state"], message?: string) {
+  runtimeManager.setStatus(state, message)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(IPC_CHANNELS.runtimeStatusChanged, runtimeManager.getStatus())
+  }
+}
 
 const lock = app.requestSingleInstanceLock()
 if (!lock) {
@@ -71,23 +80,23 @@ async function enterMainApp(): Promise<void> {
     if (currentConfig.mode !== config.mode) {
       if (config.mode === "local") {
         if (!isCoreRunning()) {
-          runtimeManager.setStatus("starting")
+          notifyStatus(runtimeManager, "starting")
           try {
             startCore()
             void waitForCoreReady().then(() => {
-              runtimeManager.setStatus("ready")
+              notifyStatus(runtimeManager, "ready")
             }).catch((err) => {
               console.error("[AmitiaDesktop] 模式切换后核心启动失败:", err)
-              runtimeManager.setStatus("failed", String(err))
+              notifyStatus(runtimeManager, "failed", String(err))
             })
           } catch (err) {
             console.error("[AmitiaDesktop] 模式切换startCore异常:", err)
-            runtimeManager.setStatus("failed", String(err))
+            notifyStatus(runtimeManager, "failed", String(err))
           }
         }
       } else {
         stopCore()
-        runtimeManager.setStatus("ready")
+        notifyStatus(runtimeManager, "ready")
       }
     }
     currentConfig = config
@@ -105,19 +114,19 @@ async function enterMainApp(): Promise<void> {
   await waitForStartupCheck()
 
   if (currentConfig.mode === "local") {
-    runtimeManager.setStatus("starting")
+    notifyStatus(runtimeManager, "starting")
     try {
       console.log("[AmitiaDesktop] 启动本地核心...")
       startCore()
       await waitForCoreReady()
       console.log("[AmitiaDesktop] 核心就绪")
-      runtimeManager.setStatus("ready")
+      notifyStatus(runtimeManager, "ready")
     } catch (err) {
       console.error("[AmitiaDesktop] 核心启动失败:", err)
-      runtimeManager.setStatus("failed", String(err))
+      notifyStatus(runtimeManager, "failed", String(err))
     }
   } else {
-    runtimeManager.setStatus("ready")
+    notifyStatus(runtimeManager, "ready")
   }
 
   mainWindow.on("close", (event) => {
