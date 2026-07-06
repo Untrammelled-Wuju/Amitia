@@ -107,12 +107,6 @@ async function enterMainApp(): Promise<void> {
     console.warn("[AmitiaDesktop] 数据目录初始化存在缺失:", ensureResult.errors.join(", "))
   }
 
-  mainWindow = createMainWindow()
-  tray = createAppTray(mainWindow, () => currentConfig)
-
-  registerUpdateManager(mainWindow)
-  await waitForStartupCheck()
-
   if (currentConfig.mode === "local") {
     notifyStatus(runtimeManager, "starting")
     try {
@@ -128,6 +122,12 @@ async function enterMainApp(): Promise<void> {
   } else {
     notifyStatus(runtimeManager, "ready")
   }
+
+  mainWindow = createMainWindow()
+  tray = createAppTray(mainWindow, () => currentConfig)
+
+  registerUpdateManager(mainWindow)
+  await waitForStartupCheck()
 
   mainWindow.on("close", (event) => {
     if (!quitting) {

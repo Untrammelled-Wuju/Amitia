@@ -94,20 +94,20 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	compressor := chat.NewCompressor(ctx.DB)
 	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
 	if err := psycheStore.InitSchema(); err != nil {
-		panic("failed to init psyche store schema: " + err.Error())
+		log.Error("failed to init psyche store schema:", err); panic("failed to init psyche store schema")
 	}
 	if err := ctx.DB.AutoMigrate(&chat.RelationshipStateRecord{}, &chat.NeedStateRecord{}); err != nil {
-		panic("failed to init relationship/need store schema: " + err.Error())
+		log.Error("failed to init relationship/need store schema:", err); panic("failed to init relationship/need store schema")
 	}
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
-		panic("failed to init interaction tracker schema: " + err.Error())
+		log.Error("failed to init interaction tracker schema:", err); panic("failed to init interaction tracker schema")
 	}
 	newOutboxStore := newoutbox.NewSQLiteOutboxStore(ctx.DB, newoutbox.DefaultOutboxStoreConfig())
 	if err := ctx.DB.AutoMigrate(&newoutbox.OutboxRecordModel{}, &newoutbox.DeadLetterRecordModel{}); err != nil {
-		panic("failed to init outbox store schema: " + err.Error())
+		log.Error("failed to init outbox store schema:", err); panic("failed to init outbox store schema")
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
@@ -121,7 +121,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
 	chatSvc.SetOutboxStore(outboxAdapter)
 	if err := runtimeQueue.InitSchema(); err != nil {
-		panic("failed to init runtime queue schema: " + err.Error())
+		log.Error("failed to init runtime queue schema:", err); panic("failed to init runtime queue schema")
 	}
 
 	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
@@ -152,7 +152,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	resolver := interaction.NewScopeResolver(interaction.NewConversationScopeBindingLookup(ctx.DB))
 	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
 	if err := dataLifecycle.InitSchema(); err != nil {
-		panic("failed to init data lifecycle schema: " + err.Error())
+		log.Error("failed to init data lifecycle schema:", err); panic("failed to init data lifecycle schema")
 	}
 	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB, graphSvc))
 	if coordinatorSetter, ok := interface{}(memSvc).(interface {
@@ -190,7 +190,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	cbRegistry.Register("model_api", mindruntime.DefaultCircuitBreakerConfig())
 	voiceEntry := interaction.NewVoiceEntryWithUnifiedEntry(orch, entry)
 	if err := deliveryStore.InitSchema(); err != nil {
-		panic("failed to init delivery store schema: " + err.Error())
+		log.Error("failed to init delivery store schema:", err); panic("failed to init delivery store schema")
 	}
 	return &AppServices{
 		Graph:               graphSvc,
