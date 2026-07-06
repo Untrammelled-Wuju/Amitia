@@ -51,10 +51,26 @@ release/server.exe
 release/server.exe~
 backend/server.exe
 desktop/release2/
+desktop-release/
+desktop/build-installer/
+desktop/installer/
+desktop/installer-v2/
+desktop/installer-v3/
+desktop/installer-v4/
+desktop/installer-v5/
+desktop/installer-out/
+desktop/installer-final/
+desktop/release-dist/
+desktop/dist-release/
 desktop/release/
 desktop/build/
 desktop/dist-types/
 desktop/resources/core/
+# Root-level runtime data (not to be committed)
+AmitiaData/
+storage/
+.qdrant-initialized
+backend/qdrant/
 wechat-chat-extractor/weFlow.zip
 noa.rs-7.cn/
 
