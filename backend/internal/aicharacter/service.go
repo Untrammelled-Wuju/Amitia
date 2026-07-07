@@ -103,6 +103,10 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 		updates["description"] = desc
 	}
 
+	if bp, ok := body["basePrompt"].(string); ok {
+		updates["base_prompt"] = bp
+	}
+
 	// Handle personalityConfig
 	if pc, ok := body["personalityConfig"]; ok {
 		if pcBytes, err := json.Marshal(pc); err == nil {
