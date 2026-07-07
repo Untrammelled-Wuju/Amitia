@@ -132,9 +132,13 @@ export function useWebChatConversation(
       const r = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
       const items = r?.conversations || r?.items || []
       conversations.value = items
-      const wc = items.find((x: any) => x.id === "channel-wechat" || x.channel === "wechat")
+      const wc = items.find((x: any) => x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "wechat")
+        || items.find((x: any) => x.channel === "wechat")
       wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
-      const qc = items.find((x: any) => x.id === "channel-qq" || x.channel === "qq")
+      const qc = items.find((x: any) => x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "qq")
+        || items.find((x: any) => x.channel === "qq")
       qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
       const webConv = items.find((x: any) => x.id === convId.value)
       if (webConv) webMsgCount.value = webConv?.messageCount || 0
@@ -144,8 +148,8 @@ export function useWebChatConversation(
   async function handleSelectConv(conv: any) {
     showDrawer.value = false
     const convIdStr = String(conv?.id || "")
-    isWechatActive.value = convIdStr === "channel-wechat" || conv?.channel === "wechat"
-    isQQActive.value = convIdStr === "channel-qq" || conv?.channel === "qq"
+    isWechatActive.value = conv?.channel === "wechat"
+    isQQActive.value = conv?.channel === "qq"
     disconnectSSE()
     convId.value = conv.id
     convTitle.value = conv?.channel === "qq" ? "QQ聊天" : conv?.channel === "wechat" ? "微信聊天" : (conv.title || "")
@@ -194,11 +198,10 @@ export function useWebChatConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const wc = items.find((x: any) => x.id === "channel-wechat") || items.find((x: any) => x.channel === "wechat")
-      const wechatDups = items.filter((x: any) => (x.id === "channel-wechat" || x.channel === "wechat") && x.id !== wc?.id)
-      for (const d of wechatDups) {
-        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
-      }
+      const wc = items.find((x: any) => x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "wechat")
+        || items.find((x: any) => x.channel === "wechat")
+        || items.find((x: any) => x.id === "channel-wechat")
       if (wc) {
         localStorage.setItem("webchat-last-conv", "wechat")
         const cid = wc.characterId || wc.character_id
@@ -241,11 +244,10 @@ export function useWebChatConversation(
       }
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const qc = items.find((x: any) => x.id === "channel-qq") || items.find((x: any) => x.channel === "qq")
-      const qqDups = items.filter((x: any) => (x.id === "channel-qq" || x.channel === "qq") && x.id !== qc?.id)
-      for (const d of qqDups) {
-        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
-      }
+      const qc = items.find((x: any) => x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "qq")
+        || items.find((x: any) => x.channel === "qq")
+        || items.find((x: any) => x.id === "channel-qq")
       if (qc) {
         localStorage.setItem("webchat-last-conv", "qq")
         const cid = qc.characterId || qc.character_id
@@ -314,7 +316,9 @@ export function useWebChatConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const wc = items.find((x: any) => x.id === "channel-wechat" || x.channel === "wechat")
+      const wc = items.find((x: any) => x.channel === "wechat" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "wechat")
+        || items.find((x: any) => x.channel === "wechat")
       if (wc) wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
     } catch {}
   }
@@ -330,7 +334,9 @@ export function useWebChatConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const qc = items.find((x: any) => x.id === "channel-qq" || x.channel === "qq")
+      const qc = items.find((x: any) => x.channel === "qq" && (x.messageCount > 0 || x.msgCount > 0))
+        || items.find((x: any) => x.id.startsWith("conv-") && x.channel === "qq")
+        || items.find((x: any) => x.channel === "qq")
       if (qc) qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
     } catch {}
   }

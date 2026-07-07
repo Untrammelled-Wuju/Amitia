@@ -146,11 +146,7 @@ export function useConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const wc = items.find((x: any) => x.id === "channel-wechat") || items.find((x: any) => x.channel === "wechat")
-      const wechatDups = items.filter((x: any) => (x.id === "channel-wechat" || x.channel === "wechat") && x.id !== wc?.id)
-      for (const d of wechatDups) {
-        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
-      }
+      const wc = items.find((x: any) => x.channel === "wechat" && x.messageCount > 0) || items.find((x: any) => x.channel === "wechat") || items.find((x: any) => x.id === "channel-wechat")
       if (wc) {
         localStorage.setItem("webchat-last-conv", "wechat")
         const cid = wc.characterId || wc.character_id
@@ -193,11 +189,7 @@ export function useConversation(
       }
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const qc = items.find((x: any) => x.id === "channel-qq") || items.find((x: any) => x.channel === "qq")
-      const qqDups = items.filter((x: any) => (x.id === "channel-qq" || x.channel === "qq") && x.id !== qc?.id)
-      for (const d of qqDups) {
-        try { await del(`/api/web-chat/conversations/${encodeURIComponent(d.id)}`) } catch {}
-      }
+      const qc = items.find((x: any) => x.channel === "qq" && x.messageCount > 0) || items.find((x: any) => x.channel === "qq") || items.find((x: any) => x.id === "channel-qq")
       if (qc) {
         localStorage.setItem("webchat-last-conv", "qq")
         const cid = qc.characterId || qc.character_id

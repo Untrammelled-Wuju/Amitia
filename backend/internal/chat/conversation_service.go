@@ -56,7 +56,7 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 	if channel == "qq" {
 		title = "QQ对话"
 	}
-	convID := "channel-" + channel
+	convID := "conv-" + channel
 
 	c, err := s.repo.GetConversation(convID)
 	if err == nil && c != nil && c.ID == convID {

@@ -342,7 +342,7 @@ onUnmounted(() => {
   .login-layout { flex-direction: column-reverse; align-items: center; }
 }
 
-.login-steps { width: 300px; flex-shrink: 0; }
+.login-steps { max-width: 300px; flex-shrink: 0; }
 .login-qr { flex-shrink: 0; }
 
 .qr-frame {

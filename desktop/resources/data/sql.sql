@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     source TEXT DEFAULT 'manual',
     peer_id TEXT DEFAULT '',
     message_count INTEGER DEFAULT 0,
+    state_version TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -627,6 +628,7 @@ CREATE TABLE IF NOT EXISTS moods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
     mood TEXT DEFAULT '',
+    mood_value TEXT DEFAULT '',
     level INTEGER DEFAULT 50,
     created_at TEXT DEFAULT (datetime('now'))
 );
@@ -762,3 +764,7 @@ ALTER TABLE memories ADD COLUMN source_start INTEGER DEFAULT 0;
 ALTER TABLE memories ADD COLUMN source_end INTEGER DEFAULT 0;
 ALTER TABLE memory_candidates ADD COLUMN source_start INTEGER DEFAULT 0;
 ALTER TABLE memory_candidates ADD COLUMN source_end INTEGER DEFAULT 0;
+
+ALTER TABLE conversations ADD COLUMN state_version TEXT DEFAULT '';
+
+ALTER TABLE moods ADD COLUMN mood_value TEXT DEFAULT '';
