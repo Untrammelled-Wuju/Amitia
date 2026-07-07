@@ -137,10 +137,11 @@ export function useConversation(
   }
 
   async function handleSelectWechat(skipConfirm = false) {
+    console.log("[handleSelectWechat] called, skipConfirm =", skipConfirm)
     if (!skipConfirm) {
       try {
         await ElMessageBox.confirm("将切换到微信对话。", "切换对话", { confirmButtonText: "确认切换", cancelButtonText: "取消", type: "info" })
-      } catch { return }
+      } catch (e: any) { if (e !== 'cancel' && e !== 'close') console.error("[handleSelectWechat] confirm error:", e); return }
     }
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
@@ -179,10 +180,11 @@ export function useConversation(
   }
 
   async function handleSelectQQ(skipConfirm = false) {
+    console.log("[handleSelectQQ] called, skipConfirm =", skipConfirm)
     if (!skipConfirm) {
       try {
         await ElMessageBox.confirm("将切换到QQ对话。", "切换对话", { confirmButtonText: "确认切换", cancelButtonText: "取消", type: "info" })
-      } catch { return }
+      } catch (e: any) { if (e !== 'cancel' && e !== 'close') console.error("[handleSelectQQ] confirm error:", e); return }
     }
     try {
       if (!qqOnline.value) {

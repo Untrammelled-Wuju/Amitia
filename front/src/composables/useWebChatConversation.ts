@@ -132,9 +132,9 @@ export function useWebChatConversation(
       const r = await get<any>("/api/web-chat/conversations", { pageSize: 100 })
       const items = r?.conversations || r?.items || []
       conversations.value = items
-      const wc = items.find((x: any) => x.channel === "wechat")
+      const wc = items.find((x: any) => x.id === "channel-wechat" || x.channel === "wechat")
       wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
-      const qc = items.find((x: any) => x.channel === "qq")
+      const qc = items.find((x: any) => x.id === "channel-qq" || x.channel === "qq")
       qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
       const webConv = items.find((x: any) => x.id === convId.value)
       if (webConv) webMsgCount.value = webConv?.messageCount || 0
@@ -143,8 +143,10 @@ export function useWebChatConversation(
 
   async function handleSelectConv(conv: any) {
     showDrawer.value = false
-    isWechatActive.value = conv?.channel === "wechat"
-    isQQActive.value = conv?.channel === "qq"
+    const convIdStr = String(conv?.id || "")
+    isWechatActive.value = convIdStr === "channel-wechat" || conv?.channel === "wechat"
+    isQQActive.value = convIdStr === "channel-qq" || conv?.channel === "qq"
+    disconnectSSE()
     convId.value = conv.id
     convTitle.value = conv?.channel === "qq" ? "QQ聊天" : conv?.channel === "wechat" ? "微信聊天" : (conv.title || "")
     msgPage.value = 1
@@ -182,10 +184,11 @@ export function useWebChatConversation(
   }
 
   async function handleSelectWechat(skipConfirm = false) {
+    console.log("[handleSelectWechat] called, skipConfirm =", skipConfirm)
     if (!skipConfirm) {
       try {
         await ElMessageBox.confirm("将切换到微信对话。", "切换对话", { confirmButtonText: "确认切换", cancelButtonText: "取消", type: "info" })
-      } catch { return }
+      } catch (e: any) { if (e !== 'cancel' && e !== 'close') console.error("[handleSelectWechat] confirm error:", e); return }
     }
     showDrawer.value = false
     try {
@@ -225,16 +228,16 @@ export function useWebChatConversation(
   }
 
   async function handleSelectQQ(skipConfirm = false) {
+    console.log("[handleSelectQQ] called, skipConfirm =", skipConfirm)
     if (!skipConfirm) {
       try {
         await ElMessageBox.confirm("将切换到QQ对话。", "切换对话", { confirmButtonText: "确认切换", cancelButtonText: "取消", type: "info" })
-      } catch { return }
+      } catch (e: any) { if (e !== 'cancel' && e !== 'close') console.error("[handleSelectQQ] confirm error:", e); return }
     }
     showDrawer.value = false
     try {
       if (!qqOnline.value) {
-        ElMessage.warning("QQ未连接")
-        return
+        ElMessage.warning("QQ未连接，仅展示历史消息")
       }
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
@@ -311,7 +314,7 @@ export function useWebChatConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const wc = items.find((x: any) => x.channel === "wechat")
+      const wc = items.find((x: any) => x.id === "channel-wechat" || x.channel === "wechat")
       if (wc) wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
     } catch {}
   }
@@ -327,7 +330,7 @@ export function useWebChatConversation(
     try {
       const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
       const items = convs?.conversations || convs?.items || []
-      const qc = items.find((x: any) => x.channel === "qq")
+      const qc = items.find((x: any) => x.id === "channel-qq" || x.channel === "qq")
       if (qc) qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
     } catch {}
   }

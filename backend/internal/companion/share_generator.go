@@ -292,7 +292,7 @@ func (s *service) GetShareHistory(characterID string) ShareHistory {
 	var rows []map[string]interface{}
 	query := s.db.Table("proactive_messages").Select("message_content, created_at").Order("created_at DESC").Limit(30)
 	if characterID != "" {
-		query = query.Where("character_id = ?", characterID)
+		query = s.db.Table("proactive_messages").Select("proactive_messages.message_content, proactive_messages.created_at").Joins("JOIN conversations ON conversations.id = proactive_messages.conversation_id").Where("conversations.character_id = ?", characterID).Order("proactive_messages.created_at DESC").Limit(30)
 	}
 	query.Find(&rows)
 

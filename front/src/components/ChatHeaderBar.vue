@@ -8,6 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="header-info">
       <span class="header-char-name">{{ charName || "选择角色" }}</span>
       <span class="header-char-desc" v-if="charName">{{ charIdentity || '暂无角色描述' }}</span>
+      <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span>
     </div>
     <div class="header-actions">
       <button class="fa-btn" :class="{ active: showProfiles }" @click="$emit('toggleProfiles')" title="显示画像"><el-icon :size="18"><User /></el-icon></button>

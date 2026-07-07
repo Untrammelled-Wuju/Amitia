@@ -320,6 +320,10 @@ onMounted(async () => {
       await handleSelectWechat(true)
       return
     }
+    if (lastConv === "qq") {
+      await handleSelectQQ(true)
+      return
+    }
     const savedId = localStorage.getItem("webchat-char-id")
     const preferred = savedId ? characters.value.find((c: any) => c.id === savedId) : null
     if (preferred) { selectCharacter(preferred) }

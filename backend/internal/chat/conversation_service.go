@@ -57,14 +57,25 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 		title = "QQ对话"
 	}
 	convID := "channel-" + channel
-	c, err := s.repo.GetConversationByChannel(channel)
-	if err == nil && c != nil && c.ID != "" {
-		if c.ID != convID {
-			s.db.Exec("UPDATE conversations SET id = ? WHERE id = ?", convID, c.ID)
-			c.ID = convID
-		}
+
+	c, err := s.repo.GetConversation(convID)
+	if err == nil && c != nil && c.ID == convID {
+		s.db.Exec("UPDATE conversations SET channel = ?, title = ?, source = 'system' WHERE id = ?", channel, title, convID)
+		c.Channel = channel
+		c.Title = title
+		c.Source = "system"
 		return c, nil
 	}
+
+	c, err = s.repo.GetConversationByChannel(channel)
+	if err == nil && c != nil && c.ID != "" {
+		s.db.Exec("UPDATE conversations SET channel = ?, title = ?, source = 'system' WHERE id = ?", channel, title, c.ID)
+		c.Channel = channel
+		c.Title = title
+		c.Source = "system"
+		return c, nil
+	}
+
 	now := time.Now().Format("2006-01-02 15:04:05")
 	c = &Conversation{
 		ID:          convID,

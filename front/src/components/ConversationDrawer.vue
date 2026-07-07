@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div :class="{ 'mobile-drawer-body': isMobile }">
 
     <div class="section-label">频道对话</div>
-    <div v-if="wechatOnline" class="channel-pinned" :class="{ active: isWechatActive }" @click="$emit('selectWechat')">
+    <div v-if="wechatOnline" class="channel-pinned" :class="{ active: isWechatActive }" @click.stop="onSelectWechat">
       <el-icon class="channel-icon wechat-icon"><ChatDotRound /></el-icon>
       <div class="channel-info">
         <div class="channel-name">微信对话</div>
@@ -22,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <el-tag type="success" size="small" effect="plain">微信</el-tag>
     </div>
-    <div v-if="qqOnline" class="channel-pinned" :class="{ active: isQQActive }" @click="$emit('selectQQ')">
+    <div v-if="qqOnline" class="channel-pinned" :class="{ active: isQQActive }" @click.stop="onSelectQQ">
       <el-icon class="channel-icon qq-icon"><ChatDotSquare /></el-icon>
       <div class="channel-info">
         <div class="channel-name">QQ对话</div>
@@ -99,6 +99,14 @@ const emit = defineEmits<{
 
 const isMobile = computed(() => window.innerWidth < 768)
 const drawerTitle = computed(() => isMobile.value ? "角色" : "陪伴角色")
+
+function onSelectWechat() {
+  emit('selectWechat')
+}
+
+function onSelectQQ() {
+  emit('selectQQ')
+}
 </script>
 
 <style scoped>
