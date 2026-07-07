@@ -82,6 +82,8 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
 			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
+		} else if strings.Contains(err.Error(), "character_id") {
+			s.db.Exec("UPDATE conversations SET character_id = ?, channel = ?, updated_at = ? WHERE id = ?", charID, channel, time.Now().Format("2006-01-02 15:04:05"), convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,

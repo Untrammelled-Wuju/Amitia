@@ -77,9 +77,17 @@ func (s *service) GetWechatStatus() map[string]interface{} {
 	if status == "" {
 		status = "disconnected"
 	}
+
+	var messageCount int64
+	var replyCount int64
+	s.db.Table("messages").Where("conversation_id IN (SELECT id FROM conversations WHERE channel = ?) AND role = ?", "wechat", "user").Count(&messageCount)
+	s.db.Table("messages").Where("conversation_id IN (SELECT id FROM conversations WHERE channel = ?) AND role = ?", "wechat", "assistant").Count(&replyCount)
+
 	data["connected"] = status == "connected"
 	data["status"] = status
 	data["available"] = true
+	data["messageCount"] = messageCount
+	data["replyCount"] = replyCount
 	return data
 }
 

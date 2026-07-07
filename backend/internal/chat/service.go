@@ -49,6 +49,7 @@ type Service interface {
 	DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error)
 	EnsureChannelConversation(channel string) (*Conversation, error)
 	RecalculateMessageCounts() (int64, error)
+	BackfillMissingConversations() (int64, error)
 	GetCompressionStatus(convID string) map[string]interface{}
 	GetPipelineStatus() interface{}
 	ListProviders() []ProviderInfo

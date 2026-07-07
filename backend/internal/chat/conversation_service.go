@@ -86,6 +86,22 @@ func (s *service) RecalculateMessageCounts() (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
+func (s *service) BackfillMissingConversations() (int64, error) {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, title, channel, source, created_at, updated_at)
+		SELECT DISTINCT m.conversation_id, m.conversation_id,
+		CASE
+			WHEN m.conversation_id LIKE '%wechat%' THEN 'wechat'
+			WHEN m.conversation_id LIKE '%qq%' THEN 'qq'
+			ELSE 'web'
+		END,
+		'webhook', ?, ?
+		FROM messages m
+		LEFT JOIN conversations c ON c.id = m.conversation_id
+		WHERE c.id IS NULL AND m.conversation_id != ''`, now, now)
+	return result.RowsAffected, result.Error
+}
+
 func (s *service) DeleteConversation(id string) error {
 	if err := s.repo.DeleteConversation(id); err != nil {
 		return err

@@ -184,6 +184,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}); ok {
 		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
 	}
+	chatSvc.EnsureChannelConversation("wechat")
+	chatSvc.EnsureChannelConversation("qq")
+
 	entry := interaction.NewUnifiedEntry(orch, resolver)
 	compSvc.AttachUnifiedEntry(entry)
 	compSvc.AttachDeliveryStore(deliveryStore)

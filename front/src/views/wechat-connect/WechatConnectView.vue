@@ -100,7 +100,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="status-detail-grid" v-if="detail">
             <div class="sd-item">
               <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ dbMessageCount }}</span>
+              <span class="sd-value">{{ detail?.messageCount ?? 0 }}</span>
+            </div>
+            <div class="sd-item">
+              <span class="sd-label">回复数</span>
+              <span class="sd-value">{{ detail?.replyCount ?? 0 }}</span>
             </div>
             <div class="sd-item" v-if="detail.accountId">
               <span class="sd-label">账号</span>
@@ -112,7 +116,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             </div>
             <div class="sd-item" v-if="detail.startedAt">
               <span class="sd-label">连接时间</span>
-              <span class="sd-value">{{ detail.startedAt }}</span>
+              <span class="sd-value">{{ formatStartedAt(detail.startedAt) }}</span>
             </div>
           </div>
         </div>
@@ -149,17 +153,17 @@ const pageReady = ref(false)
 
 const reconnecting = ref(false)
 
-const dbMessageCount = ref(0)
-
 const isConnected = computed(() => detail.value?.status === "connected")
 
-async function fetchDbMessageCount() {
+function formatStartedAt(iso: string): string {
+  if (!iso) return ""
   try {
-    const r = await get<any>("/api/chats/conversations", { channel: "wechat", pageSize: 50 })
-    const items = r?.conversations || r?.items || []
-    const wc = items[0]
-    dbMessageCount.value = wc?.messageCount || 0
-  } catch {}
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return iso
+  }
 }
 
 async function refreshStatus() {
@@ -176,7 +180,6 @@ async function refreshStatus() {
   }
 
   pageReady.value = true
-  fetchDbMessageCount()
 }
 
 async function startLogin() {

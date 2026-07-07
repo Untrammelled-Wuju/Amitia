@@ -47,7 +47,9 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		qqGroup.GET("/status", func(c *gin.Context) {
 			mgr := GetManager()
 			var msgCount int64
-			ctx.DB.Table("messages").Joins("JOIN conversations ON messages.conversation_id = conversations.id").Where("conversations.channel = ?", "qq").Count(&msgCount)
+			var replyCount int64
+			ctx.DB.Table("messages").Where("conversation_id IN (SELECT id FROM conversations WHERE channel = ?) AND role = ?", "qq", "user").Count(&msgCount)
+			ctx.DB.Table("messages").Where("conversation_id IN (SELECT id FROM conversations WHERE channel = ?) AND role = ?", "qq", "assistant").Count(&replyCount)
 			if mgr == nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": true,
@@ -59,6 +61,7 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 						"protocol":     "QQBot (WebSocket)",
 						"startedAt":    "",
 						"messageCount": msgCount,
+						"replyCount":   replyCount,
 					},
 				})
 				return
@@ -78,6 +81,7 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 						"error":        err,
 						"startedAt":    startedAt,
 						"messageCount": msgCount,
+						"replyCount":   replyCount,
 					},
 				})
 				return
@@ -92,6 +96,7 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 					"error":        mgr.GetLastError(),
 					"startedAt":    mgr.GetStartedAt(),
 					"messageCount": msgCount,
+					"replyCount":   replyCount,
 				},
 			})
 		})

@@ -183,6 +183,9 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	if convID == "" {
 		convID = "channel-" + req.Channel
 	}
+
+	
+	s.ensureWebhookConversation(convID, req.Channel, req.Text)
 	sessionID := stableWebhookSessionID(req, convID)
 	userID := stableWebhookUserID(req)
 	source := stableWebhookSource(req)
@@ -345,5 +348,19 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(runes[:n]) + "..."
+}
+
+func (s *service) ensureWebhookConversation(convID, channel, text string) {
+	var count int64
+	s.db.Table("conversations").Where("id = ?", convID).Count(&count)
+	if count > 0 {
+		return
+	}
+	title := text
+	if len([]rune(title)) > 50 {
+		title = string([]rune(title)[:50])
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("INSERT OR IGNORE INTO conversations (id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'webhook', ?, ?)", convID, title, channel, now, now)
 }
 

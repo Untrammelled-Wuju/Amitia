@@ -211,9 +211,16 @@ func normalizeResolutionSource(source string) string {
 
 func (r ScopeResolver) resolveDefaultCharacter(ctx context.Context, scope InteractionScope) InteractionScope {
 	if scope.CharacterID != "" || r.defaultCharProvider == nil {
+		if r.defaultCharProvider == nil {
+			log.Printf("[scope_resolver] defaultCharProvider is nil, skipping")
+		}
+		if scope.CharacterID != "" {
+			log.Printf("[scope_resolver] CharacterID already set: %s", scope.CharacterID)
+		}
 		return scope
 	}
 	id, err := r.defaultCharProvider.GetDefaultCharacterID(ctx)
+	log.Printf("[scope_resolver] resolved default character: id=%s err=%v", id, err)
 	if err != nil {
 		log.Printf("[scope_resolver] default character lookup failed: %v", err)
 		return scope

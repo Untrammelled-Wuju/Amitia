@@ -34,7 +34,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="status-detail-grid">
             <div class="sd-item">
               <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ messageCount }}</span>
+              <span class="sd-value">{{ statusMessageCount }}</span>
+            </div>
+            <div class="sd-item">
+              <span class="sd-label">回复数</span>
+              <span class="sd-value">{{ statusReplyCount }}</span>
             </div>
             <div class="sd-item" v-if="accountId">
               <span class="sd-label">Bot ID</span>
@@ -126,7 +130,8 @@ const loginStatus = ref("")
 const connecting = ref(false)
 const disconnecting = ref(false)
 const reconnecting = ref(false)
-const messageCount = ref(0)
+const statusMessageCount = ref(0)
+const statusReplyCount = ref(0)
 const startedAt = ref("")
 
 const appId = ref("")
@@ -152,15 +157,6 @@ function formatStartedAt(iso: string): string {
   } catch {
     return iso
   }
-}
-
-async function fetchDbMessageCount() {
-  try {
-    const r = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
-    const items = r?.conversations || r?.items || []
-    const qc = items.find((x: any) => x.channel === "qq")
-    messageCount.value = qc?.messageCount || qc?.msgCount || 0
-  } catch {}
 }
 
 async function doConnect() {
@@ -263,6 +259,8 @@ async function refreshStatus() {
     accountId.value = data?.accountId || null
     loginStatus.value = data?.status || ""
     startedAt.value = data?.startedAt || ""
+    statusMessageCount.value = data?.messageCount ?? 0
+		statusReplyCount.value = data?.replyCount ?? 0
 
     if (qqOnline.value && loginStatus.value !== "connecting") {
       if (loginStatus.value === "connecting") {
@@ -294,7 +292,6 @@ async function refreshStatus() {
     qqOnline.value = false
   } finally {
     pageReady.value = true
-    fetchDbMessageCount()
   }
 }
 

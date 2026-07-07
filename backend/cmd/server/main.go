@@ -145,6 +145,13 @@ func main() {
 		log.Info("频道对话已确保创建")
 	}()
 	count, err := services.Chat.RecalculateMessageCounts()
+	backfilled, backfillErr := services.Chat.BackfillMissingConversations()
+	if backfillErr != nil {
+		log.Error("回填缺失对话记录失败:", backfillErr)
+	} else if backfilled > 0 {
+		log.Info("已回填缺失对话记录，影响", backfilled, "条")
+	}
+
 	if err != nil {
 		log.Error("重算消息计数失败:", err)
 	} else {

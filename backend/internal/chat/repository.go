@@ -217,7 +217,7 @@ func (r *repository) UpdateModelRoutes(routes []map[string]interface{}) error {
 
 func (r *repository) GetConversationByChannel(channel string) (*Conversation, error) {
 	var c Conversation
-	err := r.db.Where("channel = ? AND source = ?", channel, "system").First(&c).Error
+	err := r.db.Where("channel = ?", channel).Order("CASE WHEN source = 'system' THEN 0 ELSE 1 END").First(&c).Error
 	return &c, err
 }
 
