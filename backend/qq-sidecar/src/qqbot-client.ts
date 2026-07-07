@@ -59,6 +59,7 @@ export class QQBotClient {
   private accessTokenExpiry: number = 0
   private _messageCount: number = 0
   private _manualDisconnect: boolean = false
+  private _startedAt: string = ""
 
 
   private lastErrorMessage: string = ""
@@ -70,6 +71,7 @@ export class QQBotClient {
   getStatus() { return this.loginStatus }
   getMessageCount(): number { return this._messageCount }
   getAccountId() { return this.accountId }
+  getStartedAt() { return this._startedAt }
   isOnline() { return this.loginStatus === "online" }
 
   constructor() {
@@ -311,6 +313,7 @@ export class QQBotClient {
         this.sessionId = data?.session_id || ""
         this.identifyRetries = 0
         this.reconnectAttempts = 0
+        this._startedAt = new Date().toISOString()
         this.debugLog(`已上线! Bot=${this.botName} (${this.accountId})`)
         break
 
@@ -717,6 +720,7 @@ export class QQBotClient {
 
     console.log("[QQBot] 断开连接")
     this._manualDisconnect = true
+    this._startedAt = ""
     this.loginStatus = "disconnected"
     this.stopHeartbeat()
     if (this.reconnectTimer) {

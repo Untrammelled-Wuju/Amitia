@@ -155,10 +155,10 @@ const isConnected = computed(() => detail.value?.status === "connected")
 
 async function fetchDbMessageCount() {
   try {
-    const r = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+    const r = await get<any>("/api/chats/conversations", { channel: "wechat", pageSize: 50 })
     const items = r?.conversations || r?.items || []
-    const wc = items.find((x: any) => x.channel === "wechat")
-    dbMessageCount.value = wc?.messageCount || wc?.msgCount || 0
+    const wc = items[0]
+    dbMessageCount.value = wc?.messageCount || 0
   } catch {}
 }
 

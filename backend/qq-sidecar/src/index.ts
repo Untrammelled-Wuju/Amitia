@@ -433,8 +433,21 @@ app.get("/api/status", async (_req, reply) => {
       accountId: qq.getAccountId(),
       error: qq.getLastError(),
       messageCount: qq.getMessageCount(),
+      startedAt: qq.getStartedAt(),
     },
   })
+})
+
+app.get("/api/config", async (_req, reply) => {
+  const saved = loadQQBotConfig()
+  if (saved) {
+    return reply.send({
+      appId: saved.appId,
+      token: saved.token,
+      sandbox: saved.sandbox,
+    })
+  }
+  return reply.send({ appId: "", token: "", sandbox: false })
 })
 
 // ============================================================

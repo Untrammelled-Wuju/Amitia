@@ -21,6 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             <span class="card-header-title">连接状态</span>
             <div class="header-actions">
               <el-button size="small" @click="refreshStatus" :loading="loading">刷新</el-button>
+              <el-button size="small" type="success" @click="doReconnect" :loading="reconnecting">重新连接</el-button>
               <el-button size="small" type="danger" @click="doDisconnect" :loading="disconnecting">断开</el-button>
             </div>
           </div>
@@ -30,18 +31,22 @@ SPDX-License-Identifier: AGPL-3.0-only
             <div class="status-indicator ok"></div>
             <span class="status-label">已连接</span>
           </div>
-          <div class="status-detail-grid" v-if="accountId">
+          <div class="status-detail-grid">
             <div class="sd-item">
+              <span class="sd-label">消息数</span>
+              <span class="sd-value">{{ messageCount }}</span>
+            </div>
+            <div class="sd-item" v-if="accountId">
               <span class="sd-label">Bot ID</span>
-              <span class="sd-value">{{ accountId }}</span>
+              <span class="sd-value">{{ accountId.slice(0, 12) }}...</span>
             </div>
             <div class="sd-item">
               <span class="sd-label">协议</span>
               <span class="sd-value">QQBot (WebSocket)</span>
             </div>
-            <div class="sd-item">
-              <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ messageCount }}</span>
+            <div class="sd-item" v-if="startedAt">
+              <span class="sd-label">连接时间</span>
+              <span class="sd-value">{{ formatStartedAt(startedAt) }}</span>
             </div>
           </div>
         </div>
@@ -100,7 +105,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUnmounted, inject } from "vue"
 import { Loading } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import axios from "axios"
@@ -108,6 +113,8 @@ import { getQQApiBaseURL } from "../../runtime/runtime-adapter"
 import { useApi } from "../../composables/useApi"
 
 const { get } = useApi()
+
+const refreshHealth = inject<() => Promise<void>>("refreshHealth")
 
 const qqApiBaseUrl = ref("")
 
@@ -118,7 +125,9 @@ const accountId = ref<string | null>(null)
 const loginStatus = ref("")
 const connecting = ref(false)
 const disconnecting = ref(false)
+const reconnecting = ref(false)
 const messageCount = ref(0)
+const startedAt = ref("")
 
 const appId = ref("")
 const token = ref("")
@@ -132,6 +141,17 @@ let lastShownError: string = ""
 
 function stopConnectPoll() {
   if (connectPollTimer) { clearInterval(connectPollTimer); connectPollTimer = null }
+}
+
+function formatStartedAt(iso: string): string {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return iso
+  }
 }
 
 async function fetchDbMessageCount() {
@@ -163,6 +183,7 @@ async function doConnect() {
         connecting.value = false
         loginStatus.value = ""
         ElMessage.success("QQ Bot 连接成功")
+        refreshHealth?.()
         return
       }
       if (Date.now() - startTime > 30000) {
@@ -179,13 +200,57 @@ async function doConnect() {
   }
 }
 
+async function doReconnect() {
+  reconnecting.value = true
+  try {
+    const cfg = await axios.get(qqApiBaseUrl.value + "/config")
+    if (!cfg.data?.appId || !cfg.data?.token) {
+      ElMessage.warning("未找到已保存的凭证，请手动重新连接")
+      reconnecting.value = false
+      return
+    }
+    await axios.post(qqApiBaseUrl.value + "/disconnect")
+    await new Promise(r => setTimeout(r, 1000))
+    await axios.post(qqApiBaseUrl.value + "/connect", {
+      appId: cfg.data.appId,
+      token: cfg.data.token,
+      sandbox: cfg.data.sandbox || false,
+    })
+    loginStatus.value = "connecting"
+    stopConnectPoll()
+    const startTime = Date.now()
+    connectPollTimer = setInterval(async () => {
+      await refreshStatus()
+      if (qqOnline.value) {
+        stopConnectPoll()
+        reconnecting.value = false
+        loginStatus.value = ""
+        ElMessage.success("QQ Bot 重新连接成功")
+        refreshHealth?.()
+        return
+      }
+      if (Date.now() - startTime > 30000) {
+        stopConnectPoll()
+        reconnecting.value = false
+        loginStatus.value = ""
+        ElMessage.error("重新连接超时")
+      }
+    }, 2000)
+  } catch (e: any) {
+    ElMessage.error("重新连接失败")
+    reconnecting.value = false
+  }
+}
+
 async function doDisconnect() {
   disconnecting.value = true
   try {
     await axios.post(qqApiBaseUrl.value + "/disconnect")
     qqOnline.value = false
     accountId.value = null
+    startedAt.value = ""
     loginStatus.value = ""
+    refreshHealth?.()
   } catch (e: any) {}
   disconnecting.value = false
 }
@@ -197,6 +262,7 @@ async function refreshStatus() {
     qqOnline.value = !!data?.qqOnline
     accountId.value = data?.accountId || null
     loginStatus.value = data?.status || ""
+    startedAt.value = data?.startedAt || ""
 
     if (qqOnline.value && loginStatus.value !== "connecting") {
       if (loginStatus.value === "connecting") {
@@ -219,6 +285,7 @@ async function refreshStatus() {
         const cfg = await axios.get(qqApiBaseUrl.value + "/config")
         if (cfg.data?.appId) {
           appId.value = cfg.data.appId
+          token.value = cfg.data.token || ""
           sandbox.value = cfg.data.sandbox || false
         }
       } catch {}

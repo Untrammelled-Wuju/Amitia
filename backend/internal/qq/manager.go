@@ -32,6 +32,7 @@ type Manager struct {
 	status     Status
 	accountID  string
 	lastError  string
+	startedAt  string
 }
 
 func NewManager(sidecarURL string) *Manager {
@@ -76,6 +77,65 @@ func (m *Manager) GetSandbox() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.sandbox
+}
+
+func (m *Manager) GetStartedAt() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.startedAt
+}
+
+func (m *Manager) FetchSidecarConfig() map[string]interface{} {
+	resp, err := m.httpClient.Get(m.sidecarURL + "/api/config")
+	if err != nil {
+		return map[string]interface{}{"appId": "", "token": "", "sandbox": false}
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	if result == nil {
+		result = map[string]interface{}{"appId": "", "token": "", "sandbox": false}
+	}
+	return result
+}
+
+func (m *Manager) FetchSidecarStatus() (bool, Status, string, string, string) {
+	resp, err := m.httpClient.Get(m.sidecarURL + "/api/status")
+	if err != nil {
+		return false, StatusDisconnected, "", err.Error(), ""
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	data, _ := result["data"].(map[string]interface{})
+	if data == nil {
+		return false, StatusDisconnected, "", "", ""
+	}
+	online, _ := data["qqOnline"].(bool)
+	statusStr, _ := data["status"].(string)
+	accountID, _ := data["accountId"].(string)
+	errStr, _ := data["error"].(string)
+	var s Status
+	switch statusStr {
+	case "online":
+		s = StatusConnected
+	case "connecting":
+		s = StatusConnecting
+	default:
+		s = StatusDisconnected
+	}
+	startedAt, _ := data["startedAt"].(string)
+	return online, s, accountID, errStr, startedAt
+}
+
+func (m *Manager) SetOnline(accountID string, startedAt string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.status = StatusConnected
+	m.accountID = accountID
+	m.startedAt = startedAt
 }
 
 func (m *Manager) Connect(appID, token string, sandbox bool) error {

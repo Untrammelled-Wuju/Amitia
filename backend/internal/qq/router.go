@@ -57,6 +57,26 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 						"accountId":    "",
 						"qrcodeReady":  false,
 						"protocol":     "QQBot (WebSocket)",
+						"startedAt":    "",
+						"messageCount": msgCount,
+					},
+				})
+				return
+			}
+			if !mgr.IsOnline() {
+				online, s, accountID, err, startedAt := mgr.FetchSidecarStatus()
+				if online {
+					mgr.SetOnline(accountID, startedAt)
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"success": true,
+					"data": gin.H{
+						"qqOnline":     online,
+						"status":       string(s),
+						"accountId":    accountID,
+						"protocol":     "QQBot (WebSocket)",
+						"error":        err,
+						"startedAt":    startedAt,
 						"messageCount": msgCount,
 					},
 				})
@@ -70,6 +90,7 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 					"accountId":    mgr.GetAccountID(),
 					"protocol":     "QQBot (WebSocket)",
 					"error":        mgr.GetLastError(),
+					"startedAt":    mgr.GetStartedAt(),
 					"messageCount": msgCount,
 				},
 			})
@@ -81,10 +102,8 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 				c.JSON(http.StatusOK, gin.H{"appId": "", "sandbox": false})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{
-				"appId":   mgr.GetAppID(),
-				"sandbox": mgr.GetSandbox(),
-			})
+			cfg := mgr.FetchSidecarConfig()
+			c.JSON(http.StatusOK, cfg)
 		})
 	}
 }
