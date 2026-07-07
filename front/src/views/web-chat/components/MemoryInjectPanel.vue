@@ -96,7 +96,7 @@ onMounted(async () => {
 .fa-panel {
   position: absolute;
   right: 16px;
-  top: 52px;
+  top: 0;
   z-index: 19;
   background: var(--ac-color-surface, #fff);
   border-radius: 12px;

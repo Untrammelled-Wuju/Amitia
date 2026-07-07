@@ -8,9 +8,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="header-info">
       <span class="header-char-name">{{ charName || "选择角色" }}</span>
       <span class="header-char-desc" v-if="charName">{{ charIdentity || '暂无角色描述' }}</span>
-      <!-- <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span> -->
     </div>
     <div class="header-actions">
+      <button class="fa-btn" :class="{ active: showProfiles }" @click="$emit('toggleProfiles')" title="显示画像"><el-icon :size="18"><User /></el-icon></button>
+      <button class="fa-btn" :class="{ active: showMemInject }" @click="$emit('toggleMemInject')" title="记忆注入"><el-icon :size="18"><Connection /></el-icon></button>
       <el-dropdown trigger="click">
         <el-button text circle size="small" :icon="MoreFilled" />
         <template #dropdown>
@@ -35,7 +36,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { Menu, MoreFilled, Refresh, Delete, Collection, Switch } from "@element-plus/icons-vue"
+import { Menu, MoreFilled, Refresh, Delete, Collection, Switch, User, Connection } from "@element-plus/icons-vue"
 
 defineProps<{
   charName: string
@@ -44,6 +45,8 @@ defineProps<{
   canRegenerate: boolean
   messagesCount: number
   convId: string
+  showProfiles: boolean
+  showMemInject: boolean
 }>()
 
 defineEmits<{
@@ -52,6 +55,8 @@ defineEmits<{
   clear: []
   viewMemories: []
   toggleCharPicker: []
+  toggleProfiles: []
+  toggleMemInject: []
 }>()
 </script>
 
@@ -107,5 +112,35 @@ defineEmits<{
 
 .header-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fa-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--ac-color-border);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: var(--ac-shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.fa-btn:hover {
+  color: var(--ac-color-text);
+  border-color: var(--ac-color-text-muted);
+}
+
+.fa-btn.active {
+  background: var(--ac-color-primary-bg);
+  border-color: var(--ac-color-primary);
+  color: var(--ac-color-primary);
 }
 </style>

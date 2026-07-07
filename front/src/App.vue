@@ -126,7 +126,6 @@ html.amitia-desktop-shell .el-drawer.rtl,
 html.amitia-desktop-shell .el-drawer.ttb,
 html.amitia-desktop-shell .el-drawer.btt {
   height: calc(100% - 34px) !important;
-  top: 34px !important;
 }
 
 

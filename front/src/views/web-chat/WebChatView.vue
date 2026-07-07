@@ -24,17 +24,17 @@ SPDX-License-Identifier: AGPL-3.0-only
       :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
+      :show-profiles="showProfiles"
+      :show-mem-inject="showMemInject"
       @toggle-drawer="showDrawer = true"
       @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
+      @toggle-profiles="toggleProfiles"
+      @toggle-mem-inject="toggleMemInject"
     />
     <div class="chat-body-wrapper">
-      <div class="floating-btns">
-        <button class="fa-btn" :class="{ active: showProfiles }" @click="toggleProfiles" title="显示画像"><el-icon :size="20"><User /></el-icon></button>
-        <button class="fa-btn" :class="{ active: showMemInject }" @click="toggleMemInject" title="记忆注入"><el-icon :size="20"><Connection /></el-icon></button>
-      </div>
       <ProfileSummaryPanel
         :visible="showProfiles"
         @close="showProfiles = false"
@@ -122,7 +122,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, onMounted, onUnmounted, nextTick, watch, inject } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
-import { User, Connection } from "@element-plus/icons-vue"
 import { useApi, isLoggedIn } from "../../composables/useApi"
 import { useCachedApi } from "../../composables/useCachedApi"
 import { useWebChatSSE } from "../../composables/useWebChatSSE"
@@ -389,34 +388,4 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-
-.floating-btns {
-  position: absolute;
-  right: 16px;
-  top: 12px;
-  z-index: 20;
-  display: flex;
-  gap: 8px;
-}
-
-.fa-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--ac-color-border, #ddd);
-  background: var(--ac-color-surface, #fff);
-  cursor: pointer;
-  font-size: 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.fa-btn.active {
-  background: var(--ac-color-primary-bg, #e8f4fd);
-  border-color: var(--ac-color-primary, #409eff);
-}
 </style>
-
