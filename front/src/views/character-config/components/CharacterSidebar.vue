@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @click="emit('select', c)"
       >
         <div class="cli-main">
-          <el-avatar :size="28">{{ c.name?.charAt(0) }}</el-avatar>
+          <el-avatar :size="28" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
           <span class="cli-name">{{ c.name }}</span>
           <el-tag v-if="c.isActive" type="success" size="small" effect="dark">当前</el-tag>
         </div>

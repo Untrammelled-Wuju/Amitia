@@ -1,12 +1,13 @@
 import { app } from "electron"
 import path from "path"
 import fs from "fs"
+import { fileURLToPath } from "node:url"
 
 export function getInstallDir(): string {
   if (app.isPackaged) {
     return path.dirname(app.getPath("exe"))
   }
-  return path.resolve(process.cwd())
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 }
 
 export function getAmitiaDataDir(): string {

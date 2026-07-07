@@ -78,5 +78,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	r.Static("/voice", "./data/voice_msg")
 	r.Static("/images", "./data/images")
 	r.Static("/videos", "./data/videos")
+	r.Static("/avatars", "./data/avatars")
 	return r
 }

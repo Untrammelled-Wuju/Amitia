@@ -71,6 +71,7 @@ type CreateCharacterRequest struct {
 	Name              string          `json:"name"`
 	Identity          string          `json:"identity"`
 	Personality       string          `json:"personality"`
+	Avatar            string          `json:"avatar"`
 	SpeakingStyle     string          `json:"speakingStyle"`
 	RelationshipStyle string          `json:"relationshipStyle"`
 	SystemPrompt      string          `json:"systemPrompt"`

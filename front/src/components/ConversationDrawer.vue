@@ -42,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :class="{ active: c.id === activeCharId && !isWechatActive && !isQQActive }"
         @click="$emit('selectChar', c)"
       >
-        <el-avatar :size="32">{{ c.name?.charAt(0) }}</el-avatar>
+        <el-avatar :size="32" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
         <div class="char-info">
           <div class="char-name">{{ c.name }}</div>
           <div class="char-desc">{{ c.identity || c.personality || '未设置' }}</div>

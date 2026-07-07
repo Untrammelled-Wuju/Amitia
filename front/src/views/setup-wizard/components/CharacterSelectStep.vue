@@ -16,6 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :class="{ selected: modelValue === c.id }"
       >
         <input :checked="modelValue === c.id" type="radio" :value="c.id" @change="emit('update:modelValue', c.id)" />
+        <el-avatar :size="32" :src="c.avatar || undefined" style="flex-shrink:0">{{ c.name?.charAt(0) }}</el-avatar>
         <div class="sw-option-body">
           <strong>{{ c.name }}</strong>
           <p>{{ c.identity || 'No description' }}</p>

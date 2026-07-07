@@ -43,7 +43,7 @@ export function createMainWindow(): BrowserWindow {
     }
   })
 
-  const devServerURL = process.env.VITE_DEV_SERVER_URL || process.env.AMITIA_DESKTOP_DEV_SERVER_URL || "http://127.0.0.1:5178"
+  const devServerURL = process.env.VITE_DEV_SERVER_URL || process.env.AMITIA_DESKTOP_DEV_SERVER_URL || "http://127.0.0.1:5173"
   if (!app.isPackaged) {
     void win.loadURL(devServerURL)
     win.webContents.openDevTools({ mode: "detach" })
@@ -56,5 +56,5 @@ export function createMainWindow(): BrowserWindow {
 
 function isAllowedNavigation(url: string): boolean {
   const devServerURL = process.env.VITE_DEV_SERVER_URL
-  return url.startsWith("file://") || (devServerURL ? url.startsWith(devServerURL) : false) || url.startsWith("http://127.0.0.1:5178") || url.startsWith("http://localhost:5178")
+  return url.startsWith("file://") || (devServerURL ? url.startsWith(devServerURL) : false) || url.startsWith("http://127.0.0.1:5173") || url.startsWith("http://localhost:5173")
 }

@@ -3,6 +3,7 @@
   "version": "1.0.0-beta",
   "private": true,
   "type": "module",
+  "main": "../desktop/dist/main/index.js",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",

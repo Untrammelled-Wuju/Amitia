@@ -12,6 +12,8 @@ export function useCharacterConfig() {
   const refreshHealth = inject<() => void>("refreshHealth", () => {})
   const defaultPersonalityConfig = DEFAULT_PERSONALITY_CONFIG
 
+  const avatarUploading = ref(false)
+
   const templates = ref<any[]>([])
   const showTemplateDialog = ref(false)
   const templateLoading = ref(false)
@@ -151,6 +153,33 @@ export function useCharacterConfig() {
     if (found) selectChar(found)
   }
 
+  async function uploadAvatar(file: File): Promise<string | null> {
+    if (!selectedId.value) { ElMessage.warning("请先保存角色"); return null }
+    avatarUploading.value = true
+    try {
+      const formData = new FormData()
+      formData.append("avatar", file)
+      const { resolveApiUrl, createAuthorizedRequestInit } = await import("../../../runtime/runtime-adapter")
+      const [url, init] = await Promise.all([
+        resolveApiUrl(`/api/characters/${selectedId.value}/avatar`),
+        createAuthorizedRequestInit({ method: "POST", body: formData }),
+      ])
+      const res = await fetch(url, init)
+      if (!res.ok) throw new Error("上传失败")
+      const data = await res.json()
+      const avatarUrl = (data as any)?.data?.avatarUrl || ""
+      if (avatarUrl) {
+        form.avatar = avatarUrl
+        ElMessage.success("头像上传成功")
+        return avatarUrl
+      }
+      return null
+    } catch (err: any) {
+      ElMessage.error("头像上传失败")
+      return null
+    } finally { avatarUploading.value = false }
+  }
+
   async function delChar(c: any) {
     if (c.isActive) {
       const others = characters.value.filter(x => x.id !== c.id)
@@ -179,5 +208,6 @@ export function useCharacterConfig() {
     selectChar, createNew, createFromTemplate,
     copyChar, saveChar, resetPrompt, resetBounds, delChar,
     selectCharById,
+    avatarUploading, uploadAvatar,
   }
 }

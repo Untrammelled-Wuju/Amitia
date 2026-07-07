@@ -41,6 +41,7 @@ export function useOnboardingWizard() {
     apiKey: "",
     modelName: "",
     charName: "阿米提亚",
+    charAvatar: "",
     charIdentity: "AI 虚拟陪伴角色",
     charPersonality: "温和、体贴、有耐心",
     webChatEnabled: true,
@@ -298,6 +299,7 @@ export function useOnboardingWizard() {
       if (form.charName) {
         await post("/api/characters", {
           name: form.charName,
+          avatar: form.charAvatar,
           identity: form.charIdentity,
           personality: form.charPersonality,
           isActive: 1,

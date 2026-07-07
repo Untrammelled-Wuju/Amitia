@@ -13,8 +13,15 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="头像链接">
-              <el-input v-model="avatarModel" placeholder="URL（可选）" />
+            <el-form-item label="头像">
+              <div class="avatar-upload-row">
+                <div class="avatar-preview" @click="triggerUpload" :title="avatarModel ? '点击更换头像' : '点击上传头像'">
+                  <img v-if="avatarModel" :src="avatarModel" class="avatar-img" @error="onAvatarError" />
+                  <el-icon v-else :size="28"><Plus /></el-icon>
+                </div>
+                <input ref="fileInputRef" type="file" accept="image/*" hidden @change="onFileChange" />
+                <el-input v-model="avatarModel" placeholder="或输入URL" size="small" style="flex:1" />
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -81,8 +88,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { FullScreen } from "@element-plus/icons-vue"
+import { Plus } from "@element-plus/icons-vue"
 import PersonalitySliders from "../../../components/PersonalitySliders.vue"
 import type { PersonalityConfig } from "../composables/types"
 
@@ -113,7 +121,24 @@ const emit = defineEmits<{
   (e: "resetPrompt"): void
   (e: "resetBounds"): void
   (e: "save"): void
+  (e: "uploadAvatar", v: File): void
 }>()
+
+const fileInputRef = ref<HTMLInputElement>()
+function triggerUpload() { fileInputRef.value?.click() }
+function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith("image/")) { return }
+  emit("uploadAvatar", file)
+  input.value = ""
+}
+
+function onAvatarError(e: Event) {
+  const img = e.target as HTMLImageElement
+  img.style.display = "none"
+}
 
 const activeTabModel = computed({ get: () => props.activeTab, set: (v) => emit("update:activeTab", v) })
 const nameModel = computed({ get: () => props.name, set: (v) => emit("update:name", v) })
@@ -127,5 +152,35 @@ const boundaryRulesModel = computed({ get: () => props.boundaryRules, set: (v) =
 const personalityConfigModel = computed({ get: () => props.personalityConfig, set: (v) => emit("update:personalityConfig", v) })
 const isActiveModel = computed({ get: () => props.isActive, set: (v) => emit("update:isActive", v) })
 </script>
+
+<style scoped>
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px dashed var(--ac-color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--ac-color-surface);
+  transition: border-color 0.2s;
+}
+.avatar-preview:hover {
+  border-color: var(--ac-color-primary);
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+</style>
 
 

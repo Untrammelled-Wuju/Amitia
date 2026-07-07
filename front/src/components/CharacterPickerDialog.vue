@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :class="{ active: c.id === characterId }"
         @click="$emit('select', c)"
       >
-        <el-avatar :size="36">{{ c.name?.charAt(0) }}</el-avatar>
+        <el-avatar :size="36" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
         <div class="char-option-info">
           <div class="char-option-name">{{ c.name }}</div>
           <div class="char-option-desc">{{ c.identity || c.personality }}</div>

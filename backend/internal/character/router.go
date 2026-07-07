@@ -28,4 +28,5 @@ func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	r.POST("/character-templates/:id/create-character", handler.CreateFromTemplate)
 	r.GET("/companion/role-profile", handler.GetRoleProfile)
 	r.PUT("/companion/role-profile", handler.UpdateRoleProfile)
+	r.POST("/characters/:id/avatar", handler.UploadAvatar)
 }

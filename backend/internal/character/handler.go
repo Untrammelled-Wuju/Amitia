@@ -3,7 +3,11 @@
 package character
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -143,4 +147,47 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, profile)
+}
+
+func (h *Handler) UploadAvatar(c *gin.Context) {
+	id := c.Param("id")
+	file, header, err := c.Request.FormFile("avatar")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少头像文件", nil)
+		return
+	}
+	defer file.Close()
+
+	avatarDir := filepath.Join("data", "avatars")
+	if err := os.MkdirAll(avatarDir, 0755); err != nil {
+		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		return
+	}
+
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		ext = ".png"
+	}
+	filename := uuid.New().String() + ext
+	savePath := filepath.Join(avatarDir, filename)
+
+	dst, err := os.Create(savePath)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		return
+	}
+
+	avatarUrl := "/avatars/" + filename
+	if err := h.service.UpdateAvatar(id, avatarUrl); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+
+	util.SuccessResponse(c, gin.H{"avatarUrl": avatarUrl})
 }

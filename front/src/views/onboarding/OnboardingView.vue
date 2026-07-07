@@ -55,6 +55,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <CharacterStep
           v-if="current === 4"
           v-model:charName="form.charName"
+          v-model:charAvatar="form.charAvatar"
           v-model:charIdentity="form.charIdentity"
           v-model:charPersonality="form.charPersonality"
         />

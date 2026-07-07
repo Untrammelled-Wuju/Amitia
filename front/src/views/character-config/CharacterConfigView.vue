@@ -43,6 +43,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             @reset-prompt="resetPrompt"
             @reset-bounds="resetBounds"
             @save="saveChar"
+            @upload-avatar="onUploadAvatar"
           >
             <template #test>
               <CharacterTestChat
@@ -129,6 +130,7 @@ const {
   selectChar, createNew, createFromTemplate,
   copyChar, saveChar, resetPrompt, resetBounds, delChar,
   selectCharById,
+  avatarUploading, uploadAvatar,
 } = useCharacterConfig()
 
 const {
@@ -154,6 +156,10 @@ function onSendTest(text: string) {
 
 function onExportPack() {
   exportPack(selectedId.value, selected.value?.name || "")
+}
+
+async function onUploadAvatar(file: File) {
+  await uploadAvatar(file)
 }
 
 async function onConfirmImport() {

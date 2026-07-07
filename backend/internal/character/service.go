@@ -21,6 +21,7 @@ type Service interface {
 	GetTemplateByID(id string) (*CharacterTemplate, error)
 	GetRoleProfile(characterID string) (*RoleProfileResponse, error)
 	UpdateRoleProfile(characterID string, updates map[string]interface{}) (*RoleProfileResponse, error)
+	UpdateAvatar(id string, avatarUrl string) error
 }
 
 type service struct {
@@ -48,6 +49,7 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	c := &Character{
 		ID: uuid.New().String(), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
+		Avatar: req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, SystemPrompt: req.SystemPrompt,
 		BoundaryRules: req.BoundaryRules, Description: req.Description,
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
@@ -285,8 +287,32 @@ func (s *service) UpdateRoleProfile(characterID string, updates map[string]inter
 		}
 		targetID = active.ID
 	}
-	if err := s.repo.Update(targetID, updates); err != nil {
+
+	fieldMap := map[string]string{
+		"roleName":            "name",
+		"gender":              "gender",
+		"genderLabel":         "gender_label",
+		"pronoun":             "pronoun",
+		"selfReference":       "self_reference",
+		"genderExpression":    "gender_expression",
+		"lifeIdentity":        "life_identity",
+		"userAddressingStyle": "user_addressing_style",
+	}
+	dbUpdates := make(map[string]interface{})
+	for k, v := range updates {
+		if col, ok := fieldMap[k]; ok {
+			dbUpdates[col] = v
+		}
+	}
+	if err := s.repo.Update(targetID, dbUpdates); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	return s.GetRoleProfile(targetID)
+}
+func (s *service) UpdateAvatar(id string, avatarUrl string) error {
+	_, err := s.repo.FindByID(id)
+	if err != nil {
+		return fmt.Errorf("角色不存在")
+	}
+	return s.repo.Update(id, map[string]interface{}{"avatar": avatarUrl})
 }

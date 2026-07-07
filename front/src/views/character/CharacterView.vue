@@ -17,8 +17,10 @@ SPDX-License-Identifier: AGPL-3.0-only
           :class="{ active: selectedId === String(c.id) }"
           @click="selectChar(c)"
         >
-          <span class="char-name">{{ c.name }}</span>
-          <span class="char-desc">{{ c.description?.slice(0,15) || '' }}</span>
+          <el-avatar :size="28" :src="c.avatar || undefined" style="flex-shrink:0;margin-right:6px">{{ c.name?.charAt(0) }}</el-avatar>
+          <div style="flex:1;min-width:0">
+            <span class="char-name">{{ c.name }}</span>
+          </div>
         </div>
         <el-empty v-if="!characters.length" description="暂无角色" :image-size="40" />
       </div>
@@ -54,6 +56,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <el-dialog v-model="showDialog" :title="editingId ? '编辑角色' : '创建角色'" width="640px">
       <el-form :model="form" label-width="80px">
+        <el-form-item label="头像">
+          <div class="avatar-upload-row">
+            <div class="avatar-preview" @click="triggerAvatarUpload" :title="form.avatar ? '点击更换头像' : '点击上传头像'">
+              <img v-if="form.avatar" :src="form.avatar" class="avatar-img" @error="onAvatarImgError" />
+              <span v-else class="avatar-placeholder">+</span>
+            </div>
+            <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="onAvatarFileChange" />
+            <el-input v-model="form.avatar" placeholder="或输入URL" size="small" style="flex:1" />
+          </div>
+        </el-form-item>
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="性格"><el-input v-model="form.personality" type="textarea" :rows="3" /></el-form-item>
@@ -97,6 +109,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, provide } from "vue"
+import { Plus } from "@element-plus/icons-vue"
 import { useRouter, useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { apiClient } from "@/composables/useApi"
@@ -114,6 +127,23 @@ const showDialog = ref(false)
 const editingId = ref<string | null>(null)
 const saving = ref(false)
 const voicePresets = ref<any[]>([])
+const avatarInputRef = ref<HTMLInputElement>()
+
+function triggerAvatarUpload() { avatarInputRef.value?.click() }
+function onAvatarFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith("image/")) { ElMessage.warning("请选择图片文件"); return }
+  const reader = new FileReader()
+  reader.onload = () => { form.avatar = reader.result as string }
+  reader.readAsDataURL(file)
+  input.value = ""
+}
+function onAvatarImgError(e: Event) {
+  const img = e.target as HTMLImageElement
+  img.style.display = "none"
+}
 const currentVoiceSupportsEmotion = computed(() => {
   const v = voicePresets.value.find((p: any) => p.name === form.voiceType)
   return v?.supportsEmotion ?? false
@@ -122,6 +152,7 @@ const globalApiKey = ref("")
 
 const form = reactive({
   name: "", description: "", personality: "",
+  avatar: "",
   systemPrompt: "",
   voiceType: "zh_female_vv_uranus_bigtts",
   voiceSpeed: 1.0, voicePitch: 0, voiceVolume: 1.0,
@@ -200,6 +231,7 @@ function onTabChange(tab: string) {
 function openCreate() {
   editingId.value = null
   form.name = ""; form.description = ""; form.personality = ""
+  form.avatar = ""
   form.voiceType = "zh_female_vv_uranus_bigtts"
   form.voiceSpeed = 1.0; form.voicePitch = 0; form.voiceVolume = 1.0
   form.customVoiceId = ""
@@ -213,6 +245,7 @@ function editCurrent() {
   editingId.value = selectedChar.value.id
   form.name = selectedChar.value.name || ""
   form.description = selectedChar.value.description || ""
+  form.avatar = selectedChar.value.avatar || ""
   form.personality = selectedChar.value.personality || ""
   form.systemPrompt = selectedChar.value.systemPrompt || ""
   form.voiceType = selectedChar.value.voiceType || "zh_female_vv_uranus_bigtts"
@@ -315,6 +348,7 @@ async function saveCharacter() {
   try {
     const payload: any = {
       name: form.name,
+      avatar: form.avatar,
       description: form.description,
       personality: form.personality,
       systemPrompt: form.systemPrompt,
@@ -342,6 +376,7 @@ async function saveCharacter() {
     ElMessage.success("已保存")
     showDialog.value = false
     await loadCharacters()
+    window.dispatchEvent(new CustomEvent("character-updated", { detail: { id: editingId.value || (selectedId.value), avatar: form.avatar } }))
   } catch { ElMessage.error("保存失败") }
   finally { saving.value = false }
 }
@@ -360,17 +395,23 @@ async function deleteCurrent() {
 </script>
 
 <style scoped>
+.avatar-upload-row { display: flex; align-items: center; gap: 8px; }
+.avatar-preview { width: 64px; height: 64px; border-radius: 50%; border: 2px dashed var(--ac-color-border); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; flex-shrink: 0; background: var(--ac-color-surface); transition: border-color 0.2s; }
+.avatar-preview:hover { border-color: var(--ac-color-primary); }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-placeholder { font-size: 28px; color: var(--ac-color-text-muted); }
 .char-layout { display:flex; height:calc(100vh - 80px); gap:0; }
 .char-sidebar { width:200px; flex-shrink:0; border-right:1px solid var(--el-border-color-light); background:var(--el-bg-color); display:flex; flex-direction:column; }
 .sidebar-header { display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); }
 .sidebar-header h3 { font-size:15px; font-weight:600; margin:0; }
 .char-list { flex:1; overflow-y:auto; padding:4px; }
-.char-item { padding:10px 12px; cursor:pointer; border-radius:6px; margin:2px 0; display:flex; flex-direction:column; gap:2px; transition:background .15s; }
+.char-item { padding:10px 12px; cursor:pointer; border-radius:6px; margin:2px 0; display:flex; align-items:center; gap:8px; transition:background .15s; }
 .char-item:hover { background:var(--el-fill-color-light); }
 .char-item.active { background:var(--el-color-primary-light-9); }
 .char-name { font-size:14px; font-weight:500; }
-.char-desc { font-size:11px; color:var(--el-text-color-secondary); }
 .char-main { flex:1; overflow-y:auto; padding:16px 20px; }
 .detail-top { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .detail-top h2 { font-size:18px; font-weight:600; margin:0; flex:1; }
 </style>
+
+

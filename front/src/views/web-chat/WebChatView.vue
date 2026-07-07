@@ -286,6 +286,11 @@ onMounted(async () => {
 
   connectProactiveSSE()
   history.scrollRestoration = "manual"
+  window.addEventListener("character-updated", ((e: CustomEvent) => {
+    if (e.detail?.id && e.detail.id === characterId.value) {
+      charAvatar.value = e.detail.avatar || ""
+    }
+  }) as EventListener)
 
   window.addEventListener("online", () => {
     isOffline.value = false
