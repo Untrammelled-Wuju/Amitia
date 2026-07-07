@@ -1,0 +1,55 @@
+2026/07/06 20:10:07 [DB] 连接 SQLite: D:\桌面\跟进项目\U-Ai\AmitiaData\data\app.db
+2026/07/06 20:10:08 [Env] 根目录: D:\桌面\跟进项目\U-Ai\AmitiaData
+2026/07/06 20:10:08 [Env] 使用打包版附属服务
+2026/07/06 20:10:08 [Env] 附属服务启动中...
+2026/07/06 20:10:08 [Env] 正在启动 qq-sidecar (端口 18899)...
+2026/07/06 20:10:08 [Env] 正在启动 backend/sidecar (端口 18899)...
+2026/07/06 20:10:08 [qq-sidecar] file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:11
+  throw Error('Dynamic require of "' + x + '" is not supported');
+        ^
+
+Error: Dynamic require of "node:events" is not supported
+    at file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:11:9
+    at node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:948:14)
+    at __require2 (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:15:52)
+    at node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/fastify.js (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:33255:17)
+    at __require2 (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:15:52)
+    at file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/qq-sidecar/bundle.mjs:38524:30
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:547:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+2026/07/06 20:10:08 [qq-sidecar] 
+Node.js v22.12.0
+2026/07/06 20:10:09 [backend/sidecar] file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:11
+  throw Error('Dynamic require of "' + x + '" is not supported');
+        ^
+
+Error: Dynamic require of "node:events" is not supported
+    at file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:11:9
+    at node_modules/avvio/boot.js (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:951:14)
+    at __require3 (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:17:50)
+    at node_modules/fastify/fastify.js (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:33258:17)
+    at __require3 (file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:17:50)
+    at file:///D:/%E6%A1%8C%E9%9D%A2/%E8%B7%9F%E8%BF%9B%E9%A1%B9%E7%9B%AE/U-Ai/AmitiaData/sidecar/bundle.mjs:116239:30
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:547:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+2026/07/06 20:10:09 [backend/sidecar] 
+Node.js v22.12.0
+2026/07/06 20:10:12 [SafeScheduler] 定时调度器已启动（Timer模式）
+2026/07/06 20:10:12 [ProactiveCron] 规则扫描已启动（SafeScheduler Timer模式）
+2026/07/06 20:10:12 [ProactiveCron] 提醒扫描已启动（每 10s）
+2026/07/06 20:10:12 [ProactiveCron] 主动任务扫描已启动（每 30s）
+2026/07/06 20:10:12 [ProactiveCron] 每日重生成已启动（每 60s）
+2026/07/06 20:10:12 [ProactiveCron] 随机突发已启动（每 60s）
+2026/07/06 20:10:13 [Env] backend/sidecar 已就绪 (pid=45180)
+2026/07/06 20:10:13 [Env] backend/sidecar 已退出
+2026/07/06 20:10:13 [Env] qq-sidecar 已就绪 (pid=45032)
+2026/07/06 20:10:13 [Env] qq-sidecar 已退出
+2026/07/06 20:10:42 [orchestrator] compensation event for committed interaction 9b06eea2-7472-4dfd-957d-b2067e9e699b: supersede_after_commit:af87e1cc-6f77-4356-894a-3de87eff3db4 (compensation outbox deferred)
+2026/07/06 20:10:47 [Companion] ProcessDueActiveMessageTasks sent type=morning_share id=13
+2026/07/06 20:10:47 [orchestrator] compensation event for committed interaction af87e1cc-6f77-4356-894a-3de87eff3db4: supersede_after_commit:3821825a-6f1f-4d86-9529-4f1f543fa2bf (compensation outbox deferred)
+2026/07/06 20:10:51 [Companion] ProcessDueActiveMessageTasks sent type=noon_daily id=14
+2026/07/06 20:10:51 [orchestrator] compensation event for committed interaction 3821825a-6f1f-4d86-9529-4f1f543fa2bf: supersede_after_commit:a1fd3445-5489-4168-8fa5-0fe308649501 (compensation outbox deferred)
+2026/07/06 20:10:54 [Companion] ProcessDueActiveMessageTasks sent type=evening_reflection id=15
+2026/07/06 20:10:54 [ProactiveCron] 主动任务处理 char=beba52ee-c4e7-42e2-a9dc-de5b290ff53e: processed=3 sent=3
