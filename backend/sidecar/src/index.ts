@@ -132,7 +132,31 @@ manager.onMessage(async (msg) => {
       })
       const json = await resp.json() as any
       console.log(`[Sidecar][DIAG] 后端响应: code=${json?.code} msg=${json?.msg} hasData=${!!json?.data} hasOutMsg=${!!json?.data?.outgoingMessage} hasText=${!!json?.data?.outgoingMessage?.text}`)
-      if (json?.data?.outgoingMessage?.text) {
+      const texts: string[] = json?.data?.outgoingMessage?.texts
+      if (texts && Array.isArray(texts) && texts.length > 0) {
+        console.log('[OpenClaw] 拆分消息: ' + texts.length + ' 条')
+        for (let i = 0; i < texts.length; i++) {
+          const line = texts[i]
+          if (!line || line.trim() === '') continue
+          console.log('[OpenClaw] Reply [' + (i+1) + '/' + texts.length + '] (' + line.length + ' chars): ' + line.substring(0, 100))
+          const deliveryResp = await fetch(`${sidecarConfig.coreUrl}/api/delivery/submit`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              channel: "wechat",
+              peerId: last.fromUserId,
+              text: line,
+              interactionId: json?.data?.requestId || "",
+              messageId: last.messageId,
+            }),
+            signal: AbortSignal.timeout(10000),
+          })
+          const deliveryJson = await deliveryResp.json() as any
+          console.log('[Sidecar] delivery提交[' + (i+1) + ']: inserted=' + deliveryJson?.data?.inserted + ' id=' + deliveryJson?.data?.id)
+          if (i < texts.length - 1) {
+            await new Promise(r => setTimeout(r, 500))
+          }
+        }
+      } else if (json?.data?.outgoingMessage?.text) {
         const reply = json.data.outgoingMessage.text
         console.log('[OpenClaw] Reply (' + reply.length + ' chars): ' + reply.substring(0, 200))
         
@@ -179,14 +203,15 @@ app.get("/api/health", async (_req, reply) => {
 // Full status
 app.get("/api/status", async (_req, reply) => {
   const state = manager.getState()
-  return reply.send({
-    success: true,
-    data: {
-      status: state.status,
-      accountId: state.accountId,
-      qrCodeUrl: state.qrCodeUrl,
-      messageCount: state.messageCount,
-      baseUrl: state.baseUrl,
+    return reply.send({
+      success: true,
+      data: {
+        status: state.status,
+        accountId: state.accountId,
+        qrCodeUrl: state.qrCodeUrl,
+        messageCount: state.messageCount,
+        replyCount: state.replyCount,
+        baseUrl: state.baseUrl,
       startedAt: state.startedAt,
       lastError: state.lastError,
       message: state.message,

@@ -105,6 +105,9 @@ import { Loading } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import axios from "axios"
 import { getQQApiBaseURL } from "../../runtime/runtime-adapter"
+import { useApi } from "../../composables/useApi"
+
+const { get } = useApi()
 
 const qqApiBaseUrl = ref("")
 
@@ -129,6 +132,15 @@ let lastShownError: string = ""
 
 function stopConnectPoll() {
   if (connectPollTimer) { clearInterval(connectPollTimer); connectPollTimer = null }
+}
+
+async function fetchDbMessageCount() {
+  try {
+    const r = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+    const items = r?.conversations || r?.items || []
+    const qc = items.find((x: any) => x.channel === "qq")
+    messageCount.value = qc?.messageCount || qc?.msgCount || 0
+  } catch {}
 }
 
 async function doConnect() {
@@ -185,7 +197,6 @@ async function refreshStatus() {
     qqOnline.value = !!data?.qqOnline
     accountId.value = data?.accountId || null
     loginStatus.value = data?.status || ""
-    messageCount.value = data?.messageCount || 0
 
     if (qqOnline.value && loginStatus.value !== "connecting") {
       if (loginStatus.value === "connecting") {
@@ -216,6 +227,7 @@ async function refreshStatus() {
     qqOnline.value = false
   } finally {
     pageReady.value = true
+    fetchDbMessageCount()
   }
 }
 

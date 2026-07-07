@@ -140,5 +140,5 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 }
 
 func sendProactiveNotification(db *gorm.DB, convID, msgID, content string) {
-	db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=datetime('now', 'localtime') WHERE id=?", convID)
+	db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=datetime('now', 'localtime') WHERE id=?", convID, convID)
 }

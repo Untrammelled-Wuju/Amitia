@@ -25,8 +25,7 @@ function notifyStatus(runtimeManager: DesktopRuntimeManager, state: RuntimeStatu
   }
   }
 
-const lockKey = app.isPackaged ? undefined : `amitia-dev-${Date.now()}-${Math.random().toString(36).slice(2)}`
-const lock = app.requestSingleInstanceLock(lockKey)
+const lock = app.requestSingleInstanceLock()
 if (!lock) {
   app.quit()
 } else {

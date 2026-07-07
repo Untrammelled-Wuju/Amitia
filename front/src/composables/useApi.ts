@@ -45,7 +45,9 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    // Delegate to unified request module for network errors
+    if (error && typeof error === 'object' && 'severity' in error) {
+      return Promise.reject(error)
+    }
     return unifiedRequest.interceptors.response.handlers?.[0]?.rejected?.(error) ?? Promise.reject(error)
   }
 )

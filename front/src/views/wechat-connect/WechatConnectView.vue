@@ -100,7 +100,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="status-detail-grid" v-if="detail">
             <div class="sd-item">
               <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ detail.messageCount || 0 }}</span>
+              <span class="sd-value">{{ dbMessageCount }}</span>
             </div>
             <div class="sd-item" v-if="detail.accountId">
               <span class="sd-label">账号</span>
@@ -145,12 +145,22 @@ const qrStep = ref(0)
 const scanning = ref(false)
 const loginError = ref("")
 
-// Page load state
 const pageReady = ref(false)
 
 const reconnecting = ref(false)
 
+const dbMessageCount = ref(0)
+
 const isConnected = computed(() => detail.value?.status === "connected")
+
+async function fetchDbMessageCount() {
+  try {
+    const r = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+    const items = r?.conversations || r?.items || []
+    const wc = items.find((x: any) => x.channel === "wechat")
+    dbMessageCount.value = wc?.messageCount || wc?.msgCount || 0
+  } catch {}
+}
 
 async function refreshStatus() {
   loading.value = true
@@ -166,6 +176,7 @@ async function refreshStatus() {
   }
 
   pageReady.value = true
+  fetchDbMessageCount()
 }
 
 async function startLogin() {

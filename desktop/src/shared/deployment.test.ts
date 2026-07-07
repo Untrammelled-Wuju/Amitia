@@ -27,7 +27,7 @@ describe("deployment", () => {
   })
 
   it("rejects blocked self hosted host", () => {
-    expect(() => validateSelfHostedURL("http://0.0.0.0:8899")).toThrow("不可路由地址")
+    expect(() => validateSelfHostedURL("http://0.0.0.0:18899")).toThrow("不可路由地址")
   })
 
   it("maps config to label", () => {

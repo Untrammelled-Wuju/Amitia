@@ -231,22 +231,34 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	msgID := uuid.New().String()
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, now)
-	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)", rule.ID, convID, content, channel, now, now)
+	var maxLen int
+	switch {
+	case channel == "wechat":
+		maxLen = util.MaxWechatMessageLen
+	case channel == "qq":
+		maxLen = util.MaxQQMessageLen
+	default:
+		maxLen = util.MaxWebMessageLen
+	}
+	lines := util.SplitLongMessage(content, maxLen)
+	wcID := h.getWechatConvIDForTrigger(character.ID)
+	qqID := h.getQQConvIDForTrigger(character.ID)
+	for _, line := range lines {
+		msgID := uuid.New().String()
+		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, now)
+		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)", rule.ID, convID, line, channel, now, now)
+		if channel == "wechat" || channel == "all" {
+			if wcID != "" {
+				h.sendToWechatSidecar(wcID, line)
+			}
+		}
+		if channel == "qq" || channel == "all" {
+			if qqID != "" {
+				h.sendToQQSidecarForTrigger(qqID, line)
+			}
+		}
+	}
 	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
-	if channel == "wechat" || channel == "all" {
-		wcID := h.getWechatConvIDForTrigger(character.ID)
-		if wcID != "" {
-			h.sendToWechatSidecar(wcID, content)
-		}
-	}
-	if channel == "qq" || channel == "all" {
-		qqID := h.getQQConvIDForTrigger(character.ID)
-		if qqID != "" {
-			h.sendToQQSidecarForTrigger(qqID, content)
-		}
-	}
 	util.SuccessResponse(c, gin.H{"id": rule.ID, "triggered": true, "messageContent": content, "channel": channel})
 }
 
@@ -373,13 +385,16 @@ func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
 	if content == "" {
 		content = fmt.Sprintf("[提醒] %s", rem.Title)
 	}
-	msgID = uuid.New().String()
+	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, now)
-	h.db.Exec("UPDATE conversations SET message_count=message_count+1, updated_at=? WHERE id=?", now, convID)
+	for _, line := range lines {
+		msgID = uuid.New().String()
+		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, now)
+		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, line, rem.Channel, now)
+	}
+	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, now, convID)
 	h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", now, now, rem.ID)
 	sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive", "createdAt": now})
-	h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, content, rem.Channel, now)
 	return
 }
 

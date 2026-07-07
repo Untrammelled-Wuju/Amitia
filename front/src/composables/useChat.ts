@@ -27,8 +27,6 @@ export function useChat() {
 
   let abortController: AbortController | null = null
 
-    const replyStyle = ref<string>("natural")
-
   const canRegenerate = computed(() => {
     if (messages.value.length === 0) return false
     return messages.value[messages.value.length - 1]?.role === "assistant"
@@ -131,7 +129,6 @@ export function useChat() {
           characterId: charId.value || undefined,
           content: text,
           useMemory: true,
-          replyStyle: replyStyle.value,
         }),
         signal: abortController.signal,
       })
@@ -267,7 +264,6 @@ export function useChat() {
         characterId: charId.value || undefined,
         content: text,
         useMemory: true,
-        replyStyle: replyStyle.value,
       }, {
         signal: abortController.signal,
       })
@@ -443,7 +439,7 @@ export function useChat() {
 
   return {
     // State
-    conversations, messages, characters, importBatches, memories, replyStyle,
+    conversations, messages, characters, importBatches, memories,
     loading, sending, streamingContent, convId, charId,
     canRegenerate, hasMoreHistory,
 

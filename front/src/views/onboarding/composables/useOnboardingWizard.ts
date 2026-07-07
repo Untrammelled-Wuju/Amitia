@@ -250,7 +250,8 @@ export function useOnboardingWizard() {
           try {
             await post("/api/auth/setup", { username: form.username, password: form.password })
           } catch (setupErr: any) {
-            if (setupErr?.response?.status === 409 || setupErr?.response?.data?.code === 20006) {
+            if (setupErr?.code === 600 || setupErr?.response?.status === 409 || setupErr?.response?.data?.code === 20006) {
+              hasAdmin.value = true
             } else {
               throw setupErr
             }

@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/pkg/util"
 	applog "github.com/u-ai/backend/log"
 )
 
@@ -244,21 +245,16 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = applyExpressionLengthLimit(reply, req.Runtime)
 	}
 
-	policy := expression.GetChannelPolicy(kind)
-	var realLines []string
-	if policy.Capabilities.SupportsSegmented {
-		lines_ := strings.Split(strings.TrimSpace(reply), "\n")
-		for _, line := range lines_ {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			realLines = append(realLines, line)
-		}
+	var maxLen int
+	switch kind {
+	case expression.ChannelWechat:
+		maxLen = util.MaxWechatMessageLen
+	case expression.ChannelQQ:
+		maxLen = util.MaxQQMessageLen
+	default:
+		maxLen = util.MaxWebMessageLen
 	}
-	if len(realLines) == 0 {
-		realLines = []string{reply}
-	}
+	realLines := util.SplitLongMessage(reply, maxLen)
 
 	pipelineMessages := make([]map[string]string, 0, len(history)+2)
 	pipelineMessages = append(pipelineMessages, history...)

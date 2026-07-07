@@ -16,7 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -194,19 +193,6 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "SSE not supported", nil)
 		return
 	}
-	channelKind := expression.ChannelWeb
-	policy := expression.GetChannelPolicy(channelKind)
-	var lines []string
-	if policy.Capabilities.SupportsSegmented {
-		lines = strings.Split(strings.TrimSpace(result.Reply), "\n")
-	} else {
-		trimmed := strings.TrimSpace(result.Reply)
-		if trimmed != "" {
-			lines = []string{trimmed}
-		}
-	}
-	msgIDIdx := 0
-
 	voiceChance := 0.20
 	if body.VoiceMessage {
 		voiceChance = 0.80
@@ -247,8 +233,16 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		applog.Info(fmt.Sprintf("[Voice] skipped: chance=%.2f forceVoice=%v reply=%v", voiceChance, result.ForceVoice, result.Reply != ""))
 	}
 
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
+	for i, msgID := range result.MessageIDs {
+		var msg struct {
+			Content       string  `gorm:"column:content"`
+			AudioUrl      string  `gorm:"column:audio_url"`
+			AudioDuration float64 `gorm:"column:audio_duration"`
+		}
+		if err := h.db.Table("messages").Select("content, audio_url, audio_duration").Where("id = ?", msgID).Scan(&msg).Error; err != nil || msg.Content == "" {
+			continue
+		}
+		line := strings.TrimSpace(msg.Content)
 		if line == "" || isReasoningLine(line) {
 			continue
 		}
@@ -259,11 +253,6 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			}
 			time.Sleep(time.Duration(delayMs) * time.Millisecond)
 		}
-		msgID := uuid.New().String()
-		if msgIDIdx < len(result.MessageIDs) {
-			msgID = result.MessageIDs[msgIDIdx]
-		}
-		msgIDIdx++
 
 		var audioURL string
 		var audioDuration float64

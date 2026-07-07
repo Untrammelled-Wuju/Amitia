@@ -99,6 +99,10 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 		c.IsDefault = 1
 	}
+	var count int64
+	if err := s.db.Table("characters").Count(&count).Error; err == nil && count == 0 {
+		c.IsDefault = 1
+	}
 	if err := s.repo.Create(c); err != nil {
 		return nil, fmt.Errorf("创建角色失败: %w", err)
 	}

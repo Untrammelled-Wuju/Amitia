@@ -1,6 +1,7 @@
 package interaction
 
 import (
+	"log"
 	"context"
 	"errors"
 	"strings"
@@ -214,6 +215,7 @@ func (r ScopeResolver) resolveDefaultCharacter(ctx context.Context, scope Intera
 	}
 	id, err := r.defaultCharProvider.GetDefaultCharacterID(ctx)
 	if err != nil {
+		log.Printf("[scope_resolver] default character lookup failed: %v", err)
 		return scope
 	}
 	scope.CharacterID = id

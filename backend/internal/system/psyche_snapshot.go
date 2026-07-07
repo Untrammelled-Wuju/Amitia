@@ -2,6 +2,7 @@ package system
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -70,10 +71,19 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 	store := psyche.NewSQLitePsycheStore(h.db)
 	state, err := store.LoadState(characterID)
 	if err != nil {
+		if errors.Is(err, psyche.ErrStateNotFound) {
+			defaultState := psyche.NewPsycheState(characterID)
+			c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(defaultState, characterID, now, h), "msg": "操作成功"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to load psyche state", "error": err.Error()})
 		return
 	}
 
+	c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(*state, characterID, now, h), "msg": "操作成功"})
+}
+
+func buildSnapshot(state psyche.PsycheState, characterID string, now time.Time, h *psycheSnapshotHandler) PsycheSnapshotOutput {
 	var collectedAt string
 	if !state.UpdatedAt.IsZero() {
 		collectedAt = state.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
@@ -101,7 +111,7 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 
 	beliefs := h.loadBeliefSnapshots(characterID)
 
-	snapshot := PsycheSnapshotOutput{
+	return PsycheSnapshotOutput{
 		Emotion: PsycheEmotionOutput{
 			Positive:  positive,
 			Negative:  negative,
@@ -122,8 +132,6 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 		Relationship: relState,
 		CollectedAt:  collectedAt,
 	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 200, "data": snapshot, "msg": "操作成功"})
 }
 
 func (h *psycheSnapshotHandler) loadNeedSnapshot(characterID string) map[string]float64 {

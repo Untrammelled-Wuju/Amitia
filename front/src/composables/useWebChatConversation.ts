@@ -29,14 +29,13 @@ export function useWebChatConversation(
   const importBatches = ref<any[]>([])
   const memories = ref<any[]>([])
 
-  const replyStyle = ref<string>("natural")
-
   const isWechatActive = ref(false)
   const wechatOnline = ref(false)
   const wechatMsgCount = ref(0)
   const isQQActive = ref(false)
   const qqOnline = ref(false)
   const qqMsgCount = ref(0)
+  const webMsgCount = ref(0)
 
   const showDrawer = ref(false)
   const showCharPicker = ref(false)
@@ -137,6 +136,8 @@ export function useWebChatConversation(
       wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
       const qc = items.find((x: any) => x.channel === "qq")
       qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
+      const webConv = items.find((x: any) => x.id === convId.value)
+      if (webConv) webMsgCount.value = webConv?.messageCount || 0
     } catch { conversations.value = [] }
   }
 
@@ -307,6 +308,12 @@ export function useWebChatConversation(
       const status = r?.data || r
       wechatOnline.value = status?.status === "connected" || status?.accountId != null
     } catch {}
+    try {
+      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+      const items = convs?.conversations || convs?.items || []
+      const wc = items.find((x: any) => x.channel === "wechat")
+      if (wc) wechatMsgCount.value = wc?.messageCount || wc?.msgCount || 0
+    } catch {}
   }
 
   async function fetchQQStatus() {
@@ -316,6 +323,22 @@ export function useWebChatConversation(
       const r = await get<any>("/api/qq/status")
       const data = r?.data || r
       qqOnline.value = data?.qqOnline || data?.status === "online"
+    } catch {}
+    try {
+      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+      const items = convs?.conversations || convs?.items || []
+      const qc = items.find((x: any) => x.channel === "qq")
+      if (qc) qqMsgCount.value = qc?.messageCount || qc?.msgCount || 0
+    } catch {}
+  }
+
+  async function fetchWebMsgCount() {
+    if (!convId.value) return
+    try {
+      const convs = await get<any>("/api/web-chat/conversations", { pageSize: 50 })
+      const items = convs?.conversations || convs?.items || []
+      const wc = items.find((x: any) => x.id === convId.value)
+      if (wc) webMsgCount.value = wc?.messageCount || 0
     } catch {}
   }
 
@@ -336,13 +359,13 @@ export function useWebChatConversation(
     conversations,
     importBatches,
     memories,
-    replyStyle,
     isWechatActive,
     wechatOnline,
     wechatMsgCount,
     isQQActive,
     qqOnline,
     qqMsgCount,
+    webMsgCount,
     showDrawer,
     showCharPicker,
     showMemories,
@@ -357,6 +380,7 @@ export function useWebChatConversation(
     handleViewMemories,
     fetchWechatMsgCount,
     fetchQQStatus,
+    fetchWebMsgCount,
     refreshCharacters,
     fetchConvSummary,
   }

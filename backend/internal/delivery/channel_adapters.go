@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"bytes"
+	"fmt"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -34,10 +35,10 @@ func (a *QQChannelAdapter) Deliver(intent DeliveryIntent) error {
 		applog.Error("QQ delivery failed", "peerId", intent.PeerID, "error", err)
 		return err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		applog.Error("QQ delivery failed", "peerId", intent.PeerID, "status", resp.StatusCode)
-		return err
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	applog.Info("QQ delivered", "peerId", intent.PeerID)
 	return nil
@@ -68,10 +69,10 @@ func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
 		applog.Error("Wechat delivery failed", "peerId", intent.PeerID, "error", err)
 		return err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		applog.Error("Wechat delivery failed", "peerId", intent.PeerID, "status", resp.StatusCode)
-		return err
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	applog.Info("Wechat delivered", "peerId", intent.PeerID)
 	return nil

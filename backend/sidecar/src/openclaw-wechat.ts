@@ -33,7 +33,12 @@ import type { WeixinMessage } from "@tencent-weixin/openclaw-weixin/dist/src/api
 import { normalizeAccountId } from "openclaw/plugin-sdk/account-id"
 import { downloadAndDecryptBuffer } from "@tencent-weixin/openclaw-weixin/dist/src/cdn/pic-decrypt.js"
 import { silkToWav } from "@tencent-weixin/openclaw-weixin/dist/src/media/silk-transcode.js"
+import { resolveStateDir } from "@tencent-weixin/openclaw-weixin/dist/src/storage/state-dir.js"
 import crypto from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
+
+import QRCode from "qrcode"
 
 // ============================================================
 // Types
@@ -55,6 +60,7 @@ export interface WechatState {
   sessionKey: string
   message: string
   messageCount: number
+  replyCount: number
   baseUrl: string
   startedAt: string | null
   lastError: string | null
@@ -97,6 +103,7 @@ private state: WechatState = {
     sessionKey: "",
     message: "",
     messageCount: 0,
+    replyCount: 0,
     baseUrl: DEFAULT_BASE_URL,
     startedAt: null,
     lastError: null,
@@ -134,18 +141,47 @@ private state: WechatState = {
       this.state.baseUrl = data.baseUrl || DEFAULT_BASE_URL
       this.state.startedAt = new Date().toISOString()
       this.token = data.token
-      // Restore message cursor so polling resumes where it left off
       if (data.getUpdatesBuf) {
         this.getUpdatesBuf = data.getUpdatesBuf
       }
-      // Restore message count
       if (typeof (data as any).messageCount === "number") {
         this.state.messageCount = (data as any).messageCount
       }
+      this.loadStats()
       this.debugLog("[OpenClaw] Loaded saved account: ")
       return true
     }
     return false
+  }
+
+  private resolveStatsPath(): string {
+    const dir = path.join(resolveStateDir(), "openclaw-weixin", "accounts")
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    return path.join(dir, `${this.state.accountId}.stats.json`)
+  }
+
+  private persistStats(): void {
+    if (!this.state.accountId) return
+    try {
+      fs.writeFileSync(this.resolveStatsPath(), JSON.stringify({
+        messageCount: this.state.messageCount,
+        replyCount: this.state.replyCount,
+      }), "utf-8")
+    } catch {
+    }
+  }
+
+  private loadStats(): void {
+    if (!this.state.accountId) return
+    try {
+      const statsPath = this.resolveStatsPath()
+      if (fs.existsSync(statsPath)) {
+        const data = JSON.parse(fs.readFileSync(statsPath, "utf-8"))
+        if (typeof data.messageCount === "number") this.state.messageCount = data.messageCount
+        if (typeof data.replyCount === "number") this.state.replyCount = data.replyCount
+      }
+    } catch {
+    }
   }
 
   /** Start QR login flow */
@@ -165,8 +201,6 @@ private state: WechatState = {
       this.state.sessionKey = result.sessionKey
       this.state.message = result.message
 
-      // Generate QR code as base64 data URL
-      const QRCode = await import("qrcode")
       const qrImageUrl = await QRCode.toDataURL(result.qrcodeUrl, { width: 300, margin: 2 })
 
       this.debugLog("[OpenClaw] QR code ready, sessionKey hash: ")
@@ -250,7 +284,6 @@ private state: WechatState = {
     this.polling = true
     this.pollAbort = new AbortController()
 
-    // Notify start
     try {
       await notifyStart({
         baseUrl: this.state.baseUrl,
@@ -284,15 +317,12 @@ private state: WechatState = {
             continue
           }
 
-          // Update cursor
           console.log("[OpenClaw] getUpdates OK: ret=" + (resp.ret ?? "?") + " msgs=" + ((resp.msgs && resp.msgs.length) || 0))
           if (resp.get_updates_buf) {
             this.getUpdatesBuf = resp.get_updates_buf
-            // Persist cursor for crash recovery
             this.persistBuf()
           }
 
-          // Process messages
           if (resp.msgs && resp.msgs.length > 0) {
             for (const msg of resp.msgs) {
               await this.processMessage(msg)
@@ -321,10 +351,8 @@ private state: WechatState = {
   private async autoReconnect(): Promise<void> {
     console.log("[OpenClaw] ========== AUTO-RECONNECT START ==========")
     
-    // Keep the same bot account - just re-authenticate with a fresh QR scan
     const savedAccountId = this.state.accountId
     
-    // Reset polling state only, preserve account identity
     this.pollAbort = new AbortController()
     this.getUpdatesBuf = ""
     this.token = null
@@ -335,7 +363,6 @@ private state: WechatState = {
     this.state.lastError = null
     
     try {
-      // Re-login with same bot (no force=true, reuses existing bot identity)
       const loginResult = await this.startLogin()
       console.log("[OpenClaw] QR code ready - re-scan same bot to restore session")
       
@@ -379,15 +406,12 @@ private state: WechatState = {
    */
   private async sendPreExpiryWarning(): Promise<void> {
     try {
-      // Get last known user from message handler state (stored during processMessage)
       const lastUserId = this._lastFromUserId
       if (!lastUserId) return
       
-      // Generate a fresh QR in background
       console.log("[OpenClaw] Generating pre-expiry QR code...")
       await this.startLogin()
       
-      // Send warning with QR URL
       const qrUrl = this.state.qrCodeUrl
       const msg = [
         "🔔 连接即将过期",
@@ -405,10 +429,6 @@ private state: WechatState = {
     }
   }
 
-  /** Send a text message back to WeChat */
-    
-  /** Send a text message back to WeChat */
-  /** Send a text message back to WeChat */
   /** Send a text message back to WeChat */
   async sendTextMessage(
     toUserId: string,
@@ -434,10 +454,13 @@ private state: WechatState = {
           },
         },
       })
+      this.state.replyCount++
+      this.persistStats()
       console.log(`[OpenClaw] SDK sendMessage completed`)
       this.debugLog("[OpenClaw] Sent to: ")
     } catch (err: any) {
       console.error(`[OpenClaw] Send exception:`, err.message)
+      throw err
     }
   }
   async sendVoiceMessage(
@@ -531,6 +554,8 @@ private state: WechatState = {
       },
     })
     
+    this.state.replyCount++
+    this.persistStats()
     console.log("[OpenClaw][VOICE-SEND] Message sent OK")
   }
   
@@ -579,6 +604,7 @@ private state: WechatState = {
       sessionKey: "",
       message: "",
       messageCount: 0,
+      replyCount: 0,
       baseUrl: DEFAULT_BASE_URL,
       startedAt: null,
       lastError: null,
@@ -593,7 +619,6 @@ private state: WechatState = {
     try {
       const data: Record<string, any> = { messageCount: this.state.messageCount }
       if (this.getUpdatesBuf) data.getUpdatesBuf = this.getUpdatesBuf
-      saveWeixinAccount(this.state.accountId, data)
     } catch {
       // Non-critical, ignore
     }
@@ -601,12 +626,10 @@ private state: WechatState = {
 
 
   async restartPolling(): Promise<void> {
-    // Reset abort controller without notifyStop (which tells server bot is offline)
     this.pollAbort.abort()
     this.pollAbort = new AbortController()
     this.polling = true
 
-    // Re-notify start to refresh session
     try {
       await notifyStart({ baseUrl: this.state.baseUrl, token: this.token! })
       console.log("[OpenClaw] Polling restarted after reply")
@@ -623,7 +646,6 @@ private state: WechatState = {
             get_updates_buf: this.getUpdatesBuf, timeoutMs: 35000,
           })
 
-          // Check for session errors (align with startPolling)
           if (resp.errcode && resp.errcode !== 0) {
             console.error("[OpenClaw] getUpdates error: errcode=" + resp.errcode + " errmsg=" + (resp.errmsg || ""))
             if (resp.errcode === -14) {
@@ -653,7 +675,6 @@ private state: WechatState = {
   }
 
   private async processMessage(msg: WeixinMessage): Promise<void> {
-    // Skip bot messages (our own replies)
     console.log("[OpenClaw][DIAG] === processMessage === msg_type=" + msg.message_type + " from=" + this.hashId(String(msg.from_user_id || '')) + " items.len=" + (msg.item_list ? msg.item_list.length : 0));
     if (msg.message_type === 2) return
 
@@ -664,7 +685,6 @@ private state: WechatState = {
     const messageId = String(msg.message_id || Date.now())
     const createdAt = msg.create_time_ms || Date.now()
 
-    // Extract text from items
     let text = ""
     let isVoice = false
     if (msg.item_list) {
@@ -750,6 +770,7 @@ private state: WechatState = {
 
     this.state.messageCount++
     this.persistBuf()
+    this.persistStats()
 
     console.log("[OpenClaw] Msg from " + this.hashId(String(fromUserId)) + ": " + (text.length > 80 ? text.substring(0, 80) + "..." : text))
 
@@ -771,7 +792,6 @@ private state: WechatState = {
         })
 
         if (reply) {
-          // Split by newline for WeChat-style multi-message delivery (primary)
           const rawReply = typeof reply === "string" ? reply : String(reply)
           console.log('[OpenClaw] Raw reply (' + rawReply.length + ' chars): ' + rawReply.substring(0, 200))
           
@@ -795,8 +815,6 @@ private state: WechatState = {
             }
           }
 
-        // Note: not restarting polling here to avoid notifyStop session damage
-        // If session expires, getUpdates errcode check will handle re-login
         }
       } catch (err: any) {
         console.error(`[OpenClaw] Handler error:`, err.message)

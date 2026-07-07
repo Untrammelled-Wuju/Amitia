@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/internal/prompt"
+	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
@@ -94,11 +95,18 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	}
 
 	s.repo.CreateMessage(&Message{ID: uuid.New().String(), ConversationID: convID, Role: "user", Content: req.Message})
-	aiMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: "assistant", Content: content, Tokens: tokens}
-	s.repo.CreateMessage(aiMsg)
+	var lastSeq int64 = 0
+	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
+	for _, line := range lines {
+		aiMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: "assistant", Content: line, MsgType: "text", Tokens: tokens}
+		if err := s.repo.CreateMessage(aiMsg); err != nil {
+			return nil, err
+		}
+		lastSeq = aiMsg.Sequence
+	}
 	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
-	return &ChatResponse{ConversationID: convID, Message: &MessageItem{ID: aiMsg.ID, ConversationID: convID, Sequence: aiMsg.Sequence, Role: "assistant", Content: content, Tokens: tokens}}, nil
+	return &ChatResponse{ConversationID: convID, Sequence: lastSeq, Message: &MessageItem{ID: "", ConversationID: convID, Sequence: lastSeq, Role: "assistant", Content: content, Tokens: tokens}}, nil
 }
 
 func (s *service) validateConversationScope(convID, characterID, channel string) error {

@@ -245,8 +245,12 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		forceVoice = false
 		replyText = "抱歉，由于微信平台限制，暂不支持语音回复。以下为文字回复：\n\n" + replyText
 	}
-	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v", len(replyText), forceVoice)
-	return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}, nil
+	outMsg := map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}
+	if len(result.Response.Lines) > 0 {
+		outMsg["texts"] = result.Response.Lines
+	}
+	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v lines=%d", len(replyText), forceVoice, len(result.Response.Lines))
+	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}, nil
 }
 
 func stableWebhookRequestID(req WebhookRequest) string {
@@ -342,3 +346,4 @@ func truncate(s string, n int) string {
 	}
 	return string(runes[:n]) + "..."
 }
+

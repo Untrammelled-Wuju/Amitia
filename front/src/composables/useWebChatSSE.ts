@@ -9,6 +9,7 @@ export function useWebChatSSE(
   scrollToBottom: (smooth?: boolean) => void,
   fetchWechatMsgCount: () => void,
   fetchQQStatus: () => void,
+  fetchWebMsgCount: () => void,
   sending: Ref<boolean>,
 ) {
   let eventSource: EventSource | null = null
@@ -56,6 +57,7 @@ export function useWebChatSSE(
           scrollToBottom()
           fetchWechatMsgCount()
           fetchQQStatus()
+          fetchWebMsgCount()
         }
       } catch { }
     }
@@ -89,6 +91,7 @@ export function useWebChatSSE(
         } catch {}
           fetchWechatMsgCount()
           fetchQQStatus()
+          fetchWebMsgCount()
       })
       proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(() => void connectProactiveSSE(), 5000) }
     } catch { setTimeout(() => void connectProactiveSSE(), 5000) }

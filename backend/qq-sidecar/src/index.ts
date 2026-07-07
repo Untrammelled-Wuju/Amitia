@@ -188,15 +188,18 @@ qq.onMessage(async (msg: QQMessage) => {
       }
       const logLine = (msgtxt: string) => { try { fs.appendFileSync("forward-debug.log", new Date().toISOString() + " " + msgtxt + "\n") } catch {} }
       logLine("Webhook response: " + JSON.stringify(json).substring(0, 300))
-      if (json?.data?.outgoingMessage?.text) {
-        const reply = json.data.outgoingMessage.text
-        logLine("Reply text (" + reply.length + " chars): " + reply.substring(0, 100))
+      if (json?.data?.outgoingMessage) {
+        const outMsg = json.data.outgoingMessage
+        const reply = outMsg.text
+        if (reply) {
+          logLine("Reply text (" + reply.length + " chars): " + reply.substring(0, 100))
+        }
 
-        const forceVoice = json?.data?.outgoingMessage?.forceVoice === true
+        const forceVoice = outMsg.forceVoice === true
         const shouldSendVoice = forceVoice || (wasVoice && Math.random() < 0.8)
         logLine("Voice decision: wasVoice=" + wasVoice + " shouldSendVoice=" + shouldSendVoice)
 
-        const audioUrls: string[] = json?.data?.outgoingMessage?.audioUrls || []
+        const audioUrls: string[] = outMsg?.audioUrls || []
         if (shouldSendVoice && audioUrls.length > 0) {
           try {
             logLine("Voice audioUrls: " + audioUrls.length)
@@ -233,22 +236,53 @@ qq.onMessage(async (msg: QQMessage) => {
           }
         }
 
-        const parts = reply.split("\n").map((p: string) => p.trim()).filter((p: string) => p.length > 0)
-        logLine("Reply parts: " + parts.length)
-        for (let i = 0; i < parts.length; i++) {
-          const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId
-          logLine("Sending part " + (i+1) + "/" + parts.length + " to " + sendTarget + " text=" + parts[i].substring(0, 50))
-          try {
-            if (last.groupId) {
-              await qq.sendGroupMsg(last.groupId, parts[i])
-            } else {
-              await qq.sendPrivateMsg(last.fromUserId, parts[i])
+        const texts: string[] = outMsg.texts
+        if (texts && Array.isArray(texts) && texts.length > 0) {
+          logLine("Split reply (" + texts.length + " parts) via delivery")
+          for (let i = 0; i < texts.length; i++) {
+            const line = texts[i]
+            if (!line || line.trim() === '') continue
+            const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId
+            logLine("Delivery [" + (i+1) + "/" + texts.length + "] to " + sendTarget + " text=" + line.substring(0, 50))
+            try {
+              const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  channel: "qq",
+                  peerId: last.groupId || last.fromUserId,
+                  text: line,
+                  interactionId: json?.data?.requestId || "",
+                  messageId: last.messageId,
+                }),
+                signal: AbortSignal.timeout(10000),
+              })
+              const deliveryJson = await deliveryResp.json() as any
+              logLine("Delivery [" + (i+1) + "]: inserted=" + deliveryJson?.data?.inserted + " id=" + deliveryJson?.data?.id)
+            } catch (sendErr: any) {
+              logLine("Delivery FAILED for part " + (i+1) + ": " + (sendErr?.message || String(sendErr)))
             }
-            logLine("Part " + (i+1) + " sent OK")
-          } catch (sendErr: any) {
-            logLine("Send FAILED for part " + (i+1) + ": " + (sendErr?.message || String(sendErr)))
+            if (i < texts.length - 1) await new Promise(r => setTimeout(r, 500))
           }
-          if (i < parts.length - 1) await new Promise(r => setTimeout(r, 800))
+        } else if (reply) {
+          const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId
+          logLine("Single reply to " + sendTarget + " via delivery")
+          try {
+            const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                channel: "qq",
+                peerId: last.groupId || last.fromUserId,
+                text: reply,
+                interactionId: json?.data?.requestId || "",
+                messageId: last.messageId,
+              }),
+              signal: AbortSignal.timeout(10000),
+            })
+            const deliveryJson = await deliveryResp.json() as any
+            logLine("Delivery: inserted=" + deliveryJson?.data?.inserted + " id=" + deliveryJson?.data?.id)
+          } catch (sendErr: any) {
+            logLine("Delivery FAILED: " + (sendErr?.message || String(sendErr)))
+          }
         }
       } else {
         logLine("No outgoingMessage in response. Keys: " + Object.keys(json?.data || {}).join(","))

@@ -100,9 +100,17 @@ func main() {
 
 	startQdrant()
 	startSurreal()
+	surrealdbDB.StartSurrealMonitor()
 
 	graphSvc := initGraph()
 	services := NewAppServices(ctx, graphSvc)
+	surrealdbDB.SetSurrealRestartCallback(func() {
+		newGraphSvc := initGraph()
+		if newGraphSvc != nil {
+			services.Graph = newGraphSvc
+			log.Info("SurrealDB恢复后图谱服务已重新连接")
+		}
+	})
 	agenttool.SetMemoryService(services.Memory)
 
 	serverAddr := config.AppCfg.Server.Addr()

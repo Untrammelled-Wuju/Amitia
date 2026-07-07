@@ -406,6 +406,7 @@ export interface PsycheStateSnapshot {
   emotion: { positive: number; negative: number; arousal: number; dominance: number }
   mood: { valence: number; tension: number; pad: string }
   stress: number
+  energy: number
   needs: Record<string, number>
   beliefs: Array<{ key: string; value: string; confidence: number; conflicted: boolean }>
   relationship: { trust: number; familiarity: number; tension: number; security: number }

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,13 @@ import (
 )
 
 var surrealCmd *exec.Cmd
+var surrealMu sync.Mutex
+var surrealMonitorStop chan struct{}
+var surrealRestartFn func()
+
+func SetSurrealRestartCallback(fn func()) {
+	surrealRestartFn = fn
+}
 
 type surrealWriter struct{}
 
@@ -62,6 +70,13 @@ func killExistingSurreal(port int) {
 }
 
 func StartSurreal() error {
+	surrealMu.Lock()
+	defer surrealMu.Unlock()
+
+	return startSurrealInternal()
+}
+
+func startSurrealInternal() error {
 	cfg := config.AppCfg.Surreal
 	workDir := util.RuntimeRoot()
 
@@ -114,6 +129,75 @@ func StartSurreal() error {
 	return nil
 }
 
+func isSurrealAlive(port int) bool {
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+func StartSurrealMonitor() {
+	if surrealMonitorStop != nil {
+		return
+	}
+	surrealMonitorStop = make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warn("SurrealDB监控协程异常恢复:", r)
+			}
+		}()
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				surrealMu.Lock()
+				needRestart := false
+				if surrealCmd == nil || surrealCmd.Process == nil {
+					needRestart = true
+				} else if !isSurrealAlive(config.AppCfg.Surreal.Port) {
+					needRestart = true
+				}
+				if needRestart {
+					log.Warn("检测到SurrealDB进程异常，尝试重启...")
+					if err := startSurrealInternal(); err != nil {
+						log.Error("SurrealDB重启失败:", err)
+						surrealMu.Unlock()
+						continue
+					}
+					if err := WaitForSurreal(config.AppCfg.Surreal.Port); err != nil {
+						log.Error("等待SurrealDB就绪超时:", err)
+						surrealMu.Unlock()
+						continue
+					}
+					log.Info("SurrealDB已自动恢复")
+					surrealMu.Unlock()
+					if surrealRestartFn != nil {
+						surrealRestartFn()
+					}
+				} else {
+					surrealMu.Unlock()
+				}
+			case <-surrealMonitorStop:
+				return
+			}
+		}
+	}()
+	log.Info("SurrealDB进程监控已启动")
+}
+
+func StopSurrealMonitor() {
+	if surrealMonitorStop != nil {
+		close(surrealMonitorStop)
+		surrealMonitorStop = nil
+	}
+}
+
 func ensureSurrealBinary(surrealPath, surrealDir string) error {
 	if _, err := os.Stat(surrealPath); err == nil {
 		return nil
@@ -137,6 +221,10 @@ func ensureSurrealBinary(surrealPath, surrealDir string) error {
 }
 
 func StopSurreal() {
+	StopSurrealMonitor()
+	surrealMu.Lock()
+	defer surrealMu.Unlock()
+
 	if surrealCmd == nil || surrealCmd.Process == nil {
 		return
 	}

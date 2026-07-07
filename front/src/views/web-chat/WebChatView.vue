@@ -21,12 +21,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       :char-name="charName"
       :char-identity="charIdentity"
       :conv-title="convTitle"
-      :reply-style="replyStyle"
       :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
       @toggle-drawer="showDrawer = true"
-      @update:reply-style="replyStyle = $event"
       @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
@@ -230,7 +228,7 @@ const {
   connectSSE, disconnectSSE,
   connectProactiveSSE, disconnectProactiveSSE, cleanup: cleanupSSE,
   setLastPolledMsgId,
-} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), sending)
+} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(), sending)
 
 const {
   canRegenerate,
@@ -247,12 +245,11 @@ const {
   currentImageBase64, currentImageFile,
   pendingImageBase64, pendingAudioUrl, pendingVideoUrl,
   scrollToBottom, disconnectSSE, inputRef,
-  () => fetchWechatMsgCount(), () => fetchQQStatus(),
+  () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(),
 )
 
 const {
   characters, conversations, importBatches, memories,
-  replyStyle,
   isWechatActive, wechatOnline, wechatMsgCount,
   isQQActive, qqOnline, qqMsgCount,
   showDrawer, showCharPicker, showMemories,
@@ -261,7 +258,7 @@ const {
   handleSelectConv, handleSelectWechat,
   handleSelectQQ, handleContinueImport,
   handleViewMemories, fetchWechatMsgCount,
-  fetchQQStatus, refreshCharacters, fetchConvSummary,
+  fetchQQStatus, fetchWebMsgCount, refreshCharacters, fetchConvSummary,
 } = useWebChatConversation(
   messages, convId, characterId, convTitle,
   charName, charIdentity, charAvatar,

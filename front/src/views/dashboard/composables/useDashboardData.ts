@@ -26,6 +26,7 @@ export function useDashboardData() {
   const feedbackByType = ref<Record<string, number>>({})
   const psycheState = ref<import("../../../types").PsycheStateSnapshot | null>(null)
   const psycheLoading = ref(false)
+  const characters = ref<any[]>([])
 
   const deployLabel = computed(() => health.value?.deployMode === "cloud-web" ? "私有云" : "本地桌面")
   const deployClass = computed(() => health.value?.deployMode === "cloud-web" ? "status-warn" : "status-ok")
@@ -206,6 +207,7 @@ export function useDashboardData() {
     try {
       const chars = await get<any[]>("/api/characters")
       if (chars && chars.length > 0) {
+        characters.value = chars
         totalChars.value = chars.length
       }
     } catch {}
@@ -242,10 +244,19 @@ export function useDashboardData() {
     } catch {}
   }
 
+  function getActiveCharacterId(): string {
+    const stored = localStorage.getItem("webchat-char-id")
+    if (stored && characters.value.some((c: any) => c.id === stored)) return stored
+    const defaultChar = characters.value.find((c: any) => c.isDefault) || characters.value.find((c: any) => c.isActive) || characters.value[0]
+    return defaultChar?.id || ""
+  }
+
   async function fetchPsycheState() {
     psycheLoading.value = true
     try {
-      const r = await get<any>("/api/psyche/state")
+      const charId = getActiveCharacterId()
+      if (!charId) { psycheState.value = null; return }
+      const r = await get<any>("/api/psyche/state", { characterId: charId })
       const data = r?.data || r
       if (data && data.emotion) {
         psycheState.value = data as import("../../../types").PsycheStateSnapshot
@@ -272,8 +283,8 @@ export function useDashboardData() {
       fetchRecentErrors(), fetchActiveChar(), fetchTodayStats(), fetchRecentImports(),
       fetchCloudRisk(), fetchFeedbackStats(), fetchAccessRisk(), fetchUsageOverview(),
       fetchQQStatus(),
-      fetchPsycheState(),
     ])
+    await fetchPsycheState()
   }
 
   onMounted(() => { refreshAll() })
@@ -296,5 +307,3 @@ export function useDashboardData() {
     refreshAll,
   }
 }
-
-

@@ -197,6 +197,7 @@ type ProcessMessageResponse struct {
 	ConversationID string                     `json:"conversationId"`
 	Sequence       int64                      `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Reply          string                     `json:"reply"`
+	Lines          []string                   `json:"lines"`
 	CharacterID    string                     `json:"characterId"`
 	CharacterName  string                     `json:"characterName"`
 	MessageIDs     []string                   `json:"messageIds"`

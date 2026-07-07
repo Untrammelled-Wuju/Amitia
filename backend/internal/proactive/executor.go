@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/tts"
+	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 	"math/rand"
 )
@@ -176,23 +177,35 @@ func (e *Executor) executeRule(r struct {
 		return
 	}
 
+	var maxLen int
+	switch {
+	case channel == "wechat":
+		maxLen = util.MaxWechatMessageLen
+	case channel == "qq":
+		maxLen = util.MaxQQMessageLen
+	default:
+		maxLen = util.MaxWebMessageLen
+	}
+	lines := util.SplitLongMessage(content, maxLen)
 	sentWeb, sentWechat, sentQQ := false, false, false
-	if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
-		e.sendToWeb(convID, content)
-		sentWeb = true
-	}
-	if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
-		wcID := e.getWechatConvID(character.ID)
-		if wcID != "" {
-			e.sendToWechat(wcID, content)
-			sentWechat = true
+	for _, line := range lines {
+		if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
+			e.sendToWeb(convID, line)
+			sentWeb = true
 		}
-	}
-	if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
-		qqID := e.getQQConvID(character.ID)
-		if qqID != "" {
-			e.sendToQQ(qqID, content)
-			sentQQ = true
+		if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
+			wcID := e.getWechatConvID(character.ID)
+			if wcID != "" {
+				e.sendToWechat(wcID, line)
+				sentWechat = true
+			}
+		}
+		if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
+			qqID := e.getQQConvID(character.ID)
+			if qqID != "" {
+				e.sendToQQ(qqID, line)
+				sentQQ = true
+			}
 		}
 	}
 
@@ -314,22 +327,34 @@ func (e *Executor) executeReminder(r struct {
 		return
 	}
 
-	sentWeb, sentWechat, sentQQ := false, false, false
-	if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
-		e.sendToWeb(convID, content)
-		sentWeb = true
+	var maxLen int
+	switch {
+	case channel == "wechat":
+		maxLen = util.MaxWechatMessageLen
+	case channel == "qq":
+		maxLen = util.MaxQQMessageLen
+	default:
+		maxLen = util.MaxWebMessageLen
 	}
-	if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
-		wcID := e.getWechatConvID(r.charID)
-		if wcID != "" {
-			if e.sendToWechat(wcID, content) {
-				sentWechat = true
+	lines := util.SplitLongMessage(content, maxLen)
+	sentWeb, sentWechat, sentQQ := false, false, false
+	for _, line := range lines {
+		if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
+			e.sendToWeb(convID, line)
+			sentWeb = true
+		}
+		if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
+			wcID := e.getWechatConvID(r.charID)
+			if wcID != "" {
+				if e.sendToWechat(wcID, line) {
+					sentWechat = true
+				}
 			}
 		}
-	}
-	if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
-		if e.sendToQQ(convID, content) {
-			sentQQ = true
+		if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
+			if e.sendToQQ(convID, line) {
+				sentQQ = true
+			}
 		}
 	}
 
@@ -605,10 +630,8 @@ func (e *Executor) sendToQQ(userID, content string) bool {
 
 	now := time.Now()
 	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
-	displayContent := content
 	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 0, ?)",
-		msgID, convID, displayContent, now)
-
+		msgID, convID, content, now)
 	log.Printf("[Proactive] QQ已发送 to=%s voice=%v voiceOK=%v", targetID, useVoice, voiceOK)
 	return true
 }
@@ -651,18 +674,21 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 	if content == "" {
 		return ""
 	}
+	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
 	sentWeb, sentWechat, sentQQ := false, false, false
-	e.sendToWeb(convID, content)
-	sentWeb = true
 	wcID := e.getWechatConvID(character.ID)
-	if wcID != "" {
-		e.sendToWechat(wcID, content)
-		sentWechat = true
-	}
 	qqID := e.getQQConvID(character.ID)
-	if qqID != "" {
-		e.sendToQQ(qqID, content)
-		sentQQ = true
+	for _, line := range lines {
+		e.sendToWeb(convID, line)
+		sentWeb = true
+		if wcID != "" {
+			e.sendToWechat(wcID, line)
+			sentWechat = true
+		}
+		if qqID != "" {
+			e.sendToQQ(qqID, line)
+			sentQQ = true
+		}
 	}
 	status := "pending"
 	if !sentWeb && !sentWechat && !sentQQ {

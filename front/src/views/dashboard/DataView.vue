@@ -106,7 +106,7 @@ function statAvg(key: string): number {
 function chartOption(key: string) {
   const arr = safeArray(dailyData.value)
   const m = [...chartMetrics, ...statMetrics].find((m) => m.key === key)!
-  const xData = arr.length ? arr.map((d: any) => d.date.slice(5)) : []
+  const xData = arr.length ? arr.map((d: any) => (d.date || "").slice(5)) : []
   const data = arr.map((d: any) => d[key] || 0)
   return {
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
