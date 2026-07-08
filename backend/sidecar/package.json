@@ -10,7 +10,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@ai-companion/config": "workspace:*",
     "@fastify/cors": "^9.0.0",
     "@tencent-weixin/openclaw-weixin": "^2.4.3",
     "axios": "^1.16.1",
