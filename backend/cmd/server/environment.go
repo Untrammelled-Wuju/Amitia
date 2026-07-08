@@ -217,9 +217,25 @@ func startEnvironment() *Environment {
 	_, wxOk := os.Stat(bundledWX)
 	useBundled := qqOk == nil && wxOk == nil
 
+	bundledRoot := runtimeRoot
+	if !useBundled {
+		if exePath, err := os.Executable(); err == nil {
+			exeDir := filepath.Dir(exePath)
+			exeBundledQQ := filepath.Join(exeDir, "qq-sidecar", "bundle.mjs")
+			exeBundledWX := filepath.Join(exeDir, "sidecar", "bundle.mjs")
+			_, exeQQOk := os.Stat(exeBundledQQ)
+			_, exeWXOk := os.Stat(exeBundledWX)
+			if exeQQOk == nil && exeWXOk == nil {
+				useBundled = true
+				bundledRoot = exeDir
+				log.Printf("[Env] 在可执行文件目录找到捆绑侧车: %s", exeDir)
+			}
+		}
+	}
+
 	var env *Environment
 	if useBundled {
-		env = NewEnvironment(runtimeRoot)
+		env = NewEnvironment(bundledRoot)
 		log.Printf("[Env] 根目录: %s", runtimeRoot)
 		log.Printf("[Env] 使用打包版附属服务")
 	} else {
