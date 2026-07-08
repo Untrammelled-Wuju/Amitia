@@ -427,6 +427,7 @@ CREATE TABLE IF NOT EXISTS proactive_rules (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+
 CREATE TABLE IF NOT EXISTS proactive_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rule_id INTEGER,
@@ -504,6 +505,16 @@ CREATE TABLE IF NOT EXISTS memory_events (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
+ALTER TABLE memories ADD COLUMN expires_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN entity_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN entity_type TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
+ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'character';
+ALTER TABLE memories ADD COLUMN scope_type TEXT DEFAULT 'user_character';
 UPDATE memories SET scope_type = CASE WHEN scope_type IN ('character_self', 'world') THEN scope_type WHEN scope = 'user' THEN 'user_global' WHEN scope_type = 'user_global' THEN 'user_global' WHEN scope = 'character' THEN 'user_character' ELSE 'user_character' END WHERE scope_type IS NULL OR scope_type = '' OR scope_type IN ('user', 'character', 'user_character');
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
@@ -527,6 +538,8 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+
 
 CREATE TABLE IF NOT EXISTS episodic_memories (
     id TEXT PRIMARY KEY,
@@ -594,8 +607,8 @@ CREATE INDEX IF NOT EXISTS idx_conv_summaries_parent ON conversation_summaries(p
 CREATE TABLE IF NOT EXISTS message_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id TEXT DEFAULT '',
-    feedback_type TEXT NOT NULL DEFAULT '',
-    reason TEXT DEFAULT '',
+    rating INTEGER DEFAULT 0,
+    comment TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -615,8 +628,20 @@ CREATE TABLE IF NOT EXISTS moods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
     mood TEXT DEFAULT '',
+    mood_value TEXT DEFAULT '',
     level INTEGER DEFAULT 50,
     created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS need_states (
+    id TEXT PRIMARY KEY,
+    character_id TEXT NOT NULL DEFAULT '',
+    need_key TEXT NOT NULL DEFAULT '',
+    current_value REAL DEFAULT 0,
+    baseline REAL DEFAULT 0,
+    trend REAL DEFAULT 0,
+    saturated INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT ''
 );
 
 -- 应用设置
@@ -643,6 +668,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(characte
 CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
 CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conversations(character_id, channel, updated_at);
+
 
 -- ============================================
 -- 数据库迁移: 为旧表添加缺失字段 (忽略已存在的列)
@@ -674,10 +700,27 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_request_created ON retrieval_logs(request_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_character_created ON retrieval_logs(character_id, created_at);
+ALTER TABLE retrieval_logs ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN request_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN channel TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN retrieval_version TEXT NOT NULL DEFAULT '';
+ALTER TABLE retrieval_logs ADD COLUMN legacy INTEGER NOT NULL DEFAULT 0;
 UPDATE retrieval_logs
 SET legacy = 1
 WHERE conversation_id = ''
    OR conversation_id NOT IN (SELECT id FROM conversations);
+ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT "character";
+
+ALTER TABLE memories ADD COLUMN confidence INTEGER DEFAULT 50;
+ALTER TABLE memories ADD COLUMN expires_at TEXT DEFAULT NULL;
+ALTER TABLE memories ADD COLUMN entity_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN entity_type TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_msg_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN source_conv_id TEXT DEFAULT '';
+ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
+ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
+ALTER TABLE messages ADD COLUMN request_id TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0;
 UPDATE messages SET sequence = (
     SELECT rn FROM (
         SELECT id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS rn
@@ -694,6 +737,7 @@ CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
     updated_at TEXT DEFAULT '',
     PRIMARY KEY (conversation_id, pipeline_type)
 );
+ALTER TABLE memories ADD COLUMN scope_type TEXT DEFAULT 'user_character';
 UPDATE memories SET scope_type = CASE WHEN scope_type IN ('character_self', 'world') THEN scope_type WHEN scope = 'user' THEN 'user_global' WHEN scope_type = 'user_global' THEN 'user_global' WHEN scope = 'character' THEN 'user_character' ELSE 'user_character' END WHERE scope_type IS NULL OR scope_type = '' OR scope_type IN ('user', 'character', 'user_character');
 CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, role, request_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence ON messages(conversation_id, sequence);
@@ -714,6 +758,8 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+
+
 CREATE TABLE IF NOT EXISTS embedding_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL DEFAULT 'default',
@@ -724,3 +770,12 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+ALTER TABLE memories ADD COLUMN source_start INTEGER DEFAULT 0;
+ALTER TABLE memories ADD COLUMN source_end INTEGER DEFAULT 0;
+ALTER TABLE memory_candidates ADD COLUMN source_start INTEGER DEFAULT 0;
+ALTER TABLE memory_candidates ADD COLUMN source_end INTEGER DEFAULT 0;
+
+ALTER TABLE conversations ADD COLUMN state_version TEXT DEFAULT '';
+
+ALTER TABLE moods ADD COLUMN mood_value TEXT DEFAULT '';

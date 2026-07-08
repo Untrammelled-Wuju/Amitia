@@ -184,7 +184,8 @@ export function useWebChatSend(
             }
             if (eventType === "token" && data.content) {
               const nextId: string = data.id || assistantStreamingId || ("msg-" + Date.now())
-              const idx = assistantStreamingId ? messages.value.findIndex((m: any) => m.id === assistantStreamingId) : -1
+              const searchId = data.id || assistantStreamingId
+              const idx = searchId ? messages.value.findIndex((m: any) => m.id === searchId) : -1
               if (idx >= 0) {
                 const current = messages.value[idx]
                 const nextContent = `${current.content || ""}${data.content}`
@@ -201,7 +202,8 @@ export function useWebChatSend(
             }
             if (eventType === "voice_audio" && data.audioUrl) {
               const nextId: string = data.messageId || assistantStreamingId || ("msg-" + Date.now())
-              const idx = assistantStreamingId ? messages.value.findIndex((m: any) => m.id === assistantStreamingId) : -1
+              const searchId = data.messageId || assistantStreamingId
+              const idx = searchId ? messages.value.findIndex((m: any) => m.id === searchId) : -1
               if (idx >= 0) {
                 const current = messages.value[idx]
                 messages.value[idx] = {

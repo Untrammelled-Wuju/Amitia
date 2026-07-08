@@ -37,15 +37,15 @@ func logPromptTrace(trace applog.TraceFields, pt *promptir.PromptTrace, source s
 	}
 
 	fields := applog.Fields{
-		"prompt_hash":           pt.PromptHash,
-		"section_count":         len(pt.Sections),
-		"source":                source,
-		"persona_section_used":  pt.QualityFlags.PersonaSectionUsed,
-		"emotion_section_used":  pt.QualityFlags.EmotionSectionUsed,
-		"memory_section_used":   pt.QualityFlags.MemorySectionUsed,
+		"prompt_hash":            pt.PromptHash,
+		"section_count":          len(pt.Sections),
+		"source":                 source,
+		"persona_section_used":   pt.QualityFlags.PersonaSectionUsed,
+		"emotion_section_used":   pt.QualityFlags.EmotionSectionUsed,
+		"memory_section_used":    pt.QualityFlags.MemorySectionUsed,
 		"intimacy_boundary_used": pt.QualityFlags.IntimacyBoundaryUsed,
-		"think_removed":         pt.QualityFlags.ThinkRemoved,
-		"markdown_removed":      pt.QualityFlags.MarkdownRemoved,
+		"think_removed":          pt.QualityFlags.ThinkRemoved,
+		"markdown_removed":       pt.QualityFlags.MarkdownRemoved,
 	}
 
 	var sectionNames []string

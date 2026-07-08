@@ -11,9 +11,9 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -660,7 +660,6 @@ func TestChatFunctional_ComputeInteractionOnlySplitsOnce(t *testing.T) {
 	})
 }
 
-
 func setupChatFunctionalTestWithCapture(t *testing.T, personalityCfg string, capture *[]map[string]interface{}, reply string) (*gorm.DB, *service, string, string) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "chat-flag.db")), &gorm.Config{})
@@ -712,7 +711,9 @@ func TestChatFunctional_FeatureFlagPersonalityDisabled(t *testing.T) {
 		var capturedMessages []map[string]interface{}
 		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
 
-		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		if config.AppCfg == nil {
+			config.AppCfg = &config.Config{}
+		}
 		config.AppCfg.Prompt.PersonalityRawEnabled = false
 		t.Cleanup(func() { config.AppCfg.Prompt.PersonalityRawEnabled = true })
 
@@ -743,7 +744,9 @@ func TestChatFunctional_FeatureFlagEmotionFusionDisabled(t *testing.T) {
 		var capturedMessages []map[string]interface{}
 		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
 
-		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		if config.AppCfg == nil {
+			config.AppCfg = &config.Config{}
+		}
 		config.AppCfg.Prompt.EmotionFusionEnabled = false
 		t.Cleanup(func() { config.AppCfg.Prompt.EmotionFusionEnabled = true })
 
@@ -774,7 +777,9 @@ func TestChatFunctional_FeatureFlagReplySanitizerDisabled(t *testing.T) {
 		var capturedMessages []map[string]interface{}
 		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
 
-		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		if config.AppCfg == nil {
+			config.AppCfg = &config.Config{}
+		}
 		config.AppCfg.Prompt.ReplySanitizerEnabled = false
 		t.Cleanup(func() { config.AppCfg.Prompt.ReplySanitizerEnabled = true })
 
@@ -808,13 +813,17 @@ func TestChatFunctional_FeatureFlagAllFlagsOff(t *testing.T) {
 		var capturedMessages []map[string]interface{}
 		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
 
-		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		if config.AppCfg == nil {
+			config.AppCfg = &config.Config{}
+		}
 		config.AppCfg.Prompt = config.PromptFeatureFlags{}
-		t.Cleanup(func() { config.AppCfg.Prompt = config.PromptFeatureFlags{
-			TextlibRawEnabled: true, PersonalityRawEnabled: true, EmotionFusionEnabled: true,
-			IntimacyDefaultEnabled: true, MemoryRawEnabled: true,
-			ReplySanitizerEnabled: true, ProactiveRawEnabled: true,
-		}})
+		t.Cleanup(func() {
+			config.AppCfg.Prompt = config.PromptFeatureFlags{
+				TextlibRawEnabled: true, PersonalityRawEnabled: true, EmotionFusionEnabled: true,
+				IntimacyDefaultEnabled: true, MemoryRawEnabled: true,
+				ReplySanitizerEnabled: true, ProactiveRawEnabled: true,
+			}
+		})
 
 		_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
 			CharacterID:    charID,
@@ -851,5 +860,3 @@ func TestChatFunctional_FeatureFlagAllFlagsOff(t *testing.T) {
 		}
 	})
 }
-
-

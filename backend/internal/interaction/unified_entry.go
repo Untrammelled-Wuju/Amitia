@@ -99,28 +99,29 @@ var (
 )
 
 type UnifiedEntryRequest struct {
-	Channel        string          `json:"channel"`
-	Message        string          `json:"message"`
-	PeerID         string          `json:"peerId,omitempty"`
-	UserID         string          `json:"userId,omitempty"`
-	Source         string          `json:"source,omitempty"`
-	ProactiveTimeContext  string `json:"-"`
-	ProactiveRecentContext string `json:"-"`
-	ProactiveRelationship  string `json:"-"`
-	ProactiveEmotion      string `json:"-"`
-	ProactiveMemory       string `json:"-"`
-	CharacterID    string          `json:"characterId,omitempty"`
-	ConversationID string          `json:"conversationId,omitempty"`
-	AudioUrl       string          `json:"audioUrl,omitempty"`
-	AudioDuration  float64         `json:"audioDuration,omitempty"`
-	VoiceMessage   bool            `json:"voiceMessage"`
-	ExpressionPlan *ExpressionPlan `json:"expressionPlan,omitempty"`
-	ImageUrl       string          `json:"imageUrl,omitempty"`
-	VideoUrl       string          `json:"videoUrl,omitempty"`
-	ImageContext   string          `json:"imageContext,omitempty"`
-	RequestID      string          `json:"requestId,omitempty"`
-	SessionID      string          `json:"sessionId,omitempty"`
-	IsInternal     bool            `json:"-"`
+	Channel                  string          `json:"channel"`
+	Message                  string          `json:"message"`
+	PeerID                   string          `json:"peerId,omitempty"`
+	UserID                   string          `json:"userId,omitempty"`
+	Source                   string          `json:"source,omitempty"`
+	ProactiveTaskInstruction string          `json:"-"`
+	ProactiveTimeContext     string          `json:"-"`
+	ProactiveRecentContext   string          `json:"-"`
+	ProactiveRelationship    string          `json:"-"`
+	ProactiveEmotion         string          `json:"-"`
+	ProactiveMemory          string          `json:"-"`
+	CharacterID              string          `json:"characterId,omitempty"`
+	ConversationID           string          `json:"conversationId,omitempty"`
+	AudioUrl                 string          `json:"audioUrl,omitempty"`
+	AudioDuration            float64         `json:"audioDuration,omitempty"`
+	VoiceMessage             bool            `json:"voiceMessage"`
+	ExpressionPlan           *ExpressionPlan `json:"expressionPlan,omitempty"`
+	ImageUrl                 string          `json:"imageUrl,omitempty"`
+	VideoUrl                 string          `json:"videoUrl,omitempty"`
+	ImageContext             string          `json:"imageContext,omitempty"`
+	RequestID                string          `json:"requestId,omitempty"`
+	SessionID                string          `json:"sessionId,omitempty"`
+	IsInternal               bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -185,28 +186,29 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	}
 
 	procReq := &ProcessRequest{
-		CharacterID:    resolution.Scope.CharacterID,
-		ConversationID: resolution.Scope.ConversationID,
-		Message:        req.Message,
-		Channel:        resolution.Scope.Channel,
-		Source:         resolution.Source,
-		PeerID:         resolution.Scope.PeerID,
-		UserID:         resolution.Scope.UserID,
-		SessionID:      resolution.Scope.SessionID,
-		RequestID:      requestID,
-		AudioUrl:       req.AudioUrl,
-		AudioDuration:  req.AudioDuration,
-		VoiceMessage:   req.VoiceMessage,
-		ExpressionPlan: req.ExpressionPlan,
-		ImageUrl:       req.ImageUrl,
-		VideoUrl:       req.VideoUrl,
-		ImageContext:   req.ImageContext,
-		IsInternal:     req.IsInternal,
-		ProactiveTimeContext:  req.ProactiveTimeContext,
-		ProactiveRecentContext: req.ProactiveRecentContext,
-		ProactiveRelationship:  req.ProactiveRelationship,
-		ProactiveEmotion:      req.ProactiveEmotion,
-		ProactiveMemory:       req.ProactiveMemory,
+		CharacterID:              resolution.Scope.CharacterID,
+		ConversationID:           resolution.Scope.ConversationID,
+		Message:                  req.Message,
+		Channel:                  resolution.Scope.Channel,
+		Source:                   resolution.Source,
+		PeerID:                   resolution.Scope.PeerID,
+		UserID:                   resolution.Scope.UserID,
+		SessionID:                resolution.Scope.SessionID,
+		RequestID:                requestID,
+		AudioUrl:                 req.AudioUrl,
+		AudioDuration:            req.AudioDuration,
+		VoiceMessage:             req.VoiceMessage,
+		ExpressionPlan:           req.ExpressionPlan,
+		ImageUrl:                 req.ImageUrl,
+		VideoUrl:                 req.VideoUrl,
+		ImageContext:             req.ImageContext,
+		IsInternal:               req.IsInternal,
+		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
+		ProactiveTimeContext:     req.ProactiveTimeContext,
+		ProactiveRecentContext:   req.ProactiveRecentContext,
+		ProactiveRelationship:    req.ProactiveRelationship,
+		ProactiveEmotion:         req.ProactiveEmotion,
+		ProactiveMemory:          req.ProactiveMemory,
 	}
 
 	return e.orchestrator.Process(ctx, procReq)

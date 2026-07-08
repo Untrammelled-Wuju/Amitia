@@ -154,3 +154,69 @@ func TestLabelZH_AllLabelsHaveMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildEmotionFusionRawSection_EmptyCoreConflictSkipsDefault(t *testing.T) {
+	input := EmotionFusionInput{
+		PrimaryLabel:     "SWEET_ATTACHMENT",
+		Aff:              0.8,
+		Sec:              0.6,
+		Aro:              0.7,
+		Dom:              0.3,
+		PersonalityLabel: "Tsundere",
+		CoreConflict:     "",
+		Catchphrases:     []string{"哼", "笨蛋"},
+		SpeakingStyle:    "傲娇自然口语",
+	}
+	result := BuildEmotionFusionRawSection(input)
+	if strings.Contains(result, "嘴硬但心软") {
+		t.Error("empty core conflict should not produce default '嘴硬但心软'")
+	}
+	if !strings.Contains(result, "哼") || !strings.Contains(result, "笨蛋") {
+		t.Error("should contain actual catchphrases when provided")
+	}
+	if !strings.Contains(result, "融合执行策略") {
+		t.Error("should still contain fusion strategy section")
+	}
+}
+
+func TestBuildEmotionFusionRawSection_EmptyCatchphrasesSkipsDefault(t *testing.T) {
+	input := EmotionFusionInput{
+		PrimaryLabel:     "CALM_RATIONAL",
+		Aff:              0.0,
+		Sec:              0.0,
+		Aro:              0.0,
+		Dom:              0.5,
+		PersonalityLabel: "Professional",
+		CoreConflict:     "",
+		Catchphrases:     nil,
+		SpeakingStyle:    "专业简洁",
+	}
+	result := BuildEmotionFusionRawSection(input)
+	if strings.Contains(result, "嗯") || strings.Contains(result, "哼") || strings.Contains(result, "切") {
+		t.Error("empty catchphrases should not produce default '嗯/哼/切'")
+	}
+	if !strings.Contains(result, "人格基底") {
+		t.Error("should contain personality section")
+	}
+}
+
+func TestBuildEmotionFusionRawSection_NoCoreConflictNoPersonalitySkipLine(t *testing.T) {
+	input := EmotionFusionInput{
+		PrimaryLabel:     "QUIET_FOND",
+		Aff:              0.5,
+		Sec:              0.4,
+		Aro:              0.2,
+		Dom:              0.1,
+		PersonalityLabel: "Quiet",
+		CoreConflict:     "",
+		Catchphrases:     nil,
+		SpeakingStyle:    "",
+	}
+	result := BuildEmotionFusionRawSection(input)
+	if strings.Contains(result, "嘴硬但心软") {
+		t.Error("empty coreConflict should skip core constraint, not default to '嘴硬但心软'")
+	}
+	if !strings.Contains(result, "Quiet") {
+		t.Error("should contain personality label even without coreConflict/catchphrases/speakingStyle")
+	}
+}

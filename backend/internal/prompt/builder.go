@@ -11,24 +11,25 @@ type BuildRequest struct {
 	RuntimePlan         string
 	ExpressionPlan      string
 
-	BaseIdentity       string
-	PersonalityRaw     string
-	EmotionFusionRaw   string
-	AdultIntimacyRaw   string
-	MemoryInjectRaw    string
-	MemoryExtractRaw   string
-	OutputShapeRaw     string
-	AntiRepeatRaw      string
-	ChannelShortRaw    string
+	BaseIdentity     string
+	PersonalityRaw   string
+	EmotionFusionRaw string
+	AdultIntimacyRaw string
+	MemoryInjectRaw  string
+	MemoryExtractRaw string
+	OutputShapeRaw   string
+	AntiRepeatRaw    string
+	ChannelShortRaw  string
 
-	ProactiveRaw           string
-	ProactivePersonality   string
-	ProactiveRelationship  string
-	ProactiveEmotion       string
-	ProactiveMemory        string
-	ProactiveScene         string
-	ProactiveTimeContext   string
-	ProactiveRecentContext string
+	ProactiveRaw             string
+	ProactivePersonality     string
+	ProactiveRelationship    string
+	ProactiveEmotion         string
+	ProactiveMemory          string
+	ProactiveScene           string
+	ProactiveTimeContext     string
+	ProactiveRecentContext   string
+	ProactiveTaskInstruction string
 
 	ProfileContext string
 	MemoryContext  string
@@ -68,6 +69,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		Source:          "platform",
 		Priority:        1000,
 		Content:         platformPolicy(),
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionPlatformPolicy",
 	})
 
 	sections = append(sections, GwSection{Enabled: true,
@@ -78,6 +82,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		Source:          "app",
 		Priority:        900,
 		Content:         appContract(),
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionAppContract",
 	})
 
 	sections = append(sections, GwSection{Enabled: true,
@@ -88,6 +95,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		Source:          "app",
 		Priority:        870,
 		Content:         cognitiveContract(),
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionCognitiveContract",
 	})
 
 	sections = append(sections, GwSection{Enabled: true,
@@ -98,6 +108,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		Source:          "app",
 		Priority:        860,
 		Content:         antiFlatteryContract(),
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionAntiFlatteryContract",
 	})
 
 	sections = append(sections, GwSection{Enabled: true,
@@ -108,6 +121,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		Source:          "app",
 		Priority:        850,
 		Content:         technicalTaskContract(),
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionTechnicalTaskContract",
 	})
 
 	if req.BaseIdentity != "" {
@@ -119,6 +135,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "base_identity",
 			Priority:        880,
 			Content:         req.BaseIdentity,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionBaseIdentity",
 		})
 	}
 
@@ -131,6 +150,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "character_config",
 			Priority:        800,
 			Content:         req.CharacterConfig + "\n" + req.CompiledPersonality,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionCharacterContract",
 		})
 	}
 
@@ -143,6 +165,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "personality",
 			Priority:        780,
 			Content:         req.PersonalityRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionPersonalityRaw",
 		})
 	}
 
@@ -155,6 +180,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "emotion",
 			Priority:        760,
 			Content:         req.EmotionFusionRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionEmotionFusionRaw",
 		})
 	}
 
@@ -167,6 +195,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "intimacy",
 			Priority:        740,
 			Content:         req.AdultIntimacyRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionAdultIntimacyRaw",
 		})
 	}
 
@@ -179,6 +210,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "runtime",
 			Priority:        700,
 			Content:         req.RuntimePlan,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionRuntimePlan",
 		})
 	}
 
@@ -191,6 +225,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "runtime",
 			Priority:        650,
 			Content:         req.ExpressionPlan,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionExpressionPlan",
 		})
 	}
 
@@ -203,6 +240,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "memory",
 			Priority:        350,
 			Content:         req.MemoryInjectRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionMemoryInjectRaw",
 		})
 	}
 
@@ -215,10 +255,13 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "memory",
 			Priority:        340,
 			Content:         req.MemoryExtractRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionMemoryExtractRaw",
 		})
 	}
 
-	appendDataOnly := func(id string, typ GwSectionType, source string, content string) {
+	appendDataOnly := func(id string, typ GwSectionType, source string, content string, constant string) {
 		if content == "" {
 			return
 		}
@@ -230,15 +273,18 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          source,
 			Priority:        300,
 			Content:         content,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  constant,
 		})
 	}
 
-	appendDataOnly("profile_context", GwSectionProfileContext, "profile", req.ProfileContext)
-	appendDataOnly("memory_context", GwSectionMemoryContext, "memory", req.MemoryContext)
-	appendDataOnly("worldbook_context", GwSectionWorldbookContext, "worldbook", req.Worldbook)
-	appendDataOnly("conversation_history", GwSectionConversationHistory, "history", req.History)
-	appendDataOnly("tool_result", GwSectionToolResult, "tool", req.ToolResults)
-	appendDataOnly("multimodal_text", GwSectionMultimodalText, "multimodal", req.MultimodalText)
+	appendDataOnly("profile_context", GwSectionProfileContext, "profile", req.ProfileContext, "GwSectionProfileContext")
+	appendDataOnly("memory_context", GwSectionMemoryContext, "memory", req.MemoryContext, "GwSectionMemoryContext")
+	appendDataOnly("worldbook_context", GwSectionWorldbookContext, "worldbook", req.Worldbook, "GwSectionWorldbookContext")
+	appendDataOnly("conversation_history", GwSectionConversationHistory, "history", req.History, "GwSectionConversationHistory")
+	appendDataOnly("tool_result", GwSectionToolResult, "tool", req.ToolResults, "GwSectionToolResult")
+	appendDataOnly("multimodal_text", GwSectionMultimodalText, "multimodal", req.MultimodalText, "GwSectionMultimodalText")
 
 	if req.OutputShapeRaw != "" && flags.ReplySanitizerEnabled {
 		sections = append(sections, GwSection{Enabled: true,
@@ -249,6 +295,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "sanitizer",
 			Priority:        600,
 			Content:         req.OutputShapeRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionOutputShapeRaw",
 		})
 	}
 
@@ -261,6 +310,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "sanitizer",
 			Priority:        590,
 			Content:         req.AntiRepeatRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionAntiRepeatRaw",
 		})
 	}
 
@@ -273,6 +325,24 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "textlib",
 			Priority:        580,
 			Content:         req.ChannelShortRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionChannelShortRaw",
+		})
+	}
+
+	if req.ProactiveTaskInstruction != "" && flags.ProactiveRawEnabled {
+		sections = append(sections, GwSection{Enabled: true,
+			ID:              "proactive_task_instruction",
+			Type:            GwSectionProactiveTaskInstruction,
+			TrustLevel:      TrustTrusted,
+			InstructionMode: ModeAuthoritative,
+			Source:          "proactive",
+			Priority:        510,
+			Content:         req.ProactiveTaskInstruction,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveTaskInstruction",
 		})
 	}
 
@@ -285,6 +355,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        500,
 			Content:         req.ProactiveRaw,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveRaw",
 		})
 	}
 
@@ -297,6 +370,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        490,
 			Content:         req.ProactivePersonality,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactivePersonality",
 		})
 	}
 
@@ -309,6 +385,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        480,
 			Content:         req.ProactiveRelationship,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveRelationship",
 		})
 	}
 
@@ -321,6 +400,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        470,
 			Content:         req.ProactiveEmotion,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveEmotion",
 		})
 	}
 
@@ -333,6 +415,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        460,
 			Content:         req.ProactiveMemory,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveMemory",
 		})
 	}
 
@@ -345,6 +430,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        450,
 			Content:         req.ProactiveScene,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveScene",
 		})
 	}
 
@@ -357,6 +445,9 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        440,
 			Content:         req.ProactiveTimeContext,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveTimeContext",
 		})
 	}
 
@@ -369,7 +460,15 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "proactive",
 			Priority:        430,
 			Content:         req.ProactiveRecentContext,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionProactiveRecentContext",
 		})
+	}
+
+	currentUserContent := req.CurrentUserInput
+	if req.ProactiveTaskInstruction != "" {
+		currentUserContent = "(proactive)"
 	}
 
 	sections = append(sections, GwSection{Enabled: true,
@@ -379,10 +478,12 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 		InstructionMode: ModeUserRequest,
 		Source:          "user",
 		Priority:        100,
-		Content:         req.CurrentUserInput,
+		Content:         currentUserContent,
+		SourceProject:   "prompt",
+		SourceFile:      "builder.go",
+		SourceConstant:  "GwSectionCurrentUserMessage",
 	})
 
-	
 	if req.TraceOnly != "" {
 		sections = append(sections, GwSection{Enabled: true,
 			ID:              "trace_only",
@@ -392,9 +493,12 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			Source:          "trace",
 			Priority:        10,
 			Content:         req.TraceOnly,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionTraceOnly",
 		})
 	}
-if req.DropEmptySections {
+	if req.DropEmptySections {
 		var filtered []GwSection
 		for _, s := range sections {
 			if s.Content != "" {

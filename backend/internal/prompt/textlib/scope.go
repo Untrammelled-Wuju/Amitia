@@ -3,23 +3,23 @@ package textlib
 type SourceSet string
 
 const (
-	SourceSetA  SourceSet = "source_a"
+	SourceSetA    SourceSet = "source_a"
 	SourceSetRefB SourceSet = "ref_b"
 )
 
 type Category string
 
 const (
-	CatMainChat          Category = "main_chat"
-	CatPersonality       Category = "personality"
-	CatEmotionFusion     Category = "emotion_fusion"
-	CatAdultIntimacy     Category = "adult_intimacy"
-	CatMemory            Category = "memory"
-	CatProactive         Category = "proactive"
-	CatOutputCleaning    Category = "output_cleaning"
-	CatChannelRules      Category = "channel_rules"
-	CatWaveMessages      Category = "wave_messages"
-	CatAntiRepeat        Category = "anti_repeat"
+	CatMainChat       Category = "main_chat"
+	CatPersonality    Category = "personality"
+	CatEmotionFusion  Category = "emotion_fusion"
+	CatAdultIntimacy  Category = "adult_intimacy"
+	CatMemory         Category = "memory"
+	CatProactive      Category = "proactive"
+	CatOutputCleaning Category = "output_cleaning"
+	CatChannelRules   Category = "channel_rules"
+	CatWaveMessages   Category = "wave_messages"
+	CatAntiRepeat     Category = "anti_repeat"
 )
 
 type PromptConstant struct {

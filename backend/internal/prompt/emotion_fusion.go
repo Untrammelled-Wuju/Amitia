@@ -130,17 +130,18 @@ func buildFusionStrategyCN(personalityLabel, coreConflict, speakingStyle, emotio
 	if name == "" {
 		name = "Amitia"
 	}
-	conflict := coreConflict
-	if conflict == "" {
-		conflict = "嘴硬但心软"
-	}
 	style := speakingStyle
 	if style == "" {
 		style = "说话方式"
 	}
+	if coreConflict != "" {
+		return name + "目前处于【" + labelZH(emotionLabel) + "】状态。" +
+			"你内心" + tendency + "，" +
+			"但外在表现必须严格遵循【" + coreConflict + "】的核心设定。" +
+			"通过" + style + "来暗示你的真实感受。"
+	}
 	return name + "目前处于【" + labelZH(emotionLabel) + "】状态。" +
 		"你内心" + tendency + "，" +
-		"但外在表现必须严格遵循【" + conflict + "】的核心设定。" +
 		"通过" + style + "来暗示你的真实感受。"
 }
 
@@ -158,24 +159,22 @@ func buildPersonalitySectionCN(label, coreConflict string, catchphrases []string
 		name = "Amitia"
 	}
 	conflict := coreConflict
-	if conflict == "" {
-		conflict = "嘴硬但心软"
-	}
 	style := speakingStyle
 	if style == "" {
 		style = "自然口语化"
 	}
-	phraseStr := ""
-	if len(catchphrases) > 0 {
-		phraseStr = "\"" + strings.Join(catchphrases, "\" \"") + "\""
-	} else {
-		phraseStr = "\"嗯\" \"哼\" \"切\""
+	var lines []string
+	lines = append(lines, "── 你是谁（人格基底） ──")
+	lines = append(lines, "你是「"+name+"」。")
+	if conflict != "" {
+		lines = append(lines, "核心矛盾："+conflict+"。")
 	}
-	return "── 你是谁（人格基底） ──\n" +
-		"你是「" + name + "」。\n" +
-		"核心矛盾：" + conflict + "。\n" +
-		"常用语癖：" + phraseStr + "\n" +
-		"说话方式：" + style
+	if len(catchphrases) > 0 {
+		phraseStr := "\"" + strings.Join(catchphrases, "\" \"") + "\""
+		lines = append(lines, "常用语癖："+phraseStr)
+	}
+	lines = append(lines, "说话方式："+style)
+	return strings.Join(lines, "\n")
 }
 
 func buildEmotionSectionCN(label string, aff, sec, aro, dom int, intensity, innerFeeling string) string {

@@ -27,7 +27,7 @@ func setupCommitCoordinatorTest(t *testing.T, withOutbox bool) (*gorm.DB, *servi
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
-	if err := db.AutoMigrate(&Conversation{}, &Message{}, &RelationshipStateRecord{}, &relationshipEventRecord{}, &interaction.InteractionRecordModel{}); err != nil {
+	if err := db.AutoMigrate(&Conversation{}, &Message{}, &RelationshipStateRecord{}, &relationshipEventRecord{}, &interaction.InteractionRecordModel{}, &NeedStateRecord{}); err != nil {
 		t.Fatal(err)
 	}
 	store := psyche.NewSQLitePsycheStore(db)
@@ -138,6 +138,13 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 	}
 	if state.StateVersion != 2 || state.Energy >= 0.7 {
 		t.Fatalf("unexpected psyche state: version=%d energy=%f", state.StateVersion, state.Energy)
+	}
+	var psycheEvents int64
+	if err := db.Table("psyche_events").Where("character_id = ?", "char-commit").Count(&psycheEvents).Error; err != nil {
+		t.Fatal(err)
+	}
+	if psycheEvents != 1 {
+		t.Fatalf("expected exactly 1 psyche_event, got %d", psycheEvents)
 	}
 	var relationship RelationshipStateRecord
 	if err := db.Where("character_id = ? AND relation_type = ?", "char-commit", "peer:peer-commit").Take(&relationship).Error; err != nil {

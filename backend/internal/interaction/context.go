@@ -125,6 +125,10 @@ type RelationshipSnapshot struct {
 }
 
 type PsycheState struct {
+	Valence       float64            `json:"valence"`
+	Dominance     float64            `json:"dominance"`
+	MoodValence   float64            `json:"moodValence"`
+	MoodArousal   float64            `json:"moodArousal"`
 	InternalModel map[string]float64 `json:"internalModel,omitempty"`
 	Stress        float64            `json:"stress"`
 	Fatigue       float64            `json:"fatigue"`

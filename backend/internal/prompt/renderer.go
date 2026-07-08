@@ -24,7 +24,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionPlatformPolicy, GwSectionAppContract, GwSectionCognitiveContract, GwSectionAntiFlatteryContract, GwSectionTechnicalTaskContract, GwSectionBaseIdentity:
 			systemParts = append(systemParts, s.Content)
 
-		case GwSectionProactiveScene:
+		case GwSectionProactiveScene, GwSectionProactiveTaskInstruction:
 			systemParts = append(systemParts, s.Content)
 
 		case GwSectionCharacterContract, GwSectionRuntimePlan, GwSectionExpressionPlan,
@@ -95,7 +95,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 	return messages, nil
 }
 
-var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_scene", "proactive_time_context", "proactive_recent_context", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "current_user_message"}
+var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "current_user_message"}
 
 func renderTaggedSection(s GwSection) string {
 	tagName := string(s.Type)
@@ -151,4 +151,3 @@ func stripAllSectionTags(content string) string {
 	}
 	return content
 }
-

@@ -39,21 +39,21 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 	memCtx := s.buildProactiveMemoryContext(conversationID, characterID)
 
 	req := &interaction.UnifiedEntryRequest{
-		Channel:                scope.channel,
-		Message:                prompt,
-		PeerID:                 scope.peerID,
-		UserID:                 scope.userID,
-		Source:                 "proactive",
-		CharacterID:            characterID,
-		ConversationID:         conversationID,
-		RequestID:              requestID,
-		SessionID:              "proactive:" + characterID,
-		IsInternal:             true,
-		ProactiveTimeContext:   timeCtx,
-		ProactiveRecentContext: recentCtx,
-		ProactiveRelationship:  relCtx,
-		ProactiveEmotion:      emoCtx,
-		ProactiveMemory:       memCtx,
+		Channel:                  scope.channel,
+		PeerID:                   scope.peerID,
+		UserID:                   scope.userID,
+		Source:                   "proactive",
+		CharacterID:              characterID,
+		ConversationID:           conversationID,
+		RequestID:                requestID,
+		SessionID:                "proactive:" + characterID,
+		IsInternal:               true,
+		ProactiveTaskInstruction: prompt,
+		ProactiveTimeContext:     timeCtx,
+		ProactiveRecentContext:   recentCtx,
+		ProactiveRelationship:    relCtx,
+		ProactiveEmotion:         emoCtx,
+		ProactiveMemory:          memCtx,
 	}
 	return s.unifiedEntry.Handle(ctx, req)
 }
@@ -423,66 +423,49 @@ func (s *service) DispatchProactiveMessage(ctx context.Context, characterID, con
 }
 
 func (s *service) buildProactiveRelationshipContext(conversationID, characterID string) string {
-	var stage string
-	var trust float64
-	var familiarity float64
-	var security float64
+	var relationType string
+	var relationData string
 
-	s.db.Table("character_relationships").Select("stage, trust, familiarity, security").
-		Where("character_id = ? AND conversation_id = ?", characterID, conversationID).Limit(1).
-		Row().Scan(&stage, &trust, &familiarity, &security)
+	s.db.Table("relationship_states").Select("relation_type, relation_data").
+		Where("character_id = ?", characterID).Limit(1).
+		Row().Scan(&relationType, &relationData)
 
-	if stage == "" {
-		stage = "ACQUAINTANCE"
-	}
-	if trust == 0 {
-		trust = 50
-	}
-	if familiarity == 0 {
-		familiarity = 30
-	}
-	if security == 0 {
-		security = 40
+	if relationType == "" {
+		relationType = "ACQUAINTANCE"
 	}
 
-	return fmt.Sprintf("关系阶段：%s\n信任度：%.0f\n熟悉度：%.0f\n安全感：%.0f", stage, trust, familiarity, security)
+	return fmt.Sprintf("关系类型：%s\n关系数据：%s", relationType, relationData)
 }
 
 func (s *service) buildProactiveEmotionContext(conversationID, characterID string) string {
-	var aff float64
-	var primaryLabel string
-	var aro float64
-	var sec float64
+	var emotionJSON string
+	var moodJSON string
+	var stress float64
+	var energy float64
 
-	s.db.Table("character_emotions").Select("aff, primary_label, arousal, security").
-		Where("character_id = ? AND conversation_id = ?", characterID, conversationID).Limit(1).
-		Row().Scan(&aff, &primaryLabel, &aro, &sec)
+	s.db.Table("psyche_states").Select("emotion, mood, stress, energy").
+		Where("character_id = ?", characterID).Limit(1).
+		Row().Scan(&emotionJSON, &moodJSON, &stress, &energy)
 
-	if aff == 0 {
-		aff = 50
+	if emotionJSON == "" {
+		emotionJSON = "{}"
 	}
-	if primaryLabel == "" {
-		primaryLabel = "平静"
-	}
-	if aro == 0 {
-		aro = 30
-	}
-	if sec == 0 {
-		sec = 50
+	if moodJSON == "" {
+		moodJSON = "{}"
 	}
 
-	return fmt.Sprintf("好感度：%.0f\n当前情绪：%s\n唤醒度：%.0f\n安全感：%.0f", aff, primaryLabel, aro, sec)
+	return fmt.Sprintf("情绪：%s\n心情：%s\n压力：%.0f\n精力：%.0f", emotionJSON, moodJSON, stress, energy)
 }
 
 func (s *service) buildProactiveMemoryContext(conversationID, characterID string) string {
-	type factRow struct {
-		Summary   string
-		UpdatedAt string
+	type memoryRow struct {
+		Key   string
+		Value string
 	}
-	var facts []factRow
+	var memories []memoryRow
 
-	rows, err := s.db.Table("facts").Select("summary, updated_at").
-		Where("character_id = ? AND conversation_id = ? AND status = ?", characterID, conversationID, "active").
+	rows, err := s.db.Table("memories").Select("key, value").
+		Where("character_id = ?", characterID).
 		Order("updated_at DESC").
 		Limit(3).
 		Rows()
@@ -492,19 +475,19 @@ func (s *service) buildProactiveMemoryContext(conversationID, characterID string
 	defer rows.Close()
 
 	for rows.Next() {
-		var f factRow
-		rows.Scan(&f.Summary, &f.UpdatedAt)
-		facts = append(facts, f)
+		var m memoryRow
+		rows.Scan(&m.Key, &m.Value)
+		memories = append(memories, m)
 	}
 
-	if len(facts) == 0 {
+	if len(memories) == 0 {
 		return ""
 	}
 
 	var sb strings.Builder
 	sb.WriteString("最近记忆（可轻点提到，不要机械复述）：\n")
-	for _, f := range facts {
-		sb.WriteString(fmt.Sprintf("- %s\n", f.Summary))
+	for _, m := range memories {
+		sb.WriteString(fmt.Sprintf("- %s\n", m.Value))
 	}
 	return sb.String()
 }

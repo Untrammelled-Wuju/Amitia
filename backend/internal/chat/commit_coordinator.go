@@ -103,14 +103,12 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			return err
 		}
 		if shouldCommitRuntime(plan.Request) {
-			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
-				if !plan.Request.IsInternal {
+			if !plan.Request.IsInternal {
+				if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
 					if err := s.applyAppraisalResultTx(tx, plan); err != nil {
 						return err
 					}
 				}
-			}
-			if !plan.Request.IsInternal {
 				if err := s.updatePsycheStateTx(tx, plan); err != nil {
 					return err
 				}
@@ -629,40 +627,6 @@ func (s *service) applyAppraisalResultTx(tx *gorm.DB, plan messageCommitPlan) er
 		return nil
 	}
 	appraisal := plan.Runtime.Appraisal
-	if s.psycheStore != nil && appraisal.PsycheDelta != 0 {
-		charID := plan.Character
-		var store psyche.PsycheStore = s.psycheStore
-		if sqliteStore, ok := s.psycheStore.(*psyche.SQLitePsycheStore); ok {
-			store = sqliteStore.WithDB(tx)
-		}
-		state, err := store.LoadState(charID)
-		if err != nil {
-			if errors.Is(err, psyche.ErrStateNotFound) {
-				initial := psyche.NewPsycheState(charID)
-				if err := store.SaveState(&initial); err != nil {
-					return err
-				}
-				state = &initial
-			} else {
-				return err
-			}
-		}
-		event := psyche.PsycheEvent{
-			ID:          uuid.New().String(),
-			CharacterID: charID,
-			Type:        psyche.EventTypeInteraction,
-			Source:      "appraisal.delta",
-			EnergyDelta: appraisal.PsycheDelta * 0.02,
-			Timestamp:   time.Now().UTC(),
-		}
-		newState := psyche.ApplyEvent(*state, event)
-		if err := store.SaveState(&newState); err != nil {
-			return err
-		}
-		if err := store.AppendEvent(&event); err != nil {
-			return err
-		}
-	}
 	if appraisal.RelationshipDelta != 0 {
 		relationType := relationshipTypeForRequest(plan.Request)
 		userID := userIDForRequest(plan.Request)

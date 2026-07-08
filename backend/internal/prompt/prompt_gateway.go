@@ -81,6 +81,13 @@ func computePromptTrace(ir GwIR, messages []GwMessage) *PromptTrace {
 	return trace
 }
 
+func SetTraceQualityFlags(trace *PromptTrace, flags QualityFlags) {
+	if trace == nil {
+		return
+	}
+	trace.QualityFlags = flags
+}
+
 func sectionUsed(sections []GwSection, id string) bool {
 	for _, s := range sections {
 		if s.ID == id && s.Enabled && s.Content != "" {

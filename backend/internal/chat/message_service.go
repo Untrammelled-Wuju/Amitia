@@ -9,10 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"github.com/u-ai/backend/internal/prompt"
-	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
@@ -58,55 +55,47 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListRespons
 }
 
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
-	safeMessage := prompt.SanitizeCurrentUserMessage(req.Message)
-
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" {
 		channel = "web"
 	}
-	runtimeProfile, err := s.getRoleRuntimeProfile(req.CharacterID)
-	if err != nil {
-		if req.CharacterID != "" {
-			return nil, fmt.Errorf("角色不存在")
-		}
-		return nil, fmt.Errorf("没有可用角色")
-	}
-	convID := req.ConversationID
-	if convID == "" {
-		convID = uuid.New().String()
-		s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: runtimeProfile.CharacterID, Title: req.Message, Channel: channel})
-	} else if err := s.validateConversationScope(convID, runtimeProfile.CharacterID, channel); err != nil {
-		return nil, fmt.Errorf("会话与角色或渠道不匹配")
-	}
-	cfg, err := s.repo.GetActiveModel()
-	if err != nil {
-		return nil, fmt.Errorf("没有可用的模型配置")
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = "web"
 	}
 
-	systemParts := buildRoleSystemParts(runtimeProfile, nil)
-	apiMessages := []map[string]interface{}{}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": strings.Join(systemParts, "\n\n")})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": s.compiledSystemInstruction(channel)})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": safeMessage})
-
-	content, tokens, err := s.callLLM(context.Background(), cfg, apiMessages)
+	resp, err := s.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID:    req.CharacterID,
+		Message:        req.Message,
+		ConversationID: req.ConversationID,
+		Channel:        channel,
+		Source:         source,
+		PeerID:         req.PeerID,
+		UserID:         req.UserID,
+		RequestID:      req.RequestID,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	s.repo.CreateMessage(&Message{ID: uuid.New().String(), ConversationID: convID, Role: "user", Content: req.Message})
-	var lastSeq int64 = 0
-	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
-	for _, line := range lines {
-		aiMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: "assistant", Content: line, MsgType: "text", Tokens: tokens}
-		if err := s.repo.CreateMessage(aiMsg); err != nil {
-			return nil, err
-		}
-		lastSeq = aiMsg.Sequence
+	msgID := ""
+	if len(resp.MessageIDs) > 0 {
+		msgID = resp.MessageIDs[len(resp.MessageIDs)-1]
 	}
-	s.db.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), convID, convID)
 
-	return &ChatResponse{ConversationID: convID, Sequence: lastSeq, Message: &MessageItem{ID: "", ConversationID: convID, Sequence: lastSeq, Role: "assistant", Content: content, Tokens: tokens}}, nil
+	return &ChatResponse{
+		ConversationID: resp.ConversationID,
+		Sequence:       resp.Sequence,
+		Message: &MessageItem{
+			ID:             msgID,
+			ConversationID: resp.ConversationID,
+			Sequence:       resp.Sequence,
+			Role:           "assistant",
+			Content:        resp.Reply,
+			Source:         "assistant",
+			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
+		},
+	}, nil
 }
 
 func (s *service) validateConversationScope(convID, characterID, channel string) error {

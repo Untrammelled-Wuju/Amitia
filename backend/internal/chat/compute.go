@@ -12,8 +12,8 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
-	"github.com/u-ai/backend/pkg/util"
 	applog "github.com/u-ai/backend/log"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type ComputeResult struct {
@@ -179,6 +179,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
+	if source == "proactive" {
+		userContent = "(proactive)"
+	}
 
 	personalityTemplate := personality.CompilePersonalityTemplate(runtimeProfile.Name, sys1Result.PersonalityPresetID, runtimeProfile.Gender)
 	personalityRaw := promptir.BuildPersonalityRawSection(runtimeProfile.Name, runtimeProfile.Gender, personalityTemplate)
@@ -190,6 +193,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	var proactivePersonality string
 	var proactiveRelationship string
 	var proactiveEmotion string
+	var proactiveTaskInstruction string
 	if source == "proactive" {
 		aff := 0.5
 		if req.Runtime != nil && req.Runtime.Appraisal != nil {
@@ -198,6 +202,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			} else {
 				aff = 0.3
 			}
+		}
+		if req.Runtime != nil && req.Runtime.Context.Psyche.Status == interaction.LoadStatusReady && req.Runtime.Context.Psyche.Value.Stress > 0.7 {
+			aff *= 0.4
 		}
 		if aff > 1.0 {
 			aff = 1.0
@@ -210,32 +217,36 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 		if req.ProactiveEmotion != "" {
 			proactiveEmotion = req.ProactiveEmotion
+		} else {
+			proactiveEmotion = buildProactiveEmotionFromPsyche(req.Runtime)
 		}
+		proactiveTaskInstruction = req.ProactiveTaskInstruction
 	}
 
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
-		BaseIdentity:      promptir.BaseIdentitySection(),
-		CharacterConfig:   sys1Result.CharacterConfig,
-		PersonalityConfig: sys2Result.SystemInstruction,
-		PersonalityRaw:    personalityRaw,
-		EmotionFusionRaw:  buildEmotionFusionRaw(req.Runtime, charName),
-		AdultIntimacyRaw:  adultIntimacyRaw,
-		MemoryInjectRaw:   sys2Result.MemoryInjectRaw,
-		AntiRepeatRaw:     antiRepeatRaw,
-		ProfileContext:    mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
-		MemoryContext:     sys2Result.MemoryContext,
-		Worldbook:         sys1Result.Worldbook,
-		History:           history,
-		Runtime:           req.Runtime,
-		StyleInstruction:  channelPrompt.StyleInstruction,
-		ProactiveScene:        proactiveScene(source),
-		ProactiveTimeContext:  req.ProactiveTimeContext,
-		ProactiveRecentContext: req.ProactiveRecentContext,
-		ProactivePersonality:  proactivePersonality,
-		ProactiveRelationship: proactiveRelationship,
-		ProactiveEmotion:     proactiveEmotion,
-		ProactiveMemory:      req.ProactiveMemory,
-		UserContent:       userContent,
+		BaseIdentity:             promptir.BaseIdentitySection(),
+		CharacterConfig:          sys1Result.CharacterConfig,
+		PersonalityConfig:        sys2Result.SystemInstruction,
+		PersonalityRaw:           personalityRaw,
+		EmotionFusionRaw:         buildEmotionFusionRaw(req.Runtime, charName),
+		AdultIntimacyRaw:         adultIntimacyRaw,
+		MemoryInjectRaw:          sys2Result.MemoryInjectRaw,
+		AntiRepeatRaw:            antiRepeatRaw,
+		ProfileContext:           mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
+		MemoryContext:            sys2Result.MemoryContext,
+		Worldbook:                sys1Result.Worldbook,
+		History:                  history,
+		Runtime:                  req.Runtime,
+		StyleInstruction:         channelPrompt.StyleInstruction,
+		ProactiveScene:           proactiveScene(source),
+		ProactiveTimeContext:     req.ProactiveTimeContext,
+		ProactiveRecentContext:   req.ProactiveRecentContext,
+		ProactivePersonality:     proactivePersonality,
+		ProactiveTaskInstruction: proactiveTaskInstruction,
+		ProactiveRelationship:    proactiveRelationship,
+		ProactiveEmotion:         proactiveEmotion,
+		ProactiveMemory:          req.ProactiveMemory,
+		UserContent:              userContent,
 	})
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
 		"history_count":      len(history),
@@ -294,7 +305,8 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 
 	priorAssistant := extractAssistantReplies(history)
-	reply = SanitizeReply(reply, charName, priorAssistant)
+	var qualityFlags promptir.QualityFlags
+	reply, qualityFlags = SanitizeReply(reply, charName, priorAssistant)
 	if reply == "" {
 		reply = "嗯"
 	}
@@ -302,6 +314,11 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	reply = CollapseAdjacentSemanticDuplicates(reply, priorAssistant)
 	if reply == "" {
 		reply = "嗯"
+	}
+
+	if promptTrace != nil {
+		promptTrace.QualityFlags.ThinkRemoved = qualityFlags.ThinkRemoved
+		promptTrace.QualityFlags.MarkdownRemoved = qualityFlags.MarkdownRemoved
 	}
 
 	reply = expression.ApplyPostValidation(reply, kind)
@@ -440,4 +457,13 @@ func extractAssistantReplies(history []map[string]string) []string {
 		}
 	}
 	return replies
+}
+
+func buildProactiveEmotionFromPsyche(runtime *interaction.RuntimeAssembly) string {
+	if runtime == nil || runtime.Context.Psyche.Status != interaction.LoadStatusReady {
+		return ""
+	}
+	p := runtime.Context.Psyche.Value
+	return fmt.Sprintf("情绪：{\"valence\":%.2f,\"arousal\":%.2f,\"dominance\":%.2f}\n心情：{\"moodValence\":%.2f,\"moodArousal\":%.2f}\n压力：%.0f\n精力：%.0f",
+		p.Valence, p.Arousal, p.Dominance, p.MoodValence, p.MoodArousal, p.Stress*100, (1-p.Fatigue)*100)
 }

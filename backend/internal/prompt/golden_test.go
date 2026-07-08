@@ -505,12 +505,12 @@ func TestGolden_ProactiveSections(t *testing.T) {
 
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
-		BaseIdentity:        "测试BaseIdentity",
-		ProactiveRaw:        "主动消息原始提示词",
+		BaseIdentity:         "测试BaseIdentity",
+		ProactiveRaw:         "主动消息原始提示词",
 		ProactivePersonality: "主动消息人格",
-		ProactiveScene:      "主动消息场景",
+		ProactiveScene:       "主动消息场景",
 		ProactiveTimeContext: "主动消息时间上下文",
-		CurrentUserInput:    "你好",
+		CurrentUserInput:     "你好",
 	})
 
 	required := []string{"proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context"}
@@ -529,12 +529,12 @@ func TestGolden_ProactiveSectionsDisabled(t *testing.T) {
 
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
-		BaseIdentity:        "测试BaseIdentity",
-		ProactiveRaw:        "主动消息原始提示词",
+		BaseIdentity:         "测试BaseIdentity",
+		ProactiveRaw:         "主动消息原始提示词",
 		ProactivePersonality: "主动消息人格",
-		ProactiveScene:      "主动消息场景",
+		ProactiveScene:       "主动消息场景",
 		ProactiveTimeContext: "主动消息时间上下文",
-		CurrentUserInput:    "你好",
+		CurrentUserInput:     "你好",
 	})
 
 	proactiveIDs := []string{"proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_recent_context"}
@@ -551,21 +551,21 @@ func TestGolden_AllFlagsEnabledBuild(t *testing.T) {
 
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
-		BaseIdentity:        "测试BaseIdentity",
-		CharacterConfig:     "测试角色",
-		PersonalityRaw:      "人格",
-		EmotionFusionRaw:    "情绪",
-		AdultIntimacyRaw:    "成人",
-		MemoryInjectRaw:     "记忆注入",
-		MemoryExtractRaw:    "记忆抽取",
-		OutputShapeRaw:      "输出清洗",
-		AntiRepeatRaw:       "防复读",
-		ProactiveRaw:        "主动消息",
+		BaseIdentity:         "测试BaseIdentity",
+		CharacterConfig:      "测试角色",
+		PersonalityRaw:       "人格",
+		EmotionFusionRaw:     "情绪",
+		AdultIntimacyRaw:     "成人",
+		MemoryInjectRaw:      "记忆注入",
+		MemoryExtractRaw:     "记忆抽取",
+		OutputShapeRaw:       "输出清洗",
+		AntiRepeatRaw:        "防复读",
+		ProactiveRaw:         "主动消息",
 		ProactivePersonality: "主动人格",
-		ProactiveScene:      "主动场景",
+		ProactiveScene:       "主动场景",
 		ProactiveTimeContext: "主动时间",
-		ChannelShortRaw:     "短句",
-		CurrentUserInput:    "测试",
+		ChannelShortRaw:      "短句",
+		CurrentUserInput:     "测试",
 	})
 
 	r := NewRenderer()
@@ -595,21 +595,21 @@ func TestGolden_AllFlagsDisabledBuild(t *testing.T) {
 
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
-		BaseIdentity:        "测试BaseIdentity",
-		CharacterConfig:     "测试角色",
-		PersonalityRaw:      "人格",
-		EmotionFusionRaw:    "情绪",
-		AdultIntimacyRaw:    "成人",
-		MemoryInjectRaw:     "记忆注入",
-		MemoryExtractRaw:    "记忆抽取",
-		OutputShapeRaw:      "输出清洗",
-		AntiRepeatRaw:       "防复读",
-		ProactiveRaw:        "主动消息",
+		BaseIdentity:         "测试BaseIdentity",
+		CharacterConfig:      "测试角色",
+		PersonalityRaw:       "人格",
+		EmotionFusionRaw:     "情绪",
+		AdultIntimacyRaw:     "成人",
+		MemoryInjectRaw:      "记忆注入",
+		MemoryExtractRaw:     "记忆抽取",
+		OutputShapeRaw:       "输出清洗",
+		AntiRepeatRaw:        "防复读",
+		ProactiveRaw:         "主动消息",
 		ProactivePersonality: "主动人格",
-		ProactiveScene:      "主动场景",
+		ProactiveScene:       "主动场景",
 		ProactiveTimeContext: "主动时间",
-		ChannelShortRaw:     "短句",
-		CurrentUserInput:    "测试",
+		ChannelShortRaw:      "短句",
+		CurrentUserInput:     "测试",
 	})
 
 	newSectionIDs := []string{"personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "memory_inject_raw", "memory_extract_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_recent_context", "channel_short_raw"}
@@ -752,4 +752,111 @@ func TestGolden_AllFlagsOffOldChatLink(t *testing.T) {
 	for i, m := range msgs {
 		t.Logf("消息%d: role=%s content_len=%d", i, m.Role, len(m.Content))
 	}
+}
+
+func TestGolden_ProactiveTaskInstructionNotInCurrentUserMessage(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:             "测试BaseIdentity",
+		ProactiveTaskInstruction: "这是一条主动消息任务指令，不应出现在用户消息中",
+		CurrentUserInput:         "你好",
+	})
+
+	if !containsSection(ir, "proactive_task_instruction") {
+		t.Fatal("期望包含 proactive_task_instruction section")
+	}
+
+	currentUserSection := getSectionContent(ir, "current_user_message")
+	if currentUserSection != "(proactive)" {
+		t.Errorf("current_user_message 内容应为 (proactive)，实际为: %s", currentUserSection)
+	}
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+
+	if len(msgs) == 0 {
+		t.Fatal("渲染后消息为空")
+	}
+
+	lastMsg := msgs[len(msgs)-1]
+	if containsSub(lastMsg.Content, "这是一条主动消息任务指令") {
+		t.Error("ProactiveTaskInstruction 文本不应出现在 current_user_message 中")
+	}
+
+	systemMsg := msgs[0].Content
+	if !containsSub(systemMsg, "这是一条主动消息任务指令") {
+		t.Error("ProactiveTaskInstruction 文本应出现在 system 消息中")
+	}
+
+	for _, m := range msgs {
+		if m.Role == "user" && containsSub(m.Content, "<current_user_message>") {
+			cmContent := m.Content
+			if containsSub(cmContent, "这是一条主动消息任务指令") {
+				t.Error("ProactiveTaskInstruction 文本泄漏到了 <current_user_message> 块中")
+			}
+		}
+	}
+}
+
+func TestGolden_ProactiveContextInjection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:          "测试BaseIdentity",
+		ProactiveRelationship: "关系类型：CLOSE_FRIEND\n关系数据：亲密好友",
+		ProactiveEmotion:      "情绪：{\"joy\":0.8}\n心情：{\"calm\":0.6}\n压力：20\n精力：80",
+		ProactiveMemory:       "最近记忆：上次一起看了电影",
+		CurrentUserInput:      "你好",
+	})
+
+	required := []string{"proactive_relationship", "proactive_emotion", "proactive_memory"}
+	for _, id := range required {
+		if !containsSection(ir, id) {
+			t.Errorf("期望包含 %s section", id)
+		}
+	}
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+
+	if len(msgs) < 3 {
+		t.Fatalf("期望至少3条消息，实际 %d", len(msgs))
+	}
+
+	contextMsg := msgs[1]
+	if !containsSub(contextMsg.Content, "关系类型") {
+		t.Error("proactive_relationship 内容未注入到渲染输出")
+	}
+	if !containsSub(contextMsg.Content, "关系类型：CLOSE_FRIEND") || !containsSub(contextMsg.Content, "亲密好友") {
+		t.Error("proactive_relationship 的关系数据未完整注入")
+	}
+	if !containsSub(contextMsg.Content, "情绪") {
+		t.Error("proactive_emotion 内容未注入到渲染输出")
+	}
+	if !containsSub(contextMsg.Content, "joy") {
+		t.Error("proactive_emotion 的情绪数据未完整注入")
+	}
+	if !containsSub(contextMsg.Content, "上次一起看了电影") {
+		t.Error("proactive_memory 的记忆内容未注入到渲染输出")
+	}
+}
+
+func getSectionContent(ir GwIR, id string) string {
+	for _, s := range ir.Sections {
+		if s.ID == id {
+			return s.Content
+		}
+	}
+	return ""
 }

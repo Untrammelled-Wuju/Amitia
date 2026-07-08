@@ -35,10 +35,10 @@ func (s *service) compiledChannelPrompt(channel string) expression.CompiledPromp
 }
 
 type sys1Result struct {
-	CharacterConfig    string
-	ProfileContext     string
-	EpisodicContext    string
-	Worldbook          string
+	CharacterConfig     string
+	ProfileContext      string
+	EpisodicContext     string
+	Worldbook           string
 	PersonalityPresetID string
 }
 
@@ -71,10 +71,10 @@ func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage
 	presetID := profile.PersonalityPresetID()
 
 	return sys1Result{
-		CharacterConfig:    strings.Join(parts, "\n\n"),
-		ProfileContext:     profileCtx,
-		EpisodicContext:    epiCtx,
-		Worldbook:          wbCtx,
+		CharacterConfig:     strings.Join(parts, "\n\n"),
+		ProfileContext:      profileCtx,
+		EpisodicContext:     epiCtx,
+		Worldbook:           wbCtx,
 		PersonalityPresetID: presetID,
 	}
 }

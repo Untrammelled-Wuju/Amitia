@@ -14,7 +14,7 @@ func init() {
 		Type: "function",
 		Function: Function{
 			Name:        "read_psyche_state",
-			Description: "读取角色当前的心理状态，包括情感（正向/负向情绪强度、唤醒度、支配感）、心境（PAD、紧张度）、压力水平和关键信念。用于在需要理解自身状态或向用户解释感受时调用。",
+			Description: "读取角色当前的心理状态，包括情感（效价、唤醒度、支配感）、心境（心境效价、心境唤醒度）、压力水平和精力水平。用于在需要理解自身状态或向用户解释感受时调用。",
 			Parameters: Parameters{
 				Type: "object",
 				Properties: map[string]Property{
@@ -37,20 +37,20 @@ type psycheStateOutput struct {
 	Emotion   emotionBlock  `json:"emotion"`
 	Mood      moodBlock     `json:"mood"`
 	Stress    float64       `json:"stress"`
+	Energy    float64       `json:"energy"`
 	Beliefs   []beliefBlock `json:"beliefs,omitempty"`
 	UpdatedAt string        `json:"updatedAt"`
 }
 
 type emotionBlock struct {
-	Positive  float64 `json:"positive"`
-	Negative  float64 `json:"negative"`
+	Valence   float64 `json:"valence"`
 	Arousal   float64 `json:"arousal"`
 	Dominance float64 `json:"dominance"`
 }
 
 type moodBlock struct {
-	Valence float64 `json:"valence"`
-	Tension float64 `json:"tension"`
+	MoodValence float64 `json:"moodValence"`
+	MoodArousal float64 `json:"moodArousal"`
 }
 
 type beliefBlock struct {
@@ -83,42 +83,40 @@ func readPsycheState(callCtx context.Context, execCtx ToolExecutionContext, args
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	emotionRow := toolDB.QueryRow(
-		"SELECT positive, negative, arousal, dominance, updated_at FROM affect_states WHERE character_id = ? ORDER BY updated_at DESC LIMIT 1",
-		characterID,
-	)
-	var pos, neg, arou, dom float64
-	var emoUpdated sql.NullString
-	if err := emotionRow.Scan(&pos, &neg, &arou, &dom, &emoUpdated); err == nil {
-		output.Emotion = emotionBlock{Positive: pos, Negative: neg, Arousal: arou, Dominance: dom}
-		if emoUpdated.Valid {
-			output.UpdatedAt = emoUpdated.String
-		}
-	}
+	var emotionJSON, moodJSON sql.NullString
+	var stress, energy float64
+	var updatedAt sql.NullString
 
-	moodRow := toolDB.QueryRow(
-		"SELECT valence, tension, updated_at FROM mood_states WHERE character_id = ? ORDER BY updated_at DESC LIMIT 1",
+	psycheRow := toolDB.QueryRow(
+		"SELECT emotion, mood, stress, energy, updated_at FROM psyche_states WHERE character_id = ? ORDER BY updated_at DESC LIMIT 1",
 		characterID,
 	)
-	var moodVal, moodTen float64
-	var moodUpdated sql.NullString
-	if err := moodRow.Scan(&moodVal, &moodTen, &moodUpdated); err == nil {
-		output.Mood = moodBlock{Valence: moodVal, Tension: moodTen}
-		if moodUpdated.Valid && moodUpdated.String > output.UpdatedAt {
-			output.UpdatedAt = moodUpdated.String
-		}
-	}
-
-	stressRow := toolDB.QueryRow(
-		"SELECT stress, updated_at FROM stress_states WHERE character_id = ? ORDER BY updated_at DESC LIMIT 1",
-		characterID,
-	)
-	var stress float64
-	var stressUpdated sql.NullString
-	if err := stressRow.Scan(&stress, &stressUpdated); err == nil {
+	if err := psycheRow.Scan(&emotionJSON, &moodJSON, &stress, &energy, &updatedAt); err == nil {
 		output.Stress = stress
-		if stressUpdated.Valid && stressUpdated.String > output.UpdatedAt {
-			output.UpdatedAt = stressUpdated.String
+		output.Energy = energy
+		if updatedAt.Valid {
+			output.UpdatedAt = updatedAt.String
+		}
+
+		if emotionJSON.Valid && emotionJSON.String != "" && emotionJSON.String != "{}" {
+			var emo struct {
+				Valence   float64 `json:"valence"`
+				Arousal   float64 `json:"arousal"`
+				Dominance float64 `json:"dominance"`
+			}
+			if json.Unmarshal([]byte(emotionJSON.String), &emo) == nil {
+				output.Emotion = emotionBlock{Valence: emo.Valence, Arousal: emo.Arousal, Dominance: emo.Dominance}
+			}
+		}
+
+		if moodJSON.Valid && moodJSON.String != "" && moodJSON.String != "{}" {
+			var m struct {
+				MoodValence float64 `json:"moodValence"`
+				MoodArousal float64 `json:"moodArousal"`
+			}
+			if json.Unmarshal([]byte(moodJSON.String), &m) == nil {
+				output.Mood = moodBlock{MoodValence: m.MoodValence, MoodArousal: m.MoodArousal}
+			}
 		}
 	}
 
@@ -142,10 +140,11 @@ func readPsycheState(callCtx context.Context, execCtx ToolExecutionContext, args
 	raw, _ := json.Marshal(output)
 
 	var lines []string
-	lines = append(lines, fmt.Sprintf("情感状态 — 正向: %.2f, 负向: %.2f, 唤醒度: %.2f, 支配感: %.2f",
-		output.Emotion.Positive, output.Emotion.Negative, output.Emotion.Arousal, output.Emotion.Dominance))
-	lines = append(lines, fmt.Sprintf("心境状态 — PAD效价: %.2f, 紧张度: %.2f", output.Mood.Valence, output.Mood.Tension))
+	lines = append(lines, fmt.Sprintf("情感状态 — 效价: %.2f, 唤醒度: %.2f, 支配感: %.2f",
+		output.Emotion.Valence, output.Emotion.Arousal, output.Emotion.Dominance))
+	lines = append(lines, fmt.Sprintf("心境状态 — 心境效价: %.2f, 心境唤醒度: %.2f", output.Mood.MoodValence, output.Mood.MoodArousal))
 	lines = append(lines, fmt.Sprintf("压力水平: %.2f", output.Stress))
+	lines = append(lines, fmt.Sprintf("精力水平: %.2f", output.Energy))
 	if len(output.Beliefs) > 0 {
 		var beliefLines []string
 		for _, b := range output.Beliefs {

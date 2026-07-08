@@ -633,6 +633,17 @@ CREATE TABLE IF NOT EXISTS moods (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS need_states (
+    id TEXT PRIMARY KEY,
+    character_id TEXT NOT NULL DEFAULT '',
+    need_key TEXT NOT NULL DEFAULT '',
+    current_value REAL DEFAULT 0,
+    baseline REAL DEFAULT 0,
+    trend REAL DEFAULT 0,
+    saturated INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT ''
+);
+
 -- 应用设置
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,

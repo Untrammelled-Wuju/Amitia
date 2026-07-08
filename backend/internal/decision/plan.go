@@ -110,6 +110,11 @@ type BehaviorPlan struct {
 type PsycheSignalSet struct {
 	Emotions      []EmotionSignal  `json:"emotions,omitempty"`
 	Mood          ScalarSignal     `json:"mood"`
+	Valence       ScalarSignal     `json:"valence"`
+	Arousal       ScalarSignal     `json:"arousal"`
+	Dominance     ScalarSignal     `json:"dominance"`
+	MoodValence   ScalarSignal     `json:"moodValence"`
+	MoodArousal   ScalarSignal     `json:"moodArousal"`
 	Stress        ScalarSignal     `json:"stress"`
 	CognitiveLoad ScalarSignal     `json:"cognitiveLoad"`
 	Needs         []NeedSignal     `json:"needs,omitempty"`

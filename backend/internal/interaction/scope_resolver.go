@@ -1,9 +1,9 @@
 package interaction
 
 import (
-	"log"
 	"context"
 	"errors"
+	"log"
 	"strings"
 )
 
@@ -68,7 +68,7 @@ type DefaultCharacterProvider interface {
 }
 
 type ScopeResolver struct {
-	lookup ScopeBindingLookup
+	lookup              ScopeBindingLookup
 	defaultCharProvider DefaultCharacterProvider
 }
 

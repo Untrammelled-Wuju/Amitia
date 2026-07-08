@@ -30,19 +30,19 @@ type RuntimeDeliveryIntent struct {
 }
 
 type RuntimeAssembly struct {
-	Version     string                           `json:"version"`
-	ExecutorID  string                           `json:"executorId,omitempty"`
-	Context     ContextSnapshot                  `json:"context"`
-	Path        PathType                         `json:"path"`
-	Budget      []TokenBudgetPlan                `json:"budget"`
-	Safety      RuntimeSafetyDecision            `json:"safety"`
-	Delivery    RuntimeDeliveryIntent            `json:"delivery"`
-	Transaction TransactionDefinition            `json:"transaction"`
-	AssembledAt time.Time                        `json:"assembledAt"`
-	Personality *personality.CompiledPersonality `json:"personality,omitempty"`
-	Appraisal   *AppraisalResult                 `json:"appraisal,omitempty"`
-	BehaviorPlan   *decision.BehaviorPlan    `json:"behaviorPlan,omitempty"`
-	ExpressionPlan *decision.ExpressionPlan  `json:"expressionPlan,omitempty"`
+	Version        string                           `json:"version"`
+	ExecutorID     string                           `json:"executorId,omitempty"`
+	Context        ContextSnapshot                  `json:"context"`
+	Path           PathType                         `json:"path"`
+	Budget         []TokenBudgetPlan                `json:"budget"`
+	Safety         RuntimeSafetyDecision            `json:"safety"`
+	Delivery       RuntimeDeliveryIntent            `json:"delivery"`
+	Transaction    TransactionDefinition            `json:"transaction"`
+	AssembledAt    time.Time                        `json:"assembledAt"`
+	Personality    *personality.CompiledPersonality `json:"personality,omitempty"`
+	Appraisal      *AppraisalResult                 `json:"appraisal,omitempty"`
+	BehaviorPlan   *decision.BehaviorPlan           `json:"behaviorPlan,omitempty"`
+	ExpressionPlan *decision.ExpressionPlan         `json:"expressionPlan,omitempty"`
 }
 
 type RuntimePipeline struct {
@@ -199,6 +199,11 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 			Mood:          decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodPressure},
 			Stress:        decision.ScalarSignal{Value: snapshot.Psyche.Value.Stress},
 			CognitiveLoad: decision.ScalarSignal{Value: snapshot.Psyche.Value.Fatigue},
+			Valence:       decision.ScalarSignal{Value: snapshot.Psyche.Value.Valence},
+			Arousal:       decision.ScalarSignal{Value: snapshot.Psyche.Value.Arousal},
+			Dominance:     decision.ScalarSignal{Value: snapshot.Psyche.Value.Dominance},
+			MoodValence:   decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodValence},
+			MoodArousal:   decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodArousal},
 		}
 	} else {
 		psycheSignals = decision.PsycheSignalSet{
@@ -237,13 +242,13 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 
 	ctx_ := decision.CandidateGenerationContext{
-		UserID:       scope.UserID,
-		CharacterID:  scope.CharacterID,
-		Psyche:       psycheSignals,
-		Relationship: relSnapshot,
-		Life:         lifeSnapshot,
+		UserID:             scope.UserID,
+		CharacterID:        scope.CharacterID,
+		Psyche:             psycheSignals,
+		Relationship:       relSnapshot,
+		Life:               lifeSnapshot,
 		PersonalityWeights: personalityWeights,
-		Now:          now,
+		Now:                now,
 	}
 
 	candidates := decision.GenerateCandidates(ctx_, p.candidateRegistry)
@@ -288,11 +293,11 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		}
 	}
 	exprInput := decision.ExpressionPlanInput{
-		BehaviorPlan:   plan,
-		Psyche:         psycheSignals,
-		ExpressionCtrl: exprCtrl,
+		BehaviorPlan:               plan,
+		Psyche:                     psycheSignals,
+		ExpressionCtrl:             exprCtrl,
 		PersonalityExpressionStyle: personalityStyle,
-		Now:            now,
+		Now:                        now,
 	}
 	exprPlan := decision.GenerateExpressionPlan(exprInput)
 
@@ -434,12 +439,12 @@ func runtimeDelivery(scope InteractionScope, req *ProcessRequest) RuntimeDeliver
 }
 
 type AppraisalResult struct {
-	PsycheDelta       float64 `json:"psycheDelta"`
-	RelationshipDelta float64 `json:"relationshipDelta"`
+	PsycheDelta       float64            `json:"psycheDelta"`
+	RelationshipDelta float64            `json:"relationshipDelta"`
 	NeedDeltas        map[string]float64 `json:"needDeltas,omitempty"`
-	Severity          float64 `json:"severity"`
-	EventType         string  `json:"eventType"`
-	BudgetAllocated   float64 `json:"budgetAllocated"`
+	Severity          float64            `json:"severity"`
+	EventType         string             `json:"eventType"`
+	BudgetAllocated   float64            `json:"budgetAllocated"`
 }
 
 type AppraisalEventCategory string
@@ -983,7 +988,6 @@ func tokenizeForMemory(text string) []string {
 	}
 	return result
 }
-
 
 func minInt(a, b int) int {
 	if a < b {

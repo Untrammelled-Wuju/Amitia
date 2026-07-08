@@ -45,7 +45,7 @@ func TestSanitizeReply_StripsThinkTags(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		result := SanitizeReply(tc.input, "阿米提亚", nil)
+		result, _ := SanitizeReply(tc.input, "阿米提亚", nil)
 		if !strings.Contains(result, tc.expected) {
 			t.Errorf("input=%q: expected to contain %q, got %q", tc.input, tc.expected, result)
 		}
@@ -54,7 +54,7 @@ func TestSanitizeReply_StripsThinkTags(t *testing.T) {
 
 func TestSanitizeReply_ThinkTagsNotInOutput(t *testing.T) {
 	input := "<think>用户可能需要帮助，应该友好地打招呼</think>你好！有什么可以帮你的吗？"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	if strings.Contains(result, "think") {
 		t.Errorf("output still contains 'think': %q", result)
@@ -76,7 +76,7 @@ func TestSanitizeReply_StripsMetaNarrative(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		for _, marker := range metaSentenceMarkers {
 			if strings.Contains(result, marker) {
 				t.Errorf("input=%q: output still contains meta marker %q: %q", input, marker, result)
@@ -87,7 +87,7 @@ func TestSanitizeReply_StripsMetaNarrative(t *testing.T) {
 
 func TestSanitizeReply_CleansMetaNarrativeOutput(t *testing.T) {
 	input := "作为AI助手，我应该友好地回复用户。你好！今天有什么可以帮你的吗？"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	forbidden := []string{"作为AI", "作为人工智能", "我应该回复", "用户说"}
 	for _, fb := range forbidden {
@@ -106,7 +106,7 @@ func TestSanitizeReply_StripsMarkdown(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		if !strings.Contains(result, "你好") && input == "*你好*，今天过得怎么样" {
 			t.Errorf("input=%q: core content lost: %q", input, result)
 		}
@@ -115,7 +115,7 @@ func TestSanitizeReply_StripsMarkdown(t *testing.T) {
 
 func TestSanitizeReply_StripsMarkdownLists(t *testing.T) {
 	input := "- 第一点\n- 第二点\n- 第三点"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	if strings.Contains(result, "- ") {
 		t.Errorf("markdown lists not stripped: %q", result)
@@ -124,7 +124,7 @@ func TestSanitizeReply_StripsMarkdownLists(t *testing.T) {
 
 func TestSanitizeReply_StripsRolePrefix(t *testing.T) {
 	input := "阿米提亚：你好呀，今天过得怎么样？"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	if strings.HasPrefix(result, "阿米提亚") {
 		t.Errorf("role prefix not stripped: %q", result)
@@ -136,7 +136,7 @@ func TestSanitizeReply_StripsRolePrefix(t *testing.T) {
 
 func TestSanitizeReply_StripsLineDuplicates(t *testing.T) {
 	input := "你好呀\n你好呀\n今天天气不错"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	count := strings.Count(result, "你好呀")
 	if count > 1 {
@@ -151,7 +151,7 @@ func TestSanitizeReply_StripsRepetition(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		t.Logf("input=%q: result=%q", input, result)
 	}
 }
@@ -168,7 +168,7 @@ func TestSanitizeReply_EmptyReply(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		if strings.TrimSpace(input) == "" && result != "" {
 			t.Errorf("empty input should return empty: %q -> %q", input, result)
 		}
@@ -184,7 +184,7 @@ func TestSanitizeReply_PreservesValidContent(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		if result == "" {
 			t.Errorf("valid content %q was stripped to empty", input)
 		}
@@ -193,7 +193,7 @@ func TestSanitizeReply_PreservesValidContent(t *testing.T) {
 
 func TestSanitizeReply_StripsJSONWrapping(t *testing.T) {
 	input := "{\"reply\": \"你好呀\"} 你好呀"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	if strings.Contains(result, "{") || strings.Contains(result, "}") {
 		t.Errorf("JSON wrapping not stripped: %q", result)
@@ -202,7 +202,7 @@ func TestSanitizeReply_StripsJSONWrapping(t *testing.T) {
 
 func TestSanitizeReply_StripsHTML(t *testing.T) {
 	input := "你好呀<div>今天天气不错</div>"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	if strings.Contains(result, "<div>") || strings.Contains(result, "</div>") {
 		t.Errorf("HTML tags not stripped: %q", result)
@@ -212,12 +212,12 @@ func TestSanitizeReply_StripsHTML(t *testing.T) {
 func TestSanitizeReply_PriorRepeats(t *testing.T) {
 	prior := []string{"今天天气真好啊", "是的是的", "我也觉得不错"}
 
-	result := SanitizeReply("今天天气真好啊", "阿米提亚", prior)
+	result, _ := SanitizeReply("今天天气真好啊", "阿米提亚", prior)
 	if result != "" {
 		t.Logf("exact repeat still present: %q", result)
 	}
 
-	result = SanitizeReply("是一个好天气呢", "阿米提亚", prior)
+	result, _ = SanitizeReply("是一个好天气呢", "阿米提亚", prior)
 	if result == "" {
 		t.Errorf("similar but distinct content stripped: %q", result)
 	}
@@ -231,7 +231,7 @@ func TestSanitizeReply_ResponsePrefixStripped(t *testing.T) {
 	}
 
 	for _, input := range cases {
-		result := SanitizeReply(input, "阿米提亚", nil)
+		result, _ := SanitizeReply(input, "阿米提亚", nil)
 		lower := strings.ToLower(result)
 		if strings.Contains(lower, "response") {
 			t.Errorf("input=%q: 'response' prefix not cleaned: %q", input, result)
@@ -274,7 +274,7 @@ func TestSanitizeReply_SourceCleaningCases(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := SanitizeReply(tc.input, "阿米提亚", nil)
+			result, _ := SanitizeReply(tc.input, "阿米提亚", nil)
 			for _, fb := range tc.forbidden {
 				if strings.Contains(result, fb) {
 					t.Errorf("%s: output contains forbidden %q: %q", tc.name, fb, result)
@@ -286,7 +286,7 @@ func TestSanitizeReply_SourceCleaningCases(t *testing.T) {
 
 func TestSanitizeReply_SentenceLimit(t *testing.T) {
 	longInput := "第一句。第二句。第三句。第四句。第五句。第六句。第七句。第八句。第九句。第十句"
-	result := SanitizeReply(longInput, "阿米提亚", nil)
+	result, _ := SanitizeReply(longInput, "阿米提亚", nil)
 
 	sentences := strings.FieldsFunc(result, func(r rune) bool {
 		return r == '。' || r == '！' || r == '？'
@@ -298,7 +298,7 @@ func TestSanitizeReply_SentenceLimit(t *testing.T) {
 
 func TestSanitizeReply_AllStepsExecuted(t *testing.T) {
 	input := "<think>分析中</think>阿米提亚：作为AI，*你好*啊 <p>今天</p> {\"reply\":\"不错\"} 在呢 在呢"
-	result := SanitizeReply(input, "阿米提亚", nil)
+	result, _ := SanitizeReply(input, "阿米提亚", nil)
 
 	forbiddenList := []string{
 		"<think>", "</think>", "分析中",
@@ -312,7 +312,7 @@ func TestSanitizeReply_AllStepsExecuted(t *testing.T) {
 		}
 	}
 
-	result2 := SanitizeReply(result, "阿米提亚", nil)
+	result2, _ := SanitizeReply(result, "阿米提亚", nil)
 	if result2 != result {
 		t.Errorf("sanitizer not idempotent: first=%q second=%q", result, result2)
 	}
@@ -332,13 +332,13 @@ func TestSanitizeReply_StripsProactiveMetaNarratives(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := SanitizeReply(tc.input, "阿米提亚", nil)
+		result, _ := SanitizeReply(tc.input, "阿米提亚", nil)
 		if !strings.Contains(result, tc.contains) {
 			t.Errorf("expected reply to contain %q, got %q", tc.contains, result)
 		}
 		for _, marker := range []string{"系统提醒", "系统通知", "任务：", "主动消息：", "指令：", "提示："} {
 			if strings.Contains(result, marker) {
-			t.Errorf("reply must not contain meta-narrative marker %q: %q", marker, result)
+				t.Errorf("reply must not contain meta-narrative marker %q: %q", marker, result)
 			}
 		}
 	}

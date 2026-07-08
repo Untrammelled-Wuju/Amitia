@@ -3,32 +3,33 @@ package prompt
 type SectionType string
 
 const (
-	SectionTypeSystem       SectionType = "system"
-	SectionTypeIdentity     SectionType = "identity"
-	SectionTypeBehaviorPlan SectionType = "behavior_plan"
-	SectionTypePsyche       SectionType = "psyche"
-	SectionTypeMemory       SectionType = "memory"
-	SectionTypeHistory      SectionType = "history"
-	SectionTypeCurrentInput SectionType = "current_input"
-	SectionTypeWorldbook    SectionType = "worldbook"
-	SectionTypeBaseIdentity     SectionType = "base_identity"
-	SectionTypePersonalityRaw   SectionType = "personality_raw"
-	SectionTypeEmotionFusionRaw SectionType = "emotion_fusion_raw"
-	SectionTypeAdultIntimacyRaw SectionType = "adult_intimacy_raw"
-	SectionTypeMemoryInjectRaw  SectionType = "memory_inject_raw"
-	SectionTypeMemoryExtractRaw SectionType = "memory_extract_raw"
-	SectionTypeOutputShapeRaw   SectionType = "output_shape_raw"
-	SectionTypeAntiRepeatRaw    SectionType = "anti_repeat_raw"
-	SectionTypeProactiveRaw     SectionType = "proactive_raw"
-	SectionTypeProactivePersonality   SectionType = "proactive_personality"
-	SectionTypeProactiveRelationship  SectionType = "proactive_relationship"
-	SectionTypeProactiveEmotion      SectionType = "proactive_emotion"
-	SectionTypeProactiveMemory       SectionType = "proactive_memory"
-	SectionTypeProactiveScene        SectionType = "proactive_scene"
-	SectionTypeProactiveTimeContext  SectionType = "proactive_time_context"
-	SectionTypeProactiveRecentContext SectionType = "proactive_recent_context"
-	SectionTypeChannelShortRaw  SectionType = "channel_short_raw"
-	SectionTypeTraceOnly        SectionType = "trace_only"
+	SectionTypeSystem                   SectionType = "system"
+	SectionTypeIdentity                 SectionType = "identity"
+	SectionTypeBehaviorPlan             SectionType = "behavior_plan"
+	SectionTypePsyche                   SectionType = "psyche"
+	SectionTypeMemory                   SectionType = "memory"
+	SectionTypeHistory                  SectionType = "history"
+	SectionTypeCurrentInput             SectionType = "current_input"
+	SectionTypeWorldbook                SectionType = "worldbook"
+	SectionTypeBaseIdentity             SectionType = "base_identity"
+	SectionTypePersonalityRaw           SectionType = "personality_raw"
+	SectionTypeEmotionFusionRaw         SectionType = "emotion_fusion_raw"
+	SectionTypeAdultIntimacyRaw         SectionType = "adult_intimacy_raw"
+	SectionTypeMemoryInjectRaw          SectionType = "memory_inject_raw"
+	SectionTypeMemoryExtractRaw         SectionType = "memory_extract_raw"
+	SectionTypeOutputShapeRaw           SectionType = "output_shape_raw"
+	SectionTypeAntiRepeatRaw            SectionType = "anti_repeat_raw"
+	SectionTypeProactiveRaw             SectionType = "proactive_raw"
+	SectionTypeProactivePersonality     SectionType = "proactive_personality"
+	SectionTypeProactiveRelationship    SectionType = "proactive_relationship"
+	SectionTypeProactiveEmotion         SectionType = "proactive_emotion"
+	SectionTypeProactiveMemory          SectionType = "proactive_memory"
+	SectionTypeProactiveScene           SectionType = "proactive_scene"
+	SectionTypeProactiveTimeContext     SectionType = "proactive_time_context"
+	SectionTypeProactiveRecentContext   SectionType = "proactive_recent_context"
+	SectionTypeProactiveTaskInstruction SectionType = "proactive_task_instruction"
+	SectionTypeChannelShortRaw          SectionType = "channel_short_raw"
+	SectionTypeTraceOnly                SectionType = "trace_only"
 )
 
 type SensitivityLevel string
@@ -99,12 +100,12 @@ type SectionTrace struct {
 }
 
 type QualityFlags struct {
-	ThinkRemoved          bool `json:"think_removed"`
-	MarkdownRemoved       bool `json:"markdown_removed"`
-	PersonaSectionUsed    bool `json:"persona_section_used"`
-	EmotionSectionUsed    bool `json:"emotion_section_used"`
-	MemorySectionUsed     bool `json:"memory_section_used"`
-	IntimacyBoundaryUsed  bool `json:"intimacy_boundary_used"`
+	ThinkRemoved         bool `json:"think_removed"`
+	MarkdownRemoved      bool `json:"markdown_removed"`
+	PersonaSectionUsed   bool `json:"persona_section_used"`
+	EmotionSectionUsed   bool `json:"emotion_section_used"`
+	MemorySectionUsed    bool `json:"memory_section_used"`
+	IntimacyBoundaryUsed bool `json:"intimacy_boundary_used"`
 }
 
 type PromptTrace struct {

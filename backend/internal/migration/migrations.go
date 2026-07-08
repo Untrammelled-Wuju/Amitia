@@ -55,5 +55,6 @@ func DefaultMigrations() []Migration {
 		LegacyDataMigration(),
 		TriggerHistoryMigration(),
 		RelationshipScopeMigration(),
+		NeedStatesMigration(),
 	}
 }

@@ -76,6 +76,54 @@ func TestRuntimeBudgetIncludesNewRuntimeInputs(t *testing.T) {
 	}
 }
 
+func TestPsycheContextLoaderReadsEmotionMoodJSON(t *testing.T) {
+	db := openRuntimeLoaderTestDB(t)
+	if err := db.Exec(`CREATE TABLE psyche_states (
+		character_id TEXT,
+		emotion TEXT DEFAULT '{}',
+		mood TEXT DEFAULT '{}',
+		stress REAL,
+		energy REAL,
+		updated_at TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create psyche_states: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO psyche_states (character_id, emotion, mood, stress, energy, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"char-psyche", `{"valence":0.7,"arousal":0.6,"dominance":0.4}`,
+		`{"moodValence":0.5,"moodArousal":0.3}`, 0.3, 0.85, "2026-07-08").Error; err != nil {
+		t.Fatalf("insert psyche: %v", err)
+	}
+
+	loader := NewPsycheContextLoader(db)
+	state, err := loader.Load(context.Background(), InteractionScope{CharacterID: "char-psyche"}, "v-test")
+	if err != nil {
+		t.Fatalf("load psyche: %v", err)
+	}
+	ready, ok := state.Value.(PsycheState)
+	if !ok {
+		t.Fatalf("expected PsycheState, got %T", state.Value)
+	}
+	if ready.Valence != 0.7 {
+		t.Errorf("expected Valence=0.7, got %f", ready.Valence)
+	}
+	if ready.Dominance != 0.4 {
+		t.Errorf("expected Dominance=0.4, got %f", ready.Dominance)
+	}
+	if ready.MoodValence != 0.5 {
+		t.Errorf("expected MoodValence=0.5, got %f", ready.MoodValence)
+	}
+	if ready.MoodArousal != 0.3 {
+		t.Errorf("expected MoodArousal=0.3, got %f", ready.MoodArousal)
+	}
+	if ready.Stress != 0.3 {
+		t.Errorf("expected Stress=0.3, got %f", ready.Stress)
+	}
+	if ready.Fatigue >= 0.18 {
+		t.Errorf("expected Fatigue<0.18 from energy=0.85, got %f", ready.Fatigue)
+	}
+}
+
 func openRuntimeLoaderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "runtime_loader.db")), &gorm.Config{})
@@ -127,6 +175,8 @@ func createRuntimeLoaderTestSchema(t *testing.T, db *gorm.DB) {
 		)`,
 		`CREATE TABLE psyche_states (
 			character_id TEXT,
+			emotion TEXT DEFAULT '{}',
+			mood TEXT DEFAULT '{}',
 			stress REAL,
 			energy REAL,
 			updated_at TEXT
@@ -175,8 +225,8 @@ func insertRuntimeLoaderTestData(t *testing.T, db *gorm.DB) {
 		"char-runtime", "neutral", "calm", "2026-07-01 11:00:00").Error; err != nil {
 		t.Fatalf("insert mood: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO psyche_states (character_id, stress, energy, updated_at) VALUES (?, ?, ?, ?)`,
-		"char-runtime", 0.2, 0.72, "2026-07-01 11:00:00").Error; err != nil {
+	if err := db.Exec(`INSERT INTO psyche_states (character_id, emotion, mood, stress, energy, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"char-runtime", `{"valence":0.5,"arousal":0.5,"dominance":0.5}`, `{"moodValence":0.5,"moodArousal":0.5}`, 0.2, 0.72, "2026-07-01 11:00:00").Error; err != nil {
 		t.Fatalf("insert psyche: %v", err)
 	}
 	for _, row := range []struct {

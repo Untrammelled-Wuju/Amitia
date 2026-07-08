@@ -3,6 +3,8 @@ package chat
 import (
 	"regexp"
 	"strings"
+
+	promptir "github.com/u-ai/backend/internal/prompt"
 )
 
 var reThinkTag = regexp.MustCompile(`(?is)<think[^>]*>[\s\S]*?</think\s*>`)
@@ -51,20 +53,23 @@ var antiRepeatWeakPhrases = []string{
 	"嗯", "嗯嗯", "好", "好的", "好吧", "行", "行吧", "知道了", "哦", "噢",
 }
 
-func SanitizeReply(raw string, charName string, priorReplies []string) string {
+func SanitizeReply(raw string, charName string, priorReplies []string) (string, promptir.QualityFlags) {
 	if raw == "" {
-		return ""
+		return "", promptir.QualityFlags{}
 	}
 
 	result := raw
 
 	result = stripThinkingTags(result)
+	thinkRemoved := result != raw
 
 	result = stripJSONWrap(result)
 
 	result = stripHTMLTags(result)
 
+	preMarkdown := result
 	result = stripMarkdownFormatting(result)
+	markdownRemoved := result != preMarkdown
 
 	result = stripResponsePrefix(result)
 
@@ -82,7 +87,7 @@ func SanitizeReply(raw string, charName string, priorReplies []string) string {
 
 	result = strings.TrimSpace(result)
 
-	return result
+	return result, promptir.QualityFlags{ThinkRemoved: thinkRemoved, MarkdownRemoved: markdownRemoved}
 }
 
 func stripThinkingTags(content string) string {
@@ -182,7 +187,6 @@ func extractDirectReply(content string) string {
 	if cleaned != "" {
 		return cleaned
 	}
-
 
 	commaParts := strings.Split(trimmed, "，")
 	cleaned = filterMetaFromSentences(commaParts)
@@ -633,11 +637,3 @@ func CollapseAdjacentSemanticDuplicates(raw string, priorReplies []string) strin
 
 	return result
 }
-
-
-
-
-
-
-
-

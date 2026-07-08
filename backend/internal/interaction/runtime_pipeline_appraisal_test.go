@@ -15,9 +15,9 @@ type testMemoryLoader struct {
 	memories []MemoryItem
 }
 
-func (l testMemoryLoader) Name() string            { return "memories" }
-func (l testMemoryLoader) IsRequired() bool         { return false }
-func (l testMemoryLoader) Timeout() time.Duration   { return time.Second }
+func (l testMemoryLoader) Name() string           { return "memories" }
+func (l testMemoryLoader) IsRequired() bool       { return false }
+func (l testMemoryLoader) Timeout() time.Duration { return time.Second }
 func (l testMemoryLoader) CacheKey(scope InteractionScope, version string) string {
 	return version + scope.CharacterID
 }
@@ -29,9 +29,9 @@ type testRelationshipLoader struct {
 	state RelationshipState
 }
 
-func (l testRelationshipLoader) Name() string            { return "relationship" }
-func (l testRelationshipLoader) IsRequired() bool         { return false }
-func (l testRelationshipLoader) Timeout() time.Duration   { return time.Second }
+func (l testRelationshipLoader) Name() string           { return "relationship" }
+func (l testRelationshipLoader) IsRequired() bool       { return false }
+func (l testRelationshipLoader) Timeout() time.Duration { return time.Second }
 func (l testRelationshipLoader) CacheKey(scope InteractionScope, version string) string {
 	return version + scope.CharacterID
 }
@@ -43,9 +43,9 @@ type testRuntimeProfileLoader struct {
 	config map[string]interface{}
 }
 
-func (l testRuntimeProfileLoader) Name() string            { return "runtimeProfile" }
-func (l testRuntimeProfileLoader) IsRequired() bool         { return false }
-func (l testRuntimeProfileLoader) Timeout() time.Duration   { return time.Second }
+func (l testRuntimeProfileLoader) Name() string           { return "runtimeProfile" }
+func (l testRuntimeProfileLoader) IsRequired() bool       { return false }
+func (l testRuntimeProfileLoader) Timeout() time.Duration { return time.Second }
 func (l testRuntimeProfileLoader) CacheKey(scope InteractionScope, version string) string {
 	return version + scope.CharacterID
 }

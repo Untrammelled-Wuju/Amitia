@@ -10,11 +10,11 @@ import (
 
 func TestDeriveEmotionLabel_ToneMapping(t *testing.T) {
 	tests := []struct {
-		name            string
-		tone            decision.ExpressionTone
-		intensity       float64
-		suppressed      bool
-		expectedLabel   string
+		name          string
+		tone          decision.ExpressionTone
+		intensity     float64
+		suppressed    bool
+		expectedLabel string
 	}{
 		{"warm high intensity", decision.ExpressionToneWarm, 0.8, false, "SWEET_ATTACHMENT"},
 		{"warm low intensity", decision.ExpressionToneWarm, 0.3, false, "QUIET_FOND"},
@@ -130,5 +130,57 @@ func TestBuildEmotionFusionInput_AllEmotionsHaveValidAffSecAroDom(t *testing.T) 
 		if input.Dom < -1.0 || input.Dom > 1.0 {
 			t.Errorf("tone %s dom out of range: %f", tone, input.Dom)
 		}
+	}
+}
+
+func TestBuildEmotionFusionRaw_DifferentPersonalitiesProduceDifferentOutput(t *testing.T) {
+	exprPlan := &decision.ExpressionPlan{
+		Tone:             decision.ExpressionTonePlayful,
+		EmotionIntensity: 0.6,
+	}
+
+	runtimeA := &interaction.RuntimeAssembly{
+		ExpressionPlan: exprPlan,
+		Context: interaction.ContextSnapshot{
+			RuntimeProfile: interaction.FieldReady(interaction.RuntimeProfile{
+				SpeakingStyle:     "傲娇冷淡，言不由衷",
+				BoundaryRules:     "内心想靠近但嘴上不承认",
+				PersonalityConfig: map[string]interface{}{"catchphrases": []interface{}{"哼", "切"}},
+			}, "profile", "v1"),
+		},
+	}
+	runtimeB := &interaction.RuntimeAssembly{
+		ExpressionPlan: exprPlan,
+		Context: interaction.ContextSnapshot{
+			RuntimeProfile: interaction.FieldReady(interaction.RuntimeProfile{
+				SpeakingStyle:     "温和体贴，真诚表达",
+				BoundaryRules:     "愿意敞开心扉",
+				PersonalityConfig: map[string]interface{}{"catchphrases": []interface{}{"嗯", "好呀"}},
+			}, "profile", "v1"),
+		},
+	}
+
+	resultA := buildEmotionFusionRaw(runtimeA, "傲娇A")
+	resultB := buildEmotionFusionRaw(runtimeB, "温柔B")
+
+	if resultA == "" || resultB == "" {
+		t.Fatal("both should produce non-empty output")
+	}
+	if resultA == resultB {
+		t.Error("different personalities should produce different output")
+	}
+
+	if !strings.Contains(resultA, "傲娇冷淡") {
+		t.Error("resultA should contain tsundere speaking style")
+	}
+	if !strings.Contains(resultB, "温和体贴") {
+		t.Error("resultB should contain gentle speaking style")
+	}
+
+	if !strings.Contains(resultA, "内心想靠近但嘴上不承认") {
+		t.Error("resultA should contain tsundere core conflict")
+	}
+	if !strings.Contains(resultB, "愿意敞开心扉") {
+		t.Error("resultB should contain gentle core conflict")
 	}
 }

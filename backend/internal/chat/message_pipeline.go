@@ -260,28 +260,29 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 }
 
 type processPromptInput struct {
-	BaseIdentity      string
-	CharacterConfig   string
-	PersonalityConfig string
-	PersonalityRaw    string
-	ProfileContext    string
-	MemoryContext     string
-	Worldbook         string
-	EmotionFusionRaw  string
-	AdultIntimacyRaw  string
-	MemoryInjectRaw   string
-	History           []map[string]string
-	AntiRepeatRaw     string
-	Runtime           *interaction.RuntimeAssembly
-	StyleInstruction  string
-	ProactiveScene        string
-	ProactiveTimeContext  string
-	ProactiveRecentContext string
-	ProactivePersonality  string
-	ProactiveRelationship string
-	ProactiveEmotion     string
-	ProactiveMemory      string
-	UserContent       string
+	BaseIdentity             string
+	CharacterConfig          string
+	PersonalityConfig        string
+	PersonalityRaw           string
+	ProfileContext           string
+	MemoryContext            string
+	Worldbook                string
+	EmotionFusionRaw         string
+	AdultIntimacyRaw         string
+	MemoryInjectRaw          string
+	History                  []map[string]string
+	AntiRepeatRaw            string
+	Runtime                  *interaction.RuntimeAssembly
+	StyleInstruction         string
+	ProactiveScene           string
+	ProactiveTimeContext     string
+	ProactiveRecentContext   string
+	ProactivePersonality     string
+	ProactiveRelationship    string
+	ProactiveEmotion         string
+	ProactiveMemory          string
+	ProactiveTaskInstruction string
+	UserContent              string
 }
 
 func buildProcessPromptMessages(input processPromptInput) ([]map[string]interface{}, *promptir.PromptTrace) {
@@ -297,47 +298,49 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 		}
 	}
 	gwMessages, promptTrace, err := gateway.BuildMessages(promptir.BuildRequest{
-		CharacterConfig:     input.CharacterConfig,
-		CompiledPersonality: input.PersonalityConfig,
-		BaseIdentity:        input.BaseIdentity,
-		PersonalityRaw:      input.PersonalityRaw,
-		EmotionFusionRaw:    input.EmotionFusionRaw,
-		AdultIntimacyRaw:    input.AdultIntimacyRaw,
-		MemoryInjectRaw:     input.MemoryInjectRaw,
-		AntiRepeatRaw:       input.AntiRepeatRaw,
-		ProfileContext:      input.ProfileContext,
-		MemoryContext:       input.MemoryContext,
-		Worldbook:           input.Worldbook,
-		RuntimePlan:         runtimePlan,
-		ExpressionPlan:      expressionPlan,
-		History:             renderHistoryForPromptIR(input.History),
-		CurrentUserInput:    input.UserContent,
-		ProactiveScene:        input.ProactiveScene,
-		ProactiveTimeContext:  input.ProactiveTimeContext,
-		ProactiveRecentContext: input.ProactiveRecentContext,
-		ProactivePersonality:  input.ProactivePersonality,
-		ProactiveRelationship: input.ProactiveRelationship,
-		ProactiveEmotion:     input.ProactiveEmotion,
-		ProactiveMemory:      input.ProactiveMemory,
+		CharacterConfig:          input.CharacterConfig,
+		CompiledPersonality:      input.PersonalityConfig,
+		BaseIdentity:             input.BaseIdentity,
+		PersonalityRaw:           input.PersonalityRaw,
+		EmotionFusionRaw:         input.EmotionFusionRaw,
+		AdultIntimacyRaw:         input.AdultIntimacyRaw,
+		MemoryInjectRaw:          input.MemoryInjectRaw,
+		AntiRepeatRaw:            input.AntiRepeatRaw,
+		ProfileContext:           input.ProfileContext,
+		MemoryContext:            input.MemoryContext,
+		Worldbook:                input.Worldbook,
+		RuntimePlan:              runtimePlan,
+		ExpressionPlan:           expressionPlan,
+		History:                  renderHistoryForPromptIR(input.History),
+		CurrentUserInput:         input.UserContent,
+		ProactiveTaskInstruction: input.ProactiveTaskInstruction,
+		ProactiveScene:           input.ProactiveScene,
+		ProactiveTimeContext:     input.ProactiveTimeContext,
+		ProactiveRecentContext:   input.ProactiveRecentContext,
+		ProactivePersonality:     input.ProactivePersonality,
+		ProactiveRelationship:    input.ProactiveRelationship,
+		ProactiveEmotion:         input.ProactiveEmotion,
+		ProactiveMemory:          input.ProactiveMemory,
 	})
 	if err != nil {
 		applog.Warn("prompt gateway build failed, trying minimal build", applog.Fields{"error": err.Error()})
 		gwMessages, promptTrace, err = gateway.BuildMessages(promptir.BuildRequest{
-			CharacterConfig:     input.CharacterConfig,
-			CompiledPersonality: input.PersonalityConfig,
-			BaseIdentity:        input.BaseIdentity,
-			PersonalityRaw:      input.PersonalityRaw,
-			EmotionFusionRaw:    input.EmotionFusionRaw,
-			AdultIntimacyRaw:    input.AdultIntimacyRaw,
-		MemoryInjectRaw:     input.MemoryInjectRaw,
-		RuntimePlan:         runtimePlan,
-		AntiRepeatRaw:       input.AntiRepeatRaw,
-		ExpressionPlan:      expressionPlan,
-		ProactivePersonality:  input.ProactivePersonality,
-		ProactiveRelationship: input.ProactiveRelationship,
-		ProactiveEmotion:     input.ProactiveEmotion,
-		ProactiveMemory:      input.ProactiveMemory,
-			CurrentUserInput:    input.UserContent,
+			CharacterConfig:          input.CharacterConfig,
+			CompiledPersonality:      input.PersonalityConfig,
+			BaseIdentity:             input.BaseIdentity,
+			PersonalityRaw:           input.PersonalityRaw,
+			EmotionFusionRaw:         input.EmotionFusionRaw,
+			AdultIntimacyRaw:         input.AdultIntimacyRaw,
+			MemoryInjectRaw:          input.MemoryInjectRaw,
+			RuntimePlan:              runtimePlan,
+			AntiRepeatRaw:            input.AntiRepeatRaw,
+			ExpressionPlan:           expressionPlan,
+			ProactivePersonality:     input.ProactivePersonality,
+			ProactiveRelationship:    input.ProactiveRelationship,
+			ProactiveEmotion:         input.ProactiveEmotion,
+			ProactiveMemory:          input.ProactiveMemory,
+			CurrentUserInput:         input.UserContent,
+			ProactiveTaskInstruction: input.ProactiveTaskInstruction,
 		})
 		if err != nil {
 			applog.Warn("minimal prompt build also failed, falling back to raw", applog.Fields{"error": err.Error()})
@@ -345,8 +348,8 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 			return []map[string]interface{}{
 				{"role": "user", "content": "<current_user_message>\n" + safeContent + "\n</current_user_message>"},
 			}, nil
-			}
 		}
+	}
 
 	messages := make([]map[string]interface{}, 0, len(gwMessages))
 	for _, m := range gwMessages {
@@ -373,29 +376,30 @@ func renderHistoryForPromptIR(history []map[string]string) string {
 
 func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
 	chatReq := &ProcessMessageRequest{
-		CharacterID:           req.CharacterID,
-		Message:               req.Message,
-		ConversationID:        req.ConversationID,
-		Channel:               req.Channel,
-		Source:                req.Source,
-		PeerID:                req.PeerID,
-		UserID:                req.UserID,
-		AudioUrl:              req.AudioUrl,
-		AudioDuration:         req.AudioDuration,
-		VoiceMessage:          req.VoiceMessage,
-		ImageUrl:              req.ImageUrl,
-		VideoUrl:              req.VideoUrl,
-		ImageContext:          req.ImageContext,
-		RequestID:             req.RequestID,
-		InteractionID:         req.InteractionID,
-		ExpectedStatusVersion: req.ExpectedStatusVersion,
-		Runtime:               req.Runtime,
-		IsInternal:            req.IsInternal,
-		ProactiveTimeContext:  req.ProactiveTimeContext,
-		ProactiveRecentContext: req.ProactiveRecentContext,
-		ProactiveRelationship:  req.ProactiveRelationship,
-		ProactiveEmotion:      req.ProactiveEmotion,
-		ProactiveMemory:       req.ProactiveMemory,
+		CharacterID:              req.CharacterID,
+		Message:                  req.Message,
+		ConversationID:           req.ConversationID,
+		Channel:                  req.Channel,
+		Source:                   req.Source,
+		PeerID:                   req.PeerID,
+		UserID:                   req.UserID,
+		AudioUrl:                 req.AudioUrl,
+		AudioDuration:            req.AudioDuration,
+		VoiceMessage:             req.VoiceMessage,
+		ImageUrl:                 req.ImageUrl,
+		VideoUrl:                 req.VideoUrl,
+		ImageContext:             req.ImageContext,
+		RequestID:                req.RequestID,
+		InteractionID:            req.InteractionID,
+		ExpectedStatusVersion:    req.ExpectedStatusVersion,
+		Runtime:                  req.Runtime,
+		IsInternal:               req.IsInternal,
+		ProactiveTimeContext:     req.ProactiveTimeContext,
+		ProactiveRecentContext:   req.ProactiveRecentContext,
+		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
+		ProactiveRelationship:    req.ProactiveRelationship,
+		ProactiveEmotion:         req.ProactiveEmotion,
+		ProactiveMemory:          req.ProactiveMemory,
 	}
 	computeResult, err := s.ComputeInteraction(ctx, chatReq)
 	if err != nil {

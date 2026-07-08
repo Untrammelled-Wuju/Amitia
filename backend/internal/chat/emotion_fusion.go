@@ -137,8 +137,37 @@ func buildEmotionFusionRaw(runtime *interaction.RuntimeAssembly, name string) st
 	if name != "" {
 		input.PersonalityLabel = name
 	}
-	input.CoreConflict = "嘴硬但心软"
-	input.Catchphrases = []string{"嗯", "哼", "切"}
-	input.SpeakingStyle = "自然口语化，多用短句和反问"
+	if runtime.Context.RuntimeProfile.Status == interaction.LoadStatusReady {
+		rp := runtime.Context.RuntimeProfile.Value
+		if rp.BoundaryRules != "" {
+			input.CoreConflict = rp.BoundaryRules
+		}
+		if rp.SpeakingStyle != "" {
+			input.SpeakingStyle = rp.SpeakingStyle
+		}
+		if catchphrases, ok := rp.PersonalityConfig["catchphrases"]; ok {
+			switch v := catchphrases.(type) {
+			case []interface{}:
+				for _, item := range v {
+					if s, ok := item.(string); ok {
+						input.Catchphrases = append(input.Catchphrases, s)
+					}
+				}
+			case []string:
+				input.Catchphrases = v
+			}
+		} else if catchphrases, ok := rp.ChatStyleConfig["catchphrases"]; ok {
+			switch v := catchphrases.(type) {
+			case []interface{}:
+				for _, item := range v {
+					if s, ok := item.(string); ok {
+						input.Catchphrases = append(input.Catchphrases, s)
+					}
+				}
+			case []string:
+				input.Catchphrases = v
+			}
+		}
+	}
 	return promptir.BuildEmotionFusionRawSection(*input)
 }

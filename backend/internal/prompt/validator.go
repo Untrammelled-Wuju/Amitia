@@ -10,23 +10,23 @@ type Validator struct {
 }
 
 var flagToSectionTypes = map[string][]GwSectionType{
-	"TextlibRawEnabled":       {GwSectionChannelShortRaw},
-	"PersonalityRawEnabled":   {GwSectionPersonalityRaw},
-	"EmotionFusionEnabled":    {GwSectionEmotionFusionRaw},
-	"IntimacyDefaultEnabled":  {GwSectionAdultIntimacyRaw},
-	"MemoryRawEnabled":        {GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw},
-	"ReplySanitizerEnabled":   {GwSectionOutputShapeRaw, GwSectionAntiRepeatRaw},
-	"ProactiveRawEnabled":     {GwSectionProactiveRaw, GwSectionProactiveScene, GwSectionProactivePersonality, GwSectionProactiveTimeContext, GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory, GwSectionProactiveRecentContext},
+	"TextlibRawEnabled":      {GwSectionChannelShortRaw},
+	"PersonalityRawEnabled":  {GwSectionPersonalityRaw},
+	"EmotionFusionEnabled":   {GwSectionEmotionFusionRaw},
+	"IntimacyDefaultEnabled": {GwSectionAdultIntimacyRaw},
+	"MemoryRawEnabled":       {GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw},
+	"ReplySanitizerEnabled":  {GwSectionOutputShapeRaw, GwSectionAntiRepeatRaw},
+	"ProactiveRawEnabled":    {GwSectionProactiveRaw, GwSectionProactiveScene, GwSectionProactivePersonality, GwSectionProactiveTimeContext, GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory, GwSectionProactiveRecentContext},
 }
 
 var flagToSectionNames = map[string]string{
-	"TextlibRawEnabled":       "prompt_raw_textlib_enabled",
-	"PersonalityRawEnabled":   "prompt_personality_raw_enabled",
-	"EmotionFusionEnabled":    "prompt_emotion_fusion_enabled",
-	"IntimacyDefaultEnabled":  "prompt_intimacy_default_enabled",
-	"MemoryRawEnabled":        "prompt_memory_raw_enabled",
-	"ReplySanitizerEnabled":   "prompt_reply_sanitizer_enabled",
-	"ProactiveRawEnabled":     "prompt_proactive_raw_enabled",
+	"TextlibRawEnabled":      "prompt_raw_textlib_enabled",
+	"PersonalityRawEnabled":  "prompt_personality_raw_enabled",
+	"EmotionFusionEnabled":   "prompt_emotion_fusion_enabled",
+	"IntimacyDefaultEnabled": "prompt_intimacy_default_enabled",
+	"MemoryRawEnabled":       "prompt_memory_raw_enabled",
+	"ReplySanitizerEnabled":  "prompt_reply_sanitizer_enabled",
+	"ProactiveRawEnabled":    "prompt_proactive_raw_enabled",
 }
 
 func NewValidator() *Validator {

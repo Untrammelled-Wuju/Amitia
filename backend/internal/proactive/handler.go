@@ -21,8 +21,8 @@ type ProactiveDispatcher interface {
 }
 
 type Handler struct {
-	service          Service
-	db               *gorm.DB
+	service Service
+	db      *gorm.DB
 	compSvc ProactiveDispatcher
 }
 

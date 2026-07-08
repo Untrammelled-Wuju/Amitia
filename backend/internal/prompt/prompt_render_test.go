@@ -411,4 +411,3 @@ func TestGatewayBuildMessagesNewSectionsRenderCorrectly(t *testing.T) {
 		}
 	}
 }
-

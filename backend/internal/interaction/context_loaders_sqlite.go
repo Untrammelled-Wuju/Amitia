@@ -148,10 +148,12 @@ func (l *PsycheContextLoader) CacheKey(scope InteractionScope, version string) s
 }
 func (l *PsycheContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
 	var row struct {
-		Stress float64
-		Energy float64
+		Emotion string
+		Mood    string
+		Stress  float64
+		Energy  float64
 	}
-	err := l.db.WithContext(ctx).Table("psyche_states").Select("stress, energy").Where("character_id = ?", scope.CharacterID).Take(&row).Error
+	err := l.db.WithContext(ctx).Table("psyche_states").Select("emotion, mood, stress, energy").Where("character_id = ?", scope.CharacterID).Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
@@ -159,6 +161,30 @@ func (l *PsycheContextLoader) Load(ctx context.Context, scope InteractionScope, 
 		Stress:  row.Stress,
 		Fatigue: clamp01(1 - row.Energy),
 		Arousal: clamp01(0.5 + row.Stress/2),
+	}
+	if row.Emotion != "" && row.Emotion != "{}" {
+		var emo struct {
+			Valence   float64 `json:"valence"`
+			Arousal   float64 `json:"arousal"`
+			Dominance float64 `json:"dominance"`
+		}
+		if json.Unmarshal([]byte(row.Emotion), &emo) == nil {
+			state.Valence = emo.Valence
+			state.Dominance = emo.Dominance
+			if emo.Arousal > 0 {
+				state.Arousal = emo.Arousal
+			}
+		}
+	}
+	if row.Mood != "" && row.Mood != "{}" {
+		var m struct {
+			MoodValence float64 `json:"moodValence"`
+			MoodArousal float64 `json:"moodArousal"`
+		}
+		if json.Unmarshal([]byte(row.Mood), &m) == nil {
+			state.MoodValence = m.MoodValence
+			state.MoodArousal = m.MoodArousal
+		}
 	}
 	return FieldReady[any](state, l.Name(), version), nil
 }

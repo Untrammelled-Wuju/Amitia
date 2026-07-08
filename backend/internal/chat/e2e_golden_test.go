@@ -560,7 +560,6 @@ func TestE2E_AllNewFlagsOff_OldChatLinkWorks(t *testing.T) {
 	t.Logf("关闭新开关后旧聊天链路可运行: assistant消息数=%d, reply=%s", assistantCount, resp.Reply)
 }
 
-
 func TestE2E_ProactiveNotHuntAfterGoodnight(t *testing.T) {
 	suppressPhrases := []string{"晚安", "别发了", "不用回了", "去忙了"}
 	for _, phrase := range suppressPhrases {
