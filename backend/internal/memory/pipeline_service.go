@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
 func (s *service) Name() string { return "结构化事实" }
@@ -21,7 +23,11 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
-	candidates, err := s.generateCandidatesFromMessages(convID, pending)
+	filteredMsgs := filterExtractableMessages(pending)
+	if len(filteredMsgs) == 0 {
+		return manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner)
+	}
+	candidates, err := s.generateCandidatesFromMessages(convID, filteredMsgs)
 	if err != nil {
 		return err
 	}
@@ -34,6 +40,8 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	for _, m := range existingMemories {
 		existingKeys[m.Key+"|"+m.Value] = true
 	}
+
+	acceptedCount := 0
 	for _, c := range candidates {
 		if c.Importance < 7 {
 			continue
@@ -41,13 +49,134 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 		if existingKeys[c.Key+"|"+c.Value] {
 			continue
 		}
+
+		autoRes, err := s.AutoResolveConflict(c.Key, c.Value, c.CharacterID, 50)
+		if err == nil && autoRes.Resolved {
+			continue
+		}
+
 		existingKeys[c.Key+"|"+c.Value] = true
 		mem, err := s.AcceptCandidate(c.ID)
 		if err == nil && mem != nil {
 			s.SyncEmbedding(mem.ID, mem.Key, mem.Value, mem.CharacterID, mem.MemoryType)
+			acceptedCount++
 		}
 	}
+
+	if acceptedCount > 0 {
+		s.consolidationNeeded(convID)
+	}
+
 	return manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner)
+}
+
+func (s *service) consolidationNeeded(convID string) {
+	var charID string
+	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&charID); err != nil {
+		return
+	}
+	var count int64
+	s.db.Table("memories").Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).Count(&count)
+	if count < 20 {
+		return
+	}
+
+	var lastConsolidation string
+	s.db.Table("memory_events").Select("created_at").
+		Where("character_id = ? AND event_type = 'consolidation'", charID).
+		Order("created_at DESC").Limit(1).Row().Scan(&lastConsolidation)
+
+	if lastConsolidation != "" {
+		lastT, err := time.Parse("2006-01-02 15:04:05", lastConsolidation)
+		if err == nil && time.Since(lastT) < 2*time.Hour {
+			return
+		}
+	}
+
+	go s.runConsolidation(charID)
+}
+
+func (s *service) runConsolidation(charID string) {
+	cfg := s.getActiveModel()
+	if cfg == nil {
+		return
+	}
+
+	var facts []struct {
+		ID          string
+		Key         string
+		Value       string
+		MemoryType  string
+		Importance  int
+		CreatedAt   string
+	}
+	s.db.Table("memories").
+		Select("id, key, value, memory_type, importance, created_at").
+		Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).
+		Order("importance DESC, created_at DESC").Limit(50).Find(&facts)
+
+	if len(facts) < 10 {
+		return
+	}
+
+	factLines := make([]string, 0, len(facts))
+	for i, f := range facts {
+		factLines = append(factLines, fmt.Sprintf("[%d] (%s) %s: %s", i+1, f.MemoryType, f.Key, f.Value))
+	}
+
+	userMsg := fmt.Sprintf(textlib.MemoryConsolidationUserMsgTemplate, len(facts), strings.Join(factLines, "\n"))
+
+	messages := []map[string]interface{}{
+		{"role": "system", "content": textlib.MemoryConsolidationSystemPrompt},
+		{"role": "user", "content": userMsg},
+	}
+
+	content, _, err := s.callLLM(cfg, messages)
+	if err != nil {
+		return
+	}
+
+	content = extractJSONObject(content)
+	var result struct {
+		Insights      []map[string]interface{} `json:"insights"`
+		Associations  []map[string]interface{} `json:"associations"`
+	}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return
+	}
+
+	now := time.Now().Format("2006-01-02 15:04:05")
+	for _, insight := range result.Insights {
+		subcategory, _ := insight["subcategory"].(string)
+		subject, _ := insight["subject"].(string)
+		summary, _ := insight["summary"].(string)
+		triggersJSON, _ := json.Marshal(insight["triggers"])
+
+		eventID := uuid.New().String()
+		s.db.Exec(
+			"INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			eventID, "", "consolidation", subject, summary, subcategory, 0, "auto", charID, now,
+		)
+
+		detailsJSON, _ := json.Marshal(map[string]interface{}{
+			"subcategory": subcategory,
+			"subject":     subject,
+			"summary":     summary,
+			"triggers":    string(triggersJSON),
+		})
+		s.db.Exec(
+			"INSERT INTO consolidation_results (id, character_id, insight_type, insight_text, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+			uuid.New().String(), charID, subcategory, summary, string(detailsJSON), now,
+		)
+	}
+
+	if len(result.Associations) > 0 {
+		assocJSON, _ := json.Marshal(result.Associations)
+		s.db.Exec(
+			"INSERT INTO consolidation_results (id, character_id, insight_type, insight_text, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+			uuid.New().String(), charID, "associations", fmt.Sprintf("%d associations", len(result.Associations)), string(assocJSON), now,
+		)
+	}
 }
 
 func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult) {

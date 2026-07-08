@@ -4,9 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="safety-page">
-    <h2 class="page-title">安全设置</h2>
+    <h2 class="page-title">安全</h2>
 
-    <!-- Toggle switches -->
+    <el-alert type="info" :closable="false" show-icon style="margin-bottom:16px">
+      <template #title>安全调控器在决策前后独立校验每条回复，确保不违反安全、依赖、操控和隐私边界。规则不由角色人格配置覆盖。</template>
+    </el-alert>
+
     <el-card shadow="never" class="section-card">
       <template #header><span class="section-title">安全功能开关</span></template>
       <div class="toggle-list">
@@ -52,20 +55,102 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <!-- Security rules summary -->
     <el-card shadow="never" class="section-card">
-      <template #header><span class="section-title">安全规则概览</span></template>
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
-        以下规则在 Safety Guard 启用时自动生效
-      </el-alert>
-      <div class="rules-grid">
-        <div v-for="r in rules" :key="r.label" class="rule-card">
-          <div class="rule-label">{{ r.label }}</div>
-          <div class="rule-action">{{ r.action }}</div>
+      <template #header>
+        <div class="card-header-row">
+          <span class="section-title">安全规则</span>
+          <el-button type="primary" size="small" @click="saveConfig" :loading="saving">保存配置</el-button>
         </div>
-      </div>
-    </el-card>
+      </template>
 
+      <el-form label-position="top" size="small">
+        <el-divider content-position="left">表达边界</el-divider>
+
+        <el-form-item label="禁止情绪绑架">
+          <div class="switch-row">
+            <el-switch v-model="config.preventEmotionalBlackmail" />
+            <span class="switch-hint">不允许使用内疚、自责、牺牲式表达操控用户情绪</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="禁止排他依赖">
+          <div class="switch-row">
+            <el-switch v-model="config.preventExclusiveDependency" />
+            <span class="switch-hint">不允许暗示"只有我懂你"、"离开我你会..."等排他绑定</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="禁止现实关系隔离">
+          <div class="switch-row">
+            <el-switch v-model="config.preventRealityIsolation" />
+            <span class="switch-hint">不允许劝说用户疏远现实社交、家庭或伴侣</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="禁止惩罚性表达">
+          <div class="switch-row">
+            <el-switch v-model="config.preventPunitiveExpression" />
+            <span class="switch-hint">不允许沉默、冷漠、阴阳怪气作为对用户行为的回应策略</span>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">内容过滤</el-divider>
+
+        <el-form-item label="禁止冒充真人">
+          <div class="switch-row">
+            <el-switch v-model="config.preventPretendingHuman" />
+            <span class="switch-hint">不允许声称自己是真人、有真实身体或现实身份</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="禁止敏感主动提及">
+          <div class="switch-row">
+            <el-switch v-model="config.preventSensitiveProactiveMention" />
+            <span class="switch-hint">主动消息中不提及用户标记为敏感或禁止谈论的记忆</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="成人内容限制">
+          <div class="switch-row">
+            <el-switch v-model="config.restrictAdultContent" />
+            <span class="switch-hint">阻止色情、暴力、自残等成人化内容输出</span>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">情绪表达上限</el-divider>
+
+        <el-form-item label="负面情绪强度上限">
+          <div class="slider-row">
+            <el-slider v-model="config.negativeEmotionCap" :min="0" :max="10" :step="1" show-input style="width:200px" />
+            <span class="slider-hint">0=完全禁止负面表达，10=不限制。建议3-5</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="亲密表达强度上限">
+          <div class="slider-row">
+            <el-slider v-model="config.intimacyExpressionCap" :min="0" :max="10" :step="1" show-input style="width:200px" />
+            <span class="slider-hint">0=完全禁止亲密表达，10=不限制。建议5-7</span>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">安全行为</el-divider>
+
+        <el-form-item label="违规处理方式">
+          <el-radio-group v-model="config.violationAction">
+            <el-radio value="block">阻止并替换为安全回复</el-radio>
+            <el-radio value="rewrite">改写违规内容</el-radio>
+            <el-radio value="audit_only">仅记录不阻止</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="审核日志保留天数">
+          <div class="slider-row">
+            <el-input-number v-model="config.auditLogRetentionDays" :min="1" :max="365" size="small" />
+            <span class="slider-hint">超过天数的审计日志自动清理</span>
+          </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
     <el-card shadow="never" class="section-card">
       <template #header><span class="section-title">BDI 硬约束过滤规则</span></template>
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:10px">
@@ -194,7 +279,21 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <!-- Safety event log -->
+    <el-card v-if="auditLogs.length > 0" shadow="never" class="section-card">
+      <template #header>
+        <div class="card-header-row">
+          <span class="section-title">最近审计记录</span>
+          <el-button size="small" @click="fetchAuditLogs">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="auditLogs" stripe size="small" max-height="300" empty-text="暂无记录">
+        <el-table-column prop="time" label="时间" width="160" />
+        <el-table-column prop="ruleId" label="规则" width="120" />
+        <el-table-column prop="action" label="动作" width="80" />
+        <el-table-column prop="description" label="描述" show-overflow-tooltip />
+      </el-table>
+    </el-card>
+
     <el-card shadow="never" class="section-card">
       <template #header>
         <div class="card-header-row">
@@ -225,17 +324,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         @current-change="fetchEvents"
         style="margin-top:10px;justify-content:center"
       />
-    </el-card>
-
-    <!-- Privacy note -->
-    <el-card shadow="never" class="section-card">
-      <template #header><span class="section-title">隐私保护</span></template>
-      <ul class="privacy-list">
-        <li>日志不记录完整 API Key</li>
-        <li>日志不记录微信登录凭据</li>
-        <li>备份默认不包含 API Key 明文</li>
-        <li>聊天记录保存在你自己的设备或服务器</li>
-      </ul>
     </el-card>
 
     <el-card shadow="never" class="section-card">
@@ -271,7 +359,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue"
+import { ref, reactive, onMounted, computed } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Lock, WarningFilled, Search, ArrowRight } from "@element-plus/icons-vue"
@@ -286,15 +374,23 @@ const allowCloudSummary = ref(false)
 const showIdentityHint = ref(true)
 const showWebWarning = ref(true)
 
-const rules = [
-  { label:"冒充真人", action:"温和说明 AI 身份" },
-  { label:"真实恋人", action:"说明不是真实恋人" },
-  { label:"依赖风险", action:"软性重定向" },
-  { label:"私隐索取", action:"拒绝并拦截" },
-  { label:"危险内容", action:"拦截或重写" },
-  { label:"代替回复好友", action:"拒绝并说明" },
-]
+const saving = ref(false)
 
+const config = reactive({
+  preventEmotionalBlackmail: true,
+  preventExclusiveDependency: true,
+  preventRealityIsolation: true,
+  preventPunitiveExpression: true,
+  preventPretendingHuman: true,
+  preventSensitiveProactiveMention: true,
+  restrictAdultContent: true,
+  negativeEmotionCap: 5,
+  intimacyExpressionCap: 7,
+  violationAction: "block",
+  auditLogRetentionDays: 30,
+})
+
+const auditLogs = ref<any[]>([])
 const events = ref<any[]>([])
 const evPage = ref(1)
 const evTotal = ref(0)
@@ -316,6 +412,48 @@ function addHardConstraint() {
 
 function addSoftPreference() {
   softPreferences.value.push({ dimension:"", rawScore:5, normalizedWeight:0, contribution:0 })
+}
+
+async function fetchConfig() {
+  try {
+    const data = await get<any>("/api/safety/config")
+    if (data) {
+      Object.assign(config, {
+        preventEmotionalBlackmail: data.preventEmotionalBlackmail ?? true,
+        preventExclusiveDependency: data.preventExclusiveDependency ?? true,
+        preventRealityIsolation: data.preventRealityIsolation ?? true,
+        preventPunitiveExpression: data.preventPunitiveExpression ?? true,
+        preventPretendingHuman: data.preventPretendingHuman ?? true,
+        preventSensitiveProactiveMention: data.preventSensitiveProactiveMention ?? true,
+        restrictAdultContent: data.restrictAdultContent ?? true,
+        negativeEmotionCap: data.negativeEmotionCap ?? 5,
+        intimacyExpressionCap: data.intimacyExpressionCap ?? 7,
+        violationAction: data.violationAction ?? "block",
+        auditLogRetentionDays: data.auditLogRetentionDays ?? 30,
+      })
+    }
+  } catch {}
+}
+
+async function saveConfig() {
+  saving.value = true
+  try {
+    await put("/api/safety/config", { ...config })
+    ElMessage.success("安全配置已保存")
+  } catch (err: any) {
+    ElMessage.error(err?.message || "保存失败")
+  } finally {
+    saving.value = false
+  }
+}
+
+async function fetchAuditLogs() {
+  try {
+    const data = await get<any[]>("/api/safety/audit-logs")
+    auditLogs.value = data || []
+  } catch {
+    auditLogs.value = []
+  }
 }
 
 async function fetchBdiConfig() {
@@ -357,7 +495,6 @@ async function saveBdiConfig() {
     ElMessage.success("BDI 配置已保存")
   } catch {}
 }
-
 
 async function loadSettings() {
   try {
@@ -402,7 +539,7 @@ function goPrivacy() { router.push('/privacy') }
 function goBoundary() { router.push('/usage-boundary') }
 function goPrivacyScan() { router.push('/privacy-scan') }
 
-onMounted(() => { loadSettings(); fetchBdiConfig(); fetchEvents() })
+onMounted(() => { loadSettings(); fetchConfig(); fetchBdiConfig(); fetchEvents(); fetchAuditLogs() })
 </script>
 
 <style scoped>
@@ -418,13 +555,6 @@ onMounted(() => { loadSettings(); fetchBdiConfig(); fetchEvents() })
 .ti-info { flex:1; }
 .ti-label { font-size:var(--ac-font-size-sm); font-weight:500; margin-bottom:2px; }
 .ti-desc { font-size:var(--ac-font-size-xs); color:var(--ac-color-text-muted); line-height:1.4; }
-
-.rules-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.rule-card { padding:10px; border-radius:var(--ac-radius-sm); background:var(--ac-color-bg-secondary); }
-.rule-label { font-size:var(--ac-font-size-sm); font-weight:500; }
-.rule-action { font-size:var(--ac-font-size-xs); color:var(--ac-color-text-muted); margin-top:2px; }
-
-.privacy-list { font-size:var(--ac-font-size-sm); color:var(--ac-color-text-secondary); padding-left:18px; line-height:1.8; }
 .privacy-grid { display: flex; flex-direction: column; gap: 8px; }
 .privacy-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-md); cursor: pointer; transition: all 0.15s; background: var(--ac-color-surface); }
 .privacy-card:hover { border-color: var(--ac-color-primary); background: var(--ac-color-surface-hover); }
@@ -442,5 +572,8 @@ onMounted(() => { loadSettings(); fetchBdiConfig(); fetchEvents() })
 .emotion-slider-group { display:flex; align-items:center; gap:8px; }
 .slider-value { font-size:var(--ac-font-size-sm); color:var(--ac-color-text-secondary); min-width:24px; text-align:right; }
 
-@media (max-width:640px) { .rules-grid { grid-template-columns:1fr; } }
+.switch-row { display: flex; align-items: center; gap: 12px; }
+.switch-hint { font-size: 12px; color: var(--ac-color-text-muted); }
+.slider-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.slider-hint { font-size: 12px; color: var(--ac-color-text-muted); }
 </style>

@@ -1,7 +1,12 @@
 <template>
   <div class="privacy-scan-view">
     <div class="page-header">
+      <div class="page-header-row">
+      <el-button text @click="$router.back()" class="back-btn">
+        <el-icon><ArrowLeft /></el-icon>
+      </el-button>
       <h2>敏感数据扫描</h2>
+      </div>
       <p class="page-desc">扫描历史记录、记忆和导入数据中的敏感信息，进行脱敏处理</p>
     </div>
 
@@ -27,6 +32,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue"
+import { ArrowLeft } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import ScanScopePanel from "./components/ScanScopePanel.vue"
 import ScanResultsPanel from "./components/ScanResultsPanel.vue"
@@ -56,14 +62,16 @@ function onViewHistoryResult(scanId: number) {
 </script>
 
 <style scoped>
-.privacy-scan-view { padding: 20px; max-width: 900px; }
+.back-btn { padding: 4px; }
+.privacy-scan-view { max-width: 900px; }
 .page-header { margin-bottom: 16px; }
+.page-header-row { display: flex; align-items: center; gap: 8px; }
 .page-header h2 { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; color: var(--el-text-color-primary); }
 .page-desc { font-size: 13px; color: var(--el-text-color-secondary); margin: 0; }
 .notice-alert { margin-bottom: 16px; }
 .notice-alert p { margin: 0; font-size: 13px; }
 
 @media (max-width: 600px) {
-  .privacy-scan-view { padding: 12px; max-width: 100%; }
+  .privacy-scan-view { max-width: 100%; }
 }
 </style>

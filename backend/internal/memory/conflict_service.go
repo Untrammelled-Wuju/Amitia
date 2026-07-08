@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
 func (s *service) CheckConflict(req *CheckConflictRequest) (*CheckConflictResponse, error) {
@@ -83,10 +85,13 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		importance = 10
 	}
 
+	now := time.Now().Format("2006-01-02 15:04:05")
+
 	switch req.Action {
 	case "replace", "replace_old":
 		if req.ConflictID != "" {
 			if existing != nil {
+				s.preserveHistory(existing, "replaced", now)
 				s.deleteGraph(existing)
 			}
 			s.repo.Delete(req.ConflictID)
@@ -125,12 +130,13 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		newValue := req.NewValue
 		if existing != nil {
 			newValue = existing.Value + "; " + req.NewValue
+			s.preserveHistory(existing, "merged", now)
 			updates := map[string]interface{}{
 				"value":            newValue,
 				"importance":       importance,
 				"confidence":       maxInt(existing.Confidence, 50),
 				"verified_status":  "user_verified",
-				"last_verified_at": time.Now().Format("2006-01-02 15:04:05"),
+				"last_verified_at": now,
 			}
 			if err := s.repo.Update(existing.ID, updates); err != nil {
 				return nil, err
@@ -166,6 +172,8 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 		return &ResolveConflictResponse{Resolved: false}, nil
 	}
 
+	now := time.Now().Format("2006-01-02 15:04:05")
+
 	for _, m := range existing {
 		if m.Key != key {
 			continue
@@ -174,7 +182,7 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 			if newConfidence > m.Confidence+10 {
 				s.repo.Update(m.ID, map[string]interface{}{
 					"confidence": newConfidence,
-					"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+					"updated_at": now,
 				})
 				if updated, err := s.repo.FindByID(m.ID); err == nil {
 					s.syncGraph(updated)
@@ -184,6 +192,7 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 		}
 		confDiff := newConfidence - m.Confidence
 		if confDiff >= 40 {
+			s.preserveHistory(&m, "auto_replaced", now)
 			s.deleteGraph(&m)
 			s.repo.Delete(m.ID)
 			return &ResolveConflictResponse{Resolved: false}, nil
@@ -198,17 +207,33 @@ func (s *service) llmCheckContradiction(newVal, oldVal string) (bool, error) {
 	if cfg == nil {
 		return false, nil
 	}
-	prompt := fmt.Sprintf(`判断以下两条记忆是否存在矛盾。存在矛盾返回true，不矛盾返回false。
-记忆A: %s
-记忆B: %s
-只返回true或false。`, newVal, oldVal)
+
+	userMsg := fmt.Sprintf(
+		textlib.MemoryContradictionUserMsgTemplate,
+		"", "", oldVal,
+		"", "", newVal,
+	)
 
 	messages := []map[string]interface{}{
-		{"role": "user", "content": prompt},
+		{"role": "system", "content": textlib.MemoryContradictionSystemPrompt},
+		{"role": "user", "content": userMsg},
 	}
 	content, _, err := s.callLLM(cfg, messages)
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(strings.ToLower(strings.TrimSpace(content)), "true"), nil
+
+	content = strings.TrimSpace(content)
+	lower := strings.ToLower(content)
+	return strings.Contains(lower, "strong_conflict") || strings.Contains(lower, "weak_conflict"), nil
+}
+
+func (s *service) preserveHistory(memory *Memory, action, timestamp string) {
+	if s.db == nil || memory == nil {
+		return
+	}
+	s.db.Exec(
+		"INSERT INTO memory_history (memory_id, previous_value, action, changed_at) VALUES (?, ?, ?, ?)",
+		memory.ID, memory.Value, action, timestamp,
+	)
 }

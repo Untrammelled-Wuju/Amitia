@@ -132,7 +132,6 @@ import { ArrowLeft } from "@element-plus/icons-vue"
 
 <style scoped>
 .privacy-page {
-  max-width: 700px;
   padding: 20px;
 }
 

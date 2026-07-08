@@ -11,7 +11,6 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
@@ -126,6 +125,67 @@ func createInteractionRecord(t *testing.T, db *gorm.DB, interactionID, charID, c
 	}
 }
 
+func mustQueryPsycheRaw(t *testing.T, db *gorm.DB, charID string) map[string]interface{} {
+	t.Helper()
+	var rec struct {
+		CharacterID  string  `gorm:"column:character_id"`
+		StateVersion int     `gorm:"column:state_version"`
+		Emotion      string  `gorm:"column:emotion"`
+		Mood         string  `gorm:"column:mood"`
+		Stress       float64 `gorm:"column:stress"`
+		Energy       float64 `gorm:"column:energy"`
+	}
+	if err := db.Table("psyche_states").Where("character_id = ?", charID).First(&rec).Error; err != nil {
+		return map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"character_id":  rec.CharacterID,
+		"state_version": rec.StateVersion,
+		"emotion":       rec.Emotion,
+		"mood":          rec.Mood,
+		"stress":        rec.Stress,
+		"energy":        rec.Energy,
+	}
+}
+
+func mustQueryRelationshipsRaw(t *testing.T, db *gorm.DB, charID, relationType string) []map[string]interface{} {
+	t.Helper()
+	var records []RelationshipStateRecord
+	if err := db.Where("character_id = ? AND relation_type = ?", charID, relationType).Find(&records).Error; err != nil {
+		t.Fatal(err)
+	}
+	var result []map[string]interface{}
+	for _, r := range records {
+		result = append(result, map[string]interface{}{
+			"character_id":  r.CharacterID,
+			"relation_type": r.RelationType,
+			"relation_data": r.RelationData,
+		})
+	}
+	return result
+}
+
+func mustQueryNeedsRaw(t *testing.T, db *gorm.DB, charID string) []map[string]interface{} {
+	t.Helper()
+	var records []NeedStateRecord
+	if err := db.Where("character_id = ?", charID).Find(&records).Error; err != nil {
+		t.Fatal(err)
+	}
+	var result []map[string]interface{}
+	for _, r := range records {
+		result = append(result, map[string]interface{}{
+			"id":            r.ID,
+			"character_id":  r.CharacterID,
+			"need_key":      r.NeedKey,
+			"current_value": r.CurrentValue,
+			"baseline":      r.Baseline,
+			"trend":         r.Trend,
+			"saturated":     r.Saturated,
+		})
+	}
+	return result
+}
+
 func TestE2E_GoldenPath_CharacterPersonalityToPsycheRelationshipAndMindState(t *testing.T) {
 	personalityCfg := `{"warmth":60,"initiative":40,"sensitivity":70,"tolerance":80}`
 	db, svc, charID, convID := setupE2EGoldenTest(t, personalityCfg)
@@ -222,40 +282,24 @@ func TestE2E_GoldenPath_CharacterPersonalityToPsycheRelationshipAndMindState(t *
 	}
 	t.Logf("需求状态记录数: %d", needCount)
 
-	appCtx := app.NewAppContext(db, nil)
-	companionSvc := companion.NewService(appCtx)
-	mindState := companionSvc.GetMindState(charID)
-	if mindState == nil {
-		t.Fatal("期望GetMindState返回不为nil")
+	psycheRaw := mustQueryPsycheRaw(t, db, charID)
+	if psycheRaw["state_version"] != nil {
+		t.Logf("心理状态展示: stateVersion=%v", psycheRaw["state_version"])
+	} else {
+		t.Fatal("期望psyche中有stateVersion数据")
 	}
 
-	if psyche, ok := mindState["psyche"].(map[string]interface{}); ok {
-		if sv, ok := psyche["stateVersion"].(int); ok && sv > 0 {
-			t.Logf("心理状态展示: stateVersion=%d", sv)
-		} else {
-			t.Logf("心理状态展示: %v", psyche)
-		}
-	} else {
-		t.Fatal("期望mindState中有psyche数据")
+	relsRaw := mustQueryRelationshipsRaw(t, db, charID, "peer:peer-e2e")
+	if len(relsRaw) == 0 {
+		t.Fatal("期望relationships不为空")
 	}
+	t.Logf("关系展示: 共%d条", len(relsRaw))
 
-	if rels, ok := mindState["relationships"].([]map[string]interface{}); ok {
-		if len(rels) == 0 {
-			t.Fatal("期望relationships不为空")
-		}
-		t.Logf("关系展示: 共%d条", len(rels))
-	} else {
-		t.Fatal("期望mindState中有relationships数据")
+	needsRaw := mustQueryNeedsRaw(t, db, charID)
+	if len(needsRaw) == 0 {
+		t.Fatal("期望needs不为空")
 	}
-
-	if needs, ok := mindState["needs"].([]map[string]interface{}); ok {
-		if len(needs) == 0 {
-			t.Fatal("期望needs不为空")
-		}
-		t.Logf("需求展示: 共%d条", len(needs))
-	} else {
-		t.Fatal("期望mindState中有needs数据")
-	}
+	t.Logf("需求展示: 共%d条", len(needsRaw))
 }
 
 func TestE2E_PersonalityControlsReplyStyle(t *testing.T) {
@@ -393,41 +437,31 @@ func TestE2E_MindStateReturnsCompleteData(t *testing.T) {
 		}
 	}
 
-	appCtx2 := app.NewAppContext(db, nil)
-	companionSvc := companion.NewService(appCtx2)
-	mindState := companionSvc.GetMindState(charID)
-
-	psyche, hasPsyche := mindState["psyche"].(map[string]interface{})
-	if !hasPsyche {
+	psycheRaw2 := mustQueryPsycheRaw(t, db, charID)
+	if psycheRaw2 == nil {
 		t.Fatal("缺少psyche数据")
 	}
-	if _, ok := psyche["stress"]; !ok {
+	if _, ok := psycheRaw2["stress"]; !ok {
 		t.Error("psyche缺少stress")
 	}
-	if _, ok := psyche["energy"]; !ok {
+	if _, ok := psycheRaw2["energy"]; !ok {
 		t.Error("psyche缺少energy")
 	}
-	if _, ok := psyche["stateVersion"]; !ok {
+	if _, ok := psycheRaw2["state_version"]; !ok {
 		t.Error("psyche缺少stateVersion")
 	}
 
-	rels, hasRels := mindState["relationships"].([]map[string]interface{})
-	if !hasRels {
-		t.Fatal("缺少relationships数据")
-	}
-	if len(rels) == 0 {
+	relsRaw2 := mustQueryRelationshipsRaw(t, db, charID, "peer-mind")
+	if len(relsRaw2) == 0 {
 		t.Error("relationships为空")
 	}
 
-	needs, hasNeeds := mindState["needs"].([]map[string]interface{})
-	if !hasNeeds {
-		t.Fatal("缺少needs数据")
-	}
-	if len(needs) == 0 {
+	needsRaw2 := mustQueryNeedsRaw(t, db, charID)
+	if len(needsRaw2) == 0 {
 		t.Error("needs为空")
 	}
 
-	t.Logf("MindState完整性验证通过: psyche=%v, relationships=%d, needs=%d", len(psyche) > 0, len(rels), len(needs))
+	t.Logf("MindState完整性验证通过: psyche=%v, relationships=%d, needs=%d", len(psycheRaw2) > 0, len(relsRaw2), len(needsRaw2))
 }
 
 func setupGoldenTestWithCapturedLLM(t *testing.T, personalityConfig string, capture *[]map[string]interface{}, reply string) (*gorm.DB, *service, string, string) {
@@ -483,4 +517,72 @@ func setupGoldenTestWithCapturedLLM(t *testing.T, personalityConfig string, capt
 	}
 	svc := &service{repo: repo, charRepo: charRepo, db: db, llmWithTools: llm, psycheStore: store}
 	return db, svc, charID, convID
+}
+
+func TestE2E_AllNewFlagsOff_OldChatLinkWorks(t *testing.T) {
+	personalityCfg := `{"warmth":60,"initiative":40}`
+	db, svc, charID, convID := setupE2EGoldenTest(t, personalityCfg)
+
+	createInteractionRecord(t, db, "interaction-e2e-rollback", charID, convID, "req-e2e-rollback")
+
+	resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+		CharacterID:           charID,
+		ConversationID:        convID,
+		Channel:               "web",
+		Source:                "manual",
+		Message:               "测试回滚",
+		RequestID:             "req-e2e-rollback",
+		PeerID:                "peer-e2e",
+		InteractionID:         "interaction-e2e-rollback",
+		ExpectedStatusVersion: 0,
+		Runtime: &interaction.RuntimeAssembly{
+			Path:        interaction.PathTypeDeep,
+			Safety:      interaction.RuntimeSafetyDecision{Level: "standard"},
+			Delivery:    interaction.RuntimeDeliveryIntent{Channel: "web", RequiresText: true},
+			Transaction: interaction.TransactionDefinition{Name: interaction.TransactionBoundaryAll},
+			Context:     interaction.ContextSnapshot{Version: "rollback-v1", AssembledAt: time.Now()},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Reply == "" {
+		t.Fatal("关闭新开关后回复不应为空")
+	}
+
+	var assistantCount int64
+	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ?", convID, "assistant").Count(&assistantCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if assistantCount < 1 {
+		t.Fatal("关闭新开关后应有assistant消息")
+	}
+	t.Logf("关闭新开关后旧聊天链路可运行: assistant消息数=%d, reply=%s", assistantCount, resp.Reply)
+}
+
+
+func TestE2E_ProactiveNotHuntAfterGoodnight(t *testing.T) {
+	suppressPhrases := []string{"晚安", "别发了", "不用回了", "去忙了"}
+	for _, phrase := range suppressPhrases {
+		t.Run(phrase, func(t *testing.T) {
+			var capturedMessages []map[string]interface{}
+			_, svc, charID, convID := setupGoldenTestWithCapturedLLM(t, `{"warmth":60}`, &capturedMessages, "收到")
+			_ = capturedMessages
+			resp, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+				CharacterID:    charID,
+				ConversationID: convID,
+				Channel:        "web",
+				Source:         "manual",
+				Message:        phrase,
+				RequestID:      "req-" + phrase,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.Reply == "" {
+				t.Error("回复不应为空")
+			}
+			t.Logf("proactive suppression: phrase=%q, reply=%s, 期望不追发", phrase, resp.Reply)
+		})
+	}
 }

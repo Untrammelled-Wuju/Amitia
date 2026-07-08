@@ -5,7 +5,29 @@ import (
 	"strings"
 )
 
-type Validator struct{}
+type Validator struct {
+	DisabledFlags []string
+}
+
+var flagToSectionTypes = map[string][]GwSectionType{
+	"TextlibRawEnabled":       {GwSectionChannelShortRaw},
+	"PersonalityRawEnabled":   {GwSectionPersonalityRaw},
+	"EmotionFusionEnabled":    {GwSectionEmotionFusionRaw},
+	"IntimacyDefaultEnabled":  {GwSectionAdultIntimacyRaw},
+	"MemoryRawEnabled":        {GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw},
+	"ReplySanitizerEnabled":   {GwSectionOutputShapeRaw, GwSectionAntiRepeatRaw},
+	"ProactiveRawEnabled":     {GwSectionProactiveRaw, GwSectionProactiveScene, GwSectionProactivePersonality, GwSectionProactiveTimeContext, GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory, GwSectionProactiveRecentContext},
+}
+
+var flagToSectionNames = map[string]string{
+	"TextlibRawEnabled":       "prompt_raw_textlib_enabled",
+	"PersonalityRawEnabled":   "prompt_personality_raw_enabled",
+	"EmotionFusionEnabled":    "prompt_emotion_fusion_enabled",
+	"IntimacyDefaultEnabled":  "prompt_intimacy_default_enabled",
+	"MemoryRawEnabled":        "prompt_memory_raw_enabled",
+	"ReplySanitizerEnabled":   "prompt_reply_sanitizer_enabled",
+	"ProactiveRawEnabled":     "prompt_proactive_raw_enabled",
+}
 
 func NewValidator() *Validator {
 	return &Validator{}
@@ -26,6 +48,28 @@ func (v *Validator) ValidateIR(ir GwIR) error {
 			GwSectionConversationHistory, GwSectionToolResult, GwSectionMultimodalText:
 			if s.TrustLevel != TrustUntrusted {
 				return fmt.Errorf("context section must be untrusted: %s", s.ID)
+			}
+		case GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw:
+			if s.TrustLevel != TrustUntrusted {
+				return fmt.Errorf("context section must be untrusted: %s", s.ID)
+			}
+		}
+	}
+
+	for _, flag := range v.DisabledFlags {
+		sectionTypes, ok := flagToSectionTypes[flag]
+		if !ok {
+			continue
+		}
+		for _, st := range sectionTypes {
+			for _, s := range ir.Sections {
+				if s.Type == st {
+					configName := flagToSectionNames[flag]
+					if configName == "" {
+						configName = flag
+					}
+					return fmt.Errorf("section type %s is present but feature flag %s (%s) is disabled", s.Type, configName, flag)
+				}
 			}
 		}
 	}

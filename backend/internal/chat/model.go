@@ -178,6 +178,11 @@ type ProcessMessageRequest struct {
 	Sequence              int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel               string                       `json:"channel"`
 	Source                string                       `json:"source"`
+	ProactiveTimeContext  string                       `json:"-"`
+	ProactiveRecentContext string                      `json:"-"`
+	ProactiveRelationship  string                       `json:"-"`
+	ProactiveEmotion      string                       `json:"-"`
+	ProactiveMemory       string                       `json:"-"`
 	PeerID                string                       `json:"peerId"`
 	AudioUrl              string                       `json:"audioUrl"`
 	AudioDuration         float64                      `json:"audioDuration"`

@@ -2,6 +2,7 @@ package expression
 
 import (
 	"github.com/u-ai/backend/internal/interaction"
+	"strings"
 	"testing"
 )
 
@@ -90,6 +91,87 @@ func TestGetChannelPolicyVersion_UnknownVersion(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown version")
 	}
+}
+
+func TestGetChannelPolicy_WechatHasShortRules(t *testing.T) {
+	p := GetChannelPolicy(ChannelWechat)
+	if p.ShortRules == "" {
+		t.Fatal("wechat policy should have ShortRules")
+	}
+	if !containsAny(p.ShortRules, []string{"微信短句规则", "短句", "活人说话"}) {
+		t.Fatalf("wechat ShortRules missing wechat-specific rules: %q", p.ShortRules[:100])
+	}
+	if containsAny(p.ShortRules, []string{"表情包", "sticker", "StickerManager"}) {
+		t.Fatal("wechat ShortRules should not contain sticker rules")
+	}
+	if containsAny(p.ShortRules, []string{"@", "群聊", "groupchat"}) {
+		t.Fatal("wechat ShortRules should not contain group chat rules")
+	}
+}
+
+func TestGetChannelPolicy_QQHasShortRules(t *testing.T) {
+	p := GetChannelPolicy(ChannelQQ)
+	if p.ShortRules == "" {
+		t.Fatal("qq policy should have ShortRules")
+	}
+	if !containsAny(p.ShortRules, []string{"QQ短句规则", "短句"}) {
+		t.Fatalf("qq ShortRules missing qq-specific rules: %q", p.ShortRules[:100])
+	}
+	if containsAny(p.ShortRules, []string{"表情包", "sticker"}) {
+		t.Fatal("qq ShortRules should not contain sticker rules")
+	}
+	if containsAny(p.ShortRules, []string{"@", "群聊"}) {
+		t.Fatal("qq ShortRules should not contain group chat rules")
+	}
+}
+
+func TestGetChannelPolicy_WebHasShortRules(t *testing.T) {
+	p := GetChannelPolicy(ChannelWeb)
+	if p.ShortRules == "" {
+		t.Fatal("web policy should have ShortRules")
+	}
+	if !containsAny(p.ShortRules, []string{"桌面端", "完整段落"}) {
+		t.Fatalf("web ShortRules missing web-specific rules: %q", p.ShortRules[:100])
+	}
+}
+
+func TestCompileChannelPrompt_WechatIncludesShortRules(t *testing.T) {
+	cp := CompileChannelPrompt(ChannelWechat)
+	if !containsAny(cp.SystemInstruction, []string{"微信短句规则", "短句"}) {
+		t.Fatal("wechat compiled prompt should include short rules")
+	}
+	if !containsAny(cp.SystemInstruction, []string{"直接回复内容", "不要输出思考过程"}) {
+		t.Fatal("wechat compiled prompt should include direct reply directive")
+	}
+}
+
+func TestCompileChannelPrompt_QQIncludesShortRules(t *testing.T) {
+	cp := CompileChannelPrompt(ChannelQQ)
+	if !containsAny(cp.SystemInstruction, []string{"QQ短句规则", "短句"}) {
+		t.Fatal("qq compiled prompt should include short rules")
+	}
+	if !containsAny(cp.SystemInstruction, []string{"直接回复内容", "不要输出思考过程"}) {
+		t.Fatal("qq compiled prompt should include direct reply directive")
+	}
+}
+
+func TestCompileChannelPrompt_WebNotForcedToWechatLength(t *testing.T) {
+	cp := CompileChannelPrompt(ChannelWeb)
+	if containsAny(cp.SystemInstruction, []string{"短句规则", "15-50字"}) {
+		t.Fatal("web should not use wechat short rules")
+	}
+	if !containsAny(cp.SystemInstruction, []string{"完整段落", "Markdown"}) {
+		t.Fatal("web compiled prompt should include web-specific rules")
+	}
+}
+
+func containsAny(s string, substrs []string) bool {
+	for _, sub := range substrs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRegisterChannelPolicy(t *testing.T) {

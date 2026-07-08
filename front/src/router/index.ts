@@ -47,7 +47,6 @@ const router = createRouter({
             { path: "voice", name: "settingsModelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
             { path: "embedding", name: "settingsModelEmbedding", component: () => import("@/views/model-config/VectorModelConfigView.vue") },
             { path: "vision", name: "settingsModelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
-            { path: "safety", name: "settingsModelSafety", component: () => import("@/views/model-config/SafetyGovernorView.vue"), meta: { requiresAuth: true } },
           ],
         },
         { path: "safety", name: "settingsSafety", component: () => import("@/views/safety-settings/SafetySettingsView.vue"), meta: { requiresAuth: true } },

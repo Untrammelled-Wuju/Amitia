@@ -126,7 +126,6 @@ const misuses = ref([
 
 <style scoped>
 .boundary-page {
-  max-width: 700px;
   padding: 20px;
 }
 

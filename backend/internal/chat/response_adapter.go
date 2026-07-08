@@ -10,11 +10,12 @@ func convertProcessMessageResponse(resp *ProcessMessageResponse) *interaction.Pr
 	if resp == nil {
 		return nil
 	}
+	lines := DeduplicateAdjacentLines(resp.Lines)
 	return &interaction.ProcessResponse{
 		ConversationID: resp.ConversationID,
 		Sequence:       resp.Sequence,
 		Reply:          resp.Reply,
-		Lines:          resp.Lines,
+		Lines:          lines,
 		CharacterID:    resp.CharacterID,
 		CharacterName:  resp.CharacterName,
 		MessageIDs:     resp.MessageIDs,

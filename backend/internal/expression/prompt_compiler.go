@@ -75,6 +75,10 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 		)
 	}
 
+	if policy.ShortRules != "" {
+		instructionParts = append(instructionParts, policy.ShortRules)
+	}
+
 	if !policy.Capabilities.SupportsMarkdown {
 		instructionParts = append(instructionParts, "回复中不要使用任何emoji表情符号。", "不能使用markdown格式。")
 	}

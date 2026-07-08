@@ -197,7 +197,7 @@ func TestProcessMessageBuildsPromptThroughIR(t *testing.T) {
 }
 
 func TestBuildProcessPromptMessagesGatewayOnlyFirstSystem(t *testing.T) {
-	messages := buildProcessPromptMessages(processPromptInput{
+	messages, _ := buildProcessPromptMessages(processPromptInput{
 		CharacterConfig:   "你是 Amitia",
 		PersonalityConfig: "遵守当前渠道策略",
 		History: []map[string]string{

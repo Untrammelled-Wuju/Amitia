@@ -21,13 +21,24 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 
 	for _, s := range ir.Sections {
 		switch s.Type {
-		case GwSectionPlatformPolicy, GwSectionAppContract, GwSectionCognitiveContract, GwSectionAntiFlatteryContract, GwSectionTechnicalTaskContract:
+		case GwSectionPlatformPolicy, GwSectionAppContract, GwSectionCognitiveContract, GwSectionAntiFlatteryContract, GwSectionTechnicalTaskContract, GwSectionBaseIdentity:
 			systemParts = append(systemParts, s.Content)
 
-		case GwSectionCharacterContract, GwSectionRuntimePlan, GwSectionExpressionPlan:
+		case GwSectionProactiveScene:
+			systemParts = append(systemParts, s.Content)
+
+		case GwSectionCharacterContract, GwSectionRuntimePlan, GwSectionExpressionPlan,
+			GwSectionPersonalityRaw, GwSectionEmotionFusionRaw, GwSectionAdultIntimacyRaw,
+			GwSectionOutputShapeRaw, GwSectionAntiRepeatRaw, GwSectionProactiveRaw, GwSectionChannelShortRaw:
 			characterParts = append(characterParts, renderTaggedSection(s))
 
-		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionConversationHistory:
+		case GwSectionProactivePersonality:
+			characterParts = append(characterParts, renderTaggedSection(s))
+
+		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionConversationHistory,
+			GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw,
+			GwSectionProactiveTimeContext, GwSectionProactiveRecentContext,
+			GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory:
 			contextParts = append(contextParts, renderUntrustedSection(s))
 
 		case GwSectionToolResult, GwSectionMultimodalText:
@@ -35,6 +46,9 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 
 		case GwSectionCurrentUserMessage:
 			currentUser = sanitizeUserMessage(s.Content)
+
+		case GwSectionTraceOnly:
+
 		}
 	}
 
@@ -81,7 +95,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 	return messages, nil
 }
 
-var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "current_user_message"}
+var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_scene", "proactive_time_context", "proactive_recent_context", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "current_user_message"}
 
 func renderTaggedSection(s GwSection) string {
 	tagName := string(s.Type)
@@ -99,7 +113,7 @@ func renderUntrustedSection(s GwSection) string {
 
 	content := s.Content
 	if risk == "high" {
-		sanitized := SanitizeContent(s.Content, SensitivityInternal)
+		sanitized := SanitizeContent(content, SensitivityInternal)
 		if !sanitized.Clean {
 			content = sanitized.Content
 		}
@@ -137,3 +151,4 @@ func stripAllSectionTags(content string) string {
 	}
 	return content
 }
+

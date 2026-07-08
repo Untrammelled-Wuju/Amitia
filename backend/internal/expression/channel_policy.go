@@ -1,6 +1,10 @@
 package expression
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/u-ai/backend/internal/prompt/textlib"
+)
 
 type ChannelKind string
 
@@ -27,6 +31,8 @@ type ChannelPolicy struct {
 	MinSegments   int               `json:"minSegments"`
 	Capabilities  ChannelCapability `json:"capabilities"`
 	SegmentHint   string            `json:"segmentHint,omitempty"`
+	ShortRules    string            `json:"shortRules,omitempty"`
+	AntiRepeatEnabled bool         `json:"antiRepeatEnabled"`
 }
 
 type ExpressionChannelPolicyVersion string
@@ -52,6 +58,8 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsSegmented: true,
 			},
 			SegmentHint: "short_per_line",
+			ShortRules:  textlib.RawChannelWechatShortRules,
+			AntiRepeatEnabled: true,
 		}
 	case ChannelQQ:
 		return ChannelPolicy{
@@ -68,6 +76,8 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsSegmented: true,
 			},
 			SegmentHint: "short_per_line",
+			ShortRules:  textlib.RawChannelQQShortRules,
+			AntiRepeatEnabled: true,
 		}
 	case ChannelWeb:
 		return ChannelPolicy{
@@ -84,6 +94,7 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsSegmented: true,
 			},
 			SegmentHint: "full_paragraph",
+			ShortRules:  textlib.RawChannelWebDesktopRules,
 		}
 	case ChannelVoice:
 		return ChannelPolicy{

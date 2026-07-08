@@ -104,6 +104,11 @@ type UnifiedEntryRequest struct {
 	PeerID         string          `json:"peerId,omitempty"`
 	UserID         string          `json:"userId,omitempty"`
 	Source         string          `json:"source,omitempty"`
+	ProactiveTimeContext  string `json:"-"`
+	ProactiveRecentContext string `json:"-"`
+	ProactiveRelationship  string `json:"-"`
+	ProactiveEmotion      string `json:"-"`
+	ProactiveMemory       string `json:"-"`
 	CharacterID    string          `json:"characterId,omitempty"`
 	ConversationID string          `json:"conversationId,omitempty"`
 	AudioUrl       string          `json:"audioUrl,omitempty"`
@@ -197,6 +202,11 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		VideoUrl:       req.VideoUrl,
 		ImageContext:   req.ImageContext,
 		IsInternal:     req.IsInternal,
+		ProactiveTimeContext:  req.ProactiveTimeContext,
+		ProactiveRecentContext: req.ProactiveRecentContext,
+		ProactiveRelationship:  req.ProactiveRelationship,
+		ProactiveEmotion:      req.ProactiveEmotion,
+		ProactiveMemory:       req.ProactiveMemory,
 	}
 
 	return e.orchestrator.Process(ctx, procReq)

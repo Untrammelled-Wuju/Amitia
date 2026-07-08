@@ -158,3 +158,15 @@ type RoleRuntimeProfile struct {
 	LifeIdentity        string                 `json:"lifeIdentity"`
 	Diagnostics         []string               `json:"diagnostics"`
 }
+
+func (rp *RoleRuntimeProfile) PersonalityPresetID() string {
+	if rp == nil {
+		return ""
+	}
+	if v, ok := rp.PersonalityConfig["presetId"]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}

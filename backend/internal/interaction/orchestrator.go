@@ -30,6 +30,11 @@ type ProcessRequest struct {
 	ConversationID        string           `json:"conversationId,omitempty"`
 	Channel               string           `json:"channel,omitempty"`
 	Source                string           `json:"source,omitempty"`
+	ProactiveTimeContext  string           `json:"-"`
+	ProactiveRecentContext string          `json:"-"`
+	ProactiveRelationship  string           `json:"-"`
+	ProactiveEmotion      string           `json:"-"`
+	ProactiveMemory       string           `json:"-"`
 	PeerID                string           `json:"peerId,omitempty"`
 	UserID                string           `json:"userId,omitempty"`
 	SessionID             string           `json:"sessionId,omitempty"`

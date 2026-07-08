@@ -3,16 +3,10 @@
 package proactive
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
-
-	"bytes"
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -22,13 +16,18 @@ import (
 	"gorm.io/gorm"
 )
 
-type Handler struct {
-	service Service
-	db      *gorm.DB
+type ProactiveDispatcher interface {
+	DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error)
 }
 
-func NewHandler(srv Service, db *gorm.DB) *Handler {
-	return &Handler{service: srv, db: db}
+type Handler struct {
+	service          Service
+	db               *gorm.DB
+	compSvc ProactiveDispatcher
+}
+
+func NewHandler(srv Service, db *gorm.DB, compSvc ProactiveDispatcher) *Handler {
+	return &Handler{service: srv, db: db, compSvc: compSvc}
 }
 
 func (h *Handler) ListRules(c *gin.Context) {
@@ -189,9 +188,23 @@ func (h *Handler) TestRule(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
 	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity, character.ID)
-	if content == "" {
-		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
+
+	channel := rule.Channel
+	if channel == "" {
+		channel = "web"
+	}
+	convID := resolveProactiveConversation(h.db, rule.ConversationID, character.ID, channel, false)
+	if convID == "" {
+		convID = resolveProactiveConversation(h.db, "", character.ID, channel, false)
+	}
+	prompt := rule.PromptTemplate
+	if prompt == "" {
+		prompt = "发一条自然的主动消息。"
+	}
+
+	content, err := h.dispatchContent(c.Request.Context(), character.ID, convID, channel, prompt)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "AI生成失败："+err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{
@@ -199,7 +212,7 @@ func (h *Handler) TestRule(c *gin.Context) {
 		"tested":         true,
 		"ruleName":       rule.Name,
 		"messageContent": content,
-		"channel":        rule.Channel,
+		"channel":        channel,
 		"safetyCheck":    gin.H{"safe": true},
 	})
 }
@@ -216,11 +229,7 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
 	}
-	content := h.generateRuleContent(rule.Name, rule.RuleType, rule.PromptTemplate, character.Name, character.Identity, character.ID)
-	if content == "" {
-		util.ErrorResponse(c, response.InternalError, "AI生成失败，请检查模型配置", nil)
-		return
-	}
+
 	channel := rule.Channel
 	if channel == "" {
 		channel = "web"
@@ -230,36 +239,28 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
 		return
 	}
+	prompt := rule.PromptTemplate
+	if prompt == "" {
+		prompt = "发一条自然的主动消息。"
+	}
+
+	content, err := h.dispatchContent(c.Request.Context(), character.ID, convID, channel, prompt)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "AI生成失败："+err.Error(), nil)
+		return
+	}
+
 	now := time.Now()
-	var maxLen int
-	switch {
-	case channel == "wechat":
-		maxLen = util.MaxWechatMessageLen
-	case channel == "qq":
-		maxLen = util.MaxQQMessageLen
-	default:
-		maxLen = util.MaxWebMessageLen
-	}
-	lines := util.SplitLongMessage(content, maxLen)
-	wcID := h.getWechatConvIDForTrigger(character.ID)
-	qqID := h.getQQConvIDForTrigger(character.ID)
-	for _, line := range lines {
-		msgID := uuid.New().String()
-		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, now)
-		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)", rule.ID, convID, line, channel, now, now)
-		if channel == "wechat" || channel == "all" {
-			if wcID != "" {
-				h.sendToWechatSidecar(wcID, line)
-			}
-		}
-		if channel == "qq" || channel == "all" {
-			if qqID != "" {
-				h.sendToQQSidecarForTrigger(qqID, line)
-			}
-		}
-	}
 	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
 	util.SuccessResponse(c, gin.H{"id": rule.ID, "triggered": true, "messageContent": content, "channel": channel})
+}
+
+func (h *Handler) dispatchContent(ctx context.Context, characterID, convID, channel, prompt string) (string, error) {
+	if h.compSvc == nil {
+		return "", fmt.Errorf("主动消息统一派发未配置")
+	}
+	requestID := fmt.Sprintf("proactive-handler-%d", time.Now().UnixNano())
+	return h.compSvc.DispatchProactiveMessage(ctx, characterID, convID, channel, prompt, requestID)
 }
 
 func (h *Handler) ResetPresets(c *gin.Context) {
@@ -385,16 +386,35 @@ func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
 	if content == "" {
 		content = fmt.Sprintf("[提醒] %s", rem.Title)
 	}
-	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
-	now := time.Now().Format("2006-01-02 15:04:05")
+	now := time.Now()
+
+	if h.compSvc == nil {
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		msgID = uuid.New().String()
+		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, nowStr)
+		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, content, rem.Channel, nowStr)
+		h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, nowStr, convID)
+		h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", nowStr, nowStr, rem.ID)
+		sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive", "createdAt": nowStr})
+		return
+	}
+
+	requestID := fmt.Sprintf("proactive-reminder-now-%d-%d", rem.ID, now.UnixNano())
+	generatedContent, err := h.compSvc.DispatchProactiveMessage(context.Background(), rem.CharacterID, convID, rem.Channel, content, requestID)
+	if err != nil || generatedContent == "" {
+		generatedContent = content
+	}
+
+	lines := util.SplitLongMessage(generatedContent, util.MaxWebMessageLen)
+	nowStr := now.Format("2006-01-02 15:04:05")
 	for _, line := range lines {
 		msgID = uuid.New().String()
-		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, now)
-		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, line, rem.Channel, now)
+		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, nowStr)
+		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, line, rem.Channel, nowStr)
 	}
-	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, now, convID)
-	h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", now, now, rem.ID)
-	sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive", "createdAt": now})
+	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, nowStr, convID)
+	h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", nowStr, nowStr, rem.ID)
+	sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": generatedContent, "role": "assistant", "source": "proactive", "createdAt": nowStr})
 	return
 }
 
@@ -479,190 +499,6 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 	}
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now', 'localtime'))", body.CleanupDays)
 	util.SuccessMsgResponse(c, "已更新", nil)
-}
-
-func (h *Handler) generateRuleContent(name, ruleType, prompt, charName, identity, characterID string) string {
-	if identity == "" {
-		identity = "一个AI伙伴"
-	}
-	if prompt == "" {
-		prompt = "发一条自然的主动消息。"
-	}
-
-	personalityPrompt := h.loadPersonalityPrompt(characterID)
-
-	now := time.Now()
-	sys := fmt.Sprintf("你是%s，%s。\n当前时间：%s，周%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity, now.Format("15:04"), now.Weekday().String())
-	if personalityPrompt != "" {
-		sys = sys + "\n" + personalityPrompt
-	}
-	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
-
-	cfg := h.getActiveModelConfig()
-	if cfg == nil {
-		return ""
-	}
-
-	msgs := []map[string]interface{}{
-		{"role": "system", "content": sys},
-		{"role": "user", "content": usr},
-	}
-
-	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"model": cfg["modelName"], "messages": msgs,
-		"temperature": 0.9, "max_tokens": 200, "stream": false,
-	})
-
-	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
-
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		log.Printf("[Proactive] AI 生成失败: %v", err)
-		return ""
-	}
-	defer resp.Body.Close()
-
-	rb, _ := io.ReadAll(resp.Body)
-	var r struct {
-		Choices []struct{ Message struct{ Content string } }
-	}
-	json.Unmarshal(rb, &r)
-	if len(r.Choices) > 0 {
-		return strings.TrimSpace(r.Choices[0].Message.Content)
-	}
-	return ""
-}
-
-func (h *Handler) loadPersonalityPrompt(characterID string) string {
-	if characterID == "" {
-		return ""
-	}
-	var personality, personalityConfig string
-	h.db.Table("characters").Select("COALESCE(personality,''), COALESCE(personality_config,'')").Where("id = ?", characterID).Limit(1).Row().Scan(&personality, &personalityConfig)
-	if personality == "" && personalityConfig == "" {
-		return ""
-	}
-	prompt := "【性格特征】"
-	if personality != "" {
-		prompt += personality
-	}
-	if personalityConfig != "" && personalityConfig != "{}" {
-		var cfg map[string]interface{}
-		if json.Unmarshal([]byte(personalityConfig), &cfg) == nil {
-			for key, val := range cfg {
-				if v, ok := val.(float64); ok {
-					label := personalitySliderLabel(key)
-					if label != "" {
-						prompt += fmt.Sprintf("\n%s: %.0f/100", label, v)
-					}
-				}
-			}
-		}
-	}
-	return prompt
-}
-
-func personalitySliderLabel(key string) string {
-	switch key {
-	case "initiative":
-		return "主动性"
-	case "sensitivity":
-		return "敏感度"
-	case "tolerance":
-		return "包容度"
-	case "stability":
-		return "情绪稳定性"
-	case "boundary":
-		return "边界感"
-	case "warmth":
-		return "温暖度"
-	case "directness":
-		return "直接度"
-	case "humor":
-		return "幽默感"
-	case "affection":
-		return "亲密度"
-	case "verbosity":
-		return "话量"
-	case "conflictAvoidance":
-		return "冲突回避"
-	default:
-		return ""
-	}
-}
-
-func (h *Handler) getActiveModelConfig() map[string]string {
-	var baseURL, apiKey, modelName string
-	err := h.db.Table("model_configs").
-		Select("base_url, api_key, model_name").
-		Where("is_active = 1").Limit(1).Row().
-		Scan(&baseURL, &apiKey, &modelName)
-	if err != nil {
-		return nil
-	}
-	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName}
-}
-
-func (h *Handler) sendToWechatSidecar(convID, content string) {
-	toUserID := convID
-	if strings.HasPrefix(convID, "conv-") {
-		toUserID = convID[5:]
-	}
-
-	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9876/api/send", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[Proactive] 微信发送失败: %v", err)
-		return
-	}
-	resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Printf("[Proactive] 微信返回 %d", resp.StatusCode)
-		return
-	}
-	log.Printf("[Proactive] 微信已发送 to=%s", toUserID)
-}
-
-func (h *Handler) getWechatConvID(charID string) string {
-	return resolveProactiveConversation(h.db, "", charID, "wechat", true)
-}
-
-func (h *Handler) getWechatConvIDForTrigger(charID string) string {
-	return resolveProactiveConversation(h.db, "", charID, "wechat", true)
-}
-
-func (h *Handler) getQQConvIDForTrigger(charID string) string {
-	return resolveProactiveConversation(h.db, "", charID, "qq", true)
-}
-
-func (h *Handler) sendToQQSidecarForTrigger(toUserID, content string) {
-	if strings.HasPrefix(toUserID, "conv-qq-") {
-		toUserID = toUserID[8:]
-	} else if strings.HasPrefix(toUserID, "conv-") {
-		toUserID = toUserID[5:]
-	}
-	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-	if err != nil {
-		log.Printf("[Proactive] QQ发送失败: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("[Proactive] QQ返回 %d body=%s", resp.StatusCode, string(bodyBytes))
-		return
-	}
-	log.Printf("[Proactive] QQ已发送 to=%s", toUserID)
 }
 
 func (h *Handler) CleanupTriggeredReminders() {

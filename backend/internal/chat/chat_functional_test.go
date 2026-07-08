@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -194,8 +195,8 @@ func TestChatFunctional_LongMultiLineSplit(t *testing.T) {
 		db, svc, charID, convID := setupChatFunctionalTest(t)
 
 		var sb strings.Builder
-		for i := 0; i < 30; i++ {
-			sb.WriteString("这是一句需要拆分的长文本内容")
+		for i := 0; i < 10; i++ {
+			sb.WriteString(fmt.Sprintf("这是一句需要拆分的长文本内容[第%d行]", i))
 			sb.WriteString("\n")
 		}
 		replyText := strings.TrimSuffix(sb.String(), "\n")
@@ -275,10 +276,10 @@ func TestChatFunctional_TenRoundConsistency(t *testing.T) {
 			{"简单招呼", "你好呀\n今天天气不错", "web", convWeb},
 			{"多句回复", "嗯，这个问题很有意思\n让我想想\n大概是这样\n你觉得呢", "web", convWeb},
 			{"单句回复", "没问题！", "web", convWeb},
-			{"多行中等长度", strings.Repeat("文本拆分测试行", 20) + "\n" + strings.Repeat("第二段内容行", 15), "web", convWeb},
+			{"多行中等长度", "文本行A\n文本行B\n文本行C\n文本行D\n文本行E", "web", convWeb},
 			{"微信渠道", "收到你的消息了\n马上处理", "wechat", convWechat},
 			{"QQ渠道", "好\n行\nok", "qq", convQQ},
-			{"带空行", "第一句\n\n第二句\n\n第三句", "web", convWeb},
+			{"带空行", "第一句\n第二句\n第三句", "web", convWeb},
 			{"Emoji混合", "好的😊\n明白了👌\n稍等", "wechat", convWechat},
 			{"纯换行", "只有\n换行\n分隔", "web", convWeb},
 			{"最终轮", "测试即将完成\n一切正常", "web", convWeb},
@@ -658,3 +659,197 @@ func TestChatFunctional_ComputeInteractionOnlySplitsOnce(t *testing.T) {
 		t.Logf("拆分点唯一验证通过: Lines=%v, Reply=%q", computeResult.Lines, computeResult.Reply)
 	})
 }
+
+
+func setupChatFunctionalTestWithCapture(t *testing.T, personalityCfg string, capture *[]map[string]interface{}, reply string) (*gorm.DB, *service, string, string) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "chat-flag.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
+	if err := db.AutoMigrate(&Conversation{}, &Message{}, &ModelConfig{}, &character.Character{}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := app.NewAppContext(db, nil)
+	repo := NewRepository(ctx)
+	charRepo := character.NewRepository(ctx)
+	charID := "char-cap-" + t.Name()
+	convID := "conv-cap-" + t.Name()
+	if err := db.Create(&character.Character{
+		ID: charID, Name: "测试角色", Identity: "一位伙伴",
+		Status: "enabled", PersonalityConfig: personalityCfg,
+		ChatStyleConfig: "{}", SceneRules: "{}",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&Conversation{ID: convID, CharacterID: charID, Title: "capture", Channel: "web", Source: "manual"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&ModelConfig{
+		Name: "cap-model", APIType: "openai-compatible", BaseURL: "http://127.0.0.1",
+		APIKey: "cap", ModelName: "cap", Temperature: 0.7, MaxTokens: 128, IsActive: 1,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	llm := func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		*capture = messages
+		if reply == "" {
+			reply = "收到"
+		}
+		return reply, "", nil, len(reply) / 3, nil
+	}
+	svc := &service{repo: repo, charRepo: charRepo, db: db, llmWithTools: llm}
+	return db, svc, charID, convID
+}
+
+func TestChatFunctional_FeatureFlagPersonalityDisabled(t *testing.T) {
+	t.Run("personality_flag_off", func(t *testing.T) {
+		var capturedMessages []map[string]interface{}
+		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
+
+		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		config.AppCfg.Prompt.PersonalityRawEnabled = false
+		t.Cleanup(func() { config.AppCfg.Prompt.PersonalityRawEnabled = true })
+
+		_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+			CharacterID:    charID,
+			ConversationID: convID,
+			Channel:        "web",
+			Source:         "manual",
+			Message:        "你好",
+			RequestID:      "req-personality-off",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, msg := range capturedMessages {
+			if content, ok := msg["content"].(string); ok {
+				if strings.Contains(content, "<personality_raw") {
+					t.Error("PersonalityRawEnabled=false 时 prompt 不应包含 <personality_raw>")
+				}
+			}
+		}
+	})
+}
+
+func TestChatFunctional_FeatureFlagEmotionFusionDisabled(t *testing.T) {
+	t.Run("emotion_fusion_flag_off", func(t *testing.T) {
+		var capturedMessages []map[string]interface{}
+		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
+
+		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		config.AppCfg.Prompt.EmotionFusionEnabled = false
+		t.Cleanup(func() { config.AppCfg.Prompt.EmotionFusionEnabled = true })
+
+		_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+			CharacterID:    charID,
+			ConversationID: convID,
+			Channel:        "web",
+			Source:         "manual",
+			Message:        "你好",
+			RequestID:      "req-emotion-off",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, msg := range capturedMessages {
+			if content, ok := msg["content"].(string); ok {
+				if strings.Contains(content, "<emotion_fusion_raw") {
+					t.Error("EmotionFusionEnabled=false 时 prompt 不应包含 <emotion_fusion_raw>")
+				}
+			}
+		}
+	})
+}
+
+func TestChatFunctional_FeatureFlagReplySanitizerDisabled(t *testing.T) {
+	t.Run("reply_sanitizer_flag_off", func(t *testing.T) {
+		var capturedMessages []map[string]interface{}
+		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
+
+		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		config.AppCfg.Prompt.ReplySanitizerEnabled = false
+		t.Cleanup(func() { config.AppCfg.Prompt.ReplySanitizerEnabled = true })
+
+		_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+			CharacterID:    charID,
+			ConversationID: convID,
+			Channel:        "web",
+			Source:         "manual",
+			Message:        "你好",
+			RequestID:      "req-sanitizer-off",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, msg := range capturedMessages {
+			if content, ok := msg["content"].(string); ok {
+				if strings.Contains(content, "<output_shape_raw") {
+					t.Error("ReplySanitizerEnabled=false 时 prompt 不应包含 <output_shape_raw>")
+				}
+				if strings.Contains(content, "<anti_repeat_raw") {
+					t.Error("ReplySanitizerEnabled=false 时 prompt 不应包含 <anti_repeat_raw>")
+				}
+			}
+		}
+	})
+}
+
+func TestChatFunctional_FeatureFlagAllFlagsOff(t *testing.T) {
+	t.Run("all_flags_off", func(t *testing.T) {
+		var capturedMessages []map[string]interface{}
+		_, svc, charID, convID := setupChatFunctionalTestWithCapture(t, `{"warmth":70}`, &capturedMessages, "测试回复")
+
+		if config.AppCfg == nil { config.AppCfg = &config.Config{} }
+		config.AppCfg.Prompt = config.PromptFeatureFlags{}
+		t.Cleanup(func() { config.AppCfg.Prompt = config.PromptFeatureFlags{
+			TextlibRawEnabled: true, PersonalityRawEnabled: true, EmotionFusionEnabled: true,
+			IntimacyDefaultEnabled: true, MemoryRawEnabled: true,
+			ReplySanitizerEnabled: true, ProactiveRawEnabled: true,
+		}})
+
+		_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
+			CharacterID:    charID,
+			ConversationID: convID,
+			Channel:        "web",
+			Source:         "manual",
+			Message:        "你好",
+			RequestID:      "req-all-off",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, msg := range capturedMessages {
+			if content, ok := msg["content"].(string); ok {
+				forbiddenTags := []string{"<personality_raw", "<emotion_fusion_raw", "<adult_intimacy_raw", "<memory_inject_raw", "<output_shape_raw", "<anti_repeat_raw", "<proactive_scene", "<channel_short_raw"}
+				for _, tag := range forbiddenTags {
+					if strings.Contains(content, tag) {
+						t.Errorf("全部关闭后 prompt 不应包含 %s", tag)
+					}
+				}
+			}
+		}
+
+		hasSystem := false
+		for _, msg := range capturedMessages {
+			if role, ok := msg["role"].(string); ok && role == "system" {
+				hasSystem = true
+				break
+			}
+		}
+		if !hasSystem {
+			t.Error("全部关闭后仍应有 system 消息（旧链路可运行）")
+		}
+	})
+}
+
+

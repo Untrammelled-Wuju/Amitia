@@ -136,20 +136,42 @@ func sectionRank(sectionType SectionType) int {
 	switch sectionType {
 	case SectionTypeSystem:
 		return 10
+	case SectionTypeBaseIdentity:
+		return 15
 	case SectionTypeIdentity:
 		return 20
+	case SectionTypePersonalityRaw:
+		return 25
 	case SectionTypeBehaviorPlan:
 		return 30
+	case SectionTypeEmotionFusionRaw:
+		return 35
+	case SectionTypeAdultIntimacyRaw:
+		return 36
+	case SectionTypeOutputShapeRaw:
+		return 37
+	case SectionTypeAntiRepeatRaw:
+		return 38
+	case SectionTypeProactiveRaw:
+		return 39
 	case SectionTypePsyche:
 		return 40
+	case SectionTypeMemoryInjectRaw:
+		return 45
+	case SectionTypeMemoryExtractRaw:
+		return 46
 	case SectionTypeMemory:
 		return 50
+	case SectionTypeChannelShortRaw:
+		return 55
 	case SectionTypeWorldbook:
 		return 60
 	case SectionTypeHistory:
 		return 70
 	case SectionTypeCurrentInput:
 		return 80
+	case SectionTypeTraceOnly:
+		return 99
 	default:
 		return 100
 	}

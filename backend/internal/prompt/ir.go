@@ -36,6 +36,24 @@ const (
 	GwSectionToolResult            GwSectionType = "tool_result"
 	GwSectionMultimodalText        GwSectionType = "multimodal_text"
 	GwSectionCurrentUserMessage    GwSectionType = "current_user_message"
+	GwSectionBaseIdentity          GwSectionType = "base_identity"
+	GwSectionPersonalityRaw        GwSectionType = "personality_raw"
+	GwSectionEmotionFusionRaw      GwSectionType = "emotion_fusion_raw"
+	GwSectionAdultIntimacyRaw      GwSectionType = "adult_intimacy_raw"
+	GwSectionMemoryInjectRaw       GwSectionType = "memory_inject_raw"
+	GwSectionMemoryExtractRaw      GwSectionType = "memory_extract_raw"
+	GwSectionOutputShapeRaw        GwSectionType = "output_shape_raw"
+	GwSectionAntiRepeatRaw         GwSectionType = "anti_repeat_raw"
+	GwSectionProactiveRaw          GwSectionType = "proactive_raw"
+	GwSectionProactivePersonality   GwSectionType = "proactive_personality"
+	GwSectionProactiveRelationship  GwSectionType = "proactive_relationship"
+	GwSectionProactiveEmotion      GwSectionType = "proactive_emotion"
+	GwSectionProactiveMemory       GwSectionType = "proactive_memory"
+	GwSectionProactiveScene        GwSectionType = "proactive_scene"
+	GwSectionProactiveTimeContext  GwSectionType = "proactive_time_context"
+	GwSectionProactiveRecentContext GwSectionType = "proactive_recent_context"
+	GwSectionChannelShortRaw       GwSectionType = "channel_short_raw"
+	GwSectionTraceOnly             GwSectionType = "trace_only"
 )
 
 type GwSection struct {
@@ -47,10 +65,15 @@ type GwSection struct {
 	Priority        int
 	TokenBudget     int
 	Content         string
+	SourceProject   string
+	SourceFile      string
+	SourceConstant  string
+	Enabled         bool
 }
 
 type GwIR struct {
 	Sections []GwSection
+	Trace    PromptTrace
 }
 
 type GwMessage struct {

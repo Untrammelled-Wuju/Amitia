@@ -10,6 +10,8 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/personality"
+	promptir "github.com/u-ai/backend/internal/prompt"
 	"github.com/u-ai/backend/pkg/util"
 	applog "github.com/u-ai/backend/log"
 )
@@ -177,15 +179,62 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
-	messages := buildProcessPromptMessages(processPromptInput{
+
+	personalityTemplate := personality.CompilePersonalityTemplate(runtimeProfile.Name, sys1Result.PersonalityPresetID, runtimeProfile.Gender)
+	personalityRaw := promptir.BuildPersonalityRawSection(runtimeProfile.Name, runtimeProfile.Gender, personalityTemplate)
+
+	adultIntimacyRaw := buildAdultIntimacyRaw(req.Runtime, sys1Result.PersonalityPresetID, req.Message)
+
+	antiRepeatRaw := promptir.BuildAntiRepeatRawSection()
+
+	var proactivePersonality string
+	var proactiveRelationship string
+	var proactiveEmotion string
+	if source == "proactive" {
+		aff := 0.5
+		if req.Runtime != nil && req.Runtime.Appraisal != nil {
+			if req.Runtime.Appraisal.RelationshipDelta > 0 {
+				aff = 0.3 + req.Runtime.Appraisal.RelationshipDelta*0.7
+			} else {
+				aff = 0.3
+			}
+		}
+		if aff > 1.0 {
+			aff = 1.0
+		}
+		proactivePersonality = personality.BuildProactivePersonalityBlock(runtimeProfile.Name, sys1Result.PersonalityPresetID, runtimeProfile.Gender, aff, false)
+		proactivePersonality = promptir.ProactivePersonalityInstructionHeader() + "\n\n" + proactivePersonality
+		proactivePersonality += "\n\n" + promptir.ProactivePersonalityBoundarySection()
+		if req.ProactiveRelationship != "" {
+			proactiveRelationship = req.ProactiveRelationship
+		}
+		if req.ProactiveEmotion != "" {
+			proactiveEmotion = req.ProactiveEmotion
+		}
+	}
+
+	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
+		BaseIdentity:      promptir.BaseIdentitySection(),
 		CharacterConfig:   sys1Result.CharacterConfig,
 		PersonalityConfig: sys2Result.SystemInstruction,
+		PersonalityRaw:    personalityRaw,
+		EmotionFusionRaw:  buildEmotionFusionRaw(req.Runtime, charName),
+		AdultIntimacyRaw:  adultIntimacyRaw,
+		MemoryInjectRaw:   sys2Result.MemoryInjectRaw,
+		AntiRepeatRaw:     antiRepeatRaw,
 		ProfileContext:    mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
 		MemoryContext:     sys2Result.MemoryContext,
 		Worldbook:         sys1Result.Worldbook,
 		History:           history,
 		Runtime:           req.Runtime,
 		StyleInstruction:  channelPrompt.StyleInstruction,
+		ProactiveScene:        proactiveScene(source),
+		ProactiveTimeContext:  req.ProactiveTimeContext,
+		ProactiveRecentContext: req.ProactiveRecentContext,
+		ProactivePersonality:  proactivePersonality,
+		ProactiveRelationship: proactiveRelationship,
+		ProactiveEmotion:     proactiveEmotion,
+		ProactiveMemory:      req.ProactiveMemory,
 		UserContent:       userContent,
 	})
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
@@ -194,6 +243,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"tool_count":         len(tool.GetAll()),
 		"image_context_size": len(req.ImageContext),
 	}, "process message prompt ready")
+	logPromptTrace(trace, promptTrace, source)
 	toolDefs := tool.GetAll()
 	seenTools := map[string]bool{}
 	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
@@ -242,6 +292,18 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	case "qq":
 		kind = expression.ChannelQQ
 	}
+
+	priorAssistant := extractAssistantReplies(history)
+	reply = SanitizeReply(reply, charName, priorAssistant)
+	if reply == "" {
+		reply = "嗯"
+	}
+
+	reply = CollapseAdjacentSemanticDuplicates(reply, priorAssistant)
+	if reply == "" {
+		reply = "嗯"
+	}
+
 	reply = expression.ApplyPostValidation(reply, kind)
 	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
 		reply = applyExpressionLengthLimit(reply, req.Runtime)
@@ -257,6 +319,8 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		maxLen = util.MaxWebMessageLen
 	}
 	realLines := util.SplitLongMessage(reply, maxLen)
+
+	realLines = DeduplicateAdjacentLines(realLines)
 
 	pipelineMessages := make([]map[string]string, 0, len(history)+2)
 	pipelineMessages = append(pipelineMessages, history...)
@@ -293,6 +357,7 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 }
 
 func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {
+
 	if rt == nil || rt.ExpressionPlan == nil {
 		return reply
 	}
@@ -307,6 +372,13 @@ func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) s
 	default:
 		return reply
 	}
+}
+
+func proactiveScene(source string) string {
+	if source == "proactive" {
+		return promptir.ProactiveSceneSection()
+	}
+	return ""
 }
 
 func mergeContext(a, b string) string {
@@ -327,6 +399,24 @@ func truncateToRuneLimit(s string, limit int) string {
 	return string(runes[:limit])
 }
 
+func buildAdultIntimacyRaw(runtime *interaction.RuntimeAssembly, personalityPresetID, userMessage string) string {
+	label := ""
+	if input := buildEmotionFusionInput(runtime); input != nil {
+		label = input.PrimaryLabel
+	}
+
+	gate := promptir.IntimacyGate(userMessage, label)
+	switch gate {
+	case "hard_stop":
+		return ""
+	case "rejection":
+		return promptir.BuildIntimacyDowngradeSection()
+	case "blocked_emotion":
+		return ""
+	}
+
+	return promptir.BuildAdultIntimacyDefaultSection(personalityPresetID)
+}
 func assistantMaxSequence(msgs []Message) int64 {
 	if len(msgs) == 0 {
 		return 0
@@ -338,4 +428,16 @@ func assistantMaxSequence(msgs []Message) int64 {
 		}
 	}
 	return max
+}
+
+func extractAssistantReplies(history []map[string]string) []string {
+	var replies []string
+	for _, msg := range history {
+		if role, ok := msg["role"]; ok && role == "assistant" {
+			if content, ok2 := msg["content"]; ok2 && content != "" {
+				replies = append(replies, content)
+			}
+		}
+	}
+	return replies
 }

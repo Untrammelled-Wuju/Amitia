@@ -35,10 +35,11 @@ func (s *service) compiledChannelPrompt(channel string) expression.CompiledPromp
 }
 
 type sys1Result struct {
-	CharacterConfig string
-	ProfileContext  string
-	EpisodicContext string
-	Worldbook       string
+	CharacterConfig    string
+	ProfileContext     string
+	EpisodicContext    string
+	Worldbook          string
+	PersonalityPresetID string
 }
 
 func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) sys1Result {
@@ -66,22 +67,28 @@ func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage
 			wbCtx = wbPrompt
 		}
 	}
+
+	presetID := profile.PersonalityPresetID()
+
 	return sys1Result{
-		CharacterConfig: strings.Join(parts, "\n\n"),
-		ProfileContext:  profileCtx,
-		EpisodicContext: epiCtx,
-		Worldbook:       wbCtx,
+		CharacterConfig:    strings.Join(parts, "\n\n"),
+		ProfileContext:     profileCtx,
+		EpisodicContext:    epiCtx,
+		Worldbook:          wbCtx,
+		PersonalityPresetID: presetID,
 	}
 }
 
 type sys2Result struct {
 	SystemInstruction string
 	MemoryContext     string
+	MemoryInjectRaw   string
 }
 
 func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage string) sys2Result {
 	sysInstruction := s.compiledSystemInstruction(channel)
 	var internalParts []string
+	var memoryInjectRaw string
 	workingSummary := ""
 	if s.stateProvider != nil {
 		state := s.stateProvider.GetState(convID)
@@ -127,18 +134,22 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 				}
 				line := fmt.Sprintf("- [%s %s %.0f%% 置信%d%%] %s", typeLabel, r.MatchType, r.Score*100, r.Memory.Confidence, r.Memory.Value)
 				layerLines[layer] = append(layerLines[layer], line)
-				go s.memorySvc.RecordUse(r.Memory.ID)
 			}
 			for _, layer := range layerOrder {
 				if lines := layerLines[layer]; len(lines) > 0 {
 					internalParts = append(internalParts, "【"+layer+"】\n"+strings.Join(lines, "\n"))
 				}
 			}
+			memoryInjectRaw = s.buildMemoryInjectItems(results)
+			for _, r := range results {
+				go s.memorySvc.RecordUse(r.Memory.ID)
+			}
 		}
 	}
 	return sys2Result{
 		SystemInstruction: sysInstruction,
 		MemoryContext:     strings.Join(internalParts, "\n\n"),
+		MemoryInjectRaw:   memoryInjectRaw,
 	}
 }
 

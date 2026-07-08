@@ -5,9 +5,11 @@ package memory
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/prompt/textlib"
 	"github.com/u-ai/backend/log"
 )
 
@@ -28,30 +30,45 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 	return s.generateCandidatesFromMessages(conversationID, typedMessages)
 }
 
+func (s *service) buildExtractionUserMsg(messages []map[string]string) (userParts, assistantParts []string) {
+	for _, msg := range messages {
+		role := strings.ToLower(strings.TrimSpace(msg["role"]))
+		content := strings.TrimSpace(msg["content"])
+		if content == "" {
+			continue
+		}
+		if role == "user" {
+			userParts = append(userParts, content)
+		} else if role == "assistant" {
+			assistantParts = append(assistantParts, content)
+		}
+	}
+	return userParts, assistantParts
+}
+
 func (s *service) generateCandidatesFromMessages(conversationID string, messages []map[string]string) ([]MemoryCandidate, error) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
+	userParts, assistantParts := s.buildExtractionUserMsg(messages)
+	if len(userParts) == 0 {
+		return nil, nil
+	}
+	userText := strings.Join(userParts, "\n")
+	assistantText := strings.Join(assistantParts, "\n")
+
 	var characterID string
 	s.db.Table("conversations").Select("character_id").Where("id = ?", conversationID).Row().Scan(&characterID)
 	cfg := s.getActiveModel()
 	if cfg == nil {
 		return nil, fmt.Errorf("no active model")
 	}
-	conversationText := ""
-	for _, msg := range messages {
-		role := msg["role"]
-		content := msg["content"]
-		conversationText += role + ": " + content + "\n"
-	}
-	systemPrompt := `你是一个记忆提取器。从对话中提取值得长期记忆的事实，返回JSON数组。
-每条记忆包含：key(关键词标签)、value(记忆内容)、memoryType(类型：personal_info/hobby/preference/fact/plan/habit/relationship)、importance(1-10)、confidence(0-100)
 
-只提取明确的事实信息，不确定的信息confidence低于50。如果没有值得记忆的内容，返回空数组[]。`
+	userMsg := fmt.Sprintf(textlib.MemoryExtractUserMsgTemplate, userText, assistantText)
 
 	messagesLLM := []map[string]interface{}{
-		{"role": "system", "content": systemPrompt},
-		{"role": "user", "content": conversationText},
+		{"role": "system", "content": textlib.MemoryExtractSystemPrompt},
+		{"role": "user", "content": userMsg},
 	}
 	content, _, err := s.callLLM(cfg, messagesLLM)
 	if err != nil {
@@ -64,7 +81,7 @@ func (s *service) generateCandidatesFromMessages(conversationID string, messages
 	}
 	for i := range candidates {
 		candidates[i].ID = uuid.New().String()
-		candidates[i].SourceText = conversationText
+		candidates[i].SourceText = userText
 		candidates[i].ConversationID = conversationID
 		candidates[i].CharacterID = characterID
 		candidates[i].CreatedAt = time.Now().Format("2006-01-02 15:04:05")

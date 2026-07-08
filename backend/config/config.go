@@ -18,6 +18,7 @@ type Config struct {
 	Qdrant    QdrantConfig    `mapstructure:"qdrant"`
 	Embedding EmbeddingConfig `mapstructure:"embedding"`
 	Surreal   SurrealConfig   `mapstructure:"surrealdb"`
+	Prompt    PromptFeatureFlags `mapstructure:"prompt"`
 }
 
 type ServerConfig struct {
@@ -76,6 +77,16 @@ type SurrealConfig struct {
 	DataPath  string `mapstructure:"dataPath"`
 }
 
+type PromptFeatureFlags struct {
+	TextlibRawEnabled          bool `mapstructure:"textlibRawEnabled"`
+	PersonalityRawEnabled      bool `mapstructure:"personalityRawEnabled"`
+	EmotionFusionEnabled       bool `mapstructure:"emotionFusionEnabled"`
+	IntimacyDefaultEnabled     bool `mapstructure:"intimacyDefaultEnabled"`
+	MemoryRawEnabled           bool `mapstructure:"memoryRawEnabled"`
+	ReplySanitizerEnabled      bool `mapstructure:"replySanitizerEnabled"`
+	ProactiveRawEnabled        bool `mapstructure:"proactiveRawEnabled"`
+}
+
 var AppCfg *Config
 
 func InitConfig(configPath string) {
@@ -119,6 +130,14 @@ func InitConfig(configPath string) {
 	v.SetDefault("surrealdb.username", "root")
 	v.SetDefault("surrealdb.password", "root")
 	v.SetDefault("surrealdb.dataPath", "data/graph.db")
+
+	v.SetDefault("prompt.textlibRawEnabled", true)
+	v.SetDefault("prompt.personalityRawEnabled", true)
+	v.SetDefault("prompt.emotionFusionEnabled", true)
+	v.SetDefault("prompt.intimacyDefaultEnabled", true)
+	v.SetDefault("prompt.memoryRawEnabled", true)
+	v.SetDefault("prompt.replySanitizerEnabled", true)
+	v.SetDefault("prompt.proactiveRawEnabled", true)
 
 	v.AutomaticEnv()
 

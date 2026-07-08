@@ -260,18 +260,31 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 }
 
 type processPromptInput struct {
+	BaseIdentity      string
 	CharacterConfig   string
 	PersonalityConfig string
+	PersonalityRaw    string
 	ProfileContext    string
 	MemoryContext     string
 	Worldbook         string
-	History          []map[string]string
-	Runtime          *interaction.RuntimeAssembly
-	StyleInstruction string
-	UserContent      string
+	EmotionFusionRaw  string
+	AdultIntimacyRaw  string
+	MemoryInjectRaw   string
+	History           []map[string]string
+	AntiRepeatRaw     string
+	Runtime           *interaction.RuntimeAssembly
+	StyleInstruction  string
+	ProactiveScene        string
+	ProactiveTimeContext  string
+	ProactiveRecentContext string
+	ProactivePersonality  string
+	ProactiveRelationship string
+	ProactiveEmotion     string
+	ProactiveMemory      string
+	UserContent       string
 }
 
-func buildProcessPromptMessages(input processPromptInput) []map[string]interface{} {
+func buildProcessPromptMessages(input processPromptInput) ([]map[string]interface{}, *promptir.PromptTrace) {
 	gateway := promptir.NewGateway()
 
 	runtimePlan := buildBehaviorPlanFromRuntime(input.Runtime)
@@ -283,10 +296,15 @@ func buildProcessPromptMessages(input processPromptInput) []map[string]interface
 			expressionPlan = input.StyleInstruction
 		}
 	}
-
-	gwMessages, err := gateway.BuildMessages(promptir.BuildRequest{
+	gwMessages, promptTrace, err := gateway.BuildMessages(promptir.BuildRequest{
 		CharacterConfig:     input.CharacterConfig,
 		CompiledPersonality: input.PersonalityConfig,
+		BaseIdentity:        input.BaseIdentity,
+		PersonalityRaw:      input.PersonalityRaw,
+		EmotionFusionRaw:    input.EmotionFusionRaw,
+		AdultIntimacyRaw:    input.AdultIntimacyRaw,
+		MemoryInjectRaw:     input.MemoryInjectRaw,
+		AntiRepeatRaw:       input.AntiRepeatRaw,
 		ProfileContext:      input.ProfileContext,
 		MemoryContext:       input.MemoryContext,
 		Worldbook:           input.Worldbook,
@@ -294,14 +312,31 @@ func buildProcessPromptMessages(input processPromptInput) []map[string]interface
 		ExpressionPlan:      expressionPlan,
 		History:             renderHistoryForPromptIR(input.History),
 		CurrentUserInput:    input.UserContent,
+		ProactiveScene:        input.ProactiveScene,
+		ProactiveTimeContext:  input.ProactiveTimeContext,
+		ProactiveRecentContext: input.ProactiveRecentContext,
+		ProactivePersonality:  input.ProactivePersonality,
+		ProactiveRelationship: input.ProactiveRelationship,
+		ProactiveEmotion:     input.ProactiveEmotion,
+		ProactiveMemory:      input.ProactiveMemory,
 	})
 	if err != nil {
 		applog.Warn("prompt gateway build failed, trying minimal build", applog.Fields{"error": err.Error()})
-		gwMessages, err = gateway.BuildMessages(promptir.BuildRequest{
+		gwMessages, promptTrace, err = gateway.BuildMessages(promptir.BuildRequest{
 			CharacterConfig:     input.CharacterConfig,
 			CompiledPersonality: input.PersonalityConfig,
-			RuntimePlan:         runtimePlan,
-			ExpressionPlan:      expressionPlan,
+			BaseIdentity:        input.BaseIdentity,
+			PersonalityRaw:      input.PersonalityRaw,
+			EmotionFusionRaw:    input.EmotionFusionRaw,
+			AdultIntimacyRaw:    input.AdultIntimacyRaw,
+		MemoryInjectRaw:     input.MemoryInjectRaw,
+		RuntimePlan:         runtimePlan,
+		AntiRepeatRaw:       input.AntiRepeatRaw,
+		ExpressionPlan:      expressionPlan,
+		ProactivePersonality:  input.ProactivePersonality,
+		ProactiveRelationship: input.ProactiveRelationship,
+		ProactiveEmotion:     input.ProactiveEmotion,
+		ProactiveMemory:      input.ProactiveMemory,
 			CurrentUserInput:    input.UserContent,
 		})
 		if err != nil {
@@ -309,15 +344,15 @@ func buildProcessPromptMessages(input processPromptInput) []map[string]interface
 			safeContent := promptir.SanitizeCurrentUserMessage(input.UserContent)
 			return []map[string]interface{}{
 				{"role": "user", "content": "<current_user_message>\n" + safeContent + "\n</current_user_message>"},
+			}, nil
 			}
 		}
-	}
 
 	messages := make([]map[string]interface{}, 0, len(gwMessages))
 	for _, m := range gwMessages {
 		messages = append(messages, map[string]interface{}{"role": m.Role, "content": m.Content})
 	}
-	return messages
+	return messages, promptTrace
 }
 
 func renderHistoryForPromptIR(history []map[string]string) string {
@@ -356,6 +391,11 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		ExpectedStatusVersion: req.ExpectedStatusVersion,
 		Runtime:               req.Runtime,
 		IsInternal:            req.IsInternal,
+		ProactiveTimeContext:  req.ProactiveTimeContext,
+		ProactiveRecentContext: req.ProactiveRecentContext,
+		ProactiveRelationship:  req.ProactiveRelationship,
+		ProactiveEmotion:      req.ProactiveEmotion,
+		ProactiveMemory:       req.ProactiveMemory,
 	}
 	computeResult, err := s.ComputeInteraction(ctx, chatReq)
 	if err != nil {

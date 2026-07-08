@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+const MaxMemoryInjectTotal = 15
+
+// MaxMemoryInjectTotal 限制每轮注入的记忆条数上限，防止全量聊天历史塞入 prompt。
+// 取值参考 Ackem CONSOLIDATION_MAX_FACTS_INPUT + LianYu MemoryManager limit 策略，
+// 确保注入上下文精炼可控，模型仅用于自然参考不逐条复述。
+
 type RetrievalScorer struct{}
 
 func (rs *RetrievalScorer) halflifeDays(memoryType string) int {

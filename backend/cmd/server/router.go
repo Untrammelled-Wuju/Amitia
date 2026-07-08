@@ -50,7 +50,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
 		})
 		profile.RegisterProfileRouter(apiGroup, services.Profile)
-		proactive.RegisterProactiveRouter(apiGroup, ctx)
+		proactive.RegisterProactiveRouterWithCompanion(apiGroup, ctx, services.Companion)
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)

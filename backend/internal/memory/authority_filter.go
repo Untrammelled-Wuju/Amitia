@@ -101,3 +101,44 @@ func memoryExpired(expiresAt *string, now time.Time) bool {
 	}
 	return true
 }
+
+func shouldExtractFromMessage(role string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	return role == "user"
+}
+
+func isTransientContent(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return true
+	}
+	greetings := []string{"你好", "在吗", "早安", "晚安", "午安", "早上好", "晚上好", "下午好", "hi", "hello", "hey"}
+	for _, g := range greetings {
+		if strings.EqualFold(trimmed, g) {
+			return true
+		}
+	}
+	pureEmoticons := []string{"哈哈哈", "哈哈", "嘿嘿", "嘻嘻", "呵呵", "嗯嗯", "哦哦", "好的", "ok", "OK", "嗯", "哦", "啊"}
+	for _, e := range pureEmoticons {
+		if trimmed == e {
+			return true
+		}
+	}
+	return false
+}
+
+func filterExtractableMessages(messages []map[string]string) []map[string]string {
+	filtered := make([]map[string]string, 0, len(messages))
+	hasUser := false
+	for _, msg := range messages {
+		role := strings.ToLower(strings.TrimSpace(msg["role"]))
+		if role == "user" && !isTransientContent(msg["content"]) {
+			hasUser = true
+		}
+		filtered = append(filtered, msg)
+	}
+	if !hasUser {
+		return nil
+	}
+	return filtered
+}

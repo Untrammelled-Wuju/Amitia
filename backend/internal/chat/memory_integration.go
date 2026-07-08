@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/u-ai/backend/internal/memory"
+	promptir "github.com/u-ai/backend/internal/prompt"
+)
 
 func (s *service) detectEpisodicMoment(convID, charID string) {
 	if s.episodicSvc == nil {
@@ -71,4 +76,54 @@ func (s *service) profileExtractionUserID(convID, charID string) string {
 		return fallback
 	}
 	return peerID
+}
+
+func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) string {
+	if len(results) == 0 {
+		return promptir.BuildMemoryInjectGuardrailOnly()
+	}
+	if len(results) > memory.MaxMemoryInjectTotal {
+		results = results[:memory.MaxMemoryInjectTotal]
+	}
+	injectItems := make([]promptir.MemoryInjectItem, 0, len(results))
+	for _, r := range results {
+		if isMemoryBlocked(r.Memory) {
+			continue
+		}
+		cat := r.Memory.MemoryType
+		if cat == "" {
+			cat = "fact"
+		}
+		tier := mapLayerToTier(r.MemoryLayer)
+		injectItems = append(injectItems, promptir.MemoryInjectItem{
+			Content:  r.Memory.Value,
+			Category: cat,
+			Tier:     tier,
+		})
+	}
+	return promptir.BuildMemoryInjectRawSection(injectItems)
+}
+
+func mapLayerToTier(layer string) promptir.MemoryInjectTier {
+	switch layer {
+	case "用户画像":
+		return promptir.TierLongTerm
+	case "情景回忆":
+		return promptir.TierRoleRel
+	case "当前摘要":
+		return promptir.TierRecent
+	case "事实记忆":
+		return promptir.TierRecent
+	default:
+		return promptir.TierRecent
+	}
+}
+
+func isMemoryBlocked(m memory.Memory) bool {
+	status := strings.ToLower(strings.TrimSpace(m.VerifiedStatus))
+	switch status {
+	case "deleted", "invalidated", "expired", "rejected", "tombstone", "tombstoned", "inactive":
+		return true
+	}
+	return false
 }

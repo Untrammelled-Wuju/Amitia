@@ -3,23 +3,16 @@
 package proactive
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/tts"
-	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
-	"math/rand"
 )
 
 type Executor struct {
@@ -148,72 +141,32 @@ func (e *Executor) executeRule(r struct {
 		return
 	}
 
-	if e.dispatch != nil {
-		requestID := fmt.Sprintf("proactive-rule-%d-%d", r.id, time.Now().Unix())
-		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
-			CharacterID:    character.ID,
-			ConversationID: convID,
-			Channel:        channel,
-			Prompt:         r.prompt,
-			RequestID:      requestID,
-		})
-		status := "pending"
-		content := ""
-		if err != nil || (result != nil && !result.Success) {
-			status = "failed"
-			log.Printf("[Proactive] 规则 id=%d 统一调度失败: %v", r.id, err)
-		} else if result != nil {
-			content = result.Content
-		}
+	if e.dispatch == nil {
+		log.Printf("[Proactive] 规则 id=%d 主动消息统一调度未配置，无法发送", r.id)
+		status := "failed"
 		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-			r.id, convID, content, channel, status)
+			r.id, convID, "", channel, status)
 		e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?",
 			time.Now(), time.Now(), r.id)
 		return
 	}
 
-	content := e.generateContent(r.name, r.ruleType, r.prompt, character.Name, character.Identity, character.ID)
-	if content == "" {
-		return
-	}
-
-	var maxLen int
-	switch {
-	case channel == "wechat":
-		maxLen = util.MaxWechatMessageLen
-	case channel == "qq":
-		maxLen = util.MaxQQMessageLen
-	default:
-		maxLen = util.MaxWebMessageLen
-	}
-	lines := util.SplitLongMessage(content, maxLen)
-	sentWeb, sentWechat, sentQQ := false, false, false
-	for _, line := range lines {
-		if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
-			e.sendToWeb(convID, line)
-			sentWeb = true
-		}
-		if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
-			wcID := e.getWechatConvID(character.ID)
-			if wcID != "" {
-				e.sendToWechat(wcID, line)
-				sentWechat = true
-			}
-		}
-		if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
-			qqID := e.getQQConvID(character.ID)
-			if qqID != "" {
-				e.sendToQQ(qqID, line)
-				sentQQ = true
-			}
-		}
-	}
-
+	requestID := fmt.Sprintf("proactive-rule-%d-%d", r.id, time.Now().Unix())
+	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		CharacterID:    character.ID,
+		ConversationID: convID,
+		Channel:        channel,
+		Prompt:         r.prompt,
+		RequestID:      requestID,
+	})
 	status := "pending"
-	if !sentWeb && !sentWechat && !sentQQ {
+	content := ""
+	if err != nil || (result != nil && !result.Success) {
 		status = "failed"
+		log.Printf("[Proactive] 规则 id=%d 统一调度失败: %v", r.id, err)
+	} else if result != nil {
+		content = result.Content
 	}
-
 	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
 		r.id, convID, content, channel, status)
 	e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?",
@@ -299,241 +252,38 @@ func (e *Executor) executeReminder(r struct {
 		channel = "web"
 	}
 
-	if e.dispatch != nil {
-		requestID := fmt.Sprintf("proactive-reminder-%d-%d", r.id, time.Now().Unix())
-		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
-			CharacterID:    r.charID,
-			ConversationID: convID,
-			Channel:        channel,
-			Prompt:         content,
-			RequestID:      requestID,
-		})
-		status := "pending"
-		contentStr := ""
-		if err != nil || (result != nil && !result.Success) {
-			status = "failed"
-		}
-		if result != nil {
-			contentStr = result.Content
-		}
+	if e.dispatch == nil {
+		log.Printf("[Reminder] 提醒 id=%d 主动消息统一调度未配置，无法发送", r.id)
 		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-			r.id, convID, contentStr, channel, status)
-		finalState := "sent"
-		if status == "failed" {
-			finalState = "failed"
-		}
-		e.recordTriggerHistory(r.id, r.title, "reminder", channel, finalState, "")
-		log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度发送", r.id, r.title)
+			r.id, convID, "", channel, "failed")
+		e.recordTriggerHistory(r.id, r.title, "reminder", channel, "failed", "统一调度未配置")
 		return
 	}
 
-	var maxLen int
-	switch {
-	case channel == "wechat":
-		maxLen = util.MaxWechatMessageLen
-	case channel == "qq":
-		maxLen = util.MaxQQMessageLen
-	default:
-		maxLen = util.MaxWebMessageLen
-	}
-	lines := util.SplitLongMessage(content, maxLen)
-	sentWeb, sentWechat, sentQQ := false, false, false
-	for _, line := range lines {
-		if channel == "web" || channel == "all" || strings.Contains(channel, "web") {
-			e.sendToWeb(convID, line)
-			sentWeb = true
-		}
-		if channel == "wechat" || channel == "all" || strings.Contains(channel, "wechat") {
-			wcID := e.getWechatConvID(r.charID)
-			if wcID != "" {
-				if e.sendToWechat(wcID, line) {
-					sentWechat = true
-				}
-			}
-		}
-		if channel == "qq" || channel == "all" || strings.Contains(channel, "qq") {
-			if e.sendToQQ(convID, line) {
-				sentQQ = true
-			}
-		}
-	}
-
+	requestID := fmt.Sprintf("proactive-reminder-%d-%d", r.id, time.Now().Unix())
+	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		CharacterID:    r.charID,
+		ConversationID: convID,
+		Channel:        channel,
+		Prompt:         content,
+		RequestID:      requestID,
+	})
 	status := "pending"
-	if !sentWeb && !sentWechat && !sentQQ {
+	contentStr := ""
+	if err != nil || (result != nil && !result.Success) {
 		status = "failed"
 	}
-
+	if result != nil {
+		contentStr = result.Content
+	}
 	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-		r.id, convID, content, channel, status)
-
-	log.Printf("[Reminder] 提醒 id=%d title=%s 已发送 (web=%v wechat=%v qq=%v)", r.id, r.title, sentWeb, sentWechat, sentQQ)
-
+		r.id, convID, contentStr, channel, status)
 	finalState := "sent"
 	if status == "failed" {
 		finalState = "failed"
 	}
 	e.recordTriggerHistory(r.id, r.title, "reminder", channel, finalState, "")
-}
-
-func (e *Executor) loadPersonalityPrompt(characterID string) string {
-	if characterID == "" {
-		return ""
-	}
-	var personality, personalityConfig string
-	e.db.Table("characters").Select("COALESCE(personality,''), COALESCE(personality_config,'')").Where("id = ?", characterID).Limit(1).Row().Scan(&personality, &personalityConfig)
-	if personality == "" && personalityConfig == "" {
-		return ""
-	}
-	prompt := "【性格特征】"
-	if personality != "" {
-		prompt += personality
-	}
-	if personalityConfig != "" && personalityConfig != "{}" {
-		var cfg map[string]interface{}
-		if json.Unmarshal([]byte(personalityConfig), &cfg) == nil {
-			for key, val := range cfg {
-				if v, ok := val.(float64); ok {
-					label := personalitySliderLabel(key)
-					if label != "" {
-						prompt += fmt.Sprintf("\n%s: %.0f/100", label, v)
-					}
-				}
-			}
-		}
-	}
-	return prompt
-}
-
-func (e *Executor) generateContent(name, ruleType, prompt, charName, identity, characterID string) string {
-	if identity == "" {
-		identity = "一个AI伙伴"
-	}
-	if prompt == "" {
-		prompt = "发一条自然的主动消息。"
-	}
-
-	personalityPrompt := e.loadPersonalityPrompt(characterID)
-
-	sys := fmt.Sprintf("你是%s，%s。\n你的语气自然、口语化。\n字数控制在8-40字。\n【重要】不要调用工具，直接输出纯文本。\n不要使用emoji表情符号。", charName, identity)
-	usr := fmt.Sprintf("【主动消息 - 不要调用工具】\n任务：%s (%s)\n要求：%s\n直接输出消息（无前缀无引号）：", name, ruleType, prompt)
-	if personalityPrompt != "" {
-		usr = usr + "\n\n【角色风格约束】\n" + personalityPrompt
-	}
-
-	cfg := e.getActiveModelCron()
-	if cfg == nil {
-		return ""
-	}
-
-	msgs := []map[string]interface{}{
-		{"role": "system", "content": sys},
-		{"role": "user", "content": usr},
-	}
-
-	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"model": cfg["modelName"], "messages": msgs,
-		"temperature": 0.9, "max_tokens": 200, "stream": false,
-	})
-
-	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
-
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-
-	rb, _ := io.ReadAll(resp.Body)
-	var r struct {
-		Choices []struct{ Message struct{ Content string } }
-	}
-	json.Unmarshal(rb, &r)
-	if len(r.Choices) > 0 {
-		return strings.TrimSpace(r.Choices[0].Message.Content)
-	}
-	return ""
-}
-
-func (e *Executor) getActiveModelCron() map[string]string {
-	var baseURL, apiKey, modelName string
-	err := e.db.Table("model_configs").
-		Select("base_url, api_key, model_name").
-		Where("is_active = 1").Limit(1).Row().
-		Scan(&baseURL, &apiKey, &modelName)
-	if err != nil {
-		return nil
-	}
-	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName}
-}
-
-func (e *Executor) sendToWeb(convID, content string) {
-	now := time.Now()
-	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
-	displayContent := content
-	audioUrl := ""
-	var audioDuration float64
-
-	ttsRepo := tts.NewRepository(e.db)
-	activeCfg, cfgErr := ttsRepo.GetActive()
-	if cfgErr == nil && activeCfg.ApiKey != "" && content != "" {
-		cfg := &tts.TtsConfig{ApiKey: activeCfg.ApiKey, ResourceId: activeCfg.ResourceId, VoiceType: activeCfg.VoiceType, Speed: activeCfg.Speed, Pitch: activeCfg.Pitch, Volume: activeCfg.Volume}
-		if cfg.VoiceType == "" {
-			cfg.VoiceType = "zh_female_vv_uranus_bigtts"
-		}
-		if cfg.Speed == 0 {
-			cfg.Speed = 1.0
-		}
-		if cfg.Pitch == 0 {
-			cfg.Pitch = 1.0
-		}
-		if cfg.Volume == 0 {
-			cfg.Volume = 1.0
-		}
-		if rand.Float64() < 0.20 {
-			synthResult, synthErr := tts.Synthesize(cfg, content)
-			if synthErr == nil {
-				audioUrl = synthResult.AudioURL
-				audioDuration = synthResult.Duration
-				displayContent = ""
-			}
-		}
-	}
-
-	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, audio_url, audio_duration, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 0, ?, ?, ?)",
-		msgID, convID, displayContent, audioUrl, audioDuration, now)
-}
-
-func (e *Executor) sendToWechat(convID, content string) bool {
-	toUserID := convID
-	if strings.HasPrefix(convID, "conv-") {
-		toUserID = convID[5:]
-	}
-
-	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9876/api/send", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[Proactive] 微信发送失败: %v", err)
-		return false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		var respBody bytes.Buffer
-		respBody.ReadFrom(resp.Body)
-		log.Printf("[Proactive] 微信返回 %d body=%s", resp.StatusCode, respBody.String())
-		return false
-	}
-	log.Printf("[Proactive] 微信已发送 to=%s", toUserID)
-	return true
-}
-func (e *Executor) getWechatConvID(charID string) string {
-	return resolveProactiveConversation(e.db, "", charID, "wechat", true)
+	log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度发送", r.id, r.title)
 }
 
 func calcNextRemindAt(remindAt, repeatRule, nowDate, nowTime string) string {
@@ -584,58 +334,6 @@ func quietHoursAllow(start, end, now string) bool {
 	return now >= end && now < start
 }
 
-func (e *Executor) sendToQQ(userID, content string) bool {
-	convID := userID
-	targetID := userID
-	if strings.HasPrefix(userID, "conv-qq-") {
-		targetID = userID[len("conv-qq-"):]
-	} else if strings.HasPrefix(userID, "conv-") {
-		targetID = userID[5:]
-	}
-
-	useVoice := rand.Float64() < 0.20
-	voiceOK := false
-
-	body, _ := json.Marshal(map[string]string{"toUserId": targetID, "text": content})
-	client := &http.Client{Timeout: 60 * time.Second}
-
-	if useVoice {
-		voiceReq, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send-voice", bytes.NewReader(body))
-		voiceReq.Header.Set("Content-Type", "application/json")
-		voiceResp, voiceErr := client.Do(voiceReq)
-		if voiceErr == nil && voiceResp.StatusCode == 200 {
-			voiceOK = true
-		}
-		if voiceResp != nil {
-			voiceResp.Body.Close()
-		}
-	}
-
-	if !voiceOK {
-		textReq, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
-		textReq.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(textReq)
-		if err != nil {
-			log.Printf("[Proactive] QQ发送失败: %v", err)
-			return false
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			var respBody bytes.Buffer
-			respBody.ReadFrom(resp.Body)
-			log.Printf("[Proactive] QQ返回 %d body=%s", resp.StatusCode, respBody.String())
-			return false
-		}
-	}
-
-	now := time.Now()
-	msgID := fmt.Sprintf("proactive-%s", uuid.New().String())
-	e.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 0, ?)",
-		msgID, convID, content, now)
-	log.Printf("[Proactive] QQ已发送 to=%s voice=%v voiceOK=%v", targetID, useVoice, voiceOK)
-	return true
-}
-
 func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) string {
 	character, ok := resolveProactiveCharacter(e.db, characterID, conversationID)
 	if !ok {
@@ -648,60 +346,32 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 		return ""
 	}
 
-	if e.dispatch != nil {
-		requestID := fmt.Sprintf("proactive-share-%d", time.Now().UnixNano())
-		result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
-			CharacterID:    character.ID,
-			ConversationID: convID,
-			Channel:        "all",
-			Prompt:         prompt,
-			RequestID:      requestID,
-		})
-		status := "pending"
-		content := ""
-		if err != nil || (result != nil && !result.Success) {
-			status = "failed"
-		} else if result != nil {
-			content = result.Content
-		}
+	if e.dispatch == nil {
+		log.Println("[Proactive] ExecuteShareTask: 主动消息统一调度未配置")
 		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
-			convID, content, "all", status, time.Now(), time.Now())
-		log.Printf("[Proactive] ExecuteShareTask dispatched via unified entry: success=%v", err == nil && result != nil && result.Success)
-		return content
-	}
-
-	content := e.generateContent("系统主动消息", "share", prompt, character.Name, character.Identity, character.ID)
-	if content == "" {
+			convID, "", "all", "failed", time.Now(), time.Now())
 		return ""
 	}
-	lines := util.SplitLongMessage(content, util.MaxWebMessageLen)
-	sentWeb, sentWechat, sentQQ := false, false, false
-	wcID := e.getWechatConvID(character.ID)
-	qqID := e.getQQConvID(character.ID)
-	for _, line := range lines {
-		e.sendToWeb(convID, line)
-		sentWeb = true
-		if wcID != "" {
-			e.sendToWechat(wcID, line)
-			sentWechat = true
-		}
-		if qqID != "" {
-			e.sendToQQ(qqID, line)
-			sentQQ = true
-		}
-	}
+
+	requestID := fmt.Sprintf("proactive-share-%d", time.Now().UnixNano())
+	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		CharacterID:    character.ID,
+		ConversationID: convID,
+		Channel:        "all",
+		Prompt:         prompt,
+		RequestID:      requestID,
+	})
 	status := "pending"
-	if !sentWeb && !sentWechat && !sentQQ {
+	content := ""
+	if err != nil || (result != nil && !result.Success) {
 		status = "failed"
+	} else if result != nil {
+		content = result.Content
 	}
 	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
 		convID, content, "all", status, time.Now(), time.Now())
-	log.Printf("[Proactive] ExecuteShareTask sent: web=%v wechat=%v qq=%v", sentWeb, sentWechat, sentQQ)
+	log.Printf("[Proactive] ExecuteShareTask dispatched via unified entry: success=%v", err == nil && result != nil && result.Success)
 	return content
-}
-
-func (e *Executor) getQQConvID(charID string) string {
-	return resolveProactiveConversation(e.db, "", charID, "qq", true)
 }
 
 func (e *Executor) recordTriggerHistory(triggerID int, title, triggerType, channel, state, lastError string) {

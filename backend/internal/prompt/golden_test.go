@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/u-ai/backend/config"
 )
 
 func goldenPath(name string) string {
@@ -37,6 +39,66 @@ func readGolden(t *testing.T, name string) ([]byte, bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+func goldenAssertOrUpdate(t *testing.T, name string, data []byte) {
+	t.Helper()
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		writeGolden(t, name, data)
+		return
+	}
+	expected, ok := readGolden(t, name)
+	if !ok {
+		writeGolden(t, name, data)
+		return
+	}
+	if string(expected) != string(data) {
+		t.Errorf("golden mismatch for %s", name)
+	}
+}
+
+func allFlagsEnabled() config.PromptFeatureFlags {
+	return config.PromptFeatureFlags{
+		TextlibRawEnabled:      true,
+		PersonalityRawEnabled:  true,
+		EmotionFusionEnabled:   true,
+		IntimacyDefaultEnabled: true,
+		MemoryRawEnabled:       true,
+		ReplySanitizerEnabled:  true,
+		ProactiveRawEnabled:    true,
+	}
+}
+
+func allFlagsDisabled() config.PromptFeatureFlags {
+	return config.PromptFeatureFlags{}
+}
+
+func containsSub(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSection(gw GwIR, id string) bool {
+	for _, s := range gw.Sections {
+		if s.ID == id && s.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+func initGoldenTestFlags(t *testing.T, flags config.PromptFeatureFlags) func() {
+	t.Helper()
+	if config.AppCfg == nil {
+		config.AppCfg = &config.Config{}
+	}
+	old := config.AppCfg.Prompt
+	config.AppCfg.Prompt = flags
+	return func() { config.AppCfg.Prompt = old }
 }
 
 func TestGoldenCompileIRSnapshot(t *testing.T) {
@@ -200,5 +262,494 @@ func TestGoldenRenderIR(t *testing.T) {
 
 	if string(expected) != rendered {
 		t.Fatalf("golden mismatch render:\nexpected:\n%s\nactual:\n%s", string(expected), rendered)
+	}
+}
+
+func TestGolden_NormalChatSections(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		CharacterConfig:  "测试角色配置",
+		CurrentUserInput: "用户输入内容",
+	})
+
+	required := []string{"platform_policy", "base_identity", "app_contract", "cognitive_contract", "anti_flattery_contract", "technical_task_contract", "character_contract", "current_user_message"}
+	for _, id := range required {
+		if !containsSection(ir, id) {
+			t.Errorf("期望包含 section %s，实际未找到", id)
+		}
+	}
+
+	data, _ := json.MarshalIndent(ir, "", "  ")
+	goldenAssertOrUpdate(t, "normal_chat.json", data)
+}
+
+func TestGolden_PersonalitySection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		PersonalityRaw:   "人格原始提示词内容",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "personality_raw") {
+		t.Error("flags全部开启时应包含 personality_raw section")
+	}
+}
+
+func TestGolden_PersonalitySectionDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.PersonalityRawEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		PersonalityRaw:   "人格原始提示词内容",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "personality_raw") {
+		t.Error("PersonalityRawEnabled=false 时不应包含 personality_raw section")
+	}
+}
+
+func TestGolden_EmotionFusionSection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		EmotionFusionRaw: "情绪融合提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "emotion_fusion_raw") {
+		t.Error("flags全部开启时应包含 emotion_fusion_raw section")
+	}
+}
+
+func TestGolden_EmotionFusionSectionDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.EmotionFusionEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		EmotionFusionRaw: "情绪融合提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "emotion_fusion_raw") {
+		t.Error("EmotionFusionEnabled=false 时不应包含 emotion_fusion_raw section")
+	}
+}
+
+func TestGolden_AdultIntimacySection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		AdultIntimacyRaw: "成人亲密边界提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "adult_intimacy_raw") {
+		t.Error("flags全部开启时应包含 adult_intimacy_raw section")
+	}
+}
+
+func TestGolden_AdultIntimacySectionDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.IntimacyDefaultEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		AdultIntimacyRaw: "成人亲密边界提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "adult_intimacy_raw") {
+		t.Error("IntimacyDefaultEnabled=false 时不应包含 adult_intimacy_raw section")
+	}
+}
+
+func TestGolden_MemoryInjectSection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		MemoryInjectRaw:  "记忆注入原始文本",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "memory_inject_raw") {
+		t.Error("flags全部开启时应包含 memory_inject_raw section")
+	}
+}
+
+func TestGolden_MemoryInjectSectionDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.MemoryRawEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		MemoryInjectRaw:  "记忆注入原始文本",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "memory_inject_raw") {
+		t.Error("MemoryRawEnabled=false 时不应包含 memory_inject_raw section")
+	}
+}
+
+func TestGolden_OutputShapeAndAntiRepeat(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		OutputShapeRaw:   "输出清洗提示词",
+		AntiRepeatRaw:    "防复读提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "output_shape_raw") {
+		t.Error("应包含 output_shape_raw section")
+	}
+	if !containsSection(ir, "anti_repeat_raw") {
+		t.Error("应包含 anti_repeat_raw section")
+	}
+}
+
+func TestGolden_OutputShapeDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.ReplySanitizerEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		OutputShapeRaw:   "输出清洗提示词",
+		AntiRepeatRaw:    "防复读提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "output_shape_raw") {
+		t.Error("ReplySanitizerEnabled=false 时不应包含 output_shape_raw")
+	}
+	if containsSection(ir, "anti_repeat_raw") {
+		t.Error("ReplySanitizerEnabled=false 时不应包含 anti_repeat_raw")
+	}
+}
+
+func TestGolden_ChannelShortSection(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		ChannelShortRaw:  "微信短句提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if !containsSection(ir, "channel_short_raw") {
+		t.Error("应包含 channel_short_raw section")
+	}
+}
+
+func TestGolden_ChannelShortSectionDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.TextlibRawEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		ChannelShortRaw:  "微信短句提示词",
+		CurrentUserInput: "你好",
+	})
+
+	if containsSection(ir, "channel_short_raw") {
+		t.Error("TextlibRawEnabled=false 时不应包含 channel_short_raw")
+	}
+}
+
+func TestGolden_ProactiveSections(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:        "测试BaseIdentity",
+		ProactiveRaw:        "主动消息原始提示词",
+		ProactivePersonality: "主动消息人格",
+		ProactiveScene:      "主动消息场景",
+		ProactiveTimeContext: "主动消息时间上下文",
+		CurrentUserInput:    "你好",
+	})
+
+	required := []string{"proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context"}
+	for _, id := range required {
+		if !containsSection(ir, id) {
+			t.Errorf("期望包含 proactive section %s，实际未找到", id)
+		}
+	}
+}
+
+func TestGolden_ProactiveSectionsDisabled(t *testing.T) {
+	flags := allFlagsEnabled()
+	flags.ProactiveRawEnabled = false
+	cleanup := initGoldenTestFlags(t, flags)
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:        "测试BaseIdentity",
+		ProactiveRaw:        "主动消息原始提示词",
+		ProactivePersonality: "主动消息人格",
+		ProactiveScene:      "主动消息场景",
+		ProactiveTimeContext: "主动消息时间上下文",
+		CurrentUserInput:    "你好",
+	})
+
+	proactiveIDs := []string{"proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_recent_context"}
+	for _, id := range proactiveIDs {
+		if containsSection(ir, id) {
+			t.Errorf("ProactiveRawEnabled=false 时不应包含 %s", id)
+		}
+	}
+}
+
+func TestGolden_AllFlagsEnabledBuild(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:        "测试BaseIdentity",
+		CharacterConfig:     "测试角色",
+		PersonalityRaw:      "人格",
+		EmotionFusionRaw:    "情绪",
+		AdultIntimacyRaw:    "成人",
+		MemoryInjectRaw:     "记忆注入",
+		MemoryExtractRaw:    "记忆抽取",
+		OutputShapeRaw:      "输出清洗",
+		AntiRepeatRaw:       "防复读",
+		ProactiveRaw:        "主动消息",
+		ProactivePersonality: "主动人格",
+		ProactiveScene:      "主动场景",
+		ProactiveTimeContext: "主动时间",
+		ChannelShortRaw:     "短句",
+		CurrentUserInput:    "测试",
+	})
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Fatal("渲染后消息为空")
+	}
+	if msgs[0].Role != "system" {
+		t.Fatalf("第一条消息应为system, 实际为 %s", msgs[0].Role)
+	}
+
+	v := NewValidator()
+	if err := v.ValidateMessages(msgs); err != nil {
+		t.Fatalf("校验messages失败: %v", err)
+	}
+
+	data, _ := json.MarshalIndent(msgs, "", "  ")
+	goldenAssertOrUpdate(t, "all_flags_render.json", data)
+}
+
+func TestGolden_AllFlagsDisabledBuild(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsDisabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:        "测试BaseIdentity",
+		CharacterConfig:     "测试角色",
+		PersonalityRaw:      "人格",
+		EmotionFusionRaw:    "情绪",
+		AdultIntimacyRaw:    "成人",
+		MemoryInjectRaw:     "记忆注入",
+		MemoryExtractRaw:    "记忆抽取",
+		OutputShapeRaw:      "输出清洗",
+		AntiRepeatRaw:       "防复读",
+		ProactiveRaw:        "主动消息",
+		ProactivePersonality: "主动人格",
+		ProactiveScene:      "主动场景",
+		ProactiveTimeContext: "主动时间",
+		ChannelShortRaw:     "短句",
+		CurrentUserInput:    "测试",
+	})
+
+	newSectionIDs := []string{"personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "memory_inject_raw", "memory_extract_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_scene", "proactive_time_context", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_recent_context", "channel_short_raw"}
+	for _, id := range newSectionIDs {
+		if containsSection(ir, id) {
+			t.Errorf("全部关闭后不应包含 %s", id)
+		}
+	}
+
+	coreIDs := []string{"platform_policy", "base_identity", "app_contract", "cognitive_contract", "anti_flattery_contract", "technical_task_contract", "current_user_message"}
+	for _, id := range coreIDs {
+		if !containsSection(ir, id) {
+			t.Errorf("核心 section %s 应始终存在", id)
+		}
+	}
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("全部关闭后渲染失败: %v", err)
+	}
+
+	v := NewValidator()
+	if err := v.ValidateMessages(msgs); err != nil {
+		t.Fatalf("全部关闭后校验messages失败: %v", err)
+	}
+
+	data, _ := json.MarshalIndent(msgs, "", "  ")
+	goldenAssertOrUpdate(t, "all_flags_off_render.json", data)
+}
+
+func TestGolden_ReplySanitizerBlocksMetadata(t *testing.T) {
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		ProactiveRaw:     "主动消息",
+		ProactiveScene:   "主动场景",
+		OutputShapeRaw:   "输出清洗",
+		CurrentUserInput: "你好",
+	})
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+
+	for _, m := range msgs {
+		content := m.Content
+		forbidden := []string{"系统提醒", "任务：", "主动消息：", "任务:", "主动消息:"}
+		for _, fb := range forbidden {
+			if containsSub(content, fb) {
+				t.Errorf("prompt中不应包含元信息 %q", fb)
+			}
+		}
+	}
+}
+
+func TestGolden_ProactiveSceneSystemPlacement(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		ProactiveScene:   "这是主动消息场景描述",
+		CurrentUserInput: "你好",
+	})
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+
+	systemContent := msgs[0].Content
+	if !containsSub(systemContent, "这是主动消息场景描述") {
+		t.Error("ProactiveScene 应渲染到 system 消息中")
+	}
+}
+
+func TestGolden_ProactivePersonalityCharacterPlacement(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsEnabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:         "测试BaseIdentity",
+		ProactivePersonality: "主动消息人格指令",
+		CurrentUserInput:     "你好",
+	})
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("渲染失败: %v", err)
+	}
+
+	found := false
+	for i := 1; i < len(msgs); i++ {
+		if containsSub(msgs[i].Content, "主动消息人格指令") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("ProactivePersonality 应渲染到 character 消息中")
+	}
+}
+
+func TestGolden_AllFlagsOffOldChatLink(t *testing.T) {
+	cleanup := initGoldenTestFlags(t, allFlagsDisabled())
+	defer cleanup()
+
+	b := NewBuilder()
+	ir := b.Build(BuildRequest{
+		BaseIdentity:     "测试BaseIdentity",
+		CharacterConfig:  "角色",
+		CurrentUserInput: "你好用户",
+		History:          "User: 你好\nAmitia: 你好呀",
+		ProfileContext:   "用户画像",
+		MemoryContext:    "记忆",
+	})
+
+	r := NewRenderer()
+	msgs, err := r.Render(ir)
+	if err != nil {
+		t.Fatalf("旧链路渲染失败: %v", err)
+	}
+
+	v := NewValidator()
+	if err := v.ValidateIR(ir); err != nil {
+		t.Fatalf("旧链路ValidateIR失败: %v", err)
+	}
+	if err := v.ValidateMessages(msgs); err != nil {
+		t.Fatalf("旧链路ValidateMessages失败: %v", err)
+	}
+
+	t.Logf("旧链路渲染成功，消息数=%d", len(msgs))
+	for i, m := range msgs {
+		t.Logf("消息%d: role=%s content_len=%d", i, m.Role, len(m.Content))
 	}
 }
