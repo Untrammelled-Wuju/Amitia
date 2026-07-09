@@ -63,6 +63,18 @@ func (r *repository) GetActive() (*TtsConfig, error) {
 	return &cfg, err
 }
 
+func (r *repository) resolveActiveConfig() *TtsConfig {
+	active, err := r.GetActive()
+	if err == nil && active != nil && active.ApiKey != "" {
+		return active
+	}
+	var anyCfg TtsConfig
+	if err2 := r.db.Where("api_key != ''").First(&anyCfg).Error; err2 == nil {
+		return &anyCfg
+	}
+	return &TtsConfig{VoiceType: "zh_female_vv_uranus_bigtts", Speed: 1.0, Pitch: 1.0, Volume: 1.0}
+}
+
 func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 	var char struct {
 		VoiceType       string
@@ -79,10 +91,7 @@ func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 	if err != nil {
 		return r.GetActive()
 	}
-	active, _ := r.GetActive()
-	if active == nil {
-		active = &TtsConfig{VoiceType: "zh_female_vv_uranus_bigtts", Speed: 1.0, Pitch: 1.0, Volume: 1.0}
-	}
+	active := r.resolveActiveConfig()
 	cfg := &TtsConfig{
 		ApiKey:          active.ApiKey,
 		ResourceId:      active.ResourceId,

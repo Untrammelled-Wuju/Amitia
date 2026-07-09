@@ -12,6 +12,26 @@ export default defineConfig({
         target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
+      "/audio": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
+      "/voice": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
+      "/images": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
+      "/videos": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
+      "/avatars": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
     },
   },
   resolve: {
