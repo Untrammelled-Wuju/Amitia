@@ -434,11 +434,11 @@ async function resetConfig() {
 }
 
 async function editCharPrompt() {
-  promptLoading.value = true
-  try {
-    if (charId.value) {
-      const char = await get<any>("/api/ai/character/" + charId.value)
-      editingPrompt.value = char?.base_prompt || ""
+ promptLoading.value = true
+ try {
+   if (charId.value) {
+      const char = await get<any>("/api/characters/" + charId.value)
+      editingPrompt.value = char?.systemPrompt || ""
     } else {
       editingPrompt.value = ""
       ElMessage.info("请先保存角色后再编辑提示词")

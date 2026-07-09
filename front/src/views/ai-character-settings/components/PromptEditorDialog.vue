@@ -33,7 +33,7 @@ const emit = defineEmits<{
   (e: "saved"): void
 }>()
 
-const { post } = useApi()
+const { put } = useApi()
 const promptSaving = ref(false)
 
 const showModel = computed({
@@ -53,10 +53,8 @@ async function saveCharPrompt() {
   }
   promptSaving.value = true
   try {
-    await post<any>("/api/ai/character/save", {
-      id: props.charId,
-      name: props.charName.trim(),
-      basePrompt: props.editingPrompt,
+    await put<any>(`/api/characters/${props.charId}`, {
+      systemPrompt: props.editingPrompt,
     })
     ElMessage.success("提示词已保存")
     emit("update:modelValue", false)
