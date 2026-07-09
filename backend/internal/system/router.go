@@ -199,7 +199,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/release-check/run", handler.ReleaseCheckRun)
 
 	r.GET("/messages/stream", handler.MessagesStream)
-	r.GET("/reminders/stream", handler.RemindersStream)
 	r.GET("/proactive-sse", sse.SSEHandler)
 
 	r.GET("/conversations", handler.LegacyListConversations)

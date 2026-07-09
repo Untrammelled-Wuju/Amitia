@@ -27,7 +27,10 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionProactiveScene, GwSectionProactiveTaskInstruction:
 			systemParts = append(systemParts, s.Content)
 
-		case GwSectionCharacterContract, GwSectionRuntimePlan, GwSectionExpressionPlan,
+		case GwSectionCharacterContract:
+			systemParts = append(systemParts, s.Content)
+
+		case GwSectionRuntimePlan, GwSectionExpressionPlan,
 			GwSectionPersonalityRaw, GwSectionEmotionFusionRaw, GwSectionAdultIntimacyRaw,
 			GwSectionOutputShapeRaw, GwSectionAntiRepeatRaw, GwSectionProactiveRaw, GwSectionChannelShortRaw:
 			characterParts = append(characterParts, renderTaggedSection(s))

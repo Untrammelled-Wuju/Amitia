@@ -11,7 +11,7 @@ func RegisterProactiveRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	RegisterProactiveRouterWithCompanion(r, ctx, nil)
 }
 
-func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContext, compSvc ProactiveDispatcher) {
+func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContext, compSvc ProactiveDispatcher) *Handler {
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
 	handler := NewHandler(svc, ctx.DB, compSvc)
@@ -42,4 +42,23 @@ func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContex
 	r.GET("/proactive/rules/:id/messages", handler.RuleMessages)
 	r.GET("/proactive/settings/cleanup", handler.GetCleanupConfig)
 	r.POST("/proactive/settings/cleanup", handler.SetCleanupConfig)
+	return handler
+}
+
+func RegisterRemindersRouter(r *gin.RouterGroup, h *Handler) {
+	r.GET("/reminders", h.ListReminders)
+	r.POST("/reminders", h.CreateReminder)
+	r.PUT("/reminders/:id", h.UpdateReminder)
+	r.DELETE("/reminders/:id", h.DeleteReminder)
+	r.POST("/reminders/:id/toggle", h.ToggleReminder)
+	r.POST("/reminders/:id/test", h.TestReminder)
+	r.POST("/reminders/:id/trigger", h.TriggerReminder)
+	r.GET("/reminders/status", h.ReminderStatus)
+	r.GET("/reminders/cleanup-config", h.GetCleanupConfig)
+	r.PUT("/reminders/cleanup-config", h.SetCleanupConfig)
+	r.POST("/reminders/clear-backpressure", h.ClearBackpressure)
+	r.GET("/reminders/stream", h.RemindersStream)
+	r.GET("/reminders/prospective", h.Prospective)
+	r.GET("/reminders/queue-summary", h.QueueSummary)
+	r.GET("/reminders/trigger-history", h.ListTriggerHistory)
 }

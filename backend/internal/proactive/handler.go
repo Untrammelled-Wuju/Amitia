@@ -4,6 +4,7 @@ package proactive
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -28,6 +29,10 @@ type Handler struct {
 
 func NewHandler(srv Service, db *gorm.DB, compSvc ProactiveDispatcher) *Handler {
 	return &Handler{service: srv, db: db, compSvc: compSvc}
+}
+
+func (h *Handler) broadcastReminderChange() {
+	sse.Global.Broadcast("changed", map[string]interface{}{"type": "reminder"})
 }
 
 func (h *Handler) ListRules(c *gin.Context) {
@@ -139,6 +144,7 @@ func (h *Handler) CreateReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "提醒时间不能早于当前时间", nil)
 		return
 	}
+	h.broadcastReminderChange()
 	util.SuccessMsgResponse(c, "提醒创建成功", rem)
 }
 
@@ -154,6 +160,7 @@ func (h *Handler) UpdateReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	h.broadcastReminderChange()
 	util.SuccessMsgResponse(c, "提醒更新成功", rem)
 }
 
@@ -163,6 +170,7 @@ func (h *Handler) DeleteReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}
+	h.broadcastReminderChange()
 	util.SuccessMsgResponse(c, "提醒已删除", nil)
 }
 
@@ -173,6 +181,7 @@ func (h *Handler) ToggleReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "操作失败", nil)
 		return
 	}
+	h.broadcastReminderChange()
 	util.SuccessMsgResponse(c, "状态已切换", rem)
 }
 
@@ -374,6 +383,7 @@ func (h *Handler) TriggerReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
 		return
 	}
+	h.broadcastReminderChange()
 	util.SuccessResponse(c, gin.H{"id": id, "triggered": true, "title": rem.Title, "conversationId": convID, "messageId": msgID})
 }
 
@@ -498,6 +508,7 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 		return
 	}
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now', 'localtime'))", body.CleanupDays)
+	h.broadcastReminderChange()
 	util.SuccessMsgResponse(c, "已更新", nil)
 }
 
@@ -542,7 +553,18 @@ func (h *Handler) QueueSummary(c *gin.Context) {
 	h.db.Model(&TriggerHistory{}).Where("state = 'failed' AND created_at > ?", cutoff).Count(&recentFailures)
 
 	depth := int(pendingCount)
-	backpressure := pendingCount > 50 || recentFailures > 10
+
+	var clearedAt string
+	h.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_backpressure_cleared' LIMIT 1").Row().Scan(&clearedAt)
+	cleared := false
+	if clearedAt != "" {
+		if t, err := time.Parse("2006-01-02 15:04:05", clearedAt); err == nil {
+			if time.Since(t) < 5*time.Minute {
+				cleared = true
+			}
+		}
+	}
+	backpressure := !cleared && (pendingCount > 50 || recentFailures > 10)
 
 	var oldestAgeMs int64
 	var oldestCreated string
@@ -580,5 +602,44 @@ func (h *Handler) Prospective(c *gin.Context) {
 	if items == nil {
 		items = []ProspectiveReminder{}
 	}
-	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
+	util.SuccessResponse(c, items)
+}
+
+func (h *Handler) ClearBackpressure(c *gin.Context) {
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_backpressure_cleared', ?, datetime('now', 'localtime'))", nowStr)
+	h.broadcastReminderChange()
+	util.SuccessMsgResponse(c, "背压标记已清除", nil)
+}
+
+func (h *Handler) RemindersStream(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	clientID := "reminders-stream"
+	client := sse.Global.Subscribe(clientID)
+	defer sse.Global.Unsubscribe(clientID)
+
+	c.Writer.Flush()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case msg := <-client.Events:
+			eventName, _ := msg["event"].(string)
+			data, _ := msg["data"].(map[string]interface{})
+			jsonData, _ := json.Marshal(data)
+			c.SSEvent(eventName, string(jsonData))
+			c.Writer.Flush()
+		case <-ticker.C:
+			c.SSEvent("ping", "{}")
+			c.Writer.Flush()
+		case <-c.Done():
+			return
+		}
+	}
 }

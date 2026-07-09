@@ -36,6 +36,13 @@ type BdiConfig struct {
 	EmotionExpression *EmotionExpression `json:"emotionExpression"`
 }
 
+type AuditLog struct {
+	ID     uint   `json:"id" gorm:"primaryKey"`
+	Time   string `json:"time"`
+	RuleID string `json:"ruleId"`
+	Action string `json:"action"`
+}
+
 type Handler struct {
 	db *gorm.DB
 }

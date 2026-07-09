@@ -21,13 +21,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       :char-name="charName"
       :char-identity="charIdentity"
       :conv-title="convTitle"
-      :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       @toggle-drawer="showDrawer = true"
-      @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
@@ -230,13 +228,12 @@ const {
 } = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(), sending)
 
 const {
-  canRegenerate,
   onImageAttached, onImageRemoved,
   onVideoAttached, onVideoRemoved,
   handleVoiceAudio, handleVoiceText,
   handleImageSend, handleSend,
   handleStop, handleRetry,
-  handleRegenerate, handleClear,
+  handleClear,
   getLastPolledMsgId,
 } = useWebChatSend(
   messages, convId, characterId,

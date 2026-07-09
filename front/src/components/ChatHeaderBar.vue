@@ -17,9 +17,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-button text circle size="small" :icon="MoreFilled" />
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="$emit('regenerate')" :disabled="!canRegenerate">
-              <el-icon><Refresh /></el-icon> 重新生成回复
-            </el-dropdown-item>
             <el-dropdown-item @click="$emit('clear')" :disabled="messagesCount === 0">
               <el-icon><Delete /></el-icon> 清空会话
             </el-dropdown-item>
@@ -37,13 +34,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { Menu, MoreFilled, Refresh, Delete, Collection, Switch, User, Connection } from "@element-plus/icons-vue"
+import { Menu, MoreFilled, Delete, Collection, Switch, User, Connection } from "@element-plus/icons-vue"
 
 defineProps<{
   charName: string
   charIdentity: string
   convTitle: string
-  canRegenerate: boolean
   messagesCount: number
   convId: string
   showProfiles: boolean
@@ -52,7 +48,6 @@ defineProps<{
 
 defineEmits<{
   toggleDrawer: []
-  regenerate: []
   clear: []
   viewMemories: []
   toggleCharPicker: []

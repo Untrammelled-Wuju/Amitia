@@ -44,6 +44,7 @@ export function useOnboardingWizard() {
     charAvatar: "",
     charIdentity: "AI 虚拟陪伴角色",
     charPersonality: "温和、体贴、有耐心",
+    charPrompt: "",
     webChatEnabled: true,
     wechatEnabled: false,
     qqEnabled: false,
@@ -302,6 +303,7 @@ export function useOnboardingWizard() {
           avatar: form.charAvatar,
           identity: form.charIdentity,
           personality: form.charPersonality,
+          systemPrompt: form.charPrompt,
           isActive: 1,
           isDefault: true,
         })

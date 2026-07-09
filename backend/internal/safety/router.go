@@ -9,4 +9,5 @@ func RegisterSafetyRouter(r *gin.RouterGroup, db *gorm.DB) {
 	h := NewHandler(db)
 	r.GET("/safety/bdi-config", h.GetBdiConfig)
 	r.PUT("/safety/bdi-config", h.PutBdiConfig)
+	r.GET("/safety/audit-logs", h.GetAuditLogs)
 }

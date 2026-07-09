@@ -23,19 +23,67 @@ func SplitLongMessage(text string, maxLen int) []string {
 		if line == "" {
 			continue
 		}
-		if utf8.RuneCountInString(line) <= maxLen {
-			chunks = append(chunks, line)
-			continue
-		}
-		runes := []rune(line)
-		for i := 0; i < len(runes); i += maxLen {
-			end := i + maxLen
-			if end > len(runes) {
-				end = len(runes)
+		sentences := splitByPunctuation(line)
+		for _, s := range sentences {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
 			}
-			chunks = append(chunks, string(runes[i:end]))
+			chunks = append(chunks, cutToMaxLen(s, maxLen)...)
 		}
 	}
 
 	return chunks
+}
+
+func isChinesePunctuation(r rune) bool {
+	return r == '。' || r == '？' || r == '！'
+}
+
+func splitByPunctuation(line string) []string {
+	runes := []rune(line)
+	var result []string
+	start := 0
+
+	for i := 0; i < len(runes); i++ {
+		if isChinesePunctuation(runes[i]) {
+			j := i + 1
+			for j < len(runes) && isChinesePunctuation(runes[j]) {
+				j++
+			}
+			result = append(result, string(runes[start:j]))
+			start = j
+			i = j - 1
+		}
+	}
+
+	if start < len(runes) {
+		result = append(result, string(runes[start:]))
+	}
+
+	return result
+}
+
+func cutToMaxLen(s string, maxLen int) []string {
+	if utf8.RuneCountInString(s) <= maxLen {
+		return []string{s}
+	}
+
+	runes := []rune(s)
+	var result []string
+	i := 0
+
+	for i < len(runes) {
+		end := i + maxLen
+		if end > len(runes) {
+			end = len(runes)
+		}
+		for end < len(runes) && isChinesePunctuation(runes[end]) {
+			end++
+		}
+		result = append(result, string(runes[i:end]))
+		i = end
+	}
+
+	return result
 }

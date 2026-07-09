@@ -55,3 +55,12 @@ func (h *Handler) PutBdiConfig(c *gin.Context) {
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('safety_bdi_config', ?, datetime('now', 'localtime'))", string(data))
 	util.SuccessMsgResponse(c, "BDI 配置已保存", nil)
 }
+
+func (h *Handler) GetAuditLogs(c *gin.Context) {
+	var logs []AuditLog
+	h.db.Table("audit_logs").Order("time DESC").Limit(50).Find(&logs)
+	if logs == nil {
+		logs = []AuditLog{}
+	}
+	util.SuccessResponse(c, logs)
+}

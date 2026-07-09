@@ -58,6 +58,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           v-model:charAvatar="form.charAvatar"
           v-model:charIdentity="form.charIdentity"
           v-model:charPersonality="form.charPersonality"
+          v-model:charPrompt="form.charPrompt"
         />
 
         <ProfileStep

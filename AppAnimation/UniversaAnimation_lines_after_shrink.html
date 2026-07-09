@@ -43,10 +43,10 @@
     const ctx = canvas.getContext("2d");
 
     const config = {
-      particleCount: 380,
+      particleCount: 220,
       sphereRadius: 150,
-      dotMinSize: 0.75,
-      dotMaxSize: 2.25,
+      dotMinSize: 0.65,
+      dotMaxSize: 1.0,
       rotateSpeedX: 0.00016,
       rotateSpeedY: 0.00027,
       perspective: 540,
@@ -84,7 +84,7 @@
       centerX = width / 2;
       centerY = height / 2;
 
-      config.sphereRadius = Math.min(width, height) * 0.19;
+      config.sphereRadius = Math.min(width, height) * 0.1;
     }
 
     function createSphereParticles() {
@@ -187,9 +187,9 @@
         radius
       );
 
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.10})`);
-      gradient.addColorStop(0.42, `rgba(255, 255, 255, ${alpha * 0.035})`);
-      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+      gradient.addColorStop(0, `rgba(200, 200, 200, ${alpha * 0.10})`);
+      gradient.addColorStop(0.42, `rgba(200, 200, 200, ${alpha * 0.035})`);
+      gradient.addColorStop(1, "rgba(200, 200, 200, 0)");
 
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -286,7 +286,7 @@
         })
         .sort((a, b) => a.z - b.z);
 
-      const ringRadius = config.sphereRadius * baseScale * 1.02;
+      const ringRadius = config.sphereRadius * baseScale * 1.05;
       const lineRevealProgress = Math.min(
         Math.max((elapsed - config.enterDuration) / 650, 0),
         1

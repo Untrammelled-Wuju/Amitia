@@ -26,22 +26,27 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-form-item label="性格描述">
         <el-input v-model="charPersonalityModel" type="textarea" :rows="2" placeholder="温和、体贴、有耐心" />
       </el-form-item>
+      <el-form-item label="角色提示词">
+        <el-input v-model="charPromptModel" type="textarea" :rows="4" placeholder="设定角色的行为规则、语气、回复风格等..." />
+      </el-form-item>
     </el-form>
   </div>
 </template>
 <script setup lang="ts">
 import { computed, ref } from "vue"
-const props = defineProps<{ charName: string; charAvatar: string; charIdentity: string; charPersonality: string }>()
+const props = defineProps<{ charName: string; charAvatar: string; charIdentity: string; charPersonality: string; charPrompt: string }>()
 const emit = defineEmits<{
   (e: "update:charAvatar", v: string): void
   (e: "update:charName", v: string): void
   (e: "update:charIdentity", v: string): void
   (e: "update:charPersonality", v: string): void
+  (e: "update:charPrompt", v: string): void
 }>()
 const charNameModel = computed({ get: () => props.charName, set: (v) => emit("update:charName", v) })
 const charAvatarModel = computed({ get: () => props.charAvatar, set: (v) => emit("update:charAvatar", v) })
 const charIdentityModel = computed({ get: () => props.charIdentity, set: (v) => emit("update:charIdentity", v) })
 const charPersonalityModel = computed({ get: () => props.charPersonality, set: (v) => emit("update:charPersonality", v) })
+const charPromptModel = computed({ get: () => props.charPrompt, set: (v) => emit("update:charPrompt", v) })
 
 const avatarInput = ref<HTMLInputElement>()
 function triggerUpload() { avatarInput.value?.click() }
