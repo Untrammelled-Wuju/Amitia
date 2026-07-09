@@ -157,6 +157,13 @@ func (mb *MessageBuffer) GetImageContexts(convID string) string {
 	return strings.Join(buf.imageContexts, "\n")
 }
 
+func (mb *MessageBuffer) ClearImageContexts(convID string) {
+	buf := mb.getOrCreate(convID)
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	buf.imageContexts = nil
+}
+
 func (mb *MessageBuffer) GetPending(convID string) []string {
 	mb.mu.Lock()
 	buf, exists := mb.buffers[convID]

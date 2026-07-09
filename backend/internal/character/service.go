@@ -49,16 +49,16 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	c := &Character{
 		ID: uuid.New().String(), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
-		Avatar: req.Avatar,
+		Avatar:            req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, SystemPrompt: req.SystemPrompt,
 		BoundaryRules: req.BoundaryRules, Description: req.Description,
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
 		GenderExpression: req.GenderExpression, LifeIdentity: req.LifeIdentity,
-		Status: "enabled",
+		Status:            "enabled",
 		PersonalityConfig: string(req.PersonalityConfig),
-		ChatStyleConfig: req.ChatStyleConfig,
-		SceneRules: req.SceneRules,
-		VoiceType: req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
+		ChatStyleConfig:   req.ChatStyleConfig,
+		SceneRules:        req.SceneRules,
+		VoiceType:         req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID,
 	}
 	if c.Name == "" {

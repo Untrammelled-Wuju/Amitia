@@ -15,6 +15,28 @@ import (
 	"gorm.io/gorm"
 )
 
+type MessageCommitHook func(event *MessageCommitEvent)
+
+var onMessageCommitted MessageCommitHook
+
+func RegisterMessageCommitHook(hook MessageCommitHook) {
+	onMessageCommitted = hook
+}
+
+type MessageCommitEvent struct {
+	ConversationID string
+	CharacterID    string
+	Channel        string
+	Source         string
+	MessageIDs     []string
+	UserMessageID  string
+	UserMessage    string
+	Reply          string
+	Lines          []string
+	UserID         string
+	PeerID         string
+	RequestID      string
+}
 type RelationshipStateRecord struct {
 	ID           string `gorm:"primaryKey;column:id"`
 	CharacterID  string `gorm:"column:character_id"`
@@ -140,6 +162,20 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 
 	if plan.LeaseID != "" {
 		_ = s.deliveryStore.ReleaseOutputLease(plan.LeaseID, plan.LeaseOwnerToken)
+	}
+	if onMessageCommitted != nil {
+		event := MessageCommitEvent{
+			ConversationID: plan.Conversation,
+			CharacterID:    plan.Character,
+			Channel:        plan.Request.Channel,
+			Source:         plan.Source,
+			MessageIDs:     result.MessageIDs,
+			UserMessageID:  plan.UserMessageID,
+			UserMessage:    plan.Request.Message,
+			Reply:          plan.Reply,
+			Lines:          plan.Lines,
+		}
+		onMessageCommitted(&event)
 	}
 	return result, nil
 }
@@ -578,7 +614,7 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) ([]string, error) {
 	ids := []string{}
 	channel := plan.Runtime.Delivery.Channel
-	if plan.Request != nil && (plan.Request.Source == "wechat" || plan.Request.Source == "qq") {
+	if strings.ToLower(channel) == "web" {
 		return ids, nil
 	}
 	peerID := ""

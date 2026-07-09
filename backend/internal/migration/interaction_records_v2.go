@@ -25,7 +25,6 @@ func InteractionRecordsV2Migration() Migration {
 				}
 			}
 
-
 			if err := step.CreateIndex("idx_interaction_conv_request_unique", "interaction_records", []string{"conversation_id", "request_id"}, true); err != nil {
 				return err
 			}

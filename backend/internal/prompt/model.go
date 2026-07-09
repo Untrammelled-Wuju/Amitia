@@ -106,10 +106,19 @@ type QualityFlags struct {
 	EmotionSectionUsed   bool `json:"emotion_section_used"`
 	MemorySectionUsed    bool `json:"memory_section_used"`
 	IntimacyBoundaryUsed bool `json:"intimacy_boundary_used"`
+	HTMLRemoved          bool `json:"html_removed"`
+	JSONWrapperRemoved   bool `json:"json_wrapper_removed"`
+	RolePrefixRemoved    bool `json:"role_prefix_removed"`
+	MetaSentenceRemoved  bool `json:"meta_sentence_removed"`
+	DuplicateTrimmed     bool `json:"duplicate_trimmed"`
+	ChannelLimitApplied  bool `json:"channel_limit_applied"`
+	EmptyFallbackUsed    bool `json:"empty_fallback_used"`
 }
 
 type PromptTrace struct {
-	PromptHash   string         `json:"prompt_hash"`
-	Sections     []SectionTrace `json:"sections"`
-	QualityFlags QualityFlags   `json:"quality_flags"`
+	PromptHash       string         `json:"prompt_hash"`
+	Sections         []SectionTrace `json:"sections"`
+	QualityFlags     QualityFlags   `json:"quality_flags"`
+	RawReplyLength   int            `json:"raw_reply_length"`
+	FinalReplyLength int            `json:"final_reply_length"`
 }

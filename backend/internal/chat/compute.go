@@ -306,19 +306,23 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 
 	priorAssistant := extractAssistantReplies(history)
 	var qualityFlags promptir.QualityFlags
+	rawReplyLength := len(reply)
 	reply, qualityFlags = SanitizeReply(reply, charName, priorAssistant)
 	if reply == "" {
 		reply = "嗯"
+		qualityFlags.EmptyFallbackUsed = true
 	}
 
 	reply = CollapseAdjacentSemanticDuplicates(reply, priorAssistant)
 	if reply == "" {
 		reply = "嗯"
+		qualityFlags.EmptyFallbackUsed = true
 	}
 
 	if promptTrace != nil {
-		promptTrace.QualityFlags.ThinkRemoved = qualityFlags.ThinkRemoved
-		promptTrace.QualityFlags.MarkdownRemoved = qualityFlags.MarkdownRemoved
+		promptTrace.QualityFlags = qualityFlags
+		promptTrace.RawReplyLength = rawReplyLength
+		promptTrace.FinalReplyLength = len(reply)
 	}
 
 	reply = expression.ApplyPostValidation(reply, kind)

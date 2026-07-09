@@ -5,16 +5,16 @@ import (
 )
 
 type CandidateGenerationContext struct {
-	UserID            string
-	CharacterID       string
-	Goals             []Goal
-	Intentions        []Intention
-	Psyche            PsycheSignalSet
-	Relationship      RelationshipSnapshot
-	Life              LifeSnapshot
-	Beliefs           BeliefSnapshot
+	UserID             string
+	CharacterID        string
+	Goals              []Goal
+	Intentions         []Intention
+	Psyche             PsycheSignalSet
+	Relationship       RelationshipSnapshot
+	Life               LifeSnapshot
+	Beliefs            BeliefSnapshot
 	PersonalityWeights map[BehaviorTag]float64
-	Now               time.Time
+	Now                time.Time
 }
 
 func GenerateCandidates(ctx CandidateGenerationContext, registry *CandidateRegistry) []BehaviorCandidate {

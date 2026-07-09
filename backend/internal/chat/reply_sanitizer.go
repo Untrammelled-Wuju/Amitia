@@ -60,34 +60,48 @@ func SanitizeReply(raw string, charName string, priorReplies []string) (string, 
 
 	result := raw
 
+	var flags promptir.QualityFlags
+
 	result = stripThinkingTags(result)
-	thinkRemoved := result != raw
+	flags.ThinkRemoved = result != raw
 
+	preJSON := result
 	result = stripJSONWrap(result)
+	flags.JSONWrapperRemoved = result != preJSON
 
+	preHTML := result
 	result = stripHTMLTags(result)
+	flags.HTMLRemoved = result != preHTML
 
 	preMarkdown := result
 	result = stripMarkdownFormatting(result)
-	markdownRemoved := result != preMarkdown
+	flags.MarkdownRemoved = result != preMarkdown
 
 	result = stripResponsePrefix(result)
 
+	preRole := result
 	result = stripRoleNamePrefix(result, charName)
+	flags.RolePrefixRemoved = result != preRole
 
+	preDup := result
 	result = stripLineDuplicates(result)
+	flags.DuplicateTrimmed = result != preDup
 
+	preMeta := result
 	result = extractDirectReply(result)
+	flags.MetaSentenceRemoved = result != preMeta
 
 	result = stripRepeatPhrases(result)
 
+	preTrim := result
 	result = trimToSentenceLimit(result, 8, 500)
+	flags.ChannelLimitApplied = result != preTrim
 
 	result = stripPriorRepeats(result, priorReplies)
 
 	result = strings.TrimSpace(result)
 
-	return result, promptir.QualityFlags{ThinkRemoved: thinkRemoved, MarkdownRemoved: markdownRemoved}
+	return result, flags
 }
 
 func stripThinkingTags(content string) string {

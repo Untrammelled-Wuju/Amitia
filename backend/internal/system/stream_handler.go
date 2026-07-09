@@ -155,7 +155,16 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 
 	mergedContent := strings.Join(bufferedMsgs, "\n")
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
+	chat.GetBuffer().ClearImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
+
+	characterID := body.CharacterID
+	if characterID == "" && body.ConversationID != "" {
+		var dbCharID string
+		if scanErr := h.db.Table("conversations").Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+			characterID = dbCharID
+		}
+	}
 
 	if h.unifiedEntry == nil {
 		util.ErrorResponse(c, response.InternalError, "统一入口未初始化", nil)
@@ -163,7 +172,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	}
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-		CharacterID: body.CharacterID, Message: mergedContent,
+		CharacterID: characterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
@@ -204,7 +213,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var ttsCfg *tts.TtsConfig
 	if (rand.Float64() < voiceChance || result.ForceVoice) && result.Reply != "" {
 		ttsRepo := tts.NewRepository(h.db)
-		charCfg, cfgErr := ttsRepo.GetByCharacterID(body.CharacterID)
+		charCfg, cfgErr := ttsRepo.GetByCharacterID(characterID)
 		if cfgErr != nil {
 			applog.Info(fmt.Sprintf("[Voice] GetByCharacterID err: %v", cfgErr))
 		}
@@ -232,6 +241,14 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	} else {
 		applog.Info(fmt.Sprintf("[Voice] skipped: chance=%.2f forceVoice=%v reply=%v", voiceChance, result.ForceVoice, result.Reply != ""))
 	}
+
+	startData := gin.H{"conversationId": result.ConversationID, "messageId": "", "role": "assistant", "channel": "web", "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+	if len(result.MessageIDs) > 0 {
+		startData["messageId"] = result.MessageIDs[0]
+	}
+	sb, _ := json.Marshal(startData)
+	fmt.Fprintf(c.Writer, "event: message_start\ndata: %s\n\n", string(sb))
+	flusher.Flush()
 
 	for i, msgID := range result.MessageIDs {
 		var msg struct {
@@ -282,9 +299,29 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			b, _ := json.Marshal(msg)
 			fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
 			flusher.Flush()
+		} else {
+			applog.Info(fmt.Sprintf("[Voice] TTS failed for line, fallback to text: %s", line[:min(len(line), 30)]))
+			msg := gin.H{"id": msgID, "conversationId": result.ConversationID, "role": "assistant", "content": line, "createdAt": time.Now().Format("2006-01-02 15:04:05")}
+			b, _ := json.Marshal(msg)
+			fmt.Fprintf(c.Writer, "event: token\ndata: %s\n\n", string(b))
+			flusher.Flush()
 		}
 	}
 	doneData := gin.H{"conversationId": result.ConversationID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}
+
+	lastMsgID := ""
+	if len(result.MessageIDs) > 0 {
+		lastMsgID = result.MessageIDs[len(result.MessageIDs)-1]
+	}
+	endData := gin.H{"messageId": lastMsgID, "status": "completed", "conversationId": result.ConversationID, "finalContentLength": len(result.Reply)}
+	if len(result.MessageIDs) == 0 {
+		endData["messageId"] = ""
+		endData["status"] = "empty"
+	}
+	eb, _ := json.Marshal(endData)
+	fmt.Fprintf(c.Writer, "event: message_end\ndata: %s\n\n", string(eb))
+	flusher.Flush()
+
 	db, _ := json.Marshal(doneData)
 	fmt.Fprintf(c.Writer, "event: done\ndata: %s\n\n", string(db))
 	flusher.Flush()

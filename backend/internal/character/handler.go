@@ -3,13 +3,13 @@
 package character
 
 import (
-	"io"
-	"os"
-	"path/filepath"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"io"
+	"os"
+	"path/filepath"
 )
 
 type Handler struct {

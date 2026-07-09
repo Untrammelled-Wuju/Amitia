@@ -143,7 +143,7 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 
 	if req.CharacterConfig != "" || req.CompiledPersonality != "" {
 		sections = append(sections, GwSection{Enabled: true,
-		ID:              "character_contract",
+			ID:              "character_contract",
 			Type:            GwSectionCharacterContract,
 			TrustLevel:      TrustTrusted,
 			InstructionMode: ModeAuthoritative,

@@ -156,7 +156,39 @@ func (h *Handler) WebChatReplyTimingStatus(c *gin.Context) {
 }
 
 func (h *Handler) WebChatMessageStatus(c *gin.Context) {
-	util.SuccessResponse(c, map[string]interface{}{"id": c.Param("id"), "status": "sent"})
+	msgID := c.Param("id")
+	if msgID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少消息ID", nil)
+		return
+	}
+
+	var msg struct {
+		ID             string `gorm:"column:id"`
+		ConversationID string `gorm:"column:conversation_id"`
+		Status         string `gorm:"column:status"`
+		RequestID      string `gorm:"column:request_id"`
+		Role           string `gorm:"column:role"`
+		CreatedAt      string `gorm:"column:created_at"`
+		UpdatedAt      string `gorm:"column:updated_at"`
+	}
+	if err := h.db.Table("messages").Select("id, conversation_id, status, request_id, role, created_at, updated_at").Where("id = ?", msgID).Take(&msg).Error; err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "消息不存在", nil)
+		return
+	}
+
+	result := gin.H{"id": msgID, "status": msg.Status, "role": msg.Role, "conversationId": msg.ConversationID, "createdAt": msg.CreatedAt, "updatedAt": msg.UpdatedAt}
+
+	if msg.RequestID != "" {
+		var interactionStatus string
+		if scanErr := h.db.Table("interaction_records").Select("status").Where("id = ?", msg.RequestID).Limit(1).Row().Scan(&interactionStatus); scanErr == nil && interactionStatus != "" {
+			result["interactionStatus"] = interactionStatus
+			if msg.Status == "processing" && strings.Contains(interactionStatus, "committed") {
+				result["status"] = "completed"
+			}
+		}
+	}
+
+	util.SuccessResponse(c, result)
 }
 
 func (h *Handler) WebChatSend(c *gin.Context) {
@@ -203,6 +235,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	mergedContent := strings.Join(bufferedMsgs, "\n")
 	imageCtx := chat.GetBuffer().GetImageContexts(convID)
 	applog.Info(fmt.Sprintf("[Webhook] imageCtx len=%d content=%s", len(imageCtx), imageCtx[:min(len(imageCtx), 200)]))
+	chat.GetBuffer().ClearImageContexts(convID)
 
 	characterID := body.CharacterID
 	if characterID == "" && body.ConversationID != "" {

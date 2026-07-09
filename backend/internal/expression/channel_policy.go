@@ -23,16 +23,16 @@ type ChannelCapability struct {
 }
 
 type ChannelPolicy struct {
-	Kind          ChannelKind       `json:"kind"`
-	Version       string            `json:"version"`
-	MaxCharacters int               `json:"maxCharacters"`
-	MinCharacters int               `json:"minCharacters"`
-	MaxSegments   int               `json:"maxSegments"`
-	MinSegments   int               `json:"minSegments"`
-	Capabilities  ChannelCapability `json:"capabilities"`
-	SegmentHint   string            `json:"segmentHint,omitempty"`
-	ShortRules    string            `json:"shortRules,omitempty"`
-	AntiRepeatEnabled bool         `json:"antiRepeatEnabled"`
+	Kind              ChannelKind       `json:"kind"`
+	Version           string            `json:"version"`
+	MaxCharacters     int               `json:"maxCharacters"`
+	MinCharacters     int               `json:"minCharacters"`
+	MaxSegments       int               `json:"maxSegments"`
+	MinSegments       int               `json:"minSegments"`
+	Capabilities      ChannelCapability `json:"capabilities"`
+	SegmentHint       string            `json:"segmentHint,omitempty"`
+	ShortRules        string            `json:"shortRules,omitempty"`
+	AntiRepeatEnabled bool              `json:"antiRepeatEnabled"`
 }
 
 type ExpressionChannelPolicyVersion string
@@ -57,8 +57,8 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsVoice:     false,
 				SupportsSegmented: true,
 			},
-			SegmentHint: "short_per_line",
-			ShortRules:  textlib.RawChannelWechatShortRules,
+			SegmentHint:       "short_per_line",
+			ShortRules:        textlib.RawChannelWechatShortRules,
 			AntiRepeatEnabled: true,
 		}
 	case ChannelQQ:
@@ -75,8 +75,8 @@ func defaultChannelPolicy(kind ChannelKind) ChannelPolicy {
 				SupportsVoice:     false,
 				SupportsSegmented: true,
 			},
-			SegmentHint: "short_per_line",
-			ShortRules:  textlib.RawChannelQQShortRules,
+			SegmentHint:       "short_per_line",
+			ShortRules:        textlib.RawChannelQQShortRules,
 			AntiRepeatEnabled: true,
 		}
 	case ChannelWeb:

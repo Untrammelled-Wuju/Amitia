@@ -46,6 +46,15 @@ func logPromptTrace(trace applog.TraceFields, pt *promptir.PromptTrace, source s
 		"intimacy_boundary_used": pt.QualityFlags.IntimacyBoundaryUsed,
 		"think_removed":          pt.QualityFlags.ThinkRemoved,
 		"markdown_removed":       pt.QualityFlags.MarkdownRemoved,
+		"html_removed":           pt.QualityFlags.HTMLRemoved,
+		"json_wrapper_removed":   pt.QualityFlags.JSONWrapperRemoved,
+		"role_prefix_removed":    pt.QualityFlags.RolePrefixRemoved,
+		"meta_sentence_removed":  pt.QualityFlags.MetaSentenceRemoved,
+		"duplicate_trimmed":      pt.QualityFlags.DuplicateTrimmed,
+		"channel_limit_applied":  pt.QualityFlags.ChannelLimitApplied,
+		"empty_fallback_used":    pt.QualityFlags.EmptyFallbackUsed,
+		"raw_reply_length":       pt.RawReplyLength,
+		"final_reply_length":     pt.FinalReplyLength,
 	}
 
 	var sectionNames []string

@@ -51,13 +51,13 @@ type ExpressionPlan struct {
 }
 
 type ExpressionPlanInput struct {
-	BehaviorPlan              BehaviorPlan
-	Psyche                    PsycheSignalSet
-	ExpressionCtrl            ExpressionControlInput
-	CopingStrategy            CopingStrategy
-	SafetyResult              SafetyCheckResult
+	BehaviorPlan               BehaviorPlan
+	Psyche                     PsycheSignalSet
+	ExpressionCtrl             ExpressionControlInput
+	CopingStrategy             CopingStrategy
+	SafetyResult               SafetyCheckResult
 	PersonalityExpressionStyle map[string]float64
-	Now                       time.Time
+	Now                        time.Time
 }
 
 func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {

@@ -103,12 +103,12 @@ func (s *service) runConsolidation(charID string) {
 	}
 
 	var facts []struct {
-		ID          string
-		Key         string
-		Value       string
-		MemoryType  string
-		Importance  int
-		CreatedAt   string
+		ID         string
+		Key        string
+		Value      string
+		MemoryType string
+		Importance int
+		CreatedAt  string
 	}
 	s.db.Table("memories").
 		Select("id, key, value, memory_type, importance, created_at").
@@ -138,8 +138,8 @@ func (s *service) runConsolidation(charID string) {
 
 	content = extractJSONObject(content)
 	var result struct {
-		Insights      []map[string]interface{} `json:"insights"`
-		Associations  []map[string]interface{} `json:"associations"`
+		Insights     []map[string]interface{} `json:"insights"`
+		Associations []map[string]interface{} `json:"associations"`
 	}
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return

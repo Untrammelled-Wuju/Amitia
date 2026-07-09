@@ -2,8 +2,8 @@ package delivery
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 

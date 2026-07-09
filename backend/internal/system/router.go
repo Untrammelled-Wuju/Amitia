@@ -13,11 +13,29 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
+	"time"
 )
 
 func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service) {
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry)
+
+	chat.RegisterMessageCommitHook(func(event *chat.MessageCommitEvent) {
+		bus := GetMessageEventBus()
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		channel := event.Channel
+		if channel == "" {
+			channel = "web"
+		}
+		bus.PublishMessageCreated(event.ConversationID, event.UserMessageID, channel, "inbound", "user", event.UserMessage, nowStr)
+		for i, msgID := range event.MessageIDs {
+			content := ""
+			if i < len(event.Lines) {
+				content = event.Lines[i]
+			}
+			bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr)
+		}
+	})
 
 	r.GET("/health", handler.Health)
 	r.GET("/diagnostics", handler.Diagnostics)
@@ -200,6 +218,8 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/messages/stream", handler.MessagesStream)
 	r.GET("/proactive-sse", sse.SSEHandler)
+
+	r.GET("/messages/events", handler.MessagesEventsStream)
 
 	r.GET("/conversations", handler.LegacyListConversations)
 	r.GET("/conversations/:id/messages", handler.LegacyGetMessages)

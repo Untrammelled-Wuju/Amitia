@@ -50,9 +50,9 @@ func (h *SubmitHandler) Submit(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, gin.H{
-		"inserted": inserted,
-		"id":       intent.ID,
-		"status":   string(intent.Status),
+		"inserted":   inserted,
+		"id":         intent.ID,
+		"status":     string(intent.Status),
 		"maxRetries": intent.MaxRetries,
 		"createdAt":  intent.CreatedAt.Format(time.RFC3339),
 	})

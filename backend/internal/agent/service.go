@@ -184,7 +184,6 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		convID = "channel-" + req.Channel
 	}
 
-	
 	s.ensureWebhookConversation(convID, req.Channel, req.Text)
 	sessionID := stableWebhookSessionID(req, convID)
 	userID := stableWebhookUserID(req)
@@ -363,4 +362,3 @@ func (s *service) ensureWebhookConversation(convID, channel, text string) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	s.db.Exec("INSERT OR IGNORE INTO conversations (id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'webhook', ?, ?)", convID, title, channel, now, now)
 }
-
