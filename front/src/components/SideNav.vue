@@ -10,6 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
     <el-menu
       :default-active="activeIndex"
+      :collapse="appStore.sidebarCollapsed"
       unique-opened
       router
       class="side-menu"
@@ -186,6 +187,7 @@ onMounted(async () => {
   border-right: none;
   background: transparent;
   flex: 1;
+  width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -212,6 +214,11 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-color);
+  font-weight: 600;
+}
 .side-menu :deep(.el-sub-menu .el-menu) {
   background: transparent;
 }
@@ -227,20 +234,6 @@ onMounted(async () => {
   height: 1px;
   background: var(--console-border-soft);
   margin: 8px 28px;
-}
-
-.side-nav.is-collapsed .side-menu :deep(.el-sub-menu .el-menu-item) {
-  padding-left: 14px !important;
-}
-
-.side-nav.is-collapsed .side-menu :deep(.el-menu-item) span,
-.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__title) span {
-  display: none !important;
-}
-
-.side-nav.is-collapsed .side-menu :deep(.el-menu-item) .el-icon,
-.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__title) .el-icon {
-  margin-right: 0 !important;
 }
 
 .side-nav.is-collapsed .menu-divider {
@@ -290,9 +283,5 @@ onMounted(async () => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.side-nav.is-collapsed .side-menu :deep(.el-sub-menu__icon-arrow) {
-  display: none !important;
 }
 </style>

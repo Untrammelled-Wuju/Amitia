@@ -1,4 +1,4 @@
-/* SPDX-FileCopyrightText: 2026 彭旭 */
+﻿/* SPDX-FileCopyrightText: 2026 彭旭 */
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* ============================================================
    Element Plus - Warm Green Theme Overrides
@@ -210,8 +210,26 @@
 }
 
 /* ---- Menu / Nav ---- */
+.el-menu{
+  .el-sub-menu{
+    margin-top: 3px;
+    &:first-child{
+      margin-top: 0;
+    }
+  }
+  .el-menu-item{
+    margin: 3px 12px 0 12px !important;
+  }
+}
 .el-menu-item.is-active { color: var(--nav-active-color); border-bottom-color: var(--nav-active-color); }
-
+.el-menu--popup{
+  background: var(--console-sidebar);
+  .el-menu-item{
+    &:hover{
+      background: var(--nav-hover-bg);
+    }
+  }
+}
 /* ---- Tabs ---- */
 .el-tabs__item.is-active {
   color: var(--ac-color-primary);
