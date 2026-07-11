@@ -32,6 +32,7 @@ type ComputeResult struct {
 	Channel              string
 	Trace                applog.TraceFields
 	PipelineMessages     []map[string]string
+	TotalTokens          int
 }
 
 func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageRequest) (*ComputeResult, error) {
@@ -287,7 +288,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, nil
 		}
 	}
-	reply, forceVoice, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, toolDefs, seenTools, toolExecCtx)
+	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
 	}
@@ -363,6 +364,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		HasExistingUser:      hasExistingUser,
 		Channel:              channel,
 		Trace:                trace,
+		TotalTokens:          totalTokens,
 		PipelineMessages:     pipelineMessages,
 	}, nil
 }

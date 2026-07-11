@@ -28,7 +28,7 @@ export const desktopNavGroups: AppNavGroup[] = [
     key: "core",
     items: [
       { key: "chat", to: "/chat", label: "聊天", icon: ChatDotRound, mobile: true },
-      { key: "dashboard", to: "/dashboard", label: "概览", icon: Odometer },
+      { key: "dashboard", to: "/dashboard/data", label: "概览", icon: Odometer, match: ["/dashboard/data", "/dashboard/run"] },
     ],
   },
   {

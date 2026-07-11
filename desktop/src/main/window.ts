@@ -7,12 +7,15 @@ const currentDir = dirname(fileURLToPath(import.meta.url))
 export function createMainWindow(): BrowserWindow {
   const preloadPath = join(currentDir, "../preload/index.cjs")
 
+  const iconPath = join(currentDir, "../../resources/tray.png")
+
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 1060,
     minHeight: 640,
     title: "Amitia",
+    icon: iconPath,
     frame: false,
     show: false,
     webPreferences: {

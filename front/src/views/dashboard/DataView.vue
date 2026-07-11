@@ -21,11 +21,19 @@
       </div>
     </div>
 
-    <div class="section-header">趋势图表</div>
-    <div class="charts-row">
+    <div class="section-header-row">
+      <span class="section-header">趋势图表</span>
+      <el-button class="refresh-btn" :loading="refreshing" @click="manualRefresh" size="small" text>
+        <el-icon :size="16"><Refresh /></el-icon>
+      </el-button>
+    </div>
+    <div v-if="!dataLoaded" class="charts-loading">
+      <el-icon class="is-loading" :size="28"><Loading /></el-icon>
+    </div>
+    <div v-else class="charts-row">
       <div v-for="m in chartMetrics" :key="m.key" class="chart-card">
         <div class="chart-card-title">{{ m.label }}</div>
-        <v-chart :ref="(el: any) => { if (el) chartRefs[m.key] = el }" class="chart-mini" :option="chartOption(m.key)" />
+        <v-chart :ref="(el: any) => { if (el) chartRefs[m.key] = el }" class="chart-mini" :option="chartOptions[m.key]" />
       </div>
     </div>
 
@@ -36,10 +44,10 @@
         <div class="stat-body">
           <div class="stat-label">{{ s.label }}</div>
           <div class="stat-main">
-            <span class="stat-total">{{ fmtNum(statTotal(s.key)) }}</span>
+            <span class="stat-total">{{ fmtNum(statTotals[s.key]) }}</span>
             <span class="stat-unit">{{ s.unit }}</span>
           </div>
-          <div class="stat-sub">日均 {{ fmtNum(statAvg(s.key)) }} {{ s.unit }}</div>
+          <div class="stat-sub">日均 {{ fmtNum(statAvgs[s.key]) }} {{ s.unit }}</div>
         </div>
       </div>
     </div>
@@ -47,9 +55,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
-import { ChatDotRound, UserFilled } from "@element-plus/icons-vue"
-import { useApi } from "../../composables/useApi"
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue"
+import { ChatDotRound, UserFilled, Refresh, Loading } from "@element-plus/icons-vue"
+import { useDashboardData } from "./composables/useDashboardData"
 import VChart from "vue-echarts"
 import { use } from "echarts/core"
 import { CanvasRenderer } from "echarts/renderers"
@@ -58,11 +66,11 @@ import { TooltipComponent, GridComponent } from "echarts/components"
 
 use([CanvasRenderer, BarChart, TooltipComponent, GridComponent])
 
-const { get } = useApi()
-const totalConvs = ref(0)
-const totalChars = ref(0)
-const dailyData = ref<any[]>([])
+const { totalConvs, totalChars, dailyData, refreshAll } = useDashboardData()
+
 const chartRefs: Record<string, any> = {}
+const refreshing = ref(false)
+const dataLoaded = ref(false)
 
 const chartMetrics = [
   { key: "messages", label: "消息", color: "#4f7cff" },
@@ -76,7 +84,8 @@ const statMetrics = [
   { key: "feedback", label: "Feedback", color: "#0891b2", unit: "条" },
 ]
 
-function fmtNum(n: number): string {
+function fmtNum(n: number | undefined): string {
+  if (n === undefined || n === null) return "0"
   if (n >= 10000) return (n / 10000).toFixed(1) + "w"
   if (n >= 1000) return (n / 1000).toFixed(1) + "k"
   return String(n)
@@ -92,63 +101,62 @@ function safeArray(v: any): any[] {
   return Array.isArray(v) ? v : []
 }
 
-function statTotal(key: string): number {
-  const arr = safeArray(dailyData.value)
-  return arr.reduce((sum, d) => sum + (d[key] || 0), 0)
-}
-
-function statAvg(key: string): number {
-  const arr = safeArray(dailyData.value)
-  if (!arr.length) return 0
-  return Math.round(arr.reduce((sum, d) => sum + (d[key] || 0), 0) / arr.length)
-}
-
-function chartOption(key: string) {
-  const arr = safeArray(dailyData.value)
-  const m = [...chartMetrics, ...statMetrics].find((m) => m.key === key)!
-  const xData = arr.length ? arr.map((d: any) => (d.date || "").slice(5)) : []
-  const data = arr.map((d: any) => d[key] || 0)
-  return {
-    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    grid: { left: 0, right: 8, top: 8, bottom: 20 },
-    xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border", "#E6EBF4") } } },
-    yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft", "#EEF2F7") } }, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10 } },
-    series: [{
-      type: "bar",
-      data,
-      itemStyle: { color: m.color, borderRadius: [3, 3, 0, 0] },
-      barMaxWidth: 14,
-    }],
+const statTotals = computed(() => {
+  const result: Record<string, number> = {}
+  for (const s of statMetrics) {
+    const arr = safeArray(dailyData.value)
+    result[s.key] = arr.reduce((sum, d) => sum + (d[s.key] || 0), 0)
   }
-}
+  return result
+})
+
+const statAvgs = computed(() => {
+  const result: Record<string, number> = {}
+  for (const s of statMetrics) {
+    const arr = safeArray(dailyData.value)
+    if (!arr.length) { result[s.key] = 0; continue }
+    result[s.key] = Math.round(arr.reduce((sum, d) => sum + (d[s.key] || 0), 0) / arr.length)
+  }
+  return result
+})
+
+const chartOptions = computed(() => {
+  const result: Record<string, any> = {}
+  for (const m of chartMetrics) {
+    const arr = safeArray(dailyData.value)
+    const xData = arr.length ? arr.map((d: any) => (d.date || "").slice(5)) : []
+    const data = arr.map((d: any) => d[m.key] || 0)
+    result[m.key] = {
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      grid: { left: 0, right: 8, top: 8, bottom: 20 },
+      xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border", "#E6EBF4") } } },
+      yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft", "#EEF2F7") } }, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10 } },
+      series: [{
+        type: "bar",
+        data,
+        itemStyle: { color: m.color, borderRadius: [3, 3, 0, 0] },
+        barMaxWidth: 14,
+      }],
+    }
+  }
+  return result
+})
 
 function handleResize() {
   Object.values(chartRefs).forEach((ref: any) => ref?.chart?.resize())
 }
 
-async function fetchData() {
-  try {
-    const chars = await get<any[]>("/api/characters")
-    if (Array.isArray(chars) && chars.length > 0) totalChars.value = chars.length
-  } catch {}
-
-  try {
-    const data = await get<any>("/api/chats/stats")
-    if (data && typeof data.totalConversations === "number") totalConvs.value = data.totalConversations
-  } catch {}
-
-  try {
-    const periodic = await get<any>("/api/usage/periodic")
-    if (periodic) {
-      const d = periodic.daily
-      if (Array.isArray(d) && d.length > 0) dailyData.value = d
-    }
-  } catch {}
+async function manualRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  await refreshAll()
+  refreshing.value = false
 }
 
-onMounted(() => {
-  fetchData()
+onMounted(async () => {
   window.addEventListener("resize", handleResize)
+  await nextTick()
+  dataLoaded.value = true
 })
 
 onUnmounted(() => {
@@ -204,6 +212,30 @@ onUnmounted(() => {
 }
 
 .section-header { font-size: 15px; font-weight: 700; color: var(--console-text); margin-bottom: 12px; }
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.section-header-row .section-header { margin-bottom: 0; }
+
+.refresh-btn {
+  color: var(--console-text-muted, #667085);
+  transition: color 0.2s;
+}
+
+.refresh-btn:hover { color: var(--console-primary, #4f7cff); }
+
+.charts-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: var(--console-text-muted);
+}
 
 .charts-row {
   display: grid;

@@ -7,8 +7,8 @@ import type { DeploymentModeConfig } from "../shared/types"
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
 export function createAppTray(win: BrowserWindow, getConfig: () => DeploymentModeConfig): Tray {
-  const icon = nativeImage.createFromPath(join(currentDir, "../../resources/tray.svg"))
-  const tray = new Tray(icon.resize({ width: 16, height: 16 }))
+  const icon = nativeImage.createFromPath(join(currentDir, "../../resources/tray.png"))
+  const tray = new Tray(icon)
   tray.setToolTip("Amitia")
 
   const updateMenu = () => {

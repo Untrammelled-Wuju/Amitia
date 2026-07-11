@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }">
     <div class="brand">
-      <div class="brand-mark">A</div>
+      <img class="brand-mark" :src="logoUrl" alt="Amitia" />
       <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
     </div>
     <el-menu
@@ -84,6 +84,7 @@ import {
 } from "@element-plus/icons-vue"
 import { useAppStore } from "@/stores/app"
 
+import logoUrl from "../../public/logo.png"
 const route = useRoute()
 
 const version = ref("1.0.0")
@@ -167,15 +168,8 @@ onMounted(async () => {
 .brand-mark {
   width: 36px;
   height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  font-weight: 800;
-  font-size: 22px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #4f7cff 12%, #7c3aed 48%, #28d8b8 100%);
-  box-shadow: 0 12px 24px rgba(79, 124, 255, 0.22);
+  object-fit: contain;
   flex-shrink: 0;
 }
 

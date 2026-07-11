@@ -41,6 +41,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		Reply:         computeResult.Reply,
 		Lines:         computeResult.Lines,
 		Source:        computeResult.Source,
+		TotalTokens:   computeResult.TotalTokens,
 		Runtime:       req.Runtime,
 	})
 	if err != nil {
@@ -157,22 +158,24 @@ func (s *service) abortMessageCommitIfCancelled(ctx context.Context, trace applo
 	return nil
 }
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, userMsgID, convID, charID, channel, requestID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, error) {
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, userMsgID, convID, charID, channel, requestID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
 	var reply string
+	var totalTokens int
 	forceVoice := false
 	for round := 0; round < 3; round++ {
 		applog.TraceInfo(trace.WithStage("model_call_started"), applog.Fields{
 			"round":         round,
 			"message_count": len(messages),
 		}, "process message model call started")
-		aiContent, reasoning, toolCalls, _, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
+		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithTools(ctx, cfg, messages, toolDefs)
+		totalTokens = tok
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{
 				"round":           round,
 				"user_message_id": userMsgID,
 			}, llmErr, "process message model call failed")
-			return "", false, fmt.Errorf("AI 调用失败: %w", llmErr)
+			return "", false, 0, fmt.Errorf("AI 调用失败: %w", llmErr)
 		}
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{
 			"round":           round,
@@ -256,7 +259,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
 		}
 	}
-	return reply, forceVoice, nil
+	return reply, forceVoice, totalTokens, nil
 }
 
 type processPromptInput struct {
@@ -424,6 +427,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Reply:         computeResult.Reply,
 		Lines:         computeResult.Lines,
 		Source:        computeResult.Source,
+		TotalTokens:   computeResult.TotalTokens,
 		Runtime:       req.Runtime,
 	})
 	if err != nil {

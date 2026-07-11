@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>White Particle 3D Sphere Logo</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="particleSphere"></canvas>
+  <div id="audioUi" style="position:fixed;left:20px;top:20px;z-index:10;display:flex;flex-direction:column;gap:10px;font-family:Inter,Arial,sans-serif;">
+    <button id="audioToggle" style="appearance:none;border:none;border-radius:999px;padding:10px 16px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .2s ease;">开始获取声音</button>
+    <div id="audioStatus" style="padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.82);font-size:12px;line-height:1.4;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);">未开启</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("particleSphere");
+    const ctx = canvas.getContext("2d");
+    const audioToggle = document.getElementById("audioToggle");
+    const audioStatus = document.getElementById("audioStatus");
+
+    const config = {
+      particleCount: 1200,
+      sphereRadius: 150,
+      dotMinSize: 0.28,
+      dotMaxSize: 0.42,
+      rotateSpeedX: 0.00016,
+      rotateSpeedY: 0.00027,
+      perspective: 500,
+
+      breathStrength: 0.038,
+      breathSpeed: 0.00125,
+
+      enterDuration: 2000,
+      enterSpread: 3.8,
+
+      rimBoost: 0.34,
+
+      integratedRadialBarsEnabled: true,
+      integratedRadialBarCount: 42,
+      integratedRadialBarStrength: 0.245,
+      integratedRadialBarSharpness: 10.8,
+      integratedRadialBarFlow: 0.00115,
+      integratedRadialBarDetail: 0.010
+    };
+
+    let width = 0;
+    let height = 0;
+    let centerX = 0;
+    let centerY = 0;
+    let startTime = performance.now();
+    const audioReactive = {
+      active: false,
+      soundActive: false,
+      audioContext: null,
+      analyser: null,
+      beatAnalyser: null,
+      mediaStream: null,
+      source: null,
+      timeData: null,
+      frequencyData: null,
+      beatFrequencyData: null,
+      smoothLevel: 0,
+      level: 0,
+      slowLevel: 0,
+      lowPeak: 0.06,
+      energyPeak: 0.04,
+      lowFast: 0,
+      lowSlow: 0,
+      prevLow: 0,
+      lowNorm: 0,
+      lowOnset: 0,
+      bodyNorm: 0,
+      energyNorm: 0,
+      frequencyPulse: 0,
+      beatPulse: 0,
+      waveformSamples: [],
+      visualWaveformSamples: [],
+      visualLevel: 0,
+      visualBeatPulse: 0,
+      visualPresence: 0,
+      threshold: 0.002,
+      lastSound: 0,
+      lastVisualSound: 0,
+      soundHold: 220,
+      visualHold: 1350
+    };
+    let particles = [];
+    let transientRings = [];
+    let nextTransientRingTime = 0;
+    let shapeMorph = {
+      active: false,
+      start: 0,
+      duration: 1600,
+      ringsEnabled: true
+    };
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      width = window.innerWidth;
+      height = window.innerHeight;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      centerX = width / 2;
+      centerY = height / 2;
+
+      config.sphereRadius = Math.min(width, height) * 0.1;
+    }
+
+    function createSphereParticles() {
+      particles = [];
+
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+      for (let i = 0; i < config.particleCount; i++) {
+        const y = 1 - (i / (config.particleCount - 1)) * 2;
+        const radius = Math.sqrt(1 - y * y);
+        const theta = goldenAngle * i;
+
+        const x = Math.cos(theta) * radius;
+        const z = Math.sin(theta) * radius;
+
+        particles.push({
+          x,
+          y,
+          z,
+          shapeX: x,
+          shapeY: y,
+          shapeZ: z,
+          fromX: x,
+          fromY: y,
+          fromZ: z,
+          toX: x,
+          toY: y,
+          toZ: z,
+          seed: Math.random(),
+          enterOffset: Math.random() * 0.35,
+          twinkleSpeed: 0.00075 + Math.random() * 0.00075
+        });
+      }
+    }
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function easeOutBack(t) {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, value));
+    }
+
+    function getAudioRms(buffer) {
+      if (!buffer || !buffer.length) return 0;
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        const normalized = (buffer[i] - 128) / 128;
+        sum += normalized * normalized;
+      }
+      return Math.sqrt(sum / buffer.length);
+    }
+
+    function bandRms(frequencyData, sampleRate, fftSize, minHz, maxHz) {
+      if (!frequencyData || !frequencyData.length || !sampleRate || !fftSize) return 0;
+
+      const binHz = sampleRate / fftSize;
+      const startBin = Math.max(1, Math.floor(minHz / binHz));
+      const endBin = Math.min(frequencyData.length - 1, Math.ceil(maxHz / binHz));
+
+      if (endBin < startBin) return 0;
+
+      let sum = 0;
+      let peak = 0;
+      let count = 0;
+
+      for (let i = startBin; i <= endBin; i++) {
+        const value = frequencyData[i] / 255;
+        sum += value * value;
+        if (value > peak) peak = value;
+        count++;
+      }
+
+      const rms = Math.sqrt(sum / Math.max(1, count));
+      return rms * 0.82 + peak * 0.18;
+    }
+
+    function followValue(current, target, attack, release) {
+      const factor = target > current ? attack : release;
+      return current + (target - current) * factor;
+    }
+
+    function updateFrequencyReactive() {
+      if (!audioReactive.active || !audioReactive.analyser) return;
+
+      const analyser = audioReactive.analyser;
+      const beatAnalyser = audioReactive.beatAnalyser || analyser;
+      const sampleRate = audioReactive.audioContext ? audioReactive.audioContext.sampleRate : 44100;
+
+      if (audioReactive.frequencyData) {
+        analyser.getByteFrequencyData(audioReactive.frequencyData);
+      }
+
+      if (audioReactive.beatFrequencyData) {
+        beatAnalyser.getByteFrequencyData(audioReactive.beatFrequencyData);
+      }
+
+      const visualData = audioReactive.frequencyData || audioReactive.beatFrequencyData;
+      const beatData = audioReactive.beatFrequencyData || audioReactive.frequencyData;
+
+      const energyRaw = visualData
+        ? bandRms(visualData, sampleRate, analyser.fftSize, 38, 9200)
+        : audioReactive.smoothLevel;
+
+      const sub = beatData
+        ? bandRms(beatData, sampleRate, beatAnalyser.fftSize, 38, 74)
+        : 0;
+      const kick = beatData
+        ? bandRms(beatData, sampleRate, beatAnalyser.fftSize, 52, 165)
+        : 0;
+      const body = beatData
+        ? bandRms(beatData, sampleRate, beatAnalyser.fftSize, 165, 420)
+        : 0;
+
+      const low = kick * 0.86 + sub * 0.42;
+
+      audioReactive.lowPeak = Math.max(audioReactive.lowPeak * 0.989, low, 0.060);
+      audioReactive.energyPeak = Math.max(audioReactive.energyPeak * 0.993, energyRaw, 0.040);
+
+      const lowNorm = clamp01(
+        Math.pow(low / Math.max(0.060, audioReactive.lowPeak * 0.72), 0.78)
+      );
+      const bodyNorm = clamp01(
+        Math.pow(body / Math.max(0.040, audioReactive.lowPeak * 0.62), 0.84)
+      );
+      const energyNorm = clamp01(
+        Math.pow(energyRaw / Math.max(0.040, audioReactive.energyPeak * 0.68), 0.82)
+      );
+
+      audioReactive.lowFast = followValue(audioReactive.lowFast, lowNorm, 0.42, 0.18);
+      audioReactive.lowSlow = followValue(audioReactive.lowSlow, lowNorm, 0.070, 0.035);
+
+      const lowRise = Math.max(0, audioReactive.lowFast - audioReactive.lowSlow);
+      const lowFlux = Math.max(0, lowNorm - audioReactive.prevLow);
+      audioReactive.prevLow = lowNorm;
+
+      const lowOnset = clamp01(lowRise * 2.8 + lowFlux * 1.7);
+      const frequencyPulse = clamp01(lowNorm * 0.62 + lowOnset * 1.15 + energyNorm * 0.26);
+
+      audioReactive.lowNorm += (lowNorm - audioReactive.lowNorm) * (lowNorm > audioReactive.lowNorm ? 0.50 : 0.16);
+      audioReactive.lowOnset += (lowOnset - audioReactive.lowOnset) * (lowOnset > audioReactive.lowOnset ? 0.62 : 0.20);
+      audioReactive.bodyNorm += (bodyNorm - audioReactive.bodyNorm) * (bodyNorm > audioReactive.bodyNorm ? 0.38 : 0.14);
+      audioReactive.energyNorm += (energyNorm - audioReactive.energyNorm) * (energyNorm > audioReactive.energyNorm ? 0.34 : 0.12);
+      audioReactive.frequencyPulse += (frequencyPulse - audioReactive.frequencyPulse) * (frequencyPulse > audioReactive.frequencyPulse ? 0.58 : 0.16);
+    }
+
+    function extractWaveformSamples(buffer, sampleCount) {
+      if (!buffer || !buffer.length || sampleCount <= 0) return [];
+
+      const samples = [];
+      const length = buffer.length;
+      const step = length / sampleCount;
+
+      for (let i = 0; i < sampleCount; i++) {
+        const start = Math.floor(i * step);
+        const end = Math.min(length, Math.max(start + 1, Math.floor((i + 1) * step)));
+        let sum = 0;
+        let peak = 0;
+        let count = 0;
+
+        for (let j = start; j < end; j++) {
+          const normalized = Math.abs((buffer[j] - 128) / 128);
+          sum += normalized * normalized;
+          if (normalized > peak) peak = normalized;
+          count++;
+        }
+
+        const rms = Math.sqrt(sum / Math.max(1, count));
+        const envelope = rms * 0.72 + peak * 0.28;
+        samples.push(Math.pow(envelope, 0.85));
+      }
+
+      return samples;
+    }
+
+    function updateVisualWaveformSamples(targetSamples, releaseOnly = false) {
+      const count = targetSamples && targetSamples.length ? targetSamples.length : 180;
+
+      if (audioReactive.visualWaveformSamples.length !== count) {
+        audioReactive.visualWaveformSamples = new Array(count).fill(0);
+      }
+
+      for (let i = 0; i < count; i++) {
+        const current = audioReactive.visualWaveformSamples[i] || 0;
+        const target = releaseOnly ? 0 : (targetSamples[i] || 0);
+        const factor = target > current ? 0.68 : 0.055;
+        audioReactive.visualWaveformSamples[i] = current + (target - current) * factor;
+      }
+    }
+
+    function getClockwiseWaveformValue(normalizedT, now, phaseOffset = 0) {
+      const samples = audioReactive.visualWaveformSamples;
+      if (!audioReactive.active || audioReactive.visualPresence <= 0.002 || !samples.length) return 0;
+
+      const scroll = ((phaseOffset % 1) + 1) % 1;
+      const wrapped = ((normalizedT - scroll) % 1 + 1) % 1;
+      const position = wrapped * samples.length;
+      const index0 = Math.floor(position) % samples.length;
+      const index1 = (index0 + 1) % samples.length;
+      const frac = position - Math.floor(position);
+
+      return (samples[index0] * (1 - frac) + samples[index1] * frac) * audioReactive.visualPresence;
+    }
+
+    function updateAudioReactive(now) {
+      if (!audioReactive.active || !audioReactive.analyser || !audioReactive.timeData) {
+        audioReactive.soundActive = false;
+        audioReactive.smoothLevel += (0 - audioReactive.smoothLevel) * 0.08;
+        audioReactive.slowLevel += (0 - audioReactive.slowLevel) * 0.04;
+        audioReactive.lowFast += (0 - audioReactive.lowFast) * 0.16;
+        audioReactive.lowSlow += (0 - audioReactive.lowSlow) * 0.06;
+        audioReactive.lowNorm += (0 - audioReactive.lowNorm) * 0.16;
+        audioReactive.lowOnset += (0 - audioReactive.lowOnset) * 0.20;
+        audioReactive.bodyNorm += (0 - audioReactive.bodyNorm) * 0.14;
+        audioReactive.energyNorm += (0 - audioReactive.energyNorm) * 0.12;
+        audioReactive.frequencyPulse += (0 - audioReactive.frequencyPulse) * 0.18;
+        audioReactive.beatPulse *= 0.88;
+        audioReactive.visualBeatPulse *= 0.94;
+        audioReactive.visualLevel += (0 - audioReactive.visualLevel) * 0.045;
+        audioReactive.visualPresence += (0 - audioReactive.visualPresence) * 0.035;
+        updateVisualWaveformSamples([], true);
+        audioReactive.waveformSamples = [];
+        return;
+      }
+
+      audioReactive.analyser.getByteTimeDomainData(audioReactive.timeData);
+
+      const level = getAudioRms(audioReactive.timeData);
+      audioReactive.level = level;
+      audioReactive.smoothLevel += (level - audioReactive.smoothLevel) * 0.45;
+      audioReactive.slowLevel += (level - audioReactive.slowLevel) * 0.035;
+      updateFrequencyReactive();
+      audioReactive.waveformSamples = extractWaveformSamples(audioReactive.timeData, 180);
+
+      if (audioReactive.smoothLevel > audioReactive.threshold) {
+        audioReactive.lastSound = now;
+        audioReactive.lastVisualSound = now;
+        audioReactive.soundActive = true;
+      } else {
+        audioReactive.soundActive = now - audioReactive.lastSound < audioReactive.soundHold;
+      }
+
+      const onset = Math.max(0, audioReactive.smoothLevel - audioReactive.slowLevel * 1.08);
+      const beatStrength = clamp01(onset * 180 + audioReactive.lowOnset * 0.72 + audioReactive.frequencyPulse * 0.28);
+
+      if (beatStrength > audioReactive.beatPulse) {
+        audioReactive.beatPulse = beatStrength;
+      } else {
+        audioReactive.beatPulse += (0 - audioReactive.beatPulse) * 0.18;
+      }
+
+      const visualTarget = audioReactive.soundActive
+        ? 1
+        : clamp01(1 - (now - audioReactive.lastVisualSound) / audioReactive.visualHold);
+
+      audioReactive.visualPresence += (visualTarget - audioReactive.visualPresence) * (visualTarget > audioReactive.visualPresence ? 0.22 : 0.045);
+      audioReactive.visualLevel += (audioReactive.smoothLevel - audioReactive.visualLevel) * (audioReactive.smoothLevel > audioReactive.visualLevel ? 0.42 : 0.05);
+
+      if (audioReactive.beatPulse > audioReactive.visualBeatPulse) {
+        audioReactive.visualBeatPulse += (audioReactive.beatPulse - audioReactive.visualBeatPulse) * 0.62;
+      } else {
+        audioReactive.visualBeatPulse += (audioReactive.beatPulse - audioReactive.visualBeatPulse) * 0.035;
+      }
+
+      updateVisualWaveformSamples(audioReactive.waveformSamples, false);
+
+      audioStatus.textContent = audioReactive.soundActive
+        ? `检测到声音 ${Math.round(audioReactive.smoothLevel * 1000)} / 节奏 ${Math.round(audioReactive.beatPulse * 100)} / 低频 ${Math.round(audioReactive.lowNorm * 100)} / 瞬态 ${Math.round(audioReactive.lowOnset * 100)}`
+        : "波纹缓释中";
+    }
+
+    function releaseAudioReactive() {
+      if (audioReactive.source && typeof audioReactive.source.disconnect === "function") {
+        try { audioReactive.source.disconnect(); } catch (error) {}
+      }
+      if (audioReactive.mediaStream) {
+        for (const track of audioReactive.mediaStream.getTracks()) {
+          track.stop();
+        }
+      }
+      audioReactive.active = false;
+      audioReactive.soundActive = false;
+      audioReactive.mediaStream = null;
+      audioReactive.source = null;
+      audioReactive.analyser = null;
+      audioReactive.beatAnalyser = null;
+      audioReactive.timeData = null;
+      audioReactive.frequencyData = null;
+      audioReactive.beatFrequencyData = null;
+      audioReactive.smoothLevel = 0;
+      audioReactive.level = 0;
+      audioReactive.slowLevel = 0;
+      audioReactive.lowPeak = 0.06;
+      audioReactive.energyPeak = 0.04;
+      audioReactive.lowFast = 0;
+      audioReactive.lowSlow = 0;
+      audioReactive.prevLow = 0;
+      audioReactive.lowNorm = 0;
+      audioReactive.lowOnset = 0;
+      audioReactive.bodyNorm = 0;
+      audioReactive.energyNorm = 0;
+      audioReactive.frequencyPulse = 0;
+      audioReactive.beatPulse = 0;
+      audioReactive.visualBeatPulse = 0;
+      audioReactive.visualLevel = 0;
+      audioReactive.visualPresence = 0;
+      audioReactive.waveformSamples = [];
+      audioReactive.visualWaveformSamples = [];
+      audioReactive.lastSound = 0;
+      audioReactive.lastVisualSound = 0;
+      audioToggle.textContent = "开始获取声音";
+      audioStatus.textContent = "未开启";
+    }
+
+    async function startAudioReactive() {
+      if (audioReactive.active) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        audioStatus.textContent = "浏览器不支持系统声音";
+        throw new Error("当前浏览器不支持 getDisplayMedia。");
+      }
+
+      audioStatus.textContent = "请选择要共享的系统/标签页音频";
+      audioToggle.textContent = "获取声音中...";
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioReactive.audioContext = audioReactive.audioContext || new AudioContextClass();
+      if (audioReactive.audioContext.state === "suspended") {
+        await audioReactive.audioContext.resume();
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+
+      const audioTracks = stream.getAudioTracks();
+      if (!audioTracks.length) {
+        for (const track of stream.getTracks()) track.stop();
+        audioToggle.textContent = "开始获取声音";
+        audioStatus.textContent = "未选中音频";
+        throw new Error("没有捕获到音频，请勾选共享系统/标签页音频。");
+      }
+
+      for (const track of stream.getVideoTracks()) {
+        track.stop();
+      }
+      for (const track of audioTracks) {
+        track.addEventListener("ended", () => {
+          if (audioReactive.active) releaseAudioReactive();
+        });
+      }
+
+      const analyser = audioReactive.audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.35;
+
+      const beatAnalyser = audioReactive.audioContext.createAnalyser();
+      beatAnalyser.fftSize = 2048;
+      beatAnalyser.smoothingTimeConstant = 0.10;
+
+      const source = audioReactive.audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      source.connect(beatAnalyser);
+
+      audioReactive.active = true;
+      audioReactive.soundActive = false;
+      audioReactive.mediaStream = stream;
+      audioReactive.source = source;
+      audioReactive.analyser = analyser;
+      audioReactive.beatAnalyser = beatAnalyser;
+      audioReactive.timeData = new Uint8Array(analyser.fftSize);
+      audioReactive.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      audioReactive.beatFrequencyData = new Uint8Array(beatAnalyser.frequencyBinCount);
+      audioReactive.smoothLevel = 0;
+      audioReactive.level = 0;
+      audioReactive.slowLevel = 0;
+      audioReactive.lowPeak = 0.06;
+      audioReactive.energyPeak = 0.04;
+      audioReactive.lowFast = 0;
+      audioReactive.lowSlow = 0;
+      audioReactive.prevLow = 0;
+      audioReactive.lowNorm = 0;
+      audioReactive.lowOnset = 0;
+      audioReactive.bodyNorm = 0;
+      audioReactive.energyNorm = 0;
+      audioReactive.frequencyPulse = 0;
+      audioReactive.beatPulse = 0;
+      audioReactive.visualBeatPulse = 0;
+      audioReactive.visualLevel = 0;
+      audioReactive.visualPresence = 0;
+      audioReactive.waveformSamples = [];
+      audioReactive.visualWaveformSamples = [];
+      audioReactive.lastSound = 0;
+      audioReactive.lastVisualSound = 0;
+
+      audioToggle.textContent = "停止获取声音";
+      audioStatus.textContent = "等待声音";
+    }
+
+    function normalizeShapePoint(point, options = {}) {
+      const scale = options.scale ?? 1;
+      const defaultZ = options.defaultZ ?? 0;
+      let x = 0;
+      let y = 0;
+      let z = defaultZ;
+
+      if (Array.isArray(point)) {
+        x = Number(point[0]) || 0;
+        y = Number(point[1]) || 0;
+        z = point.length > 2 ? (Number(point[2]) || 0) : defaultZ;
+      } else if (point && typeof point === "object") {
+        x = Number(point.x) || 0;
+        y = Number(point.y) || 0;
+        z = point.z == null ? defaultZ : (Number(point.z) || 0);
+      }
+
+      return {
+        x: x * scale,
+        y: y * scale,
+        z: z * scale
+      };
+    }
+
+    function normalizePointCloud(points, options = {}) {
+      const normalized = points.map((point) => normalizeShapePoint(point, options));
+
+      if (!normalized.length) return [];
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let minZ = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let maxZ = -Infinity;
+
+      for (const p of normalized) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.z < minZ) minZ = p.z;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+        if (p.z > maxZ) maxZ = p.z;
+      }
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const centerZ = (minZ + maxZ) / 2;
+
+      const spanX = maxX - minX;
+      const spanY = maxY - minY;
+      const spanZ = maxZ - minZ;
+      const maxSpan = Math.max(spanX, spanY, spanZ, 1e-6);
+
+      // 原始圆球的标准坐标范围是 -1 到 1，直径跨度为 2。
+      // 所有自定义形态统一归一化到最大跨度 2，保证整体尺寸和原圆球一致。
+      const fit = options.fit ?? 2;
+      const fitScale = fit / maxSpan;
+
+      // 双模式：
+      // 1) 优先真实 3D：输入本身有明显 z 深度时，直接保留真实 3D。
+      // 2) 兼容 2D：输入基本无 z 深度时，自动补 z 深度形成立体点阵。
+      const auto3D = options.auto3D ?? true;
+      const depth = options.depth ?? 0.62;
+      const preferTrue3D = options.preferTrue3D ?? true;
+      const hasInputDepth = spanZ > maxSpan * 0.035;
+
+      return normalized.map((p, index) => {
+        const x = (p.x - centerX) * fitScale;
+        const y = (p.y - centerY) * fitScale;
+        let z = (p.z - centerZ) * fitScale;
+
+        if (auto3D && (!hasInputDepth || !preferTrue3D)) {
+          const noiseA = Math.sin(index * 12.9898 + 4.1414) * 43758.5453;
+          const noiseB = Math.sin(index * 78.233 + 9.173) * 24634.6345;
+          const randomA = noiseA - Math.floor(noiseA);
+          const randomB = noiseB - Math.floor(noiseB);
+
+          const halfFit = Math.max(fit * 0.5, 1e-6);
+          const radial = Math.min(1, Math.hypot(x, y) / halfFit);
+          const dome = Math.sqrt(Math.max(0, 1 - radial * radial));
+
+          const innerLayerDepth = (randomA - 0.5) * depth * 0.58;
+          const surfaceDepth = (randomB > 0.5 ? 1 : -1) * dome * depth * 0.42;
+
+          z += innerLayerDepth + surfaceDepth;
+        }
+
+        return {
+          x,
+          y,
+          z
+        };
+      });
+    }
+
+
+    function normalizeSignedDistance(value) {
+      if (typeof value === "boolean") return value;
+      return Number(value) <= 0;
+    }
+
+    function buildVolumePointCloud(options = {}) {
+      if (typeof options.volumeGenerator !== "function") {
+        throw new Error("setParticleShape3D 需要传入 volumeGenerator 函数。");
+      }
+
+      const count = particles.length;
+      const resolution = Math.max(8, Math.min(48, Number(options.resolution) || 28));
+      const points = [];
+      const candidates = [];
+
+      for (let ix = 0; ix < resolution; ix++) {
+        const x = -1 + (ix / (resolution - 1)) * 2;
+
+        for (let iy = 0; iy < resolution; iy++) {
+          const y = -1 + (iy / (resolution - 1)) * 2;
+
+          for (let iz = 0; iz < resolution; iz++) {
+            const z = -1 + (iz / (resolution - 1)) * 2;
+            const inside = normalizeSignedDistance(
+              options.volumeGenerator(x, y, z, { ix, iy, iz, resolution })
+            );
+
+            if (!inside) continue;
+
+            const shellOnly = options.shellOnly ?? false;
+            if (shellOnly) {
+              const e = 2 / Math.max(1, resolution - 1);
+              const neighborInside =
+                normalizeSignedDistance(options.volumeGenerator(x + e, y, z, { ix, iy, iz, resolution })) &&
+                normalizeSignedDistance(options.volumeGenerator(x - e, y, z, { ix, iy, iz, resolution })) &&
+                normalizeSignedDistance(options.volumeGenerator(x, y + e, z, { ix, iy, iz, resolution })) &&
+                normalizeSignedDistance(options.volumeGenerator(x, y - e, z, { ix, iy, iz, resolution })) &&
+                normalizeSignedDistance(options.volumeGenerator(x, y, z + e, { ix, iy, iz, resolution })) &&
+                normalizeSignedDistance(options.volumeGenerator(x, y, z - e, { ix, iy, iz, resolution }));
+
+              if (neighborInside) continue;
+            }
+
+            candidates.push({ x, y, z });
+          }
+        }
+      }
+
+      if (!candidates.length) {
+        throw new Error("volumeGenerator 没有生成任何 3D 点。");
+      }
+
+      for (let i = 0; i < count; i++) {
+        const source = candidates[Math.floor((i / count) * candidates.length) % candidates.length];
+        points.push({
+          x: source.x,
+          y: source.y,
+          z: source.z
+        });
+      }
+
+      return normalizePointCloud(points, options);
+    }
+
+    function setParticleShape3D(options = {}) {
+      let cloud = null;
+
+      if (Array.isArray(options.points3D) && options.points3D.length > 0) {
+        cloud = normalizePointCloud(options.points3D, options);
+      } else if (typeof options.generator3D === "function") {
+        const generated = [];
+        for (let i = 0; i < particles.length; i++) {
+          generated.push(options.generator3D(i, particles.length, options));
+        }
+        cloud = normalizePointCloud(generated, options);
+      } else if (typeof options.volumeGenerator === "function") {
+        cloud = buildVolumePointCloud(options);
+      } else {
+        throw new Error("setParticleShape3D 需要传入 points3D、generator3D 或 volumeGenerator。");
+      }
+
+      applyTargetCloud(cloud, options.duration, false);
+    }
+
+    function getSphereShapePoint(index, count) {
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      const y = 1 - (index / (count - 1)) * 2;
+      const radius = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = goldenAngle * index;
+
+      return {
+        x: Math.cos(theta) * radius,
+        y,
+        z: Math.sin(theta) * radius
+      };
+    }
+
+    function buildShapeCloud(options = {}) {
+      const count = particles.length;
+
+      if (
+        Array.isArray(options.points3D) ||
+        typeof options.generator3D === "function" ||
+        typeof options.volumeGenerator === "function"
+      ) {
+        if (Array.isArray(options.points3D) && options.points3D.length > 0) {
+          return normalizePointCloud(options.points3D, options);
+        }
+
+        if (typeof options.generator3D === "function") {
+          const generated = [];
+          for (let i = 0; i < count; i++) {
+            generated.push(options.generator3D(i, count, options));
+          }
+          return normalizePointCloud(generated, options);
+        }
+
+        return buildVolumePointCloud(options);
+      }
+
+      if (typeof options.generator === "function") {
+        const generated = [];
+        for (let i = 0; i < count; i++) {
+          generated.push(options.generator(i, count, options));
+        }
+        return normalizePointCloud(generated, options);
+      }
+
+      if (Array.isArray(options.points) && options.points.length > 0) {
+        return normalizePointCloud(options.points, options);
+      }
+
+      throw new Error("setParticleShape 需要传入 points / generator（二维轮廓可自动补 z 深度）或 points3D / generator3D / volumeGenerator（优先真实 3D）。");
+    }
+
+    function applyTargetCloud(cloud, duration = 1600, ringsEnabledAfterMorph = false) {
+      const now = performance.now();
+
+      shapeMorph = {
+        active: true,
+        start: now,
+        duration: Math.max(120, Number(duration) || 1600),
+        ringsEnabled: ringsEnabledAfterMorph
+      };
+
+      transientRings = [];
+      nextTransientRingTime = now + shapeMorph.duration + 420;
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const target = cloud[i % cloud.length];
+
+        p.fromX = p.shapeX;
+        p.fromY = p.shapeY;
+        p.fromZ = p.shapeZ;
+
+        p.toX = target.x;
+        p.toY = target.y;
+        p.toZ = target.z;
+      }
+    }
+
+    function setParticleShape(options = {}) {
+      const cloud = buildShapeCloud(options);
+      applyTargetCloud(cloud, options.duration, false);
+    }
+
+    function resetParticleSphere(duration = 1600) {
+      const sphereCloud = [];
+      for (let i = 0; i < particles.length; i++) {
+        sphereCloud.push(getSphereShapePoint(i, particles.length));
+      }
+      applyTargetCloud(sphereCloud, duration, true);
+    }
+
+    function getShapeMorphProgress(now) {
+      if (!shapeMorph.active) return 1;
+
+      const progress = Math.min(
+        Math.max((now - shapeMorph.start) / shapeMorph.duration, 0),
+        1
+      );
+
+      if (progress >= 1) {
+        for (const p of particles) {
+          p.shapeX = p.toX;
+          p.shapeY = p.toY;
+          p.shapeZ = p.toZ;
+        }
+
+        shapeMorph.active = false;
+        return 1;
+      }
+
+      return easeOutCubic(progress);
+    }
+
+    function getParticleShapePoint(p, morphProgress) {
+      if (!shapeMorph.active) {
+        return {
+          x: p.shapeX,
+          y: p.shapeY,
+          z: p.shapeZ
+        };
+      }
+
+      return {
+        x: p.fromX + (p.toX - p.fromX) * morphProgress,
+        y: p.fromY + (p.toY - p.fromY) * morphProgress,
+        z: p.fromZ + (p.toZ - p.fromZ) * morphProgress
+      };
+    }
+
+    function getRingVisibility() {
+      return shapeMorph.ringsEnabled && !shapeMorph.active ? 1 : 0;
+    }
+
+    window.setParticleShape = setParticleShape;
+    window.setParticleShape3D = setParticleShape3D;
+    window.resetParticleSphere = resetParticleSphere;
+    window.setIntegratedRadialBarsEnabled = (enabled) => {
+      config.integratedRadialBarsEnabled = !!enabled;
+    };
+
+    audioToggle.addEventListener("click", async () => {
+      if (audioReactive.active) {
+        releaseAudioReactive();
+        return;
+      }
+
+      try {
+        await startAudioReactive();
+      } catch (error) {
+        releaseAudioReactive();
+        audioStatus.textContent = "开启失败";
+        console.error(error);
+      }
+    });
+
+    // 双模式支持：
+    // 1. setParticleShape(...)
+    //    - points / generator：支持二维轮廓，自动补 z 深度
+    //    - points3D / generator3D / volumeGenerator：优先真实 3D
+    //
+    // 2. setParticleShape3D(...)
+    //    - 专门用于真正 3D 点阵/体素点云
+    //
+    // 二维轮廓示例（自动补 z 深度）：
+    // setParticleShape({
+    //   duration: 1600,
+    //   points: [{ x: -1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 }]
+    // });
+    //
+    // 真 3D 体素示例：
+    // setParticleShape3D({
+    //   duration: 1600,
+    //   resolution: 30,
+    //   shellOnly: false,
+    //   volumeGenerator: (x, y, z) => x * x + y * y + z * z - 0.55
+    // });
+
+    function rotatePoint(p, time) {
+      const angleY = time * config.rotateSpeedY;
+      const angleX = time * config.rotateSpeedX;
+
+      const cosY = Math.cos(angleY);
+      const sinY = Math.sin(angleY);
+      const cosX = Math.cos(angleX);
+      const sinX = Math.sin(angleX);
+
+      let x = p.x;
+      let y = p.y;
+      let z = p.z;
+
+      const x1 = x * cosY - z * sinY;
+      const z1 = x * sinY + z * cosY;
+
+      const y2 = y * cosX - z1 * sinX;
+      const z2 = y * sinX + z1 * cosX;
+
+      return {
+        x: x1,
+        y: y2,
+        z: z2
+      };
+    }
+
+    function getIntegratedRadialBarIntensity(rotated, now, seed) {
+      if (!config.integratedRadialBarsEnabled || !audioReactive.active) return 0;
+
+      const audioLevel = clamp01((audioReactive.soundActive ? audioReactive.smoothLevel : 0) * 22);
+      if (audioLevel <= 0.002) return 0;
+
+      const angle = Math.atan2(rotated.y * 0.92, rotated.x);
+      const polar = Math.acos(Math.max(-1, Math.min(1, rotated.z)));
+      const ringWeight = Math.pow(Math.max(0, 1 - Math.abs(rotated.z)), 1.38);
+      const dynamicCount = config.integratedRadialBarCount + Math.round(audioLevel * 10);
+      const normalizedColumn = ((angle + Math.PI) / (Math.PI * 2)) * dynamicCount;
+      const nearestColumn = Math.round(normalizedColumn);
+      const columnDistance = Math.abs(normalizedColumn - nearestColumn);
+
+      const hardColumnMask = Math.pow(
+        Math.max(0, 1 - columnDistance * 3.05),
+        config.integratedRadialBarSharpness
+      );
+
+      const columnMotion =
+        0.54 +
+        Math.sin(nearestColumn * 0.72 + now * config.integratedRadialBarFlow * (1.1 + audioLevel)) * 0.26 +
+        Math.sin(nearestColumn * 1.73 - now * config.integratedRadialBarFlow * 0.62 + seed * 3.0) * 0.20;
+
+      const verticalWeight =
+        0.74 +
+        Math.sin(polar * 3.2 + now * 0.00045 + seed * 4.0) * 0.12;
+
+      return clamp01(
+        hardColumnMask *
+        columnMotion *
+        ringWeight *
+        verticalWeight *
+        (0.38 + audioLevel * 1.28)
+      );
+    }
+
+    function getIntegratedRadialBarScale(rotated, now, seed) {
+      return 1;
+    }
+
+    function getRingFrequencyIntensity(normalizedT, now, phaseOffset = 0, accentFreq = 2.0) {
+      if (!config.integratedRadialBarsEnabled || !audioReactive.active || !audioReactive.soundActive) {
+        return 0;
+      }
+
+      const lowNorm = clamp01(audioReactive.lowNorm);
+      const lowOnset = clamp01(audioReactive.lowOnset);
+      const bodyNorm = clamp01(audioReactive.bodyNorm);
+      const energyNorm = clamp01(audioReactive.energyNorm);
+      const frequencyPulse = clamp01(audioReactive.frequencyPulse);
+
+      const energy = clamp01(
+        lowNorm * 0.58 +
+        lowOnset * 1.18 +
+        bodyNorm * 0.18 +
+        energyNorm * 0.24 +
+        frequencyPulse * 0.36
+      );
+
+      if (energy <= 0.002) return 0;
+
+      const shiftedT = ((normalizedT + phaseOffset) % 1 + 1) % 1;
+      const dynamicCount = config.integratedRadialBarCount + Math.round(energy * 10);
+      const normalizedColumn = shiftedT * dynamicCount;
+      const nearestColumn = Math.round(normalizedColumn);
+      const columnDistance = Math.abs(normalizedColumn - nearestColumn);
+
+      const hardColumnMask = Math.pow(
+        Math.max(0, 1 - columnDistance * 3.05),
+        config.integratedRadialBarSharpness
+      );
+
+      const columnMotion =
+        0.54 +
+        Math.sin(nearestColumn * 0.72 + now * config.integratedRadialBarFlow * (1.1 + energy)) * 0.26 +
+        Math.sin(nearestColumn * 1.73 - now * config.integratedRadialBarFlow * 0.62 + phaseOffset * 19.0) * 0.20;
+
+      const ringAccent =
+        0.78 +
+        0.22 * Math.sin(shiftedT * Math.PI * 2 * accentFreq + now * 0.00045 + phaseOffset * 7.0);
+
+      return clamp01(
+        hardColumnMask *
+        columnMotion *
+        ringAccent *
+        (0.28 + lowNorm * 0.68 + lowOnset * 1.10 + energyNorm * 0.30)
+      );
+    }
+
+    function drawWaveRing(now, baseRadius, phase, alpha, lineWidth, reactiveOptions = null) {
+      const steps = 180;
+      const squashY = 0.92;
+      const spin = now * 0.00028 + phase * 0.15;
+      const reactiveEnabled =
+        !!reactiveOptions &&
+        audioReactive.active &&
+        audioReactive.visualPresence > 0.002 &&
+        audioReactive.visualWaveformSamples.length > 0;
+
+      const audioLevel = clamp01(audioReactive.visualLevel * 24);
+      const beatPulse = clamp01(audioReactive.visualBeatPulse);
+
+      ctx.beginPath();
+
+      for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * Math.PI * 2;
+        const baseWave =
+          Math.sin(t * 3 + now * 0.0011 + phase) * 0.065 +
+          Math.sin(t * 5 - now * 0.0007 + phase * 1.7) * 0.028 +
+          Math.sin(t * 8 + now * 0.00045 + phase * 0.6) * 0.012;
+
+        let outwardReactive = 0;
+        let mixedBaseWave = baseWave;
+
+        if (reactiveEnabled) {
+          const waveform = getClockwiseWaveformValue(
+            t / (Math.PI * 2),
+            now,
+            reactiveOptions.phaseOffset ?? 0
+          );
+
+          const localAccent =
+            0.82 +
+            0.18 * Math.sin(t * (reactiveOptions.accentFreq ?? 2.0) + phase * 0.8);
+
+          const reactiveGain = reactiveOptions.gain ?? 0.12;
+          const peakOnly = Math.pow(clamp01((waveform - 0.24) / 0.76), 1.65);
+          const peakBoost = reactiveOptions.peakBoost ?? 1.0;
+          const frequencyIntensity = getRingFrequencyIntensity(
+            t / (Math.PI * 2),
+            now,
+            reactiveOptions.phaseOffset ?? 0,
+            reactiveOptions.accentFreq ?? 2.0
+          );
+          const frequencyGain = reactiveOptions.frequencyGain ?? 0.0;
+          const beatGain = 0.32 + beatPulse * 0.74 + frequencyIntensity * 0.42;
+          const levelGain = 0.24 + audioLevel * 0.46 + frequencyIntensity * 0.20;
+          const frequencyOutward =
+            frequencyIntensity *
+            frequencyGain *
+            (0.66 + audioReactive.lowOnset * 0.90 + beatPulse * 0.44) *
+            (0.72 + audioReactive.lowNorm * 0.58 + audioLevel * 0.34) *
+            localAccent;
+
+          outwardReactive =
+            Math.max(0, waveform) *
+            reactiveGain *
+            beatGain *
+            levelGain *
+            localAccent +
+            peakOnly *
+            reactiveGain *
+            peakBoost *
+            (0.55 + beatPulse * 1.25 + frequencyIntensity * 0.50) *
+            (0.38 + audioLevel * 0.70 + frequencyIntensity * 0.24) *
+            localAccent +
+            frequencyOutward;
+
+          mixedBaseWave *= reactiveOptions.baseWaveMix ?? 0.34;
+        }
+
+        const radius = baseRadius * (1 + mixedBaseWave + outwardReactive);
+        const angle = t + spin;
+
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius * squashY;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+
+      ctx.closePath();
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.stroke();
+    }
+
+    function spawnTransientRing(now, baseRadius) {
+      transientRings.push({
+        start: now,
+        life: 1050 + Math.random() * 1050,
+        radiusScale: 0.96 + Math.random() * 0.16,
+        phase: Math.random() * Math.PI * 2,
+        alpha: 0.020 + Math.random() * 0.085,
+        lineWidth: 0.45 + Math.random() * 0.45
+      });
+    }
+
+    function updateTransientRings(now, baseRadius, enabled) {
+      transientRings = transientRings.filter((ring) => now - ring.start < ring.life);
+
+      if (!enabled) {
+        nextTransientRingTime = now + 520;
+        return;
+      }
+
+      if (nextTransientRingTime === 0) {
+        nextTransientRingTime = now + 520;
+      }
+
+      if (now >= nextTransientRingTime) {
+        const targetCount = 1 + Math.floor(Math.random() * 5);
+
+        while (transientRings.length < targetCount && transientRings.length < 5) {
+          spawnTransientRing(now, baseRadius);
+        }
+
+        nextTransientRingTime = now + 520 + Math.random() * 820;
+      }
+    }
+
+    function drawTransientRings(now, baseRadius, globalAlpha) {
+      for (const ring of transientRings) {
+        const progress = Math.min(Math.max((now - ring.start) / ring.life, 0), 1);
+        const fade = Math.sin(progress * Math.PI);
+        const alpha = ring.alpha * fade * globalAlpha;
+
+        if (alpha <= 0.002) continue;
+
+        drawWaveRing(
+          now,
+          baseRadius * ring.radiusScale,
+          ring.phase,
+          alpha,
+          ring.lineWidth
+        );
+      }
+    }
+
+    function drawReactiveInnerRings(now, baseRadius, globalAlpha) {
+      if (!audioReactive.active || !audioReactive.soundActive || globalAlpha <= 0.002) return;
+
+      const audioLevel = clamp01(audioReactive.smoothLevel * 24);
+      if (audioLevel <= 0.01) return;
+
+      const rings = [
+        { scale: 1.00, phase: 0.2, alpha: 0.18, width: 0.95 },
+        { scale: 1.08, phase: 1.5, alpha: 0.15, width: 0.82 },
+        { scale: 1.16, phase: 2.7, alpha: 0.12, width: 0.72 }
+      ];
+
+      for (const ring of rings) {
+        drawReactiveWaveRing(
+          now,
+          baseRadius * ring.scale,
+          ring.phase,
+          ring.alpha * globalAlpha * (0.55 + audioLevel * 0.9),
+          ring.width,
+          audioLevel
+        );
+      }
+    }
+
+    function drawReactiveWaveRing(now, baseRadius, phase, alpha, lineWidth, audioLevel) {
+      const steps = 180;
+      const squashY = 0.92;
+      const spin = now * 0.00012 + phase * 0.08;
+      const beatPulse = clamp01(audioReactive.beatPulse);
+      const samples = audioReactive.waveformSamples;
+      const basePush = audioLevel * 0.012;
+      const beatPush = beatPulse * 0.17;
+      const pulseBase = baseRadius * (1 + basePush + beatPulse * 0.035);
+
+      ctx.beginPath();
+
+      for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * Math.PI * 2;
+        const sampleIndex = samples.length
+          ? Math.floor((((t / (Math.PI * 2)) + phase * 0.07) % 1) * samples.length + samples.length) % samples.length
+          : 0;
+        const waveform = samples.length ? samples[sampleIndex] : 0;
+        const neighbor = samples.length ? samples[(sampleIndex + 1) % samples.length] : 0;
+        const smoothedWaveform = waveform * 0.72 + neighbor * 0.28;
+
+        const localAccent =
+          0.7 +
+          0.3 * Math.sin(t * 2.0 + phase * 0.6);
+
+        const outwardWave =
+          smoothedWaveform * beatPush * localAccent +
+          smoothedWaveform * audioLevel * 0.05;
+
+        const radius = pulseBase * (1 + Math.max(0, outwardWave));
+        const angle = t + spin;
+
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius * squashY;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+
+      ctx.closePath();
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.stroke();
+    }
+
+    function drawSoftCore(radius, alpha) {
+      const gradient = ctx.createRadialGradient(
+        centerX,
+        centerY,
+        0,
+        centerX,
+        centerY,
+        radius
+      );
+
+      gradient.addColorStop(0, `rgba(200, 200, 200, ${alpha * 0.10})`);
+      gradient.addColorStop(0.42, `rgba(200, 200, 200, ${alpha * 0.035})`);
+      gradient.addColorStop(1, "rgba(200, 200, 200, 0)");
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
+
+    function drawParticle(x, y, size, alpha, rim, front) {
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.fill();
+    }
+
+    function animate(now) {
+      ctx.clearRect(0, 0, width, height);
+      updateAudioReactive(now);
+
+      const elapsed = now - startTime;
+
+      const enterProgress = Math.min(elapsed / config.enterDuration, 1);
+      const enterEase = easeOutCubic(enterProgress);
+
+      const breath =
+        1 + Math.sin(now * config.breathSpeed) * config.breathStrength;
+
+      const impact =
+        Math.sin(enterProgress * Math.PI) *
+        0.09 *
+        Math.pow(1 - enterProgress, 0.35);
+
+      const baseScale = enterEase * breath * (1 + impact);
+      const morphProgress = getShapeMorphProgress(now);
+      const ringVisibility = getRingVisibility();
+      const sphereRotationEnabled = shapeMorph.ringsEnabled && !shapeMorph.active;
+
+      const sortedParticles = particles
+        .map((p) => {
+          const shapedPoint = getParticleShapePoint(p, morphProgress);
+          const rotated = sphereRotationEnabled
+            ? rotatePoint(shapedPoint, now)
+            : shapedPoint;
+
+          const depth = rotated.z;
+          const perspectiveScale =
+            config.perspective / (config.perspective - depth * config.sphereRadius);
+
+          const enterDelay = Math.max(
+            0,
+            Math.min(1, (enterProgress - p.enterOffset) / (1 - p.enterOffset))
+          );
+
+          const localEnter = easeOutCubic(enterDelay);
+
+          const spread = config.enterSpread - localEnter * (config.enterSpread - 1);
+          const radius = config.sphereRadius * baseScale * spread;
+
+          const x = centerX + rotated.x * radius * perspectiveScale;
+          const y = centerY + rotated.y * radius * perspectiveScale;
+
+          const front = (depth + 1) / 2;
+          const rim = Math.pow(1 - Math.abs(depth), 2.8);
+
+          const waveAngle = Math.atan2(rotated.y, rotated.x);
+          const surfaceBand = Math.acos(Math.max(-1, Math.min(1, rotated.z)));
+
+          const wholeSphereWave =
+            Math.sin(waveAngle * 3.0 + surfaceBand * 1.6 + now * 0.0010 + p.seed * 5.0) * 0.055 +
+            Math.sin(waveAngle * 5.0 - surfaceBand * 2.2 - now * 0.00072 + p.seed * 3.4) * 0.032 +
+            Math.sin(waveAngle * 8.0 + now * 0.00045 + p.seed * 7.2) * 0.014;
+
+          const planarRadius = Math.hypot(rotated.x, rotated.y);
+          const deformationStrength = 0.42 + Math.pow(planarRadius, 1.35) * 0.78;
+          const baseWaveScale = sphereRotationEnabled
+            ? 1 + wholeSphereWave * deformationStrength
+            : 1;
+          const waveScale = baseWaveScale;
+
+          const px = centerX + rotated.x * radius * waveScale * perspectiveScale;
+          const py = centerY + rotated.y * radius * waveScale * perspectiveScale;
+
+          const flicker =
+            0.91 + Math.sin(now * p.twinkleSpeed + p.seed * 12.0) * 0.09;
+
+          const size =
+            (config.dotMinSize +
+              (config.dotMaxSize - config.dotMinSize) * front) *
+            localEnter *
+            (0.94 + front * 0.12);
+
+          const alpha =
+            (0.12 + front * 0.86 + rim * 0.06) *
+            localEnter *
+            (0.88 + Math.sin(now * 0.002 + p.seed * 10) * 0.08);
+
+          return {
+            x: px,
+            y: py,
+            size,
+            alpha: Math.min(1, alpha),
+            z: depth,
+            rim,
+            front
+          };
+        })
+        .sort((a, b) => a.z - b.z);
+
+      const ringRadius = config.sphereRadius * baseScale * 1.05;
+      const lineRevealProgress = Math.min(
+        Math.max((elapsed - config.enterDuration) / 650, 0),
+        1
+      );
+      const lineAlpha = easeOutCubic(lineRevealProgress);
+
+      updateTransientRings(now, ringRadius, lineAlpha > 0.92 && ringVisibility > 0);
+
+      if (lineAlpha > 0 && ringVisibility > 0) {
+        drawWaveRing(
+          now,
+          ringRadius,
+          0.0,
+          0.14 * lineAlpha * ringVisibility,
+          1.1,
+          { gain: 0.18, phaseOffset: 0.00, accentFreq: 2.0, baseWaveMix: 0.28, peakBoost: 2.25, frequencyGain: 0.036 }
+        );
+        drawWaveRing(
+          now,
+          ringRadius * 0.97,
+          1.7,
+          0.10 * lineAlpha * ringVisibility,
+          0.85,
+          { gain: 0.14, phaseOffset: 0.16, accentFreq: 2.7, baseWaveMix: 0.24, peakBoost: 1.90, frequencyGain: 0.029 }
+        );
+      }
+
+      drawTransientRings(now, ringRadius, lineAlpha * ringVisibility);
+
+      for (const p of sortedParticles) {
+        if (p.alpha <= 0.01 || p.size <= 0.1) continue;
+        drawParticle(p.x, p.y, p.size, p.alpha, p.rim, p.front);
+      }
+
+      if (lineAlpha > 0 && ringVisibility > 0) {
+        drawWaveRing(
+          now,
+          ringRadius * 1.01,
+          3.2,
+          0.08 * lineAlpha * ringVisibility,
+          0.7,
+          { gain: 0.11, phaseOffset: 0.31, accentFreq: 3.1, baseWaveMix: 0.22, peakBoost: 1.60, frequencyGain: 0.023 }
+        );
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener("resize", resize);
+
+    resize();
+    createSphereParticles();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

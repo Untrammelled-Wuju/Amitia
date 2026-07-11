@@ -78,6 +78,7 @@ type messageCommitPlan struct {
 	CommitOwner     string
 	LeaseID         string
 	LeaseOwnerToken string
+	TotalTokens     int
 }
 
 type messageCommitResult struct {
@@ -108,7 +109,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		}
 		for _, text := range plan.Lines {
 			aiMsgID := uuid.New().String()
-			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, RequestID: plan.Request.RequestID}
+			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID}
 			if err := tx.Create(aiMsg).Error; err != nil {
 				return err
 			}

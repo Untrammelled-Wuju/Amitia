@@ -16,18 +16,18 @@ export function initLogger(): void {
   const origError = console.error
 
   console.log = (...args: unknown[]) => {
-    origLog(...args)
+    try { origLog(...args) } catch (_) {}
     if (logStream) {
       const msg = `[${new Date().toISOString()}] [LOG] ${args.map(String).join(" ")}\n`
-      logStream.write(msg)
+      try { logStream.write(msg) } catch (_) {}
     }
   }
 
   console.error = (...args: unknown[]) => {
-    origError(...args)
+    try { origError(...args) } catch (_) {}
     if (logStream) {
       const msg = `[${new Date().toISOString()}] [ERROR] ${args.map(String).join(" ")}\n`
-      logStream.write(msg)
+      try { logStream.write(msg) } catch (_) {}
     }
   }
 }

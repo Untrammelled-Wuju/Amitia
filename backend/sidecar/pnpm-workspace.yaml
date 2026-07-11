@@ -1,6 +1,6 @@
 allowBuilds:
-  '@google/genai': set this to true or false
-  esbuild: set this to true or false
-  openclaw: set this to true or false
-  protobufjs: set this to true or false
-  tree-sitter-bash: set this to true or false
+  '@google/genai': false
+  esbuild: false
+  openclaw: false
+  protobufjs: false
+  tree-sitter-bash: false

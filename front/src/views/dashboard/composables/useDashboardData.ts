@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, onMounted, onUnmounted } from "vue"
 import { useApi } from "../../../composables/useApi"
 
 export function useDashboardData() {
@@ -27,6 +27,8 @@ export function useDashboardData() {
   const psycheState = ref<import("../../../types").PsycheStateSnapshot | null>(null)
   const psycheLoading = ref(false)
   const characters = ref<any[]>([])
+  const dailyData = ref<any[]>([])
+  let refreshTimer: ReturnType<typeof setInterval> | null = null
 
   const deployLabel = computed(() => health.value?.deployMode === "cloud-web" ? "私有云" : "本地桌面")
   const deployClass = computed(() => health.value?.deployMode === "cloud-web" ? "status-warn" : "status-ok")
@@ -237,6 +239,16 @@ export function useDashboardData() {
     } catch {}
   }
 
+  async function fetchUsageDaily() {
+    try {
+      const periodic = await get<any>("/api/usage/periodic")
+      if (periodic) {
+        const d = periodic.daily
+        if (Array.isArray(d) && d.length > 0) dailyData.value = d
+      }
+    } catch {}
+  }
+
   async function fetchRecentImports() {
     try {
       const r = await get<any>("/api/imports/batches", { limit: 5 })
@@ -282,12 +294,19 @@ export function useDashboardData() {
       fetchHealth(), fetchModelInfo(), fetchDiagnostics(), fetchRuntimeHealth(),
       fetchRecentErrors(), fetchActiveChar(), fetchTodayStats(), fetchRecentImports(),
       fetchCloudRisk(), fetchFeedbackStats(), fetchAccessRisk(), fetchUsageOverview(),
-      fetchQQStatus(),
+      fetchQQStatus(), fetchUsageDaily(),
     ])
     await fetchPsycheState()
   }
 
-  onMounted(() => { refreshAll() })
+  onMounted(() => {
+    refreshAll()
+    refreshTimer = setInterval(refreshAll, 30000)
+  })
+
+  onUnmounted(() => {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+  })
 
   return {
     health, runtimeHealth, runtimeHealthLoading, accessRisk, cloudRisk, modelName,
@@ -295,6 +314,7 @@ export function useDashboardData() {
     todayMessages, totalConvs, totalMemories, totalChars, todayCalls, todayTokens,
     recentErrors, recentImports,
     feedbackTotal, feedbackByType,
+    dailyData,
     deployLabel, deployClass, modelLabel, modelClass, wechatLabel, wechatClass, qqLabel, qqClass,
     suggestionItems, hasSuggestions, maxTodayStat,
     healthModuleLabel, healthStatusLabel, barPercent, formatTokens, fmtDateShort,
@@ -303,7 +323,7 @@ export function useDashboardData() {
     fetchDiagnostics, runDiagnostics,
     fetchRecentErrors, fetchActiveChar, fetchTodayStats, fetchUsageOverview,
     psycheState, psycheLoading,
-    fetchRecentImports, fetchFeedbackStats, fetchPsycheState,
+    fetchRecentImports, fetchFeedbackStats, fetchPsycheState, fetchUsageDaily,
     refreshAll,
   }
 }
