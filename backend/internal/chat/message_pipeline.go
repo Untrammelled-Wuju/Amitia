@@ -21,6 +21,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		return nil, err
 	}
 	if computeResult.HasExistingUser {
+		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		return &ProcessMessageResponse{
 			ConversationID: computeResult.ConversationID,
 			Sequence:       computeResult.UserMessageSequence,
@@ -49,6 +50,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		return nil, err
 	}
 	s.PostCommitActions(ctx, computeResult)
+	s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 	return &ProcessMessageResponse{
 		ConversationID: computeResult.ConversationID,
 		Sequence:       commitResult.LastSequence,
@@ -394,6 +396,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		ImageContext:             req.ImageContext,
 		RequestID:                req.RequestID,
 		InteractionID:            req.InteractionID,
+		ReplyToMessageID:         req.ReplyToMessageID,
 		ExpectedStatusVersion:    req.ExpectedStatusVersion,
 		Runtime:                  req.Runtime,
 		IsInternal:               req.IsInternal,

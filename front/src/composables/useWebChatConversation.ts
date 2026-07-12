@@ -47,6 +47,30 @@ export function useWebChatConversation(
   let __fsLast = 0
   let __wcfLast = 0
 
+  function isLocalMessage(m: any) {
+    const id = String(m.id || "")
+    return id.startsWith("user-") || id.startsWith("failed-")
+  }
+
+  function mergeMessages(serverItems: any[]) {
+    const serverMap = new Map<string, any>()
+    for (const item of serverItems) {
+      if (item.id) serverMap.set(String(item.id), item)
+    }
+    const localOnly = messages.value.filter(m => isLocalMessage(m))
+    const merged = serverItems.map((m: any) => {
+      if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
+      return m
+    })
+    for (const local of localOnly) {
+      if (!serverMap.has(String(local.id))) {
+        merged.push(local)
+      }
+    }
+    merged.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    messages.value = merged
+  }
+
   function selectCharacter(c: any) {
     characterId.value = c.id
     charName.value = c.name
@@ -107,22 +131,18 @@ export function useWebChatConversation(
       const items = (r?.messages || r?.items || [])
       if (items.length) {
         if (items.length < 50 && (r?.totalPages || 1) <= 1) hasMoreHistory.value = false
-        messages.value = items.map((m: any) => {
-          if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
-          return m
-        })
+        mergeMessages(items)
         msgPage.value = 1
         hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE
         scrollToBottom()
-      } else {
+      } else if (messages.value.length === 0) {
         messages.value = []
       }
-      messages.value.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       setLastPolledMsgId(messages.value[messages.value.length - 1]?.id || null)
       connectSSE()
     } catch {
       if (version !== messagesVersion) return
-      messages.value = []
+      if (messages.value.length === 0) messages.value = []
     }
   }
 
@@ -162,11 +182,7 @@ export function useWebChatConversation(
       if (version !== messagesVersion) return
       const items = (r?.messages || r?.items || [])
       if (items.length) {
-        messages.value = items.map((m: any) => {
-          if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
-          return m
-        })
-        messages.value.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        mergeMessages(items)
         const cid = conv.characterId || conv.character_id
         if (cid && cid !== characterId.value) {
           const c = characters.value.find((x: any) => x.id === cid)

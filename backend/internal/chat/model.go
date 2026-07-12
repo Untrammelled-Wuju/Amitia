@@ -4,6 +4,7 @@ package chat
 
 import (
 	"github.com/u-ai/backend/internal/interaction"
+	"time"
 	"gorm.io/gorm"
 )
 
@@ -39,6 +40,9 @@ type Message struct {
 	ImageUrl       string  `gorm:"column:image_url;default:" json:"imageUrl"`
 	VideoUrl       string  `gorm:"column:video_url;default:" json:"videoUrl"`
 	RequestID      string  `gorm:"column:request_id;default:" json:"requestId"`
+	ReplyToMessageID *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
+	ReplyToRole      *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
+	ReplyToExcerpt   *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
 	CreatedAt      string  `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt      string  `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -46,6 +50,13 @@ type Message struct {
 func (Message) TableName() string { return "messages" }
 
 func (m *Message) BeforeCreate(tx *gorm.DB) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if m.CreatedAt == "" {
+		m.CreatedAt = now
+	}
+	if m.UpdatedAt == "" {
+		m.UpdatedAt = now
+	}
 	if m.Sequence > 0 || m.ConversationID == "" {
 		return nil
 	}
@@ -99,13 +110,14 @@ type ChatRequest struct {
 }
 
 type WebChatRequest struct {
-	CharacterID    string `json:"characterId" binding:"required"`
-	Message        string `json:"message" binding:"required"`
-	ConversationID string `json:"conversationId"`
-	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	UserID         string `json:"userId"`
-	SessionID      string `json:"sessionId"`
-	RequestID      string `json:"requestId"`
+	CharacterID     string  `json:"characterId" binding:"required"`
+	Message         string  `json:"message" binding:"required"`
+	ConversationID  string  `json:"conversationId"`
+	Sequence        int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	UserID          string  `json:"userId"`
+	SessionID       string  `json:"sessionId"`
+	RequestID       string  `json:"requestId"`
+	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
 }
 
 type CreateConversationRequest struct {
@@ -153,14 +165,17 @@ type ContextStructureLog struct {
 }
 
 type MessageItem struct {
-	ID             string `json:"id"`
-	ConversationID string `json:"conversationId"`
-	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Role           string `json:"role"`
-	Content        string `json:"content"`
-	Tokens         int    `json:"tokens"`
-	Source         string `json:"source"`
-	CreatedAt      string `json:"createdAt"`
+	ID              string  `json:"id"`
+	ConversationID  string  `json:"conversationId"`
+	Sequence        int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Role            string  `json:"role"`
+	Content         string  `json:"content"`
+	Tokens          int     `json:"tokens"`
+	Source          string  `json:"source"`
+	CreatedAt       string  `json:"createdAt"`
+	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
+	ReplyToRole      *string `json:"replyToRole,omitempty"`
+	ReplyToExcerpt   *string `json:"replyToExcerpt,omitempty"`
 }
 
 type ConversationListResponse struct {
@@ -191,6 +206,7 @@ type ProcessMessageRequest struct {
 	ImageUrl                 string                       `json:"imageUrl"`
 	VideoUrl                 string                       `json:"videoUrl"`
 	RequestID                string                       `json:"requestId"`
+	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`
 	UserID                   string                       `json:"-"`
 	InteractionID            string                       `json:"-"`

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,22 +19,23 @@ import (
 )
 
 type webChatSendRequest struct {
-	ConversationID  string  `json:"conversationId"`
-	Content         string  `json:"content"`
-	Message         string  `json:"message"`
-	CharacterID     string  `json:"characterId"`
-	UserID          string  `json:"userId"`
-	PeerID          string  `json:"peerId"`
-	RequestID       string  `json:"requestId"`
-	SessionID       string  `json:"sessionId"`
-	Source          string  `json:"source"`
-	ClientMessageID string  `json:"clientMessageId"`
-	MessageID       string  `json:"messageId"`
-	VoiceMessage    bool    `json:"voiceMessage"`
-	AudioUrl        string  `json:"audioUrl"`
-	AudioDuration   float64 `json:"audioDuration"`
-	ImageUrl        string  `json:"imageUrl"`
-	VideoUrl        string  `json:"videoUrl"`
+	ConversationID   string  `json:"conversationId"`
+	Content          string  `json:"content"`
+	Message          string  `json:"message"`
+	CharacterID      string  `json:"characterId"`
+	UserID           string  `json:"userId"`
+	PeerID           string  `json:"peerId"`
+	RequestID        string  `json:"requestId"`
+	SessionID        string  `json:"sessionId"`
+	Source           string  `json:"source"`
+	ClientMessageID  string  `json:"clientMessageId"`
+	MessageID        string  `json:"messageId"`
+	VoiceMessage     bool    `json:"voiceMessage"`
+	AudioUrl         string  `json:"audioUrl"`
+	AudioDuration    float64 `json:"audioDuration"`
+	ImageUrl         string  `json:"imageUrl"`
+	VideoUrl         string  `json:"videoUrl"`
+	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
 }
 
 func (h *Handler) WebChatCreateConv(c *gin.Context) {
@@ -246,14 +248,15 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	}
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-		ConversationID: convID, Channel: "web", Source: source,
-		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-		CharacterID: characterID, Message: mergedContent,
-		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
-		VoiceMessage: body.VoiceMessage,
-		ImageUrl:     body.ImageUrl,
-		VideoUrl:     body.VideoUrl,
-		ImageContext: imageCtx,
+		ConversationID:   convID, Channel: "web", Source: source,
+		UserID:           userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+		CharacterID:      characterID, Message: mergedContent,
+		AudioUrl:         body.AudioUrl, AudioDuration: body.AudioDuration,
+		VoiceMessage:     body.VoiceMessage,
+		ImageUrl:         body.ImageUrl,
+		VideoUrl:         body.VideoUrl,
+		ImageContext:     imageCtx,
+		ReplyToMessageID: body.ReplyToMessageID,
 	})
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.SuccessResponse(c, gin.H{"status": "processing", "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
@@ -264,6 +267,145 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
+}
+
+func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
+	var body webChatSendRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		return
+	}
+	msgContent := body.Content
+	if msgContent == "" {
+		msgContent = body.Message
+	}
+	if msgContent == "" {
+		util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil)
+		return
+	}
+
+	convID := body.ConversationID
+	if convID == "" {
+		convID = "web-" + uuid.New().String()[:8]
+	}
+	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
+	sessionID := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id")
+	if sessionID == "" {
+		sessionID = convID
+	}
+	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
+	source := resolveSource(c, body.Source, "web")
+
+	characterID := body.CharacterID
+	if characterID == "" && body.ConversationID != "" {
+		var dbCharID string
+		if scanErr := h.db.Table("conversations").Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
+			characterID = dbCharID
+		}
+	}
+
+	var replyToRole *string
+	var replyToExcerpt *string
+	if body.ReplyToMessageID != nil && *body.ReplyToMessageID != "" {
+		var targetMsg chat.Message
+		if err := h.db.Table("messages").Where("id = ? AND conversation_id = ?", *body.ReplyToMessageID, convID).First(&targetMsg).Error; err == nil {
+			role := targetMsg.Role
+			excerpt := chat.BuildMessageExcerpt(&targetMsg)
+			replyToRole = &role
+			replyToExcerpt = &excerpt
+		}
+	}
+
+	now := time.Now().Format("2006-01-02 15:04:05")
+	msgID := uuid.New().String()
+	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, status, audio_url, audio_duration, image_url, video_url, request_id, reply_to_message_id, reply_to_role, reply_to_excerpt, created_at, updated_at) VALUES (?, ?, 'user', ?, 'text', ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		msgID, convID, msgContent, source,
+		body.AudioUrl, body.AudioDuration, body.ImageUrl, body.VideoUrl,
+		requestID, body.ReplyToMessageID, replyToRole, replyToExcerpt,
+		now, now)
+
+	var convExists int64
+	h.db.Table("conversations").Where("id = ?", convID).Count(&convExists)
+	if convExists == 0 {
+		h.db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', ?, ?, ?)",
+			convID, msgContent, characterID, source, now, now)
+	} else {
+		h.db.Exec("UPDATE conversations SET updated_at = ? WHERE id = ?", now, convID)
+	}
+
+	c.Header("X-Request-ID", requestID)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				applog.Error(fmt.Sprintf("[WebChatSubmitMessage] panic recovered: %v", r))
+				h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
+			}
+		}()
+		chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+		chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
+
+		bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
+		if bufErr != nil {
+			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] buffer aborted for %s", convID))
+			return
+		}
+
+		mergedContent := strings.Join(bufferedMsgs, "\n")
+		imageCtx := chat.GetBuffer().GetImageContexts(convID)
+		chat.GetBuffer().ClearImageContexts(convID)
+
+		genID := uuid.New().String()
+		genCtx, genCancel, err := chat.GetGenerationQueue().AcquireSlot(context.Background(), convID, genID)
+		if err != nil {
+			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation slot cancelled for %s: %v", convID, err))
+			return
+		}
+		defer genCancel()
+		defer func() {
+			chat.GetGenerationQueue().FinishProcessing(convID)
+		}()
+
+		if genCtx.Err() != nil {
+			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation cancelled before LLM call for %s", convID))
+			return
+		}
+
+		orchResult, err := h.unifiedEntry.Handle(genCtx, &interaction.UnifiedEntryRequest{
+			ConversationID:   convID, Channel: "web", Source: source,
+			UserID:           userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+			CharacterID:      characterID, Message: mergedContent,
+			AudioUrl:         body.AudioUrl, AudioDuration: body.AudioDuration,
+			VoiceMessage:     body.VoiceMessage,
+			ImageUrl:         body.ImageUrl,
+			VideoUrl:         body.VideoUrl,
+			ImageContext:     imageCtx,
+			ReplyToMessageID: body.ReplyToMessageID,
+		})
+		if err != nil {
+			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))
+			h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
+		} else if orchResult != nil && orchResult.Response != nil {
+			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation completed for %s, assistant count=%d", convID, len(orchResult.Response.MessageIDs)))
+		}
+	}()
+
+	util.SuccessResponse(c, gin.H{
+		"conversationId": convID,
+		"userMessageId":  msgID,
+		"status":         "queued",
+	})
+}
+
+func (h *Handler) WebChatCancelGeneration(c *gin.Context) {
+	convID := c.Param("id")
+	if convID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
+		return
+	}
+	chat.GetGenerationQueue().Cancel(convID)
+	util.SuccessResponse(c, gin.H{"cancelled": true, "conversationId": convID})
 }
 
 func (h *Handler) WebChatFromImport(c *gin.Context) {
@@ -312,3 +454,4 @@ func resolveSource(c *gin.Context, bodyValue string, fallback string) string {
 	}
 	return strings.TrimSpace(fallback)
 }
+

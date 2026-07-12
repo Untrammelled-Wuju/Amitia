@@ -19,7 +19,14 @@ SPDX-License-Identifier: AGPL-3.0-only
       <span v-else-if="attachedVideoUrl" class="upload-status ready">就绪</span>
       <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="clearVideo" :disabled="uploadingVideo" />
     </div>
-    <div class="input-wrapper">
+        <div v-if="replyTarget" class="reply-preview-bar">
+      <div class="reply-preview-content">
+        <span class="reply-preview-label">正在引用{{ replyTarget.role === 'assistant' ? '' : '自己' }}：</span>
+        <span class="reply-preview-excerpt">{{ replyTargetExcerpt }}</span>
+      </div>
+      <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="$emit('cancelReply')" />
+    </div>
+<div class="input-wrapper">
       <div class="input-left-actions">
 
         <el-button
@@ -56,8 +63,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         ref="inputRef"
         v-model="text"
         class="input-field"
-        :placeholder="sending ? 'AI 回复中...' : '输入消息...'"
-        :disabled="disabled || sending"
+        placeholder="输入消息..."
+        :disabled="disabled"
         rows="1"
         @keydown.enter.exact="handleEnterSend"
         @input="autoResize"
@@ -73,7 +80,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @touchmove.prevent="onTouchMove"
         @touchend.prevent="endHold"
         @touchcancel.prevent="endHold"
-        :disabled="disabled || sending"
+        :disabled="disabled"
       >
         <template v-if="slideZone === 'cancel'">
           <span class="hold-text slide-hint cancel-hint">
@@ -116,12 +123,12 @@ SPDX-License-Identifier: AGPL-3.0-only
           title="停止生成"
         />
         <el-button
-          v-if="!voiceMode && !sending"
+          v-if="!voiceMode"
           type="primary"
           :icon="Promotion"
           circle
           size="small"
-          :disabled="disabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo)"
+          :disabled="disabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo) || isSubmitting"
           @click="handleSendClick"
           title="发送 (Enter)"
         />
@@ -148,7 +155,9 @@ import { useMediaUpload } from "../composables/useMediaUpload"
 const props = defineProps<{
   disabled?: boolean
   sending?: boolean
+  isSubmitting?: boolean
   callActive?: boolean
+  replyTarget?: any
 }>()
 
 const emit = defineEmits<{
@@ -161,23 +170,29 @@ const emit = defineEmits<{
   removeImage: []
   video: [file: File, videoUrl: string]
   removeVideo: []
+  cancelReply: []
 }>()
 
 const isDisabled = () => !!props.disabled
-const isSending = () => !!props.sending
 
 const textInput = useTextInput(
   emit as any,
   isDisabled,
-  isSending,
 )
 
 const voiceInput = useVoiceInput(
   (text: string) => emit("voiceText", text),
   (blob: Blob, transcript?: string, duration?: number) => emit("voiceAudio", blob, transcript, duration),
   isDisabled,
-  isSending,
+  () => !!props.sending,
 )
+
+const replyTargetExcerpt = computed(() => {
+  const t = props.replyTarget
+  if (!t) return ''
+  const excerpt = t.replyToExcerpt || t.content || ''
+  return excerpt.length > 60 ? excerpt.slice(0, 60) + '...' : excerpt
+})
 
 const mediaUpload = useMediaUpload(
   (file: File, base64: string) => emit("image", file, base64),
@@ -545,6 +560,34 @@ defineExpose({ focus, setText, clear: clearText })
   background: var(--ac-color-surface);
   border: 1px solid var(--ac-color-border-light);
   border-radius: var(--ac-radius-sm);
+}
+
+.reply-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: #f0f4ff;
+  border-left: 3px solid var(--ac-color-primary);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.reply-preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reply-preview-label {
+  color: var(--ac-color-primary);
+  font-weight: 500;
+}
+.reply-preview-excerpt {
+  color: var(--ac-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
 

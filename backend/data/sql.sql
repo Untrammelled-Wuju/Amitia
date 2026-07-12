@@ -120,6 +120,9 @@ CREATE TABLE IF NOT EXISTS messages (
     image_url TEXT DEFAULT '',
     video_url TEXT DEFAULT '',
     request_id TEXT DEFAULT '',
+    reply_to_message_id TEXT DEFAULT '',
+    reply_to_role TEXT DEFAULT '',
+    reply_to_excerpt TEXT DEFAULT '',
     tool_call_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -779,3 +782,7 @@ ALTER TABLE memory_candidates ADD COLUMN source_end INTEGER DEFAULT 0;
 ALTER TABLE conversations ADD COLUMN state_version TEXT DEFAULT '';
 
 ALTER TABLE moods ADD COLUMN mood_value TEXT DEFAULT '';
+
+ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN reply_to_role TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN reply_to_excerpt TEXT DEFAULT '';

@@ -3,6 +3,8 @@
 package character
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -12,8 +14,13 @@ import (
 	"path/filepath"
 )
 
+type ChatTester interface {
+	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
+}
+
 type Handler struct {
-	service Service
+	service    Service
+	chatTester ChatTester
 }
 
 func NewHandler(srv Service) *Handler {
@@ -118,7 +125,24 @@ func (h *Handler) GetRoleProfile(c *gin.Context) {
 }
 
 func (h *Handler) Test(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"id": c.Param("id"), "tested": true})
+	id := c.Param("id")
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Message == "" {
+		util.ErrorResponse(c, response.InvalidParams, "消息不能为空", nil)
+		return
+	}
+	if h.chatTester == nil {
+		util.ErrorResponse(c, response.InternalError, "测试功能不可用", nil)
+		return
+	}
+	reply, err := h.chatTester.TestChat(c.Request.Context(), id, req.Message)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"characterId": id, "reply": reply})
 }
 func (h *Handler) ExportPack(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"id": c.Param("id"), "pack": map[string]interface{}{}})

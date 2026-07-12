@@ -30,26 +30,31 @@ export function useWebChatSSE(
   async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
+    const currentConvId = convId.value
     const baseUrl = await resolveApiUrl("/api/messages/stream")
-    const url = baseUrl + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
+    const url = baseUrl + "?conversationId=" + encodeURIComponent(currentConvId) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
     eventSource.onmessage = function(event) {
+      if (convId.value !== currentConvId) return
       try {
         const msg = JSON.parse(event.data)
         if (!msg.role || msg.role === "tool") return
         if ((msg as any).tool_calls_json) return
+        if (msg.conversationId && msg.conversationId !== convId.value) return
         if (!messages.value.some((m: any) => m.id === msg.id)) {
           if (msg.role === "user") {
             const now = Date.now()
             const dup = messages.value.some((m: any) =>
               m.role === "user" && m.content === msg.content &&
-              String(m.id).startsWith("user-") &&
-              (now - new Date(m.createdAt).getTime()) < 15000
+              (now - new Date(m.createdAt).getTime()) < 30000
             )
             if (dup) return
           }
+          if (msg.role === "assistant") {
+            sending.value = false
+          }
           messages.value.push(msg)
-          if (!sending.value) sortMessages()
+          sortMessages()
           lastPolledMsgId = msg.id || lastPolledMsgId
           if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
             new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
@@ -84,7 +89,7 @@ export function useWebChatSSE(
           if (msg.conversationId === convId.value) {
             if (!messages.value.some((m: any) => m.id === msg.messageId)) {
               messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: msg.createdAt || new Date().toISOString() })
-              if (!sending.value) sortMessages()
+              sortMessages()
               nextTick(() => scrollToBottom())
             }
           }

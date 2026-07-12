@@ -7,7 +7,6 @@ const DRAFT_KEY = "webchat_draft"
 export function useTextInput(
   emit: (e: "send", ...args: any[]) => void,
   isDisabled: () => boolean,
-  isSending: () => boolean,
 ) {
   const text = ref(localStorage.getItem(DRAFT_KEY) || "")
   const inputRef = ref<HTMLTextAreaElement>()
@@ -23,7 +22,7 @@ export function useTextInput(
   function handleSend(e?: KeyboardEvent) {
     if (e) e.preventDefault()
     const trimmed = text.value.trim()
-    if (!trimmed || isDisabled() || isSending()) return
+    if (!trimmed || isDisabled()) return
     emit("send", trimmed)
     text.value = ""
     localStorage.removeItem(DRAFT_KEY)
@@ -81,4 +80,3 @@ export function useTextInput(
     saveDraft,
   }
 }
-

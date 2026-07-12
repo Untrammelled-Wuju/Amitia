@@ -81,6 +81,18 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 				m["videoUrl"] = v
 				delete(m, "video_url")
 			}
+			if v, ok := m["reply_to_message_id"]; ok && v != nil {
+				m["replyToMessageId"] = v
+				delete(m, "reply_to_message_id")
+			}
+			if v, ok := m["reply_to_role"]; ok && v != nil {
+				m["replyToRole"] = v
+				delete(m, "reply_to_role")
+			}
+			if v, ok := m["reply_to_excerpt"]; ok && v != nil {
+				m["replyToExcerpt"] = v
+				delete(m, "reply_to_excerpt")
+			}
 			msgs = append(msgs, m)
 		}
 		if len(msgs) >= pageSize || int64(offset+queryLimit) >= total {

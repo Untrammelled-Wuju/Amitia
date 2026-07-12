@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { type Ref, computed } from "vue"
+import { type Ref, computed, ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "./useApi"
 import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
@@ -24,13 +24,37 @@ export function useWebChatSend(
   fetchWechatMsgCount: () => void,
   fetchQQStatus: () => void,
   fetchWebMsgCount: () => void,
+  replyTarget?: Ref<any>,
 ) {
   const { post, del, get } = useApi()
-  let abortController: AbortController | null = null
   let lastPolledMsgId: string | null = null
+  const isSubmitting = ref(false)
+  let sendingTimer: ReturnType<typeof setTimeout> | null = null
 
   function getLastPolledMsgId() { return lastPolledMsgId }
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
+
+  function clearSendingTimer() {
+    if (sendingTimer) {
+      clearTimeout(sendingTimer)
+      sendingTimer = null
+    }
+  }
+
+  function startSendingTimeout(userMsgId: string) {
+    clearSendingTimer()
+    sendingTimer = setTimeout(() => {
+      if (!sending.value) return
+      const idx = messages.value.findIndex((m: any) => m.id === userMsgId)
+      if (idx >= 0 && messages.value[idx].status === "queued") {
+        messages.value[idx] = { ...messages.value[idx], status: "timeout" }
+      }
+      sending.value = false
+      if (!modelError.value) {
+        modelError.value = "AI响应超时，请重试"
+      }
+    }, 60000)
+  }
 
   const canRegenerate = computed(() => {
     if (!convId.value || messages.value.length === 0) return false
@@ -85,7 +109,6 @@ export function useWebChatSend(
   }
 
   async function handleImageSend(text: string, imageBase64: string) {
-    if (sending.value) return
     currentImageBase64.value = null
     currentImageFile.value = null
     const hasUserText = !!(text && text.trim())
@@ -106,14 +129,20 @@ export function useWebChatSend(
       handleImageSend(text, imageBase64 || currentImageBase64.value || "")
       return
     }
-    if (sending.value) return
     doActualSend(text)
+  }
+
+  function cancelActiveGeneration() {
+    messages.value.filter((m: any) => m.status === "streaming").forEach((m: any) => m.status = "interrupted")
+    if (convId.value) {
+      post(`/api/web-chat/conversations/${convId.value}/generations/current/cancel`).catch(() => {})
+    }
   }
 
   async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string) {
     const safeText = typeof text === "string" ? text : ""
-    if (sending.value) return
-    disconnectSSE()
+    if (isSubmitting.value) return
+    isSubmitting.value = true
     const userMsgLocalId = "user-" + Date.now()
     const imgUrl = pendingImageBase64.value
     const finalAudioUrl = audioUrl || pendingAudioUrl.value
@@ -130,7 +159,7 @@ export function useWebChatSend(
     scrollToBottom(true)
     sending.value = true
     modelError.value = ""
-    abortController = new AbortController()
+    clearSendingTimer()
     try {
       const payload = {
         ...createRequestEnvelope(),
@@ -141,120 +170,46 @@ export function useWebChatSend(
         audioUrl: finalAudioUrl || "",
         voiceMessage: !!finalAudioUrl,
         videoUrl: finalVideoUrl || "",
+        replyToMessageId: replyTarget?.value?.id || undefined,
       }
       const [url, init] = await Promise.all([
-        resolveApiUrl("/api/web-chat/send-stream"),
+        resolveApiUrl("/api/web-chat/messages"),
         createAuthorizedRequestInit({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-          signal: abortController.signal,
         }),
       ])
       const res = await fetch(url, init)
+      isSubmitting.value = false
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error("No response stream")
-      const decoder = new TextDecoder()
-      let buffer = ""
-      let eventType = ""
-      let assistantStreamingId: string | null = null
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = lines.pop() || ""
-        for (const line of lines) {
-          if (line.startsWith("event:")) {
-            eventType = line.slice(6).trim()
-            continue
-          }
-          if (!line.startsWith("data:")) continue
-          try {
-            const data = JSON.parse(line.slice(5).trim())
-            if (data.conversationId && !convId.value) convId.value = data.conversationId
-            if (eventType === "message_start") {
-              const uIdx = messages.value.findIndex((m: any) => m.id === userMsgLocalId)
-              if (uIdx >= 0 && data.userMessageId) {
-                messages.value[uIdx].id = data.userMessageId
-              }
-              if (data.conversationId && !convId.value) convId.value = data.conversationId
-              continue
-            }
-            if (eventType === "token" && data.content) {
-              const nextId: string = data.id || assistantStreamingId || ("msg-" + Date.now())
-              const searchId = data.id || assistantStreamingId
-              const idx = searchId ? messages.value.findIndex((m: any) => m.id === searchId) : -1
-              if (idx >= 0) {
-                const current = messages.value[idx]
-                const nextContent = `${current.content || ""}${data.content}`
-                messages.value[idx] = { ...current, id: nextId, content: nextContent, conversationId: data.conversationId || current.conversationId || convId.value }
-              } else {
-                messages.value.push({
-                  id: nextId, role: "assistant", content: data.content,
-                  status: "streaming", conversationId: data.conversationId || convId.value,
-                  createdAt: data.createdAt || new Date().toISOString()
-                })
-              }
-              assistantStreamingId = nextId
-              scrollToBottom(true)
-            }
-            if (eventType === "voice_audio" && data.audioUrl) {
-              const nextId: string = data.messageId || assistantStreamingId || ("msg-" + Date.now())
-              const searchId = data.messageId || assistantStreamingId
-              const idx = searchId ? messages.value.findIndex((m: any) => m.id === searchId) : -1
-              if (idx >= 0) {
-                const current = messages.value[idx]
-                messages.value[idx] = {
-                  ...current,
-                  id: nextId,
-                  content: data.content || current.content || "",
-                  conversationId: data.conversationId || current.conversationId || convId.value,
-                  audioUrl: data.audioUrl,
-                  audioDuration: data.duration || 0,
-                }
-              } else {
-                messages.value.push({
-                  id: nextId, role: "assistant", content: data.content || "",
-                  status: "streaming", conversationId: data.conversationId || convId.value,
-                  createdAt: data.createdAt || new Date().toISOString(), audioUrl: data.audioUrl, audioDuration: data.duration || 0,
-                })
-              }
-              assistantStreamingId = nextId
-              scrollToBottom(true)
-            }
-            if (eventType === "done") {
-              const lastStreaming = [...messages.value].reverse().find((m: any) => m.status === "streaming" && m.id !== "streaming")
-              if (lastStreaming?.id) lastPolledMsgId = lastStreaming.id
-              messages.value.forEach((m: any) => {
-                if (m.status === "streaming") m.status = "sent"
-              })
-            }
-          } catch { }
+      const data = await res.json()
+      const result = data?.data || data
+      const uIdx = messages.value.findIndex((m: any) => m.id === userMsgLocalId)
+      if (uIdx >= 0 && result.userMessageId) {
+        messages.value[uIdx].id = result.userMessageId
+        messages.value[uIdx].status = "queued"
+        const duplicates = messages.value.filter((m: any, i: number) => i !== uIdx && m.id === result.userMessageId)
+        if (duplicates.length > 0) {
+          messages.value = messages.value.filter((_m: any, i: number) => i === uIdx || _m.id !== result.userMessageId)
         }
       }
+      if (result.conversationId && !convId.value) convId.value = result.conversationId
+      if (replyTarget) replyTarget.value = null
+      startSendingTimeout(result.userMessageId || userMsgLocalId)
     } catch (err: any) {
-      if (err?.name === "AbortError") {
-        const streaming = messages.value.filter((m: any) => m.status === "streaming")
-        for (const sm of streaming) {
-          sm.status = "interrupted"
-        }
-      } else {
-        console.error("[Stream] Failed:", err)
-        const errMsg = err?.message || "连接失败"
-        modelError.value = errMsg
-        ElMessage.error(errMsg)
-        const tIdx = messages.value.findIndex((m: any) => m.id === userMsgLocalId)
-        if (tIdx >= 0) {
-          messages.value[tIdx] = { ...messages.value[tIdx], id: "failed-" + Date.now(), status: "failed" }
-        }
-        const sIdx = messages.value.findIndex(m => m.id === "streaming")
-        if (sIdx >= 0) messages.value.splice(sIdx, 1)
+      console.error("[Send] Failed:", err)
+      const errMsg = err?.message || "发送失败"
+      modelError.value = errMsg
+      ElMessage.error(errMsg)
+      const tIdx = messages.value.findIndex((m: any) => m.id === userMsgLocalId)
+      if (tIdx >= 0) {
+        messages.value[tIdx] = { ...messages.value[tIdx], id: "failed-" + Date.now(), status: "failed" }
       }
-    } finally {
       sending.value = false
-      abortController = null
+      isSubmitting.value = false
+      clearSendingTimer()
+    } finally {
       const lastMsg = messages.value[messages.value.length - 1]
       if (lastMsg?.id && lastMsg.id !== "streaming") lastPolledMsgId = lastMsg.id
       fetchWechatMsgCount()
@@ -264,23 +219,24 @@ export function useWebChatSend(
   }
 
   function handleStop() {
-    if (abortController) {
-      abortController.abort()
-      abortController = null
-    }
+    clearSendingTimer()
     messages.value.filter((m: any) => m.status === "streaming").forEach((m: any) => m.status = "interrupted")
     sending.value = false
+    if (convId.value) {
+      post(`/api/web-chat/conversations/${convId.value}/generations/current/cancel`).catch(() => {})
+    }
   }
 
   async function handleRetry(msg: any) {
     if (sending.value) return
-    messages.value = messages.value.filter(m => m.id !== msg.id)
+    const msgIdToRemove = msg.id
+    messages.value = messages.value.filter(m => m.id !== msgIdToRemove)
     const lastAsst = [...messages.value].reverse().find(m => m.role === "assistant" && (m.status === "interrupted" || m.status === "failed"))
     if (lastAsst) {
       messages.value = messages.value.filter(m => m.id !== lastAsst.id)
     }
     try {
-      await post("/api/web-chat/retry", { messageId: msg.id })
+      await post("/api/web-chat/retry", { messageId: msgIdToRemove })
     } catch { }
     const text = msg.content
     if (text) {
@@ -291,6 +247,7 @@ export function useWebChatSend(
   async function handleRegenerate() {
     if (!canRegenerate.value || !convId.value) return
     sending.value = true
+    clearSendingTimer()
     try {
       const res = await post<any>(`/api/web-chat/conversations/${convId.value}/regenerate`)
       if (res) {
@@ -342,5 +299,6 @@ export function useWebChatSend(
     handleClear,
     getLastPolledMsgId,
     setLastPolledMsgId,
+    isSubmitting,
   }
 }

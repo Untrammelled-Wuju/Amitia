@@ -4,6 +4,8 @@ package aicharacter
 
 import (
 	"encoding/json"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -106,20 +108,20 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 	if bp, ok := body["basePrompt"].(string); ok {
 		updates["base_prompt"] = bp
 	}
+	if sp, ok := body["systemPrompt"].(string); ok {
+		updates["system_prompt"] = strings.TrimSpace(sp)
+	}
 
-	// Handle personalityConfig
 	if pc, ok := body["personalityConfig"]; ok {
 		if pcBytes, err := json.Marshal(pc); err == nil {
 			updates["personality_config"] = string(pcBytes)
 		}
 	}
 
-	// Handle lifeIdentity
 	if li, ok := body["lifeIdentity"].(string); ok && li != "" {
 		updates["life_identity"] = li
 	}
 
-	// Handle isDefault - only update if explicitly provided (accepts bool or number)
 	if isDef, ok := body["isDefault"]; ok {
 		var isDefaultVal bool
 		switch v := isDef.(type) {
@@ -143,7 +145,6 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 		return map[string]interface{}{"id": id, "saved": true}
 	}
 
-	// Create new character
 	newId := uuid.New().String()
 	c := map[string]interface{}{
 		"id": newId, "name": name, "description": desc,

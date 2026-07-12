@@ -119,6 +119,7 @@ type UnifiedEntryRequest struct {
 	ImageUrl                 string          `json:"imageUrl,omitempty"`
 	VideoUrl                 string          `json:"videoUrl,omitempty"`
 	ImageContext             string          `json:"imageContext,omitempty"`
+	ReplyToMessageID         *string         `json:"replyToMessageId,omitempty"`
 	RequestID                string          `json:"requestId,omitempty"`
 	SessionID                string          `json:"sessionId,omitempty"`
 	IsInternal               bool            `json:"-"`
@@ -202,6 +203,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ImageUrl:                 req.ImageUrl,
 		VideoUrl:                 req.VideoUrl,
 		ImageContext:             req.ImageContext,
+		ReplyToMessageID:         req.ReplyToMessageID,
 		IsInternal:               req.IsInternal,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
 		ProactiveTimeContext:     req.ProactiveTimeContext,

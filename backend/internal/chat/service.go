@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,6 +57,7 @@ type Service interface {
 	SetOutboxStore(store OutboxStore)
 	SetDeliveryStore(store DeliveryStore)
 	ReplayPostProcess(eventType string, payload []byte) error
+	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -135,6 +137,25 @@ func (s *service) SetOutboxStore(store OutboxStore) {
 
 func (s *service) SetDeliveryStore(store DeliveryStore) {
 	s.deliveryStore = store
+}
+
+func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {
+	profile, err := s.charRepo.GetRuntimeProfile(characterID)
+	if err != nil {
+		return "", fmt.Errorf("获取角色配置失败: %w", err)
+	}
+	parts := buildRoleSystemParts(profile, nil)
+	systemPrompt := strings.Join(parts, "\n\n")
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil {
+		return "", fmt.Errorf("获取模型配置失败: %w", err)
+	}
+	messages := []map[string]interface{}{
+		{"role": "system", "content": systemPrompt + "\n\n" + systemFormatInstruction},
+		{"role": "user", "content": userMessage},
+	}
+	reply, _, err := s.callLLM(ctx, cfg, messages)
+	return reply, err
 }
 func SetVisionModelConfigProvider(provider func() (*visioncfg.VisionConfig, error)) {
 	visionModelConfigProviderMu.Lock()

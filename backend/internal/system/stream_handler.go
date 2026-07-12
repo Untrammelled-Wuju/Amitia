@@ -60,8 +60,44 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 			if role == "assistant" && content == "" {
 				continue
 			}
-			c.SSEvent("message", m)
-			if ca, ok := m["created_at"].(string); ok {
+		if v, ok := m["reply_to_message_id"]; ok && v != nil {
+			m["replyToMessageId"] = v
+			delete(m, "reply_to_message_id")
+		}
+		if v, ok := m["reply_to_role"]; ok && v != nil {
+			m["replyToRole"] = v
+			delete(m, "reply_to_role")
+		}
+		if v, ok := m["reply_to_excerpt"]; ok && v != nil {
+			m["replyToExcerpt"] = v
+			delete(m, "reply_to_excerpt")
+		}
+		if v, ok := m["created_at"]; ok {
+			m["createdAt"] = v
+			delete(m, "created_at")
+		}
+		if v, ok := m["updated_at"]; ok {
+			m["updatedAt"] = v
+			delete(m, "updated_at")
+		}
+		if v, ok := m["conversation_id"]; ok {
+			m["conversationId"] = v
+			delete(m, "conversation_id")
+		}
+		if v, ok := m["image_url"]; ok {
+			m["imageUrl"] = v
+			delete(m, "image_url")
+		}
+		if v, ok := m["audio_url"]; ok {
+			m["audioUrl"] = v
+			delete(m, "audio_url")
+		}
+		if v, ok := m["video_url"]; ok {
+			m["videoUrl"] = v
+			delete(m, "video_url")
+		}
+		c.SSEvent("message", m)
+		if ca, ok := m["createdAt"].(string); ok {
 				sinceCreatedAt = ca
 			}
 			if id, ok := m["id"].(string); ok {
@@ -72,7 +108,7 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 		select {
 		case <-c.Done():
 			return
-		case <-time.After(2 * time.Second):
+		case <-time.After(500 * time.Millisecond):
 		}
 	}
 }
@@ -171,16 +207,17 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		return
 	}
 
-	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-		CharacterID: characterID, Message: mergedContent,
-		ConversationID: convID, Channel: "web", Source: source,
-		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
-		VoiceMessage: body.VoiceMessage,
-		ImageUrl:     body.ImageUrl,
-		VideoUrl:     body.VideoUrl,
-		ImageContext: imageCtx,
-	})
+		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+			CharacterID: characterID, Message: mergedContent,
+			ConversationID: convID, Channel: "web", Source: source,
+			UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+			AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
+			VoiceMessage: body.VoiceMessage,
+			ImageUrl:     body.ImageUrl,
+			VideoUrl:     body.VideoUrl,
+			ImageContext: imageCtx,
+			ReplyToMessageID: body.ReplyToMessageID,
+		})
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.ErrorResponse(c, response.InternalError, "请求处理中", nil)
 		return

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"log"
 	"errors"
 	"fmt"
 	"strings"
@@ -93,6 +94,8 @@ type messageCommitResult struct {
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 
+	log.Printf("[commitInteraction] enter InteractionID=%s HasRuntime=%v ExpectedVersion=%d Lines=%d", plan.Request.InteractionID, plan.Request.Runtime != nil, plan.Request.ExpectedStatusVersion, len(plan.Lines))
+
 	if s.deliveryStore != nil && plan.Request != nil && plan.Request.InteractionID != "" {
 		leaseID, ownerToken, err := s.deliveryStore.AcquireOutputLease(
 			plan.Request.InteractionID, plan.Character, plan.Request.UserID, plan.Request.Channel)
@@ -182,6 +185,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 }
 
 func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan *messageCommitPlan) error {
+	log.Printf("[acquireCommitToken] InteractionID=%s shouldCommitRuntime=%v", plan.Request.InteractionID, shouldCommitRuntime(plan.Request))
 	if !shouldCommitRuntime(plan.Request) {
 		return nil
 	}
@@ -225,6 +229,7 @@ func (s *service) acquireAndValidateCommitTokenTx(tx *gorm.DB, plan *messageComm
 }
 
 func (s *service) transitionInteractionCommittedTx(tx *gorm.DB, plan messageCommitPlan, result *messageCommitResult) error {
+	log.Printf("[transitionCommitted] InteractionID=%s shouldCommitRuntime=%v", plan.Request.InteractionID, shouldCommitRuntime(plan.Request))
 	if !shouldCommitRuntime(plan.Request) {
 		return nil
 	}
@@ -250,6 +255,7 @@ func (s *service) transitionInteractionCommittedTx(tx *gorm.DB, plan messageComm
 	if res.RowsAffected != 1 {
 		return fmt.Errorf("%w: interaction commit transition failed", interaction.ErrVersionConflict)
 	}
+	log.Printf("[transitionCommitted] success, status updated to committed InteractionID=%s", plan.Request.InteractionID)
 	return nil
 }
 

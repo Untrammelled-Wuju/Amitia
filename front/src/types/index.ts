@@ -48,6 +48,9 @@ export interface Message {
   tokens?: number
   source: string
   importedItemId?: string | null
+  replyToMessageId?: string
+  replyToRole?: string
+  replyToExcerpt?: string
   createdAt: string
 }
 

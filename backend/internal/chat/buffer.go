@@ -23,7 +23,7 @@ func InitBuffer(waitMs int) {
 
 func GetBuffer() *MessageBuffer {
 	if globalBuffer == nil {
-		globalBuffer = NewMessageBuffer(6000)
+		globalBuffer = NewMessageBuffer(5000)
 	}
 	return globalBuffer
 }
@@ -40,6 +40,7 @@ type conversationBuffer struct {
 	imageContexts []string
 	timer         *time.Timer
 	waiters       []chan []string
+	batchStartedAt *time.Time
 }
 
 func NewMessageBuffer(waitMs int) *MessageBuffer {
@@ -64,7 +65,19 @@ func (mb *MessageBuffer) Buffer(convID, text string) ([]string, error) {
 	buf := mb.getOrCreate(convID)
 
 	buf.mu.Lock()
+
+	now := time.Now()
+	if buf.batchStartedAt == nil {
+		buf.batchStartedAt = &now
+	}
+
 	buf.messages = append(buf.messages, text)
+
+	elapsed := now.Sub(*buf.batchStartedAt)
+	remaining := mb.wait - elapsed
+	if remaining < 0 {
+		remaining = 0
+	}
 
 	if buf.timer != nil {
 		buf.timer.Stop()
@@ -78,13 +91,14 @@ func (mb *MessageBuffer) Buffer(convID, text string) ([]string, error) {
 	ch := make(chan []string, 1)
 	buf.waiters = append(buf.waiters, ch)
 
-	buf.timer = time.AfterFunc(mb.wait, func() {
+	buf.timer = time.AfterFunc(remaining, func() {
 		buf.mu.Lock()
 		defer buf.mu.Unlock()
 		msgs := make([]string, len(buf.messages))
 		copy(msgs, buf.messages)
 		buf.messages = nil
 		buf.timer = nil
+		buf.batchStartedAt = nil
 		for _, w := range buf.waiters {
 			w <- msgs
 		}
@@ -195,5 +209,6 @@ func (mb *MessageBuffer) Flush(convID string) string {
 	combined := strings.Join(buf.messages, "\n")
 	buf.messages = nil
 	buf.imageContexts = nil
+	buf.batchStartedAt = nil
 	return combined
 }

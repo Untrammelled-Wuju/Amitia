@@ -46,6 +46,7 @@ type ProcessRequest struct {
 	ImageUrl                 string           `json:"imageUrl,omitempty"`
 	VideoUrl                 string           `json:"videoUrl,omitempty"`
 	ImageContext             string           `json:"imageContext,omitempty"`
+	ReplyToMessageID         *string          `json:"replyToMessageId,omitempty"`
 	RequestID                string           `json:"requestId,omitempty"`
 	InteractionID            string           `json:"-"`
 	ExpectedStatusVersion    int64            `json:"-"`
@@ -329,6 +330,8 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	start := time.Now()
 	resp, err := o.processor.ProcessMessageCtx(processCtx, req)
 	duration := time.Since(start)
+	log.Printf("[orchestrator] ProcessMessageCtx returned err=%v InteractionID=%s", err, req.InteractionID)
+	log.Printf("[orchestrator] ProcessMessageCtx returned err=%v InteractionID=%s", err, req.InteractionID)
 
 	if err != nil {
 		return o.handleProcessorError(ctx, record, req, resp, duration, err)

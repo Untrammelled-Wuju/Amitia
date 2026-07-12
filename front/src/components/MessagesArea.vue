@@ -28,16 +28,18 @@ SPDX-License-Identifier: AGPL-3.0-only
       <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
     </div>
 
+    <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
     <ChatBubble
-      v-for="msg in messages"
-      :key="msg.id"
       :message="msg"
       :char-name="charName"
       :char-avatar="charAvatar"
       :is-streaming="msg.id === 'streaming'"
       :status="msg.status"
       @retry="$emit('retry', $event)"
+      @reply="$emit('reply', $event)"
+      @scroll-to-message="(id) => scrollToMessage(id)"
     />
+    </div>
 
     <transition name="fade">
       <el-button
@@ -76,8 +78,20 @@ defineEmits<{
   touchMove: [e: TouchEvent]
   touchEnd: []
   retry: [msg: any]
+  reply: [msg: any]
   scrollToBottom: []
 }>()
+
+
+function scrollToMessage(messageId: string) {
+  if (!rootEl.value) return
+  const el = rootEl.value.querySelector(`[data-message-id="${messageId}"]`)
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    el.classList.add("highlight-flash")
+    setTimeout(() => el.classList.remove("highlight-flash"), 2000)
+  }
+}
 
 const rootEl = ref<HTMLElement>()
 defineExpose({ rootEl })
@@ -171,4 +185,14 @@ defineExpose({ rootEl })
     padding: 12px 12px;
   }
 }
+
+.highlight-flash {
+  animation: highlight-fade 2s ease-out;
+}
+
+@keyframes highlight-fade {
+  0% { background-color: var(--ac-color-primary-light, rgba(64, 158, 255, 0.15)); }
+  100% { background-color: transparent; }
+}
+
 </style>

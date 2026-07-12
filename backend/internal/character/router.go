@@ -7,10 +7,11 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext) {
+func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester) {
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
 	handler := NewHandler(svc)
+	handler.chatTester = chatTester
 
 	r.GET("/characters", handler.List)
 	r.GET("/characters/:id", handler.Get)

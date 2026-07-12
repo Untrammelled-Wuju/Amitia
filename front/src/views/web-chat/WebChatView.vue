@@ -59,6 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @touch-move="onMsgTouchMove"
       @touch-end="onMsgTouchEnd"
       @retry="handleRetry"
+      @reply="handleReply"
       @scroll-to-bottom="scrollToBottom(true)"
     />
     </div>
@@ -74,7 +75,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       ref="inputRef"
       :disabled="modelMissing"
       :sending="sending"
+      :is-submitting="submittingFromSend"
       :call-active="callActive"
+      :reply-target="replyTarget"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -83,6 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
+      @cancelReply="replyTarget = null"
       @toggleCall="handleToggleCall"
     />
 
@@ -170,6 +174,10 @@ const { get } = useApi()
 const { cachedGet, invalidateCache } = useCachedApi()
 const currentCharName = inject<any>("currentCharName", null)
 
+function handleReply(msg: any) {
+  replyTarget.value = msg
+}
+
 const messages = ref<any[]>([])
 const convId = ref("")
 const convTitle = ref("")
@@ -199,6 +207,7 @@ const currentImageFile = ref<File | null>(null)
 const pendingImageBase64 = ref<string | null>(null)
 const pendingAudioUrl = ref<string | null>(null)
 const pendingVideoUrl = ref<string | null>(null)
+const replyTarget = ref<any>(null)
 
 function toggleProfiles() {
   showProfiles.value = !showProfiles.value
@@ -235,6 +244,7 @@ const {
   handleStop, handleRetry,
   handleClear,
   getLastPolledMsgId,
+  isSubmitting: submittingFromSend,
 } = useWebChatSend(
   messages, convId, characterId,
   sending, modelError, modelMissing,
@@ -242,6 +252,7 @@ const {
   pendingImageBase64, pendingAudioUrl, pendingVideoUrl,
   scrollToBottom, disconnectSSE, inputRef,
   () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(),
+  replyTarget,
 )
 
 const {

@@ -29,9 +29,13 @@ SPDX-License-Identifier: AGPL-3.0-only
         @click.stop
       />
       <div class="bubble-content" v-if="renderedContent && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove" style="word-break:break-word;overflow-wrap:break-word"></div>
-      <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
+      <div class="bubble-reply" v-if="message.replyToExcerpt && message.replyToMessageId" @click.stop="$emit('scrollToMessage', message.replyToMessageId)">
+        <span class="reply-role">{{ message.replyToRole === 'assistant' ? charName : '你' }}</span>
+        <span class="reply-excerpt">{{ message.replyToExcerpt }}</span>
+      </div>
+      <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted' || message.status === 'timeout'">
         <span class="status-tag" :class="message.status">
-          {{ message.status === 'failed' ? '发送失败' : '生成中断' }}
+          {{ message.status === 'failed' ? '发送失败' : message.status === 'timeout' ? '响应超时' : '生成中断' }}
         </span>
         <el-button v-if="message.role === 'user' && message.status === 'failed'" text size="small" type="warning" @click="$emit('retry', message)" class="retry-btn">
           <el-icon><Refresh /></el-icon> 重试
@@ -41,9 +45,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span>{{ textExpanded ? '隐藏文本' : '显示文本' }}</span>
         <span class="text-toggle-arrow" :class="{ expanded: textExpanded }">&#9660;</span>
       </div>
-      <div class="bubble-actions" v-if="message.role === 'assistant' && !isStreaming">
+      <div class="bubble-actions" v-if="(message.role === 'user' || message.role === 'assistant') && !isStreaming">
         <el-button text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
+        </el-button>
+        <el-button text size="small" @click="$emit('reply', message)">
+          <el-icon><ChatLineSquare /></el-icon>
         </el-button>
         <slot name="actions" :message="message" />
       </div>
@@ -54,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue"
 import { DocumentCopy, Refresh } from "@element-plus/icons-vue"
+import { ChatLineSquare } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue"
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue"
@@ -70,6 +78,9 @@ const props = defineProps<{
     status?: string
     audioUrl?: string
     audioDuration?: number
+    replyToMessageId?: string
+    replyToRole?: string
+    replyToExcerpt?: string
   }
   charName?: string
   charAvatar?: string
@@ -80,6 +91,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   retry: [message: any]
+  reply: [message: any]
+  scrollToMessage: [messageId: string]
 }>()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
@@ -230,6 +243,22 @@ async function copyContent() {
   display: flex; gap: 2px; padding: 2px 4px;
   opacity: 0; transition: opacity var(--ac-transition-fast);
 }
+.bubble-reply {
+  margin-bottom: 4px; padding: 6px 10px;  cursor: pointer;
+  border-left: 3px solid var(--ac-color-primary);
+  border-radius: 0 4px 4px 0;
+  background: var(--ac-color-bg-secondary, #f5f5f5);
+  font-size: 12px; line-height: 1.5;
+  max-width: 100%; overflow: hidden;
+}
+.reply-role {
+  display: block; font-weight: 500; color: var(--ac-color-text-secondary);
+  margin-bottom: 2px;
+}
+.reply-excerpt {
+  display: block; color: var(--ac-color-text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .chat-bubble:hover .bubble-actions { opacity: 1; }
 
 @media (max-width: 768px) {
@@ -251,6 +280,7 @@ html.dark .chat-bubble.assistant .bubble-content {
 .status-tag { font-size: 11px; padding: 1px 8px; border-radius: 3px; line-height: 1.6; }
 .status-tag.failed { color: #d35; background: #fef0f0; }
 .status-tag.interrupted { color: #b88230; background: #fef8e7; }
+.status-tag.timeout { color: #b88230; background: #fef8e7; }
 .retry-btn { font-size: 11px; }
 .bubble-source-tag {
   font-size: 10px; padding: 0 5px; border-radius: 3px; line-height: 1.6;
