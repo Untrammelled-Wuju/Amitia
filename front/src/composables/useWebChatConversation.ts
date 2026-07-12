@@ -373,6 +373,10 @@ export function useWebChatConversation(
       if (Array.isArray(chars)) {
         characters.value = chars
         saveCache("/api/characters", chars)
+        if (characterId.value) {
+          const current = chars.find((c: any) => c.id === characterId.value)
+          if (current) selectCharacter(current)
+        }
       }
     } catch {}
   }

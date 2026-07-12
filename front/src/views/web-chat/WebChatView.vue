@@ -345,6 +345,10 @@ onMounted(async () => {
       characters.value = cachedChars.value
       const active = characters.value.find((c: any) => c.isActive)
       if (active && !characterId.value) selectCharacter(active)
+      if (characterId.value) {
+        const cur = characters.value.find((c: any) => c.id === characterId.value)
+        if (cur) selectCharacter(cur)
+      }
       const def = characters.value.find((c: any) => c.isDefault)
       if (def) {
         localStorage.setItem("uai-default-char", JSON.stringify({
