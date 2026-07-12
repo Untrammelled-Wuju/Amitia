@@ -66,13 +66,7 @@ export function useWebChatSSE(
         if ((msg as any).tool_calls_json) return
         if (!messages.value.some((m: any) => m.id === msg.id) && !typingQueue.some((m: any) => m.id === msg.id)) {
           if (msg.role === "user") {
-            const now = Date.now()
-            const dup = messages.value.some((m: any) =>
-              m.role === "user" && m.content === msg.content &&
-              String(m.id).startsWith("user-") &&
-              (now - new Date(m.createdAt).getTime()) < 15000
-            )
-            if (dup) {
+            if (sending.value) {
               lastPolledMsgId = msg.id || lastPolledMsgId
               return
             }
@@ -106,7 +100,6 @@ export function useWebChatSSE(
       eventSource.close()
       eventSource = null
     }
-    clearTypingQueue()
   }
 
   function connectProactiveSSE() {
@@ -138,6 +131,7 @@ export function useWebChatSSE(
   function cleanup() {
     disconnectSSE()
     disconnectProactiveSSE()
+    clearTypingQueue()
   }
 
   return {

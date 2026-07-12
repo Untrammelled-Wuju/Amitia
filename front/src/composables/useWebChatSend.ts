@@ -155,7 +155,7 @@ export function useWebChatSend(
     const hasVideo = !!(finalVideoUrl)
     const displayContent = (hasVoice && !safeText.trim()) ? "[语音]" : (hasVideo && !safeText.trim()) ? "" : (hasImage && safeText === "[图片]") ? "" : safeText
     const sendContent = (hasVoice && !safeText.trim()) ? "[语音]" : (hasVideo && !safeText.trim()) ? "[视频]" : (hasImage && !safeText.trim()) ? "[图片]" : safeText
-    messages.value.push({ id: userMsgLocalId, role: "user", content: displayContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, videoUrl: finalVideoUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
+    messages.value.push({ id: userMsgLocalId, role: "user", content: sendContent, imageUrl: imgUrl || undefined, audioUrl: finalAudioUrl || undefined, audioDuration: 0, videoUrl: finalVideoUrl || undefined, status: "sent", conversationId: convId.value, createdAt: new Date().toISOString() })
     scrollToBottom(true)
     sending.value = true
     modelError.value = ""
