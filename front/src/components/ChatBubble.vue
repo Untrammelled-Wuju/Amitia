@@ -15,6 +15,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="bubble-time" v-if="message.createdAt">{{ fmtTime(message.createdAt) }}</span>
         <span class="bubble-latency" v-if="message.latencyMs">{{ message.latencyMs }}ms</span>
       </div>
+      <div class="bubble-reply-to" v-if="(message as any).replyToMessageId" @click="$emit('scroll-to-message', (message as any).replyToMessageId)">
+        <span class="reply-to-label">{{ (message as any).replyToRole === 'assistant' ? '引用' : '引用自己' }}：</span>
+        <span class="reply-to-excerpt">{{ ((message as any).replyToExcerpt || '').slice(0, 80) }}</span>
+      </div>
       <MediaAttachmentPreview
         :image-url="(message as any).imageUrl"
         :video-url="(message as any).videoUrl"
@@ -45,6 +49,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-button text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
         </el-button>
+        <el-button text size="small" @click="$emit('reply', message)" title="引用回复">
+          <el-icon><ChatLineSquare /></el-icon>
+        </el-button>
         <slot name="actions" :message="message" />
       </div>
     </div>
@@ -53,7 +60,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue"
-import { DocumentCopy, Refresh } from "@element-plus/icons-vue"
+import { DocumentCopy, Refresh, ChatLineSquare } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue"
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue"
@@ -82,6 +89,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   retry: [message: any]
+  reply: [message: any]
+  scrollToMessage: [id: string]
 }>()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
@@ -191,6 +200,24 @@ async function copyContent() {
 .bubble-name { font-size: var(--ac-font-size-xs); font-weight: 500; color: var(--ac-color-text-secondary); }
 .bubble-time { font-size: 10px; color: var(--ac-color-text-muted); }
 .bubble-latency { font-size: 10px; color: var(--ac-color-text-placeholder); }
+
+.bubble-reply-to {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  margin-bottom: 4px;
+  background: var(--ac-color-surface);
+  border-left: 2px solid var(--ac-color-primary);
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+.bubble-reply-to:hover { opacity: 1; }
+.reply-to-label { color: var(--ac-color-text-muted); flex-shrink: 0; }
+.reply-to-excerpt { color: var(--ac-color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .bubble-content {
   padding: 10px 14px; border-radius: var(--ac-radius-md);

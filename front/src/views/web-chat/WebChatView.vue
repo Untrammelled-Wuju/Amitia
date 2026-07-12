@@ -63,6 +63,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @touch-move="onMsgTouchMove"
       @touch-end="onMsgTouchEnd"
       @retry="handleRetry"
+      @reply="handleSetReply"
       @scroll-to-bottom="scrollToBottom(true)"
     />
     </div>
@@ -79,6 +80,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :disabled="modelMissing"
       :sending="sending"
       :call-active="callActive"
+      :reply-target="replyTarget"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -88,6 +90,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
       @toggleCall="handleToggleCall"
+      @cancel-reply="replyTarget = null"
     />
 
     <ConversationDrawer
@@ -194,6 +197,7 @@ const importContext = ref<any>(null)
 const showImportDetail = ref(false)
 const convSummary = ref("")
 const showSummary = ref(false)
+const replyTarget = ref<any>(null)
 
 const msgAreaRef = ref<InstanceType<typeof MessagesArea>>()
 const inputRef = ref<InstanceType<typeof ChatInput>>()
@@ -215,6 +219,14 @@ function toggleMemInject() {
   showMemInject.value = !showMemInject.value
   if (showMemInject.value) {
     showProfiles.value = false
+  }
+}
+
+function handleSetReply(msg: any) {
+  replyTarget.value = {
+    id: msg.id,
+    role: msg.role,
+    content: (msg.content || "").slice(0, 100),
   }
 }
 
@@ -247,6 +259,7 @@ const {
   pendingImageBase64, pendingAudioUrl, pendingVideoUrl,
   scrollToBottom, disconnectSSE, inputRef,
   () => fetchWechatMsgCount(), () => fetchQQStatus(),
+  undefined, replyTarget,
 )
 
 const {
