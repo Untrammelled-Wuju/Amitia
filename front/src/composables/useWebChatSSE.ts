@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, nextTick } from "vue"
-import { resolveApiUrl } from "../runtime/runtime-adapter"
+import { calcTypingDelay } from "@/utils/typing"
 
 export function useWebChatSSE(
   convId: Ref<string>,
@@ -9,12 +9,14 @@ export function useWebChatSSE(
   scrollToBottom: (smooth?: boolean) => void,
   fetchWechatMsgCount: () => void,
   fetchQQStatus: () => void,
-  fetchWebMsgCount: () => void,
   sending: Ref<boolean>,
 ) {
   let eventSource: EventSource | null = null
   let lastPolledMsgId: string | null = null
   let proactiveSSE: EventSource | null = null
+
+  const typingQueue: any[] = []
+  let typingTimer: ReturnType<typeof setTimeout> | null = null
 
   function getLastPolledMsgId() { return lastPolledMsgId }
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
@@ -27,48 +29,76 @@ export function useWebChatSSE(
     })
   }
 
-  async function connectSSE() {
+  function processTypingQueue() {
+    if (typingQueue.length === 0) return
+    const raw = typingQueue.shift()!
+    raw.typingStart = Date.now()
+    messages.value.push(raw)
+    lastPolledMsgId = raw.id || lastPolledMsgId
+    scrollToBottom()
+    fetchWechatMsgCount()
+    fetchQQStatus()
+    const delay = calcTypingDelay(raw.content || "")
+    typingTimer = setTimeout(() => {
+      const idx = messages.value.findIndex((m: any) => m.id === raw.id)
+      if (idx !== -1) {
+        messages.value[idx].typingDone = true
+      }
+      typingTimer = null
+      setTimeout(() => processTypingQueue(), 300)
+    }, delay)
+  }
+
+  function clearTypingQueue() {
+    typingQueue.length = 0
+    if (typingTimer) {
+      clearTimeout(typingTimer)
+      typingTimer = null
+    }
+  }
+
+  function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
-    const currentConvId = convId.value
-    const baseUrl = await resolveApiUrl("/api/messages/stream")
-    const url = baseUrl + "?conversationId=" + encodeURIComponent(currentConvId) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
+    const apiBase = (import.meta as any).env?.VITE_API_URL || ""
+    const url = apiBase + "/api/messages/stream?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
     eventSource.onmessage = function(event) {
-      if (convId.value !== currentConvId) return
       try {
         const msg = JSON.parse(event.data)
         if (!msg.role || msg.role === "tool") return
         if ((msg as any).tool_calls_json) return
-        if (msg.conversationId && msg.conversationId !== convId.value) return
-        if (!messages.value.some((m: any) => m.id === msg.id)) {
+        if (!messages.value.some((m: any) => m.id === msg.id) && !typingQueue.some((m: any) => m.id === msg.id)) {
           if (msg.role === "user") {
             const now = Date.now()
             const dup = messages.value.some((m: any) =>
               m.role === "user" && m.content === msg.content &&
-              (now - new Date(m.createdAt).getTime()) < 30000
+              String(m.id).startsWith("user-") &&
+              (now - new Date(m.createdAt).getTime()) < 15000
             )
             if (dup) return
           }
           if (msg.role === "assistant") {
             sending.value = false
+            typingQueue.push(msg)
+            if (!typingTimer) processTypingQueue()
+          } else {
+            messages.value.push(msg)
+            if (!sending.value) sortMessages()
+            lastPolledMsgId = msg.id || lastPolledMsgId
+            if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
+              new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
+            }
+            scrollToBottom()
+            fetchWechatMsgCount()
+            fetchQQStatus()
           }
-          messages.value.push(msg)
-          sortMessages()
-          lastPolledMsgId = msg.id || lastPolledMsgId
-          if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
-            new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
-          }
-          scrollToBottom()
-          fetchWechatMsgCount()
-          fetchQQStatus()
-          fetchWebMsgCount()
         }
       } catch { }
     }
     eventSource.onerror = () => {
       disconnectSSE()
-      setTimeout(() => { if (convId.value) void connectSSE() }, 3000)
+      setTimeout(() => { if (convId.value) connectSSE() }, 3000)
     }
   }
 
@@ -77,29 +107,28 @@ export function useWebChatSSE(
       eventSource.close()
       eventSource = null
     }
+    clearTypingQueue()
   }
 
-  async function connectProactiveSSE() {
+  function connectProactiveSSE() {
     try {
-      const url = await resolveApiUrl("/api/proactive-sse")
-      proactiveSSE = new EventSource(url)
+      proactiveSSE = new EventSource("/api/proactive-sse")
       proactiveSSE.addEventListener("proactive_message", (e) => {
         try {
           const msg = JSON.parse(e.data)
           if (msg.conversationId === convId.value) {
             if (!messages.value.some((m: any) => m.id === msg.messageId)) {
               messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: msg.createdAt || new Date().toISOString() })
-              sortMessages()
+              if (!sending.value) sortMessages()
               nextTick(() => scrollToBottom())
             }
           }
         } catch {}
           fetchWechatMsgCount()
           fetchQQStatus()
-          fetchWebMsgCount()
       })
-      proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(() => void connectProactiveSSE(), 5000) }
-    } catch { setTimeout(() => void connectProactiveSSE(), 5000) }
+      proactiveSSE.onerror = () => { proactiveSSE?.close(); setTimeout(connectProactiveSSE, 5000) }
+    } catch { setTimeout(connectProactiveSSE, 5000) }
   }
 
   function disconnectProactiveSSE() {

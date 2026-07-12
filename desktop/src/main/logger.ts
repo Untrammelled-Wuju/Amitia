@@ -4,7 +4,17 @@ import { getAmitiaDataDir } from "./path-manager"
 
 let logStream: fs.WriteStream | null = null
 
+function suppressPipeErrors() {
+  const onError = (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED") return
+    throw err
+  }
+  process.stdout.on("error", onError)
+  process.stderr.on("error", onError)
+}
+
 export function initLogger(): void {
+  suppressPipeErrors()
   const logDir = path.join(getAmitiaDataDir(), "logs")
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true })

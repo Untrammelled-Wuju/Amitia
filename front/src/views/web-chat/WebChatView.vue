@@ -21,11 +21,15 @@ SPDX-License-Identifier: AGPL-3.0-only
       :char-name="charName"
       :char-identity="charIdentity"
       :conv-title="convTitle"
+      :reply-style="replyStyle"
+      :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       @toggle-drawer="showDrawer = true"
+      @update:reply-style="replyStyle = $event"
+      @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
@@ -59,7 +63,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       @touch-move="onMsgTouchMove"
       @touch-end="onMsgTouchEnd"
       @retry="handleRetry"
-      @reply="handleReply"
       @scroll-to-bottom="scrollToBottom(true)"
     />
     </div>
@@ -75,9 +78,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       ref="inputRef"
       :disabled="modelMissing"
       :sending="sending"
-      :is-submitting="submittingFromSend"
       :call-active="callActive"
-      :reply-target="replyTarget"
       @send="handleSend"
       @image="onImageAttached"
       @removeImage="onImageRemoved"
@@ -86,7 +87,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
-      @cancelReply="replyTarget = null"
       @toggleCall="handleToggleCall"
     />
 
@@ -165,7 +165,7 @@ async function fetchTtsConfig() {
 async function handleToggleCall() {
   await fetchTtsConfig()
   if (!ttsApiKey.value) {
-    router.push("/settings/model/voice")
+    router.push("/model/voice")
     return
   }
   callActive.value = !callActive.value
@@ -173,10 +173,6 @@ async function handleToggleCall() {
 const { get } = useApi()
 const { cachedGet, invalidateCache } = useCachedApi()
 const currentCharName = inject<any>("currentCharName", null)
-
-function handleReply(msg: any) {
-  replyTarget.value = msg
-}
 
 const messages = ref<any[]>([])
 const convId = ref("")
@@ -207,7 +203,6 @@ const currentImageFile = ref<File | null>(null)
 const pendingImageBase64 = ref<string | null>(null)
 const pendingAudioUrl = ref<string | null>(null)
 const pendingVideoUrl = ref<string | null>(null)
-const replyTarget = ref<any>(null)
 
 function toggleProfiles() {
   showProfiles.value = !showProfiles.value
@@ -234,29 +229,29 @@ const {
   connectSSE, disconnectSSE,
   connectProactiveSSE, disconnectProactiveSSE, cleanup: cleanupSSE,
   setLastPolledMsgId,
-} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(), sending)
+} = useWebChatSSE(convId, messages, scrollToBottom, () => fetchWechatMsgCount(), () => fetchQQStatus(), sending)
 
 const {
+  canRegenerate,
   onImageAttached, onImageRemoved,
   onVideoAttached, onVideoRemoved,
   handleVoiceAudio, handleVoiceText,
   handleImageSend, handleSend,
   handleStop, handleRetry,
-  handleClear,
+  handleRegenerate, handleClear,
   getLastPolledMsgId,
-  isSubmitting: submittingFromSend,
 } = useWebChatSend(
   messages, convId, characterId,
   sending, modelError, modelMissing,
   currentImageBase64, currentImageFile,
   pendingImageBase64, pendingAudioUrl, pendingVideoUrl,
   scrollToBottom, disconnectSSE, inputRef,
-  () => fetchWechatMsgCount(), () => fetchQQStatus(), () => fetchWebMsgCount(),
-  replyTarget,
+  () => fetchWechatMsgCount(), () => fetchQQStatus(),
 )
 
 const {
   characters, conversations, importBatches, memories,
+  replyStyle,
   isWechatActive, wechatOnline, wechatMsgCount,
   isQQActive, qqOnline, qqMsgCount,
   showDrawer, showCharPicker, showMemories,
@@ -265,7 +260,7 @@ const {
   handleSelectConv, handleSelectWechat,
   handleSelectQQ, handleContinueImport,
   handleViewMemories, fetchWechatMsgCount,
-  fetchQQStatus, fetchWebMsgCount, refreshCharacters, fetchConvSummary,
+  fetchQQStatus, refreshCharacters, fetchConvSummary,
 } = useWebChatConversation(
   messages, convId, characterId, convTitle,
   charName, charIdentity, charAvatar,
@@ -294,11 +289,6 @@ onMounted(async () => {
 
   connectProactiveSSE()
   history.scrollRestoration = "manual"
-  window.addEventListener("character-updated", ((e: CustomEvent) => {
-    if (e.detail?.id && e.detail.id === characterId.value) {
-      charAvatar.value = e.detail.avatar || ""
-    }
-  }) as EventListener)
 
   window.addEventListener("online", () => {
     isOffline.value = false
@@ -331,10 +321,6 @@ onMounted(async () => {
     const lastConv = localStorage.getItem("webchat-last-conv")
     if (lastConv === "wechat") {
       await handleSelectWechat(true)
-      return
-    }
-    if (lastConv === "qq") {
-      await handleSelectQQ(true)
       return
     }
     const savedId = localStorage.getItem("webchat-char-id")
