@@ -32,18 +32,14 @@ export function useWebChatSSE(
   function processTypingQueue() {
     if (typingQueue.length === 0) return
     const raw = typingQueue.shift()!
-    raw.typingStart = Date.now()
-    messages.value.push(raw)
-    lastPolledMsgId = raw.id || lastPolledMsgId
-    scrollToBottom()
-    fetchWechatMsgCount()
-    fetchQQStatus()
     const delay = calcTypingDelay(raw.content || "")
     typingTimer = setTimeout(() => {
-      const idx = messages.value.findIndex((m: any) => m.id === raw.id)
-      if (idx !== -1) {
-        messages.value[idx].typingDone = true
-      }
+      raw.typingDone = true
+      messages.value.push(raw)
+      lastPolledMsgId = raw.id || lastPolledMsgId
+      scrollToBottom()
+      fetchWechatMsgCount()
+      fetchQQStatus()
       typingTimer = null
       setTimeout(() => processTypingQueue(), 300)
     }, delay)
