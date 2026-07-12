@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, nextTick } from "vue"
+import { resolveApiUrl } from "../runtime/runtime-adapter"
 import { calcTypingDelay } from "@/utils/typing"
 
 export function useWebChatSSE(
@@ -53,11 +54,10 @@ export function useWebChatSSE(
     }
   }
 
-  function connectSSE() {
+  async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
-    const apiBase = (import.meta as any).env?.VITE_API_URL || ""
-    const url = apiBase + "/api/messages/stream?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
+    const url = await resolveApiUrl("/api/messages/stream") + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
     eventSource.onmessage = function(event) {
       try {

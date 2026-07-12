@@ -37,7 +37,13 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 	sinceID := c.Query("since")
 	sinceCreatedAt := ""
 	if sinceID != "" {
-		h.db.Table("messages").Select("created_at").Where("id = ?", sinceID).Row().Scan(&sinceCreatedAt)
+		var sinceCreatedAtRaw interface{}
+		h.db.Table("messages").Select("created_at").Where("id = ?", sinceID).Row().Scan(&sinceCreatedAtRaw)
+		if t, ok := sinceCreatedAtRaw.(time.Time); ok {
+			sinceCreatedAt = t.Format("2006-01-02 15:04:05")
+		} else if s, ok := sinceCreatedAtRaw.(string); ok {
+			sinceCreatedAt = s
+		}
 	}
 	if sinceCreatedAt == "" {
 		sinceCreatedAt = "0001-01-01"
@@ -97,7 +103,9 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 			delete(m, "video_url")
 		}
 		c.SSEvent("message", m)
-		if ca, ok := m["createdAt"].(string); ok {
+		if ca, ok := m["createdAt"].(time.Time); ok {
+				sinceCreatedAt = ca.Format("2006-01-02 15:04:05")
+			} else if ca, ok := m["createdAt"].(string); ok {
 				sinceCreatedAt = ca
 			}
 			if id, ok := m["id"].(string); ok {
