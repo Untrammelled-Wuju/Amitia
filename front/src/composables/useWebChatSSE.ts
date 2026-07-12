@@ -76,7 +76,10 @@ export function useWebChatSSE(
               String(m.id).startsWith("user-") &&
               (now - new Date(m.createdAt).getTime()) < 15000
             )
-            if (dup) return
+            if (dup) {
+              lastPolledMsgId = msg.id || lastPolledMsgId
+              return
+            }
           }
           if (msg.role === "assistant") {
             sending.value = false

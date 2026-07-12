@@ -23,7 +23,7 @@ export function useWebChatSend(
   inputRef: Ref<any>,
   fetchWechatMsgCount: () => void,
   fetchQQStatus: () => void,
-  fetchWebMsgCount: () => void,
+  fetchWebMsgCount?: () => void,
   replyTarget?: Ref<any>,
 ) {
   const { post, del, get } = useApi()
@@ -214,7 +214,7 @@ export function useWebChatSend(
       if (lastMsg?.id && lastMsg.id !== "streaming") lastPolledMsgId = lastMsg.id
       fetchWechatMsgCount()
       fetchQQStatus()
-      fetchWebMsgCount()
+      if (fetchWebMsgCount) fetchWebMsgCount()
     }
   }
 
