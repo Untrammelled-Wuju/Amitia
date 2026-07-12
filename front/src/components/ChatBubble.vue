@@ -15,10 +15,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="bubble-time" v-if="message.createdAt">{{ fmtTime(message.createdAt) }}</span>
         <span class="bubble-latency" v-if="message.latencyMs">{{ message.latencyMs }}ms</span>
       </div>
-      <div class="bubble-reply-to" v-if="(message as any).replyToMessageId" @click="$emit('scroll-to-message', (message as any).replyToMessageId)">
-        <span class="reply-to-label">{{ (message as any).replyToRole === 'assistant' ? '引用' : '引用自己' }}：</span>
-        <span class="reply-to-excerpt">{{ ((message as any).replyToExcerpt || '').slice(0, 80) }}</span>
-      </div>
       <MediaAttachmentPreview
         :image-url="(message as any).imageUrl"
         :video-url="(message as any).videoUrl"
@@ -32,7 +28,16 @@ SPDX-License-Identifier: AGPL-3.0-only
         :character-id="characterId"
         @click.stop
       />
-      <div class="bubble-content" v-if="typingDone && renderedContent && (!hasAudio || textExpanded)" v-html="renderedContent" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove" style="word-break:break-word;overflow-wrap:break-word"></div>
+      <div class="bubble-content" v-if="typingDone && (renderedContent || hasReplyTo) && (!hasAudio || textExpanded)" @touchstart="onTouchStart" @touchend="onTouchEnd" @touchmove="onTouchMove">
+        <div v-if="hasReplyTo" class="quote-block" @click="$emit('scroll-to-message', (message as any).replyToMessageId)">
+          <div class="quote-bar"></div>
+          <div class="quote-body">
+            <div class="quote-sender">{{ (message as any).replyToRole === 'user' ? '你' : charName }}</div>
+            <div class="quote-text">{{ ((message as any).replyToExcerpt || '').slice(0, 120) }}</div>
+          </div>
+        </div>
+        <div class="bubble-text" v-if="renderedContent" v-html="renderedContent"></div>
+      </div>
       <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
         <span class="status-tag" :class="message.status">
           {{ message.status === 'failed' ? '发送失败' : '生成中断' }}
@@ -95,6 +100,8 @@ const emit = defineEmits<{
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
 const textExpanded = ref(!((props.message as any).audioUrl))
+
+const hasReplyTo = computed(() => !!((props.message as any).replyToMessageId))
 
 watch(
   () => (props.message as any).audioUrl,
@@ -201,30 +208,14 @@ async function copyContent() {
 .bubble-time { font-size: 10px; color: var(--ac-color-text-muted); }
 .bubble-latency { font-size: 10px; color: var(--ac-color-text-placeholder); }
 
-.bubble-reply-to {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  margin-bottom: 4px;
-  background: var(--ac-color-surface);
-  border-left: 2px solid var(--ac-color-primary);
-  border-radius: 3px;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity 0.2s;
-}
-.bubble-reply-to:hover { opacity: 1; }
-.reply-to-label { color: var(--ac-color-text-muted); flex-shrink: 0; }
-.reply-to-excerpt { color: var(--ac-color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .bubble-content {
-  padding: 10px 14px; border-radius: var(--ac-radius-md);
-  font-size: var(--ac-font-size-sm); line-height: 1.65;
-  word-break: break-word; white-space: pre-wrap;
+  padding: 0;
+  border-radius: var(--ac-radius-md);
+  font-size: var(--ac-font-size-sm);
+  line-height: 1.65;
+  word-break: break-word;
+  overflow: hidden;
 }
-
 .chat-bubble.user .bubble-content {
   background: var(--ac-color-bg-primary);
   border: 1px solid var(--ac-color-border-light);
@@ -234,6 +225,60 @@ async function copyContent() {
   background: var(--ac-color-bg-primary);
   border: 1px solid var(--ac-color-border-light);
   border-top-left-radius: 2px;
+}
+
+.quote-block {
+  display: flex;
+  gap: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.quote-block:hover { background: rgba(0, 0, 0, 0.03); }
+
+.quote-bar {
+  width: 3px;
+  min-width: 3px;
+  background: #b0b8c0;
+  border-radius: 2px;
+  margin: 8px 8px 8px 10px;
+}
+
+.quote-body {
+  flex: 1;
+  padding: 7px 10px 7px 0;
+  min-width: 0;
+}
+
+.quote-sender {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6a737d;
+  margin-bottom: 2px;
+}
+
+.quote-text {
+  font-size: 12px;
+  color: #8b949e;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+}
+
+.bubble-text {
+  padding: 8px 14px 10px 14px;
+  white-space: pre-wrap;
+}
+
+.bubble-text:first-child {
+  padding-top: 10px;
+}
+
+.quote-block + .bubble-text {
+  padding-top: 4px;
 }
 
 .text-toggle {
