@@ -34,6 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           circle
           size="small"
           class="image-btn"
+          :disabled="isInputDisabled"
           :class="{ 'has-image': !!attachedImagePreview }"
           @click="fileInputRef?.click()"
           title="上传图片"
@@ -43,6 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           circle
           size="small"
           class="video-btn"
+          :disabled="isInputDisabled"
           :class="{ 'has-video': !!attachedVideo }"
           @click="videoInputRef?.click()"
           title="上传视频"
@@ -52,6 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           circle
           size="small"
           class="mode-toggle-btn"
+          :disabled="isInputDisabled"
           @click="voiceMode = !voiceMode"
           :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
         />
@@ -63,8 +66,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         ref="inputRef"
         v-model="text"
         class="input-field"
-        placeholder="输入消息..."
-        :disabled="disabled"
+        :placeholder="isWechatActive ? '微信消息请在微信端发送...' : isQQActive ? 'QQ消息请在QQ端发送...' : '输入消息...'"
+        :disabled="isInputDisabled"
         rows="1"
         @keydown.enter.exact="handleEnterSend"
         @input="autoResize"
@@ -80,7 +83,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @touchmove.prevent="onTouchMove"
         @touchend.prevent="endHold"
         @touchcancel.prevent="endHold"
-        :disabled="disabled"
+        :disabled="isInputDisabled"
       >
         <template v-if="slideZone === 'cancel'">
           <span class="hold-text slide-hint cancel-hint">
@@ -128,7 +131,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :icon="Promotion"
           circle
           size="small"
-          :disabled="disabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo) || isSubmitting"
+          :disabled="isInputDisabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo) || isSubmitting"
           @click="handleSendClick"
           title="发送 (Enter)"
         />
@@ -139,6 +142,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :icon="Phone"
       circle
       :class="{ 'call-btn-outer': true, 'is-calling': callActive }"
+      :disabled="isInputDisabled"
       @click="$emit('toggleCall')"
       title="语音通话"
     />
@@ -153,6 +157,8 @@ import { useVoiceInput } from "../composables/useVoiceInput"
 import { useMediaUpload } from "../composables/useMediaUpload"
 
 const props = defineProps<{
+  isWechatActive?: boolean
+  isQQActive?: boolean
   disabled?: boolean
   sending?: boolean
   isSubmitting?: boolean
@@ -173,8 +179,9 @@ const emit = defineEmits<{
   cancelReply: []
 }>()
 
-const isDisabled = () => !!props.disabled
+const isDisabled = () => !!props.disabled || !!props.isWechatActive || !!props.isQQActive
 
+const isInputDisabled = computed(() => !!props.disabled || !!props.isWechatActive || !!props.isQQActive)
 const textInput = useTextInput(
   emit as any,
   isDisabled,

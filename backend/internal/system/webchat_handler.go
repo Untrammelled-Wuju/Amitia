@@ -246,6 +246,9 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 			characterID = dbCharID
 		}
 	}
+	if characterID == "" {
+		h.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
+	}
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		ConversationID:   convID, Channel: "web", Source: source,
@@ -303,6 +306,9 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		if scanErr := h.db.Table("conversations").Select("character_id").Where("id = ?", body.ConversationID).Limit(1).Row().Scan(&dbCharID); scanErr == nil && strings.TrimSpace(dbCharID) != "" {
 			characterID = dbCharID
 		}
+	}
+	if characterID == "" {
+		h.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
 
 	var replyToRole *string

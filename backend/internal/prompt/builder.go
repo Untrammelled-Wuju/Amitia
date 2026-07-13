@@ -5,6 +5,8 @@ import (
 )
 
 type BuildRequest struct {
+	SystemPrompt string
+
 	CharacterName       string
 	CharacterConfig     string
 	CompiledPersonality string
@@ -138,6 +140,23 @@ func (b *Builder) Build(req BuildRequest) GwIR {
 			SourceProject:   "prompt",
 			SourceFile:      "builder.go",
 			SourceConstant:  "GwSectionBaseIdentity",
+		})
+	}
+
+	
+
+	if req.SystemPrompt != "" {
+		sections = append(sections, GwSection{Enabled: true,
+			ID:              "system_prompt",
+			Type:            GwSectionSystemPrompt,
+			TrustLevel:      TrustSemiTrusted,
+			InstructionMode: ModeAuthoritative,
+			Source:          "system_prompt",
+			Priority:        840,
+			Content:         "【角色专属提示词 - 最高优先级角色指令】" + "\n" + req.SystemPrompt,
+			SourceProject:   "prompt",
+			SourceFile:      "builder.go",
+			SourceConstant:  "GwSectionSystemPrompt",
 		})
 	}
 

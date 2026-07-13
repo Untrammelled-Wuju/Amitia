@@ -619,9 +619,10 @@ private state: WechatState = {
     try {
       const data: Record<string, any> = { messageCount: this.state.messageCount }
       if (this.getUpdatesBuf) data.getUpdatesBuf = this.getUpdatesBuf
+      saveWeixinAccount(this.state.accountId, data)
     } catch {
-      // Non-critical, ignore
-    }
+  }
+
   }
 
 

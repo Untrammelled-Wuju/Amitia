@@ -198,9 +198,6 @@ func buildRoleSystemParts(profile *character.RoleRuntimeProfile, runtime *intera
 		identity = "一个AI伙伴"
 	}
 	parts = append(parts, fmt.Sprintf("你是%s，%s。", profile.Name, identity))
-	if profile.SystemPrompt != "" {
-		parts = append(parts, profile.SystemPrompt)
-	}
 	if profile.Personality != "" {
 		parts = append(parts, "【角色性格】\n"+profile.Personality)
 	}

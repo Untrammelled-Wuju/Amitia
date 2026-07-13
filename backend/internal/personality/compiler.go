@@ -175,11 +175,7 @@ func (cp CompiledPersonality) ToPersonalitySummary() string {
 func CompilePersonalityTemplate(name, presetID, gender string) string {
 	tmpl, ok := allPersonalityTemplates[presetID]
 	if !ok {
-		if gender == "MALE" || gender == "male" {
-			tmpl = allPersonalityTemplates["boy_next_door"]
-		} else {
-			tmpl = allPersonalityTemplates["deredere"]
-		}
+		return ""
 	}
 
 	var sb strings.Builder
@@ -222,11 +218,7 @@ func CompilePersonalityTemplate(name, presetID, gender string) string {
 func BuildProactivePersonalityBlock(name, presetID, gender string, aff float64, harass bool) string {
 	tmpl, ok := allPersonalityTemplates[presetID]
 	if !ok {
-		if gender == "MALE" || gender == "male" {
-			tmpl = allPersonalityTemplates["boy_next_door"]
-		} else {
-			tmpl = allPersonalityTemplates["deredere"]
-		}
+		return ""
 	}
 
 	var sb strings.Builder

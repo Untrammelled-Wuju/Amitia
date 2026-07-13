@@ -248,14 +248,17 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 func (s *SQLiteDeliveryStore) MarkSent(id string) error {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	res := s.db.Model(&DeliveryIntentModel{}).
-		Where("id = ? AND status = ? AND lease_until > ?",
-			id, string(DeliveryStatusLeased), now).
+		Where("id = ? AND status = ?",
+			id, string(DeliveryStatusLeased)).
 		Updates(map[string]interface{}{
 			"status":  string(DeliveryStatusSent),
 			"sent_at": now,
 		})
 	if res.Error != nil {
 		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
 	}
 	return nil
 }

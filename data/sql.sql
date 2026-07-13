@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS messages (
     video_url TEXT DEFAULT '',
     request_id TEXT DEFAULT '',
     tool_call_id TEXT DEFAULT '',
+    reply_to_message_id TEXT DEFAULT '',
+    reply_to_role TEXT DEFAULT '',
+    reply_to_excerpt TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -721,6 +724,9 @@ ALTER TABLE memories ADD COLUMN verified_status TEXT DEFAULT 'unverified';
 ALTER TABLE memories ADD COLUMN last_verified_at TEXT DEFAULT NULL;
 ALTER TABLE messages ADD COLUMN request_id TEXT DEFAULT '';
 ALTER TABLE messages ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN reply_to_role TEXT DEFAULT '';
+ALTER TABLE messages ADD COLUMN reply_to_excerpt TEXT DEFAULT '';
 UPDATE messages SET sequence = (
     SELECT rn FROM (
         SELECT id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS rn

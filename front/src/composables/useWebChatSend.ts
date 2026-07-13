@@ -235,9 +235,6 @@ export function useWebChatSend(
     if (lastAsst) {
       messages.value = messages.value.filter(m => m.id !== lastAsst.id)
     }
-    try {
-      await post("/api/web-chat/retry", { messageId: msgIdToRemove })
-    } catch { }
     const text = msg.content
     if (text) {
       await handleSend(text)

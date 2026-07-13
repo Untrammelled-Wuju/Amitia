@@ -286,6 +286,7 @@ type processPromptInput struct {
 	ProactiveRelationship    string
 	ProactiveEmotion         string
 	ProactiveMemory          string
+	SystemPrompt string
 	ProactiveTaskInstruction string
 	UserContent              string
 }
@@ -306,6 +307,7 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 		CharacterConfig:          input.CharacterConfig,
 		CompiledPersonality:      input.PersonalityConfig,
 		BaseIdentity:             input.BaseIdentity,
+		SystemPrompt:              input.SystemPrompt,
 		PersonalityRaw:           input.PersonalityRaw,
 		EmotionFusionRaw:         input.EmotionFusionRaw,
 		AdultIntimacyRaw:         input.AdultIntimacyRaw,
@@ -333,6 +335,7 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 			CharacterConfig:          input.CharacterConfig,
 			CompiledPersonality:      input.PersonalityConfig,
 			BaseIdentity:             input.BaseIdentity,
+		SystemPrompt:              input.SystemPrompt,
 			PersonalityRaw:           input.PersonalityRaw,
 			EmotionFusionRaw:         input.EmotionFusionRaw,
 			AdultIntimacyRaw:         input.AdultIntimacyRaw,

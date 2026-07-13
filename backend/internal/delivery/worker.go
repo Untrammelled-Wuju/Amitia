@@ -90,7 +90,9 @@ func (w *Worker) deliver(ctx context.Context, intent DeliveryIntent) error {
 		return err
 	}
 
-	w.store.MarkSent(intent.ID)
+	if err := w.store.MarkSent(intent.ID); err != nil {
+		applog.Error("delivery worker mark sent failed", "id", intent.ID, "channel", intent.Channel, "error", err)
+	}
 	return nil
 }
 

@@ -54,6 +54,8 @@ const (
 	GwSectionProactiveRecentContext   GwSectionType = "proactive_recent_context"
 	GwSectionProactiveTaskInstruction GwSectionType = "proactive_task_instruction"
 	GwSectionChannelShortRaw          GwSectionType = "channel_short_raw"
+	GwSectionSystemPrompt GwSectionType = "system_prompt"
+
 	GwSectionTraceOnly                GwSectionType = "trace_only"
 )
 
