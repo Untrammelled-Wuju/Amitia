@@ -336,13 +336,21 @@ onMounted(async () => {
       await handleSelectWechat(true)
       return
     }
+    if (lastConv === "qq") {
+      await handleSelectQQ(true)
+      return
+    }
     const savedId = localStorage.getItem("webchat-char-id")
     const preferred = savedId ? characters.value.find((c: any) => c.id === savedId) : null
     if (preferred) { selectCharacter(preferred) }
     else {
-      const active = characters.value.find((c: any) => c.isActive)
-      if (active) selectCharacter(active)
-      else if (characters.value.length > 0) selectCharacter(characters.value[0])
+      const defaultChar = characters.value.find((c: any) => c.isDefault)
+      if (defaultChar) selectCharacter(defaultChar)
+      else {
+        const active = characters.value.find((c: any) => c.isActive)
+        if (active) selectCharacter(active)
+        else if (characters.value.length > 0) selectCharacter(characters.value[0])
+      }
     }
     const def = characters.value.find((c: any) => c.isDefault)
     if (def) {
@@ -357,7 +365,11 @@ onMounted(async () => {
     if (cachedChars.value?.length) {
       characters.value = cachedChars.value
       const active = characters.value.find((c: any) => c.isActive)
-      if (active && !characterId.value) selectCharacter(active)
+      if (!characterId.value) {
+        const defaultChar = characters.value.find((c: any) => c.isDefault)
+        if (defaultChar) selectCharacter(defaultChar)
+        else if (active) selectCharacter(active)
+      }
       if (characterId.value) {
         const cur = characters.value.find((c: any) => c.id === characterId.value)
         if (cur) selectCharacter(cur)

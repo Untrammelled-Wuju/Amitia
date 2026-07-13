@@ -306,8 +306,16 @@ export function useOnboardingWizard() {
           systemPrompt: form.charPrompt,
           isActive: 1,
           isDefault: true,
+        }).then((charRes: any) => {
+          const charId = charRes?.id || charRes?.data?.id
+          if (charId) {
+            localStorage.setItem("webchat-char-id", charId)
+          }
         })
       }
+      localStorage.removeItem("webchat-last-conv")
+      const nextCacheVersion = Date.now()
+      localStorage.setItem("char_cache_version", String(nextCacheVersion))
       const validProfiles = profileList.filter(p => p.attributeName && p.attributeValue)
       for (const p of validProfiles) {
         await post("/api/profiles", {

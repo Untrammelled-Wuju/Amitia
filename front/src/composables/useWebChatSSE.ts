@@ -54,41 +54,43 @@ export function useWebChatSSE(
     }
   }
 
+  function handleMessage(event: MessageEvent) {
+    try {
+      const msg = JSON.parse(event.data)
+      if (!msg.role || msg.role === "tool") return
+      if ((msg as any).tool_calls_json) return
+      if (!messages.value.some((m: any) => m.id === msg.id) && !typingQueue.some((m: any) => m.id === msg.id)) {
+        if (msg.role === "user") {
+          if (sending.value) {
+            lastPolledMsgId = msg.id || lastPolledMsgId
+            return
+          }
+        }
+        if (msg.role === "assistant") {
+          sending.value = false
+          typingQueue.push(msg)
+          if (!typingTimer) processTypingQueue()
+        } else {
+          messages.value.push(msg)
+          if (!sending.value) sortMessages()
+          lastPolledMsgId = msg.id || lastPolledMsgId
+          if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
+            new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
+          }
+          scrollToBottom()
+          fetchWechatMsgCount()
+          fetchQQStatus()
+        }
+      }
+    } catch { }
+  }
+
   async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
     const url = await resolveApiUrl("/api/messages/stream") + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
-    eventSource.onmessage = function(event) {
-      try {
-        const msg = JSON.parse(event.data)
-        if (!msg.role || msg.role === "tool") return
-        if ((msg as any).tool_calls_json) return
-        if (!messages.value.some((m: any) => m.id === msg.id) && !typingQueue.some((m: any) => m.id === msg.id)) {
-          if (msg.role === "user") {
-            if (sending.value) {
-              lastPolledMsgId = msg.id || lastPolledMsgId
-              return
-            }
-          }
-          if (msg.role === "assistant") {
-            sending.value = false
-            typingQueue.push(msg)
-            if (!typingTimer) processTypingQueue()
-          } else {
-            messages.value.push(msg)
-            if (!sending.value) sortMessages()
-            lastPolledMsgId = msg.id || lastPolledMsgId
-            if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
-              new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
-            }
-            scrollToBottom()
-            fetchWechatMsgCount()
-            fetchQQStatus()
-          }
-        }
-      } catch { }
-    }
+    eventSource.addEventListener("message", handleMessage)
     eventSource.onerror = () => {
       disconnectSSE()
       setTimeout(() => { if (convId.value) connectSSE() }, 3000)

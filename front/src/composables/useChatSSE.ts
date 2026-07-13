@@ -16,38 +16,40 @@ export function useChatSSE(
   function getLastPolledMsgId() { return lastPolledMsgId }
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
 
+  function handleMessage(event: MessageEvent) {
+    try {
+      const msg = JSON.parse(event.data)
+      if (!msg.role || msg.role === "tool") return
+      if ((msg as any).tool_calls_json) return
+      if (!messages.value.some((m: any) => m.id === msg.id)) {
+        if (msg.role === "user") {
+          const now = Date.now()
+          const dup = messages.value.some((m: any) =>
+            m.role === "user" && m.content === msg.content &&
+            String(m.id).startsWith("user-") &&
+            (now - new Date(m.createdAt).getTime()) < 15000
+          )
+          if (dup) return
+        }
+        lastPolledMsgId = msg.id || lastPolledMsgId
+        messages.value.push(msg)
+        if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
+          new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
+        }
+        scrollToBottom()
+        fetchWechatMsgCount()
+        fetchQQStatus()
+      }
+    } catch { }
+  }
+
   async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
     const baseUrl = await resolveApiUrl("/api/messages/stream")
     const url = baseUrl + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
     eventSource = new EventSource(url)
-    eventSource.onmessage = function(event) {
-      try {
-        const msg = JSON.parse(event.data)
-        if (!msg.role || msg.role === "tool") return
-        if ((msg as any).tool_calls_json) return
-        if (!messages.value.some((m: any) => m.id === msg.id)) {
-          if (msg.role === "user") {
-            const now = Date.now()
-            const dup = messages.value.some((m: any) =>
-              m.role === "user" && m.content === msg.content &&
-              String(m.id).startsWith("user-") &&
-              (now - new Date(m.createdAt).getTime()) < 15000
-            )
-            if (dup) return
-          }
-          lastPolledMsgId = msg.id || lastPolledMsgId
-          messages.value.push(msg)
-          if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
-            new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
-          }
-          scrollToBottom()
-          fetchWechatMsgCount()
-          fetchQQStatus()
-        }
-      } catch { }
-    }
+    eventSource.addEventListener("message", handleMessage)
     eventSource.onerror = () => {
       disconnectSSE()
       setTimeout(() => { if (convId.value) void connectSSE() }, 3000)

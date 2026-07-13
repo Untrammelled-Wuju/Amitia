@@ -624,6 +624,9 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs [
 	if strings.ToLower(channel) == "web" {
 		return ids, nil
 	}
+	if plan.Source != "proactive" && plan.Request.Source != "proactive" {
+		return ids, nil
+	}
 	peerID := ""
 	if plan.Runtime.Delivery.PeerID != "" {
 		peerID = plan.Runtime.Delivery.PeerID
