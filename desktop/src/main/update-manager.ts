@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, app, shell } from "electron"
+import { BrowserWindow, ipcMain, app, shell } from "electron"
 import { autoUpdater, UpdateInfo } from "electron-updater"
 import log from "electron-log"
 import path from "path"
@@ -17,7 +17,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   log.transports.file.resolvePathFn = () => path.join(logDir, "update.log")
   log.transports.file.level = "info"
   autoUpdater.logger = log
-  autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
 
   autoUpdater.on("checking-for-update", () => {
@@ -32,35 +32,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes,
-    })
-
-    const currentVersion = app.getVersion()
-    dialog.showMessageBox(mainWindow!, {
-      type: "info",
-      title: "发现新版本",
-      message: `发现新版本 v${info.version}`,
-      detail: [
-        `当前版本: v${currentVersion}`,
-        `最新版本: v${info.version}`,
-        "",
-        info.releaseNotes ? `更新内容:\n${String(info.releaseNotes)}` : "",
-      ].filter(Boolean).join("\n"),
-      buttons: ["立即下载", "稍后提醒", "Gitee 备用下载"],
-      defaultId: 0,
-      cancelId: 1,
-    }).then((result) => {
-      if (result.response === 0) {
-        autoUpdater.downloadUpdate()
-      } else if (result.response === 2) {
-        void shell.openExternal(GITEE_RELEASES_URL)
-        pendingUpdateInfo = null
-        startupResolve?.()
-        startupResolve = null
-      } else {
-        pendingUpdateInfo = null
-        startupResolve?.()
-        startupResolve = null
-      }
+      currentVersion: app.getVersion(),
     })
   })
 
@@ -79,25 +51,13 @@ export function registerUpdateManager(win: BrowserWindow): void {
       total: progress.total,
       bytesPerSecond: progress.bytesPerSecond,
     })
+    console.log(`[UpdateManager] 下载进度: ${progress.percent.toFixed(1)}%, ${(progress.transferred / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB @ ${(progress.bytesPerSecond / 1024 / 1024).toFixed(2)}MB/s`)
   })
 
   autoUpdater.on("update-downloaded", (info) => {
     console.log("[UpdateManager] 更新已下载:", info.version)
     pendingUpdateInfo = null
     mainWindow?.webContents.send("update:downloaded", { version: info.version })
-    dialog.showMessageBox(mainWindow!, {
-      type: "info",
-      title: "更新已下载",
-      message: `v${info.version} 已下载完成`,
-      detail: "是否立即重启并安装更新?",
-      buttons: ["立即重启", "稍后处理"],
-      defaultId: 0,
-      cancelId: 1,
-    }).then((result) => {
-      if (result.response === 0) {
-        autoUpdater.quitAndInstall(false, true)
-      }
-    })
   })
 
   autoUpdater.on("error", (error) => {
@@ -108,6 +68,30 @@ export function registerUpdateManager(win: BrowserWindow): void {
       startupResolve()
       startupResolve = null
     }
+  })
+
+  ipcMain.handle("update:start-download", async () => {
+    try {
+      await autoUpdater.downloadUpdate()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error("[UpdateManager] 下载更新失败:", msg)
+      mainWindow?.webContents.send("update:error", { message: msg })
+    }
+  })
+
+  ipcMain.handle("update:skip-version", () => {
+    pendingUpdateInfo = null
+    startupResolve?.()
+    startupResolve = null
+  })
+
+  ipcMain.handle("update:restart-now", () => {
+    autoUpdater.quitAndInstall(false, true)
+  })
+
+  ipcMain.handle("update:restart-later", () => {
+    pendingUpdateInfo = null
   })
 
   ipcMain.handle("update:check-on-startup", async () => {
@@ -153,25 +137,11 @@ export function registerUpdateManager(win: BrowserWindow): void {
   ipcMain.handle("update:check-now", async () => {
     try {
       const result = await autoUpdater.checkForUpdates()
-      if (!result || !result.updateInfo) {
-        dialog.showMessageBox(mainWindow!, {
-          type: "info",
-          title: "检查更新",
-          message: "当前已是最新版本",
-          buttons: ["确定"],
-        })
-      }
       return result
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error("[UpdateManager] 手动检查更新失败:", msg)
-      dialog.showMessageBox(mainWindow!, {
-        type: "error",
-        title: "检查更新失败",
-        message: "无法连接到更新服务器",
-        detail: msg,
-        buttons: ["确定"],
-      })
+      mainWindow?.webContents.send("update:error", { message: msg })
       return null
     }
   })

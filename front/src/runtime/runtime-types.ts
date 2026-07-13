@@ -43,4 +43,8 @@ export interface AmitiaDesktopAPI {
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void
   getVersion(): Promise<string>
   checkUpdate(): Promise<unknown>
+  startDownload(): Promise<void>
+  skipVersion(): Promise<void>
+  restartNow(): Promise<void>
+  restartLater(): Promise<void>
 }

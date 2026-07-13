@@ -47,6 +47,18 @@ const api = {
   downloadUpdate(): Promise<void> {
     return ipcRenderer.invoke("update:download")
   },
+  startDownload(): Promise<void> {
+    return ipcRenderer.invoke("update:start-download")
+  },
+  skipVersion(): Promise<void> {
+    return ipcRenderer.invoke("update:skip-version")
+  },
+  restartNow(): Promise<void> {
+    return ipcRenderer.invoke("update:restart-now")
+  },
+  restartLater(): Promise<void> {
+    return ipcRenderer.invoke("update:restart-later")
+  },
   installUpdateNow(): Promise<void> {
     return ipcRenderer.invoke("update:install-now")
   },

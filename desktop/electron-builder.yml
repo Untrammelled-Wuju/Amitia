@@ -40,14 +40,7 @@ nsis:
   runAfterFinish: true
   deleteAppDataOnUninstall: false
 
-
 publish:
   - provider: github
     owner: Untrammelled-Wuju
     repo: Amitia
-
-
-
-
-
-
