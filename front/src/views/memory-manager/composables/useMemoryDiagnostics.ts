@@ -1,4 +1,5 @@
 import { ref } from "vue"
+import { ElMessage } from "element-plus"
 import { useApi } from "../../../composables/useApi"
 
 export function useMemoryDiagnostics() {
@@ -26,8 +27,9 @@ export function useMemoryDiagnostics() {
     try {
       const result = await post<any>("/api/memories/rebuild-embeddings", {})
       vectorStatus.value = result
+      ElMessage.success("索引重建完成：" + (result.embedded ?? result.totalEmbedded ?? 0) + " 条记忆已处理")
       await loadVectorStatus()
-    } catch (err: any) { console.error(err) }
+    } catch (err: any) { ElMessage.error(err.message || "Rebuild failed") }
     rebuilding.value = false
   }
 

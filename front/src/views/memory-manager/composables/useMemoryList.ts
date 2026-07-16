@@ -1,6 +1,7 @@
-import { ref, reactive } from "vue"
+import { ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../../composables/useApi"
+import { rowAllowContextUse, rowAllowProactiveMention, rowRequiresConfirmation, rowScopeType, rowSensitivity } from "../memoryFormatters"
 
 export function useMemoryList(injectedCharacterId?: any) {
   const { get, post, put, del } = useApi()
@@ -81,10 +82,44 @@ export function useMemoryList(injectedCharacterId?: any) {
     } catch { ElMessage.error("批量删除失败") }
   }
 
+  async function handleClearAll() {
+    await ElMessageBox.confirm("确定清空当前角色全部 " + total.value + " 条记忆？此操作不可撤销。", "警告", { type: "warning", confirmButtonText: "确定清空", confirmButtonClass: "el-button--danger" })
+    const characterId = characterFilter.value || injectedCharacterId?.value
+    if (!characterId) { ElMessage.warning("请先选择角色再清空"); return }
+    await del("/api/memories?characterId=" + characterId)
+    ElMessage.success("已清空")
+    fetchList()
+  }
+
+  async function handleExport() {
+    try {
+      const params: any = { pageSize: 10000 }
+      if (characterFilter.value) params.characterId = characterFilter.value
+      if (typeFilter.value) params.memoryType = typeFilter.value
+      if (sourceFilter.value) params.source = sourceFilter.value
+      if (scopeTypeFilter.value) params.scopeType = scopeTypeFilter.value
+      const all = await get<any>("/api/memories", params)
+      const items = all?.items || []
+      const data = items.map((memory: any) => ({ key: memory.key, value: memory.value, type: memory.memoryType, importance: memory.importance, source: memory.source, scope: memory.scope, scopeType: rowScopeType(memory), sensitivity: rowSensitivity(memory), allowContextUse: rowAllowContextUse(memory), allowProactiveMention: rowAllowProactiveMention(memory), requiresConfirmation: rowRequiresConfirmation(memory) }))
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = "memories-" + new Date().toISOString().slice(0, 10) + ".json"
+      anchor.click()
+      URL.revokeObjectURL(url)
+      ElMessage.success("已导出 " + items.length + " 条记忆")
+    } catch { ElMessage.error("导出失败") }
+  }
+
+  async function loadCharacters() {
+    try { characters.value = await get<any[]>("/api/characters") || [] } catch {}
+  }
+
   return {
     memories, keyword, typeFilter, sourceFilter, scopeTypeFilter, characterFilter, characters, sortBy,
     page, pageSize, total, selectedIds, tableRef,
     globalQuery, globalSearching, globalSearched, showGlobalResults, globalResults, globalResultCount,
-    fetchList, handleSelectionChange, delMem, toggleScope, batchVerify, batchSetImportant, batchDelete
+    fetchList, handleSelectionChange, delMem, toggleScope, batchVerify, batchSetImportant, batchDelete, handleClearAll, handleExport, loadCharacters
   }
 }
