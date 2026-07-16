@@ -1,6 +1,7 @@
 package character
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -121,7 +122,7 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 	created, err := svc.Create(&CreateCharacterRequest{
 		Name:              "测试角色",
 		Identity:          "一个测试角色",
-		PersonalityConfig: `{"warmth":80,"sensitivity":60,"tolerance":70}`,
+		PersonalityConfig: json.RawMessage(`{"warmth":80,"sensitivity":60,"tolerance":70}`),
 		ChatStyleConfig:   `{"pace":"fast","emotion":"rich"}`,
 		SceneRules:        `{"place":"office","time":"day"}`,
 	})
@@ -152,7 +153,7 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 		t.Fatalf("sceneRules read mismatch: %s", read.SceneRules)
 	}
 
-	newConfig := `{"warmth":80,"sensitivity":60,"tolerance":30}`
+	newConfig := json.RawMessage(`{"warmth":80,"sensitivity":60,"tolerance":30}`)
 	cfg := newConfig
 	updated, err := svc.Update(created.ID, &UpdateCharacterRequest{
 		PersonalityConfig: &cfg,
@@ -160,7 +161,7 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.PersonalityConfig != newConfig {
+	if updated.PersonalityConfig != string(newConfig) {
 		t.Fatalf("personalityConfig update not persisted: %s", updated.PersonalityConfig)
 	}
 	if updated.ChatStyleConfig != `{"pace":"fast","emotion":"rich"}` {
@@ -174,7 +175,7 @@ func TestCreateThenUpdatePersonalityConfigRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if read2.PersonalityConfig != newConfig {
+	if read2.PersonalityConfig != string(newConfig) {
 		t.Fatalf("re-read personalityConfig mismatch: %s", read2.PersonalityConfig)
 	}
 

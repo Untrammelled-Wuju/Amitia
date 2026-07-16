@@ -23,7 +23,7 @@ extraResources:
 asar: true
 win:
   signAndEditExecutable: false
-  icon: build/icon.ico
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch:

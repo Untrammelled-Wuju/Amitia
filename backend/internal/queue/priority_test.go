@@ -81,6 +81,33 @@ func (m *mockRuntimeQueueStore) CountByScope(ctx context.Context, scope string) 
 	return count, nil
 }
 
+func (m *mockRuntimeQueueStore) Claim(ctx context.Context, owner string, leaseDuration time.Duration, limit int) ([]RuntimeQueueRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	claimed := make([]RuntimeQueueRecord, 0, limit)
+	for _, record := range m.records {
+		if len(claimed) >= limit || (record.Status != "pending" && record.Status != "retry") || record.AvailableAt.After(time.Now()) {
+			continue
+		}
+		record.Status = "leased"
+		record.Lease = owner
+		record.Attempt++
+		claimed = append(claimed, *record)
+	}
+	return claimed, nil
+}
+
+func (m *mockRuntimeQueueStore) Release(ctx context.Context, taskID string, owner string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	record, ok := m.records[taskID]
+	if !ok || record.Lease != owner {
+		return ErrQueueLeaseConflict
+	}
+	record.Status = "completed"
+	return nil
+}
+
 func TestPriorityQueueOrdersP0ToP5(t *testing.T) {
 	store := newMockRuntimeQueueStore()
 	pq := NewPriorityQueue(PriorityQueueConfig{MaxQueueSize: 10, Store: store})
