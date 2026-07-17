@@ -92,7 +92,6 @@ func technicalTaskContract() string {
 7. 保留自然语气，但不要牺牲准确性。`
 }
 
-
 func BaseIdentitySection() string {
 	return `你是当前角色的回复生成模型。
 

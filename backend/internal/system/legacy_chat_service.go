@@ -85,7 +85,7 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 				m["conversationId"] = v
 				delete(m, "conversation_id")
 			}
-		if v, ok := m["reply_to_message_id"]; ok && v != nil {
+			if v, ok := m["reply_to_message_id"]; ok && v != nil {
 				m["replyToMessageId"] = v
 				delete(m, "reply_to_message_id")
 			}
@@ -93,19 +93,19 @@ func (s *service) LegacyGetMessages(id string, page, pageSize int) map[string]in
 				m["replyToRole"] = v
 				delete(m, "reply_to_role")
 			}
-		if v, ok := m["reply_to_excerpt"]; ok && v != nil {
-			m["replyToExcerpt"] = v
-			delete(m, "reply_to_excerpt")
-		}
-		if v, ok := m["created_at"]; ok {
-			m["createdAt"] = v
-			delete(m, "created_at")
-		}
-		if v, ok := m["updated_at"]; ok {
-			m["updatedAt"] = v
-			delete(m, "updated_at")
-		}
-		msgs = append(msgs, m)
+			if v, ok := m["reply_to_excerpt"]; ok && v != nil {
+				m["replyToExcerpt"] = v
+				delete(m, "reply_to_excerpt")
+			}
+			if v, ok := m["created_at"]; ok {
+				m["createdAt"] = v
+				delete(m, "created_at")
+			}
+			if v, ok := m["updated_at"]; ok {
+				m["updatedAt"] = v
+				delete(m, "updated_at")
+			}
+			msgs = append(msgs, m)
 		}
 		if len(msgs) >= pageSize || int64(offset+queryLimit) >= total {
 			if msgs == nil {

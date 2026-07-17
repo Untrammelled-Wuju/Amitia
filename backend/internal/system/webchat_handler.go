@@ -251,10 +251,10 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	}
 
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-		ConversationID:   convID, Channel: "web", Source: source,
-		UserID:           userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-		CharacterID:      characterID, Message: mergedContent,
-		AudioUrl:         body.AudioUrl, AudioDuration: body.AudioDuration,
+		ConversationID: convID, Channel: "web", Source: source,
+		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+		CharacterID: characterID, Message: mergedContent,
+		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage:     body.VoiceMessage,
 		ImageUrl:         body.ImageUrl,
 		VideoUrl:         body.VideoUrl,
@@ -379,10 +379,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		}
 
 		orchResult, err := h.unifiedEntry.Handle(genCtx, &interaction.UnifiedEntryRequest{
-			ConversationID:   convID, Channel: "web", Source: source,
-			UserID:           userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-			CharacterID:      characterID, Message: mergedContent,
-			AudioUrl:         body.AudioUrl, AudioDuration: body.AudioDuration,
+			ConversationID: convID, Channel: "web", Source: source,
+			UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
+			CharacterID: characterID, Message: mergedContent,
+			AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 			VoiceMessage:     body.VoiceMessage,
 			ImageUrl:         body.ImageUrl,
 			VideoUrl:         body.VideoUrl,
@@ -460,4 +460,3 @@ func resolveSource(c *gin.Context, bodyValue string, fallback string) string {
 	}
 	return strings.TrimSpace(fallback)
 }
-

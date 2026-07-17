@@ -314,9 +314,9 @@ func TestDeliverableChannels(t *testing.T) {
 }
 
 func TestBackpressureEnqueueDequeue(t *testing.T) {
-	processed := []string{}
+	processed := make(chan string, 1)
 	outbox := func(item *QueueItem) bool {
-		processed = append(processed, item.ID)
+		processed <- item.ID
 		return true
 	}
 
@@ -328,8 +328,12 @@ func TestBackpressureEnqueueDequeue(t *testing.T) {
 	if !qb.Enqueue(item) {
 		t.Fatal("expected enqueue to succeed")
 	}
-	time.Sleep(100 * time.Millisecond)
-	if len(processed) < 1 {
+	select {
+	case id := <-processed:
+		if id != item.ID {
+			t.Fatalf("expected item %s to be processed, got %s", item.ID, id)
+		}
+	case <-time.After(time.Second):
 		t.Fatal("expected item to be processed")
 	}
 }

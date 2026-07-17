@@ -35,11 +35,11 @@ type MessageBuffer struct {
 }
 
 type conversationBuffer struct {
-	mu            sync.Mutex
-	messages      []string
-	imageContexts []string
-	timer         *time.Timer
-	waiters       []chan []string
+	mu             sync.Mutex
+	messages       []string
+	imageContexts  []string
+	timer          *time.Timer
+	waiters        []chan []string
 	batchStartedAt *time.Time
 }
 

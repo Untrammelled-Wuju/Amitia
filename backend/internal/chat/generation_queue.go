@@ -24,19 +24,19 @@ const (
 )
 
 type ConversationGenerationRuntime struct {
-	ConversationID    string
-	GenerationStatus  GenerationStatus
+	ConversationID     string
+	GenerationStatus   GenerationStatus
 	ActiveGenerationID string
-	GenerationRunning bool
-	CancelFunc        context.CancelFunc
-	GenerationIDs     []string
-	Mu                sync.Mutex
+	GenerationRunning  bool
+	CancelFunc         context.CancelFunc
+	GenerationIDs      []string
+	Mu                 sync.Mutex
 }
 
 type GenerationQueue struct {
-	mu        sync.Mutex
-	runtimes  map[string]*ConversationGenerationRuntime
-	handler   func(ctx context.Context, convID, generationID string, msgIDs []string) error
+	mu       sync.Mutex
+	runtimes map[string]*ConversationGenerationRuntime
+	handler  func(ctx context.Context, convID, generationID string, msgIDs []string) error
 }
 
 var generationQueue *GenerationQueue

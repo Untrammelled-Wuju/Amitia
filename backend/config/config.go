@@ -10,14 +10,14 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Storage   StorageConfig   `mapstructure:"storage"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	App       AppConfig       `mapstructure:"app"`
-	Chat      ChatConfig      `mapstructure:"chat"`
-	Qdrant    QdrantConfig    `mapstructure:"qdrant"`
-	Embedding EmbeddingConfig `mapstructure:"embedding"`
-	Surreal   SurrealConfig   `mapstructure:"surrealdb"`
+	Server    ServerConfig       `mapstructure:"server"`
+	Storage   StorageConfig      `mapstructure:"storage"`
+	JWT       JWTConfig          `mapstructure:"jwt"`
+	App       AppConfig          `mapstructure:"app"`
+	Chat      ChatConfig         `mapstructure:"chat"`
+	Qdrant    QdrantConfig       `mapstructure:"qdrant"`
+	Embedding EmbeddingConfig    `mapstructure:"embedding"`
+	Surreal   SurrealConfig      `mapstructure:"surrealdb"`
 	Prompt    PromptFeatureFlags `mapstructure:"prompt"`
 }
 
@@ -78,13 +78,13 @@ type SurrealConfig struct {
 }
 
 type PromptFeatureFlags struct {
-	TextlibRawEnabled          bool `mapstructure:"textlibRawEnabled"`
-	PersonalityRawEnabled      bool `mapstructure:"personalityRawEnabled"`
-	EmotionFusionEnabled       bool `mapstructure:"emotionFusionEnabled"`
-	IntimacyDefaultEnabled     bool `mapstructure:"intimacyDefaultEnabled"`
-	MemoryRawEnabled           bool `mapstructure:"memoryRawEnabled"`
-	ReplySanitizerEnabled      bool `mapstructure:"replySanitizerEnabled"`
-	ProactiveRawEnabled        bool `mapstructure:"proactiveRawEnabled"`
+	TextlibRawEnabled      bool `mapstructure:"textlibRawEnabled"`
+	PersonalityRawEnabled  bool `mapstructure:"personalityRawEnabled"`
+	EmotionFusionEnabled   bool `mapstructure:"emotionFusionEnabled"`
+	IntimacyDefaultEnabled bool `mapstructure:"intimacyDefaultEnabled"`
+	MemoryRawEnabled       bool `mapstructure:"memoryRawEnabled"`
+	ReplySanitizerEnabled  bool `mapstructure:"replySanitizerEnabled"`
+	ProactiveRawEnabled    bool `mapstructure:"proactiveRawEnabled"`
 }
 
 var AppCfg *Config

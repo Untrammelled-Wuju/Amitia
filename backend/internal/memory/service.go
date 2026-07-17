@@ -108,13 +108,13 @@ type MemoryCandidate struct {
 	CreatedAt      string `json:"createdAt"`
 }
 type SubmitCandidateRequest struct {
-	Key string `json:"key"`
-	Value string `json:"value"`
-	MemoryType string `json:"memoryType"`
-	Importance int `json:"importance"`
-	SourceText string `json:"sourceText"`
+	Key            string `json:"key"`
+	Value          string `json:"value"`
+	MemoryType     string `json:"memoryType"`
+	Importance     int    `json:"importance"`
+	SourceText     string `json:"sourceText"`
 	ConversationID string `json:"conversationId"`
-	CharacterID string `json:"characterId"`
+	CharacterID    string `json:"characterId"`
 }
 
 type VectorSearchResult struct {
