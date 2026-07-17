@@ -1,12 +1,8 @@
 <template>
   <div class="extension-page">
-    <header class="page-header">
-      <div>
-        <h1>技能</h1>
-        <p>管理 Amitia 内置能力与现有工具适配状态。禁用后会立即从模型工具列表中移除。</p>
-      </div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-    </header>
+    <ExtensionPageHeader title="技能" description="管理 Amitia 内置能力与现有工具适配状态。禁用后会立即从模型工具列表中移除。">
+      <template #actions><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></template>
+    </ExtensionPageHeader>
 
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" label-position="top" @submit.prevent>
@@ -107,6 +103,7 @@ import { onMounted, reactive, ref } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Refresh } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue"
 import { fetchSkills, resolveCharacterId, setSkillEnabled } from "./api"
 import type { RunStatus, SkillTrigger, SkillView } from "./types"
 

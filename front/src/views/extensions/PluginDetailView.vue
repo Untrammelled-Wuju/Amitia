@@ -1,12 +1,9 @@
 <template>
   <div class="plugin-page" v-loading="loading">
-    <header class="page-header">
-      <div>
-        <el-button link :icon="ArrowLeft" @click="router.push('/extensions/plugins')">返回插件列表</el-button>
-        <div v-if="plugin" class="title-row"><div><h1>{{ plugin.manifest.metadata.name }}</h1><code>{{ plugin.manifest.metadata.id }}</code></div><el-tag :type="plugin.enabled ? 'success' : 'info'">{{ plugin.enabled ? "已启用" : "已禁用" }}</el-tag><el-tag :type="plugin.compatible ? 'success' : 'danger'">{{ plugin.compatible ? "兼容" : "不兼容" }}</el-tag></div>
-      </div>
-      <div v-if="plugin" class="actions"><el-button :icon="Lock" @click="permissionVisible = true">管理权限</el-button><el-button :loading="reloading" @click="reload">重新加载</el-button><el-button :type="plugin.enabled ? 'danger' : 'primary'" plain :loading="changing" @click="toggle">{{ plugin.enabled ? "禁用" : "启用" }}</el-button></div>
-    </header>
+    <ExtensionPageHeader :title="plugin?.manifest.metadata.name || '插件详情'">
+      <template v-if="plugin" #meta><div class="detail-heading-meta"><code>{{ plugin.manifest.metadata.id }}</code><el-tag :type="plugin.enabled ? 'success' : 'info'">{{ plugin.enabled ? "已启用" : "已禁用" }}</el-tag><el-tag :type="plugin.compatible ? 'success' : 'danger'">{{ plugin.compatible ? "兼容" : "不兼容" }}</el-tag></div></template>
+      <template v-if="plugin" #actions><div class="actions"><el-button :icon="Lock" @click="permissionVisible = true">管理权限</el-button><el-button :loading="reloading" @click="reload">重新加载</el-button><el-button :type="plugin.enabled ? 'danger' : 'primary'" plain :loading="changing" @click="toggle">{{ plugin.enabled ? "禁用" : "启用" }}</el-button></div></template>
+    </ExtensionPageHeader>
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><el-button link type="primary" @click="load">重新加载</el-button></el-alert>
 
     <template v-if="plugin">
@@ -32,15 +29,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
-import { useRoute, useRouter } from "vue-router"
+import { useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { ArrowLeft, Lock } from "@element-plus/icons-vue"
+import { Lock } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue"
 import PermissionDialog from "./components/PermissionDialog.vue"
 import SchemaSurfaceRenderer from "./components/SchemaSurfaceRenderer.vue"
 import { executePluginAction, fetchCapabilities, fetchPlugin, fetchPluginEvents, fetchPluginHealth, fetchPluginSchedules, fetchPluginState, fetchPluginSurface, reloadPlugin, resetPluginCircuit, resetPluginConfig, resolveCharacterId, retryPluginEvent, setPluginEnabled, setPluginScheduleEnabled, updatePluginConfig, updatePluginPermissions } from "./api"
 import type { CapabilityDefinition, PermissionGrant, PluginDetail, PluginEventPage, PluginHealth, PluginSchedule, PluginState, SurfaceDocument } from "./types"
 
-const route = useRoute(); const router = useRouter(); const pluginId = computed(() => String(route.params.id || ""))
+const route = useRoute(); const pluginId = computed(() => String(route.params.id || ""))
 const plugin = ref<PluginDetail>(); const characterId = ref(""); const loading = ref(false); const loadError = ref(""); const activeTab = ref("protocol")
 const surface = ref<SurfaceDocument>(); const health = ref<PluginHealth>(); const states = ref<PluginState[]>([]); const schedules = ref<PluginSchedule[]>([]); const events = ref<PluginEventPage>({ items: [], total: 0, page: 1, pageSize: 20 }); const capabilities = ref<CapabilityDefinition[]>([])
 const permissionVisible = ref(false); const savingPermissions = ref(false); const changing = ref(false); const reloading = ref(false); const savingConfig = ref(false); const resetting = ref(false); const resettingCircuit = ref(false); const runningAction = ref(""); const eventStatus = ref(""); const configText = ref("{}"); const configError = ref("")
@@ -64,5 +62,6 @@ onMounted(load)
 
 <style scoped>
 .plugin-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }.page-header,.title-row,.actions,.panel-header { display: flex; align-items: center; gap: 12px; }.page-header,.panel-header { justify-content: space-between; }.page-header { align-items: flex-start; }.title-row { margin-top: 8px; flex-wrap: wrap; }.title-row h1 { font-size: 24px; line-height: 32px; }.title-row code,.muted,.help { color: var(--ac-color-text-muted); }.description { margin-bottom: 16px; color: var(--ac-color-text-secondary); line-height: 1.6; }.two-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }.tags { display: flex; flex-wrap: wrap; gap: 8px; }.table-card :deep(.el-card__body) { padding: 0; overflow-x: auto; }.event-filter { padding: 16px; max-width: 220px; }.help { margin-top: 6px; font-size: 12px; }.error { margin-bottom: 12px; color: var(--el-color-danger); }pre { margin: 0; padding: 14px; overflow: auto; border-radius: 8px; background: var(--ac-color-surface-soft); font-size: 12px; line-height: 1.6; }code { overflow-wrap: anywhere; }
+.detail-heading-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }.detail-heading-meta code { color: var(--ac-color-text-muted); }
 @media (max-width: 840px) { .page-header { flex-direction: column; }.two-grid { grid-template-columns: 1fr; } }
 </style>

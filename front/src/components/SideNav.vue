@@ -57,17 +57,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/import">导入记录</el-menu-item>
       </el-sub-menu>
 
-      <el-sub-menu index="extensions">
-        <template #title>
-          <el-icon><Grid /></el-icon>
-          <span>扩展</span>
-        </template>
-        <el-menu-item index="/extensions">扩展中心</el-menu-item>
-        <el-menu-item index="/extensions/skills">技能</el-menu-item>
-        <el-menu-item index="/extensions/plugins">插件</el-menu-item>
-        <el-menu-item index="/extensions/workshop">扩展工坊</el-menu-item>
-        <el-menu-item index="/extensions/runs">执行记录</el-menu-item>
-      </el-sub-menu>
+      <el-menu-item index="/extensions">
+        <el-icon><Grid /></el-icon>
+        <span>扩展中心</span>
+      </el-menu-item>
 
       <div class="menu-divider"></div>
 
@@ -118,6 +111,9 @@ const activeIndex = computed(() => {
   }
   if (path.startsWith("/dashboard")) {
     return path
+  }
+  if (path.startsWith("/extensions")) {
+    return "/extensions"
   }
   return path
 })

@@ -1,24 +1,27 @@
 <template>
   <main class="package-page">
-    <header class="page-header">
-      <div><h1>本地扩展包</h1><p>导入、验证、导出并管理 workflow 与 instructions Skill 的本地版本。</p></div>
-      <el-button @click="$router.push('/extensions')">返回扩展中心</el-button>
-    </header>
+    <ExtensionPageHeader title="本地扩展包" description="导入、验证、导出并管理 workflow 与 instructions Skill 的本地版本。" />
 
     <el-tabs v-model="tab" class="package-tabs" @tab-change="refreshTab">
       <el-tab-pane label="导入扩展" name="import">
         <section class="panel import-panel">
           <div class="scope-row">
             <el-segmented v-model="scopeType" :options="scopeOptions" aria-label="安装作用域" />
-            <el-input v-if="scopeType === 'character'" v-model="scopeId" placeholder="角色 ID" aria-label="角色 ID" />
+            <div v-if="scopeType === 'character'" class="character-field">
+              <label for="package-character-select">导入角色</label>
+              <el-select id="package-character-select" v-model="scopeId" filterable :loading="characterLoading" placeholder="请选择角色" no-data-text="暂无可用角色" aria-label="导入角色" @change="onCharacterChange">
+                <el-option v-for="character in characters" :key="character.id" :label="character.name" :value="String(character.id)" />
+              </el-select>
+              <span v-if="characterLoadError" class="field-error" role="alert">{{ characterLoadError }}</span>
+            </div>
           </div>
           <div class="drop-zone" @dragover.prevent @drop.prevent="onDrop">
             <el-icon><UploadFilled /></el-icon>
             <strong>选择 .amitiax、AgentSkills ZIP 或目录</strong>
             <span>服务端会重新检测格式并执行全部安全校验</span>
             <div class="actions">
-              <el-button type="primary" :loading="loading" @click="chooseFile">选择文件</el-button>
-              <el-button :loading="loading" @click="chooseDirectory">选择目录</el-button>
+              <el-button type="primary" :disabled="characterSelectionRequired" :loading="loading" @click="chooseFile">选择文件</el-button>
+              <el-button :disabled="characterSelectionRequired" :loading="loading" @click="chooseDirectory">选择目录</el-button>
             </div>
             <el-progress v-if="loading" class="upload-progress" :percentage="uploadProgress" :status="uploadProgress === 100 ? 'success' : undefined" />
             <input ref="fileInput" class="sr-only" type="file" accept=".amitiax,.zip,application/zip" @change="onFile" />
@@ -112,18 +115,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import { useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { UploadFilled } from "@element-plus/icons-vue"
+import type { Character } from "@/types"
+import ExtensionPageHeader from "../components/ExtensionPageHeader.vue"
 import type { PackageImportPreview, PackageOperation, PackageSigner, PackageVersion } from "../types"
-import { comparePackageVersions, downloadExtensionPackage, exportExtensionPackage, fetchPackageDependencies, fetchPackageOperations, fetchPackageSigners, fetchPackageVersions, installExtensionPackage, previewExtensionDirectory, previewExtensionPackage, previewPackageUninstall, resolveCharacterId, rollbackExtensionPackage, setPackageSignerTrust, uninstallExtensionPackage } from "../api"
+import { comparePackageVersions, downloadExtensionPackage, exportExtensionPackage, fetchCharacterOptions, fetchPackageDependencies, fetchPackageOperations, fetchPackageSigners, fetchPackageVersions, installExtensionPackage, previewExtensionDirectory, previewExtensionPackage, previewPackageUninstall, resolveCharacterId, rollbackExtensionPackage, setPackageSignerTrust, uninstallExtensionPackage } from "../api"
 
 const route = useRoute()
 const tab = ref("import")
 const scopeType = ref<"global" | "character">("global")
 const scopeId = ref("")
 const scopeOptions = [{ label: "全局", value: "global" }, { label: "角色", value: "character" }]
+const characters = ref<Character[]>([])
+const characterLoading = ref(false)
+const characterLoadError = ref("")
 const fileInput = ref<HTMLInputElement>()
 const directoryInput = ref<HTMLInputElement>()
 const upgradeInput = ref<HTMLInputElement>()
@@ -148,18 +156,22 @@ const compareFrom = ref("")
 
 const requiredCapabilityConfirmations = computed(() => Array.from(new Set([...(preview.value?.highRiskCapabilities || []), ...(preview.value?.capabilityConfirmations || [])])))
 const canInstall = computed(() => Boolean(preview.value?.availableActions.length && !preview.value.errors.length && preview.value.compatible && (preview.value.signature.status !== "unsigned" || confirmUnsigned.value) && (!preview.value.scripts || confirmScripts.value) && (!upgradeId.value || confirmVersionChange.value) && (!hasRisk("SIGNER_CHANGED") || confirmSignerChange.value) && (!hasRisk("CONFIG_MIGRATION") || confirmConfigMigration.value) && requiredCapabilityConfirmations.value.every(item => confirmedCapabilities.value.includes(item))))
+const characterSelectionRequired = computed(() => scopeType.value === "character" && (!scopeId.value || characterLoading.value))
 
-onMounted(async () => { scopeId.value = await resolveCharacterId(); if (extensionId.value) { tab.value = "versions"; await loadExtension() } })
+onMounted(async () => { await loadCharacters(); if (extensionId.value) { tab.value = "versions"; await loadExtension() } })
+watch(scopeType, async (value, previous) => { if (value !== previous) resetPreview(); if (value === "character" && !characters.value.length) await loadCharacters() })
 
 function resetPreview() { preview.value = undefined; confirmUnsigned.value = false; confirmScripts.value = false; confirmVersionChange.value = false; confirmSignerChange.value = false; confirmConfigMigration.value = false; confirmedCapabilities.value = [] }
+async function loadCharacters() { characterLoading.value = true; characterLoadError.value = ""; try { characters.value = await fetchCharacterOptions(); if (!characters.value.length) { scopeId.value = ""; characterLoadError.value = "暂无可用角色，请先创建角色"; return } if (!characters.value.some(item => String(item.id) === scopeId.value)) scopeId.value = await resolveCharacterId(characters.value) } catch (error: any) { characters.value = []; scopeId.value = ""; characterLoadError.value = error?.response?.data?.detail || "角色列表加载失败，请稍后重试" } finally { characterLoading.value = false } }
+function onCharacterChange() { resetPreview() }
 function hasRisk(code: string) { return Boolean(preview.value?.risks.some(risk => risk.code === code)) }
-async function previewFile(file: File, target = "") { if (scopeType.value === "character" && !scopeId.value) return ElMessage.warning("请选择角色作用域"); loading.value = true; uploadProgress.value = 0; resetPreview(); try { preview.value = await previewExtensionPackage(file, scopeType.value, scopeType.value === "character" ? scopeId.value : "", target, value => { uploadProgress.value = value }); upgradeId.value = target } catch (error: any) { ElMessage.error(error?.response?.data?.detail || error?.message || "预览失败") } finally { loading.value = false } }
+async function previewFile(file: File, target = "") { if (scopeType.value === "character" && !scopeId.value) return ElMessage.warning("请先选择导入角色"); loading.value = true; uploadProgress.value = 0; resetPreview(); try { preview.value = await previewExtensionPackage(file, scopeType.value, scopeType.value === "character" ? scopeId.value : "", target, value => { uploadProgress.value = value }); upgradeId.value = target } catch (error: any) { ElMessage.error(error?.response?.data?.detail || error?.message || "预览失败") } finally { loading.value = false } }
 function onFile(event: Event) { const file = (event.target as HTMLInputElement).files?.[0]; if (file) void previewFile(file); (event.target as HTMLInputElement).value = "" }
 async function chooseFile() { const desktop = window.amitiaDesktop; if (!desktop?.selectExtensionPackage) return fileInput.value?.click(); const selected = await desktop.selectExtensionPackage(); if (!selected) return; const bytes = Uint8Array.from(atob(selected.base64), char => char.charCodeAt(0)); await previewFile(new File([bytes], selected.name, { type: "application/zip" })) }
 function onDrop(event: DragEvent) { const file = event.dataTransfer?.files?.[0]; if (file) void previewFile(file) }
 async function chooseDirectory() { const desktop = window.amitiaDesktop; if (desktop?.selectAgentSkillDirectory) { const selected = await desktop.selectAgentSkillDirectory(); if (selected) await previewDirectoryPayload(selected.rootName, selected.files.map(item => ({ path: item.path, base64: item.base64 }))); return } directoryInput.value?.click() }
 async function onDirectory(event: Event) { const files = Array.from((event.target as HTMLInputElement).files || []); if (!files.length) return; const rootName = files[0].webkitRelativePath.split("/")[0]; const payload = await Promise.all(files.map(async file => ({ path: file.webkitRelativePath.split("/").slice(1).join("/"), base64: await fileBase64(file) }))); await previewDirectoryPayload(rootName, payload); (event.target as HTMLInputElement).value = "" }
-async function previewDirectoryPayload(rootName: string, files: Array<{ path: string; base64: string }>) { loading.value = true; uploadProgress.value = 0; resetPreview(); try { preview.value = await previewExtensionDirectory(rootName, files, scopeType.value, scopeType.value === "character" ? scopeId.value : "", value => { uploadProgress.value = value }); upgradeId.value = "" } catch (error: any) { ElMessage.error(error?.response?.data?.detail || error?.message || "目录预览失败") } finally { loading.value = false } }
+async function previewDirectoryPayload(rootName: string, files: Array<{ path: string; base64: string }>) { if (scopeType.value === "character" && !scopeId.value) return ElMessage.warning("请先选择导入角色"); loading.value = true; uploadProgress.value = 0; resetPreview(); try { preview.value = await previewExtensionDirectory(rootName, files, scopeType.value, scopeType.value === "character" ? scopeId.value : "", value => { uploadProgress.value = value }); upgradeId.value = "" } catch (error: any) { ElMessage.error(error?.response?.data?.detail || error?.message || "目录预览失败") } finally { loading.value = false } }
 function fileBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1] || ""); reader.onerror = reject; reader.readAsDataURL(file) }) }
 async function installPreview() { if (!preview.value || !canInstall.value) return; installing.value = true; try { const result = await installExtensionPackage(preview.value, { unsigned: confirmUnsigned.value, scripts: confirmScripts.value, capabilities: confirmedCapabilities.value, versionChange: confirmVersionChange.value, signerChange: confirmSignerChange.value, configMigration: confirmConfigMigration.value }, upgradeId.value); ElMessage.success(`${result.extensionId} ${result.version} 已安装，当前状态：${result.enabled ? '启用' : '禁用'}`); extensionId.value = result.extensionId; resetPreview(); upgradeId.value = "" } catch (error: any) { ElMessage.error(error?.response?.data?.detail || error?.message || "安装失败") } finally { installing.value = false } }
 async function refreshTab(name: string | number) { if (name === "operations") operations.value = await fetchPackageOperations(); if (name === "signers") signers.value = await fetchPackageSigners() }
@@ -176,15 +188,15 @@ function formatBytes(value: number) { if (value < 1024) return `${value} B`; if 
 </script>
 
 <style scoped>
-.package-page { height: 100%; overflow: auto; padding: 24px; color: var(--console-text); background: var(--console-bg); }
+.package-page { height: 100%; overflow: auto; color: var(--console-text); background: var(--console-bg); }
 .page-header, .title-row, .manager-toolbar, .install-bar, .scope-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .page-header h1, h2 { margin: 0; }.page-header p, .summary-panel p { margin: 6px 0 0; color: var(--console-text-muted); }.package-tabs { margin-top: 20px; }
-.panel { padding: 20px; border: 1px solid var(--console-border); border-radius: 14px; background: var(--console-card-bg); box-shadow: 0 8px 28px rgba(0,0,0,.04); }.import-panel { max-width: 900px; margin: 0 auto; }.scope-row { justify-content: flex-start; margin-bottom: 18px; }.scope-row .el-input { max-width: 280px; }
+.panel { padding: 20px; border: 1px solid var(--console-border); border-radius: 14px; background: var(--console-card-bg); box-shadow: 0 8px 28px rgba(0,0,0,.04); }.import-panel { width: 100%; box-sizing: border-box; }.scope-row { justify-content: flex-start; margin-bottom: 18px; }.character-field { display: grid; grid-template-columns: auto minmax(220px, 320px); align-items: center; gap: 8px 12px; }.character-field label { color: var(--console-text-muted); font-size: 13px; }.character-field .el-select { width: 100%; }.field-error { grid-column: 2; color: var(--el-color-danger); font-size: 12px; }
 .drop-zone { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px dashed var(--el-border-color); border-radius: 12px; background: var(--el-fill-color-lighter); text-align: center; }.drop-zone > .el-icon { font-size: 44px; color: var(--el-color-primary); }.drop-zone span, .install-bar span { color: var(--console-text-muted); }.actions { display: flex; gap: 10px; margin-top: 6px; }.upload-progress { width: min(420px, 80%); }
 .preview-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: 16px; margin-top: 18px; }.wide-panel, .install-bar { grid-column: 1 / -1; }.eyebrow { color: var(--el-color-primary); text-transform: uppercase; font-size: 12px; letter-spacing: .08em; }.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }.facts div { min-width: 0; }.facts dt { color: var(--console-text-muted); font-size: 12px; }.facts dd { margin: 3px 0 0; overflow-wrap: anywhere; }.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }.message-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 8px; }.message-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; background: var(--el-fill-color-light); }.risk-high strong { color: var(--el-color-danger); }.risk-medium strong { color: var(--el-color-warning); }.risk-low strong { color: var(--el-color-success); }.confirmations { display: grid; gap: 8px; }.confirmations :deep(.el-checkbox-group) { display: grid; }
 .wide-panel .el-alert + .el-alert { margin-top: 8px; }.file-tree { max-height: 320px; overflow: auto; margin-top: 14px; border: 1px solid var(--console-border); border-radius: 10px; }.file-tree > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 12px; border-bottom: 1px solid var(--console-border); }.file-tree > div:last-child { border-bottom: 0; }.file-tree span:last-child { color: var(--console-text-muted); white-space: nowrap; }.install-bar { position: sticky; bottom: 0; padding: 16px 20px; border: 1px solid var(--console-border); border-radius: 14px; background: color-mix(in srgb, var(--console-card-bg) 92%, transparent); backdrop-filter: blur(14px); z-index: 2; }
 .manager-toolbar { justify-content: flex-start; }.manager-toolbar .el-input { max-width: 520px; }.version-layout { margin-top: 18px; }.manager-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }.diff-view { max-height: 420px; overflow: auto; padding: 14px; border-radius: 10px; background: var(--el-fill-color-darker); white-space: pre-wrap; overflow-wrap: anywhere; }.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-@media (max-width: 860px) { .package-page { padding: 16px; }.page-header, .install-bar, .manager-toolbar { align-items: stretch; flex-direction: column; }.preview-grid { grid-template-columns: 1fr; }.wide-panel, .install-bar { grid-column: auto; }.facts { grid-template-columns: 1fr; }.file-tree > div { flex-direction: column; gap: 4px; }.manager-toolbar .el-input { max-width: none; } }
+@media (max-width: 860px) { .page-header, .install-bar, .manager-toolbar, .scope-row { align-items: stretch; flex-direction: column; }.character-field { grid-template-columns: 1fr; }.field-error { grid-column: 1; }.preview-grid { grid-template-columns: 1fr; }.wide-panel, .install-bar { grid-column: auto; }.facts { grid-template-columns: 1fr; }.file-tree > div { flex-direction: column; gap: 4px; }.manager-toolbar .el-input { max-width: none; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>

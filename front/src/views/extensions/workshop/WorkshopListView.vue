@@ -1,12 +1,8 @@
 <template>
   <main class="workshop-page">
-    <header class="page-header">
-      <div>
-        <h1>扩展工坊</h1>
-        <p>用自然语言创建声明式工作流或纯指令 Agent Skill。工坊不会生成脚本。</p>
-      </div>
-      <el-button type="primary" :icon="Plus" @click="createOpen = true">创建 Skill</el-button>
-    </header>
+    <ExtensionPageHeader title="扩展工坊" description="用自然语言创建声明式工作流或纯指令 Agent Skill。工坊不会生成脚本。">
+      <template #actions><el-button type="primary" :icon="Plus" @click="createOpen = true">创建 Skill</el-button></template>
+    </ExtensionPageHeader>
 
     <el-alert title="安全边界" type="info" :closable="false" show-icon>
       <template #default>所有草案都要经过结构校验、权限确认和沙箱测试，安装后默认保持禁用。</template>
@@ -56,6 +52,7 @@ import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Plus } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "../components/ExtensionPageHeader.vue"
 import { archiveWorkshopSession, createWorkshopSession, fetchWorkshopSessions, generateWorkshopInstruction, installAgentSkill, resolveCharacterId } from "../api"
 import type { WorkshopSession, WorkshopStatus } from "../types"
 
@@ -126,7 +123,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.workshop-page { display: flex; flex-direction: column; gap: 16px; height: 100%; padding: 24px; overflow: auto; }
+.workshop-page { display: flex; flex-direction: column; gap: 16px; height: 100%; overflow: auto; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .page-header h1 { margin: 0 0 8px; color: var(--console-text); }
 .page-header p, .helper { margin: 0; color: var(--console-text-muted); line-height: 1.6; }
@@ -136,5 +133,5 @@ onMounted(load)
 .session-link code { color: var(--console-text-muted); font-size: 12px; }
 .session-link:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; border-radius: 4px; }
 .helper { margin-top: 8px; font-size: 13px; }
-@media (max-width: 720px) { .workshop-page { padding: 16px; } .page-header { flex-direction: column; } .page-header .el-button { width: 100%; min-height: 44px; } }
+@media (max-width: 720px) { .page-header { flex-direction: column; } .page-header .el-button { width: 100%; min-height: 44px; } }
 </style>

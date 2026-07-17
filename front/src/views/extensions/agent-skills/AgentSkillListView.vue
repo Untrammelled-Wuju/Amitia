@@ -1,9 +1,8 @@
 <template>
   <main class="agent-page">
-    <header class="page-header">
-      <div><h1>Agent Skills</h1><p>导入并管理通用 SKILL.md。脚本始终只能查看，不能执行。</p></div>
-      <div class="header-actions"><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button><el-button type="primary" :icon="Upload" @click="importDialog = true">导入 Agent Skill</el-button></div>
-    </header>
+    <ExtensionPageHeader title="Agent Skills" description="导入并管理通用 SKILL.md。脚本始终只能查看，不能执行。">
+      <template #actions><div class="header-actions"><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button><el-button type="primary" :icon="Upload" @click="importDialog = true">导入 Agent Skill</el-button></div></template>
+    </ExtensionPageHeader>
 
     <el-alert title="安全边界" type="info" :closable="false" show-icon description="allowed-tools 只用于兼容性分析，不会授予权限；MCP 不会自动连接；scripts 不会执行。" />
 
@@ -72,6 +71,7 @@
 import { onMounted, reactive, ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Files, FolderOpened, Refresh, Upload } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "../components/ExtensionPageHeader.vue"
 import { fetchAgentSkill, fetchAgentSkills, installAgentSkill, previewAgentSkillDirectory, previewAgentSkillZIP, removeAgentSkill, resolveCharacterId, setAgentSkillEnabled } from "../api"
 import type { AgentSkillCompatibilityStatus, AgentSkillDefinition, AgentSkillDetail, AgentSkillPreview, AgentSkillScope } from "../types"
 

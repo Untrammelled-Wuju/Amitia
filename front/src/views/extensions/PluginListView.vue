@@ -1,9 +1,8 @@
 <template>
   <div class="plugin-page">
-    <header class="page-header">
-      <div><h1>插件</h1><p>管理 Plugin Runtime 生命周期、健康状态、权限与扩展协议。</p></div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-    </header>
+    <ExtensionPageHeader title="插件" description="管理 Plugin Runtime 生命周期、健康状态、权限与扩展协议。">
+      <template #actions><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></template>
+    </ExtensionPageHeader>
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false"><el-button link type="primary" @click="load">重新加载</el-button></el-alert>
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="page.items" row-key="manifest.metadata.id" empty-text="暂无插件" stripe>
@@ -30,6 +29,7 @@ import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Refresh } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue"
 import { fetchPlugins, resolveCharacterId, setPluginEnabled } from "./api"
 import type { PluginPage, PluginView } from "./types"
 

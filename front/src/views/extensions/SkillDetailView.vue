@@ -1,26 +1,24 @@
 <template>
   <div class="extension-page" v-loading="loading">
-    <header class="page-header">
-      <div class="title-block">
-        <el-button link :icon="ArrowLeft" @click="router.push('/extensions/skills')">返回技能列表</el-button>
-        <div v-if="skill" class="title-row">
-          <div>
-            <h1>{{ skill.name }}</h1>
-            <code>{{ skill.id }}</code>
-          </div>
+    <ExtensionPageHeader :title="skill?.name || '技能详情'">
+      <template v-if="skill" #meta>
+        <div class="detail-heading-meta">
+          <code>{{ skill.id }}</code>
           <div class="tag-list">
             <el-tag :type="skill.enabled ? 'success' : 'info'">{{ skill.enabled ? "已启用" : "已禁用" }}</el-tag>
             <el-tag :type="skill.compatible ? 'success' : 'danger'">{{ skill.compatible ? "兼容" : "不兼容" }}</el-tag>
           </div>
         </div>
-      </div>
-      <div v-if="skill" class="header-actions">
-        <el-button v-if="skill.source === 'workflow' || skill.source === 'instructions'" @click="router.push({ path: '/extensions/packages', query: { id: skill.id } })">包与版本</el-button>
-        <el-button v-if="skill.source === 'workflow'" :loading="forking" @click="forkRevision">创建新 Revision</el-button>
-        <el-button :icon="Lock" @click="permissionVisible = true">管理权限</el-button>
-        <el-button :type="skill.enabled ? 'danger' : 'primary'" plain :loading="changing" @click="toggleSkill">{{ skill.enabled ? "禁用" : "启用" }}</el-button>
-      </div>
-    </header>
+      </template>
+      <template v-if="skill" #actions>
+        <div class="header-actions">
+          <el-button v-if="skill.source === 'workflow' || skill.source === 'instructions'" @click="router.push({ path: '/extensions/packages', query: { id: skill.id } })">包与版本</el-button>
+          <el-button v-if="skill.source === 'workflow'" :loading="forking" @click="forkRevision">创建新 Revision</el-button>
+          <el-button :icon="Lock" @click="permissionVisible = true">管理权限</el-button>
+          <el-button :type="skill.enabled ? 'danger' : 'primary'" plain :loading="changing" @click="toggleSkill">{{ skill.enabled ? "禁用" : "启用" }}</el-button>
+        </div>
+      </template>
+    </ExtensionPageHeader>
 
     <el-alert v-if="loadError" :title="loadError" type="error" show-icon :closable="false">
       <template #default><el-button link type="primary" @click="load">重新加载</el-button></template>
@@ -166,7 +164,8 @@
 import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { ArrowLeft, Lock } from "@element-plus/icons-vue"
+import { Lock } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue"
 import PermissionDialog from "./components/PermissionDialog.vue"
 import { executeSkill, fetchCapabilities, fetchSkill, forkWorkflowSkill, resetConfig, resolveCharacterId, rollbackWorkflowSkill, setSkillEnabled, updateConfig, updatePermissions } from "./api"
 import type { CapabilityDefinition, PermissionGrant, RunStatus, SkillDetail, SkillResult, SkillTrigger } from "./types"
@@ -403,6 +402,7 @@ onMounted(load)
 
 .page-header,
 .title-row,
+.detail-heading-meta,
 .header-actions,
 .tag-list,
 .result-header,
@@ -437,7 +437,7 @@ h1 {
   line-height: 32px;
 }
 
-.title-row code,
+.detail-heading-meta code,
 .capability-item code {
   color: var(--ac-color-text-secondary);
   overflow-wrap: anywhere;

@@ -1,13 +1,8 @@
 <template>
   <main class="session-page" v-loading="loading">
-    <header class="page-header">
-      <div>
-        <el-button link :icon="ArrowLeft" @click="router.push('/extensions/workshop')">返回工坊</el-button>
-        <h1>{{ draft?.metadata.name || "扩展工坊会话" }}</h1>
-        <p>{{ session?.requirement }}</p>
-      </div>
-      <div class="header-status"><el-tag v-if="session" :type="statusType(session.status)">{{ statusLabel(session.status) }}</el-tag><span v-if="session?.currentRevision">Revision {{ session.currentRevision }}</span></div>
-    </header>
+    <ExtensionPageHeader :title="draft?.metadata.name || '扩展工坊会话'" :description="session?.requirement">
+      <template #actions><div class="header-status"><el-tag v-if="session" :type="statusType(session.status)">{{ statusLabel(session.status) }}</el-tag><span v-if="session?.currentRevision">Revision {{ session.currentRevision }}</span></div></template>
+    </ExtensionPageHeader>
 
     <el-alert title="本工坊只创建声明式 Skill" type="info" :closable="false" show-icon>不能生成 Plugin、源码、JavaScript、Shell 或 SQL；所有安装结果默认禁用。</el-alert>
 
@@ -128,7 +123,7 @@
 import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { ArrowLeft } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "../components/ExtensionPageHeader.vue"
 import { confirmWorkshopPermissions, fetchWorkshopSession, generateWorkshopDraft, installWorkshopDraft, resolveCharacterId, testWorkshopDraft, validateWorkshopDraft } from "../api"
 import type { AnalysisIssue, CapabilityAnalysis, ExtensionDraft, WorkshopSessionDetail, WorkshopStatus, WorkshopTestReport, WorkshopValidation } from "../types"
 import CapabilityRiskList from "./components/CapabilityRiskList.vue"
@@ -190,7 +185,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.session-page { display: flex; flex-direction: column; gap: 16px; height: 100%; padding: 24px; overflow: auto; }
+.session-page { display: flex; flex-direction: column; gap: 16px; height: 100%; overflow: auto; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .page-header h1 { margin: 8px 0; color: var(--console-text); }
 .page-header p, .stage-help { margin: 0; color: var(--console-text-muted); line-height: 1.6; }
@@ -217,6 +212,6 @@ pre { max-height: 360px; padding: 14px; overflow: auto; border: 1px solid var(--
 .install-card { margin-bottom: 24px; }
 code { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .progress { align-items: flex-start; } .workflow-list li { grid-template-columns: 1fr auto; } .issue-row { grid-template-columns: auto 1fr; } .issue-row code { grid-column: 2; } }
-@media (max-width: 720px) { .session-page { padding: 16px; } .page-header, .card-heading { flex-direction: column; } .header-status { white-space: normal; } .actions .el-button, .actions.start .el-button { min-height: 44px; } .stage-card :deep(.el-descriptions__body) { overflow-x: auto; } .plan-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { .page-header, .card-heading { flex-direction: column; } .header-status { white-space: normal; } .actions .el-button, .actions.start .el-button { min-height: 44px; } .stage-card :deep(.el-descriptions__body) { overflow-x: auto; } .plan-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .session-page * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
 </style>

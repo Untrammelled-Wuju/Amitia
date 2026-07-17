@@ -1,12 +1,8 @@
 <template>
   <div class="extension-page">
-    <header class="page-header">
-      <div>
-        <h1>执行记录</h1>
-        <p>按角色查看技能运行状态、触发来源、耗时与审计关联信息。</p>
-      </div>
-      <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-    </header>
+    <ExtensionPageHeader title="执行记录" description="按角色查看技能运行状态、触发来源、耗时与审计关联信息。">
+      <template #actions><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></template>
+    </ExtensionPageHeader>
 
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" label-position="top" @submit.prevent>
@@ -83,6 +79,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue"
 import { Refresh } from "@element-plus/icons-vue"
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue"
 import { fetchRun, fetchRuns, fetchSkills, resolveCharacterId } from "./api"
 import type { RunPage, RunStatus, RunView, SkillTrigger, SkillView } from "./types"
 

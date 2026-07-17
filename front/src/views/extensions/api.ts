@@ -1,4 +1,5 @@
 import { apiClient } from "@/composables/useApi"
+import type { Character } from "@/types"
 import type {
   CapabilityDefinition,
   PermissionGrant,
@@ -34,18 +35,22 @@ import type {
   PackageDependency,
 } from "./types"
 
-export async function resolveCharacterId() {
+export async function fetchCharacterOptions() {
+  const response = await apiClient.get("/api/characters")
+  const characters = response.data?.data || response.data
+  return Array.isArray(characters) ? characters as Character[] : []
+}
+
+export async function resolveCharacterId(availableCharacters?: Character[]) {
+  const characters = availableCharacters || await fetchCharacterOptions()
   const cached = localStorage.getItem("uai-default-char")
   if (cached) {
     try {
       const parsed = JSON.parse(cached)
-      if (parsed?.id) return String(parsed.id)
+      if (parsed?.id && characters.some(item => String(item.id) === String(parsed.id))) return String(parsed.id)
     } catch {}
   }
-  const response = await apiClient.get("/api/characters")
-  const characters = response.data?.data || response.data
-  if (!Array.isArray(characters)) return ""
-  const selected = characters.find((item: any) => item.isDefault) || characters.find((item: any) => item.isActive) || characters.find((item: any) => item.status !== "disabled")
+  const selected = characters.find(item => item.isDefault) || characters.find(item => item.isActive) || characters.find(item => item.status !== "disabled")
   return selected?.id ? String(selected.id) : ""
 }
 

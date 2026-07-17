@@ -329,9 +329,8 @@ onUnmounted(() => {
 <style scoped>
 .wechat-page {
   margin:  0;
-  padding: 20px 16px;
 }
-.page-title { font-size: 20px; font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
+.page-title { font-size: 24px; font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
 .section-card { margin-bottom: 12px; }
 .card-header-row { display: flex; align-items: center; justify-content: space-between; }
 .header-actions { display: flex; align-items: center; gap: 8px; }

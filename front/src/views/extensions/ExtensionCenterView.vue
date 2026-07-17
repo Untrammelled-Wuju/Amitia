@@ -20,13 +20,13 @@ const entries = [
 ]
 </script>
 <style scoped>
-.center-page { height: 100%; padding: 24px; overflow: auto; }
-header h1 { margin: 0 0 8px; color: var(--console-text); }
+.center-page { height: 100%; overflow: auto; }
+header h1 { margin: 0 0 8px; color: var(--console-text); font-size: 24px; }
 header p, .entry-card p { margin: 0; color: var(--console-text-muted); line-height: 1.6; }
 .entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 24px; }
 .entry-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; min-height: 110px; padding: 20px; border: 1px solid var(--console-border); border-radius: 12px; background: var(--console-card-bg); color: var(--console-text); text-decoration: none; transition: border-color 180ms ease, box-shadow 180ms ease; }
 .entry-card:hover, .entry-card:focus-visible { border-color: var(--el-color-primary); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); outline: none; }
 .entry-card > .el-icon:first-child { font-size: 26px; color: var(--el-color-primary); }
 .entry-card h2 { margin: 0 0 6px; font-size: 18px; }
-@media (max-width: 720px) { .center-page { padding: 16px; } .entry-card { min-height: 120px; } }
+@media (max-width: 720px) { .entry-card { min-height: 120px; } }
 </style>
