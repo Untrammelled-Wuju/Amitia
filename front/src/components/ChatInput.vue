@@ -13,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="clearImage" />
     </div>
     <div v-if="attachedVideo" class="video-preview-bar">
-      <el-icon size="20" color="#409eff"><VideoCamera /></el-icon>
+      <el-icon size="20" color="var(--ac-color-primary)"><VideoCamera /></el-icon>
       <span class="preview-name">{{ attachedVideo.name }}</span>
       <span v-if="uploadingVideo" class="upload-status">上传中...</span>
       <span v-else-if="attachedVideoUrl" class="upload-status ready">就绪</span>
@@ -460,15 +460,15 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 .hold-btn.slide-text {
-  background: #e8f5e9;
-  border-color: #66bb6a;
-  color: #388e3c;
+  background: var(--ac-color-success-bg);
+  border-color: var(--ac-color-success);
+  color: var(--ac-color-success);
 }
 
 .hold-btn.slide-cancel {
-  background: #fbe9e7;
-  border-color: #ef5350;
-  color: #d32f2f;
+  background: var(--ac-color-danger-bg);
+  border-color: var(--ac-color-danger);
+  color: var(--ac-color-danger);
 }
 
 .hold-btn:disabled {
@@ -489,11 +489,11 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 .cancel-hint {
-  color: #d32f2f;
+  color: var(--ac-color-danger);
 }
 
 .text-hint {
-  color: #388e3c;
+  color: var(--ac-color-success);
 }
 
 .hold-dot {
@@ -515,7 +515,7 @@ defineExpose({ focus, setText, clear: clearText })
 .cancel-icon {
   width: 6px;
   height: 22px;
-  background: #d32f2f;
+  background: var(--ac-color-danger);
   border-radius: 3px;
   display: inline-block;
 }
@@ -528,7 +528,7 @@ defineExpose({ focus, setText, clear: clearText })
 
 .text-icon::before {
   content: 'T';
-  color: #388e3c;
+  color: var(--ac-color-success);
   font-weight: 800;
   font-family: Georgia, serif;
 }
@@ -641,7 +641,7 @@ defineExpose({ focus, setText, clear: clearText })
   gap: 8px;
   padding: 6px 10px;
   margin-bottom: 4px;
-  background: #f0f4ff;
+  background: var(--ac-color-primary-bg);
   border-left: 3px solid var(--ac-color-primary);
   border-radius: 4px;
   font-size: 12px;

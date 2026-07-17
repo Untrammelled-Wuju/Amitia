@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="wechat-page">
     <h2 class="page-title">微信连接</h2>
-    <div v-if="!pageReady" style="padding:40px 0;color:#909399">
+    <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
       <el-icon class="is-loading" :size="24"><Loading /></el-icon>
       <p style="margin-top:8px">检测连接状态...</p>
     </div>
@@ -347,10 +347,10 @@ onUnmounted(() => {
 .qr-frame {
   width: 200px;
   height: 200px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--ac-color-border);
   border-radius: 6px;
   overflow: hidden;
-  background: #fff;
+  background: var(--ac-color-surface);
 }
 .qr-frame img {
   width: 100%;
@@ -364,14 +364,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #909399;
+  color: var(--ac-color-text-muted);
   font-size: 12px;
 }
 
 .qr-tip {
   margin-top: 14px;
   font-size: 12px;
-  color: #909399;
+  color: var(--ac-color-text-muted);
   text-align: left;
 }
 
@@ -380,26 +380,26 @@ onUnmounted(() => {
   gap: 10px;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--ac-color-border-light);
 }
 .qr-step-row:last-child { border-bottom: none; }
-.qr-step-num { color: #4e5969; 
+.qr-step-num { color: var(--ac-color-text-secondary);
   width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 600;
-  background: #f5f7fa; color: #909399;
-  border: 2px solid #dcdfe6;
+  background: var(--ac-color-bg-secondary); color: var(--ac-color-text-muted);
+  border: 2px solid var(--ac-color-border);
 }
-.qr-step-num.active { background: #5a9e6f; color: #fff; border-color: #5a9e6f; }
+.qr-step-num.active { background: var(--ac-color-primary); color: var(--ac-color-text-on-primary); border-color: var(--ac-color-primary); }
 .qr-step-body { flex: 1; display: flex; align-items: center; gap: 10px; }
 .qr-step-title { font-size: 13px; font-weight: 600; color: var(--ac-color-text); }
-.qr-status { font-size: 12px; color: #4e5969; display: flex; align-items: center; gap: 4px; }
-.qr-done { font-size: 12px; color: #5a9e6f; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.qr-status { font-size: 12px; color: var(--ac-color-text-secondary); display: flex; align-items: center; gap: 4px; }
+.qr-done { font-size: 12px; color: var(--ac-color-success); font-weight: 600; display: flex; align-items: center; gap: 4px; }
 
 .status-main { display: flex; flex-direction: column; gap: 12px; }
 .status-row { display: flex; align-items: center; gap: 10px; }
 .status-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-.status-indicator.ok { background: #5a9e6f; }
+.status-indicator.ok { background: var(--ac-color-success); }
 .status-label { font-size: 16px; font-weight: 600; color: var(--ac-color-text); }
 .status-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .sd-item { padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: 4px; }

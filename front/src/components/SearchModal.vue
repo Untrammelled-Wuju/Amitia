@@ -345,7 +345,7 @@ defineExpose({ open, close })
 
 .group-char .result-icon {
   background: rgba(79, 124, 255, 0.1);
-  color: #4f7cff;
+  color: var(--ac-color-primary);
 }
 
 .result-body {

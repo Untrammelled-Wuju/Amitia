@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="card-details">
           <div class="detail-row"><span class="dl">资源</span><span class="dv">{{ cfg.resourceId || 'seed-tts-2.0' }}</span></div>
           <div class="detail-row"><span class="dl">API Key</span><span class="dv">{{ cfg.hasApiKey ? '已设置' : '未设置' }}</span></div>
-          <div class="detail-row" v-if="cfg.lastTestResult"><span class="dl">状态</span><span class="dv" :style="{color: cfg.lastTestResult === 'success' ? '#67c23a' : '#f56c6c'}">{{ cfg.lastTestResult === 'success' ? '连接正常' : '连接失败' }}</span></div>
+          <div class="detail-row" v-if="cfg.lastTestResult"><span class="dl">状态</span><span class="dv" :style="{color: cfg.lastTestResult === 'success' ? 'var(--ac-color-success)' : 'var(--ac-color-danger)'}">{{ cfg.lastTestResult === 'success' ? '连接正常' : '连接失败' }}</span></div>
           <div class="detail-row"><span class="dl">语速</span><span class="dv">{{ cfg.speed?.toFixed(1) ?? '1.0' }}x</span></div>
           <div class="detail-row"><span class="dl">音调</span><span class="dv">{{ cfg.pitch?.toFixed(1) ?? '1.0' }}x</span></div>
           <div class="detail-row"><span class="dl">音量</span><span class="dv">{{ Math.round((cfg.volume ?? 1) * 100) }}%</span></div>

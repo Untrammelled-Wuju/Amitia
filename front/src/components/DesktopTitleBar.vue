@@ -57,8 +57,8 @@ async function handleClose() {
   align-items: center;
   justify-content: flex-end;
   background: var(--console-sidebar, rgba(248,251,255,0.96));
-  border-bottom: 1px solid var(--ac-color-border-light, #e5e7eb);
-  color: var(--ac-color-text, #1f2937);
+  border-bottom: 1px solid var(--ac-color-border-light);
+  color: var(--ac-color-text);
   font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   user-select: none;
   -webkit-app-region: drag;
@@ -77,17 +77,17 @@ async function handleClose() {
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: var(--ac-color-text-secondary, #64748b);
+  color: var(--ac-color-text-secondary);
   cursor: pointer;
   -webkit-app-region: no-drag;
 }
 #WindowControlButtons .icon:hover {
   background: rgba(128, 128, 128, 0.2);
-  color: var(--ac-color-text, #111827);
+  color: var(--ac-color-text);
 }
 #WindowControlButtons .icon.close:hover {
-  background: #e81123;
-  color: #ffffff;
+  background: var(--ac-color-danger);
+  color: var(--tp-text-on-status);
 }
 #WindowControlButtons .icon svg {
   width: 14px;

@@ -131,8 +131,8 @@ function formatTime(dateStr: string): string {
 .chat-message.user .message-body { text-align: right; }
 .chat-message.user .message-header { justify-content: flex-end; }
 .chat-message.assistant { background: var(--el-fill-color-light); }
-.chat-message.is-reminder { background: #fafbfc; border-left: 3px solid #d0d5dd; }
-.chat-message.is-tool-result { background: #f8f9fb; border-left: 3px solid #c8cdd5; }
+.chat-message.is-reminder { background: var(--ac-color-bg-secondary); border-left: 3px solid var(--ac-color-border); }
+.chat-message.is-tool-result { background: var(--ac-color-bg-secondary); border-left: 3px solid var(--ac-color-border-strong); }
 .chat-message.is-typing { border-left: 3px solid var(--el-color-primary); }
 .message-avatar { flex-shrink: 0; }
 .message-body { flex: 1; min-width: 0; }
@@ -153,14 +153,14 @@ function formatTime(dateStr: string): string {
   text-transform: none;
 }
 .reminder-tag {
-  color: #8b5e3c;
-  background: #fef6e8;
-  border: 1px solid #f0dba8;
+  color: var(--ac-color-warning);
+  background: var(--ac-color-warning-bg);
+  border: 1px solid var(--ac-color-warning);
 }
 .tool-tag {
-  color: #4a6fa5;
-  background: #eef3fa;
-  border: 1px solid #c8d6e5;
+  color: var(--ac-color-primary);
+  background: var(--ac-color-primary-bg);
+  border: 1px solid var(--ac-color-primary);
 }
 
 .message-voice { margin-top: 4px; }

@@ -213,7 +213,7 @@ function capLabel(key: string | number): string {
 .model-detect-wrap { position: relative; }
 .model-detect-row { display: flex; gap: 8px; }
 .model-detect-row .model-input { flex: 1; }
-.detect-error { color: var(--ac-color-danger, #f56c6c); font-size: 12px; margin-top: 4px; }
+.detect-error { color: var(--ac-color-danger); font-size: 12px; margin-top: 4px; }
 .detect-dropdown { background: var(--ac-color-surface); border: 1px solid var(--ac-color-primary-border); border-radius: var(--ac-radius-sm); box-shadow: var(--ac-shadow-md); max-height: 180px; overflow-y: auto; margin-top: 6px; }
 .detect-hint { padding: 6px 10px; font-size: 11px; color: var(--ac-color-text-muted); border-bottom: 1px solid var(--ac-color-border-light); }
 .detect-option { padding: 8px 10px; cursor: pointer; font-size: 13px; color: var(--ac-color-text); transition: background .15s; }

@@ -69,11 +69,11 @@ const emit = defineEmits<{
 .module-icon { display: flex; color: var(--console-text-muted); font-size: 18px; }
 .hmi-body { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .hmi-label { min-width: 76px; font-size: 14px; font-weight: 600; color: var(--console-text-secondary); }
-.hmi-status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 400; color: #16a34a; }
+.hmi-status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 400; color: var(--ac-color-success); }
 .hmi-status::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--status-ok-bg); }
-.hmi-status.warning { color: #f97316; }
+.hmi-status.warning { color: var(--ac-color-warning); }
 .hmi-status.warning::before { background: var(--status-off-bg); }
-.hmi-status.error { color: #ef4444; }
+.hmi-status.error { color: var(--ac-color-danger); }
 .hmi-status.error::before { background: var(--status-off-bg); }
 .hmi-detail { font-size: 13px; color: var(--console-text-muted); word-break: break-all; }
 

@@ -75,8 +75,8 @@ defineProps<{
 .ctxp-memory-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .ctxp-messages { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
 .ctxp-msg-item { display: flex; gap: 8px; padding: 4px 8px; border-radius: var(--ac-radius-sm); font-size: 12px; }
-.ctxp-msg-item.user { background: #e8f4fd; }
-.ctxp-msg-item.assistant { background: #f5f5f5; }
+.ctxp-msg-item.user { background: var(--ac-color-primary-bg); }
+.ctxp-msg-item.assistant { background: var(--ac-color-bg-secondary); }
 .ctxp-msg-role { font-weight: 600; flex-shrink: 0; min-width: 30px; }
 .ctxp-msg-content { word-break: break-word; }
 </style>

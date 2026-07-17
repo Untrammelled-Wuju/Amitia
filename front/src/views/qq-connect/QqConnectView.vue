@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="wechat-page">
     <h2 class="page-title">QQ 连接</h2>
-    <div v-if="!pageReady" style="padding:40px 0;color:#909399">
+    <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
       <el-icon class="is-loading" :size="24"><Loading /></el-icon>
       <p style="margin-top:8px">检测连接状态...</p>
     </div>
@@ -75,11 +75,11 @@ SPDX-License-Identifier: AGPL-3.0-only
             </el-form-item>
             <el-form-item label="沙箱模式">
               <el-switch v-model="sandbox" />
-              <span style="margin-left:8px;font-size:12px;color:#909399">{{ sandbox ? "沙箱环境" : "正式环境" }}</span>
+        <span style="margin-left:8px;font-size:12px;color:var(--ac-color-text-muted)">{{ sandbox ? "沙箱环境" : "正式环境" }}</span>
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="connecting" @click="doConnect">连接</el-button>
-              <span v-if="loginStatus === 'connecting'" style="margin-left:10px;font-size:12px;color:#e6a23c">
+        <span v-if="loginStatus === 'connecting'" style="margin-left:10px;font-size:12px;color:var(--ac-color-warning)">
                 <el-icon class="is-loading"><Loading /></el-icon> 连接中...
               </span>
 
@@ -90,8 +90,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <el-card shadow="never" class="section-card" style="margin-top:12px">
         <template #header><span class="card-header-title">使用说明</span></template>
-        <div style="font-size:13px;color:#606266;line-height:1.8">
-          <p>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:#409eff">QQ开放平台</a> 创建机器人</p>
+      <div style="font-size:13px;color:var(--ac-color-text-secondary);line-height:1.8">
+        <p>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:var(--ac-color-primary)">QQ开放平台</a> 创建机器人</p>
           <p>2. 获取 AppID 和 Token</p>
           <p>3. 填入上方表单，点击"连接"</p>
           <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
@@ -317,7 +317,7 @@ onUnmounted(() => {
 .status-main { display: flex; flex-direction: column; gap: 12px; }
 .status-row { display: flex; align-items: center; gap: 10px; }
 .status-indicator { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-.status-indicator.ok { background: #5a9e6f; }
+.status-indicator.ok { background: var(--ac-color-success); }
 .status-label { font-size: 16px; font-weight: 600; color: var(--ac-color-text); }
 .status-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .sd-item { padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: 4px; }

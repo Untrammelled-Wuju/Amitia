@@ -18,17 +18,17 @@
   --el-color-danger: var(--ac-color-danger);
   --el-color-info: var(--ac-color-primary);
 
-  --el-border-color: #DDE6D8;
-  --el-border-color-light: #EEF2EA;
-  --el-border-color-lighter: #F3F6F0;
+  --el-border-color: var(--ac-color-border);
+  --el-border-color-light: var(--ac-color-border-light);
+  --el-border-color-lighter: var(--ac-color-border-light);
 
-  --el-text-color-primary: #2F3A32;
-  --el-text-color-regular: #2F3A32;
-  --el-text-color-secondary: #6F7F70;
-  --el-text-color-placeholder: #B0BCAF;
+  --el-text-color-primary: var(--ac-color-text);
+  --el-text-color-regular: var(--ac-color-text);
+  --el-text-color-secondary: var(--ac-color-text-secondary);
+  --el-text-color-placeholder: var(--ac-color-text-placeholder);
 
-  --el-bg-color: #FAFBF8;
-  --el-bg-color-overlay: #FFFFFF;
+  --el-bg-color: var(--ac-color-bg);
+  --el-bg-color-overlay: var(--ac-color-surface);
 }
 
 /* ---- Primary button ---- */
@@ -42,10 +42,10 @@
 }
 
 .el-button--success {
-  --el-button-bg-color: var(--ac-color-primary);
-  --el-button-border-color: var(--ac-color-primary);
-  --el-button-hover-bg-color: var(--ac-color-primary-dark);
-  --el-button-hover-border-color: var(--ac-color-primary-dark);
+  --el-button-bg-color: var(--ac-color-success);
+  --el-button-border-color: var(--ac-color-success);
+  --el-button-hover-bg-color: var(--ac-color-success);
+  --el-button-hover-border-color: var(--ac-color-success);
 }
 
 /* ---- Link / text button ---- */
@@ -166,47 +166,47 @@
 }
 
 .el-tag--danger {
-  --el-tag-bg-color: rgba(217, 120, 120, 0.12);
-  --el-tag-border-color: rgba(217, 120, 120, 0.25);
+  --el-tag-bg-color: var(--tp-danger-soft);
+  --el-tag-border-color: var(--tp-danger);
   --el-tag-text-color: var(--ac-color-danger);
 }
 
 .el-tag--warning {
-  --el-tag-bg-color: rgba(217, 164, 65, 0.12);
-  --el-tag-border-color: rgba(217, 164, 65, 0.25);
-  --el-tag-text-color: #C8924A;
+  --el-tag-bg-color: var(--tp-warning-soft);
+  --el-tag-border-color: var(--tp-warning);
+  --el-tag-text-color: var(--ac-color-warning);
 }
 
 /* ---- Alert ---- */
 .el-alert--success {
-  --el-alert-bg-color: rgba(125, 170, 132, 0.1);
-  --el-alert-border-color: rgba(125, 170, 132, 0.2);
+  --el-alert-bg-color: var(--tp-success-soft);
+  --el-alert-border-color: var(--tp-success);
 }
 
 .el-alert--warning {
-  --el-alert-bg-color: rgba(217, 164, 65, 0.1);
-  --el-alert-border-color: rgba(217, 164, 65, 0.2);
+  --el-alert-bg-color: var(--tp-warning-soft);
+  --el-alert-border-color: var(--tp-warning);
 }
 
 .el-alert--error {
-  --el-alert-bg-color: rgba(217, 120, 120, 0.1);
-  --el-alert-border-color: rgba(217, 120, 120, 0.2);
+  --el-alert-bg-color: var(--tp-danger-soft);
+  --el-alert-border-color: var(--tp-danger);
 }
 
 /* ---- Message ---- */
 .el-message--success {
-  --el-message-bg-color: rgba(125, 170, 132, 0.1);
-  border-color: rgba(125, 170, 132, 0.3);
+  --el-message-bg-color: var(--tp-success-soft);
+  border-color: var(--tp-success);
 }
 
 .el-message--warning {
-  --el-message-bg-color: rgba(217, 164, 65, 0.1);
-  border-color: rgba(217, 164, 65, 0.3);
+  --el-message-bg-color: var(--tp-warning-soft);
+  border-color: var(--tp-warning);
 }
 
 .el-message--error {
-  --el-message-bg-color: rgba(217, 120, 120, 0.1);
-  border-color: rgba(217, 120, 120, 0.3);
+  --el-message-bg-color: var(--tp-danger-soft);
+  border-color: var(--tp-danger);
 }
 
 /* ---- Menu / Nav ---- */
@@ -438,7 +438,7 @@
     color: var(--ac-color-text);
   }
 }
-.el-button{
+.el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger){
   background-color: var(--ac-color-surface) !important;
   .el-icon{
     color: var(--ac-color-text) !important;
@@ -506,5 +506,19 @@
     .el-collapse-item__wrap{
       background-color: var(--ac-color-surface);
     }
+  }
+}
+.el-button--primary{
+  .el-icon,
+  span{
+    color: var(--tp-text-on-primary) !important;
+  }
+}
+.el-button--success,
+.el-button--warning,
+.el-button--danger{
+  .el-icon,
+  span{
+    color: var(--tp-text-on-status) !important;
   }
 }

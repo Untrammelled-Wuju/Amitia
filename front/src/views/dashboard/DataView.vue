@@ -58,6 +58,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue"
 import { ChatDotRound, UserFilled, Refresh, Loading } from "@element-plus/icons-vue"
 import { useDashboardData } from "./composables/useDashboardData"
+import { useTheme } from "@/composables/useTheme"
 import VChart from "vue-echarts"
 import { use } from "echarts/core"
 import { CanvasRenderer } from "echarts/renderers"
@@ -67,21 +68,22 @@ import { TooltipComponent, GridComponent } from "echarts/components"
 use([CanvasRenderer, BarChart, TooltipComponent, GridComponent])
 
 const { totalConvs, totalChars, dailyData, refreshAll } = useDashboardData()
+const { resolvedMode } = useTheme()
 
 const chartRefs: Record<string, any> = {}
 const refreshing = ref(false)
 const dataLoaded = ref(false)
 
 const chartMetrics = [
-  { key: "messages", label: "消息", color: "#4f7cff" },
-  { key: "modelCalls", label: "模型调用", color: "#16a34a" },
-  { key: "tokens", label: "Token 消耗", color: "#e11d48" },
+  { key: "messages", label: "消息", color: "var(--ac-color-primary)" },
+  { key: "modelCalls", label: "模型调用", color: "var(--ac-color-success)" },
+  { key: "tokens", label: "Token 消耗", color: "var(--ac-color-danger)" },
 ]
 
 const statMetrics = [
-  { key: "conversations", label: "会话", color: "#7c3aed", unit: "个" },
-  { key: "memories", label: "记忆", color: "#f97316", unit: "条" },
-  { key: "feedback", label: "Feedback", color: "#0891b2", unit: "条" },
+  { key: "conversations", label: "会话", color: "var(--ac-color-primary)", unit: "个" },
+  { key: "memories", label: "记忆", color: "var(--ac-color-warning)", unit: "条" },
+  { key: "feedback", label: "Feedback", color: "var(--ac-color-success)", unit: "条" },
 ]
 
 function fmtNum(n: number | undefined): string {
@@ -95,6 +97,11 @@ function readCSSVar(name: string, fallback: string): string {
   if (typeof document === "undefined") return fallback
   const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return val || fallback
+}
+
+function resolveColor(color: string): string {
+  if (!color.startsWith("var(") || !color.endsWith(")")) return color
+  return readCSSVar(color.slice(4, -1).trim(), "#9B642D")
 }
 
 function safeArray(v: any): any[] {
@@ -121,6 +128,7 @@ const statAvgs = computed(() => {
 })
 
 const chartOptions = computed(() => {
+  resolvedMode.value
   const result: Record<string, any> = {}
   for (const m of chartMetrics) {
     const arr = safeArray(dailyData.value)
@@ -129,12 +137,12 @@ const chartOptions = computed(() => {
     result[m.key] = {
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       grid: { left: 0, right: 8, top: 8, bottom: 20 },
-      xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border", "#E6EBF4") } } },
-      yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft", "#EEF2F7") } }, axisLabel: { color: readCSSVar("--console-text-muted", "#667085"), fontSize: 10 } },
+      xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted", "#969B96"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border", "#DDD8CE") } } },
+      yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft", "#E8E3DA") } }, axisLabel: { color: readCSSVar("--console-text-muted", "#969B96"), fontSize: 10 } },
       series: [{
         type: "bar",
         data,
-        itemStyle: { color: m.color, borderRadius: [3, 3, 0, 0] },
+        itemStyle: { color: resolveColor(m.color), borderRadius: [3, 3, 0, 0] },
         barMaxWidth: 14,
       }],
     }
@@ -194,8 +202,8 @@ onUnmounted(() => {
   border-radius: 10px;
 }
 
-.dc-icon.blue { color: #2563eb; background: var(--console-blue-soft); }
-.dc-icon.orange { color: #f97316; background: var(--console-orange-soft); }
+.dc-icon.blue { color: var(--ac-color-primary); background: var(--console-blue-soft); }
+.dc-icon.orange { color: var(--ac-color-warning); background: var(--console-orange-soft); }
 
 .dc-body { flex: 1; min-width: 0; }
 .dc-label { font-size: 16px; font-weight: 650; color: var(--console-text); margin-bottom: 8px; }
@@ -206,7 +214,7 @@ onUnmounted(() => {
   padding: 3px 10px;
   border-radius: 7px;
   background: var(--console-value-ok-bg);
-  color: #12a150;
+  color: var(--ac-color-success);
   font-size: 13px;
   font-weight: 400;
 }
@@ -223,11 +231,11 @@ onUnmounted(() => {
 .section-header-row .section-header { margin-bottom: 0; }
 
 .refresh-btn {
-  color: var(--console-text-muted, #667085);
+  color: var(--console-text-muted);
   transition: color 0.2s;
 }
 
-.refresh-btn:hover { color: var(--console-primary, #4f7cff); }
+.refresh-btn:hover { color: var(--ac-color-primary); }
 
 .charts-loading {
   display: flex;

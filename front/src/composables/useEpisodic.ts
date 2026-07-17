@@ -80,10 +80,10 @@ export function useEpisodic() {
   }
 
   function sentimentColor(score: number): string {
-    if (score >= 5) return "#4caf50"
-    if (score >= 1) return "#8bc34a"
-    if (score >= -4) return "#ff9800"
-    return "#f44336"
+  if (score >= 5) return "var(--ac-color-success)"
+  if (score >= 1) return "var(--ac-color-primary)"
+  if (score >= -4) return "var(--ac-color-warning)"
+  return "var(--ac-color-danger)"
   }
 
   function sentimentIntensity(score: number): { label: string; percent: number } {

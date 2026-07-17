@@ -263,7 +263,7 @@ onMounted(() => { fetchConvs(); loadCharacters() })
 .mi-delete { margin-left: auto; opacity: 0; transition: opacity var(--ac-transition-fast); }
 .msg-item:hover .mi-delete { opacity: 1; }
 .mi-content { font-size: var(--ac-font-size-sm); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-.mi-metadata { margin-top: 8px; padding: 8px; background: #1e1e1e; color: #d4d4d4; border-radius: 4px; }
+.mi-metadata { margin-top: 8px; padding: 8px; background: var(--ac-color-bg-secondary); color: var(--ac-color-text-secondary); border-radius: 4px; }
 .mi-metadata pre { margin: 0; font-size: 11px; font-family: Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
 .detail-summary { margin-bottom: 8px; }
 .summary-content { white-space: pre-wrap; line-height: 1.7; font-size: var(--ac-font-size-sm); }

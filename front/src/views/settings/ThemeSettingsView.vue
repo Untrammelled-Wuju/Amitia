@@ -67,9 +67,9 @@ const { state: themeState, setPreset, presets } = useTheme()
 .theme-preset-item:hover { border-color: var(--ac-color-primary); background: var(--ac-color-surface-hover); }
 .theme-preset-item.active { border-color: var(--ac-color-primary); background: var(--ac-color-primary-bg); }
 .theme-preset-preview { width: 48px; height: 48px; border-radius: 8px; flex-shrink: 0; border: 1px solid var(--ac-color-border); }
-.preview-light { background: linear-gradient(135deg, #F7FAFF 0%, #FFFFFF 52%, #3B82F6 100%); }
-.preview-dark { background: linear-gradient(135deg, #070B10 0%, #111820 58%, #3B82F6 100%); }
-.preview-system { background: linear-gradient(135deg, #F7FAFF 0 50%, #070B10 50% 100%); }
+.preview-light { background: linear-gradient(135deg, #F4F1EA 0%, #FAF8F3 52%, #9B642D 100%); }
+.preview-dark { background: linear-gradient(135deg, #0B0B0C 0%, #18181B 58%, #C99557 100%); }
+.preview-system { background: linear-gradient(135deg, #F4F1EA 0 50%, #0B0B0C 50% 100%); }
 .theme-preset-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .theme-preset-name { font-size: var(--ac-font-size-sm); font-weight: 500; color: var(--ac-color-text); }
 .theme-preset-desc { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); }

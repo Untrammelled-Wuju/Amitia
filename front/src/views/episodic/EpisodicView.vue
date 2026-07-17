@@ -160,14 +160,14 @@ async function handleDelete(id: string) {
 .header-controls { display: flex; align-items: center; gap: 10px; }
 
 .timeline { position: relative; padding-left: 24px; }
-.timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
+.timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--ac-color-border); }
 .timeline-item { position: relative; margin-bottom: 20px; cursor: pointer; display: flex; gap: 16px; }
-.timeline-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ac-color-text-primary); box-shadow: 0 0 0 2px #e0e0e0; flex-shrink: 0; margin-top: 4px; }
+.timeline-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ac-color-text); box-shadow: 0 0 0 2px var(--ac-color-border); flex-shrink: 0; margin-top: 4px; }
 .timeline-content { background: var(--ac-color-bg-secondary); border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex: 1; }
 .item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .scene-emoji { font-size: 16px; }
 .scene-type { font-size: 12px; color: var(--ac-color-text-primary); }
-.sentiment-badge { font-size: 11px; color: #fff; padding: 1px 6px; border-radius: 8px; }
+.sentiment-badge { font-size: 11px; color: var(--tp-text-on-status); padding: 1px 6px; border-radius: 8px; }
 .item-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: var(--ac-color-text-primary); }
 .item-content { font-size: 14px; color: var(--ac-color-text-secondary); margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .item-sequence { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ac-color-text-secondary); margin-bottom: 4px; }
@@ -177,10 +177,10 @@ async function handleDelete(id: string) {
 .conv-source { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ac-color-text-secondary); font-family: monospace; }
 .time { margin-left: auto; }
 
-.sentiment-bar-track { height: 3px; background: var(--ac-color-bg-tertiary, #eee); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.sentiment-bar-track { height: 3px; background: var(--ac-color-border-light); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 .sentiment-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
 
-.loading, .empty { text-align: center; padding: 48px; color: #999; }
+.loading, .empty { text-align: center; padding: 48px; color: var(--ac-color-text-muted); }
 
 .detail-section { padding: 0 4px; }
 .detail-title { font-size: 18px; margin: 0 0 12px 0; }
@@ -194,11 +194,11 @@ async function handleDelete(id: string) {
 .detail-sentiment-track { flex: 1; margin-top: 0; height: 5px; }
 .sentiment-value { font-size: 12px; font-weight: 600; min-width: 36px; text-align: right; }
 
-.context-bubbles { margin-top: 20px; border-top: 1px solid var(--ac-color-border, #e8e8e8); padding-top: 16px; }
+.context-bubbles { margin-top: 20px; border-top: 1px solid var(--ac-color-border); padding-top: 16px; }
 .context-bubbles h4 { font-size: 14px; margin: 0 0 12px 0; font-weight: 600; }
 .context-bubble { padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; display: flex; align-items: flex-start; gap: 8px; }
-.context-bubble.role-user { background: var(--ac-color-bg-tertiary, #f0f2f5); }
-.context-bubble.role-assistant { background: var(--ac-color-primary-bg, #e6f7ff); }
+.context-bubble.role-user { background: var(--ac-color-bg-secondary); }
+.context-bubble.role-assistant { background: var(--ac-color-primary-bg); }
 .bubble-role { font-weight: 600; font-size: 12px; white-space: nowrap; min-width: 36px; }
 .bubble-seq { font-family: monospace; font-size: 11px; color: var(--ac-color-text-secondary); white-space: nowrap; }
 .bubble-text { color: var(--ac-color-text-primary); }

@@ -25,7 +25,7 @@
         <template #default="{ row }">
           <div style="display:flex;align-items:center;gap:4px">
             <el-progress :percentage="row.confidence ?? 50" :stroke-width="6" :show-text="false"
-              :color="(row.confidence ?? 50) >= 80 ? '#67c23a' : (row.confidence ?? 50) >= 50 ? '#e6a23c' : '#f56c6c'" />
+            :color="(row.confidence ?? 50) >= 80 ? 'var(--ac-color-success)' : (row.confidence ?? 50) >= 50 ? 'var(--ac-color-warning)' : 'var(--ac-color-danger)'" />
             <span style="font-size:11px">{{ row.confidence ?? 50 }}%</span>
           </div>
         </template>
@@ -97,7 +97,7 @@ const SENSITIVITY_OPTIONS = [{ value: "normal", label: "\u666e\u901a" }, { value
 function typeLabel(t: string) { return TYPES.find(x => x.value === t)?.label || t }
 function charName(id: string) { return props.characters?.find((x: any) => x.id === id)?.name || id }
 function sourceLabel(s: string) { return SOURCES.find(x => x.value === s)?.label || s }
-function importanceColor(v: number) { return v >= 8 ? "#c85a5a" : v >= 5 ? "#c8924a" : "#5b7fa5" }
+function importanceColor(v: number) { return v >= 8 ? "var(--ac-color-danger)" : v >= 5 ? "var(--ac-color-warning)" : "var(--ac-color-primary)" }
 function isExpired(exp?: string) { return !!exp && new Date(exp).getTime() < Date.now() }
 function rowScopeType(row: any) { return row.scopeType || row.scope_type || (row.scope === "user" ? "user_global" : "user_character") }
 function scopeTypeLabel(row: any) { return SCOPE_TYPES.find(x => x.value === rowScopeType(row))?.label || rowScopeType(row) }
@@ -122,7 +122,7 @@ function fmtDate(d: string) { if (!d) return ""; try { return new Date(d).toLoca
 
 <style scoped>
 .source-badge { font-size: var(--ac-font-size-xs); padding: 1px 6px; border-radius: 4px; background: var(--ac-color-bg-secondary); }
-.scope-char-name { font-size: 11px; color: #909399; margin-left: 4px; }
+.scope-char-name { font-size: 11px; color: var(--ac-color-text-muted); margin-left: 4px; }
 .scope-toggle-btn { margin-left: 4px !important; text-decoration: underline !important; }
 .permission-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 </style>

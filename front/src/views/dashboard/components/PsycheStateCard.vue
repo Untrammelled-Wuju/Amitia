@@ -161,12 +161,12 @@ function needLabel(k: string): string {
 .ps-fill-positive { background: var(--ac-color-success); }
 .ps-fill-negative { background: var(--ac-color-danger); }
 .ps-fill-arousal { background: var(--ac-color-warning); }
-.ps-fill-belief { background: #8b7ec8; }
-.ps-fill-need { background: #c8806a; }
-.ps-fill-trust { background: #5a9e6f; }
-.ps-fill-familiar { background: #6a8fc8; }
-.ps-fill-tension { background: #d98a5a; }
-.ps-fill-security { background: #5a9ead; }
+.ps-fill-belief { background: var(--ac-color-primary); }
+.ps-fill-need { background: var(--ac-color-warning); }
+.ps-fill-trust { background: var(--ac-color-success); }
+.ps-fill-familiar { background: var(--ac-color-primary-light); }
+.ps-fill-tension { background: var(--ac-color-danger); }
+.ps-fill-security { background: var(--ac-color-primary-dark); }
 .ps-affect-label { margin-top: 2px; }
 .ps-empty { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); padding: 4px 0; }
 .psyche-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0; color: var(--ac-color-text-muted); font-size: var(--ac-font-size-sm); }

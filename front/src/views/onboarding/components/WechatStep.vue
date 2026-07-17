@@ -93,7 +93,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
           <div class="qr-tip" v-if="wxQrCodeUrl">打开微信，扫描二维码确认连接。</div>
         </el-card>
-        <div v-if="wxError" style="color:#f56c6c;font-size:12px;margin-top:8px">{{ wxError }}</div>
+      <div v-if="wxError" style="color:var(--ac-color-danger);font-size:12px;margin-top:8px">{{ wxError }}</div>
         <el-alert type="warning" :closable="false" show-icon style="margin-top:12px">
           <template #title>主动推送须知</template>
           添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。

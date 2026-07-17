@@ -102,7 +102,7 @@ defineEmits<{
 .import-badge {
   font-size: 10px;
   background: var(--ac-color-success);
-  color: #fff;
+  color: var(--ac-color-text-on-primary);
   border-radius: 3px;
   padding: 0 4px;
   margin-left: 6px;

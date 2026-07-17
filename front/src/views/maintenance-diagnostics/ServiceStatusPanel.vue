@@ -108,13 +108,13 @@ defineExpose({ fetchStatus: handleFetchStatus })
 .ss-issues {
   padding: 10px 12px;
   border-radius: var(--ac-radius-md);
-  background: #fef7e0;
-  border: 1px solid #f5dab1;
+  background: var(--ac-color-warning-bg);
+  border: 1px solid var(--ac-color-warning);
 }
 .ss-issues-title {
   font-size: var(--ac-font-size-sm);
   font-weight: 600;
-  color: #e6a23c;
+  color: var(--ac-color-warning);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -133,7 +133,7 @@ defineExpose({ fetchStatus: handleFetchStatus })
   font-size: 11px;
   padding: 0 4px;
   border-radius: 2px;
-  background: #f5dab1;
+  background: var(--ac-color-warning);
   white-space: nowrap;
 }
 .ssi-msg {

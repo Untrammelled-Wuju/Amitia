@@ -179,8 +179,8 @@ function guessLayer(item: any): string {
 }
 
 function layerColor(layer: string): string {
-  const colors: Record<string,string> = { working: '#409eff', profile: '#e6a23c', episodic: '#f56c6c', fact: '#67c23a', worldbook: '#909399', graph: '#b37feb' }
-  return colors[layer] || '#409eff'
+  const colors: Record<string,string> = { working: 'var(--ac-color-primary)', profile: 'var(--ac-color-warning)', episodic: 'var(--ac-color-danger)', fact: 'var(--ac-color-success)', worldbook: 'var(--ac-color-text-muted)', graph: 'var(--ac-color-primary-light)' }
+  return colors[layer] || 'var(--ac-color-primary)'
 }
 
 function applyFilters() { fetchTimeline() }

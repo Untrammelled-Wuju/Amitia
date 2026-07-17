@@ -36,7 +36,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="vision-item">
           <span class="vision-label">测试连接</span>
           <el-button size="small" @click="testVision" :loading="testing">测试</el-button>
-          <span v-if="testResult" :style="{color: testResult === 'ok' ? '#67c23a' : '#f56c6c', marginLeft: '8px'}">{{ testResult === 'ok' ? '连接正常' : '连接失败' }}</span>
+      <span v-if="testResult" :style="{color: testResult === 'ok' ? 'var(--ac-color-success)' : 'var(--ac-color-danger)', marginLeft: '8px'}">{{ testResult === 'ok' ? '连接正常' : '连接失败' }}</span>
         </div>
       </div>
       <div style="margin-top:6px;font-size:12px;color:var(--el-text-color-secondary)">

@@ -238,7 +238,7 @@ async function copyContent() {
 .quote-bar {
   width: 3px;
   min-width: 3px;
-  background: #b0b8c0;
+  background: var(--ac-color-text-muted);
   border-radius: 2px;
   margin: 8px 8px 8px 10px;
 }
@@ -252,13 +252,13 @@ async function copyContent() {
 .quote-sender {
   font-size: 11px;
   font-weight: 500;
-  color: #6a737d;
+  color: var(--ac-color-text-secondary);
   margin-bottom: 2px;
 }
 
 .quote-text {
   font-size: 12px;
-  color: #8b949e;
+  color: var(--ac-color-text-muted);
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -321,14 +321,14 @@ async function copyContent() {
   padding: 2px 4px; margin-bottom: 2px;
 }
 .status-tag { font-size: 11px; padding: 1px 8px; border-radius: 3px; line-height: 1.6; }
-.status-tag.failed { color: #d35; background: #fef0f0; }
-.status-tag.interrupted { color: #b88230; background: #fef8e7; }
+.status-tag.failed { color: var(--ac-color-danger); background: var(--ac-color-danger-bg); }
+.status-tag.interrupted { color: var(--ac-color-warning); background: var(--ac-color-warning-bg); }
 .retry-btn { font-size: 11px; }
 .bubble-source-tag {
   font-size: 10px; padding: 0 5px; border-radius: 3px; line-height: 1.6;
-  color: #8b5e3c; background: #fef6e8; border: 1px solid #f0dba8;
+  color: var(--ac-color-warning); background: var(--ac-color-warning-bg); border: 1px solid var(--ac-color-warning);
 }
 .bubble-source-tag.tool {
-  color: #4a6fa5; background: #eef3fa; border: 1px solid #c8d6e5;
+  color: var(--ac-color-primary); background: var(--ac-color-primary-bg); border: 1px solid var(--ac-color-primary);
 }
 </style>

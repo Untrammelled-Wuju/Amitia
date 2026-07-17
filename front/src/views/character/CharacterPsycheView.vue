@@ -363,15 +363,15 @@ function formatNeedLabel(k: string): string {
 }
 
 function needColor(v: number): string {
-  if (v < 0.3) return '#f56c6c'
-  if (v < 0.6) return '#e6a23c'
-  return '#67c23a'
+  if (v < 0.3) return 'var(--ac-color-danger)'
+  if (v < 0.6) return 'var(--ac-color-warning)'
+  return 'var(--ac-color-success)'
 }
 
 function relColor(v: number): string {
-  if (v < 0.3) return '#f56c6c'
-  if (v < 0.6) return '#e6a23c'
-  return '#409eff'
+  if (v < 0.3) return 'var(--ac-color-danger)'
+  if (v < 0.6) return 'var(--ac-color-warning)'
+  return 'var(--ac-color-primary)'
 }
 </script>
 
@@ -408,9 +408,9 @@ function relColor(v: number): string {
 }
 
 .affect-default { background: var(--el-fill-color); color: var(--el-text-color-regular); }
-.affect-positive { background: #e1f3d8; color: #529b2e; }
-.affect-negative { background: #fde2e2; color: #c45656; }
-.affect-tense { background: #faecd8; color: #b88230; }
+.affect-positive { background: var(--ac-color-success-bg); color: var(--ac-color-success); }
+.affect-negative { background: var(--ac-color-danger-bg); color: var(--ac-color-danger); }
+.affect-tense { background: var(--ac-color-warning-bg); color: var(--ac-color-warning); }
 
 .collect-time {
   font-size: 11px;
@@ -488,12 +488,12 @@ function relColor(v: number): string {
   transition: width 0.6s ease;
 }
 
-.positive-fill { background: linear-gradient(90deg, #b3e19d, #67c23a); }
-.negative-fill { background: linear-gradient(90deg, #f89898, #f56c6c); }
-.arousal-fill { background: linear-gradient(90deg, #f3d19e, #e6a23c); }
-.dominance-fill { background: linear-gradient(90deg, #a0cfff, #409eff); }
-.valence-fill { background: linear-gradient(90deg, #a8d8ea, #4fc3f7); }
-.tension-fill { background: linear-gradient(90deg, #f4a7a7, #ef5350); }
+.positive-fill { background: linear-gradient(90deg, var(--ac-color-success-bg), var(--ac-color-success)); }
+.negative-fill { background: linear-gradient(90deg, var(--ac-color-danger-bg), var(--ac-color-danger)); }
+.arousal-fill { background: linear-gradient(90deg, var(--ac-color-warning-bg), var(--ac-color-warning)); }
+.dominance-fill { background: linear-gradient(90deg, var(--ac-color-primary-bg), var(--ac-color-primary)); }
+.valence-fill { background: linear-gradient(90deg, var(--ac-color-primary-bg), var(--ac-color-primary)); }
+.tension-fill { background: linear-gradient(90deg, var(--ac-color-danger-bg), var(--ac-color-danger)); }
 
 .ebar-val {
   width: 36px;
@@ -531,9 +531,9 @@ function relColor(v: number): string {
   font-weight: 600;
 }
 
-.level-low { color: #67c23a; }
-.level-mid { color: #e6a23c; }
-.level-high { color: #f56c6c; }
+.level-low { color: var(--ac-color-success); }
+.level-mid { color: var(--ac-color-warning); }
+.level-high { color: var(--ac-color-danger); }
 
 .se-ring-track {
   height: 8px;
@@ -548,13 +548,13 @@ function relColor(v: number): string {
   transition: width 0.6s ease;
 }
 
-.se-ring-fill.level-low { background: #67c23a; }
-.se-ring-fill.level-mid { background: #e6a23c; }
-.se-ring-fill.level-high { background: #f56c6c; }
+.se-ring-fill.level-low { background: var(--ac-color-success); }
+.se-ring-fill.level-mid { background: var(--ac-color-warning); }
+.se-ring-fill.level-high { background: var(--ac-color-danger); }
 
-.se-ring-fill.energy-fill.level-low { background: #f56c6c; }
-.se-ring-fill.energy-fill.level-mid { background: #e6a23c; }
-.se-ring-fill.energy-fill.level-high { background: #67c23a; }
+.se-ring-fill.energy-fill.level-low { background: var(--ac-color-danger); }
+.se-ring-fill.energy-fill.level-mid { background: var(--ac-color-warning); }
+.se-ring-fill.energy-fill.level-high { background: var(--ac-color-success); }
 
 .needs-panel,
 .rel-panel,
@@ -698,9 +698,9 @@ function relColor(v: number): string {
   transition: width 0.5s ease;
 }
 
-.bcb-low { background: #f56c6c; }
-.bcb-mid { background: #e6a23c; }
-.bcb-high { background: #67c23a; }
+.bcb-low { background: var(--ac-color-danger); }
+.bcb-mid { background: var(--ac-color-warning); }
+.bcb-high { background: var(--ac-color-success); }
 
 .bcb-val {
   font-size: 11px;

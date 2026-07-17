@@ -55,21 +55,21 @@ defineProps<{
   border-radius: 8px;
   margin-bottom: 16px;
 }
-.access-risk-alert.risk-error { background: #fef0f0; border: 1px solid #fbc4c4; }
-.access-risk-alert.risk-warn { background: #fef7e0; border: 1px solid #fae29c; }
+.access-risk-alert.risk-error { background: var(--ac-color-danger-bg); border: 1px solid var(--ac-color-danger); }
+.access-risk-alert.risk-warn { background: var(--ac-color-warning-bg); border: 1px solid var(--ac-color-warning); }
 .ara-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.risk-error .ara-header { color: #f56c6c; }
-.risk-warn .ara-header { color: #e6a23c; }
+.risk-error .ara-header { color: var(--ac-color-danger); }
+.risk-warn .ara-header { color: var(--ac-color-warning); }
 .ara-title { font-size: 15px; font-weight: 700; }
 .ara-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .ara-item { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; }
 .arai-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.ara-error .arai-dot { background: #f56c6c; }
-.ara-warn .arai-dot { background: #e6a23c; }
+.ara-error .arai-dot { background: var(--ac-color-danger); }
+.ara-warn .arai-dot { background: var(--ac-color-warning); }
 .arai-name { font-weight: 600; white-space: nowrap; flex-shrink: 0; min-width: 80px; color: var(--ac-color-text); }
 .arai-msg { color: var(--ac-color-text-secondary); line-height: 1.4; }
 .ara-footer { text-align: right; }
 .ara-link { font-size: 13px; font-weight: 600; text-decoration: none; }
-.risk-error .ara-link { color: #f56c6c; }
-.risk-warn .ara-link { color: #e6a23c; }
+.risk-error .ara-link { color: var(--ac-color-danger); }
+.risk-warn .ara-link { color: var(--ac-color-warning); }
 </style>

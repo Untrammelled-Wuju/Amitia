@@ -61,12 +61,12 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-button type="primary" @click="emit('connectQQ')" :loading="qqConnecting" :disabled="!qqConnected && (!qqAppId || !qqToken)">
               {{ qqConnecting ? '连接中...' : '连接' }}
             </el-button>
-            <span v-if="qqError" style="color:#f56c6c;margin-left:8px">{{ qqError }}</span>
+        <span v-if="qqError" style="color:var(--ac-color-danger);margin-left:8px">{{ qqError }}</span>
           </el-form-item>
         </el-form>
         <div class="step-illustration" style="margin-top:12px">
           <span>使用步骤：</span>
-          <span>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:#409eff">QQ开放平台</a> 创建机器人</span>
+          <span>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:var(--ac-color-primary)">QQ开放平台</a> 创建机器人</span>
           <span>2. 获取 AppID 和 Token</span>
           <span>3. 填入上方表单，点击"连接"</span>
           <span>4. 连接成功后，在QQ中 @机器人 即可对话</span>

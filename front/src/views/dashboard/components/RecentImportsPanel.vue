@@ -64,8 +64,8 @@ defineProps<{
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #cbd5e1;
-  border: 4px solid #cbd5e1;
+  color: var(--ac-color-text-muted);
+  border: 4px solid var(--ac-color-text-muted);
   border-radius: 10px;
   font-size: 46px;
 }

@@ -7,31 +7,44 @@
 
 :root {
   /* ---- Primary Palette: warm green ---- */
-  --ac-color-primary: var(--tp-primary, #7DAA84);
-  --ac-color-primary-light: var(--tp-primary-soft, #9BC1A1);
-  --ac-color-primary-dark: var(--tp-primary, #6C9873);
-  --ac-color-primary-bg: var(--tp-primary-bg, rgba(125,170,132,0.08));
-  --ac-color-primary-border: var(--tp-primary-border, rgba(125,170,132,0.2));
+  --ac-color-primary: var(--tp-primary, #9B642D);
+  --ac-color-primary-light: var(--tp-primary-hover, #845122);
+  --ac-color-primary-dark: var(--tp-primary-active, #6F421B);
+  --ac-color-primary-bg: var(--tp-primary-bg, #F1E2CF);
+  --ac-color-primary-border: var(--tp-primary-border, rgba(155,100,45,0.22));
+  --ac-color-text-on-primary: var(--tp-text-on-primary, #FFFFFF);
+  --ac-color-primary-light-9: var(--ac-color-primary-bg);
+  --ac-color-bg-primary: var(--ac-color-primary-bg);
 
   /* ---- Neutral Palette (original) ---- */
-  --ac-color-bg: var(--tp-bg, #F8FAF4);
-  --ac-color-bg-secondary: var(--tp-bg-secondary, #F0F3EC);
+  --ac-color-bg: var(--tp-bg, #F4F1EA);
+  --ac-color-bg-secondary: var(--tp-bg-secondary, #FAF8F3);
   --ac-color-surface: var(--tp-surface, #FFFFFF);
-  --ac-color-surface-hover: var(--tp-surface-hover, #F5F7F2);
-  --ac-color-border: var(--tp-border, #DDE6D8);
-  --ac-color-border-light: var(--tp-border-light, #EEF2EA);
+  --ac-color-surface-hover: var(--tp-surface-hover, #EEE9DF);
+  --ac-color-bg-hover: var(--ac-color-surface-hover);
+  --ac-color-surface-alt: var(--ac-color-bg-secondary);
+  --ac-color-surface-soft: var(--ac-color-bg-secondary);
+  --ac-color-border: var(--tp-border, #DDD8CE);
+  --ac-color-border-light: var(--tp-border-light, #E8E3DA);
+  --ac-color-border-strong: var(--tp-border-strong, #C8C1B5);
 
   /* ---- Text (original) ---- */
-  --ac-color-text: var(--tp-text, #2F3A32);
-  --ac-color-text-secondary: var(--tp-text-secondary, #6F7F70);
-  --ac-color-text-muted: var(--tp-text-muted, #9AAB9A);
-  --ac-color-text-placeholder: var(--tp-text-placeholder, #B0BCAF);
+  --ac-color-text: var(--tp-text, #1C201D);
+  --ac-color-text-primary: var(--ac-color-text);
+  --ac-color-text-secondary: var(--tp-text-secondary, #656B66);
+  --ac-color-text-muted: var(--tp-text-muted, #969B96);
+  --ac-color-text-placeholder: var(--tp-text-placeholder, #969B96);
 
   /* ---- Status ---- */
-  --ac-color-success: var(--tp-success, #7DAA84);
-  --ac-color-warning: var(--tp-warning, #D9A441);
-  --ac-color-danger: var(--tp-danger, #D97878);
-  --ac-color-info: var(--tp-info, #7DAA84);
+  --ac-color-success: var(--tp-success, #4F8562);
+  --ac-color-success-bg: var(--tp-success-soft, #E3EFE6);
+  --ac-color-warning: var(--tp-warning, #A96E28);
+  --ac-color-warning-bg: var(--tp-warning-soft, #F5E8D4);
+  --ac-color-warning-border: var(--ac-color-warning);
+  --ac-color-danger: var(--tp-danger, #B94F4D);
+  --ac-color-danger-bg: var(--tp-danger-soft, #F6E2E1);
+  --ac-color-info: var(--tp-info, #9B642D);
+  --ac-color-info-bg: var(--tp-info-soft, #F1E2CF);
 
   /* ---- Radius ---- */
   --ac-radius-sm: 6px;
@@ -57,6 +70,7 @@
 
   /* ---- Typography ---- */
   --ac-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ac-font-family-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --ac-font-size-xs: 12px;
   --ac-font-size-sm: 13px;
   --ac-font-size-base: 14px;
@@ -66,34 +80,48 @@
   /* ---- Transitions ---- */
   --ac-transition-fast: 0.15s ease;
   --ac-transition-normal: 0.25s ease;
-  --el-color-primary: var(--tp-primary, #7DAA84);
-  --el-color-primary-light-3: var(--tp-primary-soft, #DDEEDD);
-  --el-color-primary-light-5: var(--tp-primary-bg, rgba(125,170,132,0.08));
+  --el-color-primary: var(--tp-primary, #9B642D);
+  --el-color-primary-light-3: var(--tp-primary-hover, #845122);
+  --el-color-primary-light-5: var(--tp-primary-bg, #F1E2CF);
 }
 
 /* ---- Dark Theme ---- */
 html.dark {
-  --ac-color-primary: var(--tp-primary, #7DAA84);
-  --ac-color-primary-light: var(--tp-primary-soft, #9BC1A1);
-  --ac-color-primary-dark: var(--tp-primary, #6C9873);
-  --ac-color-primary-bg: var(--tp-primary-bg, rgba(125,170,132,0.08));
-  --ac-color-primary-border: var(--tp-primary-border, rgba(125,170,132,0.2));
+  --ac-color-primary: var(--tp-primary, #C99557);
+  --ac-color-primary-light: var(--tp-primary-hover, #D8A96A);
+  --ac-color-primary-dark: var(--tp-primary-active, #AD773D);
+  --ac-color-primary-bg: var(--tp-primary-bg, rgba(201,149,87,0.11));
+  --ac-color-primary-border: var(--tp-primary-border, rgba(201,149,87,0.22));
+  --ac-color-text-on-primary: var(--tp-text-on-primary, #17120C);
+  --ac-color-primary-light-9: var(--ac-color-primary-bg);
+  --ac-color-bg-primary: var(--ac-color-primary-bg);
 
-  --ac-color-bg: var(--tp-bg, #F8FAF4);
-  --ac-color-bg-secondary: var(--tp-bg-secondary, #F0F3EC);
-  --ac-color-surface: var(--tp-surface, #FFFFFF);
-  --ac-color-surface-hover: var(--tp-surface-hover, #F5F7F2);
-  --ac-color-border: var(--tp-border, #DDE6D8);
-  --ac-color-border-light: var(--tp-border-light, #EEF2EA);
+  --ac-color-bg: var(--tp-bg, #0B0B0C);
+  --ac-color-bg-secondary: var(--tp-bg-secondary, #121214);
+  --ac-color-surface: var(--tp-surface, #18181B);
+  --ac-color-surface-hover: var(--tp-surface-hover, #202024);
+  --ac-color-bg-hover: var(--ac-color-surface-hover);
+  --ac-color-surface-alt: var(--ac-color-bg-secondary);
+  --ac-color-surface-soft: var(--ac-color-bg-secondary);
+  --ac-color-border: var(--tp-border, #29292D);
+  --ac-color-border-light: var(--tp-border-light, #212124);
+  --ac-color-border-strong: var(--tp-border-strong, #3B3B41);
 
-  --ac-color-text: var(--tp-text, #2F3A32);
-  --ac-color-text-secondary: var(--tp-text-secondary, #6F7F70);
-  --ac-color-text-muted: var(--tp-text-muted, #9AAB9A);
-  --ac-color-text-placeholder: var(--tp-text-placeholder, #B0BCAF);
+  --ac-color-text: var(--tp-text, #F1F0ED);
+  --ac-color-text-primary: var(--ac-color-text);
+  --ac-color-text-secondary: var(--tp-text-secondary, #AAA7A2);
+  --ac-color-text-muted: var(--tp-text-muted, #74716D);
+  --ac-color-text-placeholder: var(--tp-text-placeholder, #74716D);
 
-  --ac-color-success: var(--tp-success, #7DAA84);
-  --ac-color-warning: var(--tp-warning, #D9A441);
-  --ac-color-danger: var(--tp-danger, #D97878);
+  --ac-color-success: var(--tp-success, #75A184);
+  --ac-color-success-bg: var(--tp-success-soft, rgba(117,161,132,0.12));
+  --ac-color-warning: var(--tp-warning, #C99A56);
+  --ac-color-warning-bg: var(--tp-warning-soft, rgba(201,154,86,0.12));
+  --ac-color-warning-border: var(--ac-color-warning);
+  --ac-color-danger: var(--tp-danger, #C96E6A);
+  --ac-color-danger-bg: var(--tp-danger-soft, rgba(201,110,106,0.12));
+  --ac-color-info: var(--tp-info, #C99557);
+  --ac-color-info-bg: var(--tp-info-soft, rgba(201,149,87,0.11));
 
   --ac-shadow-sm: var(--tp-shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
   --ac-shadow-md: var(--tp-shadow-md, 0 2px 8px rgba(0,0,0,0.08));
@@ -113,7 +141,7 @@ html, body {
   font-family: var(--ac-font-family);
   font-size: var(--ac-font-size-base);
   color: var(--ac-color-text);
-  background: var(--ac-color-bg);
+  background: var(--tp-page-glow, none), var(--ac-color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.3s ease;

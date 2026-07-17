@@ -40,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="mi-pipeline">
           <template v-for="l in (pipeline?.layers || [])" :key="l.layer">
             <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
-              <span class="mi-pl-dot" :style="{backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#909399' : '#409eff'}" />
+              <span class="mi-pl-dot" :style="{backgroundColor: l.status === 'completed' ? 'var(--ac-color-success)' : l.status === 'skipped' ? 'var(--ac-color-text-muted)' : 'var(--ac-color-primary)'}" />
             </el-tooltip>
           </template>
         </div>
@@ -98,7 +98,7 @@ onMounted(async () => {
   right: 16px;
   top: 0;
   z-index: 19;
-  background: var(--ac-color-surface, #fff);
+  background: var(--ac-color-surface);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   overflow-y: auto;

@@ -192,7 +192,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ac-color-bg, #f5f5f5);
+  background: var(--ac-color-bg);
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -200,8 +200,8 @@ onMounted(async () => {
 .sw-container {
   width: 100%;
   max-width: 560px;
-  background: var(--ac-color-surface, #fff);
-  border: 1px solid var(--ac-color-border-light, #e5e5e5);
+  background: var(--ac-color-surface);
+  border: 1px solid var(--ac-color-border-light);
   border-radius: 8px;
   padding: 32px 28px 24px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -215,13 +215,13 @@ onMounted(async () => {
 .sw-title {
   font-size: 22px;
   font-weight: 600;
-  color: var(--ac-color-text, #1a1a1a);
+  color: var(--ac-color-text);
   margin: 0 0 6px;
 }
 
 .sw-subtitle {
   font-size: 13px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0;
 }
 
@@ -255,32 +255,32 @@ onMounted(async () => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid var(--ac-color-border, #ccc);
+  border: 2px solid var(--ac-color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ac-color-text-muted, #999);
-  background: var(--ac-color-surface, #fff);
+  color: var(--ac-color-text-muted);
+  background: var(--ac-color-surface);
   transition: all 0.2s;
 }
 
 .sw-step-dot.active .sw-dot {
-  border-color: var(--ac-color-primary, #409eff);
-  background: var(--ac-color-primary, #409eff);
-  color: #fff;
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-primary);
+  color: var(--ac-color-text-on-primary);
 }
 
 .sw-step-dot.done .sw-dot {
-  border-color: var(--ac-color-success, #67c23a);
-  background: var(--ac-color-success, #67c23a);
-  color: #fff;
+  border-color: var(--ac-color-success);
+  background: var(--ac-color-success);
+  color: var(--tp-text-on-status);
 }
 
 .sw-dot-label {
   font-size: 10px;
-  color: var(--ac-color-text-muted, #999);
+  color: var(--ac-color-text-muted);
   text-align: center;
   white-space: nowrap;
 }
@@ -294,12 +294,12 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: 48px 0;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
 }
 
 .sw-error {
-  background: var(--ac-color-surface-alt, #fff5f5);
-  border: 1px solid var(--ac-color-danger, #f56c6c);
+  background: var(--ac-color-danger-bg);
+  border: 1px solid var(--ac-color-danger);
   border-radius: 6px;
   padding: 16px;
   text-align: center;
@@ -308,19 +308,19 @@ onMounted(async () => {
 .sw-error-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--ac-color-danger, #f56c6c);
+  color: var(--ac-color-danger);
   margin: 0 0 8px;
 }
 
 .sw-error-msg {
   font-size: 13px;
-  color: var(--ac-color-text, #333);
+  color: var(--ac-color-text);
   margin: 0 0 6px;
 }
 
 .sw-error-suggestion {
   font-size: 12px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0 0 12px;
 }
 
@@ -338,12 +338,12 @@ onMounted(async () => {
   font-size: 17px;
   font-weight: 600;
   margin: 0 0 4px;
-  color: var(--ac-color-text, #1a1a1a);
+  color: var(--ac-color-text);
 }
 
 .sw-step-desc {
   font-size: 13px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0 0 16px;
 }
 
@@ -357,7 +357,7 @@ onMounted(async () => {
   gap: 8px;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--ac-color-border-light, #eee);
+  border-top: 1px solid var(--ac-color-border-light);
 }
 
 .sw-btn {
@@ -376,33 +376,33 @@ onMounted(async () => {
 }
 
 .sw-btn-primary {
-  background: var(--ac-color-primary, #409eff);
-  color: #fff;
-  border-color: var(--ac-color-primary, #409eff);
+  background: var(--ac-color-primary);
+  color: var(--ac-color-text-on-primary);
+  border-color: var(--ac-color-primary);
 }
 
 .sw-btn-primary:hover:not(:disabled) {
-  background: var(--ac-color-primary-hover, #66b1ff);
+  background: var(--ac-color-primary-light);
 }
 
 .sw-btn-secondary {
-  background: var(--ac-color-surface, #fff);
-  color: var(--ac-color-text, #333);
-  border-color: var(--ac-color-border, #ddd);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  border-color: var(--ac-color-border);
 }
 
 .sw-btn-secondary:hover:not(:disabled) {
-  background: var(--ac-color-surface-alt, #f5f5f5);
+  background: var(--ac-color-surface-hover);
 }
 
 .sw-btn-ghost {
   background: transparent;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   border-color: transparent;
 }
 
 .sw-btn-ghost:hover:not(:disabled) {
-  color: var(--ac-color-text, #333);
+  color: var(--ac-color-text);
 }
 
 .sw-progress {
@@ -415,21 +415,21 @@ onMounted(async () => {
 .sw-progress-bar {
   flex: 1;
   height: 4px;
-  background: var(--ac-color-border-light, #eee);
+  background: var(--ac-color-border-light);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .sw-progress-fill {
   height: 100%;
-  background: var(--ac-color-primary, #409eff);
+  background: var(--ac-color-primary);
   border-radius: 2px;
   transition: width 0.3s;
 }
 
 .sw-progress-text {
   font-size: 12px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   white-space: nowrap;
 }
 </style>
@@ -446,19 +446,19 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--ac-color-border-light, #e5e5e5);
+  border: 1px solid var(--ac-color-border-light);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .sw-option-card:hover {
-  border-color: var(--ac-color-primary, #409eff);
+  border-color: var(--ac-color-primary);
 }
 
 .sw-option-card.selected {
-  border-color: var(--ac-color-primary, #409eff);
-  background: var(--ac-color-primary-bg, #ecf5ff);
+  border-color: var(--ac-color-primary);
+  background: var(--ac-color-primary-bg);
 }
 
 .sw-option-card input[type="radio"] {
@@ -469,12 +469,12 @@ onMounted(async () => {
   display: block;
   font-size: 14px;
   margin-bottom: 4px;
-  color: var(--ac-color-text, #1a1a1a);
+  color: var(--ac-color-text);
 }
 
 .sw-option-body p {
   font-size: 12px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0;
 }
 
@@ -503,49 +503,49 @@ onMounted(async () => {
 .sw-field label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--ac-color-text-secondary, #666);
+  color: var(--ac-color-text-secondary);
 }
 
 .sw-field input,
 .sw-field select {
   padding: 8px 12px;
-  border: 1px solid var(--ac-color-border-light, #ddd);
+  border: 1px solid var(--ac-color-border-light);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
-  background: var(--ac-color-surface, #fff);
-  color: var(--ac-color-text, #1a1a1a);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
   transition: border-color 0.2s;
 }
 
 .sw-field input:focus,
 .sw-field select:focus {
   outline: none;
-  border-color: var(--ac-color-primary, #409eff);
+  border-color: var(--ac-color-primary);
 }
 
 .sw-notice {
   padding: 10px 12px;
-  background: var(--ac-color-surface-alt, #f0f9ff);
-  border-left: 3px solid var(--ac-color-primary, #409eff);
+  background: var(--ac-color-primary-bg);
+  border-left: 3px solid var(--ac-color-primary);
   border-radius: 4px;
   font-size: 12px;
-  color: var(--ac-color-text-secondary, #666);
+  color: var(--ac-color-text-secondary);
   line-height: 1.5;
 }
 
 .sw-notice strong {
-  color: var(--ac-color-text, #333);
+  color: var(--ac-color-text);
 }
 
 .sw-notice-warn {
-  background: var(--ac-color-surface-alt, #fff7e6);
-  border-left-color: var(--ac-color-warning, #e6a23c);
+  background: var(--ac-color-warning-bg);
+  border-left-color: var(--ac-color-warning);
 }
 
 .sw-skip-option {
   padding: 12px 0;
-  border-top: 1px solid var(--ac-color-border-light, #eee);
+  border-top: 1px solid var(--ac-color-border-light);
 }
 
 .sw-skip-option label {
@@ -553,7 +553,7 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   cursor: pointer;
 }
 
@@ -564,15 +564,15 @@ onMounted(async () => {
 }
 
 .sw-test-result.success {
-  background: var(--ac-color-surface-alt, #f0f9eb);
-  border: 1px solid var(--ac-color-success, #67c23a);
-  color: var(--ac-color-success, #67c23a);
+  background: var(--ac-color-success-bg);
+  border: 1px solid var(--ac-color-success);
+  color: var(--ac-color-success);
 }
 
 .sw-test-result.failed {
-  background: var(--ac-color-surface-alt, #fef0f0);
-  border: 1px solid var(--ac-color-danger, #f56c6c);
-  color: var(--ac-color-danger, #f56c6c);
+  background: var(--ac-color-danger-bg);
+  border: 1px solid var(--ac-color-danger);
+  color: var(--ac-color-danger);
 }
 
 .sw-test-detail {
@@ -589,16 +589,16 @@ onMounted(async () => {
 
 .sw-info-card {
   padding: 14px;
-  background: var(--ac-color-surface-alt, #f8f9fa);
+  background: var(--ac-color-bg-secondary);
   border-radius: 6px;
-  border: 1px solid var(--ac-color-border-light, #eee);
+  border: 1px solid var(--ac-color-border-light);
 }
 
 .sw-info-card h3 {
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: var(--ac-color-text, #1a1a1a);
+  color: var(--ac-color-text);
 }
 
 .sw-info-card ul {
@@ -608,7 +608,7 @@ onMounted(async () => {
 
 .sw-info-card li {
   font-size: 12px;
-  color: var(--ac-color-text-secondary, #555);
+  color: var(--ac-color-text-secondary);
   line-height: 1.8;
 }
 
@@ -622,13 +622,13 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--ac-color-text, #333);
+  color: var(--ac-color-text);
   cursor: pointer;
 }
 
 .sw-hint {
   font-size: 12px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0 0 12px;
 }
 
@@ -641,8 +641,8 @@ onMounted(async () => {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--ac-color-success, #67c23a);
-  color: #fff;
+  background: var(--ac-color-success);
+  color: var(--tp-text-on-status);
   font-size: 24px;
   display: flex;
   align-items: center;
@@ -654,12 +654,12 @@ onMounted(async () => {
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: var(--ac-color-text, #1a1a1a);
+  color: var(--ac-color-text);
 }
 
 .sw-finish p {
   font-size: 13px;
-  color: var(--ac-color-text-muted, #888);
+  color: var(--ac-color-text-muted);
   margin: 0;
 }
 </style>

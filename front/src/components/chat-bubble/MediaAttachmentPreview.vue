@@ -77,7 +77,7 @@ function stopPreviewVideo() {
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
-  color: #fff;
+  color: var(--ac-color-text-on-primary);
   font-size: 24px;
 }
 .bubble-image:hover .image-overlay {

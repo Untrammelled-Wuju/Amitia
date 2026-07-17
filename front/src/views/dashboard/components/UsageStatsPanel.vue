@@ -126,12 +126,12 @@ defineProps<{
   font-size: 22px;
 }
 
-.blue .stat-icon { color: #2563eb; background: var(--console-blue-soft); }
-.purple .stat-icon { color: #7c3aed; background: var(--console-purple-soft); }
-.violet .stat-icon { color: #6d5dfc; background: var(--console-violet-soft); }
-.orange .stat-icon { color: #f97316; background: var(--console-orange-soft); }
-.amber .stat-icon { color: #f97316; background: var(--console-amber-soft); }
-.green .stat-icon { color: #16a34a; background: var(--console-green-soft); }
+.blue .stat-icon { color: var(--ac-color-primary); background: var(--console-blue-soft); }
+.purple .stat-icon { color: var(--ac-color-primary); background: var(--console-purple-soft); }
+.violet .stat-icon { color: var(--ac-color-primary-light); background: var(--console-violet-soft); }
+.orange .stat-icon { color: var(--ac-color-warning); background: var(--console-orange-soft); }
+.amber .stat-icon { color: var(--ac-color-warning); background: var(--console-amber-soft); }
+.green .stat-icon { color: var(--ac-color-success); background: var(--console-green-soft); }
 
 .stat-label { margin-bottom: 4px; color: var(--console-text-muted); font-size: 14px; }
 .stat-value { color: var(--console-text); font-size: 22px; font-weight: 750; line-height: 1.1; }

@@ -111,12 +111,12 @@ const runtimeHealthLabel = computed(() =>
   padding: 3px 10px;
   border-radius: 7px;
   background: var(--console-value-ok-bg);
-  color: #12a150;
+  color: var(--ac-color-success);
   font-size: 13px;
   font-weight: 400;
 }
-.status-warn .sc-value { background: var(--console-value-off-bg); color: #f97316; }
-.status-off .sc-value { background: var(--console-value-off-bg); color: #f43f5e; }
+.status-warn .sc-value { background: var(--console-value-off-bg); color: var(--ac-color-warning); }
+.status-off .sc-value { background: var(--console-value-off-bg); color: var(--ac-color-danger); }
 .sc-sub { font-size: 14px; color: var(--console-text-muted); margin-top: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1280px) {

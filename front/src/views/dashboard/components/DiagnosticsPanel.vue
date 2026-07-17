@@ -80,16 +80,16 @@ const emit = defineEmits<{
 .diag-time { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--console-text-muted); }
 
 .diag-summary { margin-top: 16px; display: flex; flex-direction: column; gap: 0; border: 1px solid var(--console-border-soft); border-radius: 9px; overflow: hidden; }
-.ds-overall { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: #f97316; background: var(--console-diagnostic-warn-bg); font-size: 15px; font-weight: 750; }
-.ds-overall.healthy { color: #16a34a; background: var(--console-diagnostic-ok-bg); }
+.ds-overall { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: var(--ac-color-warning); background: var(--console-diagnostic-warn-bg); font-size: 15px; font-weight: 750; }
+.ds-overall.healthy { color: var(--ac-color-success); background: var(--console-diagnostic-ok-bg); }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
 .ds-items { display: grid; grid-template-columns: 1fr; }
 @media (max-width: 640px) { .ds-items { grid-template-columns: 1fr; } }
 .ds-item { display: grid; grid-template-columns: 22px minmax(130px, 1fr) minmax(140px, 1.2fr); align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-top: 1px solid var(--console-border-soft); background: var(--console-card); font-size: 14px; }
-.dsi-status.ok { color: #16a34a; }
-.dsi-status.warn { color: #f97316; }
-.dsi-status.error { color: #ef4444; }
-.dsi-status.unknown { color: #98a2b3; }
+.dsi-status.ok { color: var(--ac-color-success); }
+.dsi-status.warn { color: var(--ac-color-warning); }
+.dsi-status.error { color: var(--ac-color-danger); }
+.dsi-status.unknown { color: var(--ac-color-text-muted); }
 .dsi-name { font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 .dsi-msg { color: var(--console-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
 

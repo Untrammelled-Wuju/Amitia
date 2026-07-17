@@ -8,7 +8,6 @@ export type ThemePreset = "system" | "dark" | "light"
 export interface ThemeState {
   preset: ThemePreset
   accentColor: string
-  customTheme: Record<string, string> | null
 }
 
 const STORAGE_KEY = "ai-companion-theme"
@@ -21,7 +20,6 @@ function normalizePreset(preset: unknown): ThemePreset {
 const state = ref<ThemeState>({
   preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
   accentColor: "",
-  customTheme: null,
 })
 
 const resolvedMode = ref<"light" | "dark">("light")
@@ -52,6 +50,8 @@ function resolveEffectivePreset(preset: ThemePreset): "light" | "dark" | ThemePr
 function applyTheme(preset: ThemePreset) {
   const html = document.documentElement
   const effective = resolveEffectivePreset(preset)
+  html.style.removeProperty("--tp-primary")
+  html.style.removeProperty("--el-color-primary")
 
   // Determine light/dark for class toggling
   if (effective === "dark") {
@@ -65,37 +65,12 @@ function applyTheme(preset: ThemePreset) {
   // Set data-theme attribute for CSS variable selection
   html.setAttribute("data-theme", effective)
 
-  // If custom theme, apply overrides
-  if (state.value.customTheme) {
-    applyCustomTheme(state.value.customTheme)
-  }
-
-  // Apply accent color if set
-  if (state.value.accentColor) {
-    html.style.setProperty("--tp-primary", state.value.accentColor)
-    html.style.setProperty("--el-color-primary", state.value.accentColor)
-  }
-}
-
-function applyCustomTheme(custom: Record<string, string>) {
-  const html = document.documentElement
-  for (const [key, value] of Object.entries(custom)) {
-    html.style.setProperty(key, value)
-  }
 }
 
 // Watch for preset changes
 watch(() => state.value.preset, (val) => {
   applyTheme(val)
   localStorage.setItem(STORAGE_KEY, val)
-})
-
-// Watch for accent color changes
-watch(() => state.value.accentColor, (val) => {
-  if (val) {
-    document.documentElement.style.setProperty("--tp-primary", val)
-    document.documentElement.style.setProperty("--el-color-primary", val)
-  }
 })
 
 // Listen for system theme changes
@@ -113,7 +88,7 @@ async function loadFromServer() {
     const d = (res.data as any)?.data || res.data
     if (d?.preset) {
       state.value.preset = normalizePreset(d.preset)
-      state.value.accentColor = d.accentColor || ""
+      state.value.accentColor = ""
       applyTheme(state.value.preset)
     }
     themeLoaded.value = true
@@ -124,9 +99,9 @@ async function loadFromServer() {
   }
 }
 
-async function saveToServer(preset: ThemePreset, accentColor?: string) {
+async function saveToServer(preset: ThemePreset) {
   try {
-    await apiClient.put("/api/theme", { preset, accentColor: accentColor || "" })
+    await apiClient.put("/api/theme", { preset, accentColor: "" })
   } catch {
     // Silently fail - localStorage is the source of truth
   }
@@ -135,17 +110,10 @@ async function saveToServer(preset: ThemePreset, accentColor?: string) {
 export function useTheme() {
   function setPreset(preset: ThemePreset) {
     state.value.preset = normalizePreset(preset)
-    saveToServer(preset, state.value.accentColor)
+    saveToServer(preset)
     if (state.value.preset === "light") {
       preferredLight.value = preset
     }
-  }
-
-  function setAccentColor(color: string) {
-    state.value.accentColor = color
-    document.documentElement.style.setProperty("--tp-primary", color)
-    document.documentElement.style.setProperty("--el-color-primary", color)
-    saveToServer(state.value.preset, color)
   }
 
   function toggleLightDark() {
@@ -162,7 +130,6 @@ export function useTheme() {
     themeLoaded,
     presets: THEME_PRESETS,
     setPreset,
-    setAccentColor,
     toggleLightDark,
     preferredLight,
     loadFromServer,

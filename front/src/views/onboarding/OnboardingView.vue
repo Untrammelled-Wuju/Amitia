@@ -263,12 +263,12 @@ onUnmounted(() => {
 
 .step-dot.active .dot-icon {
   background: var(--ac-color-primary);
-  color: #fff;
+  color: var(--ac-color-text-on-primary);
 }
 
 .step-dot.done .dot-icon {
   background: var(--ac-color-success);
-  color: #fff;
+  color: var(--ac-color-text-on-primary);
 }
 
 .dot-label {
@@ -625,7 +625,7 @@ onUnmounted(() => {
 .qr-step-num.active {
   border-color: var(--ac-color-primary);
   background: var(--ac-color-primary);
-  color: #fff;
+  color: var(--ac-color-text-on-primary);
 }
 
 .qr-step-body {

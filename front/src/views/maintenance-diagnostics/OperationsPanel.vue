@@ -170,9 +170,9 @@ async function handleReloadConfig() {
   display: inline-block;
 }
 .op-risk.high {
-  color: #f56c6c;
-  background: #fef0f0;
-  border: 1px solid #fde2e2;
+  color: var(--ac-color-danger);
+  background: var(--ac-color-danger-bg);
+  border: 1px solid var(--ac-color-danger);
 }
 .op-action {
   flex-shrink: 0;

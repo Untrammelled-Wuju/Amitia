@@ -153,7 +153,7 @@ async function handleSetup() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--ac-bg-page, #f5f5f5);
+  background: var(--ac-color-bg);
   padding: 20px;
 }
 
@@ -180,7 +180,7 @@ async function handleSetup() {
 
 .setup-header p {
   font-size: 14px;
-  color: #666;
+  color: var(--ac-color-text-secondary);
   line-height: 1.6;
 }
 </style>

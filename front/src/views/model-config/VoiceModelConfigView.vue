@@ -71,7 +71,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="tts-item" v-if="ttsTestResult">
           <span class="tts-label">状态</span>
-          <span :style="{color: ttsTestResult==='ok'?'#67c23a':'#f56c6c'}">{{ ttsTestResult === 'ok' ? '连接正常' : '连接失败' }}</span>
+          <span :style="{color: ttsTestResult==='ok'?'var(--ac-color-success)':'var(--ac-color-danger)'}">{{ ttsTestResult === 'ok' ? '连接正常' : '连接失败' }}</span>
         </div>
       </div>
       <div style="margin-top:12px;font-size:12px;color:var(--el-text-color-secondary);display:flex;flex-wrap:wrap;gap:12px">

@@ -198,11 +198,11 @@ async function handleDelete(id: string) {
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  border-left: 4px solid #e0e0e0;
+  border-left: 4px solid var(--ac-color-border);
 }
-.profile-card.confidence-success { border-left-color: #4caf50; }
-.profile-card.confidence-warning { border-left-color: #ff9800; }
-.profile-card.confidence-danger { border-left-color: #f44336; }
+.profile-card.confidence-success { border-left-color: var(--ac-color-success); }
+.profile-card.confidence-warning { border-left-color: var(--ac-color-warning); }
+.profile-card.confidence-danger { border-left-color: var(--ac-color-danger); }
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -212,9 +212,9 @@ async function handleDelete(id: string) {
 .category-badge {
   font-size: 12px;
   padding: 2px 8px;
-  background: #f0f0f0;
+  background: var(--ac-color-bg-secondary);
   border-radius: 4px;
-  color: #666;
+  color: var(--ac-color-text-secondary);
 }
 .card-actions { display: flex; gap: 4px; }
 
@@ -225,22 +225,22 @@ async function handleDelete(id: string) {
 .confidence-bar {
   flex: 1;
   height: 6px;
-  background: #eee;
+  background: var(--ac-color-border-light);
   border-radius: 3px;
   position: relative;
   overflow: hidden;
 }
 .confidence-fill {
   height: 100%;
-  background: #4caf50;
+  background: var(--ac-color-success);
   border-radius: 3px;
   transition: width 0.3s;
 }
-.confidence-text { font-size: 11px; color: #999; min-width: 36px; text-align: right; }
-.source-info { font-size: 11px; color: #999; cursor: help; }
-.empty-state { grid-column: 1 / -1; text-align: center; padding: 48px; color: #999; }
-.loading { text-align: center; padding: 48px; color: #999; }
-.btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; }
-.btn-primary { background: #1976d2; color: #fff; border-color: #1976d2; }
+.confidence-text { font-size: 11px; color: var(--ac-color-text-muted); min-width: 36px; text-align: right; }
+.source-info { font-size: 11px; color: var(--ac-color-text-muted); cursor: help; }
+.empty-state { grid-column: 1 / -1; text-align: center; padding: 48px; color: var(--ac-color-text-muted); }
+.loading { text-align: center; padding: 48px; color: var(--ac-color-text-muted); }
+.btn { padding: 8px 16px; border: 1px solid var(--ac-color-border); border-radius: 6px; background: var(--ac-color-surface); color: var(--ac-color-text); cursor: pointer; font-size: 14px; }
+.btn-primary { background: var(--ac-color-primary); color: var(--ac-color-text-on-primary); border-color: var(--ac-color-primary); }
 
 </style>

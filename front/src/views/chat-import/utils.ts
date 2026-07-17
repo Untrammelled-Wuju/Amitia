@@ -14,9 +14,9 @@ export function warningType(w: any): "error" | "warning" | "info" {
 }
 
 export function confidenceColor(conf: number): string {
-  if (conf >= 0.8) return "#67c23a"
-  if (conf >= 0.5) return "#e6a23c"
-  return "#f56c6c"
+  if (conf >= 0.8) return "var(--ac-color-success)"
+  if (conf >= 0.5) return "var(--ac-color-warning)"
+  return "var(--ac-color-danger)"
 }
 
 export function fmtDate(d: string): string {

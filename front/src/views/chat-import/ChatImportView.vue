@@ -180,7 +180,7 @@ onMounted(() => {
 .step-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%;
-  background: var(--ac-color-primary); color: #fff;
+  background: var(--ac-color-primary); color: var(--ac-color-text-on-primary);
   font-size: 11px; font-weight: 700; margin-right: 6px; flex-shrink: 0;
 }
 

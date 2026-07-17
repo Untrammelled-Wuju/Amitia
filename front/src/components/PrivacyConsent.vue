@@ -22,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <div class="consent-sections">
         <div class="cs-item">
-          <el-icon color="#409eff"><Lock /></el-icon>
+          <el-icon color="var(--ac-color-primary)"><Lock /></el-icon>
           <div class="csi-text">
             <div class="csi-title">数据由你自己掌控</div>
             <div class="csi-desc">
@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
 
         <div class="cs-item">
-          <el-icon color="#e6a23c"><WarningFilled /></el-icon>
+          <el-icon color="var(--ac-color-warning)"><WarningFilled /></el-icon>
           <div class="csi-text">
             <div class="csi-title">模型 API 数据提醒</div>
             <div class="csi-desc">
@@ -44,7 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
 
         <div class="cs-item">
-          <el-icon color="#67c23a"><ChatDotRound /></el-icon>
+          <el-icon color="var(--ac-color-success)"><ChatDotRound /></el-icon>
           <div class="csi-text">
             <div class="csi-title">AI 是虚拟角色</div>
             <div class="csi-desc">
@@ -55,7 +55,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
 
         <div class="cs-item">
-          <el-icon color="#909399"><Delete /></el-icon>
+          <el-icon color="var(--ac-color-text-muted)"><Delete /></el-icon>
           <div class="csi-text">
             <div class="csi-title">你可以随时删除数据</div>
             <div class="csi-desc">

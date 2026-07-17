@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-table :data="limitations" :show-header="false" size="small" class="limit-table">
           <el-table-column prop="icon" width="36">
             <template #default="{ row }">
-              <el-icon color="#f56c6c"><CircleCloseFilled /></el-icon>
+              <el-icon color="var(--ac-color-danger)"><CircleCloseFilled /></el-icon>
             </template>
           </el-table-column>
           <el-table-column prop="title" width="180" />
@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-table :data="misuses" :show-header="false" size="small" class="limit-table">
           <el-table-column prop="icon" width="36">
             <template #default="{ row }">
-              <el-icon color="#e6a23c"><WarningFilled /></el-icon>
+              <el-icon color="var(--ac-color-warning)"><WarningFilled /></el-icon>
             </template>
           </el-table-column>
           <el-table-column prop="title" width="180" />

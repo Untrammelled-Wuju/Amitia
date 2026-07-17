@@ -145,11 +145,11 @@ function onSelectQQ() {
 }
 
 .channel-icon.wechat-icon {
-  color: var(--ac-color-success, #67c23a);
+  color: var(--ac-color-success);
 }
 
 .channel-icon.qq-icon {
-  color: var(--ac-color-primary, #409eff);
+  color: var(--ac-color-primary);
 }
 
 .channel-info {

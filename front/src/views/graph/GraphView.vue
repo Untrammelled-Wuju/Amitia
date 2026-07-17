@@ -57,9 +57,9 @@ let chartInstance: any = null
 const { resolvedMode } = useTheme()
 
 const typeLabels: Record<string,string> = { memory: "记忆", profile: "画像", episodic: "情景", worldbook: "世界书", worldbook_trigger: "触发片段", user: "用户", character: "角色", entity: "实体" }
-const typeColors: Record<string,string> = { memory: "#409eff", profile: "#e6a23c", episodic: "#f56c6c", worldbook: "#67c23a", worldbook_trigger: "#909399", user: "#8e6ad8", character: "#14b8a6", entity: "#64748b" }
+const typeColors: Record<string,string> = { memory: "var(--ac-color-primary)", profile: "var(--ac-color-warning)", episodic: "var(--ac-color-danger)", worldbook: "var(--ac-color-success)", worldbook_trigger: "var(--ac-color-text-muted)", user: "var(--ac-color-primary-light)", character: "var(--ac-color-primary-dark)", entity: "var(--ac-color-text-secondary)" }
 function typeLabel(t: string) { return typeLabels[t] || t }
-function typeColor(t: string) { return typeColors[t] || "#909399" }
+function typeColor(t: string) { return typeColors[t] || "var(--ac-color-text-muted)" }
 const typeOptions = computed(() => (stats.value?.byType || []).map((t: any) => ({ label: typeLabel(t.entity_type), value: t.entity_type })))
 
 const filteredNodes = computed(() => {
@@ -197,9 +197,9 @@ async function renderGraph() {
     return { source: extractId(l.in || l.source), target: extractId(l.out || l.target) }
   })
   var styles = getComputedStyle(document.documentElement)
-  var textColor = styles.getPropertyValue("--ac-color-text").trim() || "#333"
-  var bgColor = styles.getPropertyValue("--ac-color-bg").trim() || "#fff"
-  var lineColor = styles.getPropertyValue("--ac-color-border").trim() || "#e0e0e0"
+    var textColor = styles.getPropertyValue("--ac-color-text").trim() || "#1C201D"
+    var bgColor = styles.getPropertyValue("--ac-color-bg").trim() || "#F4F1EA"
+    var lineColor = styles.getPropertyValue("--ac-color-border").trim() || "#DDD8CE"
   chartInstance.setOption({
     backgroundColor: bgColor,
     tooltip: {
@@ -241,12 +241,12 @@ onUnmounted(() => {
 .graph-page { height: 100%; display: flex; flex-direction: column; }
 .page-title { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
 .graph-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-.slider-label { color: #909399; font-size: 13px; white-space: nowrap; }
-.graph-stats { display: flex; gap: 16px; margin-bottom: 8px; font-size: 13px; color: #606266; flex-wrap: wrap; }
+.slider-label { color: var(--ac-color-text-muted); font-size: 13px; white-space: nowrap; }
+.graph-stats { display: flex; gap: 16px; margin-bottom: 8px; font-size: 13px; color: var(--ac-color-text-secondary); flex-wrap: wrap; }
 .stat-type { font-weight: 500; }
-.graph-container { flex: 1; min-height: 400px; border: 1px solid #e4e7ed; border-radius: 8px; overflow: hidden; position: relative; }
+.graph-container { flex: 1; min-height: 400px; border: 1px solid var(--ac-color-border); border-radius: 8px; overflow: hidden; position: relative; }
 .graph-container.fullscreen { position: fixed; inset: 0; z-index: 1000; background: var(--ac-color-bg); border: none; border-radius: 0; }
-.fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--ac-color-bg-secondary); border-bottom: 1px solid #e4e7ed; }
+.fullscreen-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: var(--ac-color-bg-secondary); border-bottom: 1px solid var(--ac-color-border); }
 .fullscreen-title { font-size: 14px; font-weight: 600; color: var(--ac-color-text-primary); }
 .fullscreen-close { font-size: 14px; color: var(--ac-color-text-primary); }
 .chart { width: 100%; height: 100%; }

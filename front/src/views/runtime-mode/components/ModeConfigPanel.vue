@@ -204,8 +204,8 @@ const modeDescription = computed(() =>
 .section-header-row { display: flex; align-items: center; justify-content: space-between; }
 
 .mode-hero { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border-radius: 12px; margin-bottom: 16px; }
-.mode-desktop { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
-.mode-cloud { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.mode-desktop { background: var(--ac-color-success-bg); border: 1px solid var(--ac-color-success); color: var(--ac-color-success); }
+.mode-cloud { background: var(--ac-color-primary-bg); border: 1px solid var(--ac-color-primary); color: var(--ac-color-primary); }
 .mode-hero-icon { flex-shrink: 0; }
 .mode-hero-body { flex: 1; min-width: 0; }
 .mode-hero-label { font-size: 16px; font-weight: 700; color: var(--ac-color-text); }
@@ -213,24 +213,24 @@ const modeDescription = computed(() =>
 .mode-hero-addr { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
 
 .validation-result { margin-top: 16px; padding: 12px 16px; border-radius: 8px; }
-.vr-ok-block { background: #f0fdf4; border: 1px solid #bbf7d0; }
-.vr-error-block { background: #fef2f2; border: 1px solid #fecaca; }
+.vr-ok-block { background: var(--ac-color-success-bg); border: 1px solid var(--ac-color-success); }
+.vr-error-block { background: var(--ac-color-danger-bg); border: 1px solid var(--ac-color-danger); }
 .vr-header { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
-.vr-ok-block .vr-header { color: #166534; }
-.vr-error-block .vr-header { color: #991b1b; }
+.vr-ok-block .vr-header { color: var(--ac-color-success); }
+.vr-error-block .vr-header { color: var(--ac-color-danger); }
 .vr-checks { display: flex; flex-direction: column; gap: 8px; }
 .vr-check-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; }
 .vr-ok { }
-.vr-warn { background: #fefce8; }
-.vr-error { background: #fef2f2; }
+.vr-warn { background: var(--ac-color-warning-bg); }
+.vr-error { background: var(--ac-color-danger-bg); }
 .vr-check-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
-.vr-ok .vr-check-icon { color: #16a34a; }
-.vr-warn .vr-check-icon { color: #ca8a04; }
-.vr-error .vr-check-icon { color: #dc2626; }
+.vr-ok .vr-check-icon { color: var(--ac-color-success); }
+.vr-warn .vr-check-icon { color: var(--ac-color-warning); }
+.vr-error .vr-check-icon { color: var(--ac-color-danger); }
 .vr-check-body { flex: 1; min-width: 0; }
 .vr-check-name { font-size: 12px; font-weight: 600; color: var(--ac-color-text); }
 .vr-check-msg { font-size: 12px; color: var(--ac-color-text-secondary); margin-top: 2px; }
-.vr-check-suggestion { font-size: 11px; color: #92400e; margin-top: 4px; padding: 4px 8px; border-radius: 4px; background: #fef3c7; line-height: 1.4; }
+.vr-check-suggestion { font-size: 11px; color: var(--ac-color-warning); margin-top: 4px; padding: 4px 8px; border-radius: 4px; background: var(--ac-color-warning-bg); line-height: 1.4; }
 
 .checklist-group { display: flex; flex-direction: column; gap: 10px; }
 

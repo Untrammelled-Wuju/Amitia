@@ -121,7 +121,7 @@ onMounted(loadHistory)
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 .card-title { font-size: 15px; font-weight: 600; }
 .no-data { color: var(--el-text-color-placeholder); }
-.risk-number.high { color: #dc2626; font-weight: 600; }
+.risk-number.high { color: var(--ac-color-danger); font-weight: 600; }
 .pagination-wrap { display: flex; justify-content: center; margin-top: 12px; }
 .empty-tip { text-align: center; padding: 24px 0; color: var(--el-text-color-secondary); font-size: 13px; }
 </style>

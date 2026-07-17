@@ -6,7 +6,7 @@
       <span class="pl-label">管线状态:</span>
       <template v-for="l in pipelineStatus.layers" :key="l.layer">
         <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
-          <span class="pl-dot" :class="'pl-' + l.status" :style="{ backgroundColor: l.status === 'completed' ? '#67c23a' : l.status === 'skipped' ? '#c0c4cc' : '#f56c6c' }"></span>
+        <span class="pl-dot" :class="'pl-' + l.status" :style="{ backgroundColor: l.status === 'completed' ? 'var(--ac-color-success)' : l.status === 'skipped' ? 'var(--ac-color-text-muted)' : 'var(--ac-color-danger)' }"></span>
         </el-tooltip>
       </template>
       <span class="pl-time" v-if="pipelineStatus.endedAt">{{ fmtDate(pipelineStatus.endedAt) }}</span>
@@ -235,16 +235,16 @@ onMounted(async () => {
 }
 .pipeline-bar {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-  background: var(--ac-color-bg-secondary); border: 1px solid #e4e7ed; border-radius: 6px;
+  background: var(--ac-color-bg-secondary); border: 1px solid var(--ac-color-border); border-radius: 6px;
   margin-bottom: 12px; font-size: 13px;
 }
-.pl-label { color: #606266; font-weight: 600; margin-right: 4px; }
+.pl-label { color: var(--ac-color-text-secondary); font-weight: 600; margin-right: 4px; }
 .pl-dot {
   display: inline-block; width: 14px; height: 14px; border-radius: 50%;
   cursor: pointer; transition: transform 0.15s;
 }
 .pl-dot:hover { transform: scale(1.3); }
-.pl-time { color: #909399; font-size: 12px; margin-left: auto; }
+.pl-time { color: var(--ac-color-text-muted); font-size: 12px; margin-left: auto; }
 .mem-tabs { margin-top: 8px; }
 .analysis-panel { padding: 4px 0; }
 .ap-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
@@ -288,7 +288,7 @@ onMounted(async () => {
 
 .scope-char-name {
   font-size: 11px;
-  color: #909399;
+  color: var(--ac-color-text-muted);
   margin-left: 4px;
 }
 

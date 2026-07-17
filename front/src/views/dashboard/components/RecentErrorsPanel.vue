@@ -64,7 +64,7 @@ const emit = defineEmits<{
 
 .empty-hint { color: var(--console-text-muted); padding: 52px 0 0; }
 .empty-hint.ok { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-size: 15px; }
-.empty-illustration { position: relative; width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; color: #cbd5e1; }
+.empty-illustration { position: relative; width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; color: var(--ac-color-text-muted); }
 .doc-icon { font-size: 78px; }
 .check-badge {
   position: absolute;
@@ -76,8 +76,8 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: #ffffff;
-  background: #22c55e;
-  border: 3px solid #ffffff;
+  color: var(--tp-text-on-status);
+  background: var(--ac-color-success);
+  border: 3px solid var(--ac-color-surface);
 }
 </style>

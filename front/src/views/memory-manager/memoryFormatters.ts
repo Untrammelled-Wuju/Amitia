@@ -14,7 +14,7 @@ export const SENSITIVITY_OPTIONS = [
 
 export function typeLabel(value: string) { return TYPES.find(item => item.value === value)?.label || value }
 export function sourceLabel(value: string) { return SOURCES.find(item => item.value === value)?.label || value }
-export function importanceColor(value: number) { return value >= 8 ? "#c85a5a" : value >= 5 ? "#c8924a" : "#5b7fa5" }
+export function importanceColor(value: number) { return value >= 8 ? "var(--ac-color-danger)" : value >= 5 ? "var(--ac-color-warning)" : "var(--ac-color-primary)" }
 export function isExpired(expiresAt?: string) { return !!expiresAt && new Date(expiresAt).getTime() < Date.now() }
 export function legacyScopeToScopeType(scope: string) { return scope === "user" ? "user_global" : "user_character" }
 export function rowScopeType(row: any) { return row.scopeType || row.scope_type || legacyScopeToScopeType(row.scope || "character") }
