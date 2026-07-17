@@ -50,7 +50,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
 
-      <div ref="inputWrapperRef" class="input-wrapper">
+      <div class="composer-input-row">
+        <div ref="inputWrapperRef" class="input-wrapper">
         <div class="input-left-actions">
           <el-popover
             v-model:visible="addMenuOpen"
@@ -198,40 +199,41 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </div>
 
-        <div class="input-actions">
-          <el-button
-            :icon="Microphone"
-            circle
-            size="small"
-            class="voice-mode-toggle"
-            :class="{ 'is-voice-mode': voiceMode }"
-            :disabled="isInputDisabled"
-            @click="toggleVoiceMode"
-            :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
-          />
-          <el-button
-            v-if="!voiceMode || generating"
-            :type="generating ? 'danger' : 'primary'"
-            :icon="generating ? CloseBold : Promotion"
-            circle
-            size="small"
-            :disabled="!generating && (isInputDisabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo && !selectedSkillNames.length) || isSubmitting)"
-            @click="generating ? $emit('stop') : handleSendClick()"
-            :title="generating ? '停止生成' : '发送 (Enter)'"
-          />
+          <div class="input-actions">
+            <el-button
+              :icon="Microphone"
+              circle
+              size="small"
+              class="voice-mode-toggle"
+              :class="{ 'is-voice-mode': voiceMode }"
+              :disabled="isInputDisabled"
+              @click="toggleVoiceMode"
+              :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
+            />
+            <el-button
+              v-if="!voiceMode || generating"
+              :type="generating ? 'danger' : 'primary'"
+              :icon="generating ? CloseBold : Promotion"
+              circle
+              size="small"
+              :disabled="!generating && (isInputDisabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo && !selectedSkillNames.length) || isSubmitting)"
+              @click="generating ? $emit('stop') : handleSendClick()"
+              :title="generating ? '停止生成' : '发送 (Enter)'"
+            />
+          </div>
         </div>
+
+        <el-button
+          :type="callActive ? 'danger' : 'default'"
+          :icon="Phone"
+          circle
+          :class="{ 'call-btn-outer': true, 'is-calling': callActive }"
+          :disabled="isInputDisabled"
+          @click="$emit('toggleCall')"
+          title="语音通话"
+        />
       </div>
     </div>
-
-    <el-button
-      :type="callActive ? 'danger' : 'default'"
-      :icon="Phone"
-      circle
-      :class="{ 'call-btn-outer': true, 'is-calling': callActive }"
-      :disabled="isInputDisabled"
-      @click="$emit('toggleCall')"
-      title="语音通话"
-    />
   </div>
 </template>
 
@@ -591,9 +593,18 @@ defineExpose({ focus, setText, clear: clearText })
   flex: 1;
 }
 
+.composer-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .input-wrapper {
   display: flex;
   align-items: flex-end;
+  min-width: 0;
+  flex: 1;
   gap: 6px;
   min-height: 52px;
   padding: 8px 9px;
@@ -1112,7 +1123,6 @@ defineExpose({ focus, setText, clear: clearText })
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  align-self: center;
   font-size: 18px;
 }
 
