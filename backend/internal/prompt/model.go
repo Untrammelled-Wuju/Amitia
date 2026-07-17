@@ -100,25 +100,48 @@ type SectionTrace struct {
 }
 
 type QualityFlags struct {
-	ThinkRemoved         bool `json:"think_removed"`
-	MarkdownRemoved      bool `json:"markdown_removed"`
-	PersonaSectionUsed   bool `json:"persona_section_used"`
-	EmotionSectionUsed   bool `json:"emotion_section_used"`
-	MemorySectionUsed    bool `json:"memory_section_used"`
-	IntimacyBoundaryUsed bool `json:"intimacy_boundary_used"`
-	HTMLRemoved          bool `json:"html_removed"`
-	JSONWrapperRemoved   bool `json:"json_wrapper_removed"`
-	RolePrefixRemoved    bool `json:"role_prefix_removed"`
-	MetaSentenceRemoved  bool `json:"meta_sentence_removed"`
-	DuplicateTrimmed     bool `json:"duplicate_trimmed"`
-	ChannelLimitApplied  bool `json:"channel_limit_applied"`
-	EmptyFallbackUsed    bool `json:"empty_fallback_used"`
+	ThinkRemoved          bool `json:"think_removed"`
+	MarkdownRemoved       bool `json:"markdown_removed"`
+	PersonaSectionUsed    bool `json:"persona_section_used"`
+	EmotionSectionUsed    bool `json:"emotion_section_used"`
+	MemorySectionUsed     bool `json:"memory_section_used"`
+	AgentSkillSectionUsed bool `json:"agent_skill_section_used"`
+	IntimacyBoundaryUsed  bool `json:"intimacy_boundary_used"`
+	HTMLRemoved           bool `json:"html_removed"`
+	JSONWrapperRemoved    bool `json:"json_wrapper_removed"`
+	RolePrefixRemoved     bool `json:"role_prefix_removed"`
+	MetaSentenceRemoved   bool `json:"meta_sentence_removed"`
+	DuplicateTrimmed      bool `json:"duplicate_trimmed"`
+	ChannelLimitApplied   bool `json:"channel_limit_applied"`
+	EmptyFallbackUsed     bool `json:"empty_fallback_used"`
 }
 
 type PromptTrace struct {
-	PromptHash       string         `json:"prompt_hash"`
-	Sections         []SectionTrace `json:"sections"`
-	QualityFlags     QualityFlags   `json:"quality_flags"`
-	RawReplyLength   int            `json:"raw_reply_length"`
-	FinalReplyLength int            `json:"final_reply_length"`
+	PromptHash                string            `json:"prompt_hash"`
+	Sections                  []SectionTrace    `json:"sections"`
+	QualityFlags              QualityFlags      `json:"quality_flags"`
+	AgentSkillCatalogIncluded bool              `json:"agent_skill_catalog_included"`
+	AgentSkills               []AgentSkillTrace `json:"agent_skills,omitempty"`
+	RawReplyLength            int               `json:"raw_reply_length"`
+	FinalReplyLength          int               `json:"final_reply_length"`
+}
+
+type AgentSkillTrace struct {
+	ActivationID        string      `json:"activation_id"`
+	ExtensionID         string      `json:"extension_id"`
+	Name                string      `json:"agent_skill_name"`
+	Source              string      `json:"source"`
+	Scope               string      `json:"scope"`
+	Trigger             string      `json:"trigger"`
+	Explicit            bool        `json:"explicit"`
+	CompatibilityStatus string      `json:"compatibility_status"`
+	BodyTokens          int         `json:"body_tokens"`
+	ResourceReads       int         `json:"resource_reads"`
+	ResourcePaths       []string    `json:"resource_paths,omitempty"`
+	ScriptsUsed         bool        `json:"scripts_used"`
+	ToolMappings        interface{} `json:"tool_mappings,omitempty"`
+	InstructionPosition string      `json:"instruction_position"`
+	TokenLimitHit       bool        `json:"token_limit_hit"`
+	Status              string      `json:"status"`
+	ErrorCode           string      `json:"error_code,omitempty"`
 }

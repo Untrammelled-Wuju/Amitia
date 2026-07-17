@@ -60,3 +60,18 @@ export interface ManagedProcessStatus {
   exitCode?: number
   error?: string
 }
+export interface AgentSkillDirectorySelection {
+  rootName: string
+  files: Array<{ path: string; name: string; base64: string }>
+}
+
+export interface ExtensionPackageSelection {
+  name: string
+  size: number
+  base64: string
+}
+
+export interface SaveExtensionPackageRequest {
+  suggestedName: string
+  base64: string
+}

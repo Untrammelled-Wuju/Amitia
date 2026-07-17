@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron"
 import { IPC_CHANNELS } from "../shared/ipc"
-import type { DeploymentModeConfig, DesktopEnvironment, RuntimeStatus } from "../shared/types"
+import type { AgentSkillDirectorySelection, DeploymentModeConfig, DesktopEnvironment, ExtensionPackageSelection, RuntimeStatus, SaveExtensionPackageRequest } from "../shared/types"
 
 const api = {
   getEnvironment(): Promise<DesktopEnvironment> {
@@ -17,6 +17,15 @@ const api = {
   },
   openLogsDirectory(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.openLogsDirectory)
+  },
+  selectAgentSkillDirectory(): Promise<AgentSkillDirectorySelection | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.selectAgentSkillDirectory)
+  },
+  selectExtensionPackage(): Promise<ExtensionPackageSelection | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.selectExtensionPackage)
+  },
+  saveExtensionPackage(request: SaveExtensionPackageRequest): Promise<{ saved: boolean; fileName?: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.saveExtensionPackage, request)
   },
   minimizeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.minimizeWindow)

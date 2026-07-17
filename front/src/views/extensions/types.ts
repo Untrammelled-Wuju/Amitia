@@ -165,3 +165,69 @@ export interface WorkshopRevision { id: string; sessionId: string; revision: num
 export interface WorkshopTestReport { testRunId: string; sessionId: string; revision: number; workflowChecksum: string; status: string; startedAt: string; finishedAt: string; durationMs: number; stepResults: Array<{ stepId: string; type: string; status: string; inputSummary: string; outputSummary: string; durationMs: number; mocked: boolean; error?: { code: string; message: string; detail?: string } }>; assertions: Array<{ type: string; passed: boolean; message?: string }>; sideEffects: Array<{ type: string; targetId?: string; confirmed: boolean }>; capabilities: string[]; warnings: Array<{ code: string; message: string }>; output?: unknown; error?: { code: string; message: string; detail?: string } }
 export interface WorkshopSessionDetail extends WorkshopSession { revision?: WorkshopRevision; testReports: WorkshopTestReport[] }
 export interface WorkshopPage { items: WorkshopSession[]; total: number; page: number; pageSize: number }
+
+export type AgentSkillCompatibilityStatus = "compatible" | "compatible_with_warnings" | "partially_compatible" | "blocked"
+export type AgentSkillScope = "global" | "character"
+export type AgentSkillResourceKind = "skill" | "reference" | "asset" | "script" | "agent_metadata" | "other"
+export interface AgentSkillResource { path: string; kind: AgentSkillResourceKind; mimeType: string; size: number; sha256: string; textReadable: boolean; executable: false; supported: boolean }
+export interface AgentSkillToolMapping { sourceTool: string; targetSkillId?: string; status: "mapped" | "partially_mapped" | "unsupported" | "blocked"; reason: string }
+export interface AgentSkillWarning { code: string; message: string; path?: string }
+export interface AgentSkillCompatibilityReport { status: AgentSkillCompatibilityStatus; toolMappings: AgentSkillToolMapping[]; requiredScripts: string[]; missingFiles: string[]; unsupported: string[]; warnings: AgentSkillWarning[]; errors: AgentSkillWarning[] }
+export interface AgentSkillDefinition { extensionId: string; name: string; description: string; license?: string; compatibility?: string; metadata: Record<string, string>; allowedTools?: string; displayName?: string; shortDescription?: string; defaultPrompt?: string; iconSmall?: string; iconLarge?: string; brandColor?: string; source: "bundled" | "local-directory" | "local-zip" | "workshop"; scope: AgentSkillScope; scopeId?: string; artifactId: string; contentHash: string; body?: string; rawSkillMd?: string; resources: AgentSkillResource[]; toolMappings: AgentSkillToolMapping[]; compatibilityStatus: AgentSkillCompatibilityStatus; warnings: AgentSkillWarning[]; enabled: boolean; createdAt: string; updatedAt: string }
+export interface AgentSkillPreview { previewId: string; definition: AgentSkillDefinition; compatibilityReport: AgentSkillCompatibilityReport; files: AgentSkillResource[]; expiresAt: string }
+export interface AgentSkillPage { items: AgentSkillDefinition[]; total: number; page: number; pageSize: number }
+export interface AgentSkillActivation { activationId: string; extensionId: string; triggerType: string; explicit: boolean; status: string; loadedTokens: number; resourceReads: number; resourcePaths: string[]; traceId: string; errorCode?: string; createdAt: string }
+export interface AgentSkillDetail { definition: AgentSkillDefinition; compatibilityReport: AgentSkillCompatibilityReport; activations: AgentSkillActivation[] }
+
+export type PackageFormat = "amitiax" | "agentskills-zip" | "agentskills-directory"
+export interface PackageRisk { code: string; severity: "low" | "medium" | "high"; message: string }
+export interface PackageFile { path: string; size: number; kind: string }
+export interface PackageDependency { id: string; versionConstraint?: string; required: boolean; installed: boolean; version?: string }
+export interface PackageUninstallPreview { extensionId: string; currentVersion: string; enabled: boolean; dependents: PackageDependency[]; scheduleCount: number; grants: string[]; configPresent: boolean; historicalRuns: number; artifactArchived: boolean; cleanup: string[]; preserved: string[] }
+export interface PackageImportPreview {
+  sessionId: string
+  format: PackageFormat
+  skillType: "workflow" | "instructions"
+  id: string
+  name: string
+  version: string
+  description: string
+  license: string
+  source: string
+  scopeType: "global" | "character"
+  scopeId: string
+  packageHash: string
+  checksum: { valid: boolean; packageHash: string }
+  signature: { status: "unsigned" | "valid-untrusted" | "valid-trusted" | "invalid"; fingerprint?: string; algorithm?: string; displayName?: string }
+  compatible: boolean
+  compatibility: string
+  capabilities: string[]
+  highRiskCapabilities: string[]
+  capabilityConfirmations: string[]
+  triggers: SkillTrigger[]
+  dependencies: PackageDependency[]
+  agentSkill?: AgentSkillPreview
+  workflowSteps?: string[]
+  scripts: number
+  scriptsRequired: boolean
+  references: number
+  assets: number
+  files: PackageFile[]
+  totalSize: number
+  fileCount: number
+  testStatus: string
+  risks: PackageRisk[]
+  warnings: string[]
+  errors: string[]
+  conflict: string
+  availableActions: string[]
+  currentVersion?: string
+  rollbackVersion?: string
+  upgradeDiff?: Record<string, unknown>
+  expiresAt: string
+}
+export interface PackageOperationResult { operationId: string; traceId: string; operation: string; extensionId: string; version: string; enabled: boolean; status: string }
+export interface PackageOperation { id: string; operation: string; extensionId: string; previousVersion?: string; targetVersion?: string; source: string; packageHash: string; signatureStatus: string; signerFingerprint?: string; scopeType: string; scopeId: string; status: string; errorCode?: string; traceId: string; createdAt: string; completedAt?: string }
+export interface PackageVersion { version: string; manifest: Record<string, unknown>; artifactId: string; artifactHash: string; packageHash: string; source: string; signatureStatus: string; signerFingerprint?: string; compatibilityStatus: string; capabilities: string[]; installedAt: string; installedBy: string; active: boolean; validationStatus: string; testStatus: string; archived: boolean }
+export interface PackageSigner { fingerprint: string; algorithm: string; displayName: string; trusted: boolean; trustedAt?: string; revokedAt?: string }
+export interface ExportedPackage { exportId: string; fileName: string; mime: string; size: number; hash: string; version: string; format: string; testsIncluded: boolean; readmeIncluded: boolean; sbomIncluded: boolean; scriptsIncluded: boolean; secretScan: string; signatureStatus: string; expiresAt: string }

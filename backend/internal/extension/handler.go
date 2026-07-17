@@ -46,7 +46,7 @@ func (h *Handler) ListSkills(c *gin.Context) {
 		h.problem(c, NewExtensionError(ErrSkillInputInvalid, "Invalid trigger filter", string(filter.Trigger), false, nil))
 		return
 	}
-	if filter.Source != "" && filter.Source != SkillSourceBuiltin && filter.Source != SkillSourceLegacy && filter.Source != SkillSourceWorkflow {
+	if filter.Source != "" && filter.Source != SkillSourceBuiltin && filter.Source != SkillSourceLegacy && filter.Source != SkillSourceWorkflow && filter.Source != SkillSourceInstructions {
 		h.problem(c, NewExtensionError(ErrSkillInputInvalid, "Invalid source filter", string(filter.Source), false, nil))
 		return
 	}
@@ -284,12 +284,28 @@ func (h *Handler) problemWithResult(c *gin.Context, err error, result SkillResul
 }
 
 func problemStatus(code string) int {
+	if strings.HasPrefix(code, "PACKAGE_") {
+		switch code {
+		case ErrPackageOperationInProgress:
+			return http.StatusConflict
+		case ErrPackageImportSessionExpired, ErrPackageImportSessionConsumed:
+			return http.StatusGone
+		case ErrPackageExportNotAllowed, ErrPackageIDConflict, ErrPackageNameConflict, ErrPackageVersionConflict, ErrPackageSameVersionDifferentContent, ErrPackageDependencyInUse:
+			return http.StatusConflict
+		case ErrPackageArchiveLimit:
+			return http.StatusRequestEntityTooLarge
+		case ErrPackageHighRiskConfirmationRequired, ErrPackageConfigMigrationRequired:
+			return http.StatusPreconditionRequired
+		default:
+			return http.StatusUnprocessableEntity
+		}
+	}
 	switch code {
-	case ErrSkillNotFound, ErrPluginNotFound, ErrWorkshopSessionNotFound, ErrWorkshopRevisionNotFound:
+	case ErrSkillNotFound, ErrAgentSkillNotFound, ErrAgentSkillResourceNotFound, ErrPluginNotFound, ErrWorkshopSessionNotFound, ErrWorkshopRevisionNotFound:
 		return http.StatusNotFound
-	case ErrSkillDisabled, ErrSkillIncompatible, ErrSkillTriggerNotAllowed, ErrSkillInputInvalid, ErrSkillManifestInvalid, ErrSkillDuplicateID, ErrSkillIdempotencyConflict, ErrPluginDisabled, ErrPluginIncompatible, ErrPluginManifestInvalid, ErrPluginStateInvalid, ErrPluginStateConflict, ErrPluginConfigInvalid, ErrPluginEventInvalid, ErrPluginEventDepthExceeded, ErrPluginEventDeadLetter, ErrPluginScheduleInvalid, ErrPluginSurfaceInvalid, ErrPluginActionNotAllowed, ErrWorkshopInvalidState, ErrWorkshopGenerationOutputInvalid, ErrWorkshopManifestInvalid, ErrWorkshopWorkflowInvalid, ErrWorkshopSchemaInvalid, ErrWorkshopStaticAnalysisFailed, ErrWorkshopCapabilityMismatch, ErrWorkshopPermissionRequired, ErrWorkshopPermissionStale, ErrWorkshopSecretDetected, ErrWorkshopNetworkDenied, ErrWorkshopDependencyNotFound, ErrWorkshopDependencyCycle, ErrWorkshopTestRequired, ErrWorkshopTestFailed, ErrWorkshopTestStale, ErrWorkshopSandboxLimit, ErrWorkshopSkillIDConflict, ErrWorkshopVersionConflict, ErrWorkshopArtifactInvalid, ErrWorkshopChecksumMismatch, ErrWorkflowStepInvalid, ErrWorkflowReferenceInvalid, ErrWorkflowOutputInvalid:
+	case ErrSkillDisabled, ErrSkillIncompatible, ErrSkillTriggerNotAllowed, ErrSkillInputInvalid, ErrSkillManifestInvalid, ErrSkillDuplicateID, ErrSkillIdempotencyConflict, ErrSkillNotExecutable, ErrAgentSkillDisabled, ErrAgentSkillBlocked, ErrAgentSkillNotExecutable, ErrAgentSkillInvalidArchive, ErrAgentSkillArchiveLimit, ErrAgentSkillMissingSkillMD, ErrAgentSkillFrontmatter, ErrAgentSkillNameInvalid, ErrAgentSkillNameMismatch, ErrAgentSkillDescription, ErrAgentSkillNameConflict, ErrAgentSkillResourceTooLarge, ErrAgentSkillScriptDisabled, ErrAgentSkillToolUnsupported, ErrAgentSkillActivationLimit, ErrAgentSkillPromptLimit, ErrAgentSkillArtifactInvalid, ErrAgentSkillChecksumMismatch, ErrPluginDisabled, ErrPluginIncompatible, ErrPluginManifestInvalid, ErrPluginStateInvalid, ErrPluginStateConflict, ErrPluginConfigInvalid, ErrPluginEventInvalid, ErrPluginEventDepthExceeded, ErrPluginEventDeadLetter, ErrPluginScheduleInvalid, ErrPluginSurfaceInvalid, ErrPluginActionNotAllowed, ErrWorkshopInvalidState, ErrWorkshopGenerationOutputInvalid, ErrWorkshopManifestInvalid, ErrWorkshopWorkflowInvalid, ErrWorkshopSchemaInvalid, ErrWorkshopStaticAnalysisFailed, ErrWorkshopCapabilityMismatch, ErrWorkshopPermissionRequired, ErrWorkshopPermissionStale, ErrWorkshopSecretDetected, ErrWorkshopNetworkDenied, ErrWorkshopDependencyNotFound, ErrWorkshopDependencyCycle, ErrWorkshopTestRequired, ErrWorkshopTestFailed, ErrWorkshopTestStale, ErrWorkshopSandboxLimit, ErrWorkshopSkillIDConflict, ErrWorkshopVersionConflict, ErrWorkshopArtifactInvalid, ErrWorkshopChecksumMismatch, ErrWorkflowStepInvalid, ErrWorkflowReferenceInvalid, ErrWorkflowOutputInvalid:
 		return http.StatusBadRequest
-	case ErrSkillPermissionDenied, ErrWorkshopSessionForbidden:
+	case ErrSkillPermissionDenied, ErrAgentSkillScopeForbidden, ErrAgentSkillResourceDenied, ErrAgentSkillPathTraversal, ErrWorkshopSessionForbidden:
 		return http.StatusForbidden
 	case ErrSkillTimeout, ErrPluginHookTimeout, ErrWorkflowStepTimeout:
 		return http.StatusGatewayTimeout

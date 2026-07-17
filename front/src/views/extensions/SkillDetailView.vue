@@ -15,6 +15,7 @@
         </div>
       </div>
       <div v-if="skill" class="header-actions">
+        <el-button v-if="skill.source === 'workflow' || skill.source === 'instructions'" @click="router.push({ path: '/extensions/packages', query: { id: skill.id } })">包与版本</el-button>
         <el-button v-if="skill.source === 'workflow'" :loading="forking" @click="forkRevision">创建新 Revision</el-button>
         <el-button :icon="Lock" @click="permissionVisible = true">管理权限</el-button>
         <el-button :type="skill.enabled ? 'danger' : 'primary'" plain :loading="changing" @click="toggleSkill">{{ skill.enabled ? "禁用" : "启用" }}</el-button>

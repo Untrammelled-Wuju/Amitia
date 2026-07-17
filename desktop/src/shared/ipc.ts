@@ -8,6 +8,9 @@ export const IPC_CHANNELS = {
   toggleMaximizeWindow: "amitia:window:toggle-maximize",
   closeWindow: "amitia:window:close",
   runtimeStatusChanged: "amitia:runtime:status-changed",
+  selectAgentSkillDirectory: "amitia:agent-skill:select-directory",
+  selectExtensionPackage: "amitia:extension-package:select-file",
+  saveExtensionPackage: "amitia:extension-package:save",
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

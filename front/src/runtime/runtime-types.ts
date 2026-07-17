@@ -40,6 +40,9 @@ export interface AmitiaDesktopAPI {
   saveDeploymentConfig(config: DeploymentModeConfig): Promise<DeploymentModeConfig>
   getRuntimeStatus(): Promise<RuntimeStatus>
   openLogsDirectory(): Promise<void>
+  selectAgentSkillDirectory(): Promise<{ rootName: string; files: Array<{ path: string; name: string; base64: string }> } | null>
+  selectExtensionPackage(): Promise<{ name: string; size: number; base64: string } | null>
+  saveExtensionPackage(request: { suggestedName: string; base64: string }): Promise<{ saved: boolean; fileName?: string }>
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void
   getVersion(): Promise<string>
   checkUpdate(): Promise<unknown>

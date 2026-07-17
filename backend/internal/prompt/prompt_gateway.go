@@ -37,6 +37,8 @@ func (g *Gateway) BuildMessages(req BuildRequest) ([]GwMessage, *PromptTrace, er
 	}
 
 	trace := computePromptTrace(ir, messages)
+	trace.AgentSkillCatalogIncluded = req.AgentSkillCatalogIncluded
+	trace.AgentSkills = append([]AgentSkillTrace(nil), req.AgentSkillTrace...)
 
 	return messages, trace, nil
 }
@@ -55,10 +57,11 @@ func computePromptTrace(ir GwIR, messages []GwMessage) *PromptTrace {
 	trace := &PromptTrace{
 		PromptHash: promptHash,
 		QualityFlags: QualityFlags{
-			PersonaSectionUsed:   sectionUsed(ir.Sections, "personality_raw"),
-			EmotionSectionUsed:   sectionUsed(ir.Sections, "emotion_fusion_raw"),
-			MemorySectionUsed:    sectionUsed(ir.Sections, "memory_inject_raw"),
-			IntimacyBoundaryUsed: sectionUsed(ir.Sections, "adult_intimacy_raw"),
+			PersonaSectionUsed:    sectionUsed(ir.Sections, "personality_raw"),
+			EmotionSectionUsed:    sectionUsed(ir.Sections, "emotion_fusion_raw"),
+			MemorySectionUsed:     sectionUsed(ir.Sections, "memory_inject_raw"),
+			AgentSkillSectionUsed: sectionUsed(ir.Sections, "agent_skill_instructions"),
+			IntimacyBoundaryUsed:  sectionUsed(ir.Sections, "adult_intimacy_raw"),
 		},
 	}
 

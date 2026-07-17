@@ -23,6 +23,7 @@ type WorkshopService struct {
 	registry      *Registry
 	skillExecutor *Executor
 	installer     *WorkshopInstaller
+	agentSkills   *AgentSkillService
 	sessionLocks  sync.Map
 }
 
@@ -33,6 +34,33 @@ func NewWorkshopService(repository *WorkshopRepository, generator *WorkshopGener
 }
 func (s *WorkshopService) SetModelGenerator(model WorkshopModelGenerator) {
 	s.generator.SetModel(model)
+}
+
+func (s *WorkshopService) AttachAgentSkills(service *AgentSkillService) { s.agentSkills = service }
+
+func (s *WorkshopService) GenerateInstruction(ctx context.Context, scope ExecutionScope, requirement string) (AgentSkillImportPreview, error) {
+	if s.agentSkills == nil {
+		return AgentSkillImportPreview{}, NewExtensionError(ErrWorkshopGenerationFailed, "Agent Skill 工坊不可用", "", false, nil)
+	}
+	draft, err := s.generator.GenerateInstruction(ctx, strings.TrimSpace(requirement))
+	if err != nil {
+		return AgentSkillImportPreview{}, err
+	}
+	files := map[string][]byte{"SKILL.md": []byte(fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", draft.Name, strconv.Quote(draft.Description), draft.Body))}
+	for name, content := range draft.References {
+		files["references/"+name] = []byte(content)
+	}
+	for name, content := range draft.Assets {
+		files["assets/"+name] = []byte(content)
+	}
+	if draft.DisplayName != "" || draft.ShortDescription != "" {
+		files["agents/openai.yaml"] = []byte(fmt.Sprintf("interface:\n  display_name: %s\n  short_description: %s\n", strconv.Quote(draft.DisplayName), strconv.Quote(draft.ShortDescription)))
+	}
+	parsed, err := parseAgentSkillFiles(files, draft.Name, AgentSkillSourceWorkshop, s.agentSkills.limits)
+	if err != nil {
+		return AgentSkillImportPreview{}, err
+	}
+	return s.agentSkills.storePreview(scope.UserID, parsed), nil
 }
 func (s *WorkshopService) lockSession(id string) (func(), bool) {
 	value, _ := s.sessionLocks.LoadOrStore(id, &sync.Mutex{})

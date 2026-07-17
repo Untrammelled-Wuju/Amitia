@@ -29,6 +29,7 @@
             <el-option label="旧工具适配" value="legacy_tool" />
             <el-option label="内置技能" value="builtin" />
             <el-option label="工坊工作流" value="workflow" />
+            <el-option label="Agent Skill" value="instructions" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -132,6 +133,11 @@ async function load() {
 }
 
 function openDetail(id: string) {
+	const skill = skills.value.find(item => item.id === id)
+	if (skill?.source === "instructions") {
+		router.push(`/extensions/agent-skills`)
+		return
+	}
   router.push(`/extensions/skills/${encodeURIComponent(id)}`)
 }
 
@@ -153,6 +159,7 @@ function sourceLabel(source: string) {
   if (source === "legacy_tool") return "旧工具适配"
   if (source === "builtin") return "内置技能"
   if (source === "workflow") return "工坊工作流"
+  if (source === "instructions") return "Agent Skill"
   return source
 }
 

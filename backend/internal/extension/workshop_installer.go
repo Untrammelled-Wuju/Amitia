@@ -132,6 +132,19 @@ func (i *WorkshopInstaller) Install(ctx context.Context, scope ExecutionScope, s
 		if err := tx.Create(&version).Error; err != nil {
 			return err
 		}
+		if tx.Migrator().HasColumn("extensions", "owner_user_id") {
+			scopeType := string(ScopeGlobal)
+			if scope.CharacterID != "" {
+				scopeType = string(ScopeCharacter)
+			}
+			if err := tx.Table("extensions").Where("extension_id = ?", definition.ID).Updates(map[string]interface{}{"owner_user_id": scope.UserID, "scope_type": scopeType, "scope_id": scope.CharacterID}).Error; err != nil {
+				return err
+			}
+			capabilities, _ := json.Marshal(definition.Capabilities)
+			if err := tx.Table("extension_versions").Where("extension_id = ? AND version = ?", definition.ID, definition.Version).Updates(map[string]interface{}{"artifact_id": artifact.ArtifactID, "artifact_hash": artifact.Checksum, "package_hash": artifact.Checksum, "source": "workshop", "signature_status": "local-generated", "compatibility_status": "compatible", "capabilities_json": string(capabilities), "installed_by": scope.UserID, "validation_status": "valid", "test_status": "passed"}).Error; err != nil {
+				return err
+			}
+		}
 		update := tx.Model(&workshopSessionRecord{}).Where("id = ? AND current_revision = ? AND lock_version = ?", sessionID, revision, sessionRecord.LockVersion).Updates(map[string]interface{}{"status": string(WorkshopInstalled), "installed_skill_id": definition.ID, "installed_version": definition.Version, "lock_version": gorm.Expr("lock_version + 1"), "updated_at": now})
 		if update.Error != nil {
 			return update.Error

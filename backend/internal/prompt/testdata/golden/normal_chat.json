@@ -122,6 +122,7 @@
       "persona_section_used": false,
       "emotion_section_used": false,
       "memory_section_used": false,
+      "agent_skill_section_used": false,
       "intimacy_boundary_used": false,
       "html_removed": false,
       "json_wrapper_removed": false,
@@ -131,6 +132,7 @@
       "channel_limit_applied": false,
       "empty_fallback_used": false
     },
+    "agent_skill_catalog_included": false,
     "raw_reply_length": 0,
     "final_reply_length": 0
   }

@@ -62,5 +62,8 @@ func DefaultMigrations() []Migration {
 		ExtensionWorkshopPermissionScopesMigration(),
 		ExtensionWorkshopPlannerMigration(),
 		ExtensionWorkshopGenerationSummaryMigration(),
+		ExtensionAgentSkillsMigration(),
+		ExtensionAgentSkillTraceMigration(),
+		ExtensionPackagesMigration(),
 	}
 }

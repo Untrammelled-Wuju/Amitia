@@ -234,37 +234,60 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 
 	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+	agentSkillContext := ""
+	agentSkillCatalogIncluded := false
+	agentSkillTrace := []promptir.AgentSkillTrace{}
+	if s.skillRuntime != nil {
+		catalog, activated, activationErrors := s.skillRuntime.PrepareAgentSkillPrompt(ctx, skillScope, req.Message)
+		parts := []string{}
+		if catalog != "" {
+			parts = append(parts, catalog)
+			agentSkillCatalogIncluded = true
+		}
+		for _, item := range activated {
+			parts = append(parts, item.Prompt)
+			agentSkillTrace = append(agentSkillTrace, promptir.AgentSkillTrace{ActivationID: item.ActivationID, ExtensionID: item.Definition.ExtensionID, Name: item.Definition.Name, Source: string(item.Definition.Source), Scope: string(item.Definition.Scope), Trigger: "explicit", Explicit: true, CompatibilityStatus: string(item.Definition.CompatibilityStatus), BodyTokens: item.BodyTokens, ScriptsUsed: false, ToolMappings: item.Definition.ToolMappings, InstructionPosition: "after_character_rules", Status: "activated"})
+		}
+		if len(activationErrors) > 0 {
+			parts = append(parts, "<agent_skill_activation_errors>"+strings.Join(activationErrors, "; ")+"</agent_skill_activation_errors>")
+		}
+		agentSkillContext = strings.Join(parts, "\n\n")
+		defer s.skillRuntime.EndAgentSkillRound(skillScope)
+	}
 	pluginContributions := []extension.ContextContribution{}
 	if s.skillRuntime != nil {
 		pluginContributions = s.skillRuntime.BeforePrompt(ctx, skillScope)
 	}
 	pluginContext, pluginSources := renderPluginContributions(pluginContributions)
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
-		BaseIdentity:             promptir.BaseIdentitySection(),
-		SystemPrompt:             runtimeProfile.SystemPrompt,
-		CharacterConfig:          sys1Result.CharacterConfig,
-		PersonalityConfig:        sys2Result.SystemInstruction,
-		PersonalityRaw:           personalityRaw,
-		EmotionFusionRaw:         buildEmotionFusionRaw(req.Runtime, charName),
-		AdultIntimacyRaw:         adultIntimacyRaw,
-		MemoryInjectRaw:          sys2Result.MemoryInjectRaw,
-		AntiRepeatRaw:            antiRepeatRaw,
-		ProfileContext:           mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
-		MemoryContext:            sys2Result.MemoryContext,
-		Worldbook:                sys1Result.Worldbook,
-		PluginContext:            pluginContext,
-		History:                  history,
-		Runtime:                  req.Runtime,
-		StyleInstruction:         channelPrompt.StyleInstruction,
-		ProactiveScene:           proactiveScene(source),
-		ProactiveTimeContext:     req.ProactiveTimeContext,
-		ProactiveRecentContext:   req.ProactiveRecentContext,
-		ProactivePersonality:     proactivePersonality,
-		ProactiveTaskInstruction: proactiveTaskInstruction,
-		ProactiveRelationship:    proactiveRelationship,
-		ProactiveEmotion:         proactiveEmotion,
-		ProactiveMemory:          req.ProactiveMemory,
-		UserContent:              userContent,
+		BaseIdentity:              promptir.BaseIdentitySection(),
+		SystemPrompt:              runtimeProfile.SystemPrompt,
+		CharacterConfig:           sys1Result.CharacterConfig,
+		PersonalityConfig:         sys2Result.SystemInstruction,
+		PersonalityRaw:            personalityRaw,
+		EmotionFusionRaw:          buildEmotionFusionRaw(req.Runtime, charName),
+		AdultIntimacyRaw:          adultIntimacyRaw,
+		MemoryInjectRaw:           sys2Result.MemoryInjectRaw,
+		AntiRepeatRaw:             antiRepeatRaw,
+		ProfileContext:            mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
+		MemoryContext:             sys2Result.MemoryContext,
+		Worldbook:                 sys1Result.Worldbook,
+		PluginContext:             pluginContext,
+		AgentSkillContext:         agentSkillContext,
+		AgentSkillCatalogIncluded: agentSkillCatalogIncluded,
+		AgentSkillTrace:           agentSkillTrace,
+		History:                   history,
+		Runtime:                   req.Runtime,
+		StyleInstruction:          channelPrompt.StyleInstruction,
+		ProactiveScene:            proactiveScene(source),
+		ProactiveTimeContext:      req.ProactiveTimeContext,
+		ProactiveRecentContext:    req.ProactiveRecentContext,
+		ProactivePersonality:      proactivePersonality,
+		ProactiveTaskInstruction:  proactiveTaskInstruction,
+		ProactiveRelationship:     proactiveRelationship,
+		ProactiveEmotion:          proactiveEmotion,
+		ProactiveMemory:           req.ProactiveMemory,
+		UserContent:               userContent,
 	})
 	var toolDefs []tool.Tool
 	if s.skillRuntime != nil {
@@ -286,7 +309,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"plugin_contribution_count":   len(pluginContributions),
 		"plugin_contribution_sources": pluginSources,
 	}, "process message prompt ready")
-	logPromptTrace(trace, promptTrace, source)
 	seenTools := map[string]bool{}
 	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelTools()
@@ -318,7 +340,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, nil
 		}
 	}
-	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, toolDefs, seenTools, toolExecCtx)
+	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
 	}
@@ -355,6 +377,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		promptTrace.RawReplyLength = rawReplyLength
 		promptTrace.FinalReplyLength = len(reply)
 	}
+	logPromptTrace(trace, promptTrace, source)
 
 	reply = expression.ApplyPostValidation(reply, kind)
 	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {

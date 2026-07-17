@@ -48,7 +48,7 @@ func NewRegistry(engineVersion string, validator *SchemaValidator, stateStore Re
 }
 
 func (r *Registry) Register(ctx context.Context, definition SkillDefinition, handler SkillHandler) error {
-	if handler == nil {
+	if handler == nil && definition.Entry.Kind != "instructions" {
 		return NewExtensionError(ErrSkillManifestInvalid, "Skill handler is required", definition.ID, false, nil)
 	}
 	if err := r.validateDefinition(definition); err != nil {
@@ -70,15 +70,21 @@ func (r *Registry) Register(ctx context.Context, definition SkillDefinition, han
 	if _, exists := r.items[definition.ID]; exists {
 		return NewExtensionError(ErrSkillDuplicateID, "Duplicate skill ID", definition.ID, false, nil)
 	}
-	if existing, exists := r.modelNames[definition.ModelName]; exists {
-		return NewExtensionError(ErrSkillDuplicateID, "Duplicate model tool name", existing, false, nil)
+	if definition.Entry.Kind != "instructions" {
+		if existing, exists := r.modelNames[definition.ModelName]; exists {
+			return NewExtensionError(ErrSkillDuplicateID, "Duplicate model tool name", existing, false, nil)
+		}
 	}
 	r.items[definition.ID] = cloneRegistered(RegisteredSkill{Definition: definition, Handler: handler})
-	r.modelNames[definition.ModelName] = definition.ID
+	if definition.Entry.Kind != "instructions" {
+		r.modelNames[definition.ModelName] = definition.ID
+	}
 	if r.stateStore != nil {
 		if err := r.stateStore.UpsertDefinition(ctx, definition); err != nil {
 			delete(r.items, definition.ID)
-			delete(r.modelNames, definition.ModelName)
+			if definition.Entry.Kind != "instructions" {
+				delete(r.modelNames, definition.ModelName)
+			}
 			return err
 		}
 	}
@@ -92,7 +98,9 @@ func (r *Registry) Unregister(_ context.Context, skillID string) error {
 	if !ok {
 		return NewExtensionError(ErrSkillNotFound, "Skill not found", skillID, false, nil)
 	}
-	delete(r.modelNames, item.Definition.ModelName)
+	if item.Definition.Entry.Kind != "instructions" {
+		delete(r.modelNames, item.Definition.ModelName)
+	}
 	delete(r.items, skillID)
 	return nil
 }
@@ -121,6 +129,9 @@ func (r *Registry) List(_ context.Context, filter SkillFilter) ([]RegisteredSkil
 	r.mu.RLock()
 	items := make([]RegisteredSkill, 0, len(r.items))
 	for _, item := range r.items {
+		if item.Definition.Internal && !filter.IncludeInternal {
+			continue
+		}
 		if filter.Enabled != nil && item.Definition.Enabled != *filter.Enabled {
 			continue
 		}
@@ -138,13 +149,13 @@ func (r *Registry) List(_ context.Context, filter SkillFilter) ([]RegisteredSkil
 }
 
 func (r *Registry) Available(ctx context.Context, scope ExecutionScope) ([]SkillDefinition, error) {
-	items, err := r.List(ctx, SkillFilter{Trigger: scope.Trigger})
+	items, err := r.List(ctx, SkillFilter{Trigger: scope.Trigger, IncludeInternal: true})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]SkillDefinition, 0, len(items))
 	for _, item := range items {
-		if item.Definition.Enabled && item.Definition.Compatible {
+		if item.Definition.Enabled && item.Definition.Compatible && item.Definition.Entry.Kind != "instructions" {
 			result = append(result, cloneDefinition(item.Definition))
 		}
 	}
@@ -178,7 +189,8 @@ func (r *Registry) validateDefinition(definition SkillDefinition) error {
 	if !semverPattern.MatchString(definition.Version) {
 		return NewExtensionError(ErrSkillManifestInvalid, "Invalid skill version", definition.Version, false, nil)
 	}
-	if strings.TrimSpace(definition.ModelName) == "" || (definition.Entry.Kind == "workflow" && strings.TrimSpace(definition.Entry.ArtifactID) == "") || (definition.Entry.Kind != "workflow" && strings.TrimSpace(definition.Entry.Name) == "") {
+	instructionsEntry := definition.Entry.Kind == "instructions"
+	if (!instructionsEntry && strings.TrimSpace(definition.ModelName) == "") || ((definition.Entry.Kind == "workflow" || instructionsEntry) && strings.TrimSpace(definition.Entry.ArtifactID) == "") || (instructionsEntry && definition.Entry.Path != "SKILL.md") || (definition.Entry.Kind != "workflow" && !instructionsEntry && strings.TrimSpace(definition.Entry.Name) == "") {
 		return NewExtensionError(ErrSkillManifestInvalid, "Skill entry is invalid", definition.ID, false, nil)
 	}
 	for _, capability := range definition.Capabilities {

@@ -33,6 +33,7 @@ const (
 	GwSectionProfileContext           GwSectionType = "profile_context"
 	GwSectionWorldbookContext         GwSectionType = "worldbook_context"
 	GwSectionPluginContext            GwSectionType = "plugin_context"
+	GwSectionAgentSkillInstructions   GwSectionType = "agent_skill_instructions"
 	GwSectionConversationHistory      GwSectionType = "conversation_history"
 	GwSectionToolResult               GwSectionType = "tool_result"
 	GwSectionMultimodalText           GwSectionType = "multimodal_text"

@@ -40,6 +40,9 @@ func (e *Executor) Execute(ctx context.Context, request ExecuteSkillRequest) (re
 		return SkillResult{}, err
 	}
 	definition := registered.Definition
+	if definition.Entry.Kind == "instructions" {
+		return SkillResult{}, NewExtensionError(ErrSkillNotExecutable, "Skill is not executable", definition.ID, false, nil)
+	}
 	if ctx.Err() != nil {
 		result := SkillResult{RunID: uuid.New().String(), Status: RunCancelled, Error: NewExtensionError(ErrSkillCancelled, "Skill was cancelled", "", false, ctx.Err())}
 		return result, result.Error

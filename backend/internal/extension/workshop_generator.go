@@ -18,6 +18,66 @@ type WorkshopGenerator struct {
 	maxAttempts int
 }
 
+type WorkshopInstructionDraft struct {
+	Name             string            `json:"name"`
+	Description      string            `json:"description"`
+	Body             string            `json:"body"`
+	References       map[string]string `json:"references"`
+	Assets           map[string]string `json:"assets"`
+	DisplayName      string            `json:"displayName"`
+	ShortDescription string            `json:"shortDescription"`
+}
+
+func (g *WorkshopGenerator) GenerateInstruction(ctx context.Context, requirement string) (WorkshopInstructionDraft, error) {
+	if g.model == nil {
+		return WorkshopInstructionDraft{}, NewExtensionError(ErrWorkshopGenerationFailed, "未配置可用的模型 Provider", "请先在模型设置中配置并启用模型", false, nil)
+	}
+	if issues := ScanWorkshopSecrets([]byte(requirement)); hasErrorIssues(issues) {
+		return WorkshopInstructionDraft{}, NewExtensionError(ErrWorkshopSecretDetected, "需求中包含疑似明文 Secret", "请使用 Secret 引用名称，不要粘贴密钥", false, nil)
+	}
+	if forbiddenDraftPattern.MatchString(requirement) {
+		return WorkshopInstructionDraft{}, NewExtensionError(ErrWorkshopGenerationOutputInvalid, "instructions Skill 不得包含代码或脚本执行需求", "", false, nil)
+	}
+	prompt := `你是 Amitia Agent Skill 工坊。只返回 JSON，字段必须且只能是 name、description、body、references、assets、displayName、shortDescription。name 必须是小写短横线格式，description 必须说明功能和适用触发场景，body 是清晰的 Markdown 命令式流程。references 和 assets 是相对文件名到纯文本内容的对象，只能放知识材料和模板。禁止 scripts、源码、Shell、Python、Node、PowerShell、MCP、allowed-tools、Secret、安装说明、README 和 CHANGELOG。`
+	var last error
+	for attempt := 0; attempt < g.maxAttempts; attempt++ {
+		raw, _, _, err := g.model.GenerateWorkshopJSON(ctx, prompt, requirement)
+		if err != nil {
+			last = err
+			continue
+		}
+		var draft WorkshopInstructionDraft
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&draft); err != nil {
+			last = err
+			continue
+		}
+		if !agentSkillNamePattern.MatchString(draft.Name) || strings.TrimSpace(draft.Body) == "" || validateAgentSkillDescription(draft.Description) != nil {
+			last = fmt.Errorf("生成内容不符合 Agent Skill 结构")
+			continue
+		}
+		invalid := false
+		for name := range draft.References {
+			if strings.Contains(name, "/") || strings.Contains(name, "\\") || name == "" {
+				last = fmt.Errorf("references 文件名非法")
+				invalid = true
+			}
+		}
+		for name := range draft.Assets {
+			if strings.Contains(name, "/") || strings.Contains(name, "\\") || name == "" {
+				last = fmt.Errorf("assets 文件名非法")
+				invalid = true
+			}
+		}
+		if invalid {
+			continue
+		}
+		return draft, nil
+	}
+	return WorkshopInstructionDraft{}, NewExtensionError(ErrWorkshopGenerationOutputInvalid, "模型多次返回无效 instructions Skill", sanitizeGenerationError(last), false, last)
+}
+
 func NewWorkshopGenerator(model WorkshopModelGenerator, registry SkillRegistry) *WorkshopGenerator {
 	return &WorkshopGenerator{model: model, registry: registry, maxAttempts: 3}
 }

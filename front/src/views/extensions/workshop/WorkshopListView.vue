@@ -3,7 +3,7 @@
     <header class="page-header">
       <div>
         <h1>扩展工坊</h1>
-        <p>用自然语言创建安全的声明式 Skill。首版不生成 Plugin、源码或脚本。</p>
+        <p>用自然语言创建声明式工作流或纯指令 Agent Skill。工坊不会生成脚本。</p>
       </div>
       <el-button type="primary" :icon="Plus" @click="createOpen = true">创建 Skill</el-button>
     </header>
@@ -37,8 +37,9 @@
 
     <el-dialog v-model="createOpen" title="描述你要创建的 Skill" width="min(620px, 92vw)" :close-on-click-modal="false">
       <el-form label-position="top" @submit.prevent="create">
+        <el-form-item label="产物类型" required><el-radio-group v-model="productType"><el-radio-button value="workflow">执行型工作流</el-radio-button><el-radio-button value="instructions">指令型 Agent Skill</el-radio-button></el-radio-group><p class="helper">知识、审查、写作和操作规范请选择指令型；API 与宿主操作请选择工作流。</p></el-form-item>
         <el-form-item label="需求描述" required :error="requirementError">
-          <el-input v-model="requirement" type="textarea" :rows="7" maxlength="20000" show-word-limit placeholder="例如：输入城市后，通过 HTTPS 天气接口获取数据并生成简洁摘要。" @blur="validateRequirement" />
+          <el-input v-model="requirement" type="textarea" :rows="7" maxlength="20000" show-word-limit :placeholder="productType === 'instructions' ? '例如：创建一个代码审查流程，用于用户要求检查正确性和安全性时。' : '例如：输入城市后，通过 HTTPS 天气接口获取数据并生成简洁摘要。'" @blur="validateRequirement" />
           <p class="helper">不要粘贴 API Key。需要凭证时只写 Secret 引用名称。</p>
         </el-form-item>
       </el-form>
@@ -55,7 +56,7 @@ import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { Plus } from "@element-plus/icons-vue"
-import { archiveWorkshopSession, createWorkshopSession, fetchWorkshopSessions, resolveCharacterId } from "../api"
+import { archiveWorkshopSession, createWorkshopSession, fetchWorkshopSessions, generateWorkshopInstruction, installAgentSkill, resolveCharacterId } from "../api"
 import type { WorkshopSession, WorkshopStatus } from "../types"
 
 const router = useRouter()
@@ -63,6 +64,7 @@ const loading = ref(false)
 const creating = ref(false)
 const createOpen = ref(false)
 const requirement = ref("")
+const productType = ref<"workflow" | "instructions">("workflow")
 const requirementError = ref("")
 const characterId = ref("")
 const sessions = ref<WorkshopSession[]>([])
@@ -94,6 +96,16 @@ async function create() {
   if (!validateRequirement()) return
   creating.value = true
   try {
+    if (productType.value === "instructions") {
+      const preview = await generateWorkshopInstruction(requirement.value.trim(), characterId.value)
+      await ElMessageBox.confirm(`将安装指令型 Agent Skill “${preview.definition.name}”。兼容状态：${preview.compatibilityReport.status}。安装后默认禁用，且不会生成或执行 scripts。`, "确认工坊产物", { type: preview.compatibilityReport.status === "blocked" ? "error" : "warning", confirmButtonText: "安装为当前角色 Skill", cancelButtonText: "取消" })
+      await installAgentSkill(preview.previewId, "character", characterId.value)
+      createOpen.value = false
+      requirement.value = ""
+      ElMessage.success("Agent Skill 已安装，默认禁用")
+      await router.push("/extensions/agent-skills")
+      return
+    }
     const session = await createWorkshopSession(requirement.value.trim(), characterId.value)
     createOpen.value = false
     requirement.value = ""

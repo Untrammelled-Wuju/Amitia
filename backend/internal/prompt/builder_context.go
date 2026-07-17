@@ -2,6 +2,9 @@ package prompt
 
 func appendContextSections(ctx *buildContext) {
 	req := ctx.req
+	if req.AgentSkillContext != "" {
+		ctx.appendSection("agent_skill_instructions", GwSectionAgentSkillInstructions, TrustSemiTrusted, ModeRuntime, "agent-skill-host", 325, req.AgentSkillContext, "GwSectionAgentSkillInstructions")
+	}
 	if req.MemoryInjectRaw != "" && ctx.flags.MemoryRawEnabled {
 		ctx.appendSection("memory_inject_raw", GwSectionMemoryInjectRaw, TrustUntrusted, ModeDataOnly, "memory", 350, req.MemoryInjectRaw, "GwSectionMemoryInjectRaw")
 	}

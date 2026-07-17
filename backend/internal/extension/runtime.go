@@ -22,6 +22,8 @@ type Runtime struct {
 	PluginManager *PluginManager
 	Workshop      *WorkshopService
 	WorkflowHost  *WorkflowHostAdapter
+	AgentSkills   *AgentSkillService
+	Packages      *PackageService
 }
 
 func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtime, error) {
@@ -52,6 +54,13 @@ func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 	}
 	executor := NewExecutor(registry, validator, permissions, repository)
 	service := NewService(registry, executor, repository, validator)
+	agentSkills := NewAgentSkillService(repository, registry, validator)
+	if err := agentSkills.Restore(ctx); err != nil {
+		return nil, err
+	}
+	if err := registerAgentSkillRuntime(ctx, registry, agentSkills); err != nil {
+		return nil, err
+	}
 	pluginRegistry := NewPluginRegistry(engineVersion, validator)
 	if err := pluginRegistry.Register(ctx, newDiagnosticPlugin(), newDiagnosticPlugin); err != nil {
 		return nil, err
@@ -70,10 +79,15 @@ func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 	workflowHost := &WorkflowHostAdapter{}
 	workflowExecutor := NewWorkflowExecutor(BuildWorkflowAdapters(executor, workflowHost), validator)
 	workshop := NewWorkshopService(workshopRepository, NewWorkshopGenerator(nil, registry), workflowCompiler, workflowExecutor, validator, registry, executor)
+	workshop.AttachAgentSkills(agentSkills)
 	if err := workshop.Restore(ctx); err != nil {
 		applog.Warn("workflow skill restore warning", applog.Fields{"error_code": asExtensionError(err).Code})
 	}
-	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost}, nil
+	packages := NewPackageService(repository, registry, validator, workflowCompiler, workshop.installer, agentSkills)
+	if err := packages.Restore(ctx); err != nil {
+		return nil, err
+	}
+	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages}, nil
 }
 
 func (r *Runtime) Close(ctx context.Context) error {
@@ -117,12 +131,21 @@ func (r *Runtime) pluginSnapshot(ctx context.Context, scope ExecutionScope) (Ext
 
 func (r *Runtime) ModelTools(ctx context.Context, scope ExecutionScope) ([]tool.Tool, error) {
 	scope.Trigger = TriggerLLM
+	agentSkillToolsAvailable := false
+	if r.AgentSkills != nil {
+		if catalog, catalogErr := r.AgentSkills.ResolveCatalog(ctx, scope); catalogErr == nil && len(catalog) > 0 {
+			agentSkillToolsAvailable = true
+		}
+	}
 	definitions, err := r.Registry.Available(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]tool.Tool, 0, len(definitions))
 	for _, definition := range definitions {
+		if definition.Internal && !agentSkillToolsAvailable {
+			continue
+		}
 		allowed := true
 		identity := ExtensionIdentity{ExtensionID: definition.ID, SkillID: definition.ID, Version: definition.Version}
 		for _, capability := range definition.Capabilities {

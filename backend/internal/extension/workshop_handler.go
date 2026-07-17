@@ -65,6 +65,22 @@ func (h *WorkshopHandler) CreateSession(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, result)
 }
+
+func (h *WorkshopHandler) GenerateInstruction(c *gin.Context) {
+	var request struct {
+		Requirement string `json:"requirement"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		h.base.problem(c, NewExtensionError(ErrWorkshopGenerationOutputInvalid, "请求无效", err.Error(), false, err))
+		return
+	}
+	result, err := h.service.GenerateInstruction(c.Request.Context(), h.scope(c), request.Requirement)
+	if err != nil {
+		h.base.problem(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
 func (h *WorkshopHandler) GetSession(c *gin.Context) {
 	result, err := h.service.GetSession(c.Request.Context(), h.scope(c), c.Param("id"))
 	if err != nil {

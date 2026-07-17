@@ -9,9 +9,11 @@
   </main>
 </template>
 <script setup lang="ts">
-import { MagicStick, Operation, SetUp, Tickets, ArrowRight } from "@element-plus/icons-vue"
+import { MagicStick, Operation, SetUp, Tickets, ArrowRight, DocumentChecked, Box } from "@element-plus/icons-vue"
 const entries = [
+  { to: "/extensions/packages", title: "本地扩展包", description: "统一导入、导出、升级、比较、回滚与卸载", icon: Box },
   { to: "/extensions/skills", title: "技能", description: "管理内置、旧工具适配与工坊生成的 Skill", icon: Operation },
+  { to: "/extensions/agent-skills", title: "Agent Skills", description: "导入和管理通用 SKILL.md 指令技能", icon: DocumentChecked },
   { to: "/extensions/plugins", title: "插件", description: "管理受宿主管控的 Plugin Runtime", icon: SetUp },
   { to: "/extensions/workshop", title: "扩展工坊", description: "从自然语言创建安全的声明式 Skill", icon: MagicStick },
   { to: "/extensions/runs", title: "执行记录", description: "检查 Skill 运行结果、耗时和标准错误", icon: Tickets },

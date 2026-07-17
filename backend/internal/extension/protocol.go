@@ -12,9 +12,10 @@ import (
 type SkillSource string
 
 const (
-	SkillSourceBuiltin  SkillSource = "builtin"
-	SkillSourceLegacy   SkillSource = "legacy_tool"
-	SkillSourceWorkflow SkillSource = "workflow"
+	SkillSourceBuiltin      SkillSource = "builtin"
+	SkillSourceLegacy       SkillSource = "legacy_tool"
+	SkillSourceWorkflow     SkillSource = "workflow"
+	SkillSourceInstructions SkillSource = "instructions"
 )
 
 type SkillTrigger string
@@ -72,6 +73,7 @@ const (
 	ErrSkillDuplicateID         = "SKILL_DUPLICATE_ID"
 	ErrSkillManifestInvalid     = "SKILL_MANIFEST_INVALID"
 	ErrSkillIdempotencyConflict = "SKILL_IDEMPOTENCY_CONFLICT"
+	ErrSkillNotExecutable       = "SKILL_NOT_EXECUTABLE"
 )
 
 type Manifest struct {
@@ -112,6 +114,7 @@ type SkillEntry struct {
 	Kind       string `json:"kind"`
 	Name       string `json:"name,omitempty"`
 	ArtifactID string `json:"artifactId,omitempty"`
+	Path       string `json:"path,omitempty"`
 }
 
 type ManifestExecution struct {
@@ -147,6 +150,7 @@ type SkillDefinition struct {
 	Author              string          `json:"author,omitempty"`
 	License             string          `json:"license,omitempty"`
 	Manifest            json.RawMessage `json:"manifest"`
+	Internal            bool            `json:"internal,omitempty"`
 }
 
 type ExecutionScope struct {
@@ -237,9 +241,10 @@ type RegisteredSkill struct {
 }
 
 type SkillFilter struct {
-	Enabled *bool
-	Trigger SkillTrigger
-	Source  SkillSource
+	Enabled         *bool
+	Trigger         SkillTrigger
+	Source          SkillSource
+	IncludeInternal bool
 }
 
 type RunFilter struct {

@@ -66,6 +66,9 @@ func (s *ExtensionService) ListSkills(ctx context.Context, scope ExecutionScope,
 	}
 	views := make([]SkillView, 0, len(items))
 	for _, item := range items {
+		if item.Definition.Internal {
+			continue
+		}
 		latest, latestErr := s.repository.LatestRun(ctx, scope, item.Definition.ID)
 		if latestErr != nil {
 			return nil, latestErr

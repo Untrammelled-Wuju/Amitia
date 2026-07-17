@@ -58,9 +58,28 @@ SPDX-License-Identifier: AGPL-3.0-only
           @click="voiceMode = !voiceMode"
           :title="voiceMode ? '切换到文字输入' : '切换到语音输入'"
         />
+        <el-button
+          :icon="MagicStick"
+          circle
+          size="small"
+          class="skill-btn"
+          :disabled="isInputDisabled"
+          title="选择 Agent Skill"
+          aria-label="选择 Agent Skill"
+          @click="skillPickerOpen = !skillPickerOpen"
+        />
       </div>
 
       <div class="input-body">
+        <div v-if="selectedSkillNames.length" class="skill-chips" aria-label="已选择 Agent Skills">
+          <el-tag v-for="name in selectedSkillNames" :key="name" closable size="small" @close="removeSkill(name)">${{ name }}</el-tag>
+        </div>
+        <div v-if="skillPickerOpen && filteredAgentSkills.length" class="skill-picker" role="listbox" aria-label="可用 Agent Skills">
+          <button v-for="skill in filteredAgentSkills" :key="skill.extensionId" type="button" role="option" @click="selectSkill(skill.name)">
+            <span><strong>${{ skill.name }}</strong><el-tag size="small" type="info">{{ skill.scope === "character" ? "角色" : "全局" }}</el-tag></span>
+            <small>{{ skill.description }}</small>
+          </button>
+        </div>
         <textarea
         v-show="!voiceMode"
         ref="inputRef"
@@ -70,7 +89,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :disabled="isInputDisabled"
         rows="1"
         @keydown.enter.exact="handleEnterSend"
-        @input="autoResize"
+        @input="handleTextInput"
       />
 
       <button
@@ -150,11 +169,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
-import { Promotion, CloseBold, Microphone, Phone, Key, Picture, VideoCamera } from "@element-plus/icons-vue"
+import { computed, onMounted, ref, watch } from "vue"
+import { Promotion, CloseBold, Microphone, Phone, Key, Picture, VideoCamera, MagicStick } from "@element-plus/icons-vue"
 import { useTextInput } from "../composables/useTextInput"
 import { useVoiceInput } from "../composables/useVoiceInput"
 import { useMediaUpload } from "../composables/useMediaUpload"
+import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api"
+import type { AgentSkillDefinition } from "../views/extensions/types"
 
 const props = defineProps<{
   isWechatActive?: boolean
@@ -223,6 +244,42 @@ const {
   attachedVideo, attachedVideoUrl, uploadingVideo,
   handleImageSelect, clearImage, handleVideoSelect, clearVideo,
 } = mediaUpload
+
+const agentSkills = ref<AgentSkillDefinition[]>([])
+const skillPickerOpen = ref(false)
+const skillQuery = computed(() => text.value.match(/(?:^|\s)\$([a-z0-9-]*)$/)?.[1] || "")
+const selectedSkillNames = computed(() => Array.from(new Set(Array.from(text.value.matchAll(/(?:^|\s)\$([a-z0-9]+(?:-[a-z0-9]+)*)\b/g), match => match[1]))))
+const filteredAgentSkills = computed(() => agentSkills.value.filter(skill => !skillQuery.value || skill.name.includes(skillQuery.value)).slice(0, 8))
+
+async function loadAgentSkills() {
+  try {
+    const characterId = await resolveCharacterId()
+    if (!characterId) return
+    const page = await fetchAgentSkills(characterId, { pageSize: 100 })
+    agentSkills.value = (page.items || []).filter(skill => skill.enabled && skill.compatibilityStatus !== "blocked")
+  } catch {}
+}
+
+function handleTextInput() {
+  autoResize()
+  skillPickerOpen.value = /(?:^|\s)\$[a-z0-9-]*$/.test(text.value)
+}
+
+function selectSkill(name: string) {
+  const match = text.value.match(/(?:^|\s)\$[a-z0-9-]*$/)
+  text.value = match ? `${text.value.slice(0, match.index)}${match[0].startsWith(" ") ? " " : ""}$${name} ` : `${text.value}${text.value && !text.value.endsWith(" ") ? " " : ""}$${name} `
+  skillPickerOpen.value = false
+  autoResize()
+  inputRef.value?.focus()
+}
+
+function removeSkill(name: string) {
+  text.value = text.value.replace(new RegExp(`(^|\\s)\\$${name}(?=\\s|$)`, "g"), "$1").replace(/ {2,}/g, " ").trimStart()
+  autoResize()
+}
+
+watch(() => props.disabled, value => { if (!value) loadAgentSkills() })
+onMounted(loadAgentSkills)
 
 function handleEnterSend(e: KeyboardEvent) {
   if (attachedVideo.value) {
@@ -328,7 +385,16 @@ defineExpose({ focus, setText, clear: clearText })
   min-height: 36px;
   display: flex;
   align-items: center;
+  position: relative;
+  flex-direction: column;
 }
+
+.skill-chips { display: flex; width: 100%; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
+.skill-picker { position: absolute; z-index: 40; right: 0; bottom: calc(100% + 10px); left: 0; max-height: 280px; overflow: auto; padding: 6px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); box-shadow: var(--ac-shadow-lg); }
+.skill-picker button { display: flex; width: 100%; min-height: 56px; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 10px; border: 0; border-radius: var(--ac-radius-sm); background: transparent; color: var(--ac-color-text); cursor: pointer; text-align: left; }
+.skill-picker button:hover,.skill-picker button:focus-visible { background: var(--ac-color-primary-bg); outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
+.skill-picker button span { display: flex; align-items: center; gap: 8px; }
+.skill-picker small { color: var(--ac-color-text-secondary); line-height: 1.4; }
 
 .input-field {
   width: 100%;

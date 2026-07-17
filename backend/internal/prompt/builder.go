@@ -33,11 +33,14 @@ type BuildRequest struct {
 	ProactiveRecentContext   string
 	ProactiveTaskInstruction string
 
-	ProfileContext string
-	MemoryContext  string
-	Worldbook      string
-	PluginContext  string
-	History        string
+	ProfileContext            string
+	MemoryContext             string
+	Worldbook                 string
+	PluginContext             string
+	AgentSkillContext         string
+	AgentSkillCatalogIncluded bool
+	AgentSkillTrace           []AgentSkillTrace
+	History                   string
 
 	ToolResults    string
 	MultimodalText string
