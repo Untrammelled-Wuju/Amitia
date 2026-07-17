@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -93,6 +94,18 @@ type configRecord struct {
 
 func (configRecord) TableName() string { return "extension_configs" }
 
+type scopeBindingRecord struct {
+	ID          string `gorm:"column:id;primaryKey"`
+	ExtensionID string `gorm:"column:extension_id"`
+	ScopeType   string `gorm:"column:scope_type"`
+	ScopeID     string `gorm:"column:scope_id"`
+	Enabled     int    `gorm:"column:enabled"`
+	CreatedAt   string `gorm:"column:created_at"`
+	UpdatedAt   string `gorm:"column:updated_at"`
+}
+
+func (scopeBindingRecord) TableName() string { return "extension_scope_bindings" }
+
 type runRecord struct {
 	RunID            string `gorm:"column:run_id;primaryKey"`
 	ExtensionID      string `gorm:"column:extension_id"`
@@ -124,7 +137,21 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db, configCipher: cipher, configCipherErr: err}
 }
 
+func (r *Repository) hasScopeBindings() bool {
+	return r.db != nil && r.db.Migrator().HasTable(&scopeBindingRecord{})
+}
+
 func (r *Repository) ResolveEnabled(ctx context.Context, definition SkillDefinition) (bool, error) {
+	if r.hasScopeBindings() {
+		var binding scopeBindingRecord
+		bindingErr := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ''", definition.ID, ScopeGlobal).First(&binding).Error
+		if bindingErr == nil {
+			return binding.Enabled == 1, nil
+		}
+		if !errors.Is(bindingErr, gorm.ErrRecordNotFound) {
+			return false, bindingErr
+		}
+	}
 	var record extensionRecord
 	err := r.db.WithContext(ctx).Where("extension_id = ?", definition.ID).First(&record).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -134,6 +161,71 @@ func (r *Repository) ResolveEnabled(ctx context.Context, definition SkillDefinit
 		return false, err
 	}
 	return record.Enabled == 1, nil
+}
+
+func (r *Repository) ResolveScopeEnabled(ctx context.Context, extensionID string, scope ExecutionScope, fallback bool) (bool, PermissionScope, error) {
+	if !r.hasScopeBindings() {
+		return fallback, PermissionScope{Type: ScopeGlobal}, nil
+	}
+	if characterID := strings.TrimSpace(scope.CharacterID); characterID != "" {
+		var character scopeBindingRecord
+		err := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", extensionID, ScopeCharacter, characterID).First(&character).Error
+		if err == nil {
+			return character.Enabled == 1, PermissionScope{Type: ScopeCharacter, ID: characterID}, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, PermissionScope{}, err
+		}
+	}
+	var global scopeBindingRecord
+	err := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ''", extensionID, ScopeGlobal).First(&global).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, PermissionScope{}, nil
+	}
+	if err != nil {
+		return false, PermissionScope{}, err
+	}
+	return global.Enabled == 1, PermissionScope{Type: ScopeGlobal}, nil
+}
+
+func (r *Repository) DeleteScopeBinding(ctx context.Context, extensionID string, scope PermissionScope) error {
+	if !r.hasScopeBindings() {
+		return nil
+	}
+	return r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", extensionID, scope.Type, scope.ID).Delete(&scopeBindingRecord{}).Error
+}
+
+func (r *Repository) SetScopeEnabled(ctx context.Context, extensionID string, scope PermissionScope, enabled bool) error {
+	if scope.Type != ScopeGlobal && scope.Type != ScopeCharacter {
+		return fmt.Errorf("unsupported extension binding scope: %s", scope.Type)
+	}
+	if err := validateScopeID(scope); err != nil {
+		return err
+	}
+	if !r.hasScopeBindings() {
+		return r.db.WithContext(ctx).Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Update("enabled", boolNumber(enabled)).Error
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	record := scopeBindingRecord{ID: uuid.New().String(), ExtensionID: extensionID, ScopeType: string(scope.Type), ScopeID: scope.ID, Enabled: boolNumber(enabled), CreatedAt: now, UpdatedAt: now}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return NewExtensionError(ErrSkillNotFound, "Skill not found", extensionID, false, nil)
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "extension_id"}, {Name: "scope_type"}, {Name: "scope_id"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{"enabled": boolNumber(enabled), "updated_at": now}),
+		}).Create(&record).Error; err != nil {
+			return err
+		}
+		if scope.Type == ScopeGlobal {
+			return tx.Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Updates(map[string]interface{}{"enabled": boolNumber(enabled), "updated_at": now}).Error
+		}
+		return nil
+	})
 }
 
 func (r *Repository) UpsertDefinition(ctx context.Context, definition SkillDefinition) error {
@@ -164,6 +256,12 @@ func (r *Repository) UpsertDefinition(ctx context.Context, definition SkillDefin
 			DoUpdates: clause.AssignmentColumns([]string{"name", "current_version", "source", "enabled", "manifest_json", "normalized_manifest_json", "updated_at"}),
 		}).Create(&record).Error; err != nil {
 			return err
+		}
+		if tx.Migrator().HasTable(&scopeBindingRecord{}) {
+			binding := scopeBindingRecord{ID: uuid.New().String(), ExtensionID: definition.ID, ScopeType: string(ScopeGlobal), ScopeID: "", Enabled: boolNumber(definition.Enabled), CreatedAt: now, UpdatedAt: now}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&binding).Error; err != nil {
+				return err
+			}
 		}
 		hash := sha256.Sum256(definition.Manifest)
 		version := extensionVersionRecord{ID: uuid.New().String(), ExtensionID: definition.ID, Version: definition.Version, ManifestJSON: string(definition.Manifest), Checksum: hex.EncodeToString(hash[:]), CreatedAt: now}
@@ -291,6 +389,24 @@ func (r *Repository) ValidateConversationScope(ctx context.Context, scope Execut
 	return nil
 }
 
+func (r *Repository) ValidateCharacterScope(ctx context.Context, scope ExecutionScope) error {
+	characterID := strings.TrimSpace(scope.CharacterID)
+	if characterID == "" {
+		return nil
+	}
+	if !r.db.Migrator().HasTable("characters") {
+		return nil
+	}
+	var count int64
+	if err := r.db.WithContext(ctx).Table("characters").Where("id = ?", characterID).Count(&count).Error; err != nil {
+		return fmt.Errorf("validate character scope: %w", err)
+	}
+	if count == 0 {
+		return NewExtensionError(ErrSkillPermissionDenied, "Character scope is unavailable", characterID, false, nil)
+	}
+	return nil
+}
+
 func (r *Repository) LatestRun(ctx context.Context, scope ExecutionScope, skillID string) (*RunView, error) {
 	var record runRecord
 	query := applyRunScope(r.db.WithContext(ctx), scope).Where("skill_id = ?", skillID).Order("created_at DESC")
@@ -333,6 +449,54 @@ func (r *Repository) GetConfig(ctx context.Context, skillID string, scope Permis
 	return json.RawMessage(plain), nil
 }
 
+func (r *Repository) GetEffectiveConfig(ctx context.Context, skillID string, scope ExecutionScope, defaults json.RawMessage) (json.RawMessage, error) {
+	if characterID := strings.TrimSpace(scope.CharacterID); characterID != "" {
+		config, found, err := r.getStoredConfig(ctx, skillID, PermissionScope{Type: ScopeCharacter, ID: characterID})
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return config, nil
+		}
+	}
+	config, found, err := r.getStoredConfig(ctx, skillID, PermissionScope{Type: ScopeGlobal})
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return config, nil
+	}
+	return append(json.RawMessage(nil), normalizeJSON(defaults)...), nil
+}
+
+func (r *Repository) getStoredConfig(ctx context.Context, skillID string, scope PermissionScope) (json.RawMessage, bool, error) {
+	var record configRecord
+	err := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", skillID, scope.Type, scope.ID).First(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if r.configCipherErr != nil {
+		return nil, false, r.configCipherErr
+	}
+	plain, encrypted, err := r.configCipher.decrypt(record.ConfigJSON)
+	if err != nil {
+		return nil, false, err
+	}
+	if !encrypted {
+		secured, secureErr := r.configCipher.encrypt(plain)
+		if secureErr != nil {
+			return nil, false, secureErr
+		}
+		if updateErr := r.db.WithContext(ctx).Model(&configRecord{}).Where("id = ?", record.ID).Update("config_json", secured).Error; updateErr != nil {
+			return nil, false, updateErr
+		}
+	}
+	return json.RawMessage(plain), true, nil
+}
+
 func (r *Repository) UpdateConfig(ctx context.Context, skillID string, scope PermissionScope, config json.RawMessage) error {
 	if err := validateScopeID(scope); err != nil {
 		return err
@@ -369,6 +533,54 @@ func (r *Repository) ListGrants(ctx context.Context, skillID string) ([]Permissi
 	return items, nil
 }
 
+func (r *Repository) ListGrantsForScope(ctx context.Context, skillID string, scope ExecutionScope) ([]PermissionGrantView, error) {
+	query := r.db.WithContext(ctx).Where("extension_id = ?", skillID)
+	if characterID := strings.TrimSpace(scope.CharacterID); characterID != "" {
+		query = query.Where("(scope_type = ? AND scope_id = '') OR (scope_type = ? AND scope_id = ?)", ScopeGlobal, ScopeCharacter, characterID)
+	} else {
+		query = query.Where("scope_type = ? AND scope_id = ''", ScopeGlobal)
+	}
+	var records []grantRecord
+	if err := query.Order("capability, scope_type, scope_id").Find(&records).Error; err != nil {
+		return nil, err
+	}
+	items := make([]PermissionGrantView, 0, len(records))
+	for _, record := range records {
+		capability, _ := Capability(record.Capability)
+		items = append(items, PermissionGrantView{ID: record.ID, Capability: record.Capability, Risk: capability.Risk, Description: capability.Description, Decision: PermissionDecision(record.Decision), ScopeType: ScopeType(record.ScopeType), ScopeID: record.ScopeID, ExpiresAt: record.ExpiresAt, ConsumedAt: record.ConsumedAt})
+	}
+	return items, nil
+}
+
+func (r *Repository) ReplaceGrantsForScope(ctx context.Context, skillID string, scope ExecutionScope, grants []PermissionGrantInput) error {
+	target := PermissionScope{Type: ScopeGlobal}
+	if characterID := strings.TrimSpace(scope.CharacterID); characterID != "" {
+		target = PermissionScope{Type: ScopeCharacter, ID: characterID}
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("extension_id = ? AND scope_type = ? AND scope_id = ?", skillID, target.Type, target.ID).Delete(&grantRecord{}).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		for _, grant := range grants {
+			if grant.ScopeType != target.Type || grant.ScopeID != target.ID {
+				return NewExtensionError(ErrSkillPermissionDenied, "Permission scope mismatch", grant.ScopeID, false, nil)
+			}
+			if _, ok := Capability(grant.Capability); !ok {
+				return fmt.Errorf("unknown capability: %s", grant.Capability)
+			}
+			if !validDecision(grant.Decision) {
+				return fmt.Errorf("invalid permission grant")
+			}
+			record := grantRecord{ID: uuid.New().String(), ExtensionID: skillID, Capability: grant.Capability, Decision: string(grant.Decision), ScopeType: string(target.Type), ScopeID: target.ID, ExpiresAt: grant.ExpiresAt, CreatedAt: now, UpdatedAt: now}
+			if err := tx.Create(&record).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Repository) ReplaceGrants(ctx context.Context, skillID string, grants []PermissionGrantInput) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("extension_id = ?", skillID).Delete(&grantRecord{}).Error; err != nil {
@@ -400,6 +612,7 @@ func (r *Repository) ResolveGrant(ctx context.Context, identity ExtensionIdentit
 		return DecisionDeny, false, err
 	}
 	now := time.Now().UTC()
+	matched := make([]grantRecord, 0, len(records))
 	for _, record := range records {
 		if record.ExpiresAt != "" {
 			expires, err := time.Parse(time.RFC3339Nano, record.ExpiresAt)
@@ -410,6 +623,12 @@ func (r *Repository) ResolveGrant(ctx context.Context, identity ExtensionIdentit
 		if !grantMatchesScope(record, scope) {
 			continue
 		}
+		matched = append(matched, record)
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return grantScopePriority(ScopeType(matched[i].ScopeType)) > grantScopePriority(ScopeType(matched[j].ScopeType))
+	})
+	for _, record := range matched {
 		decision := PermissionDecision(record.Decision)
 		if decision == DecisionAllowOnce && consume {
 			result := r.db.WithContext(ctx).Model(&grantRecord{}).Where("id = ? AND consumed_at = ''", record.ID).Update("consumed_at", now.Format(time.RFC3339Nano))
@@ -423,6 +642,23 @@ func (r *Repository) ResolveGrant(ctx context.Context, identity ExtensionIdentit
 		return decision, true, nil
 	}
 	return DecisionDeny, false, nil
+}
+
+func grantScopePriority(scope ScopeType) int {
+	switch scope {
+	case ScopeSession:
+		return 50
+	case ScopeConversation:
+		return 40
+	case ScopeCharacter:
+		return 30
+	case ScopeChannel:
+		return 20
+	case ScopeGlobal:
+		return 10
+	default:
+		return 0
+	}
 }
 
 func applyRunScope(query *gorm.DB, scope ExecutionScope) *gorm.DB {

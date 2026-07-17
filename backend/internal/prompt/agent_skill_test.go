@@ -21,7 +21,7 @@ func TestAgentSkillPromptPlacementAndTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) < 4 || messages[0].Role != "system" || !strings.Contains(messages[1].Content, "<active_agent_skill>instruction</active_agent_skill>") || !strings.Contains(messages[2].Content, "memory") || messages[len(messages)-1].Role != "user" {
+	if len(messages) < 3 || messages[0].Role != "system" || !strings.Contains(messages[0].Content, "<active_agent_skill>instruction</active_agent_skill>") || !strings.Contains(messages[len(messages)-2].Content, "memory") || messages[len(messages)-1].Role != "user" {
 		t.Fatalf("unexpected Agent Skill prompt placement: %+v", messages)
 	}
 	if trace == nil || !trace.AgentSkillCatalogIncluded || !trace.QualityFlags.AgentSkillSectionUsed || len(trace.AgentSkills) != 1 || trace.AgentSkills[0].ScriptsUsed {

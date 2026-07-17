@@ -144,7 +144,7 @@ async function toggle(skill: SkillView) {
   }
   changingId.value = skill.id
   try {
-    await setSkillEnabled(skill.id, !skill.enabled)
+		await setSkillEnabled(skill.id, characterId.value, !skill.enabled)
     ElMessage.success(skill.enabled ? "技能已禁用" : "技能已启用")
     await load()
   } finally {

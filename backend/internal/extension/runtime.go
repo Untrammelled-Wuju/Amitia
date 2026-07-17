@@ -55,6 +55,7 @@ func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 	executor := NewExecutor(registry, validator, permissions, repository)
 	service := NewService(registry, executor, repository, validator)
 	agentSkills := NewAgentSkillService(repository, registry, validator)
+	service.AttachLifecycleService(NewExtensionLifecycleService(registry, repository, agentSkills))
 	if err := agentSkills.Restore(ctx); err != nil {
 		return nil, err
 	}

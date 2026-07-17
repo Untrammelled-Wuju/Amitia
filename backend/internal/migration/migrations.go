@@ -65,5 +65,11 @@ func DefaultMigrations() []Migration {
 		ExtensionAgentSkillsMigration(),
 		ExtensionAgentSkillTraceMigration(),
 		ExtensionPackagesMigration(),
+		ExtensionScopeBindingsMigration(),
+		ExtensionOwnedResourcesMigration(),
+		ExtensionPackageRecoveryMigration(),
+		ExtensionArtifactRecoveryMigration(),
+		ExtensionScheduleSourceMigration(),
+		ExtensionScheduleOwnershipRepairMigration(),
 	}
 }

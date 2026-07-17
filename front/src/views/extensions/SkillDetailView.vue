@@ -71,8 +71,8 @@
         <el-tab-pane label="配置" name="config">
           <el-card shadow="never" class="editor-card">
             <el-form label-position="top" @submit.prevent>
-              <el-form-item label="全局配置 JSON">
-                <el-input v-model="configText" type="textarea" :rows="14" spellcheck="false" aria-label="全局配置 JSON" />
+			<el-form-item label="当前角色配置 JSON">
+				<el-input v-model="configText" type="textarea" :rows="14" spellcheck="false" aria-label="当前角色配置 JSON" />
                 <div class="field-help">配置会按技能的 Config Schema 校验。包含 Secret 的字段不会在页面或日志中明文显示。</div>
               </el-form-item>
               <div v-if="configError" class="field-error" role="alert">{{ configError }}</div>
@@ -219,7 +219,7 @@ async function toggleSkill() {
   if (skill.value.enabled) await ElMessageBox.confirm("禁用后模型和手动入口都不能执行该技能。", "确认禁用", { type: "warning" })
   changing.value = true
   try {
-    await setSkillEnabled(skill.value.id, !skill.value.enabled)
+		await setSkillEnabled(skill.value.id, characterId.value, !skill.value.enabled)
     ElMessage.success(skill.value.enabled ? "技能已禁用" : "技能已启用")
     await load()
   } finally {
@@ -282,7 +282,7 @@ async function saveConfig() {
   }
   savingConfig.value = true
   try {
-    await updateConfig(skill.value.id, value)
+		await updateConfig(skill.value.id, characterId.value, value)
     ElMessage.success("配置已保存")
     await load()
   } catch (error: any) {
@@ -296,7 +296,7 @@ async function resetSkillConfig() {
   if (!skill.value) return
   resetting.value = true
   try {
-    await resetConfig(skill.value.id)
+		await resetConfig(skill.value.id, characterId.value)
     ElMessage.success("已恢复默认配置")
     await load()
   } finally {

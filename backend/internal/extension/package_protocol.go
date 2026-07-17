@@ -166,6 +166,7 @@ type PackageImportPreview struct {
 	TotalSize               int64                    `json:"totalSize"`
 	FileCount               int                      `json:"fileCount"`
 	TestStatus              string                   `json:"testStatus"`
+	TestReport              *PackageDryRunReport     `json:"testReport,omitempty"`
 	Risks                   []PackageRisk            `json:"risks"`
 	Warnings                []string                 `json:"warnings"`
 	Errors                  []string                 `json:"errors"`
@@ -177,14 +178,38 @@ type PackageImportPreview struct {
 	ExpiresAt               time.Time                `json:"expiresAt"`
 }
 
+type PackageDryRunReport struct {
+	Status       string                    `json:"status"`
+	CaseCount    int                       `json:"caseCount"`
+	PassedCount  int                       `json:"passedCount"`
+	FailedCount  int                       `json:"failedCount"`
+	DurationMS   int64                     `json:"durationMs"`
+	Cases        []PackageDryRunCaseReport `json:"cases"`
+	Capabilities []string                  `json:"capabilities"`
+	SideEffects  []SideEffectRecord        `json:"sideEffects"`
+}
+
+type PackageDryRunCaseReport struct {
+	ID         string               `json:"id"`
+	Name       string               `json:"name"`
+	Mode       string               `json:"mode"`
+	Status     string               `json:"status"`
+	DurationMS int64                `json:"durationMs"`
+	Steps      []WorkflowStepResult `json:"steps"`
+	Assertions []AssertionResult    `json:"assertions"`
+	Output     json.RawMessage      `json:"output,omitempty"`
+	Error      *ExtensionError      `json:"error,omitempty"`
+}
+
 type PreviewPackageImportRequest struct {
-	UserID    string
-	ScopeType string
-	ScopeID   string
-	FileName  string
-	Raw       []byte
-	Directory map[string][]byte
-	RootName  string
+	UserID      string
+	ScopeType   string
+	ScopeID     string
+	FileName    string
+	Raw         []byte
+	Directory   map[string][]byte
+	RootName    string
+	OperationID string
 }
 
 type InstallPackageRequest struct {
@@ -273,6 +298,10 @@ type PackageVersionView struct {
 	Active              bool            `json:"active"`
 	ValidationStatus    string          `json:"validationStatus"`
 	TestStatus          string          `json:"testStatus"`
+	ArtifactStatus      string          `json:"artifactStatus"`
+	ActivationStatus    string          `json:"activationStatus"`
+	OperationID         string          `json:"operationId,omitempty"`
+	FailureCode         string          `json:"failureCode,omitempty"`
 	Archived            bool            `json:"archived"`
 }
 

@@ -73,8 +73,8 @@ function normalizeSkill<T extends SkillView>(skill: T): T {
   }
 }
 
-export async function setSkillEnabled(id: string, enabled: boolean) {
-  await apiClient.post(`/api/extensions/skills/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`)
+export async function setSkillEnabled(id: string, characterId: string, enabled: boolean) {
+	await apiClient.post(`/api/extensions/skills/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`, null, { params: { characterId } })
 }
 
 export async function fetchCapabilities() {
@@ -89,12 +89,12 @@ export async function updatePermissions(id: string, characterId: string, grants:
   })
 }
 
-export async function updateConfig(id: string, config: unknown) {
-  await apiClient.put(`/api/extensions/skills/${encodeURIComponent(id)}/config`, config)
+export async function updateConfig(id: string, characterId: string, config: unknown) {
+	await apiClient.put(`/api/extensions/skills/${encodeURIComponent(id)}/config`, config, { params: { characterId } })
 }
 
-export async function resetConfig(id: string) {
-  await apiClient.post(`/api/extensions/skills/${encodeURIComponent(id)}/config/reset`)
+export async function resetConfig(id: string, characterId: string) {
+	await apiClient.post(`/api/extensions/skills/${encodeURIComponent(id)}/config/reset`, null, { params: { characterId } })
 }
 
 export async function executeSkill(id: string, payload: { characterId: string; conversationId?: string; channel?: string; sessionId?: string; idempotencyKey?: string; input: unknown }) {

@@ -18,6 +18,8 @@ var semverPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1
 
 type RegistryStateStore interface {
 	ResolveEnabled(context.Context, SkillDefinition) (bool, error)
+	ResolveScopeEnabled(context.Context, string, ExecutionScope, bool) (bool, PermissionScope, error)
+	SetScopeEnabled(context.Context, string, PermissionScope, bool) error
 	UpsertDefinition(context.Context, SkillDefinition) error
 }
 
@@ -25,10 +27,12 @@ type SkillRegistry interface {
 	Register(context.Context, SkillDefinition, SkillHandler) error
 	Unregister(context.Context, string) error
 	Get(context.Context, string) (RegisteredSkill, error)
+	GetScoped(context.Context, string, ExecutionScope) (RegisteredSkill, error)
 	GetByModelName(context.Context, string) (RegisteredSkill, error)
 	List(context.Context, SkillFilter) ([]RegisteredSkill, error)
 	Available(context.Context, ExecutionScope) ([]SkillDefinition, error)
 	SetEnabled(context.Context, string, bool) error
+	SetScopeEnabled(context.Context, string, ExecutionScope, bool) error
 }
 
 type Registry struct {
@@ -115,6 +119,24 @@ func (r *Registry) Get(_ context.Context, skillID string) (RegisteredSkill, erro
 	return cloneRegistered(item), nil
 }
 
+func (r *Registry) GetScoped(ctx context.Context, skillID string, scope ExecutionScope) (RegisteredSkill, error) {
+	item, err := r.Get(ctx, skillID)
+	if err != nil {
+		return RegisteredSkill{}, err
+	}
+	if r.stateStore == nil {
+		return item, nil
+	}
+	enabled, effectiveScope, err := r.stateStore.ResolveScopeEnabled(ctx, skillID, scope, item.Definition.Enabled)
+	if err != nil {
+		return RegisteredSkill{}, err
+	}
+	item.Definition.Enabled = enabled
+	item.Definition.EffectiveScopeType = effectiveScope.Type
+	item.Definition.EffectiveScopeID = effectiveScope.ID
+	return item, nil
+}
+
 func (r *Registry) GetByModelName(ctx context.Context, name string) (RegisteredSkill, error) {
 	r.mu.RLock()
 	id, ok := r.modelNames[name]
@@ -155,11 +177,47 @@ func (r *Registry) Available(ctx context.Context, scope ExecutionScope) ([]Skill
 	}
 	result := make([]SkillDefinition, 0, len(items))
 	for _, item := range items {
-		if item.Definition.Enabled && item.Definition.Compatible && item.Definition.Entry.Kind != "instructions" {
-			result = append(result, cloneDefinition(item.Definition))
+		scoped, scopedErr := r.GetScoped(ctx, item.Definition.ID, scope)
+		if scopedErr != nil {
+			return nil, scopedErr
+		}
+		if scoped.Definition.Enabled && scoped.Definition.Compatible && scoped.Definition.Entry.Kind != "instructions" {
+			result = append(result, cloneDefinition(scoped.Definition))
 		}
 	}
 	return result, nil
+}
+
+func (r *Registry) SetScopeEnabled(ctx context.Context, skillID string, scope ExecutionScope, enabled bool) error {
+	item, err := r.Get(ctx, skillID)
+	if err != nil {
+		return err
+	}
+	if enabled && !item.Definition.Compatible {
+		return NewExtensionError(ErrSkillIncompatible, "Skill is incompatible", item.Definition.CompatibilityReason, false, nil)
+	}
+	if r.stateStore == nil {
+		return r.SetEnabled(ctx, skillID, enabled)
+	}
+	target := PermissionScope{Type: ScopeGlobal}
+	if strings.TrimSpace(scope.CharacterID) != "" {
+		target = PermissionScope{Type: ScopeCharacter, ID: strings.TrimSpace(scope.CharacterID)}
+	}
+	if err := r.stateStore.SetScopeEnabled(ctx, skillID, target, enabled); err != nil {
+		return err
+	}
+	_, effectiveScope, err := r.stateStore.ResolveScopeEnabled(ctx, skillID, scope, item.Definition.Enabled)
+	if err != nil {
+		return err
+	}
+	if effectiveScope.Type == ScopeGlobal {
+		r.mu.Lock()
+		current := r.items[skillID]
+		current.Definition.Enabled = enabled
+		r.items[skillID] = current
+		r.mu.Unlock()
+	}
+	return nil
 }
 
 func (r *Registry) SetEnabled(ctx context.Context, skillID string, enabled bool) error {

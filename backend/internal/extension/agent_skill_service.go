@@ -128,6 +128,9 @@ func (s *AgentSkillService) storePreview(userID string, parsed parsedAgentSkill)
 }
 
 func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSkillRequest) (AgentSkillDefinition, error) {
+	if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}); err != nil {
+		return AgentSkillDefinition{}, err
+	}
 	s.mu.Lock()
 	preview, ok := s.previews[request.PreviewID]
 	if ok {
@@ -145,12 +148,31 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 	}
 	definition := preview.parsed.Definition
 	definition.UserID = request.UserID
-	definition.Scope = request.Scope
-	if request.Scope == AgentSkillScopeCharacter {
-		definition.ScopeID = request.CharacterID
-	}
-	scopeHash := hashAgentSkillFiles(map[string][]byte{"scope": []byte(request.UserID + "\x00" + string(request.Scope) + "\x00" + definition.ScopeID)})[:12]
+	definition.Scope = AgentSkillScopeGlobal
+	definition.ScopeID = ""
+	scopeHash := hashAgentSkillFiles(map[string][]byte{"owner": []byte(request.UserID)})[:12]
 	definition.ExtensionID = "local.agentskill." + scopeHash + "." + definition.Name
+	if existing, existingErr := s.repository.GetAgentSkillRecord(ctx, definition.ExtensionID); existingErr == nil {
+		if existing.ContentHash != definition.ContentHash {
+			return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillNameConflict, "Agent Skill name already exists with different content", definition.Name, false, nil)
+		}
+		loaded, _, _, loadErr := s.repository.LoadAgentSkill(ctx, definition.ExtensionID)
+		if loadErr != nil {
+			return AgentSkillDefinition{}, loadErr
+		}
+		if err := s.setInstalledAgentSkillBinding(ctx, definition.ExtensionID, request, false, false); err != nil {
+			return AgentSkillDefinition{}, err
+		}
+		loaded.Scope = request.Scope
+		loaded.ScopeID = request.CharacterID
+		if request.Enable {
+			if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}, definition.ExtensionID); err != nil {
+				return AgentSkillDefinition{}, err
+			}
+			loaded.Enabled = true
+		}
+		return loaded, nil
+	}
 	definition.ArtifactID = uuid.NewString()
 	definition.Enabled = false
 	now := time.Now().UTC()
@@ -168,6 +190,11 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		_ = s.repository.RemoveAgentSkill(ctx, definition.ExtensionID)
 		return AgentSkillDefinition{}, err
 	}
+	if err := s.setInstalledAgentSkillBinding(ctx, definition.ExtensionID, request, false, true); err != nil {
+		_ = s.registry.Unregister(ctx, definition.ExtensionID)
+		_ = s.repository.RemoveAgentSkill(ctx, definition.ExtensionID)
+		return AgentSkillDefinition{}, err
+	}
 	s.invalidateAgentSkillCaches()
 	if request.Enable {
 		if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}, definition.ExtensionID); err != nil {
@@ -175,7 +202,24 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		}
 		definition.Enabled = true
 	}
+	definition.Scope = request.Scope
+	if request.Scope == AgentSkillScopeCharacter {
+		definition.ScopeID = request.CharacterID
+	}
 	return definition, nil
+}
+
+func (s *AgentSkillService) setInstalledAgentSkillBinding(ctx context.Context, extensionID string, request InstallAgentSkillRequest, enabled, removeGlobal bool) error {
+	scope := ExecutionScope{UserID: request.UserID}
+	if request.Scope == AgentSkillScopeCharacter {
+		scope.CharacterID = request.CharacterID
+		if removeGlobal {
+			if err := s.repository.DeleteScopeBinding(ctx, extensionID, PermissionScope{Type: ScopeGlobal}); err != nil {
+				return err
+			}
+		}
+	}
+	return s.registry.SetScopeEnabled(ctx, extensionID, scope, enabled)
 }
 
 func buildAgentSkillManifest(definition AgentSkillDefinition, version string) SkillDefinition {
@@ -218,6 +262,9 @@ func (s *AgentSkillService) Restore(ctx context.Context) error {
 }
 
 func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filter AgentSkillFilter) (PagedAgentSkills, error) {
+	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
+		return PagedAgentSkills{}, err
+	}
 	rows, err := s.repository.ListAgentSkillRecords(ctx)
 	if err != nil {
 		return PagedAgentSkills{}, err
@@ -225,14 +272,16 @@ func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filt
 	items := []AgentSkillDefinition{}
 	for _, row := range rows {
 		d := agentSkillDefinitionFromRecord(row)
-		registered, registryErr := s.registry.Get(ctx, d.ExtensionID)
+		registered, registryErr := s.registry.GetScoped(ctx, d.ExtensionID, scope)
 		if registryErr != nil || registered.Definition.Source != SkillSourceInstructions {
 			continue
 		}
 		d.Enabled = registered.Definition.Enabled
-		if !s.visible(scope, d) {
+		if registered.Definition.EffectiveScopeType == "" {
 			continue
 		}
+		d.Scope = AgentSkillScope(registered.Definition.EffectiveScopeType)
+		d.ScopeID = registered.Definition.EffectiveScopeID
 		if filter.Scope != "" && d.Scope != filter.Scope {
 			continue
 		}
@@ -263,18 +312,28 @@ func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filt
 	return PagedAgentSkills{Items: items[start:end], Total: int64(total), Page: page, PageSize: pageSize}, nil
 }
 func (s *AgentSkillService) Get(ctx context.Context, scope ExecutionScope, id string) (AgentSkillDefinition, AgentSkillCompatibilityReport, error) {
+	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
+		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, err
+	}
 	row, err := s.repository.GetAgentSkillRecord(ctx, id)
 	if err != nil {
 		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, err
 	}
 	metadata := agentSkillDefinitionFromRecord(row)
-	if !s.visible(scope, metadata) {
-		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, NewExtensionError(ErrAgentSkillScopeForbidden, "Agent Skill is outside the current scope", id, false, nil)
-	}
 	definition, report, _, err := s.loadAgentSkill(ctx, metadata)
 	if err != nil {
 		return definition, report, err
 	}
+	registered, err := s.registry.GetScoped(ctx, id, scope)
+	if err != nil {
+		return definition, report, err
+	}
+	if registered.Definition.EffectiveScopeType == "" {
+		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, NewExtensionError(ErrAgentSkillScopeForbidden, "Agent Skill is outside the current scope", id, false, nil)
+	}
+	definition.Enabled = registered.Definition.Enabled
+	definition.Scope = AgentSkillScope(registered.Definition.EffectiveScopeType)
+	definition.ScopeID = registered.Definition.EffectiveScopeID
 	return definition, report, nil
 }
 func (s *AgentSkillService) Enable(ctx context.Context, scope ExecutionScope, id string) error {
@@ -285,11 +344,7 @@ func (s *AgentSkillService) Enable(ctx context.Context, scope ExecutionScope, id
 	if definition.CompatibilityStatus == AgentSkillBlocked {
 		return NewExtensionError(ErrAgentSkillBlocked, "Blocked Agent Skill cannot be enabled", id, false, nil)
 	}
-	if err := s.registry.SetEnabled(ctx, id, true); err != nil {
-		return err
-	}
-	if err := s.repository.SetAgentSkillEnabled(ctx, id, true); err != nil {
-		_ = s.registry.SetEnabled(ctx, id, false)
+	if err := s.registry.SetScopeEnabled(ctx, id, scope, true); err != nil {
 		return err
 	}
 	s.invalidateAgentSkillCaches()
@@ -300,14 +355,10 @@ func (s *AgentSkillService) Disable(ctx context.Context, scope ExecutionScope, i
 	if _, _, err := s.Get(ctx, scope, id); err != nil {
 		return err
 	}
-	if err := s.registry.SetEnabled(ctx, id, false); err != nil {
+	if err := s.registry.SetScopeEnabled(ctx, id, scope, false); err != nil {
 		return err
 	}
 	s.clearExtensionFromRounds(id)
-	if err := s.repository.SetAgentSkillEnabled(ctx, id, false); err != nil {
-		_ = s.registry.SetEnabled(ctx, id, true)
-		return err
-	}
 	s.invalidateAgentSkillCaches()
 	return nil
 }
@@ -326,7 +377,7 @@ func (s *AgentSkillService) Remove(ctx context.Context, scope ExecutionScope, id
 	_ = json.Unmarshal(restoreManifest.Manifest, &restoreRaw)
 	restoreRaw.Enabled = definition.Enabled
 	restoreManifest.Manifest, _ = json.Marshal(restoreRaw)
-	_ = s.registry.SetEnabled(ctx, id, false)
+	_ = s.registry.SetScopeEnabled(ctx, id, scope, false)
 	if err := s.registry.Unregister(ctx, id); err != nil {
 		return err
 	}
@@ -610,6 +661,7 @@ func (s *AgentSkillService) resolve(ctx context.Context, scope ExecutionScope, n
 		return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillNotFound, "Agent Skill not found", nameOrID, false, nil)
 	}
 	definition, _, _, err := s.loadAgentSkill(ctx, *found)
+	definition.Enabled = found.Enabled
 	return definition, err
 }
 

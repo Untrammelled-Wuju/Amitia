@@ -23,15 +23,10 @@
           <el-select :id="`decision-${row.capability}`" v-model="row.decision" @change="normalizeScope(row)">
             <el-option label="拒绝" value="deny" />
             <el-option label="仅一次" value="allow_once" />
-            <el-option label="当前会话" value="allow_session" />
             <el-option label="当前角色" value="allow_character" />
-            <el-option label="始终允许" value="allow_always" />
+            <el-option label="当前角色始终允许" value="allow_always" />
           </el-select>
-          <template v-if="row.decision === 'allow_session'">
-            <label :for="`scope-${row.capability}`">会话 ID</label>
-            <el-input :id="`scope-${row.capability}`" v-model="row.scopeId" placeholder="输入当前会话 ID" />
-          </template>
-          <template v-else-if="row.decision === 'allow_once'">
+		  <template v-if="row.decision === 'allow_once'">
             <label :for="`scope-${row.capability}`">授权角色</label>
             <el-input :id="`scope-${row.capability}`" v-model="row.scopeId" readonly />
           </template>
@@ -95,25 +90,16 @@ watch(
 )
 
 function normalizeScope(row: PermissionGrant) {
-  if (row.decision === "allow_always" || row.decision === "deny") {
-    row.scopeType = "global"
-    row.scopeId = ""
-  } else if (row.decision === "allow_session") {
-    row.scopeType = "session"
-    row.scopeId = ""
-  } else {
-    row.scopeType = "character"
-    row.scopeId = props.characterId
-  }
+	row.scopeType = "character"
+	row.scopeId = props.characterId
 }
 
 function submit() {
-  const missingSession = rows.value.find((row) => row.decision === "allow_session" && !row.scopeId.trim())
-  if (missingSession) {
-    ElMessage.warning(`请填写 ${missingSession.capability} 的会话 ID`)
-    return
-  }
-  emit("save", rows.value.map((row) => ({ ...row })))
+	if (!props.characterId) {
+		ElMessage.warning("当前角色无效")
+		return
+	}
+	emit("save", rows.value.map((row) => ({ ...row, scopeType: "character", scopeId: props.characterId })))
 }
 
 function riskType(risk: string) {

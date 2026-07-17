@@ -72,7 +72,11 @@ func (h *Handler) GetSkill(c *gin.Context) {
 }
 
 func (h *Handler) EnableSkill(c *gin.Context) {
-	if err := h.service.EnableSkill(c.Request.Context(), h.baseScope(c), c.Param("id")); err != nil {
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
+	if err := h.service.EnableSkill(c.Request.Context(), scope, c.Param("id")); err != nil {
 		h.problem(c, err)
 		return
 	}
@@ -80,7 +84,11 @@ func (h *Handler) EnableSkill(c *gin.Context) {
 }
 
 func (h *Handler) DisableSkill(c *gin.Context) {
-	if err := h.service.DisableSkill(c.Request.Context(), h.baseScope(c), c.Param("id")); err != nil {
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
+	if err := h.service.DisableSkill(c.Request.Context(), scope, c.Param("id")); err != nil {
 		h.problem(c, err)
 		return
 	}
@@ -88,7 +96,11 @@ func (h *Handler) DisableSkill(c *gin.Context) {
 }
 
 func (h *Handler) GetPermissions(c *gin.Context) {
-	items, err := h.service.GetSkillPermissions(c.Request.Context(), h.baseScope(c), c.Param("id"))
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
+	items, err := h.service.GetSkillPermissions(c.Request.Context(), scope, c.Param("id"))
 	if err != nil {
 		h.problem(c, err)
 		return
@@ -113,6 +125,10 @@ func (h *Handler) UpdatePermissions(c *gin.Context) {
 	scope.ConversationID = strings.TrimSpace(body.ConversationID)
 	scope.Channel = strings.TrimSpace(body.Channel)
 	scope.SessionID = strings.TrimSpace(body.SessionID)
+	if scope.CharacterID == "" {
+		h.problem(c, NewExtensionError(ErrSkillInputInvalid, "characterId is required", "", false, nil))
+		return
+	}
 	if err := h.service.UpdateSkillPermissions(c.Request.Context(), scope, c.Param("id"), body.Grants); err != nil {
 		h.problem(c, err)
 		return
@@ -121,7 +137,11 @@ func (h *Handler) UpdatePermissions(c *gin.Context) {
 }
 
 func (h *Handler) GetConfig(c *gin.Context) {
-	config, err := h.service.GetSkillConfig(c.Request.Context(), h.baseScope(c), c.Param("id"))
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
+	config, err := h.service.GetSkillConfig(c.Request.Context(), scope, c.Param("id"))
 	if err != nil {
 		h.problem(c, err)
 		return
@@ -134,12 +154,16 @@ func (h *Handler) GetConfig(c *gin.Context) {
 }
 
 func (h *Handler) UpdateConfig(c *gin.Context) {
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
 	raw, err := c.GetRawData()
 	if err != nil {
 		h.problem(c, NewExtensionError(ErrSkillInputInvalid, "Invalid config request", err.Error(), false, err))
 		return
 	}
-	if err := h.service.UpdateSkillConfig(c.Request.Context(), h.baseScope(c), c.Param("id"), raw); err != nil {
+	if err := h.service.UpdateSkillConfig(c.Request.Context(), scope, c.Param("id"), raw); err != nil {
 		h.problem(c, err)
 		return
 	}
@@ -147,7 +171,11 @@ func (h *Handler) UpdateConfig(c *gin.Context) {
 }
 
 func (h *Handler) ResetConfig(c *gin.Context) {
-	if err := h.service.ResetSkillConfig(c.Request.Context(), h.baseScope(c), c.Param("id")); err != nil {
+	scope, ok := h.queryScope(c, true)
+	if !ok {
+		return
+	}
+	if err := h.service.ResetSkillConfig(c.Request.Context(), scope, c.Param("id")); err != nil {
 		h.problem(c, err)
 		return
 	}

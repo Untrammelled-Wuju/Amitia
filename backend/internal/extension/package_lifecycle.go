@@ -13,6 +13,9 @@ import (
 )
 
 func (s *PackageService) Export(ctx context.Context, request ExportPackageRequest) (ExportedPackage, error) {
+	if err := s.validatePackageScope(ctx, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+		return ExportedPackage{}, err
+	}
 	extension, err := s.repository.GetPackageExtension(ctx, request.ExtensionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "扩展不可导出", request.ExtensionID, false, err)
@@ -164,10 +167,16 @@ func (s *PackageService) GetExport(ctx context.Context, userID, extensionID, exp
 }
 
 func (s *PackageService) ListVersions(ctx context.Context, extensionID, userID, scopeType, scopeID string) ([]PackageVersionView, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return nil, err
+	}
 	return s.repository.ListPackageVersions(ctx, extensionID, userID, scopeType, scopeID)
 }
 
 func (s *PackageService) CompareVersions(ctx context.Context, extensionID, userID, scopeType, scopeID, fromVersion, toVersion string) (PackageVersionDiff, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageVersionDiff{}, err
+	}
 	if _, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID); err != nil {
 		return PackageVersionDiff{}, err
 	}
@@ -261,6 +270,9 @@ func stringSetDifference(left, right []string) []string {
 }
 
 func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
+	}
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationResult{}, err
@@ -281,6 +293,9 @@ func (s *PackageService) Rollback(ctx context.Context, extensionID, version, use
 	var artifact packageArtifactRecord
 	if err := s.repository.db.WithContext(ctx).Where("artifact_id = ? AND archived_at = ''", target.ArtifactID).First(&artifact).Error; err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageArtifactInvalid, "历史 Artifact 不可用", version, false, err)
+	}
+	if err := s.revalidateRollbackTarget(ctx, target, artifact, userID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
 	}
 	var definition SkillDefinition
 	var handler SkillHandler
@@ -345,6 +360,22 @@ func (s *PackageService) Rollback(ctx context.Context, extensionID, version, use
 				return err
 			}
 		}
+		if tx.Migrator().HasColumn("extension_versions", "activation_status") {
+			if err := tx.Model(&packageVersionRecord{}).Where("extension_id = ? AND version = ?", extensionID, version).Updates(map[string]interface{}{"artifact_status": "active", "activation_status": "active", "failure_code": ""}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&packageVersionRecord{}).Where("extension_id = ? AND version <> ? AND activation_status = ?", extensionID, version, "active").Updates(map[string]interface{}{"activation_status": "archived", "artifact_status": "archived"}).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasColumn("extension_artifacts", "artifact_status") {
+			if err := tx.Model(&packageArtifactRecord{}).Where("artifact_id = ?", artifact.ArtifactID).Update("artifact_status", "active").Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&packageArtifactRecord{}).Where("extension_id = ? AND artifact_id <> ? AND artifact_status = ?", extensionID, artifact.ArtifactID, "active").Update("artifact_status", "archived").Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	}); err != nil {
 		_ = s.registry.Unregister(context.Background(), extensionID)
@@ -362,7 +393,47 @@ func (s *PackageService) Rollback(ctx context.Context, extensionID, version, use
 	return PackageOperationResult{OperationID: operationID, TraceID: traceID, Operation: PackageOperationRollback, ExtensionID: extensionID, Version: version, Enabled: current.Definition.Enabled, Status: "succeeded"}, nil
 }
 
+func (s *PackageService) revalidateRollbackTarget(ctx context.Context, target packageVersionRecord, artifact packageArtifactRecord, userID, scopeType, scopeID string) error {
+	request := PreviewPackageImportRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: target.ExtensionID + ".amitiax", Raw: target.PackageBlob}
+	if len(target.PackageBlob) > 0 {
+		parsed, err := parsePackageInput(request, s.validator, s.limits)
+		if err != nil {
+			return NewExtensionError(ErrPackageRollbackFailed, "回滚目标包重新解析失败", "", false, err)
+		}
+		preview, err := s.buildPackagePreview(ctx, request, parsed)
+		if err != nil {
+			return NewExtensionError(ErrPackageRollbackFailed, "回滚目标包重新验证失败", "", false, err)
+		}
+		if preview.ID != target.ExtensionID || preview.Version != target.Version || len(preview.Errors) > 0 || !preview.Compatible {
+			return NewExtensionError(ErrPackageRollbackFailed, "回滚目标包未通过重新验证", strings.Join(preview.Errors, "; "), false, nil)
+		}
+		return nil
+	}
+	if artifact.ArtifactKind != "workflow" {
+		return nil
+	}
+	var manifest Manifest
+	var workflow WorkflowDefinition
+	var schemas map[string]json.RawMessage
+	if json.Unmarshal([]byte(artifact.ManifestJSON), &manifest) != nil || json.Unmarshal([]byte(artifact.WorkflowJSON), &workflow) != nil || json.Unmarshal([]byte(artifact.SchemasJSON), &schemas) != nil {
+		return NewExtensionError(ErrPackageRollbackFailed, "回滚目标 Workflow 制品无效", artifact.ArtifactID, false, nil)
+	}
+	compiled, issues, err := s.compiler.Compile(ctx, workflow)
+	if err != nil {
+		return NewExtensionError(ErrPackageRollbackFailed, "回滚目标 Workflow 重新编译失败", summarizeIssues(issues), false, err)
+	}
+	parsed := parsedExtensionPackage{Manifest: manifest, Workflow: &workflow, Tests: json.RawMessage(artifact.TestsJSON), Schemas: schemas}
+	report := s.runPackageWorkflowTests(ctx, request, parsed, compiled)
+	if report.Status != "passed" {
+		return NewExtensionError(ErrPackageRollbackFailed, "回滚目标 Workflow 测试失败", report.Status, false, nil)
+	}
+	return nil
+}
+
 func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, scopeType, scopeID string) (map[string]interface{}, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return nil, err
+	}
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return nil, err
@@ -383,6 +454,9 @@ func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, 
 }
 
 func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageUninstallPreview, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageUninstallPreview{}, err
+	}
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageUninstallPreview{}, err
@@ -392,8 +466,10 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 		return PackageUninstallPreview{}, err
 	}
 	preview := PackageUninstallPreview{ExtensionID: extensionID, CurrentVersion: extension.CurrentVersion, Enabled: extension.Enabled == 1, Dependents: dependents, Grants: []string{}, ArtifactArchived: true, Cleanup: []string{"运行时注册", "Agent Skill 索引", "自有定时任务", "Capability Grant", "当前配置与缓存"}, Preserved: []string{"版本历史", "安装与操作审计", "历史运行记录", "归档 Artifact"}}
-	if s.repository.db.Migrator().HasTable("extension_schedules") {
-		_ = s.repository.db.WithContext(ctx).Table("extension_schedules").Where("plugin_id = ?", extensionID).Count(&preview.ScheduleCount).Error
+	if count, countErr := s.repository.CountOwnedResources(ctx, extensionID, scopeType, scopeID); countErr == nil {
+		preview.ScheduleCount = count
+	} else {
+		return PackageUninstallPreview{}, countErr
 	}
 	var grants []grantRecord
 	_ = s.repository.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", extensionID, scopeType, scopeID).Find(&grants).Error
@@ -408,6 +484,9 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 }
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
+	}
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationResult{}, err
@@ -431,6 +510,9 @@ func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, sco
 		return PackageOperationResult{}, NewExtensionError(ErrPackageOperationInProgress, "该扩展已有操作进行中", extensionID, true, nil)
 	}
 	defer unlock()
+	if err := s.repository.CleanupOwnedResources(ctx, extensionID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
+	}
 	registered, err := s.registry.Get(ctx, extensionID)
 	if err != nil {
 		return PackageOperationResult{}, err
@@ -460,6 +542,11 @@ func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, sco
 				return err
 			}
 		}
+		if tx.Migrator().HasTable(&scopeBindingRecord{}) {
+			if err := tx.Where("extension_id = ?", extensionID).Delete(&scopeBindingRecord{}).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if transactionErr != nil {
@@ -476,6 +563,16 @@ func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, sco
 	_ = s.repository.CreatePackageOperation(ctx, record)
 	s.metric("extension_package_uninstall_total")
 	return PackageOperationResult{OperationID: operationID, TraceID: traceID, Operation: PackageOperationUninstall, ExtensionID: extensionID, Version: extension.CurrentVersion, Enabled: false, Status: "succeeded"}, nil
+}
+
+func (s *PackageService) validatePackageScope(ctx context.Context, userID, scopeType, scopeID string) error {
+	if scopeType == string(ScopeCharacter) {
+		return s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: userID, CharacterID: scopeID})
+	}
+	if scopeType != "" && scopeType != string(ScopeGlobal) {
+		return NewExtensionError(ErrSkillPermissionDenied, "扩展作用域无效", scopeType, false, nil)
+	}
+	return nil
 }
 
 func (s *PackageService) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationView, error) {

@@ -216,6 +216,7 @@ export interface PackageImportPreview {
   totalSize: number
   fileCount: number
   testStatus: string
+	testReport?: PackageDryRunReport
   risks: PackageRisk[]
   warnings: string[]
   errors: string[]
@@ -226,8 +227,10 @@ export interface PackageImportPreview {
   upgradeDiff?: Record<string, unknown>
   expiresAt: string
 }
+export interface PackageDryRunReport { status: string; caseCount: number; passedCount: number; failedCount: number; durationMs: number; capabilities: string[]; sideEffects: Array<{ type: string; targetId?: string; confirmed: boolean }>; cases: PackageDryRunCaseReport[] }
+export interface PackageDryRunCaseReport { id: string; name: string; mode: string; status: string; durationMs: number; steps: Array<{ stepId: string; type: string; status: string; mocked: boolean; durationMs: number; error?: { code: string; detail?: string } }>; assertions: Array<{ type: string; passed: boolean; message?: string }>; output?: unknown; error?: { code: string; message: string; detail?: string } }
 export interface PackageOperationResult { operationId: string; traceId: string; operation: string; extensionId: string; version: string; enabled: boolean; status: string }
 export interface PackageOperation { id: string; operation: string; extensionId: string; previousVersion?: string; targetVersion?: string; source: string; packageHash: string; signatureStatus: string; signerFingerprint?: string; scopeType: string; scopeId: string; status: string; errorCode?: string; traceId: string; createdAt: string; completedAt?: string }
-export interface PackageVersion { version: string; manifest: Record<string, unknown>; artifactId: string; artifactHash: string; packageHash: string; source: string; signatureStatus: string; signerFingerprint?: string; compatibilityStatus: string; capabilities: string[]; installedAt: string; installedBy: string; active: boolean; validationStatus: string; testStatus: string; archived: boolean }
+export interface PackageVersion { version: string; manifest: Record<string, unknown>; artifactId: string; artifactHash: string; packageHash: string; source: string; signatureStatus: string; signerFingerprint?: string; compatibilityStatus: string; capabilities: string[]; installedAt: string; installedBy: string; active: boolean; validationStatus: string; testStatus: string; artifactStatus: string; activationStatus: string; operationId?: string; failureCode?: string; archived: boolean }
 export interface PackageSigner { fingerprint: string; algorithm: string; displayName: string; trusted: boolean; trustedAt?: string; revokedAt?: string }
 export interface ExportedPackage { exportId: string; fileName: string; mime: string; size: number; hash: string; version: string; format: string; testsIncluded: boolean; readmeIncluded: boolean; sbomIncluded: boolean; scriptsIncluded: boolean; secretScan: string; signatureStatus: string; expiresAt: string }

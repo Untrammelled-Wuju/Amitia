@@ -179,7 +179,7 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 		t.Fatal("Agent Skill must be disabled by default")
 	}
 	scope := ExecutionScope{UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web", TraceID: "trace-1", Trigger: TriggerLLM}
-	if err := service.Enable(ctx, scope, installed.ExtensionID); err != nil {
+	if err := service.Enable(ctx, ExecutionScope{UserID: "user-1"}, installed.ExtensionID); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := service.ResolveCatalog(ctx, scope)
@@ -201,14 +201,22 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	if err != nil || len(catalog) != 1 || catalog[0].ExtensionID != characterSkill.ExtensionID {
 		t.Fatalf("character priority failed: %+v %v", catalog, err)
 	}
-	_, _, err = service.Get(ctx, ExecutionScope{UserID: "user-1", CharacterID: "char-2"}, characterSkill.ExtensionID)
-	assertExtensionErrorCode(t, err, ErrAgentSkillScopeForbidden)
+	globalView, _, err := service.Get(ctx, ExecutionScope{UserID: "user-1", CharacterID: "char-2"}, characterSkill.ExtensionID)
+	if err != nil || !globalView.Enabled || globalView.Scope != AgentSkillScopeGlobal {
+		t.Fatalf("global binding not inherited: %+v %v", globalView, err)
+	}
 	if err := service.Disable(ctx, scope, characterSkill.ExtensionID); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err = service.ResolveCatalog(ctx, scope)
-	if err != nil || len(catalog) != 1 || catalog[0].ExtensionID != installed.ExtensionID {
-		t.Fatalf("global fallback failed: %+v %v", catalog, err)
+	if err != nil || len(catalog) != 0 {
+		t.Fatalf("character disable did not override global binding: %+v %v", catalog, err)
+	}
+	if err := service.Enable(ctx, scope, characterSkill.ExtensionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ResolveCatalog(ctx, scope); err != nil {
+		t.Fatal(err)
 	}
 	activation, err := service.Activate(ctx, ActivateAgentSkillRequest{Scope: scope, NameOrID: "code-review", Explicit: true})
 	if err != nil || !strings.Contains(activation.Prompt, "active_agent_skill") {

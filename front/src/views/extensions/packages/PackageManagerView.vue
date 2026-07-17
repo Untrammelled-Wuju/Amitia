@@ -66,6 +66,18 @@
             <el-alert v-for="warning in preview.warnings" :key="warning" :title="warning" type="warning" :closable="false" show-icon />
           </article>
 
+			<article v-if="preview.testReport" class="panel wide-panel">
+				<div class="title-row"><h2>Dry Run 与测试报告</h2><el-tag :type="preview.testReport.status === 'passed' ? 'success' : 'danger'">{{ preview.testReport.passedCount }} 通过 / {{ preview.testReport.failedCount }} 失败 · {{ preview.testReport.durationMs }} ms</el-tag></div>
+				<el-collapse>
+					<el-collapse-item v-for="testCase in preview.testReport.cases" :key="testCase.id" :name="testCase.id">
+						<template #title><span>{{ testCase.name }} · {{ testCase.mode }} · {{ testCase.status }}</span></template>
+						<el-table :data="testCase.steps" size="small"><el-table-column prop="stepId" label="步骤" /><el-table-column prop="type" label="类型" /><el-table-column prop="status" label="状态" /><el-table-column prop="mocked" label="Mock" /></el-table>
+						<ul v-if="testCase.assertions.length" class="message-list"><li v-for="(assertion, index) in testCase.assertions" :key="`${testCase.id}-${index}`" :class="assertion.passed ? 'risk-low' : 'risk-high'"><strong>{{ assertion.type }}</strong><span>{{ assertion.passed ? '通过' : assertion.message || '失败' }}</span></li></ul>
+						<el-alert v-if="testCase.error" :title="`${testCase.error.code}：${testCase.error.detail || testCase.error.message}`" type="error" :closable="false" show-icon />
+					</el-collapse-item>
+				</el-collapse>
+			</article>
+
           <article v-if="preview.workflowSteps?.length || preview.agentSkill" class="panel wide-panel">
             <h2>{{ preview.skillType === 'workflow' ? 'Workflow 摘要' : 'AgentSkills 摘要' }}</h2>
             <div v-if="preview.workflowSteps?.length" class="tag-list"><el-tag v-for="step in preview.workflowSteps" :key="step">{{ step }}</el-tag></div>

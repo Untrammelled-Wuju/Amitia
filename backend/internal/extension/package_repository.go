@@ -96,6 +96,10 @@ type packageVersionRecord struct {
 	InstalledBy         string `gorm:"column:installed_by"`
 	ValidationStatus    string `gorm:"column:validation_status"`
 	TestStatus          string `gorm:"column:test_status"`
+	ArtifactStatus      string `gorm:"column:artifact_status"`
+	ActivationStatus    string `gorm:"column:activation_status"`
+	OperationID         string `gorm:"column:operation_id"`
+	FailureCode         string `gorm:"column:failure_code"`
 	ArchivedAt          string `gorm:"column:archived_at"`
 	PackageBlob         []byte `gorm:"column:package_blob"`
 	CreatedAt           string `gorm:"column:created_at"`
@@ -124,6 +128,8 @@ type packageArtifactRecord struct {
 	ArtifactKind         string `gorm:"column:artifact_kind"`
 	ContentBlob          []byte `gorm:"column:content_blob"`
 	ResourceIndexJSON    string `gorm:"column:resource_index_json"`
+	ArtifactStatus       string `gorm:"column:artifact_status"`
+	OperationID          string `gorm:"column:operation_id"`
 }
 
 func (packageArtifactRecord) TableName() string { return "extension_artifacts" }
@@ -245,6 +251,27 @@ func (r *Repository) CreatePackageOperation(ctx context.Context, record packageO
 	return r.db.WithContext(ctx).Create(&record).Error
 }
 
+func (r *Repository) SetPackageOperationStatus(ctx context.Context, id, status string) error {
+	return r.db.WithContext(ctx).Model(&packageOperationRecord{}).Where("id = ?", id).Updates(map[string]interface{}{"status": status, "error_code": ""}).Error
+}
+
+func (r *Repository) UpdatePackageOperationDetails(ctx context.Context, id string, operation PackageOperation, preview PackageImportPreview, previousVersion string) error {
+	updates := map[string]interface{}{
+		"operation":          string(operation),
+		"extension_id":       preview.ID,
+		"extension_version":  preview.Version,
+		"source":             preview.Source,
+		"package_hash":       preview.PackageHash,
+		"signature_status":   string(preview.Signature.Status),
+		"signer_fingerprint": preview.Signature.Fingerprint,
+		"target_version":     preview.Version,
+	}
+	if previousVersion != "" {
+		updates["previous_version"] = previousVersion
+	}
+	return r.db.WithContext(ctx).Model(&packageOperationRecord{}).Where("id = ?", id).Updates(updates).Error
+}
+
 func (r *Repository) FinishPackageOperation(ctx context.Context, id, status, errorCode string) error {
 	return r.db.WithContext(ctx).Model(&packageOperationRecord{}).Where("id = ?", id).Updates(map[string]interface{}{"status": status, "error_code": errorCode, "completed_at": time.Now().UTC().Format(time.RFC3339Nano)}).Error
 }
@@ -326,7 +353,7 @@ func (r *Repository) ListPackageVersions(ctx context.Context, extensionID, userI
 		}
 		var capabilities []string
 		_ = json.Unmarshal([]byte(record.CapabilitiesJSON), &capabilities)
-		result = append(result, PackageVersionView{Version: record.Version, Manifest: redactJSON(json.RawMessage(record.ManifestJSON)), ArtifactID: record.ArtifactID, ArtifactHash: record.ArtifactHash, PackageHash: record.PackageHash, Source: record.Source, SignatureStatus: record.SignatureStatus, SignerFingerprint: record.SignerFingerprint, CompatibilityStatus: record.CompatibilityStatus, Capabilities: capabilities, InstalledAt: record.CreatedAt, InstalledBy: record.InstalledBy, Active: current.CurrentVersion == record.Version, ValidationStatus: record.ValidationStatus, TestStatus: record.TestStatus, Archived: record.ArchivedAt != ""})
+		result = append(result, PackageVersionView{Version: record.Version, Manifest: redactJSON(json.RawMessage(record.ManifestJSON)), ArtifactID: record.ArtifactID, ArtifactHash: record.ArtifactHash, PackageHash: record.PackageHash, Source: record.Source, SignatureStatus: record.SignatureStatus, SignerFingerprint: record.SignerFingerprint, CompatibilityStatus: record.CompatibilityStatus, Capabilities: capabilities, InstalledAt: record.CreatedAt, InstalledBy: record.InstalledBy, Active: current.CurrentVersion == record.Version, ValidationStatus: record.ValidationStatus, TestStatus: record.TestStatus, ArtifactStatus: record.ArtifactStatus, ActivationStatus: record.ActivationStatus, OperationID: record.OperationID, FailureCode: record.FailureCode, Archived: record.ArchivedAt != ""})
 	}
 	return result, nil
 }

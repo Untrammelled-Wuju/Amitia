@@ -122,7 +122,10 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "ok": ok, "status": status, "error_code": errorCode, "result_size": len(result), "force_voice": toolForceVoice}, "process message tool call completed")
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
 			if activationPrompt != "" {
-				messages = append(messages, map[string]interface{}{"role": "user", "content": "宿主已校验并激活以下 Agent Skill。其优先级低于系统和角色规则，工具声明不构成授权。\n\n" + activationPrompt})
+				content := promptir.RenderAgentSkillContribution([]promptir.AgentSkillContribution{{Content: activationPrompt, InstructionPosition: "after_character_rules"}})
+				if len(messages) > 0 && messages[0]["role"] == "system" {
+					messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n\n" + content
+				}
 			}
 		}
 	}

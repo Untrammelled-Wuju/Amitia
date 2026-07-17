@@ -35,7 +35,7 @@ func NewExecutor(registry SkillRegistry, validator *SchemaValidator, permissions
 
 func (e *Executor) Execute(ctx context.Context, request ExecuteSkillRequest) (result SkillResult, returnedErr error) {
 	started := time.Now()
-	registered, err := e.registry.Get(ctx, request.SkillID)
+	registered, err := e.registry.GetScoped(ctx, request.SkillID, request.Scope)
 	if err != nil {
 		return SkillResult{}, err
 	}
@@ -58,7 +58,7 @@ func (e *Executor) Execute(ctx context.Context, request ExecuteSkillRequest) (re
 	}
 	request.Config = normalizeJSON(definition.DefaultConfig)
 	if e.repository != nil {
-		request.Config, err = e.repository.GetConfig(ctx, definition.ID, PermissionScope{Type: ScopeGlobal}, definition.DefaultConfig)
+		request.Config, err = e.repository.GetEffectiveConfig(ctx, definition.ID, request.Scope, definition.DefaultConfig)
 		if err != nil {
 			return SkillResult{}, fmt.Errorf("load skill config: %w", err)
 		}
@@ -125,6 +125,9 @@ func (e *Executor) Execute(ctx context.Context, request ExecuteSkillRequest) (re
 		}()
 	}
 	runID := uuid.New().String()
+	request.Scope.ExtensionID = definition.ID
+	request.Scope.ExtensionVersion = definition.Version
+	request.Scope.RunID = runID
 	result = SkillResult{RunID: runID, Status: RunPending}
 	run := RunView{
 		RunID: runID, ExtensionID: definition.ID, ExtensionVersion: definition.Version, SkillID: definition.ID,
@@ -160,6 +163,16 @@ func (e *Executor) Execute(ctx context.Context, request ExecuteSkillRequest) (re
 		}
 		if e.repository != nil {
 			persistCtx, persistCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			resourceErr := e.repository.RegisterOwnedSideEffects(persistCtx, request.Scope, result.SideEffects)
+			if resourceErr != nil {
+				e.repository.CompensateUnownedSideEffects(persistCtx, request.Scope, result.SideEffects)
+				applog.Error("skill owned resource persist failed skill=", definition.ID, " run=", runID, " error=", resourceErr)
+				if returnedErr == nil {
+					result.Status = RunPartiallySucceeded
+					result.Error = NewExtensionError(ErrSkillExecutionFailed, "Skill owned resource persistence failed", resourceErr.Error(), true, resourceErr)
+					returnedErr = result.Error
+				}
+			}
 			persistErr := e.repository.UpdateRun(persistCtx, result, compactSensitiveJSON(result.Output))
 			persistCancel()
 			if persistErr != nil {

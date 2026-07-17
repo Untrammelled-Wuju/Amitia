@@ -18,6 +18,11 @@ type packageConfigMigration struct {
 }
 
 func (s *PackageService) Install(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {
+	if request.ScopeType == string(ScopeCharacter) {
+		if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); err != nil {
+			return PackageOperationResult{}, err
+		}
+	}
 	session, err := s.repository.AcquirePackageImportSession(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return PackageOperationResult{}, err
@@ -29,6 +34,22 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		}
 		_ = s.repository.FinishPackageImportSession(context.Background(), session.ID, status)
 	}()
+	operationID := uuid.NewString()
+	traceID := uuid.NewString()
+	operation := PackageOperationInstall
+	record := packageOperationRecord{ID: operationID, Operation: string(operation), PackageHash: session.PackageHash, UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID, Status: "pending", TraceID: traceID, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	if err := s.repository.CreatePackageOperation(ctx, record); err != nil {
+		return PackageOperationResult{}, err
+	}
+	defer func() {
+		if err != nil {
+			code := asExtensionError(err).Code
+			_ = s.repository.FinishPackageOperation(context.Background(), operationID, "failed", code)
+			if operation == PackageOperationUpgrade {
+				s.metric("extension_package_upgrade_failure_total")
+			}
+		}
+	}()
 	parsed, err := s.reparsePackageSession(session)
 	if err != nil {
 		return PackageOperationResult{}, err
@@ -36,8 +57,28 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 	if parsed.PackageHash != session.PackageHash {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageChecksumMismatch, "正式安装时包 Hash 已变化", "", false, nil)
 	}
-	preview, err := s.buildPackagePreview(ctx, PreviewPackageImportRequest{UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID, FileName: session.FileName}, parsed)
+	extensionID, extensionVersion := packageOperationIdentity(request, parsed)
+	previousVersion := ""
+	if extensionID != "" {
+		if current, getErr := s.repository.GetPackageExtension(ctx, extensionID, request.UserID, request.ScopeType, request.ScopeID); getErr == nil {
+			previousVersion = current.CurrentVersion
+		}
+	}
+	identity := PackageImportPreview{ID: extensionID, Version: extensionVersion, Source: parsed.Source, PackageHash: parsed.PackageHash, Signature: parsed.Signature}
+	if err := s.repository.UpdatePackageOperationDetails(ctx, operationID, operation, identity, previousVersion); err != nil {
+		return PackageOperationResult{}, err
+	}
+	if err := s.repository.SetPackageOperationStatus(ctx, operationID, "validating"); err != nil {
+		return PackageOperationResult{}, err
+	}
+	preview, err := s.buildPackagePreview(ctx, PreviewPackageImportRequest{UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID, FileName: session.FileName, OperationID: operationID}, parsed)
 	if err != nil {
+		return PackageOperationResult{}, err
+	}
+	if preview.Conflict == PackageConflictUpgrade {
+		operation = PackageOperationUpgrade
+	}
+	if err := s.repository.UpdatePackageOperationDetails(ctx, operationID, operation, preview, previousVersion); err != nil {
 		return PackageOperationResult{}, err
 	}
 	if request.ExpectedExtensionID != "" && preview.ID != request.ExpectedExtensionID {
@@ -85,26 +126,20 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		return PackageOperationResult{}, NewExtensionError(ErrPackageVersionConflict, "低版本包不能作为普通安装", preview.Version, false, nil)
 	}
 	if preview.Conflict == PackageConflictSame {
-		return PackageOperationResult{OperationID: session.ID, TraceID: uuid.NewString(), Operation: PackageOperationInstall, ExtensionID: preview.ID, Version: preview.Version, Enabled: false, Status: "succeeded"}, nil
+		if err := s.repository.FinishPackageOperation(ctx, operationID, "succeeded", ""); err != nil {
+			return PackageOperationResult{}, err
+		}
+		return PackageOperationResult{OperationID: operationID, TraceID: traceID, Operation: PackageOperationInstall, ExtensionID: preview.ID, Version: preview.Version, Enabled: false, Status: "succeeded"}, nil
 	}
 	unlock, ok := s.lockExtension(preview.ID)
 	if !ok {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageOperationInProgress, "该扩展已有安装类操作进行中", preview.ID, true, nil)
 	}
 	defer unlock()
-	operation := PackageOperationInstall
 	if preview.Conflict == PackageConflictUpgrade {
-		operation = PackageOperationUpgrade
 		s.metric("extension_package_upgrade_total")
 	}
-	traceID := uuid.NewString()
-	operationID := uuid.NewString()
-	previousVersion := ""
-	if current, getErr := s.repository.GetPackageExtension(ctx, preview.ID, request.UserID, request.ScopeType, request.ScopeID); getErr == nil {
-		previousVersion = current.CurrentVersion
-	}
-	record := packageOperationRecord{ID: operationID, ExtensionID: preview.ID, ExtensionVersion: preview.Version, Operation: string(operation), Source: preview.Source, PackageHash: preview.PackageHash, SignatureStatus: string(preview.Signature.Status), SignerFingerprint: preview.Signature.Fingerprint, PreviousVersion: previousVersion, TargetVersion: preview.Version, UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID, Status: "applying", TraceID: traceID, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	if err := s.repository.CreatePackageOperation(ctx, record); err != nil {
+	if err := s.repository.SetPackageOperationStatus(ctx, operationID, "staging"); err != nil {
 		return PackageOperationResult{}, err
 	}
 	if restored, restoreErr := s.reinstallArchivedPackage(ctx, request, preview, operationID, traceID); restoreErr != nil {
@@ -115,15 +150,6 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		}
 		return *restored, nil
 	}
-	defer func() {
-		if err != nil {
-			code := asExtensionError(err).Code
-			_ = s.repository.FinishPackageOperation(context.Background(), operationID, "failed", code)
-			if operation == PackageOperationUpgrade {
-				s.metric("extension_package_upgrade_failure_total")
-			}
-		}
-	}()
 	if parsed.Workflow != nil {
 		result, err = s.installWorkflowPackage(ctx, request, parsed, preview, operationID, traceID)
 	} else {
@@ -136,6 +162,20 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		return PackageOperationResult{}, err
 	}
 	return result, nil
+}
+
+func packageOperationIdentity(request InstallPackageRequest, parsed parsedExtensionPackage) (string, string) {
+	if parsed.Format == PackageFormatAmitiax {
+		return parsed.Manifest.Metadata.ID, parsed.Manifest.Metadata.Version
+	}
+	if parsed.AgentSkill == nil {
+		return "", ""
+	}
+	version := "0.0.0+" + parsed.AgentSkill.Definition.ContentHash[:12]
+	if sourceVersion := parsed.AgentSkill.Definition.Metadata["version"]; semverPattern.MatchString(sourceVersion) {
+		version = sourceVersion
+	}
+	return localAgentSkillExtensionID(request.UserID, request.ScopeType, request.ScopeID, parsed.AgentSkill.Definition.Name), version
 }
 
 func packagePreviewHasRisk(preview PackageImportPreview, code string) bool {
@@ -276,7 +316,7 @@ func (s *PackageService) installWorkflowPackage(ctx context.Context, request Ins
 	schemas := packageSchemas(parsed, manifest)
 	schemasRaw, _ := json.Marshal(schemas)
 	compiledRaw, _ := json.Marshal(compiled)
-	artifact := packageArtifactRecord{ID: uuid.NewString(), ArtifactID: artifactID, ExtensionID: preview.ID, ExtensionVersion: preview.Version, Source: parsed.Source, SessionID: request.SessionID, ManifestJSON: string(manifestRaw), WorkflowJSON: string(parsed.WorkflowRaw), SchemasJSON: string(schemasRaw), CompiledWorkflowJSON: string(compiledRaw), TestsJSON: string(normalizeJSONArray(parsed.Tests)), ReadmeText: string(parsed.Files["docs/README.md"]), SizeBytes: int64(len(parsed.Raw)), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), ArtifactKind: "workflow", ContentBlob: append([]byte(nil), parsed.Raw...), ResourceIndexJSON: "[]"}
+	artifact := packageArtifactRecord{ID: uuid.NewString(), ArtifactID: artifactID, ExtensionID: preview.ID, ExtensionVersion: preview.Version, Source: parsed.Source, SessionID: request.SessionID, ManifestJSON: string(manifestRaw), WorkflowJSON: string(parsed.WorkflowRaw), SchemasJSON: string(schemasRaw), CompiledWorkflowJSON: string(compiledRaw), TestsJSON: string(normalizeJSONArray(parsed.Tests)), ReadmeText: string(parsed.Files["docs/README.md"]), SizeBytes: int64(len(parsed.Raw)), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), ArtifactKind: "workflow", ContentBlob: append([]byte(nil), parsed.Raw...), ResourceIndexJSON: "[]", ArtifactStatus: "staged", OperationID: operationID}
 	artifact.Checksum = artifactChecksum(artifact.base())
 	definition := skillDefinitionFromManifest(manifest, schemas)
 	definition.Dependencies = dependencyIDs(compiled.Dependencies)
@@ -320,18 +360,29 @@ func (s *PackageService) installInstructionsPackage(ctx context.Context, request
 		return PackageOperationResult{}, err
 	}
 	resources, _ := json.Marshal(definition.Resources)
-	artifact := packageArtifactRecord{ID: uuid.NewString(), ArtifactID: definition.ArtifactID, ExtensionID: preview.ID, ExtensionVersion: preview.Version, Source: parsed.Source, SessionID: request.SessionID, ManifestJSON: string(manifestDefinition.Manifest), WorkflowJSON: "{}", SchemasJSON: "{}", CompiledWorkflowJSON: "{}", TestsJSON: "[]", Checksum: definition.ContentHash, SizeBytes: int64(len(agentArchive)), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), ArtifactKind: "agent-skill", ContentBlob: agentArchive, ResourceIndexJSON: string(resources)}
+	artifact := packageArtifactRecord{ID: uuid.NewString(), ArtifactID: definition.ArtifactID, ExtensionID: preview.ID, ExtensionVersion: preview.Version, Source: parsed.Source, SessionID: request.SessionID, ManifestJSON: string(manifestDefinition.Manifest), WorkflowJSON: "{}", SchemasJSON: "{}", CompiledWorkflowJSON: "{}", TestsJSON: "[]", Checksum: definition.ContentHash, SizeBytes: int64(len(agentArchive)), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), ArtifactKind: "agent-skill", ContentBlob: agentArchive, ResourceIndexJSON: string(resources), ArtifactStatus: "staged", OperationID: operationID}
 	metadata := buildAgentSkillMetadataRecord(definition, parsed.AgentSkill.Report)
 	return s.commitPackageVersion(ctx, request, parsed, preview, artifact, manifestDefinition, nil, nil, nil, operationID, traceID, &metadata)
 }
 
 func (s *PackageService) commitPackageVersion(ctx context.Context, request InstallPackageRequest, parsed parsedExtensionPackage, preview PackageImportPreview, artifact packageArtifactRecord, definition SkillDefinition, handler SkillHandler, dependencies []ResolvedSkillDependency, configMigrations []packageConfigMigration, operationID, traceID string, agentMetadata *agentSkillMetadataRecord) (PackageOperationResult, error) {
+	if err := s.repository.SetPackageOperationStatus(ctx, operationID, "staging"); err != nil {
+		return PackageOperationResult{}, err
+	}
 	var oldRegistered *RegisteredSkill
 	if current, err := s.registry.Get(ctx, preview.ID); err == nil {
 		oldRegistered = &current
 	}
+	installScope := ExecutionScope{UserID: request.UserID}
+	if request.ScopeType == string(ScopeCharacter) {
+		installScope.CharacterID = request.ScopeID
+	}
+	previousEnabled := false
+	if oldScoped, scopeErr := s.registry.GetScoped(ctx, preview.ID, installScope); scopeErr == nil {
+		previousEnabled = oldScoped.Definition.Enabled
+	}
 	capabilitiesJSON, _ := json.Marshal(sortedPackageCapabilities(definition.Capabilities))
-	version := packageVersionRecord{ID: uuid.NewString(), ExtensionID: preview.ID, Version: preview.Version, ManifestJSON: string(definition.Manifest), Checksum: artifact.Checksum, ArtifactID: artifact.ArtifactID, ArtifactHash: artifact.Checksum, PackageHash: preview.PackageHash, Source: preview.Source, SignatureStatus: string(preview.Signature.Status), SignerFingerprint: preview.Signature.Fingerprint, CompatibilityStatus: "compatible", CapabilitiesJSON: string(capabilitiesJSON), InstalledBy: request.UserID, ValidationStatus: "valid", TestStatus: preview.TestStatus, PackageBlob: append([]byte(nil), parsed.Raw...), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	version := packageVersionRecord{ID: uuid.NewString(), ExtensionID: preview.ID, Version: preview.Version, ManifestJSON: string(definition.Manifest), Checksum: artifact.Checksum, ArtifactID: artifact.ArtifactID, ArtifactHash: artifact.Checksum, PackageHash: preview.PackageHash, Source: preview.Source, SignatureStatus: string(preview.Signature.Status), SignerFingerprint: preview.Signature.Fingerprint, CompatibilityStatus: "compatible", CapabilitiesJSON: string(capabilitiesJSON), InstalledBy: request.UserID, ValidationStatus: "valid", TestStatus: preview.TestStatus, ArtifactStatus: "staged", ActivationStatus: "staged", OperationID: operationID, PackageBlob: append([]byte(nil), parsed.Raw...), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if err := s.repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&artifact).Error; err != nil {
 			return err
@@ -352,6 +403,10 @@ func (s *PackageService) commitPackageVersion(ctx context.Context, request Insta
 	if oldRegistered != nil {
 		_ = s.registry.Unregister(ctx, preview.ID)
 	}
+	if err := s.repository.SetPackageOperationStatus(ctx, operationID, "registering"); err != nil {
+		cleanupPrepared()
+		return PackageOperationResult{}, err
+	}
 	if err := s.registry.Register(ctx, definition, handler); err != nil {
 		if oldRegistered != nil {
 			_ = s.registry.Register(ctx, oldRegistered.Definition, oldRegistered.Handler)
@@ -359,10 +414,32 @@ func (s *PackageService) commitPackageVersion(ctx context.Context, request Insta
 		cleanupPrepared()
 		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Registry 注册目标版本失败", "", false, err)
 	}
-	enabled := false
-	if oldRegistered != nil {
-		enabled = oldRegistered.Definition.Enabled
-		_ = s.registry.SetEnabled(ctx, preview.ID, enabled)
+	if request.ScopeType == string(ScopeCharacter) {
+		if err := s.repository.DeleteScopeBinding(ctx, preview.ID, PermissionScope{Type: ScopeGlobal}); err != nil {
+			_ = s.registry.Unregister(context.Background(), preview.ID)
+			if oldRegistered != nil {
+				_ = s.registry.Register(context.Background(), oldRegistered.Definition, oldRegistered.Handler)
+			}
+			cleanupPrepared()
+			return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "角色作用域绑定失败", "", false, err)
+		}
+	}
+	enabled := previousEnabled
+	if err := s.registry.SetScopeEnabled(ctx, preview.ID, installScope, enabled); err != nil {
+		_ = s.registry.Unregister(context.Background(), preview.ID)
+		if oldRegistered != nil {
+			_ = s.registry.Register(context.Background(), oldRegistered.Definition, oldRegistered.Handler)
+		}
+		cleanupPrepared()
+		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "作用域状态恢复失败", "", false, err)
+	}
+	if err := s.repository.SetPackageOperationStatus(ctx, operationID, "committing"); err != nil {
+		_ = s.registry.Unregister(context.Background(), preview.ID)
+		if oldRegistered != nil {
+			_ = s.registry.Register(context.Background(), oldRegistered.Definition, oldRegistered.Handler)
+		}
+		cleanupPrepared()
+		return PackageOperationResult{}, err
 	}
 	transactionErr := s.repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -404,6 +481,22 @@ func (s *PackageService) commitPackageVersion(ctx context.Context, request Insta
 				return err
 			}
 		}
+		if tx.Migrator().HasColumn("extension_versions", "artifact_status") {
+			if err := tx.Model(&packageVersionRecord{}).Where("extension_id = ? AND version = ?", preview.ID, preview.Version).Updates(map[string]interface{}{"artifact_status": "active", "activation_status": "active", "failure_code": ""}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&packageVersionRecord{}).Where("extension_id = ? AND version <> ? AND activation_status = ?", preview.ID, preview.Version, "active").Updates(map[string]interface{}{"activation_status": "archived", "artifact_status": "archived"}).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasColumn("extension_artifacts", "artifact_status") {
+			if err := tx.Model(&packageArtifactRecord{}).Where("artifact_id = ?", artifact.ArtifactID).Updates(map[string]interface{}{"artifact_status": "active", "operation_id": operationID}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&packageArtifactRecord{}).Where("extension_id = ? AND artifact_id <> ? AND artifact_status = ?", preview.ID, artifact.ArtifactID, "active").Update("artifact_status", "archived").Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if transactionErr != nil {
@@ -415,7 +508,13 @@ func (s *PackageService) commitPackageVersion(ctx context.Context, request Insta
 		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "版本切换事务失败", "", false, transactionErr)
 	}
 	if s.agentSkills != nil {
+		if err := s.repository.SetPackageOperationStatus(ctx, operationID, "refreshing"); err != nil {
+			return PackageOperationResult{}, err
+		}
 		s.agentSkills.invalidateAgentSkillCaches()
+	}
+	if scoped, scopedErr := s.registry.GetScoped(ctx, preview.ID, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); scopedErr == nil {
+		enabled = scoped.Definition.Enabled
 	}
 	return PackageOperationResult{OperationID: operationID, TraceID: traceID, Operation: packageOperationForPreview(preview), ExtensionID: preview.ID, Version: preview.Version, Enabled: enabled, Status: "succeeded"}, nil
 }

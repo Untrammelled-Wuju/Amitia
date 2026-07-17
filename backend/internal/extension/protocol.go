@@ -145,6 +145,8 @@ type SkillDefinition struct {
 	Retryable           bool            `json:"retryable"`
 	Idempotent          bool            `json:"idempotent"`
 	Enabled             bool            `json:"enabled"`
+	EffectiveScopeType  ScopeType       `json:"effectiveScopeType,omitempty"`
+	EffectiveScopeID    string          `json:"effectiveScopeId,omitempty"`
 	Compatible          bool            `json:"compatible"`
 	CompatibilityReason string          `json:"compatibilityReason,omitempty"`
 	Author              string          `json:"author,omitempty"`
@@ -154,17 +156,20 @@ type SkillDefinition struct {
 }
 
 type ExecutionScope struct {
-	UserID         string       `json:"userId"`
-	CharacterID    string       `json:"characterId"`
-	ConversationID string       `json:"conversationId"`
-	Channel        string       `json:"channel"`
-	SessionID      string       `json:"sessionId"`
-	Trigger        SkillTrigger `json:"trigger"`
-	TraceID        string       `json:"traceId"`
-	RequestID      string       `json:"requestId"`
-	ToolCallID     string       `json:"toolCallId"`
-	CorrelationID  string       `json:"correlationId"`
-	CausationID    string       `json:"causationId"`
+	UserID           string       `json:"userId"`
+	CharacterID      string       `json:"characterId"`
+	ConversationID   string       `json:"conversationId"`
+	Channel          string       `json:"channel"`
+	SessionID        string       `json:"sessionId"`
+	Trigger          SkillTrigger `json:"trigger"`
+	TraceID          string       `json:"traceId"`
+	RequestID        string       `json:"requestId"`
+	ToolCallID       string       `json:"toolCallId"`
+	CorrelationID    string       `json:"correlationId"`
+	CausationID      string       `json:"causationId"`
+	ExtensionID      string       `json:"extensionId,omitempty"`
+	ExtensionVersion string       `json:"extensionVersion,omitempty"`
+	RunID            string       `json:"runId,omitempty"`
 }
 
 type PermissionScope struct {

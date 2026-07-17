@@ -25,7 +25,7 @@ func packageTestService(t *testing.T) (*PackageService, *Registry, *AgentSkillSe
 	if err != nil {
 		t.Fatal(err)
 	}
-	migrations := []migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration(), migration.ExtensionWorkshopMigration(), migration.ExtensionAgentSkillsMigration(), migration.ExtensionAgentSkillTraceMigration(), migration.ExtensionPackagesMigration()}
+	migrations := []migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration(), migration.ExtensionWorkshopMigration(), migration.ExtensionAgentSkillsMigration(), migration.ExtensionAgentSkillTraceMigration(), migration.ExtensionPackagesMigration(), migration.ExtensionScopeBindingsMigration(), migration.ExtensionOwnedResourcesMigration(), migration.ExtensionPackageRecoveryMigration(), migration.ExtensionArtifactRecoveryMigration(), migration.ExtensionScheduleSourceMigration(), migration.ExtensionScheduleOwnershipRepairMigration()}
 	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply(migrations); err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +99,57 @@ func TestPackageArchiveSecurityAndChecksums(t *testing.T) {
 	files["a.txt"] = []byte("changed")
 	if err := validateChecksums(files); asExtensionError(err).Code != ErrPackageChecksumMismatch {
 		t.Fatalf("unexpected mismatch error: %v", err)
+	}
+}
+
+func TestPackagePreviewExecutesAssertions(t *testing.T) {
+	service, _, _, db := packageTestService(t)
+	tests := []WorkshopTestCase{{ID: "wrong-output", Name: "错误输出", Mode: string(WorkflowDryRun), Input: json.RawMessage(`{"name":"A"}`), Config: json.RawMessage(`{}`), Assertions: []TestAssertion{{Type: "equals", Path: "output.message", Expected: "not-hello"}}}}
+	testsRaw, _ := json.Marshal(tests)
+	preview, err := service.PreviewImport(context.Background(), PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "greeting.amitiax", Raw: packageWorkflowArchive(t, "1.0.0", map[string][]byte{"tests/cases.json": testsRaw})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.TestStatus != "failed" || preview.TestReport == nil || preview.TestReport.FailedCount != 1 || preview.Compatible || !containsString(preview.Errors, ErrPackageTestFailed) {
+		t.Fatalf("failed assertion was not enforced: %+v", preview)
+	}
+	if _, err := service.Install(context.Background(), InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); asExtensionError(err).Code != ErrPackageInstallFailed {
+		t.Fatalf("install should re-run and reject failed assertions: %v", err)
+	}
+	var operation packageOperationRecord
+	if err := db.Order("created_at DESC").First(&operation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if operation.ExtensionID != preview.ID || operation.Status != "failed" || operation.ErrorCode != ErrPackageInstallFailed || operation.CompletedAt == "" {
+		t.Fatalf("failed validation operation was not tracked: %+v", operation)
+	}
+}
+
+func TestPackageRecoveryReconcilesActivatedOperation(t *testing.T) {
+	service, _, _, db := packageTestService(t)
+	ctx := context.Background()
+	preview, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "greeting.amitiax", Raw: packageWorkflowArchive(t, "1.0.0", nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	operation := packageOperationRecord{ID: uuid.NewString(), ExtensionID: preview.ID, ExtensionVersion: preview.Version, Operation: string(PackageOperationUpgrade), PreviousVersion: "0.9.0", TargetVersion: preview.Version, UserID: "1", ScopeType: "global", Status: "activating", TraceID: uuid.NewString(), CreatedAt: now}
+	if err := db.Create(&operation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := service.recoverPackageOperations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var recovered packageOperationRecord
+	if err := db.Where("id = ?", operation.ID).First(&recovered).Error; err != nil || recovered.Status != "succeeded" || recovered.CompletedAt == "" {
+		t.Fatalf("unexpected recovered operation: %+v %v", recovered, err)
+	}
+	var version packageVersionRecord
+	if err := db.Where("extension_id = ? AND version = ?", preview.ID, preview.Version).First(&version).Error; err != nil || version.ArtifactStatus != "active" || version.ActivationStatus != "active" {
+		t.Fatalf("unexpected recovered version: %+v %v", version, err)
 	}
 }
 
@@ -235,6 +286,40 @@ func TestPackageAgentSkillsLifecycle(t *testing.T) {
 	files, _, err := readPackageZIP(exported.Content, DefaultPackageLimits())
 	if err != nil || files["code-review/SKILL.md"] == nil {
 		t.Fatalf("agentskills export invalid: %v", err)
+	}
+}
+
+func TestUnifiedLifecycleKeepsInstructionsStateConsistent(t *testing.T) {
+	packages, registry, agentSkills, db := packageTestService(t)
+	ctx := context.Background()
+	skill := []byte("---\nname: lifecycle-check\ndescription: Check lifecycle consistency when users request it.\nlicense: MIT\nmetadata:\n  version: 1.0.0\n---\nCheck lifecycle state.\n")
+	raw := packageUnsafeZIP(t, map[string][]byte{"lifecycle-check/SKILL.md": skill}, nil)
+	preview, err := packages.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "lifecycle-check.zip", Raw: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed, err := packages.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator, _ := NewSchemaValidator()
+	repository := NewRepository(db)
+	service := NewService(registry, nil, repository, validator)
+	service.AttachLifecycleService(NewExtensionLifecycleService(registry, repository, agentSkills))
+	scope := ExecutionScope{UserID: "1"}
+	if err := service.EnableSkill(ctx, scope, installed.ExtensionID); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := agentSkills.ResolveCatalog(ctx, scope)
+	if err != nil || len(catalog) != 1 || catalog[0].ExtensionID != installed.ExtensionID {
+		t.Fatalf("generic enable did not refresh catalog: %+v %v", catalog, err)
+	}
+	if err := agentSkills.Disable(ctx, scope, installed.ExtensionID); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.GetSkill(ctx, scope, installed.ExtensionID)
+	if err != nil || detail.Enabled {
+		t.Fatalf("agent disable did not update generic state: %+v %v", detail, err)
 	}
 }
 

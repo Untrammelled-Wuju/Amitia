@@ -44,6 +44,7 @@ func (s *PackageService) Restore(ctx context.Context) error {
 		s.metric("extension_package_cleanup_failure_total")
 		return err
 	}
+	s.repository.RetryOwnedResourceCleanup(ctx)
 	if err := s.repository.db.WithContext(ctx).Exec(`UPDATE extensions SET owner_user_id = (SELECT user_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type = COALESCE((SELECT scope_type FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type), scope_id = COALESCE((SELECT scope_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_id) WHERE source = 'instructions' AND owner_user_id = ''`).Error; err != nil {
 		return err
 	}
@@ -53,8 +54,10 @@ func (s *PackageService) Restore(ctx context.Context) error {
 	if err := s.repository.db.WithContext(ctx).Exec(`UPDATE extension_versions SET artifact_id = COALESCE((SELECT artifact_id FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), artifact_id), artifact_hash = CASE WHEN artifact_hash = '' THEN checksum ELSE artifact_hash END, package_hash = CASE WHEN package_hash = '' THEN checksum ELSE package_hash END, source = CASE WHEN source = '' THEN COALESCE((SELECT source FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), '') ELSE source END, compatibility_status = CASE WHEN compatibility_status = '' THEN 'compatible' ELSE compatibility_status END, capabilities_json = CASE WHEN capabilities_json = '' THEN '[]' ELSE capabilities_json END, validation_status = CASE WHEN validation_status = '' THEN 'valid' ELSE validation_status END`).Error; err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return s.repository.db.WithContext(ctx).Model(&packageOperationRecord{}).Where("status NOT IN ?", []string{"succeeded", "failed", "rolled_back"}).Updates(map[string]interface{}{"status": "failed", "error_code": ErrPackageInstallFailed, "completed_at": now}).Error
+	if err := s.recoverPackageOperations(ctx); err != nil {
+		return err
+	}
+	return s.cleanupPackageRecoveryDebris(ctx)
 }
 
 func (s *PackageService) PreviewImport(ctx context.Context, request PreviewPackageImportRequest) (preview PackageImportPreview, err error) {
@@ -78,6 +81,11 @@ func (s *PackageService) PreviewImport(ctx context.Context, request PreviewPacka
 	}
 	if request.ScopeType != string(ScopeGlobal) && request.ScopeType != string(ScopeCharacter) || request.ScopeType == string(ScopeCharacter) && strings.TrimSpace(request.ScopeID) == "" {
 		return PackageImportPreview{}, NewExtensionError(ErrSkillPermissionDenied, "扩展安装作用域无效", request.ScopeType, false, nil)
+	}
+	if request.ScopeType == string(ScopeCharacter) {
+		if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); err != nil {
+			return PackageImportPreview{}, err
+		}
 	}
 	parsed, err := parsePackageInput(request, s.validator, s.limits)
 	if err != nil {
@@ -150,15 +158,32 @@ func (s *PackageService) buildPackagePreview(ctx context.Context, request Previe
 				return PackageImportPreview{}, NewExtensionError(ErrPackageCapabilityMismatch, "Workflow Capability 与实际行为不一致", fmt.Sprintf("声明=%v 实际=%v", declared, actual), false, nil)
 			}
 			preview.WorkflowSteps = packageStepSummary(parsed.Workflow)
+			if request.OperationID != "" {
+				if err := s.repository.SetPackageOperationStatus(ctx, request.OperationID, "testing"); err != nil {
+					return PackageImportPreview{}, err
+				}
+			}
+			testReport := s.runPackageWorkflowTests(ctx, request, parsed, compiled)
+			preview.TestReport = &testReport
 			preview.TestStatus = "dry-run-passed"
 			if len(parsed.Tests) > 0 {
-				preview.TestStatus = "validated"
+				preview.TestStatus = "tests-passed"
+			}
+			if testReport.Status != "passed" {
+				preview.TestStatus = "failed"
+				preview.Compatible = false
+				preview.Errors = append(preview.Errors, ErrPackageTestFailed)
 			}
 			for _, dependency := range compiled.Dependencies {
 				preview.Dependencies = append(preview.Dependencies, s.resolvePackageDependency(ctx, dependency.SkillID, dependency.Version))
 			}
 		}
 		if parsed.AgentSkill != nil {
+			if request.OperationID != "" {
+				if err := s.repository.SetPackageOperationStatus(ctx, request.OperationID, "testing"); err != nil {
+					return PackageImportPreview{}, err
+				}
+			}
 			agentPreview := AgentSkillImportPreview{Definition: parsed.AgentSkill.Definition, Report: parsed.AgentSkill.Report, Files: parsed.AgentSkill.Definition.Resources}
 			preview.AgentSkill = &agentPreview
 			preview.ScriptsRequired = len(parsed.AgentSkill.Report.RequiredScripts) > 0
@@ -169,6 +194,11 @@ func (s *PackageService) buildPackagePreview(ctx context.Context, request Previe
 		agent := parsed.AgentSkill
 		if agent == nil {
 			return PackageImportPreview{}, NewExtensionError(ErrPackageFormatUnsupported, "AgentSkills 内容无效", "", false, nil)
+		}
+		if request.OperationID != "" {
+			if err := s.repository.SetPackageOperationStatus(ctx, request.OperationID, "testing"); err != nil {
+				return PackageImportPreview{}, err
+			}
 		}
 		preview.SkillType = "instructions"
 		preview.Name = agent.Definition.Name

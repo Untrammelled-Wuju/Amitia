@@ -174,13 +174,14 @@ func (h *AgentSkillHandler) Resources(c *gin.Context) {
 func (h *AgentSkillHandler) ResourceContent(c *gin.Context) { h.serveResource(c, false) }
 func (h *AgentSkillHandler) AssetContent(c *gin.Context)    { h.serveResource(c, true) }
 func (h *AgentSkillHandler) serveResource(c *gin.Context, assetOnly bool) {
-	definition, _, files, err := h.service.repository.LoadAgentSkill(c.Request.Context(), c.Param("id"))
-	if err != nil {
+	scope := h.scope(c)
+	if _, _, err := h.service.Get(c.Request.Context(), scope, c.Param("id")); err != nil {
 		h.problems.problem(c, err)
 		return
 	}
-	if !h.service.visible(h.scope(c), definition) {
-		h.problems.problem(c, NewExtensionError(ErrAgentSkillScopeForbidden, "Agent Skill is outside the current scope", "", false, nil))
+	definition, _, files, err := h.service.repository.LoadAgentSkill(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		h.problems.problem(c, err)
 		return
 	}
 	clean, err := validateAgentSkillRelativePath(c.Query("path"), h.service.limits)
