@@ -104,6 +104,11 @@ func main() {
 
 	graphSvc := initGraph()
 	services := NewAppServices(ctx, graphSvc)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = services.Extension.Close(shutdownCtx)
+	}()
 	surrealdbDB.SetSurrealRestartCallback(func() {
 		newGraphSvc := initGraph()
 		if newGraphSvc != nil {
@@ -222,6 +227,11 @@ func main() {
 	case <-rootCtx.Done():
 		log.Info("收到关闭信号，开始排水...")
 		services.UnifiedEntry.SetOrchestratorReady(false)
+		pluginShutdownCtx, pluginCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := services.Extension.Close(pluginShutdownCtx); err != nil {
+			log.Error("Plugin Runtime 关闭失败:", err)
+		}
+		pluginCancel()
 		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

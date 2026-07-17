@@ -38,7 +38,7 @@ func (o *Orchestrator) resolveCompletionConflict(ctx context.Context, id string,
 }
 
 func isInteractionConflictError(err error) bool {
-	return errors.Is(err, ErrVersionConflict) || errors.Is(err, ErrAlreadyTerminal) || errors.Is(err, ErrInvalidTransition)
+	return errors.Is(err, ErrVersionConflict) || errors.Is(err, ErrInteractionCASConflict) || errors.Is(err, ErrAlreadyTerminal) || errors.Is(err, ErrInvalidTransition)
 }
 
 func (o *Orchestrator) handleIdempotentHit(existing *InteractionRecord) (*OrchestrationResult, error) {

@@ -36,6 +36,7 @@ type BuildRequest struct {
 	ProfileContext string
 	MemoryContext  string
 	Worldbook      string
+	PluginContext  string
 	History        string
 
 	ToolResults    string

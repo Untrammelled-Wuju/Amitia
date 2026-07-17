@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/expression"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
@@ -85,8 +86,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
 			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
-		} else if strings.Contains(err.Error(), "character_id") {
-			s.db.Exec("UPDATE conversations SET character_id = ?, channel = ?, updated_at = ? WHERE id = ?", charID, channel, time.Now().Format("2006-01-02 15:04:05"), convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,
@@ -131,7 +130,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			if source == "proactive" {
 				msgRole = "system"
 			}
-		userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
+			userMsg := &Message{ID: uuid.New().String(), ConversationID: convID, Role: msgRole, Content: req.Message, MsgType: "text", Source: source, Status: "processing", AudioUrl: req.AudioUrl, AudioDuration: req.AudioDuration, ImageUrl: req.ImageUrl, VideoUrl: req.VideoUrl, RequestID: requestID, ReplyToMessageID: req.ReplyToMessageID}
 			userMsgID = userMsg.ID
 			if err := s.repo.CreateMessage(userMsg); err != nil {
 				applog.TraceError(trace.WithStage("user_message_persist_failed"), applog.Fields{
@@ -234,9 +233,15 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		proactiveTaskInstruction = req.ProactiveTaskInstruction
 	}
 
+	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+	pluginContributions := []extension.ContextContribution{}
+	if s.skillRuntime != nil {
+		pluginContributions = s.skillRuntime.BeforePrompt(ctx, skillScope)
+	}
+	pluginContext, pluginSources := renderPluginContributions(pluginContributions)
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		BaseIdentity:             promptir.BaseIdentitySection(),
-		SystemPrompt:      runtimeProfile.SystemPrompt,
+		SystemPrompt:             runtimeProfile.SystemPrompt,
 		CharacterConfig:          sys1Result.CharacterConfig,
 		PersonalityConfig:        sys2Result.SystemInstruction,
 		PersonalityRaw:           personalityRaw,
@@ -247,6 +252,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		ProfileContext:           mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
 		MemoryContext:            sys2Result.MemoryContext,
 		Worldbook:                sys1Result.Worldbook,
+		PluginContext:            pluginContext,
 		History:                  history,
 		Runtime:                  req.Runtime,
 		StyleInstruction:         channelPrompt.StyleInstruction,
@@ -260,14 +266,27 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		ProactiveMemory:          req.ProactiveMemory,
 		UserContent:              userContent,
 	})
+	var toolDefs []tool.Tool
+	if s.skillRuntime != nil {
+		resolved, resolveErr := s.skillRuntime.ModelTools(ctx, skillScope)
+		if resolveErr != nil {
+			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")
+			toolDefs = nil
+		} else {
+			toolDefs = resolved
+		}
+	} else {
+		applog.TraceError(trace.WithStage("skill_runtime_unavailable"), nil, fmt.Errorf("skill runtime is not configured"), "skill tool definitions unavailable")
+	}
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
-		"history_count":      len(history),
-		"system_part_count":  len(sys1Result.CharacterConfig) + len(sys2Result.SystemInstruction),
-		"tool_count":         len(tool.GetAll()),
-		"image_context_size": len(req.ImageContext),
+		"history_count":               len(history),
+		"system_part_count":           len(sys1Result.CharacterConfig) + len(sys2Result.SystemInstruction),
+		"tool_count":                  len(toolDefs),
+		"image_context_size":          len(req.ImageContext),
+		"plugin_contribution_count":   len(pluginContributions),
+		"plugin_contribution_sources": pluginSources,
 	}, "process message prompt ready")
 	logPromptTrace(trace, promptTrace, source)
-	toolDefs := tool.GetAll()
 	seenTools := map[string]bool{}
 	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelTools()
@@ -299,7 +318,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, nil
 		}
 	}
-	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, toolDefs, seenTools, toolExecCtx)
+	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
 	}
@@ -423,6 +442,16 @@ func mergeContext(a, b string) string {
 		return a
 	}
 	return a + "\n\n" + b
+}
+
+func renderPluginContributions(contributions []extension.ContextContribution) (string, []string) {
+	parts := make([]string, 0, len(contributions))
+	sources := make([]string, 0, len(contributions))
+	for _, contribution := range contributions {
+		parts = append(parts, "来源: "+contribution.Source+"\n"+contribution.Content)
+		sources = append(sources, contribution.Source)
+	}
+	return strings.Join(parts, "\n\n"), sources
 }
 
 func truncateToRuneLimit(s string, limit int) string {

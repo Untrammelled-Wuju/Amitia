@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
 )
@@ -45,7 +46,10 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		return nil, err
 	}
 	s.PostCommitActions(ctx, computeResult)
+	s.dispatchPluginAfterReply(req, computeResult, commitResult.MessageIDs)
 	s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+	applog.TraceInfo(computeResult.Trace.WithStage("db_commit_completed"), applog.Fields{"message_count": len(commitResult.MessageIDs)}, "process message db commit completed")
+	applog.TraceInfo(computeResult.Trace.WithStage("completed"), applog.Fields{"reply_size": len(computeResult.Reply)}, "process message completed")
 	return &ProcessMessageResponse{
 		ConversationID: computeResult.ConversationID,
 		Sequence:       commitResult.LastSequence,
@@ -81,6 +85,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Source:                   req.Source,
 		PeerID:                   req.PeerID,
 		UserID:                   req.UserID,
+		SessionID:                req.SessionID,
 		AudioUrl:                 req.AudioUrl,
 		AudioDuration:            req.AudioDuration,
 		VoiceMessage:             req.VoiceMessage,
@@ -131,6 +136,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		return nil, err
 	}
 	s.PostCommitActions(ctx, computeResult)
+	s.dispatchPluginAfterReply(chatReq, computeResult, commitResult.MessageIDs)
 	return &interaction.ProcessResponse{
 		ConversationID: computeResult.ConversationID,
 		Sequence:       commitResult.LastSequence,
@@ -143,4 +149,16 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		RequestID:      computeResult.RequestID,
 		Events:         commitResult.Events,
 	}, nil
+}
+
+func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *ComputeResult, messageIDs []string) {
+	if s.skillRuntime == nil || result == nil || result.HasExistingUser || result.Reply == "" {
+		return
+	}
+	messageID := ""
+	if len(messageIDs) > 0 {
+		messageID = messageIDs[len(messageIDs)-1]
+	}
+	scope := extension.ExecutionScope{UserID: req.UserID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, SessionID: req.SessionID, TraceID: result.RequestID, RequestID: result.RequestID, CorrelationID: result.Trace.CorrelationID, CausationID: result.Trace.CausationID}
+	s.skillRuntime.AfterReply(scope, extension.ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()})
 }

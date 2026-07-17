@@ -29,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 defineProps<{
   modelValue: string
-  characters: { id: string; name: string; identity: string }[]
+  characters: { id: string; name: string; identity: string; avatar?: string }[]
 }>()
 
 const emit = defineEmits<{ (e: "update:modelValue", v: string): void }>()

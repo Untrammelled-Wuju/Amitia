@@ -27,9 +27,10 @@ export interface RequestError {
 // ============================================================
 
 function classifyError(body: ApiResponse | null, axiosError: AxiosError | null): RequestError {
-  const code = body?.code ?? 0
-  const message = body?.message || axiosError?.message || "Network error"
-  const detail = body?.detail
+  const problem = body as any
+  const code = typeof problem?.code === "number" ? problem.code : typeof problem?.status === "number" ? problem.status : 0
+  const message = problem?.message || problem?.title || axiosError?.message || "Network error"
+  const detail = problem?.detail
 
   // Network / server not reachable
   if (!body && axiosError) {
@@ -158,6 +159,7 @@ request.interceptors.response.use(
   (error: AxiosError) => {
     const body = (error.response?.data as ApiResponse) || null
     const err = classifyError(body, error)
+    err.raw = body
     displayError(err)
     return Promise.reject(err)
   }

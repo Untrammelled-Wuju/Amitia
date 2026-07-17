@@ -35,9 +35,9 @@ export default defineConfig({
     },
   },
   resolve: {
+    dedupe: ["vue", "@vue/runtime-core", "@vue/runtime-dom"],
     alias: {
       "@": resolve(__dirname, "../front/src"),
-      "/src": resolve(__dirname, "../front/src"),
     },
   },
   build: {

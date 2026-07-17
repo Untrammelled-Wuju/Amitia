@@ -17,8 +17,19 @@ import (
 type llmWithToolsFunc func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error)
 
 func (s *service) callLLM(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
+	return s.callLLMMode(ctx, cfg, messages, false)
+}
+
+func (s *service) callLLMJSON(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}) (string, int, error) {
+	return s.callLLMMode(ctx, cfg, messages, true)
+}
+
+func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	reqBody := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
+	if jsonOnly {
+		reqBody["response_format"] = map[string]string{"type": "json_object"}
+	}
 	jsonBody, _ := json.Marshal(reqBody)
 	url := baseURL + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))

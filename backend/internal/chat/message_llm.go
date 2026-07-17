@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/extension"
 	applog "github.com/u-ai/backend/log"
 )
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, userMsgID, convID, charID, channel, requestID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, userMsgID, convID, charID, channel, requestID, userID, sessionID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
 	var reply string
 	var totalTokens int
 	forceVoice := false
@@ -57,17 +58,30 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				newArgs, _ := json.Marshal(toolArgs)
 				args = string(newArgs)
 			}
-			toolCtx := tool.ToolExecutionContext{ConversationID: convID, CharacterID: charID, Channel: channel, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, User: trace.User, StateVersion: trace.StateVersion, Path: "chat.process_message.tool", ToolCallID: toolCallID}
 			applog.TraceInfo(trace.WithStage("tool_call_started"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "args_size": len(args)}, "process message tool call started")
-			toolResult, ok := tool.ExecuteWithContextAndCancel(toolExecCtx, toolCtx, name, args)
-			result := toolResult.VisibleText
-			if result == "" {
-				result = toolResult.Content
+			result := ""
+			ok := false
+			status := "FAILED"
+			errorCode := ""
+			toolForceVoice := false
+			if s.skillRuntime != nil {
+				skillScope := extension.ExecutionScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+				skillResult, found := s.skillRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), skillScope, "")
+				ok = found
+				result = skillResult.VisibleText
+				status = string(skillResult.Status)
+				toolForceVoice = skillResult.ForceVoice
+				if skillResult.Error != nil {
+					errorCode = skillResult.Error.Code
+				}
+			} else {
+				result = "工具运行时不可用"
+				errorCode = extension.ErrSkillExecutionFailed
 			}
-			if toolResult.ForceVoice && toolResult.Status == tool.ToolStatusSuccess {
+			if toolForceVoice {
 				forceVoice = true
 			}
-			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "ok": ok, "status": string(toolResult.Status), "error_code": toolResult.ErrorCode, "result_size": len(result), "force_voice": toolResult.ForceVoice}, "process message tool call completed")
+			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": name, "tool_call_id": toolCallID, "ok": ok, "status": status, "error_code": errorCode, "result_size": len(result), "force_voice": toolForceVoice}, "process message tool call completed")
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": tc["id"], "content": result})
 		}
 	}

@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/redis/go-redis/v9 v9.19.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.52.0

@@ -29,7 +29,7 @@ func TestMemoryProcessAdvancesCheckpointAndSkipsProcessedMessages(t *testing.T) 
 		if len(body.Messages) != 2 {
 			t.Fatalf("unexpected llm messages: %#v", body.Messages)
 		}
-		if body.Messages[1].Content != "user: 我喜欢绿茶\nassistant: 记住了\n" {
+		if body.Messages[1].Content != "【仅根据「用户」一行抽取关于用户的事实；「助手」仅供理解语境，禁止从中抽取写入用户档案的信息】\n用户：我喜欢绿茶\n助手（勿抽取）：记住了" {
 			t.Fatalf("unexpected extraction content: %q", body.Messages[1].Content)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{

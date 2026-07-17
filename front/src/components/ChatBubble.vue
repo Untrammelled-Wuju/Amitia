@@ -95,7 +95,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   retry: [message: any]
   reply: [message: any]
-  scrollToMessage: [id: string]
+  "scroll-to-message": [id: string]
 }>()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))

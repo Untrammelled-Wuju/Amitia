@@ -28,6 +28,7 @@ type Service interface {
 	GetVectorStatus() map[string]interface{}
 	GetTimeline(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error)
 	GenerateCandidates(conversationID string) ([]MemoryCandidate, error)
+	SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate, error)
 	ListCandidates() []MemoryCandidate
 	AcceptCandidate(id string) (*Memory, error)
 	RejectCandidate(id string) error
@@ -105,6 +106,15 @@ type MemoryCandidate struct {
 	ConversationID string `json:"conversationId"`
 	CharacterID    string `json:"characterId"`
 	CreatedAt      string `json:"createdAt"`
+}
+type SubmitCandidateRequest struct {
+	Key string `json:"key"`
+	Value string `json:"value"`
+	MemoryType string `json:"memoryType"`
+	Importance int `json:"importance"`
+	SourceText string `json:"sourceText"`
+	ConversationID string `json:"conversationId"`
+	CharacterID string `json:"characterId"`
 }
 
 type VectorSearchResult struct {

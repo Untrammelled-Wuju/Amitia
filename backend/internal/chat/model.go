@@ -4,8 +4,8 @@ package chat
 
 import (
 	"github.com/u-ai/backend/internal/interaction"
-	"time"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Conversation struct {
@@ -24,27 +24,27 @@ type Conversation struct {
 func (Conversation) TableName() string { return "conversations" }
 
 type Message struct {
-	ID             string  `gorm:"column:id;primaryKey" json:"id"`
-	ConversationID string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
-	Sequence       int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Role           string  `gorm:"column:role;not null" json:"role"`
-	Content        string  `gorm:"column:content;not null" json:"content"`
-	MsgType        string  `gorm:"column:msg_type;default:text" json:"msgType"`
-	Tokens         int     `gorm:"column:tokens;default:0" json:"tokens"`
-	Source         string  `gorm:"column:source;default:manual" json:"source"`
-	SafetyLevel    string  `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
-	Status         string  `gorm:"column:status;default:sent" json:"status"`
-	IncludeInCtx   int     `gorm:"column:include_in_context;default:1" json:"includeInContext"`
-	AudioUrl       string  `gorm:"column:audio_url;default:" json:"audioUrl"`
-	AudioDuration  float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
-	ImageUrl       string  `gorm:"column:image_url;default:" json:"imageUrl"`
-	VideoUrl       string  `gorm:"column:video_url;default:" json:"videoUrl"`
-	RequestID      string  `gorm:"column:request_id;default:" json:"requestId"`
+	ID               string  `gorm:"column:id;primaryKey" json:"id"`
+	ConversationID   string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
+	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Role             string  `gorm:"column:role;not null" json:"role"`
+	Content          string  `gorm:"column:content;not null" json:"content"`
+	MsgType          string  `gorm:"column:msg_type;default:text" json:"msgType"`
+	Tokens           int     `gorm:"column:tokens;default:0" json:"tokens"`
+	Source           string  `gorm:"column:source;default:manual" json:"source"`
+	SafetyLevel      string  `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
+	Status           string  `gorm:"column:status;default:sent" json:"status"`
+	IncludeInCtx     int     `gorm:"column:include_in_context;default:1" json:"includeInContext"`
+	AudioUrl         string  `gorm:"column:audio_url;default:" json:"audioUrl"`
+	AudioDuration    float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
+	ImageUrl         string  `gorm:"column:image_url;default:" json:"imageUrl"`
+	VideoUrl         string  `gorm:"column:video_url;default:" json:"videoUrl"`
+	RequestID        string  `gorm:"column:request_id;default:" json:"requestId"`
 	ReplyToMessageID *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
 	ReplyToRole      *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
 	ReplyToExcerpt   *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
-	CreatedAt      string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt      string  `gorm:"column:updated_at" json:"updatedAt"`
+	CreatedAt        string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 func (Message) TableName() string { return "messages" }
@@ -110,13 +110,13 @@ type ChatRequest struct {
 }
 
 type WebChatRequest struct {
-	CharacterID     string  `json:"characterId" binding:"required"`
-	Message         string  `json:"message" binding:"required"`
-	ConversationID  string  `json:"conversationId"`
-	Sequence        int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	UserID          string  `json:"userId"`
-	SessionID       string  `json:"sessionId"`
-	RequestID       string  `json:"requestId"`
+	CharacterID      string  `json:"characterId" binding:"required"`
+	Message          string  `json:"message" binding:"required"`
+	ConversationID   string  `json:"conversationId"`
+	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	UserID           string  `json:"userId"`
+	SessionID        string  `json:"sessionId"`
+	RequestID        string  `json:"requestId"`
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
 }
 
@@ -165,14 +165,14 @@ type ContextStructureLog struct {
 }
 
 type MessageItem struct {
-	ID              string  `json:"id"`
-	ConversationID  string  `json:"conversationId"`
-	Sequence        int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Role            string  `json:"role"`
-	Content         string  `json:"content"`
-	Tokens          int     `json:"tokens"`
-	Source          string  `json:"source"`
-	CreatedAt       string  `json:"createdAt"`
+	ID               string  `json:"id"`
+	ConversationID   string  `json:"conversationId"`
+	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Role             string  `json:"role"`
+	Content          string  `json:"content"`
+	Tokens           int     `json:"tokens"`
+	Source           string  `json:"source"`
+	CreatedAt        string  `json:"createdAt"`
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
 	ReplyToRole      *string `json:"replyToRole,omitempty"`
 	ReplyToExcerpt   *string `json:"replyToExcerpt,omitempty"`
@@ -209,6 +209,7 @@ type ProcessMessageRequest struct {
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`
 	UserID                   string                       `json:"-"`
+	SessionID                string                       `json:"-"`
 	InteractionID            string                       `json:"-"`
 	ExpectedStatusVersion    int64                        `json:"-"`
 	Runtime                  *interaction.RuntimeAssembly `json:"-"`

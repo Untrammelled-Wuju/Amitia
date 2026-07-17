@@ -14,7 +14,7 @@ func newOutboxTestDB(t *testing.T) *SQLiteOutboxStore {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&OutboxRecordModel{}); err != nil {
+	if err := db.AutoMigrate(&OutboxRecordModel{}, &DeadLetterRecordModel{}); err != nil {
 		t.Fatalf("migrate outbox: %v", err)
 	}
 	cfg := OutboxStoreConfig{

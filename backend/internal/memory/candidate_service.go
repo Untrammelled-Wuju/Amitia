@@ -29,6 +29,18 @@ func (s *service) GenerateCandidates(conversationID string) ([]MemoryCandidate, 
 	}
 	return s.generateCandidatesFromMessages(conversationID, typedMessages)
 }
+func (s *service) SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate, error) {
+	if req == nil || strings.TrimSpace(req.Key) == "" || strings.TrimSpace(req.Value) == "" || strings.TrimSpace(req.SourceText) == "" || strings.TrimSpace(req.ConversationID) == "" || strings.TrimSpace(req.CharacterID) == "" {
+		return nil, fmt.Errorf("候选记忆缺少 key、value、sourceText、conversationId 或 characterId")
+	}
+	if req.Importance < 1 { req.Importance = 5 }
+	if req.Importance > 10 { req.Importance = 10 }
+	if req.MemoryType == "" { req.MemoryType = "fact" }
+	now := time.Now().Format("2006-01-02 15:04:05")
+	model := &MemoryCandidateModel{ID: uuid.New().String(), Key: strings.TrimSpace(req.Key), Value: strings.TrimSpace(req.Value), MemoryType: req.MemoryType, Importance: req.Importance, SourceText: strings.TrimSpace(req.SourceText), ConversationID: req.ConversationID, CharacterID: req.CharacterID, CreatedAt: now}
+	if err := s.repo.CreateCandidate(model); err != nil { return nil, err }
+	return &MemoryCandidate{ID: model.ID, Key: model.Key, Value: model.Value, MemoryType: model.MemoryType, Importance: model.Importance, SourceText: model.SourceText, ConversationID: model.ConversationID, CharacterID: model.CharacterID, CreatedAt: model.CreatedAt}, nil
+}
 
 func (s *service) buildExtractionUserMsg(messages []map[string]string) (userParts, assistantParts []string) {
 	for _, msg := range messages {

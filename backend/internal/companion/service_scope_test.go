@@ -88,8 +88,8 @@ func TestRunActiveMessageTaskUsesScopedConversation(t *testing.T) {
 	}
 
 	result := svc.RunActiveMessageTask(1, "char-1")
-	if result["status"] != "SENT" {
-		t.Fatalf("expected SENT, got %#v", result)
+	if result["status"] != "QUEUED" {
+		t.Fatalf("expected QUEUED, got %#v", result)
 	}
 	if len(fake.requests) != 1 {
 		t.Fatalf("expected one unified entry request, got %d", len(fake.requests))

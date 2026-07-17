@@ -183,7 +183,11 @@ func (s *Step) AddColumn(table, column, definition string) error {
 	}
 	operation := "add_column:" + table + "." + column + ":" + definition
 	s.operations = append(s.operations, operation)
-	if exists {
+	tableExists, err := s.TableExists(table)
+	if err != nil {
+		return err
+	}
+	if exists || !tableExists {
 		return nil
 	}
 	s.commands = append(s.commands, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
@@ -246,6 +250,20 @@ func (s *Step) IndexExists(name string) (bool, error) {
 	}
 	var count int64
 	if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?", name).Scan(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *Step) TableExists(name string) (bool, error) {
+	if !safeIdentifier(name) {
+		return false, fmt.Errorf("unsafe table name: %s", name)
+	}
+	if s.db == nil {
+		return true, nil
+	}
+	var count int64
+	if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil

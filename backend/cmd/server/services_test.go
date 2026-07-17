@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -21,7 +23,13 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
+	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration()}); err != nil {
+		t.Fatal(err)
+	}
 	services := NewAppServices(app.NewAppContext(db, nil), nil)
+	t.Cleanup(func() {
+		_ = services.Extension.Close(context.Background())
+	})
 	if services.Chat == nil {
 		t.Fatal("missing chat service")
 	}

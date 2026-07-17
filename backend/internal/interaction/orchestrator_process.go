@@ -140,21 +140,13 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	start := time.Now()
 	resp, err := o.processor.ProcessMessageCtx(processCtx, req)
 	duration := time.Since(start)
-	log.Printf("[orchestrator] ProcessMessageCtx returned err=%v InteractionID=%s", err, req.InteractionID)
-	log.Printf("[orchestrator] ProcessMessageCtx returned err=%v InteractionID=%s", err, req.InteractionID)
 	if err != nil {
 		return o.handleProcessorError(ctx, record, req, resp, duration, err)
 	}
 	if fresh, ok, getErr := o.tracker.Get(processCtx, record.ID); getErr == nil && ok {
 		record = fresh
 	}
-	if record.Status == InteractionStatusCommitted || record.Status == InteractionStatusCompleted {
-		resp.RequestID, resp.ConversationID, resp.CharacterID = req.RequestID, req.ConversationID, req.CharacterID
-		result := o.buildResult(record, resp, OutcomeCompleted, nil)
-		result.Duration, result.Events = duration, resp.Events
-		return result, nil
-	}
-	return nil, fmt.Errorf("orchestrator: processor did not commit interaction status=%s", record.Status)
+	return o.finalizeProcessorSuccess(ctx, record, req, resp, runtime, duration)
 }
 
 func (o *Orchestrator) handleProcessorError(ctx context.Context, record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, duration time.Duration, procErr error) (*OrchestrationResult, error) {

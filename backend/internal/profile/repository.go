@@ -129,17 +129,17 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 func hasIndependentProfileEvidence(existing, incoming UserProfile) bool {
 	if incoming.SourceConvID != "" {
 		if incoming.SourceConvID != existing.SourceConvID {
-			return hasHigherAuthority(incoming.Source, existing.Source)
+			return hasSufficientAuthority(incoming.Source, existing.Source)
 		}
 		return false
 	}
 	if existing.SourceConvID != "" {
 		return false
 	}
-	return incoming.Source != "" && existing.Source != "" && incoming.Source != existing.Source && hasHigherAuthority(incoming.Source, existing.Source)
+	return incoming.Source != "" && existing.Source != "" && incoming.Source != existing.Source && hasSufficientAuthority(incoming.Source, existing.Source)
 }
 
-func hasHigherAuthority(incoming, existing string) bool {
+func hasSufficientAuthority(incoming, existing string) bool {
 	auth := func(s string) int {
 		switch s {
 		case "admin_settings", "system", "config", "admin":
@@ -152,7 +152,7 @@ func hasHigherAuthority(incoming, existing string) bool {
 			return 0
 		}
 	}
-	return auth(incoming) > auth(existing)
+	return auth(incoming) >= auth(existing)
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {

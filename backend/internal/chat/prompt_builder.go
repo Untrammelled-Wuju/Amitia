@@ -225,6 +225,7 @@ func buildRoleSystemParts(profile *character.RoleRuntimeProfile, runtime *intera
 			parts = append(parts, label+"\n"+string(raw))
 		}
 	}
+	appendRuntimeConfig("【性格配置】", profile.PersonalityConfig)
 	appendRuntimeConfig("【对话风格配置】", profile.ChatStyleConfig)
 	appendRuntimeConfig("【场景配置】", profile.SceneRules)
 	return parts

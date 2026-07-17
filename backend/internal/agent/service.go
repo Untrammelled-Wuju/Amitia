@@ -172,6 +172,9 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 }
 
 func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]interface{}, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("请求上下文不能为空")
+	}
 	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", req.Channel, req.Text[:min(len(req.Text), 80)], req.VoiceMessage, len(req.ImageUrl), req.SkipTiming)
 	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", req.Channel, req.Text[:min(len(req.Text), 50)], len(req.ImageUrl), len(req.VideoUrl))
 	req.Text = strings.TrimSpace(req.Text)
@@ -214,9 +217,6 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	}
 	if s.unifiedEntry == nil {
 		return nil, fmt.Errorf("统一入口未初始化")
-	}
-	if ctx == nil {
-		return nil, fmt.Errorf("请求上下文不能为空")
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()

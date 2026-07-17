@@ -57,6 +57,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/import">导入记录</el-menu-item>
       </el-sub-menu>
 
+      <el-sub-menu index="extensions">
+        <template #title>
+          <el-icon><Grid /></el-icon>
+          <span>扩展</span>
+        </template>
+        <el-menu-item index="/extensions">扩展中心</el-menu-item>
+        <el-menu-item index="/extensions/skills">技能</el-menu-item>
+        <el-menu-item index="/extensions/plugins">插件</el-menu-item>
+        <el-menu-item index="/extensions/workshop">扩展工坊</el-menu-item>
+        <el-menu-item index="/extensions/runs">执行记录</el-menu-item>
+      </el-sub-menu>
+
       <div class="menu-divider"></div>
 
       <el-menu-item index="/settings">
@@ -81,7 +93,7 @@ import { useRoute } from "vue-router"
 import { ElMessage } from "element-plus"
 import {
   ChatDotRound, Odometer, Connection, UserFilled,
-  ChatDotSquare, Setting, Loading,
+  ChatDotSquare, Setting, Loading, Grid,
 } from "@element-plus/icons-vue"
 import { useAppStore } from "@/stores/app"
 

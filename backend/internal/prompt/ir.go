@@ -32,6 +32,7 @@ const (
 	GwSectionMemoryContext            GwSectionType = "memory_context"
 	GwSectionProfileContext           GwSectionType = "profile_context"
 	GwSectionWorldbookContext         GwSectionType = "worldbook_context"
+	GwSectionPluginContext            GwSectionType = "plugin_context"
 	GwSectionConversationHistory      GwSectionType = "conversation_history"
 	GwSectionToolResult               GwSectionType = "tool_result"
 	GwSectionMultimodalText           GwSectionType = "multimodal_text"
@@ -54,9 +55,9 @@ const (
 	GwSectionProactiveRecentContext   GwSectionType = "proactive_recent_context"
 	GwSectionProactiveTaskInstruction GwSectionType = "proactive_task_instruction"
 	GwSectionChannelShortRaw          GwSectionType = "channel_short_raw"
-	GwSectionSystemPrompt GwSectionType = "system_prompt"
+	GwSectionSystemPrompt             GwSectionType = "system_prompt"
 
-	GwSectionTraceOnly                GwSectionType = "trace_only"
+	GwSectionTraceOnly GwSectionType = "trace_only"
 )
 
 type GwSection struct {

@@ -451,7 +451,7 @@ func TestE2E_MindStateReturnsCompleteData(t *testing.T) {
 		t.Error("psyche缺少stateVersion")
 	}
 
-	relsRaw2 := mustQueryRelationshipsRaw(t, db, charID, "peer-mind")
+	relsRaw2 := mustQueryRelationshipsRaw(t, db, charID, "peer:peer-mind")
 	if len(relsRaw2) == 0 {
 		t.Error("relationships为空")
 	}

@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
+    "@vue/compiler-sfc": "3.5.35",
     "concurrently": "^10.0.3",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
@@ -30,6 +31,7 @@
     "vite-plugin-electron": "^1.1.0",
     "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^4.1.10",
+    "vue": "3.5.35",
     "wait-on": "^9.0.10"
   }
 }

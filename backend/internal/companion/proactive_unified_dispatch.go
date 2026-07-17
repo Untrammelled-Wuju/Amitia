@@ -40,6 +40,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 
 	req := &interaction.UnifiedEntryRequest{
 		Channel:                  scope.channel,
+		Message:                  prompt,
 		PeerID:                   scope.peerID,
 		UserID:                   scope.userID,
 		Source:                   "proactive",
@@ -360,20 +361,16 @@ func formatGapDuration(totalGapMs int64) string {
 
 func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, characterID string) proactiveDeliveryScope {
 	scope := proactiveDeliveryScope{channel: normalizeProactiveChannel(channelSetting)}
-	var channel, peerID, userID string
-	s.db.Table("conversations").Select("channel, peer_id, user_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&channel, &peerID, &userID)
+	var channel, peerID string
+	s.db.Table("conversations").Select("channel, peer_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&channel, &peerID)
 	if strings.TrimSpace(channel) != "" {
 		scope.channel = normalizeProactiveChannel(channel)
 	}
 	scope.peerID = strings.TrimSpace(peerID)
-	if userIDFromDB := strings.TrimSpace(userID); userIDFromDB != "" {
-		scope.userID = userIDFromDB
+	if trimmedPeerID := strings.TrimSpace(peerID); trimmedPeerID != "" {
+		scope.userID = trimmedPeerID
 	} else {
-		if trimmedPeerID := strings.TrimSpace(peerID); trimmedPeerID != "" {
-			scope.userID = trimmedPeerID
-		} else {
-			scope.userID = "character:" + strings.TrimSpace(characterID)
-		}
+		scope.userID = "character:" + strings.TrimSpace(characterID)
 	}
 	if scope.channel == "" {
 		scope.channel = "web"

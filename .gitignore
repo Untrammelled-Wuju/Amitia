@@ -79,3 +79,4 @@ noa.rs-7.cn/
 
 .php/
 *.py
+*.extension-key

@@ -11,7 +11,7 @@ import (
 )
 
 type processPromptInput struct {
-	BaseIdentity, CharacterConfig, PersonalityConfig, PersonalityRaw, ProfileContext, MemoryContext, Worldbook, EmotionFusionRaw, AdultIntimacyRaw, MemoryInjectRaw, AntiRepeatRaw                                      string
+	BaseIdentity, CharacterConfig, PersonalityConfig, PersonalityRaw, ProfileContext, MemoryContext, Worldbook, PluginContext, EmotionFusionRaw, AdultIntimacyRaw, MemoryInjectRaw, AntiRepeatRaw                       string
 	History                                                                                                                                                                                                             []map[string]string
 	Runtime                                                                                                                                                                                                             *interaction.RuntimeAssembly
 	StyleInstruction, ProactiveScene, ProactiveTimeContext, ProactiveRecentContext, ProactivePersonality, ProactiveRelationship, ProactiveEmotion, ProactiveMemory, SystemPrompt, ProactiveTaskInstruction, UserContent string
@@ -28,11 +28,11 @@ func buildProcessPromptMessages(input processPromptInput) ([]map[string]interfac
 			expressionPlan = input.StyleInstruction
 		}
 	}
-	request := promptir.BuildRequest{CharacterConfig: input.CharacterConfig, CompiledPersonality: input.PersonalityConfig, BaseIdentity: input.BaseIdentity, SystemPrompt: input.SystemPrompt, PersonalityRaw: input.PersonalityRaw, EmotionFusionRaw: input.EmotionFusionRaw, AdultIntimacyRaw: input.AdultIntimacyRaw, MemoryInjectRaw: input.MemoryInjectRaw, AntiRepeatRaw: input.AntiRepeatRaw, ProfileContext: input.ProfileContext, MemoryContext: input.MemoryContext, Worldbook: input.Worldbook, RuntimePlan: runtimePlan, ExpressionPlan: expressionPlan, History: renderHistoryForPromptIR(input.History), CurrentUserInput: input.UserContent, ProactiveTaskInstruction: input.ProactiveTaskInstruction, ProactiveScene: input.ProactiveScene, ProactiveTimeContext: input.ProactiveTimeContext, ProactiveRecentContext: input.ProactiveRecentContext, ProactivePersonality: input.ProactivePersonality, ProactiveRelationship: input.ProactiveRelationship, ProactiveEmotion: input.ProactiveEmotion, ProactiveMemory: input.ProactiveMemory}
+	request := promptir.BuildRequest{CharacterConfig: input.CharacterConfig, CompiledPersonality: input.PersonalityConfig, BaseIdentity: input.BaseIdentity, SystemPrompt: input.SystemPrompt, PersonalityRaw: input.PersonalityRaw, EmotionFusionRaw: input.EmotionFusionRaw, AdultIntimacyRaw: input.AdultIntimacyRaw, MemoryInjectRaw: input.MemoryInjectRaw, AntiRepeatRaw: input.AntiRepeatRaw, ProfileContext: input.ProfileContext, MemoryContext: input.MemoryContext, Worldbook: input.Worldbook, PluginContext: input.PluginContext, RuntimePlan: runtimePlan, ExpressionPlan: expressionPlan, History: renderHistoryForPromptIR(input.History), CurrentUserInput: input.UserContent, ProactiveTaskInstruction: input.ProactiveTaskInstruction, ProactiveScene: input.ProactiveScene, ProactiveTimeContext: input.ProactiveTimeContext, ProactiveRecentContext: input.ProactiveRecentContext, ProactivePersonality: input.ProactivePersonality, ProactiveRelationship: input.ProactiveRelationship, ProactiveEmotion: input.ProactiveEmotion, ProactiveMemory: input.ProactiveMemory}
 	gwMessages, promptTrace, err := gateway.BuildMessages(request)
 	if err != nil {
 		applog.Warn("prompt gateway build failed, trying minimal build", applog.Fields{"error": err.Error()})
-		request.ProfileContext, request.MemoryContext, request.Worldbook, request.History, request.ProactiveScene, request.ProactiveTimeContext, request.ProactiveRecentContext = "", "", "", "", "", "", ""
+		request.ProfileContext, request.MemoryContext, request.Worldbook, request.PluginContext, request.History, request.ProactiveScene, request.ProactiveTimeContext, request.ProactiveRecentContext = "", "", "", "", "", "", "", ""
 		gwMessages, promptTrace, err = gateway.BuildMessages(request)
 		if err != nil {
 			applog.Warn("minimal prompt build also failed, falling back to raw", applog.Fields{"error": err.Error()})

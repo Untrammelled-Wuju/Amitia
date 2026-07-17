@@ -56,5 +56,11 @@ func DefaultMigrations() []Migration {
 		TriggerHistoryMigration(),
 		RelationshipScopeMigration(),
 		NeedStatesMigration(),
+		ExtensionsMigration(),
+		PluginRuntimeMigration(),
+		ExtensionWorkshopMigration(),
+		ExtensionWorkshopPermissionScopesMigration(),
+		ExtensionWorkshopPlannerMigration(),
+		ExtensionWorkshopGenerationSummaryMigration(),
 	}
 }

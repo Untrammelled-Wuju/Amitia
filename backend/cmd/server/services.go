@@ -4,6 +4,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -54,6 +58,7 @@ type AppServices struct {
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
+	Extension           *extension.Runtime
 }
 
 type defaultCharacterProvider struct {
@@ -107,20 +112,31 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	compressor := chat.NewCompressor(ctx.DB)
 	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
 	if err := psycheStore.InitSchema(); err != nil {
-		log.Error("failed to init psyche store schema:", err); panic("failed to init psyche store schema")
+		log.Error("failed to init psyche store schema:", err)
+		panic("failed to init psyche store schema")
 	}
 	if err := ctx.DB.AutoMigrate(&chat.RelationshipStateRecord{}, &chat.NeedStateRecord{}); err != nil {
-		log.Error("failed to init relationship/need store schema:", err); panic("failed to init relationship/need store schema")
+		log.Error("failed to init relationship/need store schema:", err)
+		panic("failed to init relationship/need store schema")
 	}
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
+	extensionRuntime, err := extension.NewRuntime(context.Background(), ctx.DB, "1.0.0")
+	if err != nil {
+		log.Error("failed to initialize skill runtime:", err)
+		panic("failed to initialize skill runtime")
+	}
+	chatSvc.SetSkillRuntime(extensionRuntime)
+	extensionRuntime.Workshop.SetModelGenerator(chatSvc)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
-		log.Error("failed to init interaction tracker schema:", err); panic("failed to init interaction tracker schema")
+		log.Error("failed to init interaction tracker schema:", err)
+		panic("failed to init interaction tracker schema")
 	}
 	newOutboxStore := newoutbox.NewSQLiteOutboxStore(ctx.DB, newoutbox.DefaultOutboxStoreConfig())
 	if err := ctx.DB.AutoMigrate(&newoutbox.OutboxRecordModel{}, &newoutbox.DeadLetterRecordModel{}); err != nil {
-		log.Error("failed to init outbox store schema:", err); panic("failed to init outbox store schema")
+		log.Error("failed to init outbox store schema:", err)
+		panic("failed to init outbox store schema")
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
@@ -134,7 +150,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
 	chatSvc.SetOutboxStore(outboxAdapter)
 	if err := runtimeQueue.InitSchema(); err != nil {
-		log.Error("failed to init runtime queue schema:", err); panic("failed to init runtime queue schema")
+		log.Error("failed to init runtime queue schema:", err)
+		panic("failed to init runtime queue schema")
 	}
 
 	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
@@ -166,7 +183,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), &defaultCharacterProvider{repo: charRepo})
 	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
 	if err := dataLifecycle.InitSchema(); err != nil {
-		log.Error("failed to init data lifecycle schema:", err); panic("failed to init data lifecycle schema")
+		log.Error("failed to init data lifecycle schema:", err)
+		panic("failed to init data lifecycle schema")
 	}
 	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB, graphSvc))
 	if coordinatorSetter, ok := interface{}(memSvc).(interface {
@@ -207,8 +225,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	cbRegistry.Register("model_api", mindruntime.DefaultCircuitBreakerConfig())
 	voiceEntry := interaction.NewVoiceEntryWithUnifiedEntry(orch, entry)
 	if err := deliveryStore.InitSchema(); err != nil {
-		log.Error("failed to init delivery store schema:", err); panic("failed to init delivery store schema")
+		log.Error("failed to init delivery store schema:", err)
+		panic("failed to init delivery store schema")
 	}
+	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore)
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -229,6 +249,90 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,
+		Extension:           extensionRuntime,
+	}
+}
+
+func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
+	runtime.WorkflowHost.Schedule = func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+		var payload map[string]interface{}
+		if err := json.Unmarshal(input, &payload); err != nil {
+			return nil, nil, fmt.Errorf("日程参数无效: %w", err)
+		}
+		if payload["due_time"] == nil && payload["dueAt"] != nil {
+			payload["due_time"] = payload["dueAt"]
+		}
+		idempotencyKey, _ := payload["idempotencyKey"].(string)
+		normalized, _ := json.Marshal(payload)
+		registered, err := runtime.Registry.Get(ctx, "dev.amitia.skill.create-schedule")
+		if err != nil {
+			return nil, nil, err
+		}
+		result, err := registered.Handler(ctx, extension.ExecuteSkillRequest{SkillID: registered.Definition.ID, Input: normalized, Scope: scope, IdempotencyKey: idempotencyKey})
+		return result.Output, result.SideEffects, err
+	}
+	runtime.WorkflowHost.Notification = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+		var payload struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(input, &payload); err != nil {
+			return nil, nil, fmt.Errorf("通知参数无效: %w", err)
+		}
+		payload.Content = strings.TrimSpace(payload.Content)
+		if payload.Content == "" || len([]rune(payload.Content)) > 4000 {
+			return nil, nil, fmt.Errorf("通知内容长度必须为 1 到 4000 个字符")
+		}
+		conversation, err := chatSvc.GetConversation(scope.ConversationID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if conversation.CharacterID != scope.CharacterID || conversation.Channel != scope.Channel || conversation.PeerID == "" {
+			return nil, nil, fmt.Errorf("通知只能发送到当前角色和会话绑定的渠道")
+		}
+		body, _ := json.Marshal(map[string]string{"content": payload.Content})
+		interactionID := scope.RequestID
+		if interactionID == "" {
+			interactionID = uuid.New().String()
+		}
+		intent := delivery.NewDeliveryIntent(interactionID, conversation.Channel, conversation.PeerID, "text", body)
+		if err := deliveryStore.CreateIntent(intent); err != nil {
+			return nil, nil, err
+		}
+		output, _ := json.Marshal(map[string]string{"intentId": intent.ID, "status": string(intent.Status)})
+		return output, []extension.SideEffectRecord{{Type: "notification_send", TargetID: intent.ID, Confirmed: true}}, nil
+	}
+	runtime.WorkflowHost.MemoryCandidate = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+		var payload struct {
+			Key        string `json:"key"`
+			Value      string `json:"value"`
+			MemoryType string `json:"memoryType"`
+			Importance int    `json:"importance"`
+			Source     string `json:"source"`
+		}
+		if err := json.Unmarshal(input, &payload); err != nil {
+			return nil, nil, fmt.Errorf("候选记忆参数无效: %w", err)
+		}
+		candidate, err := memSvc.SubmitCandidate(&memory.SubmitCandidateRequest{Key: payload.Key, Value: payload.Value, MemoryType: payload.MemoryType, Importance: payload.Importance, SourceText: payload.Source, ConversationID: scope.ConversationID, CharacterID: scope.CharacterID})
+		if err != nil {
+			return nil, nil, err
+		}
+		output, _ := json.Marshal(map[string]interface{}{"candidateId": candidate.ID, "status": "pending_review"})
+		return output, []extension.SideEffectRecord{{Type: "memory_candidate_write", TargetID: candidate.ID, Confirmed: true}}, nil
+	}
+	runtime.WorkflowHost.ContextContribution = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+		var payload struct {
+			Content    string `json:"content"`
+			TokenLimit int    `json:"tokenLimit"`
+		}
+		if err := json.Unmarshal(input, &payload); err != nil {
+			return nil, nil, fmt.Errorf("上下文贡献参数无效: %w", err)
+		}
+		payload.Content = strings.TrimSpace(payload.Content)
+		if payload.Content == "" || payload.TokenLimit < 1 || payload.TokenLimit > 1024 || len([]rune(payload.Content)) > payload.TokenLimit*8 {
+			return nil, nil, fmt.Errorf("上下文贡献超出 1024 token 宿主限制")
+		}
+		output, _ := json.Marshal(map[string]interface{}{"content": payload.Content, "tokenLimit": payload.TokenLimit, "conversationId": scope.ConversationID})
+		return output, []extension.SideEffectRecord{{Type: "context_injection", TargetID: scope.ConversationID, Confirmed: true}}, nil
 	}
 }
 

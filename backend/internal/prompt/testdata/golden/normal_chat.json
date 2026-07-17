@@ -87,8 +87,8 @@
     {
       "ID": "character_contract",
       "Type": "character_contract",
-      "TrustLevel": "semi_trusted",
-      "InstructionMode": "style_constraint",
+      "TrustLevel": "trusted",
+      "InstructionMode": "authoritative_instruction",
       "Source": "character_config",
       "Priority": 800,
       "TokenBudget": 0,
@@ -122,7 +122,16 @@
       "persona_section_used": false,
       "emotion_section_used": false,
       "memory_section_used": false,
-      "intimacy_boundary_used": false
-    }
+      "intimacy_boundary_used": false,
+      "html_removed": false,
+      "json_wrapper_removed": false,
+      "role_prefix_removed": false,
+      "meta_sentence_removed": false,
+      "duplicate_trimmed": false,
+      "channel_limit_applied": false,
+      "empty_fallback_used": false
+    },
+    "raw_reply_length": 0,
+    "final_reply_length": 0
   }
 }

@@ -38,6 +38,9 @@ audio_duration REAL DEFAULT 0,
 image_url TEXT DEFAULT '',
 video_url TEXT DEFAULT '',
 request_id TEXT DEFAULT '',
+reply_to_message_id TEXT,
+reply_to_role TEXT,
+reply_to_excerpt TEXT,
 created_at TEXT DEFAULT '',
 updated_at TEXT DEFAULT ''
 )`).Error; err != nil {

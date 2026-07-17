@@ -12,6 +12,7 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -58,6 +59,8 @@ type Service interface {
 	SetDeliveryStore(store DeliveryStore)
 	ReplayPostProcess(eventType string, payload []byte) error
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
+	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
+	SetSkillRuntime(*extension.Runtime)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -106,6 +109,7 @@ type service struct {
 	llmWithTools  llmWithToolsFunc
 	outboxStore   OutboxStore
 	deliveryStore DeliveryStore
+	skillRuntime  *extension.Runtime
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -139,6 +143,10 @@ func (s *service) SetDeliveryStore(store DeliveryStore) {
 	s.deliveryStore = store
 }
 
+func (s *service) SetSkillRuntime(runtime *extension.Runtime) {
+	s.skillRuntime = runtime
+}
+
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {
 	profile, err := s.charRepo.GetRuntimeProfile(characterID)
 	if err != nil {
@@ -156,6 +164,18 @@ func (s *service) TestChat(ctx context.Context, characterID string, userMessage 
 	}
 	reply, _, err := s.callLLM(ctx, cfg, messages)
 	return reply, err
+}
+func (s *service) GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error) {
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil {
+		return "", "", "", fmt.Errorf("获取模型配置失败: %w", err)
+	}
+	messages := []map[string]interface{}{
+		{"role": "system", "content": systemPrompt},
+		{"role": "user", "content": userPrompt},
+	}
+	reply, _, err := s.callLLMJSON(ctx, cfg, messages)
+	return reply, cfg.APIType, cfg.ModelName, err
 }
 func SetVisionModelConfigProvider(provider func() (*visioncfg.VisionConfig, error)) {
 	visionModelConfigProviderMu.Lock()

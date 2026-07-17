@@ -11,6 +11,7 @@ func appendContextSections(ctx *buildContext) {
 	appendDataOnly(ctx, "profile_context", GwSectionProfileContext, "profile", req.ProfileContext, "GwSectionProfileContext")
 	appendDataOnly(ctx, "memory_context", GwSectionMemoryContext, "memory", req.MemoryContext, "GwSectionMemoryContext")
 	appendDataOnly(ctx, "worldbook_context", GwSectionWorldbookContext, "worldbook", req.Worldbook, "GwSectionWorldbookContext")
+	appendDataOnly(ctx, "plugin_context", GwSectionPluginContext, "plugin", req.PluginContext, "GwSectionPluginContext")
 	appendDataOnly(ctx, "conversation_history", GwSectionConversationHistory, "history", req.History, "GwSectionConversationHistory")
 	appendDataOnly(ctx, "tool_result", GwSectionToolResult, "tool", req.ToolResults, "GwSectionToolResult")
 	appendDataOnly(ctx, "multimodal_text", GwSectionMultimodalText, "multimodal", req.MultimodalText, "GwSectionMultimodalText")

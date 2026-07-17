@@ -28,7 +28,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 			systemParts = append(systemParts, s.Content)
 
 		case GwSectionCharacterContract:
-			systemParts = append(systemParts, s.Content)
+			systemParts = append(systemParts, renderTaggedSection(s))
 
 		case GwSectionRuntimePlan, GwSectionExpressionPlan,
 			GwSectionPersonalityRaw, GwSectionEmotionFusionRaw, GwSectionAdultIntimacyRaw,
@@ -38,7 +38,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionProactivePersonality:
 			characterParts = append(characterParts, renderTaggedSection(s))
 
-		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionConversationHistory,
+		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext, GwSectionConversationHistory,
 			GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw,
 			GwSectionProactiveTimeContext, GwSectionProactiveRecentContext,
 			GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory:
@@ -98,7 +98,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 	return messages, nil
 }
 
-var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "current_user_message"}
+var allSectionTags = []string{"untrusted_data", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "plugin_context", "current_user_message"}
 
 func renderTaggedSection(s GwSection) string {
 	tagName := string(s.Type)

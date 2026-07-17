@@ -47,4 +47,10 @@ export interface AmitiaDesktopAPI {
   skipVersion(): Promise<void>
   restartNow(): Promise<void>
   restartLater(): Promise<void>
+  openGiteeRelease(): Promise<void>
+  onUpdateAvailable(callback: (event: unknown, data: unknown) => void): () => void
+  onUpdateNotAvailable(callback: () => void): () => void
+  onUpdateDownloadProgress(callback: (event: unknown, data: unknown) => void): () => void
+  onUpdateDownloaded(callback: (event: unknown, data: unknown) => void): () => void
+  onUpdateError(callback: (event: unknown, data: unknown) => void): () => void
 }

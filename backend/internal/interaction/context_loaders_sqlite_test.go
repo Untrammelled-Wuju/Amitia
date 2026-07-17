@@ -163,6 +163,7 @@ func createRuntimeLoaderTestSchema(t *testing.T, db *gorm.DB) {
 			self_reference TEXT,
 			gender_expression INTEGER,
 			life_identity TEXT,
+			status TEXT,
 			is_default INTEGER,
 			sort_order INTEGER,
 			created_at TEXT
@@ -213,12 +214,12 @@ func insertRuntimeLoaderTestData(t *testing.T, db *gorm.DB) {
 		id, name, identity, personality, speaking_style, relationship_style, system_prompt,
 		boundary_rules, personality_sliders, base_prompt, generated_prompt, personality_config,
 		chat_style_config, scene_rules, gender, pronoun, self_reference, gender_expression,
-		life_identity, is_default, sort_order, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		life_identity, status, is_default, sort_order, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"char-runtime", "Amitia", "assistant", "warm", "direct", "steady", "system",
 		"boundaries", "{}", "base", "generated", `{"openness":0.7}`,
 		`{"version":"chat-v1"}`, `{"version":"scene-v1"}`, "FEMALE", "她", "我", 60,
-		"CUSTOM", 1, 1, "2026-07-01 10:00:00").Error; err != nil {
+		"CUSTOM", "enabled", 1, 1, "2026-07-01 10:00:00").Error; err != nil {
 		t.Fatalf("insert character: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO moods (character_id, mood, mood_value, created_at) VALUES (?, ?, ?, ?)`,

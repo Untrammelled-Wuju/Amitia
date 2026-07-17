@@ -21,14 +21,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       :char-name="charName"
       :char-identity="charIdentity"
       :conv-title="convTitle"
-      :reply-style="replyStyle"
       :can-regenerate="canRegenerate"
       :messages-count="messages.length"
       :conv-id="convId"
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       @toggle-drawer="showDrawer = true"
-      @update:reply-style="replyStyle = $event"
       @regenerate="handleRegenerate"
       @clear="handleClear"
       @view-memories="handleViewMemories"
@@ -264,7 +262,6 @@ const {
 
 const {
   characters, conversations, importBatches, memories,
-  replyStyle,
   isWechatActive, wechatOnline, wechatMsgCount,
   isQQActive, qqOnline, qqMsgCount,
   showDrawer, showCharPicker, showMemories,

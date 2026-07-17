@@ -11,9 +11,10 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
-	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/memory"
@@ -74,6 +75,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry, ttsSvc, services.DeliveryStore)
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
+		extension.RegisterRouter(apiGroup, ctx, services.Extension)
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")
