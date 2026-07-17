@@ -182,10 +182,10 @@ onMounted(async () => {
 }
 
 :global(html[data-theme="dark"]) .side-nav {
-  background: var(--console-sidebar);
-  border-right-color: var(--console-border);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: var(--tp-glass-bg-strong);
+  border-right-color: var(--tp-glass-border);
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .side-nav.is-collapsed {

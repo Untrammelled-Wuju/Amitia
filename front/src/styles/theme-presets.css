@@ -41,8 +41,8 @@ html[data-theme="light"] {
   --tp-info: #68706A;
   --tp-info-soft: #ECEFEB;
   --tp-overlay: rgba(244, 241, 234, 0.82);
-  --tp-glass-bg: rgba(248, 251, 255, 0.96);
-  --tp-glass-bg-strong: rgba(248, 251, 255, 0.96);
+  --tp-glass-bg: rgba(255, 255, 255, 0.2);
+  --tp-glass-bg-strong: rgba(255, 255, 255, 0.2);
   --tp-glass-border: rgba(92, 72, 50, 0.12);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;
@@ -140,8 +140,8 @@ html[data-theme="dark"] {
   --tp-info: #9A9E99;
   --tp-info-soft: rgba(154, 158, 153, 0.11);
   --tp-overlay: rgba(11, 11, 12, 0.88);
-  --tp-glass-bg: rgba(24, 24, 27, 0.68);
-  --tp-glass-bg-strong: rgba(24, 24, 27, 0.82);
+  --tp-glass-bg: rgba(24, 24, 27, 0.6);
+  --tp-glass-bg-strong: rgba(24, 24, 27, 0.6);
   --tp-glass-border: rgba(255, 255, 255, 0.08);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;

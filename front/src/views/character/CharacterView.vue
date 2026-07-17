@@ -400,7 +400,7 @@ async function deleteCurrent() {
 .avatar-preview:hover { border-color: var(--ac-color-primary); }
 .avatar-img { width: 100%; height: 100%; object-fit: cover; }
 .avatar-placeholder { font-size: 28px; color: var(--ac-color-text-muted); }
-.char-layout { display:flex; height:calc(100vh - 80px); gap:0; }
+.char-layout { display:flex; height:100%; gap:0; }
 .char-sidebar { width:200px; flex-shrink:0; border-right:1px solid var(--el-border-color-light); background:var(--el-bg-color); display:flex; flex-direction:column; }
 .sidebar-header { display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); }
 .sidebar-header h3 { font-size:15px; font-weight:600; margin:0; }
