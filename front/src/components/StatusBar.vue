@@ -32,23 +32,27 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
     <div class="status-right">
-      <el-button text circle class="icon-button" @click="$emit('toggleTheme')">
-        <el-icon><component :is="themeIcon" /></el-icon>
-      </el-button>
-      <el-dropdown v-if="username" trigger="click">
-        <button class="user-button">
-          <span class="avatar"><el-icon><UserFilled /></el-icon></span>
-          <span>{{ username }}</span>
-        </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item @click="$emit('logout')">退出登录</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-      <button v-else class="user-button">
-        <span class="avatar"><el-icon><UserFilled /></el-icon></span>
-        <span>管理员</span>
+      <button
+        class="theme-toggle"
+        :class="{ 'is-light': theme === 'light' }"
+        type="button"
+        role="switch"
+        :aria-checked="theme === 'light'"
+        :aria-label="theme === 'dark' ? '切换为亮色主题' : '切换为暗色主题'"
+        title="切换主题"
+        @click="$emit('toggleTheme')"
+      >
+        <span class="toggle-icon moon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M20 15.2A8 8 0 0 1 8.8 4a8.3 8.3 0 1 0 11.2 11.2Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <span class="toggle-icon sun">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.9" />
+            <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+          </svg>
+        </span>
       </button>
     </div>
     <SearchModal ref="searchModal" />
@@ -57,7 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { DArrowLeft, Moon, Search, Sunny, UserFilled } from "@element-plus/icons-vue"
+import { DArrowLeft, Search } from "@element-plus/icons-vue"
 import SearchModal from "./SearchModal.vue"
 import { useAppStore } from "@/stores/app"
 
@@ -68,12 +72,10 @@ const props = defineProps<{
   modelStatus?: string
   characterName?: string
   theme?: string
-  username?: string
 }>()
 
 defineEmits<{
   toggleTheme: []
-  logout: []
 }>()
 
 const appStore = useAppStore()
@@ -105,7 +107,6 @@ const modelLabel = computed(() =>
   props.modelStatus === "configured" ? "模型已配" : "模型未配"
 )
 
-const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
 </script>
 
 <style scoped>
@@ -231,33 +232,74 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   gap: 8px;
 }
 
-.icon-button {
-  color: var(--console-text);
-  font-size: 16px;
-}
-
-.user-button {
-  display: inline-flex;
+.theme-toggle {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--console-text-secondary);
-  font-size: 12px;
+  justify-content: space-between;
+  width: 72px;
+  height: 34px;
+  padding: 3px 4px;
+  border: 1px solid var(--tp-border);
+  border-radius: 999px;
+  background: var(--tp-panel-soft);
+  color: var(--tp-text-muted);
   cursor: pointer;
+  transition: border-color 180ms cubic-bezier(.2, .8, .2, 1), background 180ms cubic-bezier(.2, .8, .2, 1), transform 180ms cubic-bezier(.2, .8, .2, 1);
 }
 
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  width: 22px;
-  height: 22px;
+.theme-toggle:hover {
+  border-color: var(--tp-border-strong);
+  background: var(--tp-control-hover);
+}
+
+.theme-toggle:active {
+  transform: translateY(1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 2px;
+}
+
+.theme-toggle::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--tp-primary) 46%, transparent);
   border-radius: 50%;
-  color: var(--console-text-muted);
-  background: var(--console-avatar-bg);
+  background: var(--tp-primary);
+  transform: translateX(0);
+  transition: transform 240ms cubic-bezier(.2, .85, .2, 1), background 180ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.theme-toggle.is-light::before {
+  transform: translateX(38px);
+}
+
+.toggle-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.theme-toggle:not(.is-light) .moon,
+.theme-toggle.is-light .sun {
+  color: var(--tp-text-on-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle,
+  .theme-toggle::before {
+    transition-duration: 0.001ms;
+  }
 }
 
 @media (max-width: 768px) {

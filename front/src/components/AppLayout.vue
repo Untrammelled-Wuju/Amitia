@@ -5,7 +5,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
     <div class="app-body">
-      <SideNav v-if="!isMobile" />
+      <SideNav
+        v-if="!isMobile"
+        :username="authUsername"
+        :avatar="authAvatar"
+      />
 
       <div class="app-main">
         <StatusBar
@@ -16,9 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :model-status="health.model"
           :character-name="currentCharName"
           :theme="resolvedTheme"
-          :username="authUsername"
           @toggle-theme="toggleTheme"
-          @logout="handleLogout"
         />
 
         <main class="app-content" :class="{ 'is-login': isLoginPage }">
@@ -50,6 +52,7 @@ import MobileNav from "./MobileNav.vue"
 import { useTheme } from "../composables/useTheme"
 import { apiClient, getToken, removeToken, isLoggedIn } from "../composables/useApi"
 import { getPageTitle } from "@/navigation/app-nav"
+import { useUserAvatar } from "@/composables/useUserAvatar"
 
 const router = useRouter()
 const { state: theme, resolvedMode: resolvedTheme, toggleLightDark: toggleTheme } = useTheme()
@@ -74,6 +77,7 @@ const health = ref({
 const currentCharName = ref("")
 
 const authUsername = ref("")
+const { avatar: authAvatar } = useUserAvatar()
 
 const modelClass = computed(() =>
   health.value.model === "configured" ? "status-on" : "status-off"
@@ -153,15 +157,6 @@ async function fetchUserInfo() {
   } catch {
     removeToken()
   }
-}
-
-async function handleLogout() {
-  try {
-    await apiClient.post("/api/auth/logout")
-  } catch { /* ignore */ }
-  removeToken()
-  authUsername.value = ""
-  router.push("/login")
 }
 
 onMounted(() => {

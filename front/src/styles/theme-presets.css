@@ -3,10 +3,11 @@
 
 :root,
 html[data-theme="light"] {
-  --tp-page: #F4F1EA;
-  --tp-shell: rgba(250, 248, 243, 0.88);
+  --tp-page: #F7F9FC;
+  --tp-shell: rgba(248, 251, 255, 0.96);
   --tp-panel: #FFFFFF;
   --tp-panel-soft: #FAF8F3;
+  --tp-profile-bg: #F8FBFE;
   --tp-control: #F7F4EE;
   --tp-control-hover: #EEE9DF;
   --tp-float: #FFFFFF;
@@ -40,12 +41,12 @@ html[data-theme="light"] {
   --tp-info: #68706A;
   --tp-info-soft: #ECEFEB;
   --tp-overlay: rgba(244, 241, 234, 0.82);
-  --tp-glass-bg: rgba(250, 248, 243, 0.72);
-  --tp-glass-bg-strong: rgba(250, 248, 243, 0.84);
+  --tp-glass-bg: rgba(248, 251, 255, 0.96);
+  --tp-glass-bg-strong: rgba(248, 251, 255, 0.96);
   --tp-glass-border: rgba(92, 72, 50, 0.12);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;
-  --tp-page-glow: radial-gradient(circle at 16% 0%, rgba(155, 100, 45, 0.07), transparent 32%), radial-gradient(circle at 92% 12%, rgba(111, 86, 58, 0.04), transparent 28%);
+  --tp-page-glow: none;
   --tp-sidebar-glow: linear-gradient(180deg, rgba(155, 100, 45, 0.035), transparent 34%);
   --tp-logo-bg: linear-gradient(145deg, #B77B3F, #815022);
   --tp-shadow-card: none;
@@ -69,9 +70,8 @@ html[data-theme="light"] {
   --console-bg: var(--tp-page);
   --console-sidebar: var(--tp-shell);
   --console-topbar: var(--tp-shell);
-  --console-card: var(--tp-panel);
-  --console-card-soft: var(--tp-panel-soft);
-  --console-card-bg: var(--tp-panel);
+  --console-card: #FFFFFF;
+  --console-card-soft: #F8FAFC;
   --console-bg-subtle: var(--tp-panel-soft);
   --console-code-bg: var(--tp-panel-soft);
   --console-border: var(--tp-border);
@@ -106,6 +106,7 @@ html[data-theme="dark"] {
   --tp-shell: rgba(18, 18, 20, 0.88);
   --tp-panel: #18181B;
   --tp-panel-soft: #141416;
+  --tp-profile-bg: #161617;
   --tp-control: #202024;
   --tp-control-hover: #252529;
   --tp-float: #1C1C20;

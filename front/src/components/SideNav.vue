@@ -71,6 +71,16 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-menu>
 
     <div class="side-nav-bottom">
+      <button class="user-profile" type="button" :title="username || '管理员'" @click="openUserProfile">
+        <span class="user-avatar">
+          <img v-if="avatar" :src="avatar" alt="用户头像" />
+          <el-icon v-else><UserFilled /></el-icon>
+        </span>
+        <span v-show="!appStore.sidebarCollapsed" class="user-copy">
+          <strong>{{ username || "管理员" }}</strong>
+          <span>当前用户</span>
+        </span>
+      </button>
       <div class="version-bar" @click="handleCheckUpdate">
         <span v-show="!appStore.sidebarCollapsed" class="version-label">v{{ version }}</span>
         <el-icon v-if="checking" class="version-spinner"><Loading /></el-icon>
@@ -82,7 +92,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed, ref, onMounted } from "vue"
 
-import { useRoute } from "vue-router"
+import { useRoute, useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
 import {
   ChatDotRound, Odometer, Connection, UserFilled,
@@ -92,6 +102,12 @@ import { useAppStore } from "@/stores/app"
 
 import logoUrl from "../../public/logo.png"
 const route = useRoute()
+const router = useRouter()
+
+defineProps<{
+  username?: string
+  avatar?: string
+}>()
 
 const version = ref("1.0.0")
 const checking = ref(false)
@@ -117,6 +133,10 @@ const activeIndex = computed(() => {
   }
   return path
 })
+
+function openUserProfile() {
+  router.push("/user-settings")
+}
 
 async function handleCheckUpdate() {
   if (checking.value) return
@@ -267,6 +287,74 @@ onMounted(async () => {
 
 .side-nav.is-collapsed .side-nav-bottom {
   margin: 0 8px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  background: var(--tp-profile-bg);
+  color: var(--console-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.user-profile:focus-visible {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 2px;
+}
+
+.user-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--tp-primary);
+  color: var(--tp-text-on-primary);
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-copy {
+  min-width: 0;
+}
+
+.user-copy strong,
+.user-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-copy strong {
+  max-width: 126px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.user-copy span {
+  margin-top: 2px;
+  color: var(--console-text-muted);
+  font-size: 11px;
+}
+
+.side-nav.is-collapsed .user-profile {
+  justify-content: center;
+  padding: 10px;
 }
 
 .version-bar {

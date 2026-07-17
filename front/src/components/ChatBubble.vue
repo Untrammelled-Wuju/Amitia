@@ -5,8 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="chat-bubble" :class="[message.role]">
     <div class="bubble-avatar">
-      <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : undefined">
-        {{ message.role === "user" ? "U" : charInitial }}
+      <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : (userAvatar || undefined)">
+        <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
+        <template v-else>{{ charInitial }}</template>
       </el-avatar>
     </div>
     <div class="bubble-body">
@@ -65,11 +66,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue"
-import { DocumentCopy, Refresh, ChatLineSquare } from "@element-plus/icons-vue"
+import { DocumentCopy, Refresh, ChatLineSquare, UserFilled } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue"
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue"
 import { fmtTime } from "./chat-bubble/utils"
+import { useUserAvatar } from "@/composables/useUserAvatar"
 
 const props = defineProps<{
   message: {
@@ -97,6 +99,8 @@ const emit = defineEmits<{
   reply: [message: any]
   "scroll-to-message": [id: string]
 }>()
+
+const { avatar: userAvatar } = useUserAvatar()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
 const textExpanded = ref(!((props.message as any).audioUrl))

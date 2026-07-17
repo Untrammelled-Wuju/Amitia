@@ -63,6 +63,7 @@ const extraTitles = [
   { path: "/storage", label: "存储清理" },
   { path: "/runtime-mode", label: "运行模式" },
   { path: "/runtime-debug", label: "运行时调试" },
+  { path: "/user-settings", label: "用户信息" },
   { path: "/extensions/skills", label: "技能管理" },
   { path: "/extensions/plugins", label: "插件管理" },
   { path: "/extensions/workshop", label: "扩展工坊" },

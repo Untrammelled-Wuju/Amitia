@@ -5,8 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div :class="['chat-message', message.role, { 'is-reminder': isReminder, 'is-tool-result': isToolResult }]">
     <div class="message-avatar">
-      <el-avatar :size="36" :src="message.role === 'assistant' ? avatar : undefined">
-        {{ message.role === 'user' ? 'U' : 'AI' }}
+      <el-avatar :size="36" :src="message.role === 'assistant' ? avatar : (userAvatar || undefined)">
+        <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
+        <template v-else>AI</template>
       </el-avatar>
     </div>
     <div class="message-body">
@@ -55,7 +56,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, computed } from "vue"
 import { ElMessage } from "element-plus"
+import { UserFilled } from "@element-plus/icons-vue"
 import { request } from "../composables/request"
+import { useUserAvatar } from "@/composables/useUserAvatar"
 import type { Message } from "@/types"
 
 const props = defineProps<{
@@ -63,6 +66,8 @@ const props = defineProps<{
   name?: string
   avatar?: string
 }>()
+
+const { avatar: userAvatar } = useUserAvatar()
 
 const isReminder = computed(() => {
   return props.message.source === "reminder" || props.message.msgType === "reminder"

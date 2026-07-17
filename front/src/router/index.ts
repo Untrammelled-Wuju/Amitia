@@ -84,6 +84,7 @@ const router = createRouter({
     { path: "/runtime-mode", name: "runtimeMode", component: () => import("@/views/runtime-mode/RuntimeModeView.vue"), meta: { requiresAuth: true } },
     { path: "/storage", name: "storage", component: () => import("@/views/chat-cleanup/ChatCleanupView.vue"), meta: { requiresAuth: true } },
     { path: "/profiles", name: "profiles", component: () => import("@/views/profile/ProfileView.vue"), meta: { requiresAuth: true } },
+    { path: "/user-settings", name: "userSettings", component: () => import("@/views/user-settings/UserSettingsView.vue"), meta: { requiresAuth: true } },
     { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
     { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
     { path: '/decision-viz', name: 'decisionViz', component: () => import('@/views/decision-viz/DecisionVizView.vue'), meta: { requiresAuth: true } },
