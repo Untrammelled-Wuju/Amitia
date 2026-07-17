@@ -1,6 +1,6 @@
 <template>
   <div class="extension-page">
-    <ExtensionPageHeader title="技能" description="管理 Amitia 内置能力与现有工具适配状态。禁用后会立即从模型工具列表中移除。">
+    <ExtensionPageHeader title="技能管理" description="管理 Amitia 内置能力与现有工具适配状态。禁用后会立即从模型工具列表中移除。">
       <template #actions><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></template>
     </ExtensionPageHeader>
 
