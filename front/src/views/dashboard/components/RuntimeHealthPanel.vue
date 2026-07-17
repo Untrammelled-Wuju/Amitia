@@ -50,14 +50,14 @@ const emit = defineEmits<{
   border: 1px solid var(--console-border);
   border-radius: 14px;
   background: var(--console-card);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 .health-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
 .health-module-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .health-module-item {
   min-height: 54px;
-  background: var(--console-card);
+  background: var(--console-card-soft);
   border-radius: 9px;
   padding: 12px 14px;
   border: 1px solid var(--console-border-soft);
@@ -66,6 +66,7 @@ const emit = defineEmits<{
   align-items: center;
   gap: 12px;
 }
+.health-module-item:hover { background: var(--tp-control-hover); }
 .module-icon { display: flex; color: var(--console-text-muted); font-size: 18px; }
 .hmi-body { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .hmi-label { min-width: 76px; font-size: 14px; font-weight: 600; color: var(--console-text-secondary); }

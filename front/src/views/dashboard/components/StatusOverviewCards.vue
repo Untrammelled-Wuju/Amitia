@@ -87,7 +87,7 @@ const runtimeHealthLabel = computed(() =>
   border-radius: 14px;
   background: var(--console-card);
   border: 1px solid var(--console-border);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 .sc-icon {
   flex-shrink: 0;

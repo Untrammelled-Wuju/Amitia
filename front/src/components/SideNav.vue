@@ -148,14 +148,24 @@ onMounted(async () => {
 .side-nav {
   width: var(--ac-sidebar-width);
   height: 100%;
-  background: var(--console-sidebar);
-  border-right: 1px solid var(--console-border);
+  background: var(--tp-glass-bg-strong);
+  border-right: 1px solid var(--tp-glass-border);
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   padding: 24px 0 0;
   user-select: none;
   flex-shrink: 0;
   transition: width 0.3s ease;
+}
+
+:global(html[data-theme="dark"]) .side-nav {
+  background: var(--console-sidebar);
+  border-right-color: var(--console-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .side-nav.is-collapsed {

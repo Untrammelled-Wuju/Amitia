@@ -38,7 +38,7 @@ defineProps<{
   border: 1px solid var(--console-border);
   border-radius: 14px;
   background: var(--console-card);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 .section-header-row { display: flex; justify-content: space-between; align-items: center; }
 .panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }

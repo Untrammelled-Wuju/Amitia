@@ -1,13 +1,15 @@
 /* SPDX-FileCopyrightText: 2026 彭旭 */
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* ============================================================
-   Theme Presets - CSS Variable Definitions
-   Data attribute driven: html[data-theme="preset-name"]
-   ============================================================ */
 
-/* === Default / Light === */
 :root,
 html[data-theme="light"] {
+  --tp-page: #F4F1EA;
+  --tp-shell: rgba(250, 248, 243, 0.88);
+  --tp-panel: #FFFFFF;
+  --tp-panel-soft: #FAF8F3;
+  --tp-control: #F7F4EE;
+  --tp-control-hover: #EEE9DF;
+  --tp-float: #FFFFFF;
   --tp-primary: #9B642D;
   --tp-primary-hover: #845122;
   --tp-primary-active: #6F421B;
@@ -15,84 +17,98 @@ html[data-theme="light"] {
   --tp-primary-bg: #F1E2CF;
   --tp-primary-border: rgba(155, 100, 45, 0.22);
   --tp-primary-ring: rgba(155, 100, 45, 0.22);
-  --tp-text-on-primary: #FFFFFF;
-  --tp-text-on-status: #FFFFFF;
-
-  --nav-active-color: #9B642D;
-  --nav-active-bg: #F1E2CF;
-  --nav-hover-color: #845122;
-  --nav-hover-bg: rgba(155, 100, 45, 0.08);
-
-  --status-ok-bg: #E3EFE6;
-  --status-ok-color: #4F8562;
-  --status-off-bg: #F6E2E1;
-  --status-off-color: #B94F4D;
-
-  --tp-bg: #F4F1EA;
-  --tp-bg-secondary: #FAF8F3;
-  --tp-surface: #FFFFFF;
-  --tp-surface-hover: #EEE9DF;
-  --tp-border: #DDD8CE;
-  --tp-border-light: #E8E3DA;
-  --tp-border-strong: #C8C1B5;
-
+  --tp-primary-light-3: #B48458;
+  --tp-primary-light-5: #C9A27F;
+  --tp-primary-light-7: #DFC7AD;
+  --tp-primary-light-8: #E9D8C5;
+  --tp-primary-light-9: #F4EADF;
   --tp-text: #1C201D;
   --tp-text-secondary: #656B66;
   --tp-text-muted: #969B96;
   --tp-text-placeholder: #969B96;
-
+  --tp-text-on-primary: #FFFFFF;
+  --tp-text-on-status: #FFFFFF;
+  --tp-border: #DDD8CE;
+  --tp-border-light: #E8E3DA;
+  --tp-border-strong: #C8C1B5;
   --tp-success: #4F8562;
   --tp-success-soft: #E3EFE6;
   --tp-warning: #A96E28;
   --tp-warning-soft: #F5E8D4;
   --tp-danger: #B94F4D;
   --tp-danger-soft: #F6E2E1;
-  --tp-info: #9B642D;
-  --tp-info-soft: #F1E2CF;
-
-  --tp-shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --tp-shadow-md: 0 2px 8px rgba(0,0,0,0.08);
-  --tp-shadow-lg: 0 4px 16px rgba(0,0,0,0.1);
+  --tp-info: #68706A;
+  --tp-info-soft: #ECEFEB;
   --tp-overlay: rgba(244, 241, 234, 0.82);
-  --tp-glass: rgba(250, 248, 243, 0.78);
-  --tp-sidebar-glow: radial-gradient(circle at 20% 0%, rgba(155, 100, 45, 0.10), transparent 34%);
-  --tp-page-glow: radial-gradient(circle at 72% 12%, rgba(155, 100, 45, 0.08), transparent 30%);
+  --tp-glass-bg: rgba(250, 248, 243, 0.72);
+  --tp-glass-bg-strong: rgba(250, 248, 243, 0.84);
+  --tp-glass-border: rgba(92, 72, 50, 0.12);
+  --tp-glass-blur: 14px;
+  --tp-glass-saturate: 105%;
+  --tp-page-glow: radial-gradient(circle at 16% 0%, rgba(155, 100, 45, 0.07), transparent 32%), radial-gradient(circle at 92% 12%, rgba(111, 86, 58, 0.04), transparent 28%);
+  --tp-sidebar-glow: linear-gradient(180deg, rgba(155, 100, 45, 0.035), transparent 34%);
   --tp-logo-bg: linear-gradient(145deg, #B77B3F, #815022);
-
-  --console-bg: #F4F1EA;
-  --console-sidebar: rgba(250, 248, 243, 0.96);
-  --console-topbar: var(--console-sidebar);
-  --console-card: #FFFFFF;
-  --console-card-soft: #FAF8F3;
-  --console-card-bg: var(--console-card);
-  --console-bg-subtle: var(--console-card-soft);
-  --console-code-bg: var(--tp-bg-secondary);
-  --console-border: #DDD8CE;
-  --console-border-soft: #E8E3DA;
-  --console-text: #1C201D;
-  --console-text-secondary: #656B66;
-  --console-text-muted: #969B96;
-  --console-search-bg: #EEE9DF;
-  --console-search-text: #656B66;
-  --console-shadow: 0 18px 50px rgba(28, 32, 29, 0.06);
-  --console-status-ok-bg: #E3EFE6;
-  --console-status-warn-bg: #F5E8D4;
-  --console-value-ok-bg: #E3EFE6;
-  --console-value-warn-bg: #F5E8D4;
-  --console-value-off-bg: #F6E2E1;
-  --console-blue-soft: #F1E2CF;
-  --console-purple-soft: #F1E2CF;
-  --console-violet-soft: #F1E2CF;
+  --tp-shadow-card: none;
+  --tp-shadow-float: 0 12px 32px rgba(28, 32, 29, 0.10);
+  --tp-bg: var(--tp-page);
+  --tp-bg-secondary: var(--tp-panel-soft);
+  --tp-surface: var(--tp-panel);
+  --tp-surface-hover: var(--tp-control-hover);
+  --tp-glass: var(--tp-glass-bg);
+  --tp-shadow-sm: var(--tp-shadow-card);
+  --tp-shadow-md: var(--tp-shadow-float);
+  --tp-shadow-lg: var(--tp-shadow-float);
+  --nav-active-color: var(--tp-primary);
+  --nav-active-bg: var(--tp-primary-soft);
+  --nav-hover-color: var(--tp-primary-hover);
+  --nav-hover-bg: rgba(155, 100, 45, 0.08);
+  --status-ok-bg: var(--tp-success-soft);
+  --status-ok-color: var(--tp-success);
+  --status-off-bg: var(--tp-danger-soft);
+  --status-off-color: var(--tp-danger);
+  --console-bg: var(--tp-page);
+  --console-sidebar: var(--tp-shell);
+  --console-topbar: var(--tp-shell);
+  --console-card: var(--tp-panel);
+  --console-card-soft: var(--tp-panel-soft);
+  --console-card-bg: var(--tp-panel);
+  --console-bg-subtle: var(--tp-panel-soft);
+  --console-code-bg: var(--tp-panel-soft);
+  --console-border: var(--tp-border);
+  --console-border-soft: var(--tp-border-light);
+  --console-text: var(--tp-text);
+  --console-text-secondary: var(--tp-text-secondary);
+  --console-text-muted: var(--tp-text-muted);
+  --console-search-bg: var(--tp-control);
+  --console-search-text: var(--tp-text-secondary);
+  --console-shadow: var(--tp-shadow-card);
+  --console-glass: var(--tp-glass-bg);
+  --console-glass-strong: var(--tp-glass-bg-strong);
+  --console-glass-border: var(--tp-glass-border);
+  --console-status-ok-bg: var(--tp-success-soft);
+  --console-status-warn-bg: var(--tp-warning-soft);
+  --console-value-ok-bg: var(--tp-success-soft);
+  --console-value-warn-bg: var(--tp-warning-soft);
+  --console-value-off-bg: var(--tp-danger-soft);
+  --console-blue-soft: #ECEFEB;
+  --console-purple-soft: #F0ECE6;
+  --console-violet-soft: #EEEAE2;
   --console-orange-soft: #F5E8D4;
-  --console-amber-soft: #F5E8D4;
+  --console-amber-soft: #F1E2CF;
   --console-green-soft: #E3EFE6;
-  --console-diagnostic-warn-bg: #F5E8D4;
-  --console-diagnostic-ok-bg: #E3EFE6;
+  --console-diagnostic-warn-bg: var(--tp-warning-soft);
+  --console-diagnostic-ok-bg: var(--tp-success-soft);
   --console-avatar-bg: linear-gradient(180deg, #F1E2CF, #DDD8CE);
 }
 
-/* === Dark === */
 html[data-theme="dark"] {
+  --tp-page: #0B0B0C;
+  --tp-shell: rgba(18, 18, 20, 0.88);
+  --tp-panel: #18181B;
+  --tp-panel-soft: #141416;
+  --tp-control: #202024;
+  --tp-control-hover: #252529;
+  --tp-float: #1C1C20;
   --tp-primary: #C99557;
   --tp-primary-hover: #D8A96A;
   --tp-primary-active: #AD773D;
@@ -100,145 +116,45 @@ html[data-theme="dark"] {
   --tp-primary-bg: rgba(201, 149, 87, 0.11);
   --tp-primary-border: rgba(201, 149, 87, 0.22);
   --tp-primary-ring: rgba(201, 149, 87, 0.22);
-  --tp-text-on-primary: #17120C;
-  --tp-text-on-status: #17120C;
-
-  --nav-active-color: #D8A96A;
-  --nav-active-bg: rgba(201, 149, 87, 0.11);
-  --nav-hover-color: #C99557;
-  --nav-hover-bg: rgba(201, 149, 87, 0.07);
-
-  --status-ok-bg: rgba(117, 161, 132, 0.12);
-  --status-ok-color: #75A184;
-  --status-off-bg: rgba(201, 110, 106, 0.12);
-  --status-off-color: #C96E6A;
-
-  --tp-bg: #0B0B0C;
-  --tp-bg-secondary: #121214;
-  --tp-surface: #18181B;
-  --tp-surface-hover: #202024;
-  --tp-border: #29292D;
-  --tp-border-light: #212124;
-  --tp-border-strong: #3B3B41;
-
+  --tp-primary-light-3: #D4AA76;
+  --tp-primary-light-5: #B99365;
+  --tp-primary-light-7: rgba(201, 149, 87, 0.28);
+  --tp-primary-light-8: rgba(201, 149, 87, 0.18);
+  --tp-primary-light-9: rgba(201, 149, 87, 0.11);
   --tp-text: #F1F0ED;
   --tp-text-secondary: #AAA7A2;
   --tp-text-muted: #74716D;
   --tp-text-placeholder: #74716D;
-
+  --tp-text-on-primary: #17120C;
+  --tp-text-on-status: #17120C;
+  --tp-border: #29292D;
+  --tp-border-light: #212124;
+  --tp-border-strong: #3B3B41;
   --tp-success: #75A184;
   --tp-success-soft: rgba(117, 161, 132, 0.12);
   --tp-warning: #C99A56;
   --tp-warning-soft: rgba(201, 154, 86, 0.12);
   --tp-danger: #C96E6A;
   --tp-danger-soft: rgba(201, 110, 106, 0.12);
-  --tp-info: #C99557;
-  --tp-info-soft: rgba(201, 149, 87, 0.11);
-
-  --tp-shadow-sm: 0 1px 3px rgba(0,0,0,0.26);
-  --tp-shadow-md: 0 2px 10px rgba(0,0,0,0.36);
-  --tp-shadow-lg: 0 18px 60px rgba(0,0,0,0.42);
+  --tp-info: #9A9E99;
+  --tp-info-soft: rgba(154, 158, 153, 0.11);
   --tp-overlay: rgba(11, 11, 12, 0.88);
-  --tp-glass: rgba(18, 18, 20, 0.84);
-  --tp-sidebar-glow: radial-gradient(circle at 18% 0%, rgba(201, 149, 87, 0.045), transparent 36%);
-  --tp-page-glow: radial-gradient(circle at 74% 10%, rgba(201, 149, 87, 0.035), transparent 32%);
+  --tp-glass-bg: rgba(24, 24, 27, 0.68);
+  --tp-glass-bg-strong: rgba(24, 24, 27, 0.82);
+  --tp-glass-border: rgba(255, 255, 255, 0.08);
+  --tp-glass-blur: 14px;
+  --tp-glass-saturate: 105%;
+  --tp-page-glow: radial-gradient(circle at 18% 0%, rgba(201, 149, 87, 0.055), transparent 30%);
+  --tp-sidebar-glow: linear-gradient(180deg, rgba(201, 149, 87, 0.028), transparent 32%);
   --tp-logo-bg: linear-gradient(145deg, #D2A363, #A66F39);
-
-  --console-bg: #0B0B0C;
-  --console-sidebar: #121214;
-  --console-topbar: #121214;
-  --console-card: #18181B;
-  --console-card-soft: #121214;
-  --console-card-bg: var(--console-card);
-  --console-bg-subtle: var(--console-card-soft);
-  --console-code-bg: var(--tp-bg-secondary);
-  --console-border: #29292D;
-  --console-border-soft: #212124;
-  --console-text: #F1F0ED;
-  --console-text-secondary: #AAA7A2;
-  --console-text-muted: #74716D;
-  --console-search-bg: #202024;
-  --console-search-text: #AAA7A2;
-  --console-shadow: 0 18px 56px rgba(0, 0, 0, 0.28);
-  --console-status-ok-bg: rgba(117, 161, 132, 0.12);
-  --console-status-warn-bg: rgba(201, 154, 86, 0.12);
-  --console-value-ok-bg: rgba(117, 161, 132, 0.12);
-  --console-value-warn-bg: rgba(201, 154, 86, 0.12);
-  --console-value-off-bg: rgba(201, 110, 106, 0.12);
-  --console-blue-soft: rgba(201, 149, 87, 0.11);
-  --console-purple-soft: rgba(201, 149, 87, 0.11);
-  --console-violet-soft: rgba(201, 149, 87, 0.11);
+  --tp-shadow-card: none;
+  --tp-shadow-float: 0 16px 40px rgba(0, 0, 0, 0.30);
+  --nav-hover-bg: rgba(201, 149, 87, 0.07);
+  --console-blue-soft: rgba(154, 158, 153, 0.11);
+  --console-purple-soft: rgba(176, 162, 143, 0.10);
+  --console-violet-soft: rgba(164, 157, 145, 0.10);
   --console-orange-soft: rgba(201, 154, 86, 0.12);
-  --console-amber-soft: rgba(201, 154, 86, 0.12);
+  --console-amber-soft: rgba(201, 149, 87, 0.11);
   --console-green-soft: rgba(117, 161, 132, 0.12);
-  --console-diagnostic-warn-bg: rgba(201, 154, 86, 0.12);
-  --console-diagnostic-ok-bg: rgba(117, 161, 132, 0.12);
   --console-avatar-bg: linear-gradient(180deg, #3B3B41, #18181B);
-}
-/* === Element Plus variable bridge === */
-html[data-theme] {
-  --el-color-primary: var(--tp-primary);
-  --el-color-primary-light-3: var(--tp-primary-hover);
-  --el-color-primary-light-5: var(--tp-primary-soft);
-  --el-color-primary-light-7: var(--tp-primary-soft);
-  --el-color-primary-light-8: var(--tp-primary-soft);
-  --el-color-primary-light-9: var(--tp-primary-bg);
-  --el-color-primary-dark-2: var(--tp-primary-active);
-
-  --el-color-success: var(--tp-success);
-  --el-color-warning: var(--tp-warning);
-  --el-color-danger: var(--tp-danger);
-  --el-color-info: var(--tp-info);
-
-  --el-border-color: var(--tp-border);
-  --el-border-color-light: var(--tp-border-light);
-  --el-border-color-lighter: var(--tp-border-light);
-
-  --el-text-color-primary: var(--tp-text);
-  --el-text-color-regular: var(--tp-text);
-  --el-text-color-secondary: var(--tp-text-secondary);
-  --el-text-color-placeholder: var(--tp-text-placeholder);
-
-  --el-bg-color: var(--tp-bg);
-  --el-bg-color-overlay: var(--tp-surface);
-  --el-mask-color: var(--tp-overlay);
-  --el-fill-color: var(--tp-bg-secondary);
-  --el-fill-color-lighter: var(--tp-bg-secondary);
-  --el-fill-color-light: var(--tp-bg-secondary);
-}
-
-/* === Bridge existing ac- variables to new tp- variables === */
-html[data-theme] {
-  --ac-color-primary: var(--tp-primary);
-  --ac-color-primary-light: var(--tp-primary-hover);
-  --ac-color-primary-dark: var(--tp-primary-active);
-  --ac-color-primary-bg: var(--tp-primary-bg);
-  --ac-color-primary-border: var(--tp-primary-border);
-  --ac-color-text-on-primary: var(--tp-text-on-primary);
-
-  --ac-color-bg: var(--tp-bg);
-  --ac-color-bg-secondary: var(--tp-bg-secondary);
-  --ac-color-surface: var(--tp-surface);
-  --ac-color-surface-hover: var(--tp-surface-hover);
-  --ac-color-border: var(--tp-border);
-  --ac-color-border-light: var(--tp-border-light);
-  --ac-color-border-strong: var(--tp-border-strong);
-
-  --ac-color-text: var(--tp-text);
-  --ac-color-text-secondary: var(--tp-text-secondary);
-  --ac-color-text-muted: var(--tp-text-muted);
-  --ac-color-text-placeholder: var(--tp-text-placeholder);
-
-  --ac-color-success: var(--tp-success);
-  --ac-color-success-bg: var(--tp-success-soft);
-  --ac-color-warning: var(--tp-warning);
-  --ac-color-warning-bg: var(--tp-warning-soft);
-  --ac-color-danger: var(--tp-danger);
-  --ac-color-danger-bg: var(--tp-danger-soft);
-  --ac-color-info: var(--tp-info);
-  --ac-color-info-bg: var(--tp-info-soft);
-
-  --ac-shadow-sm: var(--tp-shadow-sm);
-  --ac-shadow-md: var(--tp-shadow-md);
-  --ac-shadow-lg: var(--tp-shadow-lg);
 }

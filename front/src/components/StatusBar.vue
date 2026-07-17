@@ -116,11 +116,20 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   gap: 12px;
   height: 56px;
   padding: 0 12px;
-  background: var(--console-topbar);
-  border-bottom: 1px solid var(--console-border);
+  background: var(--tp-glass-bg);
+  border-bottom: 1px solid var(--tp-glass-border);
   flex-shrink: 0;
   user-select: none;
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  box-shadow: none;
+}
+
+:global(html[data-theme="dark"]) .status-bar {
+  background: var(--console-topbar);
+  border-bottom-color: var(--console-border);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: none;
 }
 
 .collapse-btn {
@@ -159,7 +168,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   background: var(--console-search-bg);
   cursor: pointer;
   color: var(--console-search-text);
-  box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.02);
+  box-shadow: none;
   font-size: 12px;
 }
 
@@ -188,7 +197,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
   gap: 6px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(34, 197, 94, 0.16);
+  border: 1px solid color-mix(in srgb, var(--tp-success) 18%, transparent);
   border-radius: 9px;
   background: var(--console-status-ok-bg);
   font-size: 12px;
@@ -208,7 +217,7 @@ const themeIcon = computed(() => props.theme === "dark" ? Sunny : Moon)
 .status-off .dot { background: var(--status-off-color); }
 
 .status-off {
-  border-color: rgba(245, 158, 11, 0.22);
+  border-color: color-mix(in srgb, var(--tp-warning) 22%, transparent);
   background: var(--console-status-warn-bg);
 }
 

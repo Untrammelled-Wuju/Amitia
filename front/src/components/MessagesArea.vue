@@ -190,7 +190,7 @@ defineExpose({ rootEl })
 }
 
 @keyframes highlight-fade {
-  0% { background-color: var(--ac-color-primary-light, rgba(64, 158, 255, 0.15)); }
+  0% { background-color: var(--tp-primary-light-9); }
   100% { background-color: transparent; }
 }
 

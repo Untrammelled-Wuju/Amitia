@@ -93,15 +93,15 @@ function fmtNum(n: number | undefined): string {
   return String(n)
 }
 
-function readCSSVar(name: string, fallback: string): string {
-  if (typeof document === "undefined") return fallback
+function readCSSVar(name: string): string {
+  if (typeof document === "undefined") return ""
   const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return val || fallback
+  return val
 }
 
 function resolveColor(color: string): string {
   if (!color.startsWith("var(") || !color.endsWith(")")) return color
-  return readCSSVar(color.slice(4, -1).trim(), "#9B642D")
+  return readCSSVar(color.slice(4, -1).trim()) || readCSSVar("--tp-primary")
 }
 
 function safeArray(v: any): any[] {
@@ -137,8 +137,8 @@ const chartOptions = computed(() => {
     result[m.key] = {
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       grid: { left: 0, right: 8, top: 8, bottom: 20 },
-      xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted", "#969B96"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border", "#DDD8CE") } } },
-      yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft", "#E8E3DA") } }, axisLabel: { color: readCSSVar("--console-text-muted", "#969B96"), fontSize: 10 } },
+      xAxis: { type: "category", data: xData, axisLabel: { color: readCSSVar("--console-text-muted"), fontSize: 10, rotate: 45 }, axisLine: { lineStyle: { color: readCSSVar("--console-border") } } },
+      yAxis: { type: "value", splitLine: { lineStyle: { color: readCSSVar("--console-border-soft") } }, axisLabel: { color: readCSSVar("--console-text-muted"), fontSize: 10 } },
       series: [{
         type: "bar",
         data,
@@ -189,7 +189,7 @@ onUnmounted(() => {
   border-radius: 14px;
   background: var(--console-card);
   border: 1px solid var(--console-border);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 
 .dc-icon {
@@ -202,7 +202,7 @@ onUnmounted(() => {
   border-radius: 10px;
 }
 
-.dc-icon.blue { color: var(--ac-color-primary); background: var(--console-blue-soft); }
+.dc-icon.blue { color: var(--tp-info); background: var(--console-blue-soft); }
 .dc-icon.orange { color: var(--ac-color-warning); background: var(--console-orange-soft); }
 
 .dc-body { flex: 1; min-width: 0; }
@@ -256,7 +256,7 @@ onUnmounted(() => {
   border: 1px solid var(--console-border);
   border-radius: 10px;
   padding: 14px 12px 10px;
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 
 .chart-card-title { font-size: 14px; font-weight: 700; color: var(--console-text); margin-bottom: 2px; padding: 0 2px; }
@@ -276,7 +276,7 @@ onUnmounted(() => {
   border-radius: 10px;
   background: var(--console-card);
   border: 1px solid var(--console-border);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 
 .stat-color {

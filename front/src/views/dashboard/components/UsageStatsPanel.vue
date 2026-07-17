@@ -84,7 +84,7 @@ defineProps<{
   border: 1px solid var(--console-border);
   border-radius: 14px;
   background: var(--console-card);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 
 .panel-title { margin-bottom: 20px; font-size: 18px; font-weight: 800; color: var(--console-text); }
@@ -126,11 +126,11 @@ defineProps<{
   font-size: 22px;
 }
 
-.blue .stat-icon { color: var(--ac-color-primary); background: var(--console-blue-soft); }
-.purple .stat-icon { color: var(--ac-color-primary); background: var(--console-purple-soft); }
-.violet .stat-icon { color: var(--ac-color-primary-light); background: var(--console-violet-soft); }
+.blue .stat-icon { color: var(--tp-info); background: var(--console-blue-soft); }
+.purple .stat-icon { color: var(--tp-info); background: var(--console-purple-soft); }
+.violet .stat-icon { color: var(--tp-info); background: var(--console-violet-soft); }
 .orange .stat-icon { color: var(--ac-color-warning); background: var(--console-orange-soft); }
-.amber .stat-icon { color: var(--ac-color-warning); background: var(--console-amber-soft); }
+.amber .stat-icon { color: var(--ac-color-primary); background: var(--console-amber-soft); }
 .green .stat-icon { color: var(--ac-color-success); background: var(--console-green-soft); }
 
 .stat-label { margin-bottom: 4px; color: var(--console-text-muted); font-size: 14px; }

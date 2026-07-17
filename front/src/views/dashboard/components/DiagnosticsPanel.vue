@@ -72,7 +72,7 @@ const emit = defineEmits<{
   border: 1px solid var(--console-border);
   border-radius: 14px;
   background: var(--console-card);
-  box-shadow: var(--console-shadow);
+  box-shadow: none;
 }
 .section-header-row { display: flex; justify-content: space-between; align-items: center; }
 .panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
@@ -85,7 +85,7 @@ const emit = defineEmits<{
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
 .ds-items { display: grid; grid-template-columns: 1fr; }
 @media (max-width: 640px) { .ds-items { grid-template-columns: 1fr; } }
-.ds-item { display: grid; grid-template-columns: 22px minmax(130px, 1fr) minmax(140px, 1.2fr); align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-top: 1px solid var(--console-border-soft); background: var(--console-card); font-size: 14px; }
+.ds-item { display: grid; grid-template-columns: 22px minmax(130px, 1fr) minmax(140px, 1.2fr); align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-top: 1px solid var(--console-border-soft); background: var(--console-card-soft); font-size: 14px; }
 .dsi-status.ok { color: var(--ac-color-success); }
 .dsi-status.warn { color: var(--ac-color-warning); }
 .dsi-status.error { color: var(--ac-color-danger); }

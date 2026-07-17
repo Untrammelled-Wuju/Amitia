@@ -147,16 +147,19 @@ function dismissLater() {
 <style scoped>
 .pwa-install-overlay {
   position: fixed; inset: 0; z-index: 9999;
-  background: rgba(0, 0, 0, 0.45);
+  background: color-mix(in srgb, var(--tp-page) 45%, transparent);
   display: flex; align-items: flex-end; justify-content: center;
   padding: 16px;
 }
 
 .pwa-install-card {
-  background: var(--ac-color-surface);
+  background: var(--tp-glass-bg-strong);
+  border: 1px solid var(--tp-glass-border);
   border-radius: 16px 16px 0 0;
   max-width: 420px; width: 100%;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--tp-shadow-float);
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   overflow: hidden;
   animation: slideUp 0.3s ease-out;
 }
@@ -174,7 +177,7 @@ function dismissLater() {
 
 .pwa-icon img {
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: none;
 }
 
 .pwa-title-group { flex: 1; }

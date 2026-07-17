@@ -56,12 +56,17 @@ async function handleClose() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  background: var(--console-sidebar, rgba(248,251,255,0.96));
-  border-bottom: 1px solid var(--ac-color-border-light);
+  background: var(--tp-glass-bg-strong);
+  border-bottom: 1px solid var(--tp-glass-border);
   color: var(--ac-color-text);
   font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   user-select: none;
   -webkit-app-region: drag;
+}
+
+:global(html[data-theme="dark"]) #WindowControlButtons {
+  background: var(--console-sidebar);
+  border-bottom-color: var(--ac-color-border-light);
 }
 #WindowControlButtons .window-actions {
   height: 100%;
@@ -82,7 +87,7 @@ async function handleClose() {
   -webkit-app-region: no-drag;
 }
 #WindowControlButtons .icon:hover {
-  background: rgba(128, 128, 128, 0.2);
+  background: var(--tp-control-hover);
   color: var(--ac-color-text);
 }
 #WindowControlButtons .icon.close:hover {

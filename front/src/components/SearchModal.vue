@@ -236,20 +236,21 @@ defineExpose({ open, close })
   position: fixed;
   inset: 0;
   z-index: 900;
-  background: rgba(0, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--tp-page) 35%, transparent);
   display: flex;
   justify-content: center;
   padding-top: 15vh;
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .search-panel {
   width: min(560px, 92vw);
   max-height: 60vh;
-  background: var(--console-sidebar);
-  border: 1px solid var(--console-border);
+  background: var(--tp-glass-bg-strong);
+  border: 1px solid var(--tp-glass-border);
   border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--tp-shadow-float);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -344,8 +345,8 @@ defineExpose({ open, close })
 }
 
 .group-char .result-icon {
-  background: rgba(79, 124, 255, 0.1);
-  color: var(--ac-color-primary);
+  background: var(--tp-info-soft);
+  color: var(--tp-info);
 }
 
 .result-body {

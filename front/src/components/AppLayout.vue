@@ -186,7 +186,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--console-bg);
+  background: var(--tp-page-glow, none), var(--console-bg);
 }
 
 .app-body {
@@ -201,6 +201,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: transparent;
 }
 
 .app-content {
@@ -208,12 +209,13 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: transparent;
 }
 
 .app-content.is-login {
   align-items: center;
   justify-content: center;
-  background: var(--console-bg);
+  background: var(--tp-page-glow, none), var(--console-bg);
 }
 
 .content-scroll {
@@ -222,7 +224,7 @@ onMounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 24px 32px;
-  background: var(--console-bg);
+  background: transparent;
 }
 
 .content-scroll.no-padding {

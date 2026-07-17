@@ -340,8 +340,9 @@ defineExpose({ focus, setText, clear: clearText })
   align-items: flex-end;
   gap: 6px;
   padding: 10px 12px;
-  background: var(--ac-color-bg-primary);
-  border-top: 1px solid var(--ac-color-border-light);
+  border-top: 1px solid var(--tp-glass-border);
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .input-wrapper {
@@ -390,7 +391,7 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 .skill-chips { display: flex; width: 100%; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
-.skill-picker { position: absolute; z-index: 40; right: 0; bottom: calc(100% + 10px); left: 0; max-height: 280px; overflow: auto; padding: 6px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); box-shadow: var(--ac-shadow-lg); }
+.skill-picker { position: absolute; z-index: 40; right: 0; bottom: calc(100% + 10px); left: 0; max-height: 280px; overflow: auto; padding: 6px; border: 1px solid var(--tp-glass-border); border-radius: var(--ac-radius-md); background: var(--tp-glass-bg-strong); backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate)); -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate)); box-shadow: var(--tp-shadow-float); }
 .skill-picker button { display: flex; width: 100%; min-height: 56px; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 10px; border: 0; border-radius: var(--ac-radius-sm); background: transparent; color: var(--ac-color-text); cursor: pointer; text-align: left; }
 .skill-picker button:hover,.skill-picker button:focus-visible { background: var(--ac-color-primary-bg); outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .skill-picker button span { display: flex; align-items: center; gap: 8px; }
@@ -630,7 +631,7 @@ defineExpose({ focus, setText, clear: clearText })
   gap: 8px;
   padding: 6px 10px;
   margin-bottom: 4px;
-  background: var(--ac-color-surface);
+  background: var(--tp-control);
   border: 1px solid var(--ac-color-border-light);
   border-radius: var(--ac-radius-sm);
 }
