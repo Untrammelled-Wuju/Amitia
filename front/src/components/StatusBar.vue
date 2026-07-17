@@ -253,10 +253,6 @@ const modelLabel = computed(() =>
   background: var(--tp-control-hover);
 }
 
-.theme-toggle:active {
-  transform: translateY(1px);
-}
-
 .theme-toggle:focus-visible {
   outline: 2px solid var(--tp-primary);
   outline-offset: 2px;

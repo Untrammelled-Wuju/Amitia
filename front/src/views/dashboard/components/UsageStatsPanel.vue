@@ -83,7 +83,7 @@ defineProps<{
   padding: 22px;
   border: 1px solid var(--console-border);
   border-radius: 14px;
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   box-shadow: none;
 }
 

@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-input v-model="charNameModel" placeholder="例如：阿米提亚" />
       </el-form-item>
       <el-form-item label="角色身份">
-        <el-input v-model="charIdentityModel" placeholder="AI 虚拟陪伴角色" />
+        <el-input v-model="charIdentityModel" placeholder="AI 虚拟角色" />
       </el-form-item>
       <el-form-item label="性格描述">
         <el-input v-model="charPersonalityModel" type="textarea" :rows="2" placeholder="温和、体贴、有耐心" />

@@ -15,7 +15,7 @@ function stepText(capability: string) { const steps = Object.entries(props.bySte
 </script>
 <style scoped>
 .capability-list { display: grid; gap: 10px; }
-.capability-item { padding: 14px 16px; border: 1px solid var(--console-border); border-radius: 10px; background: var(--console-card-bg); }
+.capability-item { padding: 14px 16px; border: 1px solid var(--console-border); border-radius: 10px; background: var(--ac-color-surface); }
 .capability-item.high { border-color: var(--el-color-danger-light-5); }
 .capability-item div { display: flex; align-items: center; gap: 8px; }
 .capability-item p { margin: 7px 0; color: var(--console-text-muted); font-size: 13px; }

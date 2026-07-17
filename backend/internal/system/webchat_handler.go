@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	applog "github.com/u-ai/backend/log"
@@ -341,6 +342,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	}
 
 	c.Header("X-Request-ID", requestID)
+	genID := chat.GetGenerationQueue().StartCollection(convID)
 
 	go func() {
 		defer func() {
@@ -362,7 +364,6 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		imageCtx := chat.GetBuffer().GetImageContexts(convID)
 		chat.GetBuffer().ClearImageContexts(convID)
 
-		genID := uuid.New().String()
 		genCtx, genCancel, err := chat.GetGenerationQueue().AcquireSlot(context.Background(), convID, genID)
 		if err != nil {
 			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation slot cancelled for %s: %v", convID, err))
@@ -401,6 +402,19 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		"conversationId": convID,
 		"userMessageId":  msgID,
 		"status":         "queued",
+		"mergeWindowMs":  config.AppCfg.Chat.MergeWindowMs,
+	})
+}
+
+func (h *Handler) WebChatGenerationStatus(c *gin.Context) {
+	convID := c.Param("id")
+	if convID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{
+		"conversationId": convID,
+		"status":         chat.GetGenerationQueue().GetStatus(convID),
 	})
 }
 

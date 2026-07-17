@@ -50,7 +50,7 @@ const emit = defineEmits<{
   padding: 22px;
   border: 1px solid var(--console-border);
   border-radius: 14px;
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   box-shadow: none;
 }
 .section-header-row { display: flex; justify-content: space-between; align-items: center; }

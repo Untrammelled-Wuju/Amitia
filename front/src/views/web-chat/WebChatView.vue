@@ -77,6 +77,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       ref="inputRef"
       :disabled="modelMissing"
       :sending="sending"
+      :generating="generating"
+      :is-submitting="isSubmitting"
       :call-active="callActive"
       :reply-target="replyTarget"
       @send="handleSend"
@@ -250,6 +252,7 @@ const {
   handleStop, handleRetry,
   handleRegenerate, handleClear,
   getLastPolledMsgId,
+  generating, isSubmitting,
 } = useWebChatSend(
   messages, convId, characterId,
   sending, modelError, modelMissing,

@@ -187,7 +187,7 @@ onUnmounted(() => {
   min-height: 90px;
   padding: 16px 18px;
   border-radius: 14px;
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   border: 1px solid var(--console-border);
   box-shadow: none;
 }
@@ -252,7 +252,7 @@ onUnmounted(() => {
 }
 
 .chart-card {
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   border: 1px solid var(--console-border);
   border-radius: 10px;
   padding: 14px 12px 10px;
@@ -274,7 +274,7 @@ onUnmounted(() => {
   gap: 14px;
   padding: 18px 16px;
   border-radius: 10px;
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   border: 1px solid var(--console-border);
   box-shadow: none;
 }

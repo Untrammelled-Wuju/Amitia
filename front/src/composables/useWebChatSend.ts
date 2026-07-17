@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { type Ref, computed, ref } from "vue"
+import { type Ref, computed, ref, watch } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "./useApi"
 import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
@@ -29,7 +29,9 @@ export function useWebChatSend(
   const { post, del, get } = useApi()
   let lastPolledMsgId: string | null = null
   const isSubmitting = ref(false)
+  const generating = ref(false)
   let sendingTimer: ReturnType<typeof setTimeout> | null = null
+  let generationPhaseTimer: ReturnType<typeof setTimeout> | null = null
 
   function getLastPolledMsgId() { return lastPolledMsgId }
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
@@ -40,6 +42,44 @@ export function useWebChatSend(
       sendingTimer = null
     }
   }
+
+  function clearGenerationPhaseTimer() {
+    if (generationPhaseTimer) {
+      clearTimeout(generationPhaseTimer)
+      generationPhaseTimer = null
+    }
+  }
+
+  function startGenerationPhaseTracking(mergeWindowMs: unknown) {
+    if (generating.value || generationPhaseTimer) return
+    const parsedWindow = Number(mergeWindowMs)
+    const fallbackDelay = Number.isFinite(parsedWindow) && parsedWindow >= 0 ? parsedWindow : 5000
+    const startedAt = Date.now()
+    const poll = async () => {
+      generationPhaseTimer = null
+      if (!sending.value || generating.value || !convId.value) return
+      try {
+        const result = await get<{ status?: string }>(`/api/web-chat/conversations/${convId.value}/generations/current/status`)
+        if (result?.status === "processing") {
+          generating.value = true
+          return
+        }
+      } catch {
+        if (Date.now() - startedAt >= fallbackDelay) {
+          generating.value = true
+          return
+        }
+      }
+      generationPhaseTimer = setTimeout(poll, 150)
+    }
+    generationPhaseTimer = setTimeout(poll, 0)
+  }
+
+  watch(sending, (active) => {
+    if (active) return
+    clearGenerationPhaseTimer()
+    generating.value = false
+  })
 
   function startSendingTimeout(userMsgId: string) {
     clearSendingTimer()
@@ -196,6 +236,7 @@ export function useWebChatSend(
       }
       if (result.conversationId && !convId.value) convId.value = result.conversationId
       if (replyTarget) replyTarget.value = null
+      startGenerationPhaseTracking(result.mergeWindowMs)
       startSendingTimeout(result.userMessageId || userMsgLocalId)
     } catch (err: any) {
       console.error("[Send] Failed:", err)
@@ -220,8 +261,10 @@ export function useWebChatSend(
 
   function handleStop() {
     clearSendingTimer()
+    clearGenerationPhaseTimer()
     messages.value.filter((m: any) => m.status === "streaming").forEach((m: any) => m.status = "interrupted")
     sending.value = false
+    generating.value = false
     if (convId.value) {
       post(`/api/web-chat/conversations/${convId.value}/generations/current/cancel`).catch(() => {})
     }
@@ -244,6 +287,7 @@ export function useWebChatSend(
   async function handleRegenerate() {
     if (!canRegenerate.value || !convId.value) return
     sending.value = true
+    generating.value = true
     clearSendingTimer()
     try {
       const res = await post<any>(`/api/web-chat/conversations/${convId.value}/regenerate`)
@@ -297,5 +341,6 @@ export function useWebChatSend(
     getLastPolledMsgId,
     setLastPolledMsgId,
     isSubmitting,
+    generating,
   }
 }

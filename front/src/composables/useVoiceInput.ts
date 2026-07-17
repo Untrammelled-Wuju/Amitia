@@ -1,201 +1,128 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, onUnmounted } from "vue"
-
-const VOICE_END_DELAY = 400
-const SLIDE_TEXT_THRESHOLD = 60
-const SLIDE_CANCEL_THRESHOLD = 120
+import { onUnmounted, ref } from "vue"
 
 export function useVoiceInput(
-  onVoiceText: (text: string) => void,
-  onVoiceAudio: (blob: Blob, transcript?: string, duration?: number) => void,
+  onVoiceAudio: (blob: Blob, duration?: number) => void,
   isDisabled: () => boolean,
   isSending: () => boolean,
+  onError: () => void,
 ) {
-  const voiceMode = ref(false)
   const holding = ref(false)
-  const listening = ref(false)
-  const slideZone = ref<"none" | "text" | "cancel">("none")
-  const touchStartY = ref(0)
-  const lastTranscript = ref("")
+  const recording = ref(false)
 
-  let recognition: any = null
   let mediaRecorder: MediaRecorder | null = null
+  let mediaStream: MediaStream | null = null
   let audioChunks: Blob[] = []
-  let onRecordingComplete: (() => void) | null = null
   let recordingStartTime = 0
+  let requestVersion = 0
+  let cancelled = false
 
-  function onGlobalMouseUp() {
-    document.removeEventListener("mouseup", onGlobalMouseUp)
-    endHold()
+  function removeReleaseListener() {
+    document.removeEventListener("pointerup", endHold)
   }
 
-  function startHold(e: TouchEvent | MouseEvent) {
-    if (isDisabled() || isSending()) return
-    holding.value = true
-    slideZone.value = "none"
-    lastTranscript.value = ""
-    if ("touches" in e) {
-      touchStartY.value = e.touches[0].clientY
-    } else {
-      touchStartY.value = e.clientY
+  function stopStream() {
+    mediaStream?.getTracks().forEach((track) => track.stop())
+    mediaStream = null
+  }
+
+  function resetRecorder() {
+    mediaRecorder = null
+    recording.value = false
+    stopStream()
+  }
+
+  async function startHold() {
+    if (holding.value || recording.value || isDisabled() || isSending()) return
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      onError()
+      return
     }
-    startRecording()
-    startListening()
-    document.addEventListener("mouseup", onGlobalMouseUp)
-  }
 
-  function onTouchMove(e: TouchEvent) {
-    if (!holding.value) return
-    const currentY = e.touches[0].clientY
-    const deltaY = touchStartY.value - currentY
-    if (deltaY > SLIDE_CANCEL_THRESHOLD) {
-      slideZone.value = "cancel"
-    } else if (deltaY > SLIDE_TEXT_THRESHOLD) {
-      slideZone.value = "text"
-    } else {
-      slideZone.value = "none"
+    holding.value = true
+    cancelled = false
+    audioChunks = []
+    const version = ++requestVersion
+    document.addEventListener("pointerup", endHold)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (version !== requestVersion || !holding.value) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+
+      mediaStream = stream
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm"
+      const recorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorder = recorder
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) audioChunks.push(event.data)
+      }
+      recorder.onstop = () => {
+        const chunks = audioChunks
+        const shouldSend = !cancelled && chunks.length > 0
+        const duration = Math.max(1, Math.round((Date.now() - recordingStartTime) / 1000))
+        audioChunks = []
+        resetRecorder()
+        if (shouldSend) onVoiceAudio(new Blob(chunks, { type: mimeType }), duration)
+      }
+      recorder.onerror = () => {
+        cancelled = true
+        audioChunks = []
+        resetRecorder()
+        holding.value = false
+        removeReleaseListener()
+        onError()
+      }
+      recordingStartTime = Date.now()
+      recorder.start()
+      recording.value = true
+    } catch {
+      if (version !== requestVersion) return
+      holding.value = false
+      cancelled = true
+      audioChunks = []
+      resetRecorder()
+      removeReleaseListener()
+      onError()
     }
   }
 
   function endHold() {
     if (!holding.value) return
-    const zone = slideZone.value
     holding.value = false
-    slideZone.value = "none"
-
-    setTimeout(() => {
-      document.removeEventListener("mouseup", onGlobalMouseUp)
-      stopListening()
-
-      if (zone === "cancel") {
-        stopRecording()
-        audioChunks = []
-        return
-      }
-
-      if (zone === "text") {
-        stopRecording()
-        audioChunks = []
-        if (lastTranscript.value) {
-          onVoiceText(lastTranscript.value)
-        }
-        voiceMode.value = false
-        return
-      }
-
-      onRecordingComplete = () => {
-        try {
-          if (audioChunks.length > 0) {
-            const blob = new Blob(audioChunks, { type: "audio/webm" })
-            const transcript = lastTranscript.value || undefined
-            audioChunks = []
-            const duration = Math.round((Date.now() - recordingStartTime) / 1000)
-            try { onVoiceAudio(blob, transcript, duration) } catch (e) { console.error("[Voice] emit error:", e) }
-          }
-          voiceMode.value = false
-        } catch (e) {
-          console.error("[Voice] onRecordingComplete error:", e)
-          audioChunks = []
-          voiceMode.value = false
-        }
-      }
-      stopRecording()
-    }, VOICE_END_DELAY)
-  }
-
-  function startRecording() {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      recordingStartTime = Date.now()
-
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm"
-      mediaRecorder = new MediaRecorder(stream, { mimeType })
-      mediaRecorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data.size > 0) audioChunks.push(e.data)
-      }
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        if (onRecordingComplete) {
-          onRecordingComplete()
-          onRecordingComplete = null
-        }
-      }
-      mediaRecorder.start()
-    }).catch(() => {
-      holding.value = false
-    })
-  }
-
-  function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop()
-    }
-    mediaRecorder = null
-  }
-
-  function startListening() {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) {
+    removeReleaseListener()
+    if (!mediaRecorder) {
+      requestVersion++
+      stopStream()
       return
     }
-    if (recognition) {
-      try { recognition.stop() } catch {}
-      recognition = null
-    }
-    recognition = new SpeechRecognition()
-    recognition.lang = "zh-CN"
-    recognition.interimResults = true
-    recognition.maxAlternatives = 1
-    recognition.continuous = false
-
-    recognition.onstart = () => { listening.value = true }
-    recognition.onresult = (event: any) => {
-      let finalTranscript = ""
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript
-        }
-      }
-      if (finalTranscript) {
-        lastTranscript.value = finalTranscript
-      } else if (event.results.length > 0) {
-        lastTranscript.value = event.results[event.results.length - 1][0].transcript
-      }
-    }
-    recognition.onerror = () => {
-      listening.value = false
-    }
-    recognition.onend = () => { listening.value = false }
-
-    try {
-      recognition.start()
-    } catch {
-      listening.value = false
-    }
+    if (mediaRecorder.state !== "inactive") mediaRecorder.stop()
   }
 
-  function stopListening() {
-    if (recognition) {
-      try { recognition.stop() } catch {}
-      recognition = null
-    }
-    listening.value = false
+  function cancelHold() {
+    cancelled = true
+    endHold()
   }
 
   onUnmounted(() => {
-    stopListening()
-    stopRecording()
+    cancelled = true
+    holding.value = false
+    requestVersion++
+    removeReleaseListener()
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop()
+    resetRecorder()
   })
 
   return {
-    voiceMode,
     holding,
-    listening,
-    slideZone,
+    recording,
     startHold,
     endHold,
-    onTouchMove,
+    cancelHold,
   }
 }

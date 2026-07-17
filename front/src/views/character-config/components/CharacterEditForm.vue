@@ -29,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="身份">
-              <el-input v-model="identityModel" placeholder="例如: AI 虚拟陪伴角色" />
+              <el-input v-model="identityModel" placeholder="例如: AI 虚拟角色" />
             </el-form-item>
           </el-col>
           <el-col :span="12">

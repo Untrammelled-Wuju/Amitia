@@ -85,7 +85,7 @@ const runtimeHealthLabel = computed(() =>
   min-height: 138px;
   padding: 24px 20px;
   border-radius: 14px;
-  background: var(--console-card);
+  background: var(--ac-color-surface);
   border: 1px solid var(--console-border);
   box-shadow: none;
 }

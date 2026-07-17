@@ -42,7 +42,7 @@ export function useOnboardingWizard() {
     modelName: "",
     charName: "阿米提亚",
     charAvatar: "",
-    charIdentity: "AI 虚拟陪伴角色",
+    charIdentity: "AI 虚拟角色",
     charPersonality: "温和、体贴、有耐心",
     charPrompt: "",
     webChatEnabled: true,

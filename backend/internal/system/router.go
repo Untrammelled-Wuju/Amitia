@@ -246,6 +246,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/web-chat/messages", handler.WebChatSubmitMessage)
 	r.POST("/web-chat/send-stream", handler.WebChatSendStream)
 	r.POST("/web-chat/conversations/from-import", handler.WebChatFromImport)
+	r.GET("/web-chat/conversations/:id/generations/current/status", handler.WebChatGenerationStatus)
 	r.POST("/web-chat/conversations/:id/generations/:generationId/cancel", handler.WebChatCancelGeneration)
 	r.POST("/voice/upload", handler.VoiceUpload)
 	r.POST("/image/upload", handler.ImageUpload)
