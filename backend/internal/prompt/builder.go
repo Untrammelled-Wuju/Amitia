@@ -34,6 +34,7 @@ type BuildRequest struct {
 	ProactiveTaskInstruction string
 
 	ProfileContext            string
+	TemporalContext           string
 	MemoryContext             string
 	Worldbook                 string
 	PluginContext             string

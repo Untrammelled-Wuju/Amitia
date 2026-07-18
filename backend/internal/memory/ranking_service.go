@@ -3,10 +3,13 @@
 package memory
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 )
@@ -74,6 +77,22 @@ func (s *service) GetRankedMemories(characterID, userID, query string, limit int
 				KeywordScore:   math.Round(ks*10000) / 10000,
 				ImportanceNorm: math.Round(is*10000) / 10000,
 			})
+		}
+	}
+	if s.temporalReranker != nil && len(ranked) > 0 {
+		candidates := make([]temporal.MemoryScoreCandidate, 0, len(ranked))
+		for _, result := range ranked {
+			candidates = append(candidates, temporal.MemoryScoreCandidate{MemoryID: result.Memory.ID, BaseScore: result.FinalScore, CreatedAt: result.Memory.CreatedAt, MemoryType: result.Memory.MemoryType})
+		}
+		if reranked, rerankErr := s.temporalReranker.RerankMemoryScores(context.Background(), query, candidates); rerankErr == nil {
+			for index := range ranked {
+				if score, exists := reranked[ranked[index].Memory.ID]; exists {
+					ranked[index].FinalScore = score.FinalScore
+					ranked[index].TemporalBoost = score.TemporalBoost
+					ranked[index].ValidityPenalty = score.ValidityPenalty
+					ranked[index].TemporalReference = score.ReferenceSource
+				}
+			}
 		}
 	}
 

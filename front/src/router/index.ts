@@ -48,6 +48,7 @@ const router = createRouter({
         { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
         { path: "ai-config", name: "settingsAiConfig", component: () => import("@/views/settings/AiConfigPanel.vue"), meta: { requiresAuth: true } },
         { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },
+        { path: "temporal", name: "settingsTemporal", component: () => import("@/views/settings/TemporalSettingsView.vue"), meta: { requiresAuth: true } },
         {
           path: "model",
           component: () => import("@/views/model-config/ModelConfigView.vue"),

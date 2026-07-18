@@ -5,8 +5,25 @@ package tool
 import (
 	"context"
 	"fmt"
-	"time"
+	"sync"
+
+	"github.com/u-ai/backend/internal/temporal"
 )
+
+var temporalResolver struct {
+	sync.RWMutex
+	service interface {
+		ResolveSnapshot(context.Context, temporal.SnapshotInput) (temporal.Snapshot, error)
+	}
+}
+
+func SetTemporalService(service interface {
+	ResolveSnapshot(context.Context, temporal.SnapshotInput) (temporal.Snapshot, error)
+}) {
+	temporalResolver.Lock()
+	temporalResolver.service = service
+	temporalResolver.Unlock()
+}
 
 func init() {
 	Register(Tool{
@@ -24,11 +41,18 @@ func init() {
 		if err := callCtx.Err(); err != nil {
 			return CancelledResult(err.Error())
 		}
-		local := time.Now().Format("2006-01-02 15:04:05")
-		utc := time.Now().UTC().Format("2006-01-02 15:04:05")
-		weekday := time.Now().Weekday().String()
-		result := TextResult(fmt.Sprintf("本地时间: %s (周%s) | UTC: %s", local, weekday, utc))
-		result.Audit = map[string]interface{}{"channel": execCtx.Channel}
+		temporalResolver.RLock()
+		service := temporalResolver.service
+		temporalResolver.RUnlock()
+		if service == nil {
+			return ErrorResult("temporal_runtime_unavailable", "时间运行时暂不可用")
+		}
+		snapshot, err := service.ResolveSnapshot(callCtx, temporal.SnapshotInput{UserID: execCtx.User, CharacterID: execCtx.CharacterID, Channel: execCtx.Channel})
+		if err != nil {
+			return ErrorResult("temporal_snapshot_failed", "时间上下文解析失败")
+		}
+		result := TextResult(fmt.Sprintf("用户当地时间: %s (%s, %s) | 角色当地时间: %s (%s, %s) | UTC: %s", snapshot.UserTime.LocalTime.Format("2006-01-02 15:04:05"), snapshot.UserTime.Timezone, snapshot.UserTime.Weekday, snapshot.CharacterTime.LocalTime.Format("2006-01-02 15:04:05"), snapshot.CharacterTime.Timezone, snapshot.CharacterTime.Weekday, snapshot.NowUTC.Format("2006-01-02 15:04:05Z07:00")))
+		result.Audit = map[string]interface{}{"channel": execCtx.Channel, "snapshotVersion": snapshot.Version, "userTimezone": snapshot.UserTime.Timezone, "characterTimezone": snapshot.CharacterTime.Timezone}
 		return result
 	})
 }

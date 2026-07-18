@@ -73,6 +73,7 @@ func DefaultMigrations() []Migration {
 		ExtensionScheduleOwnershipRepairMigration(),
 		EmotesMigration(),
 		MessagePlanMigration(),
+		TemporalCoreMigration(),
 		MCPClientMigration(),
 	}
 }

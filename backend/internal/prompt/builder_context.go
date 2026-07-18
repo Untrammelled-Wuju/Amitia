@@ -12,6 +12,9 @@ func appendContextSections(ctx *buildContext) {
 		ctx.appendSection("memory_extract_raw", GwSectionMemoryExtractRaw, TrustUntrusted, ModeDataOnly, "memory", 340, req.MemoryExtractRaw, "GwSectionMemoryExtractRaw")
 	}
 	appendDataOnly(ctx, "profile_context", GwSectionProfileContext, "profile", req.ProfileContext, "GwSectionProfileContext")
+	if req.TemporalContext != "" {
+		ctx.sections = append(ctx.sections, GwSection{Enabled: true, ID: "temporal_context", Type: GwSectionTemporalContext, TrustLevel: TrustTrusted, InstructionMode: ModeDataOnly, Source: "temporal-runtime", Priority: 430, TokenBudget: 220, Content: req.TemporalContext, SourceProject: "prompt", SourceFile: "builder_context.go", SourceConstant: "GwSectionTemporalContext"})
+	}
 	appendDataOnly(ctx, "memory_context", GwSectionMemoryContext, "memory", req.MemoryContext, "GwSectionMemoryContext")
 	appendDataOnly(ctx, "worldbook_context", GwSectionWorldbookContext, "worldbook", req.Worldbook, "GwSectionWorldbookContext")
 	appendDataOnly(ctx, "plugin_context", GwSectionPluginContext, "plugin", req.PluginContext, "GwSectionPluginContext")

@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
+	"github.com/u-ai/backend/internal/temporal"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -259,6 +260,10 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		pluginContributions = s.skillRuntime.BeforePrompt(ctx, skillScope)
 	}
 	pluginContext, pluginSources := renderPluginContributions(pluginContributions)
+	temporalContext := ""
+	if req.Runtime != nil && req.Runtime.Context.Temporal.Status == interaction.LoadStatusReady {
+		temporalContext = temporal.RenderSnapshot(req.Runtime.Context.Temporal.Value)
+	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		BaseIdentity:              promptir.BaseIdentitySection(),
 		SystemPrompt:              runtimeProfile.SystemPrompt,
@@ -270,6 +275,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		MemoryInjectRaw:           sys2Result.MemoryInjectRaw,
 		AntiRepeatRaw:             antiRepeatRaw,
 		ProfileContext:            mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
+		TemporalContext:           temporalContext,
 		MemoryContext:             sys2Result.MemoryContext,
 		Worldbook:                 sys1Result.Worldbook,
 		PluginContext:             pluginContext,

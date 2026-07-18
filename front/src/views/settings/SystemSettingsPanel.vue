@@ -14,6 +14,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <el-icon><ArrowRight /></el-icon>
       </div>
+      <div class="nav-entry nav-entry-spaced" @click="router.push('/settings/temporal')">
+        <el-icon size="22" color="var(--ac-color-primary)"><Clock /></el-icon>
+        <div class="nav-entry-body">
+          <div class="nav-entry-title">时间与地区</div>
+          <div class="nav-entry-desc">配置时区、安静时段、节日地区和时间锚点</div>
+        </div>
+        <el-icon><ArrowRight /></el-icon>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="section-card">
@@ -60,7 +68,7 @@ import { useRouter } from "vue-router"
 import axios from "axios"
 import { ElMessage } from "element-plus"
 import {
-  Brush, ArrowRight, Loading, FolderAdd, Delete, Download
+  Brush, ArrowRight, Clock, Loading, FolderAdd, Delete, Download
 } from '@element-plus/icons-vue'
 import { getApiBaseURL, getDeploymentConfig } from "../../runtime/runtime-adapter"
 
@@ -158,6 +166,7 @@ onMounted(async () => {
   cursor: pointer; transition: all 0.15s; background: var(--ac-color-surface);
 }
 .nav-entry:hover { border-color: var(--ac-color-primary); background: var(--ac-color-surface-hover); }
+.nav-entry-spaced { margin-top: 10px; }
 .nav-entry-body { flex: 1; min-width: 0; }
 .nav-entry-title { font-size: 14px; font-weight: 600; color: var(--ac-color-text); margin-bottom: 2px; }
 .nav-entry-desc { font-size: 12px; color: var(--ac-color-text-muted); line-height: 1.4; }

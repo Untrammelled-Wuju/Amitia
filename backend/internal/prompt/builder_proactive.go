@@ -23,7 +23,7 @@ func appendProactiveSections(ctx *buildContext) {
 	if req.ProactiveScene != "" && ctx.flags.ProactiveRawEnabled {
 		ctx.appendSection("proactive_scene", GwSectionProactiveScene, TrustTrusted, ModeAuthoritative, "proactive", 450, req.ProactiveScene, "GwSectionProactiveScene")
 	}
-	if req.ProactiveTimeContext != "" && ctx.flags.ProactiveRawEnabled {
+	if req.TemporalContext == "" && req.ProactiveTimeContext != "" && ctx.flags.ProactiveRawEnabled {
 		ctx.appendSection("proactive_time_context", GwSectionProactiveTimeContext, TrustUntrusted, ModeDataOnly, "proactive", 440, req.ProactiveTimeContext, "GwSectionProactiveTimeContext")
 	}
 	if req.ProactiveRecentContext != "" && ctx.flags.ProactiveRawEnabled {

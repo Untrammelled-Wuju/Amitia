@@ -3,6 +3,8 @@ package interaction
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type ContextSnapshot struct {
@@ -17,6 +19,7 @@ type ContextSnapshot struct {
 	Needs             SnapshotField[NeedState]           `json:"needs"`
 	UnresolvedThreads SnapshotField[UnresolvedThreadSet] `json:"unresolvedThreads"`
 	Channel           SnapshotField[ChannelCapabilities] `json:"channel"`
+	Temporal          SnapshotField[temporal.Snapshot]   `json:"temporal"`
 	AssembledAt       time.Time                          `json:"assembledAt"`
 }
 

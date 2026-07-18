@@ -53,6 +53,10 @@ func (v *Validator) ValidateIR(ir GwIR) error {
 			if s.TrustLevel != TrustUntrusted {
 				return fmt.Errorf("context section must be untrusted: %s", s.ID)
 			}
+		case GwSectionTemporalContext:
+			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeDataOnly {
+				return fmt.Errorf("temporal context must be trusted data_only: %s", s.ID)
+			}
 		}
 	}
 

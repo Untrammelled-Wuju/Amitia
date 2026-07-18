@@ -3,11 +3,14 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 
@@ -267,6 +270,22 @@ func (s *service) HybridSearch(req *VectorSearchRequest) ([]HybridSearchResult, 
 			CollectionName: item.collectionName,
 			MemoryLayer:    memoryLayerLabel(collectionKey),
 		})
+	}
+	if s.temporalReranker != nil && len(results) > 0 {
+		candidates := make([]temporal.MemoryScoreCandidate, 0, len(results))
+		for _, result := range results {
+			candidates = append(candidates, temporal.MemoryScoreCandidate{MemoryID: result.Memory.ID, BaseScore: result.Score, CreatedAt: result.Memory.CreatedAt, MemoryType: result.Memory.MemoryType})
+		}
+		if reranked, rerankErr := s.temporalReranker.RerankMemoryScores(context.Background(), queryText, candidates); rerankErr == nil {
+			for index := range results {
+				if score, exists := reranked[results[index].Memory.ID]; exists {
+					results[index].Score = score.FinalScore
+					results[index].TemporalBoost = score.TemporalBoost
+					results[index].ValidityPenalty = score.ValidityPenalty
+					results[index].TemporalReference = score.ReferenceSource
+				}
+			}
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {

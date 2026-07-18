@@ -45,6 +45,7 @@ import (
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
@@ -73,6 +74,7 @@ type AppServices struct {
 	VoiceEntry          *interaction.VoiceEntry
 	Extension           *extension.Runtime
 	Emote               *emote.Service
+	Temporal            *temporal.Service
 	MCPRepository       *mcp.Repository
 	MCPConnections      *mcpmanager.Manager
 	MCPAuth             *mcpauth.Manager
@@ -122,8 +124,10 @@ func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.R
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
+	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx, graphSvc)
+	memory.SetTemporalMemoryReranker(memSvc, temporalSvc)
 	profRepo := profile.NewRepository(ctx)
 	profSvc := profile.NewService(profRepo, ctx, graphSvc)
 	epiRepo := episodic.NewRepository(ctx)
@@ -192,7 +196,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, interaction.NewInMemoryOutboxStore())
 	charRepo := character.NewRepository(ctx)
-	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo)
+	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, temporalSvc)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 	runtimePipeline.SetSafetyGovernor(safety.NewGovernor(safety.DefaultGovernorConfig()))
@@ -312,6 +316,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		VoiceEntry:          voiceEntry,
 		Extension:           extensionRuntime,
 		Emote:               emoteSvc,
+		Temporal:            temporalSvc,
 		MCPRepository:       mcpRepository,
 		MCPConnections:      connectionManager,
 		MCPAuth:             oauthManager,
@@ -426,7 +431,7 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 	}
 }
 
-func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository) *interaction.ContextLoaderRegistry {
+func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {
 	runtimeRegistry := interaction.NewContextLoaderRegistry()
 	runtimeRegistry.Register(interaction.NewRoleRuntimeProfileContextLoader(charRepo))
 	runtimeRegistry.Register(interaction.NewChannelContextLoader())
@@ -437,6 +442,9 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	runtimeRegistry.Register(interaction.NewLifeContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
+	if len(temporalServices) > 0 && temporalServices[0] != nil {
+		runtimeRegistry.Register(interaction.NewTemporalContextLoader(temporalServices[0]))
+	}
 	return runtimeRegistry
 }
 

@@ -3,12 +3,14 @@
 package memory
 
 import (
+	"context"
 	"strings"
 	"sync"
 
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -50,11 +52,14 @@ type Service interface {
 }
 
 type RankedMemory struct {
-	Memory         Memory  `json:"memory"`
-	FinalScore     float64 `json:"finalScore"`
-	VectorScore    float64 `json:"vectorScore"`
-	KeywordScore   float64 `json:"keywordScore"`
-	ImportanceNorm float64 `json:"importanceNorm"`
+	Memory            Memory  `json:"memory"`
+	FinalScore        float64 `json:"finalScore"`
+	VectorScore       float64 `json:"vectorScore"`
+	KeywordScore      float64 `json:"keywordScore"`
+	ImportanceNorm    float64 `json:"importanceNorm"`
+	TemporalBoost     float64 `json:"temporalBoost"`
+	ValidityPenalty   float64 `json:"validityPenalty"`
+	TemporalReference string  `json:"temporalReference"`
 }
 
 type UpdateCandidateRequest struct {
@@ -126,13 +131,16 @@ type VectorSearchResult struct {
 }
 
 type HybridSearchResult struct {
-	Memory         Memory  `json:"memory"`
-	Score          float64 `json:"score"`
-	VectorScore    float64 `json:"vectorScore"`
-	KeywordScore   float64 `json:"keywordScore"`
-	MatchType      string  `json:"matchType"`
-	CollectionName string  `json:"collectionName"`
-	MemoryLayer    string  `json:"memoryLayer"`
+	Memory            Memory  `json:"memory"`
+	Score             float64 `json:"score"`
+	VectorScore       float64 `json:"vectorScore"`
+	KeywordScore      float64 `json:"keywordScore"`
+	MatchType         string  `json:"matchType"`
+	CollectionName    string  `json:"collectionName"`
+	MemoryLayer       string  `json:"memoryLayer"`
+	TemporalBoost     float64 `json:"temporalBoost"`
+	ValidityPenalty   float64 `json:"validityPenalty"`
+	TemporalReference string  `json:"temporalReference"`
 }
 
 type service struct {
@@ -143,6 +151,17 @@ type service struct {
 	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 	embedMu                  sync.Mutex
 	embedLocks               map[string]*sync.Mutex
+	temporalReranker         TemporalMemoryReranker
+}
+
+type TemporalMemoryReranker interface {
+	RerankMemoryScores(ctx context.Context, query string, candidates []temporal.MemoryScoreCandidate) (map[string]temporal.MemoryScoreResult, error)
+}
+
+func SetTemporalMemoryReranker(memoryService Service, reranker TemporalMemoryReranker) {
+	if target, ok := memoryService.(*service); ok {
+		target.temporalReranker = reranker
+	}
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service) Service {

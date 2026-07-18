@@ -156,6 +156,8 @@ func sectionRank(sectionType SectionType) int {
 		return 39
 	case SectionTypePsyche:
 		return 40
+	case SectionTypeTemporalContext:
+		return 41
 	case SectionTypeMemoryInjectRaw:
 		return 45
 	case SectionTypeMemoryExtractRaw:

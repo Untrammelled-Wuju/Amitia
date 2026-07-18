@@ -11,6 +11,36 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-button type="success" @click="triggerDailyRegen" :loading="triggeringDaily">触发每日重生</el-button>
     </div>
 
+    <el-card class="debug-card temporal-runtime-card" shadow="never">
+      <template #header><div class="temporal-header"><span>Temporal Runtime</span><el-tag size="small">{{ temporalDiagnostics?.snapshotVersion || '未加载' }}</el-tag></div></template>
+      <el-tabs v-if="temporalDiagnostics" model-value="core">
+        <el-tab-pane label="Core Time" name="core">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="用户当地时间">{{ formatTemporalCivil(temporalDiagnostics.snapshot.userTime) }}</el-descriptions-item>
+            <el-descriptions-item label="角色当地时间">{{ formatTemporalCivil(temporalDiagnostics.snapshot.characterTime) }}</el-descriptions-item>
+            <el-descriptions-item label="时区是否不同">{{ temporalDiagnostics.snapshot.signals.timezoneDiffers ? '是' : '否' }}</el-descriptions-item>
+            <el-descriptions-item label="用户安静时段">{{ temporalDiagnostics.snapshot.signals.quietHours ? '是' : '否' }}</el-descriptions-item>
+            <el-descriptions-item label="Clock 来源">{{ temporalDiagnostics.core.clockSource }}</el-descriptions-item>
+            <el-descriptions-item label="TZDB">{{ temporalDiagnostics.core.tzdb }}</el-descriptions-item>
+          </el-descriptions>
+        </el-tab-pane>
+        <el-tab-pane label="Anchors" name="anchors">
+          <el-table :data="temporalDiagnostics.snapshot.salientAnchors || []" size="small" stripe>
+            <el-table-column prop="type" label="类型" width="150" /><el-table-column prop="title" label="名称" min-width="180" /><el-table-column prop="distanceDays" label="距离天数" width="100" /><el-table-column prop="salience" label="显著性" width="90" />
+          </el-table>
+          <el-empty v-if="!temporalDiagnostics.snapshot.salientAnchors?.length" description="当前没有显著时间锚点" :image-size="42" />
+        </el-tab-pane>
+        <el-tab-pane label="Relationship Time" name="relationship">
+          <pre v-if="temporalDiagnostics.relationshipTime" class="json-block">{{ prettyJSON(temporalDiagnostics.relationshipTime) }}</pre>
+          <el-empty v-else description="Relationship Time 提供器当前未返回数据" :image-size="42" />
+        </el-tab-pane>
+        <el-tab-pane label="Reunion" name="reunion"><el-empty description="重逢诊断由 Relationship Time 模块提供" :image-size="42" /></el-tab-pane>
+        <el-tab-pane label="Prompt Contribution" name="prompt"><pre class="prompt-block">{{ temporalDiagnostics.promptSections?.[0]?.content || '本轮未注入时间上下文' }}</pre></el-tab-pane>
+        <el-tab-pane label="Commit Effects" name="effects"><pre v-if="temporalDiagnostics.commitEffects?.length" class="json-block">{{ prettyJSON(temporalDiagnostics.commitEffects) }}</pre><el-empty v-else description="当前没有时间提交效果" :image-size="42" /></el-tab-pane>
+      </el-tabs>
+      <el-empty v-else description="Temporal Runtime 诊断不可用" :image-size="48" />
+    </el-card>
+
     <!-- 当前状态 -->
     <el-card class="debug-card" shadow="hover">
       <template #header><span>当前状态</span></template>
@@ -140,6 +170,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
+import { getTemporalDiagnostics, type CivilTimeSnapshot, type TemporalDiagnostics } from "@/api/temporal"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
 const { get, post } = useApi()
@@ -148,6 +179,7 @@ const regenerating = ref(false)
 const triggeringActive = ref(false)
 const triggeringDelayed = ref(false)
 const triggeringDaily = ref(false)
+const temporalDiagnostics = ref<TemporalDiagnostics | null>(null)
 
 const data = reactive<any>({
   currentState: null,
@@ -163,6 +195,7 @@ async function loadAll() {
   try {
     const res = await get<any>("/api/companion/debug/overview", { characterId: injectedCharacterId?.value ?? undefined })
     Object.assign(data, res)
+    temporalDiagnostics.value = await getTemporalDiagnostics(injectedCharacterId?.value ?? "")
   } catch {
     ElMessage.error("加载失败")
   } finally {
@@ -294,6 +327,12 @@ function taskStatusTag(s: string) {
   return "info"
 }
 
+function formatTemporalCivil(value: CivilTimeSnapshot) {
+  return `${value.localTime.replace("T", " ").slice(0, 16)} · ${value.timezone} · ${value.daypart || "无时段"}`
+}
+
+function prettyJSON(value: unknown) { return JSON.stringify(value, null, 2) }
+
 onMounted(() => loadAll())
 </script>
 
@@ -302,4 +341,7 @@ onMounted(() => loadAll())
 .page-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .page-header h2 { font-size:18px; font-weight:600; margin:0; }
 .debug-card { margin-bottom: 14px; }
+.temporal-runtime-card { border-color: var(--ac-color-border-light); }
+.temporal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.prompt-block, .json-block { margin: 0; padding: 12px; border-radius: var(--ac-radius-sm); background: var(--ac-color-surface-hover); color: var(--ac-color-text); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 </style>

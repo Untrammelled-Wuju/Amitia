@@ -31,7 +31,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 	}
 	scope := s.resolveProactiveDeliveryScope(conversationID, channelSetting, characterID)
 
-	timeCtx := s.buildProactiveTimeContext()
+	timeCtx := ""
 	recentCtx := s.buildProactiveRecentContext(conversationID, characterID)
 
 	relCtx := s.buildProactiveRelationshipContext(conversationID, characterID)

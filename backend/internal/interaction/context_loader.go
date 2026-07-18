@@ -138,6 +138,8 @@ func applySnapshotField(snapshot *ContextSnapshot, name string, field SnapshotFi
 		setSnapshotField(&snapshot.UnresolvedThreads, field)
 	case "channel":
 		setSnapshotField(&snapshot.Channel, field)
+	case "temporal":
+		setSnapshotField(&snapshot.Temporal, field)
 	default:
 	}
 }

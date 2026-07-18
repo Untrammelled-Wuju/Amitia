@@ -11,6 +11,7 @@ const (
 	SectionTypeHistory                  SectionType = "history"
 	SectionTypeCurrentInput             SectionType = "current_input"
 	SectionTypeWorldbook                SectionType = "worldbook"
+	SectionTypeTemporalContext          SectionType = "temporal_context"
 	SectionTypeBaseIdentity             SectionType = "base_identity"
 	SectionTypePersonalityRaw           SectionType = "personality_raw"
 	SectionTypeEmotionFusionRaw         SectionType = "emotion_fusion_raw"

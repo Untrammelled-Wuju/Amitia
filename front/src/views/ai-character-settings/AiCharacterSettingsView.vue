@@ -63,6 +63,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         @change="onLifeIdentityChange"
       />
 
+      <TemporalAwarenessSection :character-id="charId" />
+
       <FixedEventsSection
         v-if="showCourseSection"
         :characterId="charId"
@@ -100,6 +102,7 @@ import RoleGenderSection from "./components/RoleGenderSection.vue"
 import LifestyleTendencySection from "./components/LifestyleTendencySection.vue"
 import SleepSettingSection from "./components/SleepSettingSection.vue"
 import LifeScenarioSection from "./components/LifeScenarioSection.vue"
+import TemporalAwarenessSection from "./components/TemporalAwarenessSection.vue"
 import FixedEventsSection from "./components/FixedEventsSection.vue"
 import SpecialEventsSection from "./components/SpecialEventsSection.vue"
 import WorkProfileSection from "./components/WorkProfileSection.vue"

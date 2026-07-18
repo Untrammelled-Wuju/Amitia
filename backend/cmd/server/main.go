@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/qq"
+	"github.com/u-ai/backend/internal/temporal"
 	"gorm.io/gorm"
 	"net"
 	"net/http"
@@ -118,6 +119,10 @@ func main() {
 		}
 	})
 	agenttool.SetMemoryService(services.Memory)
+	agenttool.SetTemporalService(services.Temporal)
+	temporalScheduler := temporal.NewScheduler(services.Temporal)
+	temporalScheduler.Start(rootCtx)
+	defer temporalScheduler.Stop()
 
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
