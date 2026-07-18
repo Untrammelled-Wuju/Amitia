@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"github.com/u-ai/backend/internal/temporal"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -1026,7 +1027,7 @@ func TestUnifiedEntryBackpressureRejectsInvalidConfig(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetBackpressureConfig(BackpressureConfig{MaxQueueDepth: 0, WarningRatio: -1, SheddingRatio: 2})
 	if status := entry.GetBackpressureStatus(); status != BackpressureNormal {
 		t.Fatalf("invalid config should normalize without shedding, got %s", status)

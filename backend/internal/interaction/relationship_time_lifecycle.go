@@ -32,6 +32,7 @@ func (o *Orchestrator) prepareRelationshipTime(ctx context.Context, record *Inte
 		PeerID:         record.Scope.PeerID,
 		RequestID:      record.Scope.RequestID,
 		InteractionID:  record.ID,
+		ObservedAt:     time.Now().UTC(),
 		IsInternal:     req.IsInternal,
 		Source:         record.Scope.Source,
 	})

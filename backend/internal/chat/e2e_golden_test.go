@@ -261,7 +261,7 @@ func TestE2E_GoldenPath_CharacterPersonalityToPsycheRelationshipAndMindState(t *
 	}
 
 	var relRecord RelationshipStateRecord
-	if err := db.Where("character_id = ? AND relation_type = ?", charID, "peer:peer-e2e").Take(&relRecord).Error; err != nil {
+	if err := db.Where("character_id = ? AND relation_type = ?", charID, "user_character").Take(&relRecord).Error; err != nil {
 		t.Fatal(err)
 	}
 	var relData map[string]float64
@@ -289,7 +289,7 @@ func TestE2E_GoldenPath_CharacterPersonalityToPsycheRelationshipAndMindState(t *
 		t.Fatal("期望psyche中有stateVersion数据")
 	}
 
-	relsRaw := mustQueryRelationshipsRaw(t, db, charID, "peer:peer-e2e")
+	relsRaw := mustQueryRelationshipsRaw(t, db, charID, "user_character")
 	if len(relsRaw) == 0 {
 		t.Fatal("期望relationships不为空")
 	}
@@ -387,7 +387,7 @@ func TestE2E_MultipleInteractionsAccumulateRelationship(t *testing.T) {
 	}
 
 	var relRecord RelationshipStateRecord
-	if err := db.Where("character_id = ? AND relation_type = ?", charID, "peer:peer-e2e").Take(&relRecord).Error; err != nil {
+	if err := db.Where("character_id = ? AND relation_type = ?", charID, "user_character").Take(&relRecord).Error; err != nil {
 		t.Fatal(err)
 	}
 	var relData map[string]float64
@@ -451,7 +451,7 @@ func TestE2E_MindStateReturnsCompleteData(t *testing.T) {
 		t.Error("psyche缺少stateVersion")
 	}
 
-	relsRaw2 := mustQueryRelationshipsRaw(t, db, charID, "peer:peer-mind")
+	relsRaw2 := mustQueryRelationshipsRaw(t, db, charID, "user_character")
 	if len(relsRaw2) == 0 {
 		t.Error("relationships为空")
 	}

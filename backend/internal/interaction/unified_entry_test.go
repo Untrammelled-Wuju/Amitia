@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type captureRequestProcessor struct {
@@ -55,7 +57,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
@@ -97,7 +99,7 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	tracker := NewInMemoryTracker()
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
@@ -144,7 +146,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 			Source:         "binding",
 			State:          ScopeBindingStateActive,
 		},
-	}}))
+	}}), temporal.SystemClock{})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:   "wechat",
@@ -191,7 +193,7 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetBackpressureConfig(BackpressureConfig{
 		MaxQueueDepth: -1,
 		WarningRatio:  2,
@@ -244,7 +246,7 @@ func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -282,7 +284,7 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	tracker := newBlockingListTracker()
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil))
+	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
 	done := make(chan struct{})
 	go func() {

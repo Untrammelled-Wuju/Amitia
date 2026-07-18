@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing.T) {
@@ -22,7 +23,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 			Source:         "voice-binding",
 			State:          ScopeBindingStateActive,
 		},
-	}})))
+	}}), temporal.SystemClock{}))
 	plan := &ExpressionPlan{
 		Version:   ExpressionPlanVersionV1,
 		ID:        "expr-voice",
