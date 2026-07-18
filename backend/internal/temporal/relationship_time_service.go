@@ -92,6 +92,7 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			}
 			kind := classifyReunionKind(globalGap, cadence.ExpectedGap.Seconds(), level, lastAssistantContact, input.ObservedAt)
 			policy := DefaultRelationshipTimePolicy(level)
+			policy = applySettingsToPolicy(policy, settings)
 			shouldExpress := kind != ReunionKindReplyToProactive
 			if !shouldExpress {
 				policy.MentionMode = ReunionMentionNone
@@ -392,4 +393,41 @@ func cadenceSample(userID, characterID, interactionID, kind string, previous, cu
 func isProactiveSource(source string) bool {
 	value := strings.ToLower(strings.TrimSpace(source))
 	return strings.Contains(value, "proactive") || strings.Contains(value, "active_message") || strings.Contains(value, "internal")
+}
+
+func applySettingsToPolicy(policy RelationshipTimePolicy, settings *RelationshipTimeSettings) RelationshipTimePolicy {
+	if settings == nil {
+		return policy
+	}
+	if !settings.AllowReunionMention {
+		policy.MentionMode = ReunionMentionNone
+		policy.MaxMentionSentences = 0
+		return policy
+	}
+	if !settings.AllowMemoryRecall {
+		policy.MemoryRecallBudget = 0
+		policy.RestorePreviousTopic = false
+	}
+	if !settings.AllowRelationshipAge {
+		policy.UseRelationshipAge = false
+	}
+	if !settings.AllowProactiveReference {
+		policy.RestorePreviousTopic = false
+	}
+	if settings.MaxMentionSentences > 0 && settings.MaxMentionSentences < policy.MaxMentionSentences {
+		policy.MaxMentionSentences = settings.MaxMentionSentences
+	}
+	switch settings.Sensitivity {
+	case "conservative":
+		if policy.MaxMentionSentences > 0 {
+			policy.MaxMentionSentences = 0
+			policy.MentionMode = ReunionMentionNone
+			policy.MemoryRecallBudget = 0
+		}
+	case "expressive":
+		if policy.MentionMode != ReunionMentionNone && policy.MaxMentionSentences < 2 {
+			policy.MaxMentionSentences = 2
+		}
+	}
+	return policy
 }
