@@ -199,8 +199,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, interaction.NewInMemoryOutboxStore())
-	orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
-	chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
+	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
+		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
+		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
+	}
 	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, temporalSvc)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))

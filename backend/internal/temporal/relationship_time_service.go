@@ -34,6 +34,10 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 	if input.UserID == "" || input.CharacterID == "" || input.InteractionID == "" {
 		return result, errors.New("user id, character id and interaction id are required")
 	}
+	settings, settingsErr := c.repo.GetSettings(ctx, input.CharacterID)
+	if settingsErr == nil && settings != nil && !settings.Enabled {
+		return RelationshipTimeContext{Version: RelationshipTimeVersion, UserID: input.UserID, CharacterID: input.CharacterID}, nil
+	}
 	if input.RequestID == "" {
 		input.RequestID = input.InteractionID
 	}
