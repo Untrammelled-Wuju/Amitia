@@ -30,7 +30,7 @@ func newRuntimeModulesTestRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	group := router.Group("")
-	RegisterSystemRouter(group, &app.AppContext{DB: db}, nil, nil, nil, nil, nil, nil, nil)
+	RegisterSystemRouter(group, &app.AppContext{DB: db}, nil, nil, nil, nil, nil, nil, nil, nil)
 	return router
 }
 
