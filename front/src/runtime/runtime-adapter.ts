@@ -38,10 +38,11 @@ async function createDesktopConnection(): Promise<RuntimeConnection> {
       websocketBaseURL: inferWebSocketBaseURL(apiBaseURL),
     }
   }
+  const devMode = (import.meta as any).env?.DEV
   return {
     mode: "desktop-local",
-    apiBaseURL: "http://127.0.0.1:18899",
-    websocketBaseURL: "ws://127.0.0.1:18899",
+    apiBaseURL: devMode ? "" : "http://127.0.0.1:18899",
+    websocketBaseURL: devMode ? "" : "ws://127.0.0.1:18899",
   }
 }
 

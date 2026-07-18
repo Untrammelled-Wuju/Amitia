@@ -214,7 +214,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
-import { getRelationshipTimeDiagnostics, getTemporalDiagnostics, listReunionEpisodes, type CivilTimeSnapshot, type RelationshipTimeContext, type RelationshipTimeDiagnostics, type ReunionEpisode, type SnapshotField, type TemporalDiagnostics } from "@/api/temporal"
+import { getTemporalDiagnostics, listReunionEpisodes, type CivilTimeSnapshot, type RelationshipTimeContext, type ReunionEpisode, type SnapshotField, type TemporalDiagnostics } from "@/api/temporal"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
 const { get, post } = useApi()
@@ -224,7 +224,6 @@ const triggeringActive = ref(false)
 const triggeringDelayed = ref(false)
 const triggeringDaily = ref(false)
 const temporalDiagnostics = ref<TemporalDiagnostics | null>(null)
-const relationshipDiagnostics = ref<RelationshipTimeDiagnostics | null>(null)
 const reunionEpisodes = ref<ReunionEpisode[]>([])
 const temporalLoading = ref(false)
 const temporalError = ref("")
@@ -233,8 +232,6 @@ const temporalActiveTab = ref("core")
 const relationshipFeatureEnabled = computed(() => temporalDiagnostics.value?.core.featureFlags.relationshipTimeEnabled === true)
 const relationshipContext = computed(() => {
   const candidates = [
-    relationshipDiagnostics.value?.state,
-    relationshipDiagnostics.value?.relationshipTime,
     temporalDiagnostics.value?.snapshot.relationshipTime,
     temporalDiagnostics.value?.relationshipTime,
   ]
@@ -245,7 +242,6 @@ const relationshipContext = computed(() => {
   return null
 })
 const relationshipDiagnosticsList = computed(() => Array.from(new Set([
-  ...(relationshipDiagnostics.value?.diagnostics || []),
   ...(relationshipContext.value?.diagnostics || []),
   ...(temporalDiagnostics.value?.diagnostics || []),
 ])))
@@ -276,7 +272,7 @@ async function loadTemporal() {
   temporalLoading.value = true
   temporalError.value = ""
   const characterId = injectedCharacterId?.value ?? ""
-  const requests: Promise<unknown>[] = [getTemporalDiagnostics(characterId), getRelationshipTimeDiagnostics(characterId)]
+  const requests: Promise<unknown>[] = [getTemporalDiagnostics(characterId)]
   if (characterId) requests.push(listReunionEpisodes(characterId))
   const results = await Promise.allSettled(requests)
   if (results[0].status === "fulfilled") temporalDiagnostics.value = results[0].value as TemporalDiagnostics
@@ -284,12 +280,11 @@ async function loadTemporal() {
     temporalDiagnostics.value = null
     temporalError.value = "Temporal Runtime 诊断加载失败，请检查后端服务后重试"
   }
-  relationshipDiagnostics.value = results[1].status === "fulfilled" ? results[1].value as RelationshipTimeDiagnostics : null
-  if (characterId && results[2]?.status === "fulfilled") {
-    const result = results[2].value as ReunionEpisode[] | { items: ReunionEpisode[] }
+  if (characterId && results[1]?.status === "fulfilled") {
+    const result = results[1].value as ReunionEpisode[] | { items: ReunionEpisode[] }
     reunionEpisodes.value = Array.isArray(result) ? result : result.items || []
   } else {
-    reunionEpisodes.value = relationshipDiagnostics.value?.episodes || []
+    reunionEpisodes.value = []
   }
   temporalLoading.value = false
 }
