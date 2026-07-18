@@ -107,6 +107,7 @@ func main() {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		_ = services.MCPConnections.Close(shutdownCtx)
 		_ = services.Extension.Close(shutdownCtx)
 	}()
 	surrealdbDB.SetSurrealRestartCallback(func() {

@@ -558,6 +558,42 @@ private state: WechatState = {
     this.persistStats()
     console.log("[OpenClaw][VOICE-SEND] Message sent OK")
   }
+
+  async sendImageMessage(toUserId: string, imageBuffer: Buffer, contextToken?: string): Promise<void> {
+    if (!this.token) throw new Error("Not logged in")
+    const rawsize = imageBuffer.length
+    const rawfilemd5 = crypto.createHash("md5").update(imageBuffer).digest("hex")
+    const aesKey = crypto.randomBytes(16)
+    const encrypted = this.aes128EcbEncrypt(imageBuffer, aesKey)
+    const uploadResp = await getUploadUrl({
+      baseUrl: this.state.baseUrl,
+      token: this.token,
+      filekey: `image_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.png`,
+      media_type: 2,
+      to_user_id: toUserId,
+      rawsize,
+      rawfilemd5,
+      filesize: encrypted.length,
+      aeskey: aesKey.toString("hex"),
+      no_need_thumb: true,
+    })
+    if (uploadResp.errcode && uploadResp.errcode !== 0) throw new Error("getUploadUrl failed: " + uploadResp.errcode)
+    if (!uploadResp.upload_full_url) throw new Error("getUploadUrl returned no upload_full_url")
+    const encryptQueryParam = uploadResp.encrypt_query_param || (() => {
+      const match = uploadResp.upload_full_url.match(/encrypted_query_param=([^&]+)/)
+      return match ? decodeURIComponent(match[1]) : ""
+    })()
+    if (!encryptQueryParam) throw new Error("encrypt_query_param missing")
+    const upload = await fetch(uploadResp.upload_full_url, { method: "POST", body: encrypted, signal: AbortSignal.timeout(30000) })
+    if (!upload.ok) throw new Error("CDN upload failed: " + upload.status)
+    await sendMessage({
+      baseUrl: this.state.baseUrl,
+      token: this.token,
+      body: { msg: { from_user_id: this.getState().accountId || "", to_user_id: toUserId, client_id: `openclaw-weixin:${Date.now()}-${crypto.randomBytes(4).toString("hex")}`, message_type: 2, message_state: 2, context_token: contextToken || "", item_list: [{ type: 2, image_item: { media: { encrypt_query_param: encryptQueryParam, aes_key: Buffer.from(aesKey.toString("hex")).toString("base64") } } }] } },
+    })
+    this.state.replyCount++
+    this.persistStats()
+  }
   
   private aes128EcbEncrypt(data: Buffer, key: Buffer): Buffer {
     const cipher = crypto.createCipheriv("aes-128-ecb", key, Buffer.alloc(0))

@@ -690,6 +690,30 @@ export class QQBotClient {
     }, "发送私聊语音")
   }
 
+  async sendGroupImage(groupId: string, fileInfo: string): Promise<void> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const resp = await fetch(this.apiBase + "/v2/groups/" + groupId + "/messages", {
+        method: "POST",
+        headers: { "Authorization": "QQBot " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1000) }),
+      })
+      if (!resp.ok) throw new Error("发送群图片失败 (" + resp.status + "): " + await resp.text())
+    }, "发送群图片")
+  }
+
+  async sendPrivateImage(userId: string, fileInfo: string): Promise<void> {
+    if (!this.config) throw new Error("未连接")
+    return this._sendWithRetry(async (token: string) => {
+      const resp = await fetch(this.apiBase + "/v2/users/" + userId + "/messages", {
+        method: "POST",
+        headers: { "Authorization": "QQBot " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1000) }),
+      })
+      if (!resp.ok) throw new Error("发送私聊图片失败 (" + resp.status + "): " + await resp.text())
+    }, "发送私聊图片")
+  }
+
 
 
   async downloadImage(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {

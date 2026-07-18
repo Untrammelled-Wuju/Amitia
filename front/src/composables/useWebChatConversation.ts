@@ -4,6 +4,7 @@ import { ref, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "./useApi"
 import { useCachedApi } from "./useCachedApi"
+import { compareChatMessages, normalizeRealtimeMessage } from "@/utils/message-order"
 
 export function useWebChatConversation(
   messages: Ref<any[]>,
@@ -58,7 +59,8 @@ export function useWebChatConversation(
       if (item.id) serverMap.set(String(item.id), item)
     }
     const localOnly = messages.value.filter(m => isLocalMessage(m))
-    const merged = serverItems.map((m: any) => {
+    const merged = serverItems.map((raw: any) => {
+      const m = normalizeRealtimeMessage(raw)
       if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" }
       return m
     })
@@ -67,7 +69,7 @@ export function useWebChatConversation(
         merged.push(local)
       }
     }
-    merged.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    merged.sort(compareChatMessages)
     messages.value = merged
   }
 

@@ -104,6 +104,21 @@ type AgentSkillResource struct {
 	Executable   bool                   `json:"executable"`
 	Supported    bool                   `json:"supported"`
 }
+type AgentSkillMCPDependency struct {
+	ID                         string   `json:"id"`
+	Description                string   `json:"description,omitempty"`
+	Required                   bool     `json:"required"`
+	Transport                  string   `json:"transport"`
+	URL                        string   `json:"url,omitempty"`
+	Command                    string   `json:"command,omitempty"`
+	Args                       []string `json:"args,omitempty"`
+	AuthType                   string   `json:"authType"`
+	ToolAllowlist              []string `json:"toolAllowlist"`
+	DefaultScope               string   `json:"defaultScope"`
+	AutoConfigure              bool     `json:"autoConfigure"`
+	AutoEnable                 bool     `json:"autoEnable"`
+	RequiresManualConfirmation bool     `json:"requiresManualConfirmation"`
+}
 type AgentSkillCompatibilityReport struct {
 	Status          AgentSkillCompatibilityStatus `json:"status"`
 	ToolMappings    []AgentSkillToolMapping       `json:"toolMappings"`
@@ -143,6 +158,7 @@ type AgentSkillDefinition struct {
 	ToolMappings        []AgentSkillToolMapping       `json:"toolMappings"`
 	CompatibilityStatus AgentSkillCompatibilityStatus `json:"compatibilityStatus"`
 	Warnings            []AgentSkillWarning           `json:"warnings"`
+	MCPDependencies     []AgentSkillMCPDependency     `json:"mcpDependencies"`
 	Enabled             bool                          `json:"enabled"`
 	CreatedAt           time.Time                     `json:"createdAt"`
 	UpdatedAt           time.Time                     `json:"updatedAt"`

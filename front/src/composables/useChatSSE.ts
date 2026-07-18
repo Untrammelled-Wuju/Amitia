@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, type Ref, nextTick } from "vue"
 import { resolveApiUrl } from "../runtime/runtime-adapter"
+import { compareChatMessages, mergeChatMessage, normalizeRealtimeMessage } from "@/utils/message-order"
 
 export function useChatSSE(
   convId: Ref<string>,
@@ -18,9 +19,14 @@ export function useChatSSE(
 
   function handleMessage(event: MessageEvent) {
     try {
-      const msg = JSON.parse(event.data)
+      const msg = normalizeRealtimeMessage(JSON.parse(event.data))
       if (!msg.role || msg.role === "tool") return
       if ((msg as any).tool_calls_json) return
+      if (mergeChatMessage(messages.value, msg)) {
+        messages.value.sort(compareChatMessages)
+        lastPolledMsgId = msg.id || lastPolledMsgId
+        return
+      }
       if (!messages.value.some((m: any) => m.id === msg.id)) {
         if (msg.role === "user") {
           const now = Date.now()
@@ -33,6 +39,7 @@ export function useChatSSE(
         }
         lastPolledMsgId = msg.id || lastPolledMsgId
         messages.value.push(msg)
+        messages.value.sort(compareChatMessages)
         if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
           new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
         }
@@ -70,9 +77,10 @@ export function useChatSSE(
       proactiveSSE = new EventSource(url)
       proactiveSSE.addEventListener("proactive_message", (e) => {
         try {
-          const msg = JSON.parse(e.data)
+          const msg = normalizeRealtimeMessage(JSON.parse(e.data))
           if (msg.conversationId === convId.value) {
-            messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: new Date().toISOString() })
+            if (!mergeChatMessage(messages.value, msg)) messages.value.push({ ...msg, createdAt: msg.createdAt || new Date().toISOString() })
+            messages.value.sort(compareChatMessages)
             nextTick(() => scrollToBottom())
           }
         } catch {}

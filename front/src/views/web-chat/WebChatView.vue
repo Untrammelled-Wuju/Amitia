@@ -91,6 +91,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @removeVideo="onVideoRemoved"
       @toggleCall="handleToggleCall"
       @cancel-reply="replyTarget = null"
+	  @emote="handleEmoteSend"
     />
 
     <ConversationDrawer
@@ -143,6 +144,7 @@ import MemoryPanel from "../../components/MemoryPanel.vue"
 import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue"
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue"
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue"
+import { normalizeRealtimeMessage } from "@/utils/message-order"
 
 const router = useRouter()
 const callActive = ref(false)
@@ -173,7 +175,7 @@ async function handleToggleCall() {
   }
   callActive.value = !callActive.value
 }
-const { get } = useApi()
+const { get, post } = useApi()
 const { cachedGet, invalidateCache } = useCachedApi()
 const currentCharName = inject<any>("currentCharName", null)
 
@@ -207,6 +209,21 @@ const currentImageFile = ref<File | null>(null)
 const pendingImageBase64 = ref<string | null>(null)
 const pendingAudioUrl = ref<string | null>(null)
 const pendingVideoUrl = ref<string | null>(null)
+
+async function handleEmoteSend(emote: any) {
+	if (!convId.value || !characterId.value) {
+		ElMessage.warning("请先选择角色和会话")
+		return
+	}
+	try {
+		const message = normalizeRealtimeMessage(await post<any>("/api/chat/send-emote", { conversationId: convId.value, characterId: characterId.value, emoteId: emote.id, replyToMessageId: replyTarget.value?.id || undefined }))
+		if (!messages.value.some(item => item.id === message.id)) messages.value.push(message)
+		replyTarget.value = null
+		nextTick(() => scrollToBottom())
+	} catch (error: any) {
+		ElMessage.error(error?.response?.data?.msg || "表情发送失败")
+	}
+}
 
 function toggleProfiles() {
   showProfiles.value = !showProfiles.value

@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <DesktopTitleBar v-if="isDesktopShell()" />
   <UpdateDialog />
+  <MCPInteractionGuard v-if="!isPublicPage" />
   <PrivacyConsent v-if="!isPublicPage" />
   <AppLayout v-if="!isPublicPage">
     <router-view />
@@ -20,6 +21,7 @@ import { apiClient } from "./ui-index"
 import PrivacyConsent from "./components/PrivacyConsent.vue"
 import UpdateDialog from "./components/UpdateDialog.vue"
 import DesktopTitleBar from "./components/DesktopTitleBar.vue"
+import MCPInteractionGuard from "./components/MCPInteractionGuard.vue"
 import { useTheme } from "./ui-index"
 import { isDesktopShell } from "./runtime/runtime-capabilities"
 

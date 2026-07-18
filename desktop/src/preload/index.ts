@@ -21,6 +21,9 @@ const api = {
   selectAgentSkillDirectory(): Promise<AgentSkillDirectorySelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectAgentSkillDirectory)
   },
+  selectMCPRoot(): Promise<{ path: string; name: string } | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.selectMCPRoot)
+  },
   selectExtensionPackage(): Promise<ExtensionPackageSelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectExtensionPackage)
   },

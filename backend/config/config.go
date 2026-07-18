@@ -120,6 +120,8 @@ func InitConfig(configPath string) {
 	v.SetDefault("qdrant.collections.user_profiles.vectorDim", 2560)
 	v.SetDefault("qdrant.collections.episodic_memories.name", "episodic_memories")
 	v.SetDefault("qdrant.collections.episodic_memories.vectorDim", 2560)
+	v.SetDefault("qdrant.collections.amitia_emotes.name", "amitia_emotes")
+	v.SetDefault("qdrant.collections.amitia_emotes.vectorDim", 2560)
 	v.SetDefault("embedding.modelName", "doubao-embedding-vision-251215")
 	v.SetDefault("embedding.baseUrl", "")
 	v.SetDefault("embedding.apiKey", "")

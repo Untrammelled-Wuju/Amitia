@@ -344,6 +344,29 @@ app.post("/api/send-voice", async (req, reply) => {
     return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
   }
 })
+
+app.post("/api/send-image", async (req, reply) => {
+  try {
+    const body = req.body as { toUserId?: string; assetUrl?: string; fallbackUrl?: string; contextToken?: string }
+    if (!body.toUserId || (!body.assetUrl && !body.fallbackUrl)) return reply.status(422).send({ success: false, message: "toUserId and assetUrl are required" })
+    const candidates = [body.assetUrl, body.fallbackUrl].filter(Boolean) as string[]
+    let buffer: Buffer | null = null
+    for (const candidate of candidates) {
+      const url = candidate.startsWith("http") ? candidate : sidecarConfig.coreUrl + candidate
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(30000) })
+        if (!response.ok) continue
+        buffer = Buffer.from(await response.arrayBuffer())
+        break
+      } catch {}
+    }
+    if (!buffer) throw new Error("表情资源下载失败")
+    await manager.sendImageMessage(body.toUserId, buffer, body.contextToken)
+    return reply.send({ success: true, message: "Image sent" })
+  } catch (err: any) {
+    return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
+  }
+})
 // ============================================================
 // Startup
 // ============================================================

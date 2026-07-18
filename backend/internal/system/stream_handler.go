@@ -20,6 +20,7 @@ import (
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) MessagesStream(c *gin.Context) {
@@ -35,29 +36,16 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 	sinceID := c.Query("since")
-	sinceCreatedAt := ""
+	var sinceSequence int64
 	if sinceID != "" {
-		var sinceCreatedAtRaw interface{}
-		h.db.Table("messages").Select("created_at").Where("id = ?", sinceID).Row().Scan(&sinceCreatedAtRaw)
-		if t, ok := sinceCreatedAtRaw.(time.Time); ok {
-			sinceCreatedAt = t.Format("2006-01-02 15:04:05")
-		} else if s, ok := sinceCreatedAtRaw.(string); ok {
-			sinceCreatedAt = s
-		}
-	}
-	if sinceCreatedAt == "" {
-		sinceCreatedAt = "0001-01-01"
+		h.db.Table("messages").Select("sequence").Where("id = ? AND conversation_id = ?", sinceID, convID).Row().Scan(&sinceSequence)
 	}
 	for {
-		var msgs []map[string]interface{}
-		rows, _ := h.db.Table("messages").Where("conversation_id = ? AND (created_at > ? OR (created_at = ? AND id > ?))", convID, sinceCreatedAt, sinceCreatedAt, sinceID).Order("created_at ASC, id ASC").Rows()
-		for rows.Next() {
-			var m map[string]interface{}
-			h.db.ScanRows(rows, &m)
-			msgs = append(msgs, m)
-		}
-		rows.Close()
+		msgs, _ := loadMessagesAfterSequence(h.db, convID, sinceSequence)
 		for _, m := range msgs {
+			if sequence, ok := messageSequence(m["sequence"]); ok {
+				sinceSequence = sequence
+			}
 			role, _ := m["role"].(string)
 			content, _ := m["content"].(string)
 			if role == "tool" {
@@ -102,15 +90,13 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 				m["videoUrl"] = v
 				delete(m, "video_url")
 			}
+			for snake, camel := range map[string]string{"msg_type": "msgType", "emote_id": "emoteId", "alt_text": "altText", "is_animated": "isAnimated", "media_width": "width", "media_height": "height", "original_asset_reference": "originalAssetReference", "fallback_asset_reference": "fallbackAssetReference", "response_group_id": "responseGroupId", "delivery_sequence": "deliverySequence", "emote_decision_status": "emoteDecisionStatus"} {
+				if v, ok := m[snake]; ok {
+					m[camel] = v
+					delete(m, snake)
+				}
+			}
 			c.SSEvent("message", m)
-			if ca, ok := m["createdAt"].(time.Time); ok {
-				sinceCreatedAt = ca.Format("2006-01-02 15:04:05")
-			} else if ca, ok := m["createdAt"].(string); ok {
-				sinceCreatedAt = ca
-			}
-			if id, ok := m["id"].(string); ok {
-				sinceID = id
-			}
 			c.Writer.Flush()
 		}
 		select {
@@ -118,6 +104,34 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 			return
 		case <-time.After(500 * time.Millisecond):
 		}
+	}
+}
+
+func loadMessagesAfterSequence(db *gorm.DB, conversationID string, sinceSequence int64) ([]map[string]interface{}, error) {
+	rows, err := db.Table("messages").Where("conversation_id = ? AND sequence > ?", conversationID, sinceSequence).Order("sequence ASC").Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	msgs := []map[string]interface{}{}
+	for rows.Next() {
+		var message map[string]interface{}
+		db.ScanRows(rows, &message)
+		msgs = append(msgs, message)
+	}
+	return msgs, rows.Err()
+}
+
+func messageSequence(value interface{}) (int64, bool) {
+	switch sequence := value.(type) {
+	case int64:
+		return sequence, true
+	case int:
+		return int64(sequence), true
+	case float64:
+		return int64(sequence), true
+	default:
+		return 0, false
 	}
 }
 

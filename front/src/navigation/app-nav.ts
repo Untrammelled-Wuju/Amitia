@@ -64,6 +64,8 @@ const extraTitles = [
   { path: "/runtime-mode", label: "运行模式" },
   { path: "/runtime-debug", label: "运行时调试" },
   { path: "/user-settings", label: "用户信息" },
+  { path: "/emotes", label: "表情包管理" },
+  { path: "/extensions/mcp", label: "MCP 服务" },
   { path: "/extensions/skills", label: "技能管理" },
   { path: "/extensions/plugins", label: "插件管理" },
   { path: "/extensions/workshop", label: "扩展工坊" },

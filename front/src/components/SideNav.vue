@@ -48,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/character">角色管理</el-menu-item>
         <el-menu-item index="/reminders">日程提醒</el-menu-item>
         <el-menu-item index="/memory-manager">记忆总览</el-menu-item>
+        <el-menu-item index="/emotes">表情包管理</el-menu-item>
         <el-menu-item index="/episodic">情景记忆</el-menu-item>
         <el-menu-item index="/graph">记忆图谱</el-menu-item>
         <el-menu-item index="/memory-timeline">时间线</el-menu-item>
@@ -115,7 +116,7 @@ const checking = ref(false)
 const appStore = useAppStore()
 
 const CHAR_PATHS = [
-  "/character", "/reminders", "/memory-manager", "/episodic",
+  "/character", "/reminders", "/memory-manager", "/emotes", "/episodic",
   "/graph", "/memory-timeline", "/profiles", "/world-book",
   "/logs", "/import",
 ]

@@ -24,10 +24,25 @@ var capabilityCatalog = map[string]CapabilityDefinition{
 	"event.own.emit":            {Name: "event.own.emit", Risk: "low", Description: "发送当前插件命名空间事件"},
 	"clipboard.read":            {Name: "clipboard.read", Risk: "high", Description: "读取系统剪贴板"},
 	"system.foreground.read":    {Name: "system.foreground.read", Risk: "high", Description: "读取前台应用信息"},
+	"mcp.invoke":                {Name: "mcp.invoke", Risk: "high", Description: "调用外部 MCP 工具"},
+	"network.remote":            {Name: "network.remote", Risk: "high", Description: "访问远程服务"},
+	"filesystem.read":           {Name: "filesystem.read", Risk: "high", Description: "读取文件系统"},
+	"filesystem.write":          {Name: "filesystem.write", Risk: "high", Description: "写入文件系统"},
+	"external.account.read":     {Name: "external.account.read", Risk: "high", Description: "读取外部账户数据"},
+	"external.account.write":    {Name: "external.account.write", Risk: "high", Description: "修改外部账户数据"},
+	"message.send":              {Name: "message.send", Risk: "high", Description: "通过外部服务发送消息"},
+	"data.delete":               {Name: "data.delete", Risk: "high", Description: "删除外部数据"},
+	"financial.action":          {Name: "financial.action", Risk: "high", Description: "执行金融操作"},
 }
 
 func Capability(name string) (CapabilityDefinition, bool) {
 	item, ok := capabilityCatalog[name]
+	if !ok && len(name) > len("mcp.server.") && name[:len("mcp.server.")] == "mcp.server." {
+		return CapabilityDefinition{Name: name, Risk: "high", Description: "访问指定 MCP Server"}, true
+	}
+	if !ok && len(name) > len("mcp.tool.") && name[:len("mcp.tool.")] == "mcp.tool." {
+		return CapabilityDefinition{Name: name, Risk: "high", Description: "调用指定 MCP Tool"}, true
+	}
 	return item, ok
 }
 

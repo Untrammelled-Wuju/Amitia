@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/character"
@@ -17,10 +19,21 @@ import (
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mcp"
+	mcpauth "github.com/u-ai/backend/internal/mcp/auth"
+	mcpclient "github.com/u-ai/backend/internal/mcp/client"
+	mcpdependency "github.com/u-ai/backend/internal/mcp/dependency"
+	mcpdiscovery "github.com/u-ai/backend/internal/mcp/discovery"
+	mcpfeatures "github.com/u-ai/backend/internal/mcp/features"
+	mcphost "github.com/u-ai/backend/internal/mcp/host"
+	mcpmanager "github.com/u-ai/backend/internal/mcp/manager"
+	"github.com/u-ai/backend/internal/mcp/protocol"
+	mcpskill "github.com/u-ai/backend/internal/mcp/skill"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
@@ -59,6 +72,17 @@ type AppServices struct {
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
 	Extension           *extension.Runtime
+	Emote               *emote.Service
+	MCPRepository       *mcp.Repository
+	MCPConnections      *mcpmanager.Manager
+	MCPAuth             *mcpauth.Manager
+	MCPDiscovery        *mcpdiscovery.Service
+	MCPSkills           *mcpskill.Runtime
+	MCPSecrets          mcpauth.SecretStore
+	MCPFeatures         *mcpfeatures.Service
+	MCPHost             *mcphost.Service
+	MCPInteractions     *mcphost.Broker
+	MCPDependencies     *mcpdependency.Service
 }
 
 type defaultCharacterProvider struct {
@@ -141,11 +165,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
 	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
+		delivery.NewWebChannelAdapter(),
 		delivery.NewQQChannelAdapter("http://127.0.0.1:9877"),
 		delivery.NewWechatChannelAdapter("http://127.0.0.1:9876"),
 	}, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
+	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
+	emoteDecision := emote.NewDecisionService(emoteSvc)
+	chat.RegisterMessagePlanningHook(emoteDecision.Plan)
 
 	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
 	chatSvc.SetOutboxStore(outboxAdapter)
@@ -229,6 +257,39 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to init delivery store schema")
 	}
 	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore)
+	mcpRepository := mcp.NewRepository(ctx.DB)
+	mcpStorageDir := mcpDataDirectory(ctx)
+	secretStore, err := mcpauth.NewEncryptedFileStore(filepath.Join(mcpStorageDir, "mcp-secrets.json"), filepath.Join(mcpStorageDir, "mcp-secrets.key"))
+	if err != nil {
+		panic("failed to initialize MCP secret store")
+	}
+	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
+	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
+	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
+	skillRuntime := mcpskill.New(mcpRepository, connectionManager, extensionRuntime)
+	featureService := mcpfeatures.New(mcpRepository, connectionManager)
+	interactionBroker := mcphost.NewBroker(chatSvc)
+	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)
+	dependencyService := mcpdependency.New(mcpRepository, connectionManager, discoveryService, skillRuntime)
+	extensionRuntime.AgentSkills.SetAfterRemove(func(ctx context.Context, extensionID string) {
+		_, _ = dependencyService.Uninstall(ctx, extensionID)
+	})
+	connectionManager.RegisterReadyHandler(func(readyCtx context.Context, serverID string) {
+		hostService.Attach(serverID)
+		if discoverErr := discoveryService.Discover(readyCtx, serverID); discoverErr != nil {
+			log.Warn("MCP capability discovery failed server=", serverID, " error=", discoverErr)
+			return
+		}
+		if registerErr := skillRuntime.RegisterServer(readyCtx, serverID); registerErr != nil {
+			log.Warn("MCP skill registration failed server=", serverID, " error=", registerErr)
+		}
+	})
+	if err := skillRuntime.RegisterAll(context.Background()); err != nil {
+		log.Warn("MCP skill restore warning: ", err)
+	}
+	if err := connectionManager.Restore(context.Background()); err != nil {
+		log.Warn("MCP connection restore warning: ", err)
+	}
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -250,7 +311,36 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,
 		Extension:           extensionRuntime,
+		Emote:               emoteSvc,
+		MCPRepository:       mcpRepository,
+		MCPConnections:      connectionManager,
+		MCPAuth:             oauthManager,
+		MCPDiscovery:        discoveryService,
+		MCPSkills:           skillRuntime,
+		MCPSecrets:          secretStore,
+		MCPFeatures:         featureService,
+		MCPHost:             hostService,
+		MCPInteractions:     interactionBroker,
+		MCPDependencies:     dependencyService,
 	}
+}
+
+func mcpDataDirectory(ctx *app.AppContext) string {
+	if config.AppCfg != nil && strings.TrimSpace(config.AppCfg.Storage.DataDir) != "" {
+		return config.AppCfg.Storage.DataDir
+	}
+	var databases []struct {
+		Name string `gorm:"column:name"`
+		File string `gorm:"column:file"`
+	}
+	if ctx != nil && ctx.DB != nil && ctx.DB.Raw("PRAGMA database_list").Scan(&databases).Error == nil {
+		for _, database := range databases {
+			if database.Name == "main" && strings.TrimSpace(database.File) != "" {
+				return filepath.Dir(database.File)
+			}
+		}
+	}
+	return filepath.Join(".", "data")
 }
 
 func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore) {

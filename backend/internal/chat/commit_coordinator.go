@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,11 +12,53 @@ import (
 )
 
 type MessageCommitHook func(event *MessageCommitEvent)
+type MessagePlanningHook func(event *MessagePlanningEvent) *MessagePlanningDecision
 
-var onMessageCommitted MessageCommitHook
+var messageCommitHooks []MessageCommitHook
+var messagePlanningHook MessagePlanningHook
 
 func RegisterMessageCommitHook(hook MessageCommitHook) {
-	onMessageCommitted = hook
+	if hook != nil {
+		messageCommitHooks = append(messageCommitHooks, hook)
+	}
+}
+
+func RegisterMessagePlanningHook(hook MessagePlanningHook) {
+	messagePlanningHook = hook
+}
+
+type MessagePlanningEvent struct {
+	ConversationID string
+	CharacterID    string
+	Channel        string
+	Source         string
+	UserMessage    string
+	Reply          string
+	Lines          []string
+	UserID         string
+	PeerID         string
+	RequestID      string
+	ForceVoice     bool
+}
+
+type PlannedEmote struct {
+	EmoteID     string
+	Content     string
+	AltText     string
+	IsAnimated  int
+	Width       int
+	Height      int
+	Original    string
+	Fallback    string
+	MimeType    string
+	DeliveryKey string
+}
+
+type MessagePlanningDecision struct {
+	Emote       *PlannedEmote
+	InsertAfter int
+	SendMode    string
+	Persist     func(tx *gorm.DB, message *Message) error
 }
 
 type MessageCommitEvent struct {
@@ -31,6 +74,7 @@ type MessageCommitEvent struct {
 	UserID         string
 	PeerID         string
 	RequestID      string
+	MessagePlan    *interaction.MessagePlan
 }
 
 type messageCommitPlan struct {
@@ -48,6 +92,7 @@ type messageCommitPlan struct {
 	LeaseID         string
 	LeaseOwnerToken string
 	TotalTokens     int
+	ForceVoice      bool
 }
 
 type messageCommitResult struct {
@@ -57,12 +102,52 @@ type messageCommitResult struct {
 	Events            []interaction.OutboxRecord
 	StateVersions     map[string]int64
 	DeliveryIntentIDs []string
+	MessagePlan       *interaction.MessagePlan
 }
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 
 	log.Printf("[commitInteraction] enter InteractionID=%s HasRuntime=%v ExpectedVersion=%d Lines=%d", plan.Request.InteractionID, plan.Request.Runtime != nil, plan.Request.ExpectedStatusVersion, len(plan.Lines))
+
+	responseGroupID := plan.Request.RequestID
+	if responseGroupID == "" {
+		responseGroupID = plan.Request.InteractionID
+	}
+	if responseGroupID == "" {
+		responseGroupID = uuid.New().String()
+	}
+	var planningDecision *MessagePlanningDecision
+	if messagePlanningHook != nil {
+		planningDecision = messagePlanningHook(&MessagePlanningEvent{
+			ConversationID: plan.Conversation,
+			CharacterID:    plan.Character,
+			Channel:        plan.Request.Channel,
+			Source:         plan.Source,
+			UserMessage:    plan.Request.Message,
+			Reply:          plan.Reply,
+			Lines:          append([]string(nil), plan.Lines...),
+			UserID:         plan.Request.UserID,
+			PeerID:         plan.Request.PeerID,
+			RequestID:      responseGroupID,
+			ForceVoice:     plan.ForceVoice,
+		})
+	}
+	emoteInsertAfter := len(plan.Lines)
+	if planningDecision != nil && planningDecision.Emote != nil {
+		if len(plan.Lines) == 0 {
+			if planningDecision.SendMode == "emote_only" {
+				emoteInsertAfter = 0
+			} else {
+				planningDecision = nil
+			}
+		} else if planningDecision.InsertAfter > 0 && planningDecision.InsertAfter < len(plan.Lines) {
+			emoteInsertAfter = planningDecision.InsertAfter
+		} else {
+			planningDecision.InsertAfter = len(plan.Lines)
+			planningDecision.SendMode = "after_all_text"
+		}
+	}
 
 	if s.deliveryStore != nil && plan.Request != nil && plan.Request.InteractionID != "" {
 		leaseID, ownerToken, err := s.deliveryStore.AcquireOutputLease(
@@ -78,14 +163,55 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 			return err
 		}
-		for _, text := range plan.Lines {
+		items := make([]interaction.MessagePlanItem, 0, len(plan.Lines)+1)
+		textIndex := 0
+		totalItems := len(plan.Lines)
+		if planningDecision != nil && planningDecision.Emote != nil {
+			totalItems++
+		}
+		var emoteMessage *Message
+		emoteInserted := false
+		for sequence := 1; sequence <= totalItems; sequence++ {
+			insertEmote := planningDecision != nil && planningDecision.Emote != nil && !emoteInserted && textIndex == emoteInsertAfter
+			if insertEmote {
+				planned := planningDecision.Emote
+				status := "sent"
+				if strings.ToLower(plan.Request.Channel) != "web" {
+					status = "sending"
+				}
+				emoteMessage = &Message{ID: uuid.New().String(), ConversationID: plan.Conversation, Role: "assistant", Content: planned.Content, MsgType: "emote", Source: "ai_random", Status: status, ImageUrl: planned.Original, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated, MediaWidth: planned.Width, MediaHeight: planned.Height, OriginalAsset: planned.Original, FallbackAsset: planned.Fallback, ResponseGroupID: responseGroupID, DeliverySequence: sequence, EmoteDecisionStatus: "queued", RequestID: plan.Request.RequestID}
+				if status == "sent" {
+					emoteMessage.EmoteDecisionStatus = "sent"
+				}
+				if err := tx.Create(emoteMessage).Error; err != nil {
+					return err
+				}
+				result.LastSequence = emoteMessage.Sequence
+				items = append(items, interaction.MessagePlanItem{MessageID: emoteMessage.ID, Sequence: sequence, Type: "emote", Content: planned.Content, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated == 1, Width: planned.Width, Height: planned.Height, OriginalAssetReference: planned.Original, FallbackAssetReference: planned.Fallback})
+				emoteInserted = true
+				continue
+			}
+			text := plan.Lines[textIndex]
 			aiMsgID := uuid.New().String()
-			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID}
+			decisionStatus := "none"
+			if planningDecision != nil && planningDecision.Emote != nil {
+				decisionStatus = "selected"
+			}
+			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence, EmoteDecisionStatus: decisionStatus}
 			if err := tx.Create(aiMsg).Error; err != nil {
 				return err
 			}
 			result.MessageIDs = append(result.MessageIDs, aiMsgID)
 			result.LastSequence = aiMsg.Sequence
+			items = append(items, interaction.MessagePlanItem{MessageID: aiMsgID, Sequence: sequence, Type: "text", Content: text})
+			textIndex++
+		}
+		managed := strings.EqualFold(plan.Request.Channel, "web") || !plan.ForceVoice
+		result.MessagePlan = &interaction.MessagePlan{ResponseGroupID: responseGroupID, Managed: managed, Items: items}
+		if planningDecision != nil && planningDecision.Persist != nil {
+			if err := planningDecision.Persist(tx, emoteMessage); err != nil {
+				return err
+			}
 		}
 		now := time.Now().Format("2006-01-02 15:04:05")
 		if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {
@@ -113,7 +239,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 					return err
 				}
 			}
-			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs)
+			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
 			if err != nil {
 				return err
 			}
@@ -135,8 +261,8 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 	if plan.LeaseID != "" {
 		_ = s.deliveryStore.ReleaseOutputLease(plan.LeaseID, plan.LeaseOwnerToken)
 	}
-	if onMessageCommitted != nil {
-		event := MessageCommitEvent{
+	if len(messageCommitHooks) > 0 {
+		event := &MessageCommitEvent{
 			ConversationID: plan.Conversation,
 			CharacterID:    plan.Character,
 			Channel:        plan.Request.Channel,
@@ -146,8 +272,14 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			UserMessage:    plan.Request.Message,
 			Reply:          plan.Reply,
 			Lines:          plan.Lines,
+			UserID:         plan.Request.UserID,
+			PeerID:         plan.Request.PeerID,
+			RequestID:      plan.Request.RequestID,
+			MessagePlan:    result.MessagePlan,
 		}
-		onMessageCommitted(&event)
+		for _, hook := range messageCommitHooks {
+			hook(event)
+		}
 	}
 	return result, nil
 }

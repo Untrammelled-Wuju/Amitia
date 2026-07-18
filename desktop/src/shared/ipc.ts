@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
   closeWindow: "amitia:window:close",
   runtimeStatusChanged: "amitia:runtime:status-changed",
   selectAgentSkillDirectory: "amitia:agent-skill:select-directory",
+  selectMCPRoot: "amitia:mcp:select-root",
   selectExtensionPackage: "amitia:extension-package:select-file",
   saveExtensionPackage: "amitia:extension-package:save",
 } as const

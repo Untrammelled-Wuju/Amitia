@@ -236,6 +236,11 @@ qq.onMessage(async (msg: QQMessage) => {
           }
         }
 
+        if (outMsg.messagePlanManaged === true) {
+          logLine("Reply delivery is managed by the ordered message plan")
+          return
+        }
+
         const texts: string[] = outMsg.texts
         if (texts && Array.isArray(texts) && texts.length > 0) {
           logLine("Split reply (" + texts.length + " parts) via delivery")
@@ -416,6 +421,39 @@ app.post("/api/send-voice", async (req, reply) => {
     return reply.send({ success: true })
   } catch (err: any) {
     console.error(`[HTTP] 语音发送失败:`, err.message)
+    return reply.status(500).send({ success: false, error: err.message })
+  }
+})
+
+app.post("/api/send-image", async (req, reply) => {
+  if (!qq.isOnline()) return reply.status(503).send({ success: false, error: "QQBot未连接" })
+  const body = req.body as any
+  const toUserId = body?.toUserId
+  const groupId = body?.groupId
+  if (!toUserId && !groupId) return reply.status(400).send({ success: false, error: "toUserId or groupId required" })
+  const candidates = [body?.assetUrl, body?.fallbackUrl].filter(Boolean)
+  try {
+    let imageBuffer: Buffer | null = null
+    let filename = "emote.png"
+    for (const candidate of candidates) {
+      const url = String(candidate).startsWith("http") ? String(candidate) : qqSidecarConfig.coreUrl + String(candidate)
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(30000) })
+        if (!response.ok) continue
+        imageBuffer = Buffer.from(await response.arrayBuffer())
+        const pathname = new URL(url).pathname
+        filename = path.basename(pathname) || filename
+        break
+      } catch {}
+    }
+    if (!imageBuffer) throw new Error("表情资源下载失败")
+    const fileInfo = groupId
+      ? await qq.uploadGroupMedia(groupId, imageBuffer, filename, 1)
+      : await qq.uploadPrivateMedia(toUserId, imageBuffer, filename, 1)
+    if (groupId) await qq.sendGroupImage(groupId, fileInfo)
+    else await qq.sendPrivateImage(toUserId, fileInfo)
+    return reply.send({ success: true })
+  } catch (err: any) {
     return reply.status(500).send({ success: false, error: err.message })
   }
 })

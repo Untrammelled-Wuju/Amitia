@@ -202,6 +202,9 @@ export async function fetchAgentSkill(id: string, characterId: string) { const r
 export async function installAgentSkill(previewId: string, scope: AgentSkillScope, characterId: string) { const response = await apiClient.post(`${agentSkillPath()}/import/install`, { previewId, scope, characterId, enable: false }); return response.data as AgentSkillDefinition }
 export async function setAgentSkillEnabled(id: string, enabled: boolean, characterId: string) { await apiClient.post(`${agentSkillPath(id)}/${enabled ? "enable" : "disable"}`, null, { params: { characterId } }) }
 export async function removeAgentSkill(id: string, characterId: string) { await apiClient.delete(agentSkillPath(id), { params: { characterId } }) }
+export async function previewAgentSkillMCPDependencies(agentSkillExtensionId: string, characterId: string, dependencies: unknown[]) { const response = await apiClient.post("/api/mcp/agent-skills/dependencies/preview", { agentSkillExtensionId, characterId, dependencies }); return response.data?.data ?? response.data }
+export async function installAgentSkillMCPDependencies(plan: unknown, options: { installOptional: boolean; confirmHTTP: boolean; confirmStdio: boolean }) { const response = await apiClient.post("/api/mcp/agent-skills/dependencies/install", { plan, ...options, enableServers: true }); return response.data?.data ?? response.data }
+export async function removeAgentSkillMCPDependencies(id: string) { const response = await apiClient.delete(`/api/mcp/agent-skills/${encodeURIComponent(id)}/dependencies`); return response.data?.data ?? response.data }
 
 export async function previewExtensionPackage(file: File, scopeType: "global" | "character", scopeId: string, extensionId = "", onProgress?: (percent: number) => void) {
   const data = new FormData()

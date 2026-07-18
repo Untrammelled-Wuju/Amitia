@@ -71,5 +71,8 @@ func DefaultMigrations() []Migration {
 		ExtensionArtifactRecoveryMigration(),
 		ExtensionScheduleSourceMigration(),
 		ExtensionScheduleOwnershipRepairMigration(),
+		EmotesMigration(),
+		MessagePlanMigration(),
+		MCPClientMigration(),
 	}
 }

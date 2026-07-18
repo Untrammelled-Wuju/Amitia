@@ -3,6 +3,8 @@ package chat
 import (
 	"encoding/json"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -282,6 +284,86 @@ func TestCommitInteractionRejectsStaleInteractionRecord(t *testing.T) {
 				t.Fatal("expected stale interaction commit to fail")
 			}
 			assertNoCommitSideEffects(t, db, convID)
+		})
+	}
+}
+
+func TestCommitInteractionBuildsOneLegalOrderedEmotePlan(t *testing.T) {
+	originalHook := messagePlanningHook
+	t.Cleanup(func() { messagePlanningHook = originalHook })
+	cases := []struct {
+		name            string
+		insertAfter     int
+		sendMode        string
+		lines           []string
+		expectedTypes   []string
+		expectedMode    string
+		expectedMessage int
+		expectedEmotes  int
+	}{
+		{name: "between", insertAfter: 1, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "emote", "text"}, expectedMode: "between_text_messages", expectedMessage: 3, expectedEmotes: 1},
+		{name: "before_is_normalized_to_after", insertAfter: 0, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "text", "emote"}, expectedMode: "after_all_text", expectedMessage: 3, expectedEmotes: 1},
+		{name: "overflow_is_normalized_to_after", insertAfter: 9, sendMode: "between_text_messages", lines: []string{"第一条", "第二条"}, expectedTypes: []string{"text", "text", "emote"}, expectedMode: "after_all_text", expectedMessage: 3, expectedEmotes: 1},
+		{name: "emote_only_without_text", insertAfter: 0, sendMode: "emote_only", lines: nil, expectedTypes: []string{"emote"}, expectedMode: "emote_only", expectedMessage: 1, expectedEmotes: 1},
+		{name: "textless_non_emote_only_is_rejected", insertAfter: 0, sendMode: "between_text_messages", lines: nil, expectedTypes: []string{}, expectedMode: "between_text_messages", expectedMessage: 0, expectedEmotes: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, svc, convID := setupCommitCoordinatorTest(t, false)
+			calls := 0
+			decision := &MessagePlanningDecision{Emote: &PlannedEmote{EmoteID: "emote-1", Content: "[表情：开心]"}, InsertAfter: tc.insertAfter, SendMode: tc.sendMode}
+			RegisterMessagePlanningHook(func(*MessagePlanningEvent) *MessagePlanningDecision {
+				calls++
+				return decision
+			})
+			result, err := svc.commitInteraction(messageCommitPlan{
+				Request:       &ProcessMessageRequest{CharacterID: "char-commit", ConversationID: convID, Channel: "web", Source: "manual", RequestID: "req-commit"},
+				Conversation:  convID,
+				Character:     "char-commit",
+				CharacterName: "Amitia",
+				UserMessageID: "user-commit",
+				Reply:         strings.Join(tc.lines, "\n"),
+				Lines:         tc.lines,
+				Source:        "manual",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 {
+				t.Fatalf("一次回复应只调用一次表情规划，实际 %d", calls)
+			}
+			if result.MessagePlan == nil || result.MessagePlan.ResponseGroupID != "req-commit" || !result.MessagePlan.Managed {
+				t.Fatalf("统一消息计划缺失: %#v", result.MessagePlan)
+			}
+			types := make([]string, 0, len(result.MessagePlan.Items))
+			for index, item := range result.MessagePlan.Items {
+				types = append(types, item.Type)
+				if item.Sequence != index+1 {
+					t.Fatalf("消息计划 sequence 不连续: %#v", result.MessagePlan.Items)
+				}
+			}
+			if !reflect.DeepEqual(types, tc.expectedTypes) {
+				t.Fatalf("消息计划顺序错误: %#v", types)
+			}
+			if decision.SendMode != tc.expectedMode {
+				t.Fatalf("发送位置模式错误: %s", decision.SendMode)
+			}
+			var messages []Message
+			if err = db.Where("conversation_id = ? AND role = 'assistant'", convID).Order("delivery_sequence ASC").Find(&messages).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(messages) != tc.expectedMessage {
+				t.Fatalf("持久化消息数量错误: %d", len(messages))
+			}
+			emoteCount := 0
+			for _, message := range messages {
+				if message.MsgType == "emote" {
+					emoteCount++
+				}
+			}
+			if emoteCount != tc.expectedEmotes {
+				t.Fatalf("自动表情数量错误，期望 %d，实际 %d", tc.expectedEmotes, emoteCount)
+			}
 		})
 	}
 }

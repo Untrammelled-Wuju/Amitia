@@ -41,6 +41,7 @@ export interface AmitiaDesktopAPI {
   getRuntimeStatus(): Promise<RuntimeStatus>
   openLogsDirectory(): Promise<void>
   selectAgentSkillDirectory(): Promise<{ rootName: string; files: Array<{ path: string; name: string; base64: string }> } | null>
+  selectMCPRoot(): Promise<{ path: string; name: string } | null>
   selectExtensionPackage(): Promise<{ name: string; size: number; base64: string } | null>
   saveExtensionPackage(request: { suggestedName: string; base64: string }): Promise<{ saved: boolean; fileName?: string }>
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void

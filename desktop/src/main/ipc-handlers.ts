@@ -67,6 +67,21 @@ export function registerIpcHandlers(
     return { rootName: path.basename(root), files }
   })
 
+  ipcMain.handle(IPC_CHANNELS.selectMCPRoot, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options = { properties: ["openDirectory"] as Array<"openDirectory"> }
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return null
+    const selected = path.resolve(result.filePaths[0])
+    const home = path.resolve(app.getPath("home"))
+    const blocked = [app.getPath("userData"), app.getPath("appData"), path.join(home, ".ssh"), path.join(home, ".config", "google-chrome"), path.join(home, ".config", "chromium")].map(value => path.resolve(value).toLowerCase())
+    const normalized = selected.toLowerCase()
+    if (normalized === home.toLowerCase() || blocked.some(value => normalized === value || normalized.startsWith(value + path.sep))) throw new Error("该目录包含敏感的应用或账户数据，不能授权给 MCP 服务")
+    const stat = await fs.lstat(selected)
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("只能授权真实本地目录")
+    return { path: selected, name: path.basename(selected) }
+  })
+
   ipcMain.handle(IPC_CHANNELS.selectExtensionPackage, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const options = { properties: ["openFile"] as Array<"openFile">, filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "zip"] }] }

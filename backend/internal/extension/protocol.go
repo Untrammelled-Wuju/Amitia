@@ -16,6 +16,7 @@ const (
 	SkillSourceLegacy       SkillSource = "legacy_tool"
 	SkillSourceWorkflow     SkillSource = "workflow"
 	SkillSourceInstructions SkillSource = "instructions"
+	SkillSourceMCP          SkillSource = "mcp"
 )
 
 type SkillTrigger string

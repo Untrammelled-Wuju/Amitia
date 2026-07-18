@@ -51,6 +51,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-model:activeCollapse="activeCollapse"
       />
 
+	  <EmoteSettingsSection :character-id="charId" />
+
       <LifestyleTendencySection :characterId="charId" />
 
       <SleepSettingSection v-model:sleepForm="sleepForm" />
@@ -102,6 +104,7 @@ import FixedEventsSection from "./components/FixedEventsSection.vue"
 import SpecialEventsSection from "./components/SpecialEventsSection.vue"
 import WorkProfileSection from "./components/WorkProfileSection.vue"
 import PromptEditorDialog from "./components/PromptEditorDialog.vue"
+import EmoteSettingsSection from "./components/EmoteSettingsSection.vue"
 
 const { get, post } = useApi()
 const { invalidateCache } = useCachedApi()

@@ -104,6 +104,22 @@ func TestAgentSkillParserResourcesMappingsAndOpenAI(t *testing.T) {
 	}
 }
 
+func TestAgentSkillParserAmitiaMCPDependenciesOverrideOpenAI(t *testing.T) {
+	files := map[string][]byte{
+		"SKILL.md":           []byte("---\nname: mcp-skill\ndescription: Use when MCP access is requested.\n---\n\nBody"),
+		"agents/openai.yaml": []byte("dependencies:\n  tools:\n    - type: mcp\n      value: fallback\n"),
+		"agents/amitia.yaml": []byte("version: \"1\"\nmcp_dependencies:\n  - id: remote\n    description: Remote service\n    required: true\n    transport: streamable_http\n    url: https://example.com/mcp\n    auth:\n      type: oauth\n    tools:\n      allow: [search, read]\n    scope:\n      default: character\n    install:\n      auto_configure: true\n      auto_enable: false\n      requires_manual_confirmation: true\n"),
+	}
+	parsed, err := parseAgentSkillFiles(files, "mcp-skill", AgentSkillSourceDirectory, DefaultAgentSkillLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependencies := parsed.Definition.MCPDependencies
+	if len(dependencies) != 1 || dependencies[0].ID != "remote" || dependencies[0].AuthType != "oauth" || !dependencies[0].AutoConfigure || dependencies[0].AutoEnable || len(dependencies[0].ToolAllowlist) != 2 {
+		t.Fatalf("unexpected dependencies: %#v", dependencies)
+	}
+}
+
 func TestAgentSkillZIPSecurity(t *testing.T) {
 	limits := DefaultAgentSkillLimits()
 	valid := agentSkillTestZIP(t, map[string][]byte{"code-review/SKILL.md": []byte("---\nname: code-review\ndescription: Review code. Use when requested.\n---\n\nBody")}, nil)

@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -84,12 +86,23 @@ func parseAgentSkillFiles(files map[string][]byte, rootName string, source Agent
 		return parsedAgentSkill{}, err
 	}
 	warnings = append(warnings, openaiWarnings...)
+	amitiaDependencies, amitiaWarnings, err := parseAgentSkillAmitia(files, limits)
+	if err != nil {
+		return parsedAgentSkill{}, err
+	}
+	warnings = append(warnings, amitiaWarnings...)
+	dependencies := []AgentSkillMCPDependency{}
+	if len(amitiaDependencies) > 0 {
+		dependencies = amitiaDependencies
+	} else if openai != nil {
+		dependencies = openai.Dependencies
+	}
 	mappings := mapAgentSkillTools(frontmatter.AllowedTools)
 	report := analyzeAgentSkillCompatibility(body, files, resources, mappings, warnings)
 	metadataRaw, _ := json.Marshal(rawFrontmatter)
 	extraRaw, _ := json.Marshal(extra)
 	hash := hashAgentSkillFiles(files)
-	definition := AgentSkillDefinition{Name: frontmatter.Name, Description: frontmatter.Description, License: frontmatter.License, Compatibility: frontmatter.Compatibility, Metadata: frontmatter.Metadata, AllowedTools: frontmatter.AllowedTools, Source: source, ContentHash: hash, Body: body, RawSkillMD: string(bytes.TrimPrefix(raw, []byte{0xef, 0xbb, 0xbf})), RawFrontmatter: metadataRaw, ExtraFrontmatter: extraRaw, Resources: resources, ToolMappings: mappings, CompatibilityStatus: report.Status, Warnings: report.Warnings, Enabled: false}
+	definition := AgentSkillDefinition{Name: frontmatter.Name, Description: frontmatter.Description, License: frontmatter.License, Compatibility: frontmatter.Compatibility, Metadata: frontmatter.Metadata, AllowedTools: frontmatter.AllowedTools, Source: source, ContentHash: hash, Body: body, RawSkillMD: string(bytes.TrimPrefix(raw, []byte{0xef, 0xbb, 0xbf})), RawFrontmatter: metadataRaw, ExtraFrontmatter: extraRaw, Resources: resources, ToolMappings: mappings, CompatibilityStatus: report.Status, Warnings: report.Warnings, MCPDependencies: dependencies, Enabled: false}
 	if openai != nil {
 		definition.DisplayName = openai.DisplayName
 		definition.ShortDescription = openai.ShortDescription
@@ -529,6 +542,7 @@ type parsedOpenAIYAML struct {
 	BrandColor       string
 	DefaultPrompt    string
 	Raw              map[string]interface{}
+	Dependencies     []AgentSkillMCPDependency
 }
 
 func parseAgentSkillOpenAI(files map[string][]byte, limits AgentSkillLimits) (*parsedOpenAIYAML, []AgentSkillWarning, error) {
@@ -577,8 +591,137 @@ func parseAgentSkillOpenAI(files map[string][]byte, limits AgentSkillLimits) (*p
 			return nil, nil, NewExtensionError(ErrAgentSkillResourceNotFound, "icon file is missing", clean, false, nil)
 		}
 	}
-	if len(value.Dependencies.Tools) > 0 {
-		warnings = append(warnings, AgentSkillWarning{Code: "MCP_DEPENDENCY_NOT_CONNECTED", Message: "tool dependencies are displayed for compatibility only and are not connected", Path: "agents/openai.yaml"})
+	dependencies := []AgentSkillMCPDependency{}
+	for _, item := range value.Dependencies.Tools {
+		typeName, _ := item["type"].(string)
+		if strings.ToLower(strings.TrimSpace(typeName)) != "mcp" {
+			return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "only MCP tool dependencies are supported", "agents/openai.yaml", false, nil)
+		}
+		valueName, _ := item["value"].(string)
+		description, _ := item["description"].(string)
+		transportName, _ := item["transport"].(string)
+		endpoint, _ := item["url"].(string)
+		dependency := AgentSkillMCPDependency{ID: valueName, Description: description, Required: true, Transport: transportName, URL: endpoint, AuthType: "none", ToolAllowlist: []string{}, DefaultScope: "character", AutoConfigure: false, AutoEnable: false, RequiresManualConfirmation: true}
+		if dependency.Transport == "" && dependency.URL != "" {
+			dependency.Transport = "streamable_http"
+		}
+		if err := validateMCPDependency(dependency); err != nil {
+			return nil, nil, err
+		}
+		dependencies = append(dependencies, dependency)
 	}
-	return &parsedOpenAIYAML{DisplayName: value.Interface.DisplayName, ShortDescription: value.Interface.ShortDescription, IconSmall: strings.TrimPrefix(value.Interface.IconSmall, "./"), IconLarge: strings.TrimPrefix(value.Interface.IconLarge, "./"), BrandColor: value.Interface.BrandColor, DefaultPrompt: value.Interface.DefaultPrompt, Raw: rawMap}, warnings, nil
+	if len(dependencies) > 0 {
+		warnings = append(warnings, AgentSkillWarning{Code: "MCP_DEPENDENCY_REQUIRES_CONFIRMATION", Message: "MCP dependencies require an explicit installation plan and user confirmation", Path: "agents/openai.yaml"})
+	}
+	return &parsedOpenAIYAML{DisplayName: value.Interface.DisplayName, ShortDescription: value.Interface.ShortDescription, IconSmall: strings.TrimPrefix(value.Interface.IconSmall, "./"), IconLarge: strings.TrimPrefix(value.Interface.IconLarge, "./"), BrandColor: value.Interface.BrandColor, DefaultPrompt: value.Interface.DefaultPrompt, Raw: rawMap, Dependencies: dependencies}, warnings, nil
+}
+
+func parseAgentSkillAmitia(files map[string][]byte, limits AgentSkillLimits) ([]AgentSkillMCPDependency, []AgentSkillWarning, error) {
+	raw, ok := files["agents/amitia.yaml"]
+	if !ok {
+		return nil, nil, nil
+	}
+	if int64(len(raw)) > limits.MaxTextResourceBytes {
+		return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "agents/amitia.yaml exceeds size limit", "", false, nil)
+	}
+	var node yaml.Node
+	if err := decodeSafeYAML(raw, &node, limits.MaxYAMLDepth); err != nil {
+		return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "agents/amitia.yaml is invalid", err.Error(), false, err)
+	}
+	var value struct {
+		Version      string `yaml:"version"`
+		Dependencies []struct {
+			ID          string   `yaml:"id"`
+			Description string   `yaml:"description"`
+			Required    *bool    `yaml:"required"`
+			Transport   string   `yaml:"transport"`
+			URL         string   `yaml:"url"`
+			Command     string   `yaml:"command"`
+			Args        []string `yaml:"args"`
+			Auth        struct {
+				Type string `yaml:"type"`
+			} `yaml:"auth"`
+			Tools struct {
+				Allow []string `yaml:"allow"`
+			} `yaml:"tools"`
+			Scope struct {
+				Default string `yaml:"default"`
+			} `yaml:"scope"`
+			Install struct {
+				AutoConfigure              bool `yaml:"auto_configure"`
+				AutoEnable                 bool `yaml:"auto_enable"`
+				RequiresManualConfirmation bool `yaml:"requires_manual_confirmation"`
+			} `yaml:"install"`
+		} `yaml:"mcp_dependencies"`
+	}
+	if err := node.Decode(&value); err != nil || value.Version != "1" {
+		return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "agents/amitia.yaml version is invalid", "", false, err)
+	}
+	if len(value.Dependencies) > 20 {
+		return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "too many MCP dependencies", "", false, nil)
+	}
+	dependencies := make([]AgentSkillMCPDependency, 0, len(value.Dependencies))
+	seen := map[string]bool{}
+	for _, item := range value.Dependencies {
+		required := true
+		if item.Required != nil {
+			required = *item.Required
+		}
+		dependency := AgentSkillMCPDependency{ID: item.ID, Description: item.Description, Required: required, Transport: strings.ToLower(item.Transport), URL: item.URL, Command: item.Command, Args: append([]string{}, item.Args...), AuthType: strings.ToLower(item.Auth.Type), ToolAllowlist: append([]string{}, item.Tools.Allow...), DefaultScope: strings.ToLower(item.Scope.Default), AutoConfigure: item.Install.AutoConfigure, AutoEnable: item.Install.AutoEnable, RequiresManualConfirmation: item.Install.RequiresManualConfirmation}
+		if dependency.AuthType == "" {
+			dependency.AuthType = "none"
+		}
+		if dependency.DefaultScope == "" {
+			dependency.DefaultScope = "character"
+		}
+		if dependency.Transport == "stdio" {
+			dependency.RequiresManualConfirmation = true
+			dependency.AutoConfigure = false
+		}
+		if err := validateMCPDependency(dependency); err != nil {
+			return nil, nil, err
+		}
+		key := strings.ToLower(dependency.ID)
+		if seen[key] {
+			return nil, nil, NewExtensionError(ErrAgentSkillFrontmatter, "duplicate MCP dependency", dependency.ID, false, nil)
+		}
+		seen[key] = true
+		dependencies = append(dependencies, dependency)
+	}
+	warnings := []AgentSkillWarning{}
+	if len(dependencies) > 0 {
+		warnings = append(warnings, AgentSkillWarning{Code: "MCP_DEPENDENCY_REQUIRES_CONFIRMATION", Message: "MCP dependencies require explicit confirmation before installation", Path: "agents/amitia.yaml"})
+	}
+	return dependencies, warnings, nil
+}
+
+func validateMCPDependency(dependency AgentSkillMCPDependency) error {
+	if !regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`).MatchString(dependency.ID) {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency id is invalid", dependency.ID, false, nil)
+	}
+	if dependency.Transport == "" && dependency.URL == "" && dependency.Command == "" {
+		return nil
+	}
+	if dependency.Transport != "streamable_http" && dependency.Transport != "stdio" {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency transport is invalid", dependency.ID, false, nil)
+	}
+	if dependency.AuthType != "none" && dependency.AuthType != "oauth" && dependency.AuthType != "bearer_token" && dependency.AuthType != "custom_headers" && dependency.AuthType != "stdio_env" {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency auth type is invalid", dependency.ID, false, nil)
+	}
+	if dependency.DefaultScope != "global" && dependency.DefaultScope != "character" {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency scope is invalid", dependency.ID, false, nil)
+	}
+	if len(dependency.Args) > 32 || len(dependency.ToolAllowlist) > 100 {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency exceeds limits", dependency.ID, false, nil)
+	}
+	if dependency.Transport == "streamable_http" {
+		parsed, err := url.Parse(dependency.URL)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || parsed.Scheme != "https" && !(parsed.Scheme == "http" && (parsed.Hostname() == "localhost" || net.ParseIP(parsed.Hostname()) != nil && net.ParseIP(parsed.Hostname()).IsLoopback())) {
+			return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency URL is unsafe", dependency.ID, false, nil)
+		}
+	}
+	if dependency.Transport == "stdio" && strings.TrimSpace(dependency.Command) == "" {
+		return NewExtensionError(ErrAgentSkillFrontmatter, "MCP dependency command is required", dependency.ID, false, nil)
+	}
+	return nil
 }

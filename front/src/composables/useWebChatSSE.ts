@@ -3,6 +3,7 @@
 import { type Ref, nextTick } from "vue"
 import { resolveApiUrl } from "../runtime/runtime-adapter"
 import { calcTypingDelay } from "@/utils/typing"
+import { compareChatMessages, mergeChatMessage, normalizeRealtimeMessage } from "@/utils/message-order"
 
 export function useWebChatSSE(
   convId: Ref<string>,
@@ -23,11 +24,7 @@ export function useWebChatSSE(
   function setLastPolledMsgId(id: string | null) { lastPolledMsgId = id }
 
   function sortMessages() {
-    messages.value.sort((a: any, b: any) => {
-      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
-      return ta - tb
-    })
+    messages.value.sort(compareChatMessages)
   }
 
   function processTypingQueue() {
@@ -37,6 +34,7 @@ export function useWebChatSSE(
     typingTimer = setTimeout(() => {
       raw.typingDone = true
       messages.value.push(raw)
+      sortMessages()
       lastPolledMsgId = raw.id || lastPolledMsgId
       scrollToBottom()
       fetchWechatMsgCount()
@@ -56,9 +54,19 @@ export function useWebChatSSE(
 
   function handleMessage(event: MessageEvent) {
     try {
-      const msg = JSON.parse(event.data)
+      const msg = normalizeRealtimeMessage(JSON.parse(event.data))
       if (!msg.role || msg.role === "tool") return
       if ((msg as any).tool_calls_json) return
+      if (mergeChatMessage(messages.value, msg)) {
+        lastPolledMsgId = msg.id || lastPolledMsgId
+        sortMessages()
+        nextTick(() => scrollToBottom())
+        return
+      }
+      if (mergeChatMessage(typingQueue, msg)) {
+        lastPolledMsgId = msg.id || lastPolledMsgId
+        return
+      }
       if (!messages.value.some((m: any) => m.id === msg.id) && !typingQueue.some((m: any) => m.id === msg.id)) {
         if (msg.role === "user") {
           if (sending.value) {
@@ -109,13 +117,14 @@ export function useWebChatSSE(
       proactiveSSE = new EventSource("/api/proactive-sse")
       proactiveSSE.addEventListener("proactive_message", (e) => {
         try {
-          const msg = JSON.parse(e.data)
+          const msg = normalizeRealtimeMessage(JSON.parse(e.data))
           if (msg.conversationId === convId.value) {
-            if (!messages.value.some((m: any) => m.id === msg.messageId)) {
-              messages.value.push({ id: msg.messageId, conversationId: msg.conversationId, role: msg.role, content: msg.content, source: msg.source, createdAt: msg.createdAt || new Date().toISOString() })
-              if (!sending.value) sortMessages()
-              nextTick(() => scrollToBottom())
+            if (mergeChatMessage(messages.value, msg)) sortMessages()
+            else if (!mergeChatMessage(typingQueue, msg)) {
+              messages.value.push({ ...msg, createdAt: msg.createdAt || new Date().toISOString() })
+              sortMessages()
             }
+            nextTick(() => scrollToBottom())
           }
         } catch {}
           fetchWechatMsgCount()

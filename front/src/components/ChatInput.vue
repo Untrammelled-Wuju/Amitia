@@ -53,6 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="composer-input-row">
         <div ref="inputWrapperRef" class="input-wrapper">
         <div class="input-left-actions">
+		  <EmotePicker :disabled="!!disabled" @select="$emit('emote', $event)" />
           <el-popover
             v-model:visible="addMenuOpen"
             placement="top-start"
@@ -259,6 +260,7 @@ import { useMediaUpload } from "../composables/useMediaUpload"
 import { useVoiceInput } from "../composables/useVoiceInput"
 import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api"
 import type { AgentSkillDefinition } from "../views/extensions/types"
+import EmotePicker from "./EmotePicker.vue"
 
 const props = defineProps<{
   isWechatActive?: boolean
@@ -282,6 +284,7 @@ const emit = defineEmits<{
   video: [file: File, videoUrl: string]
   removeVideo: []
   cancelReply: []
+	emote: [emote: any]
 }>()
 
 const isDisabled = () => !!props.disabled || !!props.isWechatActive || !!props.isQQActive

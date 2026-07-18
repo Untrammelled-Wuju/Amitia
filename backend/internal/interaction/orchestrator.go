@@ -61,7 +61,28 @@ type ProcessResponse struct {
 	ForceVoice     bool           `json:"forceVoice"`
 	AudioUrls      []string       `json:"audioUrls"`
 	RequestID      string         `json:"requestId"`
+	MessagePlan    *MessagePlan   `json:"messagePlan,omitempty"`
 	Events         []OutboxRecord `json:"-"`
+}
+
+type MessagePlan struct {
+	ResponseGroupID string            `json:"responseGroupId"`
+	Managed         bool              `json:"managed"`
+	Items           []MessagePlanItem `json:"items"`
+}
+
+type MessagePlanItem struct {
+	MessageID              string `json:"messageId"`
+	Sequence               int    `json:"sequence"`
+	Type                   string `json:"type"`
+	Content                string `json:"content,omitempty"`
+	EmoteID                string `json:"emoteId,omitempty"`
+	AltText                string `json:"altText,omitempty"`
+	IsAnimated             bool   `json:"isAnimated,omitempty"`
+	Width                  int    `json:"width,omitempty"`
+	Height                 int    `json:"height,omitempty"`
+	OriginalAssetReference string `json:"originalAssetReference,omitempty"`
+	FallbackAssetReference string `json:"fallbackAssetReference,omitempty"`
 }
 
 type MessageProcessor interface {

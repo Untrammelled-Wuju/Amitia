@@ -219,3 +219,38 @@ func TestMarkSentToMarkDeliveredFullLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestEmoteDeliveryStatusBackfill(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.db.Exec("CREATE TABLE emote_send_records (delivery_key TEXT PRIMARY KEY, message_id TEXT, status TEXT, sent_at TEXT, failure_reason TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.Exec("CREATE TABLE messages (id TEXT PRIMARY KEY, status TEXT, emote_decision_status TEXT, updated_at TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	leaseUntil := now.Add(5 * time.Minute).Format("2006-01-02 15:04:05")
+	for _, row := range []struct{ key, message string }{{"emote-sent", "m-sent"}, {"emote-failed", "m-failed"}} {
+		store.db.Exec("INSERT INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, lease_until) VALUES (?, 'response', 'qq', 'peer', 'emote', '{}', ?, ?, 1, ?)", row.key, string(DeliveryStatusLeased), now.Format("2006-01-02 15:04:05"), leaseUntil)
+		store.db.Exec("INSERT INTO emote_send_records (delivery_key, message_id, status) VALUES (?, ?, 'queued')", row.key, row.message)
+		store.db.Exec("INSERT INTO messages (id, status, emote_decision_status) VALUES (?, 'sending', 'queued')", row.message)
+	}
+	if err := store.MarkSent("emote-sent"); err != nil {
+		t.Fatal(err)
+	}
+	var sentRecord, sentMessage string
+	store.db.Table("emote_send_records").Select("status").Where("delivery_key = ?", "emote-sent").Scan(&sentRecord)
+	store.db.Table("messages").Select("status").Where("id = ?", "m-sent").Scan(&sentMessage)
+	if sentRecord != "sent" || sentMessage != "sent" {
+		t.Fatalf("成功状态回写错误: record=%s message=%s", sentRecord, sentMessage)
+	}
+	if err := store.MarkFailed("emote-failed", "adapter rejected"); err != nil {
+		t.Fatal(err)
+	}
+	var failedRecord, failedMessage, failureReason string
+	store.db.Table("emote_send_records").Select("status, failure_reason").Where("delivery_key = ?", "emote-failed").Row().Scan(&failedRecord, &failureReason)
+	store.db.Table("messages").Select("status").Where("id = ?", "m-failed").Scan(&failedMessage)
+	if failedRecord != "failed" || failedMessage != "failed" || failureReason != "adapter rejected" {
+		t.Fatalf("失败状态回写错误: record=%s message=%s reason=%s", failedRecord, failedMessage, failureReason)
+	}
+}

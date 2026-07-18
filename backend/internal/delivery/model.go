@@ -20,23 +20,25 @@ const (
 )
 
 type DeliveryIntent struct {
-	ID            string         `json:"id"`
-	InteractionID string         `json:"interactionId"`
-	Channel       string         `json:"channel"`
-	PeerID        string         `json:"peerId"`
-	ContentType   string         `json:"contentType"`
-	Payload       []byte         `json:"payload"`
-	Status        DeliveryStatus `json:"status"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	SentAt        *time.Time     `json:"sentAt"`
-	DeliveredAt   *time.Time     `json:"deliveredAt"`
-	RetryCount    int            `json:"retryCount"`
-	MaxRetries    int            `json:"maxRetries"`
-	LastError     string         `json:"lastError"`
-	LeaseOwner    string         `json:"leaseOwner"`
-	LeaseToken    string         `json:"leaseToken"`
-	LeaseUntil    *time.Time     `json:"leaseUntil"`
-	NextRetry     *time.Time     `json:"nextRetry"`
+	ID               string         `json:"id"`
+	InteractionID    string         `json:"interactionId"`
+	ResponseGroupID  string         `json:"responseGroupId"`
+	DeliverySequence int            `json:"deliverySequence"`
+	Channel          string         `json:"channel"`
+	PeerID           string         `json:"peerId"`
+	ContentType      string         `json:"contentType"`
+	Payload          []byte         `json:"payload"`
+	Status           DeliveryStatus `json:"status"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	SentAt           *time.Time     `json:"sentAt"`
+	DeliveredAt      *time.Time     `json:"deliveredAt"`
+	RetryCount       int            `json:"retryCount"`
+	MaxRetries       int            `json:"maxRetries"`
+	LastError        string         `json:"lastError"`
+	LeaseOwner       string         `json:"leaseOwner"`
+	LeaseToken       string         `json:"leaseToken"`
+	LeaseUntil       *time.Time     `json:"leaseUntil"`
+	NextRetry        *time.Time     `json:"nextRetry"`
 }
 
 type OutputLease struct {

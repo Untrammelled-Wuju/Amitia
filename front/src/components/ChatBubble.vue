@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="chat-bubble" :class="[message.role]">
+  <div class="chat-bubble" :class="[message.role, { 'is-emote': isEmote }]">
     <div class="bubble-avatar">
       <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : (userAvatar || undefined)">
         <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
@@ -16,7 +16,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="bubble-time" v-if="message.createdAt">{{ fmtTime(message.createdAt) }}</span>
         <span class="bubble-latency" v-if="message.latencyMs">{{ message.latencyMs }}ms</span>
       </div>
+	  <EmoteMessage v-if="isEmote" :message="message" />
       <MediaAttachmentPreview
+	    v-else
         :image-url="(message as any).imageUrl"
         :video-url="(message as any).videoUrl"
       />
@@ -39,7 +41,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="bubble-text" v-if="renderedContent" v-html="renderedContent"></div>
       </div>
-      <div class="bubble-status" v-if="message.status === 'failed' || message.status === 'interrupted'">
+      <div class="bubble-status" v-if="!isEmote && (message.status === 'failed' || message.status === 'interrupted')">
         <span class="status-tag" :class="message.status">
           {{ message.status === 'failed' ? '发送失败' : '生成中断' }}
         </span>
@@ -52,7 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="text-toggle-arrow" :class="{ expanded: textExpanded }">&#9660;</span>
       </div>
       <div class="bubble-actions" v-if="message.role === 'assistant' && typingDone">
-        <el-button text size="small" @click="copyContent">
+        <el-button v-if="!isEmote" text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
         </el-button>
         <el-button text size="small" @click="$emit('reply', message)" title="引用回复">
@@ -70,6 +72,7 @@ import { DocumentCopy, Refresh, ChatLineSquare, UserFilled } from "@element-plus
 import { ElMessage } from "element-plus"
 import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue"
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue"
+import EmoteMessage from "./chat-bubble/EmoteMessage.vue"
 import { fmtTime } from "./chat-bubble/utils"
 import { useUserAvatar } from "@/composables/useUserAvatar"
 
@@ -103,6 +106,10 @@ const emit = defineEmits<{
 const { avatar: userAvatar } = useUserAvatar()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
+const isEmote = computed(() => {
+  const message = props.message as any
+  return message.msgType === "emote" || message.msg_type === "emote" || message.contentType === "emote" || message.content_type === "emote" || !!message.emoteId || !!message.emote_id
+})
 const textExpanded = ref(!((props.message as any).audioUrl))
 
 const hasReplyTo = computed(() => !!((props.message as any).replyToMessageId))
@@ -126,6 +133,7 @@ const typingDone = computed(() => {
 })
 
 const renderedContent = computed(() => {
+	if (isEmote.value) return ""
   const raw = (props.message as any).content
   const text = typeof raw === "string" ? raw : ""
   const msg = props.message as any
@@ -202,6 +210,7 @@ async function copyContent() {
 .chat-bubble.user { flex-direction: row-reverse; }
 .chat-bubble.user .bubble-avatar { flex-shrink: 0; }
 .bubble-body { max-width: 80%; min-width: 60px; }
+.chat-bubble.is-emote .bubble-body { min-width: 0; }
 
 .bubble-meta {
   display: flex; align-items: center; gap: 6px;

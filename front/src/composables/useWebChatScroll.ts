@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, type Ref, nextTick } from "vue"
 import { useApi } from "./useApi"
+import { compareChatMessages, normalizeRealtimeMessage } from "@/utils/message-order"
 
 export function useWebChatScroll(
   msgAreaRef: Ref<any>,
@@ -70,14 +71,14 @@ export function useWebChatScroll(
         page: msgPage.value + 1,
         pageSize: HISTORY_PAGE_SIZE,
       })
-      const older = r?.items || []
+      const older = (r?.items || []).map(normalizeRealtimeMessage)
       if (older.length === 0) {
         hasMoreHistory.value = false
       } else {
         const el = msgAreaRef.value?.rootEl
         const prevHeight = el?.scrollHeight || 0
         attachLocalImages(older)
-        messages.value = [...older, ...messages.value]
+        messages.value = [...older, ...messages.value].sort(compareChatMessages)
         msgPage.value++
         nextTick(() => {
           if (el) {

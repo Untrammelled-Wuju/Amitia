@@ -258,7 +258,7 @@ func CollectionNames() []string {
 	if len(cfg.Collections) == 0 {
 		return []string{defaultCollectionName()}
 	}
-	keys := []string{"memory_embeddings", "working_memory", "user_profiles", "episodic_memories"}
+	keys := []string{"memory_embeddings", "working_memory", "user_profiles", "episodic_memories", "amitia_emotes"}
 	names := make([]string, 0, len(cfg.Collections))
 	seen := map[string]bool{}
 	for _, key := range keys {

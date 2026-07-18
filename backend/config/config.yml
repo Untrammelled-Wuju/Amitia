@@ -37,6 +37,9 @@ qdrant:
     episodic_memories:
       name: "episodic_memories"
       vectorDim: 1536
+    amitia_emotes:
+      name: "amitia_emotes"
+      vectorDim: 1536
 
 embedding:
   modelName: "text-embedding-3-small"

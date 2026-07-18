@@ -3,6 +3,8 @@
 package main
 
 import (
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
@@ -13,10 +15,12 @@ import (
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
+	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -76,11 +80,14 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		emote.RegisterRouter(apiGroup, services.Emote)
+		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/voice", "./data/voice_msg")
 	r.Static("/images", "./data/images")
 	r.Static("/videos", "./data/videos")
 	r.Static("/avatars", "./data/avatars")
+	r.Static("/emote-assets", filepath.Join(config.AppCfg.Storage.DataDir, "emotes"))
 	return r
 }

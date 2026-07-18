@@ -24,6 +24,7 @@
           <el-select v-model="filters.source" clearable placeholder="全部来源" @change="load">
             <el-option label="旧工具适配" value="legacy_tool" />
             <el-option label="内置技能" value="builtin" />
+            <el-option label="MCP 工具" value="mcp" />
             <el-option label="工坊工作流" value="workflow" />
             <el-option label="Agent Skill" value="instructions" />
           </el-select>
@@ -157,6 +158,7 @@ function sourceLabel(source: string) {
   if (source === "builtin") return "内置技能"
   if (source === "workflow") return "工坊工作流"
   if (source === "instructions") return "Agent Skill"
+  if (source === "mcp") return "MCP 工具"
   return source
 }
 

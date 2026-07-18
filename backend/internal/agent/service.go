@@ -251,6 +251,10 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	if len(result.Response.Lines) > 0 {
 		outMsg["texts"] = result.Response.Lines
 	}
+	if result.Response.MessagePlan != nil {
+		outMsg["messagePlan"] = result.Response.MessagePlan
+		outMsg["messagePlanManaged"] = result.Response.MessagePlan.Managed
+	}
 	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v lines=%d", len(replyText), forceVoice, len(result.Response.Lines))
 	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source}, nil
 }

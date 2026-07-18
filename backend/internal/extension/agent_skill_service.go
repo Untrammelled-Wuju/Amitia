@@ -43,6 +43,13 @@ type AgentSkillService struct {
 	rounds     map[string]*agentSkillRoundState
 	artifacts  map[string]agentSkillArtifactCacheEntry
 	catalogs   map[string][]AgentSkillCatalogEntry
+	afterRemove func(context.Context, string)
+}
+
+func (s *AgentSkillService) SetAfterRemove(handler func(context.Context, string)) {
+	s.mu.Lock()
+	s.afterRemove = handler
+	s.mu.Unlock()
 }
 
 func NewAgentSkillService(repository *Repository, registry *Registry, validator *SchemaValidator) *AgentSkillService {
@@ -385,6 +392,12 @@ func (s *AgentSkillService) Remove(ctx context.Context, scope ExecutionScope, id
 	if err := s.repository.RemoveAgentSkill(ctx, id); err != nil {
 		_ = s.registry.Register(ctx, restoreManifest, nil)
 		return err
+	}
+	s.mu.RLock()
+	afterRemove := s.afterRemove
+	s.mu.RUnlock()
+	if afterRemove != nil {
+		afterRemove(ctx, id)
 	}
 	s.invalidateAgentSkillCaches()
 	return nil

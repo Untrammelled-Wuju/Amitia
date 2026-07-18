@@ -39,6 +39,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		Lines:         computeResult.Lines,
 		Source:        computeResult.Source,
 		TotalTokens:   computeResult.TotalTokens,
+		ForceVoice:    computeResult.ForceVoice,
 		Runtime:       req.Runtime,
 	})
 	if err != nil {
@@ -61,6 +62,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 		ForceVoice:     computeResult.ForceVoice,
 		UserMessageID:  computeResult.UserMessageID,
 		RequestID:      computeResult.RequestID,
+		MessagePlan:    commitResult.MessagePlan,
 		Events:         commitResult.Events,
 	}, nil
 }
@@ -129,6 +131,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Lines:         computeResult.Lines,
 		Source:        computeResult.Source,
 		TotalTokens:   computeResult.TotalTokens,
+		ForceVoice:    computeResult.ForceVoice,
 		Runtime:       req.Runtime,
 	})
 	if err != nil {
@@ -147,6 +150,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		MessageIDs:     commitResult.MessageIDs,
 		ForceVoice:     computeResult.ForceVoice,
 		RequestID:      computeResult.RequestID,
+		MessagePlan:    commitResult.MessagePlan,
 		Events:         commitResult.Events,
 	}, nil
 }

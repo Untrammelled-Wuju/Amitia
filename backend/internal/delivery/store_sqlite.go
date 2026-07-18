@@ -10,23 +10,25 @@ import (
 )
 
 type DeliveryIntentModel struct {
-	ID            string `gorm:"primaryKey;column:id"`
-	InteractionID string `gorm:"column:interaction_id;index"`
-	Channel       string `gorm:"column:channel"`
-	PeerID        string `gorm:"column:peer_id"`
-	ContentType   string `gorm:"column:content_type"`
-	Payload       []byte `gorm:"column:payload"`
-	Status        string `gorm:"column:status;index"`
-	CreatedAt     string `gorm:"column:created_at"`
-	SentAt        string `gorm:"column:sent_at"`
-	DeliveredAt   string `gorm:"column:delivered_at"`
-	RetryCount    int    `gorm:"column:retry_count"`
-	MaxRetries    int    `gorm:"column:max_retries"`
-	LastError     string `gorm:"column:last_error"`
-	LeaseOwner    string `gorm:"column:lease_owner"`
-	LeaseToken    string `gorm:"column:lease_token"`
-	LeaseUntil    string `gorm:"column:lease_until"`
-	NextRetry     string `gorm:"column:next_retry"`
+	ID               string `gorm:"primaryKey;column:id"`
+	InteractionID    string `gorm:"column:interaction_id;index"`
+	ResponseGroupID  string `gorm:"column:response_group_id;index:idx_delivery_message_plan,priority:1"`
+	DeliverySequence int    `gorm:"column:delivery_sequence;index:idx_delivery_message_plan,priority:2"`
+	Channel          string `gorm:"column:channel"`
+	PeerID           string `gorm:"column:peer_id"`
+	ContentType      string `gorm:"column:content_type"`
+	Payload          []byte `gorm:"column:payload"`
+	Status           string `gorm:"column:status;index"`
+	CreatedAt        string `gorm:"column:created_at"`
+	SentAt           string `gorm:"column:sent_at"`
+	DeliveredAt      string `gorm:"column:delivered_at"`
+	RetryCount       int    `gorm:"column:retry_count"`
+	MaxRetries       int    `gorm:"column:max_retries"`
+	LastError        string `gorm:"column:last_error"`
+	LeaseOwner       string `gorm:"column:lease_owner"`
+	LeaseToken       string `gorm:"column:lease_token"`
+	LeaseUntil       string `gorm:"column:lease_until"`
+	NextRetry        string `gorm:"column:next_retry"`
 }
 
 func (DeliveryIntentModel) TableName() string {
@@ -67,18 +69,20 @@ func (s *SQLiteDeliveryStore) InitSchema() error {
 func (s *SQLiteDeliveryStore) SubmitIntent(intent DeliveryIntent) (bool, error) {
 	now := intent.CreatedAt.Format("2006-01-02 15:04:05")
 	model := DeliveryIntentModel{
-		ID:            intent.ID,
-		InteractionID: intent.InteractionID,
-		Channel:       intent.Channel,
-		PeerID:        intent.PeerID,
-		ContentType:   intent.ContentType,
-		Payload:       intent.Payload,
-		Status:        string(intent.Status),
-		CreatedAt:     now,
-		MaxRetries:    intent.MaxRetries,
+		ID:               intent.ID,
+		InteractionID:    intent.InteractionID,
+		ResponseGroupID:  intent.ResponseGroupID,
+		DeliverySequence: intent.DeliverySequence,
+		Channel:          intent.Channel,
+		PeerID:           intent.PeerID,
+		ContentType:      intent.ContentType,
+		Payload:          intent.Payload,
+		Status:           string(intent.Status),
+		CreatedAt:        now,
+		MaxRetries:       intent.MaxRetries,
 	}
-	result := s.db.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		model.ID, model.InteractionID, model.Channel, model.PeerID, model.ContentType, model.Payload, model.Status, model.CreatedAt, model.MaxRetries)
+	result := s.db.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, response_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		model.ID, model.InteractionID, model.Channel, model.PeerID, model.ContentType, model.Payload, model.Status, model.CreatedAt, model.MaxRetries, model.ResponseGroupID, model.DeliverySequence)
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -88,15 +92,17 @@ func (s *SQLiteDeliveryStore) SubmitIntent(intent DeliveryIntent) (bool, error) 
 func (s *SQLiteDeliveryStore) CreateIntent(intent DeliveryIntent) error {
 	now := intent.CreatedAt.Format("2006-01-02 15:04:05")
 	model := DeliveryIntentModel{
-		ID:            intent.ID,
-		InteractionID: intent.InteractionID,
-		Channel:       intent.Channel,
-		PeerID:        intent.PeerID,
-		ContentType:   intent.ContentType,
-		Payload:       intent.Payload,
-		Status:        string(intent.Status),
-		CreatedAt:     now,
-		MaxRetries:    intent.MaxRetries,
+		ID:               intent.ID,
+		InteractionID:    intent.InteractionID,
+		ResponseGroupID:  intent.ResponseGroupID,
+		DeliverySequence: intent.DeliverySequence,
+		Channel:          intent.Channel,
+		PeerID:           intent.PeerID,
+		ContentType:      intent.ContentType,
+		Payload:          intent.Payload,
+		Status:           string(intent.Status),
+		CreatedAt:        now,
+		MaxRetries:       intent.MaxRetries,
 	}
 	return s.db.Create(&model).Error
 }
@@ -135,8 +141,9 @@ const DeliveryStatusRetry DeliveryStatus = "retry"
 
 func (s *SQLiteDeliveryStore) ListPending(limit int) ([]DeliveryIntent, error) {
 	var models []DeliveryIntentModel
-	err := s.db.Where("status IN ?", []string{string(DeliveryStatusPending), string(DeliveryStatusRetry)}).
-		Order("created_at ASC").Limit(limit).Find(&models).Error
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	err := s.db.Where("status = ? OR (status = ? AND (next_retry IS NULL OR next_retry = '' OR next_retry <= ?))", string(DeliveryStatusPending), string(DeliveryStatusRetry), now).
+		Order("created_at ASC, response_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(limit).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
@@ -218,9 +225,9 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 	token := generateDeliveryLeaseToken()
 
 	var models []DeliveryIntentModel
-	err := s.db.Where("status IN ? AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
-		[]string{string(DeliveryStatusPending), string(DeliveryStatusRetry)}, nowStr).
-		Order("created_at ASC").Limit(batchSize).Find(&models).Error
+	err := s.db.Where("(status = ? OR (status = ? AND (next_retry IS NULL OR next_retry = '' OR next_retry <= ?))) AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
+		string(DeliveryStatusPending), string(DeliveryStatusRetry), nowStr, nowStr).
+		Order("created_at ASC, response_group_id ASC, CASE WHEN status = 'pending' THEN 0 ELSE 1 END ASC, delivery_sequence ASC").Limit(batchSize).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +267,8 @@ func (s *SQLiteDeliveryStore) MarkSent(id string) error {
 	if res.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
+	_ = s.db.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": "sent", "sent_at": now, "failure_reason": ""}).Error
+	_ = s.db.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "sent", "emote_decision_status": "sent", "updated_at": now}).Error
 	return nil
 }
 
@@ -306,6 +315,14 @@ func (s *SQLiteDeliveryStore) MarkFailed(id, errMsg string) error {
 			})
 		if res.Error != nil {
 			return res.Error
+		}
+		recordStatus := "retrying"
+		if newStatus == DeliveryStatusFailed {
+			recordStatus = "failed"
+		}
+		_ = tx.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": recordStatus, "failure_reason": errMsg}).Error
+		if newStatus == DeliveryStatusFailed {
+			_ = tx.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "failed", "emote_decision_status": "failed", "updated_at": nowStr}).Error
 		}
 		return nil
 	})
@@ -370,23 +387,25 @@ func modelToIntent(m *DeliveryIntentModel) *DeliveryIntent {
 	}
 	createdAt, _ := time.Parse("2006-01-02 15:04:05", m.CreatedAt)
 	return &DeliveryIntent{
-		ID:            m.ID,
-		InteractionID: m.InteractionID,
-		Channel:       m.Channel,
-		PeerID:        m.PeerID,
-		ContentType:   m.ContentType,
-		Payload:       m.Payload,
-		Status:        DeliveryStatus(m.Status),
-		CreatedAt:     createdAt,
-		SentAt:        sentAt,
-		DeliveredAt:   deliveredAt,
-		RetryCount:    m.RetryCount,
-		MaxRetries:    m.MaxRetries,
-		LastError:     m.LastError,
-		LeaseOwner:    m.LeaseOwner,
-		LeaseToken:    m.LeaseToken,
-		LeaseUntil:    parseOptionalTime(m.LeaseUntil),
-		NextRetry:     parseOptionalTime(m.NextRetry),
+		ID:               m.ID,
+		InteractionID:    m.InteractionID,
+		ResponseGroupID:  m.ResponseGroupID,
+		DeliverySequence: m.DeliverySequence,
+		Channel:          m.Channel,
+		PeerID:           m.PeerID,
+		ContentType:      m.ContentType,
+		Payload:          m.Payload,
+		Status:           DeliveryStatus(m.Status),
+		CreatedAt:        createdAt,
+		SentAt:           sentAt,
+		DeliveredAt:      deliveredAt,
+		RetryCount:       m.RetryCount,
+		MaxRetries:       m.MaxRetries,
+		LastError:        m.LastError,
+		LeaseOwner:       m.LeaseOwner,
+		LeaseToken:       m.LeaseToken,
+		LeaseUntil:       parseOptionalTime(m.LeaseUntil),
+		NextRetry:        parseOptionalTime(m.NextRetry),
 	}
 }
 

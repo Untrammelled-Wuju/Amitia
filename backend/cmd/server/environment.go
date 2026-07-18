@@ -213,9 +213,13 @@ func startEnvironment() *Environment {
 
 	bundledQQ := filepath.Join(runtimeRoot, "qq-sidecar", "bundle.mjs")
 	bundledWX := filepath.Join(runtimeRoot, "sidecar", "bundle.mjs")
+	sourceQQ := filepath.Join(runtimeRoot, "qq-sidecar", "src", "index.ts")
+	sourceWX := filepath.Join(runtimeRoot, "sidecar", "src", "index.ts")
 	_, qqOk := os.Stat(bundledQQ)
 	_, wxOk := os.Stat(bundledWX)
-	useBundled := qqOk == nil && wxOk == nil
+	_, qqSourceOk := os.Stat(sourceQQ)
+	_, wxSourceOk := os.Stat(sourceWX)
+	useBundled := qqOk == nil && wxOk == nil && (qqSourceOk != nil || wxSourceOk != nil)
 
 	bundledRoot := runtimeRoot
 	if !useBundled {
@@ -275,6 +279,14 @@ func startEnvironment() *Environment {
 }
 
 func findWorkspace() string {
+	cwd, _ := os.Getwd()
+	for i := 0; i < 4; i++ {
+		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
+			return cwd
+		}
+		cwd = filepath.Dir(cwd)
+	}
+
 	exe, _ := os.Executable()
 	dir := filepath.Dir(exe)
 
@@ -290,7 +302,7 @@ func findWorkspace() string {
 		dir = filepath.Dir(dir)
 	}
 
-	cwd, _ := os.Getwd()
+	cwd, _ = os.Getwd()
 	for i := 0; i < 3; i++ {
 		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
 			return cwd

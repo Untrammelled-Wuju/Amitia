@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string) ([]interaction.OutboxRecord, []string, error) {
+func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, messagePlan *interaction.MessagePlan) ([]interaction.OutboxRecord, []string, error) {
 	now := time.Now()
 	deliveryIntentIDs := []string{}
 	events := []interaction.OutboxRecord{
@@ -22,6 +22,7 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 			"characterId":    plan.Character,
 			"reply":          plan.Reply,
 			"messageIds":     messageIDs,
+			"messagePlan":    messagePlan,
 			"delivery":       plan.Runtime.Delivery,
 		}, now),
 		newInteractionOutboxRecord(plan.Request.InteractionID, "interaction.state_changed", map[string]interface{}{
@@ -58,9 +59,9 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 			return nil, nil, err
 		}
 	}
-	if plan.Runtime != nil && plan.Runtime.Delivery.Channel != "" {
+	if messagePlan != nil && messagePlan.Managed {
 		var diErr error
-		deliveryIntentIDs, diErr = createDeliveryIntentsInTx(tx, plan, messageIDs, now)
+		deliveryIntentIDs, diErr = createDeliveryIntentsInTx(tx, plan, messagePlan, now)
 		if diErr != nil {
 			return nil, nil, diErr
 		}
@@ -68,31 +69,44 @@ func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan,
 	return events, deliveryIntentIDs, nil
 }
 
-func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, now time.Time) ([]string, error) {
+func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messagePlan *interaction.MessagePlan, now time.Time) ([]string, error) {
 	ids := []string{}
-	channel := plan.Runtime.Delivery.Channel
+	channel := plan.Request.Channel
+	if plan.Runtime != nil && plan.Runtime.Delivery.Channel != "" {
+		channel = plan.Runtime.Delivery.Channel
+	}
 	if strings.ToLower(channel) == "web" {
 		return ids, nil
 	}
-	if plan.Source != "proactive" && plan.Request.Source != "proactive" {
+	if strings.TrimSpace(channel) == "" {
 		return ids, nil
 	}
 	peerID := ""
-	if plan.Runtime.Delivery.PeerID != "" {
+	if plan.Runtime != nil && plan.Runtime.Delivery.PeerID != "" {
 		peerID = plan.Runtime.Delivery.PeerID
 	} else if plan.Request.PeerID != "" {
 		peerID = plan.Request.PeerID
 	}
-	for i, msgID := range messageIDs {
-		stableID := delivery.GenerateDeliveryID(plan.Request.InteractionID, channel, peerID, msgID)
-		payload, _ := json.Marshal(map[string]interface{}{
-			"messageId":      msgID,
+	for _, item := range messagePlan.Items {
+		stableID := delivery.GenerateDeliveryID(messagePlan.ResponseGroupID, channel, peerID, item.MessageID)
+		payloadData := map[string]interface{}{
+			"messageId":      item.MessageID,
 			"conversationId": plan.Conversation,
 			"characterId":    plan.Character,
-			"content":        plan.Lines[i],
-		})
-		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			stableID, plan.Request.InteractionID, channel, peerID, "text", string(payload), "pending", now.Format("2006-01-02 15:04:05"), 5)
+			"content":        item.Content,
+		}
+		maxRetries := 5
+		if item.Type == "emote" {
+			payloadData["emoteId"] = item.EmoteID
+			payloadData["altText"] = item.AltText
+			payloadData["originalPath"] = item.OriginalAssetReference
+			payloadData["fallbackPath"] = item.FallbackAssetReference
+			payloadData["isAnimated"] = item.IsAnimated
+			maxRetries = 3
+		}
+		payload, _ := json.Marshal(payloadData)
+		result := tx.Exec("INSERT OR IGNORE INTO delivery_intents (id, interaction_id, channel, peer_id, content_type, payload, status, created_at, max_retries, response_group_id, delivery_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			stableID, plan.Request.InteractionID, channel, peerID, item.Type, string(payload), "pending", now.Format("2006-01-02 15:04:05"), maxRetries, messagePlan.ResponseGroupID, item.Sequence)
 		if result.Error != nil {
 			return ids, result.Error
 		}
