@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"github.com/u-ai/backend/internal/temporal"
 
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -170,6 +171,7 @@ type Service interface {
 	WechatLoginWait() map[string]interface{}
 	WechatReplyTimingRecover() map[string]interface{}
 	WechatReplyTimingStatus() map[string]interface{}
+	AttachTemporalService(temporalSvc *temporal.Service)
 }
 
 type service struct {
@@ -177,12 +179,16 @@ type service struct {
 	startTime time.Time
 	healthLog []map[string]interface{}
 	dataDir   string
+	temporalSvc *temporal.Service
 }
 
 func NewService(ctx *app.AppContext) Service {
 	return &service{db: ctx.DB, startTime: time.Now(), dataDir: "data"}
 }
 
+func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {
+	s.temporalSvc = temporalSvc
+}
 func (s *service) MaintenanceRestartBridge() map[string]interface{} {
 	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))
 	return map[string]interface{}{"restarted": true, "restartedAt": time.Now().Format(time.DateTime), "bridgeResult": result}

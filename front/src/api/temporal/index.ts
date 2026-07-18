@@ -20,7 +20,5 @@ export async function updateRelationshipTimeSettings(characterId:string,settings
 export async function getRelationshipTimeState(characterId:string) { return (await apiClient.get<RelationshipTimeContext>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/state`)).data }
 export async function listReunionEpisodes(characterId:string) { return (await apiClient.get<ReunionEpisode[] | {items:ReunionEpisode[]}>(`/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes`)).data }
 export async function getReunionEpisode(characterId:string,episodeId:string) { return (await apiClient.get<ReunionEpisode>(`/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes/${encodeURIComponent(episodeId)}`)).data }
-export async function getRelationshipTimeDiagnostics(characterId="") { return (await apiClient.get<RelationshipTimeDiagnostics>("/api/temporal/relationship-time/diagnostics",{params:{characterId}})).data }
-export async function recomputeRelationshipCadence(characterId:string) { return (await apiClient.post<RelationshipTimeContext>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/recompute-cadence`)).data }
 
 export type * from "./types"
