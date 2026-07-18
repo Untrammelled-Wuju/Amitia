@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type VoiceInterruptPolicy string
@@ -68,12 +70,12 @@ type VoiceEntry struct {
 }
 
 func NewVoiceEntry(orchestrator *Orchestrator) *VoiceEntry {
-	return NewVoiceEntryWithUnifiedEntry(orchestrator, NewUnifiedEntry(orchestrator, NewScopeResolver(nil)))
+	return NewVoiceEntryWithUnifiedEntry(orchestrator, NewUnifiedEntry(orchestrator, NewScopeResolver(nil), temporal.SystemClock{}))
 }
 
 func NewVoiceEntryWithUnifiedEntry(orchestrator *Orchestrator, unifiedEntry *UnifiedEntry) *VoiceEntry {
 	if unifiedEntry == nil {
-		unifiedEntry = NewUnifiedEntry(orchestrator, NewScopeResolver(nil))
+		unifiedEntry = NewUnifiedEntry(orchestrator, NewScopeResolver(nil), temporal.SystemClock{})
 	}
 	return &VoiceEntry{
 		orchestrator: orchestrator,

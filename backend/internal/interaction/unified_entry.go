@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type EntrySource string
@@ -78,7 +79,7 @@ func (s *BackpressureState) updateStatusLocked(cfg BackpressureConfig) {
 	}
 }
 
-func (s *BackpressureState) applyCooldownLocked(cfg BackpressureConfig) time.Duration {
+func (s *BackpressureState) applyCooldownLocked(cfg BackpressureConfig, now time.Time) time.Duration {
 	ratio := queueRatio(s.QueueDepth, cfg.MaxQueueDepth)
 	duration := time.Duration(float64(cfg.CooldownBase) * (1.0 + ratio))
 	if duration > cfg.CooldownMax {
@@ -87,7 +88,7 @@ func (s *BackpressureState) applyCooldownLocked(cfg BackpressureConfig) time.Dur
 	if cfg.RecoveryTimeout > 0 && duration > cfg.RecoveryTimeout {
 		duration = cfg.RecoveryTimeout
 	}
-	s.CooldownUntil = time.Now().Add(duration)
+	s.CooldownUntil = now.Add(duration)
 	return duration
 }
 
@@ -132,20 +133,22 @@ type UnifiedEntry struct {
 	bpCfg        BackpressureConfig
 	bpState      *BackpressureState
 	mu           sync.Mutex
+	clock        temporal.Clock
 }
 
-func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver) *UnifiedEntry {
+func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
 	return &UnifiedEntry{
 		orchestrator: orchestrator,
 		resolver:     resolver,
 		bpCfg:        DefaultBackpressureConfig(),
 		bpState:      &BackpressureState{Status: BackpressureNormal},
+		clock:        clock,
 	}
 }
 
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
 	e.mu.Lock()
-	now := time.Now()
+	now := e.clock.Now()
 	if now.Before(e.bpState.CooldownUntil) {
 		e.mu.Unlock()
 		return nil, ErrBackpressureCooldown
@@ -164,7 +167,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 
 	if status == BackpressureShedding {
 		e.mu.Lock()
-		e.bpState.applyCooldownLocked(e.bpCfg)
+		e.bpState.applyCooldownLocked(e.bpCfg, now)
 		e.mu.Unlock()
 		return nil, ErrBackpressureShedding
 	}

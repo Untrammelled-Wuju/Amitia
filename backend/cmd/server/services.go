@@ -245,7 +245,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	chatSvc.EnsureChannelConversation("wechat")
 	chatSvc.EnsureChannelConversation("qq")
 
-	entry := interaction.NewUnifiedEntry(orch, resolver)
+	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
 	compSvc.AttachUnifiedEntry(entry)
 	compSvc.AttachDeliveryStore(deliveryStore)
 	if coordinatorSetter, ok := interface{}(compSvc).(interface {

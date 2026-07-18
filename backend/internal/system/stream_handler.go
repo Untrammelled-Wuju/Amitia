@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/requestidentity"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -194,9 +195,13 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	userID := requestidentity.ResolveGin(c, body.UserID)
 	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
 	source := resolveSource(c, body.Source, "web")
+	deviceTimezone := strings.TrimSpace(body.DeviceTimezone)
+	if deviceTimezone == "" {
+		deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
+	}
 	c.Header("X-Request-ID", requestID)
 	c.Header("X-Session-ID", sessionID)
 	c.Header("X-Source", source)
@@ -233,7 +238,8 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		CharacterID: characterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
+		DeviceTimezone: deviceTimezone,
+		AudioUrl:       body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage:     body.VoiceMessage,
 		ImageUrl:         body.ImageUrl,
 		VideoUrl:         body.VideoUrl,

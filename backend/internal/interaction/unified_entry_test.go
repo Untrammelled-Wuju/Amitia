@@ -230,7 +230,7 @@ func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
 		RecoveryTimeout: 10 * time.Millisecond,
 	}
 	before := time.Now()
-	duration := state.applyCooldownLocked(cfg)
+	duration := state.applyCooldownLocked(cfg, before)
 	after := time.Now()
 	if duration > cfg.RecoveryTimeout {
 		t.Fatalf("cooldown was not capped by recovery timeout: got %s want <= %s", duration, cfg.RecoveryTimeout)

@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/requestidentity"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -31,6 +32,7 @@ type webChatSendRequest struct {
 	Source           string  `json:"source"`
 	ClientMessageID  string  `json:"clientMessageId"`
 	MessageID        string  `json:"messageId"`
+	DeviceTimezone   string  `json:"deviceTimezone"`
 	VoiceMessage     bool    `json:"voiceMessage"`
 	AudioUrl         string  `json:"audioUrl"`
 	AudioDuration    float64 `json:"audioDuration"`
@@ -218,9 +220,13 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	userID := requestidentity.ResolveGin(c, body.UserID)
 	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
 	source := resolveSource(c, body.Source, "web")
+	deviceTimezone := strings.TrimSpace(body.DeviceTimezone)
+	if deviceTimezone == "" {
+		deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
+	}
 	c.Header("X-Request-ID", requestID)
 	c.Header("X-Session-ID", sessionID)
 	c.Header("X-Source", source)
@@ -254,7 +260,8 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-		CharacterID: characterID, Message: mergedContent,
+		DeviceTimezone: deviceTimezone,
+		CharacterID:    characterID, Message: mergedContent,
 		AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 		VoiceMessage:     body.VoiceMessage,
 		ImageUrl:         body.ImageUrl,
@@ -297,9 +304,13 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	if sessionID == "" {
 		sessionID = convID
 	}
-	userID := resolveRequestBackedValue(c, body.UserID, "X-User-ID", "userId", "user_id")
+	userID := requestidentity.ResolveGin(c, body.UserID)
 	peerID := resolveRequestBackedValue(c, body.PeerID, "X-Peer-ID", "peerId", "peer_id")
 	source := resolveSource(c, body.Source, "web")
+	deviceTimezone := strings.TrimSpace(body.DeviceTimezone)
+	if deviceTimezone == "" {
+		deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
+	}
 
 	characterID := body.CharacterID
 	if characterID == "" && body.ConversationID != "" {
@@ -382,7 +393,8 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		orchResult, err := h.unifiedEntry.Handle(genCtx, &interaction.UnifiedEntryRequest{
 			ConversationID: convID, Channel: "web", Source: source,
 			UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
-			CharacterID: characterID, Message: mergedContent,
+			DeviceTimezone: deviceTimezone,
+			CharacterID:    characterID, Message: mergedContent,
 			AudioUrl: body.AudioUrl, AudioDuration: body.AudioDuration,
 			VoiceMessage:     body.VoiceMessage,
 			ImageUrl:         body.ImageUrl,
