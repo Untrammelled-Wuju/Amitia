@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
@@ -63,6 +64,7 @@ type Service interface {
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	SetSkillRuntime(*extension.Runtime)
+	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -112,6 +114,7 @@ type service struct {
 	outboxStore   OutboxStore
 	deliveryStore DeliveryStore
 	skillRuntime  *extension.Runtime
+	relTimeCoordinator *temporal.RelationshipTimeCoordinator
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -147,6 +150,10 @@ func (s *service) SetDeliveryStore(store DeliveryStore) {
 
 func (s *service) SetSkillRuntime(runtime *extension.Runtime) {
 	s.skillRuntime = runtime
+}
+
+func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {
+	s.relTimeCoordinator = coordinator
 }
 
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {

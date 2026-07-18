@@ -135,6 +135,7 @@ type FinalizeInteractionInput struct {
 	GapMADSeconds       float64
 	CadenceSample       *CadenceSample
 	EffectLedgerEntries []TemporalEffectLedgerEntry
+	AssistantInitiated  bool
 }
 
 type RelationshipTimeSettings struct {

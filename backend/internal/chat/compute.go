@@ -264,6 +264,11 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if req.Runtime != nil && req.Runtime.Context.Temporal.Status == interaction.LoadStatusReady {
 		temporalContext = temporal.RenderSnapshot(req.Runtime.Context.Temporal.Value)
 	}
+	relationshipTimeContext := ""
+	if req.Runtime != nil && req.Runtime.Context.Temporal.Status == interaction.LoadStatusReady && req.Runtime.Context.Temporal.Value.RelationshipTime != nil {
+		policy := temporal.ResolveRelationshipTimePolicy(*req.Runtime.Context.Temporal.Value.RelationshipTime, req.Message, false)
+		relationshipTimeContext = temporal.RenderRelationshipTime(*req.Runtime.Context.Temporal.Value.RelationshipTime, policy)
+	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		BaseIdentity:              promptir.BaseIdentitySection(),
 		SystemPrompt:              runtimeProfile.SystemPrompt,
@@ -276,6 +281,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		AntiRepeatRaw:             antiRepeatRaw,
 		ProfileContext:            mergeContext(sys1Result.ProfileContext, sys1Result.EpisodicContext),
 		TemporalContext:           temporalContext,
+		RelationshipTimeContext:   relationshipTimeContext,
 		MemoryContext:             sys2Result.MemoryContext,
 		Worldbook:                 sys1Result.Worldbook,
 		PluginContext:             pluginContext,

@@ -75,6 +75,7 @@ type AppServices struct {
 	Extension           *extension.Runtime
 	Emote               *emote.Service
 	Temporal            *temporal.Service
+	RelTimeCoordinator  *temporal.RelationshipTimeCoordinator
 	MCPRepository       *mcp.Repository
 	MCPConnections      *mcpmanager.Manager
 	MCPAuth             *mcpauth.Manager
@@ -125,6 +126,9 @@ func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.R
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
+	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
+	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
+	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx, graphSvc)
 	profRepo := profile.NewRepository(ctx)
@@ -195,6 +199,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, interaction.NewInMemoryOutboxStore())
+	orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
+	chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, temporalSvc)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
@@ -317,6 +323,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		Extension:           extensionRuntime,
 		Emote:               emoteSvc,
 		Temporal:            temporalSvc,
+		RelTimeCoordinator:  relTimeCoordinator,
 		MCPRepository:       mcpRepository,
 		MCPConnections:      connectionManager,
 		MCPAuth:             oauthManager,

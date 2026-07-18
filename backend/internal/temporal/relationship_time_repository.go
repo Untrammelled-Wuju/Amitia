@@ -292,6 +292,16 @@ func (r *RelationshipTimeRepository) FinalizeInteractionTx(ctx context.Context, 
 		committedAt = repository.clock.Now()
 	}
 	committedText := FormatRelationshipTime(committedAt)
+
+	if input.AssistantInitiated {
+		if err := repository.updateAssistantContact(ctx, input.UserID, input.CharacterID, committedText); err != nil {
+			return err
+		}
+		receipt.Status = InteractionReceiptCommitted
+		receipt.UpdatedAtUTC = committedText
+		return repository.SaveReceipt(ctx, receipt)
+	}
+
 	global, err := repository.GetGlobalPresence(ctx, input.UserID)
 	if err != nil {
 		return err
@@ -472,4 +482,10 @@ func relationshipPresenceID(userID, characterID string) string {
 func isSessionBreak(previous string, current time.Time) bool {
 	previousTime := ParseRelationshipTime(previous)
 	return previousTime.IsZero() || current.Sub(previousTime) >= SessionBreakThreshold
+}
+
+func (r *RelationshipTimeRepository) updateAssistantContact(ctx context.Context, userID, characterID, committedText string) error {
+	return r.db.WithContext(ctx).Model(&RelationshipPresenceState{}).
+		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Update("last_assistant_contact_at_utc", committedText).Error
 }

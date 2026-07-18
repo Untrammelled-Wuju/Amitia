@@ -11,9 +11,15 @@ import (
 	"github.com/u-ai/backend/internal/requestidentity"
 )
 
-type Handler struct{ service *Service }
+type Handler struct {
+	service            *Service
+	relTimeCoordinator *RelationshipTimeCoordinator
+}
 
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+func NewHandlerWithRelationshipTime(service *Service, coordinator *RelationshipTimeCoordinator) *Handler {
+	return &Handler{service: service, relTimeCoordinator: coordinator}
+}
 
 func (h *Handler) GetUserProfile(c *gin.Context) {
 	profile, err := h.service.GetProfile(c.Request.Context(), OwnerUser, apiUserID(c))
@@ -141,6 +147,67 @@ func (h *Handler) SuggestTimezone(c *gin.Context) {
 	}
 	profile, err := h.service.SuggestTimezone(c.Request.Context(), apiUserID(c), input.Timezone)
 	h.respond(c, profile, err)
+}
+
+func (h *Handler) GetRelationshipTimeSettings(c *gin.Context) {
+	characterID := c.Param("characterId")
+	if h.relTimeCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
+		return
+	}
+	settings, err := h.relTimeCoordinator.GetSettings(c.Request.Context(), characterID)
+	h.respond(c, settings, err)
+}
+
+func (h *Handler) UpdateRelationshipTimeSettings(c *gin.Context) {
+	characterID := c.Param("characterId")
+	if h.relTimeCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
+		return
+	}
+	var input RelationshipTimeSettings
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "关系时间设置格式无效"})
+		return
+	}
+	input.CharacterID = characterID
+	if err := h.relTimeCoordinator.SaveSettings(c.Request.Context(), &input); err != nil {
+		h.respond(c, nil, err)
+		return
+	}
+	h.respond(c, input, nil)
+}
+
+func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
+	userID := apiUserID(c)
+	characterID := c.Param("characterId")
+	if h.relTimeCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
+		return
+	}
+	state, err := h.relTimeCoordinator.GetPresenceState(c.Request.Context(), userID, characterID)
+	h.respond(c, state, err)
+}
+
+func (h *Handler) ListReunionEpisodes(c *gin.Context) {
+	userID := apiUserID(c)
+	characterID := c.Param("characterId")
+	if h.relTimeCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	episodes, err := h.relTimeCoordinator.ListReunionEpisodes(c.Request.Context(), userID, characterID, limit)
+	h.respond(c, episodes, err)
+}
+
+func (h *Handler) GetReunionEpisode(c *gin.Context) {
+	if h.relTimeCoordinator == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
+		return
+	}
+	episode, err := h.relTimeCoordinator.GetReunionEpisode(c.Request.Context(), c.Param("episodeId"))
+	h.respond(c, episode, err)
 }
 
 func (h *Handler) respond(c *gin.Context, data interface{}, err error) {

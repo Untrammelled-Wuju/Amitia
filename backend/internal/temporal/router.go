@@ -2,8 +2,8 @@ package temporal
 
 import "github.com/gin-gonic/gin"
 
-func RegisterRouter(group *gin.RouterGroup, service *Service) {
-	handler := NewHandler(service)
+func RegisterRouter(group *gin.RouterGroup, service *Service, coordinator *RelationshipTimeCoordinator) {
+	handler := NewHandlerWithRelationshipTime(service, coordinator)
 	temporal := group.Group("/temporal")
 	{
 		temporal.GET("/profile", handler.GetUserProfile)
@@ -22,5 +22,10 @@ func RegisterRouter(group *gin.RouterGroup, service *Service) {
 		temporal.POST("/timezone-suggestion", handler.SuggestTimezone)
 		temporal.POST("/timezone-suggestion/accept", handler.AcceptTimezoneSuggestion)
 		temporal.POST("/timezone-suggestion/reject", handler.RejectTimezoneSuggestion)
+		temporal.GET("/characters/:characterId/relationship-time/settings", handler.GetRelationshipTimeSettings)
+		temporal.PUT("/characters/:characterId/relationship-time/settings", handler.UpdateRelationshipTimeSettings)
+		temporal.GET("/characters/:characterId/relationship-time/state", handler.GetRelationshipTimeState)
+		temporal.GET("/characters/:characterId/reunion-episodes", handler.ListReunionEpisodes)
+		temporal.GET("/characters/:characterId/reunion-episodes/:episodeId", handler.GetReunionEpisode)
 	}
 }

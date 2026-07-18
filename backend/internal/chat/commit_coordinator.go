@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -235,11 +236,14 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 				if err := s.updateRelationshipStateTx(tx, plan); err != nil {
 					return err
 				}
-				if err := s.updateNeedStateTx(tx, plan); err != nil {
-					return err
-				}
+			if err := s.updateNeedStateTx(tx, plan); err != nil {
+				return err
 			}
-			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
+			if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
+				return err
+			}
+		}
+		events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
 			if err != nil {
 				return err
 			}
@@ -282,4 +286,17 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		}
 	}
 	return result, nil
+}
+
+func (s *service) finalizeRelationshipTimeTx(tx *gorm.DB, plan messageCommitPlan) error {
+	if s.relTimeCoordinator == nil || plan.Runtime == nil || plan.Runtime.Context.Temporal.Value.RelationshipTime == nil {
+		return nil
+	}
+	relTimeCtx := plan.Runtime.Context.Temporal.Value.RelationshipTime
+	suppress := false
+	reason := ""
+	if suppress {
+		reason = "current_task_priority"
+	}
+	return s.relTimeCoordinator.FinalizeCommittedTx(context.Background(), tx, plan.Request.UserID, plan.Character, plan.Request.InteractionID, relTimeCtx, suppress, reason, plan.Request.IsInternal)
 }

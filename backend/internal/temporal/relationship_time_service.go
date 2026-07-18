@@ -66,8 +66,10 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		if relationship != nil {
 			previousRelationship = ParseRelationshipTime(relationship.LastCommittedUserInteractionAtUTC)
 		}
-		if saveErr := repo.SaveObservedPresence(ctx, ObservePresenceInput{UserID: input.UserID, CharacterID: input.CharacterID, Channel: input.Channel, ObservedAt: input.ObservedAt}); saveErr != nil {
-			return saveErr
+		if !input.IsInternal && !isProactiveSource(input.Source) {
+			if saveErr := repo.SaveObservedPresence(ctx, ObservePresenceInput{UserID: input.UserID, CharacterID: input.CharacterID, Channel: input.Channel, ObservedAt: input.ObservedAt}); saveErr != nil {
+				return saveErr
+			}
 		}
 		cadence, cadenceErr := c.loadCadence(ctx, repo, input.UserID, input.CharacterID)
 		if cadenceErr != nil {
@@ -222,7 +224,42 @@ func (c *RelationshipTimeCoordinator) FinalizeInteractionTx(ctx context.Context,
 	return c.repo.FinalizeInteractionTx(ctx, tx, input)
 }
 
-func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, userID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string) error {
+func (c *RelationshipTimeCoordinator) GetSettings(ctx context.Context, characterID string) (*RelationshipTimeSettings, error) {
+	if c == nil || c.repo == nil {
+		return nil, errors.New("relationship time repository is required")
+	}
+	return c.repo.GetSettings(ctx, characterID)
+}
+
+func (c *RelationshipTimeCoordinator) SaveSettings(ctx context.Context, settings *RelationshipTimeSettings) error {
+	if c == nil || c.repo == nil {
+		return errors.New("relationship time repository is required")
+	}
+	return c.repo.SaveSettings(ctx, settings)
+}
+
+func (c *RelationshipTimeCoordinator) GetPresenceState(ctx context.Context, userID, characterID string) (*RelationshipPresenceState, error) {
+	if c == nil || c.repo == nil {
+		return nil, errors.New("relationship time repository is required")
+	}
+	return c.repo.GetRelationshipPresence(ctx, userID, characterID)
+}
+
+func (c *RelationshipTimeCoordinator) ListReunionEpisodes(ctx context.Context, userID, characterID string, limit int) ([]ReunionEpisode, error) {
+	if c == nil || c.repo == nil {
+		return nil, errors.New("relationship time repository is required")
+	}
+	return c.repo.ListReunionEpisodes(ctx, userID, characterID, limit)
+}
+
+func (c *RelationshipTimeCoordinator) GetReunionEpisode(ctx context.Context, episodeID string) (*ReunionEpisode, error) {
+	if c == nil || c.repo == nil {
+		return nil, errors.New("relationship time repository is required")
+	}
+	return c.repo.GetReunionEpisode(ctx, episodeID)
+}
+
+func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, userID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {
 	if c == nil || c.repo == nil {
 		return errors.New("relationship time repository is required")
 	}
@@ -258,7 +295,7 @@ func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, t
 		return err
 	}
 	cadence := selectCadence(relationshipSamples, globalSamples)
-	input := FinalizeInteractionInput{UserID: userID, CharacterID: characterID, InteractionID: interactionID, CommittedAt: committedAt, ExpectedGapSeconds: cadence.ExpectedGap.Seconds(), GapMADSeconds: cadence.MAD.Seconds(), CadenceSample: relationshipSample, SuppressReunion: suppress, SuppressionReason: reason}
+	input := FinalizeInteractionInput{UserID: userID, CharacterID: characterID, InteractionID: interactionID, CommittedAt: committedAt, ExpectedGapSeconds: cadence.ExpectedGap.Seconds(), GapMADSeconds: cadence.MAD.Seconds(), CadenceSample: relationshipSample, SuppressReunion: suppress, SuppressionReason: reason, AssistantInitiated: assistantInitiated}
 	if relationshipTime != nil && relationshipTime.Reunion != nil {
 		input.ReunionEpisodeID = relationshipTime.Reunion.EpisodeID
 		input.ReacclimationTurns = reacclimationTurns(relationshipTime.Reunion.Level)
