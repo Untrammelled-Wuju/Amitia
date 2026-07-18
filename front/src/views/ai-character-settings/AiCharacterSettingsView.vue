@@ -55,6 +55,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <LifestyleTendencySection :characterId="charId" />
 
+      <RelationshipTimeSection :character-id="charId" />
+
       <SleepSettingSection v-model:sleepForm="sleepForm" />
 
       <LifeScenarioSection
@@ -100,6 +102,7 @@ import { useWorkProfile } from "../../composables/useWorkProfile"
 import PersonalitySlidersSection from "./components/PersonalitySlidersSection.vue"
 import RoleGenderSection from "./components/RoleGenderSection.vue"
 import LifestyleTendencySection from "./components/LifestyleTendencySection.vue"
+import RelationshipTimeSection from "./components/RelationshipTimeSection.vue"
 import SleepSettingSection from "./components/SleepSettingSection.vue"
 import LifeScenarioSection from "./components/LifeScenarioSection.vue"
 import TemporalAwarenessSection from "./components/TemporalAwarenessSection.vue"

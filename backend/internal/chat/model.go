@@ -115,6 +115,7 @@ type ChatRequest struct {
 	Source         string `json:"source"`
 	PeerID         string `json:"peerId"`
 	UserID         string `json:"userId"`
+	DeviceTimezone string `json:"deviceTimezone"`
 	SessionID      string `json:"sessionId"`
 	RequestID      string `json:"requestId"`
 }
@@ -125,6 +126,7 @@ type WebChatRequest struct {
 	ConversationID   string  `json:"conversationId"`
 	Sequence         int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	UserID           string  `json:"userId"`
+	DeviceTimezone   string  `json:"deviceTimezone"`
 	SessionID        string  `json:"sessionId"`
 	RequestID        string  `json:"requestId"`
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
@@ -219,6 +221,7 @@ type ProcessMessageRequest struct {
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`
 	UserID                   string                       `json:"-"`
+	DeviceTimezone           string                       `json:"-"`
 	SessionID                string                       `json:"-"`
 	InteractionID            string                       `json:"-"`
 	ExpectedStatusVersion    int64                        `json:"-"`

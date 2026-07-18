@@ -2,6 +2,7 @@ package temporal
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,11 +70,61 @@ func TestSnapshotFollowUserTimezone(t *testing.T) {
 	}
 }
 
+func TestPatchProfilePreservesOmittedBooleans(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	timezone := "Europe/Paris"
+	profile, err := service.PatchProfile(context.Background(), OwnerUser, DefaultUserOwnerID, ProfilePatch{Timezone: &timezone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !profile.Enabled || !profile.HolidayAwareness || !profile.MemoryResonance || profile.Timezone != timezone {
+		t.Fatalf("patch erased omitted values %#v", profile)
+	}
+}
+
+func TestPatchProfileCanDisableBoolean(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	disabled := false
+	profile, err := service.PatchProfile(context.Background(), OwnerUser, DefaultUserOwnerID, ProfilePatch{MemoryResonance: &disabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.MemoryResonance {
+		t.Fatalf("explicit false was ignored %#v", profile)
+	}
+}
+
+func TestSnapshotUsesSessionDeviceTimezone(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC))
+	snapshot, err := service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a", DeviceTimezone: "America/Los_Angeles"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.UserTime.Timezone != "America/Los_Angeles" || snapshot.Signals.UserTimezoneSource != "device_session" || snapshot.Signals.UserTimezoneConfidence != 80 {
+		t.Fatalf("device timezone not applied %#v", snapshot)
+	}
+	if strings.Contains(service.RenderSnapshot(snapshot), "用户时区未确认") {
+		t.Fatalf("valid device timezone rendered as fallback %s", service.RenderSnapshot(snapshot))
+	}
+}
+
+func TestSnapshotLabelsFallbackTimezoneAsUnconfirmed(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC))
+	snapshot, err := service.ResolveSnapshot(context.Background(), SnapshotInput{CharacterID: "character-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := service.RenderSnapshot(snapshot)
+	if !strings.Contains(rendered, "系统参考时间") || !strings.Contains(rendered, "用户时区未确认") || strings.Contains(rendered, "用户当地时间") {
+		t.Fatalf("fallback timezone was overstated %#v %s", snapshot.Signals, rendered)
+	}
+}
+
 type relationshipTimeProbe struct{ calls int }
 
-func (p *relationshipTimeProbe) Resolve(_ context.Context, _ SnapshotInput, _ time.Time) (interface{}, error) {
+func (p *relationshipTimeProbe) Resolve(_ context.Context, _ SnapshotInput, _ time.Time) (*RelationshipTimeContext, error) {
 	p.calls++
-	return map[string]bool{"provided": true}, nil
+	return &RelationshipTimeContext{Version: RelationshipTimeVersion}, nil
 }
 
 func TestFeatureFlagCombinationsKeepRelationshipProviderIndependent(t *testing.T) {
@@ -243,11 +294,23 @@ func TestMemoryRerankAppliesValidityPenalty(t *testing.T) {
 	if _, err := service.SaveMemoryTemporalMetadata(context.Background(), MemoryTemporalMetadata{MemoryID: "memory-expired", ValidToUTC: &expired}); err != nil {
 		t.Fatal(err)
 	}
-	results, err := service.RerankMemoryScores(context.Background(), "当前事实", []MemoryScoreCandidate{{MemoryID: "memory-expired", BaseScore: 1, CreatedAt: now.Format(time.RFC3339), MemoryType: "fact"}})
+	results, err := service.RerankMemoryScores(context.Background(), "这个事实什么时候失效", []MemoryScoreCandidate{{MemoryID: "memory-expired", BaseScore: 1, CreatedAt: now.Format(time.RFC3339), MemoryType: "fact"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if results["memory-expired"].ValidityPenalty != .65 {
 		t.Fatalf("validity penalty missing %#v", results["memory-expired"])
+	}
+}
+
+func TestMemoryRerankLeavesNonTemporalQueryUnchanged(t *testing.T) {
+	service, _ := temporalTestService(t, time.Date(2026, 7, 18, 9, 0, 0, 0, time.UTC))
+	results, err := service.RerankMemoryScores(context.Background(), "她喜欢什么颜色", []MemoryScoreCandidate{{MemoryID: "memory-old", BaseScore: .83, CreatedAt: "2020-01-01T00:00:00Z", MemoryType: "episodic"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := results["memory-old"]
+	if result.FinalScore != .83 || result.TemporalBoost != 0 || result.ValidityPenalty != 1 || result.ReferenceSource != "none" {
+		t.Fatalf("non-temporal query changed score %#v", result)
 	}
 }

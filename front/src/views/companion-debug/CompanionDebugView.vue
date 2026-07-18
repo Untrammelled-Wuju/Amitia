@@ -11,9 +11,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-button type="success" @click="triggerDailyRegen" :loading="triggeringDaily">触发每日重生</el-button>
     </div>
 
-    <el-card class="debug-card temporal-runtime-card" shadow="never">
-      <template #header><div class="temporal-header"><span>Temporal Runtime</span><el-tag size="small">{{ temporalDiagnostics?.snapshotVersion || '未加载' }}</el-tag></div></template>
-      <el-tabs v-if="temporalDiagnostics" model-value="core">
+    <el-card class="debug-card temporal-runtime-card" shadow="never" v-loading="temporalLoading">
+      <template #header><div class="temporal-header"><span>Temporal Runtime</span><div class="temporal-badges"><el-tag size="small">{{ temporalDiagnostics?.snapshotVersion || '未加载' }}</el-tag><el-tag size="small" :type="relationshipFeatureEnabled ? 'success' : 'info'">Relationship Time {{ relationshipFeatureEnabled ? '已启用' : '未启用' }}</el-tag></div></div></template>
+      <el-alert v-if="temporalError" :title="temporalError" type="error" show-icon :closable="false" class="temporal-alert"><el-button @click="loadTemporal">重试时间诊断</el-button></el-alert>
+      <el-tabs v-else-if="temporalDiagnostics" v-model="temporalActiveTab">
         <el-tab-pane label="Core Time" name="core">
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="用户当地时间">{{ formatTemporalCivil(temporalDiagnostics.snapshot.userTime) }}</el-descriptions-item>
@@ -31,14 +32,57 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-empty v-if="!temporalDiagnostics.snapshot.salientAnchors?.length" description="当前没有显著时间锚点" :image-size="42" />
         </el-tab-pane>
         <el-tab-pane label="Relationship Time" name="relationship">
-          <pre v-if="temporalDiagnostics.relationshipTime" class="json-block">{{ prettyJSON(temporalDiagnostics.relationshipTime) }}</pre>
-          <el-empty v-else description="Relationship Time 提供器当前未返回数据" :image-size="42" />
+          <el-alert v-if="!relationshipFeatureEnabled" title="Relationship Time 后端功能开关未启用" description="当前不会生成关系时间状态或影响角色表达。" type="info" show-icon :closable="false" />
+          <template v-else-if="relationshipContext">
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="首次互动时间">{{ formatDateTime(relationshipContext.firstInteractionAt) }}</el-descriptions-item>
+              <el-descriptions-item label="关系持续天数">{{ relationshipContext.relationshipAgeDays }} 天</el-descriptions-item>
+              <el-descriptions-item label="全局最后成功互动">{{ formatDateTime(relationshipContext.globalLastCommittedAt) }}</el-descriptions-item>
+              <el-descriptions-item label="当前角色最后成功互动">{{ formatDateTime(relationshipContext.relationshipLastCommittedAt) }}</el-descriptions-item>
+              <el-descriptions-item label="本次关系 Gap">{{ formatDuration(relationshipContext.relationshipGapSeconds) }}</el-descriptions-item>
+              <el-descriptions-item label="本次全局 Gap">{{ formatDuration(relationshipContext.globalGapSeconds) }}</el-descriptions-item>
+              <el-descriptions-item label="期望互动间隔">{{ formatDuration(relationshipContext.expectedGapSeconds) }}</el-descriptions-item>
+              <el-descriptions-item label="Normalized Gap">{{ formatDecimal(relationshipContext.normalizedGap) }}</el-descriptions-item>
+              <el-descriptions-item label="连续性分数">{{ formatPercent(relationshipContext.continuityScore) }}</el-descriptions-item>
+              <el-descriptions-item label="重新适应剩余回合">{{ relationshipContext.reacclimationTurnsLeft }}</el-descriptions-item>
+              <el-descriptions-item label="存储紧张度">{{ formatDecimal(relationshipContext.storedTension) }}</el-descriptions-item>
+              <el-descriptions-item label="有效紧张度">{{ formatDecimal(relationshipContext.effectiveTension) }}</el-descriptions-item>
+            </el-descriptions>
+            <el-alert v-if="relationshipDiagnosticsList.length" title="诊断信息" type="warning" show-icon :closable="false" class="diagnostics-alert">
+              <ul class="diagnostics-list"><li v-for="item in relationshipDiagnosticsList" :key="item">{{ item }}</li></ul>
+            </el-alert>
+          </template>
+          <el-empty v-else description="功能已启用，但当前没有可展示的关系时间状态" :image-size="42" />
         </el-tab-pane>
-        <el-tab-pane label="Reunion" name="reunion"><el-empty description="重逢诊断由 Relationship Time 模块提供" :image-size="42" /></el-tab-pane>
+        <el-tab-pane label="Reunion" name="reunion">
+          <el-alert v-if="!relationshipFeatureEnabled" title="久别重逢不可用" description="Relationship Time 后端功能开关未启用。" type="info" show-icon :closable="false" />
+          <template v-else>
+            <el-descriptions v-if="relationshipContext?.reunion" :column="2" border size="small" class="reunion-current">
+              <el-descriptions-item label="当前重逢类型">{{ reunionKindLabel(relationshipContext.reunion.kind) }}</el-descriptions-item>
+              <el-descriptions-item label="当前重逢等级">{{ reunionLevelLabel(relationshipContext.reunion.level) }}</el-descriptions-item>
+              <el-descriptions-item label="Episode 状态">{{ reunionStateLabel(relationshipContext.reunion.state) }}</el-descriptions-item>
+              <el-descriptions-item label="是否允许表达">{{ relationshipContext.reunion.shouldExpress ? '是' : '否' }}</el-descriptions-item>
+              <el-descriptions-item label="表达权所属 Interaction">{{ relationshipContext.reunion.claimedByInteractionId || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="表达权到期时间">{{ formatDateTime(relationshipContext.reunion.claimExpiresAt) }}</el-descriptions-item>
+            </el-descriptions>
+            <el-empty v-else description="当前没有活跃重逢事件" :image-size="42" />
+            <div class="table-heading">最近重逢事件</div>
+            <el-table v-if="reunionEpisodes.length" :data="reunionEpisodes" size="small" stripe>
+              <el-table-column label="检测时间" min-width="160"><template #default="{ row }">{{ formatDateTime(row.detectedAtUtc) }}</template></el-table-column>
+              <el-table-column label="类型" min-width="160"><template #default="{ row }">{{ reunionKindLabel(row.reunionKind) }}</template></el-table-column>
+              <el-table-column label="等级" width="100"><template #default="{ row }">{{ reunionLevelLabel(row.reunionLevel) }}</template></el-table-column>
+              <el-table-column label="间隔" width="130"><template #default="{ row }">{{ formatDuration(row.relationshipGapSeconds) }}</template></el-table-column>
+              <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="reunionStateTag(row.status)">{{ reunionStateLabel(row.status) }}</el-tag></template></el-table-column>
+              <el-table-column prop="handledInteractionId" label="处理 Interaction" min-width="170" show-overflow-tooltip />
+              <el-table-column prop="suppressionReason" label="抑制原因" min-width="140" show-overflow-tooltip />
+            </el-table>
+            <el-empty v-else description="暂无最近重逢事件" :image-size="42" />
+          </template>
+        </el-tab-pane>
         <el-tab-pane label="Prompt Contribution" name="prompt"><pre class="prompt-block">{{ temporalDiagnostics.promptSections?.[0]?.content || '本轮未注入时间上下文' }}</pre></el-tab-pane>
         <el-tab-pane label="Commit Effects" name="effects"><pre v-if="temporalDiagnostics.commitEffects?.length" class="json-block">{{ prettyJSON(temporalDiagnostics.commitEffects) }}</pre><el-empty v-else description="当前没有时间提交效果" :image-size="42" /></el-tab-pane>
       </el-tabs>
-      <el-empty v-else description="Temporal Runtime 诊断不可用" :image-size="48" />
+      <el-empty v-else description="Temporal Runtime 诊断尚未加载" :image-size="48" />
     </el-card>
 
     <!-- 当前状态 -->
@@ -167,10 +211,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, inject, type Ref } from "vue"
+import { computed, ref, reactive, onMounted, inject, type Ref } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi } from "../../composables/useApi"
-import { getTemporalDiagnostics, type CivilTimeSnapshot, type TemporalDiagnostics } from "@/api/temporal"
+import { getRelationshipTimeDiagnostics, getTemporalDiagnostics, listReunionEpisodes, type CivilTimeSnapshot, type RelationshipTimeContext, type RelationshipTimeDiagnostics, type ReunionEpisode, type SnapshotField, type TemporalDiagnostics } from "@/api/temporal"
 
 const injectedCharacterId = inject<Ref<string | null>>('currentCharacterId', ref(null))
 const { get, post } = useApi()
@@ -180,6 +224,31 @@ const triggeringActive = ref(false)
 const triggeringDelayed = ref(false)
 const triggeringDaily = ref(false)
 const temporalDiagnostics = ref<TemporalDiagnostics | null>(null)
+const relationshipDiagnostics = ref<RelationshipTimeDiagnostics | null>(null)
+const reunionEpisodes = ref<ReunionEpisode[]>([])
+const temporalLoading = ref(false)
+const temporalError = ref("")
+const temporalActiveTab = ref("core")
+
+const relationshipFeatureEnabled = computed(() => temporalDiagnostics.value?.core.featureFlags.relationshipTimeEnabled === true)
+const relationshipContext = computed(() => {
+  const candidates = [
+    relationshipDiagnostics.value?.state,
+    relationshipDiagnostics.value?.relationshipTime,
+    temporalDiagnostics.value?.snapshot.relationshipTime,
+    temporalDiagnostics.value?.relationshipTime,
+  ]
+  for (const candidate of candidates) {
+    const value = unwrapRelationshipContext(candidate)
+    if (value) return value
+  }
+  return null
+})
+const relationshipDiagnosticsList = computed(() => Array.from(new Set([
+  ...(relationshipDiagnostics.value?.diagnostics || []),
+  ...(relationshipContext.value?.diagnostics || []),
+  ...(temporalDiagnostics.value?.diagnostics || []),
+])))
 
 const data = reactive<any>({
   currentState: null,
@@ -195,12 +264,34 @@ async function loadAll() {
   try {
     const res = await get<any>("/api/companion/debug/overview", { characterId: injectedCharacterId?.value ?? undefined })
     Object.assign(data, res)
-    temporalDiagnostics.value = await getTemporalDiagnostics(injectedCharacterId?.value ?? "")
   } catch {
-    ElMessage.error("加载失败")
+    ElMessage.error("生活状态调试数据加载失败")
   } finally {
     loading.value = false
   }
+  await loadTemporal()
+}
+
+async function loadTemporal() {
+  temporalLoading.value = true
+  temporalError.value = ""
+  const characterId = injectedCharacterId?.value ?? ""
+  const requests: Promise<unknown>[] = [getTemporalDiagnostics(characterId), getRelationshipTimeDiagnostics(characterId)]
+  if (characterId) requests.push(listReunionEpisodes(characterId))
+  const results = await Promise.allSettled(requests)
+  if (results[0].status === "fulfilled") temporalDiagnostics.value = results[0].value as TemporalDiagnostics
+  else {
+    temporalDiagnostics.value = null
+    temporalError.value = "Temporal Runtime 诊断加载失败，请检查后端服务后重试"
+  }
+  relationshipDiagnostics.value = results[1].status === "fulfilled" ? results[1].value as RelationshipTimeDiagnostics : null
+  if (characterId && results[2]?.status === "fulfilled") {
+    const result = results[2].value as ReunionEpisode[] | { items: ReunionEpisode[] }
+    reunionEpisodes.value = Array.isArray(result) ? result : result.items || []
+  } else {
+    reunionEpisodes.value = relationshipDiagnostics.value?.episodes || []
+  }
+  temporalLoading.value = false
 }
 
 async function regenerateAll() {
@@ -331,6 +422,33 @@ function formatTemporalCivil(value: CivilTimeSnapshot) {
   return `${value.localTime.replace("T", " ").slice(0, 16)} · ${value.timezone} · ${value.daypart || "无时段"}`
 }
 
+function unwrapRelationshipContext(value: RelationshipTimeContext | SnapshotField<RelationshipTimeContext> | null | undefined) {
+  if (!value || typeof value !== "object") return null
+  if ("version" in value && "characterId" in value) return value as RelationshipTimeContext
+  const field = value as SnapshotField<RelationshipTimeContext>
+  return field.value || field.data || null
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "—"
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date)
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—"
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.round((seconds % 86400) / 3600)
+  return days > 0 ? `${days} 天${hours > 0 ? ` ${hours} 小时` : ""}` : `${Math.max(1, hours)} 小时`
+}
+
+function formatDecimal(value: number) { return Number.isFinite(value) ? value.toFixed(2) : "—" }
+function formatPercent(value: number) { return Number.isFinite(value) ? `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%` : "—" }
+function reunionKindLabel(value: string) { return ({ global_return: "全局回归", relationship_reconnect: "关系重连", reply_to_recent_proactive: "回应近期主动消息" } as Record<string,string>)[value] || value || "—" }
+function reunionLevelLabel(value: string) { return ({ none: "无", noticeable: "明显", long: "较久", extended: "长期", dormant: "休眠" } as Record<string,string>)[value] || value || "—" }
+function reunionStateLabel(value: string) { return ({ pending: "待处理", claimed: "已认领", handled: "已处理", suppressed: "已抑制", expired: "已过期" } as Record<string,string>)[value] || value || "—" }
+function reunionStateTag(value: string) { if (value === "handled") return "success"; if (value === "claimed") return "warning"; if (value === "suppressed" || value === "expired") return "info"; return "primary" }
+
 function prettyJSON(value: unknown) { return JSON.stringify(value, null, 2) }
 
 onMounted(() => loadAll())
@@ -342,6 +460,11 @@ onMounted(() => loadAll())
 .page-header h2 { font-size:18px; font-weight:600; margin:0; }
 .debug-card { margin-bottom: 14px; }
 .temporal-runtime-card { border-color: var(--ac-color-border-light); }
-.temporal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.temporal-header,.temporal-badges { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.temporal-alert,.diagnostics-alert,.reunion-current { margin-bottom: 14px; }
+.diagnostics-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
+.table-heading { margin: 16px 0 10px; font-weight: 600; color: var(--ac-color-text); }
+.temporal-alert .el-button { min-height: 44px; margin-top: 10px; }
 .prompt-block, .json-block { margin: 0; padding: 12px; border-radius: var(--ac-radius-sm); background: var(--ac-color-surface-hover); color: var(--ac-color-text); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+@media(max-width:700px){.debug-panel{padding:12px;max-width:100%}.temporal-header{align-items:flex-start;flex-direction:column}.temporal-badges{justify-content:flex-start}:deep(.temporal-runtime-card .el-descriptions__body .el-descriptions__table){display:block}:deep(.temporal-runtime-card .el-descriptions__cell){display:block;width:100%}}
 </style>

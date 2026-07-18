@@ -34,6 +34,7 @@ type ProcessRequest struct {
 	ProactiveMemory          string           `json:"-"`
 	PeerID                   string           `json:"peerId,omitempty"`
 	UserID                   string           `json:"userId,omitempty"`
+	DeviceTimezone           string           `json:"deviceTimezone,omitempty"`
 	SessionID                string           `json:"sessionId,omitempty"`
 	AudioUrl                 string           `json:"audioUrl,omitempty"`
 	AudioDuration            float64          `json:"audioDuration,omitempty"`
@@ -123,19 +124,22 @@ func DefaultOrchestratorConfig() OrchestratorConfig {
 }
 
 type Orchestrator struct {
-	cfg        OrchestratorConfig
-	processor  MessageProcessor
-	tracker    InteractionTracker
-	outbox     OutboxStore
-	resolver   *SupersedeResolver
-	pipeline   *RuntimePipeline
-	cancels    *CancellationRegistry
-	deadlineFn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)
-	mu         sync.Mutex
-	queueMu    sync.Mutex
-	queueLocks map[string]*sync.Mutex
-	active     int
-	ready      bool
+	cfg                        OrchestratorConfig
+	processor                  MessageProcessor
+	tracker                    InteractionTracker
+	outbox                     OutboxStore
+	resolver                   *SupersedeResolver
+	pipeline                   *RuntimePipeline
+	cancels                    *CancellationRegistry
+	deadlineFn                 func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)
+	relationshipTime           RelationshipTimeCoordinator
+	mu                         sync.Mutex
+	queueMu                    sync.Mutex
+	relationshipTimeMu         sync.Mutex
+	queueLocks                 map[string]*sync.Mutex
+	preparedRelationshipClaims map[string]struct{}
+	active                     int
+	ready                      bool
 }
 
 func NewOrchestrator(cfg OrchestratorConfig, processor MessageProcessor) *Orchestrator {
@@ -150,15 +154,16 @@ func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcesso
 func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
 	cfg = normalizeOrchestratorConfig(cfg)
 	return &Orchestrator{
-		cfg:        cfg,
-		processor:  processor,
-		tracker:    tracker,
-		outbox:     outbox,
-		resolver:   NewSupersedeResolver(cfg.SupersedePolicy, tracker),
-		pipeline:   NewRuntimePipeline(nil, nil, nil),
-		cancels:    NewCancellationRegistry(),
-		queueLocks: map[string]*sync.Mutex{},
-		ready:      false,
+		cfg:                        cfg,
+		processor:                  processor,
+		tracker:                    tracker,
+		outbox:                     outbox,
+		resolver:                   NewSupersedeResolver(cfg.SupersedePolicy, tracker),
+		pipeline:                   NewRuntimePipeline(nil, nil, nil),
+		cancels:                    NewCancellationRegistry(),
+		queueLocks:                 map[string]*sync.Mutex{},
+		preparedRelationshipClaims: map[string]struct{}{},
+		ready:                      false,
 	}
 }
 

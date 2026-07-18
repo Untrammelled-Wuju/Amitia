@@ -17,10 +17,20 @@ function getStoredId(key: string, prefix: string): string {
   return next
 }
 
+export function getRequestUserId(): string {
+  return getStoredId(USER_KEY, "user")
+}
+
+export function getDeviceTimezone(): string {
+  if (typeof Intl === "undefined") return ""
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+}
+
 export function createRequestEnvelope() {
   return {
     requestId: createId("req"),
     sessionId: getStoredId(SESSION_KEY, "sess"),
-    userId: getStoredId(USER_KEY, "user"),
+    userId: getRequestUserId(),
+    deviceTimezone: getDeviceTimezone(),
   }
 }

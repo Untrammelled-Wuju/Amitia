@@ -24,6 +24,13 @@ type MemoryScoreResult struct {
 }
 
 func (s *Service) RerankMemoryScores(ctx context.Context, query string, candidates []MemoryScoreCandidate) (map[string]MemoryScoreResult, error) {
+	if !hasTemporalIntent(query) {
+		results := make(map[string]MemoryScoreResult, len(candidates))
+		for _, candidate := range candidates {
+			results[candidate.MemoryID] = MemoryScoreResult{MemoryID: candidate.MemoryID, FinalScore: candidate.BaseScore, ValidityPenalty: 1, ReferenceSource: "none"}
+		}
+		return results, nil
+	}
 	ids := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		ids = append(ids, candidate.MemoryID)
@@ -37,7 +44,8 @@ func (s *Service) RerankMemoryScores(ctx context.Context, query string, candidat
 	var totalBoostMicros uint64
 	for _, candidate := range candidates {
 		item, exists := metadata[candidate.MemoryID]
-		reference, source := parseMemoryReferenceTime(candidate.CreatedAt)
+		var reference time.Time
+		source := "none"
 		if exists && item.OccurredAtUTC != nil {
 			reference = utc(*item.OccurredAtUTC)
 			source = "occurred_at_utc"

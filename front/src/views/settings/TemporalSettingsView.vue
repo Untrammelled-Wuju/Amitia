@@ -78,10 +78,10 @@
               <div class="field-help">主动消息是否可投递始终按用户当地时间判断。</div>
             </el-form-item>
             <el-form-item label="旅行模式">
-              <el-switch v-model="profile.travelMode" />
+              <!-- 旅行模式暂未在运行时消费，暂时隐藏 -->
             </el-form-item>
             <el-form-item label="时间感知强度">
-              <el-slider v-model="profile.awarenessLevel" :min="0" :max="100" show-input />
+              <!-- 时间感知强度暂未在运行时消费，暂时隐藏 -->
             </el-form-item>
           </el-form>
         </el-card>

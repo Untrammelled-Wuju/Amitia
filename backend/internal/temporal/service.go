@@ -26,7 +26,7 @@ type ScheduleProvider interface {
 }
 
 type RelationshipTimeProvider interface {
-	Resolve(ctx context.Context, input SnapshotInput, nowUTC time.Time) (interface{}, error)
+	Resolve(ctx context.Context, input SnapshotInput, nowUTC time.Time) (*RelationshipTimeContext, error)
 }
 
 type Service struct {
@@ -155,6 +155,74 @@ func (s *Service) SaveProfile(ctx context.Context, ownerType, ownerID string, in
 	return &input, nil
 }
 
+func (s *Service) PatchProfile(ctx context.Context, ownerType, ownerID string, patch ProfilePatch) (*Profile, error) {
+	current, err := s.GetProfile(ctx, ownerType, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if patch.TimezoneMode != nil {
+		current.TimezoneMode = *patch.TimezoneMode
+	}
+	if patch.Timezone != nil {
+		current.Timezone = *patch.Timezone
+	}
+	if patch.Locale != nil {
+		current.Locale = *patch.Locale
+	}
+	if patch.CalendarSystem != nil {
+		current.CalendarSystem = *patch.CalendarSystem
+	}
+	if patch.WeekStart != nil {
+		current.WeekStart = *patch.WeekStart
+	}
+	if patch.HolidayRegion != nil {
+		current.HolidayRegion = *patch.HolidayRegion
+	}
+	if patch.Hemisphere != nil {
+		current.Hemisphere = *patch.Hemisphere
+	}
+	if patch.DaypartConfigJSON != nil {
+		current.DaypartConfigJSON = *patch.DaypartConfigJSON
+	}
+	if patch.QuietHoursJSON != nil {
+		current.QuietHoursJSON = *patch.QuietHoursJSON
+	}
+	if patch.AutoDetectTimezone != nil {
+		current.AutoDetectTimezone = *patch.AutoDetectTimezone
+	}
+	if patch.TravelMode != nil {
+		current.TravelMode = *patch.TravelMode
+	}
+	if patch.AwarenessLevel != nil {
+		current.AwarenessLevel = *patch.AwarenessLevel
+	}
+	if patch.Source != nil {
+		current.Source = *patch.Source
+	}
+	if patch.Confidence != nil {
+		current.Confidence = *patch.Confidence
+	}
+	if patch.Enabled != nil {
+		current.Enabled = *patch.Enabled
+	}
+	if patch.HolidayAwareness != nil {
+		current.HolidayAwareness = *patch.HolidayAwareness
+	}
+	if patch.DaypartAwareness != nil {
+		current.DaypartAwareness = *patch.DaypartAwareness
+	}
+	if patch.AnniversaryAwareness != nil {
+		current.AnniversaryAwareness = *patch.AnniversaryAwareness
+	}
+	if patch.MemoryResonance != nil {
+		current.MemoryResonance = *patch.MemoryResonance
+	}
+	if patch.AllowSharedDateMention != nil {
+		current.AllowSharedDateMention = *patch.AllowSharedDateMention
+	}
+	return s.SaveProfile(ctx, ownerType, ownerID, *current)
+}
+
 func (s *Service) ResolveSnapshot(ctx context.Context, input SnapshotInput) (snapshot Snapshot, err error) {
 	started := s.clock.Now()
 	defer func() { s.metrics.recordSnapshot(s.clock.Since(started), err) }()
@@ -164,9 +232,12 @@ func (s *Service) ResolveSnapshot(ctx context.Context, input SnapshotInput) (sna
 func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) {
 	now := utc(s.clock.Now())
 	input.UserID = normalizeUserID(input.UserID)
+	if input.DeviceTimezone == "" {
+		input.DeviceTimezone = DeviceTimezoneFromContext(ctx)
+	}
 	if !s.flags.TemporalCoreEnabled {
 		fallback := civilSnapshot(now, time.UTC, "", "unknown")
-		var relationshipTime interface{}
+		var relationshipTime *RelationshipTimeContext
 		if s.flags.RelationshipTimeEnabled && s.relationshipTime != nil {
 			relationshipTime, _ = s.relationshipTime.Resolve(ctx, input, now)
 		}
@@ -183,13 +254,23 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 			return Snapshot{}, err
 		}
 	}
-	userLocation, err := loadLocation(userProfile.Timezone)
+	userTimezone := userProfile.Timezone
+	userTimezoneSource := userProfile.Source
+	userTimezoneConfidence := userProfile.Confidence
+	if userProfile.TimezoneMode == TimezoneFollowDevice && userProfile.AutoDetectTimezone && strings.TrimSpace(input.DeviceTimezone) != "" {
+		if deviceLocation, deviceErr := loadLocation(input.DeviceTimezone); deviceErr == nil {
+			userTimezone = deviceLocation.String()
+			userTimezoneSource = "device_session"
+			userTimezoneConfidence = 80
+		}
+	}
+	userLocation, err := loadLocation(userTimezone)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	characterTimezone := characterProfile.Timezone
 	if characterProfile.TimezoneMode == TimezoneFollowUser || characterTimezone == "" {
-		characterTimezone = userProfile.Timezone
+		characterTimezone = userTimezone
 	}
 	characterLocation, err := loadLocation(characterTimezone)
 	if err != nil {
@@ -218,14 +299,14 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 		policy.MentionTime = "none"
 		anchors = nil
 	}
-	var relationshipTime interface{}
+	var relationshipTime *RelationshipTimeContext
 	if s.flags.RelationshipTimeEnabled && s.relationshipTime != nil {
 		relationshipTime, _ = s.relationshipTime.Resolve(ctx, input, now)
 	}
 	return Snapshot{
 		Version: SnapshotVersion, NowUTC: now, UserTime: userCivil, CharacterTime: characterCivil,
 		RelationshipTime: relationshipTime, Schedule: schedule, CalendarEvents: calendarEvents, SalientAnchors: anchors,
-		Signals: TemporalSignals{TimezoneDiffers: userProfile.Timezone != characterTimezone, QuietHours: quiet},
+		Signals: TemporalSignals{TimezoneDiffers: userTimezone != characterTimezone, QuietHours: quiet, UserTimezoneSource: userTimezoneSource, UserTimezoneConfidence: userTimezoneConfidence, UserTimezoneConfirmed: userTimezoneSource != "fallback" && userTimezoneConfidence >= 60},
 		Policy:  policy, GeneratedAt: now,
 	}, nil
 }
@@ -238,11 +319,15 @@ func RenderSnapshot(snapshot Snapshot) string {
 	if snapshot.Policy.MentionTime == "none" {
 		return ""
 	}
-	lines := []string{
-		"【当前时间上下文】",
-		fmt.Sprintf("用户当地时间：%s，%s，%s", snapshot.UserTime.LocalTime.Format("2006-01-02 15:04"), weekdayCN(snapshot.UserTime.LocalTime.Weekday()), daypartCN(snapshot.UserTime.Daypart)),
-		fmt.Sprintf("角色当地时间：%s，%s，%s", snapshot.CharacterTime.LocalTime.Format("2006-01-02 15:04"), weekdayCN(snapshot.CharacterTime.LocalTime.Weekday()), daypartCN(snapshot.CharacterTime.Daypart)),
+	userTimeLabel := "用户当地时间"
+	if !snapshot.Signals.UserTimezoneConfirmed || snapshot.Signals.UserTimezoneConfidence < 60 {
+		userTimeLabel = "系统参考时间"
 	}
+	userTimeLine := fmt.Sprintf("%s：%s，%s，%s", userTimeLabel, snapshot.UserTime.LocalTime.Format("2006-01-02 15:04"), weekdayCN(snapshot.UserTime.LocalTime.Weekday()), daypartCN(snapshot.UserTime.Daypart))
+	if userTimeLabel == "系统参考时间" {
+		userTimeLine += "（用户时区未确认）"
+	}
+	lines := []string{"【当前时间上下文】", userTimeLine, fmt.Sprintf("角色当地时间：%s，%s，%s", snapshot.CharacterTime.LocalTime.Format("2006-01-02 15:04"), weekdayCN(snapshot.CharacterTime.LocalTime.Weekday()), daypartCN(snapshot.CharacterTime.Daypart))}
 	if snapshot.Schedule.CurrentState != "" {
 		lines = append(lines, "当前角色状态："+snapshot.Schedule.CurrentState)
 	}
@@ -401,7 +486,11 @@ func (s *Service) ResolveTimezoneSuggestion(ctx context.Context, userID string, 
 }
 
 func loadLocation(name string) (*time.Location, error) {
-	location, err := time.LoadLocation(strings.TrimSpace(name))
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ErrInvalidTimezone
+	}
+	location, err := time.LoadLocation(name)
 	if err != nil {
 		return nil, ErrInvalidTimezone
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/temporal"
 )
@@ -45,7 +46,10 @@ func init() {
 		service := temporalResolver.service
 		temporalResolver.RUnlock()
 		if service == nil {
-			return ErrorResult("temporal_runtime_unavailable", "时间运行时暂不可用")
+			now := time.Now()
+			result := TextResult(fmt.Sprintf("系统参考时间: %s | UTC: %s | 用户时区未确认", now.Format("2006-01-02 15:04:05 MST"), now.UTC().Format("2006-01-02 15:04:05Z07:00")))
+			result.Audit = map[string]interface{}{"clockSource": "system_fallback", "userTimezoneConfirmed": false}
+			return result
 		}
 		snapshot, err := service.ResolveSnapshot(callCtx, temporal.SnapshotInput{UserID: execCtx.User, CharacterID: execCtx.CharacterID, Channel: execCtx.Channel})
 		if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -173,6 +174,10 @@ func (h *Handler) Chat(c *gin.Context) {
 			}
 		}
 
+		deviceTimezone := strings.TrimSpace(req.DeviceTimezone)
+		if deviceTimezone == "" {
+			deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
+		}
 		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 			CharacterID:    req.CharacterID,
 			Message:        req.Message,
@@ -180,7 +185,8 @@ func (h *Handler) Chat(c *gin.Context) {
 			Channel:        channel,
 			Source:         source,
 			PeerID:         req.PeerID,
-			UserID:         req.UserID,
+			UserID:         requestidentity.ResolveGin(c, req.UserID),
+			DeviceTimezone: deviceTimezone,
 			SessionID:      req.SessionID,
 			RequestID:      req.RequestID,
 		})

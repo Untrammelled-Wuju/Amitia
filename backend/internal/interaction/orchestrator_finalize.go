@@ -19,6 +19,7 @@ func (o *Orchestrator) finalizeProcessorSuccess(ctx context.Context, record *Int
 		}
 		result := o.buildResult(record, nil, OutcomeFailed, err)
 		result.Duration = duration
+		o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "processor_response_missing")
 		return result, err
 	}
 	if record.Status == InteractionStatusCommitted || record.Status == InteractionStatusCompleted {
@@ -39,6 +40,7 @@ func (o *Orchestrator) finalizeProcessorSuccess(ctx context.Context, record *Int
 	if err != nil {
 		return o.completionConflictResult(ctx, updated, req, resp, duration, err)
 	}
+	o.forgetPreparedRelationshipClaim(record.ID)
 	events := resp.Events
 	if len(events) == 0 {
 		events, err = buildFallbackOutboxEvents(record, resp, runtime)
@@ -58,8 +60,10 @@ func (o *Orchestrator) finalizeProcessorSuccess(ctx context.Context, record *Int
 func (o *Orchestrator) completionConflictResult(ctx context.Context, record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, duration time.Duration, conflict error) (*OrchestrationResult, error) {
 	resolved, outcome, err := o.resolveCompletionConflict(ctx, record.ID, record, conflict)
 	if outcome == OutcomeCompleted && err == nil {
+		o.forgetPreparedRelationshipClaim(record.ID)
 		return o.successResult(resolved, req, resp, resp.Events, duration), nil
 	}
+	o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "completion_conflict")
 	result := o.buildResult(resolved, nil, outcome, err)
 	result.Duration = duration
 	return result, err

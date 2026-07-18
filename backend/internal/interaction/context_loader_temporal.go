@@ -26,7 +26,7 @@ func (l *TemporalContextLoader) Load(ctx context.Context, scope InteractionScope
 	if l.resolver == nil {
 		return FieldUnavailable[any](l.Name()), nil
 	}
-	snapshot, err := l.resolver.ResolveSnapshot(ctx, temporal.SnapshotInput{UserID: scope.UserID, CharacterID: scope.CharacterID, Channel: scope.Channel})
+	snapshot, err := l.resolver.ResolveSnapshot(ctx, temporal.SnapshotInput{UserID: scope.UserID, CharacterID: scope.CharacterID, Channel: scope.Channel, DeviceTimezone: temporal.DeviceTimezoneFromContext(ctx)})
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}

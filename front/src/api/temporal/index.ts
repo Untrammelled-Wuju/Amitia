@@ -1,5 +1,5 @@
 import { apiClient } from "@/composables/useApi"
-import type { TemporalAnchor, TemporalDiagnostics, TemporalProfile, TemporalSnapshot } from "./types"
+import type { RelationshipTimeContext, RelationshipTimeDiagnostics, RelationshipTimeSettings, ReunionEpisode, TemporalAnchor, TemporalDiagnostics, TemporalProfile, TemporalSnapshot } from "./types"
 
 export async function getTemporalProfile() { return (await apiClient.get<TemporalProfile>("/api/temporal/profile")).data }
 export async function updateTemporalProfile(profile: TemporalProfile) { return (await apiClient.put<TemporalProfile>("/api/temporal/profile",profile)).data }
@@ -15,5 +15,12 @@ export async function confirmTemporalAnchor(id:string,characterId="") { return (
 export async function suggestTemporalTimezone(timezone:string) { return (await apiClient.post<TemporalProfile>("/api/temporal/timezone-suggestion",{timezone})).data }
 export async function acceptTemporalTimezoneSuggestion() { return (await apiClient.post<TemporalProfile>("/api/temporal/timezone-suggestion/accept")).data }
 export async function rejectTemporalTimezoneSuggestion() { return (await apiClient.post<TemporalProfile>("/api/temporal/timezone-suggestion/reject")).data }
+export async function getRelationshipTimeSettings(characterId:string) { return (await apiClient.get<RelationshipTimeSettings>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/settings`)).data }
+export async function updateRelationshipTimeSettings(characterId:string,settings:RelationshipTimeSettings) { return (await apiClient.put<RelationshipTimeSettings>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/settings`,settings)).data }
+export async function getRelationshipTimeState(characterId:string) { return (await apiClient.get<RelationshipTimeContext>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/state`)).data }
+export async function listReunionEpisodes(characterId:string) { return (await apiClient.get<ReunionEpisode[] | {items:ReunionEpisode[]}>(`/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes`)).data }
+export async function getReunionEpisode(characterId:string,episodeId:string) { return (await apiClient.get<ReunionEpisode>(`/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes/${encodeURIComponent(episodeId)}`)).data }
+export async function getRelationshipTimeDiagnostics(characterId="") { return (await apiClient.get<RelationshipTimeDiagnostics>("/api/temporal/relationship-time/diagnostics",{params:{characterId}})).data }
+export async function recomputeRelationshipCadence(characterId:string) { return (await apiClient.post<RelationshipTimeContext>(`/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/recompute-cadence`)).data }
 
 export type * from "./types"

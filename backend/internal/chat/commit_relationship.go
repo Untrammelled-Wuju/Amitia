@@ -56,10 +56,14 @@ func (s *service) updateRelationshipStateTx(tx *gorm.DB, plan messageCommitPlan)
 		return err
 	}
 	eventData, err := json.Marshal(map[string]interface{}{
-		"interactionId":  plan.Request.InteractionID,
-		"conversationId": plan.Conversation,
-		"requestId":      plan.Request.RequestID,
-		"relationType":   relationType,
+		"interactionId":        plan.Request.InteractionID,
+		"conversationId":       plan.Conversation,
+		"requestId":            plan.Request.RequestID,
+		"relationType":         relationType,
+		"sourceChannel":        plan.Request.Channel,
+		"sourcePeerId":         plan.Request.PeerID,
+		"sourceConversationId": plan.Conversation,
+		"sourceInteractionId":  plan.Request.InteractionID,
 		"delta": map[string]float64{
 			"familiarity": famDelta,
 			"trust":       trustDelta,

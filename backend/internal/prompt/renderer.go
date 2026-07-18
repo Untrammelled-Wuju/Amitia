@@ -43,7 +43,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionProactivePersonality:
 			characterParts = append(characterParts, renderTaggedSection(s))
 
-		case GwSectionTemporalContext:
+		case GwSectionTemporalContext, GwSectionRelationshipTime:
 			trustedContextParts = append(trustedContextParts, renderTrustedDataSection(s))
 
 		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext, GwSectionConversationHistory,
@@ -115,7 +115,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 	return messages, nil
 }
 
-var allSectionTags = []string{"untrusted_data", "temporal_context", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "plugin_context", "agent_skill_context", "active_agent_skill", "available_agent_skills", "agent_skill_resource", "current_user_message"}
+var allSectionTags = []string{"untrusted_data", "temporal_context", "relationship_time", "character_contract", "runtime_plan", "expression_plan", "personality_raw", "emotion_fusion_raw", "adult_intimacy_raw", "output_shape_raw", "anti_repeat_raw", "proactive_raw", "proactive_personality", "proactive_relationship", "proactive_emotion", "proactive_memory", "proactive_scene", "proactive_time_context", "proactive_recent_context", "proactive_task_instruction", "channel_short_raw", "memory_inject_raw", "memory_extract_raw", "plugin_context", "agent_skill_context", "active_agent_skill", "available_agent_skills", "agent_skill_resource", "current_user_message"}
 
 func renderTaggedSection(s GwSection) string {
 	tagName := string(s.Type)
@@ -148,7 +148,8 @@ func renderUntrustedSection(s GwSection) string {
 
 func renderTrustedDataSection(s GwSection) string {
 	content := stripAllSectionTags(s.Content)
-	return "<temporal_context source=\"" + s.Source + "\" instruction_mode=\"data_only\">\n" + content + "\n</temporal_context>"
+	tagName := string(s.Type)
+	return "<" + tagName + " source=\"" + s.Source + "\" instruction_mode=\"data_only\">\n" + content + "\n</" + tagName + ">"
 }
 
 var userMsgTagPattern = regexp.MustCompile(`<\s*/?\s*current_user_message\s*>`)

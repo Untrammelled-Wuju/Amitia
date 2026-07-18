@@ -2,16 +2,29 @@ package companion
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type fakeProactiveUnifiedEntry struct {
 	requests []*interaction.UnifiedEntryRequest
 	ctxs     []context.Context
 	err      error
+}
+
+type fakeProactiveTemporalResolver struct {
+	snapshot temporal.Snapshot
+	input    temporal.SnapshotInput
+	err      error
+}
+
+func (f *fakeProactiveTemporalResolver) ResolveSnapshot(_ context.Context, input temporal.SnapshotInput) (temporal.Snapshot, error) {
+	f.input = input
+	return f.snapshot, f.err
 }
 
 func (f *fakeProactiveUnifiedEntry) Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error) {
@@ -113,5 +126,120 @@ func TestPersistAndDeliverStopsBeforeUnifiedEntryWhenContextCancelled(t *testing
 	}
 	if count != 0 {
 		t.Fatalf("expected no proactive audit row after cancellation, got %d", count)
+	}
+}
+
+func TestSubmitProactiveMessageUsesTemporalSnapshotContext(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	entry := &fakeProactiveUnifiedEntry{}
+	now := time.Date(2026, 7, 18, 12, 30, 0, 0, time.UTC)
+	snapshot := temporal.Snapshot{
+		Version:       temporal.SnapshotVersion,
+		NowUTC:        now,
+		UserTime:      temporal.CivilTimeSnapshot{LocalTime: now, Timezone: "UTC", Daypart: "noon"},
+		CharacterTime: temporal.CivilTimeSnapshot{LocalTime: now, Timezone: "UTC", Daypart: "noon"},
+		Signals:       temporal.TemporalSignals{UserTimezoneConfirmed: true, UserTimezoneConfidence: 100},
+		Policy:        temporal.TemporalBehaviorPolicy{MentionTime: "subtle", AllowProactive: true, MaxTemporalMentions: 1},
+	}
+	resolver := &fakeProactiveTemporalResolver{snapshot: snapshot}
+	svc.unifiedEntry = entry
+	svc.temporalResolver = resolver
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-temporal', 'char-1', 'wechat', 'peer-1', ?)", now.Format("2006-01-02 15:04:05")).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-temporal", "wechat", "prompt", "request-1")
+	if err != nil || result == nil {
+		t.Fatalf("expected proactive dispatch, result=%#v err=%v", result, err)
+	}
+	if len(entry.requests) != 1 {
+		t.Fatalf("expected one unified entry request, got %d", len(entry.requests))
+	}
+	if got, want := entry.requests[0].ProactiveTimeContext, temporal.RenderSnapshot(snapshot); got != want {
+		t.Fatalf("expected rendered temporal snapshot, got %q want %q", got, want)
+	}
+	if resolver.input.UserID != "peer-1" || resolver.input.CharacterID != "char-1" || resolver.input.Channel != "wechat" {
+		t.Fatalf("unexpected temporal scope: %#v", resolver.input)
+	}
+}
+
+func TestSubmitProactiveMessageFallsBackWhenTemporalUnavailable(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	entry := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = entry
+	svc.temporalResolver = &fakeProactiveTemporalResolver{err: errors.New("unavailable")}
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-fallback', 'char-1', 'web', 'peer-1', '2026-07-18 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-fallback", "web", "prompt", "request-2")
+	if err != nil || result == nil {
+		t.Fatalf("expected fallback dispatch, result=%#v err=%v", result, err)
+	}
+	if len(entry.requests) != 1 || entry.requests[0].ProactiveTimeContext == "" {
+		t.Fatalf("expected legacy time context fallback, requests=%#v", entry.requests)
+	}
+}
+
+func TestSubmitProactiveMessageStopsAtTemporalPolicyGate(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	entry := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = entry
+	svc.temporalResolver = &fakeProactiveTemporalResolver{snapshot: temporal.Snapshot{
+		Version: temporal.SnapshotVersion,
+		Policy:  temporal.TemporalBehaviorPolicy{MentionTime: "none", AllowProactive: false},
+	}}
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-quiet', 'char-1', 'web', 'peer-1', '2026-07-18 23:30:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-quiet", "web", "prompt", "request-3")
+	if err != nil || result != nil {
+		t.Fatalf("expected policy suppression without error, result=%#v err=%v", result, err)
+	}
+	if len(entry.requests) != 0 {
+		t.Fatalf("expected final gate to stop before unified entry, got %d requests", len(entry.requests))
+	}
+}
+
+func TestProcessDueActiveMessageTaskDefersWhenTemporalPolicyBlocks(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	entry := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = entry
+	svc.temporalResolver = &fakeProactiveTemporalResolver{snapshot: temporal.Snapshot{
+		Version: temporal.SnapshotVersion,
+		Policy:  temporal.TemporalBehaviorPolicy{MentionTime: "none", AllowProactive: false},
+	}}
+	due := time.Now().Add(-time.Minute).Format("2006-01-02 15:04:05")
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-policy-due', 'char-1', 'web', 'peer-1', ?)", due).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO active_message_settings (character_id, channel) VALUES ('char-1', 'web')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO active_message_task (id, character_id, task_type, due_time, prompt, status) VALUES (3, 'char-1', 'quiet-test', ?, 'prompt', 'PENDING')", due).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result := svc.ProcessDueActiveMessageTasks("char-1")
+	if result["sent"] != 0 || result["delayed"] != 1 {
+		t.Fatalf("expected blocked task to be delayed, got %#v", result)
+	}
+	if len(entry.requests) != 0 {
+		t.Fatalf("expected no unified entry request, got %d", len(entry.requests))
+	}
+	var status string
+	if err := svc.db.Table("active_message_task").Select("status").Where("id = ?", 3).Row().Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "PENDING" {
+		t.Fatalf("expected task to return to pending, got %q", status)
+	}
+	var auditCount int64
+	if err := svc.db.Table("proactive_messages").Where("conversation_id = ?", "conv-policy-due").Count(&auditCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if auditCount != 0 {
+		t.Fatalf("expected no proactive audit row, got %d", auditCount)
 	}
 }

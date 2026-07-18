@@ -10,10 +10,12 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt/textlib"
+	"github.com/u-ai/backend/internal/temporal"
 	"log"
 )
 
 var errProactiveUnifiedEntryMissing = errors.New("proactive unified entry is not configured")
+var errProactiveSuppressed = errors.New("proactive dispatch suppressed")
 
 type proactiveDeliveryScope struct {
 	channel string
@@ -31,7 +33,11 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 	}
 	scope := s.resolveProactiveDeliveryScope(conversationID, channelSetting, characterID)
 
-	timeCtx := ""
+	timeCtx := s.buildResolvedProactiveTimeContext(ctx, scope, characterID)
+	if timeCtx.blocked {
+		log.Printf("[companion] temporal policy blocked proactive dispatch for conversationID=%s", conversationID)
+		return nil, nil
+	}
 	recentCtx := s.buildProactiveRecentContext(conversationID, characterID)
 
 	relCtx := s.buildProactiveRelationshipContext(conversationID, characterID)
@@ -50,13 +56,37 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 		SessionID:                "proactive:" + characterID,
 		IsInternal:               true,
 		ProactiveTaskInstruction: prompt,
-		ProactiveTimeContext:     timeCtx,
+		ProactiveTimeContext:     timeCtx.value,
 		ProactiveRecentContext:   recentCtx,
 		ProactiveRelationship:    relCtx,
 		ProactiveEmotion:         emoCtx,
 		ProactiveMemory:          memCtx,
 	}
 	return s.unifiedEntry.Handle(ctx, req)
+}
+
+type proactiveTimeContext struct {
+	value   string
+	blocked bool
+}
+
+func (s *service) buildResolvedProactiveTimeContext(ctx context.Context, scope proactiveDeliveryScope, characterID string) proactiveTimeContext {
+	if s.temporalResolver == nil {
+		return proactiveTimeContext{value: s.buildProactiveTimeContext()}
+	}
+	snapshot, err := s.temporalResolver.ResolveSnapshot(ctx, temporal.SnapshotInput{
+		UserID:         scope.userID,
+		CharacterID:    characterID,
+		Channel:        scope.channel,
+		DeviceTimezone: temporal.DeviceTimezoneFromContext(ctx),
+	})
+	if err != nil {
+		return proactiveTimeContext{value: s.buildProactiveTimeContext()}
+	}
+	if !snapshot.Policy.AllowProactive {
+		return proactiveTimeContext{blocked: true}
+	}
+	return proactiveTimeContext{value: temporal.RenderSnapshot(snapshot)}
 }
 
 func (s *service) shouldProactivelyMessage(conversationID string) bool {

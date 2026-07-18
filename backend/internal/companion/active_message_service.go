@@ -156,6 +156,9 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
 		return map[string]interface{}{"id": id, "status": "FAILED", "taskType": taskType, "channel": channelSetting, "error": err.Error()}
 	}
+	if result == nil {
+		return map[string]interface{}{"id": id, "status": "SUPPRESSED", "taskType": taskType, "channel": channelSetting}
+	}
 	messageContent := prompt
 	if result != nil && result.Response != nil && result.Response.Reply != "" {
 		messageContent = result.Response.Reply

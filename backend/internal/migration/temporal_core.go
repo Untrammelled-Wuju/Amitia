@@ -2,9 +2,9 @@ package migration
 
 func TemporalCoreMigration() Migration {
 	return Migration{
-		Version:"202607180004",
-		Name:"add_temporal_core",
-		Up:func(s *Step)error{
+		Version: "202607180004",
+		Name:    "add_temporal_core",
+		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS temporal_profiles (
 id TEXT PRIMARY KEY,
 owner_type TEXT NOT NULL,
@@ -100,10 +100,18 @@ source_time_text TEXT NOT NULL DEFAULT '',
 created_at_utc DATETIME NOT NULL,
 updated_at_utc DATETIME NOT NULL
 )`)
-			if err:=s.CreateIndex("idx_temporal_anchor_scope","temporal_anchors",[]string{"user_id","character_id","status"},false);err!=nil{return err}
-			if err:=s.CreateIndex("idx_temporal_anchor_next","temporal_anchors",[]string{"next_occurrence_at_utc"},false);err!=nil{return err}
-			if err:=s.CreateIndex("idx_temporal_event_scope_time","temporal_events",[]string{"user_id","character_id","occurred_at_utc"},false);err!=nil{return err}
-			if err:=s.CreateIndex("idx_memory_temporal_occurred","memory_temporal_metadata",[]string{"occurred_at_utc"},false);err!=nil{return err}
+			if err := s.CreateIndex("idx_temporal_anchor_scope", "temporal_anchors", []string{"user_id", "character_id", "status"}, false); err != nil {
+				return err
+			}
+			if err := s.CreateIndex("idx_temporal_anchor_next", "temporal_anchors", []string{"next_occurrence_at_utc"}, false); err != nil {
+				return err
+			}
+			if err := s.CreateIndex("idx_temporal_event_scope_time", "temporal_events", []string{"user_id", "character_id", "occurred_at_utc"}, false); err != nil {
+				return err
+			}
+			if err := s.CreateIndex("idx_memory_temporal_occurred", "memory_temporal_metadata", []string{"occurred_at_utc"}, false); err != nil {
+				return err
+			}
 			return nil
 		},
 	}

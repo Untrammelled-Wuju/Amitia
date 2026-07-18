@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*OrchestrationResult, error) {
@@ -109,12 +110,19 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	defer cancel()
 	o.cancels.Register(record.ID, cancel)
 	defer o.cancels.Unregister(record.ID)
+	processCtx = temporal.ContextWithDeviceTimezone(processCtx, req.DeviceTimezone)
+	preparedRelationshipTime, prepareErr := o.prepareRelationshipTime(processCtx, record, req)
+	if prepareErr != nil {
+		log.Printf("[orchestrator] relationship-time prepare unavailable interaction=%s: %v", record.ID, prepareErr)
+	}
 	runtime := o.pipeline.Assemble(processCtx, scope, req)
+	o.attachRelationshipTime(&runtime, preparedRelationshipTime)
 	runtime.ExecutorID = executorIDForProcessor(o.processor)
 	if updated, err := o.tracker.UpdateMetadata(ctx, record.ID, metadataFromRuntime(runtime, processCtx)); err == nil {
 		record = updated
 	} else {
 		o.tracker.Fail(ctx, record.ID, record.StatusVersion, "metadata_update_failed", err.Error())
+		o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "metadata_update_failed")
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 	req.InteractionID, req.Runtime = record.ID, &runtime
@@ -122,6 +130,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		record = next
 	} else {
 		o.tracker.Fail(ctx, record.ID, record.StatusVersion, "context_ready_failed", err.Error())
+		o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "context_ready_failed")
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 	req.ExpectedStatusVersion = record.StatusVersion
@@ -133,8 +142,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "safety_blocked", blockErr.Error()); failErr == nil {
 			record = failed
 		} else {
+			o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "safety_blocked")
 			return o.buildResult(record, nil, OutcomeFailed, failErr), failErr
 		}
+		o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "safety_blocked")
 		return o.buildResult(record, nil, OutcomeFailed, blockErr), blockErr
 	}
 	start := time.Now()
@@ -168,9 +179,11 @@ func (o *Orchestrator) handleProcessorError(ctx context.Context, record *Interac
 	if errors.Is(procErr, context.Canceled) || errors.Is(procErr, context.DeadlineExceeded) {
 		record.CancelReason = procErr.Error()
 		if cancelErr := o.tracker.RequestCancel(ctx, record.ID, procErr.Error()); cancelErr != nil {
+			o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "processor_cancelled")
 			return o.buildResult(record, nil, OutcomeFailed, cancelErr), cancelErr
 		}
 		if fresh, ok, getErr := o.tracker.Get(ctx, record.ID); getErr != nil {
+			o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "processor_cancelled")
 			return o.buildResult(record, nil, OutcomeFailed, getErr), getErr
 		} else if ok {
 			record = fresh
@@ -178,11 +191,13 @@ func (o *Orchestrator) handleProcessorError(ctx context.Context, record *Interac
 		if cancelled, failErr := o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusCancelled); failErr == nil {
 			record = cancelled
 		}
+		o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "processor_cancelled")
 		return o.buildResult(record, nil, OutcomeCancelled, procErr), procErr
 	}
 	record.SetError(procErr.Error())
 	if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "processor_failed", procErr.Error()); failErr == nil {
 		record = failed
 	}
+	o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "processor_failed")
 	return o.buildResult(record, nil, OutcomeFailed, procErr), procErr
 }

@@ -131,14 +131,15 @@ type RelationshipDimensions struct {
 type RelationshipEventType string
 
 const (
-	EventTypePositiveInteraction RelationshipEventType = "positive_interaction"
-	EventTypeNegativeInteraction RelationshipEventType = "negative_interaction"
-	EventTypeRepairEffort        RelationshipEventType = "repair_effort"
-	EventTypeRupture             RelationshipEventType = "rupture"
-	EventTypeBoundaryCrossing    RelationshipEventType = "boundary_crossing"
-	EventTypeWithdrawal          RelationshipEventType = "withdrawal"
-	EventTypeVulnerabilityShare  RelationshipEventType = "vulnerability_share"
-	EventTypeNeutralInteraction  RelationshipEventType = "neutral_interaction"
+	EventTypePositiveInteraction  RelationshipEventType = "positive_interaction"
+	EventTypeNegativeInteraction  RelationshipEventType = "negative_interaction"
+	EventTypeRepairEffort         RelationshipEventType = "repair_effort"
+	EventTypeRupture              RelationshipEventType = "rupture"
+	EventTypeBoundaryCrossing     RelationshipEventType = "boundary_crossing"
+	EventTypeWithdrawal           RelationshipEventType = "withdrawal"
+	EventTypeVulnerabilityShare   RelationshipEventType = "vulnerability_share"
+	EventTypeNeutralInteraction   RelationshipEventType = "neutral_interaction"
+	EventTypeTemporalReengagement RelationshipEventType = "temporal_reengagement"
 )
 
 type RelationshipEvent struct {

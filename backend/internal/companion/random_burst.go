@@ -4,6 +4,7 @@ package companion
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -251,6 +252,9 @@ func (s *service) persistAndDeliverContext(ctx context.Context, characterID, msg
 	if err != nil {
 		return err
 	}
+	if result == nil {
+		return errProactiveSuppressed
+	}
 	messageContent := content
 	if result != nil && result.Response != nil && result.Response.Reply != "" {
 		messageContent = result.Response.Reply
@@ -336,6 +340,9 @@ func (s *service) RandomBurstTriggerContext(ctx context.Context, characterID str
 	}
 
 	if err := s.persistAndDeliverContext(ctx, characterID, msgID, convID, prompt, now); err != nil {
+		if errors.Is(err, errProactiveSuppressed) {
+			return map[string]interface{}{"triggered": false, "reason": "suppressed"}
+		}
 		return map[string]interface{}{"triggered": false, "reason": "dispatchFailed", "error": err.Error()}
 	}
 

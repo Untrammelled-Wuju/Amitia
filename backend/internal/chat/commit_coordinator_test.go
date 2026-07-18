@@ -149,7 +149,7 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 		t.Fatalf("expected exactly 1 psyche_event, got %d", psycheEvents)
 	}
 	var relationship RelationshipStateRecord
-	if err := db.Where("character_id = ? AND relation_type = ?", "char-commit", "peer:peer-commit").Take(&relationship).Error; err != nil {
+	if err := db.Where("character_id = ? AND relation_type = ? AND channel = ?", "char-commit", "user_character", "*").Take(&relationship).Error; err != nil {
 		t.Fatal(err)
 	}
 	var relationData map[string]float64

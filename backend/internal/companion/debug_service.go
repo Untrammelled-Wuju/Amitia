@@ -230,6 +230,12 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 			}
 			continue
 		}
+		if dispatchResult == nil {
+			newDue := now.Add(30 * time.Minute).Format("2006-01-02 15:04:05")
+			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, id, characterID)
+			delayed++
+			continue
+		}
 		taskType, _ := t["task_type"].(string)
 		messageContent := prompt
 		if dispatchResult != nil && dispatchResult.Response != nil && dispatchResult.Response.Reply != "" {

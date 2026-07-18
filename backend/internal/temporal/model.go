@@ -14,7 +14,7 @@ const (
 	TimezoneNarrative    = "narrative"
 	DefaultTimezone      = "Asia/Shanghai"
 	SnapshotVersion      = "temporal-snapshot-v1"
-	DefaultUserOwnerID   = "local-user"
+	DefaultUserOwnerID   = "default"
 )
 
 type Profile struct {
@@ -31,7 +31,7 @@ type Profile struct {
 	DaypartConfigJSON      string    `gorm:"column:daypart_config_json" json:"daypartConfigJson"`
 	QuietHoursJSON         string    `gorm:"column:quiet_hours_json" json:"quietHoursJson"`
 	AutoDetectTimezone     bool      `gorm:"column:auto_detect_timezone" json:"autoDetectTimezone"`
-	TravelMode            bool      `gorm:"column:travel_mode" json:"travelMode"`
+	TravelMode             bool      `gorm:"column:travel_mode" json:"travelMode"`
 	AwarenessLevel         int       `gorm:"column:awareness_level" json:"awarenessLevel"`
 	Source                 string    `gorm:"column:source" json:"source"`
 	Confidence             int       `gorm:"column:confidence" json:"confidence"`
@@ -48,6 +48,29 @@ type Profile struct {
 }
 
 func (Profile) TableName() string { return "temporal_profiles" }
+
+type ProfilePatch struct {
+	TimezoneMode           *string `json:"timezoneMode"`
+	Timezone               *string `json:"timezone"`
+	Locale                 *string `json:"locale"`
+	CalendarSystem         *string `json:"calendarSystem"`
+	WeekStart              *int    `json:"weekStart"`
+	HolidayRegion          *string `json:"holidayRegion"`
+	Hemisphere             *string `json:"hemisphere"`
+	DaypartConfigJSON      *string `json:"daypartConfigJson"`
+	QuietHoursJSON         *string `json:"quietHoursJson"`
+	AutoDetectTimezone     *bool   `json:"autoDetectTimezone"`
+	TravelMode             *bool   `json:"travelMode"`
+	AwarenessLevel         *int    `json:"awarenessLevel"`
+	Source                 *string `json:"source"`
+	Confidence             *int    `json:"confidence"`
+	Enabled                *bool   `json:"enabled"`
+	HolidayAwareness       *bool   `json:"holidayAwareness"`
+	DaypartAwareness       *bool   `json:"daypartAwareness"`
+	AnniversaryAwareness   *bool   `json:"anniversaryAwareness"`
+	MemoryResonance        *bool   `json:"memoryResonance"`
+	AllowSharedDateMention *bool   `json:"allowSharedDateMention"`
+}
 
 type Anchor struct {
 	ID                    string     `gorm:"column:id;primaryKey" json:"id"`
@@ -147,9 +170,12 @@ type AnchorOccurrence struct {
 }
 
 type TemporalSignals struct {
-	TimezoneDiffers bool `json:"timezoneDiffers"`
-	QuietHours      bool `json:"quietHours"`
-	DayChanged      bool `json:"dayChanged"`
+	TimezoneDiffers        bool   `json:"timezoneDiffers"`
+	QuietHours             bool   `json:"quietHours"`
+	DayChanged             bool   `json:"dayChanged"`
+	UserTimezoneSource     string `json:"userTimezoneSource"`
+	UserTimezoneConfidence int    `json:"userTimezoneConfidence"`
+	UserTimezoneConfirmed  bool   `json:"userTimezoneConfirmed"`
 }
 
 type TemporalBehaviorPolicy struct {
@@ -163,7 +189,7 @@ type Snapshot struct {
 	NowUTC           time.Time                `json:"nowUtc"`
 	UserTime         CivilTimeSnapshot        `json:"userTime"`
 	CharacterTime    CivilTimeSnapshot        `json:"characterTime"`
-	RelationshipTime interface{}              `json:"relationshipTime,omitempty"`
+	RelationshipTime *RelationshipTimeContext `json:"relationshipTime,omitempty"`
 	Schedule         ScheduleTemporalSnapshot `json:"schedule"`
 	CalendarEvents   []CalendarEvent          `json:"calendarEvents,omitempty"`
 	SalientAnchors   []AnchorOccurrence       `json:"salientAnchors"`
@@ -173,9 +199,10 @@ type Snapshot struct {
 }
 
 type SnapshotInput struct {
-	UserID      string
-	CharacterID string
-	Channel     string
+	UserID         string
+	CharacterID    string
+	Channel        string
+	DeviceTimezone string
 }
 
 type NarrativeClockInput struct {

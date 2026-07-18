@@ -127,7 +127,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx, graphSvc)
-	memory.SetTemporalMemoryReranker(memSvc, temporalSvc)
 	profRepo := profile.NewRepository(ctx)
 	profSvc := profile.NewService(profRepo, ctx, graphSvc)
 	epiRepo := episodic.NewRepository(ctx)
@@ -137,6 +136,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	visionRepo := vision.NewRepository(ctx.DB)
 	visionSvc := vision.NewService(visionRepo)
 	compSvc := companion.NewService(ctx)
+	compSvc.AttachTemporalResolver(temporalSvc)
 	compressor := chat.NewCompressor(ctx.DB)
 	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
 	if err := psycheStore.InitSchema(); err != nil {

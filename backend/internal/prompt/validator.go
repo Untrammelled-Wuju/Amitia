@@ -57,6 +57,18 @@ func (v *Validator) ValidateIR(ir GwIR) error {
 			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeDataOnly {
 				return fmt.Errorf("temporal context must be trusted data_only: %s", s.ID)
 			}
+		case GwSectionRelationshipTime:
+			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeDataOnly {
+				return fmt.Errorf("relationship time must be trusted data_only: %s", s.ID)
+			}
+			if s.Source != "temporal-runtime" || s.Priority != 440 || s.TokenBudget < 120 || s.TokenBudget > 180 {
+				return fmt.Errorf("relationship time metadata is invalid: %s", s.ID)
+			}
+			for _, required := range []string{"当前任务优先", "不得责备用户", "索取离线解释", "暗示用户亏欠"} {
+				if !strings.Contains(s.Content, required) {
+					return fmt.Errorf("relationship time policy is incomplete: %s", s.ID)
+				}
+			}
 		}
 	}
 

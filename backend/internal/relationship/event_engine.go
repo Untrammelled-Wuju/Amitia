@@ -151,6 +151,8 @@ func computeEventImpacts(dims RelationshipDimensions, event RelationshipEvent, w
 		return []EventImpact{
 			{Dimension: "intimacy", Delta: clampDeltaEvent(1.5*weight, singleCap), Reason: string(EventTypeNeutralInteraction)},
 		}
+	case EventTypeTemporalReengagement:
+		return nil
 	default:
 		return nil
 	}

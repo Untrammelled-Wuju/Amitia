@@ -22,9 +22,13 @@ func ComputeNarrative(dims RelationshipDimensions, events []RelationshipEvent) N
 	negatives := 0
 	ruptures := 0
 	repairs := 0
-	total := len(events)
+	total := 0
 
 	for _, e := range events {
+		if e.Type == EventTypeTemporalReengagement {
+			continue
+		}
+		total++
 		switch e.Type {
 		case EventTypePositiveInteraction, EventTypeVulnerabilityShare:
 			positives++
@@ -36,6 +40,9 @@ func ComputeNarrative(dims RelationshipDimensions, events []RelationshipEvent) N
 		case EventTypeRepairEffort:
 			repairs++
 		}
+	}
+	if total == 0 {
+		return DefaultNarrative()
 	}
 
 	trust := dims.Trust.Value / 100

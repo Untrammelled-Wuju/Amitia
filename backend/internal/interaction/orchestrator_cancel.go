@@ -36,8 +36,11 @@ func (o *Orchestrator) Cancel(interactionID string) error {
 	}
 	_, err = o.tracker.TransitionCAS(ctx, fresh.ID, fresh.StatusVersion, InteractionStatusCancelled)
 	if err != nil {
-		return o.resolveCancelConflict(ctx, interactionID, err)
+		if resolveErr := o.resolveCancelConflict(ctx, interactionID, err); resolveErr != nil {
+			return resolveErr
+		}
 	}
+	o.releaseRelationshipClaimIfUncommitted(ctx, interactionID, "cancelled")
 	return nil
 }
 
@@ -72,6 +75,7 @@ func (o *Orchestrator) CancelByScope(scope InteractionScope) int {
 				log.Printf("[orchestrator] cancel transition failed: %v", resolveErr)
 			}
 		}
+		o.releaseRelationshipClaimIfUncommitted(ctx, rec.ID, "scope_cancelled")
 	}
 	return count
 }
@@ -93,6 +97,7 @@ func (o *Orchestrator) supersedeTarget(ctx context.Context, targetID, newID stri
 		return err
 	}
 	o.cancels.Cancel(targetID)
+	o.releaseRelationshipClaimIfUncommitted(ctx, targetID, "superseded")
 	return nil
 }
 

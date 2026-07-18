@@ -93,16 +93,7 @@ func shouldCommitRuntime(req *ProcessMessageRequest) bool {
 }
 
 func relationshipTypeForRequest(req *ProcessMessageRequest) string {
-	if req == nil {
-		return "channel:unknown"
-	}
-	if peer := strings.TrimSpace(req.PeerID); peer != "" {
-		return "peer:" + peer
-	}
-	if channel := strings.TrimSpace(req.Channel); channel != "" {
-		return "channel:" + channel
-	}
-	return "channel:web"
+	return "user_character"
 }
 
 func userIDForRequest(req *ProcessMessageRequest) string {
@@ -113,8 +104,5 @@ func userIDForRequest(req *ProcessMessageRequest) string {
 }
 
 func channelForRequest(req *ProcessMessageRequest) string {
-	if req != nil && strings.TrimSpace(req.Channel) != "" {
-		return req.Channel
-	}
-	return "web"
+	return "*"
 }

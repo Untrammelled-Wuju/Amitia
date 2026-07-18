@@ -74,6 +74,7 @@ func DefaultMigrations() []Migration {
 		EmotesMigration(),
 		MessagePlanMigration(),
 		TemporalCoreMigration(),
+		TemporalRelationshipTimeMigration(),
 		MCPClientMigration(),
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 type Handler struct{ service *Service }
@@ -20,12 +21,12 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdateUserProfile(c *gin.Context) {
-	var input Profile
+	var input ProfilePatch
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "时间设置格式无效"})
 		return
 	}
-	profile, err := h.service.SaveProfile(c.Request.Context(), OwnerUser, apiUserID(c), input)
+	profile, err := h.service.PatchProfile(c.Request.Context(), OwnerUser, apiUserID(c), input)
 	h.respond(c, profile, err)
 }
 
@@ -35,22 +36,22 @@ func (h *Handler) GetCharacterProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdateCharacterProfile(c *gin.Context) {
-	var input Profile
+	var input ProfilePatch
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "角色时间设置格式无效"})
 		return
 	}
-	profile, err := h.service.SaveProfile(c.Request.Context(), OwnerCharacter, c.Param("characterId"), input)
+	profile, err := h.service.PatchProfile(c.Request.Context(), OwnerCharacter, c.Param("characterId"), input)
 	h.respond(c, profile, err)
 }
 
 func (h *Handler) GetSnapshot(c *gin.Context) {
-	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), SnapshotInput{UserID: apiUserID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel"))})
+	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), snapshotInput(c))
 	h.respond(c, snapshot, err)
 }
 
 func (h *Handler) GetDiagnostics(c *gin.Context) {
-	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), SnapshotInput{UserID: apiUserID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel"))})
+	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), snapshotInput(c))
 	if err != nil {
 		h.respond(c, nil, err)
 		return
@@ -117,7 +118,7 @@ func (h *Handler) Recompute(c *gin.Context) {
 		h.respond(c, nil, err)
 		return
 	}
-	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), SnapshotInput{UserID: apiUserID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel"))})
+	snapshot, err := h.service.ResolveSnapshot(c.Request.Context(), snapshotInput(c))
 	h.respond(c, gin.H{"snapshot": snapshot, "recomputedAnchors": recomputed, "processed": processed}, err)
 }
 
@@ -164,29 +165,9 @@ func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
 }
 
 func apiUserID(c *gin.Context) string {
-	if value, exists := c.Get("userID"); exists {
-		return strings.TrimSpace(toString(value))
-	}
-	if value, exists := c.Get("user_id"); exists {
-		return strings.TrimSpace(toString(value))
-	}
-	if value := strings.TrimSpace(c.GetHeader("X-User-ID")); value != "" {
-		return value
-	}
-	return DefaultUserOwnerID
+	return requestidentity.ResolveGin(c, "")
 }
 
-func toString(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case int:
-		return strconv.Itoa(v)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case float64:
-		return strconv.FormatInt(int64(v), 10)
-	default:
-		return ""
-	}
+func snapshotInput(c *gin.Context) SnapshotInput {
+	return SnapshotInput{UserID: apiUserID(c), CharacterID: strings.TrimSpace(c.Query("characterId")), Channel: strings.TrimSpace(c.Query("channel")), DeviceTimezone: strings.TrimSpace(c.GetHeader("X-Device-Timezone"))}
 }

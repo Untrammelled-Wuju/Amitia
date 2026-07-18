@@ -103,6 +103,7 @@ type UnifiedEntryRequest struct {
 	Message                  string          `json:"message"`
 	PeerID                   string          `json:"peerId,omitempty"`
 	UserID                   string          `json:"userId,omitempty"`
+	DeviceTimezone           string          `json:"deviceTimezone,omitempty"`
 	Source                   string          `json:"source,omitempty"`
 	ProactiveTaskInstruction string          `json:"-"`
 	ProactiveTimeContext     string          `json:"-"`
@@ -194,6 +195,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		Source:                   resolution.Source,
 		PeerID:                   resolution.Scope.PeerID,
 		UserID:                   resolution.Scope.UserID,
+		DeviceTimezone:           req.DeviceTimezone,
 		SessionID:                resolution.Scope.SessionID,
 		RequestID:                requestID,
 		AudioUrl:                 req.AudioUrl,

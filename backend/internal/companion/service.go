@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -72,11 +73,16 @@ type Service interface {
 	RandomBurstTrigger(characterID string) map[string]interface{}
 	RandomBurstTriggerContext(ctx context.Context, characterID string) map[string]interface{}
 	AttachUnifiedEntry(entry *interaction.UnifiedEntry)
+	AttachTemporalResolver(resolver ProactiveTemporalResolver)
 	AttachDeliveryStore(store *delivery.SQLiteDeliveryStore)
 }
 
 type proactiveUnifiedEntry interface {
 	Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error)
+}
+
+type ProactiveTemporalResolver interface {
+	ResolveSnapshot(ctx context.Context, input temporal.SnapshotInput) (temporal.Snapshot, error)
 }
 
 type service struct {
@@ -85,6 +91,7 @@ type service struct {
 	burstMu                  sync.Mutex
 	burstScopes              map[string]burstScopeState
 	unifiedEntry             proactiveUnifiedEntry
+	temporalResolver         ProactiveTemporalResolver
 	deliveryStore            *delivery.SQLiteDeliveryStore
 	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
 }
@@ -100,6 +107,10 @@ func NewService(ctx *app.AppContext) Service {
 
 func (s *service) AttachUnifiedEntry(entry *interaction.UnifiedEntry) {
 	s.unifiedEntry = entry
+}
+
+func (s *service) AttachTemporalResolver(resolver ProactiveTemporalResolver) {
+	s.temporalResolver = resolver
 }
 
 func (s *service) AttachDeliveryStore(store *delivery.SQLiteDeliveryStore) {
