@@ -17,7 +17,7 @@ type processPromptInput struct {
 	AgentSkillCatalogIncluded                                                                                                                                                                                                            bool
 	AgentSkillTrace                                                                                                                                                                                                                      []promptir.AgentSkillTrace
 	StyleInstruction, TemporalContext, ProactiveScene, ProactiveTimeContext, ProactiveRecentContext, ProactivePersonality, ProactiveRelationship, ProactiveEmotion, ProactiveMemory, SystemPrompt, ProactiveTaskInstruction, UserContent string
-	RelationshipTimeContext                                                                                                                                                                                                               string
+	RelationshipTimeContext                                                                                                                                                                                                              string
 }
 
 func buildProcessPromptMessages(input processPromptInput) ([]map[string]interface{}, *promptir.PromptTrace) {

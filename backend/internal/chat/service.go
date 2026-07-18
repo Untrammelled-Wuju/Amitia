@@ -17,10 +17,10 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
+	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
@@ -98,22 +98,22 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 	"不能使用markdown格式。"
 
 type service struct {
-	repo          Repository
-	charRepo      character.Repository
-	db            *gorm.DB
-	psycheStore   psyche.PsycheStore
-	memorySvc     memory.Service
-	profileSvc    profile.Service
-	episodicSvc   episodic.Service
-	worldBookSvc  worldbook.Service
-	wmCache       *WorkingMemoryCache
-	stateProvider *ConversationStateProvider
-	compressor    *Compressor
-	pipeline      *memory.Pipeline
-	llmWithTools  llmWithToolsFunc
-	outboxStore   OutboxStore
-	deliveryStore DeliveryStore
-	skillRuntime  *extension.Runtime
+	repo               Repository
+	charRepo           character.Repository
+	db                 *gorm.DB
+	psycheStore        psyche.PsycheStore
+	memorySvc          memory.Service
+	profileSvc         profile.Service
+	episodicSvc        episodic.Service
+	worldBookSvc       worldbook.Service
+	wmCache            *WorkingMemoryCache
+	stateProvider      *ConversationStateProvider
+	compressor         *Compressor
+	pipeline           *memory.Pipeline
+	llmWithTools       llmWithToolsFunc
+	outboxStore        OutboxStore
+	deliveryStore      DeliveryStore
+	skillRuntime       *extension.Runtime
 	relTimeCoordinator *temporal.RelationshipTimeCoordinator
 }
 

@@ -236,14 +236,14 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 				if err := s.updateRelationshipStateTx(tx, plan); err != nil {
 					return err
 				}
-			if err := s.updateNeedStateTx(tx, plan); err != nil {
-				return err
+				if err := s.updateNeedStateTx(tx, plan); err != nil {
+					return err
+				}
+				if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
+					return err
+				}
 			}
-			if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
-				return err
-			}
-		}
-		events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
+			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
 			if err != nil {
 				return err
 			}
