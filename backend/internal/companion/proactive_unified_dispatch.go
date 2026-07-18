@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt/textlib"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/temporal"
 	"log"
 )
@@ -397,11 +398,7 @@ func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, 
 		scope.channel = normalizeProactiveChannel(channel)
 	}
 	scope.peerID = strings.TrimSpace(peerID)
-	if trimmedPeerID := strings.TrimSpace(peerID); trimmedPeerID != "" {
-		scope.userID = trimmedPeerID
-	} else {
-		scope.userID = "character:" + strings.TrimSpace(characterID)
-	}
+	scope.userID = requestidentity.DefaultUserID
 	if scope.channel == "" {
 		scope.channel = "web"
 	}

@@ -266,7 +266,8 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	relationshipTimeContext := ""
 	if req.Runtime != nil && req.Runtime.Context.Temporal.Status == interaction.LoadStatusReady && req.Runtime.Context.Temporal.Value.RelationshipTime != nil {
-		policy := temporal.ResolveRelationshipTimePolicy(*req.Runtime.Context.Temporal.Value.RelationshipTime, req.Message, false)
+		rtSettings, _ := s.relTimeCoordinator.GetSettings(ctx, charID)
+		policy := temporal.ResolveRelationshipTimePolicy(*req.Runtime.Context.Temporal.Value.RelationshipTime, req.Message, false, rtSettings)
 		relationshipTimeContext = temporal.RenderRelationshipTime(*req.Runtime.Context.Temporal.Value.RelationshipTime, policy)
 	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{

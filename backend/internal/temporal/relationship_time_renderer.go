@@ -50,7 +50,10 @@ func DefaultRelationshipTimePolicy(level ReunionLevel) RelationshipTimePolicy {
 	return policy
 }
 
-func ResolveRelationshipTimePolicy(value RelationshipTimeContext, message string, taskLike bool) RelationshipTimePolicy {
+func ResolveRelationshipTimePolicy(value RelationshipTimeContext, message string, taskLike bool, settings *RelationshipTimeSettings) RelationshipTimePolicy {
+	if settings != nil && !settings.Enabled {
+		return RelationshipTimePolicy{MentionMode: ReunionMentionNone, SuppressionReason: "feature_disabled_by_settings"}
+	}
 	if value.Reunion == nil {
 		return RelationshipTimePolicy{MentionMode: ReunionMentionNone, FamiliarityExpression: value.ContinuityScore, SuppressionReason: "no_reunion"}
 	}
@@ -80,6 +83,7 @@ func ResolveRelationshipTimePolicy(value RelationshipTimeContext, message string
 		policy.MaxMentionSentences = 0
 		policy.SuppressionReason = "recent_proactive_contact"
 	}
+	policy = applySettingsToPolicy(policy, settings)
 	return policy
 }
 
