@@ -57,7 +57,7 @@ const emit = defineEmits<{
 .health-module-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .health-module-item {
   min-height: 54px;
-  background: var(--console-card-soft);
+  background: var(--ac-color-surface);
   border-radius: 9px;
   padding: 12px 14px;
   border: 1px solid var(--console-border-soft);

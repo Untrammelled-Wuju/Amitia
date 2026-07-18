@@ -149,7 +149,6 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	}
 
 	scope := s.resolveProactiveDeliveryScope(convID, channelSetting, characterID)
-	userID := scope.userID
 
 	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id))
 	if err != nil {
@@ -173,17 +172,16 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	}
 
 	var deliveryID string
-	if s.deliveryStore != nil && interactionID != "" {
-		lease := delivery.NewOutputLease(interactionID, characterID, userID, scope.channel)
-		_ = s.deliveryStore.CreateLease(lease)
-
-		intent := delivery.NewDeliveryIntent(interactionID, scope.channel, scope.peerID, "text/plain", []byte(messageContent))
-		if err := s.deliveryStore.CreateIntent(intent); err == nil {
-			deliveryID = intent.ID
+	if result != nil && result.Response != nil && result.Response.MessagePlan != nil && result.Response.MessagePlan.Managed {
+		messagePlan := result.Response.MessagePlan
+		if scope.channel != "web" && messagePlan.ResponseGroupID != "" && scope.peerID != "" {
+			for _, item := range messagePlan.Items {
+				if item.MessageID != "" {
+					deliveryID = delivery.GenerateDeliveryID(messagePlan.ResponseGroupID, scope.channel, scope.peerID, item.MessageID)
+					break
+				}
+			}
 		}
-	}
-	if deliveryID == "" {
-		deliveryID = "di-proactive-fallback"
 	}
 
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)

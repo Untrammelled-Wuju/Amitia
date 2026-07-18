@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -252,5 +253,70 @@ func TestCountTodayProactiveMessagesUsesCharacterConversationScope(t *testing.T)
 	}
 	if got := svc.countTodayProactiveMessages("char-2", "2026-07-02"); got != 2 {
 		t.Fatalf("expected char-2 count 2, got %d", got)
+	}
+}
+
+
+func TestRunActiveMessageTaskDoesNotCreateExtraDeliveryIntents(t *testing.T) {
+	svc := setupCompanionScopeService(t)
+	deliveryDB, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "delivery.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := deliveryDB.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		sqlDB.Close()
+	})
+	deliveryStore := delivery.NewSQLiteDeliveryStore(deliveryDB)
+	if err := deliveryStore.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	svc.deliveryStore = deliveryStore
+
+	fake := &fakeProactiveUnifiedEntry{}
+	svc.unifiedEntry = fake
+	if err := svc.db.Exec("INSERT INTO conversations (id, character_id, channel, peer_id, updated_at) VALUES ('conv-wechat', 'char-1', 'wechat', 'peer-wechat', '2026-07-01 10:00:00')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO active_message_settings (character_id, channel) VALUES ('char-1', 'wechat')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.Exec("INSERT INTO active_message_task (id, character_id, task_type, due_time, prompt, status) VALUES (1, 'char-1', 'morning_share', '2026-07-01 08:00:00', '早安', 'PENDING')").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result := svc.RunActiveMessageTask(1, "char-1")
+	if result["status"] != "QUEUED" {
+		t.Fatalf("expected QUEUED, got %#v", result)
+	}
+	if len(fake.requests) != 1 {
+		t.Fatalf("expected one unified entry request, got %d", len(fake.requests))
+	}
+
+	var intentCount int64
+	if err := deliveryDB.Table("delivery_intents").Count(&intentCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if intentCount != 0 {
+		t.Fatalf("expected 0 extra delivery_intents created by companion layer, got %d", intentCount)
+	}
+
+	var leaseCount int64
+	if err := deliveryDB.Table("output_leases").Count(&leaseCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if leaseCount != 0 {
+		t.Fatalf("expected 0 extra output_leases created by companion layer, got %d", leaseCount)
+	}
+
+	var proactiveCount int64
+	if err := svc.db.Table("proactive_messages").Count(&proactiveCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if proactiveCount != 1 {
+		t.Fatalf("expected 1 proactive_messages audit record, got %d", proactiveCount)
 	}
 }

@@ -222,7 +222,6 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 	leasedUntil := now.Add(60 * time.Second).Format("2006-01-02 15:04:05")
 	nowStr := now.Format("2006-01-02 15:04:05")
 	owner := "delivery-worker"
-	token := generateDeliveryLeaseToken()
 
 	var models []DeliveryIntentModel
 	err := s.db.Where("(status = ? OR (status = ? AND (next_retry IS NULL OR next_retry = '' OR next_retry <= ?))) AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
@@ -234,6 +233,7 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 
 	intents := make([]DeliveryIntent, 0, len(models))
 	for _, m := range models {
+		token := generateDeliveryLeaseToken()
 		res := s.db.Model(&DeliveryIntentModel{}).Where("id = ? AND status IN ? AND (lease_until IS NULL OR lease_until = '' OR lease_until <= ?)",
 			m.ID, []string{string(DeliveryStatusPending), string(DeliveryStatusRetry)}, nowStr).
 			Updates(map[string]interface{}{
@@ -247,19 +247,28 @@ func (s *SQLiteDeliveryStore) ClaimNextIntents(batchSize int) ([]DeliveryIntent,
 		}
 		intent := modelToIntent(&m)
 		intent.Status = DeliveryStatusLeased
+		intent.LeaseOwner = owner
+		intent.LeaseToken = token
+		leaseUntilTime := now.Add(60 * time.Second)
+		intent.LeaseUntil = &leaseUntilTime
 		intents = append(intents, *intent)
 	}
 	return intents, nil
 }
 
-func (s *SQLiteDeliveryStore) MarkSent(id string) error {
+func (s *SQLiteDeliveryStore) MarkSent(id, leaseToken string) error {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	res := s.db.Model(&DeliveryIntentModel{}).
-		Where("id = ? AND status = ?",
-			id, string(DeliveryStatusLeased)).
+		Where("id = ? AND status = ? AND lease_token = ?",
+			id, string(DeliveryStatusLeased), leaseToken).
 		Updates(map[string]interface{}{
-			"status":  string(DeliveryStatusSent),
-			"sent_at": now,
+			"status":      string(DeliveryStatusSent),
+			"sent_at":     now,
+			"last_error":  "",
+			"lease_owner": "",
+			"lease_token": "",
+			"lease_until": "",
+			"next_retry":  "",
 		})
 	if res.Error != nil {
 		return res.Error
@@ -287,13 +296,13 @@ func (s *SQLiteDeliveryStore) MarkDelivered(id string) error {
 	return nil
 }
 
-func (s *SQLiteDeliveryStore) MarkFailed(id, errMsg string) error {
+func (s *SQLiteDeliveryStore) MarkFailed(id, leaseToken, errMsg string) error {
 	now := time.Now().UTC()
 	nowStr := now.Format("2006-01-02 15:04:05")
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var m DeliveryIntentModel
-		if err := tx.Where("id = ? AND status = ? AND lease_until > ?",
-			id, string(DeliveryStatusLeased), nowStr).Take(&m).Error; err != nil {
+		if err := tx.Where("id = ? AND status = ? AND lease_token = ? AND lease_until > ?",
+			id, string(DeliveryStatusLeased), leaseToken, nowStr).Take(&m).Error; err != nil {
 			return errors.New("lease conflict or expired")
 		}
 		newCount := m.RetryCount + 1
@@ -303,7 +312,7 @@ func (s *SQLiteDeliveryStore) MarkFailed(id, errMsg string) error {
 		}
 		nextRetry := now.Add(time.Duration(newCount) * 2 * time.Second).Format("2006-01-02 15:04:05")
 		res := tx.Model(&DeliveryIntentModel{}).
-			Where("id = ? AND status = ?", id, string(DeliveryStatusLeased)).
+			Where("id = ? AND status = ? AND lease_token = ?", id, string(DeliveryStatusLeased), leaseToken).
 			Updates(map[string]interface{}{
 				"status":      string(newStatus),
 				"retry_count": newCount,

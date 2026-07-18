@@ -308,16 +308,22 @@ app.post("/api/login/reconnect", async (_req, reply) => {
 // Send message
 app.post("/api/send", async (req, reply) => {
   try {
-    const body = req.body as { toUserId?: string; text?: string; contextToken?: string }
+    const body = req.body as { toUserId?: string; text?: string; contextToken?: string; deliveryKey?: string }
     if (!body.toUserId || !body.text) {
       return reply.status(422).send({
         success: false,
         message: "toUserId and text are required",
       })
     }
+    const deliveryKey = body.deliveryKey || ""
+    const idempotencyKey = (req.headers["idempotency-key"] as string) || ""
+    if (deliveryKey && idempotencyKey && deliveryKey !== idempotencyKey) {
+      return reply.status(409).send({ success: false, message: "deliveryKey and Idempotency-Key mismatch" })
+    }
+    const effectiveKey = deliveryKey || idempotencyKey
     const ctxToken = body.contextToken || contextTokenCache.get(body.toUserId) || ""
-    await manager.sendTextMessage(body.toUserId, body.text, ctxToken)
-    return reply.send({ success: true, message: "Sent" })
+    const result = await manager.sendTextMessage(body.toUserId, body.text, ctxToken, effectiveKey || undefined)
+    return reply.send({ success: true, message: "Sent", duplicate: result.duplicate, deliveryKey: effectiveKey || "" })
   } catch (err: any) { console.error("[Sidecar]", err); return reply.status(500).send({ success: false, message: "服务器错误" })
   }
 })
@@ -326,19 +332,25 @@ app.post("/api/send", async (req, reply) => {
 // Send voice message (for proactive / system messages)
 app.post("/api/send-voice", async (req, reply) => {
   try {
-    const body = req.body as { toUserId?: string; audioUrl?: string; text?: string; contextToken?: string }
+    const body = req.body as { toUserId?: string; audioUrl?: string; text?: string; contextToken?: string; deliveryKey?: string }
     if (!body.toUserId || !body.audioUrl) {
       return reply.status(422).send({
         success: false,
         message: "toUserId and audioUrl are required",
       })
     }
+    const deliveryKey = body.deliveryKey || ""
+    const idempotencyKey = (req.headers["idempotency-key"] as string) || ""
+    if (deliveryKey && idempotencyKey && deliveryKey !== idempotencyKey) {
+      return reply.status(409).send({ success: false, message: "deliveryKey and Idempotency-Key mismatch" })
+    }
+    const effectiveKey = deliveryKey || idempotencyKey
     const fullAudioUrl = body.audioUrl.startsWith("http") ? body.audioUrl : sidecarConfig.coreUrl + body.audioUrl
     const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(30000) })
     if (!audioResp.ok) throw new Error("Audio download failed: " + audioResp.status)
     const audioBuffer = Buffer.from(await audioResp.arrayBuffer())
-    await manager.sendVoiceMessage(body.toUserId, audioBuffer, 7, 0, body.contextToken)
-    return reply.send({ success: true, message: "Voice sent" })
+    const result = await manager.sendVoiceMessage(body.toUserId, audioBuffer, 7, 0, body.contextToken, effectiveKey || undefined)
+    return reply.send({ success: true, message: "Voice sent", duplicate: result.duplicate, deliveryKey: effectiveKey || "" })
   } catch (err: any) {
     console.error("[Sidecar] send-voice error:", err.message)
     return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
@@ -347,8 +359,14 @@ app.post("/api/send-voice", async (req, reply) => {
 
 app.post("/api/send-image", async (req, reply) => {
   try {
-    const body = req.body as { toUserId?: string; assetUrl?: string; fallbackUrl?: string; contextToken?: string }
+    const body = req.body as { toUserId?: string; assetUrl?: string; fallbackUrl?: string; contextToken?: string; deliveryKey?: string }
     if (!body.toUserId || (!body.assetUrl && !body.fallbackUrl)) return reply.status(422).send({ success: false, message: "toUserId and assetUrl are required" })
+    const deliveryKey = body.deliveryKey || ""
+    const idempotencyKey = (req.headers["idempotency-key"] as string) || ""
+    if (deliveryKey && idempotencyKey && deliveryKey !== idempotencyKey) {
+      return reply.status(409).send({ success: false, message: "deliveryKey and Idempotency-Key mismatch" })
+    }
+    const effectiveKey = deliveryKey || idempotencyKey
     const candidates = [body.assetUrl, body.fallbackUrl].filter(Boolean) as string[]
     let buffer: Buffer | null = null
     for (const candidate of candidates) {
@@ -361,8 +379,8 @@ app.post("/api/send-image", async (req, reply) => {
       } catch {}
     }
     if (!buffer) throw new Error("表情资源下载失败")
-    await manager.sendImageMessage(body.toUserId, buffer, body.contextToken)
-    return reply.send({ success: true, message: "Image sent" })
+    const result = await manager.sendImageMessage(body.toUserId, buffer, body.contextToken, effectiveKey || undefined)
+    return reply.send({ success: true, message: "Image sent", duplicate: result.duplicate, deliveryKey: effectiveKey || "" })
   } catch (err: any) {
     return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
   }

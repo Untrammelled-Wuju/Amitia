@@ -75,3 +75,116 @@ func TestQQAndWechatPropagateSendFailure(t *testing.T) {
 		t.Fatal("微信发送失败必须返回错误")
 	}
 }
+
+
+func textIntent(t *testing.T) DeliveryIntent {
+	t.Helper()
+	payload, err := json.Marshal(map[string]interface{}{"messageId": "m-text", "content": "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return DeliveryIntent{ID: "di-text-001", Channel: "wechat", PeerID: "peer-text", ContentType: "text", Payload: payload}
+}
+
+func TestWechatTextDeliverySendsIdempotencyKey(t *testing.T) {
+	type capturedRequest struct {
+		body           map[string]interface{}
+		idempotencyKey string
+	}
+	requests := make(chan capturedRequest, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/send":
+			var body map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			idKey := r.Header.Get("Idempotency-Key")
+			requests <- capturedRequest{body: body, idempotencyKey: idKey}
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	intent := textIntent(t)
+	if err := NewWechatChannelAdapter(server.URL).Deliver(intent); err != nil {
+		t.Fatal(err)
+	}
+	req := <-requests
+	if req.body["deliveryKey"] != intent.ID {
+		t.Errorf("expected deliveryKey=%s, got %v", intent.ID, req.body["deliveryKey"])
+	}
+	if req.idempotencyKey != intent.ID {
+		t.Errorf("expected Idempotency-Key=%s, got %s", intent.ID, req.idempotencyKey)
+	}
+}
+
+func TestWechatEmoteDeliverySendsIdempotencyKey(t *testing.T) {
+	type capturedRequest struct {
+		body           map[string]interface{}
+		idempotencyKey string
+	}
+	requests := make(chan capturedRequest, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/send-image" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		idKey := r.Header.Get("Idempotency-Key")
+		requests <- capturedRequest{body: body, idempotencyKey: idKey}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	intent := emoteIntent(t, false)
+	intent.ID = "di-emote-001"
+	intent.Channel = "wechat"
+	if err := NewWechatChannelAdapter(server.URL).Deliver(intent); err != nil {
+		t.Fatal(err)
+	}
+	req := <-requests
+	if req.body["deliveryKey"] != intent.ID {
+		t.Errorf("expected deliveryKey=%s in emote body, got %v", intent.ID, req.body["deliveryKey"])
+	}
+	if req.idempotencyKey != intent.ID {
+		t.Errorf("expected Idempotency-Key=%s in emote header, got %s", intent.ID, req.idempotencyKey)
+	}
+}
+
+func TestWechatDuplicateResponseTreatedAsSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success":true,"duplicate":true,"deliveryKey":"di-dup-001"}`))
+	}))
+	defer server.Close()
+
+	intent := textIntent(t)
+	intent.ID = "di-dup-001"
+	if err := NewWechatChannelAdapter(server.URL).Deliver(intent); err != nil {
+		t.Fatalf("duplicate response should be treated as success, got error: %v", err)
+	}
+}
+
+func TestQQDeliveryIsolation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	payload, _ := json.Marshal(map[string]string{"messageId": "m1", "content": "hello"})
+	intent := DeliveryIntent{ID: "di-qq-001", Channel: "qq", PeerID: "peer-qq", ContentType: "text", Payload: payload}
+	if err := NewQQChannelAdapter(server.URL).Deliver(intent); err != nil {
+		t.Fatal(err)
+	}
+}

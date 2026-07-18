@@ -65,22 +65,24 @@ func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
 	}
 	content := extractContentFromPayload(intent.Payload)
 	body, _ := json.Marshal(map[string]string{
-		"toUserId": intent.PeerID,
-		"text":     content,
+		"toUserId":    intent.PeerID,
+		"text":        content,
+		"deliveryKey": intent.ID,
 	})
 	req, _ := http.NewRequest("POST", a.sidecarURL+"/api/send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", intent.ID)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
-		applog.Error("Wechat delivery failed", "peerId", intent.PeerID, "error", err)
+		applog.Error("Wechat delivery failed", "deliveryId", intent.ID, "error", err)
 		return err
 	}
 	resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		applog.Error("Wechat delivery failed", "peerId", intent.PeerID, "status", resp.StatusCode)
+		applog.Error("Wechat delivery failed", "deliveryId", intent.ID, "status", resp.StatusCode)
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
-	applog.Info("Wechat delivered", "peerId", intent.PeerID)
+	applog.Info("Wechat delivered", "deliveryId", intent.ID)
 	return nil
 }
 
@@ -104,7 +106,7 @@ func (a *WebChannelAdapter) Deliver(intent DeliveryIntent) error {
 	return nil
 }
 
-func deliverEmoteHTTP(url string, intent DeliveryIntent, forceFallback bool) error {
+func deliverEmoteHTTP(url string, intent DeliveryIntent, wechat bool) error {
 	var payload map[string]interface{}
 	if err := json.Unmarshal(intent.Payload, &payload); err != nil {
 		return err
@@ -112,18 +114,25 @@ func deliverEmoteHTTP(url string, intent DeliveryIntent, forceFallback bool) err
 	original, _ := payload["originalPath"].(string)
 	fallback, _ := payload["fallbackPath"].(string)
 	asset := original
-	if forceFallback || asset == "" {
+	if wechat || asset == "" {
 		asset = fallback
 	}
 	if asset == "" {
 		return fmt.Errorf("emote asset missing")
 	}
-	body, _ := json.Marshal(map[string]interface{}{"toUserId": intent.PeerID, "assetUrl": asset, "fallbackUrl": fallback, "animated": payload["isAnimated"], "altText": payload["altText"]})
+	bodyMap := map[string]interface{}{"toUserId": intent.PeerID, "assetUrl": asset, "fallbackUrl": fallback, "animated": payload["isAnimated"], "altText": payload["altText"]}
+	if wechat {
+		bodyMap["deliveryKey"] = intent.ID
+	}
+	body, _ := json.Marshal(bodyMap)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if wechat {
+		req.Header.Set("Idempotency-Key", intent.ID)
+	}
 	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
 		return err

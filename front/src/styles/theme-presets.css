@@ -71,7 +71,6 @@ html[data-theme="light"] {
   --console-sidebar: var(--tp-shell);
   --console-topbar: var(--tp-shell);
   --console-card: #FFFFFF;
-  --console-card-soft: #F8FAFC;
   --console-bg-subtle: var(--tp-panel-soft);
   --console-code-bg: var(--tp-panel-soft);
   --console-border: var(--tp-border);

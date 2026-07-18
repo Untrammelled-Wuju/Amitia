@@ -80,7 +80,7 @@ func TestProcessDueActiveMessageTasksUsesUnifiedEntryWithoutDirectMessageWrite(t
 	if req.ConversationID != "conv-target" || req.CharacterID != "char-1" || req.Channel != "wechat" || req.PeerID != "peer-1" {
 		t.Fatalf("unexpected unified request scope: %#v", req)
 	}
-	if req.Source != "proactive" || req.UserID != "peer-1" {
+	if req.Source != "proactive" || req.UserID != "default" {
 		t.Fatalf("expected proactive source and peer user scope, got source=%q userID=%q", req.Source, req.UserID)
 	}
 	if req.Message != "早安 prompt" {
@@ -158,7 +158,7 @@ func TestSubmitProactiveMessageUsesTemporalSnapshotContext(t *testing.T) {
 	if got, want := entry.requests[0].ProactiveTimeContext, temporal.RenderSnapshot(snapshot); got != want {
 		t.Fatalf("expected rendered temporal snapshot, got %q want %q", got, want)
 	}
-	if resolver.input.UserID != "peer-1" || resolver.input.CharacterID != "char-1" || resolver.input.Channel != "wechat" {
+	if resolver.input.UserID != "default" || resolver.input.CharacterID != "char-1" || resolver.input.Channel != "wechat" {
 		t.Fatalf("unexpected temporal scope: %#v", resolver.input)
 	}
 }

@@ -44,7 +44,7 @@ defineProps<{
 .panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
 
 .list-compact { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
-.list-item { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 9px; background: var(--console-card-soft); font-size: 14px; }
+.list-item { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 9px; background: var(--ac-color-surface); font-size: 14px; }
 .li-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .li-meta { font-size: 12px; color: var(--console-text-muted); white-space: nowrap; margin-left: 8px; }
 
