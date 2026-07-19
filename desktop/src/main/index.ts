@@ -124,7 +124,7 @@ async function enterMainApp(): Promise<void> {
   }
 
   mainWindow = createMainWindow()
-  tray = createAppTray(mainWindow, () => currentConfig)
+  tray = createAppTray(mainWindow, () => currentConfig, configStore)
 
   const autoLaunch = await configStore.getAutoLaunch()
   app.setLoginItemSettings({ openAtLogin: autoLaunch })
