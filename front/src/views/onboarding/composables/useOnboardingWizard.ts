@@ -33,6 +33,7 @@ export function useOnboardingWizard() {
 
   const form = reactive({
     deployMode: "desktop",
+    serverURL: "",
     username: "",
     password: "",
     password2: "",
@@ -234,6 +235,12 @@ export function useOnboardingWizard() {
 
   async function handleNext() {
     stepError.value = ""
+    if (current.value === 1) {
+      if (form.deployMode === "cloud" && !form.serverURL.trim()) {
+        stepError.value = "请输入 Core 服务器地址"
+        return
+      }
+    }
     if (current.value === 2) {
       if (!form.username || !form.password) {
         stepError.value = "请填写用户名和密码"
@@ -326,6 +333,7 @@ export function useOnboardingWizard() {
       }
       await post("/api/onboarding/complete", {
         deployMode: form.deployMode === "cloud" ? "cloud-web" : "desktop-local",
+        serverURL: form.deployMode === "cloud" ? form.serverURL.trim().replace(/\/+$/, "") : undefined,
         webChatEnabled: form.webChatEnabled,
         wechatEnabled: form.wechatEnabled,
         qqEnabled: form.qqEnabled,

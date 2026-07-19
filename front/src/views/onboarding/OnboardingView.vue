@@ -29,6 +29,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <DeployModeStep
           v-if="current === 1"
           v-model="form.deployMode"
+          :serverURL="form.serverURL"
+          @update:serverURL="form.serverURL = $event"
         />
 
         <AdminSetupStep
@@ -115,6 +117,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <SetupSummaryPanel
         v-if="current === steps.length - 1"
         :deployMode="form.deployMode"
+        :serverURL="form.serverURL"
         :webChatEnabled="form.webChatEnabled"
         :profileCount="profileList.filter(p=>p.attributeName).length"
         :wechatEnabled="form.wechatEnabled"

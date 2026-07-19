@@ -22,9 +22,41 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
     </div>
+
+    <div v-if="modelValue === 'cloud'" class="cloud-url-section">
+      <label class="cloud-url-label">Core 服务器地址</label>
+      <el-input
+        :model-value="serverURL"
+        @update:model-value="emit('update:serverURL', $event)"
+        placeholder="例如 http://192.168.1.100:18899"
+        clearable
+      />
+      <p class="cloud-url-hint">输入你部署在服务器上的 Core 完整地址，需包含协议和端口</p>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
-defineProps<{ modelValue: string }>()
-const emit = defineEmits<{ (e: "update:modelValue", v: string): void }>()
+defineProps<{ modelValue: string; serverURL?: string }>()
+const emit = defineEmits<{ (e: "update:modelValue", v: string): void; (e: "update:serverURL", v: string): void }>()
 </script>
+<style scoped>
+.cloud-url-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ac-color-border-light);
+}
+
+.cloud-url-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ac-color-text);
+  margin-bottom: 8px;
+}
+
+.cloud-url-hint {
+  font-size: 12px;
+  color: var(--ac-color-text-muted);
+  margin-top: 6px;
+}
+</style>
