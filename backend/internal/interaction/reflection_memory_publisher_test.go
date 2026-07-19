@@ -2,8 +2,29 @@ package interaction
 
 import (
 	"errors"
+	"sync"
 	"testing"
+
+	"github.com/u-ai/backend/internal/outbox"
 )
+
+type testOutboxPublisher struct {
+	mu    sync.Mutex
+	events []outbox.OutboxRecord
+}
+
+func (p *testOutboxPublisher) Publish(event outbox.OutboxRecord) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, event)
+	return nil
+}
+
+func (p *testOutboxPublisher) Count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.events)
+}
 
 type recordingReflectionMemory struct {
 	requests []ReflectionMemoryCreateRequest
@@ -23,7 +44,7 @@ func TestReflectionMemoryPublisherCreatesMemoryFromAbstractionEvent(t *testing.T
 	next := &testOutboxPublisher{}
 	publisher := NewReflectionMemoryPublisher(mem, next)
 
-	err := publisher.Publish(OutboxRecord{
+	err := publisher.Publish(outbox.OutboxRecord{
 		ID:          "outbox-1",
 		EventType:   ReflectionMemoryAbstractionEventType,
 		AggregateID: "ref-1",
@@ -58,7 +79,7 @@ func TestReflectionMemoryPublisherCreatesMemoryFromApprovedCandidate(t *testing.
 	mem := &recordingReflectionMemory{}
 	publisher := NewReflectionMemoryPublisher(mem, nil)
 
-	err := publisher.Publish(OutboxRecord{
+	err := publisher.Publish(outbox.OutboxRecord{
 		ID:          "outbox-1",
 		EventType:   ReflectionCandidateApprovedEventType,
 		AggregateID: "ref-2",
@@ -94,7 +115,7 @@ func TestReflectionMemoryPublisherPassesThroughNonReflectionEvents(t *testing.T)
 	next := &testOutboxPublisher{}
 	publisher := NewReflectionMemoryPublisher(mem, next)
 
-	err := publisher.Publish(OutboxRecord{
+	err := publisher.Publish(outbox.OutboxRecord{
 		ID:        "outbox-1",
 		EventType: "interaction.completed",
 		Payload:   []byte(`{"ok":true}`),
@@ -114,7 +135,7 @@ func TestReflectionMemoryPublisherReturnsCreateError(t *testing.T) {
 	mem := &recordingReflectionMemory{err: errors.New("create failed")}
 	publisher := NewReflectionMemoryPublisher(mem, nil)
 
-	err := publisher.Publish(OutboxRecord{
+	err := publisher.Publish(outbox.OutboxRecord{
 		ID:          "outbox-1",
 		EventType:   ReflectionMemoryAbstractionEventType,
 		AggregateID: "ref-1",

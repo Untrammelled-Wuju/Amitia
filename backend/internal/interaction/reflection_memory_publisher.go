@@ -3,6 +3,8 @@ package interaction
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/u-ai/backend/internal/outbox"
 )
 
 const (
@@ -33,7 +35,7 @@ type ReflectionMemoryCreateRequest struct {
 
 type ReflectionMemoryPublisher struct {
 	memory reflectionMemoryCreator
-	next   OutboxPublisher
+	next   outbox.Publisher
 }
 
 type reflectionMemoryPayload struct {
@@ -63,11 +65,11 @@ type reflectionMemoryAbstraction struct {
 	Abstract  string   `json:"abstract"`
 }
 
-func NewReflectionMemoryPublisher(memory reflectionMemoryCreator, next OutboxPublisher) *ReflectionMemoryPublisher {
+func NewReflectionMemoryPublisher(memory reflectionMemoryCreator, next outbox.Publisher) *ReflectionMemoryPublisher {
 	return &ReflectionMemoryPublisher{memory: memory, next: next}
 }
 
-func (p *ReflectionMemoryPublisher) Publish(record OutboxRecord) error {
+func (p *ReflectionMemoryPublisher) Publish(record outbox.OutboxRecord) error {
 	if !isReflectionMemoryEvent(record.EventType) {
 		return publishNext(p.next, record)
 	}
@@ -86,7 +88,7 @@ func isReflectionMemoryEvent(eventType string) bool {
 	}
 }
 
-func (p *ReflectionMemoryPublisher) publishReflectionMemory(record OutboxRecord) error {
+func (p *ReflectionMemoryPublisher) publishReflectionMemory(record outbox.OutboxRecord) error {
 	if p.memory == nil {
 		return publishNext(p.next, record)
 	}
@@ -220,7 +222,7 @@ func firstNonZero(values ...float64) float64 {
 	return 0
 }
 
-func publishNext(next OutboxPublisher, record OutboxRecord) error {
+func publishNext(next outbox.Publisher, record outbox.OutboxRecord) error {
 	if next == nil {
 		return nil
 	}

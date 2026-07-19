@@ -201,7 +201,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	dispatchedPublisher.Register("postprocess.compressor.maybe", postProcessAdapter)
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
-	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, interaction.NewInMemoryOutboxStore())
+
+	interactionPublisher := &noopPublisher{}
+	dispatchedPublisher.Register("interaction.completed", interactionPublisher)
+	dispatchedPublisher.Register("interaction.state_changed", interactionPublisher)
+	dispatchedPublisher.Register("interaction.runtime_assembled", interactionPublisher)
+	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, newOutboxStore)
 	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
@@ -564,4 +569,10 @@ type postProcessPublisherAdapter struct {
 
 func (a *postProcessPublisherAdapter) Publish(record newoutbox.OutboxRecord) error {
 	return a.chatSvc.ReplayPostProcess(record.EventType, record.Payload)
+}
+
+type noopPublisher struct{}
+
+func (p *noopPublisher) Publish(record newoutbox.OutboxRecord) error {
+	return nil
 }

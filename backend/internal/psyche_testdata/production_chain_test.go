@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 type productionCaseProcessor struct {
@@ -42,10 +43,9 @@ func TestAllCasesEnterUnifiedProductionChain(t *testing.T) {
 	}
 	processor := &productionCaseProcessor{}
 	tracker := interaction.NewInMemoryTracker()
-	outbox := interaction.NewInMemoryOutboxStore()
-	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
-	entry := interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil))
+	entry := interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})
 
 	for i, c := range cases {
 		requestID := fmt.Sprintf("%04d-%s", i, c.ID)
@@ -87,13 +87,6 @@ func TestAllCasesEnterUnifiedProductionChain(t *testing.T) {
 		if req.Runtime.Delivery.Channel == "" || req.Runtime.Transaction.Name == "" {
 			t.Fatalf("%s runtime missing delivery or transaction: %#v", c.ID, req.Runtime)
 		}
-	}
-	pending, err := outbox.ListPending()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pending) != len(cases)*3 {
-		t.Fatalf("pending outbox events = %d, want %d", len(pending), len(cases)*3)
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 
 func TestWebhookRejectsNilContextBeforeUnifiedEntry(t *testing.T) {
 	processor := &agentTestProcessor{}
-	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), processor, interaction.NewInMemoryTracker(), interaction.NewInMemoryOutboxStore())
+	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), processor, interaction.NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	svc := &service{unifiedEntry: interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})}
 

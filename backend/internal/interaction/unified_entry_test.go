@@ -55,7 +55,7 @@ func (t *blockingListTracker) ListActive(ctx context.Context, scope InteractionS
 
 func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
@@ -97,7 +97,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
@@ -133,7 +133,7 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
@@ -191,7 +191,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 
 func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetBackpressureConfig(BackpressureConfig{
@@ -244,7 +244,7 @@ func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
 
 func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
@@ -283,7 +283,7 @@ func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	tracker := newBlockingListTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
 	done := make(chan struct{})
@@ -326,7 +326,7 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 
 func TestOrchestratorNormalizesZeroValueConfig(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(OrchestratorConfig{}, processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(OrchestratorConfig{}, processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{

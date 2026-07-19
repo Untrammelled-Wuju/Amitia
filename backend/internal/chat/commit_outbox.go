@@ -12,10 +12,10 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, messagePlan *interaction.MessagePlan) ([]interaction.OutboxRecord, []string, error) {
+func (s *service) appendInteractionOutboxTx(tx *gorm.DB, plan messageCommitPlan, messageIDs []string, messagePlan *interaction.MessagePlan) ([]newoutbox.OutboxRecord, []string, error) {
 	now := time.Now()
 	deliveryIntentIDs := []string{}
-	events := []interaction.OutboxRecord{
+	events := []newoutbox.OutboxRecord{
 		newInteractionOutboxRecord(plan.Request.InteractionID, "interaction.completed", map[string]interface{}{
 			"interactionId":  plan.Request.InteractionID,
 			"conversationId": plan.Conversation,
@@ -118,15 +118,15 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messagePlan 
 	return ids, nil
 }
 
-func newInteractionOutboxRecord(aggregateID, eventType string, payload map[string]interface{}, now time.Time) interaction.OutboxRecord {
+func newInteractionOutboxRecord(aggregateID, eventType string, payload map[string]interface{}, now time.Time) newoutbox.OutboxRecord {
 	raw, _ := json.Marshal(payload)
-	return interaction.OutboxRecord{
+	return newoutbox.OutboxRecord{
 		ID:          uuid.New().String(),
 		AggregateID: aggregateID,
 		EventType:   eventType,
 		Payload:     raw,
-		Status:      interaction.OutboxStatusPending,
-		MaxRetries:  interaction.DefaultMaxRetries,
+		Status:      newoutbox.OutboxStatusPending,
+		MaxRetries:  newoutbox.DefaultMaxRetries,
 		CreatedAt:   now,
 		NextRetryAt: now,
 	}

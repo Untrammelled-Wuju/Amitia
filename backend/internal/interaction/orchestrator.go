@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/outbox"
 )
 
 var (
@@ -52,18 +54,18 @@ type ProcessRequest struct {
 }
 
 type ProcessResponse struct {
-	ConversationID string         `json:"conversationId"`
-	Sequence       int64          `json:"sequence"`
-	Reply          string         `json:"reply"`
-	Lines          []string       `json:"lines"`
-	CharacterID    string         `json:"characterId"`
-	CharacterName  string         `json:"characterName"`
-	MessageIDs     []string       `json:"messageIds"`
-	ForceVoice     bool           `json:"forceVoice"`
-	AudioUrls      []string       `json:"audioUrls"`
-	RequestID      string         `json:"requestId"`
-	MessagePlan    *MessagePlan   `json:"messagePlan,omitempty"`
-	Events         []OutboxRecord `json:"-"`
+	ConversationID string               `json:"conversationId"`
+	Sequence       int64                `json:"sequence"`
+	Reply          string               `json:"reply"`
+	Lines          []string             `json:"lines"`
+	CharacterID    string               `json:"characterId"`
+	CharacterName  string               `json:"characterName"`
+	MessageIDs     []string             `json:"messageIds"`
+	ForceVoice     bool                 `json:"forceVoice"`
+	AudioUrls      []string             `json:"audioUrls"`
+	RequestID      string               `json:"requestId"`
+	MessagePlan    *MessagePlan         `json:"messagePlan,omitempty"`
+	Events         []outbox.OutboxRecord `json:"-"`
 }
 
 type MessagePlan struct {
@@ -101,12 +103,12 @@ const (
 )
 
 type OrchestrationResult struct {
-	InteractionID string           `json:"interactionId"`
-	Outcome       Outcome          `json:"outcome"`
-	Response      *ProcessResponse `json:"response,omitempty"`
-	Error         string           `json:"error,omitempty"`
-	Duration      time.Duration    `json:"duration"`
-	Events        []OutboxRecord   `json:"events,omitempty"`
+	InteractionID string               `json:"interactionId"`
+	Outcome       Outcome              `json:"outcome"`
+	Response      *ProcessResponse     `json:"response,omitempty"`
+	Error         string               `json:"error,omitempty"`
+	Duration      time.Duration        `json:"duration"`
+	Events        []outbox.OutboxRecord `json:"events,omitempty"`
 }
 
 type OrchestratorConfig struct {
@@ -127,7 +129,7 @@ type Orchestrator struct {
 	cfg                        OrchestratorConfig
 	processor                  MessageProcessor
 	tracker                    InteractionTracker
-	outbox                     OutboxStore
+	outbox                     *outbox.SQLiteOutboxStore
 	resolver                   *SupersedeResolver
 	pipeline                   *RuntimePipeline
 	cancels                    *CancellationRegistry
@@ -142,22 +144,22 @@ type Orchestrator struct {
 	ready                      bool
 }
 
-func NewOrchestrator(cfg OrchestratorConfig, processor MessageProcessor) *Orchestrator {
+func NewOrchestrator(cfg OrchestratorConfig, processor MessageProcessor, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
 	tracker := NewInMemoryTracker()
-	return newOrchestratorWithStores(cfg, processor, tracker, NewInMemoryOutboxStore())
+	return newOrchestratorWithStores(cfg, processor, tracker, outboxStore)
 }
 
-func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
-	return newOrchestratorWithStores(cfg, processor, tracker, outbox)
+func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
+	return newOrchestratorWithStores(cfg, processor, tracker, outboxStore)
 }
 
-func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outbox OutboxStore) *Orchestrator {
+func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
 	cfg = normalizeOrchestratorConfig(cfg)
 	return &Orchestrator{
 		cfg:                        cfg,
 		processor:                  processor,
 		tracker:                    tracker,
-		outbox:                     outbox,
+		outbox:                     outboxStore,
 		resolver:                   NewSupersedeResolver(cfg.SupersedePolicy, tracker),
 		pipeline:                   NewRuntimePipeline(nil, nil, nil),
 		cancels:                    NewCancellationRegistry(),
@@ -205,7 +207,7 @@ func (o *Orchestrator) GetTracker() InteractionTracker {
 	return o.tracker
 }
 
-func (o *Orchestrator) GetOutbox() OutboxStore {
+func (o *Orchestrator) GetOutbox() *outbox.SQLiteOutboxStore {
 	return o.outbox
 }
 

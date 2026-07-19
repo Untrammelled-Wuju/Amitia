@@ -6,14 +6,16 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/outbox"
 )
 
 func TestOrchestratorRaceCondition1000Runs(t *testing.T) {
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
+	var outboxStore *outbox.SQLiteOutboxStore
 	cfg := DefaultOrchestratorConfig()
 	cfg.MaxConcurrent = 100
-	orch := NewOrchestratorWithStores(cfg, &stubMessageProcessor{prefix: "reply-"}, tracker, outbox)
+	orch := NewOrchestratorWithStores(cfg, &stubMessageProcessor{prefix: "reply-"}, tracker, outboxStore)
 	orch.SetReady(true)
 
 	const runs = 100
@@ -60,8 +62,8 @@ func TestOrchestratorRaceCondition1000Runs(t *testing.T) {
 
 func TestOrchestratorConsistencyNoHalfCompleteRecords(t *testing.T) {
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok"}, tracker, outbox)
+	var outboxStore *outbox.SQLiteOutboxStore
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok"}, tracker, outboxStore)
 	orch.SetReady(true)
 
 	ctx := context.Background()
@@ -97,8 +99,8 @@ func TestOrchestratorConsistencyNoHalfCompleteRecords(t *testing.T) {
 
 func TestOrchestratorIdempotentSameRequestID(t *testing.T) {
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "idem"}, tracker, outbox)
+	var outboxStore *outbox.SQLiteOutboxStore
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "idem"}, tracker, outboxStore)
 	orch.SetReady(true)
 
 	ctx := context.Background()
@@ -131,8 +133,8 @@ func TestOrchestratorIdempotentSameRequestID(t *testing.T) {
 
 func TestOrchestratorCancelBeforeCommitResultsInCancelled(t *testing.T) {
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "cancel", delay: 500 * time.Millisecond}, tracker, outbox)
+	var outboxStore *outbox.SQLiteOutboxStore
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "cancel", delay: 500 * time.Millisecond}, tracker, outboxStore)
 	orch.SetReady(true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -166,8 +168,8 @@ func TestOrchestratorCancelBeforeCommitResultsInCancelled(t *testing.T) {
 
 func TestOrchestratorStateMatrixTransitions(t *testing.T) {
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "matrix"}, tracker, outbox)
+	var outboxStore *outbox.SQLiteOutboxStore
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "matrix"}, tracker, outboxStore)
 	orch.SetReady(true)
 
 	ctx := context.Background()

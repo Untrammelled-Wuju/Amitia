@@ -79,7 +79,7 @@ func (p *relationshipTimeBlockingProcessor) ProcessMessageCtx(ctx context.Contex
 
 func TestRelationshipTimePrepareRunsOnceForIdempotentRequest(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{claim: true}
-	orch := NewOrchestrator(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok-"})
+	orch := NewOrchestrator(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok-"}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	req := &ProcessRequest{
@@ -115,7 +115,7 @@ func TestRelationshipTimePrepareRunsOnceForIdempotentRequest(t *testing.T) {
 
 func TestRelationshipTimeClaimReleasedOnProcessorFailure(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{claim: true}
-	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")})
+	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-fail", Message: "hello"})
@@ -135,7 +135,7 @@ func TestRelationshipTimeClaimReleasedOnDeadline(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{claim: true}
 	cfg := DefaultOrchestratorConfig()
 	cfg.DefaultTimeout = 20 * time.Millisecond
-	orch := NewOrchestrator(cfg, &stubMessageProcessor{prefix: "late-", delay: time.Second})
+	orch := NewOrchestrator(cfg, &stubMessageProcessor{prefix: "late-", delay: time.Second}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-timeout", Message: "hello"})
@@ -151,7 +151,7 @@ func TestRelationshipTimeClaimReleasedOnDeadline(t *testing.T) {
 func TestRelationshipTimeClaimReleaseSurvivesCallerCancellation(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{claim: true}
 	processor := &relationshipTimeBlockingProcessor{started: make(chan struct{})}
-	orch := NewOrchestrator(DefaultOrchestratorConfig(), processor)
+	orch := NewOrchestrator(DefaultOrchestratorConfig(), processor, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -182,7 +182,7 @@ func TestRelationshipTimeClaimReleaseSurvivesCallerCancellation(t *testing.T) {
 
 func TestRelationshipTimePrepareFailureDoesNotBlockChat(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{prepareErr: errors.New("repository unavailable")}
-	orch := NewOrchestrator(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok-"})
+	orch := NewOrchestrator(DefaultOrchestratorConfig(), &stubMessageProcessor{prefix: "ok-"}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	result, err := orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-prepare-fail", Message: "hello"})
@@ -197,7 +197,7 @@ func TestRelationshipTimePrepareFailureDoesNotBlockChat(t *testing.T) {
 
 func TestRelationshipTimeUnclaimedContextIsNeverReleased(t *testing.T) {
 	coordinator := &relationshipTimeCoordinatorStub{}
-	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")})
+	orch := NewOrchestrator(DefaultOrchestratorConfig(), &relationshipTimeErrorProcessor{err: errors.New("generation failed")}, nil)
 	orch.SetRelationshipTimeCoordinator(coordinator)
 	orch.SetReady(true)
 	_, _ = orch.Process(context.Background(), &ProcessRequest{UserID: "user-1", CharacterID: "char-1", RequestID: "request-unclaimed", Message: "hello"})

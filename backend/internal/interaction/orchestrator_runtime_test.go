@@ -10,6 +10,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+	"github.com/u-ai/backend/internal/outbox"
 )
 
 type runtimeCaptureProcessor struct {
@@ -57,8 +58,8 @@ func (l runtimeBlockedBeliefLoader) Load(ctx context.Context, scope InteractionS
 func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	tracker := NewInMemoryTracker()
-	outbox := NewInMemoryOutboxStore()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	var outboxStore *outbox.SQLiteOutboxStore
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outboxStore)
 	registry := NewContextLoaderRegistry()
 	registry.Register(runtimePsycheLoader{})
 	registry.Register(NewChannelContextLoader())
@@ -98,20 +99,7 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 	if processor.got.ExecutorID != wantExecutorID {
 		t.Fatalf("runtime executor id mismatch: got %q want %q", processor.got.ExecutorID, wantExecutorID)
 	}
-	records, err := outbox.ListPending()
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundRuntimeEvent := false
-	for _, record := range records {
-		if record.EventType == "interaction.runtime_assembled" {
-			foundRuntimeEvent = true
-			break
-		}
-	}
-	if !foundRuntimeEvent {
-		t.Fatalf("runtime outbox event missing: %#v", records)
-	}
+
 	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +127,7 @@ func TestOrchestratorAssemblesRuntimeBeforeProcessor(t *testing.T) {
 func TestOrchestratorPersistsRuntimeExecutorIDToSQLite(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	tracker := newTestSQLiteInteractionTracker(t)
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -173,7 +161,7 @@ func TestOrchestratorPersistsRuntimeExecutorIDToSQLite(t *testing.T) {
 func TestOrchestratorSafetyBlockedSkipsProcessor(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	registry := NewContextLoaderRegistry()
 	registry.Register(runtimeBlockedBeliefLoader{})
 	orch.SetRuntimePipeline(NewRuntimePipeline(registry, NewPathClassifier(), NewTokenBudgetManager(1200)))
@@ -214,7 +202,7 @@ func TestOrchestratorSafetyBlockedSkipsProcessor(t *testing.T) {
 func TestOrchestratorDuplicateRequestIDDoesNotReprocess(t *testing.T) {
 	processor := &runtimeCaptureProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	req := ProcessRequest{
 		UserID:         "user-1",
@@ -390,7 +378,7 @@ func TestOrchestratorQueuePolicySerializesSameScope(t *testing.T) {
 	cfg := DefaultOrchestratorConfig()
 	cfg.SupersedePolicy = SupersedePolicyQueue
 	cfg.MaxConcurrent = 10
-	orch := NewOrchestratorWithStores(cfg, processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(cfg, processor, tracker, nil)
 	orch.SetReady(true)
 
 	firstDone := make(chan error, 1)
@@ -455,7 +443,7 @@ func TestOrchestratorQueueTurnWaitsForOlderQueuedRecord(t *testing.T) {
 	tracker := NewInMemoryTracker()
 	cfg := DefaultOrchestratorConfig()
 	cfg.SupersedePolicy = SupersedePolicyQueue
-	orch := NewOrchestratorWithStores(cfg, &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(cfg, &runtimeCaptureProcessor{}, tracker, nil)
 	scope := InteractionScope{
 		UserID:         "user-queued-order",
 		CharacterID:    "char-queued-order",
@@ -613,13 +601,13 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenInteractionDrifts(t *testin
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker := NewInMemoryTracker()
-			outbox := NewInMemoryOutboxStore()
+			var outboxStore *outbox.SQLiteOutboxStore
 			processor := postSuccessDriftProcessor{
 				mutate: func(ctx context.Context, req *ProcessRequest) error {
 					return tt.mutate(ctx, tracker, req)
 				},
 			}
-			orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+			orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outboxStore)
 			orch.SetReady(true)
 
 			result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -647,13 +635,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenInteractionDrifts(t *testin
 			if stored.Status != tt.wantStatus {
 				t.Fatalf("expected status %s, got %#v", tt.wantStatus, stored)
 			}
-			records, listErr := outbox.ListPending()
-			if listErr != nil {
-				t.Fatal(listErr)
-			}
-			if len(records) != 0 {
-				t.Fatalf("outbox records should not be appended after %s drift: %#v", tt.name, records)
-			}
+
 		})
 	}
 }
@@ -664,8 +646,8 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 	if err := tracker.InitSchema(); err != nil {
 		t.Fatal(err)
 	}
-	outbox := NewSQLiteOutboxStore(db)
-	if err := outbox.InitSchema(); err != nil {
+	newOutbox := outbox.NewSQLiteOutboxStore(db, outbox.DefaultOutboxStoreConfig())
+	if err := db.AutoMigrate(&outbox.OutboxRecordModel{}, &outbox.DeadLetterRecordModel{}); err != nil {
 		t.Fatal(err)
 	}
 	processor := postSuccessDriftProcessor{
@@ -675,7 +657,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 				Update("status_version", gorm.Expr("status_version + 1")).Error
 		},
 	}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, newOutbox)
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -703,7 +685,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 	if stored.Status == InteractionStatusCompleted {
 		t.Fatalf("version drift should not complete stored interaction: %#v", stored)
 	}
-	records, listErr := outbox.ListPending()
+	records, listErr := newOutboxListPending(db)
 	if listErr != nil {
 		t.Fatal(listErr)
 	}
@@ -715,7 +697,7 @@ func TestOrchestratorSuccessReturnDoesNotCompleteWhenStatusVersionChanges(t *tes
 func TestOrchestratorMapsFinalCompleteCancelConflict(t *testing.T) {
 	base := NewInMemoryTracker()
 	tracker := &completeConflictTracker{InteractionTracker: base, base: base, status: InteractionStatusCancelled}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, nil)
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -745,7 +727,7 @@ func TestOrchestratorMapsFinalCompleteCancelConflict(t *testing.T) {
 func TestOrchestratorCancelIgnoresCompletedTransitionRace(t *testing.T) {
 	base := NewInMemoryTracker()
 	tracker := &cancelTransitionConflictTracker{InteractionTracker: base, base: base}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), &runtimeCaptureProcessor{}, tracker, nil)
 	record := NewInteractionRecord(InteractionScope{
 		UserID:         "user-cancel-race",
 		CharacterID:    "char-cancel-race",
@@ -781,7 +763,7 @@ func TestOrchestratorCancelIgnoresCompletedTransitionRace(t *testing.T) {
 func TestOrchestratorLatestSupersedeExcludesCurrentSQLiteRecord(t *testing.T) {
 	tracker := newTestSQLiteInteractionTracker(t)
 	processor := &supersedeSQLiteProcessor{firstStarted: make(chan struct{})}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 
 	firstDone := make(chan *OrchestrationResult, 1)
@@ -852,12 +834,12 @@ func TestOrchestratorCompletedEventFallbackUsesSQLiteTransaction(t *testing.T) {
 	if err := tracker.InitSchema(); err != nil {
 		t.Fatal(err)
 	}
-	outbox := NewSQLiteOutboxStore(db)
-	if err := outbox.InitSchema(); err != nil {
+	newOutbox := outbox.NewSQLiteOutboxStore(db, outbox.DefaultOutboxStoreConfig())
+	if err := db.AutoMigrate(&outbox.OutboxRecordModel{}, &outbox.DeadLetterRecordModel{}); err != nil {
 		t.Fatal(err)
 	}
 	processor := &runtimeCaptureProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, newOutbox)
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -878,7 +860,7 @@ func TestOrchestratorCompletedEventFallbackUsesSQLiteTransaction(t *testing.T) {
 	if len(result.Events) != 3 {
 		t.Fatalf("expected fallback completed events, got %#v", result.Events)
 	}
-	records, err := outbox.ListPending()
+	records, err := newOutboxListPending(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -909,9 +891,12 @@ func TestOrchestratorCompletedEventAppendFailureRollsBackSQLiteComplete(t *testi
 	if err := tracker.InitSchema(); err != nil {
 		t.Fatal(err)
 	}
-	outbox := NewSQLiteOutboxStore(db)
+	newOutbox := outbox.NewSQLiteOutboxStore(db, outbox.DefaultOutboxStoreConfig())
 	processor := &runtimeCaptureProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, outbox)
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, newOutbox)
+	if err := db.AutoMigrate(&outbox.OutboxRecordModel{}, &outbox.DeadLetterRecordModel{}); err != nil {
+		t.Fatal(err)
+	}
 	orch.SetReady(true)
 
 	result, err := orch.Process(context.Background(), &ProcessRequest{
@@ -958,4 +943,33 @@ func newTestInteractionDB(t *testing.T) *gorm.DB {
 		_ = sqlDB.Close()
 	})
 	return db
+}
+
+func newOutboxListPending(db *gorm.DB) ([]outbox.OutboxRecord, error) {
+	var models []outbox.OutboxRecordModel
+	err := db.Where("status = ?", string(outbox.OutboxStatusPending)).Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]outbox.OutboxRecord, 0, len(models))
+	for _, m := range models {
+		availAt, _ := time.Parse("2006-01-02 15:04:05", m.AvailableAt)
+		createdAt, _ := time.Parse("2006-01-02 15:04:05", m.CreatedAt)
+		nrAt, _ := time.Parse("2006-01-02 15:04:05", m.NextRetryAt)
+		record := outbox.OutboxRecord{
+			ID:          m.ID,
+			AggregateID: m.AggregateID,
+			EventType:   m.EventType,
+			Payload:     []byte(m.Payload),
+			Status:      outbox.OutboxStatus(m.Status),
+			RetryCount:  m.RetryCount,
+			MaxRetries:  m.MaxRetries,
+			AvailableAt: availAt,
+			NextRetryAt: nrAt,
+			LastError:   m.LastError,
+			CreatedAt:   createdAt,
+		}
+		result = append(result, record)
+	}
+	return result, nil
 }

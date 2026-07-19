@@ -90,55 +90,6 @@ func (s *service) GetAbout() map[string]interface{} {
 	}
 }
 
-func (s *service) GetLLMConfig() map[string]interface{} {
-	var cfg struct {
-		ApiType     string  `gorm:"column:api_type"`
-		ModelName   string  `gorm:"column:model_name"`
-		BaseURL     string  `gorm:"column:base_url"`
-		Temperature float64 `gorm:"column:temperature"`
-		MaxTokens   int     `gorm:"column:max_tokens"`
-		TopP        float64 `gorm:"column:top_p"`
-		ID          int     `gorm:"column:id"`
-	}
-	s.db.Table("model_configs").Where("is_active = 1").Limit(1).Scan(&cfg)
-	hasKey := s.getAppSetting("api_key") != ""
-	return map[string]interface{}{
-		"provider": cfg.ApiType, "model": cfg.ModelName, "baseUrl": cfg.BaseURL,
-		"temperature": cfg.Temperature, "maxTokens": cfg.MaxTokens, "topP": cfg.TopP,
-		"hasApiKey": hasKey, "id": cfg.ID,
-	}
-}
-
-func (s *service) UpdateLLMConfig(body map[string]interface{}) map[string]interface{} {
-	var activeID int
-	s.db.Table("model_configs").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&activeID)
-	updates := map[string]interface{}{}
-	if v, ok := body["provider"].(string); ok {
-		updates["api_type"] = v
-	}
-	if v, ok := body["model"].(string); ok {
-		updates["model_name"] = v
-	}
-	if v, ok := body["baseUrl"].(string); ok {
-		updates["base_url"] = v
-	}
-	if v, ok := body["temperature"]; ok {
-		updates["temperature"] = toFloat(v)
-	}
-	if v, ok := body["maxTokens"]; ok {
-		updates["max_tokens"] = toInt(v)
-	}
-	if v, ok := body["topP"]; ok {
-		updates["top_p"] = toFloat(v)
-	}
-	if v, ok := body["apiKey"].(string); ok {
-		s.setAppSetting("api_key", v)
-	}
-	if activeID > 0 && len(updates) > 0 {
-		s.db.Table("model_configs").Where("id = ?", activeID).Updates(updates)
-	}
-	return s.GetLLMConfig()
-}
 
 func (s *service) MoodDetectionConfig() map[string]interface{} {
 	enabled := s.getAppSetting("mood_detection_enabled") == "true"

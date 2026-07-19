@@ -86,6 +86,10 @@ func NewSQLiteOutboxStore(db *gorm.DB, cfg OutboxStoreConfig) *SQLiteOutboxStore
 	return &SQLiteOutboxStore{db: db, cfg: cfg}
 }
 
+func (s *SQLiteOutboxStore) DB() *gorm.DB {
+	return s.db
+}
+
 func (s *SQLiteOutboxStore) Append(record OutboxRecord) error {
 	model := OutboxRecordModel{
 		ID:             record.ID,
@@ -109,6 +113,31 @@ func (s *SQLiteOutboxStore) Append(record OutboxRecord) error {
 		}
 	}
 	return s.db.Create(&model).Error
+}
+
+func (s *SQLiteOutboxStore) AppendWithTx(tx *gorm.DB, record OutboxRecord) error {
+	model := OutboxRecordModel{
+		ID:             record.ID,
+		AggregateID:    record.AggregateID,
+		EventType:      record.EventType,
+		Payload:        string(record.Payload),
+		PayloadVersion: record.PayloadVersion,
+		Status:         string(record.Status),
+		AvailableAt:    record.AvailableAt.Format("2006-01-02 15:04:05"),
+		MaxRetries:     record.MaxRetries,
+		NextRetryAt:    record.AvailableAt.Format("2006-01-02 15:04:05"),
+		IdempotencyKey: record.IdempotencyKey,
+		CreatedAt:      record.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      record.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
+	if record.IdempotencyKey != "" {
+		var existing OutboxRecordModel
+		err := tx.Where("idempotency_key = ?", record.IdempotencyKey).Select("id").Take(&existing).Error
+		if err == nil {
+			return nil
+		}
+	}
+	return tx.Create(&model).Error
 }
 
 func (s *SQLiteOutboxStore) ClaimNext(batchSize int, owner string) ([]OutboxRecord, error) {

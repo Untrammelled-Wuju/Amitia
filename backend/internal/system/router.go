@@ -61,8 +61,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/config", handler.AppConfig)
 	r.PUT("/config", handler.UpdateConfig)
-	r.GET("/config/llm", handler.GetLLMConfig)
-	r.PUT("/config/llm", handler.UpdateLLMConfig)
 	r.GET("/config/mood-detection", handler.MoodDetectionConfig)
 	r.PUT("/config/mood-detection", handler.MoodDetectionConfig)
 	r.GET("/config/settings", handler.ConfigSettings)
@@ -227,9 +225,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/messages/events", handler.MessagesEventsStream)
 
-	r.GET("/conversations", handler.WebChatListConversations)
-	r.GET("/conversations/:id/messages", handler.WebChatGetMessages)
-	r.DELETE("/conversations/:id", handler.WebChatDeleteConv)
 
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)

@@ -4,6 +4,7 @@ package chat
 
 import (
 	"github.com/u-ai/backend/internal/interaction"
+	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 	"time"
 )
@@ -243,7 +244,7 @@ type ProcessMessageResponse struct {
 	UserMessageID  string                     `json:"userMessageId"`
 	RequestID      string                     `json:"requestId"`
 	MessagePlan    *interaction.MessagePlan   `json:"messagePlan,omitempty"`
-	Events         []interaction.OutboxRecord `json:"-"`
+	Events         []newoutbox.OutboxRecord `json:"-"`
 }
 
 type ChatStatsResponse struct {

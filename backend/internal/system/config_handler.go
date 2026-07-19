@@ -31,14 +31,6 @@ func (h *Handler) ConfigImportConfirm(c *gin.Context) {
 	util.SuccessResponse(c, h.service.ConfigImportConfirmService(body))
 }
 
-func (h *Handler) GetLLMConfig(c *gin.Context) { util.SuccessResponse(c, h.service.GetLLMConfig()) }
-
-func (h *Handler) UpdateLLMConfig(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateLLMConfig(body))
-}
-
 func (h *Handler) MoodDetectionConfig(c *gin.Context) {
 	util.SuccessResponse(c, h.service.MoodDetectionConfig())
 }

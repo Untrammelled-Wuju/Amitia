@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -43,7 +44,7 @@ func (f *fakeProactiveUnifiedEntry) Handle(ctx context.Context, req *interaction
 			ConversationID: req.ConversationID,
 			CharacterID:    req.CharacterID,
 			RequestID:      req.RequestID,
-			Events: []interaction.OutboxRecord{
+			Events: []outbox.OutboxRecord{
 				{EventType: "interaction.runtime_assembled"},
 				{EventType: "interaction.completed"},
 			},

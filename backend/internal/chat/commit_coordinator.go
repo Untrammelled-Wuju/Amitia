@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
+	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 )
 
@@ -100,7 +101,7 @@ type messageCommitResult struct {
 	CommitID          string
 	MessageIDs        []string
 	LastSequence      int64
-	Events            []interaction.OutboxRecord
+	Events            []newoutbox.OutboxRecord
 	StateVersions     map[string]int64
 	DeliveryIntentIDs []string
 	MessagePlan       *interaction.MessagePlan

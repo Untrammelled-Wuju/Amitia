@@ -49,7 +49,6 @@ func DefaultMigrations() []Migration {
 		MessageSequenceCheckpointMigration(),
 		TombstoneRebuildMigration(),
 		InteractionRecordsCreateMigration(),
-		InteractionRecordsV2Migration(),
 		ProactiveDeliveryTrackingMigration(),
 		RuntimeQueueMigration(),
 		LegacyDataMigration(),

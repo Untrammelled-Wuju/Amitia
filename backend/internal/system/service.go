@@ -37,7 +37,6 @@ type Service interface {
 	GetAuditStats() map[string]interface{}
 	GetAbout() map[string]interface{}
 	GetCurrentSession(token string) map[string]interface{}
-	GetLLMConfig() map[string]interface{}
 	GetLoginHistory() []map[string]interface{}
 	GetLogsFileContent(name string) string
 	GetLogsFiles() map[string]interface{}
@@ -126,7 +125,6 @@ type Service interface {
 	ToolRoute(body map[string]interface{}) map[string]interface{}
 	UpdateAppConfig(body map[string]interface{}) map[string]interface{}
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
-	UpdateLLMConfig(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
 	UpdateNotificationsSettings(body map[string]interface{}) map[string]interface{}

@@ -10,7 +10,7 @@ import (
 func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing.T) {
 	processor := &captureRequestProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	entry := NewVoiceEntryWithUnifiedEntry(orch, NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
@@ -81,7 +81,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 
 func TestVoiceEntryWithNilUnifiedEntryFallsBackToDefault(t *testing.T) {
 	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), NewInMemoryOutboxStore())
+	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewVoiceEntryWithUnifiedEntry(orch, nil)
 

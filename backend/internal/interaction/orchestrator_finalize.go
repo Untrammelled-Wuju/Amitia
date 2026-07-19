@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 )
 
@@ -69,7 +70,7 @@ func (o *Orchestrator) completionConflictResult(ctx context.Context, record *Int
 	return result, err
 }
 
-func (o *Orchestrator) successResult(record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, events []OutboxRecord, duration time.Duration) *OrchestrationResult {
+func (o *Orchestrator) successResult(record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, events []outbox.OutboxRecord, duration time.Duration) *OrchestrationResult {
 	resp.RequestID = req.RequestID
 	resp.ConversationID = req.ConversationID
 	resp.CharacterID = req.CharacterID
@@ -79,39 +80,38 @@ func (o *Orchestrator) successResult(record *InteractionRecord, req *ProcessRequ
 	return result
 }
 
-func (o *Orchestrator) completeWithOutbox(ctx context.Context, record *InteractionRecord, resultRef string, events []OutboxRecord) (*InteractionRecord, error) {
-	tracker, trackerOK := o.tracker.(*SQLiteInteractionTracker)
-	outbox, outboxOK := o.outbox.(*SQLiteOutboxStore)
-	if trackerOK && outboxOK && tracker.db != nil && outbox.db != nil && tracker.db.ConnPool == outbox.db.ConnPool {
-		var completed *InteractionRecord
-		err := tracker.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			txTracker := NewSQLiteInteractionTracker(tx)
-			var err error
-			completed, err = txTracker.Complete(ctx, record.ID, record.StatusVersion, resultRef)
-			if err != nil {
-				return err
-			}
-			txOutbox := NewSQLiteOutboxStore(tx)
-			for i := range events {
-				event := events[i]
-				if _, err := txOutbox.Append(&event); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		return completed, err
+func (o *Orchestrator) completeWithOutbox(ctx context.Context, record *InteractionRecord, resultRef string, events []outbox.OutboxRecord) (*InteractionRecord, error) {
+	if o.outbox == nil {
+		return o.tracker.Complete(ctx, record.ID, record.StatusVersion, resultRef)
 	}
-	for i := range events {
-		event := events[i]
-		if _, err := o.outbox.Append(&event); err != nil {
-			return nil, err
+	tracker, ok := o.tracker.(*SQLiteInteractionTracker)
+	if !ok || tracker.db == nil || o.outbox == nil || tracker.db.ConnPool != o.outbox.DB().ConnPool {
+		for i := range events {
+			if err := o.outbox.Append(events[i]); err != nil {
+				return nil, err
+			}
 		}
+		return o.tracker.Complete(ctx, record.ID, record.StatusVersion, resultRef)
 	}
-	return o.tracker.Complete(ctx, record.ID, record.StatusVersion, resultRef)
+	var completed *InteractionRecord
+	err := tracker.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txTracker := NewSQLiteInteractionTracker(tx)
+		var innerErr error
+		completed, innerErr = txTracker.Complete(ctx, record.ID, record.StatusVersion, resultRef)
+		if innerErr != nil {
+			return innerErr
+		}
+		for i := range events {
+			if innerErr = o.outbox.AppendWithTx(tx, events[i]); innerErr != nil {
+				return innerErr
+			}
+		}
+		return nil
+	})
+	return completed, err
 }
 
-func buildFallbackOutboxEvents(record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) ([]OutboxRecord, error) {
+func buildFallbackOutboxEvents(record *InteractionRecord, resp *ProcessResponse, runtime RuntimeAssembly) ([]outbox.OutboxRecord, error) {
 	now := time.Now()
 	completedPayload, err := json.Marshal(map[string]interface{}{
 		"interactionId": record.ID,
@@ -144,22 +144,22 @@ func buildFallbackOutboxEvents(record *InteractionRecord, resp *ProcessResponse,
 	if err != nil {
 		return nil, fmt.Errorf("orchestrator: encode runtime event: %w", err)
 	}
-	return []OutboxRecord{
+	return []outbox.OutboxRecord{
 		newFallbackOutboxRecord(record.ID, "interaction.completed", completedPayload, now),
 		newFallbackOutboxRecord(record.ID, "interaction.state_changed", statePayload, now),
 		newFallbackOutboxRecord(record.ID, "interaction.runtime_assembled", runtimePayload, now),
 	}, nil
 }
 
-func newFallbackOutboxRecord(aggregateID, eventType string, payload []byte, now time.Time) OutboxRecord {
-	return OutboxRecord{
+func newFallbackOutboxRecord(aggregateID, eventType string, payload []byte, now time.Time) outbox.OutboxRecord {
+	return outbox.OutboxRecord{
 		ID:          uuid.New().String(),
 		AggregateID: aggregateID,
 		EventType:   eventType,
 		Payload:     payload,
-		Status:      OutboxStatusPending,
-		MaxRetries:  DefaultMaxRetries,
+		Status:      outbox.OutboxStatusPending,
+		MaxRetries:  outbox.DefaultMaxRetries,
+		AvailableAt: now,
 		CreatedAt:   now,
-		NextRetryAt: now,
 	}
 }
