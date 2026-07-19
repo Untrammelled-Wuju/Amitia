@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
-	"github.com/u-ai/backend/internal/aicharacter"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
@@ -63,7 +62,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Surreal)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)
-		aicharacter.RegisterAICharacterRouter(apiGroup, ctx)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)

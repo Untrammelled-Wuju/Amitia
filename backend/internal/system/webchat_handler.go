@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,30 @@ type webChatSendRequest struct {
 	ImageUrl         string  `json:"imageUrl"`
 	VideoUrl         string  `json:"videoUrl"`
 	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
+}
+
+func (h *Handler) WebChatListConversations(c *gin.Context) {
+	q := chat.ConversationQuery{}
+	c.ShouldBindQuery(&q)
+	resp, err := h.chatSvc.ListConversations(q)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		return
+	}
+	util.SuccessResponse(c, resp)
+}
+
+func (h *Handler) WebChatGetMessages(c *gin.Context) {
+	id := c.Param("id")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	msgs, total, err := h.chatSvc.GetMessages(id, page, pageSize)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		return
+	}
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	util.SuccessResponse(c, gin.H{"items": msgs, "total": total, "page": page, "pageSize": pageSize, "totalPages": totalPages})
 }
 
 func (h *Handler) WebChatCreateConv(c *gin.Context) {
@@ -83,24 +108,31 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		}
 	}
 	if body.Channel == "wechat" || body.Channel == "qq" {
-		var existing []map[string]interface{}
-		h.db.Table("conversations").Where("channel = ? AND character_id = ?", body.Channel, body.CharacterID).Limit(1).Find(&existing)
-		if len(existing) > 0 {
-			util.SuccessResponse(c, gin.H{"id": existing[0]["id"], "title": existing[0]["title"], "channel": body.Channel, "source": existing[0]["source"], "characterId": existing[0]["character_id"]})
+		existingChannelConv, err := h.chatSvc.EnsureChannelConversation(body.Channel)
+		if err == nil && existingChannelConv != nil {
+			util.SuccessResponse(c, gin.H{"id": existingChannelConv.ID, "title": existingChannelConv.Title, "channel": existingChannelConv.Channel, "source": existingChannelConv.Source, "characterId": existingChannelConv.CharacterID})
 			return
 		}
 	}
-	convID := uuid.New().String()
-	now := time.Now().Format("2006-01-02 15:04:05")
-	h.db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", convID, body.Title, body.CharacterID, body.Channel, body.Source, now, now)
-	h.db.Exec("UPDATE characters SET conversation_id = ?, updated_at = ? WHERE id = ? AND (conversation_id IS NULL OR conversation_id = '')", convID, now, body.CharacterID)
-	util.SuccessResponse(c, gin.H{"id": convID, "title": body.Title, "channel": body.Channel, "source": body.Source, "characterId": body.CharacterID})
+	conv, err := h.chatSvc.CreateConversation(&chat.CreateConversationRequest{
+		CharacterID: body.CharacterID,
+		Title:       body.Title,
+		Channel:     body.Channel,
+		Source:      body.Source,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"id": conv.ID, "title": conv.Title, "channel": conv.Channel, "source": conv.Source, "characterId": conv.CharacterID})
 }
 
 func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 	id := c.Param("id")
-	h.db.Exec("DELETE FROM messages WHERE conversation_id = ?", id)
-	h.db.Exec("DELETE FROM conversations WHERE id = ?", id)
+	if err := h.chatSvc.DeleteConversation(id); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		return
+	}
 	util.SuccessResponse(c, gin.H{"deleted": true})
 }
 
@@ -114,14 +146,21 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 		return
 	}
 	if body.CharacterID != "" {
-		h.db.Exec("UPDATE conversations SET character_id = ?, updated_at = ? WHERE id = ?", body.CharacterID, time.Now(), id)
+		_, err := h.chatSvc.ChangeCharacter(id, body.CharacterID)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+			return
+		}
 	}
 	util.SuccessResponse(c, gin.H{"updated": true, "id": id})
 }
 
 func (h *Handler) WebChatDeleteConvMessages(c *gin.Context) {
 	id := c.Param("id")
-	h.db.Exec("DELETE FROM messages WHERE conversation_id = ?", id)
+	if err := h.chatSvc.DeleteMessages(id); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "清空失败", nil)
+		return
+	}
 	util.SuccessResponse(c, gin.H{"deleted": true})
 }
 

@@ -91,9 +91,6 @@ type Service interface {
 	GetWechatEvents() map[string]interface{}
 	GetWechatStatus() map[string]interface{}
 	Health() map[string]interface{}
-	LegacyDeleteConversation(id string) map[string]interface{}
-	LegacyGetMessages(id string, page, pageSize int) map[string]interface{}
-	LegacyListConversations() map[string]interface{}
 	MaintenanceDiagnose() map[string]interface{}
 	MaintenanceExportDiagnostic() map[string]interface{}
 	MaintenanceReloadConfig() map[string]interface{}

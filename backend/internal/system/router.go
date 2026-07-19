@@ -233,18 +233,18 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/messages/events", handler.MessagesEventsStream)
 
-	r.GET("/conversations", handler.LegacyListConversations)
-	r.GET("/conversations/:id/messages", handler.LegacyGetMessages)
-	r.DELETE("/conversations/:id", handler.LegacyDeleteConversation)
+	r.GET("/conversations", handler.WebChatListConversations)
+	r.GET("/conversations/:id/messages", handler.WebChatGetMessages)
+	r.DELETE("/conversations/:id", handler.WebChatDeleteConv)
 
 	r.GET("/moods", handler.GetCompanionMoods)
 	r.GET("/moods/conversations/:id", handler.GetCompanionMoodsByConversation)
 	r.DELETE("/moods/:id", handler.DeleteCompanionMood)
 	r.DELETE("/moods/conversations/:id", handler.DeleteCompanionMoodsByConversation)
 
-	r.GET("/web-chat/conversations", handler.LegacyListConversations)
+	r.GET("/web-chat/conversations", handler.WebChatListConversations)
 	r.POST("/web-chat/conversations", handler.WebChatCreateConv)
-	r.GET("/web-chat/conversations/:id/messages", handler.LegacyGetMessages)
+	r.GET("/web-chat/conversations/:id/messages", handler.WebChatGetMessages)
 	r.DELETE("/web-chat/conversations/:id", handler.WebChatDeleteConv)
 	r.PUT("/web-chat/conversations/:id", handler.WebChatUpdateConv)
 	r.DELETE("/web-chat/conversations/:id/messages", handler.WebChatDeleteConvMessages)
