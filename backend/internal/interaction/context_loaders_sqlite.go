@@ -77,7 +77,7 @@ func runtimeProfileFromRole(profile *character.RoleRuntimeProfile) RuntimeProfil
 		Personality:         profile.Personality,
 		SpeakingStyle:       profile.SpeakingStyle,
 		RelationshipStyle:   profile.RelationshipStyle,
-		SystemPrompt:        profile.SystemPrompt,
+		CharacterBase:       profile.CharacterBase,
 		BoundaryRules:       profile.BoundaryRules,
 		PersonalitySliders:  profile.PersonalitySliders,
 		BasePrompt:          profile.BasePrompt,

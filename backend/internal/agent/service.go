@@ -76,7 +76,7 @@ func (s *service) Test(characterID, message string) (map[string]interface{}, err
 			s.db.Table("characters").Select("id").Limit(1).Row().Scan(&characterID)
 		}
 	}
-	err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), system_prompt").Where("id = ?", characterID).
+	err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), character_base").Where("id = ?", characterID).
 		Row().Scan(&charID, &charName, &identity, &systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
@@ -130,7 +130,7 @@ func (s *service) ContextPreview(convID string) (map[string]interface{}, error) 
 	}
 
 	var systemPrompt string
-	s.db.Table("characters").Select("system_prompt").Where("id = ?", charID).Row().Scan(&systemPrompt)
+	s.db.Table("characters").Select("character_base").Where("id = ?", charID).Row().Scan(&systemPrompt)
 
 	var msgCount int64
 	s.db.Table("messages").Where("conversation_id = ?", convID).Count(&msgCount)

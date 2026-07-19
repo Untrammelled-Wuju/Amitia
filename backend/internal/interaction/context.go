@@ -69,7 +69,7 @@ type RuntimeProfile struct {
 	Personality         string                 `json:"personality,omitempty"`
 	SpeakingStyle       string                 `json:"speakingStyle,omitempty"`
 	RelationshipStyle   string                 `json:"relationshipStyle,omitempty"`
-	SystemPrompt        string                 `json:"systemPrompt,omitempty"`
+	CharacterBase       string                 `json:"characterBase,omitempty"`
 	BoundaryRules       string                 `json:"boundaryRules,omitempty"`
 	PersonalitySliders  string                 `json:"personalitySliders,omitempty"`
 	BasePrompt          string                 `json:"basePrompt,omitempty"`

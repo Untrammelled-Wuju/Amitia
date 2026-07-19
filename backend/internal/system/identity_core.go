@@ -13,7 +13,7 @@ import (
 var identityCoreFields = []string{
 	"name",
 	"identity",
-	"system_prompt",
+	"character_base",
 	"boundary_rules",
 	"gender",
 	"pronoun",
@@ -34,7 +34,7 @@ var identityGrowthAllowedFields = []string{
 }
 
 var identityCoreJSONFields = map[string]string{
-	"systemPrompt":   "system_prompt",
+	"systemPrompt":   "character_base",
 	"boundaryRules":  "boundary_rules",
 	"selfReference":  "self_reference",
 	"lifeIdentity":   "life_identity",
@@ -42,7 +42,8 @@ var identityCoreJSONFields = map[string]string{
 	"identity":       "identity",
 	"gender":         "gender",
 	"pronoun":        "pronoun",
-	"system_prompt":  "system_prompt",
+	"character_base":  "character_base",
+	"system_prompt":  "character_base",
 	"boundary_rules": "boundary_rules",
 	"self_reference": "self_reference",
 	"life_identity":  "life_identity",

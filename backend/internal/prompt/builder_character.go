@@ -5,8 +5,8 @@ func appendCharacterSections(ctx *buildContext) {
 	if req.BaseIdentity != "" {
 		ctx.appendSection("base_identity", GwSectionBaseIdentity, TrustTrusted, ModeAuthoritative, "base_identity", 880, req.BaseIdentity, "GwSectionBaseIdentity")
 	}
-	if req.SystemPrompt != "" {
-		ctx.appendSection("system_prompt", GwSectionSystemPrompt, TrustSemiTrusted, ModeAuthoritative, "system_prompt", 840, "【角色专属提示词 - 最高优先级角色指令】"+"\n"+req.SystemPrompt, "GwSectionSystemPrompt")
+	if req.CharacterBase != "" {
+		ctx.appendSection("character_base", GwSectionCharacterBase, TrustSemiTrusted, ModeAuthoritative, "character_base", 840, "【角色基础指令】"+"\n"+req.CharacterBase, "GwSectionCharacterBase")
 	}
 	if req.CharacterConfig != "" || req.CompiledPersonality != "" {
 		ctx.appendSection("character_contract", GwSectionCharacterContract, TrustTrusted, ModeAuthoritative, "character_config", 800, req.CharacterConfig+"\n"+req.CompiledPersonality, "GwSectionCharacterContract")

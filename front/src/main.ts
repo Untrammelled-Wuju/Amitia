@@ -7,7 +7,8 @@ import "element-plus/dist/index.css"
 import zhCn from "element-plus/dist/locale/zh-cn.mjs"
 
 // Design tokens
-import "./styles/theme-presets.css"
+import "./styles/theme-light.css"
+import "./styles/theme-dark.css"
 import "./styles/variables.css"
 import "./styles/element-overrides.css"
 

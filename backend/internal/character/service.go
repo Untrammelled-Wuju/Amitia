@@ -50,7 +50,7 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 		ID: uuid.New().String(), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
 		Avatar:            req.Avatar,
-		RelationshipStyle: req.RelationshipStyle, SystemPrompt: req.SystemPrompt,
+		RelationshipStyle: req.RelationshipStyle, CharacterBase: req.CharacterBase,
 		BoundaryRules: req.BoundaryRules, Description: req.Description,
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
 		GenderExpression: req.GenderExpression, LifeIdentity: req.LifeIdentity,
@@ -147,8 +147,8 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 	if req.RelationshipStyle != nil {
 		updates["relationship_style"] = *req.RelationshipStyle
 	}
-	if req.SystemPrompt != nil {
-		updates["system_prompt"] = *req.SystemPrompt
+	if req.CharacterBase != nil {
+		updates["character_base"] = *req.CharacterBase
 	}
 	if req.BoundaryRules != nil {
 		updates["boundary_rules"] = *req.BoundaryRules

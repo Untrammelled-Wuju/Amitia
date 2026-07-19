@@ -12,7 +12,7 @@ type Character struct {
 	Personality         string  `gorm:"column:personality" json:"personality"`
 	SpeakingStyle       string  `gorm:"column:speaking_style" json:"speakingStyle"`
 	RelationshipStyle   string  `gorm:"column:relationship_style" json:"relationshipStyle"`
-	SystemPrompt        string  `gorm:"column:system_prompt" json:"systemPrompt"`
+	CharacterBase       string  `gorm:"column:character_base" json:"characterBase"`
 	BoundaryRules       string  `gorm:"column:boundary_rules" json:"boundaryRules"`
 	PersonalitySliders  string  `gorm:"column:personality_sliders" json:"personalitySliders"`
 	Description         string  `gorm:"column:description" json:"description"`
@@ -74,7 +74,7 @@ type CreateCharacterRequest struct {
 	Avatar            string          `json:"avatar"`
 	SpeakingStyle     string          `json:"speakingStyle"`
 	RelationshipStyle string          `json:"relationshipStyle"`
-	SystemPrompt      string          `json:"systemPrompt"`
+	CharacterBase     string          `json:"characterBase"`
 	BoundaryRules     string          `json:"boundaryRules"`
 	Description       string          `json:"description"`
 	Gender            string          `json:"gender"`
@@ -94,7 +94,7 @@ type UpdateCharacterRequest struct {
 	Personality       *string          `json:"personality"`
 	SpeakingStyle     *string          `json:"speakingStyle"`
 	RelationshipStyle *string          `json:"relationshipStyle"`
-	SystemPrompt      *string          `json:"systemPrompt"`
+	CharacterBase     *string          `json:"characterBase"`
 	BoundaryRules     *string          `json:"boundaryRules"`
 	Description       *string          `json:"description"`
 	Status            *string          `json:"status"`
@@ -141,7 +141,7 @@ type RoleRuntimeProfile struct {
 	Personality         string                 `json:"personality"`
 	SpeakingStyle       string                 `json:"speakingStyle"`
 	RelationshipStyle   string                 `json:"relationshipStyle"`
-	SystemPrompt        string                 `json:"systemPrompt"`
+	CharacterBase       string                 `json:"characterBase"`
 	BoundaryRules       string                 `json:"boundaryRules"`
 	PersonalitySliders  string                 `json:"personalitySliders"`
 	BasePrompt          string                 `json:"basePrompt"`

@@ -72,7 +72,7 @@ func HandleSession(c *gin.Context) {
 		dbInstance.Table("conversations").Where("id = ?", conversationId).Select("character_id as cid").First(&conv)
 		if conv.CID != "" {
 			var ch struct{ N, SP, SS, VT, CVID, VM string }
-			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, system_prompt as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
+			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
 			if ch.VM == "clone" && ch.CVID != "" {
 				voiceType = ch.CVID
 			} else if ch.VT != "" {

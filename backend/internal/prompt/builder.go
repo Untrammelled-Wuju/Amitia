@@ -5,7 +5,7 @@ import (
 )
 
 type BuildRequest struct {
-	SystemPrompt string
+	CharacterBase string
 
 	CharacterName       string
 	CharacterConfig     string

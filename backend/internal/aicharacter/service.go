@@ -86,7 +86,7 @@ func (s *service) ResetDefault() map[string]interface{} {
 
 func (s *service) PreviewPrompt(body map[string]interface{}) map[string]interface{} {
 	prompt := ""
-	if v, ok := body["systemPrompt"].(string); ok {
+	if v, ok := body["characterBase"].(string); ok {
 		prompt = v
 	}
 	return map[string]interface{}{"preview": prompt, "estimatedTokens": len(prompt) / 2}
@@ -108,8 +108,8 @@ func (s *service) SaveCharacter(body map[string]interface{}) map[string]interfac
 	if bp, ok := body["basePrompt"].(string); ok {
 		updates["base_prompt"] = bp
 	}
-	if sp, ok := body["systemPrompt"].(string); ok {
-		updates["system_prompt"] = strings.TrimSpace(sp)
+	if sp, ok := body["characterBase"].(string); ok {
+		updates["character_base"] = strings.TrimSpace(sp)
 	}
 
 	if pc, ok := body["personalityConfig"]; ok {

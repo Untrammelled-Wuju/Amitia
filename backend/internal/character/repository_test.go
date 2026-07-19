@@ -33,7 +33,7 @@ func TestGetRuntimeProfileLoadsCompleteConfig(t *testing.T) {
 		Personality:       "温和、敏锐",
 		SpeakingStyle:     "简洁回应",
 		RelationshipStyle: "亲密但有边界",
-		SystemPrompt:      "保持角色一致",
+		CharacterBase:     "保持角色一致",
 		BoundaryRules:     "不越界承诺",
 		PersonalityConfig: `{"openness":72}`,
 		ChatStyleConfig:   `{"pace":"slow"}`,

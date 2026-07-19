@@ -130,7 +130,7 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 		Personality:         c.Personality,
 		SpeakingStyle:       c.SpeakingStyle,
 		RelationshipStyle:   c.RelationshipStyle,
-		SystemPrompt:        c.SystemPrompt,
+		CharacterBase:       c.CharacterBase,
 		BoundaryRules:       c.BoundaryRules,
 		PersonalitySliders:  c.PersonalitySliders,
 		BasePrompt:          c.BasePrompt,

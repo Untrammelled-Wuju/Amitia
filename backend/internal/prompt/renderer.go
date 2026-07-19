@@ -23,7 +23,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 
 	for _, s := range ir.Sections {
 		switch s.Type {
-		case GwSectionPlatformPolicy, GwSectionAppContract, GwSectionCognitiveContract, GwSectionAntiFlatteryContract, GwSectionTechnicalTaskContract, GwSectionBaseIdentity, GwSectionSystemPrompt:
+		case GwSectionPlatformPolicy, GwSectionAppContract, GwSectionCognitiveContract, GwSectionAntiFlatteryContract, GwSectionTechnicalTaskContract, GwSectionBaseIdentity, GwSectionCharacterBase:
 			systemParts = append(systemParts, s.Content)
 
 		case GwSectionProactiveScene, GwSectionProactiveTaskInstruction:
