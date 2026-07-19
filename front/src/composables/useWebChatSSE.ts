@@ -52,9 +52,26 @@ export function useWebChatSSE(
     }
   }
 
-  function handleMessage(event: MessageEvent) {
+  function normalizeEventMessage(event: any): any | null {
+    if (!event.messageId && !event.id) return null
+    return {
+      id: event.messageId || event.id,
+      conversationId: event.conversationId,
+      role: event.role,
+      content: event.content || "",
+      createdAt: event.createdAt || new Date().toISOString(),
+      status: event.status,
+      channel: event.channel,
+      direction: event.direction,
+    }
+  }
+
+  function handleMessageEvent(event: MessageEvent) {
     try {
-      const msg = normalizeRealtimeMessage(JSON.parse(event.data))
+      const raw = JSON.parse(event.data)
+      const msg = normalizeEventMessage(raw)
+      if (!msg) return
+      if (msg.conversationId !== convId.value) return
       if (!msg.role || msg.role === "tool") return
       if ((msg as any).tool_calls_json) return
       if (mergeChatMessage(messages.value, msg)) {
@@ -82,23 +99,21 @@ export function useWebChatSSE(
           messages.value.push(msg)
           if (!sending.value) sortMessages()
           lastPolledMsgId = msg.id || lastPolledMsgId
-          if (msg.source === "proactive" && "Notification" in window && (Notification as any).permission === "granted") {
-            new Notification("日程提醒", { body: msg.content.slice(0, 200), tag: "reminder-" + msg.id })
-          }
           scrollToBottom()
           fetchWechatMsgCount()
           fetchQQStatus()
         }
       }
-    } catch { }
+    } catch {}
   }
 
   async function connectSSE() {
     disconnectSSE()
     if (!convId.value) return
-    const url = await resolveApiUrl("/api/messages/stream") + "?conversationId=" + encodeURIComponent(convId.value) + (lastPolledMsgId ? "&since=" + encodeURIComponent(lastPolledMsgId) : "")
+    const url = await resolveApiUrl("/api/messages/events") + "?channel=web"
     eventSource = new EventSource(url)
-    eventSource.addEventListener("message", handleMessage)
+    eventSource.addEventListener("message_created", handleMessageEvent)
+    eventSource.addEventListener("message_updated", handleMessageEvent)
     eventSource.onerror = () => {
       disconnectSSE()
       setTimeout(() => { if (convId.value) connectSSE() }, 3000)
