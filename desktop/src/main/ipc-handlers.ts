@@ -32,6 +32,15 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.getRuntimeStatus, () => runtimeManager.getStatus())
 
+  ipcMain.handle(IPC_CHANNELS.getAutoLaunch, async () => {
+    return configStore.getAutoLaunch()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.setAutoLaunch, async (_event, enabled: boolean) => {
+    await configStore.setAutoLaunch(enabled)
+    app.setLoginItemSettings({ openAtLogin: enabled })
+    return enabled
+  })
   ipcMain.handle(IPC_CHANNELS.openLogsDirectory, async () => {
     await shell.openPath(app.getPath("logs"))
   })

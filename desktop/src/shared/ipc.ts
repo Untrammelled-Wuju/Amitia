@@ -12,6 +12,8 @@ export const IPC_CHANNELS = {
   selectMCPRoot: "amitia:mcp:select-root",
   selectExtensionPackage: "amitia:extension-package:select-file",
   saveExtensionPackage: "amitia:extension-package:save",
+  getAutoLaunch: "amitia:auto-launch:get",
+  setAutoLaunch: "amitia:auto-launch:set",
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

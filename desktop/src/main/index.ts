@@ -126,6 +126,8 @@ async function enterMainApp(): Promise<void> {
   mainWindow = createMainWindow()
   tray = createAppTray(mainWindow, () => currentConfig)
 
+  const autoLaunch = await configStore.getAutoLaunch()
+  app.setLoginItemSettings({ openAtLogin: autoLaunch })
   registerUpdateManager(mainWindow)
   await waitForStartupCheck()
 

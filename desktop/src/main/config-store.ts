@@ -6,9 +6,11 @@ import { getAmitiaDataDir } from "./path-manager"
 
 export class ConfigStore {
   private readonly filePath: string
+  private readonly autoLaunchPath: string
 
   constructor(filePath?: string) {
     this.filePath = filePath || join(getAmitiaDataDir(), "config", "deployment-config.json")
+    this.autoLaunchPath = join(getAmitiaDataDir(), "config", "auto-launch.json")
   }
 
   async getDeploymentConfig(): Promise<DeploymentModeConfig> {
@@ -25,5 +27,20 @@ export class ConfigStore {
     await mkdir(dirname(this.filePath), { recursive: true })
     await writeFile(this.filePath, JSON.stringify(next, null, 2), "utf8")
     return next
+  }
+
+  async getAutoLaunch(): Promise<boolean> {
+    try {
+      const raw = await readFile(this.autoLaunchPath, "utf8")
+      const data = JSON.parse(raw)
+      return data.enabled === true
+    } catch {
+      return false
+    }
+  }
+
+  async setAutoLaunch(enabled: boolean): Promise<void> {
+    await mkdir(dirname(this.autoLaunchPath), { recursive: true })
+    await writeFile(this.autoLaunchPath, JSON.stringify({ enabled }, null, 2), "utf8")
   }
 }
