@@ -54,7 +54,7 @@ async function saveCharPrompt() {
   promptSaving.value = true
   try {
     await put<any>(`/api/characters/${props.charId}`, {
-      systemPrompt: props.editingPrompt,
+      characterBase: props.editingPrompt,
     })
     ElMessage.success("提示词已保存")
     emit("update:modelValue", false)

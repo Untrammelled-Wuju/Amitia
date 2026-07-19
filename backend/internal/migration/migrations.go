@@ -76,6 +76,7 @@ func DefaultMigrations() []Migration {
 		TemporalCoreMigration(),
 		TemporalRelationshipTimeMigration(),
 		CanonicalSingleUserMigration(),
+		CharacterBaseColumnMigration(),
 		MCPClientMigration(),
 	}
 }

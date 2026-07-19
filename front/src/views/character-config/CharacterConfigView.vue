@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             v-model:personality="form.personality"
             v-model:speaking-style="form.speakingStyle"
             v-model:relationship-style="form.relationshipStyle"
-            v-model:system-prompt="form.systemPrompt"
+            v-model:character-base="form.characterBase"
             v-model:boundary-rules="form.boundaryRules"
             v-model:personality-config="form.personalityConfig"
             v-model:is-active="form.isActive"
@@ -72,7 +72,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <el-dialog v-model="showFullPrompt" title="完整 Prompt" fullscreen destroy-on-close>
       <el-input
-        v-model="form.systemPrompt"
+        v-model="form.characterBase"
         type="textarea"
         :rows="30"
         placeholder="编写角色的 System Prompt..."

@@ -29,7 +29,7 @@ export function useCharacterConfig() {
   const form = reactive({
     name: "", avatar: "", identity: "", personality: "",
     speakingStyle: "", relationshipStyle: "",
-    systemPrompt: "", boundaryRules: DEFAULT_BOUNDARY,
+    characterBase: "", boundaryRules: DEFAULT_BOUNDARY,
     isActive: true, description: "", basePrompt: "", isDefault: false, status: "enabled",
     personalityConfig: { ...DEFAULT_PERSONALITY_CONFIG } as PersonalityConfig,
     chatStyleConfig: null as any,
@@ -66,7 +66,7 @@ export function useCharacterConfig() {
     form.personality = c.personality || ""
     form.speakingStyle = c.speakingStyle || ""
     form.relationshipStyle = c.relationshipStyle || ""
-    form.systemPrompt = c.systemPrompt || ""
+    form.characterBase = c.characterBase || ""
     form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY
     form.description = c.description || ""
     form.basePrompt = c.basePrompt || ""
@@ -83,7 +83,8 @@ export function useCharacterConfig() {
     selectedId.value = ""
     activeTab.value = "edit"
     form.name = ""; form.avatar = ""; form.identity = ""; form.personality = ""
-    form.speakingStyle = ""; form.relationshipStyle = ""; form.systemPrompt = ""; form.boundaryRules = ""
+    form.speakingStyle = ""; form.relationshipStyle = "";
+    form.characterBase = ""; form.boundaryRules = ""
     form.isActive = true
   }
 
@@ -105,7 +106,7 @@ export function useCharacterConfig() {
     form.name = (c.name || "") + " (副本)"
     form.avatar = c.avatar || ""; form.identity = c.identity || ""; form.personality = c.personality || ""
     form.speakingStyle = c.speakingStyle || ""; form.relationshipStyle = c.relationshipStyle || ""
-    form.systemPrompt = c.systemPrompt || ""; form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY
+    form.characterBase = c.characterBase || ""; form.boundaryRules = c.boundaryRules ?? DEFAULT_BOUNDARY
     form.description = c.description || ""; form.basePrompt = c.basePrompt || ""
     form.isDefault = false; form.status = "enabled"
     form.personalityConfig = normalizePersonalityConfig(c.personalityConfig)
@@ -138,7 +139,7 @@ export function useCharacterConfig() {
 
   function resetPrompt() {
     ElMessageBox.confirm("恢复默认提示词？当前内容将丢失。", "提示", { type: "warning" })
-      .then(() => { form.systemPrompt = ""; ElMessage.success("已恢复") })
+      .then(() => { form.characterBase = ""; ElMessage.success("已恢复") })
       .catch(() => {})
   }
 

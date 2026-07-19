@@ -59,7 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-button text size="small" :icon="FullScreen" @click="emit('showFullPrompt')">全屏编辑</el-button>
             <el-button text size="small" @click="emit('resetPrompt')">恢复默认</el-button>
           </div>
-          <el-input v-model="systemPromptModel" type="textarea" :rows="8" placeholder="编写角色的 System Prompt..." />
+          <el-input v-model="characterBaseModel" type="textarea" :rows="8" placeholder="编写角色的 System Prompt..." />
         </el-form-item>
 
         <el-form-item label="安全边界规则">
@@ -98,7 +98,7 @@ const props = defineProps<{
   activeTab: string
   name: string; avatar: string; identity: string; personality: string
   speakingStyle: string; relationshipStyle: string
-  systemPrompt: string; boundaryRules: string
+  characterBase: string; boundaryRules: string
   personalityConfig: PersonalityConfig
   isActive: boolean; hasOtherActive: boolean
   saving: boolean; selectedId: string
@@ -112,7 +112,7 @@ const emit = defineEmits<{
   (e: "update:personality", v: string): void
   (e: "update:speakingStyle", v: string): void
   (e: "update:relationshipStyle", v: string): void
-  (e: "update:systemPrompt", v: string): void
+  (e: "update:characterBase", v: string): void
   (e: "update:boundaryRules", v: string): void
   (e: "update:personalityConfig", v: PersonalityConfig): void
   (e: "update:isActive", v: boolean): void
@@ -147,7 +147,7 @@ const identityModel = computed({ get: () => props.identity, set: (v) => emit("up
 const personalityModel = computed({ get: () => props.personality, set: (v) => emit("update:personality", v) })
 const speakingStyleModel = computed({ get: () => props.speakingStyle, set: (v) => emit("update:speakingStyle", v) })
 const relationshipStyleModel = computed({ get: () => props.relationshipStyle, set: (v) => emit("update:relationshipStyle", v) })
-const systemPromptModel = computed({ get: () => props.systemPrompt, set: (v) => emit("update:systemPrompt", v) })
+const characterBaseModel = computed({ get: () => props.characterBase, set: (v) => emit("update:characterBase", v) })
 const boundaryRulesModel = computed({ get: () => props.boundaryRules, set: (v) => emit("update:boundaryRules", v) })
 const personalityConfigModel = computed({ get: () => props.personalityConfig, set: (v) => emit("update:personalityConfig", v) })
 const isActiveModel = computed({ get: () => props.isActive, set: (v) => emit("update:isActive", v) })
@@ -182,5 +182,4 @@ const isActiveModel = computed({ get: () => props.isActive, set: (v) => emit("up
   object-fit: cover;
 }
 </style>
-
 

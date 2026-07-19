@@ -310,7 +310,7 @@ export function useOnboardingWizard() {
           avatar: form.charAvatar,
           identity: form.charIdentity,
           personality: form.charPersonality,
-          systemPrompt: form.charPrompt,
+          characterBase: form.charPrompt,
           isActive: 1,
           isDefault: true,
         }).then((charRes: any) => {

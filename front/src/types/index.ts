@@ -114,7 +114,7 @@ export interface Character {
   personality: string
   speakingStyle: string
   relationshipStyle: string
-  systemPrompt: string
+  characterBase: string
   boundaryRules: string
   personalitySliders: string
   description: string

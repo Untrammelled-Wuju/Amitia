@@ -447,7 +447,7 @@ async function editCharPrompt() {
  try {
    if (charId.value) {
       const char = await get<any>("/api/characters/" + charId.value)
-      editingPrompt.value = char?.systemPrompt || ""
+      editingPrompt.value = char?.characterBase || ""
     } else {
       editingPrompt.value = ""
       ElMessage.info("请先保存角色后再编辑提示词")
