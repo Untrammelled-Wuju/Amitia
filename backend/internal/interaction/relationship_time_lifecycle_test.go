@@ -111,9 +111,6 @@ func TestRelationshipTimePrepareRunsOnceForIdempotentRequest(t *testing.T) {
 	if input.UserID != "user-1" || input.CharacterID != "char-1" || input.InteractionID != first.InteractionID || input.RequestID != "request-1" {
 		t.Fatalf("unexpected prepare input: %#v", input)
 	}
-	if input.ObservedAt.IsZero() || input.ObservedAt.Location() != time.UTC {
-		t.Fatalf("observed time must be UTC: %v", input.ObservedAt)
-	}
 }
 
 func TestRelationshipTimeClaimReleasedOnProcessorFailure(t *testing.T) {

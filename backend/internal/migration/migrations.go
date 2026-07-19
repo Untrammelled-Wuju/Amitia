@@ -75,6 +75,7 @@ func DefaultMigrations() []Migration {
 		MessagePlanMigration(),
 		TemporalCoreMigration(),
 		TemporalRelationshipTimeMigration(),
+		CanonicalSingleUserMigration(),
 		MCPClientMigration(),
 	}
 }

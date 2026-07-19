@@ -6,7 +6,7 @@ import { ElMessage } from "element-plus"
 import type { ApiResponse } from "@/types"
 import { ERR } from "@/types"
 import { getRuntimeConnection } from "@/runtime/runtime-adapter"
-import { getDeviceTimezone, getRequestUserId } from "@/utils/requestEnvelope"
+import { getDeviceTimezone } from "@/utils/requestEnvelope"
 
 // Import from the unified request module for error classification
 import { request as unifiedRequest } from "./request"
@@ -28,7 +28,6 @@ apiClient.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  config.headers["X-User-ID"] = getRequestUserId()
   const deviceTimezone = getDeviceTimezone()
   if (deviceTimezone) config.headers["X-Device-Timezone"] = deviceTimezone
   return config

@@ -63,7 +63,22 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 		ProactiveEmotion:         emoCtx,
 		ProactiveMemory:          memCtx,
 	}
-	return s.unifiedEntry.Handle(ctx, req)
+
+	result, err := s.unifiedEntry.Handle(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if result != nil && result.Response != nil && s.assistantContactRecorder != nil {
+		if recErr := s.assistantContactRecorder.RecordAssistantContact(
+			context.WithoutCancel(ctx),
+			requestidentity.DefaultUserID,
+			characterID,
+			time.Time{},
+		); recErr != nil {
+			log.Printf("[companion] record assistant contact failed: %v", recErr)
+		}
+	}
+	return result, nil
 }
 
 type proactiveTimeContext struct {

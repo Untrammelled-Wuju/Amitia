@@ -46,11 +46,28 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 	}
 	input.ObservedAt = input.ObservedAt.UTC()
 	err = c.repo.WithTransaction(ctx, func(repo *RelationshipTimeRepository) error {
-		existing, getErr := repo.GetReceipt(ctx, input.UserID, input.RequestID)
-		if getErr != nil {
-			return getErr
+		receipt := &InteractionReceipt{
+			ID:            uuid.NewString(),
+			RequestID:     input.RequestID,
+			InteractionID: input.InteractionID,
+			UserID:        input.UserID,
+			CharacterID:   input.CharacterID,
+			Channel:       input.Channel,
+			PeerID:        input.PeerID,
+			ObservedAtUTC: FormatRelationshipTime(input.ObservedAt),
+			Status:        InteractionReceiptObserved,
+			CreatedAtUTC:  FormatRelationshipTime(input.ObservedAt),
+			UpdatedAtUTC:  FormatRelationshipTime(input.ObservedAt),
 		}
-		if existing != nil {
+		created, createErr := repo.CreateReceipt(ctx, receipt)
+		if createErr != nil {
+			return createErr
+		}
+		if !created {
+			existing, getErr := repo.GetReceipt(ctx, input.UserID, input.RequestID)
+			if getErr != nil {
+				return getErr
+			}
 			result, getErr = c.contextFromReceipt(ctx, repo, existing)
 			return getErr
 		}
@@ -84,6 +101,9 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		result = c.baseContext(input.UserID, input.CharacterID, input.ObservedAt, global, relationship, globalGap, relationshipGap, normalizedGap, deviation, cadence)
 		result.Diagnostics = append(globalDiagnostics, relationshipDiagnostics...)
 		eligible := !previousRelationship.IsZero() && !input.IsInternal && !isProactiveSource(input.Source)
+		if eligible && settings != nil && !settings.ReunionEnabled {
+			eligible = false
+		}
 		level := reunionLevel(relationshipGap, normalizedGap)
 		if eligible && level != ReunionLevelNone {
 			lastAssistantContact := time.Time{}
@@ -137,35 +157,15 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 				}
 			}
 		}
-		receipt := &InteractionReceipt{
-			ID:                                 uuid.NewString(),
-			RequestID:                          input.RequestID,
-			InteractionID:                      input.InteractionID,
-			UserID:                             input.UserID,
-			CharacterID:                        input.CharacterID,
-			Channel:                            input.Channel,
-			PeerID:                             input.PeerID,
-			ObservedAtUTC:                      FormatRelationshipTime(input.ObservedAt),
-			PreviousGlobalCommittedAtUTC:       FormatRelationshipTime(previousGlobal),
-			PreviousRelationshipCommittedAtUTC: FormatRelationshipTime(previousRelationship),
-			Status:                             InteractionReceiptObserved,
-			CreatedAtUTC:                       FormatRelationshipTime(input.ObservedAt),
-			UpdatedAtUTC:                       FormatRelationshipTime(input.ObservedAt),
+		updateFields := map[string]interface{}{
+			"previous_global_committed_at_utc":       FormatRelationshipTime(previousGlobal),
+			"previous_relationship_committed_at_utc": FormatRelationshipTime(previousRelationship),
 		}
 		if result.Reunion != nil {
-			receipt.ReunionEpisodeID = result.Reunion.EpisodeID
+			updateFields["reunion_episode_id"] = result.Reunion.EpisodeID
 		}
-		created, createErr := repo.CreateReceipt(ctx, receipt)
-		if createErr != nil {
-			return createErr
-		}
-		if !created {
-			existing, createErr = repo.GetReceipt(ctx, input.UserID, input.RequestID)
-			if createErr != nil || existing == nil {
-				return createErr
-			}
-			result, createErr = c.contextFromReceipt(ctx, repo, existing)
-			return createErr
+		if updateErr := repo.db.WithContext(ctx).Model(&InteractionReceipt{}).Where("user_id = ? AND request_id = ?", input.UserID, input.RequestID).Updates(updateFields).Error; updateErr != nil {
+			return updateErr
 		}
 		return nil
 	})
@@ -262,6 +262,30 @@ func (c *RelationshipTimeCoordinator) GetReunionEpisode(ctx context.Context, epi
 		return nil, errors.New("relationship time repository is required")
 	}
 	return c.repo.GetReunionEpisode(ctx, episodeID)
+}
+
+func (c *RelationshipTimeCoordinator) GetState(ctx context.Context, userID, characterID string) (*RelationshipTimeContext, error) {
+	if c == nil || c.repo == nil {
+		return nil, errors.New("relationship time repository is required")
+	}
+	result, err := c.Resolve(ctx, SnapshotInput{UserID: userID, CharacterID: characterID}, c.clock.Now())
+	return result, err
+}
+
+func (c *RelationshipTimeCoordinator) RecordAssistantContact(ctx context.Context, userID, characterID string, at time.Time) error {
+	if c == nil || c.repo == nil {
+		return errors.New("relationship time repository is required")
+	}
+	if strings.TrimSpace(userID) == "" {
+		userID = "default"
+	}
+	if strings.TrimSpace(characterID) == "" {
+		return errors.New("character id is required")
+	}
+	if at.IsZero() {
+		at = c.clock.Now()
+	}
+	return c.repo.RecordAssistantContact(ctx, userID, characterID, at.UTC())
 }
 
 func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, userID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {

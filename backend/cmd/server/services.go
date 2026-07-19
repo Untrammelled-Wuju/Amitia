@@ -141,6 +141,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	visionSvc := vision.NewService(visionRepo)
 	compSvc := companion.NewService(ctx)
 	compSvc.AttachTemporalResolver(temporalSvc)
+	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
+		compSvc.AttachAssistantContactRecorder(relTimeCoordinator)
+	}
 	compressor := chat.NewCompressor(ctx.DB)
 	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
 	if err := psycheStore.InitSchema(); err != nil {

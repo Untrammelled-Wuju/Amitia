@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -280,13 +281,8 @@ func stableWebhookSessionID(req WebhookRequest, convID string) string {
 }
 
 func stableWebhookUserID(req WebhookRequest) string {
-	for _, candidate := range []string{req.UserID, req.SenderID, req.AccountID} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			return candidate
-		}
-	}
-	return ""
+	_ = req
+	return requestidentity.DefaultUserID
 }
 
 func stableWebhookSource(req WebhookRequest) string {

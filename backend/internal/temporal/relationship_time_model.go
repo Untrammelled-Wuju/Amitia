@@ -81,6 +81,8 @@ type RelationshipTimeContext struct {
 	StoredTension             float64 `json:"storedTension"`
 	HasRecentAssistantContact bool    `json:"hasRecentAssistantContact"`
 
+	Policy *RelationshipTimePolicy `json:"policy,omitempty"`
+
 	Diagnostics []string `json:"diagnostics,omitempty"`
 }
 

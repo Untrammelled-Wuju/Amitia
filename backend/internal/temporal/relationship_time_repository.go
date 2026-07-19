@@ -489,3 +489,36 @@ func (r *RelationshipTimeRepository) updateAssistantContact(ctx context.Context,
 		Where("user_id = ? AND character_id = ?", userID, characterID).
 		Update("last_assistant_contact_at_utc", committedText).Error
 }
+
+func (r *RelationshipTimeRepository) RecordAssistantContact(ctx context.Context, userID, characterID string, at time.Time) error {
+	nowText := FormatRelationshipTime(at)
+	existing, err := r.GetRelationshipPresence(ctx, userID, characterID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		currentContact := ParseRelationshipTime(existing.LastAssistantContactAtUTC)
+		if !currentContact.IsZero() && !at.After(currentContact) {
+			return nil
+		}
+		return r.db.WithContext(ctx).Model(&RelationshipPresenceState{}).
+			Where("user_id = ? AND character_id = ?", userID, characterID).
+			Updates(map[string]interface{}{
+				"last_assistant_contact_at_utc": nowText,
+				"updated_at_utc":                nowText,
+				"state_version":                 gorm.Expr("state_version + 1"),
+			}).Error
+	}
+	state := RelationshipPresenceState{
+		ID:                        relationshipPresenceID(userID, characterID),
+		UserID:                    userID,
+		CharacterID:               characterID,
+		LastAssistantContactAtUTC: nowText,
+		ExpectedGapSeconds:        DefaultExpectedGap.Seconds(),
+		ContinuityScore:           1,
+		StateVersion:              1,
+		CreatedAtUTC:              nowText,
+		UpdatedAtUTC:              nowText,
+	}
+	return r.db.WithContext(ctx).Create(&state).Error
+}

@@ -22,6 +22,8 @@ func RegisterRouter(group *gin.RouterGroup, service *Service, coordinator *Relat
 		temporal.POST("/timezone-suggestion", handler.SuggestTimezone)
 		temporal.POST("/timezone-suggestion/accept", handler.AcceptTimezoneSuggestion)
 		temporal.POST("/timezone-suggestion/reject", handler.RejectTimezoneSuggestion)
+	}
+	if service != nil && service.FeatureFlags().RelationshipTimeEnabled && coordinator != nil {
 		temporal.GET("/characters/:characterId/relationship-time/settings", handler.GetRelationshipTimeSettings)
 		temporal.PUT("/characters/:characterId/relationship-time/settings", handler.UpdateRelationshipTimeSettings)
 		temporal.GET("/characters/:characterId/relationship-time/state", handler.GetRelationshipTimeState)

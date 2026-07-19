@@ -1,5 +1,4 @@
 const SESSION_KEY = "ai-companion-session-id"
-const USER_KEY = "ai-companion-user-id"
 
 function createId(prefix: string): string {
   const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -18,7 +17,7 @@ function getStoredId(key: string, prefix: string): string {
 }
 
 export function getRequestUserId(): string {
-  return getStoredId(USER_KEY, "user")
+  return "default"
 }
 
 export function getDeviceTimezone(): string {

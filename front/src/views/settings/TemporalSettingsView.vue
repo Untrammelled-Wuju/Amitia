@@ -54,13 +54,6 @@
                 <el-option label="星期日" :value="0" />
               </el-select>
             </el-form-item>
-            <el-form-item label="节日地区">
-              <el-select v-model="profile.holidayRegion" clearable class="full-width" placeholder="不启用系统节日">
-                <el-option label="中国静态公历节日" value="CN" />
-                <el-option label="美国静态公历节日" value="US" />
-              </el-select>
-              <div class="field-help">不会根据语言或时区自动猜测节日地区。</div>
-            </el-form-item>
             <el-form-item label="所在半球">
               <el-select v-model="profile.hemisphere" class="full-width">
                 <el-option label="未知" value="unknown" />
@@ -131,17 +124,15 @@
         <div class="dialog-grid">
           <el-form-item label="名称" prop="title"><el-input v-model="anchorForm.title" maxlength="100" /></el-form-item>
           <el-form-item label="类型" prop="anchorType"><el-select v-model="anchorForm.anchorType" class="full-width"><el-option v-for="item in anchorTypes" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-          <el-form-item label="时间语义" prop="timeKind"><el-select v-model="anchorForm.timeKind" class="full-width"><el-option label="年度日期" value="annual_date" /><el-option label="一次性日期" value="local_date" /><el-option label="当地日期时间" value="local_datetime" /><el-option label="周期事件" value="recurring" /><el-option label="UTC 瞬间" value="instant" /></el-select></el-form-item>
+          <el-form-item label="时间语义" prop="timeKind"><el-select v-model="anchorForm.timeKind" class="full-width"><el-option label="年度日期" value="annual_date" /><el-option label="一次性日期" value="local_date" /><el-option label="当地日期时间" value="local_datetime" /><el-option label="UTC 瞬间" value="instant" /></el-select></el-form-item>
           <el-form-item v-if="anchorForm.timeKind === 'annual_date'" label="月-日" prop="localDate"><el-input v-model="anchorForm.localDate" placeholder="08-16" /></el-form-item>
           <el-form-item v-else-if="anchorForm.timeKind !== 'instant'" label="当地日期" prop="localDate"><el-date-picker v-model="anchorForm.localDate" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" class="full-width" /></el-form-item>
           <el-form-item v-if="anchorForm.timeKind !== 'instant'" label="当地时间"><el-time-picker v-model="anchorForm.localTime" value-format="HH:mm" format="HH:mm" class="full-width" /></el-form-item>
           <el-form-item v-else label="UTC 瞬间"><el-date-picker v-model="anchorForm.instantAtUtc" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss[Z]" class="full-width" /></el-form-item>
           <el-form-item label="IANA 时区"><el-select v-model="anchorForm.timezone" filterable allow-create class="full-width"><el-option v-for="zone in timezoneOptions" :key="zone" :label="zone" :value="zone" /></el-select></el-form-item>
-          <el-form-item v-if="anchorForm.timeKind === 'recurring'" label="RRULE" prop="rrule" class="wide-item"><el-input v-model="anchorForm.rrule" placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" /><div class="field-help">周期按当地时间重新计算，跨夏令时仍保持当地钟点。</div></el-form-item>
           <el-form-item label="重要度"><el-slider v-model="anchorForm.importance" :min="0" :max="100" /></el-form-item>
           <el-form-item label="置信度"><el-slider v-model="anchorForm.confidence" :min="0" :max="100" /></el-form-item>
           <el-form-item label="允许进入聊天上下文"><el-switch v-model="anchorForm.allowPromptMention" /></el-form-item>
-          <el-form-item label="允许生成主动候选"><el-switch v-model="anchorForm.allowProactiveMention" /></el-form-item>
           <el-form-item label="需要确认"><el-switch v-model="anchorForm.requiresConfirmation" /></el-form-item>
           <el-form-item label="描述" class="wide-item"><el-input v-model="anchorForm.description" type="textarea" :rows="3" maxlength="500" /></el-form-item>
         </div>

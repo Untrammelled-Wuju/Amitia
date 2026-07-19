@@ -121,7 +121,7 @@ func main() {
 	agenttool.SetMemoryService(services.Memory)
 	agenttool.SetTemporalService(services.Temporal)
 	temporalScheduler := temporal.NewScheduler(services.Temporal)
-	temporalScheduler.Start(rootCtx)
+	_ = temporalScheduler
 	defer temporalScheduler.Stop()
 
 	serverAddr := config.AppCfg.Server.Addr()

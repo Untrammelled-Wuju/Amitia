@@ -7,13 +7,15 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/temporal"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func TestWebhookRejectsNilContextBeforeUnifiedEntry(t *testing.T) {
 	processor := &agentTestProcessor{}
 	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), processor, interaction.NewInMemoryTracker(), interaction.NewInMemoryOutboxStore())
 	orch.SetReady(true)
-	svc := &service{unifiedEntry: interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil))}
+	svc := &service{unifiedEntry: interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})}
 
 	_, err := svc.Webhook(nil, WebhookRequest{
 		Channel:        "web",
@@ -39,4 +41,19 @@ type agentTestProcessor struct {
 func (p *agentTestProcessor) ProcessMessageCtx(ctx context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
 	p.called = true
 	return nil, errors.New("unexpected call")
+}
+
+func TestStableWebhookUserIDReturnsDefault(t *testing.T) {
+	if got := stableWebhookUserID(WebhookRequest{}); got != requestidentity.DefaultUserID {
+		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	}
+	if got := stableWebhookUserID(WebhookRequest{UserID: "web-user"}); got != requestidentity.DefaultUserID {
+		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	}
+	if got := stableWebhookUserID(WebhookRequest{SenderID: "wechat-openid"}); got != requestidentity.DefaultUserID {
+		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	}
+	if got := stableWebhookUserID(WebhookRequest{AccountID: "qq-account"}); got != requestidentity.DefaultUserID {
+		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	}
 }

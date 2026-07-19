@@ -1,26 +1,16 @@
 <template>
-  <section class="section-card relationship-time-section" aria-labelledby="relationship-time-title">
+  <section v-if="availability !== 'unavailable'" class="section-card relationship-time-section" aria-labelledby="relationship-time-title">
     <div class="section-heading">
       <div>
         <div id="relationship-time-title" class="section-title">关系时间</div>
         <div class="section-subtitle">让角色理解相识时长、互动节奏与久别重逢，同时保持关系状态连续。</div>
       </div>
       <el-tag v-if="availability === 'available'" type="success" effect="plain">服务可用</el-tag>
-      <el-tag v-else-if="availability === 'unavailable'" type="info" effect="plain">后端未启用</el-tag>
       <el-tag v-else-if="availability === 'error'" type="danger" effect="plain">加载失败</el-tag>
       <el-tag v-else type="info" effect="plain">正在确认</el-tag>
     </div>
 
     <el-skeleton v-if="loading" :rows="4" animated />
-
-    <el-alert
-      v-else-if="availability === 'unavailable'"
-      title="关系时间功能当前不可用"
-      description="后端 Relationship Time 功能开关尚未启用。当前设置不会伪装生效，启用服务后可在此配置。"
-      type="info"
-      show-icon
-      :closable="false"
-    />
 
     <el-alert
       v-else-if="availability === 'error'"
@@ -54,20 +44,14 @@
           <div class="field-help">控制时间感受的表达程度，不改变关系状态本身。</div>
         </el-form-item>
         <el-form-item label="最多重逢表达句数">
-          <el-input-number v-model="settings.maxMentionSentences" :min="0" :max="3" :disabled="!settings.enabled || !settings.reunionEnabled" />
+          <el-input-number v-model="settings.maxMentionSentences" :min="0" :max="2" :disabled="!settings.enabled || !settings.reunionEnabled" />
           <div class="field-help">设为 0 时保留重逢识别，但不生成重逢表达。</div>
-        </el-form-item>
-        <el-form-item label="允许回忆共同经历">
-          <el-switch v-model="settings.allowMemoryRecall" :disabled="!settings.enabled" />
         </el-form-item>
         <el-form-item label="允许提及相识时长">
           <el-switch v-model="settings.allowRelationshipAge" :disabled="!settings.enabled" />
         </el-form-item>
         <el-form-item label="允许提及重逢">
           <el-switch v-model="settings.allowReunionMention" :disabled="!settings.enabled || !settings.reunionEnabled" />
-        </el-form-item>
-        <el-form-item label="允许主动消息引用关系时间">
-          <el-switch v-model="settings.allowProactiveReference" :disabled="!settings.enabled" />
         </el-form-item>
       </el-form>
 

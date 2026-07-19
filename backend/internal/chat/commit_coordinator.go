@@ -295,8 +295,13 @@ func (s *service) finalizeRelationshipTimeTx(tx *gorm.DB, plan messageCommitPlan
 	relTimeCtx := plan.Runtime.Context.Temporal.Value.RelationshipTime
 	suppress := false
 	reason := ""
-	if suppress {
-		reason = "current_task_priority"
+	if relTimeCtx.Policy != nil {
+		if relTimeCtx.Policy.MentionMode == "none" || relTimeCtx.Policy.MaxMentionSentences == 0 {
+			suppress = true
+		}
+		if relTimeCtx.Policy.SuppressionReason != "" {
+			reason = relTimeCtx.Policy.SuppressionReason
+		}
 	}
 	return s.relTimeCoordinator.FinalizeCommittedTx(context.Background(), tx, plan.Request.UserID, plan.Character, plan.Request.InteractionID, relTimeCtx, suppress, reason, plan.Request.IsInternal)
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -39,10 +40,7 @@ func (s *service) systemTimeResult(body map[string]interface{}) map[string]inter
 		return fallback
 	}
 	characterID, _ := body["characterId"].(string)
-	userID, _ := body["userId"].(string)
-	if userID == "" {
-		userID = "default"
-	}
+	userID := requestidentity.DefaultUserID
 	channel, _ := body["channel"].(string)
 	if channel == "" {
 		channel = "web"
@@ -55,18 +53,24 @@ func (s *service) systemTimeResult(body map[string]interface{}) map[string]inter
 	if err != nil {
 		return fallback
 	}
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"routed":            true,
 		"tool":              "system_time",
 		"source":            "temporal-runtime",
-		"timezoneConfirmed": true,
+		"timezoneConfirmed": snapshot.Signals.UserTimezoneConfirmed,
 		"utc":               snapshot.NowUTC.Format(time.RFC3339),
-		"userLocal":         fmt.Sprintf("%s %s %s", snapshot.UserTime.LocalTime.Format("15:04:05"), snapshot.UserTime.Weekday, snapshot.UserTime.Daypart),
-		"userWeekday":       snapshot.UserTime.Weekday,
-		"userDaypart":       snapshot.UserTime.Daypart,
-		"characterLocal":    fmt.Sprintf("%s %s %s", snapshot.CharacterTime.LocalTime.Format("15:04:05"), snapshot.CharacterTime.Weekday, snapshot.CharacterTime.Daypart),
-		"weekday":           snapshot.NowUTC.Weekday().String(),
-		"timestamp_unix_ms": snapshot.NowUTC.UnixMilli(),
-		"snapshotVersion":   snapshot.Version,
 	}
+	if snapshot.Signals.UserTimezoneConfirmed {
+		result["userLocal"] = fmt.Sprintf("%s %s %s", snapshot.UserTime.LocalTime.Format("15:04:05"), snapshot.UserTime.Weekday, snapshot.UserTime.Daypart)
+		result["userWeekday"] = snapshot.UserTime.Weekday
+		result["userDaypart"] = snapshot.UserTime.Daypart
+	} else {
+		result["referenceLocal"] = fmt.Sprintf("%s %s %s", snapshot.CharacterTime.LocalTime.Format("15:04:05"), snapshot.CharacterTime.Weekday, snapshot.CharacterTime.Daypart)
+		result["timezoneWarning"] = "用户实际时区尚未确认"
+	}
+	result["characterLocal"] = fmt.Sprintf("%s %s %s", snapshot.CharacterTime.LocalTime.Format("15:04:05"), snapshot.CharacterTime.Weekday, snapshot.CharacterTime.Daypart)
+	result["weekday"] = snapshot.NowUTC.Weekday().String()
+	result["timestamp_unix_ms"] = snapshot.NowUTC.UnixMilli()
+	result["snapshotVersion"] = snapshot.Version
+	return result
 }

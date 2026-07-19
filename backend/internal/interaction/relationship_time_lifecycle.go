@@ -24,6 +24,9 @@ func (o *Orchestrator) prepareRelationshipTime(ctx context.Context, record *Inte
 	if coordinator == nil || record == nil || req == nil {
 		return nil, nil
 	}
+	if req.IsInternal {
+		return nil, nil
+	}
 	result, err := coordinator.PrepareInbound(ctx, temporal.PrepareInboundInput{
 		UserID:         record.Scope.UserID,
 		CharacterID:    record.Scope.CharacterID,
@@ -32,7 +35,7 @@ func (o *Orchestrator) prepareRelationshipTime(ctx context.Context, record *Inte
 		PeerID:         record.Scope.PeerID,
 		RequestID:      record.Scope.RequestID,
 		InteractionID:  record.ID,
-		ObservedAt:     time.Now().UTC(),
+		ObservedAt:     time.Time{},
 		IsInternal:     req.IsInternal,
 		Source:         record.Scope.Source,
 	})

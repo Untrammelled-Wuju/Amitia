@@ -165,17 +165,62 @@ func (h *Handler) UpdateRelationshipTimeSettings(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
 		return
 	}
-	var input RelationshipTimeSettings
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var patch map[string]interface{}
+	if err := c.ShouldBindJSON(&patch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "关系时间设置格式无效"})
 		return
 	}
-	input.CharacterID = characterID
-	if err := h.relTimeCoordinator.SaveSettings(c.Request.Context(), &input); err != nil {
+	if maxVal, ok := patch["maxMentionSentences"].(float64); ok {
+		if maxVal < 0 || maxVal > 2 {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "maxMentionSentences 必须在 0-2 之间"})
+			return
+		}
+	}
+	if sensVal, ok := patch["sensitivity"].(string); ok {
+		s := strings.TrimSpace(sensVal)
+		if s != "" && s != "conservative" && s != "balanced" && s != "expressive" {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "sensitivity 必须为 conservative/balanced/expressive 之一"})
+			return
+		}
+	}
+	settings, err := h.relTimeCoordinator.GetSettings(c.Request.Context(), characterID)
+	if err != nil {
 		h.respond(c, nil, err)
 		return
 	}
-	h.respond(c, input, nil)
+	if settings == nil {
+		defaults := DefaultRelationshipTimeSettings(characterID)
+		settings = &defaults
+	}
+	if val, ok := patch["enabled"].(bool); ok {
+		settings.Enabled = val
+	}
+	if val, ok := patch["reunionEnabled"].(bool); ok {
+		settings.ReunionEnabled = val
+	}
+	if val, ok := patch["sensitivity"].(string); ok && strings.TrimSpace(val) != "" {
+		settings.Sensitivity = strings.TrimSpace(val)
+	}
+	if val, ok := patch["allowMemoryRecall"].(bool); ok {
+		settings.AllowMemoryRecall = val
+	}
+	if val, ok := patch["allowRelationshipAge"].(bool); ok {
+		settings.AllowRelationshipAge = val
+	}
+	if val, ok := patch["allowReunionMention"].(bool); ok {
+		settings.AllowReunionMention = val
+	}
+	if val, ok := patch["allowProactiveReference"].(bool); ok {
+		settings.AllowProactiveReference = val
+	}
+	if val, ok := patch["maxMentionSentences"].(float64); ok {
+		settings.MaxMentionSentences = int(val)
+	}
+	if err := h.relTimeCoordinator.SaveSettings(c.Request.Context(), settings); err != nil {
+		h.respond(c, nil, err)
+		return
+	}
+	h.respond(c, settings, nil)
 }
 
 func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
@@ -185,7 +230,7 @@ func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
 		return
 	}
-	state, err := h.relTimeCoordinator.GetPresenceState(c.Request.Context(), userID, characterID)
+	state, err := h.relTimeCoordinator.GetState(c.Request.Context(), userID, characterID)
 	h.respond(c, state, err)
 }
 
@@ -206,7 +251,19 @@ func (h *Handler) GetReunionEpisode(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
 		return
 	}
-	episode, err := h.relTimeCoordinator.GetReunionEpisode(c.Request.Context(), c.Param("episodeId"))
+	userID := apiUserID(c)
+	characterID := c.Param("characterId")
+	episodeID := c.Param("episodeId")
+	episode, err := h.relTimeCoordinator.GetReunionEpisode(c.Request.Context(), episodeID)
+	if err != nil {
+		h.respond(c, nil, err)
+		return
+	}
+	if episode == nil || episode.UserID != userID || episode.CharacterID != characterID {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "重聚记录不存在"})
+		return
+	}
+	h.respond(c, episode, nil)
 	h.respond(c, episode, err)
 }
 

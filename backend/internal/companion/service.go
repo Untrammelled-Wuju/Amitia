@@ -18,6 +18,7 @@ import (
 )
 
 type Service interface {
+	AttachAssistantContactRecorder(recorder AssistantContactRecorder)
 	DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error)
 	GetSleepSetting(characterID string) map[string]interface{}
 	UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{}
@@ -81,6 +82,15 @@ type proactiveUnifiedEntry interface {
 	Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error)
 }
 
+type AssistantContactRecorder interface {
+	RecordAssistantContact(
+		ctx context.Context,
+		userID string,
+		characterID string,
+		at time.Time,
+	) error
+}
+
 type ProactiveTemporalResolver interface {
 	ResolveSnapshot(ctx context.Context, input temporal.SnapshotInput) (temporal.Snapshot, error)
 }
@@ -94,6 +104,7 @@ type service struct {
 	temporalResolver         ProactiveTemporalResolver
 	deliveryStore            *delivery.SQLiteDeliveryStore
 	dataLifecycleCoordinator *mindruntime.DataLifecycleCoordinator
+	assistantContactRecorder AssistantContactRecorder
 }
 
 type burstScopeState struct {
@@ -119,6 +130,10 @@ func (s *service) AttachDeliveryStore(store *delivery.SQLiteDeliveryStore) {
 
 func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordinator) {
 	s.dataLifecycleCoordinator = c
+}
+
+func (s *service) AttachAssistantContactRecorder(recorder AssistantContactRecorder) {
+	s.assistantContactRecorder = recorder
 }
 
 func (s *service) isMemoryAccessAllowed(characterID string) bool {
