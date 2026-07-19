@@ -45,6 +45,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
       redirect: "/settings/runtime",
       children: [
+        { path: "deployment", name: "settingsDeployment", component: () => import("@/views/settings/DeploymentPanel.vue"), meta: { requiresAuth: true } },
         { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
         { path: "ai-config", name: "settingsAiConfig", component: () => import("@/views/settings/AiConfigPanel.vue"), meta: { requiresAuth: true } },
         { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },

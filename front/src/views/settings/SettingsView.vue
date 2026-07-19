@@ -6,6 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="settings-layout">
     <div class="settings-tabs">
       <router-link to="/settings/runtime" class="settings-tab" active-class="settings-tab-active">运行维护</router-link>
+      <router-link to="/settings/deployment" class="settings-tab" active-class="settings-tab-active">部署模式</router-link>
       <router-link to="/settings/ai-config" class="settings-tab" active-class="settings-tab-active">AI 配置</router-link>
       <router-link to="/settings/system" class="settings-tab" active-class="settings-tab-active">系统设置</router-link>
       <router-link to="/settings/model" class="settings-tab" active-class="settings-tab-active">模型配置</router-link>

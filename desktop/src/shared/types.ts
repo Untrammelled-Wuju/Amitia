@@ -1,11 +1,11 @@
-export type DeploymentMode = "local" | "cloud" | "self-hosted"
+export type DeploymentMode = "local" | "cloud"
 
 export interface DeploymentModeConfig {
   mode: DeploymentMode
   serverURL?: string
 }
 
-export type RuntimeMode = "browser" | "desktop-local" | "desktop-cloud" | "desktop-self-hosted"
+export type RuntimeMode = "browser" | "desktop-local" | "desktop-cloud"
 
 export interface RuntimeConnection {
   mode: RuntimeMode

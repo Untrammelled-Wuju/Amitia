@@ -1,106 +1,111 @@
-import { isDesktopShell } from "./runtime-capabilities"
-import type { DeploymentModeConfig, RuntimeConnection } from "./runtime-types"
+import type { RuntimeConnection, DeploymentModeConfig } from "./runtime-types"
 
-let runtimeConnectionPromise: Promise<RuntimeConnection> | null = null
+let cachedConnection: RuntimeConnection | null = null
+let cachedConfig: DeploymentModeConfig | null = null
 
-function inferWebSocketBaseURL(apiBaseURL: string): string {
-  if (!apiBaseURL) {
-    if (typeof window === "undefined") return ""
-    return window.location.origin.replace(/^http:/, "ws:").replace(/^https:/, "wss:")
-  }
-  return apiBaseURL.replace(/^http:/, "ws:").replace(/^https:/, "wss:")
-}
-
-function createBrowserConnection(): RuntimeConnection {
-  const apiBaseURL = (import.meta as any).env?.VITE_API_URL || ""
-  return {
-    mode: "browser",
-    apiBaseURL,
-    websocketBaseURL: inferWebSocketBaseURL(apiBaseURL),
-  }
-}
-
-async function createDesktopConnection(): Promise<RuntimeConnection> {
-  const config = await window.amitiaDesktop!.getDeploymentConfig()
-  if (config.mode === "cloud") {
-    const apiBaseURL = config.serverURL || "https://api.amitia.cn"
-    return {
-      mode: "desktop-cloud",
-      apiBaseURL,
-      websocketBaseURL: inferWebSocketBaseURL(apiBaseURL),
-    }
-  }
-  if (config.mode === "self-hosted") {
-    const apiBaseURL = config.serverURL || ""
-    return {
-      mode: "desktop-self-hosted",
-      apiBaseURL,
-      websocketBaseURL: inferWebSocketBaseURL(apiBaseURL),
-    }
-  }
-  const devMode = (import.meta as any).env?.DEV
-  return {
-    mode: "desktop-local",
-    apiBaseURL: devMode ? "" : "http://127.0.0.1:18899",
-    websocketBaseURL: devMode ? "" : "ws://127.0.0.1:18899",
-  }
-}
+const TOKEN_KEY = "ai-companion-token"
 
 export async function getRuntimeConnection(): Promise<RuntimeConnection> {
-  if (!runtimeConnectionPromise) {
-    runtimeConnectionPromise = isDesktopShell() ? createDesktopConnection() : Promise.resolve(createBrowserConnection())
+  if (cachedConnection) return cachedConnection
+
+  const api = window.amitiaDesktop
+  if (!api) {
+    const base = (import.meta as any).env?.VITE_API_URL || window.location.origin
+    cachedConnection = {
+      apiBaseURL: base,
+      websocketBaseURL: base.replace(/^http/, "ws"),
+    }
+    return cachedConnection
   }
-  return runtimeConnectionPromise
-}
 
-export function resetRuntimeConnectionCache(): void {
-  runtimeConnectionPromise = null
-}
+  const config = await api.getDeploymentConfig()
+  cachedConfig = config
 
-function joinUrl(baseURL: string, path: string): string {
-  if (!baseURL) return path
-  if (/^https?:\/\//.test(path) || /^wss?:\/\//.test(path)) return path
-  return `${baseURL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
+  if (config.mode === "cloud" && config.serverURL) {
+    cachedConnection = {
+      apiBaseURL: config.serverURL,
+      websocketBaseURL: config.serverURL.replace(/^http/, "ws"),
+    }
+    return cachedConnection
+  }
+
+  cachedConnection = {
+    apiBaseURL: "http://127.0.0.1:18899",
+    websocketBaseURL: "ws://127.0.0.1:18899",
+  }
+  return cachedConnection
 }
 
 export async function getApiBaseURL(): Promise<string> {
-  const runtime = await getRuntimeConnection()
-  return runtime.apiBaseURL
-}
-
-export async function resolveApiUrl(path: string): Promise<string> {
-  const runtime = await getRuntimeConnection()
-  return joinUrl(runtime.apiBaseURL, path)
-}
-
-export async function resolveWebSocketUrl(path: string): Promise<string> {
-  const runtime = await getRuntimeConnection()
-  return joinUrl(runtime.websocketBaseURL, path)
-}
-
-export async function resolveServerBaseURL(): Promise<string> {
-  const runtime = await getRuntimeConnection()
-  return runtime.apiBaseURL || window.location.origin
-}
-
-export async function createAuthorizedRequestInit(init: RequestInit = {}): Promise<RequestInit> {
-  const token = localStorage.getItem("ai-companion-token")
-  const headers = new Headers(init.headers || {})
-  if (token) headers.set("Authorization", `Bearer ${token}`)
-  return { ...init, headers }
-}
-
-export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const url = await resolveApiUrl(path)
-  const requestInit = await createAuthorizedRequestInit(init)
-  return fetch(url, requestInit)
+  const conn = await getRuntimeConnection()
+  return conn.apiBaseURL
 }
 
 export async function getQQApiBaseURL(): Promise<string> {
-  return resolveApiUrl("/api/qq")
+  const base = await getApiBaseURL()
+  if (base === "http://127.0.0.1:18899") {
+    return "http://127.0.0.1:9877"
+  }
+  return base
 }
 
-export async function getDeploymentConfig(): Promise<DeploymentModeConfig | null> {
-  if (!isDesktopShell()) return null
-  return window.amitiaDesktop!.getDeploymentConfig()
+export async function resolveApiUrl(path: string): Promise<string> {
+  const base = await getApiBaseURL()
+  return base + path
+}
+
+export async function resolveWebSocketUrl(path: string): Promise<string> {
+  const conn = await getRuntimeConnection()
+  return conn.websocketBaseURL + path
+}
+
+export async function createAuthorizedRequestInit(init?: RequestInit): Promise<RequestInit> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return {
+    ...init,
+    headers: {
+      ...headers,
+      ...(init?.headers as Record<string, string> || {}),
+    },
+  }
+}
+
+export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
+  if (cachedConfig) return cachedConfig
+
+  const api = window.amitiaDesktop
+  if (!api) {
+    cachedConfig = { mode: "local" }
+    return cachedConfig
+  }
+
+  cachedConfig = await api.getDeploymentConfig()
+  return cachedConfig
+}
+
+export async function saveDeploymentConfig(config: DeploymentModeConfig): Promise<DeploymentModeConfig> {
+  cachedConnection = null
+  cachedConfig = null
+
+  const api = window.amitiaDesktop
+  if (!api) {
+    throw new Error("当前环境不支持保存部署配置")
+  }
+
+  cachedConfig = await api.saveDeploymentConfig(config)
+  return cachedConfig
+}
+
+export function clearRuntimeCache(): void {
+  cachedConnection = null
+  cachedConfig = null
+}
+
+export function resetRuntimeConnectionCache(): void {
+  cachedConnection = null
+  cachedConfig = null
 }

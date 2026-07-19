@@ -149,7 +149,6 @@ onMounted(async () => {
   const deploymentConfig = await getDeploymentConfig()
   if (deploymentConfig?.mode === "local") runtimeModeLabel.value = "桌面本地"
   if (deploymentConfig?.mode === "cloud") runtimeModeLabel.value = "桌面云端"
-  if (deploymentConfig?.mode === "self-hosted") runtimeModeLabel.value = "桌面自建"
   loadAbout()
   loadStorageInfo()
 })
