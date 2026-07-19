@@ -122,46 +122,40 @@ export function useImportWizard() {
   }
 
   async function handleGenSummary() {
-    if (!importedBatchId.value) return
+    if (!importedConvId.value) return
     genSummaryLoading.value = true
     try {
-      const result = await generateSummary(importedBatchId.value)
-      if (result?.summary) {
-      }
-      try {
-        const saved = await getBatchSummary(importedBatchId.value)
-        if (saved?.summary) {
-        }
-      } catch {}
+      await generateSummary(importedConvId.value)
+      await getBatchSummary(importedConvId.value)
       ElMessage.success("摘要生成成功")
     } catch (err: any) {
       ElMessage.error(err?.message || "摘要生成失败")
+    } finally {
+      genSummaryLoading.value = false
     }
-    genSummaryLoading.value = false
   }
 
   async function handleExtractMemories() {
-    if (!importedBatchId.value) return
+    if (!importedConvId.value) return
     extractLoading.value = true
     try {
-      const result = await extractMemoryCandidates(importedBatchId.value)
-      if (result?.candidates) {
-        memCandidates.value = result.candidates
-      }
+      const result = await extractMemoryCandidates(importedConvId.value)
+      memCandidates.value = result?.candidates || []
       ElMessage.success(`已提取 ${memCandidates.value.length} 条记忆候选`)
     } catch (err: any) {
       ElMessage.error(err?.message || "提取记忆候选失败")
+    } finally {
+      extractLoading.value = false
     }
-    extractLoading.value = false
   }
 
   async function handleContinueChat() {
-    if (!importedBatchId.value) return
+    if (!importedConvId.value) return
     try {
-      const result = await createConversationFromImport(importedBatchId.value)
-      if (result?.id) {
-        ElMessage.success("会话已创建，正在跳转聊天...")
-        router.push(`/chat/${result.id}`)
+      const result = await createConversationFromImport(importedConvId.value)
+      if (result?.conversationId) {
+        ElMessage.success("正在跳转聊天...")
+        router.push(`/chat/${result.conversationId}`)
       }
     } catch (err: any) {
       ElMessage.error(err?.message || "创建会话失败")

@@ -3,7 +3,13 @@
 package chat
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"fmt"
+
+	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"time"
 )
@@ -138,4 +144,84 @@ func (s *service) GetStats() (*ChatStatsResponse, error) {
 	var totalConvs int64
 	s.db.Table("conversations").Count(&totalConvs)
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
+}
+
+func (s *service) ExportConversation(convID string, format string) (string, error) {
+	conv, err := s.repo.GetConversation(convID)
+	if err != nil {
+		return "", fmt.Errorf("对话不存在")
+	}
+
+	msgs, err := s.repo.GetAllMessagesByConv(convID)
+	if err != nil {
+		return "", err
+	}
+
+	charName := ""
+	if conv.CharacterID != "" {
+		var c struct {
+			Name string `gorm:"column:name"`
+		}
+		s.db.Table("characters").Where("id = ?", conv.CharacterID).Select("name").Scan(&c)
+		charName = c.Name
+	}
+
+	dataDir := "data" + "/" + "exports"
+	_ = os.MkdirAll(dataDir, 0755)
+
+	ts := time.Now().Format("20060102_150405")
+	safeTitle := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '-' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r >= 0x4e00 {
+			return r
+		}
+		return '_'
+	}, conv.Title)
+	if len([]rune(safeTitle)) > 30 {
+		safeTitle = string([]rune(safeTitle)[:30])
+	}
+
+	var fileName string
+	var content []byte
+	switch format {
+	case "json":
+		fileName = fmt.Sprintf("%s_%s.json", safeTitle, ts)
+		content, _ = json.MarshalIndent(gin.H{
+			"conversation": conv,
+			"characterName": charName,
+			"messages":      msgs,
+		}, "", "  ")
+	default:
+		fileName = fmt.Sprintf("%s_%s.md", safeTitle, ts)
+		content = buildMarkdownExport(conv, charName, msgs)
+	}
+
+	filePath := filepath.Join(dataDir, fileName)
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		return "", err
+	}
+
+	return "/exports/" + fileName, nil
+}
+
+func buildMarkdownExport(conv *Conversation, charName string, msgs []Message) []byte {
+	var buf strings.Builder
+	buf.WriteString("# ")
+	buf.WriteString(conv.Title)
+	buf.WriteString("\n\n")
+	if charName != "" {
+		buf.WriteString("**")
+		buf.WriteString(charName)
+		buf.WriteString("**  \n")
+	}
+	buf.WriteString("**")
+	buf.WriteString(conv.CreatedAt)
+	buf.WriteString("**\n\n---\n\n")
+	for _, m := range msgs {
+		buf.WriteString("**")
+		buf.WriteString(m.Role)
+		buf.WriteString("**: ")
+		buf.WriteString(m.Content)
+		buf.WriteString("\n\n")
+	}
+	return []byte(buf.String())
 }

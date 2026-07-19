@@ -14,11 +14,14 @@ SPDX-License-Identifier: AGPL-3.0-only
       <ConversationListPanel
         :convs="convs"
         :conv-keyword="convKeyword"
+        :character-filter="characterFilter"
+        :characters="characters"
         :channel-filter="channelFilter"
         :conv-page="convPage"
         :conv-total="convTotal"
         :selected-conv-id="selectedConvId"
         @update:conv-keyword="convKeyword = $event"
+        @update:character-filter="characterFilter = $event"
         @update:channel-filter="channelFilter = $event"
         @update:conv-page="convPage = $event"
         @search="fetchConvs"
@@ -198,6 +201,7 @@ const {
   characters,
   convs,
   convKeyword,
+  characterFilter,
   continueCharId,
   channelFilter,
   convPage,

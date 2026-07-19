@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <el-card shadow="never" class="section-card">
     <template #header>导入历史</template>
     <el-table :data="batches" size="small" v-if="batches.length > 0">
-      <el-table-column prop="fileName" label="名称" show-overflow-tooltip />
+      <el-table-column prop="title" label="名称" show-overflow-tooltip />
       <el-table-column label="状态" width="90">
         <template #default="{row}">
           <el-tag :type="row.status === 'completed' ? 'success' : 'info'" size="small">
@@ -16,7 +16,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-table-column>
       <el-table-column prop="totalItems" label="条目数" width="60" />
       <el-table-column label="日期" width="140">
-        <template #default="{row}">{{ fmtDate(row.createdAt) }}</template>
+        <template #default="{row}">{{ fmtDate(row.created_at) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="160">
         <template #default="{row}">

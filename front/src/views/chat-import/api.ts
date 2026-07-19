@@ -41,8 +41,8 @@ export function confirmMemories(batchId: string, selectedIds: string[]) {
   return apiPost(`/api/imports/batches/${batchId}/confirm-memories`, { selectedIds })
 }
 
-export function createConversationFromImport(importBatchId: string) {
-  return apiPost("/api/web-chat/conversations/from-import", { importBatchId })
+export function createConversationFromImport(conversationId: string) {
+  return apiPost("/api/web-chat/conversations/from-import", { conversationId })
 }
 
 export function fetchBatchesApi(params?: { page?: number; pageSize?: number }) {

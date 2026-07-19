@@ -86,6 +86,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 	}
 	r.Static("/audio", "./data/tts_cache")
+	r.Static("/exports", "./data/exports")
 	r.Static("/voice", "./data/voice_msg")
 	r.Static("/images", "./data/images")
 	r.Static("/videos", "./data/videos")

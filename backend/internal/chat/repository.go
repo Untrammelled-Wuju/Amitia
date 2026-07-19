@@ -31,6 +31,7 @@ type Repository interface {
 	UpdateModelRoutes(routes []map[string]interface{}) error
 	GetConversationByChannel(channel string) (*Conversation, error)
 	CountMessagesByConv(convID string) int64
+	GetAllMessagesByConv(convID string) ([]Message, error)
 	ListProviders() []ProviderInfo
 }
 
@@ -235,4 +236,13 @@ func (r *repository) CountMessagesByConv(convID string) int64 {
 	var count int64
 	r.db.Table("messages").Where("conversation_id = ?", convID).Count(&count)
 	return count
+}
+
+func (r *repository) GetAllMessagesByConv(convID string) ([]Message, error) {
+	var msgs []Message
+	err := r.db.Where("conversation_id = ?", convID).Order("sequence ASC").Find(&msgs).Error
+	if msgs == nil {
+		msgs = []Message{}
+	}
+	return msgs, err
 }

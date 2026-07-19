@@ -63,6 +63,7 @@ type Service interface {
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
+	ExportConversation(convID string, format string) (string, error)
 	SetSkillRuntime(*extension.Runtime)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 }

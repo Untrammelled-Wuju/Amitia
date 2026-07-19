@@ -22,13 +22,13 @@ func (h *Handler) ConfigExport(c *gin.Context) { util.SuccessResponse(c, h.servi
 func (h *Handler) ConfigImportPreview(c *gin.Context) {
 	var body map[string]interface{}
 	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.ImportData(body))
+	util.SuccessResponse(c, h.service.ConfigImportPreviewService(body))
 }
 
 func (h *Handler) ConfigImportConfirm(c *gin.Context) {
 	var body map[string]interface{}
 	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.ConfirmImports(body))
+	util.SuccessResponse(c, h.service.ConfigImportConfirmService(body))
 }
 
 func (h *Handler) GetLLMConfig(c *gin.Context) { util.SuccessResponse(c, h.service.GetLLMConfig()) }

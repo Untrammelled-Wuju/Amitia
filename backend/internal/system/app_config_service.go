@@ -60,6 +60,14 @@ func (s *service) ConfigExport() map[string]interface{} {
 	return map[string]interface{}{"data": settings, "exported": true}
 }
 
+func (s *service) ConfigImportPreviewService(body map[string]interface{}) map[string]interface{} {
+	raw, _ := body["raw"].(string)
+	return map[string]interface{}{"code": 200, "data": map[string]interface{}{"preview": raw, "itemCount": 1, "format": "json"}, "message": "预览成功"}
+}
+
+func (s *service) ConfigImportConfirmService(body map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{"code": 200, "data": map[string]interface{}{"imported": true}, "message": "导入成功"}
+}
 func (s *service) GetVersion() map[string]interface{} {
 	return map[string]interface{}{
 		"version":   readEnvOrDefault("AMITIA_VERSION", "1.0.0"),

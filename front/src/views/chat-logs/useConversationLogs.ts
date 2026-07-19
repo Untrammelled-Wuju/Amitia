@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, nextTick } from "vue"
+import { useRoute } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import {
   fetchConvsApi,
@@ -23,10 +24,16 @@ import {
 } from "./api"
 
 export function useConversationLogs() {
+  const route = useRoute()
   const characters = ref<any[]>([])
 
   const convs = ref<any[]>([])
   const convKeyword = ref("")
+  const characterFilter = ref("")
+
+  if (route.query.characterId) {
+    characterFilter.value = route.query.characterId as string
+  }
   const continueCharId = ref("")
   const channelFilter = ref("")
   const convPage = ref(1)
@@ -49,6 +56,7 @@ export function useConversationLogs() {
     const params: any = { page: convPage.value, pageSize: 20 }
     if (convKeyword.value) params.keyword = convKeyword.value
     if (channelFilter.value) params.channel = channelFilter.value
+    if (characterFilter.value) params.characterId = characterFilter.value
     try {
       const r = await fetchConvsApi(params)
       let items: any[] = Array.isArray(r) ? r : (r?.items || [])
@@ -273,6 +281,7 @@ export function useConversationLogs() {
     characters,
     convs,
     convKeyword,
+    characterFilter,
     continueCharId,
     channelFilter,
     convPage,

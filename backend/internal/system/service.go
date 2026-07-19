@@ -22,11 +22,10 @@ type Service interface {
 	CleanupTemp() map[string]interface{}
 	ClearUsage() map[string]interface{}
 	ConfigExport() map[string]interface{}
+	ConfigImportPreviewService(body map[string]interface{}) map[string]interface{}
+	ConfigImportConfirmService(body map[string]interface{}) map[string]interface{}
 	ConfigSettings() map[string]interface{}
-	ConfirmImports(body map[string]interface{}) map[string]interface{}
-	ConfirmImportsBatchMemories(id string) map[string]interface{}
 	DeleteAllStorage() map[string]interface{}
-	DeleteImportsBatch(id string) map[string]interface{}
 	DeleteLogs() map[string]interface{}
 	DeleteLogsModelErrors() map[string]interface{}
 	DeleteMood(id string) map[string]interface{}
@@ -34,17 +33,12 @@ type Service interface {
 	DeleteStorageBackup(name string) map[string]interface{}
 	Diagnostics() map[string]interface{}
 	ExportReleaseCheck() map[string]interface{}
-	GenerateImportsBatchSummary(id string) map[string]interface{}
 	GenerateRecoveryCodes() map[string]interface{}
 	GetAuditActions() []string
 	GetAuditSettings() map[string]interface{}
 	GetAuditStats() map[string]interface{}
 	GetAbout() map[string]interface{}
 	GetCurrentSession(token string) map[string]interface{}
-	GetImportsBatchDetail(id string) map[string]interface{}
-	GetImportsBatchMemoryCandidates(id string) map[string]interface{}
-	GetImportsBatchSummary(id string) map[string]interface{}
-	GetImportsBatches() map[string]interface{}
 	GetLLMConfig() map[string]interface{}
 	GetLoginHistory() []map[string]interface{}
 	GetLogsFileContent(name string) string
@@ -97,7 +91,6 @@ type Service interface {
 	GetWechatEvents() map[string]interface{}
 	GetWechatStatus() map[string]interface{}
 	Health() map[string]interface{}
-	ImportData(body map[string]interface{}) map[string]interface{}
 	LegacyDeleteConversation(id string) map[string]interface{}
 	LegacyGetMessages(id string, page, pageSize int) map[string]interface{}
 	LegacyListConversations() map[string]interface{}
@@ -113,7 +106,6 @@ type Service interface {
 	OnboardingComplete() map[string]interface{}
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
-	ParseImportsText(body map[string]interface{}) map[string]interface{}
 	PrivacyMask() map[string]interface{}
 	PrivacyScan() map[string]interface{}
 	PrivacyScanResults() map[string]interface{}
@@ -139,6 +131,7 @@ type Service interface {
 	StorageBackup() map[string]interface{}
 	StorageBackupEncrypted() map[string]interface{}
 	StorageExportUserData() map[string]interface{}
+	StorageExportAmitia(scope string, characterID string) map[string]interface{}
 	StorageImportUserData(body map[string]interface{}) map[string]interface{}
 	StorageRestore(name string) map[string]interface{}
 	StorageRestoreEncrypted(body map[string]interface{}) map[string]interface{}
@@ -156,7 +149,6 @@ type Service interface {
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
 	UpdateUpdateConfig(body map[string]interface{}) map[string]interface{}
 	UpdateWechatBridgeConfig(body map[string]interface{}) map[string]interface{}
-	UploadImports(body map[string]interface{}) map[string]interface{}
 	ValidateMode() map[string]interface{}
 	VerifyRecoveryCode(code string) map[string]interface{}
 	WechatBridgeRecover() map[string]interface{}

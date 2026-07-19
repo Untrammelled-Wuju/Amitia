@@ -440,11 +440,6 @@ func (h *Handler) WebChatCancelGeneration(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"cancelled": true, "conversationId": convID})
 }
 
-func (h *Handler) WebChatFromImport(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, map[string]interface{}{"imported": true, "conversationId": ""})
-}
 
 func resolveRequestID(c *gin.Context, candidates ...string) string {
 	candidates = append(candidates, c.GetHeader("X-Request-ID"), c.GetHeader("X-Idempotency-Key"), c.Query("requestId"), c.Query("request_id"), c.Query("idempotencyKey"))

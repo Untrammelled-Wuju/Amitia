@@ -405,7 +405,27 @@ func (h *Handler) GenerateSummary(c *gin.Context) { util.SuccessResponse(c, gin.
 func (h *Handler) CleanupPreview(c *gin.Context)  { util.SuccessResponse(c, gin.H{"deletable": 0}) }
 func (h *Handler) CleanupConfirm(c *gin.Context)  { util.SuccessResponse(c, gin.H{"cleaned": 0}) }
 func (h *Handler) CleanupVacuum(c *gin.Context)   { util.SuccessResponse(c, gin.H{"vacuumed": true}) }
-func (h *Handler) Export(c *gin.Context)          { util.SuccessResponse(c, gin.H{"exportUrl": ""}) }
+func (h *Handler) Export(c *gin.Context) {
+	var body struct {
+		Format          string   `json:"format"`
+		ConversationIDs []string `json:"conversationIds"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.ConversationIDs) == 0 {
+		util.ErrorResponse(c, response.InvalidParams, "参数无效", nil)
+		return
+	}
+	if body.Format != "json" {
+		body.Format = "markdown"
+	}
+
+	convID := body.ConversationIDs[0]
+	url, err := h.service.ExportConversation(convID, body.Format)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"exportUrl": url})
+}
 func (h *Handler) GetModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	models, _ := h.service.ListModels()

@@ -40,6 +40,19 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-button size="small" @click="goStorage"><el-icon><Delete /></el-icon> 存储管理</el-button>
           <el-button size="small" type="danger" plain @click="exportUserData" :loading="exportingData"><el-icon><Download /></el-icon> 导出用户数据</el-button>
         </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <el-select v-model="exportCharId" placeholder="选择角色(可选)" size="small" style="width:160px" clearable filterable>
+            <el-option v-for="c in exportCharacters" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+          <el-button size="small" @click="exportAmitiaData('character')" :disabled="!exportCharId" :loading="exportingAmitia"><el-icon><User /></el-icon> 导出角色数据</el-button>
+          <el-button size="small" @click="exportAmitiaData('all')" :loading="exportingAmitia"><el-icon><Download /></el-icon> 导出所有数据</el-button>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <el-upload :auto-upload="false" :show-file-list="false" :on-change="handleImportFile" accept=".json">
+            <el-button size="small" :loading="importingAmitia"><el-icon><Upload /></el-icon> 导入数据</el-button>
+          </el-upload>
+          <span v-if="importResult" style="font-size:12px;color:var(--ac-color-text-muted)">{{ importResult }}</span>
+        </div>
       </template>
     </el-card>
 
@@ -68,7 +81,7 @@ import { useRouter } from "vue-router"
 import axios from "axios"
 import { ElMessage } from "element-plus"
 import {
-  Brush, ArrowRight, Clock, Loading, FolderAdd, Delete, Download
+  Brush, ArrowRight, Clock, Loading, FolderAdd, Delete, Download, User, Upload
 } from '@element-plus/icons-vue'
 import { getApiBaseURL, getDeploymentConfig } from "../../runtime/runtime-adapter"
 
@@ -92,6 +105,14 @@ const storageInfo = ref<any>({})
 const backupList = ref<any[]>([])
 const backupCreating = ref(false)
 const exportingData = ref(false)
+
+const exportCharId = ref("")
+const exportCharacters = ref<any[]>([])
+const exportingAmitia = ref(false)
+
+const importingAmitia = ref(false)
+const importResult = ref("")
+
 
 function goStorage() { router.push('/storage') }
 
@@ -129,6 +150,23 @@ async function exportUserData() {
   } finally { exportingData.value = false }
 }
 
+async function exportAmitiaData(scope: string) {
+  exportingAmitia.value = true
+  try {
+    const res = await axios.post(apiBaseUrl.value + "/api/storage/export-amitia", {
+      scope,
+      characterId: scope === "character" ? exportCharId.value : "",
+    })
+    const data = res.data?.data || res.data
+    if (data?.file) {
+      window.open(apiBaseUrl.value + "/api/storage/export-download/" + encodeURIComponent(data.file), "_blank")
+    }
+    ElMessage.success(data?.message || "导出成功")
+  } catch (err: any) {
+    ElMessage.error("导出失败: " + (err?.response?.data?.msg || err.message))
+  } finally { exportingAmitia.value = false }
+}
+
 async function loadAbout() {
   try {
     const { data } = await axios.get(apiBaseUrl.value + "/api/about")
@@ -144,6 +182,38 @@ async function loadAbout() {
   } catch {}
 }
 
+async function loadExportCharacters() {
+  try {
+    const { data } = await axios.get(apiBaseUrl.value + "/api/characters")
+    if (Array.isArray(data?.data)) exportCharacters.value = data.data
+  } catch {}
+}
+
+
+async function handleImportFile(file: any) {
+  importingAmitia.value = true
+  importResult.value = ""
+  try {
+    const formData = new FormData()
+    formData.append("file", file.raw)
+    const res = await axios.post(apiBaseUrl.value + "/api/storage/import-amitia", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    const data = res.data?.data || res.data
+    if (data?.imported) {
+      const stats = data.stats || {}
+      const tableCount = Object.keys(stats).length
+      ElMessage.success("导入成功，共 " + data.totalImported + " 条记录，" + tableCount + " 张表")
+      importResult.value = "导入完成：共 " + data.totalImported + " 条记录，涉及 " + tableCount + " 张表"
+      loadStorageInfo()
+    } else {
+      ElMessage.error("导入失败: " + (data?.error || "未知错误"))
+    }
+  } catch (err: any) {
+    ElMessage.error("导入失败: " + (err?.response?.data?.msg || err.message))
+  } finally { importingAmitia.value = false }
+}
+
 onMounted(async () => {
   apiBaseUrl.value = await getApiBaseURL()
   const deploymentConfig = await getDeploymentConfig()
@@ -151,6 +221,7 @@ onMounted(async () => {
   if (deploymentConfig?.mode === "cloud") runtimeModeLabel.value = "桌面云端"
   loadAbout()
   loadStorageInfo()
+  loadExportCharacters()
 })
 </script>
 

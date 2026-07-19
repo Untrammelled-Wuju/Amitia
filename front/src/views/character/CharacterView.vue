@@ -31,6 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="detail-top">
           <h2>{{ selectedChar?.name }}</h2>
           <el-button size="small" @click="editCurrent">编辑</el-button>
+          <el-button size="small" @click="goToChatLogs">聊天记录</el-button>
           <el-button size="small" type="danger" @click="deleteCurrent">删除</el-button>
         </div>
         <el-tabs :model-value="activeTab" @tab-change="onTabChange" type="border-card">
@@ -121,6 +122,11 @@ const route = useRoute()
 
 const currentCharacterId = computed(() => selectedId.value)
 provide('currentCharacterId', currentCharacterId)
+
+function goToChatLogs() {
+  if (!selectedId.value) return
+  router.push({ path: "/logs", query: { characterId: selectedId.value } })
+}
 
 const characters = ref<any[]>([])
 const showDialog = ref(false)

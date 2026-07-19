@@ -10,6 +10,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-input>
     </div>
     <div class="sidebar-filters">
+      <el-select :model-value="characterFilter" @update:model-value="$emit('update:characterFilter', $event)" placeholder="角色" size="small" clearable @change="$emit('filterChange')" style="margin-bottom:4px;width:100%">
+        <el-option v-for="c in characters" :key="c.id" :label="c.name" :value="c.id" />
+      </el-select>
       <el-select :model-value="channelFilter" @update:model-value="$emit('update:channelFilter', $event)" placeholder="频道" size="small" clearable @change="$emit('filterChange')">
         <el-option v-for="ch in CHANNELS" :key="ch.value" :label="ch.label" :value="ch.value" />
       </el-select>
@@ -52,6 +55,8 @@ import { CHANNELS, channelLabel, fmtShort } from "../utils"
 defineProps<{
   convs: any[]
   convKeyword: string
+  characters: any[]
+  characterFilter: string
   channelFilter: string
   convPage: number
   convTotal: number
@@ -61,6 +66,7 @@ defineProps<{
 defineEmits<{
   'update:convKeyword': [value: string]
   'update:channelFilter': [value: string]
+  'update:characterFilter': [value: string]
   'update:convPage': [value: number]
   search: []
   filterChange: []

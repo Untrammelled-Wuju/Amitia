@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"gorm.io/gorm/clause"
 )
 
 func (s *service) GetStorageInfo() map[string]interface{} {
@@ -241,6 +242,155 @@ func (s *service) StorageExportUserData() map[string]interface{} {
 	return map[string]interface{}{"exported": true, "file": name, "size": len(data)}
 }
 
+type exportTable struct {
+	name          string
+	characterCol  string
+	needsConvJoin bool
+	needsMemJoin  bool
+}
+
+var amitiaExportTables = []exportTable{
+	{name: "characters", characterCol: "id"},
+	{name: "conversations", characterCol: "character_id"},
+	{name: "messages", needsConvJoin: true},
+	{name: "conversation_summaries", needsConvJoin: true},
+	{name: "memories", characterCol: "character_id"},
+	{name: "memory_events", characterCol: "character_id"},
+	{name: "memory_candidates", characterCol: "character_id"},
+	{name: "episodic_memories"},
+	{name: "moods", characterCol: "character_id"},
+	{name: "need_states", characterCol: "character_id"},
+	{name: "sleep_settings", characterCol: "character_id"},
+	{name: "fixed_events", characterCol: "character_id"},
+	{name: "special_events", characterCol: "character_id"},
+	{name: "class_adjustments", characterCol: "character_id"},
+	{name: "lifestyle_tendencies", characterCol: "character_id"},
+	{name: "work_profiles", characterCol: "character_id"},
+	{name: "role_profiles", characterCol: "character_id"},
+	{name: "active_message_settings", characterCol: "character_id"},
+	{name: "active_message_task", characterCol: "character_id"},
+	{name: "proactive_rules", characterCol: "character_id"},
+	{name: "proactive_messages", characterCol: "character_id"},
+	{name: "reminders", characterCol: "character_id"},
+	{name: "temporal_profiles", characterCol: "character_id"},
+	{name: "temporal_global_presence_states"},
+	{name: "retrieval_logs", characterCol: "character_id"},
+	{name: "tool_call_intents", characterCol: "character_id"},
+	{name: "tool_call_results", characterCol: "character_id"},
+	{name: "pipeline_checkpoints", needsConvJoin: true},
+	{name: "app_settings"},
+	{name: "model_configs"},
+	{name: "tts_configs"},
+	{name: "asr_configs"},
+	{name: "vision_configs"},
+	{name: "embedding_configs"},
+	{name: "character_templates"},
+	{name: "user_profiles"},
+	{name: "world_book"},
+	{name: "safety_events"},
+	{name: "message_feedback"},
+	{name: "delivery_intents", characterCol: "character_id"},
+	{name: "psyche_events", characterCol: "character_id"},
+	{name: "psyche_snapshots", characterCol: "character_id"},
+	{name: "psyche_states", characterCol: "character_id"},
+	{name: "relationship_events", characterCol: "character_id"},
+	{name: "relationship_states", characterCol: "character_id"},
+	{name: "memory_embeddings", needsMemJoin: true},
+	{name: "memory_temporal_metadata", needsMemJoin: true},
+	{name: "character_emote_settings", characterCol: "character_id"},
+	{name: "emote_character_bindings", characterCol: "character_id"},
+	{name: "emote_send_records", characterCol: "character_id"},
+	{name: "emotes"},
+	{name: "emote_groups"},
+	{name: "emote_group_items"},
+	{name: "interaction_records", characterCol: "character_id"},
+	{name: "output_leases", characterCol: "character_id"},
+	{name: "temporal_anchors", characterCol: "character_id"},
+	{name: "temporal_cadence_samples", characterCol: "character_id"},
+	{name: "temporal_effect_ledger", characterCol: "character_id"},
+	{name: "temporal_events", characterCol: "character_id"},
+	{name: "temporal_interaction_receipts", characterCol: "character_id"},
+	{name: "temporal_relationship_presence_states", characterCol: "character_id"},
+	{name: "temporal_relationship_time_settings", characterCol: "character_id"},
+	{name: "temporal_reunion_episodes", characterCol: "character_id"},
+	{name: "message_sequence_checkpoints", needsConvJoin: true},
+	{name: "schedules"},
+	{name: "trigger_histories"},
+}
+
+func sanitizeName(s string) string {
+	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	return r.Replace(s)
+}
+
+func (s *service) StorageExportAmitia(scope string, characterID string) map[string]interface{} {
+	exportDir := filepath.Join(s.dataDir, "exports")
+	os.MkdirAll(exportDir, 0755)
+
+	var prefix string
+	if scope == "character" && characterID != "" {
+		var ch map[string]interface{}
+		if err := s.db.Table("characters").Where("id = ?", characterID).Take(&ch).Error; err != nil {
+			return map[string]interface{}{"exported": false, "error": "角色不存在"}
+		}
+		prefix = sanitizeName(fmt.Sprint(ch["name"])) + "_" + time.Now().Format("20060102_150405")
+	} else {
+		prefix = "amitia_all_" + time.Now().Format("20060102_150405")
+	}
+
+	name := prefix + ".json"
+	export := map[string]interface{}{"exportedAt": time.Now().Format(time.DateTime), "scope": scope}
+	if characterID != "" {
+		export["characterId"] = characterID
+	}
+
+	var convIDs []string
+	if scope == "character" && characterID != "" {
+		s.db.Table("conversations").Where("character_id = ?", characterID).Pluck("id", &convIDs)
+	}
+
+	var memIDs []string
+	if scope == "character" && characterID != "" {
+		s.db.Table("memories").Where("character_id = ?", characterID).Pluck("id", &memIDs)
+	}
+
+	for _, t := range amitiaExportTables {
+		var items []map[string]interface{}
+		query := s.db.Table(t.name)
+
+		if t.needsConvJoin && scope == "character" && characterID != "" {
+			if len(convIDs) > 0 {
+				query = query.Where("conversation_id IN ?", convIDs)
+			} else {
+				export[t.name] = []map[string]interface{}{}
+				continue
+			}
+		} else if t.needsMemJoin && scope == "character" && characterID != "" {
+			if len(memIDs) > 0 {
+				query = query.Where("memory_id IN ?", memIDs)
+			} else {
+				export[t.name] = []map[string]interface{}{}
+				continue
+			}
+		} else if t.characterCol != "" && scope == "character" && characterID != "" {
+			query = query.Where(t.characterCol+" = ?", characterID)
+		}
+
+		query.Find(&items)
+		export[t.name] = items
+	}
+
+	data, err := json.MarshalIndent(export, "", "  ")
+	if err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	err = os.WriteFile(filepath.Join(exportDir, name), data, 0644)
+	if err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"exported": true, "file": name, "size": len(data), "sizeKB": len(data) / 1024}
+}
+
 func (s *service) StorageImportUserData(body map[string]interface{}) map[string]interface{} {
 	if fileName, ok := body["fileName"].(string); ok {
 		src := filepath.Join(s.dataDir, "exports", fileName)
@@ -252,7 +402,45 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 		if err := json.Unmarshal(data, &imp); err != nil {
 			return map[string]interface{}{"imported": false, "error": err.Error()}
 		}
-		return map[string]interface{}{"imported": true, "fileName": fileName, "size": len(data)}
+
+		stats := map[string]int{}
+		errors := map[string]string{}
+		totalImported := 0
+
+		for _, t := range amitiaExportTables {
+			raw, ok := imp[t.name]
+			if !ok {
+				continue
+			}
+			arr, ok := raw.([]interface{})
+			if !ok || len(arr) == 0 {
+				continue
+			}
+
+			items := make([]map[string]interface{}, 0, len(arr))
+			for _, item := range arr {
+				if m, ok := item.(map[string]interface{}); ok {
+					items = append(items, m)
+				}
+			}
+			if len(items) == 0 {
+				continue
+			}
+
+			result := s.db.Table(t.name).Clauses(clause.OnConflict{DoNothing: true}).Create(items)
+			if result.Error != nil { errors[t.name] = result.Error.Error(); continue }
+			count := len(items)
+			stats[t.name] = count
+			totalImported += count
+		}
+
+		return map[string]interface{}{
+			"imported":      true,
+			"fileName":      fileName,
+			"totalImported": totalImported,
+			"stats":         stats,
+			"errors":         errors,
+		}
 	}
 	return map[string]interface{}{"imported": false, "error": "missing fileName"}
 }

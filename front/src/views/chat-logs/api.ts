@@ -26,6 +26,10 @@ export function exportConversationApi(format: string, conversationIds: string[])
   return post("/api/chats/export", { format, conversationIds })
 }
 
+export function exportAmitiaApi(scope: string, characterId?: string) {
+  return post("/api/storage/export-amitia", { scope, characterId: characterId || "" })
+}
+
 export function fetchFeedbackApi() {
   return get<any>("/api/messages/feedback/recent", { limit: 200 })
 }
