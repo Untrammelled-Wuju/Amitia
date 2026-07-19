@@ -164,12 +164,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/version", handler.Version)
 	r.GET("/about", handler.About)
 
-	r.GET("/reply-timing/overview", handler.ReplyTimingOverview)
-	r.GET("/reply-timing/buffers", handler.ReplyTimingBuffers)
-	r.POST("/reply-timing/force", handler.ReplyTimingForce)
-	r.POST("/reply-timing/buffers/:id/cancel", handler.ReplyTimingCancelBuffer)
-	r.POST("/reply-timing/buffers/:id/force", handler.ReplyTimingForceBuffer)
-	r.POST("/reply-timing/buffers/:id/resume", handler.ReplyTimingResumeBuffer)
 
 	r.POST("/storage/backup", handler.StorageBackup)
 	r.POST("/storage/backup/encrypted", handler.StorageBackupEncrypted)
@@ -237,10 +231,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/conversations/:id/messages", handler.WebChatGetMessages)
 	r.DELETE("/conversations/:id", handler.WebChatDeleteConv)
 
-	r.GET("/moods", handler.GetCompanionMoods)
-	r.GET("/moods/conversations/:id", handler.GetCompanionMoodsByConversation)
-	r.DELETE("/moods/:id", handler.DeleteCompanionMood)
-	r.DELETE("/moods/conversations/:id", handler.DeleteCompanionMoodsByConversation)
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
 	r.POST("/web-chat/conversations", handler.WebChatCreateConv)

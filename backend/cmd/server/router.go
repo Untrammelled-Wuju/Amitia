@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
@@ -82,6 +83,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		emote.RegisterRouter(apiGroup, services.Emote)
 		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
+		mood.RegisterMoodRouter(apiGroup, ctx)
 	}
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/exports", "./data/exports")

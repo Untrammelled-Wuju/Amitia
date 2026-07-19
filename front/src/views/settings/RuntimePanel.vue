@@ -11,24 +11,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-card shadow="never" class="section-card">
       <template #header><span>回复时机判断</span></template>
       <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="功能状态"><el-tag :type="timingOverview.enabled ? 'success' : 'info'" size="small">{{ timingOverview.enabled ? '已启用' : '已禁用' }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="模型判断"><el-tag :type="timingOverview.useModelCheck ? 'success' : 'warning'" size="small">{{ timingOverview.useModelCheck ? '已启用' : '仅规则' }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="Web 等待">{{ timingOverview.webWaitMs }}ms</el-descriptions-item>
-        <el-descriptions-item label="微信等待">{{ timingOverview.wechatWaitMs }}ms</el-descriptions-item>
-        <el-descriptions-item label="最大等待">{{ timingOverview.maxWaitMs }}ms</el-descriptions-item>
-        <el-descriptions-item label="缓冲区总数">{{ timingOverview.bufferCounts?.total || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="调度器状态"><el-tag :type="timingOverview.schedulerRunning ? 'success' : 'danger'" size="small">{{ timingOverview.schedulerRunning ? '运行中' : '已停止' }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="已启用规则">{{ timingOverview.enabledRuleCount ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="规则总数">{{ timingOverview.totalRuleCount ?? 0 }}</el-descriptions-item>
       </el-descriptions>
-      <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap">
-        <el-tag size="small" type="info">等待中: {{ timingOverview.bufferCounts?.waiting || 0 }}</el-tag>
-        <el-tag size="small" type="warning">检查中: {{ timingOverview.bufferCounts?.checking || 0 }}</el-tag>
-        <el-tag size="small" type="primary">回复中: {{ timingOverview.bufferCounts?.replying || 0 }}</el-tag>
-        <el-tag size="small" type="danger">已暂停: {{ timingOverview.bufferCounts?.paused || 0 }}</el-tag>
-        <el-tag size="small" type="danger">失败: {{ timingOverview.bufferCounts?.failed || 0 }}</el-tag>
-      </div>
-      <div v-if="timingOverview.recentFailures?.length" style="margin-top: 12px">
-        <div class="form-tip" style="font-weight: 600; margin-bottom: 4px">最近失败记录：</div>
-        <div v-for="(f, i) in timingOverview.recentFailures.slice(0, 5)" :key="i" class="form-tip">{{ f.created_at?.slice(0, 19) }} {{ f.details?.slice(0, 80) }}</div>
-      </div>
     </el-card>
   </div>
 </template>
@@ -43,7 +29,7 @@ import ConfigPanel from "../long-running/components/ConfigPanel.vue"
 
 const apiBaseUrl = ref("")
 const statusPanelRef = ref<InstanceType<typeof StatusPanel> | null>(null)
-const timingOverview = ref<any>({ enabled: false, bufferCounts: {} })
+const timingOverview = ref<any>({ schedulerRunning: false, enabledRuleCount: 0, totalRuleCount: 0 })
 
 function refreshStatus() {
   statusPanelRef.value?.refresh()
@@ -51,7 +37,7 @@ function refreshStatus() {
 
 async function loadTimingOverview() {
   try {
-    const { data } = await axios.get(apiBaseUrl.value + "/api/reply-timing/overview")
+    const { data } = await axios.get(apiBaseUrl.value + "/api/proactive/status")
     if (data?.data) timingOverview.value = data.data
   } catch {}
 }

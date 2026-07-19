@@ -8,10 +8,15 @@ import (
 )
 
 type Service interface {
-	List() []map[string]interface{}
-	GetByConversation(id string) []map[string]interface{}
-	Delete(id int) bool
+	List() map[string]interface{}
+	GetByConversation(id string) map[string]interface{}
+	Delete(id string) bool
 	DeleteByConversation(id string) bool
+}
+
+type moodItem struct {
+	MessageID string `gorm:"column:id" json:"messageId"`
+	MoodLabel string `gorm:"column:mood" json:"moodLabel"`
 }
 
 type service struct {
@@ -20,28 +25,28 @@ type service struct {
 
 func NewService(ctx *app.AppContext) Service { return &service{db: ctx.DB} }
 
-func (s *service) List() []map[string]interface{} {
-	var moods []map[string]interface{}
-	s.db.Table("moods").Order("created_at DESC").Limit(50).Find(&moods)
-	if moods == nil {
-		moods = []map[string]interface{}{}
+func (s *service) List() map[string]interface{} {
+	var items []map[string]interface{}
+	s.db.Raw("SELECT DISTINCT mood as name, COUNT(*) as count, MAX(created_at) as lastDetected FROM messages WHERE mood IS NOT NULL AND mood != '' GROUP BY mood ORDER BY count DESC").Scan(&items)
+	if items == nil {
+		items = []map[string]interface{}{}
 	}
-	return moods
+	return map[string]interface{}{"moods": items}
 }
 
-func (s *service) GetByConversation(id string) []map[string]interface{} {
-	var moods []map[string]interface{}
-	s.db.Table("moods").Where("conversation_id = ?", id).Order("created_at DESC").Find(&moods)
-	if moods == nil {
-		moods = []map[string]interface{}{}
+func (s *service) GetByConversation(id string) map[string]interface{} {
+	var items []moodItem
+	s.db.Table("messages").Select("id, mood").Where("conversation_id = ? AND mood IS NOT NULL AND mood != ''", id).Order("created_at DESC").Limit(50).Find(&items)
+	if items == nil {
+		items = []moodItem{}
 	}
-	return moods
+	return map[string]interface{}{"items": items, "conversationId": id}
 }
 
-func (s *service) Delete(id int) bool {
-	return s.db.Exec("DELETE FROM moods WHERE id = ?", id).RowsAffected > 0
+func (s *service) Delete(id string) bool {
+	return s.db.Table("messages").Where("id = ?", id).Update("mood", "").RowsAffected > 0
 }
 
 func (s *service) DeleteByConversation(id string) bool {
-	return s.db.Exec("DELETE FROM moods WHERE conversation_id = ?", id).RowsAffected > 0
+	return s.db.Table("messages").Where("conversation_id = ?", id).Update("mood", "").RowsAffected > 0
 }

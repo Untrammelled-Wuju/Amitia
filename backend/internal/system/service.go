@@ -28,8 +28,6 @@ type Service interface {
 	DeleteAllStorage() map[string]interface{}
 	DeleteLogs() map[string]interface{}
 	DeleteLogsModelErrors() map[string]interface{}
-	DeleteMood(id string) map[string]interface{}
-	DeleteMoodsByConversation(id string) map[string]interface{}
 	DeleteStorageBackup(name string) map[string]interface{}
 	Diagnostics() map[string]interface{}
 	ExportReleaseCheck() map[string]interface{}
@@ -49,16 +47,12 @@ type Service interface {
 	GetLongRunningConfig() map[string]interface{}
 	GetLongRunningStatus() map[string]interface{}
 	GetMaintenanceStatus() map[string]interface{}
-	GetMoods() map[string]interface{}
-	GetMoodsByConversation(id string) map[string]interface{}
 	GetNotificationsSettings() map[string]interface{}
 	GetNotificationsStatus() map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
 	GetRecoveryCodesStatus() map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
 	GetReleaseCheckLatest() map[string]interface{}
-	GetReplyTimingBuffers() map[string]interface{}
-	GetReplyTimingOverview() map[string]interface{}
 	GetRuntimeHealth() map[string]interface{}
 	GetRuntimeHealthHistory() map[string]interface{}
 	GetIdentityCore(characterID string) map[string]interface{}
@@ -106,10 +100,6 @@ type Service interface {
 	PrivacyMask() map[string]interface{}
 	PrivacyScan() map[string]interface{}
 	PrivacyScanResults() map[string]interface{}
-	ReplyTimingCancelBuffer(id string) map[string]interface{}
-	ReplyTimingForce() map[string]interface{}
-	ReplyTimingForceBuffer(id string) map[string]interface{}
-	ReplyTimingResumeBuffer(id string) map[string]interface{}
 	RotateLogs() map[string]interface{}
 	RunDiagnostics() map[string]interface{}
 	RunNow() map[string]interface{}
