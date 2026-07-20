@@ -119,7 +119,7 @@
 
 .onboarding-world .ob-boot-panel {
   position: absolute;
-  left: calc(50% + 20px);
+  left: calc(50% + 10px);
   right: auto;
   top: 46%;
   width: min(390px, 36vw);
@@ -191,7 +191,7 @@
 
 .onboarding-world .ob-account-sheet {
   position: absolute;
-  left: calc(50% + 20px);
+  left: calc(50% + 10px);
   right: auto;
   top: 46%;
   width: min(420px, 39vw);
@@ -900,4 +900,10 @@
   --core-size: 135px !important;
   width: 135px !important;
   height: 135px !important;
+}
+
+@media (max-height: 640px) {
+  .onboarding-world .ob-boot-panel {
+    top: calc(46% - 20px);
+  }
 }
