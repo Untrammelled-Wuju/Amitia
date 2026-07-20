@@ -8,7 +8,7 @@
   position: absolute;
   left: 42%;
   right: 6%;
-  top: 10%;
+  top: calc(37.5vh - var(--stage7-shift) - var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   width: clamp(280px, calc(10vh + 220px), 320px) !important;
   max-width: 620px;
 }
@@ -48,7 +48,8 @@
   padding: 13px 16px;
   outline: none;
   font-size: 14px;
-  resize: none;
+    resize: none;
+    overflow: hidden;
   line-height: 1.5;
 }
 
@@ -162,6 +163,7 @@
 }
 
 .onboarding-world .ob-identity-step-markers {
+  display: none;
   position: absolute;
   left: 50%;
   bottom: 3%;
