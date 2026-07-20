@@ -8,7 +8,6 @@
 
 .onboarding-world .ob-choice-cloud-scale {
   display: grid;
-  pointer-events: none;
   grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr);
   gap: 420px;
   transform-origin: center center;
