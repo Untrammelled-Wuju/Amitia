@@ -25,6 +25,7 @@
   position: absolute;
   left: 42%;
   right: 6%;
+  max-width: 420px;
   top: 45%;
   bottom: auto;
   width: auto;
@@ -78,14 +79,14 @@
   position: absolute;
   left: 42%;
   right: 6%;
-  top: calc(45% + 60px);
+  top: calc(45% - 56px);
   display: flex;
   gap: 9px;
   flex-wrap: wrap;
   opacity: 0;
   pointer-events: none;
   transform: translateY(8px);
-  transition: all 0.3s var(--ob-ease);
+  transition: opacity 0.25s ease, transform 0.3s var(--ob-ease);
 }
 
 .onboarding-world .ob-identity-quick-choices.show {
@@ -502,7 +503,7 @@
 .onboarding-world .ob-memory-complete-copy p {
   color: var(--ob-muted);
   font-size: 13px;
-  max-width: 380px;
+  max-width: 420px;
 }
 
 .onboarding-world .ob-memory-complete-summary {

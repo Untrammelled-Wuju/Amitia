@@ -124,6 +124,12 @@ function syncBottomAlignment() {
 
   if (!sceneRect.height || !ledgerRect.height || !answerRect.height) return
 
+  const answerTop = ledgerRect.top - sceneRect.top + ledgerRect.height - answerRect.height
+  answer.style.top = answerTop + "px"
+  if (quick) {
+    quick.style.top = (answerTop - 56) + "px"
+  }
+
   const bottomOffset = Math.max(0, sceneRect.bottom - ledgerRect.bottom)
   answer.style.setProperty("--ledger-bottom-offset", `${bottomOffset.toFixed(2)}px`)
   answer.style.setProperty("--answer-block-height", `${answerRect.height.toFixed(2)}px`)
