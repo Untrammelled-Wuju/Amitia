@@ -1,6 +1,7 @@
 <template>
   <div class="ob-stage-inner">
     <div class="ob-voice-experience">
+      <div class="ob-voice-group">
       <div class="ob-voice-heading">
         <div class="ob-character-line">配置语音输出</div>
         <div class="ob-dialogue-note">选择语音服务商并配置语音合成参数。</div>
@@ -70,6 +71,7 @@
         </div>
       </div>
 
+      </div>
       <div class="ob-voice-spoken-line">试听并确认默认声音风格。</div>
     </div>
   </div>

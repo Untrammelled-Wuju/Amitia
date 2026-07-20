@@ -1,6 +1,7 @@
 <template>
   <div class="ob-stage-inner">
     <div class="ob-model-page-experience">
+      <div class="ob-model-page-group">
       <div class="ob-model-page-heading">
         <div class="ob-character-line">连接语言模型</div>
         <div class="ob-dialogue-note">语言模型负责理解对话、组织回复和完成推理。请选择服务并完成连接检测。</div>
@@ -74,6 +75,7 @@
             >继续</button>
           </div>
         </div>
+      </div>
       </div>
 
       <div class="ob-model-page-spoken">连接成功后，Amitia 才能理解并回应你。</div>

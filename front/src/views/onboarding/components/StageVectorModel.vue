@@ -1,6 +1,7 @@
 <template>
   <div class="ob-stage-inner">
     <div class="ob-model-page-experience">
+      <div class="ob-model-page-group">
       <div class="ob-model-page-heading">
         <div class="ob-character-line">配置长期记忆检索</div>
         <div class="ob-dialogue-note">向量模型会为记忆生成语义索引，帮助 Amitia 在之后的对话中找到相关内容。</div>
@@ -53,6 +54,7 @@
         </div>
       </div>
 
+      </div>
       <div class="ob-model-page-spoken">配置完成后，长期记忆才能被更准确地检索。</div>
     </div>
   </div>

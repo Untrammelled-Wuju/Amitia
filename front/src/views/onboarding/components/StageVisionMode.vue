@@ -1,6 +1,7 @@
 <template>
   <div class="ob-stage-inner">
     <div class="ob-model-page-experience">
+      <div class="ob-model-page-group">
       <div class="ob-model-page-heading">
         <div class="ob-character-line">设置图片理解能力</div>
         <div class="ob-dialogue-note">启用后，Amitia 可以理解你发送的图片，并将图片内容加入对话上下文。</div>
@@ -66,6 +67,7 @@
         </div>
       </div>
 
+      </div>
       <div class="ob-model-page-spoken">启用后，图片也能成为对话的一部分。</div>
     </div>
   </div>

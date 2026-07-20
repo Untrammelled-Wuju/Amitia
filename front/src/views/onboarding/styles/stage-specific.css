@@ -285,12 +285,16 @@
   position: absolute;
   inset: 0;
 }
+.onboarding-world .ob-model-page-group {
+  position: absolute;
+  left: auto;
+  right: calc(50% + 10px);
+  bottom: calc(57% - 215px);
+  width: min(51%, 500px);
+}
 
 .onboarding-world .ob-model-page-heading {
-  position: absolute;
-  left: 5%;
-  top: 10%;
-  width: 47%;
+  margin-bottom: 12px;
 }
 
 .onboarding-world .ob-model-page-heading .ob-character-line {
@@ -321,14 +325,10 @@
 }
 
 .onboarding-world .ob-model-page-panel {
-  position: absolute;
-  left: 5%;
-  top: 31%;
-  width: 51%;
 }
 
 .onboarding-world .ob-model-page-card {
-  max-width: 680px;
+  max-width: 500px;
   padding: 20px 21px 18px;
   border: 1px solid var(--ob-line);
   border-radius: 22px;
@@ -529,9 +529,11 @@
 
 .onboarding-world .ob-model-page-spoken {
   position: absolute;
-  left: 62%;
-  right: 4%;
-  bottom: 15%;
+  left: calc(50% + 260px);
+  top: calc(43% + 195px);
+  transform: translateX(-50%);
+  width: 210px;
+  white-space: nowrap;
   text-align: center;
   color: var(--ob-muted);
   font-size: 12px;
@@ -626,12 +628,16 @@
   position: absolute;
   inset: 0;
 }
+.onboarding-world .ob-voice-group {
+  position: absolute;
+  left: auto;
+  right: calc(50% + 10px);
+  bottom: calc(57% - 217px);
+  width: min(51%, 500px);
+}
 
 .onboarding-world .ob-voice-heading {
-  position: absolute;
-  left: 5%;
-  top: 7%;
-  width: 47%;
+  margin-bottom: 12px;
 }
 
 .onboarding-world .ob-voice-heading .ob-character-line {
@@ -639,12 +645,7 @@
 }
 
 .onboarding-world .ob-voice-panel {
-  position: absolute;
-  left: 5%;
-  right: auto;
-  top: 29%;
   bottom: auto;
-  width: 51%;
   max-height: none !important;
   transform: none;
   padding: 0;
@@ -730,7 +731,7 @@
 }
 
 .onboarding-world .ob-voice-model-card {
-  max-width: 680px;
+  max-width: 500px;
   margin-top: 15px;
   padding: 16px 17px 14px;
   border: 1px solid var(--ob-line);
@@ -820,14 +821,15 @@
 
 .onboarding-world .ob-voice-spoken-line {
   position: absolute;
-  left: 61%;
-  right: 4%;
-  bottom: 16%;
+  left: calc(50% + 260px);
+  top: calc(43% + 195px);
+  transform: translateX(-50%);
+  width: 210px;
+  white-space: nowrap;
   color: var(--ob-muted);
   font-size: 13px;
   line-height: 1.7;
   text-align: center;
-  opacity: 0.9;
 }
 
 .onboarding-world .ob-setup-step-panel {
