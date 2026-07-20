@@ -33,6 +33,8 @@ export function useImmersiveOnboarding() {
   const modelApiKey = ref("")
   const modelName = ref("")
 
+  const modelFieldErrors = ref<{baseUrl?: boolean, apiKey?: boolean, modelName?: boolean}>({})
+
   const visionMode = ref("dedicated")
   const detectingVision = ref(false)
   const visionReady = ref(false)
@@ -49,8 +51,9 @@ export function useImmersiveOnboarding() {
   const voiceDetected = ref(false)
   const voiceStatusText = ref("等待测试")
   const voiceModelKey = ref("")
+  const voiceModelURL = ref("https://openspeech.bytedance.com/api/v1")
   const voiceModelResource = ref("seed-tts-2.0")
-  const voiceModelVoiceType = ref("zh_female_vv_uranus_bigtts")
+  const voiceModelVoiceType = ref("zh_female_vv_jupiter_bigtts")
 
   const detectingVector = ref(false)
   const vectorReady = ref(false)
@@ -194,6 +197,13 @@ export function useImmersiveOnboarding() {
 
   function nextStage() {
     if (currentStage.value < stageCount - 1) {
+      if (currentStage.value === 3) {
+        modelFieldErrors.value = {}
+        if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true
+        if (!modelApiKey.value.trim()) modelFieldErrors.value.apiKey = true
+        if (!modelName.value.trim()) modelFieldErrors.value.modelName = true
+        if (Object.keys(modelFieldErrors.value).length > 0) return
+      }
       goToStage(currentStage.value + 1)
     }
   }
@@ -288,7 +298,7 @@ export function useImmersiveOnboarding() {
       if (res?.models && res.models.length > 0) {
         modelReady.value = true
         modelDetected.value = true
-        modelStatusText.value = "语言模型连接成功，可以继续"
+        modelStatusText.value = `已检测到 ${res.models.length} 个模型`
         detectedModels.value = res.models
       } else {
         modelReady.value = false
@@ -344,8 +354,9 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600))
 
-      await post("/api/model/test-voice", {
+      await post("/api/tts/test-connection", {
         apiKey: voiceModelKey.value,
+        baseUrl: voiceModelURL.value,
         resource: voiceModelResource.value,
         voiceType: voiceModelVoiceType.value,
       })
@@ -461,6 +472,7 @@ export function useImmersiveOnboarding() {
           apiType: "voice",
           provider: voiceModelMode.value,
           apiKey: voiceModelKey.value,
+          baseUrl: voiceModelURL.value,
           resource: voiceModelResource.value,
           voiceType: voiceModelVoiceType.value,
           voiceStyle: voiceStyle.value,
@@ -550,6 +562,7 @@ export function useImmersiveOnboarding() {
     modelDetected,
     detectedModels,
     modelStatusText,
+    modelFieldErrors,
     modelBaseUrl,
     modelApiKey,
     modelName,
@@ -568,6 +581,7 @@ export function useImmersiveOnboarding() {
     voiceDetected,
     voiceStatusText,
     voiceModelKey,
+    voiceModelURL,
     voiceModelResource,
     voiceModelVoiceType,
     detectingVector,

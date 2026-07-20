@@ -60,6 +60,7 @@
           :modelDetected="modelDetected"
           :detectedModels="detectedModels"
           :statusText="modelStatusText"
+          :fieldErrors="modelFieldErrors"
           :baseUrl="modelBaseUrl"
           :apiKey="modelApiKey"
           :modelName="modelName"
@@ -92,23 +93,22 @@
 
       <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 5 || leavingStage === 5), 'stage-leaving': leavingStage === 5, 'stage-enter-prep': enterPrepStage === 5 }">
         <StageVoice
-          :voiceStyle="voiceStyle"
           :voiceModelMode="voiceModelMode"
           :voiceModelKey="voiceModelKey"
+          :voiceModelURL="voiceModelURL"
           :voiceModelResource="voiceModelResource"
           :voiceModelVoiceType="voiceModelVoiceType"
           :voiceReady="voiceReady"
           :voiceDetected="voiceDetected"
           :detectingVoice="detectingVoice"
           :voiceStatusText="voiceStatusText"
-          @update:voiceStyle="voiceStyle = $event"
           @update:voiceModelMode="voiceModelMode = $event"
           @update:voiceModelKey="voiceModelKey = $event"
+          @update:voiceModelURL="voiceModelURL = $event"
           @update:voiceModelResource="voiceModelResource = $event"
           @update:voiceModelVoiceType="voiceModelVoiceType = $event"
           @next="nextStage"
           @detectVoice="detectVoice"
-          @playVoice="playVoiceSample"
         />
       </section>
 
@@ -213,6 +213,7 @@ const {
   modelReady,
   modelDetected,
   detectedModels,
+  modelFieldErrors,
   modelStatusText,
   modelBaseUrl,
   modelApiKey,
@@ -232,6 +233,7 @@ const {
   voiceDetected,
   voiceStatusText,
   voiceModelKey,
+  voiceModelURL,
   voiceModelResource,
   voiceModelVoiceType,
   detectingVector,

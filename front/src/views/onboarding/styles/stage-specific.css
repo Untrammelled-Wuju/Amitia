@@ -295,7 +295,7 @@
 
 .onboarding-world .ob-model-page-heading .ob-character-line {
   min-height: 0;
-  font-size: clamp(30px, 3.15vw, 45px);
+  font-size: 34px;
   line-height: 1.28;
 }
 
@@ -433,6 +433,7 @@
 .onboarding-world .ob-model-page-card .ob-small-action {
   min-width: 78px;
   font-size: 9px;
+  height: 36px;
 }
 
 .onboarding-world .ob-model-page-card .ob-model-status {
@@ -472,7 +473,31 @@
 
 .onboarding-world .ob-model-setup-action-row {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.onboarding-world .ob-model-settings-link {
+  color: var(--ob-muted);
+  font-size: 11px;
+  transition: color 0.2s ease;
+}
+
+.onboarding-world .ob-model-settings-link:hover {
+  color: var(--ob-accent2);
+}
+
+.onboarding-world .ob-model-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onboarding-world .ob-model-name-row input,
+.onboarding-world .ob-model-name-row .ob-model-select {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
 }
 
 .onboarding-world .ob-model-page-card .ob-model-setup-next {
@@ -606,6 +631,10 @@
   left: 5%;
   top: 7%;
   width: 47%;
+}
+
+.onboarding-world .ob-voice-heading .ob-character-line {
+  font-size: 34px;
 }
 
 .onboarding-world .ob-voice-panel {
@@ -830,7 +859,7 @@
 }
 
 .onboarding-world[data-layout-mode="compact"] .ob-model-page-heading .ob-character-line {
-  font-size: 31px;
+  font-size: 34px;
 }
 
 .onboarding-world[data-layout-mode="compact"] .ob-model-page-panel {
@@ -872,7 +901,7 @@
 }
 
 .onboarding-world[data-layout-mode="phone"] .ob-model-page-heading .ob-character-line {
-  font-size: 24px;
+  font-size: 34px;
   line-height: 1.25;
 }
 

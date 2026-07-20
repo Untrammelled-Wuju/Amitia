@@ -107,6 +107,28 @@ func (h *Handler) Test(c *gin.Context) {
 	util.SuccessMsgResponse(c, "连接测试成功", nil)
 }
 
+
+func (h *Handler) TestConnectionStandalone(c *gin.Context) {
+	var body struct {
+		ApiKey     string `json:"apiKey"`
+		ResourceId string `json:"resource"`
+		VoiceType  string `json:"voiceType"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		return
+	}
+	cfg := &TtsConfig{
+		ApiKey:     body.ApiKey,
+		ResourceId: body.ResourceId,
+		VoiceType:  body.VoiceType,
+	}
+	if err := TestConnection(cfg); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "语音服务测试成功", nil)
+}
 func (h *Handler) Synthesize(c *gin.Context) {
 	var req SynthesizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

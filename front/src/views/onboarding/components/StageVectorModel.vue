@@ -25,10 +25,13 @@
               />
             </label>
             <label class="ob-input-label">向量模型
-              <input
-                :value="vectorModelName"
-                @input="emit('update:vectorModelName', ($event.target as HTMLInputElement).value)"
-              />
+              <div class="ob-model-name-row">
+                <input
+                  :value="vectorModelName"
+                  @input="emit('update:vectorModelName', ($event.target as HTMLInputElement).value)"
+                />
+                <button class="ob-small-action ob-detect-inline" @click="emit('detect')" :disabled="detecting">{{ detecting ? '检测中' : vectorDetected ? '重新检测' : '检测' }}</button>
+              </div>
             </label>
             <label class="ob-input-label ob-model-page-wide">接口地址
               <div class="ob-model-page-detect-row">
@@ -36,7 +39,6 @@
                   :value="vectorModelURL"
                   @input="emit('update:vectorModelURL', ($event.target as HTMLInputElement).value)"
                 />
-                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">{{ detecting ? '检测中' : vectorDetected ? '重新检测' : '检测' }}</button>
               </div>
             </label>
           </div>
@@ -45,6 +47,7 @@
             <span>{{ statusText }}</span>
           </div>
           <div class="ob-model-setup-action-row">
+            <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-embedding-vision" target="_blank" class="ob-model-settings-link">前往火山引擎获取 API Key</a>
             <button class="ob-model-setup-next" @click="emit('next')" :disabled="!vectorReady">继续</button>
           </div>
         </div>

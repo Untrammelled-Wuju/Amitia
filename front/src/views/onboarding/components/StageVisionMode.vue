@@ -29,6 +29,12 @@
             </button>
           </div>
           <div v-if="visionMode !== 'disabled'" class="ob-form-stack ob-model-page-fields">
+            <label class="ob-input-label">接口地址
+              <input
+                :value="visionModelURL"
+                @input="emit('update:visionModelURL', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
             <label class="ob-input-label">API Key
               <input
                 :value="visionModelKey"
@@ -37,19 +43,13 @@
                 placeholder="火山引擎 API Key"
               />
             </label>
-            <label class="ob-input-label">视觉模型
+            <label class="ob-input-label ob-model-page-wide">视觉模型
+              <div class="ob-model-name-row">
               <input
                 :value="visionModelName"
                 @input="emit('update:visionModelName', ($event.target as HTMLInputElement).value)"
               />
-            </label>
-            <label class="ob-input-label ob-model-page-wide">接口地址
-              <div class="ob-model-page-detect-row">
-                <input
-                  :value="visionModelURL"
-                  @input="emit('update:visionModelURL', ($event.target as HTMLInputElement).value)"
-                />
-                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">
+                <button class="ob-small-action ob-detect-inline" @click="emit('detect')" :disabled="detecting">
                   {{ detecting ? '检测中' : visionDetected ? '重新检测' : '检测' }}
                 </button>
               </div>
@@ -60,6 +60,7 @@
             <span>{{ statusText }}</span>
           </div>
           <div class="ob-model-setup-action-row">
+            <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-lite-260428" target="_blank" class="ob-model-settings-link">前往火山引擎获取 API Key</a>
             <button class="ob-model-setup-next" @click="emit('next')" :disabled="!canContinue">继续</button>
           </div>
         </div>
