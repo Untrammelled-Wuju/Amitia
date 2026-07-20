@@ -9,7 +9,7 @@
   left: 42%;
   right: 6%;
   top: 10%;
-  width: auto;
+  width: clamp(280px, calc(10vh + 220px), 320px) !important;
   max-width: 620px;
 }
 
@@ -113,13 +113,11 @@
 
 .onboarding-world .ob-identity-ledger {
   position: absolute;
-  left: 42%;
-  right: 6%;
-  bottom: 7%;
-  width: auto;
-  max-width: 520px;
+  left: calc(25vw - clamp(24px, 5vw, 76px));
+  top: calc(37.5vh - var(--stage7-shift) * 1.333 + var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px) + 28px);
+  transform: translateX(-50%);
+  width: clamp(280px, var(--stage7-core-size), 320px);
 }
-
 .onboarding-world .ob-identity-ledger-title {
   color: var(--ob-faint);
   font-size: 10px;
