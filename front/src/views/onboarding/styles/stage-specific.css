@@ -119,8 +119,8 @@
 
 .onboarding-world .ob-boot-panel {
   position: absolute;
-  left: auto;
-  right: 5%;
+  left: calc(50% + 20px);
+  right: auto;
   top: 46%;
   width: min(390px, 36vw);
   transform: translateY(-50%);
@@ -191,7 +191,8 @@
 
 .onboarding-world .ob-account-sheet {
   position: absolute;
-  right: 5%;
+  left: calc(50% + 20px);
+  right: auto;
   top: 46%;
   width: min(420px, 39vw);
   transform: translateY(-50%);
@@ -201,8 +202,7 @@
   background: rgba(23, 22, 21, 0.7);
   backdrop-filter: blur(18px);
   box-shadow: var(--ob-shadow);
-  max-height: calc(100vh - 170px);
-  overflow: auto;
+  overflow: hidden;
   scrollbar-width: thin;
 }
 
@@ -747,6 +747,18 @@
 
 
 .onboarding-world .ob-setup-step-panel {
+}
+
+.onboarding-world .ob-setup-stage-inner .ob-setup-step-panel {
+  opacity: 1;
+  will-change: opacity;
+  transition: opacity .32s ease;
+}
+
+.onboarding-world .ob-setup-step-panel.setup-panel-leaving,
+.onboarding-world .ob-setup-step-panel.setup-panel-entering {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 

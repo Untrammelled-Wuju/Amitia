@@ -19,7 +19,7 @@
 
 .onboarding-world[data-stage-current="0"] .core-zone { left: 68%; top: 48%; --core-size: min(37vw, 56vh, 520px); }
 .onboarding-world[data-stage-current="1"] .core-zone { left: 50%; top: 47%; --core-size: min(28vw, 43vh, 410px); }
-.onboarding-world[data-stage-current="2"] .core-zone { left: 22%; top: 46%; --core-size: min(25vw, 37vh, 350px); }
+.onboarding-world[data-stage-current="2"] .core-zone { left: calc(50% - 300px); top: 46%; --core-size: min(25vw, 37vh, 350px); }
 .onboarding-world[data-stage-current="3"] .core-zone { left: 76%; top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
 .onboarding-world[data-stage-current="4"] .core-zone { left: 76%; top: 39%; --core-size: 330px; width: 330px; height: 330px; opacity: .93; }
 .onboarding-world[data-stage-current="5"] .core-zone { left: 76%; top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
