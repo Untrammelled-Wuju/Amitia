@@ -104,7 +104,7 @@ export function useImmersiveOnboarding() {
       context: "之后的对话会使用这个名字。",
       placeholder: "例如：Amitia",
       maxLength: 32,
-      quickChoices: ["Amitia", "小安", "墨染", "晨曦", "月白"],
+      quickChoices: [],
     },
     {
       question: "我的身份是什么？",
