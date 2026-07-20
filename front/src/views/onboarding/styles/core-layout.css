@@ -42,3 +42,8 @@
   --core-size: 320px !important;
   opacity: 1 !important;
 }
+
+.onboarding-world[data-stage-current="7"][data-identity-state="complete"] .core-zone {
+  opacity: 0 !important;
+  pointer-events: none;
+}

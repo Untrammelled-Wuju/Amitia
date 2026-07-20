@@ -53,14 +53,16 @@
       <div v-if="complete" class="ob-identity-complete-view">
         <div class="ob-identity-complete-card">
           <div class="ob-identity-complete-copy-block">
-            <div class="ob-identity-complete-kicker">角色设定完成</div>
             <p class="ob-identity-complete-message">
               <span>我记住了。</span>
               <span>以后，你可以叫我 <strong>{{ ledger.name }}</strong>。</span>
               <span>我是你的 <strong>{{ ledger.role }}</strong>。</span>
               <span>我会以你设定的性格，陪在你身边。</span>
             </p>
-            <p class="ob-identity-complete-note">这些设定之后仍可随时修改。</p>
+            <div class="ob-identity-complete-footer">
+              <span class="ob-identity-complete-kicker">角色设定完成</span>
+              <p class="ob-identity-complete-note">这些设定之后仍可随时修改。</p>
+            </div>
           </div>
         </div>
       </div>

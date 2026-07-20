@@ -201,6 +201,7 @@
 .onboarding-world .ob-identity-complete-card {
   text-align: center;
   max-width: 480px;
+  margin-top: -60px;
 }
 
 .onboarding-world .ob-identity-complete-copy-block {
@@ -212,11 +213,11 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .onboarding-world .ob-identity-complete-message {
-  font-size: 22px;
+  font-size: 26px;
   line-height: 1.6;
   color: var(--ob-text);
   margin: 0;
@@ -233,7 +234,7 @@
 .onboarding-world .ob-identity-complete-note {
   color: var(--ob-faint);
   font-size: 11px;
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 .onboarding-world .ob-identity-complete-next {
@@ -524,7 +525,7 @@
 
 .onboarding-world .ob-memory-summary-index {
   color: var(--ob-faint);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .onboarding-world .ob-memory-summary-label {
@@ -570,3 +571,11 @@
 }
 
 /* Obsolete bottom-alignment overrides - remove role */
+
+.onboarding-world .ob-identity-complete-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
