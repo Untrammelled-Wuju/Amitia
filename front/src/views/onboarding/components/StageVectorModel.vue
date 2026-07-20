@@ -17,6 +17,14 @@
           </div>
           <p class="ob-model-panel-copy">它只负责查找相关记忆，不会自行创建、修改或删除记忆。</p>
           <div class="ob-form-stack ob-model-page-fields">
+            <label class="ob-input-label ob-model-page-wide">接口地址
+              <div class="ob-model-page-detect-row">
+                <input
+                  :value="vectorModelURL"
+                  @input="emit('update:vectorModelURL', ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+            </label>
             <label class="ob-input-label">API Key
               <div class="ob-input-password-wrap">
                 <input :value="vectorModelKey" @input="emit('update:vectorModelKey', ($event.target as HTMLInputElement).value)" :type="showVectorApiKey ? 'text' : 'password'" placeholder="火山引擎 API Key" />
@@ -33,14 +41,6 @@
                   @input="emit('update:vectorModelName', ($event.target as HTMLInputElement).value)"
                 />
                 <button class="ob-small-action ob-detect-inline" @click="emit('detect')" :disabled="detecting">{{ detecting ? '检测中' : vectorDetected ? '重新检测' : '检测' }}</button>
-              </div>
-            </label>
-            <label class="ob-input-label ob-model-page-wide">接口地址
-              <div class="ob-model-page-detect-row">
-                <input
-                  :value="vectorModelURL"
-                  @input="emit('update:vectorModelURL', ($event.target as HTMLInputElement).value)"
-                />
               </div>
             </label>
           </div>
