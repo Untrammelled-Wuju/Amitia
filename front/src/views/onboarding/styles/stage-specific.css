@@ -129,6 +129,17 @@
   to { transform: rotate(360deg); }
 }
 
+.onboarding-world .ob-url-warn {
+  position: absolute;
+  bottom: 10px;
+  left: 34px;
+  font-size: 10px;
+  color: #e05555;
+}
+.onboarding-world .ob-field-warn {
+  border-color: #e05555 !important;
+
+}
 
 
 

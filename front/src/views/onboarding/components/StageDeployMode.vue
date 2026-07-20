@@ -25,35 +25,73 @@
           <div class="ob-remote-inline">
             <input
               class="ob-field"
+              :class="{ 'ob-field-warn': urlWarn }"
               :value="serverURL"
-              @input="$emit('update:serverURL', ($event.target as HTMLInputElement).value)"
+              @input="onInput"
               placeholder="https://amitia.example.com"
             />
-            <span class="ob-small-action" :class="{ spinning: detectingRemote }" @click="$emit('checkRemote')">
+            <span class="ob-small-action" :class="{ spinning: detectingRemote }" @click="handleCheckRemote">
               <span v-if="detectingRemote" class="ob-spin-icon"></span>
               {{ detectingRemote ? '检测中' : remoteStatusText || '检测连接' }}
             </span>
           </div>
           </div>
+          <div v-if="urlWarn" class="ob-url-warn">{{ urlWarnMsg }}</div>
         </button>
       </div>
     </div>
-    <button class="ob-stage-action" @click="$emit('next')">继续</button>
+    <button class="ob-stage-action" @click="handleNext">继续</button>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { ref } from "vue"
+
+const props = defineProps<{
   deployMode: string
   serverURL: string
   detectingRemote: boolean
   remoteStatusText: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'update:deployMode': [value: string]
   'update:serverURL': [value: string]
   next: []
   checkRemote: []
 }>()
+
+const urlWarn = ref(false)
+const urlWarnMsg = ref("")
+
+function onInput(e: Event) {
+  urlWarn.value = false
+  emit('update:serverURL', (e.target as HTMLInputElement).value)
+}
+
+function handleCheckRemote() {
+  if (!props.serverURL.trim()) {
+    urlWarn.value = true
+    urlWarnMsg.value = "请输入远程地址"
+    return
+  }
+  urlWarn.value = false
+  emit('checkRemote')
+}
+
+function handleNext() {
+  if (props.deployMode === 'remote') {
+    if (!props.serverURL.trim()) {
+      urlWarn.value = true
+      urlWarnMsg.value = "请输入远程地址"
+      return
+    }
+    if (props.remoteStatusText !== "连接成功") {
+      urlWarn.value = true
+      urlWarnMsg.value = "请先检测连接"
+      return
+    }
+  }
+  emit('next')
+}
 </script>
