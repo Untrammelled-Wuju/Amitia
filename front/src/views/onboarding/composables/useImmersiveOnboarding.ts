@@ -186,6 +186,8 @@ export function useImmersiveOnboarding() {
       currentStage.value = stage
       enterPrepStage.value = stage
 
+      if (prev === 7) { identityState.value = 'filling'; identityStep.value = 0 }
+
       setTimeout(() => {
         if (token !== stageTransitionToken) return
         enterPrepStage.value = -1
