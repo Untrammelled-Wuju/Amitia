@@ -1,12 +1,12 @@
 <template>
   <div class="ob-stage-inner">
     <div class="ob-identity-scene" ref="identitySceneRef" :data-identity-state="complete ? 'complete' : 'incomplete'">
-      <div class="ob-identity-prompt" ref="identityPromptRef">
+      <div v-if="!complete" class="ob-identity-prompt" ref="identityPromptRef">
         <div class="ob-character-line">{{ question }}</div>
         <div class="ob-identity-context">{{ context }}</div>
       </div>
 
-      <div class="ob-identity-ledger" ref="identityLedgerRef">
+      <div v-if="!complete" class="ob-identity-ledger" ref="identityLedgerRef">
         <div class="ob-identity-ledger-title">已设定的信息</div>
         <div class="ob-identity-ledger-items">
           <div class="ob-identity-ledger-card" :class="{ filled: ledger.name }">
