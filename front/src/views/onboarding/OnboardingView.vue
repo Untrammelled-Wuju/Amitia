@@ -46,7 +46,9 @@
           :step="adminStep"
           :isLogin="isLoginFlow()"
           :accountName="accountName"
+          :serverURL="serverURL"
           @update:step="adminStep = $event"
+          @healthCheckDone="onHealthCheckDone"
           @submit="handleAdminSubmit"
         />
       </section>
@@ -246,6 +248,7 @@ const {
   currentMemoryQuestion,
   nextStage,
   prevStage,
+  checkAdminExists,
   isLoginFlow,
   handleAdminSubmit,
   detectModel,
@@ -280,6 +283,11 @@ watch(currentStage, (val) => {
 watch(serverURL, () => {
   remoteStatusText.value = ""
 })
+
+async function onHealthCheckDone() {
+  await checkAdminExists()
+  adminStep.value = "account"
+}
 
 function checkRemoteConnection() {
   const url = serverURL.value.trim()

@@ -1,0 +1,108 @@
+.onboarding-world .ob-boundary {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: min(620px, 64vw);
+  height: min(620px, 64vw);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(200, 121, 91, 0.16);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.onboarding-world .ob-permission-node {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 1px solid var(--ob-line);
+  background: rgba(20, 19, 18, 0.76);
+  backdrop-filter: blur(14px);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 10px;
+  color: var(--ob-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  transition: transform 0.3s var(--ob-ease), border-color 0.3s ease, background 0.3s ease;
+}
+
+.onboarding-world .ob-permission-node:hover {
+  transform: scale(1.04);
+}
+
+.onboarding-world .ob-permission-node.on {
+  border-color: rgba(200, 121, 91, 0.5);
+  background: var(--ob-accent-soft);
+  color: var(--ob-text);
+}
+
+.onboarding-world .ob-permission-mini {
+  display: block;
+  margin-top: 5px;
+  color: var(--ob-faint);
+  font-size: 9px;
+}
+
+.onboarding-world .p-autostart {
+  left: 50%;
+  top: -8%;
+  transform: translateX(-50%);
+}
+
+.onboarding-world .p-web {
+  right: -8%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.onboarding-world .p-wechat {
+  left: 50%;
+  bottom: -8%;
+  transform: translateX(-50%);
+}
+
+.onboarding-world .p-qq {
+  left: -8%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.onboarding-world .ob-permission-node.p-autostart:hover,
+.onboarding-world .ob-permission-node.p-wechat:hover {
+  transform: translateX(-50%) scale(1.04);
+}
+
+.onboarding-world .ob-permission-node.p-web:hover,
+.onboarding-world .ob-permission-node.p-qq:hover {
+  transform: translateY(-50%) scale(1.04);
+}
+
+.onboarding-world .ob-permission-node.locked {
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.onboarding-world .ob-boundary-copy {
+  position: absolute;
+  left: 7%;
+  top: 50%;
+  width: min(330px, 30vw);
+  transform: translateY(-50%);
+}
+
+.onboarding-world .ob-boundary-copy h2 {
+  font-size: 31px;
+  font-weight: 540;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.onboarding-world .ob-boundary-copy p {
+  color: var(--ob-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}

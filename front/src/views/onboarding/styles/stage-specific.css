@@ -258,7 +258,6 @@
   background: rgba(23, 22, 21, 0.7);
   backdrop-filter: blur(18px);
   box-shadow: var(--ob-shadow);
-  pointer-events: none;
   scrollbar-width: thin;
 }
 

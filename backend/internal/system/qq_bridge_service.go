@@ -25,20 +25,34 @@ func (s *service) getQQHealthStatus() string {
 	return "disconnected"
 }
 
-func (s *service) GetQQBridgeStatus() map[string]interface{} {
+func (s *service) isQQSidecarRunning() bool {
 	resp, err := s.qqSidecarGet("/api/status")
 	if err != nil {
-		return map[string]interface{}{"connected": false, "status": "disconnected"}
+		return false
 	}
 	defer resp.Body.Close()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
 	json.Unmarshal(bodyBytes, &result)
+	success, _ := result["success"].(bool)
+	return success
+}
+
+func (s *service) GetQQBridgeStatus() map[string]interface{} {
+	resp, err := s.qqSidecarGet("/api/status")
+	if err != nil {
+		return map[string]interface{}{"connected": false, "status": "disconnected", "running": false}
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	running := result["success"] == true
 	if data, ok := result["data"].(map[string]interface{}); ok {
 		status, _ := data["status"].(string)
-		return map[string]interface{}{"connected": status == "connected", "status": status}
+		return map[string]interface{}{"connected": status == "connected", "status": status, "running": running}
 	}
-	return map[string]interface{}{"connected": resp.StatusCode == 200, "status": "unknown"}
+	return map[string]interface{}{"connected": resp.StatusCode == 200, "status": "unknown", "running": running}
 }
 
 func (s *service) GetQQBridgeStatusDetail() map[string]interface{} {

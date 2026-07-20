@@ -1,0 +1,105 @@
+<template>
+  <div class="ob-stage-inner">
+    <div class="ob-model-page-experience">
+      <div class="ob-model-page-heading">
+        <div class="ob-character-line">设置图片理解能力</div>
+        <div class="ob-dialogue-note">启用后，Amitia 可以理解你发送的图片，并将图片内容加入对话上下文。</div>
+      </div>
+
+      <div class="ob-model-page-panel">
+        <div class="ob-model-page-card">
+          <div class="ob-model-page-card-head">
+            <div>
+              <div class="ob-model-page-card-kicker">视觉服务</div>
+              <h3 class="ob-model-panel-title">视觉模式</h3>
+            </div>
+          </div>
+          <p class="ob-model-panel-copy">可使用独立视觉模型、沿用支持多模态的语言模型，或暂不启用。</p>
+          <div class="ob-model-mode-grid">
+            <button
+              v-for="mode in visionModes"
+              :key="mode.value"
+              class="ob-model-mode-card"
+              :class="{ selected: visionMode === mode.value }"
+              type="button"
+              @click="emit('update:visionMode', mode.value)"
+            >
+              <span class="ob-model-mode-name">{{ mode.label }}</span>
+              <span class="ob-model-mode-desc">{{ mode.desc }}</span>
+            </button>
+          </div>
+          <div v-if="visionMode !== 'disabled'" class="ob-form-stack ob-model-page-fields">
+            <label class="ob-input-label">API Key
+              <input
+                :value="visionModelKey"
+                @input="emit('update:visionModelKey', ($event.target as HTMLInputElement).value)"
+                type="password"
+                placeholder="火山引擎 API Key"
+              />
+            </label>
+            <label class="ob-input-label">视觉模型
+              <input
+                :value="visionModelName"
+                @input="emit('update:visionModelName', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label class="ob-input-label ob-model-page-wide">接口地址
+              <div class="ob-model-page-detect-row">
+                <input
+                  :value="visionModelURL"
+                  @input="emit('update:visionModelURL', ($event.target as HTMLInputElement).value)"
+                />
+                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">
+                  {{ detecting ? '检测中' : '检测' }}
+                </button>
+              </div>
+            </label>
+          </div>
+          <div class="ob-model-status" :class="{ ok: visionReady }">
+            <span class="ob-model-dot"></span>
+            <span>{{ statusText }}</span>
+          </div>
+          <div class="ob-model-setup-action-row">
+            <button class="ob-model-setup-next" @click="emit('next')" :disabled="!canContinue">继续</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ob-model-page-spoken">启用后，图片也能成为对话的一部分。</div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from "vue"
+
+const props = defineProps<{
+  visionMode: string
+  visionModelKey: string
+  visionModelName: string
+  visionModelURL: string
+  visionReady: boolean
+  detecting: boolean
+  statusText: string
+}>()
+
+const emit = defineEmits<{
+  next: []
+  detect: []
+  'update:visionMode': [value: string]
+  'update:visionModelKey': [value: string]
+  'update:visionModelName': [value: string]
+  'update:visionModelURL': [value: string]
+}>()
+
+const visionModes = [
+  { label: "独立视觉模型", desc: "单独配置，能力和费用更易管理", value: "dedicated" },
+  { label: "沿用语言模型", desc: "语言模型支持图片理解时使用", value: "inherit" },
+  { label: "暂不启用", desc: "只处理文字和语音", value: "disabled" },
+]
+
+const canContinue = computed(() => {
+  if (props.visionMode === "disabled") return true
+  return props.visionReady
+})
+</script>

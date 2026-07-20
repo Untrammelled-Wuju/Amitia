@@ -24,20 +24,34 @@ func (s *service) getWechatHealthStatus() string {
 	return "disconnected"
 }
 
-func (s *service) GetWechatBridgeStatus() map[string]interface{} {
+func (s *service) isWechatSidecarRunning() bool {
 	resp, err := s.sidecarGet("/api/status")
 	if err != nil {
-		return map[string]interface{}{"connected": false, "status": "disconnected"}
+		return false
 	}
 	defer resp.Body.Close()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
 	json.Unmarshal(bodyBytes, &result)
+	success, _ := result["success"].(bool)
+	return success
+}
+
+func (s *service) GetWechatBridgeStatus() map[string]interface{} {
+	resp, err := s.sidecarGet("/api/status")
+	if err != nil {
+		return map[string]interface{}{"connected": false, "status": "disconnected", "running": false}
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(bodyBytes, &result)
+	running := result["success"] == true
 	if data, ok := result["data"].(map[string]interface{}); ok {
 		status, _ := data["status"].(string)
-		return map[string]interface{}{"connected": status == "connected", "status": status}
+		return map[string]interface{}{"connected": status == "connected", "status": status, "running": running}
 	}
-	return map[string]interface{}{"connected": resp.StatusCode == 200, "status": "unknown"}
+	return map[string]interface{}{"connected": resp.StatusCode == 200, "status": "unknown", "running": running}
 }
 
 func (s *service) GetWechatBridgeStatusDetail() map[string]interface{} {
@@ -63,12 +77,13 @@ func (s *service) GetWechatEvents() map[string]interface{} {
 func (s *service) GetWechatStatus() map[string]interface{} {
 	resp, err := s.sidecarGet("/api/status")
 	if err != nil {
-		return map[string]interface{}{"connected": false, "status": "disconnected", "available": true}
+		return map[string]interface{}{"connected": false, "status": "disconnected", "available": true, "running": false}
 	}
 	defer resp.Body.Close()
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
 	json.Unmarshal(bodyBytes, &result)
+	running := result["success"] == true
 	data, _ := result["data"].(map[string]interface{})
 	if data == nil {
 		data = map[string]interface{}{}
@@ -86,6 +101,7 @@ func (s *service) GetWechatStatus() map[string]interface{} {
 	data["connected"] = status == "connected"
 	data["status"] = status
 	data["available"] = true
+	data["running"] = running
 	data["messageCount"] = messageCount
 	data["replyCount"] = replyCount
 	return data

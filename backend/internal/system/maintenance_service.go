@@ -26,12 +26,14 @@ func (s *service) GetMaintenanceStatus() map[string]interface{} {
 	if activeModel == "" {
 		issues = append(issues, map[string]interface{}{"type": "MODEL", "msg": "未配置活动模型"})
 	}
-	bridgeStatus := s.getWechatHealthStatus()
-	if bridgeStatus == "disconnected" {
+	if !s.isWechatSidecarRunning() {
+		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信侧车未启动"})
+	} else if s.getWechatHealthStatus() != "connected" {
 		issues = append(issues, map[string]interface{}{"type": "WECHAT", "msg": "微信 Bridge 未连接"})
 	}
-	qqStatus := s.getQQHealthStatus()
-	if qqStatus == "disconnected" {
+	if !s.isQQSidecarRunning() {
+		issues = append(issues, map[string]interface{}{"type": "QQ", "msg": "QQ侧车未启动"})
+	} else if s.getQQHealthStatus() != "connected" {
 		issues = append(issues, map[string]interface{}{"type": "QQ", "msg": "QQ Bridge 未连接"})
 	}
 	if memMB > 500 {
@@ -71,18 +73,28 @@ func (s *service) MaintenanceDiagnose() map[string]interface{} {
 	}
 	checks = append(checks, modelCheck)
 	bridgeStatus := s.getWechatHealthStatus()
-	bridgeOk := bridgeStatus == "connected"
+	bridgeRunning := s.isWechatSidecarRunning()
+	bridgeOk := bridgeRunning && bridgeStatus == "connected"
 	bridgeCheck := map[string]interface{}{"name": "微信 Bridge", "pass": bridgeOk}
 	if !bridgeOk {
-		bridgeCheck["error"] = "Bridge 状态: " + bridgeStatus
+		if !bridgeRunning {
+			bridgeCheck["error"] = "微信侧车未启动"
+		} else {
+			bridgeCheck["error"] = "Bridge 状态: " + bridgeStatus
+		}
 		allPassed = false
 	}
 	checks = append(checks, bridgeCheck)
 	qqBridgeStatus := s.getQQHealthStatus()
-	qqBridgeOk := qqBridgeStatus == "connected"
+	qqBridgeRunning := s.isQQSidecarRunning()
+	qqBridgeOk := qqBridgeRunning && qqBridgeStatus == "connected"
 	qqBridgeCheck := map[string]interface{}{"name": "QQ Bridge", "pass": qqBridgeOk}
 	if !qqBridgeOk {
-		qqBridgeCheck["error"] = "QQ Bridge 状态: " + qqBridgeStatus
+		if !qqBridgeRunning {
+			qqBridgeCheck["error"] = "QQ侧车未启动"
+		} else {
+			qqBridgeCheck["error"] = "QQ Bridge 状态: " + qqBridgeStatus
+		}
 		allPassed = false
 	}
 	checks = append(checks, qqBridgeCheck)

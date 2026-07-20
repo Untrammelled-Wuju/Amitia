@@ -9,7 +9,7 @@
       </h2>
       <div class="ob-boot-copy">
         {{ deployMode === 'local'
-          ? '系统将启动本地核心服务，并检查数据目录、运行组件和服务状态。'
+          ? '系统将检查后端服务、侧车服务以及各数据库组件的启动状态。'
           : '本设备不会启动本地服务，只会验证远程地址、服务版本和接口兼容性。' }}
       </div>
       <div class="ob-boot-list">
@@ -46,7 +46,7 @@
       <div class="ob-form-stack">
         <label class="ob-input-label">
           管理员名称
-          <input v-model="username" autocomplete="username" placeholder="例如：无拘" />
+          <input v-model="username" autocomplete="username" placeholder="例如：admin" />
         </label>
         <label class="ob-input-label">
           管理密码
@@ -67,17 +67,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, nextTick } from "vue"
+import { ref, watch, onMounted, onUnmounted, nextTick } from "vue"
+import { getApiBaseURL } from "@/runtime/runtime-adapter"
 
 const props = defineProps<{
   deployMode: string
   step: string
   isLogin: boolean
   accountName: string
+  serverURL: string
 }>()
 
 const emit = defineEmits<{
   'update:step': [value: string]
+  healthCheckDone: []
   submit: [data: { username: string; password: string; password2: string; isLogin: boolean; deployMode: string }]
 }>()
 
@@ -87,13 +90,14 @@ const password2 = ref("")
 const errorMsg = ref("")
 
 const bootRows = ref([
-  { name: "检查运行组件", state: "", stateText: "等待" },
-  { name: "准备数据目录", state: "", stateText: "等待" },
-  { name: "启动核心服务", state: "", stateText: "等待" },
-  { name: "确认服务状态", state: "", stateText: "等待" },
+  { name: "检查后端服务", state: "", stateText: "等待" },
+  { name: "检查微信侧车", state: "", stateText: "等待" },
+  { name: "检查QQ侧车", state: "", stateText: "等待" },
+  { name: "检查Qdrant", state: "", stateText: "等待" },
+  { name: "检查SurrealDB", state: "", stateText: "等待" },
 ])
 
-let bootTimers: ReturnType<typeof setTimeout>[] = []
+let abortController: AbortController | null = null
 let flowTransitionToken = 0
 
 const visibleStep = ref(props.step)
@@ -104,10 +108,6 @@ function panelClass(panel: string) {
   if (phase) return phase
   if (visibleStep.value !== panel) return "setup-panel-entering"
   return ""
-}
-
-function panelVisible(panel: string) {
-  return visibleStep.value === panel || panelPhase.value[panel]
 }
 
 function switchSetupPanel(step: string) {
@@ -137,7 +137,7 @@ function switchSetupPanel(step: string) {
 
         if (incoming === "environment") {
           updateBootLabels()
-          startBootAnimation()
+          startRealChecks()
         }
       })
     })
@@ -154,7 +154,14 @@ onMounted(() => {
   visibleStep.value = props.step
   if (props.step === "environment") {
     updateBootLabels()
-    startBootAnimation()
+    startRealChecks()
+  }
+})
+
+onUnmounted(() => {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
   }
 })
 
@@ -167,37 +174,237 @@ watch(() => props.step, (s) => {
 function updateBootLabels() {
   const local = props.deployMode === "local"
   const names = local
-    ? ["检查运行组件", "准备数据目录", "启动核心服务", "确认服务状态"]
+    ? ["检查后端服务", "检查微信侧车", "检查QQ侧车", "检查Qdrant", "检查SurrealDB"]
     : ["检查服务地址", "验证服务版本", "确认接口兼容性", "建立远程连接"]
   bootRows.value = names.map((name) => ({ name, state: "", stateText: "等待" }))
 }
 
-function startBootAnimation() {
-  bootTimers.forEach(clearTimeout)
-  bootTimers = []
+async function startRealChecks() {
+  if (abortController) {
+    abortController.abort()
+  }
+  abortController = new AbortController()
+  const signal = abortController.signal
+
   const rows = bootRows.value
   rows.forEach((row) => { row.state = ""; row.stateText = "等待" })
 
-  rows.forEach((row, index) => {
-    bootTimers.push(setTimeout(() => {
-      if (index > 0) {
-        rows[index - 1].state = "done"
-        rows[index - 1].stateText = "已完成"
+  const isLocal = props.deployMode === "local"
+
+  try {
+    if (isLocal) {
+      await runLocalChecks(rows, signal)
+    } else {
+      await runRemoteChecks(rows, signal)
+    }
+
+    if (!signal.aborted) {
+      const allDone = rows.every((r) => r.state === "done")
+      if (allDone) {
+        setTimeout(() => {
+          if (!signal.aborted) {
+            emit("healthCheckDone")
+          }
+        }, 360)
       }
+    }
+  } catch (e: any) {
+    if (signal.aborted) return
+    const failedRow = rows.find((r) => r.state === "running")
+    if (failedRow) {
+      failedRow.state = "error"
+      failedRow.stateText = "失败"
+    }
+  }
+}
+
+async function fetchWithTimeout(url: string, signal: AbortSignal, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController()
+  const linkedSignal = controller.signal
+
+  signal.addEventListener("abort", () => controller.abort())
+
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(url, { signal: linkedSignal })
+    return res
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException("Aborted", "AbortError")); return }
+    const t = setTimeout(resolve, ms)
+    signal.addEventListener("abort", () => { clearTimeout(t); reject(new DOMException("Aborted", "AbortError")) })
+  })
+}
+
+async function runLocalChecks(rows: typeof bootRows.value, signal: AbortSignal) {
+  const apiBase = await getApiBaseURL()
+
+  let healthData: any = null
+  let breakerData: any = null
+
+  for (let i = 0; i < rows.length; i++) {
+    if (signal.aborted) return
+    const row = rows[i]
+
+    if (i === 0) {
       row.state = "running"
       row.stateText = "处理中"
 
-      if (index === rows.length - 1) {
-        bootTimers.push(setTimeout(() => {
-          row.state = "done"
-          row.stateText = "已就绪"
-          bootTimers.push(setTimeout(() => {
-            emit("update:step", "account")
-          }, 360))
-        }, 650))
+      try {
+        const res = await fetchWithTimeout(`${apiBase}/api/health`, signal, 8000)
+        if (res.ok) {
+          healthData = await res.json()
+          const ready = healthData?.data?.ready === true || healthData?.ready === true
+          row.state = ready ? "done" : "error"
+          row.stateText = ready ? "正常运行" : "异常"
+        } else {
+          row.state = "error"
+          row.stateText = "异常"
+        }
+      } catch {
+        row.state = "error"
+        row.stateText = "无法连接"
       }
-    }, index * 650))
-  })
+    } else if (i === 1) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      const hd = healthData?.data || healthData || {}
+      const wechatRunning = hd.wechat_running
+      row.state = wechatRunning === true ? "done" : "error"
+      row.stateText = wechatRunning === true ? "正常运行" : "未启动"
+    } else if (i === 2) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      const hd = healthData?.data || healthData || {}
+      const qqRunning = hd.qq_running
+      row.state = qqRunning === true ? "done" : "error"
+      row.stateText = qqRunning === true ? "正常运行" : "未启动"
+    } else if (i === 3) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      try {
+        if (!breakerData) {
+          const res = await fetchWithTimeout(`${apiBase}/api/health/circuit-breakers`, signal, 8000)
+          if (res.ok) {
+            const json = await res.json()
+            breakerData = json?.data || json || []
+          }
+        }
+        const qdrant = Array.isArray(breakerData) ? breakerData.find((b: any) => b.name === "qdrant") : null
+        row.state = qdrant?.healthy ? "done" : "error"
+        row.stateText = qdrant?.healthy ? "正常运行" : "未启动"
+      } catch {
+        row.state = "error"
+        row.stateText = "无法连接"
+      }
+    } else if (i === 4) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      const surrealdb = Array.isArray(breakerData) ? breakerData.find((b: any) => b.name === "surrealdb") : null
+      row.state = surrealdb?.healthy ? "done" : "error"
+      row.stateText = surrealdb?.healthy ? "正常运行" : "未启动"
+    }
+  }
+}
+
+async function runRemoteChecks(rows: typeof bootRows.value, signal: AbortSignal) {
+  const remoteURL = (props.serverURL || "").trim().replace(/\/+$/, "")
+
+  for (let i = 0; i < rows.length; i++) {
+    if (signal.aborted) return
+    const row = rows[i]
+
+    if (i === 0) {
+      row.state = "running"
+      row.stateText = "处理中"
+
+      try {
+        const res = await fetchWithTimeout(`${remoteURL}/api/health`, signal, 8000)
+        if (res.ok) {
+          row.state = "done"
+          row.stateText = "已完成"
+        } else {
+          row.state = "error"
+          row.stateText = "无法访问"
+        }
+      } catch {
+        row.state = "error"
+        row.stateText = "无法连接"
+      }
+    } else if (i === 1) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      try {
+        const res = await fetchWithTimeout(`${remoteURL}/api/health`, signal, 8000)
+        if (res.ok) {
+          const data = await res.json()
+          const hasVersion = !!(data?.data?.version || data?.version)
+          row.state = hasVersion ? "done" : "error"
+          row.stateText = hasVersion ? "已完成" : "版本未知"
+        } else {
+          row.state = "error"
+          row.stateText = "异常"
+        }
+      } catch {
+        row.state = "error"
+        row.stateText = "无法连接"
+      }
+    } else if (i === 2) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+
+      try {
+        const res = await fetchWithTimeout(`${remoteURL}/api/runtime/health`, signal, 8000)
+        if (res.ok) {
+          row.state = "done"
+          row.stateText = "已完成"
+        } else {
+          row.state = "error"
+          row.stateText = "不兼容"
+        }
+      } catch {
+        row.state = "error"
+        row.stateText = "无法连接"
+      }
+    } else if (i === 3) {
+      await delay(650, signal)
+      if (signal.aborted) return
+
+      row.state = "running"
+      row.stateText = "处理中"
+      row.state = "done"
+      row.stateText = "已完成"
+    }
+  }
 }
 
 function handleSubmit() {

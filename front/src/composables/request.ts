@@ -29,7 +29,7 @@ export interface RequestError {
 function classifyError(body: ApiResponse | null, axiosError: AxiosError | null): RequestError {
   const problem = body as any
   const code = typeof problem?.code === "number" ? problem.code : typeof problem?.status === "number" ? problem.status : 0
-  const message = problem?.message || problem?.title || axiosError?.message || "Network error"
+  const message = problem?.message || problem?.msg || problem?.title || axiosError?.message || "Network error"
   const detail = problem?.detail
 
   // Network / server not reachable
