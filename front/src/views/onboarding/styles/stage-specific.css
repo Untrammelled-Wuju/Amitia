@@ -1,11 +1,18 @@
 .onboarding-world .ob-choice-cloud {
   position: absolute;
-  inset: 0;
+  top: 47%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.onboarding-world .ob-choice-cloud-scale {
   display: grid;
   pointer-events: none;
-  align-items: center;
   grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr);
-  gap: var(--stage-core, 410px);
+  gap: 420px;
+  transform-origin: center center;
+  transform: scale(calc(var(--stage-core) / 420px));
 }
 
 .onboarding-world .ob-path-choice.local {
@@ -19,7 +26,7 @@
 }
 
 .onboarding-world .ob-path-choice {
-  width: min(380px, 34vw);
+  width: 380px;
   min-height: 280px;
   border: 0;
   background: transparent;
