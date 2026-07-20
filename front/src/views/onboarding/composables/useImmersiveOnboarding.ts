@@ -447,7 +447,7 @@ export function useImmersiveOnboarding() {
       setTimeout(() => {
         identityState.value = 'complete'
       }, 1800)
-    }, 400)
+    }, 800)
   }
 
   function startIdentityReverse() {

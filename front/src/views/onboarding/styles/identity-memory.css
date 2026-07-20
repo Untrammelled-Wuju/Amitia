@@ -585,7 +585,7 @@
 .onboarding-world[data-stage-current="7"] .ob-identity-ledger,
 .onboarding-world[data-stage-current="7"] .ob-identity-answer,
 .onboarding-world[data-stage-current="7"] .ob-identity-step-markers {
-  transition: opacity 0.32s var(--ob-ease);
+  transition: opacity 0.8s var(--ob-ease);
 }
 .ob-fade-prompt-enter-active,
 .ob-fade-prompt-leave-active {
@@ -612,7 +612,7 @@
 .onboarding-world[data-stage-current="7"][data-identity-state="exiting"] .ob-identity-step-markers {
   opacity: 0 !important;
   pointer-events: none;
-  transition: opacity 0.32s var(--ob-ease);
+  transition: opacity 0.8s var(--ob-ease);
 }
 
 .onboarding-world[data-stage-current="7"][data-identity-state="spotlight"] .ob-identity-prompt,
