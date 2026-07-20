@@ -50,7 +50,7 @@
                   @input="emit('update:visionModelURL', ($event.target as HTMLInputElement).value)"
                 />
                 <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">
-                  {{ detecting ? '检测中' : '检测' }}
+                  {{ detecting ? '检测中' : visionDetected ? '重新检测' : '检测' }}
                 </button>
               </div>
             </label>
@@ -79,6 +79,7 @@ const props = defineProps<{
   visionModelName: string
   visionModelURL: string
   visionReady: boolean
+  visionDetected: boolean
   detecting: boolean
   statusText: string
 }>()

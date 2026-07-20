@@ -25,7 +25,9 @@ export function useImmersiveOnboarding() {
 
   const detectingModels = ref(false)
   const modelReady = ref(false)
+  const modelDetected = ref(false)
   const modelStatusText = ref("等待检测")
+  const detectedModels = ref<Array<{id: string, ownedBy?: string}>>([])
 
   const modelBaseUrl = ref("https://api.deepseek.com/v1")
   const modelApiKey = ref("")
@@ -34,6 +36,7 @@ export function useImmersiveOnboarding() {
   const visionMode = ref("dedicated")
   const detectingVision = ref(false)
   const visionReady = ref(false)
+  const visionDetected = ref(false)
   const visionStatusText = ref("请选择一种视觉模式")
   const visionModelKey = ref("")
   const visionModelName = ref("doubao-seed-2-0-lite-260428")
@@ -43,13 +46,15 @@ export function useImmersiveOnboarding() {
   const voiceModelMode = ref("volcengine")
   const detectingVoice = ref(false)
   const voiceReady = ref(false)
-  const voiceStatusText = ref("等待检测")
+  const voiceDetected = ref(false)
+  const voiceStatusText = ref("等待测试")
   const voiceModelKey = ref("")
   const voiceModelResource = ref("seed-tts-2.0")
   const voiceModelVoiceType = ref("zh_female_vv_uranus_bigtts")
 
   const detectingVector = ref(false)
   const vectorReady = ref(false)
+  const vectorDetected = ref(false)
   const vectorStatusText = ref("等待检测")
   const vectorModelKey = ref("")
   const vectorModelName = ref("doubao-embedding-vision-251215")
@@ -272,7 +277,7 @@ export function useImmersiveOnboarding() {
     modelStatusText.value = "正在检测模型连接"
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
       const res = await post<any>("/api/model/detect-models", {
         baseUrl: modelBaseUrl.value,
@@ -282,15 +287,20 @@ export function useImmersiveOnboarding() {
 
       if (res?.models && res.models.length > 0) {
         modelReady.value = true
+        modelDetected.value = true
         modelStatusText.value = "语言模型连接成功，可以继续"
-        if (!modelName.value) {
-          modelName.value = res.models[0]?.id || ""
-        }
+        detectedModels.value = res.models
       } else {
+        modelReady.value = false
+        modelDetected.value = false
         modelStatusText.value = "未检测到可用模型"
+        detectedModels.value = []
       }
     } catch {
+      modelReady.value = false
+      modelDetected.value = false
       modelStatusText.value = "检测失败，请检查 Base URL 和 API Key"
+      detectedModels.value = []
     } finally {
       detectingModels.value = false
     }
@@ -301,7 +311,7 @@ export function useImmersiveOnboarding() {
     visionStatusText.value = "正在检测视觉模型连接"
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
       const res = await post<any>("/api/model/detect-models", {
         baseUrl: visionModelURL.value,
@@ -311,11 +321,16 @@ export function useImmersiveOnboarding() {
 
       if (res?.models && res.models.length > 0) {
         visionReady.value = true
+        visionDetected.value = true
         visionStatusText.value = "视觉模型连接成功，可以继续"
       } else {
+        visionReady.value = false
+        visionDetected.value = false
         visionStatusText.value = "未检测到可用视觉模型"
       }
     } catch {
+      visionReady.value = false
+      visionDetected.value = false
       visionStatusText.value = "检测失败，请检查接口地址和 API Key"
     } finally {
       detectingVision.value = false
@@ -327,7 +342,7 @@ export function useImmersiveOnboarding() {
     voiceStatusText.value = "正在测试语音服务连接"
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
       await post("/api/model/test-voice", {
         apiKey: voiceModelKey.value,
@@ -336,8 +351,11 @@ export function useImmersiveOnboarding() {
       })
 
       voiceReady.value = true
+      voiceDetected.value = true
       voiceStatusText.value = "语音服务连接成功，可以继续"
     } catch {
+      voiceReady.value = false
+      voiceDetected.value = false
       voiceStatusText.value = "语音服务测试失败，请检查配置"
     } finally {
       detectingVoice.value = false
@@ -349,7 +367,7 @@ export function useImmersiveOnboarding() {
     vectorStatusText.value = "正在检测向量模型连接"
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
       const res = await post<any>("/api/model/detect-models", {
         baseUrl: vectorModelURL.value,
@@ -359,11 +377,16 @@ export function useImmersiveOnboarding() {
 
       if (res?.models && res.models.length > 0) {
         vectorReady.value = true
+        vectorDetected.value = true
         vectorStatusText.value = "向量模型连接成功，可以继续"
       } else {
+        vectorReady.value = false
+        vectorDetected.value = false
         vectorStatusText.value = "未检测到可用向量模型"
       }
     } catch {
+      vectorReady.value = false
+      vectorDetected.value = false
       vectorStatusText.value = "检测失败，请检查接口地址和 API Key"
     } finally {
       detectingVector.value = false
@@ -524,6 +547,8 @@ export function useImmersiveOnboarding() {
     accountDone,
     detectingModels,
     modelReady,
+    modelDetected,
+    detectedModels,
     modelStatusText,
     modelBaseUrl,
     modelApiKey,
@@ -531,6 +556,7 @@ export function useImmersiveOnboarding() {
     visionMode,
     detectingVision,
     visionReady,
+    visionDetected,
     visionStatusText,
     visionModelKey,
     visionModelName,
@@ -539,12 +565,14 @@ export function useImmersiveOnboarding() {
     voiceModelMode,
     detectingVoice,
     voiceReady,
+    voiceDetected,
     voiceStatusText,
     voiceModelKey,
     voiceModelResource,
     voiceModelVoiceType,
     detectingVector,
     vectorReady,
+    vectorDetected,
     vectorStatusText,
     vectorModelKey,
     vectorModelName,

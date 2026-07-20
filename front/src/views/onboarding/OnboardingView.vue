@@ -57,6 +57,8 @@
         <StageModelConfig
           :detecting="detectingModels"
           :modelReady="modelReady"
+          :modelDetected="modelDetected"
+          :detectedModels="detectedModels"
           :statusText="modelStatusText"
           :baseUrl="modelBaseUrl"
           :apiKey="modelApiKey"
@@ -76,6 +78,7 @@
           :visionModelName="visionModelName"
           :visionModelURL="visionModelURL"
           :visionReady="visionReady"
+          :visionDetected="visionDetected"
           :detecting="detectingVision"
           :statusText="visionStatusText"
           @update:visionMode="visionMode = $event"
@@ -95,6 +98,7 @@
           :voiceModelResource="voiceModelResource"
           :voiceModelVoiceType="voiceModelVoiceType"
           :voiceReady="voiceReady"
+          :voiceDetected="voiceDetected"
           :detectingVoice="detectingVoice"
           :voiceStatusText="voiceStatusText"
           @update:voiceStyle="voiceStyle = $event"
@@ -114,6 +118,7 @@
           :vectorModelName="vectorModelName"
           :vectorModelURL="vectorModelURL"
           :vectorReady="vectorReady"
+          :vectorDetected="vectorDetected"
           :detecting="detectingVector"
           :statusText="vectorStatusText"
           @update:vectorModelKey="vectorModelKey = $event"
@@ -206,6 +211,8 @@ const {
   accountName,
   detectingModels,
   modelReady,
+  modelDetected,
+  detectedModels,
   modelStatusText,
   modelBaseUrl,
   modelApiKey,
@@ -213,6 +220,7 @@ const {
   visionMode,
   detectingVision,
   visionReady,
+  visionDetected,
   visionStatusText,
   visionModelKey,
   visionModelName,
@@ -221,12 +229,14 @@ const {
   voiceModelMode,
   detectingVoice,
   voiceReady,
+  voiceDetected,
   voiceStatusText,
   voiceModelKey,
   voiceModelResource,
   voiceModelVoiceType,
   detectingVector,
   vectorReady,
+  vectorDetected,
   vectorStatusText,
   vectorModelKey,
   vectorModelName,

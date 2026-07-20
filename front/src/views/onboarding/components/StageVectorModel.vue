@@ -36,9 +36,7 @@
                   :value="vectorModelURL"
                   @input="emit('update:vectorModelURL', ($event.target as HTMLInputElement).value)"
                 />
-                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">
-                  {{ detecting ? '检测中' : '检测' }}
-                </button>
+                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">{{ detecting ? '检测中' : vectorDetected ? '重新检测' : '检测' }}</button>
               </div>
             </label>
           </div>
@@ -63,6 +61,7 @@ defineProps<{
   vectorModelName: string
   vectorModelURL: string
   vectorReady: boolean
+  vectorDetected: boolean
   detecting: boolean
   statusText: string
 }>()

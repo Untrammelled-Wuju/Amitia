@@ -65,7 +65,7 @@
                   :value="voiceModelVoiceType"
                   @input="emit('update:voiceModelVoiceType', ($event.target as HTMLInputElement).value)"
                 />
-                <button class="ob-small-action" @click="emit('detectVoice')" :disabled="detectingVoice">测试声音</button>
+                <button class="ob-small-action" @click="emit('detectVoice')" :disabled="detectingVoice">{{ detectingVoice ? '合成中' : voiceDetected ? '重新测试' : '测试声音' }}</button>
               </div>
             </label>
           </div>
@@ -94,6 +94,7 @@ const props = defineProps<{
   voiceModelResource: string
   voiceModelVoiceType: string
   voiceReady: boolean
+  voiceDetected: boolean
   detectingVoice: boolean
   voiceStatusText: string
 }>()

@@ -31,13 +31,30 @@
             <label class="ob-input-label">API Key
               <input :value="apiKey" @input="emit('update:apiKey', ($event.target as HTMLInputElement).value)" type="password" placeholder="sk-..." />
             </label>
-            <label class="ob-input-label ob-model-page-wide">模型名称
+            <label class="ob-input-label ob-model-page-wide">检测模型
               <div class="ob-model-page-detect-row">
-                <input :value="modelName" @input="emit('update:modelName', ($event.target as HTMLInputElement).value)" placeholder="例如 deepseek-chat" />
-                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting">
-                  {{ detecting ? '检测中' : '检测' }}
+                <button class="ob-small-action" @click="emit('detect')" :disabled="detecting" style="flex:1;text-align:center">
+                  {{ props.detecting ? '检测中' : props.modelDetected ? '重新检测' : '检测模型' }}
                 </button>
               </div>
+            </label>
+            <label v-if="detectedModels.length > 0" class="ob-input-label ob-model-page-wide">模型名称
+              <el-select
+                :model-value="modelName"
+                @update:model-value="emit('update:modelName', $event)"
+                placeholder="选择一个模型"
+                class="ob-model-select"
+              >
+                <el-option
+                  v-for="m in detectedModels"
+                  :key="m.id"
+                  :label="m.id"
+                  :value="m.id"
+                />
+              </el-select>
+            </label>
+            <label v-else class="ob-input-label ob-model-page-wide">模型名称
+              <input :value="modelName" @input="emit('update:modelName', ($event.target as HTMLInputElement).value)" placeholder="例如 deepseek-chat" />
             </label>
           </div>
           <div class="ob-model-status" :class="{ ok: modelReady }">
@@ -65,6 +82,8 @@ import { ref } from "vue"
 const props = defineProps<{
   detecting: boolean
   modelReady: boolean
+  modelDetected: boolean
+  detectedModels: Array<{id: string, ownedBy?: string}>
   statusText: string
   baseUrl: string
   apiKey: string
