@@ -59,6 +59,7 @@ export function useImmersiveOnboarding() {
   const vectorReady = ref(false)
   const vectorDetected = ref(false)
   const vectorStatusText = ref("等待检测")
+  const vectorModelMode = ref("volcengine")
   const vectorModelKey = ref("")
   const vectorModelName = ref("doubao-embedding-vision-251215")
   const vectorModelURL = ref("https://ark.cn-beijing.volces.com/api/v3")
@@ -215,6 +216,10 @@ export function useImmersiveOnboarding() {
     }
 
     if (currentStage.value === 7) {
+      if (identityComplete.value) {
+        identityComplete.value = false
+        return
+      }
       if (identityStep.value > 0) {
         identityStep.value--
         return
@@ -480,7 +485,7 @@ export function useImmersiveOnboarding() {
         }).catch(() => {})
       }
 
-      if (vectorModelKey.value && vectorModelURL.value) {
+      if (vectorModelMode.value !== 'disabled' && vectorModelKey.value && vectorModelURL.value) {
         await post("/api/model/configs", {
           apiType: "vector",
           baseUrl: vectorModelURL.value,
@@ -588,6 +593,7 @@ export function useImmersiveOnboarding() {
     vectorReady,
     vectorDetected,
     vectorStatusText,
+    vectorModelMode,
     vectorModelKey,
     vectorModelName,
     vectorModelURL,
@@ -619,6 +625,7 @@ export function useImmersiveOnboarding() {
     detectModel,
     detectVision,
     detectVoice,
+    vectorModelMode,
     detectVector,
     handleIdentityAnswer,
     handleMemoryAnswer,
