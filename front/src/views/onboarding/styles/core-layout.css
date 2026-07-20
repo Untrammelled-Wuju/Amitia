@@ -58,4 +58,5 @@
   --core-size: min(30vw, 42vh, 420px) !important;
   opacity: 1 !important;
   transform: translate(-50%, -50%);
+  transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), opacity 0.24s ease 0.5s !important;
 }

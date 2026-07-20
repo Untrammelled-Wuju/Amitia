@@ -340,7 +340,7 @@
   visibility: visible !important;
   pointer-events: none !important;
   z-index: 11 !important;
-  transition-duration: .28s !important;
+  transition: opacity .38s var(--ob-ease) !important;
 }
 
 .onboarding-world[data-stage-transitioning="true"] .ob-back {

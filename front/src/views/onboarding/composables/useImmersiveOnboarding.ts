@@ -156,6 +156,8 @@ export function useImmersiveOnboarding() {
   const leavingStage = ref(-1)
   const enterPrepStage = ref(-1)
 
+  let pendingNextStageTimer: ReturnType<typeof setTimeout> | null = null
+
   function goToStage(stage: number) {
     if (stage < 0 || stage >= stageCount) return
     if (stageTransitioning.value && stage !== leavingStage.value) return
@@ -174,6 +176,7 @@ export function useImmersiveOnboarding() {
 
     leavingStage.value = prev
     coreRevealPending.value = false
+    if (pendingNextStageTimer && prev === 7) { clearTimeout(pendingNextStageTimer); pendingNextStageTimer = null }
 
     setTimeout(() => {
       if (token !== stageTransitionToken) return
@@ -193,16 +196,18 @@ export function useImmersiveOnboarding() {
           stageTransitioning.value = false
         }, 380)
       }, 700)
-    }, 280)
+    }, 380)
   }
 
   function nextStage() {
     if (currentStage.value < stageCount - 1) {
       if (currentStage.value === 7 && identityState.value === 'complete') {
         identityState.value = 'spotlight'
-        setTimeout(() => {
+        if (pendingNextStageTimer) clearTimeout(pendingNextStageTimer)
+        pendingNextStageTimer = setTimeout(() => {
+          pendingNextStageTimer = null
           goToStage(currentStage.value + 1)
-        }, 1300)
+        }, 1800)
         return
       }
       if (currentStage.value === 3) {
@@ -223,7 +228,8 @@ export function useImmersiveOnboarding() {
     }
 
     if (currentStage.value === 7) {
-      if (identityState.value === 'complete') {
+      if (identityState.value !== 'filling') {
+        if (pendingNextStageTimer) { clearTimeout(pendingNextStageTimer); pendingNextStageTimer = null }
         startIdentityReverse()
         return
       }
@@ -435,7 +441,7 @@ export function useImmersiveOnboarding() {
       identityState.value = 'spotlight'
       setTimeout(() => {
         identityState.value = 'complete'
-      }, 1300)
+      }, 1800)
     }, 400)
   }
 
@@ -446,7 +452,7 @@ export function useImmersiveOnboarding() {
       setTimeout(() => {
         identityState.value = 'filling'
       }, 1400)
-    }, 1300)
+    }, 1800)
   }
 
   function handleMemoryAnswer(value: string) {
