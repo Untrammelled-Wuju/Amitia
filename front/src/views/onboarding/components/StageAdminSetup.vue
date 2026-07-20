@@ -5,7 +5,7 @@
       :class="panelClass('environment')"
     >
       <h2 class="ob-boot-title">
-        {{ deployMode === 'local' ? '正在准备运行环境' : '正在检查远程服务' }}
+        {{ deployMode === 'local' ? '正在检查运行环境' : '正在检查远程服务' }}
       </h2>
       <div class="ob-boot-copy">
         {{ deployMode === 'local'
