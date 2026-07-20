@@ -17,13 +17,11 @@
           </div>
           <p class="ob-model-panel-copy">它只负责查找相关记忆，不会自行创建、修改或删除记忆。</p>
           <div class="ob-form-stack ob-model-page-fields">
-            <label class="ob-input-label ob-model-page-wide">接口地址
-              <div class="ob-model-page-detect-row">
+            <label class="ob-input-label">接口地址
                 <input
                   :value="vectorModelURL"
                   @input="emit('update:vectorModelURL', ($event.target as HTMLInputElement).value)"
                 />
-              </div>
             </label>
             <label class="ob-input-label">API Key
               <div class="ob-input-password-wrap">
@@ -34,7 +32,7 @@
                 </button>
               </div>
             </label>
-            <label class="ob-input-label">向量模型
+            <label class="ob-input-label ob-model-page-wide">向量模型
               <div class="ob-model-name-row">
                 <input
                   :value="vectorModelName"
