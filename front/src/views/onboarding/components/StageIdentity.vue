@@ -2,8 +2,12 @@
   <div class="ob-stage-inner">
     <div class="ob-identity-scene" ref="identitySceneRef" :data-identity-state="complete ? 'complete' : 'incomplete'">
       <div v-if="!complete" class="ob-identity-prompt" ref="identityPromptRef">
-        <div class="ob-character-line">{{ question }}</div>
-        <div class="ob-identity-context">{{ context }}</div>
+        <Transition name="ob-fade" mode="out-in">
+          <div :key="step" class="ob-prompt-text">
+            <div class="ob-character-line">{{ question }}</div>
+            <div class="ob-identity-context">{{ context }}</div>
+          </div>
+        </Transition>
       </div>
 
       <div v-if="!complete" class="ob-identity-ledger" ref="identityLedgerRef">

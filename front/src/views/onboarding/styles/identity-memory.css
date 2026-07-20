@@ -579,3 +579,12 @@
   gap: 10px;
   margin-top: 20px;
 }
+
+.ob-fade-enter-active,
+.ob-fade-leave-active {
+  transition: opacity 0.3s var(--ob-ease);
+}
+.ob-fade-enter-from,
+.ob-fade-leave-to {
+  opacity: 0;
+}

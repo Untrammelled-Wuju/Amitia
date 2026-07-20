@@ -120,20 +120,20 @@
           :vectorReady="vectorReady"
           :vectorDetected="vectorDetected"
           :detecting="detectingVector"
+            :vectorModelMode="vectorModelMode"
           :statusText="vectorStatusText"
           @update:vectorModelKey="vectorModelKey = $event"
           @update:vectorModelName="vectorModelName = $event"
           @update:vectorModelURL="vectorModelURL = $event"
+            @update:vectorModelMode="vectorModelMode = $event"
           @next="nextStage"
           @detect="detectVector"
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 7 || leavingStage === 7), 'stage-leaving': leavingStage === 7, 'stage-enter-prep': enterPrepStage === 7 }">
-        <StageIdentity
+      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 7 || leavingStage === 7), 'stage-leaving': leavingStage === 7, 'stage-enter-prep': enterPrepStage === 7 }"><StageIdentity
           v-if="currentIdentityQuestion"
-          :key="identityStep"
-          :step="identityStep"
+:step="identityStep"
           :question="currentIdentityQuestion.question"
           :context="currentIdentityQuestion.context"
           :placeholder="currentIdentityQuestion.placeholder"
@@ -144,7 +144,7 @@
           @answer="handleIdentityAnswer"
           @next="nextStage"
         />
-      </section>
+</section>
 
       <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 8 || leavingStage === 8), 'stage-leaving': leavingStage === 8, 'stage-enter-prep': enterPrepStage === 8 }">
         <StageMemory
@@ -242,6 +242,7 @@ const {
   vectorStatusText,
   vectorModelKey,
   vectorModelName,
+  vectorModelMode,
   vectorModelURL,
   identityStep,
   identityComplete,
