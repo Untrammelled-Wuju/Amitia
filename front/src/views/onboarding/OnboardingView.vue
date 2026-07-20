@@ -277,6 +277,10 @@ watch(currentStage, (val) => {
   }
 })
 
+watch(serverURL, () => {
+  remoteStatusText.value = ""
+})
+
 function checkRemoteConnection() {
   const url = serverURL.value.trim()
   if (!url) return

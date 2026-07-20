@@ -113,11 +113,22 @@
   pointer-events: none;
   transition: opacity 0.25s ease;
 }
-.onboarding-world .ob-remote-status {
-  margin-top: 4px;
-  font-size: 10px;
-  color: var(--ob-faint);
+.onboarding-world .ob-spin-icon {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ob-spin 0.6s linear infinite;
+  margin-right: 4px;
+  vertical-align: middle;
 }
+
+@keyframes ob-spin {
+  to { transform: rotate(360deg); }
+}
+
 
 
 

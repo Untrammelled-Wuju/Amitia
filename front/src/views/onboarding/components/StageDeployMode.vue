@@ -29,10 +29,12 @@
               @input="$emit('update:serverURL', ($event.target as HTMLInputElement).value)"
               placeholder="https://amitia.example.com"
             />
-            <span class="ob-small-action" @click="$emit('checkRemote')">检测连接</span>
+            <span class="ob-small-action" :class="{ spinning: detectingRemote }" @click="$emit('checkRemote')">
+              <span v-if="detectingRemote" class="ob-spin-icon"></span>
+              {{ detectingRemote ? '检测中' : remoteStatusText || '检测连接' }}
+            </span>
           </div>
           </div>
-          <div v-if="remoteStatusText" class="ob-remote-status">{{ remoteStatusText }}</div>
         </button>
       </div>
     </div>
