@@ -4,9 +4,8 @@
   display: grid;
   pointer-events: none;
   align-items: center;
-  grid-template-columns: minmax(240px, 1fr) minmax(260px, 34vw) minmax(240px, 1fr);
-  gap: clamp(18px, 3vw, 48px);
-  padding: 0 3%;
+  grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr);
+  gap: var(--stage-core, 410px);
 }
 
 .onboarding-world .ob-path-choice.local {
@@ -15,7 +14,7 @@
 }
 
 .onboarding-world .ob-path-choice.remote {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: start;
 }
 
