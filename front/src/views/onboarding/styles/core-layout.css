@@ -44,6 +44,18 @@
 }
 
 .onboarding-world[data-stage-current="7"][data-identity-state="complete"] .core-zone {
+  left: 50% !important;
+  top: 50% !important;
+  --core-size: min(30vw, 42vh, 420px) !important;
+  transform: translate(-50%, -50%);
   opacity: 0 !important;
   pointer-events: none;
+}
+
+.onboarding-world[data-stage-current="7"][data-identity-state="spotlight"] .core-zone {
+  left: 50% !important;
+  top: 50% !important;
+  --core-size: min(30vw, 42vh, 420px) !important;
+  opacity: 1 !important;
+  transform: translate(-50%, -50%);
 }

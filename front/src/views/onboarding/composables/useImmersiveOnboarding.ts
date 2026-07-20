@@ -65,7 +65,7 @@ export function useImmersiveOnboarding() {
   const vectorModelURL = ref("https://ark.cn-beijing.volces.com/api/v3")
 
   const identityStep = ref(0)
-  const identityComplete = ref(false)
+  const identityState = ref<'filling' | 'exiting' | 'spotlight' | 'complete'>('filling')
   const identityName = ref("")
   const identityRole = ref("")
   const identityPersonality = ref("")
@@ -198,6 +198,13 @@ export function useImmersiveOnboarding() {
 
   function nextStage() {
     if (currentStage.value < stageCount - 1) {
+      if (currentStage.value === 7 && identityState.value === 'complete') {
+        identityState.value = 'spotlight'
+        setTimeout(() => {
+          goToStage(currentStage.value + 1)
+        }, 1300)
+        return
+      }
       if (currentStage.value === 3) {
         modelFieldErrors.value = {}
         if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true
@@ -216,8 +223,8 @@ export function useImmersiveOnboarding() {
     }
 
     if (currentStage.value === 7) {
-      if (identityComplete.value) {
-        identityComplete.value = false
+      if (identityState.value === 'complete') {
+        startIdentityReverse()
         return
       }
       if (identityStep.value > 0) {
@@ -416,10 +423,30 @@ export function useImmersiveOnboarding() {
       identityRole.value = value
     } else if (identityStep.value === 2) {
       identityPersonality.value = value
-      identityComplete.value = true
+      startIdentityTransition()
       return
     }
     identityStep.value++
+  }
+
+  function startIdentityTransition() {
+    identityState.value = 'exiting'
+    setTimeout(() => {
+      identityState.value = 'spotlight'
+      setTimeout(() => {
+        identityState.value = 'complete'
+      }, 1300)
+    }, 400)
+  }
+
+  function startIdentityReverse() {
+    identityState.value = 'spotlight'
+    setTimeout(() => {
+      identityState.value = 'exiting'
+      setTimeout(() => {
+        identityState.value = 'filling'
+      }, 1400)
+    }, 1300)
   }
 
   function handleMemoryAnswer(value: string) {
@@ -598,7 +625,7 @@ export function useImmersiveOnboarding() {
     vectorModelName,
     vectorModelURL,
     identityStep,
-    identityComplete,
+    identityState,
     identityName,
     identityRole,
     identityPersonality,

@@ -1020,3 +1020,12 @@
   }
 }
 
+
+
+.onboarding-world .ob-fields-disabled input,
+.onboarding-world .ob-fields-disabled .ob-small-action,
+.onboarding-world .ob-fields-disabled .ob-password-toggle,
+.onboarding-world .ob-fields-disabled .el-select {
+  opacity: .35;
+  pointer-events: none;
+}

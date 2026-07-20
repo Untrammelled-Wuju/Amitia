@@ -11,7 +11,7 @@
       :data-entry-preparing="entryPreparing ? 'true' : null"
       :data-entering="enteringState"
       :data-core-reveal-pending="coreRevealPending ? 'true' : null"
-      :data-identity-state="currentStage === 7 ? (identityComplete ? 'complete' : identityStep) : null"
+      :data-identity-state="currentStage === 7 ? identityState : null"
       :data-memory-step="currentStage === 8 ? (memoryComplete ? 'complete' : memoryStep) : null"
     >
       <StarfieldBg />
@@ -140,7 +140,7 @@
           :quickChoices="currentIdentityQuestion.quickChoices"
           :maxLength="currentIdentityQuestion.maxLength"
           :ledger="{ name: identityName, role: identityRole, personality: identityPersonality }"
-          :complete="identityComplete"
+          :state="identityState"
           @answer="handleIdentityAnswer"
           @next="nextStage"
         />
@@ -245,7 +245,7 @@ const {
   vectorModelMode,
   vectorModelURL,
   identityStep,
-  identityComplete,
+  identityState,
   identityName,
   identityRole,
   identityPersonality,
