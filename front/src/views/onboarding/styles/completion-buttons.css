@@ -31,12 +31,12 @@
 .onboarding-world .ob-identity-complete-next:hover,
 .onboarding-world .ob-memory-complete-next:hover {
   background: var(--ob-accent2);
-  transform: translateY(-1px);
+  transform: translateX(-50%);
 }
 
 .onboarding-world .ob-identity-complete-next:active,
 .onboarding-world .ob-memory-complete-next:active {
-  transform: translateY(0);
+  transform: translateX(-50%) translateY(0);
 }
 
 @media (max-width: 540px) {

@@ -262,7 +262,7 @@
 
 .onboarding-world .ob-identity-complete-next:hover {
   background: var(--ob-accent2);
-  transform: translateX(-50%) translateY(-2px);
+  transform: translateX(-50%);
 }
 
 .onboarding-world .ob-identity-complete-next:active {
@@ -562,7 +562,7 @@
 
 .onboarding-world .ob-memory-complete-next:hover {
   background: var(--ob-accent2);
-  transform: translateX(-50%) translateY(-2px);
+  transform: translateX(-50%);
 }
 
 .onboarding-world .ob-memory-complete-next:active {
