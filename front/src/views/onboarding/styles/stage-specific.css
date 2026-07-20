@@ -119,7 +119,8 @@
 
 .onboarding-world .ob-boot-panel {
   position: absolute;
-  left: 8%;
+  left: auto;
+  right: 5%;
   top: 46%;
   width: min(390px, 36vw);
   transform: translateY(-50%);
