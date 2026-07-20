@@ -431,6 +431,39 @@
   font-size: 10px;
 }
 
+.onboarding-world .ob-input-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.onboarding-world .ob-input-password-wrap input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.onboarding-world .ob-password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ob-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.onboarding-world .ob-password-toggle:hover {
+  color: var(--ob-accent);
+}
+
 .onboarding-world .ob-model-page-card .ob-small-action {
   min-width: 78px;
   font-size: 9px;
