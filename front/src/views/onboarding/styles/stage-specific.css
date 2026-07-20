@@ -328,6 +328,7 @@
 }
 
 .onboarding-world .ob-model-page-card {
+  max-width: 680px;
   padding: 20px 21px 18px;
   border: 1px solid var(--ob-line);
   border-radius: 22px;
@@ -729,6 +730,7 @@
 }
 
 .onboarding-world .ob-voice-model-card {
+  max-width: 680px;
   margin-top: 15px;
   padding: 16px 17px 14px;
   border: 1px solid var(--ob-line);
@@ -982,3 +984,4 @@
     top: calc(46% - 20px);
   }
 }
+

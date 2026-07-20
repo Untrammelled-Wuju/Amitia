@@ -45,12 +45,12 @@
       </div>
       <div class="ob-form-stack">
         <label class="ob-input-label">
-          管理员名称
-          <input v-model="username" autocomplete="username" placeholder="例如：admin" />
+          账号
+          <input v-model="username" autocomplete="username" placeholder="请输入账号" />
         </label>
         <label class="ob-input-label">
-          管理密码
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="至少 6 位" />
+          密码
+          <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
         </label>
         <label v-if="!isLogin" class="ob-input-label">
           确认密码

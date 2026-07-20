@@ -23,10 +23,10 @@ SPDX-License-Identifier: AGPL-3.0-only
           label-position="top"
           @submit.prevent="handleLogin"
         >
-          <el-form-item label="用户名" prop="username">
+          <el-form-item label="账号" prop="username">
             <el-input
               v-model="form.username"
-              placeholder="请输入用户名"
+              placeholder="请输入账号"
               autocomplete="username"
             />
           </el-form-item>
@@ -75,7 +75,7 @@ const checkingStatus = ref(true)
 
 const form = reactive({ username: "", password: "" })
 const rules = {
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  username: [{ required: true, message: "请输入账号", trigger: "blur" }],
   password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 }
 
