@@ -598,7 +598,7 @@
 
 .ob-fade-enter-active,
 .ob-fade-leave-active {
-  transition: opacity 0.5s var(--ob-ease);
+  transition: opacity 0.8s var(--ob-ease);
 }
 .ob-fade-enter-from,
 .ob-fade-leave-to {

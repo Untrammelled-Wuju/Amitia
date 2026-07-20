@@ -186,7 +186,7 @@ export function useImmersiveOnboarding() {
       currentStage.value = stage
       enterPrepStage.value = stage
 
-      if (prev === 7) { identityState.value = 'filling'; identityStep.value = 0 }
+      if (stage === 7 && identityState.value !== "filling" && identityState.value !== "complete" && identityState.value !== "spotlight") { identityState.value = "filling"; identityStep.value = 0 }
 
       setTimeout(() => {
         if (token !== stageTransitionToken) return
@@ -242,10 +242,13 @@ export function useImmersiveOnboarding() {
     }
 
     if (currentStage.value === 8) {
-      if (memoryStep.value > 0) {
-        memoryStep.value--
-        return
-      }
+      memoryStep.value = 0
+      identityState.value = "spotlight"
+      goToStage(7)
+      setTimeout(() => {
+        identityState.value = "complete"
+      }, 2600)
+      return
     }
 
     if (currentStage.value > 0) {
@@ -448,7 +451,8 @@ export function useImmersiveOnboarding() {
   }
 
   function startIdentityReverse() {
-    identityState.value = 'spotlight'
+    identityStep.value = 2
+    identityState.value = "spotlight"
     setTimeout(() => {
       identityState.value = 'exiting'
       setTimeout(() => {
