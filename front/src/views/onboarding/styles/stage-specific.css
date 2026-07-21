@@ -288,7 +288,7 @@
 .onboarding-world .ob-model-page-group {
   position: absolute;
   left: auto;
-  right: calc(50% + 10px);
+  right: calc(50% - 32px);
   bottom: calc(57% - 215px);
   width: min(51%, 500px);
 }
@@ -562,7 +562,7 @@
 
 .onboarding-world .ob-model-page-spoken {
   position: absolute;
-  left: calc(50% + 260px);
+  left: calc(50% + 302px);
   top: calc(43% + 195px);
   transform: translateX(-50%);
   width: 210px;
@@ -664,7 +664,7 @@
 .onboarding-world .ob-voice-group {
   position: absolute;
   left: auto;
-  right: calc(50% + 10px);
+  right: calc(50% - 32px);
   bottom: calc(57% - 217px);
   width: min(51%, 500px);
 }
@@ -854,7 +854,7 @@
 
 .onboarding-world .ob-voice-spoken-line {
   position: absolute;
-  left: calc(50% + 260px);
+  left: calc(50% + 302px);
   top: calc(43% + 195px);
   transform: translateX(-50%);
   width: 210px;
@@ -915,14 +915,14 @@
 }
 
 .onboarding-world[data-layout-mode="compact"] .ob-model-page-spoken {
-  left: 64%;
+  left: 68%;
   bottom: 14%;
 }
 
 .onboarding-world[data-layout-mode="compact"][data-stage-current="3"] .core-zone,
 .onboarding-world[data-layout-mode="compact"][data-stage-current="4"] .core-zone,
 .onboarding-world[data-layout-mode="compact"][data-stage-current="6"] .core-zone {
-  left: 78% !important;
+  left: 82% !important;
   top: 41% !important;
   --core-size: 255px !important;
   width: 255px !important;

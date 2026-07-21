@@ -22,10 +22,10 @@
 .onboarding-world[data-stage-current="1"] { --stage-core: min(28vw, 43vh, 410px); }
 .onboarding-world[data-stage-current="1"] .core-zone { left: 50%; top: 47%; --core-size: var(--stage-core); }
 .onboarding-world[data-stage-current="2"] .core-zone { left: calc(50% - 260px); top: 46%; --core-size: 340px; width: 340px; height: 340px; }
-.onboarding-world[data-stage-current="3"] .core-zone { left: calc(50% + 260px); top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
-.onboarding-world[data-stage-current="4"] .core-zone { left: calc(50% + 260px); top: 43%; --core-size: 330px; width: 330px; height: 330px; opacity: .93; }
-.onboarding-world[data-stage-current="5"] .core-zone { left: calc(50% + 260px); top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
-.onboarding-world[data-stage-current="6"] .core-zone { left: calc(50% + 260px); top: 43%; --core-size: 340px; opacity: .94; }
+.onboarding-world[data-stage-current="3"] .core-zone { left: calc(50% + 302px); top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
+.onboarding-world[data-stage-current="4"] .core-zone { left: calc(50% + 302px); top: 43%; --core-size: 330px; width: 330px; height: 330px; opacity: .93; }
+.onboarding-world[data-stage-current="5"] .core-zone { left: calc(50% + 302px); top: 43%; --core-size: 340px; width: 340px; height: 340px; opacity: .94; }
+.onboarding-world[data-stage-current="6"] .core-zone { left: calc(50% + 302px); top: 43%; --core-size: 340px; opacity: .94; }
 .onboarding-world[data-stage-current="7"] {
   --stage7-shift: min(5vh, calc(75px - 7.5vh));
   --stage7-core-size: min(26vw, 37vh, 330px);
