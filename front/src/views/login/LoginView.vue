@@ -3,60 +3,59 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="login-page">
-    <el-card class="login-card" shadow="never">
-      <div class="login-header">
-        <h1>AI-Amitia</h1>
+  <div class="login-shell">
+    <div class="login-world">
+      <div class="starfield">
+        <i v-for="s in stars" :key="s.id" class="star" :style="s.style" />
       </div>
 
-      <!-- Status detection -->
-      <div v-if="checkingStatus" class="login-status">
-        <el-icon class="is-loading" :size="20"><Loading /></el-icon>
-        <span>正在检查服务状态...</span>
+      <div class="core-zone">
+        <div class="core-halo"></div>
+        <div class="orbit o1"></div>
+        <div class="orbit o2"></div>
+        <div class="orbit o3"></div>
+        <div class="core-symbol" aria-hidden="true">
+          <span class="sigil-loop loop-a"></span>
+          <span class="sigil-loop loop-b"></span>
+          <span class="sigil-loop loop-c"></span>
+          <span class="sigil-center"></span>
+          <span class="sigil-node node-a"></span>
+          <span class="sigil-node node-b"></span>
+          <span class="sigil-node node-c"></span>
+        </div>
+        <div class="core-caption">Amitia</div>
       </div>
 
-      <template v-else>
-        <el-form
-          ref="formRef"
-          :model="form"
-          :rules="rules"
-          label-position="top"
-          @submit.prevent="handleLogin"
-        >
-          <el-form-item label="账号" prop="username">
-            <el-input
-              v-model="form.username"
-              placeholder="请输入账号"
-              autocomplete="username"
-            />
-          </el-form-item>
+      <div class="login-panel-wrapper">
+        <div class="login-panel">
+          <div class="login-title">登录 Amitia</div>
+          <div class="login-desc">登录后进入管理页面，保护配置、聊天记录和记忆数据。</div>
 
-          <el-form-item label="密码" prop="password">
-            <el-input
-              v-model="form.password"
-              type="password"
-              placeholder="请输入密码"
-              show-password
-              autocomplete="current-password"
-              @keyup.enter="handleLogin"
-            />
-          </el-form-item>
+          <div v-if="checkingStatus" class="login-status">
+            <span class="ob-spin-icon"></span>
+            <span>正在检查服务状态...</span>
+          </div>
 
-          <el-form-item>
-            <el-button
-              type="primary"
-              native-type="submit"
-              :loading="loading"
-              style="width:100%"
-              size="large"
-            >
-              登录
-            </el-button>
-          </el-form-item>
-        </el-form>
-
-      </template>
-    </el-card>
+          <template v-else>
+            <div class="login-form">
+              <label class="login-input-label">
+                账号
+                <input v-model="form.username" autocomplete="username" placeholder="请输入账号" @keyup.enter="handleLogin" />
+              </label>
+              <label class="login-input-label">
+                密码
+                <input v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码" @keyup.enter="handleLogin" />
+              </label>
+            </div>
+            <div class="login-error">{{ errorMsg }}</div>
+            <button class="login-action" :disabled="loading" @click="handleLogin">
+              <span v-if="loading" class="ob-spin-icon"></span>
+              {{ loading ? '登录中...' : '登录' }}
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -64,46 +63,56 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted } from "vue"
 import { useRouter, useRoute } from "vue-router"
 import { ElMessage } from "element-plus"
-import { Loading } from "@element-plus/icons-vue"
 import { apiClient, setToken } from "../../composables/useApi"
 
 const router = useRouter()
 const route = useRoute()
-const formRef = ref()
 const loading = ref(false)
 const checkingStatus = ref(true)
+const errorMsg = ref("")
 
 const form = reactive({ username: "", password: "" })
-const rules = {
-  username: [{ required: true, message: "请输入账号", trigger: "blur" }],
-  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
-}
+
+const stars = Array.from({ length: 56 }, (_, i) => ({
+  id: i,
+  style: {
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    '--dur': `${12 + Math.random() * 24}s`,
+    '--op': (0.08 + Math.random() * 0.25).toFixed(2),
+    '--dx': `${(-18 + Math.random() * 36).toFixed(1)}px`,
+    animationDelay: `${(-Math.random() * 20).toFixed(1)}s`,
+  },
+}))
 
 onMounted(() => {
   checkingStatus.value = false
 })
 
 async function handleLogin() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
+  errorMsg.value = ""
+  const name = form.username.trim()
+  const pw = form.password
+
+  if (!name || !pw) {
+    errorMsg.value = "请输入账号和密码"
+    return
+  }
 
   loading.value = true
   try {
     const res = await apiClient.post("/api/auth/login", {
-      username: form.username,
-      password: form.password,
+      username: name,
+      password: pw,
     })
     const data = res.data?.data || res.data
     if (data?.token) {
       setToken(data.token)
-      ElMessage.success(`欢迎回来，${data.username || form.username}`)
-
-      // Redirect to intended page or chat
+      ElMessage.success(`欢迎回来，${data.username || name}`)
       const redirect = (route.query.redirect as string) || "/chat"
       router.push(redirect)
     }
-  } catch (err: any) {
-    // Error handled by interceptor
+  } catch {
   } finally {
     loading.value = false
   }
@@ -111,34 +120,268 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-.login-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100%;
-  padding: 20px;
+:root {
+  color-scheme: dark;
 }
 
-.login-card {
-  width: 360px;
-  max-width: 100%;
+.login-shell {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #070708;
+  display: grid;
+  place-items: center;
 }
 
-.login-header {
+.login-world {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(200, 121, 91, 0.08), transparent 26%),
+    radial-gradient(circle at 12% 14%, rgba(181, 154, 120, 0.05), transparent 24%),
+    linear-gradient(145deg, #070708 0%, #0c0c0e 54%, #080809 100%);
+  color: #f3f0ea;
+  overflow: hidden;
+}
+
+.login-world button,
+.login-world input {
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.login-world button {
+  color: inherit;
+}
+
+.login-world button:focus-visible,
+.login-world input:focus-visible {
+  outline: none;
+}
+
+.login-world::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.24;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.starfield {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.34);
+  animation: star-drift var(--dur) linear infinite;
+  opacity: var(--op);
+}
+
+@keyframes star-drift {
+  from { transform: translate3d(0, 14px, 0); }
+  50% { opacity: calc(var(--op) * 0.4); }
+  to { transform: translate3d(var(--dx), -26px, 0); }
+}
+
+.core-zone {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: 600px;
+  height: 600px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+}
+
+.core-halo {
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200, 121, 91, 0.15), rgba(200, 121, 91, 0.035) 45%, transparent 70%);
+  filter: blur(6px);
+  opacity: 0.5;
+}
+
+.orbit {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 50%;
+}
+
+.orbit.o1 {
+  inset: 6%;
+  animation: orbit-spin 28s linear infinite;
+}
+
+.orbit.o2 {
+  inset: 15%;
+  border-style: dashed;
+  animation: orbit-spin-reverse 34s linear infinite;
+}
+
+.orbit.o3 {
+  inset: 25%;
+  opacity: 0.55;
+  animation: orbit-spin 22s linear infinite;
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbit-spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+.orbit::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  left: 50%;
+  top: -4px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+}
+
+.core-symbol {
+  position: relative;
+  width: 54%;
+  height: 54%;
+  opacity: 0.3;
+  transform: scale(0.92) rotate(-2deg);
+  animation: core-breathe 5.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.04));
+}
+
+.sigil-loop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 76%;
+  height: 38%;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  color: rgba(242, 239, 233, 0.78);
+  transform-origin: center;
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.025) inset;
+}
+
+.loop-a {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.loop-b {
+  transform: translate(-50%, -50%) rotate(60deg);
+}
+
+.loop-c {
+  transform: translate(-50%, -50%) rotate(120deg);
+}
+
+.sigil-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18%;
+  height: 18%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1px solid rgba(224, 154, 125, 0.68);
+  border-radius: 34%;
+  background: radial-gradient(circle at 35% 35%, rgba(224, 154, 125, 0.22), rgba(200, 121, 91, 0.045));
+  box-shadow: 0 0 26px rgba(200, 121, 91, 0.16);
+}
+
+.sigil-node {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e09a7d;
+  box-shadow: 0 0 16px rgba(224, 154, 125, 0.52);
+}
+
+.node-a {
+  left: 50%;
+  top: 8%;
+  transform: translateX(-50%);
+}
+
+.node-b {
+  right: 12%;
+  bottom: 24%;
+}
+
+.node-c {
+  left: 12%;
+  bottom: 24%;
+}
+
+@keyframes core-breathe {
+  0%, 100% { transform: scale(0.92) rotate(-2deg); }
+  50% { transform: scale(0.955) rotate(1deg); }
+}
+
+.core-caption {
+  position: absolute;
+  top: 78%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
   text-align: center;
-  margin-bottom: 24px;
+  color: #706b64;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.login-header h1 {
-  font-size: var(--ac-font-size-xl);
-  font-weight: 600;
-  color: var(--ac-color-primary);
-  margin-bottom: 4px;
+.login-panel-wrapper {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  transform: translate(-50%, -50%);
 }
 
-.login-header p {
-  font-size: var(--ac-font-size-sm);
-  color: var(--ac-color-text-muted);
+.login-panel {
+  width: min(380px, 34vw);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: rgba(23, 22, 21, 0.7);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+
+.login-title {
+  font-size: 28px;
+  font-weight: 570;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+
+.login-desc {
+  color: #a49f97;
+  font-size: 12px;
+  line-height: 1.65;
+  margin-bottom: 22px;
 }
 
 .login-status {
@@ -147,35 +390,113 @@ async function handleLogin() {
   justify-content: center;
   gap: 8px;
   padding: 32px 0;
-  color: var(--ac-color-text-muted);
-  font-size: var(--ac-font-size-sm);
+  color: #a49f97;
+  font-size: 12px;
 }
 
-
-.footer-text {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
+.ob-spin-icon {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ob-spin 0.6s linear infinite;
+  vertical-align: middle;
 }
 
-@media (max-width: 768px) {
-  .login-page {
-    padding: 10px;
-    align-items: flex-start;
-    padding-top: 60px;
+@keyframes ob-spin {
+  to { transform: rotate(360deg); }
+}
+
+.login-form {
+  display: grid;
+  gap: 13px;
+  width: 100%;
+}
+
+.login-input-label {
+  display: grid;
+  gap: 7px;
+  color: #a49f97;
+  font-size: 11px;
+}
+
+.login-input-label input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #f3f0ea;
+  outline: none;
+}
+
+.login-input-label input:focus {
+  border-color: rgba(200, 121, 91, 0.56);
+}
+
+.login-input-label input:hover {
+  border-color: rgba(200, 121, 91, 0.28);
+}
+
+.login-input-label input::placeholder {
+  color: #68635d;
+}
+
+.login-error {
+  min-height: 18px;
+  margin-top: 10px;
+  color: #cb7d75;
+  font-size: 11px;
+}
+
+.login-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  height: 40px;
+  padding: 0 56px;
+  border: 1px solid #c8795b;
+  border-radius: 12px;
+  background: #c8795b;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgba(200, 121, 91, 0.14);
+  transition: background 0.2s ease;
+}
+
+.login-action:hover {
+  background: #e09a7d;
+}
+
+.login-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 860px) {
+
+  .login-panel-wrapper {
+    left: 50%;
+    top: auto;
+    bottom: 10%;
+    transform: translate(-50%, 0);
   }
 
-  .login-card {
-    border: none;
-    box-shadow: none;
-    background: transparent;
+  .login-panel {
+    width: min(340px, 88vw);
   }
+}
 
-  .login-card :deep(.el-card__body) {
-    padding: 16px;
-  }
+@media (max-width: 480px) {
 
-  .login-header h1 {
-    font-size: var(--ac-font-size-xl);
+  .login-panel-wrapper {
+    bottom: 6%;
   }
 }
 </style>

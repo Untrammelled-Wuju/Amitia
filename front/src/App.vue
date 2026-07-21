@@ -1,4 +1,4 @@
-﻿<!--
+<!--
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <AppLayout v-if="!isPublicPage" key="app">
       <router-view />
     </AppLayout>
-    <div v-else key="public" class="public-root">
+    <div v-else key="public" class="public-root" :class="{ 'no-leave': route.path === '/login' }">
       <router-view />
     </div>
   </Transition>
@@ -154,6 +154,20 @@ html.amitia-desktop-shell .search-overlay {
 .route-slide-enter-from,
 .route-slide-leave-to {
   opacity: 0;
+}
+
+.no-leave.route-slide-leave-active {
+  transition: none;
+}
+.no-leave.route-slide-leave-to {
+  opacity: 1;
+}
+
+.no-leave.route-slide-enter-active {
+  transition: none;
+}
+.no-leave.route-slide-enter-from {
+  opacity: 1;
 }
 </style>
 
