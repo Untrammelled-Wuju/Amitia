@@ -5,6 +5,7 @@ package chat
 import (
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"time"
 )
@@ -23,6 +24,20 @@ type Conversation struct {
 }
 
 func (Conversation) TableName() string { return "conversations" }
+
+func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if c.CreatedAt == "" {
+		c.CreatedAt = now
+	}
+	if c.UpdatedAt == "" {
+		c.UpdatedAt = now
+	}
+	return nil
+}
 
 type Message struct {
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`

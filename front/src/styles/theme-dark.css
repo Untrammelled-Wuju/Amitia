@@ -40,8 +40,8 @@ html[data-theme="dark"] {
   --tp-info: #9A9E99;
   --tp-info-soft: rgba(154, 158, 153, 0.11);
   --tp-overlay: rgba(11, 11, 12, 0.88);
-  --tp-glass-bg: rgba(24, 24, 27, 0.5);
-  --tp-glass-bg-strong: rgba(24, 24, 27, 0.5);
+  --tp-glass-bg: rgba(24, 24, 27, 0.32);
+  --tp-glass-bg-strong: rgba(24, 24, 27, 0.32);
   --tp-glass-border: rgba(255, 255, 255, 0.08);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;
