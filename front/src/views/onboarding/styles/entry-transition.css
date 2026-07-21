@@ -123,6 +123,11 @@
 .onboarding-world[data-entry-preparing="true"] .core-zone {
   z-index: 210 !important;
   will-change: left, top;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%);
+  --core-size: min(20vw, 31vh, 260px);
+  transition: left 1.28s var(--ob-ease), top 1.28s var(--ob-ease), transform 1.28s var(--ob-ease) !important;
 }
 
 .onboarding-world[data-entry-preparing="true"] .ob-stage.active .ob-boundary-copy,

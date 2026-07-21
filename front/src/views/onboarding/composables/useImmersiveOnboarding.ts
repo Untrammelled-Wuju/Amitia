@@ -483,7 +483,7 @@ export function useImmersiveOnboarding() {
     if (entering.value || entryPreparing.value) return
 
     entryPreparing.value = true
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await new Promise((resolve) => setTimeout(resolve, 1280))
     entryPreparing.value = false
     enteringState.value = "true"
 
