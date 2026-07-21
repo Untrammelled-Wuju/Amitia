@@ -1,5 +1,5 @@
 .onboarding-world .ob-boundary {
-  position: absolute;
+  position: fixed;
   left: 66vw;
   top: 47vh;
   width: min(620px, 64vw, 70vh);
@@ -11,7 +11,7 @@
 }
 
 .onboarding-world .ob-permission-node {
-  position: absolute;
+  position: fixed;
   width: clamp(68px, 12vw, 112px);
   height: clamp(68px, 12vw, 112px);
   border-radius: 50%;
@@ -87,7 +87,7 @@
 }
 
 .onboarding-world .ob-boundary-copy {
-  position: absolute;
+  position: fixed;
   left: 7%;
   top: 50%;
   width: min(330px, 30vw);
