@@ -1,7 +1,7 @@
 .onboarding-world .ob-boundary {
   position: absolute;
-  left: 75%;
-  top: 47%;
+  left: 66vw;
+  top: 47vh;
   width: min(620px, 64vw, 70vh);
   height: min(620px, 64vw, 70vh);
   transform: translate(-50%, -50%);
