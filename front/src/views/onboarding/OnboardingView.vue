@@ -149,7 +149,6 @@
       <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 8 || leavingStage === 8), 'stage-leaving': leavingStage === 8, 'stage-enter-prep': enterPrepStage === 8 }">
         <StageMemory
           v-if="currentMemoryQuestion"
-          :key="memoryStep"
           :step="memoryStep"
           :question="currentMemoryQuestion.question"
           :context="currentMemoryQuestion.context"
