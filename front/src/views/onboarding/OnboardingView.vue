@@ -175,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue"
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue"
 import StarfieldBg from "./components/StarfieldBg.vue"
 import CoreZone from "./components/CoreZone.vue"
 import StageIntro from "./components/StageIntro.vue"
@@ -290,6 +290,19 @@ watch(currentStage, (val) => {
   if (stageInitReady.value && coreLayoutStage.value !== val) {
     coreLayoutStage.value = val
   }
+  nextTick(() => {
+    const el = coreZoneRef.value?.getEl()
+    if (!el) return
+    if (val === 9) {
+      setTimeout(() => {
+        el.style.transition = "none"
+        el.style.animation = "none"
+      }, 750)
+    } else {
+      el.style.transition = ""
+      el.style.animation = ""
+    }
+  })
 })
 
 watch(serverURL, () => {

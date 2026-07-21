@@ -40,7 +40,7 @@
   --stage8-pad-left: clamp(24px, 5vw, 76px);
 }
 .onboarding-world[data-stage-current="8"] .core-zone { left: 25%; top: calc(37.5% - var(--stage8-shift)); --core-size: var(--stage8-core-size); opacity: .96; transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), height var(--amitia-core-resize) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease), opacity .8s var(--ob-ease) !important; }
-.onboarding-world[data-stage-current="9"] .core-zone { position: fixed; left: 66vw; top: 47vh; transform: translate(-50%, -50%); --core-size: min(20vw, 31vh, 260px); }
+.onboarding-world[data-stage-current="9"] .core-zone { position: fixed; left: 66vw; top: 47vh; transform: translate(-50%, -50%); --core-size: min(20vw, 31vh, 260px); transition: none !important; animation: none !important; }
 
 .onboarding-world[data-stage-current="8"][data-memory-step="complete"] .core-zone {
   left: calc(50% - 195px);
