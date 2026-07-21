@@ -25,10 +25,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="dot"></span>
           <span class="dot-label">{{ qqLabel }}</span>
         </span>
-        <span class="status-dot" :class="modelClass" :title="modelLabel">
-          <span class="dot"></span>
-          <span class="dot-label">模型服务{{ modelStatus === "configured" ? "正常" : "待配置" }}</span>
-        </span>
       </div>
     </div>
     <div class="status-right">
@@ -98,13 +94,6 @@ const qqClass = computed(() =>
 )
 const qqLabel = computed(() =>
   props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ已连接" : "QQ未连接"
-)
-
-const modelClass = computed(() =>
-  props.modelStatus === "configured" ? "status-on" : "status-off"
-)
-const modelLabel = computed(() =>
-  props.modelStatus === "configured" ? "模型已配" : "模型未配"
 )
 
 </script>
