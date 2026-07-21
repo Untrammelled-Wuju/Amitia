@@ -11,6 +11,7 @@
       :data-entry-preparing="entryPreparing ? 'true' : null"
       :data-entering="enteringState"
       :data-core-reveal-pending="coreRevealPending ? 'true' : null"
+      :data-config-transition="configStageTransition ? 'true' : null"
       :data-identity-state="currentStage === 7 ? identityState : null"
       :data-memory-step="currentStage === 8 ? (memoryComplete ? 'complete' : memoryStep) : null"
     >
@@ -274,6 +275,7 @@ const {
   playVoiceSample,
   coreRevealPending,
   leavingStage,
+  configStageTransition,
   enterPrepStage,
 } = useImmersiveOnboarding()
 

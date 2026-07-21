@@ -388,6 +388,18 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+.onboarding-world[data-config-transition="true"] .ob-stage {
+  transition-duration: .5s !important;
+}
+
+.onboarding-world[data-config-transition="true"] .ob-stage.stage-leaving {
+  transition-duration: .5s !important;
+}
+
+.onboarding-world[data-config-transition="true"] .ob-stage.active {
+  animation-duration: .5s !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ob-stage,
   .step-fade-surface,

@@ -150,6 +150,8 @@ export function useImmersiveOnboarding() {
 
   const stageCount = 10
 
+  const configStageTransition = ref(false)
+
   let stageTransitionToken = 0
   const stageTransitioning = ref(false)
   const coreRevealPending = ref(false)
@@ -176,6 +178,9 @@ export function useImmersiveOnboarding() {
     const prev = currentStage.value
     if (stage === prev) return
 
+    const isConfigStep = prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6
+    configStageTransition.value = isConfigStep
+
     stageTransitioning.value = true
     const token = ++stageTransitionToken
 
@@ -201,9 +206,10 @@ export function useImmersiveOnboarding() {
         setTimeout(() => {
           if (token !== stageTransitionToken) return
           stageTransitioning.value = false
-        }, 380)
+          configStageTransition.value = false
+        }, isConfigStep ? 500 : 380)
       }, prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6 ? 0 : 700)
-    }, 380)
+    }, isConfigStep ? 500 : 380)
   }
 
   function nextStage() {
@@ -691,6 +697,7 @@ export function useImmersiveOnboarding() {
     startEntryTransition,
     playVoiceSample,
     stageTransitioning,
+    configStageTransition,
     coreRevealPending,
     leavingStage,
     enterPrepStage,
