@@ -114,7 +114,7 @@
 .onboarding-world[data-entering="true"] .ob-stage.active .ob-stage-action,
 .onboarding-world[data-entering="true"] .ob-back {
   pointer-events: none !important;
-  animation: amitiaEntryContentOut 0.38s var(--ob-ease) forwards;
+  animation: amitiaEntryContentOut 0.5s var(--ob-ease) forwards;
 }
 
 .onboarding-world[data-entering="complete"] .ob-stage.active .ob-boundary-copy,
@@ -128,17 +128,17 @@
 @keyframes amitiaEntryContentOut {
   to {
     opacity: 0;
-    filter: blur(5px);
-    transform: scale(0.975);
+
+
   }
 }
 
 .onboarding-world[data-entry-preparing="true"] .core-zone {
   z-index: 210 !important;
   will-change: left, top;
+  transition-delay: 0.5s;
   left: 50% !important;
   top: 50% !important;
-  transform: translate(-50%, -50%);
   --core-size: min(20vw, 31vh, 260px);
   transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease) !important;
 }
@@ -148,7 +148,7 @@
 .onboarding-world[data-entry-preparing="true"] .ob-stage.active .ob-stage-action,
 .onboarding-world[data-entry-preparing="true"] .ob-back {
   pointer-events: none !important;
-  animation: amitiaEntryContentOut 0.38s var(--ob-ease) forwards;
+  animation: amitiaEntryContentOut 0.5s var(--ob-ease) forwards;
 }
 
 .onboarding-world[data-entering="true"] .core-zone {

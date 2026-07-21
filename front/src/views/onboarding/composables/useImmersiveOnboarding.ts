@@ -484,7 +484,7 @@ export function useImmersiveOnboarding() {
 
     entryPreparing.value = true
     import("@/views/web-chat/WebChatView.vue")
-    await new Promise((resolve) => setTimeout(resolve, 1280))
+    await new Promise((resolve) => setTimeout(resolve, 1780))
     entryPreparing.value = false
     enteringState.value = "true"
 
