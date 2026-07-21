@@ -43,9 +43,10 @@
 .onboarding-world[data-stage-current="9"] .core-zone { left: 66%; top: 47%; --core-size: min(20vw, 31vh, 260px); }
 
 .onboarding-world[data-stage-current="8"][data-memory-step="complete"] .core-zone {
-  left: 27% !important;
-  top: 44% !important;
-  --core-size: 320px !important;
+  left: calc(50% - 195px);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  --core-size: 260px;
   opacity: 1 !important;
 }
 

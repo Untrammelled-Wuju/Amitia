@@ -167,7 +167,7 @@
   display: none;
   position: absolute;
   left: 50%;
-  bottom: 3%;
+  bottom: 6%;
   transform: translateX(-50%);
   display: flex;
   gap: 8px;
@@ -280,6 +280,11 @@
   margin-top: 20px;
 }
 
+.onboarding-world[data-stage-current="8"] .ob-identity-complete-card {
+  margin-top: 0;
+  transform: translateX(195px);
+}
+
 
 .onboarding-world[data-stage-current="7"] .ob-identity-prompt,
 .onboarding-world[data-stage-current="7"] .ob-identity-ledger,
@@ -349,14 +354,6 @@
   transition: opacity .8s var(--ob-ease);
 }
 
-.onboarding-world[data-stage-current="8"] .ob-identity-step-markers {
-  position: absolute;
-  left: 50%;
-  bottom: 2%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-}
 .ob-fade-prompt-enter-active,
 .ob-fade-prompt-leave-active {
   transition: opacity 0.3s var(--ob-ease);

@@ -61,10 +61,10 @@
             <div class="ob-identity-complete-card">
               <div class="ob-identity-complete-copy-block">
                 <p class="ob-identity-complete-message">
-                  <span>基础信息已经准备好了。</span>
-                  <span>你的称呼是 <strong>{{ items[0] || '未记录' }}</strong>。</span>
-                  <span>交流偏好：<strong>{{ items[1] || '未记录' }}</strong>。</span>
-                  <span v-if="items[2]">重要信息：<strong>{{ items[2] }}</strong>。</span>
+                  <span>我记住了。</span>
+                  <span>以后，用 <strong>{{ items[0] || '未记录' }}</strong> 称呼你。</span>
+                  <span>交流时保持 <strong>{{ items[1] || '未记录' }}</strong> 的风格。</span>
+                  <span v-if="items[2]">你会希望我记得：<strong>{{ items[2] }}</strong>。</span>
                 </p>
                 <div class="ob-identity-complete-footer">
                   <span class="ob-identity-complete-kicker">初始信息已保存</span>
