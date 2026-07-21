@@ -6,8 +6,8 @@
 
 .onboarding-world .ob-identity-prompt {
   position: absolute;
-  left: 45%;
-  right: 3%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage7-core-size), 320px) * 0.5 + 100px);
+  right: 0%;
   top: calc(37.5vh - var(--stage7-shift) - var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   width: clamp(280px, calc(10vh + 220px), 320px) !important;
   max-width: 620px;
@@ -23,8 +23,8 @@
 
 .onboarding-world .ob-identity-answer {
   position: absolute;
-  left: 45%;
-  right: 3%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage7-core-size), 320px) * 0.5 + 100px);
+  right: 0%;
   max-width: 420px;
   top: 45%;
   bottom: auto;
@@ -77,8 +77,8 @@
 
 .onboarding-world .ob-identity-quick-choices {
   position: absolute;
-  left: 45%;
-  right: 3%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage7-core-size), 320px) * 0.5 + 100px);
+  right: 0%;
   top: calc(45% - 56px);
   display: flex;
   gap: 9px;
@@ -303,7 +303,7 @@
 }
 
 .onboarding-world[data-stage-current="8"] .ob-identity-prompt {
-  left: 42%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage8-core-size), 320px) * 0.5 + 100px);
   right: 6%;
   top: calc(37.5vh - var(--stage8-shift) - var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   width: clamp(280px, var(--stage8-core-size), 320px) !important;
@@ -312,7 +312,7 @@
 
 .onboarding-world[data-stage-current="8"] .ob-identity-answer {
   position: absolute;
-  left: 42%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage8-core-size), 320px) * 0.5 + 100px);
   right: 6%;
   max-width: 420px;
   top: 45%;
@@ -325,7 +325,7 @@
 
 .onboarding-world[data-stage-current="8"] .ob-identity-quick-choices {
   position: absolute;
-  left: 42%;
+  left: calc(25vw - clamp(24px, 5vw, 76px) + clamp(280px, var(--stage8-core-size), 320px) * 0.5 + 100px);
   right: auto;
   top: auto;
   bottom: 13%;
