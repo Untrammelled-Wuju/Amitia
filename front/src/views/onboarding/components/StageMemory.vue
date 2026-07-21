@@ -1,78 +1,88 @@
 <template>
   <div class="ob-stage-inner">
-    <div class="ob-memory-scene" ref="memorySceneRef" :data-memory-step="complete ? 'complete' : step">
-      <div class="ob-memory-prompt" ref="memoryPromptRef">
-        <div class="ob-character-line">{{ question }}</div>
-        <div class="ob-memory-context">{{ context }}</div>
-      </div>
+    <div class="ob-identity-scene" ref="memorySceneRef" :data-identity-state="complete ? 'complete' : 'filling'">
+      <Transition name="ob-fade" mode="out-in" @enter="onTransitionEnter">
+        <div v-if="!complete" key="incomplete">
+          <div class="ob-identity-prompt" ref="memoryPromptRef">
+            <Transition name="ob-fade-prompt" mode="out-in">
+              <div :key="step" class="ob-prompt-text">
+                <div class="ob-character-line">{{ question }}</div>
+                <div class="ob-identity-context">{{ context }}</div>
+              </div>
+            </Transition>
+          </div>
 
-      <div class="ob-memory-ledger" ref="memoryLedgerRef">
-        <div class="ob-memory-ledger-title">已记录的信息</div>
-        <div class="ob-memory-items">
-          <div class="ob-memory-card" :class="{ filled: items[0] }">
-            <span class="ob-memory-key">称呼</span>
-            <span class="ob-memory-value">{{ items[0] || '等待回答' }}</span>
+          <div class="ob-identity-ledger" ref="memoryLedgerRef">
+            <div class="ob-identity-ledger-title">已记录的信息</div>
+            <div class="ob-identity-ledger-items">
+              <div class="ob-identity-ledger-card" :class="{ filled: items[0] }">
+                <span class="ob-identity-ledger-key">称呼</span>
+                <span class="ob-identity-ledger-value">{{ items[0] || '等待回答' }}</span>
+              </div>
+              <div class="ob-identity-ledger-card" :class="{ filled: items[1] }">
+                <span class="ob-identity-ledger-key">交流偏好</span>
+                <span class="ob-identity-ledger-value">{{ items[1] || '等待回答' }}</span>
+              </div>
+              <div class="ob-identity-ledger-card" :class="{ filled: items[2] }">
+                <span class="ob-identity-ledger-key">重要信息</span>
+                <span class="ob-identity-ledger-value">{{ items[2] || '等待回答' }}</span>
+              </div>
+            </div>
           </div>
-          <div class="ob-memory-card" :class="{ filled: items[1] }">
-            <span class="ob-memory-key">交流偏好</span>
-            <span class="ob-memory-value">{{ items[1] || '等待回答' }}</span>
+
+          <div class="ob-identity-answer" ref="memoryAnswerRef">
+            <textarea
+              v-model="inputValue"
+              rows="1"
+              :placeholder="placeholder"
+              @keydown.enter.prevent="handleSend"
+            ></textarea>
+            <button @click="handleSend" :disabled="!inputValue.trim()">↑</button>
           </div>
-          <div class="ob-memory-card" :class="{ filled: items[2] }">
-            <span class="ob-memory-key">重要信息</span>
-            <span class="ob-memory-value">{{ items[2] || '等待回答' }}</span>
+
+          <div class="ob-identity-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 }">
+            <button
+              v-for="choice in quickChoices"
+              :key="choice"
+              class="ob-identity-quick-option"
+              @click="selectChoice(choice)"
+            >{{ choice }}</button>
+          </div>
+
+          <div class="ob-identity-step-markers">
+            <span v-for="i in 3" :key="i"
+              :class="{ active: step === i - 1, done: step > i - 1 }"
+            ></span>
           </div>
         </div>
-      </div>
 
-      <div class="ob-memory-answer" ref="memoryAnswerRef" :class="{ complete }">
-        <textarea
-          v-model="inputValue"
-          rows="1"
-          :placeholder="placeholder"
-          @keydown.enter.prevent="handleSend"
-        ></textarea>
-        <button @click="handleSend" :disabled="!inputValue.trim()">↑</button>
-      </div>
-
-      <div class="ob-memory-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 && !complete }">
-        <button
-          v-for="choice in quickChoices"
-          :key="choice"
-          class="ob-memory-quick-option"
-          @click="selectChoice(choice)"
-        >{{ choice }}</button>
-      </div>
-
-      <div class="ob-memory-step-markers" v-if="!complete">
-        <span v-for="i in 3" :key="i"
-          :class="{ active: step === i - 1, done: step > i - 1 }"
-        ></span>
-      </div>
-
-      <div v-if="complete" class="ob-memory-complete-view">
-        <div class="ob-memory-complete-copy">
-          <div class="kicker">初始信息已保存</div>
-          <h2>基础信息已经准备好了。</h2>
-          <p>你的称呼、交流偏好和第一条重要信息已经记录。更多了解，会在之后的相处中自然形成。</p>
-        </div>
-        <div class="ob-memory-complete-summary">
-          <div class="ob-memory-summary-row" v-for="(label, i) in ['称呼', '交流偏好', '重要信息']" :key="label">
-            <span class="ob-memory-summary-index">{{ String(i + 1).padStart(2, '0') }}</span>
-            <div>
-              <div class="ob-memory-summary-label">{{ label }}</div>
-              <div class="ob-memory-summary-value">{{ items[i] || '尚未记录' }}</div>
+        <div v-else key="complete">
+          <div class="ob-identity-complete-view">
+            <div class="ob-identity-complete-card">
+              <div class="ob-identity-complete-copy-block">
+                <p class="ob-identity-complete-message">
+                  <span>基础信息已经准备好了。</span>
+                  <span>你的称呼是 <strong>{{ items[0] || '未记录' }}</strong>。</span>
+                  <span>交流偏好：<strong>{{ items[1] || '未记录' }}</strong>。</span>
+                  <span v-if="items[2]">重要信息：<strong>{{ items[2] }}</strong>。</span>
+                </p>
+                <div class="ob-identity-complete-footer">
+                  <span class="ob-identity-complete-kicker">初始信息已保存</span>
+                  <p class="ob-identity-complete-note">这些设定之后仍可随时修改。</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </div>
 
-    <button v-if="complete" class="ob-memory-complete-next" @click="$emit('next')">继续</button>
+    <button v-if="complete" class="ob-identity-complete-next" @click="$emit('next')">继续</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue"
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue"
 
 const props = defineProps<{
   step: number
@@ -124,6 +134,12 @@ function syncBottomAlignment() {
 
   if (!sceneRect.height || !ledgerRect.height || !answerRect.height) return
 
+  const answerTop = ledgerRect.top - sceneRect.top + ledgerRect.height - answerRect.height
+  answer.style.top = answerTop + "px"
+  if (quick) {
+    quick.style.top = (answerTop - 56) + "px"
+  }
+
   const bottomOffset = Math.max(0, sceneRect.bottom - ledgerRect.bottom)
   answer.style.setProperty("--ledger-bottom-offset", `${bottomOffset.toFixed(2)}px`)
   answer.style.setProperty("--answer-block-height", `${answerRect.height.toFixed(2)}px`)
@@ -140,7 +156,15 @@ function scheduleSync() {
   })
 }
 
-watch(() => props.complete, () => scheduleSync())
+function onTransitionEnter(_el: Element) {
+  nextTick(() => {
+    resizeObserver?.disconnect()
+    const elements = [memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value]
+    elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
+    syncBottomAlignment()
+  })
+}
+
 watch(() => props.step, () => scheduleSync())
 
 let resizeObserver: ResizeObserver | null = null

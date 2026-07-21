@@ -128,7 +128,7 @@ export function useImmersiveOnboarding() {
       question: "我应该怎么称呼你？",
       context: "告诉我你希望使用的称呼。",
       placeholder: "输入你希望我使用的称呼",
-      quickChoices: ["朋友", "主人", "哥哥", "姐姐", "亲爱的"],
+      quickChoices: ["朋友", "主人", "哥哥", "亲爱的"],
     },
     {
       question: "你希望我用什么风格交流？",
@@ -242,6 +242,15 @@ export function useImmersiveOnboarding() {
     }
 
     if (currentStage.value === 8) {
+      if (memoryComplete.value) {
+        memoryComplete.value = false
+        memoryStep.value = 2
+        return
+      }
+      if (memoryStep.value > 0) {
+        memoryStep.value--
+        return
+      }
       memoryStep.value = 0
       identityState.value = "spotlight"
       goToStage(7)
