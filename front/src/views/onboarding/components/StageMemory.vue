@@ -27,10 +27,14 @@
                 <span class="ob-identity-ledger-key">重要信息</span>
                 <span class="ob-identity-ledger-value">{{ items[2] || '等待回答' }}</span>
               </div>
+              <div class="ob-identity-ledger-card" :class="{ filled: memoryAvatarUploaded }">
+                <span class="ob-identity-ledger-key">头像</span>
+                <span class="ob-identity-ledger-value">{{ memoryAvatarUploaded ? '已上传' : '等待上传' }}</span>
+              </div>
             </div>
           </div>
 
-          <div class="ob-identity-answer" ref="memoryAnswerRef">
+          <div v-if="!isMemoryAvatarStep" class="ob-identity-answer" ref="memoryAnswerRef">
             <textarea
               v-model="inputValue"
               rows="1"
@@ -40,7 +44,7 @@
             <button @click="handleSend" :disabled="!inputValue.trim()">↑</button>
           </div>
 
-          <div class="ob-identity-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 }">
+          <div v-if="!isMemoryAvatarStep" class="ob-identity-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 }">
             <button
               v-for="choice in quickChoices"
               :key="choice"
@@ -49,8 +53,21 @@
             >{{ choice }}</button>
           </div>
 
+          <div v-if="isMemoryAvatarStep" class="ob-identity-avatar-area ob-memory-avatar-area" ref="memoryAvatarRef">
+            <div class="ob-identity-avatar-circle" :class="{ 'has-image': memoryAvatarPreviewUrl }" @click="triggerFileInput">
+              <img v-if="memoryAvatarPreviewUrl" :src="memoryAvatarPreviewUrl" alt="用户头像预览" />
+              <span v-else class="ob-identity-avatar-placeholder">+</span>
+            </div>
+            <p class="ob-identity-avatar-hint">{{ memoryAvatarPreviewUrl ? '点击更换头像' : '点击上传头像' }}</p>
+            <input ref="fileInputRef" type="file" accept="image/*" class="ob-avatar-file-input" @change="onFileChange" />
+            <div class="ob-identity-avatar-actions">
+              <button class="ob-skip-btn" @click="$emit('memoryAvatarSkip')">跳过</button>
+              <button class="ob-primary-ghost ob-avatar-continue-btn" :disabled="!memoryAvatarPreviewUrl" @click="$emit('memoryAvatarContinue')">继续</button>
+            </div>
+          </div>
+
           <div class="ob-identity-step-markers">
-            <span v-for="i in 3" :key="i"
+            <span v-for="i in 4" :key="i"
               :class="{ active: step === i - 1, done: step > i - 1 }"
             ></span>
           </div>
@@ -92,14 +109,22 @@ const props = defineProps<{
   quickChoices: string[]
   items: string[]
   complete: boolean
+  memoryAvatarPreviewUrl: string
+  memoryAvatarUploaded: boolean
+  isMemoryAvatarStep: boolean
 }>()
 
 const emit = defineEmits<{
   answer: [value: string]
   next: []
+  memoryAvatarSkip: []
+  memoryAvatarContinue: []
+  memoryAvatarFileSelected: [file: File]
 }>()
 
 const inputValue = ref("")
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const memoryAvatarRef = ref<HTMLElement | null>(null)
 
 const memorySceneRef = ref<HTMLElement | null>(null)
 const memoryLedgerRef = ref<HTMLElement | null>(null)
@@ -118,12 +143,39 @@ function selectChoice(choice: string) {
   emit("answer", choice)
 }
 
+function triggerFileInput() {
+  fileInputRef.value?.click()
+}
+
+function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith("image/")) return
+  emit("memoryAvatarFileSelected", file)
+}
+
 let alignFrame = 0
 
 function syncBottomAlignment() {
   if (window.matchMedia("(max-width: 540px)").matches) return
   const scene = memorySceneRef.value
   const ledger = memoryLedgerRef.value
+
+  if (props.isMemoryAvatarStep) {
+    if (!scene || !ledger) return
+    const sceneRect = scene.getBoundingClientRect()
+    const ledgerRect = ledger.getBoundingClientRect()
+    if (!sceneRect.height || !ledgerRect.height) return
+    const avatarEl = memoryAvatarRef.value
+    if (!avatarEl) return
+    const avatarRect = avatarEl.getBoundingClientRect()
+    if (!avatarRect.height) return
+    const avatarTop = ledgerRect.top - sceneRect.top + ledgerRect.height - avatarRect.height
+    avatarEl.style.top = avatarTop + "px"
+    return
+  }
+
   const answer = memoryAnswerRef.value
   const quick = memoryQuickRef.value
   if (!scene || !ledger || !answer) return
@@ -159,8 +211,14 @@ function scheduleSync() {
 function onTransitionEnter(_el: Element) {
   nextTick(() => {
     resizeObserver?.disconnect()
-    const elements = [memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value]
-    elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
+    if (!props.isMemoryAvatarStep) {
+      const elements = [memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value]
+      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
+    }
+    if (props.isMemoryAvatarStep) {
+      const elements = [memoryLedgerRef.value, memoryPromptRef.value, memoryAvatarRef.value]
+      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
+    }
     syncBottomAlignment()
   })
 }

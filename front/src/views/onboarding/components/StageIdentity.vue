@@ -62,7 +62,7 @@
             <p class="ob-identity-avatar-hint">{{ avatarPreviewUrl ? '点击更换头像' : '点击上传头像' }}</p>
             <input ref="fileInputRef" type="file" accept="image/*" class="ob-avatar-file-input" @change="onFileChange" />
             <div class="ob-identity-avatar-actions">
-              <button class="ob-skip-btn" :disabled="!avatarPreviewUrl" @click="$emit('avatarSkip')">跳过</button>
+              <button class="ob-skip-btn" @click="$emit('avatarSkip')">跳过</button>
               <button class="ob-primary-ghost ob-avatar-continue-btn" :disabled="!avatarPreviewUrl" @click="$emit('avatarContinue')">继续</button>
             </div>
           </div>

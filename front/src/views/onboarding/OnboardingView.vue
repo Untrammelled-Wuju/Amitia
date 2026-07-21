@@ -166,7 +166,13 @@
           :quickChoices="currentMemoryQuestion.quickChoices"
           :items="memoryItems"
           :complete="memoryComplete"
+          :memoryAvatarPreviewUrl="memoryAvatarPreviewUrl"
+          :memoryAvatarUploaded="memoryAvatarUploaded"
+          :isMemoryAvatarStep="memoryStep === 3"
           @answer="handleMemoryAnswer"
+          @memoryAvatarFileSelected="handleMemoryAvatarFileSelected"
+          @memoryAvatarSkip="handleMemoryAvatarSkip"
+          @memoryAvatarContinue="handleMemoryAvatarContinue"
           @next="nextStage"
         />
       </section>
@@ -265,6 +271,9 @@ const {
   memoryStep,
   memoryComplete,
   memoryItems,
+  memoryAvatarFile,
+  memoryAvatarPreviewUrl,
+  memoryAvatarUploaded,
   permissions,
   entering,
   entryPreparing,
@@ -286,6 +295,9 @@ const {
   handleAvatarSkip,
   handleAvatarContinue,
   handleMemoryAnswer,
+  handleMemoryAvatarFileSelected,
+  handleMemoryAvatarSkip,
+  handleMemoryAvatarContinue,
   handleEnterAmitia,
   startEntryTransition,
   playVoiceSample,

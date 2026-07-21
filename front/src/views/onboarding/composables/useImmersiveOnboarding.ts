@@ -79,6 +79,10 @@ export function useImmersiveOnboarding() {
   const memoryComplete = ref(false)
   const memoryItems = ref(["", "", ""])
 
+  const memoryAvatarFile = ref<File | null>(null)
+  const memoryAvatarPreviewUrl = ref("")
+  const memoryAvatarUploaded = ref(false)
+
   const permissions = reactive({
     autostart: false,
     web: true,
@@ -154,6 +158,13 @@ export function useImmersiveOnboarding() {
       context: "我会把这条信息放在记忆的起点。",
       placeholder: "任何你觉得重要的事情",
       quickChoices: [],
+    },
+    {
+      question: "为你自己选一张头像。",
+      context: "不选也没关系，以后随时可以更换。",
+      placeholder: "",
+      quickChoices: [],
+      isAvatar: true,
     },
   ]
 
@@ -268,7 +279,7 @@ export function useImmersiveOnboarding() {
     if (currentStage.value === 8) {
       if (memoryComplete.value) {
         memoryComplete.value = false
-        memoryStep.value = 2
+        memoryStep.value = 3
         return
       }
       if (memoryStep.value > 0) {
@@ -515,10 +526,29 @@ export function useImmersiveOnboarding() {
   function handleMemoryAnswer(value: string) {
     memoryItems.value[memoryStep.value] = value
     if (memoryStep.value >= 2) {
-      memoryComplete.value = true
+      memoryStep.value++
       return
     }
     memoryStep.value++
+  }
+
+  function handleMemoryAvatarFileSelected(file: File) {
+    memoryAvatarFile.value = file
+    if (memoryAvatarPreviewUrl.value) URL.revokeObjectURL(memoryAvatarPreviewUrl.value)
+    memoryAvatarPreviewUrl.value = URL.createObjectURL(file)
+    memoryAvatarUploaded.value = true
+  }
+
+  function handleMemoryAvatarSkip() {
+    memoryAvatarUploaded.value = false
+    memoryComplete.value = true
+  }
+
+  function handleMemoryAvatarContinue() {
+    if (memoryAvatarFile.value) {
+      memoryAvatarUploaded.value = true
+    }
+    memoryComplete.value = true
   }
 
   async function startEntryTransition() {
@@ -709,6 +739,9 @@ export function useImmersiveOnboarding() {
     memoryStep,
     memoryComplete,
     memoryItems,
+    memoryAvatarFile,
+    memoryAvatarPreviewUrl,
+    memoryAvatarUploaded,
     memoryQuestions,
     permissions,
     entering,
@@ -734,6 +767,9 @@ export function useImmersiveOnboarding() {
     handleAvatarSkip,
     handleAvatarContinue,
     handleMemoryAnswer,
+    handleMemoryAvatarFileSelected,
+    handleMemoryAvatarSkip,
+    handleMemoryAvatarContinue,
     handleEnterAmitia,
     startEntryTransition,
     playVoiceSample,

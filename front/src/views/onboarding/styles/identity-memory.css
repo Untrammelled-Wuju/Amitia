@@ -528,3 +528,14 @@
   pointer-events: none;
   transition: opacity 0.8s var(--ob-ease);
 }
+
+
+.onboarding-world[data-stage-current="8"] .ob-memory-avatar-area {
+  position: absolute;
+  left: calc(50% - 130px + clamp(280px, var(--stage8-core-size), 320px) * 0.5);
+  top: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
