@@ -519,12 +519,14 @@ export function useImmersiveOnboarding() {
         })
       }
 
-      if (visionMode.value !== "disabled" && visionModelKey.value && visionModelURL.value) {
+      const inheritVision = visionMode.value === "inherit"
+      const hasVisionCreds = inheritVision ? (modelApiKey.value && modelBaseUrl.value) : (visionModelKey.value && visionModelURL.value)
+      if (visionMode.value !== "disabled" && hasVisionCreds) {
         await post("/api/model/configs", {
           apiType: "vision",
-          baseUrl: visionModelURL.value,
-          apiKey: visionModelKey.value,
-          modelName: visionModelName.value,
+          baseUrl: visionMode.value === "inherit" ? modelBaseUrl.value : visionModelURL.value,
+          apiKey: visionMode.value === "inherit" ? modelApiKey.value : visionModelKey.value,
+          modelName: visionMode.value === "inherit" ? modelName.value : visionModelName.value,
           visionMode: visionMode.value,
           isActive: 1,
         }).catch(() => {})

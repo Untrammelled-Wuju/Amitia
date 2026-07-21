@@ -76,6 +76,7 @@
       <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 4 || leavingStage === 4), 'stage-leaving': leavingStage === 4, 'stage-enter-prep': enterPrepStage === 4 }">
         <StageVisionMode
           :visionMode="visionMode"
+          :modelReady="modelReady"
           :visionModelKey="visionModelKey"
           :visionModelName="visionModelName"
           :visionModelURL="visionModelURL"
