@@ -1,6 +1,6 @@
 import { ref, reactive, computed } from "vue"
 import { useRouter } from "vue-router"
-import { ElMessage } from "element-plus"
+import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi, setToken } from "../../../composables/useApi"
 import { getApiBaseURL } from "@/runtime/runtime-adapter"
 
@@ -491,8 +491,21 @@ export function useImmersiveOnboarding() {
   }
 
   function handleAvatarSkip() {
-    identityAvatarUploaded.value = false
-    startIdentityTransition()
+    if (!identityAvatarPreviewUrl.value) {
+      startIdentityTransition()
+      return
+    }
+    ElMessageBox.confirm(
+      '是否清除已上传的头像？',
+      '提示',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    ).then(() => {
+      if (identityAvatarPreviewUrl.value) URL.revokeObjectURL(identityAvatarPreviewUrl.value)
+      identityAvatarPreviewUrl.value = ''
+      identityAvatarFile.value = null
+      identityAvatarUploaded.value = false
+      startIdentityTransition()
+    }).catch(() => {})
   }
 
   function handleAvatarContinue() {
@@ -540,8 +553,21 @@ export function useImmersiveOnboarding() {
   }
 
   function handleMemoryAvatarSkip() {
-    memoryAvatarUploaded.value = false
-    memoryComplete.value = true
+    if (!memoryAvatarPreviewUrl.value) {
+      memoryComplete.value = true
+      return
+    }
+    ElMessageBox.confirm(
+      '是否清除已上传的头像？',
+      '提示',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    ).then(() => {
+      if (memoryAvatarPreviewUrl.value) URL.revokeObjectURL(memoryAvatarPreviewUrl.value)
+      memoryAvatarPreviewUrl.value = ''
+      memoryAvatarFile.value = null
+      memoryAvatarUploaded.value = false
+      memoryComplete.value = true
+    }).catch(() => {})
   }
 
   function handleMemoryAvatarContinue() {
