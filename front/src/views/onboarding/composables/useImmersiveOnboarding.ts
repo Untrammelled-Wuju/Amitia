@@ -1,4 +1,4 @@
-﻿import { ref, reactive, computed } from "vue"
+import { ref, reactive, computed } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
 import { useApi, setToken } from "../../../composables/useApi"
@@ -165,7 +165,12 @@ export function useImmersiveOnboarding() {
     maxStage.value = Math.max(maxStage.value, stage)
 
     if (stage === 2) {
-      adminStep.value = "environment"
+      if (accountDone.value) {
+        hasAdmin.value = true
+        adminStep.value = "account"
+      } else {
+        adminStep.value = "environment"
+      }
     }
 
     const prev = currentStage.value
@@ -267,9 +272,7 @@ export function useImmersiveOnboarding() {
 
 
   function isLoginFlow(): boolean {
-    if (deployMode.value === "remote") return true
-    if (hasAdmin.value) return true
-    return accountDone.value
+    return deployMode.value === "remote" || hasAdmin.value
   }
 
   async function checkAdminExists() {
