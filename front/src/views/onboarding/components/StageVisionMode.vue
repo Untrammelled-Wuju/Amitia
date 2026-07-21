@@ -14,21 +14,17 @@
               <div class="ob-model-page-card-kicker">视觉服务</div>
               <h3 class="ob-model-panel-title">视觉模式</h3>
             </div>
+            <div class="ob-model-types">
+              <button
+                v-for="mode in visionModes"
+                :key="mode.value"
+                class="ob-chip"
+                :class="{ selected: visionMode === mode.value }"
+                @click="emit('update:visionMode', mode.value)"
+              >{{ mode.label }}</button>
+            </div>
           </div>
           <p class="ob-model-panel-copy">可使用独立视觉模型、沿用支持多模态的语言模型，或暂不启用。</p>
-          <div class="ob-model-mode-grid">
-            <button
-              v-for="mode in visionModes"
-              :key="mode.value"
-              class="ob-model-mode-card"
-              :class="{ selected: visionMode === mode.value }"
-              type="button"
-              @click="emit('update:visionMode', mode.value)"
-            >
-              <span class="ob-model-mode-name">{{ mode.label }}</span>
-              <span class="ob-model-mode-desc">{{ mode.desc }}</span>
-            </button>
-          </div>
           <div class="ob-form-stack ob-model-page-fields" :class="{ 'ob-fields-disabled': visionMode === 'disabled' }">
             <label class="ob-input-label">接口地址
               <input

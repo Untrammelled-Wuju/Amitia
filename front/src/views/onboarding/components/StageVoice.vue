@@ -25,6 +25,7 @@
               >{{ mode.label }}</button>
             </div>
           </div>
+          <p class="ob-voice-model-desc">可选择豆包语音服务，或暂不启用语音输出能力。</p>
           <div class="ob-form-stack ob-voice-model-fields" :class="{ 'ob-fields-disabled': voiceModelMode === 'disabled' }">
             <label class="ob-input-label">接口地址
               <input

@@ -392,7 +392,6 @@
 .onboarding-world .ob-chip:hover,
 .onboarding-world .ob-chip.selected {
   border-color: rgba(200, 121, 91, 0.45);
-  transform: translateY(-2px);
   color: var(--ob-text);
   background: var(--ob-accent-soft);
 }
@@ -804,6 +803,13 @@
   height: 30px;
   padding: 0 10px;
   font-size: 9px;
+}
+
+.onboarding-world .ob-voice-model-card .ob-voice-model-desc {
+  margin-bottom: 13px;
+  color: var(--ob-muted);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .onboarding-world .ob-voice-model-fields {
