@@ -71,6 +71,10 @@ export function useImmersiveOnboarding() {
   const identityRole = ref("")
   const identityPersonality = ref("")
 
+  const identityAvatarFile = ref<File | null>(null)
+  const identityAvatarPreviewUrl = ref("")
+  const identityAvatarUploaded = ref(false)
+
   const memoryStep = ref(0)
   const memoryComplete = ref(false)
   const memoryItems = ref(["", "", ""])
@@ -121,6 +125,14 @@ export function useImmersiveOnboarding() {
       placeholder: "例如：温和、体贴、有耐心",
       maxLength: 30,
       quickChoices: ["温和、克制", "开朗、热情", "冷静、理性", "幽默、随性"],
+    },
+    {
+      question: "为角色选一张头像。",
+      context: "不选也没关系，以后随时可以更换。",
+      placeholder: "",
+      maxLength: 0,
+      quickChoices: [],
+      isAvatar: true,
     },
   ]
 
@@ -453,10 +465,30 @@ export function useImmersiveOnboarding() {
       identityRole.value = value
     } else if (identityStep.value === 2) {
       identityPersonality.value = value
+    } else if (identityStep.value === 3) {
       startIdentityTransition()
       return
     }
     identityStep.value++
+  }
+
+  function handleAvatarFileSelected(file: File) {
+    identityAvatarFile.value = file
+    if (identityAvatarPreviewUrl.value) URL.revokeObjectURL(identityAvatarPreviewUrl.value)
+    identityAvatarPreviewUrl.value = URL.createObjectURL(file)
+    identityAvatarUploaded.value = true
+  }
+
+  function handleAvatarSkip() {
+    identityAvatarUploaded.value = false
+    startIdentityTransition()
+  }
+
+  function handleAvatarContinue() {
+    if (identityAvatarFile.value) {
+      identityAvatarUploaded.value = true
+    }
+    startIdentityTransition()
   }
 
   function startIdentityTransition() {
@@ -470,7 +502,7 @@ export function useImmersiveOnboarding() {
   }
 
   function startIdentityReverse() {
-    identityStep.value = 2
+    identityStep.value = 3
     identityState.value = "spotlight"
     setTimeout(() => {
       identityState.value = 'exiting'
@@ -670,6 +702,9 @@ export function useImmersiveOnboarding() {
     identityName,
     identityRole,
     identityPersonality,
+    identityAvatarFile,
+    identityAvatarPreviewUrl,
+    identityAvatarUploaded,
     identityQuestions,
     memoryStep,
     memoryComplete,
@@ -693,9 +728,11 @@ export function useImmersiveOnboarding() {
     detectModel,
     detectVision,
     detectVoice,
-    vectorModelMode,
     detectVector,
     handleIdentityAnswer,
+    handleAvatarFileSelected,
+    handleAvatarSkip,
+    handleAvatarContinue,
     handleMemoryAnswer,
     handleEnterAmitia,
     startEntryTransition,

@@ -408,3 +408,123 @@
 .onboarding-world .ob-identity-prompt .ob-character-line {
   max-width: 480px;
 }
+.onboarding-world .ob-identity-avatar-area {
+  position: absolute;
+  left: calc(50% - 130px + clamp(280px, var(--stage7-core-size), 320px) * 0.5);
+  top: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.onboarding-world .ob-identity-avatar-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s, border-style 0.2s;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.onboarding-world .ob-identity-avatar-circle:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.onboarding-world .ob-identity-avatar-circle.has-image {
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.onboarding-world .ob-identity-avatar-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.onboarding-world .ob-identity-avatar-placeholder {
+  font-size: 36px;
+  color: rgba(255, 255, 255, 0.25);
+  line-height: 1;
+  user-select: none;
+}
+
+.onboarding-world .ob-identity-avatar-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0;
+}
+
+.onboarding-world .ob-avatar-file-input {
+  display: none;
+}
+
+.onboarding-world .ob-identity-avatar-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.onboarding-world .ob-skip-btn {
+  padding: 9px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.onboarding-world .ob-skip-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.onboarding-world .ob-skip-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.onboarding-world .ob-avatar-continue-btn {
+  padding: 9px 24px;
+  border: 1px solid var(--ob-accent);
+  border-radius: 12px;
+  background: var(--ob-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgba(200, 121, 91, 0.14);
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.onboarding-world .ob-avatar-continue-btn:hover {
+  background: var(--ob-accent2);
+}
+
+.onboarding-world .ob-avatar-continue-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.onboarding-world .ob-avatar-continue-btn::after {
+  display: none;
+}
+
+.onboarding-world[data-stage-current="7"][data-identity-state="exiting"] .ob-identity-avatar-area,
+.onboarding-world[data-stage-current="7"][data-identity-state="spotlight"] .ob-identity-avatar-area,
+.onboarding-world[data-stage-current="7"][data-identity-state="complete"] .ob-identity-avatar-area {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.8s var(--ob-ease);
+}

@@ -145,7 +145,13 @@
           :maxLength="currentIdentityQuestion.maxLength"
           :ledger="{ name: identityName, role: identityRole, personality: identityPersonality }"
           :state="identityState"
+          :avatarPreviewUrl="identityAvatarPreviewUrl"
+          :avatarUploaded="identityAvatarUploaded"
+          :isAvatarStep="identityStep === 3"
           @answer="handleIdentityAnswer"
+          @avatarFileSelected="handleAvatarFileSelected"
+          @avatarSkip="handleAvatarSkip"
+          @avatarContinue="handleAvatarContinue"
           @next="nextStage"
         />
 </section>
@@ -253,6 +259,9 @@ const {
   identityName,
   identityRole,
   identityPersonality,
+  identityAvatarFile,
+  identityAvatarPreviewUrl,
+  identityAvatarUploaded,
   memoryStep,
   memoryComplete,
   memoryItems,
@@ -273,6 +282,9 @@ const {
   detectVoice,
   detectVector,
   handleIdentityAnswer,
+  handleAvatarFileSelected,
+  handleAvatarSkip,
+  handleAvatarContinue,
   handleMemoryAnswer,
   handleEnterAmitia,
   startEntryTransition,
