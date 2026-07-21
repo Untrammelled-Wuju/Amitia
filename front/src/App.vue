@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
@@ -7,10 +7,14 @@ SPDX-License-Identifier: AGPL-3.0-only
   <UpdateDialog />
   <MCPInteractionGuard v-if="!isPublicPage" />
   <PrivacyConsent v-if="!isPublicPage" />
-  <AppLayout v-if="!isPublicPage">
-    <router-view />
-  </AppLayout>
-  <router-view v-else />
+  <Transition name="route-slide" mode="out-in">
+    <AppLayout v-if="!isPublicPage" key="app">
+      <router-view />
+    </AppLayout>
+    <div v-else key="public" class="public-root">
+      <router-view />
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -137,4 +141,20 @@ html.amitia-desktop-shell .el-drawer.btt {
 html.amitia-desktop-shell .search-overlay {
   top: 34px !important;
 }
+.public-root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.route-slide-enter-active,
+.route-slide-leave-active {
+  transition: opacity 0.325s ease;
+}
+.route-slide-enter-from,
+.route-slide-leave-to {
+  opacity: 0;
+}
 </style>
+
+
