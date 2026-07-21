@@ -559,11 +559,17 @@ export function useImmersiveOnboarding() {
       }
 
       if (memoryItems.value.some((item) => item)) {
+        let userId = ""
+        try {
+          const me = await get<any>("/api/auth/me")
+          userId = me?.id ? String(me.id) : ""
+        } catch {}
         for (const item of memoryItems.value.filter(Boolean)) {
           await post("/api/profiles", {
             category: "memory",
             attributeName: "initial_memory",
             attributeValue: item,
+            userId: userId,
           }).catch(() => {})
         }
       }

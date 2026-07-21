@@ -567,9 +567,11 @@ CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(user_id, cr
 CREATE TABLE IF NOT EXISTS user_profiles (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL DEFAULT 'default',
+    character_id TEXT NOT NULL DEFAULT '',
     category TEXT NOT NULL,
     attribute_name TEXT NOT NULL,
     attribute_value TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
     confidence INTEGER DEFAULT 50,
     source_conv_id TEXT DEFAULT '',
     verified_at TEXT DEFAULT '',
@@ -577,7 +579,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, category, attribute_name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, character_id, category, attribute_name);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(user_id, confidence);
 CREATE TABLE IF NOT EXISTS world_book (
@@ -786,3 +788,8 @@ ALTER TABLE moods ADD COLUMN mood_value TEXT DEFAULT '';
 ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT DEFAULT '';
 ALTER TABLE messages ADD COLUMN reply_to_role TEXT DEFAULT '';
 ALTER TABLE messages ADD COLUMN reply_to_excerpt TEXT DEFAULT '';
+
+
+ALTER TABLE user_profiles ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE user_profiles ADD COLUMN source TEXT NOT NULL DEFAULT '';
