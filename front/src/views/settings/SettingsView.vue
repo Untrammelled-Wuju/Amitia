@@ -12,6 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <router-link to="/settings/model" class="settings-tab" active-class="settings-tab-active">模型配置</router-link>
       <router-link to="/settings/safety" class="settings-tab" active-class="settings-tab-active">安全</router-link>
       <router-link to="/settings/maintenance" class="settings-tab" active-class="settings-tab-active">维护诊断</router-link>
+      <router-link to="/settings/about" class="settings-tab" active-class="settings-tab-active">关于</router-link>
     </div>
     <div class="settings-content">
       <router-view />

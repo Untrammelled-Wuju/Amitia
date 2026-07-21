@@ -82,22 +82,17 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span>当前用户</span>
         </span>
       </button>
-      <div class="version-bar" @click="handleCheckUpdate">
-        <span v-show="!appStore.sidebarCollapsed" class="version-label">v{{ version }}</span>
-        <el-icon v-if="checking" class="version-spinner"><Loading /></el-icon>
-      </div>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue"
+import { computed } from "vue"
 
 import { useRoute, useRouter } from "vue-router"
-import { ElMessage } from "element-plus"
 import {
   ChatDotRound, Odometer, Connection, UserFilled,
-  ChatDotSquare, Setting, Loading, Grid,
+  ChatDotSquare, Setting, Grid,
 } from "@element-plus/icons-vue"
 import { useAppStore } from "@/stores/app"
 
@@ -109,9 +104,6 @@ defineProps<{
   username?: string
   avatar?: string
 }>()
-
-const version = ref("1.0.0")
-const checking = ref(false)
 
 const appStore = useAppStore()
 
@@ -138,31 +130,6 @@ const activeIndex = computed(() => {
 function openUserProfile() {
   router.push("/user-settings")
 }
-
-async function handleCheckUpdate() {
-  if (checking.value) return
-  checking.value = true
-  try {
-    if (window.amitiaDesktop) {
-      await window.amitiaDesktop.checkUpdate()
-    } else {
-      ElMessage.info("当前为浏览器环境，无法检查更新")
-    }
-  } catch (e) {
-    ElMessage.error("检查更新失败")
-  } finally {
-    checking.value = false
-  }
-}
-
-onMounted(async () => {
-  if (window.amitiaDesktop) {
-    try {
-      version.value = await window.amitiaDesktop.getVersion()
-    } catch {
-    }
-  }
-})
 </script>
 
 <style scoped>
@@ -356,39 +323,5 @@ onMounted(async () => {
 .side-nav.is-collapsed .user-profile {
   justify-content: center;
   padding: 10px;
-}
-
-.version-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  opacity: 0.45;
-  transition: opacity 0.2s;
-  padding: 6px 0 4px;
-  justify-content: center;
-}
-
-.version-bar:hover {
-  opacity: 0.8;
-}
-
-.version-label {
-  font-size: 12px;
-  color: var(--console-text);
-  letter-spacing: 0;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.version-spinner {
-  font-size: 12px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 </style>
