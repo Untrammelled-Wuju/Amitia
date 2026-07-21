@@ -9,7 +9,7 @@
 .onboarding-world .ob-choice-cloud-scale {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr);
-  gap: 420px;
+  gap: clamp(120px, 42vw, 420px);
   align-items: stretch;
   transform-origin: center center;
   transform: scale(calc(var(--stage-core) / 420px));
@@ -50,8 +50,8 @@
 }
 
 .onboarding-world .ob-path-node {
-  width: 64px;
-  height: 64px;
+  width: clamp(48px, 8vh, 64px);
+  height: clamp(48px, 8vh, 64px);
   display: grid;
   place-items: center;
   border-radius: 50%;

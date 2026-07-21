@@ -1,9 +1,9 @@
 .onboarding-world .ob-boundary {
   position: absolute;
-  left: 50%;
+  left: 75%;
   top: 47%;
-  width: min(620px, 64vw);
-  height: min(620px, 64vw);
+  width: min(620px, 64vw, 70vh);
+  height: min(620px, 64vw, 70vh);
   transform: translate(-50%, -50%);
   border: 1px solid rgba(200, 121, 91, 0.16);
   border-radius: 50%;
@@ -12,8 +12,8 @@
 
 .onboarding-world .ob-permission-node {
   position: absolute;
-  width: 112px;
-  height: 112px;
+  width: clamp(68px, 12vw, 112px);
+  height: clamp(68px, 12vw, 112px);
   border-radius: 50%;
   border: 1px solid var(--ob-line);
   background: rgba(20, 19, 18, 0.76);
