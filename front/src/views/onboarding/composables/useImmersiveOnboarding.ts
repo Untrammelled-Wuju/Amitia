@@ -1,4 +1,4 @@
-import { ref, reactive, computed } from "vue"
+﻿import { ref, reactive, computed } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage } from "element-plus"
 import { useApi, setToken } from "../../../composables/useApi"
@@ -483,6 +483,7 @@ export function useImmersiveOnboarding() {
     if (entering.value || entryPreparing.value) return
 
     entryPreparing.value = true
+    import("@/views/web-chat/WebChatView.vue")
     await new Promise((resolve) => setTimeout(resolve, 1280))
     entryPreparing.value = false
     enteringState.value = "true"
@@ -593,7 +594,7 @@ export function useImmersiveOnboarding() {
 
       setTimeout(() => {
         router.push("/chat")
-      }, 2600)
+      }, 2700)
     } catch (err: any) {
       stageError.value = err?.message || err?.response?.data?.message || "设置过程中出现错误，请重试"
       entering.value = false

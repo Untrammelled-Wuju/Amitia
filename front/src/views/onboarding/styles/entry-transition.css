@@ -1,4 +1,4 @@
-.onboarding-world .amitia-entry-transition {
+﻿.onboarding-world .amitia-entry-transition {
   position: absolute;
   inset: 0;
   z-index: 200;
@@ -104,6 +104,11 @@
   opacity: 1;
 }
 
+.onboarding-world[data-entering="complete"] .amitia-entry-transition {
+  visibility: visible;
+  opacity: 1;
+}
+
 .onboarding-world[data-entering="true"] .ob-stage.active .ob-boundary-copy,
 .onboarding-world[data-entering="true"] .ob-stage.active .ob-boundary,
 .onboarding-world[data-entering="true"] .ob-stage.active .ob-stage-action,
@@ -162,15 +167,15 @@
 }
 
 .onboarding-world[data-entering="complete"] .entry-backdrop {
-  animation: amitiaEntryBackdropOut 1s var(--ob-ease) forwards;
+  animation: amitiaEntryBackdropOut 0.5s var(--ob-ease) forwards;
 }
 
 .onboarding-world[data-entering="complete"] .entry-brand {
-  animation: amitiaEntryBrandOut 0.6s var(--ob-ease) forwards;
+  animation: amitiaEntryBrandOut 0.35s var(--ob-ease) forwards;
 }
 
 .onboarding-world[data-entering="complete"] .starfield {
-  animation: amitiaEntryStarsIn 1s var(--ob-ease) forwards;
+  animation: amitiaEntryStarsIn 0.5s var(--ob-ease) forwards;
 }
 
 @keyframes amitiaEntryBackdropOut {

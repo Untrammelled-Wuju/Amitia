@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ob-shell ob-stage-9">
     <div
       class="onboarding-world"
@@ -44,6 +44,8 @@ import "./styles/completion-buttons.css"
 
 const router = useRouter()
 
+const coreZoneRef = ref<InstanceType<typeof CoreZone> | null>(null)
+
 const permissions = reactive({
   autostart: false,
   web: true,
@@ -55,11 +57,36 @@ const entering = ref(false)
 const entryPreparing = ref(false)
 const enteringState = ref<string | null>(null)
 
+import("@/views/web-chat/WebChatView.vue")
+
+function waitForCoreMoveComplete(): Promise<void> {
+  return new Promise((resolve) => {
+    const el = coreZoneRef.value?.getEl()
+    if (!el) { resolve(); return }
+
+    const onEnd = (e: TransitionEvent) => {
+      if (e.propertyName === 'left' || e.propertyName === 'top') {
+        el.removeEventListener('transitionend', onEnd)
+        resolve()
+      }
+    }
+
+    el.addEventListener('transitionend', onEnd)
+
+    const timeout = setTimeout(() => {
+      el.removeEventListener('transitionend', onEnd)
+      resolve()
+    }, 2000)
+  })
+}
+
 async function startEntryTransition() {
   if (entering.value || entryPreparing.value) return
+  import("@/views/web-chat/WebChatView.vue")
 
   entryPreparing.value = true
-  await new Promise((resolve) => setTimeout(resolve, 1280))
+
+  await waitForCoreMoveComplete()
   entryPreparing.value = false
   enteringState.value = "true"
 
@@ -69,7 +96,7 @@ async function startEntryTransition() {
 
   setTimeout(() => {
     router.push("/chat")
-  }, 3800)
+  }, 2700)
 }
 </script>
 
