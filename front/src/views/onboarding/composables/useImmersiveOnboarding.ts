@@ -202,7 +202,7 @@ export function useImmersiveOnboarding() {
           if (token !== stageTransitionToken) return
           stageTransitioning.value = false
         }, 380)
-      }, 700)
+      }, prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6 ? 0 : 700)
     }, 380)
   }
 

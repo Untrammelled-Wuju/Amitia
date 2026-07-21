@@ -921,6 +921,7 @@
 
 .onboarding-world[data-layout-mode="compact"][data-stage-current="3"] .core-zone,
 .onboarding-world[data-layout-mode="compact"][data-stage-current="4"] .core-zone,
+.onboarding-world[data-layout-mode="compact"][data-stage-current="5"] .core-zone,
 .onboarding-world[data-layout-mode="compact"][data-stage-current="6"] .core-zone {
   left: 82% !important;
   top: 41% !important;
@@ -1006,6 +1007,7 @@
 
 .onboarding-world[data-layout-mode="phone"][data-stage-current="3"] .core-zone,
 .onboarding-world[data-layout-mode="phone"][data-stage-current="4"] .core-zone,
+.onboarding-world[data-layout-mode="phone"][data-stage-current="5"] .core-zone,
 .onboarding-world[data-layout-mode="phone"][data-stage-current="6"] .core-zone {
   left: 50% !important;
   top: 9.5% !important;
