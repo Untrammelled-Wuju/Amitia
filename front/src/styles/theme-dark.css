@@ -45,7 +45,8 @@ html[data-theme="dark"] {
   --tp-glass-border: rgba(255, 255, 255, 0.08);
   --tp-glass-blur: 14px;
   --tp-glass-saturate: 105%;
-  --tp-page-glow: radial-gradient(circle at 18% 0%, rgba(201, 149, 87, 0.055), transparent 30%);
+  /* --tp-page-glow: radial-gradient(circle at 18% 0%, rgba(201, 149, 87, 0.055), transparent 30%); */
+  --tp-page-glow: none;
   --tp-sidebar-glow: linear-gradient(180deg, rgba(201, 149, 87, 0.028), transparent 32%);
   --tp-logo-bg: linear-gradient(145deg, #D2A363, #A66F39);
   --tp-shadow-card: none;

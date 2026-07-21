@@ -198,9 +198,9 @@ async function handleLogin() {
   position: absolute;
   left: 50%;
   top: 47%;
-  width: 600px;
-  height: 600px;
-  transform: translate(-50%, -50%);
+  width: 350px;
+  height: 350px;
+  transform: translate(calc(-50% - 202.5px), -50%);
   display: grid;
   place-items: center;
 }
@@ -353,7 +353,7 @@ async function handleLogin() {
   position: absolute;
   left: 50%;
   top: 47%;
-  transform: translate(-50%, -50%);
+  transform: translate(calc(-50% + 187.5px), -50%);
 }
 
 .login-panel {
