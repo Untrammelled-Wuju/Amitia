@@ -6,8 +6,8 @@
 
 .onboarding-world .ob-identity-prompt {
   position: absolute;
-  left: 42%;
-  right: 6%;
+  left: 45%;
+  right: 3%;
   top: calc(37.5vh - var(--stage7-shift) - var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   width: clamp(280px, calc(10vh + 220px), 320px) !important;
   max-width: 620px;
@@ -23,8 +23,8 @@
 
 .onboarding-world .ob-identity-answer {
   position: absolute;
-  left: 42%;
-  right: 6%;
+  left: 45%;
+  right: 3%;
   max-width: 420px;
   top: 45%;
   bottom: auto;
@@ -77,8 +77,8 @@
 
 .onboarding-world .ob-identity-quick-choices {
   position: absolute;
-  left: 42%;
-  right: 6%;
+  left: 45%;
+  right: 3%;
   top: calc(45% - 56px);
   display: flex;
   gap: 9px;
