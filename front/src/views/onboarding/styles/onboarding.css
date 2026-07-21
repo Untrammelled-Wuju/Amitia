@@ -389,15 +389,15 @@
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage {
-  transition-duration: .5s !important;
+  transition-duration: .42s !important;
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage.stage-leaving {
-  transition-duration: .5s !important;
+  transition-duration: .42s !important;
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage.active {
-  animation-duration: .5s !important;
+  animation-duration: .36s !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

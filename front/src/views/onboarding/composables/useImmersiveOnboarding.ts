@@ -32,6 +32,7 @@ export function useImmersiveOnboarding() {
   const modelBaseUrl = ref("https://api.deepseek.com/v1")
   const modelApiKey = ref("")
   const modelName = ref("")
+  const modelType = ref("online")
 
   const modelFieldErrors = ref<{baseUrl?: boolean, apiKey?: boolean, modelName?: boolean}>({})
 
@@ -207,9 +208,9 @@ export function useImmersiveOnboarding() {
           if (token !== stageTransitionToken) return
           stageTransitioning.value = false
           configStageTransition.value = false
-        }, isConfigStep ? 500 : 380)
+        }, isConfigStep ? 360 : 380)
       }, prev >= 3 && prev <= 6 && stage >= 3 && stage <= 6 ? 0 : 700)
-    }, isConfigStep ? 500 : 380)
+    }, isConfigStep ? 420 : 380)
   }
 
   function nextStage() {
@@ -226,7 +227,7 @@ export function useImmersiveOnboarding() {
       if (currentStage.value === 3) {
         modelFieldErrors.value = {}
         if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true
-        if (!modelApiKey.value.trim()) modelFieldErrors.value.apiKey = true
+        if (modelType.value !== "local" && !modelApiKey.value.trim()) modelFieldErrors.value.apiKey = true
         if (!modelName.value.trim()) modelFieldErrors.value.modelName = true
         if (Object.keys(modelFieldErrors.value).length > 0) return
       }
@@ -637,6 +638,7 @@ export function useImmersiveOnboarding() {
     modelBaseUrl,
     modelApiKey,
     modelName,
+    modelType,
     visionMode,
     detectingVision,
     visionReady,

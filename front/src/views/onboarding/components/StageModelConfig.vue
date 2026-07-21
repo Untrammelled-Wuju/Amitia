@@ -11,7 +11,7 @@
         <div class="ob-model-page-card">
           <div class="ob-model-page-card-head">
             <div>
-              <div class="ob-model-page-card-kicker">模型服务</div>
+              <div class="ob-model-page-card-kicker">模型服务（Open AI格式）</div>
               <h3 class="ob-model-panel-title">语言模型配置</h3>
             </div>
             <div class="ob-model-types">
@@ -20,16 +20,16 @@
                 :key="t.value"
                 class="ob-chip"
                 :class="{ selected: modelType === t.value }"
-                @click="modelType = t.value"
+                @click="onTypeChange(t.value)"
               >{{ t.label }}</button>
             </div>
           </div>
           <p class="ob-model-panel-copy">这里只配置底层能力，不会改变角色的名字、身份或性格。</p>
           <div class="ob-form-stack ob-model-page-fields">
             <label class="ob-input-label">服务地址
-              <input :value="baseUrl" @input="emit('update:baseUrl', ($event.target as HTMLInputElement).value)" placeholder="https://api.deepseek.com/v1" :class="{ 'ob-field-error': fieldErrors.baseUrl }" />
+              <input :value="baseUrl" @input="emit('update:baseUrl', ($event.target as HTMLInputElement).value)" :placeholder="modelType === 'local' ? 'http://localhost:11434/v1' : 'https://api.deepseek.com/v1'" :class="{ 'ob-field-error': fieldErrors.baseUrl }" />
             </label>
-            <label class="ob-input-label">API Key
+            <label v-if="modelType !== 'local'" class="ob-input-label">API Key
               <div class="ob-input-password-wrap">
                 <input :value="apiKey" @input="emit('update:apiKey', ($event.target as HTMLInputElement).value)" :type="showApiKey ? 'text' : 'password'" placeholder="sk-..." :class="{ 'ob-field-error': fieldErrors.apiKey }" />
                 <button type="button" class="ob-password-toggle" @click="showApiKey = !showApiKey" tabindex="-1">
@@ -61,7 +61,7 @@
             </label>
             <label v-else class="ob-input-label ob-model-page-wide">模型名称
               <div class="ob-model-name-row">
-                <input :value="modelName" @input="emit('update:modelName', ($event.target as HTMLInputElement).value)" placeholder="例如 deepseek-chat" :class="{ 'ob-field-error': fieldErrors.modelName }" />
+                <input :value="modelName" @input="emit('update:modelName', ($event.target as HTMLInputElement).value)" :placeholder="modelType === 'local' ? '例如 llama3' : '例如 deepseek-chat'" :class="{ 'ob-field-error': fieldErrors.modelName }" />
                 <button class="ob-small-action ob-detect-inline" @click="emit('detect')" :disabled="detecting">
                   {{ detecting ? '检测中' : modelDetected ? '重新检测' : '检测模型' }}
                 </button>
@@ -73,7 +73,8 @@
             <span>{{ statusText }}</span>
           </div>
           <div class="ob-model-setup-action-row">
-            <a href="https://platform.deepseek.com/api_keys" target="_blank" class="ob-model-settings-link">前往 DeepSeek 获取 API Key</a>
+            <a v-if="modelType !== 'local'" href="https://platform.deepseek.com/api_keys" target="_blank" class="ob-model-settings-link">前往 DeepSeek 获取 API Key</a>
+            <span v-else class="ob-model-settings-link">使用本地 Ollama 服务</span>
             <button
               class="ob-model-setup-next"
               @click="emit('next')"
@@ -90,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, watch } from "vue"
 
 const showApiKey = ref(false)
 const props = defineProps<{
@@ -103,6 +104,7 @@ const props = defineProps<{
   baseUrl: string
   apiKey: string
   modelName: string
+  modelType: string
 }>()
 
 const emit = defineEmits<{
@@ -111,13 +113,26 @@ const emit = defineEmits<{
   'update:baseUrl': [value: string]
   'update:apiKey': [value: string]
   'update:modelName': [value: string]
+  'update:modelType': [value: string]
 }>()
-
-const modelType = ref("online")
 
 const modelTypes = [
   { label: "在线模型", value: "online" },
   { label: "本地模型", value: "local" },
   { label: "兼容服务", value: "compatible" },
 ]
+
+function onTypeChange(value: string) {
+  emit('update:modelType', value)
+}
+
+watch(() => props.modelType, (val) => {
+  if (val === 'local') {
+    emit('update:baseUrl', 'http://localhost:11434/v1')
+    emit('update:apiKey', 'ollama')
+  } else {
+    emit('update:baseUrl', 'https://api.deepseek.com/v1')
+    emit('update:apiKey', '')
+  }
+})
 </script>

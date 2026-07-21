@@ -65,9 +65,11 @@
           :baseUrl="modelBaseUrl"
           :apiKey="modelApiKey"
           :modelName="modelName"
+          :modelType="modelType"
           @update:baseUrl="modelBaseUrl = $event"
           @update:apiKey="modelApiKey = $event"
           @update:modelName="modelName = $event"
+          @update:modelType="modelType = $event"
           @next="nextStage"
           @detect="detectModel"
         />
@@ -219,6 +221,7 @@ const {
   modelBaseUrl,
   modelApiKey,
   modelName,
+  modelType,
   visionMode,
   detectingVision,
   visionReady,
