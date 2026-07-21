@@ -112,6 +112,14 @@
   animation: amitiaEntryContentOut 0.38s var(--ob-ease) forwards;
 }
 
+.onboarding-world[data-entering="complete"] .ob-stage.active .ob-boundary-copy,
+.onboarding-world[data-entering="complete"] .ob-stage.active .ob-boundary,
+.onboarding-world[data-entering="complete"] .ob-stage.active .ob-stage-action,
+.onboarding-world[data-entering="complete"] .ob-back {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @keyframes amitiaEntryContentOut {
   to {
     opacity: 0;
@@ -127,7 +135,7 @@
   top: 50% !important;
   transform: translate(-50%, -50%);
   --core-size: min(20vw, 31vh, 260px);
-  transition: left 1.28s var(--ob-ease), top 1.28s var(--ob-ease), transform 1.28s var(--ob-ease) !important;
+  transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease) !important;
 }
 
 .onboarding-world[data-entry-preparing="true"] .ob-stage.active .ob-boundary-copy,
@@ -143,6 +151,49 @@
   top: 50% !important;
   animation: amitiaEntryCoreMove 1.12s var(--ob-ease) forwards !important;
   z-index: 210 !important;
+}
+
+.onboarding-world[data-entering="complete"] .core-zone {
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 0;
+  z-index: 210 !important;
+}
+
+.onboarding-world[data-entering="complete"] .entry-backdrop {
+  animation: amitiaEntryBackdropOut 1s var(--ob-ease) forwards;
+}
+
+.onboarding-world[data-entering="complete"] .entry-brand {
+  animation: amitiaEntryBrandOut 0.6s var(--ob-ease) forwards;
+}
+
+.onboarding-world[data-entering="complete"] .starfield {
+  animation: amitiaEntryStarsIn 1s var(--ob-ease) forwards;
+}
+
+@keyframes amitiaEntryBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes amitiaEntryBrandOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.04);
+    filter: blur(4px);
+  }
+}
+
+@keyframes amitiaEntryStarsIn {
+  from { opacity: 0.12; filter: blur(2px); }
+  to { opacity: 1; filter: blur(0); }
 }
 
 @keyframes amitiaEntryCoreMove {

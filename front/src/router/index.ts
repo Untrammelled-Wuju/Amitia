@@ -18,8 +18,7 @@ const PUBLIC_PATHS = ["/login", "/setup", "/setup-wizard", "/onboarding", "/priv
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },
-    { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
+    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingBoundaryOnly.vue") },{ path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
     { path: "/setup", name: "setup", component: () => import("../views/setup-admin/SetupAdminView.vue") },
     { path: "/", redirect: "/chat" },
     { path: "/dashboard", redirect: "/dashboard/data" },
