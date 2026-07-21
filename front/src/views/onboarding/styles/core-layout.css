@@ -32,14 +32,14 @@
   --stage7-pad-top: clamp(26px, 4.5vh, 48px);
   --stage7-pad-left: clamp(24px, 5vw, 76px);
 }
-.onboarding-world[data-stage-current="7"] .core-zone { left: calc(50% - 210px - clamp(280px, var(--stage7-core-size), 320px) * 0.5); top: calc(37.5% - var(--stage7-shift)); --core-size: var(--stage7-core-size); opacity: .96; transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), height var(--amitia-core-resize) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease), opacity .8s var(--ob-ease) !important; }
+.onboarding-world[data-stage-current="7"] .core-zone { left: calc(50% - 220px - clamp(280px, var(--stage7-core-size), 320px) * 0.5 + clamp(280px, var(--stage7-core-size), 320px) * 0.50); top: calc(37.5% - var(--stage7-shift)); --core-size: var(--stage7-core-size); opacity: .96; transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), height var(--amitia-core-resize) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease), opacity .8s var(--ob-ease) !important; }
 .onboarding-world[data-stage-current="8"] {
   --stage8-shift: min(5vh, calc(75px - 7.5vh));
   --stage8-core-size: min(26vw, 37vh, 330px);
   --stage8-pad-top: clamp(26px, 4.5vh, 48px);
   --stage8-pad-left: clamp(24px, 5vw, 76px);
 }
-.onboarding-world[data-stage-current="8"] .core-zone { left: calc(50% - 210px - clamp(280px, var(--stage8-core-size), 320px) * 0.5); top: calc(37.5% - var(--stage8-shift)); --core-size: var(--stage8-core-size); opacity: .96; transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), height var(--amitia-core-resize) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease), opacity .8s var(--ob-ease) !important; }
+.onboarding-world[data-stage-current="8"] .core-zone { left: calc(50% - 220px - clamp(280px, var(--stage8-core-size), 320px) * 0.5 + clamp(280px, var(--stage8-core-size), 320px) * 0.50); top: calc(37.5% - var(--stage8-shift)); --core-size: var(--stage8-core-size); opacity: .96; transition: left var(--amitia-core-move) var(--amitia-core-ease), top var(--amitia-core-move) var(--amitia-core-ease), width var(--amitia-core-resize) var(--amitia-core-ease), height var(--amitia-core-resize) var(--amitia-core-ease), transform var(--amitia-core-move) var(--amitia-core-ease), opacity .8s var(--ob-ease) !important; }
 .onboarding-world[data-stage-current="9"] .core-zone { left: 66%; top: 47%; transform: translate(-50%, -50%); --core-size: min(20vw, 31vh, 260px); transition-delay: 0s !important; }
 
 .onboarding-world[data-stage-current="8"][data-memory-step="complete"] .core-zone { transition-delay: 0s !important;

@@ -9,8 +9,6 @@
   left: calc(50% - 110px + clamp(280px, var(--stage7-core-size), 320px) * 0.5);
   right: 0%;
   top: calc(37.5vh - var(--stage7-shift) - var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
-  width: clamp(280px, calc(10vh + 220px), 320px) !important;
-  max-width: 620px;
 }
 
 .onboarding-world .ob-identity-context {
@@ -306,8 +304,6 @@
   left: calc(50% - 110px + clamp(280px, var(--stage8-core-size), 320px) * 0.5);
   right: 6%;
   top: calc(37.5vh - var(--stage8-shift) - var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
-  width: clamp(280px, var(--stage8-core-size), 320px) !important;
-  max-width: 620px;
 }
 
 .onboarding-world[data-stage-current="8"] .ob-identity-answer {
@@ -407,4 +403,8 @@
 .onboarding-world[data-stage-current="7"][data-identity-state="complete"] .ob-identity-step-markers {
   opacity: 0 !important;
   pointer-events: none;
+}
+
+.onboarding-world .ob-identity-prompt .ob-character-line {
+  white-space: nowrap;
 }
