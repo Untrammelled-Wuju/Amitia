@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header><span>关于 Amitia</span></template>
       <div class="about-app">
         <div class="about-logo">
-          <div class="logo-placeholder">A</div>
+          <img :src="logoUrl" alt="Amitia" />
         </div>
         <div class="about-info">
           <h2 class="about-name">Amitia</h2>
@@ -48,11 +48,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, onMounted } from "vue"
 import { ElMessage } from "element-plus"
 import { isDesktopShell } from "@/runtime/runtime-capabilities"
+import { useBrandLogo } from "@/composables/useBrandLogo"
 
 const version = "26.1.0"
 
 const checking = ref(false)
 const isDesktop = ref(false)
+const { logoUrl } = useBrandLogo()
 
 function handleCheckUpdate() {
   if (!window.amitiaDesktop) return
@@ -104,18 +106,16 @@ onMounted(() => {
 .about-logo {
   width: 72px;
   height: 72px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-light-3));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.logo-placeholder {
-  font-size: 32px;
-  font-weight: 700;
-  color: #fff;
+.about-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .about-info {

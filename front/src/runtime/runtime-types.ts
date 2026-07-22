@@ -53,6 +53,7 @@ export interface AmitiaDesktopAPI {
   getAutoLaunch(): Promise<boolean>
   setAutoLaunch(enabled: boolean): Promise<boolean>
   onAutoLaunchChanged(callback: (enabled: boolean) => void): () => void
+  setTheme(theme: "light" | "dark"): void
 
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void
   getDataDir(): Promise<string>

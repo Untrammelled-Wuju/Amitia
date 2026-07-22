@@ -95,8 +95,8 @@ import {
   ChatDotSquare, Setting, Grid,
 } from "@element-plus/icons-vue"
 import { useAppStore } from "@/stores/app"
+import { useBrandLogo } from "@/composables/useBrandLogo"
 
-import logoUrl from "../../public/logo.png"
 const route = useRoute()
 const router = useRouter()
 
@@ -106,6 +106,7 @@ defineProps<{
 }>()
 
 const appStore = useAppStore()
+const { logoUrl } = useBrandLogo()
 
 const CHAR_PATHS = [
   "/character", "/reminders", "/memory-manager", "/emotes", "/episodic",

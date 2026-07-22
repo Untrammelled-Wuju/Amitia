@@ -40,7 +40,7 @@ function getSystemPreference(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
-function resolveEffectivePreset(preset: ThemePreset): "light" | "dark" | ThemePreset {
+function resolveEffectivePreset(preset: ThemePreset): "light" | "dark" {
   if (preset === "system") {
     return getSystemPreference()
   }
@@ -64,6 +64,7 @@ function applyTheme(preset: ThemePreset) {
 
   // Set data-theme attribute for CSS variable selection
   html.setAttribute("data-theme", effective)
+  window.amitiaDesktop?.setTheme(effective)
 
 }
 

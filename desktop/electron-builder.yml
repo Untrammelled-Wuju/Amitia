@@ -4,6 +4,8 @@ directories:
   output: release
 files:
   - dist/**/*
+  - resources/icon*.ico
+  - resources/tray*.png
   - package.json
 extraResources:
   - from: resources/core

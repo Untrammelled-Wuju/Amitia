@@ -1,12 +1,9 @@
-import { fileURLToPath } from "node:url"
-import { dirname, join } from "node:path"
-import { app, BrowserWindow, Menu, nativeImage, shell, Tray } from "electron"
+import { app, BrowserWindow, Menu, nativeTheme, shell, Tray } from "electron"
 import { configToLabel } from "../shared/deployment"
 import type { DeploymentModeConfig } from "../shared/types"
 import type { ConfigStore } from "./config-store"
 import { IPC_CHANNELS } from "../shared/ipc"
-
-const currentDir = dirname(fileURLToPath(import.meta.url))
+import { getInitialBrandImage } from "./branding"
 
 let latestUpdateMenu: (() => Promise<void>) | null = null
 
@@ -19,7 +16,7 @@ export function createAppTray(
   getConfig: () => DeploymentModeConfig,
   configStore: ConfigStore,
 ): { tray: Tray; refreshMenu: () => Promise<void> } {
-  const icon = nativeImage.createFromPath(join(currentDir, "../../resources/tray.png"))
+  const icon = getInitialBrandImage(nativeTheme.shouldUseDarkColors ? "dark" : "light", "tray")
   const tray = new Tray(icon)
   tray.setToolTip("Amitia")
 

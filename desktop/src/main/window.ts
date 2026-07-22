@@ -1,13 +1,12 @@
 import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
-import { app, BrowserWindow, shell } from "electron"
+import { app, BrowserWindow, nativeTheme, shell } from "electron"
+import { getInitialBrandImage } from "./branding"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
 export function createMainWindow(): BrowserWindow {
   const preloadPath = join(currentDir, "../preload/index.cjs")
-
-  const iconPath = join(currentDir, "../../resources/tray.png")
 
   const win = new BrowserWindow({
     width: 1280,
@@ -15,7 +14,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1060,
     minHeight: 640,
     title: "Amitia",
-    icon: iconPath,
+    icon: getInitialBrandImage(nativeTheme.shouldUseDarkColors ? "dark" : "light", "icon"),
     frame: false,
     show: false,
     webPreferences: {

@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   getAutoLaunch: "amitia:auto-launch:get",
   setAutoLaunch: "amitia:auto-launch:set",
   autoLaunchChanged: "amitia:auto-launch:changed",
+  setTheme: "amitia:theme:set",
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
