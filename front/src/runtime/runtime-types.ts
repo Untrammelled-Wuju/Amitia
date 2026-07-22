@@ -50,6 +50,10 @@ export interface AmitiaDesktopAPI {
   minimizeWindow(): Promise<void>
   toggleMaximizeWindow(): Promise<boolean>
   closeWindow(): Promise<void>
+  getAutoLaunch(): Promise<boolean>
+  setAutoLaunch(enabled: boolean): Promise<boolean>
+  onAutoLaunchChanged(callback: (enabled: boolean) => void): () => void
+
   onRuntimeStatusChanged(callback: (status: RuntimeStatus) => void): () => void
   getDataDir(): Promise<string>
   getVersion(): Promise<string>

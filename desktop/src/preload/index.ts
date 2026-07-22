@@ -36,6 +36,17 @@ const api = {
   toggleMaximizeWindow(): Promise<boolean> {
     return ipcRenderer.invoke(IPC_CHANNELS.toggleMaximizeWindow)
   },
+  getAutoLaunch(): Promise<boolean> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getAutoLaunch)
+  },
+  setAutoLaunch(enabled: boolean): Promise<boolean> {
+    return ipcRenderer.invoke(IPC_CHANNELS.setAutoLaunch, enabled)
+  },
+  onAutoLaunchChanged(callback: (enabled: boolean) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled)
+    ipcRenderer.on(IPC_CHANNELS.autoLaunchChanged, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.autoLaunchChanged, listener)
+  },
   closeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.closeWindow)
   },

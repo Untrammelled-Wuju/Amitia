@@ -1,4 +1,4 @@
-import { ref, reactive, computed } from "vue"
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue"
 import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox } from "element-plus"
 import { useApi, setToken } from "../../../composables/useApi"
@@ -88,6 +88,22 @@ export function useImmersiveOnboarding() {
     web: true,
     wechat: false,
     qq: false,
+  })
+
+  watch(() => permissions.autostart, (val) => {
+    window.amitiaDesktop?.setAutoLaunch(val)
+  })
+
+  let removeAutoLaunchListener: (() => void) | null = null
+
+  onMounted(() => {
+    removeAutoLaunchListener = window.amitiaDesktop?.onAutoLaunchChanged((enabled: boolean) => {
+      permissions.autostart = enabled
+    }) ?? null
+  })
+
+  onUnmounted(() => {
+    removeAutoLaunchListener?.()
   })
 
   const entering = ref(false)
@@ -219,6 +235,12 @@ export function useImmersiveOnboarding() {
       coreRevealPending.value = true
       currentStage.value = stage
       enterPrepStage.value = stage
+
+      if (stage === 9 && window.amitiaDesktop) {
+        window.amitiaDesktop.getAutoLaunch().then((enabled: boolean) => {
+          permissions.autostart = enabled
+        })
+      }
 
       if (stage === 7 && identityState.value !== "filling" && identityState.value !== "complete" && identityState.value !== "spotlight") { identityState.value = "filling"; identityStep.value = 0 }
 

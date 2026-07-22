@@ -4,6 +4,7 @@ import { app, BrowserWindow, Menu, nativeImage, shell, Tray } from "electron"
 import { configToLabel } from "../shared/deployment"
 import type { DeploymentModeConfig } from "../shared/types"
 import type { ConfigStore } from "./config-store"
+import { IPC_CHANNELS } from "../shared/ipc"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
@@ -11,7 +12,7 @@ export function createAppTray(
   win: BrowserWindow,
   getConfig: () => DeploymentModeConfig,
   configStore: ConfigStore,
-): Tray {
+): { tray: Tray; refreshMenu: () => Promise<void> } {
   const icon = nativeImage.createFromPath(join(currentDir, "../../resources/tray.png"))
   const tray = new Tray(icon)
   tray.setToolTip("Amitia")
@@ -33,6 +34,7 @@ export function createAppTray(
           const next = menuItem.checked
           await configStore.setAutoLaunch(next)
           app.setLoginItemSettings({ openAtLogin: next })
+          win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next)
         },
       },
       { type: "separator" },
@@ -46,7 +48,7 @@ export function createAppTray(
   win.on("show", () => { void updateMenu() })
   win.on("hide", () => { void updateMenu() })
   void updateMenu()
-  return tray
+  return { tray, refreshMenu: updateMenu }
 }
 
 function showWindow(win: BrowserWindow): void {

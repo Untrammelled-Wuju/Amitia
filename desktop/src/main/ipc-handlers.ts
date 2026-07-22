@@ -11,6 +11,7 @@ export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
   onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void,
+  onAutoLaunchChanged?: () => void,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getEnvironment, () => ({
     platform: process.platform,
@@ -39,6 +40,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.setAutoLaunch, async (_event, enabled: boolean) => {
     await configStore.setAutoLaunch(enabled)
     app.setLoginItemSettings({ openAtLogin: enabled })
+    onAutoLaunchChanged?.()
     return enabled
   })
   ipcMain.handle(IPC_CHANNELS.openLogsDirectory, async () => {

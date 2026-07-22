@@ -76,6 +76,8 @@ async function enterMainApp(): Promise<void> {
   const runtimeManager = new DesktopRuntimeManager(currentConfig)
   await runtimeManager.initialize()
 
+  const onAutoLaunchChanged = () => { trayRefreshMenu?.() }
+
   registerIpcHandlers(configStore, runtimeManager, (config) => {
     if (currentConfig.mode !== config.mode) {
       if (config.mode === "local") {
@@ -100,7 +102,7 @@ async function enterMainApp(): Promise<void> {
       }
     }
     currentConfig = config
-  })
+  }, onAutoLaunchChanged)
 
   const ensureResult = ensureDataAndConfig()
   if (!ensureResult.ok) {
@@ -124,7 +126,9 @@ async function enterMainApp(): Promise<void> {
   }
 
   mainWindow = createMainWindow()
-  tray = createAppTray(mainWindow, () => currentConfig, configStore)
+  const trayResult = createAppTray(mainWindow, () => currentConfig, configStore)
+  tray = trayResult.tray
+  trayRefreshMenu = trayResult.refreshMenu
 
   const autoLaunch = await configStore.getAutoLaunch()
   app.setLoginItemSettings({ openAtLogin: autoLaunch })
