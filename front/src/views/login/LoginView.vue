@@ -128,7 +128,7 @@ async function handleLogin() {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #070708;
+  background: #000;
   display: grid;
   place-items: center;
 }
@@ -141,7 +141,7 @@ async function handleLogin() {
   background:
     radial-gradient(circle at 50% 45%, rgba(200, 121, 91, 0.08), transparent 26%),
     radial-gradient(circle at 12% 14%, rgba(181, 154, 120, 0.05), transparent 24%),
-    linear-gradient(145deg, #070708 0%, #0c0c0e 54%, #080809 100%);
+    linear-gradient(145deg, #000 0%, #000 54%, #000 100%);
   color: #f3f0ea;
   overflow: hidden;
 }
@@ -274,7 +274,7 @@ async function handleLogin() {
   top: 50%;
   width: 76%;
   height: 38%;
-  border: 2px solid currentColor;
+  border: 3px solid currentColor;
   border-radius: 50%;
   color: rgba(242, 239, 233, 0.78);
   transform-origin: center;
@@ -500,3 +500,4 @@ async function handleLogin() {
   }
 }
 </style>
+
