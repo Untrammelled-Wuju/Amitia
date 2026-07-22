@@ -64,8 +64,6 @@ function applyTheme(preset: ThemePreset) {
 
   // Set data-theme attribute for CSS variable selection
   html.setAttribute("data-theme", effective)
-  window.amitiaDesktop?.setTheme(effective)
-
 }
 
 // Watch for preset changes

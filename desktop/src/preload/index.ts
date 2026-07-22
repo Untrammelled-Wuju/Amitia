@@ -47,9 +47,6 @@ const api = {
     ipcRenderer.on(IPC_CHANNELS.autoLaunchChanged, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.autoLaunchChanged, listener)
   },
-  setTheme(theme: "light" | "dark"): void {
-    ipcRenderer.send(IPC_CHANNELS.setTheme, theme)
-  },
   closeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.closeWindow)
   },

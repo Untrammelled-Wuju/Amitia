@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray } from "electron"
+import { app, BrowserWindow, nativeTheme, Tray } from "electron"
 import { initLogger, closeLogger } from "./logger"
 import { ConfigStore } from "./config-store"
 import { registerIpcHandlers } from "./ipc-handlers"
@@ -12,13 +12,16 @@ import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager"
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager"
 import { ipcMain } from "electron"
 import { IPC_CHANNELS } from "../shared/ipc"
-import { applyBrandTheme, type BrandTheme } from "./branding"
+import { applyBrandTheme } from "./branding"
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let currentConfig: DeploymentModeConfig = { mode: "local" }
-let currentBrandTheme: BrandTheme | null = null
 let quitting = false
+
+function syncSystemBrandTheme() {
+  applyBrandTheme(nativeTheme.shouldUseDarkColors ? "dark" : "light", mainWindow, tray)
+}
 
 function notifyStatus(runtimeManager: DesktopRuntimeManager, state: RuntimeStatus["state"], message?: string) {
   runtimeManager.setStatus(state, message)
@@ -128,7 +131,7 @@ async function enterMainApp(): Promise<void> {
   mainWindow = createMainWindow()
   const trayResult = createAppTray(mainWindow, () => currentConfig, configStore)
   tray = trayResult.tray
-  if (currentBrandTheme) applyBrandTheme(currentBrandTheme, mainWindow, tray)
+  syncSystemBrandTheme()
 
   const autoLaunch = await configStore.getAutoLaunch()
   app.setLoginItemSettings({ openAtLogin: autoLaunch })
@@ -161,8 +164,4 @@ ipcMain.handle("app:get-version", () => {
   return app.getVersion()
 })
 
-ipcMain.on(IPC_CHANNELS.setTheme, (_event, theme: unknown) => {
-  if (theme !== "light" && theme !== "dark") return
-  currentBrandTheme = theme
-  applyBrandTheme(theme, mainWindow, tray)
-})
+nativeTheme.on("updated", syncSystemBrandTheme)
