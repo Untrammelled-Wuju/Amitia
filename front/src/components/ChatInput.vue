@@ -609,8 +609,7 @@ defineExpose({ focus, setText, clear: clearText })
   min-width: 0;
   flex: 1;
   gap: 6px;
-  min-height: 52px;
-  padding: 8px 9px;
+  padding: 3px 9px;
   border: 1px solid var(--ac-color-border);
   border-radius: 18px;
   background: var(--ac-color-surface);
