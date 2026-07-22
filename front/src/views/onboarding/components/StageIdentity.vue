@@ -34,7 +34,7 @@
             </div>
           </div>
 
-          <div v-if="!isAvatarStep" class="ob-identity-answer" ref="identityAnswerRef">
+          <div v-show="!isAvatarStep" class="ob-identity-answer" ref="identityAnswerRef">
             <textarea
               v-model="inputValue"
               rows="1"
@@ -45,7 +45,7 @@
             <button @click="handleSend" :disabled="!inputValue.trim()">↑</button>
           </div>
 
-          <div v-if="!isAvatarStep" class="ob-identity-quick-choices" ref="identityQuickRef" :class="{ show: quickChoices.length > 0 }">
+          <div v-show="!isAvatarStep" class="ob-identity-quick-choices" ref="identityQuickRef" :class="{ show: quickChoices.length > 0 }">
             <button
               v-for="choice in quickChoices"
               :key="choice"
@@ -54,7 +54,7 @@
             >{{ choice }}</button>
           </div>
 
-          <div v-if="isAvatarStep" class="ob-identity-avatar-area" ref="identityAvatarRef">
+          <div v-show="isAvatarStep" class="ob-identity-avatar-area" ref="identityAvatarRef">
             <div class="ob-identity-avatar-circle" :class="{ 'has-image': avatarPreviewUrl }" @click="triggerFileInput">
               <img v-if="avatarPreviewUrl" :src="avatarPreviewUrl" alt="角色头像预览" />
               <span v-else class="ob-identity-avatar-placeholder">+</span>
@@ -212,15 +212,8 @@ function scheduleSync() {
 
 function onTransitionEnter(_el: Element) {
   nextTick(() => {
-    resizeObserver?.disconnect()
-    if (!props.isAvatarStep) {
-      const elements = [identityLedgerRef.value, identityAnswerRef.value, identityQuickRef.value, identityPromptRef.value]
-      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
-    }
-    if (props.isAvatarStep) {
-      const elements = [identityLedgerRef.value, identityPromptRef.value, identityAvatarRef.value]
-      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
-    }
+    const elements = [identityLedgerRef.value, identityAnswerRef.value, identityQuickRef.value, identityPromptRef.value, identityAvatarRef.value]
+    elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
     syncBottomAlignment()
   })
 }
@@ -232,7 +225,7 @@ onMounted(() => {
   scheduleSync()
   window.addEventListener("resize", scheduleSync, { passive: true })
 
-  const elements = [identitySceneRef.value, identityLedgerRef.value, identityAnswerRef.value, identityQuickRef.value, identityPromptRef.value]
+  const elements = [identitySceneRef.value, identityLedgerRef.value, identityAnswerRef.value, identityQuickRef.value, identityPromptRef.value, identityAvatarRef.value]
   resizeObserver = new ResizeObserver(scheduleSync)
   elements.filter(Boolean).forEach((el) => resizeObserver!.observe(el!))
 })

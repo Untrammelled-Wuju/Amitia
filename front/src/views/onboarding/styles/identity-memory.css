@@ -411,7 +411,7 @@
 .onboarding-world .ob-identity-avatar-area {
   position: absolute;
   left: calc(50% - 130px + clamp(280px, var(--stage7-core-size), 320px) * 0.5);
-  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage8-shift) * 1.333 + var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px) + 28px + 68px);
+  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage8-shift) * 1.333 + var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -523,7 +523,7 @@
 
 
 .onboarding-world[data-stage-current="7"] .ob-identity-avatar-area {
-  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage7-shift) * 1.333 + var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px) + 28px + 68px);
+  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage7-shift) * 1.333 + var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
 }
 
 .onboarding-world[data-stage-current="7"][data-identity-state="exiting"] .ob-identity-avatar-area,
@@ -538,7 +538,7 @@
 .onboarding-world[data-stage-current="8"] .ob-memory-avatar-area {
   position: absolute;
   left: calc(50% - 130px + clamp(280px, var(--stage8-core-size), 320px) * 0.5);
-  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage8-shift) * 1.333 + var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px) + 28px + 68px);
+  top: calc(37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage8-shift) * 1.333 + var(--stage8-core-size) * 0.5 - clamp(26px, 4.5vh, 48px));
   display: flex;
   flex-direction: column;
   align-items: flex-start;

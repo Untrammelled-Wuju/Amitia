@@ -34,7 +34,7 @@
             </div>
           </div>
 
-          <div v-if="!isMemoryAvatarStep" class="ob-identity-answer" ref="memoryAnswerRef">
+          <div v-show="!isMemoryAvatarStep" class="ob-identity-answer" ref="memoryAnswerRef">
             <textarea
               v-model="inputValue"
               rows="1"
@@ -44,7 +44,7 @@
             <button @click="handleSend" :disabled="!inputValue.trim()">↑</button>
           </div>
 
-          <div v-if="!isMemoryAvatarStep" class="ob-identity-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 }">
+          <div v-show="!isMemoryAvatarStep" class="ob-identity-quick-choices" ref="memoryQuickRef" :class="{ show: quickChoices.length > 0 }">
             <button
               v-for="choice in quickChoices"
               :key="choice"
@@ -53,7 +53,7 @@
             >{{ choice }}</button>
           </div>
 
-          <div v-if="isMemoryAvatarStep" class="ob-identity-avatar-area ob-memory-avatar-area" ref="memoryAvatarRef">
+          <div v-show="isMemoryAvatarStep" class="ob-identity-avatar-area ob-memory-avatar-area" ref="memoryAvatarRef">
             <div class="ob-identity-avatar-circle" :class="{ 'has-image': memoryAvatarPreviewUrl }" @click="triggerFileInput">
               <img v-if="memoryAvatarPreviewUrl" :src="memoryAvatarPreviewUrl" alt="用户头像预览" />
               <span v-else class="ob-identity-avatar-placeholder">+</span>
@@ -210,15 +210,8 @@ function scheduleSync() {
 
 function onTransitionEnter(_el: Element) {
   nextTick(() => {
-    resizeObserver?.disconnect()
-    if (!props.isMemoryAvatarStep) {
-      const elements = [memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value]
-      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
-    }
-    if (props.isMemoryAvatarStep) {
-      const elements = [memoryLedgerRef.value, memoryPromptRef.value, memoryAvatarRef.value]
-      elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
-    }
+    const elements = [memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value, memoryAvatarRef.value]
+    elements.filter(Boolean).forEach((e) => resizeObserver!.observe(e!))
     syncBottomAlignment()
   })
 }
@@ -231,7 +224,7 @@ onMounted(() => {
   scheduleSync()
   window.addEventListener("resize", scheduleSync, { passive: true })
 
-  const elements = [memorySceneRef.value, memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value]
+  const elements = [memorySceneRef.value, memoryLedgerRef.value, memoryAnswerRef.value, memoryQuickRef.value, memoryPromptRef.value, memoryAvatarRef.value]
   resizeObserver = new ResizeObserver(scheduleSync)
   elements.filter(Boolean).forEach((el) => resizeObserver!.observe(el!))
 })
