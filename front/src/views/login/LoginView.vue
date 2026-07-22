@@ -120,15 +120,13 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-:root {
-  color-scheme: dark;
-}
+
 
 .login-shell {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: var(--tp-page);
   display: grid;
   place-items: center;
 }
@@ -138,11 +136,8 @@ async function handleLogin() {
   width: 100%;
   height: 100%;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background:
-    radial-gradient(circle at 50% 45%, rgba(200, 121, 91, 0.08), transparent 26%),
-    radial-gradient(circle at 12% 14%, rgba(181, 154, 120, 0.05), transparent 24%),
-    linear-gradient(145deg, #000 0%, #000 54%, #000 100%);
-  color: #f3f0ea;
+  background: var(--tp-page);
+  color: var(--tp-text);
   overflow: hidden;
 }
 
@@ -311,7 +306,7 @@ async function handleLogin() {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #e09a7d;
+  background: var(--tp-primary-hover);
   box-shadow: 0 0 16px rgba(224, 154, 125, 0.52);
 }
 
@@ -359,11 +354,11 @@ async function handleLogin() {
 .login-panel {
   width: min(380px, 34vw);
   padding: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--tp-border);
   border-radius: 24px;
-  background: rgba(23, 22, 21, 0.7);
+  background: var(--tp-panel);
   backdrop-filter: blur(18px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--tp-shadow-float);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -378,7 +373,7 @@ async function handleLogin() {
 }
 
 .login-desc {
-  color: #a49f97;
+  color: var(--tp-text-secondary);
   font-size: 12px;
   line-height: 1.65;
   margin-bottom: 22px;
@@ -390,7 +385,7 @@ async function handleLogin() {
   justify-content: center;
   gap: 8px;
   padding: 32px 0;
-  color: #a49f97;
+  color: var(--tp-text-secondary);
   font-size: 12px;
 }
 
@@ -418,7 +413,7 @@ async function handleLogin() {
 .login-input-label {
   display: grid;
   gap: 7px;
-  color: #a49f97;
+  color: var(--tp-text-secondary);
   font-size: 11px;
 }
 
@@ -426,29 +421,29 @@ async function handleLogin() {
   width: 100%;
   height: 44px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--tp-border);
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #f3f0ea;
+  background: var(--tp-control);
+  color: var(--tp-text);
   outline: none;
 }
 
 .login-input-label input:focus {
-  border-color: rgba(200, 121, 91, 0.56);
+  border-color: var(--tp-primary-ring);
 }
 
 .login-input-label input:hover {
-  border-color: rgba(200, 121, 91, 0.28);
+  border-color: var(--tp-primary-border);
 }
 
 .login-input-label input::placeholder {
-  color: #68635d;
+  color: var(--tp-text-muted);
 }
 
 .login-error {
   min-height: 18px;
   margin-top: 10px;
-  color: #cb7d75;
+  color: var(--tp-danger);
   font-size: 11px;
 }
 
@@ -459,19 +454,19 @@ async function handleLogin() {
   margin-top: 6px;
   height: 40px;
   padding: 0 56px;
-  border: 1px solid #c8795b;
+  border: 1px solid var(--tp-primary);
   border-radius: 12px;
-  background: #c8795b;
-  color: #fff;
+  background: var(--tp-primary);
+  color: var(--tp-text-on-primary);
   font-size: 13px;
   font-weight: 590;
   cursor: pointer;
-  box-shadow: 0 14px 40px rgba(200, 121, 91, 0.14);
+  box-shadow: 0 14px 40px var(--tp-primary-soft);
   transition: background 0.2s ease;
 }
 
 .login-action:hover {
-  background: #e09a7d;
+  background: var(--tp-primary-hover);
 }
 
 .login-action:disabled {
@@ -498,6 +493,49 @@ async function handleLogin() {
   .login-panel-wrapper {
     bottom: 6%;
   }
+}
+</style>
+
+<style>
+html[data-theme="light"] .star {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+html[data-theme="light"] .orbit {
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme="light"] .orbit::after {
+  background: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .core-halo {
+  opacity: 0.65;
+}
+
+html[data-theme="light"] .core-symbol {
+  filter: drop-shadow(0 0 14px rgba(0, 0, 0, 0.06));
+}
+
+html[data-theme="light"] .sigil-loop {
+  color: rgba(60, 52, 44, 0.32);
+  box-shadow: 0 0 22px rgba(0, 0, 0, 0.025) inset;
+}
+
+html[data-theme="light"] .sigil-center {
+  border-color: rgba(160, 110, 60, 0.5);
+  background: radial-gradient(circle at 35% 35%, rgba(160, 110, 60, 0.16), rgba(155, 100, 45, 0.04));
+  box-shadow: 0 0 26px rgba(160, 110, 60, 0.12);
+}
+
+html[data-theme="light"] .login-world::before {
+  mix-blend-mode: overlay;
+  opacity: 0.12;
+}
+
+html[data-theme="light"] .core-caption {
+  color: var(--tp-text-muted);
 }
 </style>
 
