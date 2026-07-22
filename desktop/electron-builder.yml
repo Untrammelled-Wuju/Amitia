@@ -10,6 +10,10 @@ files:
 extraResources:
   - from: resources/core
     to: core
+    filter:
+      - "**/*"
+      - "!qdrant/storage"
+      - "!qdrant/storage/**/*"
   - from: resources/bridge
     to: bridge
   - from: resources/migrations

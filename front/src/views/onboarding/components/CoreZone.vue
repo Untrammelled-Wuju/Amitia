@@ -1,11 +1,18 @@
 <template>
   <div class="core-zone" ref="coreZoneRef">
+    <div class="core-halo"></div>
+    <div class="orbit o1"></div>
+    <div class="orbit o2"></div>
+    <div class="orbit o3"></div>
     <div class="pulse" ref="pulseRef"></div>
     <div class="core-symbol" aria-hidden="true">
       <span class="sigil-loop loop-a"></span>
       <span class="sigil-loop loop-b"></span>
       <span class="sigil-loop loop-c"></span>
       <span class="sigil-center"></span>
+      <span class="sigil-node node-a"></span>
+      <span class="sigil-node node-b"></span>
+      <span class="sigil-node node-c"></span>
     </div>
     <div class="core-caption">{{ caption }}</div>
   </div>
