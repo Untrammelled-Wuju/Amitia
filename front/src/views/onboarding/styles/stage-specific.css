@@ -40,11 +40,6 @@
   transition: background 0.3s ease, transform 0.35s var(--ob-ease), opacity 0.3s ease;
 }
 
-
-
-
-}
-
 .onboarding-world .ob-path-choice.selected {
   background: rgba(200, 121, 91, 0.075);
 }
@@ -888,13 +883,6 @@
   pointer-events: none !important;
 }
 
-.onboarding-world .ob-setup-stage-inner .ob-boot-title,
-
-@media (max-width: 1180px), (max-height: 720px) {
-}
-
-@media (max-width: 720px), (max-height: 550px) {
-}
 
 /* 模型页面响应式布局 */
 .onboarding-world[data-layout-mode="compact"] .ob-model-page-heading {

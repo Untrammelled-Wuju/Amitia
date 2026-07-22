@@ -8,6 +8,12 @@ import { IPC_CHANNELS } from "../shared/ipc"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
+let latestUpdateMenu: (() => Promise<void>) | null = null
+
+export function refreshTrayMenu() {
+  latestUpdateMenu?.()
+}
+
 export function createAppTray(
   win: BrowserWindow,
   getConfig: () => DeploymentModeConfig,
@@ -48,6 +54,7 @@ export function createAppTray(
   win.on("show", () => { void updateMenu() })
   win.on("hide", () => { void updateMenu() })
   void updateMenu()
+  latestUpdateMenu = updateMenu
   return { tray, refreshMenu: updateMenu }
 }
 

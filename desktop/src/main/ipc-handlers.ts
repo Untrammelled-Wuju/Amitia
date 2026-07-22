@@ -6,12 +6,12 @@ import { IPC_CHANNELS } from "../shared/ipc"
 import type { DeploymentModeConfig } from "../shared/types"
 import { ConfigStore } from "./config-store"
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager"
+import { refreshTrayMenu } from "./tray"
 
 export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
   onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void,
-  onAutoLaunchChanged?: () => void,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getEnvironment, () => ({
     platform: process.platform,
@@ -40,7 +40,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.setAutoLaunch, async (_event, enabled: boolean) => {
     await configStore.setAutoLaunch(enabled)
     app.setLoginItemSettings({ openAtLogin: enabled })
-    onAutoLaunchChanged?.()
+    refreshTrayMenu()
     return enabled
   })
   ipcMain.handle(IPC_CHANNELS.openLogsDirectory, async () => {

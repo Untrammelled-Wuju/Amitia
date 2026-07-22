@@ -76,8 +76,6 @@ async function enterMainApp(): Promise<void> {
   const runtimeManager = new DesktopRuntimeManager(currentConfig)
   await runtimeManager.initialize()
 
-  const onAutoLaunchChanged = () => { trayRefreshMenu?.() }
-
   registerIpcHandlers(configStore, runtimeManager, (config) => {
     if (currentConfig.mode !== config.mode) {
       if (config.mode === "local") {
@@ -88,7 +86,7 @@ async function enterMainApp(): Promise<void> {
             void waitForCoreReady().then(() => {
               notifyStatus(runtimeManager, "ready")
             }).catch((err) => {
-              console.error("[AmitiaDesktop] 模式切换后核心启动失败:", err)
+              console.error("[AmitiaDesktop] 模式切换后核心启动失败", err)
               notifyStatus(runtimeManager, "failed", String(err))
             })
           } catch (err) {
@@ -102,11 +100,11 @@ async function enterMainApp(): Promise<void> {
       }
     }
     currentConfig = config
-  }, onAutoLaunchChanged)
+  })
 
   const ensureResult = ensureDataAndConfig()
   if (!ensureResult.ok) {
-    console.warn("[AmitiaDesktop] 数据目录初始化存在缺失:", ensureResult.errors.join(", "))
+    console.warn("[AmitiaDesktop] 数据目录初始化存在缺失", ensureResult.errors.join(", "))
   }
 
   if (currentConfig.mode === "local") {
@@ -128,7 +126,6 @@ async function enterMainApp(): Promise<void> {
   mainWindow = createMainWindow()
   const trayResult = createAppTray(mainWindow, () => currentConfig, configStore)
   tray = trayResult.tray
-  trayRefreshMenu = trayResult.refreshMenu
 
   const autoLaunch = await configStore.getAutoLaunch()
   app.setLoginItemSettings({ openAtLogin: autoLaunch })
