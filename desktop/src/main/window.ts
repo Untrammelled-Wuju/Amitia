@@ -50,7 +50,7 @@ export function createMainWindow(): BrowserWindow {
     void win.loadURL(devServerURL)
     win.webContents.openDevTools({ mode: "detach" })
   } else {
-    void win.loadFile(resolve(currentDir, "../renderer/index.html"))
+    void win.loadFile(resolve(currentDir, "../renderer/index.html"), { hash: "/" })
   }
 
   return win

@@ -1,7 +1,8 @@
 ﻿// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createRouter, createWebHistory } from "vue-router"
+import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
 import { apiClient } from "../ui-index"
+import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
 
 const TOKEN_KEY = "ai-companion-token"
 
@@ -13,10 +14,8 @@ function isLoggedIn(): boolean {
   return !!getToken()
 }
 
-const PUBLIC_PATHS = ["/login", "/setup", "/setup-wizard", "/onboarding", "/privacy", "/usage-boundary"]
-
 const router = createRouter({
-  history: createWebHistory(),
+  history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
   routes: [
     { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },{ path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
     { path: "/setup", name: "setup", component: () => import("../views/setup-admin/SetupAdminView.vue") },
@@ -99,16 +98,17 @@ const router = createRouter({
     { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
     { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
     { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
+    { path: "/:pathMatch(.*)*", redirect: "/chat" },
   ],
 })
 
 router.beforeEach(async (to, _from, next) => {
   const token = getToken()
-  const PUBLIC_PATHS = ["/login", "/setup", "/setup-wizard", "/onboarding", "/privacy", "/usage-boundary"]
+  const PUBLIC_PATHS = ["/login", "/setup", "/onboarding", "/privacy", "/usage-boundary"]
   const isPublic = PUBLIC_PATHS.includes(to.path)
 
   if (isPublic) {
-    if (token && (to.path === "/login" || to.path === "/setup" || to.path === "/setup-wizard")) {
+    if (token && (to.path === "/login" || to.path === "/setup")) {
       return next("/chat")
     }
     return next()
@@ -119,14 +119,6 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (!token) {
-    try {
-      const setupRes = await apiClient.get("/api/setup/status")
-      const setupData = setupRes.data?.data || setupRes.data
-      if (!setupData?.completed) {
-        return next("/setup-wizard")
-      }
-    } catch {}
-
     try {
       const res = await apiClient.get("/api/onboarding/status")
       const onboardingData = res.data?.data || res.data

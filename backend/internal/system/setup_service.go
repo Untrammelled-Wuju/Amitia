@@ -3,7 +3,7 @@
 package system
 
 func (s *service) SetupStatus() map[string]interface{} {
-	completed := s.getAppSetting("setup_completed") == "true"
+	completed := s.getAppSetting("setup_completed") == "true" || s.getAppSetting("onboarding_completed") == "true"
 	step := s.getAppSetting("setup_step")
 	return map[string]interface{}{"completed": completed, "currentStep": step, "steps": []interface{}{}}
 }
@@ -18,12 +18,14 @@ func (s *service) SetupChecks() map[string]interface{} {
 
 func (s *service) SetupFinish() map[string]interface{} {
 	s.setAppSetting("setup_completed", "true")
+	s.setAppSetting("onboarding_completed", "true")
 	s.setAppSetting("setup_step", "done")
 	return map[string]interface{}{"finished": true}
 }
 
 func (s *service) SetupReset() map[string]interface{} {
 	s.setAppSetting("setup_completed", "false")
+	s.setAppSetting("onboarding_completed", "false")
 	s.setAppSetting("setup_step", "")
 	return map[string]interface{}{"reset": true}
 }
@@ -34,16 +36,20 @@ func (s *service) SetupStep(step string) map[string]interface{} {
 }
 
 func (s *service) OnboardingStatus() map[string]interface{} {
-	completed := s.getAppSetting("onboarding_completed") == "true"
+	completed := s.getAppSetting("onboarding_completed") == "true" || s.getAppSetting("setup_completed") == "true"
 	return map[string]interface{}{"completed": completed, "steps": []interface{}{}}
 }
 
 func (s *service) OnboardingComplete() map[string]interface{} {
 	s.setAppSetting("onboarding_completed", "true")
+	s.setAppSetting("setup_completed", "true")
+	s.setAppSetting("setup_step", "done")
 	return map[string]interface{}{"completed": true}
 }
 
 func (s *service) OnboardingReset() map[string]interface{} {
 	s.setAppSetting("onboarding_completed", "false")
+	s.setAppSetting("setup_completed", "false")
+	s.setAppSetting("setup_step", "")
 	return map[string]interface{}{"reset": true}
 }
