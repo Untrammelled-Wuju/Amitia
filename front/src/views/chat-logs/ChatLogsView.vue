@@ -6,10 +6,6 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="logs-page">
     <h2 class="page-title">聊天记录</h2>
 
-    <el-alert type="info" :closable="true" show-icon style="margin-bottom:14px">
-      <template #title>聊天记录保存在你自己的设备或服务器上，你可随时删除。导出文件可能包含隐私信息，请妥善保管。</template>
-    </el-alert>
-
     <div class="logs-layout">
       <ConversationListPanel
         :convs="convs"
@@ -248,7 +244,7 @@ onMounted(() => { fetchConvs(); loadCharacters() })
 <style scoped>
 .logs-page { padding: 0; }
 .page-title { font-size: 24px; font-weight: 600; margin: 0 0 14px 0; color: var(--ac-color-text); }
-.logs-layout { display: flex; gap: 0; height: calc(100vh - 200px); min-height: 400px; border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-md); overflow: hidden; }
+.logs-layout { display: flex; gap: 0; height: calc(100vh - 184px); min-height: 400px; border: 1px solid var(--ac-color-border-light); border-radius: var(--ac-radius-md); overflow: hidden; }
 .msg-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; padding: 12px; }
 .msg-detail.empty { align-items: center; justify-content: center; }
 .detail-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--ac-color-border-light); flex-shrink: 0; }
