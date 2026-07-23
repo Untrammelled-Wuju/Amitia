@@ -1,7 +1,7 @@
 <template>
   <main class="session-page" v-loading="loading">
     <ExtensionPageHeader
-      :title="draft?.metadata.name || '扩展工坊会话'"
+      :title="draft?.metadata.name || '技能制作会话'"
       :description="session?.requirement"
     >
       <template #actions

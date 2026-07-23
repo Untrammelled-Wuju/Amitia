@@ -7,6 +7,7 @@ import {
   Opportunity,
   Setting,
   Share,
+  MagicStick,
 } from "@element-plus/icons-vue";
 
 export type AppNavItem = {
@@ -40,6 +41,12 @@ export const desktopNavGroups: AppNavGroup[] = [
         label: "概览",
         icon: Odometer,
         match: ["/dashboard/data", "/dashboard/run"],
+      },
+      {
+        key: "creativeWorkshop",
+        to: "/creative-workshop",
+        label: "创意工坊",
+        icon: MagicStick,
       },
     ],
   },
@@ -92,11 +99,12 @@ const extraTitles = [
   { path: "/runtime-mode", label: "运行模式" },
   { path: "/runtime-debug", label: "运行时调试" },
   { path: "/user-settings", label: "用户信息" },
+  { path: "/creative-workshop", label: "创意工坊" },
   { path: "/emotes", label: "表情包管理" },
   { path: "/extensions/mcp", label: "MCP 服务" },
   { path: "/extensions/skills", label: "技能管理" },
   { path: "/extensions/plugins", label: "插件管理" },
-  { path: "/extensions/workshop", label: "扩展工坊" },
+  { path: "/extensions/workshop", label: "技能制作" },
   { path: "/extensions/runs", label: "技能执行记录" },
   { path: "/extensions", label: "扩展中心" },
 ];

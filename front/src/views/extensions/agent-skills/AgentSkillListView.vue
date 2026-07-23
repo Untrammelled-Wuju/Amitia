@@ -141,7 +141,34 @@
       <el-steps :active="preview ? 1 : 0" finish-status="success" simple
         ><el-step title="选择来源" /><el-step title="检查并确认"
       /></el-steps>
-      <div v-if="!preview" class="source-grid">
+      
+      <div class="scope-row">
+        <el-segmented
+          v-model="installScope"
+          :options="scopeOptions"
+          aria-label="安装作用域"
+        />
+        <div v-if="installScope === 'character'" class="character-field">
+          <label for="agent-character-select">导入角色</label>
+          <el-select
+            id="agent-character-select"
+            v-model="selectedCharacterId"
+            filterable
+            :loading="characterLoading"
+            placeholder="请选择角色"
+            no-data-text="暂无可用角色"
+            aria-label="导入角色"
+          >
+            <el-option
+              v-for="ch in characters"
+              :key="String(ch.id)"
+              :label="ch.name"
+              :value="String(ch.id)"
+            />
+          </el-select>
+          <span v-if="characterLoadError" class="field-error" role="alert">{{ characterLoadError }}</span>
+        </div>
+      </div><div v-if="!preview" class="source-grid">
         <button class="source-card" type="button" @click="zipInput?.click()">
           <el-icon><Files /></el-icon><strong>选择 ZIP</strong
           ><span>适用于 Web 和桌面端</span>
@@ -187,12 +214,21 @@
         />
         <el-form label-position="top"
           ><el-form-item label="安装作用域"
-            ><el-radio-group v-model="installScope"
-              ><el-radio-button value="global">用户全局</el-radio-button
-              ><el-radio-button value="character"
-                >当前角色</el-radio-button
-              ></el-radio-group
-            ></el-form-item
+            ><el-segmented
+              v-model="installScope"
+              :options="scopeOptions"
+              aria-label="安装作用域"
+            /></el-form-item
+          ><el-form-item v-if="installScope === 'character'" label="选择角色">
+            <el-select v-model="selectedCharacterId" placeholder="当前活跃角色" clearable style="width: 100%">
+              <el-option
+                v-for="ch in characters"
+                :key="String(ch.id)"
+                :label="ch.name"
+                :value="String(ch.id)"
+              />
+            </el-select>
+          ></el-form-item
           ></el-form
         >
         <section
@@ -447,6 +483,7 @@ import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
 import {
   fetchAgentSkill,
   fetchAgentSkills,
+  fetchCharacterOptions,
   installAgentSkill,
   installAgentSkillMCPDependencies,
   previewAgentSkillDirectory,
@@ -472,12 +509,20 @@ const loading = ref(false),
 const errorText = ref(""),
   changing = ref(""),
   characterId = ref("");
+const characters = ref<Array<{ id: string | number; name: string }>>([]);
+const selectedCharacterId = ref("");
 const zipInput = ref<HTMLInputElement>(),
   directoryInput = ref<HTMLInputElement>();
 const items = ref<AgentSkillDefinition[]>([]),
   preview = ref<AgentSkillPreview | null>(null),
   detail = ref<AgentSkillDetail | null>(null);
 const installScope = ref<AgentSkillScope>("global");
+const scopeOptions = [
+  { label: "全局", value: "global" },
+  { label: "角色", value: "character" },
+];
+const characterLoading = ref(false);
+const characterLoadError = ref("");
 const dependencyPlan = ref<any>(null),
   dependencyLoading = ref(false),
   confirmHTTP = ref(false),
@@ -598,7 +643,7 @@ async function loadDependencyPlan() {
   try {
     dependencyPlan.value = await previewAgentSkillMCPDependencies(
       preview.value.definition.extensionId,
-      installScope.value === "character" ? characterId.value : "",
+      installScope.value === "character" ? (selectedCharacterId.value || characterId.value) : "",
       preview.value.definition.mcpDependencies,
     );
   } catch (error: any) {
@@ -622,7 +667,7 @@ async function install() {
     installed = await installAgentSkill(
       preview.value.previewId,
       installScope.value,
-      characterId.value,
+      selectedCharacterId.value || characterId.value,
     );
     if (dependencyPlan.value) {
       dependencyPlan.value.agentSkillExtensionId = installed.extensionId;
@@ -724,6 +769,22 @@ function statusType(status: AgentSkillCompatibilityStatus) {
       : "warning";
 }
 onMounted(load);
+watch(importDialog, async (open) => {
+  if (open) {
+    characters.value = [];
+    selectedCharacterId.value = "";
+    characterLoading.value = true;
+    characterLoadError.value = "";
+    try {
+      characters.value = await fetchCharacterOptions();
+      if (!characters.value.length) characterLoadError.value = "暂无可用角色，请先创建角色";
+    } catch {
+      characterLoadError.value = "角色列表加载失败，请稍后重试";
+    } finally {
+      characterLoading.value = false;
+    }
+  }
+});
 watch(installScope, () => {
   if (preview.value?.definition.mcpDependencies?.length)
     void loadDependencyPlan();
@@ -918,5 +979,30 @@ code {
   .source-card {
     transition: none;
   }
+}
+.scope-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.character-field {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 320px);
+  align-items: center;
+  gap: 8px 12px;
+}
+.character-field label {
+  color: var(--console-text-muted);
+  font-size: 13px;
+}
+.character-field .el-select {
+  width: 100%;
+}
+.field-error {
+  grid-column: 2;
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 </style>

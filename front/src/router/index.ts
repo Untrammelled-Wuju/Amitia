@@ -35,6 +35,8 @@ const router = createRouter({
     { path: "/extensions/workshop", name: "extensionWorkshop", component: () => import("@/views/extensions/workshop/WorkshopListView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/workshop/:id", name: "extensionWorkshopSession", component: () => import("@/views/extensions/workshop/WorkshopSessionView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/runs", name: "extensionRuns", component: () => import("@/views/extensions/RunHistoryView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetCreationView.vue"), meta: { requiresAuth: true } },
     { path: "/qq", name: "qq", component: () => import("@/views/qq-connect/QqConnectView.vue"), meta: { requiresAuth: true } },
     { path: "/wechat", name: "wechat", component: () => import("@/views/wechat-connect/WechatConnectView.vue"), meta: { requiresAuth: true } },
     {
@@ -58,6 +60,7 @@ const router = createRouter({
             { path: "voice", name: "settingsModelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
             { path: "embedding", name: "settingsModelEmbedding", component: () => import("@/views/model-config/VectorModelConfigView.vue") },
             { path: "vision", name: "settingsModelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
+            { path: "imagegen", name: "settingsModelImageGen", component: () => import("@/views/model-config/ImageGenModelConfigView.vue"), meta: { requiresAuth: true } },
           ],
         },
         { path: "safety", name: "settingsSafety", component: () => import("@/views/safety-settings/SafetySettingsView.vue"), meta: { requiresAuth: true } },

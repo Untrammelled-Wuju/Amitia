@@ -1,7 +1,7 @@
 <template>
   <main class="workshop-page">
     <ExtensionPageHeader
-      title="扩展工坊"
+      title="技能制作"
       description="用自然语言创建声明式工作流或纯指令 Agent Skill。工坊不会生成脚本。"
     >
       <template #actions
@@ -22,7 +22,7 @@
         v-loading="loading"
         :data="sessions"
         row-key="id"
-        empty-text="还没有工坊会话"
+        empty-text="还没有制作记录"
       >
         <el-table-column label="Skill 需求" min-width="320">
           <template #default="{ row }">

@@ -1,8 +1,12 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <main class="center-page">
     <header>
-      <h1>扩展中心</h1>
-      <p>集中管理 Skill、Plugin、工坊草案与执行记录。</p>
+      <h1>创意工坊</h1>
+      <p>在这里创作、调试和优化你的 AI 角色与内容</p>
     </header>
     <section class="entry-grid">
       <router-link
@@ -22,51 +26,19 @@
   </main>
 </template>
 <script setup lang="ts">
-import {
-  MagicStick,
-  Operation,
-  SetUp,
-  Tickets,
-  ArrowRight,
-  DocumentChecked,
-  Connection,
-} from "@element-plus/icons-vue";
+import { Box, ArrowRight, Star } from "@element-plus/icons-vue";
 const entries = [
   {
-    to: "/extensions/mcp",
-    title: "MCP 服务",
-    description: "连接外部服务，管理工具、资源、提示词与角色权限",
-    icon: Connection,
+    to: "/extensions/packages?from=creative-workshop",
+    title: "本地扩展包",
+    description: "统一导入、导出、升级、比较、回滚与卸载",
+    icon: Box,
   },
   {
-    to: "/extensions/agent-skills",
-    title: "Agent Skills",
-    description: "导入和管理通用 SKILL.md 指令包及其文件",
-    icon: DocumentChecked,
-  },
-  {
-    to: "/extensions/plugins",
-    title: "插件",
-    description: "管理受宿主管控的 Plugin Runtime",
-    icon: SetUp,
-  },
-  {
-    to: "/extensions/workshop",
-    title: "技能制作",
-    description: "从自然语言创建安全的声明式 Skill",
-    icon: MagicStick,
-  },
-  {
-    to: "/extensions/skills",
-    title: "技能管理",
-    description: "统一管理模型可调用技能、启用状态与工具适配",
-    icon: Operation,
-  },
-  {
-    to: "/extensions/runs",
-    title: "执行记录",
-    description: "检查 Skill 运行结果、耗时和标准错误",
-    icon: Tickets,
+    to: "/creative-workshop/pet",
+    title: "桌宠制作",
+    description: "创建和定制你的桌面陪伴角色",
+    icon: Star,
   },
 ];
 </script>

@@ -63,6 +63,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span>扩展中心</span>
       </el-menu-item>
 
+      <el-menu-item index="/creative-workshop">
+        <el-icon><MagicStick /></el-icon>
+        <span>创意工坊</span>
+      </el-menu-item>
+
       <div class="menu-divider"></div>
 
       <el-menu-item index="/settings">
@@ -103,6 +108,7 @@ import {
   ChatDotSquare,
   Setting,
   Grid,
+  MagicStick,
 } from "@element-plus/icons-vue";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
@@ -141,6 +147,9 @@ const activeIndex = computed(() => {
     return path;
   }
   if (path.startsWith("/extensions")) {
+    if (route.query.from === "creative-workshop") {
+      return "/creative-workshop";
+    }
     return "/extensions";
   }
   return path;
