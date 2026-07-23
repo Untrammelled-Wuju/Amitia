@@ -3,131 +3,171 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="wechat-page">
-    <h2 class="page-title">微信连接</h2>
-    <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
-      <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-      <p style="margin-top:8px">检测连接状态...</p>
-    </div>
-    <template v-if="pageReady">
-    <el-alert type="info" :closable="false" show-icon style="margin-bottom: 14px">
-      <template #title>
-        扫码连接你的微信
-      </template>
-    </el-alert>
+  <div class="wechat-page" :class="{ embedded, compact }">
+    <h2 v-if="!embedded" class="page-title">微信连接</h2>
 
-    <template v-if="!isConnected">
-      <el-card shadow="never" class="section-card">
-        <template #header><span class="card-header-title">扫码连接</span></template>
-
-        <div class="login-layout">
-          <div class="login-steps">
-            <div class="qr-step-row">
-              <div class="qr-step-num" :class="{ active: qrStep >= 0 }">1</div>
-              <div class="qr-step-body">
-                <span class="qr-step-title">生成二维码</span>
-                <el-button
-                  size="small"
-                  type="primary"
-                  :loading="qrLoading"
-                  @click="startLogin"
-                  :disabled="qrLoading || isConnected"
-                >获取二维码</el-button>
+    <template v-if="compact">
+      <div class="wechat-compact-form">
+        <h3 class="wechat-compact-title">微信连接</h3>
+        <div v-if="!pageReady" class="wechat-compact-loading">
+          <el-icon class="is-loading" :size="18"><Loading /></el-icon>
+          <span>检测中...</span>
+        </div>
+        <template v-else>
+          <div v-if="!isConnected" class="wechat-compact-start">
+            <div class="wechat-compact-qr-wrap">
+              <img v-if="qrCodeUrl" :src="qrCodeUrl" class="wechat-compact-qr" alt="QR" />
+              <div v-else class="wechat-compact-qr-placeholder">
+                <el-icon :size="28"><Picture /></el-icon>
+                <span>点击下方按钮获取</span>
               </div>
+              <p class="wechat-compact-scan-hint">
+                <el-icon class="is-loading" v-if="scanning"><Loading /></el-icon>
+                {{ scanning ? '等待扫码中...' : qrCodeUrl ? '请用微信扫码' : '' }}
+              </p>
+              <p class="wechat-compact-login-err" v-if="loginError">{{ loginError }}</p>
             </div>
-            <div class="qr-step-row">
-              <div class="qr-step-num" :class="{ active: qrStep >= 1 }">2</div>
-              <div class="qr-step-body">
-                <span class="qr-step-title">用微信扫码</span>
-                <span v-if="qrStep >= 1 && !isConnected" class="qr-status">
-                  <el-icon class="is-loading" v-if="scanning"><Loading /></el-icon>
-                  {{ scanning ? '等待扫码中...' : '请扫描二维码' }}
-                </span>
-              </div>
-            </div>
-            <div class="qr-step-row">
-              <div class="qr-step-num" :class="{ active: isConnected }">3</div>
-              <div class="qr-step-body">
-                <span class="qr-step-title">确认连接</span>
-                <span v-if="isConnected" class="qr-done">
-                  <el-icon><CircleCheckFilled /></el-icon> 已连接
-                </span>
-              </div>
+            <el-button type="primary" size="small" :loading="qrLoading" @click="startLogin" style="width:100%">
+              获取二维码
+            </el-button>
+            <div v-if="qrCodeUrl" class="wechat-compact-extra-actions">
+              <el-button size="small" :loading="qrLoading" @click="startLogin">刷新二维码</el-button>
+              <el-button size="small" type="success" :loading="reconnecting" @click="reconnectBot">重新连接</el-button>
             </div>
           </div>
-
-          <div class="login-qr">
-            <div class="qr-frame" v-if="qrCodeUrl">
-              <img :src="qrCodeUrl" alt="二维码" />
-            </div>
-            <div class="qr-frame qr-empty" v-else>
-              <el-icon :size="36"><Picture /></el-icon>
-              <span>点击按钮获取二维码</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="qr-tip" v-if="qrCodeUrl">
-          打开微信，扫描二维码确认连接。
-        </div>
-      </el-card>
-    </template>
-
-    <el-alert v-if="!isConnected" type="warning" :closable="false" show-icon style="margin-bottom: 14px">
-      <template #title>主动推送须知</template>
-      扫码连接后，添加微信好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
-    </el-alert>
-
-    <template v-if="isConnected">
-      <el-card shadow="never" class="section-card">
-        <template #header>
-          <div class="card-header-row">
-            <span class="card-header-title">连接状态</span>
-            <div class="header-actions">
-              <el-button size="small" @click="refreshStatus" :loading="loading">刷新</el-button>
-              <el-button size="small" type="success" @click="reconnectBot" :loading="reconnecting">重新连接</el-button>
-              <el-button size="small" type="warning" @click="handleRescan" :loading="qrLoading">
-                重新添加机器人
-              </el-button>
-            </div>
+          <div v-if="isConnected" class="wechat-compact-connected">
+            <span class="wechat-compact-dot" /> 已连接
+            <button class="wechat-compact-disconnect" @click="handleRescan" :disabled="qrLoading">重新扫码</button>
           </div>
         </template>
-        <div class="status-main">
-          <div class="status-row">
-            <div class="status-indicator ok"></div>
-            <span class="status-label">已连接</span>
-          </div>
-          <div class="status-detail-grid" v-if="detail">
-            <div class="sd-item">
-              <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ detail?.messageCount ?? 0 }}</span>
-            </div>
-            <div class="sd-item">
-              <span class="sd-label">回复数</span>
-              <span class="sd-value">{{ detail?.replyCount ?? 0 }}</span>
-            </div>
-            <div class="sd-item" v-if="detail.accountId">
-              <span class="sd-label">账号</span>
-              <span class="sd-value">{{ detail.accountId.slice(0, 12) }}...</span>
-            </div>
-            <div class="sd-item">
-              <span class="sd-label">模式</span>
-              <span class="sd-value">OpenClaw</span>
-            </div>
-            <div class="sd-item" v-if="detail.startedAt">
-              <span class="sd-label">连接时间</span>
-              <span class="sd-value">{{ formatStartedAt(detail.startedAt) }}</span>
-            </div>
-          </div>
-        </div>
-      </el-card>
+      </div>
     </template>
 
-    <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 14px">
-      <template #title>主动推送须知</template>
-      添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
-    </el-alert>
-  </template>
+    <template v-if="!compact">
+      <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
+        <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+        <p style="margin-top:8px">检测连接状态...</p>
+      </div>
+      <template v-if="pageReady">
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 14px">
+          <template #title>
+            扫码连接你的微信
+          </template>
+        </el-alert>
+
+        <template v-if="!isConnected">
+          <el-card shadow="never" class="section-card">
+            <template #header><span class="card-header-title">扫码连接</span></template>
+
+            <div class="login-layout">
+              <div class="login-steps">
+                <div class="qr-step-row">
+                  <div class="qr-step-num" :class="{ active: qrStep >= 0 }">1</div>
+                  <div class="qr-step-body">
+                    <span class="qr-step-title">生成二维码</span>
+                    <el-button
+                      size="small"
+                      type="primary"
+                      :loading="qrLoading"
+                      @click="startLogin"
+                      :disabled="qrLoading || isConnected"
+                    >获取二维码</el-button>
+                  </div>
+                </div>
+                <div class="qr-step-row">
+                  <div class="qr-step-num" :class="{ active: qrStep >= 1 }">2</div>
+                  <div class="qr-step-body">
+                    <span class="qr-step-title">用微信扫码</span>
+                    <span v-if="qrStep >= 1 && !isConnected" class="qr-status">
+                      <el-icon class="is-loading" v-if="scanning"><Loading /></el-icon>
+                      {{ scanning ? '等待扫码中...' : '请扫描二维码' }}
+                    </span>
+                  </div>
+                </div>
+                <div class="qr-step-row">
+                  <div class="qr-step-num" :class="{ active: isConnected }">3</div>
+                  <div class="qr-step-body">
+                    <span class="qr-step-title">确认连接</span>
+                    <span v-if="isConnected" class="qr-done">
+                      <el-icon><CircleCheckFilled /></el-icon> 已连接
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="login-qr">
+                <div class="qr-frame" v-if="qrCodeUrl">
+                  <img :src="qrCodeUrl" alt="二维码" />
+                </div>
+                <div class="qr-frame qr-empty" v-else>
+                  <el-icon :size="36"><Picture /></el-icon>
+                  <span>点击按钮获取二维码</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="qr-tip" v-if="qrCodeUrl">
+              打开微信，扫描二维码确认连接。
+            </div>
+          </el-card>
+        </template>
+
+        <el-alert v-if="!isConnected && !compact" type="warning" :closable="false" show-icon style="margin-bottom: 14px">
+          <template #title>主动推送须知</template>
+          扫码连接后，添加微信好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+        </el-alert>
+
+        <template v-if="isConnected">
+          <el-card shadow="never" class="section-card">
+            <template #header>
+              <div class="card-header-row">
+                <span class="card-header-title">连接状态</span>
+                <div class="header-actions">
+                  <el-button size="small" @click="refreshStatus" :loading="loading">刷新</el-button>
+                  <el-button size="small" type="success" @click="reconnectBot" :loading="reconnecting">重新连接</el-button>
+                  <el-button size="small" type="warning" @click="handleRescan" :loading="qrLoading">
+                    重新添加机器人
+                  </el-button>
+                </div>
+              </div>
+            </template>
+            <div class="status-main">
+              <div class="status-row">
+                <div class="status-indicator ok"></div>
+                <span class="status-label">已连接</span>
+              </div>
+              <div class="status-detail-grid" v-if="detail">
+                <div class="sd-item">
+                  <span class="sd-label">消息数</span>
+                  <span class="sd-value">{{ detail?.messageCount ?? 0 }}</span>
+                </div>
+                <div class="sd-item">
+                  <span class="sd-label">回复数</span>
+                  <span class="sd-value">{{ detail?.replyCount ?? 0 }}</span>
+                </div>
+                <div class="sd-item" v-if="detail.accountId">
+                  <span class="sd-label">账号</span>
+                  <span class="sd-value">{{ detail.accountId.slice(0, 12) }}...</span>
+                </div>
+                <div class="sd-item">
+                  <span class="sd-label">模式</span>
+                  <span class="sd-value">OpenClaw</span>
+                </div>
+                <div class="sd-item" v-if="detail.startedAt">
+                  <span class="sd-label">连接时间</span>
+                  <span class="sd-value">{{ formatStartedAt(detail.startedAt) }}</span>
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </template>
+
+        <el-alert v-if="isConnected && !compact" type="warning" :closable="false" show-icon style="margin-bottom: 14px">
+          <template #title>主动推送须知</template>
+          添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
+        </el-alert>
+      </template>
+    </template>
   </div>
 </template>
 
@@ -138,6 +178,15 @@ import { CircleCheckFilled, Picture, Loading, InfoFilled, Warning } from "@eleme
 import { useApi } from "../../composables/useApi"
 
 const { get, post } = useApi()
+
+withDefaults(defineProps<{ embedded?: boolean; compact?: boolean }>(), {
+  embedded: false,
+  compact: false,
+})
+
+const emit = defineEmits<{
+  connectionChanged: [connected: boolean]
+}>()
 
 const refreshHealth = inject<() => Promise<void>>("refreshHealth")
 
@@ -171,6 +220,7 @@ async function refreshStatus() {
   try {
     const resp = await get<any>("/api/wechat/status")
     detail.value = resp?.data || resp
+    emit("connectionChanged", detail.value?.status === "connected")
   } catch (err: any) {
     if (err?.message && !err.message.includes("404")) {
       console.warn("WeChat status fetch failed:", err.message)
@@ -323,6 +373,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null }
+  stopPolling()
 })
 </script>
 
@@ -405,4 +456,19 @@ onUnmounted(() => {
 .sd-item { padding: 8px 12px; background: var(--ac-color-bg-secondary); border-radius: 4px; }
 .sd-label { font-size: 11px; color: var(--ac-color-text-muted); display: block; }
 .sd-value { font-size: 14px; font-weight: 600; color: var(--ac-color-text); }
+
+.wechat-compact-form { padding: 0; }
+.wechat-compact-title { font-size: 14px; font-weight: 650; color: var(--ac-color-text); margin: 0 0 12px; }
+.wechat-compact-loading { display: flex; align-items: center; gap: 8px; color: var(--ac-color-text-muted); font-size: 12px; padding: 20px 0; justify-content: center; }
+.wechat-compact-start { padding: 4px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.wechat-compact-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.wechat-compact-qr { width: 160px; height: 160px; border: 1px solid rgba(200, 121, 91, 0.18); border-radius: 6px; object-fit: contain; background: #fff; }
+.wechat-compact-qr-placeholder { width: 160px; height: 160px; border: 1px dashed rgba(200, 121, 91, 0.25); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ac-color-text-muted); font-size: 10px; }
+.wechat-compact-scan-hint { font-size: 11px; color: var(--ac-color-text-secondary); display: flex; align-items: center; gap: 4px; margin: 0; min-height: 16px; }
+.wechat-compact-login-err { font-size: 11px; color: var(--ac-color-danger); margin: 0; }
+.wechat-compact-extra-actions { display: flex; gap: 8px; padding-top: 4px; }
+.wechat-compact-connected { display: flex; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--ac-color-border); font-size: 12px; color: var(--ac-color-success); }
+.wechat-compact-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ac-color-success); flex-shrink: 0; }
+.wechat-compact-disconnect { margin-left: auto; font-size: 10px; padding: 2px 8px; border: 1px solid var(--ac-color-border); border-radius: 4px; background: transparent; color: var(--ac-color-text-muted); cursor: pointer; }
+.wechat-compact-disconnect:hover { color: var(--ac-color-danger); border-color: var(--ac-color-danger); }
 </style>

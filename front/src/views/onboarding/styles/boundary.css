@@ -106,3 +106,121 @@
   font-size: 13px;
   line-height: 1.75;
 }
+
+.ob-channel-dialog {
+  --el-dialog-bg-color: var(--ac-color-surface);
+  border: 1px solid var(--ac-color-border);
+  border-radius: 12px;
+}
+
+.ob-channel-dialog .el-dialog__header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--ac-color-border);
+}
+
+.ob-channel-dialog .el-dialog__title {
+  color: var(--ac-color-text);
+  font-weight: 650;
+}
+
+.ob-channel-dialog .el-dialog__body {
+  max-height: min(68vh, 660px);
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.ob-channel-dialog .el-dialog__footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--ac-color-border);
+}
+
+.ob-channel-loading {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  color: var(--ac-color-text-muted);
+}
+
+.ob-channel-dialog-action {
+  min-width: 112px;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--ac-color-primary);
+  border-radius: 8px;
+  color: var(--ac-color-text-on-primary);
+  background: var(--ac-color-primary);
+  cursor: pointer;
+}
+
+.ob-channel-dialog-action:focus-visible {
+  outline: 3px solid var(--ac-color-primary-light);
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  .ob-channel-dialog .el-dialog__header,
+  .ob-channel-dialog .el-dialog__body,
+  .ob-channel-dialog .el-dialog__footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+.ob-qq-compact-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.ob-qq-compact-panel {
+  position: fixed;
+  z-index: 100;
+  left: 66%;
+  top: 47%;
+  transform: translate(-50%, -50%);
+  width: min(280px, 30vw, 34vh);
+  max-height: calc(min(620px, 64vw, 70vh) - 24px);
+  padding: 18px 18px 16px;
+  background: rgba(18, 17, 16, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(200, 121, 91, 0.22);
+  border-radius: 12px;
+  box-shadow: 0 0 60px rgba(200, 121, 91, 0.08), 0 8px 40px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.ob-qq-compact-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.ob-qq-compact-close:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--ac-color-text);
+}
+
+.ob-permission-node.p-qq.qq-active {
+  border-color: rgba(200, 121, 91, 0.5);
+  background: var(--ob-accent-soft);
+  color: var(--ob-text);
+}
+
+@media (max-width: 560px) {
+  .ob-qq-compact-panel {
+    left: 50%;
+    top: 50%;
+    width: calc(100vw - 40px);
+    max-height: calc(100vh - 40px);
+  }
+}

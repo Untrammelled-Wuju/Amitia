@@ -3,107 +3,137 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="wechat-page">
-    <h2 class="page-title">QQ 连接</h2>
-    <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
-      <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-      <p style="margin-top:8px">检测连接状态...</p>
-    </div>
-    <template v-if="pageReady">
+  <div class="wechat-page" :class="{ embedded, compact }">
+    <h2 v-if="!embedded" class="page-title">QQ 连接</h2>
 
-    <template v-if="qqOnline">
-      <el-alert type="success" :closable="false" show-icon style="margin-bottom: 14px">
-        <template #title>QQ Bot 已成功连接</template>
-      </el-alert>
-      <el-card shadow="never" class="section-card">
-        <template #header>
-          <div class="card-header-row">
-            <span class="card-header-title">连接状态</span>
-            <div class="header-actions">
-              <el-button size="small" @click="refreshStatus" :loading="loading">刷新</el-button>
-              <el-button size="small" type="success" @click="doReconnect" :loading="reconnecting">重新连接</el-button>
-              <el-button size="small" type="danger" @click="doDisconnect" :loading="disconnecting">断开</el-button>
-            </div>
-          </div>
-        </template>
-        <div class="status-main">
-          <div class="status-row">
-            <div class="status-indicator ok"></div>
-            <span class="status-label">已连接</span>
-          </div>
-          <div class="status-detail-grid">
-            <div class="sd-item">
-              <span class="sd-label">消息数</span>
-              <span class="sd-value">{{ statusMessageCount }}</span>
-            </div>
-            <div class="sd-item">
-              <span class="sd-label">回复数</span>
-              <span class="sd-value">{{ statusReplyCount }}</span>
-            </div>
-            <div class="sd-item" v-if="accountId">
-              <span class="sd-label">Bot ID</span>
-              <span class="sd-value">{{ accountId.slice(0, 12) }}...</span>
-            </div>
-            <div class="sd-item">
-              <span class="sd-label">协议</span>
-              <span class="sd-value">QQBot (WebSocket)</span>
-            </div>
-            <div class="sd-item" v-if="startedAt">
-              <span class="sd-label">连接时间</span>
-              <span class="sd-value">{{ formatStartedAt(startedAt) }}</span>
-            </div>
-          </div>
-        </div>
-      </el-card>
-
-      <el-alert type="warning" :closable="false" show-icon style="margin-top: 12px">
-        <template #title>主动推送须知</template>
-        添加QQ好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
-      </el-alert>
+    <template v-if="compact">
+      <div class="qq-compact-form">
+        <h3 class="qq-compact-title">QQBot 配置</h3>
+        <el-form label-width="70px" @submit.prevent="doConnect">
+          <el-form-item label="AppID">
+            <el-input v-model="appId" placeholder="输入Bot AppID" />
+          </el-form-item>
+          <el-form-item label="Token">
+            <el-input v-model="token" type="password" placeholder="输入Bot Token" show-password />
+          </el-form-item>
+          <el-form-item label="沙箱模式">
+            <el-switch v-model="sandbox" />
+            <span class="sandbox-label">{{ sandbox ? "沙箱环境" : "正式环境" }}</span>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="connecting" @click="doConnect">连接</el-button>
+            <span v-if="loginStatus === 'connecting'" class="connecting-text">
+              <el-icon class="is-loading"><Loading /></el-icon> 连接中...
+            </span>
+          </el-form-item>
+        </el-form>
+      </div>
+      <div class="qq-compact-help">
+        <h4 class="qq-compact-help-title">使用说明</h4>
+        <p>1. 前往 <a href="https://q.qq.com/" target="_blank">QQ开放平台</a> 创建机器人</p>
+        <p>2. 获取 AppID 和 Token</p>
+        <p>3. 填入上方表单，点击"连接"</p>
+        <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
+      </div>
+      <div v-if="qqOnline" class="qq-compact-connected">
+        <span class="qq-compact-dot" /> 已连接
+        <button class="qq-compact-disconnect" @click="doDisconnect" :disabled="disconnecting">断开</button>
+      </div>
     </template>
 
-    <template v-if="!qqOnline">
-      <el-card shadow="never" class="section-card">
-        <template #header><span class="card-header-title">QQBot 配置</span></template>
-        <div class="pwd-login">
-          <el-form label-width="70px" @submit.prevent="doConnect">
-            <el-form-item label="AppID">
-              <el-input v-model="appId" placeholder="输入Bot AppID" style="width:100%;max-width:400px" />
-            </el-form-item>
-            <el-form-item label="Token">
-              <el-input v-model="token" type="password" placeholder="输入Bot Token" style="width:100%;max-width:400px" show-password />
-            </el-form-item>
-            <el-form-item label="沙箱模式">
-              <el-switch v-model="sandbox" />
-        <span style="margin-left:8px;font-size:12px;color:var(--ac-color-text-muted)">{{ sandbox ? "沙箱环境" : "正式环境" }}</span>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="connecting" @click="doConnect">连接</el-button>
-        <span v-if="loginStatus === 'connecting'" style="margin-left:10px;font-size:12px;color:var(--ac-color-warning)">
-                <el-icon class="is-loading"><Loading /></el-icon> 连接中...
-              </span>
+    <template v-if="!compact">
+      <div v-if="!pageReady" style="padding:40px 0;color:var(--ac-color-text-muted)">
+        <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+        <p style="margin-top:8px">检测连接状态...</p>
+      </div>
+      <template v-if="pageReady">
 
-            </el-form-item>
-          </el-form>
-        </div>
-      </el-card>
+      <template v-if="qqOnline">
+        <el-alert type="success" :closable="false" show-icon style="margin-bottom: 14px">
+          <template #title>QQ Bot 已成功连接</template>
+        </el-alert>
+        <el-card shadow="never" class="section-card">
+          <template #header>
+            <div class="card-header-row">
+              <span class="card-header-title">连接状态</span>
+              <div class="header-actions">
+                <el-button size="small" @click="refreshStatus" :loading="loading">刷新</el-button>
+                <el-button size="small" type="success" @click="doReconnect" :loading="reconnecting">重新连接</el-button>
+                <el-button size="small" type="danger" @click="doDisconnect" :loading="disconnecting">断开</el-button>
+              </div>
+            </div>
+          </template>
+          <div class="status-main">
+            <div class="status-row">
+              <div class="status-indicator ok"></div>
+              <span class="status-label">已连接</span>
+            </div>
+            <div class="status-detail-grid">
+              <div class="sd-item">
+                <span class="sd-label">消息数</span>
+                <span class="sd-value">{{ statusMessageCount }}</span>
+              </div>
+              <div class="sd-item">
+                <span class="sd-label">回复数</span>
+                <span class="sd-value">{{ statusReplyCount }}</span>
+              </div>
+              <div class="sd-item" v-if="accountId">
+                <span class="sd-label">Bot ID</span>
+                <span class="sd-value">{{ accountId.slice(0, 12) }}...</span>
+              </div>
+              <div class="sd-item">
+                <span class="sd-label">协议</span>
+                <span class="sd-value">QQBot (WebSocket)</span>
+              </div>
+              <div class="sd-item" v-if="startedAt">
+                <span class="sd-label">连接时间</span>
+                <span class="sd-value">{{ formatStartedAt(startedAt) }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
 
-      <el-card shadow="never" class="section-card" style="margin-top:12px">
-        <template #header><span class="card-header-title">使用说明</span></template>
-      <div style="font-size:13px;color:var(--ac-color-text-secondary);line-height:1.8">
-        <p>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:var(--ac-color-primary)">QQ开放平台</a> 创建机器人</p>
-          <p>2. 获取 AppID 和 Token</p>
-          <p>3. 填入上方表单，点击"连接"</p>
-          <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
-        </div>
-      </el-card>
+      </template>
 
-      <el-alert type="warning" :closable="false" show-icon style="margin-top: 12px">
-        <template #title>主动推送须知</template>
-        连接成功后，添加QQ好友必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
-      </el-alert>
-    </template>
+      <template v-if="!qqOnline">
+        <el-card shadow="never" class="section-card">
+          <template #header><span class="card-header-title">QQBot 配置</span></template>
+          <div class="pwd-login">
+            <el-form label-width="70px" @submit.prevent="doConnect">
+              <el-form-item label="AppID">
+                <el-input v-model="appId" placeholder="输入Bot AppID" style="width:100%;max-width:400px" />
+              </el-form-item>
+              <el-form-item label="Token">
+                <el-input v-model="token" type="password" placeholder="输入Bot Token" style="width:100%;max-width:400px" show-password />
+              </el-form-item>
+              <el-form-item label="沙箱模式">
+                <el-switch v-model="sandbox" />
+          <span style="margin-left:8px;font-size:12px;color:var(--ac-color-text-muted)">{{ sandbox ? "沙箱环境" : "正式环境" }}</span>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="connecting" @click="doConnect">连接</el-button>
+          <span v-if="loginStatus === 'connecting'" style="margin-left:10px;font-size:12px;color:var(--ac-color-warning)">
+                  <el-icon class="is-loading"><Loading /></el-icon> 连接中...
+                </span>
 
+              </el-form-item>
+            </el-form>
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="section-card" style="margin-top:12px">
+          <template #header><span class="card-header-title">使用说明</span></template>
+        <div style="font-size:13px;color:var(--ac-color-text-secondary);line-height:1.8">
+          <p>1. 前往 <a href="https://q.qq.com/" target="_blank" style="color:var(--ac-color-primary)">QQ开放平台</a> 创建机器人</p>
+            <p>2. 获取 AppID 和 Token</p>
+            <p>3. 填入上方表单，点击"连接"</p>
+            <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
+          </div>
+        </el-card>
+
+      </template>
+
+      </template>
     </template>
   </div>
 </template>
@@ -117,6 +147,15 @@ import { getQQApiBaseURL } from "../../runtime/runtime-adapter"
 import { useApi } from "../../composables/useApi"
 
 const { get } = useApi()
+
+const props = withDefaults(defineProps<{ embedded?: boolean; compact?: boolean }>(), {
+  embedded: false,
+  compact: false,
+})
+
+const emit = defineEmits<{
+  connectionChanged: [connected: boolean]
+}>()
 
 const refreshHealth = inject<() => Promise<void>>("refreshHealth")
 
@@ -148,6 +187,12 @@ function stopConnectPoll() {
   if (connectPollTimer) { clearInterval(connectPollTimer); connectPollTimer = null }
 }
 
+async function ensureApiBaseUrl() {
+  if (!qqApiBaseUrl.value) {
+    qqApiBaseUrl.value = await getQQApiBaseURL()
+  }
+}
+
 function formatStartedAt(iso: string): string {
   if (!iso) return ""
   try {
@@ -161,6 +206,7 @@ function formatStartedAt(iso: string): string {
 
 async function doConnect() {
   if (!appId.value || !token.value) return
+  await ensureApiBaseUrl()
   connecting.value = true
   loginStatus.value = ""
   try {
@@ -197,6 +243,7 @@ async function doConnect() {
 }
 
 async function doReconnect() {
+  await ensureApiBaseUrl()
   reconnecting.value = true
   try {
     const cfg = await axios.get(qqApiBaseUrl.value + "/config")
@@ -239,6 +286,7 @@ async function doReconnect() {
 }
 
 async function doDisconnect() {
+  await ensureApiBaseUrl()
   disconnecting.value = true
   try {
     await axios.post(qqApiBaseUrl.value + "/disconnect")
@@ -246,21 +294,24 @@ async function doDisconnect() {
     accountId.value = null
     startedAt.value = ""
     loginStatus.value = ""
+    emit("connectionChanged", false)
     refreshHealth?.()
   } catch (e: any) {}
   disconnecting.value = false
 }
 
 async function refreshStatus() {
+  await ensureApiBaseUrl()
   try {
     const res = await axios.get(qqApiBaseUrl.value + "/status")
     const data = res.data?.data || res.data
     qqOnline.value = !!data?.qqOnline
+    emit("connectionChanged", qqOnline.value)
     accountId.value = data?.accountId || null
     loginStatus.value = data?.status || ""
     startedAt.value = data?.startedAt || ""
     statusMessageCount.value = data?.messageCount ?? 0
-		statusReplyCount.value = data?.replyCount ?? 0
+    statusReplyCount.value = data?.replyCount ?? 0
 
     if (qqOnline.value && loginStatus.value !== "connecting") {
       if (loginStatus.value === "connecting") {
@@ -290,15 +341,18 @@ async function refreshStatus() {
     }
   } catch {
     qqOnline.value = false
+    emit("connectionChanged", false)
   } finally {
     pageReady.value = true
   }
 }
 
 onMounted(async () => {
-  qqApiBaseUrl.value = await getQQApiBaseURL()
-  await refreshStatus()
-  pollTimer = setInterval(refreshStatus, 3000)
+  if (!props.compact) {
+    qqApiBaseUrl.value = await getQQApiBaseURL()
+    await refreshStatus()
+    pollTimer = setInterval(refreshStatus, 3000)
+  }
 })
 
 onUnmounted(() => {
@@ -324,4 +378,22 @@ onUnmounted(() => {
 .sd-label { font-size: 11px; color: var(--ac-color-text-muted); display: block; }
 .sd-value { font-size: 14px; font-weight: 600; color: var(--ac-color-text); }
 .pwd-login { padding: 8px 0; }
+
+.qq-compact-form { padding: 0; }
+.qq-compact-title { font-size: 14px; font-weight: 650; color: var(--ac-color-text); margin: 0 0 12px; }
+.qq-compact-form :deep(.el-form-item) { margin-bottom: 7px; }
+.qq-compact-form :deep(.el-form-item__label) { font-size: 12px; color: var(--ac-color-text-secondary); }
+.qq-compact-form :deep(.el-input__inner) { height: 30px; font-size: 13px; }
+.sandbox-label { margin-left: 8px; font-size: 11px; color: var(--ac-color-text-muted); }
+.connecting-text { margin-left: 8px; font-size: 11px; color: var(--ac-color-warning); }
+
+.qq-compact-help { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ac-color-border); }
+.qq-compact-help-title { font-size: 12px; font-weight: 600; color: var(--ac-color-text); margin: 0 0 4px; }
+.qq-compact-help p { font-size: 11px; color: var(--ac-color-text-secondary); line-height: 1.6; margin: 0; }
+.qq-compact-help a { color: var(--ac-color-primary); }
+
+.qq-compact-connected { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ac-color-border); font-size: 12px; color: var(--ac-color-success); }
+.qq-compact-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ac-color-success); flex-shrink: 0; }
+.qq-compact-disconnect { margin-left: auto; font-size: 10px; padding: 2px 8px; border: 1px solid var(--ac-color-border); border-radius: 4px; background: transparent; color: var(--ac-color-text-muted); cursor: pointer; }
+.qq-compact-disconnect:hover { color: var(--ac-color-danger); border-color: var(--ac-color-danger); }
 </style>
