@@ -28,8 +28,9 @@
 
       <div v-else-if="state === 'downloading'" class="update-downloading">
         <el-progress :percentage="downloadPercent" :stroke-width="8" :show-text="true" />
-        <div class="download-speed" v-if="downloadSpeed">
-          {{ downloadSpeed }}
+        <div class="download-progress-meta" aria-live="polite">
+          <span class="download-size">{{ downloadSizeText }}</span>
+          <span v-if="downloadSpeed" class="download-speed">{{ downloadSpeed }}</span>
         </div>
       </div>
 
@@ -75,10 +76,17 @@ const currentVersion = ref("")
 const latestVersion = ref("")
 const releaseNotes = ref("")
 const downloadPercent = ref(0)
+const downloadedBytes = ref(0)
+const totalBytes = ref(0)
 const downloadSpeed = ref("")
 const errorMessage = ref("")
 
 const visible = computed(() => state.value !== "idle")
+const downloadSizeText = computed(() => {
+  const downloaded = formatFileSize(downloadedBytes.value)
+  const total = totalBytes.value > 0 ? formatFileSize(totalBytes.value) : "--"
+  return `${downloaded} / ${total}`
+})
 
 const title = computed(() => {
   switch (state.value) {
@@ -100,6 +108,8 @@ async function handleStartDownload() {
   if (!window.amitiaDesktop) return
   state.value = "downloading"
   downloadPercent.value = 0
+  downloadedBytes.value = 0
+  totalBytes.value = 0
   downloadSpeed.value = ""
   await window.amitiaDesktop.startDownload()
 }
@@ -128,7 +138,15 @@ async function handleRestartLater() {
   await window.amitiaDesktop.restartLater()
 }
 
-function formatBytes(bytes: number): string {
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function formatSpeed(bytes: number): string {
   if (bytes < 1024) return `${bytes} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
@@ -146,10 +164,14 @@ onMounted(() => {
   })
 
   api.onUpdateDownloadProgress((_event, data: any) => {
-    downloadPercent.value = Math.round(data.percent || 0)
-    if (data.bytesPerSecond) {
-      downloadSpeed.value = formatBytes(data.bytesPerSecond)
-    }
+    const percent = Number(data?.percent)
+    const transferred = Number(data?.transferred)
+    const total = Number(data?.total)
+    const bytesPerSecond = Number(data?.bytesPerSecond)
+    downloadPercent.value = Number.isFinite(percent) ? Math.min(100, Math.max(0, Math.round(percent))) : 0
+    downloadedBytes.value = Number.isFinite(transferred) && transferred > 0 ? transferred : 0
+    totalBytes.value = Number.isFinite(total) && total > 0 ? total : 0
+    downloadSpeed.value = Number.isFinite(bytesPerSecond) && bytesPerSecond > 0 ? formatSpeed(bytesPerSecond) : ""
   })
 
   api.onUpdateDownloaded((_event, data: any) => {
@@ -252,9 +274,14 @@ onMounted(() => {
   width: 100%;
 }
 
-.download-speed {
+.download-progress-meta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 12px;
   color: var(--console-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .update-downloaded {

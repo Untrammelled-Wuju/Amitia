@@ -32,7 +32,7 @@ asar: true
 compression: normal
 win:
   signExecutable: false
-  icon: ../Logo/amitia-icon-light.ico
+  icon: ../Logo/amitia-character-dark-white-256.ico
   target:
     - target: nsis
       arch:
@@ -52,7 +52,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.2
+  releaseName: Amitia 26.1.3
   releaseNotesFile: release-notes.md
 
 publish:

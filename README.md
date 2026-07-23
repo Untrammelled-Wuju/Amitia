@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="front/public/icons/icon-192.png" alt="Amitia" width="96" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Logo/amitia-character-dark-white-1024.png" />
+    <source media="(prefers-color-scheme: light)" srcset="Logo/amitia-character-light-black-1024.png" />
+    <img src="Logo/amitia-character-light-black-1024.png" alt="Amitia" width="128" />
+  </picture>
 </p>
 
 <h1 align="center">Amitia · 阿米提亚</h1>
