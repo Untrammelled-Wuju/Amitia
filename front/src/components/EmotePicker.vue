@@ -1,42 +1,123 @@
 <template>
-  <el-popover v-model:visible="visible" placement="top-start" :width="360" trigger="click" :teleported="false" @show="loadAll">
-    <template #reference><el-button circle size="small" :icon="PictureRounded" :disabled="disabled" title="发送表情" aria-label="发送表情" /></template>
+  <el-popover
+    v-model:visible="visible"
+    placement="top-start"
+    :width="360"
+    trigger="click"
+    :teleported="false"
+    @show="loadAll"
+  >
+    <template #reference
+      ><el-button
+        circle
+        size="small"
+        :icon="PictureRounded"
+        :disabled="disabled"
+        title="发送表情"
+        aria-label="发送表情"
+    /></template>
     <div class="picker">
-      <div class="picker-head"><el-select v-model="groupId" placeholder="全部表情" clearable @change="loadEmotes"><el-option label="最近使用" value="recent" /><el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" /></el-select><el-input v-model="query" :prefix-icon="Search" clearable placeholder="搜索" @input="debounceLoad" /></div>
+      <div class="picker-head">
+        <el-select
+          v-model="groupId"
+          placeholder="全部表情"
+          clearable
+          @change="loadEmotes"
+          ><el-option label="最近使用" value="recent" /><el-option
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id" /></el-select
+        ><el-input
+          v-model="query"
+          :prefix-icon="Search"
+          clearable
+          placeholder="搜索"
+          @input="debounceLoad"
+        />
+      </div>
       <div v-loading="loading" class="picker-grid">
-        <button v-for="item in emotes" :key="item.id" type="button" :title="item.meaning || item.name" @click="choose(item)">
-          <img :src="assetUrl(item.thumbnailPath)" :alt="item.meaning || item.name" loading="lazy" />
+        <button
+          v-for="item in emotes"
+          :key="item.id"
+          type="button"
+          :title="item.meaning || item.name"
+          @click="choose(item)"
+        >
+          <img
+            :src="assetUrl(item.thumbnailPath)"
+            :alt="item.meaning || item.name"
+            loading="lazy"
+          />
           <span>{{ item.name }}</span>
         </button>
-        <div v-if="!loading && errorText" class="empty is-error"><span>{{ errorText }}</span><el-button link type="primary" @click="loadEmotes">重试</el-button></div>
-        <div v-else-if="!loading && !emotes.length" class="empty">没有可用表情</div>
+        <div v-if="!loading && errorText" class="empty is-error">
+          <span>{{ errorText }}</span
+          ><el-button link type="primary" @click="loadEmotes">重试</el-button>
+        </div>
+        <div v-else-if="!loading && !emotes.length" class="empty">
+          没有可用表情
+        </div>
       </div>
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { PictureRounded, Search } from "@element-plus/icons-vue"
-import { useApi } from "@/composables/useApi"
-import { useAssetUrl } from "@/composables/useAssetUrl"
+import { ref } from "vue";
+import { PictureRounded, Search } from "@element-plus/icons-vue";
+import { useApi } from "@/composables/useApi";
+import { useAssetUrl } from "@/composables/useAssetUrl";
 
-defineProps<{ disabled?: boolean }>()
-const emit = defineEmits<{ select: [emote: any] }>()
-const { get } = useApi()
-const { assetUrl } = useAssetUrl()
-const visible = ref(false)
-const loading = ref(false)
-const groups = ref<any[]>([])
-const emotes = ref<any[]>([])
-const groupId = ref("")
-const query = ref("")
-const errorText = ref("")
-let timer: ReturnType<typeof setTimeout> | undefined
-async function loadAll() { if (!groups.value.length) { try { groups.value = await get<any[]>("/api/emote-groups") } catch { groups.value = [] } } await loadEmotes() }
-async function loadEmotes() { loading.value = true; errorText.value = ""; try { const recent = groupId.value === "recent"; const data = await get<any>("/api/emotes", { groupId: recent ? undefined : groupId.value || undefined, view: recent ? "recent" : undefined, q: query.value, pageSize: 100 }); emotes.value = data.items || [] } catch { emotes.value = []; errorText.value = "表情加载失败" } finally { loading.value = false } }
-function debounceLoad() { clearTimeout(timer); timer = setTimeout(loadEmotes, 200) }
-function choose(item: any) { emit("select", item); visible.value = false }
+defineProps<{ disabled?: boolean }>();
+const emit = defineEmits<{ select: [emote: any] }>();
+const { get } = useApi();
+const { assetUrl } = useAssetUrl();
+const visible = ref(false);
+const loading = ref(false);
+const groups = ref<any[]>([]);
+const emotes = ref<any[]>([]);
+const groupId = ref("");
+const query = ref("");
+const errorText = ref("");
+let timer: ReturnType<typeof setTimeout> | undefined;
+async function loadAll() {
+  if (!groups.value.length) {
+    try {
+      groups.value = await get<any[]>("/api/emote-groups");
+    } catch {
+      groups.value = [];
+    }
+  }
+  await loadEmotes();
+}
+async function loadEmotes() {
+  loading.value = true;
+  errorText.value = "";
+  try {
+    const recent = groupId.value === "recent";
+    const data = await get<any>("/api/emotes", {
+      groupId: recent ? undefined : groupId.value || undefined,
+      view: recent ? "recent" : undefined,
+      q: query.value,
+      pageSize: 100,
+    });
+    emotes.value = data.items || [];
+  } catch {
+    emotes.value = [];
+    errorText.value = "表情加载失败";
+  } finally {
+    loading.value = false;
+  }
+}
+function debounceLoad() {
+  clearTimeout(timer);
+  timer = setTimeout(loadEmotes, 200);
+}
+function choose(item: any) {
+  emit("select", item);
+  visible.value = false;
+}
 </script>
 
 <style scoped>

@@ -4,7 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="char-config-page">
-    <el-alert type="warning" :closable="false" show-icon style="margin-bottom:12px">
+    <el-alert
+      type="warning"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 12px"
+    >
       <template #title>
         安全提示：角色不能声称自己是真人、真实恋人，不能诱导依赖、索要隐私、代替回复微信好友，不能输出成人化、操控式、威胁式或危险内容。
       </template>
@@ -51,8 +56,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                 :loading="testLoading"
                 v-model:msg="testMsg"
                 :char-name="selected?.name || ''"
-              @send="onSendTest"
-            />
+                @send="onSendTest"
+              />
             </template>
           </CharacterEditForm>
         </template>
@@ -64,13 +69,22 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div class="page-actions">
-      <el-button :loading="exportingPack" @click="onExportPack" :disabled="!selected">
+      <el-button
+        :loading="exportingPack"
+        @click="onExportPack"
+        :disabled="!selected"
+      >
         导出角色包
       </el-button>
       <el-button @click="showImportDialog = true">导入角色包</el-button>
     </div>
 
-    <el-dialog v-model="showFullPrompt" title="完整 Prompt" fullscreen destroy-on-close>
+    <el-dialog
+      v-model="showFullPrompt"
+      title="完整 Prompt"
+      fullscreen
+      destroy-on-close
+    >
       <el-input
         v-model="form.characterBase"
         type="textarea"
@@ -79,7 +93,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </el-dialog>
 
-    <el-dialog v-model="showFullBounds" title="完整边界规则" fullscreen destroy-on-close>
+    <el-dialog
+      v-model="showFullBounds"
+      title="完整边界规则"
+      fullscreen
+      destroy-on-close
+    >
       <el-input
         v-model="form.boundaryRules"
         type="textarea"
@@ -111,68 +130,91 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue"
-import { useCharacterConfig } from "./composables/useCharacterConfig"
-import { useCharacterTestChat } from "./composables/useCharacterTestChat"
-import { useCharacterImportExport } from "./composables/useCharacterImportExport"
-import CharacterSidebar from "./components/CharacterSidebar.vue"
-import CharacterEditForm from "./components/CharacterEditForm.vue"
-import CharacterTestChat from "./components/CharacterTestChat.vue"
-import TemplatePickerDialog from "./components/TemplatePickerDialog.vue"
-import ImportPackDialog from "./components/ImportPackDialog.vue"
+import { onMounted } from "vue";
+import { useCharacterConfig } from "./composables/useCharacterConfig";
+import { useCharacterTestChat } from "./composables/useCharacterTestChat";
+import { useCharacterImportExport } from "./composables/useCharacterImportExport";
+import CharacterSidebar from "./components/CharacterSidebar.vue";
+import CharacterEditForm from "./components/CharacterEditForm.vue";
+import CharacterTestChat from "./components/CharacterTestChat.vue";
+import TemplatePickerDialog from "./components/TemplatePickerDialog.vue";
+import ImportPackDialog from "./components/ImportPackDialog.vue";
 
 const {
-  templates, showTemplateDialog, templateLoading,
-  characters, selected, selectedId, activeTab, saving,
-  showFullPrompt, showFullBounds,
-  form, hasOtherActive,
-  fetchTemplates, fetchChars,
-  selectChar, createNew, createFromTemplate,
-  copyChar, saveChar, resetPrompt, resetBounds, delChar,
+  templates,
+  showTemplateDialog,
+  templateLoading,
+  characters,
+  selected,
+  selectedId,
+  activeTab,
+  saving,
+  showFullPrompt,
+  showFullBounds,
+  form,
+  hasOtherActive,
+  fetchTemplates,
+  fetchChars,
+  selectChar,
+  createNew,
+  createFromTemplate,
+  copyChar,
+  saveChar,
+  resetPrompt,
+  resetBounds,
+  delChar,
   selectCharById,
-  avatarUploading, uploadAvatar,
-} = useCharacterConfig()
+  avatarUploading,
+  uploadAvatar,
+} = useCharacterConfig();
+
+const { testMessages, testMsg, testLoading, sendTest, clearTestMessages } =
+  useCharacterTestChat();
 
 const {
-  testMessages, testMsg, testLoading, sendTest, clearTestMessages,
-} = useCharacterTestChat()
-
-const {
-  exportingPack, showImportDialog,
-  importPackName, importPreview, importPreviewing,
-  importConfirmText, importing, packHistory,
-  exportPack, previewImport, confirmImport, loadPackHistory,
+  exportingPack,
+  showImportDialog,
+  importPackName,
+  importPreview,
+  importPreviewing,
+  importConfirmText,
+  importing,
+  packHistory,
+  exportPack,
+  previewImport,
+  confirmImport,
+  loadPackHistory,
   cancelImportPreview,
-} = useCharacterImportExport()
+} = useCharacterImportExport();
 
 function onSelectChar(c: any) {
-  selectChar(c)
-  clearTestMessages()
+  selectChar(c);
+  clearTestMessages();
 }
 
 function onSendTest(text: string) {
-  sendTest(selectedId.value, text)
+  sendTest(selectedId.value, text);
 }
 
 function onExportPack() {
-  exportPack(selectedId.value, selected.value?.name || "")
+  exportPack(selectedId.value, selected.value?.name || "");
 }
 
 async function onUploadAvatar(file: File) {
-  await uploadAvatar(file)
+  await uploadAvatar(file);
 }
 
 async function onConfirmImport() {
-  const d = await confirmImport()
-  if (d?.characterId) selectCharById(d.characterId)
-  if (d) await fetchChars()
+  const d = await confirmImport();
+  if (d?.characterId) selectCharById(d.characterId);
+  if (d) await fetchChars();
 }
 
 onMounted(async () => {
-  await loadPackHistory()
-  await fetchTemplates()
-  await fetchChars()
-})
+  await loadPackHistory();
+  await fetchTemplates();
+  await fetchChars();
+});
 </script>
 
 <style scoped>

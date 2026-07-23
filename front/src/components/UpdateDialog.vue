@@ -27,10 +27,16 @@
       </div>
 
       <div v-else-if="state === 'downloading'" class="update-downloading">
-        <el-progress :percentage="downloadPercent" :stroke-width="8" :show-text="true" />
+        <el-progress
+          :percentage="downloadPercent"
+          :stroke-width="8"
+          :show-text="true"
+        />
         <div class="download-progress-meta" aria-live="polite">
           <span class="download-size">{{ downloadSizeText }}</span>
-          <span v-if="downloadSpeed" class="download-speed">{{ downloadSpeed }}</span>
+          <span v-if="downloadSpeed" class="download-speed">{{
+            downloadSpeed
+          }}</span>
         </div>
       </div>
 
@@ -49,12 +55,18 @@
       <div class="update-dialog-footer">
         <template v-if="state === 'available'">
           <el-button @click="handleSkip">稍后提醒</el-button>
-          <el-button type="default" @click="handleOpenGitee">Gitee 备用下载</el-button>
-          <el-button type="primary" @click="handleStartDownload">立即下载</el-button>
+          <el-button type="default" @click="handleOpenGitee"
+            >Gitee 备用下载</el-button
+          >
+          <el-button type="primary" @click="handleStartDownload"
+            >立即下载</el-button
+          >
         </template>
         <template v-else-if="state === 'downloaded'">
           <el-button @click="handleRestartLater">稍后处理</el-button>
-          <el-button type="primary" @click="handleRestartNow">立即重启</el-button>
+          <el-button type="primary" @click="handleRestartNow"
+            >立即重启</el-button
+          >
         </template>
         <template v-else-if="state === 'error'">
           <el-button @click="handleSkip">关闭</el-button>
@@ -65,129 +77,150 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
-import { Right, CircleCheckFilled, WarningFilled } from "@element-plus/icons-vue"
-import { isDesktopShell } from "@/runtime/runtime-capabilities"
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import {
+  Right,
+  CircleCheckFilled,
+  WarningFilled,
+} from "@element-plus/icons-vue";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
 
-type DialogState = "idle" | "available" | "downloading" | "downloaded" | "error"
+type DialogState =
+  | "idle"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "error";
 
-const state = ref<DialogState>("idle")
-const currentVersion = ref("")
-const latestVersion = ref("")
-const releaseNotes = ref("")
-const downloadPercent = ref(0)
-const downloadedBytes = ref(0)
-const totalBytes = ref(0)
-const downloadSpeed = ref("")
-const errorMessage = ref("")
+const state = ref<DialogState>("idle");
+const currentVersion = ref("");
+const latestVersion = ref("");
+const releaseNotes = ref("");
+const downloadPercent = ref(0);
+const downloadedBytes = ref(0);
+const totalBytes = ref(0);
+const downloadSpeed = ref("");
+const errorMessage = ref("");
 
-const visible = computed(() => state.value !== "idle")
+const visible = computed(() => state.value !== "idle");
 const downloadSizeText = computed(() => {
-  const downloaded = formatFileSize(downloadedBytes.value)
-  const total = totalBytes.value > 0 ? formatFileSize(totalBytes.value) : "--"
-  return `${downloaded} / ${total}`
-})
+  const downloaded = formatFileSize(downloadedBytes.value);
+  const total = totalBytes.value > 0 ? formatFileSize(totalBytes.value) : "--";
+  return `${downloaded} / ${total}`;
+});
 
 const title = computed(() => {
   switch (state.value) {
-    case "available": return "发现新版本"
-    case "downloading": return "正在下载更新"
-    case "downloaded": return "更新已下载"
-    case "error": return "更新失败"
-    default: return ""
+    case "available":
+      return "发现新版本";
+    case "downloading":
+      return "正在下载更新";
+    case "downloaded":
+      return "更新已下载";
+    case "error":
+      return "更新失败";
+    default:
+      return "";
   }
-})
+});
 
 function handleClose() {
   if (state.value === "downloaded" || state.value === "error") {
-    state.value = "idle"
+    state.value = "idle";
   }
 }
 
 async function handleStartDownload() {
-  if (!window.amitiaDesktop) return
-  state.value = "downloading"
-  downloadPercent.value = 0
-  downloadedBytes.value = 0
-  totalBytes.value = 0
-  downloadSpeed.value = ""
-  await window.amitiaDesktop.startDownload()
+  if (!window.amitiaDesktop) return;
+  state.value = "downloading";
+  downloadPercent.value = 0;
+  downloadedBytes.value = 0;
+  totalBytes.value = 0;
+  downloadSpeed.value = "";
+  await window.amitiaDesktop.startDownload();
 }
 
 async function handleSkip() {
-  if (!window.amitiaDesktop) return
-  state.value = "idle"
-  await window.amitiaDesktop.skipVersion()
+  if (!window.amitiaDesktop) return;
+  state.value = "idle";
+  await window.amitiaDesktop.skipVersion();
 }
 
 async function handleOpenGitee() {
-  if (!window.amitiaDesktop) return
-  state.value = "idle"
-  await window.amitiaDesktop.skipVersion()
-  await window.amitiaDesktop.openGiteeRelease()
+  if (!window.amitiaDesktop) return;
+  state.value = "idle";
+  await window.amitiaDesktop.skipVersion();
+  await window.amitiaDesktop.openGiteeRelease();
 }
 
 async function handleRestartNow() {
-  if (!window.amitiaDesktop) return
-  await window.amitiaDesktop.restartNow()
+  if (!window.amitiaDesktop) return;
+  await window.amitiaDesktop.restartNow();
 }
 
 async function handleRestartLater() {
-  if (!window.amitiaDesktop) return
-  state.value = "idle"
-  await window.amitiaDesktop.restartLater()
+  if (!window.amitiaDesktop) return;
+  state.value = "idle";
+  await window.amitiaDesktop.restartLater();
 }
 
 function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  if (bytes < 1024) return `${Math.round(bytes)} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function formatSpeed(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B/s`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
+  if (bytes < 1024) return `${bytes} B/s`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
 }
 
 onMounted(() => {
-  if (!isDesktopShell()) return
-  const api = window.amitiaDesktop!
+  if (!isDesktopShell()) return;
+  const api = window.amitiaDesktop!;
 
   api.onUpdateAvailable((_event, data: any) => {
-    currentVersion.value = data.currentVersion || ""
-    latestVersion.value = data.version || ""
-    releaseNotes.value = data.releaseNotes ? String(data.releaseNotes) : ""
-    state.value = "available"
-  })
+    currentVersion.value = data.currentVersion || "";
+    latestVersion.value = data.version || "";
+    releaseNotes.value = data.releaseNotes ? String(data.releaseNotes) : "";
+    state.value = "available";
+  });
 
   api.onUpdateDownloadProgress((_event, data: any) => {
-    const percent = Number(data?.percent)
-    const transferred = Number(data?.transferred)
-    const total = Number(data?.total)
-    const bytesPerSecond = Number(data?.bytesPerSecond)
-    downloadPercent.value = Number.isFinite(percent) ? Math.min(100, Math.max(0, Math.round(percent))) : 0
-    downloadedBytes.value = Number.isFinite(transferred) && transferred > 0 ? transferred : 0
-    totalBytes.value = Number.isFinite(total) && total > 0 ? total : 0
-    downloadSpeed.value = Number.isFinite(bytesPerSecond) && bytesPerSecond > 0 ? formatSpeed(bytesPerSecond) : ""
-  })
+    const percent = Number(data?.percent);
+    const transferred = Number(data?.transferred);
+    const total = Number(data?.total);
+    const bytesPerSecond = Number(data?.bytesPerSecond);
+    downloadPercent.value = Number.isFinite(percent)
+      ? Math.min(100, Math.max(0, Math.round(percent)))
+      : 0;
+    downloadedBytes.value =
+      Number.isFinite(transferred) && transferred > 0 ? transferred : 0;
+    totalBytes.value = Number.isFinite(total) && total > 0 ? total : 0;
+    downloadSpeed.value =
+      Number.isFinite(bytesPerSecond) && bytesPerSecond > 0
+        ? formatSpeed(bytesPerSecond)
+        : "";
+  });
 
   api.onUpdateDownloaded((_event, data: any) => {
-    latestVersion.value = data.version || latestVersion.value
-    state.value = "downloaded"
-  })
+    latestVersion.value = data.version || latestVersion.value;
+    state.value = "downloaded";
+  });
 
   api.onUpdateError((_event, data: any) => {
-    errorMessage.value = data?.message || "更新过程发生错误"
-    state.value = "error"
-  })
+    errorMessage.value = data?.message || "更新过程发生错误";
+    state.value = "error";
+  });
 
   api.onUpdateNotAvailable(() => {
-    state.value = "idle"
-  })
-})
+    state.value = "idle";
+  });
+});
 </script>
 
 <style scoped>

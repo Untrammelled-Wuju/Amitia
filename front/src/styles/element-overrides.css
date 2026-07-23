@@ -18,7 +18,9 @@
   --el-button-border-color: var(--tp-success);
 }
 
-.el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.is-text):not(.is-link) {
+.el-button:not(.el-button--primary):not(.el-button--success):not(
+    .el-button--warning
+  ):not(.el-button--danger):not(.is-text):not(.is-link) {
   --el-button-bg-color: var(--tp-control);
   --el-button-border-color: var(--tp-border);
   --el-button-text-color: var(--tp-text);
@@ -257,7 +259,8 @@
   background: var(--tp-glass-bg-strong);
   border-color: var(--tp-glass-border);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
   box-shadow: var(--tp-shadow-float);
 }
 
@@ -336,7 +339,9 @@
   border-radius: var(--ac-radius-md);
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .el-dialog,
   .el-drawer,
   .el-dropdown-menu,

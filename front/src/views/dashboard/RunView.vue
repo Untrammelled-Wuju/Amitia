@@ -54,23 +54,38 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { useDashboardData } from "./composables/useDashboardData"
-import StatusOverviewCards from "./components/StatusOverviewCards.vue"
-import RuntimeHealthPanel from "./components/RuntimeHealthPanel.vue"
-import DiagnosticsPanel from "./components/DiagnosticsPanel.vue"
-import RecentErrorsPanel from "./components/RecentErrorsPanel.vue"
-import RecentImportsPanel from "./components/RecentImportsPanel.vue"
+import { useDashboardData } from "./composables/useDashboardData";
+import StatusOverviewCards from "./components/StatusOverviewCards.vue";
+import RuntimeHealthPanel from "./components/RuntimeHealthPanel.vue";
+import DiagnosticsPanel from "./components/DiagnosticsPanel.vue";
+import RecentErrorsPanel from "./components/RecentErrorsPanel.vue";
+import RecentImportsPanel from "./components/RecentImportsPanel.vue";
 
 const {
-  deployClass, deployLabel, modelClass, modelLabel, modelName,
-  wechatClass, wechatLabel, qqClass, qqLabel,
-  runtimeHealth, runtimeHealthLoading,
-  recentErrors, recentImports,
-  diagResult, diagLoading, hasSuggestions, suggestionItems,
-  healthModuleLabel, healthStatusLabel,
+  deployClass,
+  deployLabel,
+  modelClass,
+  modelLabel,
+  modelName,
+  wechatClass,
+  wechatLabel,
+  qqClass,
+  qqLabel,
+  runtimeHealth,
+  runtimeHealthLoading,
+  recentErrors,
+  recentImports,
+  diagResult,
+  diagLoading,
+  hasSuggestions,
+  suggestionItems,
+  healthModuleLabel,
+  healthStatusLabel,
   fmtDateShort,
-  runHealthCheck, fetchRecentErrors, runDiagnostics,
-} = useDashboardData()
+  runHealthCheck,
+  fetchRecentErrors,
+  runDiagnostics,
+} = useDashboardData();
 </script>
 
 <style scoped>
@@ -88,10 +103,18 @@ const {
   gap: 18px;
 }
 
-.panel-service { grid-area: service; }
-.panel-errors { grid-area: errors; }
-.panel-diagnostics { grid-area: diagnostics; }
-.panel-imports { grid-area: imports; }
+.panel-service {
+  grid-area: service;
+}
+.panel-errors {
+  grid-area: errors;
+}
+.panel-diagnostics {
+  grid-area: diagnostics;
+}
+.panel-imports {
+  grid-area: imports;
+}
 
 @media (max-width: 1180px) {
   .dashboard-grid {

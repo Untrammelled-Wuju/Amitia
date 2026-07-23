@@ -1,7 +1,8 @@
 .onboarding-world .ob-stage {
   position: absolute;
   inset: 0;
-  padding: clamp(26px, 4.5vh, 48px) clamp(24px, 5vw, 76px) clamp(88px, 11vh, 118px);
+  padding: clamp(26px, 4.5vh, 48px) clamp(24px, 5vw, 76px)
+    clamp(88px, 11vh, 118px);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -35,7 +36,9 @@
   font-size: 12px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, color 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    color 0.2s ease;
 }
 
 .onboarding-world .ob-back.show {
@@ -202,22 +205,21 @@
 }
 
 .onboarding-world .ob-small-action {
-    min-width: 88px;
-    border: 1px solid rgba(200, 121, 91, 0.38);
-    border-radius: 12px;
-    background: var(--ob-accent-soft);
-    color: var(--ob-accent2);
-    cursor: pointer;
-    padding: 0 14px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 45px;
-    white-space: nowrap;
-    text-align: center;
-  }
+  min-width: 88px;
+  border: 1px solid rgba(200, 121, 91, 0.38);
+  border-radius: 12px;
+  background: var(--ob-accent-soft);
+  color: var(--ob-accent2);
+  cursor: pointer;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 45px;
+  white-space: nowrap;
+  text-align: center;
+}
 
 .onboarding-world .ob-small-action:hover {
   background: rgba(200, 121, 91, 0.2);
 }
-

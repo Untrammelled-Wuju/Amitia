@@ -10,10 +10,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="rw-dot"></span>
         </div>
         <span class="rw-status">{{ statusLabel }}</span>
-        <span class="rw-duration" v-if="callState === 'connected'">{{ formatDuration(callDuration) }}</span>
+        <span class="rw-duration" v-if="callState === 'connected'">{{
+          formatDuration(callDuration)
+        }}</span>
       </div>
       <div class="rw-right">
-        <span class="rw-error" v-if="callState === 'error'" :title="errorMsg">{{ errorMsg }}</span>
+        <span class="rw-error" v-if="callState === 'error'" :title="errorMsg">{{
+          errorMsg
+        }}</span>
         <el-button
           v-if="callState === 'idle' || callState === 'error'"
           type="primary"
@@ -45,69 +49,74 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue"
-import { Phone } from "@element-plus/icons-vue"
-import { ElMessage } from "element-plus"
-import { resolveWebSocketUrl } from "../runtime/runtime-adapter"
+import { ref, computed, watch, onUnmounted } from "vue";
+import { Phone } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { resolveWebSocketUrl } from "../runtime/runtime-adapter";
 
 const props = defineProps<{
-  visible: boolean
-  apiKey: string
-  voiceType: string
-  resourceId: string
-  conversationId: string
-  dialogId?: string
-}>()
+  visible: boolean;
+  apiKey: string;
+  voiceType: string;
+  resourceId: string;
+  conversationId: string;
+  dialogId?: string;
+}>();
 
 const emit = defineEmits<{
-  message: [data: { role: string; text: string }]
-  stateChange: [state: string]
-}>()
+  message: [data: { role: string; text: string }];
+  stateChange: [state: string];
+}>();
 
-type CallState = "idle" | "connecting" | "connected" | "error"
+type CallState = "idle" | "connecting" | "connected" | "error";
 
-const callState = ref<CallState>("idle")
-const callDuration = ref(0)
-const errorMsg = ref("")
-let ws: WebSocket | null = null
-let audioCtx: AudioContext | null = null
-let playCtx: AudioContext | null = null
-let mediaStream: MediaStream | null = null
-let scriptNode: ScriptProcessorNode | null = null
-let durationTimer: ReturnType<typeof setInterval> | null = null
-let nextPlayTime = 0
-let isAiSpeaking = false
+const callState = ref<CallState>("idle");
+const callDuration = ref(0);
+const errorMsg = ref("");
+let ws: WebSocket | null = null;
+let audioCtx: AudioContext | null = null;
+let playCtx: AudioContext | null = null;
+let mediaStream: MediaStream | null = null;
+let scriptNode: ScriptProcessorNode | null = null;
+let durationTimer: ReturnType<typeof setInterval> | null = null;
+let nextPlayTime = 0;
+let isAiSpeaking = false;
 const statusLabel = computed(() => {
   const map: Record<string, string> = {
     idle: "未连接",
     connecting: "连接中...",
     connected: "通话中",
     error: "连接失败",
-  }
-  return map[callState.value] || ""
-})
+  };
+  return map[callState.value] || "";
+});
 
-watch(() => props.visible, (v) => {
-  if (!v && callState.value === "connected") {
-    stop()
-  }
-})
+watch(
+  () => props.visible,
+  (v) => {
+    if (!v && callState.value === "connected") {
+      stop();
+    }
+  },
+);
 
 function formatDuration(s: number): string {
-  const m = Math.floor(s / 60).toString().padStart(2, "0")
-  const sec = (s % 60).toString().padStart(2, "0")
-  return m + ":" + sec
+  const m = Math.floor(s / 60)
+    .toString()
+    .padStart(2, "0");
+  const sec = (s % 60).toString().padStart(2, "0");
+  return m + ":" + sec;
 }
 
 async function start() {
   if (!props.apiKey) {
-    ElMessage.warning("请先在模型配置中设置语音API Key")
-    return
+    ElMessage.warning("请先在模型配置中设置语音API Key");
+    return;
   }
 
-  callState.value = "connecting"
-  errorMsg.value = ""
-  emit("stateChange", "connecting")
+  callState.value = "connecting";
+  errorMsg.value = "";
+  emit("stateChange", "connecting");
 
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -117,179 +126,202 @@ async function start() {
         echoCancellation: true,
         noiseSuppression: true,
       },
-    })
+    });
   } catch (err: any) {
-    errorMsg.value = "麦克风访问失败"
-    callState.value = "error"
-    emit("stateChange", "error")
-    return
+    errorMsg.value = "麦克风访问失败";
+    callState.value = "error";
+    emit("stateChange", "error");
+    return;
   }
 
-  audioCtx = new AudioContext({ sampleRate: 16000 })
-  playCtx = new AudioContext({ sampleRate: 24000 })
-  const inputCtx = audioCtx
-  if (!inputCtx || !mediaStream) return
-  const source = inputCtx.createMediaStreamSource(mediaStream)
-  scriptNode = inputCtx.createScriptProcessor(4096, 1, 1)
+  audioCtx = new AudioContext({ sampleRate: 16000 });
+  playCtx = new AudioContext({ sampleRate: 24000 });
+  const inputCtx = audioCtx;
+  if (!inputCtx || !mediaStream) return;
+  const source = inputCtx.createMediaStreamSource(mediaStream);
+  scriptNode = inputCtx.createScriptProcessor(4096, 1, 1);
 
-  const baseUrl = await resolveWebSocketUrl("/api/realtime/session")
+  const baseUrl = await resolveWebSocketUrl("/api/realtime/session");
   const params = new URLSearchParams({
     apiKey: props.apiKey,
     voiceType: props.voiceType || "zh_female_vv_jupiter_bigtts",
     resourceId: props.resourceId || "volc.speech.dialog",
     conversationId: props.conversationId,
     dialogId: props.dialogId || "",
-  })
-  ws = new WebSocket(baseUrl + "?" + params.toString())
+  });
+  ws = new WebSocket(baseUrl + "?" + params.toString());
 
   ws.onopen = () => {
-    callDuration.value = 0
-    durationTimer = setInterval(() => { callDuration.value++ }, 1000)
+    callDuration.value = 0;
+    durationTimer = setInterval(() => {
+      callDuration.value++;
+    }, 1000);
 
     if (scriptNode) {
       scriptNode.onaudioprocess = (e) => {
         if (!isAiSpeaking && ws && ws.readyState === WebSocket.OPEN) {
-          const input = e.inputBuffer.getChannelData(0)
-          const pcm = float32ToPCM(input)
-          const base64 = arrayBufferToBase64(pcm)
-          ws.send(JSON.stringify({ event: "audio", data: base64 }))
+          const input = e.inputBuffer.getChannelData(0);
+          const pcm = float32ToPCM(input);
+          const base64 = arrayBufferToBase64(pcm);
+          ws.send(JSON.stringify({ event: "audio", data: base64 }));
         }
-      }
-      const silenceGain = inputCtx.createGain()
-      silenceGain.gain.value = 0
-      source.connect(scriptNode)
-      scriptNode.connect(silenceGain)
-      silenceGain.connect(inputCtx.destination)
+      };
+      const silenceGain = inputCtx.createGain();
+      silenceGain.gain.value = 0;
+      source.connect(scriptNode);
+      scriptNode.connect(silenceGain);
+      silenceGain.connect(inputCtx.destination);
     }
-  }
+  };
 
   ws.onmessage = (e) => {
     try {
-      const msg = JSON.parse(e.data)
+      const msg = JSON.parse(e.data);
       switch (msg.event) {
         case "ChatTextResponse":
           if (msg.data?.text) {
-            emit("message", { role: "assistant", text: msg.data.text })
+            emit("message", { role: "assistant", text: msg.data.text });
           }
-          break
+          break;
         case "audio":
-          playAudio(msg.data)
-          break
+          playAudio(msg.data);
+          break;
         case "SessionFinished":
-          emit("message", { role: "assistant", text: "[通话结束]" })
-          break
+          emit("message", { role: "assistant", text: "[通话结束]" });
+          break;
         case "connected":
-          callState.value = "connected"
-          emit("stateChange", "connected")
-          break
+          callState.value = "connected";
+          emit("stateChange", "connected");
+          break;
         case "error":
-          errorMsg.value = msg.data || "连接错误"
-          ElMessage.error(msg.data || "实时通话连接失败")
-          cleanupCall()
-          break
+          errorMsg.value = msg.data || "连接错误";
+          ElMessage.error(msg.data || "实时通话连接失败");
+          cleanupCall();
+          break;
       }
     } catch {}
-  }
+  };
 
   ws.onclose = () => {
-    cleanupCall()
+    cleanupCall();
     if (callState.value === "connected") {
-      callState.value = "idle"
-      emit("stateChange", "idle")
+      callState.value = "idle";
+      emit("stateChange", "idle");
     }
-  }
+  };
 
   ws.onerror = () => {
-    errorMsg.value = "WebSocket连接失败"
-    callState.value = "error"
-    emit("stateChange", "error")
-    cleanupCall()
-  }
+    errorMsg.value = "WebSocket连接失败";
+    callState.value = "error";
+    emit("stateChange", "error");
+    cleanupCall();
+  };
 }
 
 function stop() {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ event: "stop" }))
+    ws.send(JSON.stringify({ event: "stop" }));
     setTimeout(() => {
-      if (ws) ws.close()
-    }, 500)
+      if (ws) ws.close();
+    }, 500);
   }
-  cleanupCall()
-  callState.value = "idle"
-  emit("stateChange", "idle")
-  callDuration.value = 0
-  if (durationTimer) { clearInterval(durationTimer); durationTimer = null }
+  cleanupCall();
+  callState.value = "idle";
+  emit("stateChange", "idle");
+  callDuration.value = 0;
+  if (durationTimer) {
+    clearInterval(durationTimer);
+    durationTimer = null;
+  }
 }
 
 function cleanupCall() {
   if (scriptNode) {
-    scriptNode.disconnect()
-    scriptNode = null
+    scriptNode.disconnect();
+    scriptNode = null;
   }
   if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop())
-    mediaStream = null
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
   }
-  nextPlayTime = 0
-  isAiSpeaking = false
+  nextPlayTime = 0;
+  isAiSpeaking = false;
   if (playCtx && playCtx.state !== "closed") {
-    setTimeout(() => { try { playCtx?.close() } catch {} ; playCtx = null }, 3000)
+    setTimeout(() => {
+      try {
+        playCtx?.close();
+      } catch {}
+      playCtx = null;
+    }, 3000);
   }
   if (audioCtx && audioCtx.state !== "closed") {
-    void audioCtx.close()
-    audioCtx = null
+    void audioCtx.close();
+    audioCtx = null;
   }
 }
 
 function float32ToPCM(float32: Float32Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(float32.length * 2)
-  const view = new DataView(buffer)
+  const buffer = new ArrayBuffer(float32.length * 2);
+  const view = new DataView(buffer);
   for (let i = 0; i < float32.length; i++) {
-    let s = Math.max(-1, Math.min(1, float32[i]))
-    s = s < 0 ? s * 0x8000 : s * 0x7FFF
-    view.setInt16(i * 2, s, true)
+    let s = Math.max(-1, Math.min(1, float32[i]));
+    s = s < 0 ? s * 0x8000 : s * 0x7fff;
+    view.setInt16(i * 2, s, true);
   }
-  return buffer
+  return buffer;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ""
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
+    binary += String.fromCharCode(bytes[i]);
   }
-  return btoa(binary)
+  return btoa(binary);
 }
 
 function playAudio(base64Data: string) {
   try {
-    if (!playCtx || playCtx.state === "closed") { playCtx = new AudioContext({ sampleRate: 24000 }) }
-    if (playCtx.state === "suspended") { playCtx.resume() }
-    const binaryStr = atob(base64Data)
-    const len = binaryStr.length
-    const pcmBuf = new ArrayBuffer(len)
-    const pcmView = new DataView(pcmBuf)
-    for (let i = 0; i < len; i++) { pcmView.setUint8(i, binaryStr.charCodeAt(i)) }
-    const samples = len / 2
-    const audioBuffer = playCtx.createBuffer(1, samples, 24000)
-    const channelData = audioBuffer.getChannelData(0)
-    for (let i = 0; i < samples; i++) { channelData[i] = pcmView.getInt16(i * 2, true) / 32768 }
-    const src = playCtx.createBufferSource()
-    src.buffer = audioBuffer
-    src.connect(playCtx.destination)
-    const now = playCtx.currentTime
-    nextPlayTime = Math.max(now, nextPlayTime)
-    src.start(nextPlayTime)
-    isAiSpeaking = true
-    const chunkEnd = nextPlayTime + audioBuffer.duration
-    setTimeout(() => { if (playCtx && nextPlayTime <= chunkEnd) isAiSpeaking = false }, audioBuffer.duration * 1000 + 100)
-    nextPlayTime = nextPlayTime + audioBuffer.duration
+    if (!playCtx || playCtx.state === "closed") {
+      playCtx = new AudioContext({ sampleRate: 24000 });
+    }
+    if (playCtx.state === "suspended") {
+      playCtx.resume();
+    }
+    const binaryStr = atob(base64Data);
+    const len = binaryStr.length;
+    const pcmBuf = new ArrayBuffer(len);
+    const pcmView = new DataView(pcmBuf);
+    for (let i = 0; i < len; i++) {
+      pcmView.setUint8(i, binaryStr.charCodeAt(i));
+    }
+    const samples = len / 2;
+    const audioBuffer = playCtx.createBuffer(1, samples, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < samples; i++) {
+      channelData[i] = pcmView.getInt16(i * 2, true) / 32768;
+    }
+    const src = playCtx.createBufferSource();
+    src.buffer = audioBuffer;
+    src.connect(playCtx.destination);
+    const now = playCtx.currentTime;
+    nextPlayTime = Math.max(now, nextPlayTime);
+    src.start(nextPlayTime);
+    isAiSpeaking = true;
+    const chunkEnd = nextPlayTime + audioBuffer.duration;
+    setTimeout(
+      () => {
+        if (playCtx && nextPlayTime <= chunkEnd) isAiSpeaking = false;
+      },
+      audioBuffer.duration * 1000 + 100,
+    );
+    nextPlayTime = nextPlayTime + audioBuffer.duration;
   } catch {}
 }
 
 onUnmounted(() => {
-  stop()
-})
+  stop();
+});
 </script>
 
 <style scoped>
@@ -304,7 +336,9 @@ onUnmounted(() => {
   border-radius: 6px;
   background: var(--el-fill-color-light);
   border: 1px solid var(--el-border-color);
-  transition: border-color .3s, background .3s;
+  transition:
+    border-color 0.3s,
+    background 0.3s;
 }
 .rw-bar.active {
   border-color: var(--el-color-success);
@@ -333,8 +367,13 @@ onUnmounted(() => {
   background: var(--el-color-danger);
 }
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 .rw-status {
   font-size: 13px;
@@ -359,12 +398,3 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 </style>
-
-
-
-
-
-
-
-
-

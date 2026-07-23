@@ -26,7 +26,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         :disabled="loading"
       >
         <template #append>
-          <el-button :icon="Promotion" @click="emit('send', msgModel)" :disabled="loading || !msg.trim()" />
+          <el-button
+            :icon="Promotion"
+            @click="emit('send', msgModel)"
+            :disabled="loading || !msg.trim()"
+          />
         </template>
       </el-input>
     </div>
@@ -34,13 +38,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
-import { Promotion } from "@element-plus/icons-vue"
+import { ref, computed } from "vue";
+import { Promotion } from "@element-plus/icons-vue";
 
-const props = defineProps<{ messages: { role: string; content: string }[]; loading: boolean; msg: string; charName: string }>()
+const props = defineProps<{
+  messages: { role: string; content: string }[];
+  loading: boolean;
+  msg: string;
+  charName: string;
+}>();
 const emit = defineEmits<{
-  (e: "update:msg", v: string): void
-  (e: "send", text: string): void
-}>()
-const msgModel = computed({ get: () => props.msg, set: (v) => emit("update:msg", v) })
+  (e: "update:msg", v: string): void;
+  (e: "send", text: string): void;
+}>();
+const msgModel = computed({
+  get: () => props.msg,
+  set: (v) => emit("update:msg", v),
+});
 </script>

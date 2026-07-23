@@ -21,9 +21,11 @@ SPDX-License-Identifier: AGPL-3.0-only
             :disabled="!isDesktop"
             @click="handleCheckUpdate"
           >
-            {{ checking ? '检查中...' : '检查版本更新' }}
+            {{ checking ? "检查中..." : "检查版本更新" }}
           </el-button>
-          <span v-if="!isDesktop" class="desktop-only-hint">仅桌面端支持版本更新</span>
+          <span v-if="!isDesktop" class="desktop-only-hint"
+            >仅桌面端支持版本更新</span
+          >
         </div>
       </div>
     </el-card>
@@ -40,7 +42,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           Copyright &copy; 2026 彭旭
         </el-descriptions-item>
         <el-descriptions-item label="开源协议">
-          <el-link type="primary" href="https://opensource.org/license/agpl-v3" target="_blank">
+          <el-link
+            type="primary"
+            href="https://opensource.org/license/agpl-v3"
+            target="_blank"
+          >
             GNU Affero General Public License v3.0 (AGPL-3.0)
           </el-link>
         </el-descriptions-item>
@@ -50,65 +56,66 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import { ElMessage } from "element-plus"
-import { isDesktopShell } from "@/runtime/runtime-capabilities"
-import { useBrandLogo } from "@/composables/useBrandLogo"
+import { ref, onMounted } from "vue";
+import { ElMessage } from "element-plus";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
+import { useBrandLogo } from "@/composables/useBrandLogo";
 
-const version = "26.1.0"
+const version = "26.1.0";
 
-const checking = ref(false)
-const releaseNotes = ref("")
-const isDesktop = ref(false)
-const { logoUrl } = useBrandLogo()
+const checking = ref(false);
+const releaseNotes = ref("");
+const isDesktop = ref(false);
+const { logoUrl } = useBrandLogo();
 
-let updateHandled = false
+let updateHandled = false;
 
 async function handleCheckUpdate() {
-  if (!window.amitiaDesktop) return
-  checking.value = true
-  updateHandled = false
-  await window.amitiaDesktop.checkUpdate()
+  if (!window.amitiaDesktop) return;
+  checking.value = true;
+  updateHandled = false;
+  await window.amitiaDesktop.checkUpdate();
   if (!updateHandled) {
-    checking.value = false
-    ElMessage.success("已是最新版本")
+    checking.value = false;
+    ElMessage.success("已是最新版本");
   }
 }
 
 onMounted(() => {
-  isDesktop.value = isDesktopShell()
+  isDesktop.value = isDesktopShell();
 
-  if (!window.amitiaDesktop) return
+  if (!window.amitiaDesktop) return;
 
-  const api = window.amitiaDesktop
+  const api = window.amitiaDesktop;
 
   api.getReleaseNotes().then((notes) => {
-    releaseNotes.value = notes
-  })
+    releaseNotes.value = notes;
+  });
 
   api.onUpdateChecking(() => {
-    checking.value = true
-  })
+    checking.value = true;
+  });
 
   api.onUpdateAvailable(() => {
-    checking.value = false
-  })
+    checking.value = false;
+  });
 
   api.onUpdateNotAvailable(() => {
-    checking.value = false
-    updateHandled = true
-    ElMessage.success("已是最新版本")
-  })
+    checking.value = false;
+    updateHandled = true;
+    ElMessage.success("已是最新版本");
+  });
 
   api.onUpdateError(() => {
-    checking.value = false
-    updateHandled = true
-  })
-})
+    checking.value = false;
+    updateHandled = true;
+  });
+});
 </script>
 
 <style scoped>
-.about-panel { }
+.about-panel {
+}
 
 .section-card {
   margin-bottom: 12px;

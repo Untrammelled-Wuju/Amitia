@@ -14,10 +14,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="card-top">
           <div class="card-header">
             <span class="card-name">{{ cfg.name }}</span>
-            <el-tag v-if="cfg.isActive" type="success" size="small" effect="dark">当前</el-tag>
+            <el-tag
+              v-if="cfg.isActive"
+              type="success"
+              size="small"
+              effect="dark"
+              >当前</el-tag
+            >
           </div>
           <div class="card-type">
-            <el-tag size="small" :type="cfg.apiType === 'ollama' ? 'info' : 'primary'">
+            <el-tag
+              size="small"
+              :type="cfg.apiType === 'ollama' ? 'info' : 'primary'"
+            >
               {{ providerName(cfg.apiType) }}
             </el-tag>
             <span class="card-model">{{ cfg.modelName }}</span>
@@ -46,10 +55,17 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="card-test" v-if="cfg.lastTestStatus">
           <div class="test-indicator" :class="cfg.lastTestStatus">
             <span class="test-dot"></span>
-            <span>上次测试: {{ cfg.lastTestStatus === 'success' ? '通过' : '失败' }}</span>
+            <span
+              >上次测试:
+              {{ cfg.lastTestStatus === "success" ? "通过" : "失败" }}</span
+            >
           </div>
-          <div class="test-msg" v-if="cfg.lastTestMessage">{{ cfg.lastTestMessage }}</div>
-          <div class="test-time" v-if="cfg.lastTestAt">{{ fmtDate(cfg.lastTestAt) }}</div>
+          <div class="test-msg" v-if="cfg.lastTestMessage">
+            {{ cfg.lastTestMessage }}
+          </div>
+          <div class="test-time" v-if="cfg.lastTestAt">
+            {{ fmtDate(cfg.lastTestAt) }}
+          </div>
         </div>
 
         <div class="card-actions">
@@ -58,7 +74,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :loading="testingId === cfg.id"
             @click="emit('test', cfg.id)"
           >
-            {{ testingId === cfg.id ? '测试中...' : '测试连接' }}
+            {{ testingId === cfg.id ? "测试中..." : "测试连接" }}
           </el-button>
           <el-button size="small" @click="emit('edit', cfg)">编辑</el-button>
           <el-button
@@ -89,27 +105,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 const props = defineProps<{
-  configs: any[]
-  testingId: number | null
-  providers: any[]
-}>()
+  configs: any[];
+  testingId: number | null;
+  providers: any[];
+}>();
 
 const emit = defineEmits<{
-  (e: "test", id: number): void
-  (e: "edit", cfg: any): void
-  (e: "setActive", id: number): void
-  (e: "delete", id: number): void
-  (e: "add"): void
-}>()
+  (e: "test", id: number): void;
+  (e: "edit", cfg: any): void;
+  (e: "setActive", id: number): void;
+  (e: "delete", id: number): void;
+  (e: "add"): void;
+}>();
 
 function providerName(apiType: string): string {
-  const p = props.providers.find((pr: any) => pr.id === apiType)
-  return p?.name || apiType
+  const p = props.providers.find((pr: any) => pr.id === apiType);
+  return p?.name || apiType;
 }
 
 function fmtDate(dateStr: string): string {
-  if (!dateStr) return ""
-  try { return new Date(dateStr).toLocaleString("zh-CN") } catch { return dateStr }
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleString("zh-CN");
+  } catch {
+    return dateStr;
+  }
 }
 </script>
 
@@ -125,7 +145,7 @@ function fmtDate(dateStr: string): string {
   border: 1px solid var(--ac-color-border-light);
   border-radius: var(--ac-radius-md);
   padding: 16px;
-  transition: border-color .2s;
+  transition: border-color 0.2s;
 }
 
 .config-card.is-active {
@@ -205,8 +225,12 @@ function fmtDate(dateStr: string): string {
   font-weight: 500;
 }
 
-.test-indicator.success { color: var(--ac-color-success); }
-.test-indicator.failed { color: var(--ac-color-danger); }
+.test-indicator.success {
+  color: var(--ac-color-success);
+}
+.test-indicator.failed {
+  color: var(--ac-color-danger);
+}
 
 .test-dot {
   width: 8px;
@@ -215,8 +239,12 @@ function fmtDate(dateStr: string): string {
   flex-shrink: 0;
 }
 
-.test-indicator.success .test-dot { background: var(--ac-color-success); }
-.test-indicator.failed .test-dot { background: var(--ac-color-danger); }
+.test-indicator.success .test-dot {
+  background: var(--ac-color-success);
+}
+.test-indicator.failed .test-dot {
+  background: var(--ac-color-danger);
+}
 
 .test-msg {
   margin-top: 4px;

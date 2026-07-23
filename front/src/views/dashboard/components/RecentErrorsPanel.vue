@@ -13,10 +13,16 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div v-if="recentErrors.length > 0" class="error-list">
       <div v-for="(err, idx) in recentErrors" :key="idx" class="error-row">
         <div class="er-left">
-          <el-tag :type="err.severity === 'error' ? 'danger' : 'warning'" size="small" effect="dark">
+          <el-tag
+            :type="err.severity === 'error' ? 'danger' : 'warning'"
+            size="small"
+            effect="dark"
+          >
             {{ err.action || err.targetType || "错误" }}
           </el-tag>
-          <span class="er-msg">{{ err.details || err.message || "未知错误" }}</span>
+          <span class="er-msg">{{
+            err.details || err.message || "未知错误"
+          }}</span>
         </div>
         <span class="er-time">{{ fmtDateShort(err.createdAt) }}</span>
       </div>
@@ -24,7 +30,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div v-else class="empty-hint ok">
       <div class="empty-illustration">
         <el-icon class="doc-icon"><Document /></el-icon>
-        <span class="check-badge"><el-icon><CircleCheck /></el-icon></span>
+        <span class="check-badge"
+          ><el-icon><CircleCheck /></el-icon
+        ></span>
       </div>
       <span>暂无错误，一切正常</span>
     </div>
@@ -32,16 +40,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { CircleCheck, Document, Refresh } from "@element-plus/icons-vue"
+import { CircleCheck, Document, Refresh } from "@element-plus/icons-vue";
 
 defineProps<{
-  recentErrors: any[]
-  fmtDateShort: (d: string) => string
-}>()
+  recentErrors: any[];
+  fmtDateShort: (d: string) => string;
+}>();
 
 const emit = defineEmits<{
-  (e: "refresh"): void
-}>()
+  (e: "refresh"): void;
+}>();
 </script>
 
 <style scoped>
@@ -53,19 +61,77 @@ const emit = defineEmits<{
   background: var(--ac-color-surface);
   box-shadow: none;
 }
-.section-header-row { display: flex; justify-content: space-between; align-items: center; }
-.panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--console-text);
+}
 
-.error-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
-.error-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 9px; background: var(--ac-color-surface); }
-.er-left { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; }
-.er-msg { font-size: 14px; color: var(--console-text-muted); line-height: 1.4; word-break: break-all; }
-.er-time { font-size: 12px; color: var(--console-text-muted); white-space: nowrap; flex-shrink: 0; }
+.error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.error-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--ac-color-surface);
+}
+.er-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.er-msg {
+  font-size: 14px;
+  color: var(--console-text-muted);
+  line-height: 1.4;
+  word-break: break-all;
+}
+.er-time {
+  font-size: 12px;
+  color: var(--console-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
-.empty-hint { color: var(--console-text-muted); padding: 52px 0 0; }
-.empty-hint.ok { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-size: 15px; }
-.empty-illustration { position: relative; width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; color: var(--ac-color-text-muted); }
-.doc-icon { font-size: 78px; }
+.empty-hint {
+  color: var(--console-text-muted);
+  padding: 52px 0 0;
+}
+.empty-hint.ok {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 15px;
+}
+.empty-illustration {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ac-color-text-muted);
+}
+.doc-icon {
+  font-size: 78px;
+}
 .check-badge {
   position: absolute;
   right: 7px;

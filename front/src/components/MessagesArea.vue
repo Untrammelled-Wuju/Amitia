@@ -12,7 +12,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     @touchmove="$emit('touchMove', $event)"
     @touchend="$emit('touchEnd')"
   >
-    <div class="pull-indicator" :class="{ pulling: isPulling, ready: pullReady }">
+    <div
+      class="pull-indicator"
+      :class="{ pulling: isPulling, ready: pullReady }"
+    >
       <el-icon :size="18" class="pull-icon" :class="{ spin: pullLoading }">
         <Loading v-if="pullLoading" />
         <ArrowDown v-else />
@@ -29,15 +32,15 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
-    <ChatBubble
-      :message="msg"
-      :char-name="charName"
-      :char-avatar="charAvatar"
-      :status="msg.status"
-      @retry="$emit('retry', $event)"
-      @reply="$emit('reply', $event)"
-      @scroll-to-message="(id) => scrollToMessage(id)"
-    />
+      <ChatBubble
+        :message="msg"
+        :char-name="charName"
+        :char-avatar="charAvatar"
+        :status="msg.status"
+        @retry="$emit('retry', $event)"
+        @reply="$emit('reply', $event)"
+        @scroll-to-message="(id) => scrollToMessage(id)"
+      />
     </div>
 
     <transition name="fade">
@@ -54,46 +57,45 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue"
-import ChatBubble from "./ChatBubble.vue"
+import { ref } from "vue";
+import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
+import ChatBubble from "./ChatBubble.vue";
 
 defineProps<{
-  messages: any[]
-  charName: string
-  charAvatar: string
-  sending: boolean
-  showScrollBtn: boolean
-  isPulling: boolean
-  pullReady: boolean
-  pullLoading: boolean
-  pullText: string
-}>()
+  messages: any[];
+  charName: string;
+  charAvatar: string;
+  sending: boolean;
+  showScrollBtn: boolean;
+  isPulling: boolean;
+  pullReady: boolean;
+  pullLoading: boolean;
+  pullText: string;
+}>();
 
 defineEmits<{
-  scroll: []
-  wheel: [e: WheelEvent]
-  touchStart: [e: TouchEvent]
-  touchMove: [e: TouchEvent]
-  touchEnd: []
-  retry: [msg: any]
-  reply: [msg: any]
-  scrollToBottom: []
-}>()
-
+  scroll: [];
+  wheel: [e: WheelEvent];
+  touchStart: [e: TouchEvent];
+  touchMove: [e: TouchEvent];
+  touchEnd: [];
+  retry: [msg: any];
+  reply: [msg: any];
+  scrollToBottom: [];
+}>();
 
 function scrollToMessage(messageId: string) {
-  if (!rootEl.value) return
-  const el = rootEl.value.querySelector(`[data-message-id="${messageId}"]`)
+  if (!rootEl.value) return;
+  const el = rootEl.value.querySelector(`[data-message-id="${messageId}"]`);
   if (el) {
-    el.scrollIntoView({ behavior: "smooth", block: "center" })
-    el.classList.add("highlight-flash")
-    setTimeout(() => el.classList.remove("highlight-flash"), 2000)
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("highlight-flash");
+    setTimeout(() => el.classList.remove("highlight-flash"), 2000);
   }
 }
 
-const rootEl = ref<HTMLElement>()
-defineExpose({ rootEl })
+const rootEl = ref<HTMLElement>();
+defineExpose({ rootEl });
 </script>
 
 <style scoped>
@@ -169,14 +171,25 @@ defineExpose({ rootEl })
   height: 36px;
 }
 
-.pull-indicator.pulling { opacity: 0.6; }
-.pull-indicator.ready { opacity: 1; color: var(--ac-color-primary); }
+.pull-indicator.pulling {
+  opacity: 0.6;
+}
+.pull-indicator.ready {
+  opacity: 1;
+  color: var(--ac-color-primary);
+}
 
-.pull-icon.spin { animation: spin 0.8s linear infinite; }
+.pull-icon.spin {
+  animation: spin 0.8s linear infinite;
+}
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {
@@ -190,8 +203,11 @@ defineExpose({ rootEl })
 }
 
 @keyframes highlight-fade {
-  0% { background-color: var(--tp-primary-light-9); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: var(--tp-primary-light-9);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
-
 </style>

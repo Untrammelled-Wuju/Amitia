@@ -18,33 +18,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from "vue"
-import { useRouter, useRoute } from "vue-router"
+import { computed, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
 
-const router = useRouter()
-const route = useRoute()
+const router = useRouter();
+const route = useRoute();
 
 const activeTab = computed(() => {
-  const path = route.path
-  if (path.includes("/model/llm")) return "llm"
-  if (path.includes("/model/voice")) return "voice"
-  if (path.includes("/model/vision")) return "vision"
-  if (path.includes("/model/embedding")) return "embedding"
-  return "llm"
-})
+  const path = route.path;
+  if (path.includes("/model/llm")) return "llm";
+  if (path.includes("/model/voice")) return "voice";
+  if (path.includes("/model/vision")) return "vision";
+  if (path.includes("/model/embedding")) return "embedding";
+  return "llm";
+});
 
 function onTabChange(name: string) {
-  router.push(`/settings/model/${name}`)
+  router.push(`/settings/model/${name}`);
 }
 
 onMounted(() => {
   if (route.path === "/settings/model") {
-    router.replace("/settings/model/llm")
+    router.replace("/settings/model/llm");
   }
-})
+});
 </script>
 
 <style scoped>
-.page { margin: 0 auto; padding: 20px 16px; }
-.page-title { font-size: 20px; font-weight: 600; margin: 0 0 12px; }
+.page {
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
 </style>

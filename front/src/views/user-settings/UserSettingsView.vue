@@ -5,7 +5,13 @@
         <h2>用户信息</h2>
         <p>管理你的账户资料与登录安全</p>
       </div>
-      <el-button type="danger" plain :icon="SwitchButton" :loading="logoutLoading" @click="handleLogout">
+      <el-button
+        type="danger"
+        plain
+        :icon="SwitchButton"
+        :loading="logoutLoading"
+        @click="handleLogout"
+      >
         退出登录
       </el-button>
     </header>
@@ -32,28 +38,45 @@
               accept="image/jpeg,image/png,image/webp"
               @change="handleAvatarChange"
             />
-            <el-button size="small" :loading="avatarUpdating" @click="avatarFileInput?.click()">更换头像</el-button>
-            <el-button v-if="appStore.avatar" size="small" text @click="removeAvatar">恢复默认</el-button>
+            <el-button
+              size="small"
+              :loading="avatarUpdating"
+              @click="avatarFileInput?.click()"
+              >更换头像</el-button
+            >
+            <el-button
+              v-if="appStore.avatar"
+              size="small"
+              text
+              @click="removeAvatar"
+              >恢复默认</el-button
+            >
           </div>
         </div>
 
         <div class="account-meta">
           <div class="meta-item">
-            <span class="meta-icon"><el-icon><Key /></el-icon></span>
+            <span class="meta-icon"
+              ><el-icon><Key /></el-icon
+            ></span>
             <div>
               <span>账户 ID</span>
               <strong>{{ userInfo.id || "—" }}</strong>
             </div>
           </div>
           <div class="meta-item">
-            <span class="meta-icon"><el-icon><Calendar /></el-icon></span>
+            <span class="meta-icon"
+              ><el-icon><Calendar /></el-icon
+            ></span>
             <div>
               <span>创建时间</span>
               <strong>{{ formatDate(userInfo.createdTime) }}</strong>
             </div>
           </div>
           <div class="meta-item">
-            <span class="meta-icon"><el-icon><Clock /></el-icon></span>
+            <span class="meta-icon"
+              ><el-icon><Clock /></el-icon
+            ></span>
             <div>
               <span>最近登录</span>
               <strong>{{ formatDate(userInfo.lastLoginTime) }}</strong>
@@ -64,7 +87,9 @@
 
       <section class="security-card">
         <div class="section-heading">
-          <span class="section-icon"><el-icon><Lock /></el-icon></span>
+          <span class="section-icon"
+            ><el-icon><Lock /></el-icon
+          ></span>
           <div>
             <h3>登录与安全</h3>
             <p>定期更新密码有助于保护你的账户</p>
@@ -110,16 +135,27 @@
               </el-form-item>
             </div>
             <div class="form-actions">
-              <el-button type="primary" native-type="submit" :loading="saving">保存新密码</el-button>
+              <el-button type="primary" native-type="submit" :loading="saving"
+                >保存新密码</el-button
+              >
             </div>
           </el-form>
 
           <aside class="security-guide">
             <h4>修改密码前</h4>
             <ul>
-              <li><el-icon><CircleCheck /></el-icon><span>新密码至少包含 6 个字符</span></li>
-              <li><el-icon><CircleCheck /></el-icon><span>避免使用容易猜到的连续字符</span></li>
-              <li><el-icon><CircleCheck /></el-icon><span>保存后请使用新密码登录</span></li>
+              <li>
+                <el-icon><CircleCheck /></el-icon
+                ><span>新密码至少包含 6 个字符</span>
+              </li>
+              <li>
+                <el-icon><CircleCheck /></el-icon
+                ><span>避免使用容易猜到的连续字符</span>
+              </li>
+              <li>
+                <el-icon><CircleCheck /></el-icon
+                ><span>保存后请使用新密码登录</span>
+              </li>
             </ul>
           </aside>
         </div>
@@ -129,42 +165,57 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue"
-import { useRouter } from "vue-router"
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus"
-import { Calendar, CircleCheck, Clock, Key, Lock, SwitchButton, UserFilled } from "@element-plus/icons-vue"
-import { apiClient, removeToken } from "@/composables/useApi"
-import { useAppStore } from "@/stores/app"
+import { computed, onMounted, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
+import {
+  ElMessage,
+  ElMessageBox,
+  type FormInstance,
+  type FormRules,
+} from "element-plus";
+import {
+  Calendar,
+  CircleCheck,
+  Clock,
+  Key,
+  Lock,
+  SwitchButton,
+  UserFilled,
+} from "@element-plus/icons-vue";
+import { apiClient, removeToken } from "@/composables/useApi";
+import { useAppStore } from "@/stores/app";
 
 type UserInfo = {
-  id?: number
-  username: string
-  role: string
-  createdTime: string
-  lastLoginTime: string
-}
+  id?: number;
+  username: string;
+  role: string;
+  createdTime: string;
+  lastLoginTime: string;
+};
 
-const loading = ref(false)
-const saving = ref(false)
-const logoutLoading = ref(false)
-const avatarUpdating = ref(false)
-const avatarFileInput = ref<HTMLInputElement>()
-const passwordFormRef = ref<FormInstance>()
-const appStore = useAppStore()
-const router = useRouter()
+const loading = ref(false);
+const saving = ref(false);
+const logoutLoading = ref(false);
+const avatarUpdating = ref(false);
+const avatarFileInput = ref<HTMLInputElement>();
+const passwordFormRef = ref<FormInstance>();
+const appStore = useAppStore();
+const router = useRouter();
 const userInfo = reactive<UserInfo>({
   username: "",
   role: "",
   createdTime: "",
   lastLoginTime: "",
-})
+});
 const passwordForm = reactive({
   oldPassword: "",
   newPassword: "",
   confirmPassword: "",
-})
+});
 
-const roleLabel = computed(() => userInfo.role === "admin" ? "管理员" : userInfo.role || "普通用户")
+const roleLabel = computed(() =>
+  userInfo.role === "admin" ? "管理员" : userInfo.role || "普通用户",
+);
 
 const passwordRules: FormRules = {
   oldPassword: [{ required: true, message: "请输入当前密码", trigger: "blur" }],
@@ -177,80 +228,90 @@ const passwordRules: FormRules = {
     {
       validator: (_rule, value, callback) => {
         if (value !== passwordForm.newPassword) {
-          callback(new Error("两次输入的新密码不一致"))
-          return
+          callback(new Error("两次输入的新密码不一致"));
+          return;
         }
-        callback()
+        callback();
       },
       trigger: "blur",
     },
   ],
-}
+};
 
 function formatDate(value: string) {
-  if (!value) return "—"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date)
+  }).format(date);
 }
 
 async function createAvatar(file: File) {
-  const sourceUrl = URL.createObjectURL(file)
+  const sourceUrl = URL.createObjectURL(file);
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image()
-      element.onload = () => resolve(element)
-      element.onerror = () => reject(new Error("图片读取失败"))
-      element.src = sourceUrl
-    })
-    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight)
-    const sourceX = (image.naturalWidth - sourceSize) / 2
-    const sourceY = (image.naturalHeight - sourceSize) / 2
-    const canvas = document.createElement("canvas")
-    canvas.width = 256
-    canvas.height = 256
-    const context = canvas.getContext("2d")
-    if (!context) throw new Error("头像处理失败")
-    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 256, 256)
-    return canvas.toDataURL("image/webp", 0.86)
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("图片读取失败"));
+      element.src = sourceUrl;
+    });
+    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+    const sourceX = (image.naturalWidth - sourceSize) / 2;
+    const sourceY = (image.naturalHeight - sourceSize) / 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("头像处理失败");
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceSize,
+      sourceSize,
+      0,
+      0,
+      256,
+      256,
+    );
+    return canvas.toDataURL("image/webp", 0.86);
   } finally {
-    URL.revokeObjectURL(sourceUrl)
+    URL.revokeObjectURL(sourceUrl);
   }
 }
 
 async function handleAvatarChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ""
-  if (!file) return
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    ElMessage.warning("请选择 JPG、PNG 或 WebP 图片")
-    return
+    ElMessage.warning("请选择 JPG、PNG 或 WebP 图片");
+    return;
   }
   if (file.size > 5 * 1024 * 1024) {
-    ElMessage.warning("头像图片不能超过 5 MB")
-    return
+    ElMessage.warning("头像图片不能超过 5 MB");
+    return;
   }
-  avatarUpdating.value = true
+  avatarUpdating.value = true;
   try {
-    appStore.setAvatar(await createAvatar(file))
-    ElMessage.success("头像已更新")
+    appStore.setAvatar(await createAvatar(file));
+    ElMessage.success("头像已更新");
   } catch (error: any) {
-    ElMessage.error(error?.message || "头像更新失败")
+    ElMessage.error(error?.message || "头像更新失败");
   } finally {
-    avatarUpdating.value = false
+    avatarUpdating.value = false;
   }
 }
 
 function removeAvatar() {
-  appStore.removeAvatar()
-  ElMessage.success("已恢复默认头像")
+  appStore.removeAvatar();
+  ElMessage.success("已恢复默认头像");
 }
 
 async function handleLogout() {
@@ -260,55 +321,54 @@ async function handleLogout() {
       cancelButtonText: "取消",
       type: "warning",
       confirmButtonClass: "el-button--danger",
-    })
+    });
   } catch {
-    return
+    return;
   }
-  logoutLoading.value = true
+  logoutLoading.value = true;
   try {
-    await apiClient.post("/api/auth/logout")
-  } catch {
-  }
-  removeToken()
-  await router.replace("/login")
+    await apiClient.post("/api/auth/logout");
+  } catch {}
+  removeToken();
+  await router.replace("/login");
 }
 
 async function loadUserInfo() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await apiClient.get("/api/auth/me")
-    const data = res.data?.data || res.data
-    Object.assign(userInfo, data || {})
+    const res = await apiClient.get("/api/auth/me");
+    const data = res.data?.data || res.data;
+    Object.assign(userInfo, data || {});
   } catch (error: any) {
-    ElMessage.error(error?.message || "用户信息加载失败")
+    ElMessage.error(error?.message || "用户信息加载失败");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function submitPassword() {
-  if (!passwordFormRef.value) return
-  const valid = await passwordFormRef.value.validate().catch(() => false)
-  if (!valid) return
-  saving.value = true
+  if (!passwordFormRef.value) return;
+  const valid = await passwordFormRef.value.validate().catch(() => false);
+  if (!valid) return;
+  saving.value = true;
   try {
     await apiClient.post("/api/auth/change-password", {
       oldPassword: passwordForm.oldPassword,
       newPassword: passwordForm.newPassword,
-    })
-    passwordForm.oldPassword = ""
-    passwordForm.newPassword = ""
-    passwordForm.confirmPassword = ""
-    passwordFormRef.value.clearValidate()
-    ElMessage.success("密码修改成功")
+    });
+    passwordForm.oldPassword = "";
+    passwordForm.newPassword = "";
+    passwordForm.confirmPassword = "";
+    passwordFormRef.value.clearValidate();
+    ElMessage.success("密码修改成功");
   } catch (error: any) {
-    ElMessage.error(error?.message || "密码修改失败")
+    ElMessage.error(error?.message || "密码修改失败");
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
-onMounted(loadUserInfo)
+onMounted(loadUserInfo);
 </script>
 
 <style scoped>

@@ -5,7 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <header class="status-bar">
     <div class="collapse-btn" @click="appStore.toggleSidebar">
-      <el-icon :class="{ 'is-collapsed': appStore.sidebarCollapsed }"><DArrowLeft /></el-icon>
+      <el-icon :class="{ 'is-collapsed': appStore.sidebarCollapsed }"
+        ><DArrowLeft
+      /></el-icon>
     </div>
     <div class="status-search" @click="searchModal?.open()">
       <el-icon><Search /></el-icon>
@@ -39,14 +41,42 @@ SPDX-License-Identifier: AGPL-3.0-only
         @click="$emit('toggleTheme')"
       >
         <span class="toggle-icon moon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M20 15.2A8 8 0 0 1 8.8 4a8.3 8.3 0 1 0 11.2 11.2Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M20 15.2A8 8 0 0 1 8.8 4a8.3 8.3 0 1 0 11.2 11.2Z"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linejoin="round"
+            />
           </svg>
         </span>
         <span class="toggle-icon sun">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.9" />
-            <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="3.5"
+              stroke="currentColor"
+              stroke-width="1.9"
+            />
+            <path
+              d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+            />
           </svg>
         </span>
       </button>
@@ -56,46 +86,49 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import { DArrowLeft, Search } from "@element-plus/icons-vue"
-import SearchModal from "./SearchModal.vue"
-import { useAppStore } from "@/stores/app"
+import { computed, ref } from "vue";
+import { DArrowLeft, Search } from "@element-plus/icons-vue";
+import SearchModal from "./SearchModal.vue";
+import { useAppStore } from "@/stores/app";
 
 const props = defineProps<{
-  deployMode?: string
-  wechatStatus?: string
-  qqStatus?: string
-  modelStatus?: string
-  characterName?: string
-  theme?: string
-}>()
+  deployMode?: string;
+  wechatStatus?: string;
+  qqStatus?: string;
+  modelStatus?: string;
+  characterName?: string;
+  theme?: string;
+}>();
 
 defineEmits<{
-  toggleTheme: []
-}>()
+  toggleTheme: [];
+}>();
 
-const appStore = useAppStore()
+const appStore = useAppStore();
 
-const searchModal = ref<InstanceType<typeof SearchModal> | null>(null)
+const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 
 const deployLabel = computed(() =>
-  props.deployMode === "cloud-web" ? "私有云" : "本地"
-)
+  props.deployMode === "cloud-web" ? "私有云" : "本地",
+);
 
 const wechatClass = computed(() =>
-  props.wechatStatus === "connected" ? "status-on" : "status-off"
-)
+  props.wechatStatus === "connected" ? "status-on" : "status-off",
+);
 const wechatLabel = computed(() =>
-  props.wechatStatus === "connected" ? "微信已连接" : "微信未连接"
-)
+  props.wechatStatus === "connected" ? "微信已连接" : "微信未连接",
+);
 
 const qqClass = computed(() =>
-  props.qqStatus === "connected" || props.qqStatus === "online" ? "status-on" : "status-off"
-)
+  props.qqStatus === "connected" || props.qqStatus === "online"
+    ? "status-on"
+    : "status-off",
+);
 const qqLabel = computed(() =>
-  props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ已连接" : "QQ未连接"
-)
-
+  props.qqStatus === "connected" || props.qqStatus === "online"
+    ? "QQ已连接"
+    : "QQ未连接",
+);
 </script>
 
 <style scoped>
@@ -111,7 +144,8 @@ const qqLabel = computed(() =>
   flex-shrink: 0;
   user-select: none;
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
   box-shadow: none;
 }
 
@@ -143,7 +177,6 @@ const qqLabel = computed(() =>
 
 .collapse-btn .is-collapsed {
   transform: rotate(180deg);
-
 }
 
 .status-search {
@@ -202,9 +235,13 @@ const qqLabel = computed(() =>
   flex-shrink: 0;
 }
 
-.status-on .dot { background: var(--status-ok-color); }
+.status-on .dot {
+  background: var(--status-ok-color);
+}
 
-.status-off .dot { background: var(--status-off-color); }
+.status-off .dot {
+  background: var(--status-off-color);
+}
 
 .status-off {
   border-color: color-mix(in srgb, var(--tp-warning) 22%, transparent);
@@ -234,7 +271,10 @@ const qqLabel = computed(() =>
   background: var(--tp-panel-soft);
   color: var(--tp-text-muted);
   cursor: pointer;
-  transition: border-color 180ms cubic-bezier(.2, .8, .2, 1), background 180ms cubic-bezier(.2, .8, .2, 1), transform 180ms cubic-bezier(.2, .8, .2, 1);
+  transition:
+    border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .theme-toggle:hover {
@@ -258,7 +298,9 @@ const qqLabel = computed(() =>
   border-radius: 50%;
   background: var(--tp-primary);
   transform: translateX(0);
-  transition: transform 240ms cubic-bezier(.2, .85, .2, 1), background 180ms cubic-bezier(.2, .8, .2, 1);
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    background 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .theme-toggle.is-light::before {

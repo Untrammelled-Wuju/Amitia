@@ -2,7 +2,8 @@
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
-﻿<template>
+﻿
+<template>
   <nav class="mobile-nav">
     <router-link
       v-for="item in mobileNavItems"
@@ -19,19 +20,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { useRoute } from "vue-router"
-import { isNavItemActive, mobileNavItems, type AppNavItem } from "@/navigation/app-nav"
+import { useRoute } from "vue-router";
+import {
+  isNavItemActive,
+  mobileNavItems,
+  type AppNavItem,
+} from "@/navigation/app-nav";
 
-const route = useRoute()
+const route = useRoute();
 
 const mobileLabelMap: Record<string, string> = {
   character: "角色",
   memoryManager: "记忆",
   logs: "记录",
-}
+};
 
 function isActive(item: AppNavItem) {
-  return isNavItemActive(route.path, item)
+  return isNavItemActive(route.path, item);
 }
 </script>
 
@@ -69,5 +74,8 @@ function isActive(item: AppNavItem) {
   font-size: 22px;
 }
 
-.tab-active { color: var(--nav-active-color); font-weight: 500; }
+.tab-active {
+  color: var(--nav-active-color);
+  font-weight: 500;
+}
 </style>

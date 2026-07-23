@@ -24,20 +24,23 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="card-title">数据库优化</span>
       </template>
       <div style="display: flex; align-items: center; gap: 12px">
-        <el-button
-          type="success"
-          :loading="vacuumLoading"
-          @click="runVacuum"
-        >
+        <el-button type="success" :loading="vacuumLoading" @click="runVacuum">
           执行 VACUUM 优化
         </el-button>
-        <span v-if="vacuumResult" style="font-size: 13px; color: var(--el-color-success)">
+        <span
+          v-if="vacuumResult"
+          style="font-size: 13px; color: var(--el-color-success)"
+        >
           已完成：释放 {{ vacuumResult.freedFormatted }}
           <template v-if="vacuumResult.sizeBeforeFormatted">
-            ({{ vacuumResult.sizeBeforeFormatted }} → {{ vacuumResult.sizeAfterFormatted }})
+            ({{ vacuumResult.sizeBeforeFormatted }} →
+            {{ vacuumResult.sizeAfterFormatted }})
           </template>
         </span>
-        <span v-else style="font-size: 12px; color: var(--el-text-color-placeholder)">
+        <span
+          v-else
+          style="font-size: 12px; color: var(--el-text-color-placeholder)"
+        >
           优化可压缩数据库文件，回收已删除数据占用的空间
         </span>
       </div>
@@ -46,14 +49,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue"
-import { useDatabaseHealth } from "../composables/useDatabaseHealth"
+import { onMounted } from "vue";
+import { useDatabaseHealth } from "../composables/useDatabaseHealth";
 
-const { stats, vacuumLoading, vacuumResult, loadStats, runVacuum } = useDatabaseHealth()
+const { stats, vacuumLoading, vacuumResult, loadStats, runVacuum } =
+  useDatabaseHealth();
 
 onMounted(async () => {
-  await loadStats()
-})
+  await loadStats();
+});
 </script>
 
 <style scoped>

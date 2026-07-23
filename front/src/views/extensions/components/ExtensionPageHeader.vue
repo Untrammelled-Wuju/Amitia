@@ -4,9 +4,15 @@
       <div class="title-line">
         <nav aria-label="扩展页面层级">
           <ol class="breadcrumb-list">
-            <li><RouterLink class="center-link" to="/extensions">扩展中心</RouterLink></li>
+            <li>
+              <RouterLink class="center-link" to="/extensions"
+                >扩展中心</RouterLink
+              >
+            </li>
             <li class="separator" aria-hidden="true">/</li>
-            <li class="current-title" aria-current="page"><h1>{{ title }}</h1></li>
+            <li class="current-title" aria-current="page">
+              <h1>{{ title }}</h1>
+            </li>
           </ol>
         </nav>
         <slot name="title-extra" />
@@ -14,15 +20,17 @@
       <p v-if="description" class="description">{{ description }}</p>
       <div v-if="$slots.meta" class="meta"><slot name="meta" /></div>
     </div>
-    <div v-if="$slots.actions" class="header-actions"><slot name="actions" /></div>
+    <div v-if="$slots.actions" class="header-actions">
+      <slot name="actions" />
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
 defineProps<{
-  title: string
-  description?: string
-}>()
+  title: string;
+  description?: string;
+}>();
 </script>
 
 <style scoped>

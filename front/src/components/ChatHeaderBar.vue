@@ -4,23 +4,53 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <header class="chat-header">
-    <el-button :icon="Menu" text circle size="small" class="menu-btn" @click="$emit('toggleDrawer')" />
+    <el-button
+      :icon="Menu"
+      text
+      circle
+      size="small"
+      class="menu-btn"
+      @click="$emit('toggleDrawer')"
+    />
     <div class="header-info">
       <span class="header-char-name">{{ charName || "选择角色" }}</span>
-      <span class="header-char-desc" v-if="charName">{{ charIdentity || '暂无角色描述' }}</span>
+      <span class="header-char-desc" v-if="charName">{{
+        charIdentity || "暂无角色描述"
+      }}</span>
       <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span>
     </div>
     <div class="header-actions">
-      <button class="fa-btn" :class="{ active: showProfiles }" @click="$emit('toggleProfiles')" title="显示画像"><el-icon :size="18"><User /></el-icon></button>
-      <button class="fa-btn" :class="{ active: showMemInject }" @click="$emit('toggleMemInject')" title="记忆注入"><el-icon :size="18"><Connection /></el-icon></button>
+      <button
+        class="fa-btn"
+        :class="{ active: showProfiles }"
+        @click="$emit('toggleProfiles')"
+        title="显示画像"
+      >
+        <el-icon :size="18"><User /></el-icon>
+      </button>
+      <button
+        class="fa-btn"
+        :class="{ active: showMemInject }"
+        @click="$emit('toggleMemInject')"
+        title="记忆注入"
+      >
+        <el-icon :size="18"><Connection /></el-icon>
+      </button>
       <el-dropdown trigger="click">
         <el-button text circle size="small" :icon="MoreFilled" />
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="$emit('clear')" :disabled="messagesCount === 0">
+            <el-dropdown-item
+              @click="$emit('clear')"
+              :disabled="messagesCount === 0"
+            >
               <el-icon><Delete /></el-icon> 清空会话
             </el-dropdown-item>
-            <el-dropdown-item divided @click="$emit('viewMemories')" v-if="convId">
+            <el-dropdown-item
+              divided
+              @click="$emit('viewMemories')"
+              v-if="convId"
+            >
               <el-icon><Collection /></el-icon> 查看相关记忆
             </el-dropdown-item>
             <el-dropdown-item @click="$emit('toggleCharPicker')">
@@ -34,26 +64,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { Menu, MoreFilled, Delete, Collection, Switch, User, Connection } from "@element-plus/icons-vue"
+import {
+  Menu,
+  MoreFilled,
+  Delete,
+  Collection,
+  Switch,
+  User,
+  Connection,
+} from "@element-plus/icons-vue";
 
 defineProps<{
-  charName: string
-  charIdentity: string
-  convTitle: string
-  messagesCount: number
-  convId: string
-  showProfiles: boolean
-  showMemInject: boolean
-}>()
+  charName: string;
+  charIdentity: string;
+  convTitle: string;
+  messagesCount: number;
+  convId: string;
+  showProfiles: boolean;
+  showMemInject: boolean;
+}>();
 
 defineEmits<{
-  toggleDrawer: []
-  clear: []
-  viewMemories: []
-  toggleCharPicker: []
-  toggleProfiles: []
-  toggleMemInject: []
-}>()
+  toggleDrawer: [];
+  clear: [];
+  viewMemories: [];
+  toggleCharPicker: [];
+  toggleProfiles: [];
+  toggleMemInject: [];
+}>();
 </script>
 
 <style scoped>

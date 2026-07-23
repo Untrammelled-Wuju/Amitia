@@ -6,7 +6,9 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="cleanup-view">
     <div class="page-header">
       <h2>聊天记录清理</h2>
-      <p class="page-desc">管理聊天数据的存储空间，清理旧数据以释放数据库空间</p>
+      <p class="page-desc">
+        管理聊天数据的存储空间，清理旧数据以释放数据库空间
+      </p>
     </div>
 
     <DatabaseHealthCard />
@@ -26,19 +28,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import CleanupWorkflow from "./components/CleanupWorkflow.vue"
-import DataMigrationPanel from "./components/DataMigrationPanel.vue"
-import EncryptedBackupPanel from "./components/EncryptedBackupPanel.vue"
-import RestoreBackupDialog from "./components/RestoreBackupDialog.vue"
-import DatabaseHealthCard from "./components/DatabaseHealthCard.vue"
+import { ref } from "vue";
+import CleanupWorkflow from "./components/CleanupWorkflow.vue";
+import DataMigrationPanel from "./components/DataMigrationPanel.vue";
+import EncryptedBackupPanel from "./components/EncryptedBackupPanel.vue";
+import RestoreBackupDialog from "./components/RestoreBackupDialog.vue";
+import DatabaseHealthCard from "./components/DatabaseHealthCard.vue";
 
-const restoreDialogVisible = ref(false)
-const restoreTarget = ref<any>(null)
+const restoreDialogVisible = ref(false);
+const restoreTarget = ref<any>(null);
 
 function openRestoreDialog(backup: any) {
-  restoreTarget.value = backup
-  restoreDialogVisible.value = true
+  restoreTarget.value = backup;
+  restoreDialogVisible.value = true;
 }
 </script>
 

@@ -14,9 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   >
     <div class="consent-body">
       <el-alert type="info" :closable="false" show-icon class="consent-alert">
-        <template #title>
-          请阅读并确认以下说明
-        </template>
+        <template #title> 请阅读并确认以下说明 </template>
         使用本产品前，请了解隐私保护和使用边界。
       </el-alert>
 
@@ -48,8 +46,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="csi-text">
             <div class="csi-title">AI 是虚拟角色</div>
             <div class="csi-desc">
-              AI 陪伴角色由大语言模型驱动，不是真人。
-              请理性看待 AI 的回复，不要将情感完全寄托于 AI。
+              AI 陪伴角色由大语言模型驱动，不是真人。 请理性看待 AI
+              的回复，不要将情感完全寄托于 AI。
             </div>
           </div>
         </div>
@@ -74,8 +72,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <template #footer>
       <div class="consent-footer">
-        <el-checkbox v-model="agreed" label="我已阅读并同意隐私说明和使用边界" size="large" />
-        <el-button type="primary" :disabled="!agreed" @click="confirm" size="large">
+        <el-checkbox
+          v-model="agreed"
+          label="我已阅读并同意隐私说明和使用边界"
+          size="large"
+        />
+        <el-button
+          type="primary"
+          :disabled="!agreed"
+          @click="confirm"
+          size="large"
+        >
           开始使用
         </el-button>
       </div>
@@ -84,36 +91,41 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import { useRouter } from "vue-router"
-import { Lock, WarningFilled, ChatDotRound, Delete } from "@element-plus/icons-vue"
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import {
+  Lock,
+  WarningFilled,
+  ChatDotRound,
+  Delete,
+} from "@element-plus/icons-vue";
 
-const STORAGE_KEY = "ai-companion-privacy-consent"
+const STORAGE_KEY = "ai-companion-privacy-consent";
 
-const router = useRouter()
-const visible = ref(false)
-const agreed = ref(false)
+const router = useRouter();
+const visible = ref(false);
+const agreed = ref(false);
 
 onMounted(() => {
-  const consented = localStorage.getItem(STORAGE_KEY)
+  const consented = localStorage.getItem(STORAGE_KEY);
   if (!consented) {
-    visible.value = true
+    visible.value = true;
   }
-})
+});
 
 function confirm() {
-  localStorage.setItem(STORAGE_KEY, "true")
-  visible.value = false
+  localStorage.setItem(STORAGE_KEY, "true");
+  visible.value = false;
 }
 
 function goPrivacy() {
-  visible.value = false
-  router.push("/privacy")
+  visible.value = false;
+  router.push("/privacy");
 }
 
 function goBoundary() {
-  visible.value = false
-  router.push("/usage-boundary")
+  visible.value = false;
+  router.push("/usage-boundary");
 }
 </script>
 

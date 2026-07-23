@@ -3,11 +3,17 @@
     <div class="ob-avatar-scene">
       <div class="ob-avatar-prompt">
         <div class="ob-character-line">为角色选一张头像</div>
-        <div class="ob-identity-context">可以是照片、插画或任何你觉得合适的图片</div>
+        <div class="ob-identity-context">
+          可以是照片、插画或任何你觉得合适的图片
+        </div>
       </div>
 
       <div class="ob-avatar-preview-area">
-        <div class="ob-avatar-circle" :class="{ 'has-image': previewUrl }" @click="triggerFileInput">
+        <div
+          class="ob-avatar-circle"
+          :class="{ 'has-image': previewUrl }"
+          @click="triggerFileInput"
+        >
           <img v-if="previewUrl" :src="previewUrl" alt="角色头像预览" />
           <span v-else class="ob-avatar-placeholder">+</span>
         </div>
@@ -25,39 +31,41 @@
 
       <div class="ob-avatar-actions">
         <button class="ob-skip-btn" @click="$emit('skip')">跳过</button>
-        <button class="ob-primary-ghost" @click="$emit('next', avatarFile)">继续</button>
+        <button class="ob-primary-ghost" @click="$emit('next', avatarFile)">
+          继续
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { ref, watch } from "vue";
 
 defineEmits<{
-  next: [file: File | null]
-  skip: []
-}>()
+  next: [file: File | null];
+  skip: [];
+}>();
 
-const avatarFile = ref<File | null>(null)
-const previewUrl = ref("")
-const fileInputRef = ref<HTMLInputElement | null>(null)
+const avatarFile = ref<File | null>(null);
+const previewUrl = ref("");
+const fileInputRef = ref<HTMLInputElement | null>(null);
 
 function triggerFileInput() {
-  fileInputRef.value?.click()
+  fileInputRef.value?.click();
 }
 
 function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
 
-  if (!file.type.startsWith("image/")) return
+  if (!file.type.startsWith("image/")) return;
 
-  avatarFile.value = file
-  const url = URL.createObjectURL(file)
-  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-  previewUrl.value = url
+  avatarFile.value = file;
+  const url = URL.createObjectURL(file);
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = url;
 }
 </script>
 

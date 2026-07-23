@@ -4,7 +4,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="bubble-image" v-if="imageUrl" @click="showImagePreview = true">
-    <img :src="imageUrl" alt="用户上传图片" style="width:150px;height:120px;object-fit:cover;display:block;border-radius:6px;max-width:100%" />
+    <img
+      :src="imageUrl"
+      alt="用户上传图片"
+      style="
+        width: 150px;
+        height: 120px;
+        object-fit: cover;
+        display: block;
+        border-radius: 6px;
+        max-width: 100%;
+      "
+    />
     <div class="image-overlay">
       <el-icon><ZoomIn /></el-icon>
     </div>
@@ -15,34 +26,55 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-icon size="28"><VideoPlay /></el-icon>
     </div>
   </div>
-  <el-dialog v-model="showImagePreview" title="图片预览" width="90%" :close-on-click-modal="true" class="image-preview-dialog">
-    <img :src="imageUrl" style="width:100%;max-height:70vh;object-fit:contain" />
+  <el-dialog
+    v-model="showImagePreview"
+    title="图片预览"
+    width="90%"
+    :close-on-click-modal="true"
+    class="image-preview-dialog"
+  >
+    <img
+      :src="imageUrl"
+      style="width: 100%; max-height: 70vh; object-fit: contain"
+    />
   </el-dialog>
-  <el-dialog v-model="showVideoPreview" title="视频预览" width="90%" :close-on-click-modal="true" class="video-preview-dialog" @closed="stopPreviewVideo">
-    <video :src="previewVideoUrl" controls autoplay style="width:100%;max-height:70vh;border-radius:6px" />
+  <el-dialog
+    v-model="showVideoPreview"
+    title="视频预览"
+    width="90%"
+    :close-on-click-modal="true"
+    class="video-preview-dialog"
+    @closed="stopPreviewVideo"
+  >
+    <video
+      :src="previewVideoUrl"
+      controls
+      autoplay
+      style="width: 100%; max-height: 70vh; border-radius: 6px"
+    />
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { ZoomIn, VideoPlay } from "@element-plus/icons-vue"
+import { ref } from "vue";
+import { ZoomIn, VideoPlay } from "@element-plus/icons-vue";
 
 defineProps<{
-  imageUrl?: string
-  videoUrl?: string
-}>()
+  imageUrl?: string;
+  videoUrl?: string;
+}>();
 
-const showImagePreview = ref(false)
-const showVideoPreview = ref(false)
-const previewVideoUrl = ref('')
+const showImagePreview = ref(false);
+const showVideoPreview = ref(false);
+const previewVideoUrl = ref("");
 
 function handleVideoClick(url: string) {
-  previewVideoUrl.value = url
-  showVideoPreview.value = true
+  previewVideoUrl.value = url;
+  showVideoPreview.value = true;
 }
 
 function stopPreviewVideo() {
-  previewVideoUrl.value = ''
+  previewVideoUrl.value = "";
 }
 </script>
 
@@ -111,7 +143,7 @@ function stopPreviewVideo() {
   opacity: 0.7;
   transition: opacity 0.2s;
   pointer-events: none;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 .bubble-video:hover .video-overlay {
   opacity: 1;

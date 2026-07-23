@@ -19,13 +19,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { FolderOpened } from "@element-plus/icons-vue"
-import { formatTime } from "./utils"
-import type { ExportRecord } from "./types"
+import { FolderOpened } from "@element-plus/icons-vue";
+import { formatTime } from "./utils";
+import type { ExportRecord } from "./types";
 
 defineProps<{
-  history: ExportRecord[]
-}>()
+  history: ExportRecord[];
+}>();
 </script>
 
 <style scoped>

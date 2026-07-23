@@ -19,26 +19,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref } from "vue";
 
 const props = defineProps<{
-  caption?: string
-}>()
+  caption?: string;
+}>();
 
-const coreZoneRef = ref<HTMLElement | null>(null)
-const pulseRef = ref<HTMLElement | null>(null)
+const coreZoneRef = ref<HTMLElement | null>(null);
+const pulseRef = ref<HTMLElement | null>(null);
 
 function ping() {
-  const p = pulseRef.value
-  if (!p) return
-  p.classList.remove("active")
-  void (p as HTMLElement).offsetWidth
-  p.classList.add("active")
+  const p = pulseRef.value;
+  if (!p) return;
+  p.classList.remove("active");
+  void (p as HTMLElement).offsetWidth;
+  p.classList.add("active");
 }
 
 function getEl() {
-  return coreZoneRef.value
+  return coreZoneRef.value;
 }
 
-defineExpose({ ping, getEl })
+defineExpose({ ping, getEl });
 </script>

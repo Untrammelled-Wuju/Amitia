@@ -1,7 +1,10 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref } from "vue"
-import { createAuthorizedRequestInit, resolveApiUrl } from "../runtime/runtime-adapter"
+import { ref } from "vue";
+import {
+  createAuthorizedRequestInit,
+  resolveApiUrl,
+} from "../runtime/runtime-adapter";
 
 export function useMediaUpload(
   onImage: (file: File, base64: string) => void,
@@ -9,53 +12,53 @@ export function useMediaUpload(
   onRemoveImage: () => void,
   onRemoveVideo: () => void,
 ) {
-  const attachedImage = ref<File | null>(null)
-  const attachedImagePreview = ref<string | null>(null)
-  const fileInputRef = ref<HTMLInputElement>()
-  const videoInputRef = ref<HTMLInputElement>()
-  const attachedVideo = ref<File | null>(null)
-  const attachedVideoUrl = ref<string | null>(null)
-  const uploadingVideo = ref(false)
+  const attachedImage = ref<File | null>(null);
+  const attachedImagePreview = ref<string | null>(null);
+  const fileInputRef = ref<HTMLInputElement>();
+  const videoInputRef = ref<HTMLInputElement>();
+  const attachedVideo = ref<File | null>(null);
+  const attachedVideoUrl = ref<string | null>(null);
+  const uploadingVideo = ref(false);
 
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => reject(new Error("文件读取失败"))
-      reader.readAsDataURL(file)
-    })
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("文件读取失败"));
+      reader.readAsDataURL(file);
+    });
   }
 
   function handleImageSelect(e: Event) {
-    const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
     if (!file.type.startsWith("image/")) {
-      return
+      return;
     }
-    attachedImage.value = file
+    attachedImage.value = file;
     fileToBase64(file).then((dataUrl) => {
-      attachedImagePreview.value = dataUrl
-      onImage(file, dataUrl)
-    })
-    input.value = ""
+      attachedImagePreview.value = dataUrl;
+      onImage(file, dataUrl);
+    });
+    input.value = "";
   }
 
   function clearImage() {
-    attachedImage.value = null
-    attachedImagePreview.value = null
-    onRemoveImage()
+    attachedImage.value = null;
+    attachedImagePreview.value = null;
+    onRemoveImage();
   }
 
   function handleVideoSelect(e: Event) {
-    const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith("video/")) return
-    attachedVideo.value = file
-    uploadingVideo.value = true
-    const formData = new FormData()
-    formData.append("video", file)
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("video/")) return;
+    attachedVideo.value = file;
+    uploadingVideo.value = true;
+    const formData = new FormData();
+    formData.append("video", file);
     Promise.all([
       resolveApiUrl("/api/video/upload"),
       createAuthorizedRequestInit({ method: "POST", body: formData }),
@@ -63,22 +66,24 @@ export function useMediaUpload(
       .then(([url, init]) => fetch(url, init))
       .then((res) => res.json())
       .then((data) => {
-        const videoUrl = data?.data?.videoUrl || data?.videoUrl || ""
+        const videoUrl = data?.data?.videoUrl || data?.videoUrl || "";
         if (videoUrl) {
-          attachedVideoUrl.value = videoUrl
-          onVideo(file, videoUrl)
+          attachedVideoUrl.value = videoUrl;
+          onVideo(file, videoUrl);
         }
       })
       .catch(() => {})
-      .finally(() => { uploadingVideo.value = false })
-    input.value = ""
+      .finally(() => {
+        uploadingVideo.value = false;
+      });
+    input.value = "";
   }
 
   function clearVideo() {
-    attachedVideo.value = null
-    attachedVideoUrl.value = null
-    uploadingVideo.value = false
-    onRemoveVideo()
+    attachedVideo.value = null;
+    attachedVideoUrl.value = null;
+    uploadingVideo.value = false;
+    onRemoveVideo();
   }
 
   return {
@@ -94,5 +99,5 @@ export function useMediaUpload(
     handleVideoSelect,
     clearVideo,
     fileToBase64,
-  }
+  };
 }

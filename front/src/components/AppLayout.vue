@@ -5,11 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
     <div class="app-body">
-      <SideNav
-        v-if="!isMobile"
-        :username="authUsername"
-        :avatar="authAvatar"
-      />
+      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" />
 
       <div class="app-main">
         <StatusBar
@@ -24,17 +20,20 @@ SPDX-License-Identifier: AGPL-3.0-only
         />
 
         <main class="app-content" :class="{ 'is-login': isLoginPage }">
-        <header v-if="isMobile && !isLoginPage" class="mobile-header">
-          <span class="mobile-title">{{ pageTitle }}</span>
-          <span class="mobile-status">
-            <span class="dot" :class="modelClass"></span>
-            {{ currentCharName || "未配置" }}
-          </span>
-        </header>
+          <header v-if="isMobile && !isLoginPage" class="mobile-header">
+            <span class="mobile-title">{{ pageTitle }}</span>
+            <span class="mobile-status">
+              <span class="dot" :class="modelClass"></span>
+              {{ currentCharName || "未配置" }}
+            </span>
+          </header>
 
-        <div class="content-scroll" :class="{ 'no-padding': isChatPage || isLoginPage }">
-          <slot />
-        </div>
+          <div
+            class="content-scroll"
+            :class="{ 'no-padding': isChatPage || isLoginPage }"
+          >
+            <slot />
+          </div>
         </main>
       </div>
     </div>
@@ -44,25 +43,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, provide } from "vue"
-import { useRouter } from "vue-router"
-import StatusBar from "./StatusBar.vue"
-import SideNav from "./SideNav.vue"
-import MobileNav from "./MobileNav.vue"
-import { useTheme } from "../composables/useTheme"
-import { apiClient, getToken, removeToken, isLoggedIn } from "../composables/useApi"
-import { getPageTitle } from "@/navigation/app-nav"
-import { useAppStore } from "@/stores/app"
+import { ref, computed, onMounted, onUnmounted, provide } from "vue";
+import { useRouter } from "vue-router";
+import StatusBar from "./StatusBar.vue";
+import SideNav from "./SideNav.vue";
+import MobileNav from "./MobileNav.vue";
+import { useTheme } from "../composables/useTheme";
+import {
+  apiClient,
+  getToken,
+  removeToken,
+  isLoggedIn,
+} from "../composables/useApi";
+import { getPageTitle } from "@/navigation/app-nav";
+import { useAppStore } from "@/stores/app";
 
-const router = useRouter()
-const { state: theme, resolvedMode: resolvedTheme, toggleLightDark: toggleTheme } = useTheme()
+const router = useRouter();
+const {
+  state: theme,
+  resolvedMode: resolvedTheme,
+  toggleLightDark: toggleTheme,
+} = useTheme();
 
-const windowWidth = ref(window.innerWidth)
-const isMobile = computed(() => windowWidth.value < 768)
-const isLoginPage = computed(() => router.currentRoute.value.path === "/login")
+const windowWidth = ref(window.innerWidth);
+const isMobile = computed(() => windowWidth.value < 768);
+const isLoginPage = computed(() => router.currentRoute.value.path === "/login");
 
-const isChatPage = computed(() => router.currentRoute.value.path === "/chat")
-const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path))
+const isChatPage = computed(() => router.currentRoute.value.path === "/chat");
+const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 
 const health = ref({
   appStatus: "running",
@@ -72,108 +80,115 @@ const health = ref({
   wechat: "disconnected",
   qq: "disconnected",
   web: "enabled",
-})
+});
 
-const currentCharName = ref("")
+const currentCharName = ref("");
 
-const authUsername = ref("")
-const appStore = useAppStore()
-const authAvatar = computed(() => appStore.avatar)
+const authUsername = ref("");
+const appStore = useAppStore();
+const authAvatar = computed(() => appStore.avatar);
 
 const modelClass = computed(() =>
-  health.value.model === "configured" ? "status-on" : "status-off"
-)
+  health.value.model === "configured" ? "status-on" : "status-off",
+);
 
-provide("theme", theme)
+provide("theme", theme);
 async function refreshAll() {
-  await fetchHealth()
-  await fetchQQStatus()
-  await fetchActiveCharacter()
+  await fetchHealth();
+  await fetchQQStatus();
+  await fetchActiveCharacter();
 }
-provide("refreshHealth", refreshAll)
-provide("resolvedTheme", resolvedTheme)
-provide("currentCharName", currentCharName)
-provide("authUsername", authUsername)
+provide("refreshHealth", refreshAll);
+provide("resolvedTheme", resolvedTheme);
+provide("currentCharName", currentCharName);
+provide("authUsername", authUsername);
 
 async function fetchHealth() {
   try {
-    const res = await apiClient.get("/api/health")
+    const res = await apiClient.get("/api/health");
     if (res.data?.model) {
-      health.value = { ...health.value, ...res.data }
+      health.value = { ...health.value, ...res.data };
     }
-  } catch {
-  }
+  } catch {}
 }
-
 
 async function fetchQQStatus() {
   try {
-    const res = await apiClient.get("/api/qq/status")
-    const data = res.data?.data || res.data
+    const res = await apiClient.get("/api/qq/status");
+    const data = res.data?.data || res.data;
     if (data) {
-      health.value.qq = data.qqOnline || data.status === "online" ? "connected" : "disconnected"
+      health.value.qq =
+        data.qqOnline || data.status === "online"
+          ? "connected"
+          : "disconnected";
     }
   } catch {
-    health.value.qq = "disconnected"
+    health.value.qq = "disconnected";
   }
 }
 
 async function fetchActiveCharacter() {
-  const cached = localStorage.getItem("uai-default-char")
+  const cached = localStorage.getItem("uai-default-char");
   if (cached) {
     try {
-      const dc = JSON.parse(cached)
-      if (dc.name) currentCharName.value = dc.name
+      const dc = JSON.parse(cached);
+      if (dc.name) currentCharName.value = dc.name;
     } catch {}
   }
   try {
-    const res = await apiClient.get("/api/characters")
-    const chars = res.data?.data || res.data
+    const res = await apiClient.get("/api/characters");
+    const chars = res.data?.data || res.data;
     if (Array.isArray(chars)) {
-      const defaultChar = chars.find((c: any) => c.isDefault)
-      const active = chars.find((c: any) => c.isActive)
-      const first = chars.find((c: any) => c.status !== "disabled")
-      const selected = defaultChar || active || first
-      currentCharName.value = (selected || {}).name || ""
+      const defaultChar = chars.find((c: any) => c.isDefault);
+      const active = chars.find((c: any) => c.isActive);
+      const first = chars.find((c: any) => c.status !== "disabled");
+      const selected = defaultChar || active || first;
+      currentCharName.value = (selected || {}).name || "";
       if (selected && selected.isDefault) {
-        localStorage.setItem("uai-default-char", JSON.stringify({
-          id: selected.id, name: selected.name,
-          identity: selected.identity || selected.personality || "",
-          updatedAt: Date.now(),
-        }))
+        localStorage.setItem(
+          "uai-default-char",
+          JSON.stringify({
+            id: selected.id,
+            name: selected.name,
+            identity: selected.identity || selected.personality || "",
+            updatedAt: Date.now(),
+          }),
+        );
       }
     }
-  } catch {
-  }
+  } catch {}
 }
 
 async function fetchUserInfo() {
-  if (!isLoggedIn()) return
+  if (!isLoggedIn()) return;
   try {
-    const res = await apiClient.get("/api/auth/me")
-    const user = res.data?.data || res.data
+    const res = await apiClient.get("/api/auth/me");
+    const user = res.data?.data || res.data;
     if (user?.username) {
-      authUsername.value = user.username
+      authUsername.value = user.username;
     }
   } catch {
-    removeToken()
+    removeToken();
   }
 }
 
 onMounted(() => {
   window.addEventListener("resize", () => {
-    windowWidth.value = window.innerWidth
-  })
-  fetchHealth()
-  fetchQQStatus()
+    windowWidth.value = window.innerWidth;
+  });
+  fetchHealth();
+  fetchQQStatus();
   if (isLoggedIn()) {
-    fetchActiveCharacter()
-    fetchUserInfo()
+    fetchActiveCharacter();
+    fetchUserInfo();
   }
 
-  const interval = setInterval(() => { fetchHealth(); fetchQQStatus() }, 30000)
-  onUnmounted(() => clearInterval(interval))
-})
+  const interval = setInterval(() => {
+    fetchHealth();
+    fetchQQStatus();
+  }, 30000);
+  onUnmounted(() => clearInterval(interval));
+});
 </script>
 
 <style scoped>

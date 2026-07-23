@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <el-drawer
-    :model-value="visible" @update:model-value="(val: boolean) => emit('update:visible', val)"
+    :model-value="visible"
+    @update:model-value="(val: boolean) => emit('update:visible', val)"
     :title="drawerTitle"
     :size="isMobile ? '100%' : '360px'"
     direction="ltr"
@@ -12,100 +13,120 @@ SPDX-License-Identifier: AGPL-3.0-only
     :with-header="!!isMobile"
   >
     <div :class="{ 'mobile-drawer-body': isMobile }">
-
-    <div class="section-label">频道对话</div>
-    <div v-if="wechatOnline" class="channel-pinned" :class="{ active: isWechatActive }" @click.stop="onSelectWechat">
-      <el-icon class="channel-icon wechat-icon"><ChatDotRound /></el-icon>
-      <div class="channel-info">
-        <div class="channel-name">微信对话</div>
-        <div class="channel-meta">{{ wechatMsgCount || 0 }} 条消息</div>
-      </div>
-      <el-tag type="success" size="small" effect="plain">微信</el-tag>
-    </div>
-    <div v-if="qqOnline" class="channel-pinned" :class="{ active: isQQActive }" @click.stop="onSelectQQ">
-      <el-icon class="channel-icon qq-icon"><ChatDotSquare /></el-icon>
-      <div class="channel-info">
-        <div class="channel-name">QQ对话</div>
-        <div class="channel-meta">{{ qqMsgCount || 0 }} 条消息</div>
-      </div>
-      <el-tag type="primary" size="small" effect="plain">QQ</el-tag>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="section-label">陪伴角色</div>
-    <div class="char-list" v-if="characters.length > 0">
+      <div class="section-label">频道对话</div>
       <div
-        v-for="c in characters"
-        :key="c.id"
-        class="char-item"
-        :class="{ active: c.id === activeCharId && !isWechatActive && !isQQActive }"
-        @click="$emit('selectChar', c)"
+        v-if="wechatOnline"
+        class="channel-pinned"
+        :class="{ active: isWechatActive }"
+        @click.stop="onSelectWechat"
       >
-        <el-avatar :size="32" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
-        <div class="char-info">
-          <div class="char-name">{{ c.name }}</div>
-          <div class="char-desc">{{ c.identity || c.personality || '未设置' }}</div>
+        <el-icon class="channel-icon wechat-icon"><ChatDotRound /></el-icon>
+        <div class="channel-info">
+          <div class="channel-name">微信对话</div>
+          <div class="channel-meta">{{ wechatMsgCount || 0 }} 条消息</div>
         </div>
-        <el-tag v-if="!!c.isDefault" size="small" type="success" effect="plain">默认角色</el-tag>
+        <el-tag type="success" size="small" effect="plain">微信</el-tag>
       </div>
-    </div>
-    <el-empty v-else description="还没有配置角色" :image-size="60" />
-
-    <div class="divider" v-if="importBatches.length > 0"></div>
-
-    <div v-if="importBatches.length > 0" class="import-section">
-      <div class="section-label">从导入记录继续聊天</div>
       <div
-        v-for="batch in importBatches"
-        :key="batch.id"
-        class="import-item"
-        @click="$emit('continueImport', batch)"
+        v-if="qqOnline"
+        class="channel-pinned"
+        :class="{ active: isQQActive }"
+        @click.stop="onSelectQQ"
       >
-        <el-icon><Upload /></el-icon>
-        <span class="import-title">{{ batch.title }}</span>
-        <span class="import-count">{{ batch.itemCount || 0 }}条</span>
+        <el-icon class="channel-icon qq-icon"><ChatDotSquare /></el-icon>
+        <div class="channel-info">
+          <div class="channel-name">QQ对话</div>
+          <div class="channel-meta">{{ qqMsgCount || 0 }} 条消息</div>
+        </div>
+        <el-tag type="primary" size="small" effect="plain">QQ</el-tag>
       </div>
-    </div>
 
+      <div class="divider"></div>
+
+      <div class="section-label">陪伴角色</div>
+      <div class="char-list" v-if="characters.length > 0">
+        <div
+          v-for="c in characters"
+          :key="c.id"
+          class="char-item"
+          :class="{
+            active: c.id === activeCharId && !isWechatActive && !isQQActive,
+          }"
+          @click="$emit('selectChar', c)"
+        >
+          <el-avatar :size="32" :src="c.avatar || undefined">{{
+            c.name?.charAt(0)
+          }}</el-avatar>
+          <div class="char-info">
+            <div class="char-name">{{ c.name }}</div>
+            <div class="char-desc">
+              {{ c.identity || c.personality || "未设置" }}
+            </div>
+          </div>
+          <el-tag
+            v-if="!!c.isDefault"
+            size="small"
+            type="success"
+            effect="plain"
+            >默认角色</el-tag
+          >
+        </div>
+      </div>
+      <el-empty v-else description="还没有配置角色" :image-size="60" />
+
+      <div class="divider" v-if="importBatches.length > 0"></div>
+
+      <div v-if="importBatches.length > 0" class="import-section">
+        <div class="section-label">从导入记录继续聊天</div>
+        <div
+          v-for="batch in importBatches"
+          :key="batch.id"
+          class="import-item"
+          @click="$emit('continueImport', batch)"
+        >
+          <el-icon><Upload /></el-icon>
+          <span class="import-title">{{ batch.title }}</span>
+          <span class="import-count">{{ batch.itemCount || 0 }}条</span>
+        </div>
+      </div>
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
-import { Upload, ChatDotRound, ChatDotSquare } from "@element-plus/icons-vue"
+import { computed } from "vue";
+import { Upload, ChatDotRound, ChatDotSquare } from "@element-plus/icons-vue";
 
 const props = defineProps<{
-  visible: boolean
-  characters: any[]
-  importBatches: any[]
-  activeCharId: string
-  wechatMsgCount: number
-  isWechatActive: boolean
-  wechatOnline: boolean
-  qqMsgCount: number
-  isQQActive: boolean
-  qqOnline: boolean
-}>()
+  visible: boolean;
+  characters: any[];
+  importBatches: any[];
+  activeCharId: string;
+  wechatMsgCount: number;
+  isWechatActive: boolean;
+  wechatOnline: boolean;
+  qqMsgCount: number;
+  isQQActive: boolean;
+  qqOnline: boolean;
+}>();
 
 const emit = defineEmits<{
-  "update:visible": [val: boolean]
-  selectChar: [char: any]
-  selectWechat: []
-  selectQQ: []
-  continueImport: [batch: any]
-}>()
+  "update:visible": [val: boolean];
+  selectChar: [char: any];
+  selectWechat: [];
+  selectQQ: [];
+  continueImport: [batch: any];
+}>();
 
-const isMobile = computed(() => window.innerWidth < 768)
-const drawerTitle = computed(() => isMobile.value ? "角色" : "陪伴角色")
+const isMobile = computed(() => window.innerWidth < 768);
+const drawerTitle = computed(() => (isMobile.value ? "角色" : "陪伴角色"));
 
 function onSelectWechat() {
-  emit('selectWechat')
+  emit("selectWechat");
 }
 
 function onSelectQQ() {
-  emit('selectQQ')
+  emit("selectQQ");
 }
 </script>
 

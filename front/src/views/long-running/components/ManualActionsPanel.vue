@@ -11,8 +11,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="lr-action-name">清理临时文件</div>
           <div class="lr-action-desc">删除过期的临时文件、导入导出暂存文件</div>
         </div>
-        <el-button size="small" type="warning" :loading="cleanupLoading" @click="runCleanup">
-          {{ cleanupLoading ? '清理中...' : '立即清理' }}
+        <el-button
+          size="small"
+          type="warning"
+          :loading="cleanupLoading"
+          @click="runCleanup"
+        >
+          {{ cleanupLoading ? "清理中..." : "立即清理" }}
         </el-button>
       </div>
       <el-divider />
@@ -21,8 +26,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="lr-action-name">日志轮转</div>
           <div class="lr-action-desc">对超过大小限制的日志文件进行轮转归档</div>
         </div>
-        <el-button size="small" type="primary" :loading="rotateLoading" @click="runLogRotate">
-          {{ rotateLoading ? '轮转中...' : '立即轮转' }}
+        <el-button
+          size="small"
+          type="primary"
+          :loading="rotateLoading"
+          @click="runLogRotate"
+        >
+          {{ rotateLoading ? "轮转中..." : "立即轮转" }}
         </el-button>
       </div>
       <el-divider />
@@ -31,8 +41,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="lr-action-name">数据库完整性检查</div>
           <div class="lr-action-desc">检查数据库文件完整性及外键约束</div>
         </div>
-        <el-button size="small" type="success" :loading="dbCheckLoading" @click="runDbCheck">
-          {{ dbCheckLoading ? '检查中...' : '立即检查' }}
+        <el-button
+          size="small"
+          type="success"
+          :loading="dbCheckLoading"
+          @click="runDbCheck"
+        >
+          {{ dbCheckLoading ? "检查中..." : "立即检查" }}
         </el-button>
       </div>
     </div>
@@ -44,80 +59,91 @@ SPDX-License-Identifier: AGPL-3.0-only
         @close="actionResult = null"
         show-icon
       />
-      <div v-if="actionResult.detail" class="lr-action-detail">{{ actionResult.detail }}</div>
+      <div v-if="actionResult.detail" class="lr-action-detail">
+        {{ actionResult.detail }}
+      </div>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { cleanupTempApi, rotateLogsApi, checkDbIntegrityApi } from "../api"
-import { fmtBytes } from "../utils"
+import { ref } from "vue";
+import { cleanupTempApi, rotateLogsApi, checkDbIntegrityApi } from "../api";
+import { fmtBytes } from "../utils";
 
 const emit = defineEmits<{
-  actionCompleted: []
-}>()
+  actionCompleted: [];
+}>();
 
-const cleanupLoading = ref(false)
-const rotateLoading = ref(false)
-const dbCheckLoading = ref(false)
-const actionResult = ref<{ message: string; type: "success" | "warning" | "error" | "info"; detail?: string } | null>(null)
+const cleanupLoading = ref(false);
+const rotateLoading = ref(false);
+const dbCheckLoading = ref(false);
+const actionResult = ref<{
+  message: string;
+  type: "success" | "warning" | "error" | "info";
+  detail?: string;
+} | null>(null);
 
 async function runCleanup() {
-  cleanupLoading.value = true
-  actionResult.value = null
+  cleanupLoading.value = true;
+  actionResult.value = null;
   try {
-    const result = await cleanupTempApi()
+    const result = await cleanupTempApi();
     actionResult.value = {
       message: `清理完成: 删除 ${result.deleted} 个文件`,
       type: "success",
       detail: `释放空间: ${fmtBytes(result.freedBytes)}`,
-    }
-    emit("actionCompleted")
+    };
+    emit("actionCompleted");
   } catch {
-    actionResult.value = { message: "清理失败", type: "error" }
+    actionResult.value = { message: "清理失败", type: "error" };
   } finally {
-    cleanupLoading.value = false
+    cleanupLoading.value = false;
   }
 }
 
 async function runLogRotate() {
-  rotateLoading.value = true
-  actionResult.value = null
+  rotateLoading.value = true;
+  actionResult.value = null;
   try {
-    const result = await rotateLogsApi()
+    const result = await rotateLogsApi();
     actionResult.value = {
-      message: result.rotated.length > 0
-        ? `已轮转 ${result.rotated.length} 个日志文件`
-        : "所有日志文件未超过大小限制",
+      message:
+        result.rotated.length > 0
+          ? `已轮转 ${result.rotated.length} 个日志文件`
+          : "所有日志文件未超过大小限制",
       type: "success",
-      detail: result.rotated.length > 0 ? `轮转文件: ${result.rotated.join(", ")}` : undefined,
-    }
-    emit("actionCompleted")
+      detail:
+        result.rotated.length > 0
+          ? `轮转文件: ${result.rotated.join(", ")}`
+          : undefined,
+    };
+    emit("actionCompleted");
   } catch {
-    actionResult.value = { message: "日志轮转失败", type: "error" }
+    actionResult.value = { message: "日志轮转失败", type: "error" };
   } finally {
-    rotateLoading.value = false
+    rotateLoading.value = false;
   }
 }
 
 async function runDbCheck() {
-  dbCheckLoading.value = true
-  actionResult.value = null
+  dbCheckLoading.value = true;
+  actionResult.value = null;
   try {
-    const result = await checkDbIntegrityApi()
+    const result = await checkDbIntegrityApi();
     actionResult.value = {
-      message: result.ok && result.errors.length === 0
-        ? "数据库完整性检查通过"
-        : `发现 ${result.errors.length} 个问题`,
+      message:
+        result.ok && result.errors.length === 0
+          ? "数据库完整性检查通过"
+          : `发现 ${result.errors.length} 个问题`,
       type: result.ok ? "success" : "warning",
       detail: result.errors.length > 0 ? result.errors.join("; ") : undefined,
-    }
-    emit("actionCompleted")
+    };
+    emit("actionCompleted");
   } catch {
-    actionResult.value = { message: "数据库检查失败", type: "error" }
+    actionResult.value = { message: "数据库检查失败", type: "error" };
   } finally {
-    dbCheckLoading.value = false
+    dbCheckLoading.value = false;
   }
 }
 </script>

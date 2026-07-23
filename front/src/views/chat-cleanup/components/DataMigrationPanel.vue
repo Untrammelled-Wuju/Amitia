@@ -12,9 +12,14 @@ SPDX-License-Identifier: AGPL-3.0-only
             <span class="ms-label">数据版本</span>
             <span class="ms-value">v{{ migrationStatus.currentVersion }}</span>
           </div>
-          <div v-if="migrationStatus.pendingCount > 0" class="migration-stat-item">
+          <div
+            v-if="migrationStatus.pendingCount > 0"
+            class="migration-stat-item"
+          >
             <span class="ms-label">待处理</span>
-            <span class="ms-value pending">{{ migrationStatus.pendingCount }}</span>
+            <span class="ms-value pending">{{
+              migrationStatus.pendingCount
+            }}</span>
           </div>
         </div>
       </div>
@@ -26,15 +31,21 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="cleanup-report">
           <div class="report-item">
             <span class="report-label">版本：</span>
-            <span class="report-value">{{ migrationStatus.lastMigration.version }}</span>
+            <span class="report-value">{{
+              migrationStatus.lastMigration.version
+            }}</span>
           </div>
           <div class="report-item">
             <span class="report-label">时间：</span>
-            <span class="report-value">{{ migrationStatus.lastMigration.appliedAt?.slice(0, 19) || "—" }}</span>
+            <span class="report-value">{{
+              migrationStatus.lastMigration.appliedAt?.slice(0, 19) || "—"
+            }}</span>
           </div>
           <div class="report-item">
             <span class="report-label">状态：</span>
-            <span class="report-value">{{ migrationStatus.lastMigration.status }}</span>
+            <span class="report-value">{{
+              migrationStatus.lastMigration.status
+            }}</span>
           </div>
         </div>
       </div>
@@ -71,43 +82,45 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import { ElMessage } from "element-plus"
-import { apiClient } from "../../../composables/useApi"
+import { ref, onMounted } from "vue";
+import { ElMessage } from "element-plus";
+import { apiClient } from "../../../composables/useApi";
 
-const migrationStatus = ref<any>(null)
-const migChecking = ref(false)
-const migCheckConfirm = ref("")
+const migrationStatus = ref<any>(null);
+const migChecking = ref(false);
+const migCheckConfirm = ref("");
 
 onMounted(async () => {
-  await loadMigrations()
-})
+  await loadMigrations();
+});
 
 async function loadMigrations() {
   try {
-    const res = await apiClient.get("/api/storage/migrations")
-    const d = res.data?.data || res.data
-    migrationStatus.value = d
+    const res = await apiClient.get("/api/storage/migrations");
+    const d = res.data?.data || res.data;
+    migrationStatus.value = d;
   } catch {
-    migrationStatus.value = null
+    migrationStatus.value = null;
   }
 }
 
 async function checkMigrations() {
-  if (migCheckConfirm.value !== "确认检查") return
-  migChecking.value = true
+  if (migCheckConfirm.value !== "确认检查") return;
+  migChecking.value = true;
   try {
     const res = await apiClient.post("/api/storage/migrations/check", {
       confirmText: "确认检查",
-    })
-    const d = res.data?.data || res.data
-    migrationStatus.value = d
-    migCheckConfirm.value = ""
-    ElMessage.success(d.message || "检查完成")
+    });
+    const d = res.data?.data || res.data;
+    migrationStatus.value = d;
+    migCheckConfirm.value = "";
+    ElMessage.success(d.message || "检查完成");
   } catch (err: any) {
-    ElMessage.error("检查失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "检查失败: " + (err.response?.data?.message || err.message),
+    );
   } finally {
-    migChecking.value = false
+    migChecking.value = false;
   }
 }
 </script>

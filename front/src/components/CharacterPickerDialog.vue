@@ -3,7 +3,12 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <el-dialog :model-value="visible" @update:model-value="$emit('update:visible', $event)" title="切换角色" width="400px">
+  <el-dialog
+    :model-value="visible"
+    @update:model-value="$emit('update:visible', $event)"
+    title="切换角色"
+    width="400px"
+  >
     <div class="char-list">
       <div
         v-for="c in characters"
@@ -12,12 +17,16 @@ SPDX-License-Identifier: AGPL-3.0-only
         :class="{ active: c.id === characterId }"
         @click="$emit('select', c)"
       >
-        <el-avatar :size="36" :src="c.avatar || undefined">{{ c.name?.charAt(0) }}</el-avatar>
+        <el-avatar :size="36" :src="c.avatar || undefined">{{
+          c.name?.charAt(0)
+        }}</el-avatar>
         <div class="char-option-info">
           <div class="char-option-name">{{ c.name }}</div>
           <div class="char-option-desc">{{ c.identity || c.personality }}</div>
         </div>
-        <el-tag v-if="!!c.isDefault" size="small" type="success" effect="plain">默认角色</el-tag>
+        <el-tag v-if="!!c.isDefault" size="small" type="success" effect="plain"
+          >默认角色</el-tag
+        >
       </div>
     </div>
   </el-dialog>
@@ -25,15 +34,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 defineProps<{
-  visible: boolean
-  characters: any[]
-  characterId: string
-}>()
+  visible: boolean;
+  characters: any[];
+  characterId: string;
+}>();
 
 defineEmits<{
-  "update:visible": [value: boolean]
-  select: [char: any]
-}>()
+  "update:visible": [value: boolean];
+  select: [char: any];
+}>();
 </script>
 
 <style scoped>

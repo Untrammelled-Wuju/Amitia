@@ -26,7 +26,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div v-if="backupListLoaded">
-      <div v-if="backupList.length === 0" style="font-size: 13px; color: var(--el-text-color-placeholder)">
+      <div
+        v-if="backupList.length === 0"
+        style="font-size: 13px; color: var(--el-text-color-placeholder)"
+      >
         暂无加密备份
       </div>
       <div v-else>
@@ -36,11 +39,17 @@ SPDX-License-Identifier: AGPL-3.0-only
             v-for="(b, idx) in backupList"
             :key="idx"
             class="report-item"
-            style="display: flex; justify-content: space-between; align-items: center"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
           >
             <div>
               <div style="font-weight: 500">{{ b.name }}</div>
-              <div style="font-size: 12px; color: var(--el-text-color-secondary)">
+              <div
+                style="font-size: 12px; color: var(--el-text-color-secondary)"
+              >
                 {{ b.createdAt?.slice(0, 19) || "—" }} · {{ b.sizeFormatted }}
               </div>
             </div>
@@ -54,54 +63,56 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import { ElMessage } from "element-plus"
-import { apiClient } from "../../../composables/useApi"
+import { ref, onMounted } from "vue";
+import { ElMessage } from "element-plus";
+import { apiClient } from "../../../composables/useApi";
 
 const emit = defineEmits<{
-  (e: "restore", backup: any): void
-}>()
+  (e: "restore", backup: any): void;
+}>();
 
-const backupPassword = ref("")
-const backupCreating = ref(false)
-const backupList = ref<any[]>([])
-const backupListLoaded = ref(false)
+const backupPassword = ref("");
+const backupCreating = ref(false);
+const backupList = ref<any[]>([]);
+const backupListLoaded = ref(false);
 
 onMounted(async () => {
-  await loadBackups()
-})
+  await loadBackups();
+});
 
 async function loadBackups() {
   try {
-    const res = await apiClient.get("/api/storage/backups")
-    backupList.value = res.data?.data || res.data || []
-    backupListLoaded.value = true
+    const res = await apiClient.get("/api/storage/backups");
+    backupList.value = res.data?.data || res.data || [];
+    backupListLoaded.value = true;
   } catch {
-    backupList.value = []
-    backupListLoaded.value = true
+    backupList.value = [];
+    backupListLoaded.value = true;
   }
 }
 
 async function createEncryptedBackup() {
-  if (!backupPassword.value || backupPassword.value.length < 4) return
-  backupCreating.value = true
+  if (!backupPassword.value || backupPassword.value.length < 4) return;
+  backupCreating.value = true;
   try {
     const res = await apiClient.post("/api/storage/backup/encrypted", {
       password: backupPassword.value,
-    })
-    const d = res.data?.data || res.data
-    backupPassword.value = ""
-    ElMessage.success("加密备份创建成功: " + d.backupName)
-    await loadBackups()
+    });
+    const d = res.data?.data || res.data;
+    backupPassword.value = "";
+    ElMessage.success("加密备份创建成功: " + d.backupName);
+    await loadBackups();
   } catch (err: any) {
-    ElMessage.error("创建失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "创建失败: " + (err.response?.data?.message || err.message),
+    );
   } finally {
-    backupCreating.value = false
+    backupCreating.value = false;
   }
 }
 
 function openRestore(backup: any) {
-  emit("restore", backup)
+  emit("restore", backup);
 }
 </script>
 

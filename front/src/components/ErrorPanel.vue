@@ -8,7 +8,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div v-if="visible" class="error-panel-overlay" @click.self="dismiss">
         <div class="error-panel">
           <div class="ep-header">
-            <el-icon :size="24" color="var(--el-color-danger)"><WarningFilled /></el-icon>
+            <el-icon :size="24" color="var(--el-color-danger)"
+              ><WarningFilled
+            /></el-icon>
             <span class="ep-title">{{ error?.message || "Error" }}</span>
             <el-button text circle size="small" @click="dismiss">
               <el-icon><Close /></el-icon>
@@ -16,7 +18,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
           <div class="ep-body">
             <p v-if="error?.detail" class="ep-detail">{{ error.detail }}</p>
-            <p v-if="error?.code" class="ep-code">Error code: {{ error.code }}</p>
+            <p v-if="error?.code" class="ep-code">
+              Error code: {{ error.code }}
+            </p>
           </div>
           <div class="ep-actions">
             <el-button @click="dismiss">Close</el-button>
@@ -49,46 +53,46 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { WarningFilled, Close } from "@element-plus/icons-vue"
-import type { RequestError } from "../composables/request"
-import { ERR } from "@/types"
+import { ref } from "vue";
+import { WarningFilled, Close } from "@element-plus/icons-vue";
+import type { RequestError } from "../composables/request";
+import { ERR } from "@/types";
 
-const visible = ref(false)
-const error = ref<RequestError | null>(null)
+const visible = ref(false);
+const error = ref<RequestError | null>(null);
 
 function show(err: RequestError) {
-  error.value = err
-  visible.value = true
+  error.value = err;
+  visible.value = true;
 }
 
 function dismiss() {
-  visible.value = false
-  error.value = null
+  visible.value = false;
+  error.value = null;
 }
 
 function handleAction() {
-  error.value?.action?.handler()
-  dismiss()
+  error.value?.action?.handler();
+  dismiss();
 }
 
 function goToModelConfig() {
-  window.location.hash = "#/settings/model"
-  dismiss()
+  window.location.hash = "#/settings/model";
+  dismiss();
 }
 
-let onStartCore: (() => void) | null = null
+let onStartCore: (() => void) | null = null;
 
 function setStartCoreHandler(fn: () => void) {
-  onStartCore = fn
+  onStartCore = fn;
 }
 
 function handleStartCore() {
-  onStartCore?.()
-  dismiss()
+  onStartCore?.();
+  dismiss();
 }
 
-defineExpose({ show, dismiss, setStartCoreHandler })
+defineExpose({ show, dismiss, setStartCoreHandler });
 </script>
 
 <style scoped>
@@ -158,4 +162,3 @@ defineExpose({ show, dismiss, setStartCoreHandler })
   opacity: 0;
 }
 </style>
-

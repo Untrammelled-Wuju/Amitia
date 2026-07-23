@@ -4,16 +4,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <el-dialog v-model="visible" title="测试结果" width="500px">
-    <div v-if="testResult" class="msg-preview">{{ testResult.message || JSON.stringify(testResult, null, 2) }}</div>
+    <div v-if="testResult" class="msg-preview">
+      {{ testResult.message || JSON.stringify(testResult, null, 2) }}
+    </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed } from "vue";
 
-const props = defineProps<{ modelValue: boolean; testResult: any }>()
-const emit = defineEmits<{ (e: "update:modelValue", v: boolean): void }>()
-const visible = computed({ get: () => props.modelValue, set: (v) => emit("update:modelValue", v) })
+const props = defineProps<{ modelValue: boolean; testResult: any }>();
+const emit = defineEmits<{ (e: "update:modelValue", v: boolean): void }>();
+const visible = computed({
+  get: () => props.modelValue,
+  set: (v) => emit("update:modelValue", v),
+});
 </script>
 
 <style scoped>

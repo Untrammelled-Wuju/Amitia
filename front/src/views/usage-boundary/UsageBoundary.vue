@@ -16,7 +16,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <h3>AI 是什么</h3>
         <p>
           本产品中的 AI 是一个<strong>虚拟陪伴角色</strong>，由大语言模型驱动。
-          它可以陪你聊天、倾听你的想法、帮助你整理思绪，但它<span class="highlight">不是真人</span>。
+          它可以陪你聊天、倾听你的想法、帮助你整理思绪，但它<span
+            class="highlight"
+            >不是真人</span
+          >。
         </p>
         <el-alert type="warning" :closable="false" show-icon class="info-alert">
           <template #title>
@@ -30,10 +33,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <div class="boundary-section">
         <h3>产品不能做什么</h3>
-        <el-table :data="limitations" :show-header="false" size="small" class="limit-table">
+        <el-table
+          :data="limitations"
+          :show-header="false"
+          size="small"
+          class="limit-table"
+        >
           <el-table-column prop="icon" width="36">
             <template #default="{ row }">
-              <el-icon color="var(--ac-color-danger)"><CircleCloseFilled /></el-icon>
+              <el-icon color="var(--ac-color-danger)"
+                ><CircleCloseFilled
+              /></el-icon>
             </template>
           </el-table-column>
           <el-table-column prop="title" width="180" />
@@ -45,10 +55,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <div class="boundary-section">
         <h3>产品不应该被用于</h3>
-        <el-table :data="misuses" :show-header="false" size="small" class="limit-table">
+        <el-table
+          :data="misuses"
+          :show-header="false"
+          size="small"
+          class="limit-table"
+        >
           <el-table-column prop="icon" width="36">
             <template #default="{ row }">
-              <el-icon color="var(--ac-color-warning)"><WarningFilled /></el-icon>
+              <el-icon color="var(--ac-color-warning)"
+                ><WarningFilled
+              /></el-icon>
             </template>
           </el-table-column>
           <el-table-column prop="title" width="180" />
@@ -75,8 +92,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           </li>
           <li>
             <strong>及时寻求帮助：</strong>
-            如果你感到持续的情绪低落或心理困扰，请及时向专业心理咨询师求助。
-            AI 不能提供专业的心理治疗。
+            如果你感到持续的情绪低落或心理困扰，请及时向专业心理咨询师求助。 AI
+            不能提供专业的心理治疗。
           </li>
           <li>
             <strong>未成年人需监护人陪同：</strong>
@@ -93,35 +110,43 @@ SPDX-License-Identifier: AGPL-3.0-only
           使用本产品即表示你已阅读并理解以上隐私说明和使用边界。
           本产品为开源软件，按"原样"提供，不提供任何明示或暗示的保证。
         </p>
-        <p class="update-note">
-          最后更新：2026 年 5 月
-        </p>
+        <p class="update-note">最后更新：2026 年 5 月</p>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, CircleCloseFilled, WarningFilled } from "@element-plus/icons-vue"
-import { ref } from "vue"
+import {
+  ArrowLeft,
+  CircleCloseFilled,
+  WarningFilled,
+} from "@element-plus/icons-vue";
+import { ref } from "vue";
 
 const limitations = ref([
   { title: "不是真人", desc: "AI 是虚拟角色，不能成为真实的人际关系替代品" },
   { title: "不代替回复好友", desc: "不会代替你向微信好友发送消息" },
   { title: "不做批量群发", desc: "没有群发功能，不会主动联系任何人" },
-  { title: "不读取全部聊天记录", desc: "只处理你明确指定的对话，不扫描微信全部记录" },
+  {
+    title: "不读取全部聊天记录",
+    desc: "只处理你明确指定的对话，不扫描微信全部记录",
+  },
   { title: "不保存微信密码", desc: "微信登录仅通过扫码，密码不会存储" },
   { title: "不提供医疗/法律建议", desc: "AI 的输出仅供参考，不应作为专业建议" },
   { title: "不提供心理治疗", desc: "AI 不是心理咨询师，有需要请寻求专业帮助" },
-])
+]);
 
 const misuses = ref([
   { title: "情感完全依赖 AI", desc: "过度依赖 AI 可能影响现实社交能力" },
   { title: "发送敏感隐私信息", desc: "对话内容会发送到模型 API 服务商" },
   { title: "冒充真人身份", desc: "不应将 AI 的回复用于冒充真人" },
   { title: "骚扰或滥用", desc: "不应使用 AI 生成骚扰、欺诈或违法内容" },
-  { title: "替代专业服务", desc: "AI 不能替代医生、律师、心理咨询师等专业人士" },
-])
+  {
+    title: "替代专业服务",
+    desc: "AI 不能替代医生、律师、心理咨询师等专业人士",
+  },
+]);
 </script>
 
 <style scoped>

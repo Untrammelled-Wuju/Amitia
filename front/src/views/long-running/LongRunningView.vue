@@ -12,15 +12,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import StatusPanel from "./components/StatusPanel.vue"
-import ManualActionsPanel from "./components/ManualActionsPanel.vue"
-import ConfigPanel from "./components/ConfigPanel.vue"
+import { ref } from "vue";
+import StatusPanel from "./components/StatusPanel.vue";
+import ManualActionsPanel from "./components/ManualActionsPanel.vue";
+import ConfigPanel from "./components/ConfigPanel.vue";
 
-const statusPanelRef = ref<InstanceType<typeof StatusPanel> | null>(null)
+const statusPanelRef = ref<InstanceType<typeof StatusPanel> | null>(null);
 
 function onActionCompleted() {
-  statusPanelRef.value?.refresh()
+  statusPanelRef.value?.refresh();
 }
 </script>
 

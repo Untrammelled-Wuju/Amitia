@@ -72,7 +72,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-menu>
 
     <div class="side-nav-bottom">
-      <button class="user-profile" type="button" :title="username || '管理员'" @click="openUserProfile">
+      <button
+        class="user-profile"
+        type="button"
+        :title="username || '管理员'"
+        @click="openUserProfile"
+      >
         <span class="user-avatar">
           <img v-if="avatar" :src="avatar" alt="用户头像" />
           <el-icon v-else><UserFilled /></el-icon>
@@ -87,49 +92,62 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed } from "vue";
 
-import { useRoute, useRouter } from "vue-router"
+import { useRoute, useRouter } from "vue-router";
 import {
-  ChatDotRound, Odometer, Connection, UserFilled,
-  ChatDotSquare, Setting, Grid,
-} from "@element-plus/icons-vue"
-import { useAppStore } from "@/stores/app"
-import { useBrandLogo } from "@/composables/useBrandLogo"
+  ChatDotRound,
+  Odometer,
+  Connection,
+  UserFilled,
+  ChatDotSquare,
+  Setting,
+  Grid,
+} from "@element-plus/icons-vue";
+import { useAppStore } from "@/stores/app";
+import { useBrandLogo } from "@/composables/useBrandLogo";
 
-const route = useRoute()
-const router = useRouter()
+const route = useRoute();
+const router = useRouter();
 
 defineProps<{
-  username?: string
-  avatar?: string
-}>()
+  username?: string;
+  avatar?: string;
+}>();
 
-const appStore = useAppStore()
-const { logoUrl } = useBrandLogo()
+const appStore = useAppStore();
+const { logoUrl } = useBrandLogo();
 
 const CHAR_PATHS = [
-  "/character", "/reminders", "/memory-manager", "/emotes", "/episodic",
-  "/graph", "/memory-timeline", "/profiles", "/world-book",
-  "/logs", "/import",
-]
+  "/character",
+  "/reminders",
+  "/memory-manager",
+  "/emotes",
+  "/episodic",
+  "/graph",
+  "/memory-timeline",
+  "/profiles",
+  "/world-book",
+  "/logs",
+  "/import",
+];
 
 const activeIndex = computed(() => {
-  const path = route.path
+  const path = route.path;
   if (CHAR_PATHS.some((p) => path.startsWith(p))) {
-    return path
+    return path;
   }
   if (path.startsWith("/dashboard")) {
-    return path
+    return path;
   }
   if (path.startsWith("/extensions")) {
-    return "/extensions"
+    return "/extensions";
   }
-  return path
-})
+  return path;
+});
 
 function openUserProfile() {
-  router.push("/user-settings")
+  router.push("/user-settings");
 }
 </script>
 
@@ -140,7 +158,8 @@ function openUserProfile() {
   background: var(--tp-glass-bg-strong);
   border-right: 1px solid var(--tp-glass-border);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
   box-shadow: none;
   display: flex;
   flex-direction: column;
@@ -154,7 +173,8 @@ function openUserProfile() {
   background: var(--tp-glass-bg-strong);
   border-right-color: var(--tp-glass-border);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
 }
 
 .side-nav.is-collapsed {

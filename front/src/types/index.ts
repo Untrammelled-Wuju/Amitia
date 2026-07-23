@@ -2,467 +2,518 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // API
 export interface ApiResponse<T = unknown> {
-  code: number
-  message: string
-  data?: T
-  detail?: string
+  code: number;
+  message: string;
+  data?: T;
+  detail?: string;
 }
 
 // Error codes
 export const ERR = {
-  INTERNAL: 10000, SERVICE_UNAVAILABLE: 10001, TIMEOUT: 10002,
-  DB_ERROR: 10003, VALIDATION: 10004, NOT_FOUND: 10005,
-  BAD_REQUEST: 10006, CONFLICT: 10007, RATE_LIMITED: 10008,
-  UNAUTHORIZED: 20000, INVALID_CREDENTIALS: 20001, TOKEN_EXPIRED: 20002,
-  TOKEN_INVALID: 20003, FORBIDDEN: 20004, AUTH_SETUP_REQUIRED: 20005, AUTH_ALREADY_SETUP: 20006,
-  CONFIG_ERROR: 30000, CONFIG_NOT_FOUND: 30001, CONFIG_INVALID: 30002,
-  CONFIG_SAVE_FAILED: 30003, MODEL_NOT_CONFIGURED: 30004,
-  MODEL_ERROR: 40000, MODEL_CONNECTION_FAILED: 40001, MODEL_TIMEOUT: 40002,
-  MODEL_UNAUTHORIZED: 40003, MODEL_NOT_FOUND: 40004, MODEL_RATE_LIMITED: 40005,
-  MODEL_INVALID_RESPONSE: 40006, MODEL_BASE_URL_UNREACHABLE: 40007,
-  MODEL_NETWORK_ERROR: 40008, MODEL_CONFIG_INCOMPLETE: 40009,
-  MODEL_UNSUPPORTED_TYPE: 40010, MODEL_TEST_FAILED: 40011,
-  WECHAT_ERROR: 50000, WECHAT_NOT_CONNECTED: 50001, WECHAT_ACCOUNT_NOT_FOUND: 50002,
-  WECHAT_SEND_FAILED: 50003, WECHAT_WEBHOOK_INVALID: 50004,
-  AGENT_ERROR: 60000, AGENT_MODEL_FAILED: 60001, AGENT_NO_CHARACTER: 60002,
-  AGENT_CONV_NOT_FOUND: 60003, AGENT_SAFETY_BLOCKED: 60004,
-  AGENT_CHANNEL_UNSUPPORTED: 60005, AGENT_EMPTY_MESSAGE: 60006,
-  IMPORT_ERROR: 70000, IMPORT_PARSE_FAILED: 70001, IMPORT_BATCH_NOT_FOUND: 70002,
-  IMPORT_FILE_TOO_LARGE: 70003, IMPORT_FORMAT_UNSUPPORTED: 70004,
-  IMPORT_SENSITIVE_CONTENT: 70005, IMPORT_MEMORY_FAILED: 70006, IMPORT_SUMMARY_FAILED: 70007,
-  STORAGE_ERROR: 80000, BACKUP_FAILED: 80001, BACKUP_NOT_FOUND: 80002,
-  RESTORE_FAILED: 80003, EXPORT_FAILED: 80004, IMPORT_FAILED: 80005,
-  DATA_DIR_NOT_WRITABLE: 80006, DISK_SPACE_INSUFFICIENT: 80007,
-} as const
+  INTERNAL: 10000,
+  SERVICE_UNAVAILABLE: 10001,
+  TIMEOUT: 10002,
+  DB_ERROR: 10003,
+  VALIDATION: 10004,
+  NOT_FOUND: 10005,
+  BAD_REQUEST: 10006,
+  CONFLICT: 10007,
+  RATE_LIMITED: 10008,
+  UNAUTHORIZED: 20000,
+  INVALID_CREDENTIALS: 20001,
+  TOKEN_EXPIRED: 20002,
+  TOKEN_INVALID: 20003,
+  FORBIDDEN: 20004,
+  AUTH_SETUP_REQUIRED: 20005,
+  AUTH_ALREADY_SETUP: 20006,
+  CONFIG_ERROR: 30000,
+  CONFIG_NOT_FOUND: 30001,
+  CONFIG_INVALID: 30002,
+  CONFIG_SAVE_FAILED: 30003,
+  MODEL_NOT_CONFIGURED: 30004,
+  MODEL_ERROR: 40000,
+  MODEL_CONNECTION_FAILED: 40001,
+  MODEL_TIMEOUT: 40002,
+  MODEL_UNAUTHORIZED: 40003,
+  MODEL_NOT_FOUND: 40004,
+  MODEL_RATE_LIMITED: 40005,
+  MODEL_INVALID_RESPONSE: 40006,
+  MODEL_BASE_URL_UNREACHABLE: 40007,
+  MODEL_NETWORK_ERROR: 40008,
+  MODEL_CONFIG_INCOMPLETE: 40009,
+  MODEL_UNSUPPORTED_TYPE: 40010,
+  MODEL_TEST_FAILED: 40011,
+  WECHAT_ERROR: 50000,
+  WECHAT_NOT_CONNECTED: 50001,
+  WECHAT_ACCOUNT_NOT_FOUND: 50002,
+  WECHAT_SEND_FAILED: 50003,
+  WECHAT_WEBHOOK_INVALID: 50004,
+  AGENT_ERROR: 60000,
+  AGENT_MODEL_FAILED: 60001,
+  AGENT_NO_CHARACTER: 60002,
+  AGENT_CONV_NOT_FOUND: 60003,
+  AGENT_SAFETY_BLOCKED: 60004,
+  AGENT_CHANNEL_UNSUPPORTED: 60005,
+  AGENT_EMPTY_MESSAGE: 60006,
+  IMPORT_ERROR: 70000,
+  IMPORT_PARSE_FAILED: 70001,
+  IMPORT_BATCH_NOT_FOUND: 70002,
+  IMPORT_FILE_TOO_LARGE: 70003,
+  IMPORT_FORMAT_UNSUPPORTED: 70004,
+  IMPORT_SENSITIVE_CONTENT: 70005,
+  IMPORT_MEMORY_FAILED: 70006,
+  IMPORT_SUMMARY_FAILED: 70007,
+  STORAGE_ERROR: 80000,
+  BACKUP_FAILED: 80001,
+  BACKUP_NOT_FOUND: 80002,
+  RESTORE_FAILED: 80003,
+  EXPORT_FAILED: 80004,
+  IMPORT_FAILED: 80005,
+  DATA_DIR_NOT_WRITABLE: 80006,
+  DISK_SPACE_INSUFFICIENT: 80007,
+} as const;
 
 // Message
 export interface Message {
-  id: string
-  conversationId: string
-  role: "user" | "assistant" | "system"
-  content: string
-  imageUrl?: string
-  videoUrl?: string
-  audioUrl?: string
-  msgType?: string
-  emoteId?: string
-  altText?: string
-  isAnimated?: boolean | number
-  width?: number
-  height?: number
-  originalAssetReference?: string
-  fallbackAssetReference?: string
-  responseGroupId?: string
-  deliverySequence?: number
-  sequence?: number
-  emoteDecisionStatus?: string
-  tokens?: number
-  source: string
-  importedItemId?: string | null
-  replyToMessageId?: string
-  replyToRole?: string
-  replyToExcerpt?: string
-  createdAt: string
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  msgType?: string;
+  emoteId?: string;
+  altText?: string;
+  isAnimated?: boolean | number;
+  width?: number;
+  height?: number;
+  originalAssetReference?: string;
+  fallbackAssetReference?: string;
+  responseGroupId?: string;
+  deliverySequence?: number;
+  sequence?: number;
+  emoteDecisionStatus?: string;
+  tokens?: number;
+  source: string;
+  importedItemId?: string | null;
+  replyToMessageId?: string;
+  replyToRole?: string;
+  replyToExcerpt?: string;
+  createdAt: string;
 }
 
 // Conversation
 export interface Conversation {
-  id: string
-  characterId: string
-  title: string
-  channel: string
-  source: string
-  peerId: string
-  importBatchId?: string | null
-  messageCount: number
-  createdAt: string
-  updatedAt: string
+  id: string;
+  characterId: string;
+  title: string;
+  channel: string;
+  source: string;
+  peerId: string;
+  importBatchId?: string | null;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Character
 export interface TtsConfig {
-  id: number
-  name: string
-  apiKey: string
-  resourceId: string
-  voiceType: string
-  emotion: string
-  speed: number
-  pitch: number
-  volume: number
-  isActive: number
-  isCustom: number
-  customVoiceId: string
-  lastTestResult?: string
-  hasApiKey: boolean
-  createdAt: string
-  updatedAt: string
+  id: number;
+  name: string;
+  apiKey: string;
+  resourceId: string;
+  voiceType: string;
+  emotion: string;
+  speed: number;
+  pitch: number;
+  volume: number;
+  isActive: number;
+  isCustom: number;
+  customVoiceId: string;
+  lastTestResult?: string;
+  hasApiKey: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface VoicePreset {
-  name: string
-  label: string
-  gender: string
-  language: string
+  name: string;
+  label: string;
+  gender: string;
+  language: string;
 }
 
 export interface Character {
-  id: string
-  name: string
-  avatar: string
-  identity: string
-  personality: string
-  speakingStyle: string
-  relationshipStyle: string
-  characterBase: string
-  boundaryRules: string
-  personalitySliders: string
-  description: string
-  basePrompt: string
-  generatedPrompt: string
-  isDefault: number
-  status: string
-  personalityConfig: string
-  chatStyleConfig: string
-  sceneRules: string
-  isActive: number
-  sortOrder: number
-  conversationId: string
-  createdAt: string
-  updatedAt: string
-  gender: string
-  genderLabel?: string | null
-  pronoun: string
-  selfReference: string
-  userAddressingStyle?: string | null
-  voiceConfigId?: string
-  voiceType?: string
-  voiceSpeed?: number
-  voicePitch?: number
-  voiceVolume?: number
-  customVoiceId?: string
+  id: string;
+  name: string;
+  avatar: string;
+  identity: string;
+  personality: string;
+  speakingStyle: string;
+  relationshipStyle: string;
+  characterBase: string;
+  boundaryRules: string;
+  personalitySliders: string;
+  description: string;
+  basePrompt: string;
+  generatedPrompt: string;
+  isDefault: number;
+  status: string;
+  personalityConfig: string;
+  chatStyleConfig: string;
+  sceneRules: string;
+  isActive: number;
+  sortOrder: number;
+  conversationId: string;
+  createdAt: string;
+  updatedAt: string;
+  gender: string;
+  genderLabel?: string | null;
+  pronoun: string;
+  selfReference: string;
+  userAddressingStyle?: string | null;
+  voiceConfigId?: string;
+  voiceType?: string;
+  voiceSpeed?: number;
+  voicePitch?: number;
+  voiceVolume?: number;
+  customVoiceId?: string;
 }
-
-
 
 // Import
 export interface ImportResult {
-  batchId: string
-  conversationId: string
-  messageCount: number
-  title: string
+  batchId: string;
+  conversationId: string;
+  messageCount: number;
+  title: string;
 }
 
 // Memory
 export interface Memory {
-  id: string
-  characterId: string
-  memoryType: string
-  key: string
-  value: string
-  importance: number
-  confidence: number
-  source: string
-  scope: string
-  scopeType?: string
-  verifiedStatus: string
-  useCount: number
-  lastUsedAt?: string | null
-  expiresAt?: string | null
-  createdAt: string
-  updatedAt: string
+  id: string;
+  characterId: string;
+  memoryType: string;
+  key: string;
+  value: string;
+  importance: number;
+  confidence: number;
+  source: string;
+  scope: string;
+  scopeType?: string;
+  verifiedStatus: string;
+  useCount: number;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // LLM Config
 export interface LLMConfig {
-  baseUrl: string
-  apiKey: string
-  modelName: string
-  temperature: number
-  maxTokens: number
-  topP: number
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+  temperature: number;
+  maxTokens: number;
+  topP: number;
 }
 export interface RuntimeModeResponse {
-  deployMode: string
-  host: string
-  port: number
-  web: { enabled: boolean; publicBaseUrl: string; requireAuth: boolean }
-  bridge: { enabled: boolean; mode: string; host: string; port: number }
-  storage: { dataDir: string }
+  deployMode: string;
+  host: string;
+  port: number;
+  web: { enabled: boolean; publicBaseUrl: string; requireAuth: boolean };
+  bridge: { enabled: boolean; mode: string; host: string; port: number };
+  storage: { dataDir: string };
 }
 
 export interface RuntimeModeValidationResult {
-  valid: boolean
-  errors: string[]
-  warnings?: string[]
+  valid: boolean;
+  errors: string[];
+  warnings?: string[];
   checks?: Array<{
-    name: string
-    level: "info" | "warn" | "error"
-    passed: boolean
-    message: string
-    suggestion?: string
-  }>
+    name: string;
+    level: "info" | "warn" | "error";
+    passed: boolean;
+    message: string;
+    suggestion?: string;
+  }>;
 }
 
-export type DeployMode = "desktop-local" | "cloud-web"
+export type DeployMode = "desktop-local" | "cloud-web";
 
 export interface RuntimeDebugSnapshot {
   meta: {
-    generatedAt: string
-    degraded: boolean
-  }
+    generatedAt: string;
+    degraded: boolean;
+  };
   summary: {
-    activeInteractions: number
-    queuedTasks: number
-    reconciliationIssues: number
-  }
+    activeInteractions: number;
+    queuedTasks: number;
+    reconciliationIssues: number;
+  };
   interactions: Array<{
-    scope: string
-    status: string
-    priority: string
-    path: string
-    stateVersion: number
-    deadlineAt?: string | null
-    cancelReason?: string | null
-  }>
+    scope: string;
+    status: string;
+    priority: string;
+    path: string;
+    stateVersion: number;
+    deadlineAt?: string | null;
+    cancelReason?: string | null;
+  }>;
   budgets: Array<{
-    scope: string
-    path: string
-    callsUsed: number
-    callsLimit: number
-    tokensUsed: number
-    tokensLimit: number
-    queueMs: number
-  }>
+    scope: string;
+    path: string;
+    callsUsed: number;
+    callsLimit: number;
+    tokensUsed: number;
+    tokensLimit: number;
+    queueMs: number;
+  }>;
   queues: Array<{
-    name: string
-    priority: string
-    depth: number
-    oldestAgeMs: number
-    status: string
-  }>
+    name: string;
+    priority: string;
+    depth: number;
+    oldestAgeMs: number;
+    status: string;
+  }>;
   deliveries: Array<{
-    channel: string
-    leaseState: string
-    deliveryState: string
-    attempt: number
-    updatedAt?: string | null
-  }>
+    channel: string;
+    leaseState: string;
+    deliveryState: string;
+    attempt: number;
+    updatedAt?: string | null;
+  }>;
   tools: Array<{
-    tool: string
-    status: string
-    idempotencyKey: string
-    updatedAt?: string | null
-  }>
+    tool: string;
+    status: string;
+    idempotencyKey: string;
+    updatedAt?: string | null;
+  }>;
   circuits: Array<{
-    dependency: string
-    state: string
-    failures: number
-    openedAt?: string | null
-  }>
+    dependency: string;
+    state: string;
+    failures: number;
+    openedAt?: string | null;
+  }>;
   reconciliation: Array<{
-    category: string
-    severity: "low" | "medium" | "high" | "ok"
-    count: number
-    strategy: string
-    updatedAt?: string | null
-  }>
+    category: string;
+    severity: "low" | "medium" | "high" | "ok";
+    count: number;
+    strategy: string;
+    updatedAt?: string | null;
+  }>;
   behaviorPlan?: {
-    intention: string
-    strategy: string
-    mustInclude: string[]
-    mayInclude: string[]
-    mustAvoid: string[]
-    questionPolicy: string
-    advicePolicy: string
-    deliveryPolicy: string
-    stateVersion: number
-    winnerCandidate: string
-    rejectedCandidates: string[]
-  }
+    intention: string;
+    strategy: string;
+    mustInclude: string[];
+    mayInclude: string[];
+    mustAvoid: string[];
+    questionPolicy: string;
+    advicePolicy: string;
+    deliveryPolicy: string;
+    stateVersion: number;
+    winnerCandidate: string;
+    rejectedCandidates: string[];
+  };
   expressionPlan?: {
-    sentenceCount: number
-    maxLength: number
-    directness: number
-    warmth: number
-    emotionDisplay: string
-    useQuestion: boolean
-    voiceParams?: string | null
-    avoidTopics: string[]
-  }  hardConstraintFilters?: Array<{
-    ruleId: string
-    candidateKey: string
-    reason: string
-    severity: "block" | "override"
-  }>
+    sentenceCount: number;
+    maxLength: number;
+    directness: number;
+    warmth: number;
+    emotionDisplay: string;
+    useQuestion: boolean;
+    voiceParams?: string | null;
+    avoidTopics: string[];
+  };
+  hardConstraintFilters?: Array<{
+    ruleId: string;
+    candidateKey: string;
+    reason: string;
+    severity: "block" | "override";
+  }>;
   softPreferenceScores?: Array<{
-    dimension: string
-    rawScore: number
-    normalizedWeight: number
-    contribution: number
-  }>
+    dimension: string;
+    rawScore: number;
+    normalizedWeight: number;
+    contribution: number;
+  }>;
   copingStrategy?: {
-    selected: string
-    alternatives: string[]
-    selectionReason: string
-  }
+    selected: string;
+    alternatives: string[];
+    selectionReason: string;
+  };
   emotionExpression?: {
-    displayMode: "show" | "suppress" | "reframe"
-    internalIntensity: number
-    displayIntensity: number
-    overrideReason: string
-  }
+    displayMode: "show" | "suppress" | "reframe";
+    internalIntensity: number;
+    displayIntensity: number;
+    overrideReason: string;
+  };
 
   traces?: Array<{
-    index: number
-    stage: string
-    scope: string
-    interactionId: string
-    step: string
-    durationMs: number
-    status: string
-    detail: string
-    startedAt: string
-  }>
+    index: number;
+    stage: string;
+    scope: string;
+    interactionId: string;
+    step: string;
+    durationMs: number;
+    status: string;
+    detail: string;
+    startedAt: string;
+  }>;
   metrics?: {
-    totalInteractions: number
-    activeInteractions: number
-    avgLatencyMs: number
-    p95LatencyMs: number
-    cancelRate: number
-    supersedeRate: number
-    deliverySuccessRate: number
-    toolUnknownRate: number
-    circuitBreakerRate: number
-    queueBackpressureRate: number
-    reconciliationOpenIssues: number
-    totalModelCalls: number
-    cacheHitRate: number
-    collectedAt: string
-    version: string
-  }}
+    totalInteractions: number;
+    activeInteractions: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    cancelRate: number;
+    supersedeRate: number;
+    deliverySuccessRate: number;
+    toolUnknownRate: number;
+    circuitBreakerRate: number;
+    queueBackpressureRate: number;
+    reconciliationOpenIssues: number;
+    totalModelCalls: number;
+    cacheHitRate: number;
+    collectedAt: string;
+    version: string;
+  };
+}
 
 export interface RuntimeTraceFrame {
-  index: number
-  stage: string
-  scope: string
-  interactionId: string
-  step: string
-  durationMs: number
-  status: string
-  detail: string
-  startedAt: string
-  metadata: Record<string, string>
+  index: number;
+  stage: string;
+  scope: string;
+  interactionId: string;
+  step: string;
+  durationMs: number;
+  status: string;
+  detail: string;
+  startedAt: string;
+  metadata: Record<string, string>;
 }
 
 export interface RuntimeReconciliationDetail {
-  category: string
-  severity: "low" | "medium" | "high" | "ok"
-  count: number
-  strategy: string
-  updatedAt: string
+  category: string;
+  severity: "low" | "medium" | "high" | "ok";
+  count: number;
+  strategy: string;
+  updatedAt: string;
   samples: Array<{
-    id: string
-    scope: string
-    description: string
-    autoFix: boolean
-  }>
+    id: string;
+    scope: string;
+    description: string;
+    autoFix: boolean;
+  }>;
 }
 
 export interface RuntimeMetrics {
-  totalInteractions: number
-  activeInteractions: number
-  avgLatencyMs: number
-  p95LatencyMs: number
-  cancelRate: number
-  supersedeRate: number
-  deliverySuccessRate: number
-  toolUnknownRate: number
-  circuitBreakerRate: number
-  queueBackpressureRate: number
-  reconciliationOpenIssues: number
-  totalModelCalls: number
-  cacheHitRate: number
-  collectedAt: string
-  version: string
-traces?: Array<{
-    index: number
-    stage: string
-    scope: string
-    interactionId: string
-    step: string
-    durationMs: number
-    status: string
-    detail: string
-    startedAt: string
-  }>
+  totalInteractions: number;
+  activeInteractions: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  cancelRate: number;
+  supersedeRate: number;
+  deliverySuccessRate: number;
+  toolUnknownRate: number;
+  circuitBreakerRate: number;
+  queueBackpressureRate: number;
+  reconciliationOpenIssues: number;
+  totalModelCalls: number;
+  cacheHitRate: number;
+  collectedAt: string;
+  version: string;
+  traces?: Array<{
+    index: number;
+    stage: string;
+    scope: string;
+    interactionId: string;
+    step: string;
+    durationMs: number;
+    status: string;
+    detail: string;
+    startedAt: string;
+  }>;
   metrics?: {
-    totalInteractions: number
-    activeInteractions: number
-    avgLatencyMs: number
-    p95LatencyMs: number
-    cancelRate: number
-    supersedeRate: number
-    deliverySuccessRate: number
-    toolUnknownRate: number
-    circuitBreakerRate: number
-    queueBackpressureRate: number
-    reconciliationOpenIssues: number
-    totalModelCalls: number
-    cacheHitRate: number
-    collectedAt: string
-    version: string
-  }
-
+    totalInteractions: number;
+    activeInteractions: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    cancelRate: number;
+    supersedeRate: number;
+    deliverySuccessRate: number;
+    toolUnknownRate: number;
+    circuitBreakerRate: number;
+    queueBackpressureRate: number;
+    reconciliationOpenIssues: number;
+    totalModelCalls: number;
+    cacheHitRate: number;
+    collectedAt: string;
+    version: string;
+  };
 }
 
 export interface PsycheStateSnapshot {
-  emotion: { positive: number; negative: number; arousal: number; dominance: number }
-  mood: { valence: number; tension: number; pad: string }
-  stress: number
-  energy: number
-  needs: Record<string, number>
-  beliefs: Array<{ key: string; value: string; confidence: number; conflicted: boolean }>
-  relationship: { trust: number; familiarity: number; tension: number; security: number }
-  affectLabel: string
-  collectedAt: string
+  emotion: {
+    positive: number;
+    negative: number;
+    arousal: number;
+    dominance: number;
+  };
+  mood: { valence: number; tension: number; pad: string };
+  stress: number;
+  energy: number;
+  needs: Record<string, number>;
+  beliefs: Array<{
+    key: string;
+    value: string;
+    confidence: number;
+    conflicted: boolean;
+  }>;
+  relationship: {
+    trust: number;
+    familiarity: number;
+    tension: number;
+    security: number;
+  };
+  affectLabel: string;
+  collectedAt: string;
 }
 
 export interface ProspectiveMemory {
-  id: string
-  title: string
-  description: string
-  priority: number
-  status: 'pending' | 'triggered' | 'completed' | 'cancelled'
-  expiresAt: string | null
-  notBefore: string | null
-  triggerReason: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  title: string;
+  description: string;
+  priority: number;
+  status: "pending" | "triggered" | "completed" | "cancelled";
+  expiresAt: string | null;
+  notBefore: string | null;
+  triggerReason: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TriggerHistory {
-  id: string
-  triggerId: string
-  triggerType: string
-  title: string
-  channel: string
-  state: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled'
-  priority: string
-  reason: string
-  attemptCount: number
-  lastError: string | null
-  createdAt: string
-  updatedAt: string
+  id: string;
+  triggerId: string;
+  triggerType: string;
+  title: string;
+  channel: string;
+  state: "pending" | "sending" | "sent" | "failed" | "cancelled";
+  priority: string;
+  reason: string;
+  attemptCount: number;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TriggerQueueSummary {
-  depth: number
-  pendingCount: number
-  oldestAgeMs: number
-  recentFailures: number
-  backpressure: boolean
+  depth: number;
+  pendingCount: number;
+  oldestAgeMs: number;
+  recentFailures: number;
+  backpressure: boolean;
 }
 
-export type ReminderGroup = 'overdue' | 'upcoming' | 'completed' | 'disabled'
-
+export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";

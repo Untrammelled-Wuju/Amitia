@@ -9,13 +9,20 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="pwa-install-card">
           <div class="pwa-card-header">
             <div class="pwa-icon">
-              <img src="/icons/icon-192.png" alt="AI-Amitia" width="48" height="48" />
+              <img
+                src="/icons/icon-192.png"
+                alt="AI-Amitia"
+                width="48"
+                height="48"
+              />
             </div>
             <div class="pwa-title-group">
               <h3 class="pwa-title">Install AI-Amitia</h3>
               <p class="pwa-subtitle">Add to home screen for quick access</p>
             </div>
-            <button class="pwa-close" @click="dismiss" aria-label="Close">&times;</button>
+            <button class="pwa-close" @click="dismiss" aria-label="Close">
+              &times;
+            </button>
           </div>
 
           <div class="pwa-card-body">
@@ -36,12 +43,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 
             <!-- iOS install instructions -->
             <div v-if="isIOS" class="pwa-ios-hint">
-              <p>Tap <strong>Share</strong> <span class="ios-icon">&#9650;</span> then <strong>Add to Home Screen</strong></p>
+              <p>
+                Tap <strong>Share</strong>
+                <span class="ios-icon">&#9650;</span> then
+                <strong>Add to Home Screen</strong>
+              </p>
             </div>
           </div>
 
           <div class="pwa-card-footer">
-            <button class="pwa-btn-secondary" @click="dismissLater">Later</button>
+            <button class="pwa-btn-secondary" @click="dismissLater">
+              Later
+            </button>
             <button v-if="!isIOS" class="pwa-btn-primary" @click="install">
               Install
             </button>
@@ -56,99 +69,105 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from "vue";
 
-const showPrompt = ref(false)
-const isIOS = ref(false)
+const showPrompt = ref(false);
+const isIOS = ref(false);
 
 // Store the beforeinstallprompt event
-let deferredPrompt: any = null
+let deferredPrompt: any = null;
 
 // Check if already installed or recently dismissed
 function wasRecentlyDismissed(): boolean {
-  const dismissed = localStorage.getItem('pwa-install-dismissed')
-  if (!dismissed) return false
+  const dismissed = localStorage.getItem("pwa-install-dismissed");
+  if (!dismissed) return false;
   // Re-prompt after 7 days
-  const dismissedTime = parseInt(dismissed, 10)
-  return Date.now() - dismissedTime < 7 * 24 * 60 * 60 * 1000
+  const dismissedTime = parseInt(dismissed, 10);
+  return Date.now() - dismissedTime < 7 * 24 * 60 * 60 * 1000;
 }
 
 function isStandalone(): boolean {
-  return window.matchMedia('(display-mode: standalone)').matches ||
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
     (window.navigator as any).standalone === true
+  );
 }
 
 function detectIOS(): boolean {
-  return /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase())
+  return /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
 }
 
 onMounted(() => {
-  if (isStandalone()) return
-  isIOS.value = detectIOS()
+  if (isStandalone()) return;
+  isIOS.value = detectIOS();
 
   // Listen for the install prompt event
-  window.addEventListener('beforeinstallprompt', (e: Event) => {
-    e.preventDefault()
-    deferredPrompt = e
+  window.addEventListener("beforeinstallprompt", (e: Event) => {
+    e.preventDefault();
+    deferredPrompt = e;
 
     if (!wasRecentlyDismissed()) {
       // Show prompt after a short delay
       setTimeout(() => {
-        showPrompt.value = true
-      }, 3000)
+        showPrompt.value = true;
+      }, 3000);
     }
-  })
+  });
 
   // For iOS: show prompt after delay since beforeinstallprompt doesn't fire
   if (isIOS.value && !wasRecentlyDismissed()) {
     setTimeout(() => {
-      showPrompt.value = true
-    }, 5000)
+      showPrompt.value = true;
+    }, 5000);
   }
 
   // Listen for app installed event
-  window.addEventListener('appinstalled', () => {
-    showPrompt.value = false
-    deferredPrompt = null
-    localStorage.removeItem('pwa-install-dismissed')
-  })
-})
+  window.addEventListener("appinstalled", () => {
+    showPrompt.value = false;
+    deferredPrompt = null;
+    localStorage.removeItem("pwa-install-dismissed");
+  });
+});
 
 onUnmounted(() => {
   // Clean up listeners handled by Vue
-})
+});
 
 async function install() {
-  if (!deferredPrompt) return
+  if (!deferredPrompt) return;
 
-  deferredPrompt.prompt()
-  const { outcome } = await deferredPrompt.userChoice
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
 
-  if (outcome === 'accepted') {
-    showPrompt.value = false
-    localStorage.removeItem('pwa-install-dismissed')
+  if (outcome === "accepted") {
+    showPrompt.value = false;
+    localStorage.removeItem("pwa-install-dismissed");
   } else {
-    dismissLater()
+    dismissLater();
   }
 
-  deferredPrompt = null
+  deferredPrompt = null;
 }
 
 function dismiss() {
-  showPrompt.value = false
+  showPrompt.value = false;
 }
 
 function dismissLater() {
-  showPrompt.value = false
-  localStorage.setItem('pwa-install-dismissed', String(Date.now()))
+  showPrompt.value = false;
+  localStorage.setItem("pwa-install-dismissed", String(Date.now()));
 }
 </script>
 
 <style scoped>
 .pwa-install-overlay {
-  position: fixed; inset: 0; z-index: 9999;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
   background: color-mix(in srgb, var(--tp-page) 45%, transparent);
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   padding: 16px;
 }
 
@@ -156,21 +175,29 @@ function dismissLater() {
   background: var(--tp-glass-bg-strong);
   border: 1px solid var(--tp-glass-border);
   border-radius: 16px 16px 0 0;
-  max-width: 420px; width: 100%;
+  max-width: 420px;
+  width: 100%;
   box-shadow: var(--tp-shadow-float);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
   overflow: hidden;
   animation: slideUp 0.3s ease-out;
 }
 
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .pwa-card-header {
-  display: flex; align-items: center; gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 20px 20px 12px;
   position: relative;
 }
@@ -180,33 +207,61 @@ function dismissLater() {
   box-shadow: none;
 }
 
-.pwa-title-group { flex: 1; }
-.pwa-title { margin: 0; font-size: 17px; font-weight: 600; color: var(--ac-color-text); }
-.pwa-subtitle { margin: 2px 0 0; font-size: 13px; color: var(--ac-color-text-secondary); }
+.pwa-title-group {
+  flex: 1;
+}
+.pwa-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ac-color-text);
+}
+.pwa-subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ac-color-text-secondary);
+}
 
 .pwa-close {
-  position: absolute; top: 12px; right: 12px;
-  background: none; border: none; font-size: 24px;
-  color: var(--ac-color-text-muted); cursor: pointer; padding: 4px 8px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
   line-height: 1;
 }
-.pwa-close:hover { color: var(--ac-color-text); }
+.pwa-close:hover {
+  color: var(--ac-color-text);
+}
 
 .pwa-card-body {
   padding: 0 20px 16px;
 }
 
 .pwa-features {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
 .pwa-feature {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 14px; color: var(--ac-color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ac-color-text-secondary);
 }
 
-.pf-icon { font-size: 18px; width: 24px; text-align: center; }
+.pf-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
 
 .pwa-ios-hint {
   background: var(--ac-color-primary-bg);
@@ -227,7 +282,8 @@ function dismissLater() {
 }
 
 .pwa-card-footer {
-  display: flex; gap: 10px;
+  display: flex;
+  gap: 10px;
   padding: 0 20px 20px;
 }
 
@@ -237,11 +293,14 @@ function dismissLater() {
   border: 1.5px solid var(--ac-color-border);
   border-radius: 12px;
   background: var(--ac-color-surface);
-  font-size: 15px; font-weight: 500;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--ac-color-text-secondary);
   cursor: pointer;
 }
-.pwa-btn-secondary:hover { background: var(--ac-color-surface-hover); }
+.pwa-btn-secondary:hover {
+  background: var(--ac-color-surface-hover);
+}
 
 .pwa-btn-primary {
   flex: 2;
@@ -249,20 +308,27 @@ function dismissLater() {
   border: none;
   border-radius: 12px;
   background: var(--ac-color-primary);
-  font-size: 15px; font-weight: 600;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--ac-color-text-on-primary);
   cursor: pointer;
 }
-.pwa-btn-primary:hover { background: var(--ac-color-primary-dark); }
+.pwa-btn-primary:hover {
+  background: var(--ac-color-primary-dark);
+}
 
-.pwa-fade-enter-active, .pwa-fade-leave-active {
+.pwa-fade-enter-active,
+.pwa-fade-leave-active {
   transition: opacity 0.25s ease;
 }
-.pwa-fade-enter-from, .pwa-fade-leave-to {
+.pwa-fade-enter-from,
+.pwa-fade-leave-to {
   opacity: 0;
 }
 
 @media (display-mode: standalone) {
-  .pwa-install-overlay { display: none !important; }
+  .pwa-install-overlay {
+    display: none !important;
+  }
 }
 </style>

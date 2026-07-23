@@ -4,47 +4,98 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="chat-input-bar">
-    <input ref="fileInputRef" type="file" accept="image/*" class="hidden-input" @change="handleImageInput" />
-    <input ref="videoInputRef" type="file" accept="video/*" class="hidden-input" @change="handleVideoInput" />
+    <input
+      ref="fileInputRef"
+      type="file"
+      accept="image/*"
+      class="hidden-input"
+      @change="handleImageInput"
+    />
+    <input
+      ref="videoInputRef"
+      type="file"
+      accept="video/*"
+      class="hidden-input"
+      @change="handleVideoInput"
+    />
 
     <div class="composer-stack">
       <div v-if="replyTarget" class="reply-preview-bar">
         <div class="reply-preview-content">
-          <span class="reply-preview-label">正在引用{{ replyTarget.role === "assistant" ? "" : "自己" }}：</span>
+          <span class="reply-preview-label"
+            >正在引用{{
+              replyTarget.role === "assistant" ? "" : "自己"
+            }}：</span
+          >
           <span class="reply-preview-excerpt">{{ replyTargetExcerpt }}</span>
         </div>
-        <el-button :icon="CloseBold" circle size="small" class="preview-remove" @click="$emit('cancelReply')" />
+        <el-button
+          :icon="CloseBold"
+          circle
+          size="small"
+          class="preview-remove"
+          @click="$emit('cancelReply')"
+        />
       </div>
 
       <div v-if="hasComposerContext" class="composer-context">
-        <div v-if="attachedImagePreview" class="attachment-card image-attachment">
-          <span class="attachment-thumb" :style="{ backgroundImage: `url(${attachedImagePreview})` }"></span>
+        <div
+          v-if="attachedImagePreview"
+          class="attachment-card image-attachment"
+        >
+          <span
+            class="attachment-thumb"
+            :style="{ backgroundImage: `url(${attachedImagePreview})` }"
+          ></span>
           <span class="attachment-copy">
             <strong>{{ attachedImage?.name || "图片" }}</strong>
             <small>图片</small>
           </span>
-          <button type="button" class="context-remove" aria-label="移除图片" @click="clearImage">
+          <button
+            type="button"
+            class="context-remove"
+            aria-label="移除图片"
+            @click="clearImage"
+          >
             <el-icon><CloseBold /></el-icon>
           </button>
         </div>
 
         <div v-if="attachedVideo" class="attachment-card video-attachment">
-          <span class="attachment-icon"><el-icon><VideoCamera /></el-icon></span>
+          <span class="attachment-icon"
+            ><el-icon><VideoCamera /></el-icon
+          ></span>
           <span class="attachment-copy">
             <strong>{{ attachedVideo.name }}</strong>
             <small v-if="uploadingVideo">上传中...</small>
-            <small v-else-if="attachedVideoUrl" class="is-ready">视频已就绪</small>
+            <small v-else-if="attachedVideoUrl" class="is-ready"
+              >视频已就绪</small
+            >
             <small v-else>等待上传</small>
           </span>
-          <button type="button" class="context-remove" aria-label="移除视频" :disabled="uploadingVideo" @click="clearVideo">
+          <button
+            type="button"
+            class="context-remove"
+            aria-label="移除视频"
+            :disabled="uploadingVideo"
+            @click="clearVideo"
+          >
             <el-icon><CloseBold /></el-icon>
           </button>
         </div>
 
-        <div v-for="name in selectedSkillNames" :key="name" class="skill-context-chip">
+        <div
+          v-for="name in selectedSkillNames"
+          :key="name"
+          class="skill-context-chip"
+        >
           <el-icon><MagicStick /></el-icon>
           <span>${{ name }}</span>
-          <button type="button" :aria-label="`移除技能 ${name}`" @click="removeSkill(name)">
+          <button
+            type="button"
+            :aria-label="`移除技能 ${name}`"
+            @click="removeSkill(name)"
+          >
             <el-icon><CloseBold /></el-icon>
           </button>
         </div>
@@ -52,153 +103,250 @@ SPDX-License-Identifier: AGPL-3.0-only
 
       <div class="composer-input-row">
         <div ref="inputWrapperRef" class="input-wrapper">
-        <div class="input-left-actions">
-		  <EmotePicker :disabled="!!disabled" @select="$emit('emote', $event)" />
-          <el-popover
-            v-model:visible="addMenuOpen"
-            placement="top-start"
-            :width="skillsPanelOpen ? 340 : 240"
-            trigger="click"
-            :hide-after="0"
-            :teleported="false"
-            transition="composer-add-instant"
-            popper-class="composer-add-popper"
-            @hide="resetAddMenu"
-          >
-            <template #reference>
-              <el-button
-                :icon="Plus"
-                circle
-                size="small"
-                class="add-btn"
-                :disabled="isInputDisabled"
-                title="添加图片、视频或技能"
-                aria-label="添加图片、视频或技能"
-              />
-            </template>
+          <div class="input-left-actions">
+            <EmotePicker
+              :disabled="!!disabled"
+              @select="$emit('emote', $event)"
+            />
+            <el-popover
+              v-model:visible="addMenuOpen"
+              placement="top-start"
+              :width="skillsPanelOpen ? 340 : 240"
+              trigger="click"
+              :hide-after="0"
+              :teleported="false"
+              transition="composer-add-instant"
+              popper-class="composer-add-popper"
+              @hide="resetAddMenu"
+            >
+              <template #reference>
+                <el-button
+                  :icon="Plus"
+                  circle
+                  size="small"
+                  class="add-btn"
+                  :disabled="isInputDisabled"
+                  title="添加图片、视频或技能"
+                  aria-label="添加图片、视频或技能"
+                />
+              </template>
 
-            <div v-if="!skillsPanelOpen" class="add-menu">
-              <button type="button" class="add-menu-item" @click="openImagePicker">
-                <span class="add-menu-icon"><el-icon><Picture /></el-icon></span>
-                <span><strong>上传图片</strong><small>添加一张图片到消息</small></span>
-              </button>
-              <button type="button" class="add-menu-item" @click="openVideoPicker">
-                <span class="add-menu-icon"><el-icon><VideoCamera /></el-icon></span>
-                <span><strong>上传视频</strong><small>添加一个视频到消息</small></span>
-              </button>
-              <div class="add-menu-divider"></div>
-              <button type="button" class="add-menu-item" @click="skillsPanelOpen = true">
-                <span class="add-menu-icon"><el-icon><MagicStick /></el-icon></span>
-                <span><strong>使用技能</strong><small>为本次消息选择 Agent Skill</small></span>
-                <el-icon class="menu-chevron"><ArrowRight /></el-icon>
-              </button>
-            </div>
-
-            <div v-else class="skills-panel">
-              <div class="skills-panel-header">
-                <button type="button" class="back-btn" aria-label="返回" @click="skillsPanelOpen = false">
-                  <el-icon><ArrowLeft /></el-icon>
+              <div v-if="!skillsPanelOpen" class="add-menu">
+                <button
+                  type="button"
+                  class="add-menu-item"
+                  @click="openImagePicker"
+                >
+                  <span class="add-menu-icon"
+                    ><el-icon><Picture /></el-icon
+                  ></span>
+                  <span
+                    ><strong>上传图片</strong
+                    ><small>添加一张图片到消息</small></span
+                  >
                 </button>
-                <div>
-                  <strong>使用技能</strong>
-                  <small>选择后仅作用于本次输入</small>
+                <button
+                  type="button"
+                  class="add-menu-item"
+                  @click="openVideoPicker"
+                >
+                  <span class="add-menu-icon"
+                    ><el-icon><VideoCamera /></el-icon
+                  ></span>
+                  <span
+                    ><strong>上传视频</strong
+                    ><small>添加一个视频到消息</small></span
+                  >
+                </button>
+                <div class="add-menu-divider"></div>
+                <button
+                  type="button"
+                  class="add-menu-item"
+                  @click="skillsPanelOpen = true"
+                >
+                  <span class="add-menu-icon"
+                    ><el-icon><MagicStick /></el-icon
+                  ></span>
+                  <span
+                    ><strong>使用技能</strong
+                    ><small>为本次消息选择 Agent Skill</small></span
+                  >
+                  <el-icon class="menu-chevron"><ArrowRight /></el-icon>
+                </button>
+              </div>
+
+              <div v-else class="skills-panel">
+                <div class="skills-panel-header">
+                  <button
+                    type="button"
+                    class="back-btn"
+                    aria-label="返回"
+                    @click="skillsPanelOpen = false"
+                  >
+                    <el-icon><ArrowLeft /></el-icon>
+                  </button>
+                  <div>
+                    <strong>使用技能</strong>
+                    <small>选择后仅作用于本次输入</small>
+                  </div>
+                </div>
+                <el-input
+                  v-model="skillSearch"
+                  :prefix-icon="Search"
+                  clearable
+                  placeholder="搜索技能"
+                  class="skill-search"
+                />
+                <div
+                  class="skill-options"
+                  role="listbox"
+                  aria-label="可用 Agent Skills"
+                >
+                  <button
+                    v-for="skill in filteredAgentSkills"
+                    :key="skill.extensionId"
+                    type="button"
+                    class="skill-option"
+                    :class="{
+                      'is-selected': selectedSkillNames.includes(skill.name),
+                    }"
+                    role="option"
+                    :aria-selected="selectedSkillNames.includes(skill.name)"
+                    @click="toggleSkill(skill.name)"
+                  >
+                    <span class="skill-option-icon"
+                      ><el-icon><MagicStick /></el-icon
+                    ></span>
+                    <span class="skill-option-copy">
+                      <strong>{{ skill.displayName || skill.name }}</strong>
+                      <small>{{
+                        skill.shortDescription ||
+                        skill.description ||
+                        "暂无描述"
+                      }}</small>
+                    </span>
+                    <span class="skill-scope">{{
+                      skill.scope === "character" ? "角色" : "全局"
+                    }}</span>
+                    <el-icon
+                      v-if="selectedSkillNames.includes(skill.name)"
+                      class="skill-check"
+                      ><Check
+                    /></el-icon>
+                  </button>
+                  <div v-if="!filteredAgentSkills.length" class="skill-empty">
+                    {{ agentSkills.length ? "没有匹配的技能" : "暂无可用技能" }}
+                  </div>
                 </div>
               </div>
-              <el-input v-model="skillSearch" :prefix-icon="Search" clearable placeholder="搜索技能" class="skill-search" />
-              <div class="skill-options" role="listbox" aria-label="可用 Agent Skills">
+            </el-popover>
+          </div>
+
+          <div class="input-body">
+            <textarea
+              v-show="!voiceMode"
+              ref="inputRef"
+              v-model="text"
+              class="input-field"
+              :placeholder="
+                isWechatActive
+                  ? '微信消息请在微信端发送...'
+                  : isQQActive
+                    ? 'QQ消息请在QQ端发送...'
+                    : '输入消息...'
+              "
+              :disabled="isInputDisabled"
+              rows="1"
+              :aria-expanded="slashMenuOpen"
+              aria-haspopup="listbox"
+              :aria-activedescendant="
+                slashMenuOpen && filteredSlashSkills.length
+                  ? `slash-skill-${slashActiveIndex}`
+                  : undefined
+              "
+              @keydown="handleComposerKeydown"
+              @input="handleComposerInput"
+            />
+            <button
+              v-show="voiceMode"
+              type="button"
+              class="hold-voice-btn"
+              :class="{ 'is-recording': holding }"
+              :disabled="isInputDisabled"
+              @pointerdown.prevent="startHold"
+              @pointerup.prevent="endHold"
+              @pointercancel.prevent="cancelHold"
+              @keydown.space.prevent="startHold"
+              @keyup.space.prevent="endHold"
+              @keydown.enter.prevent="startHold"
+              @keyup.enter.prevent="endHold"
+              @contextmenu.prevent
+            >
+              <span v-if="holding" class="hold-voice-label"
+                ><span class="hold-voice-dot"></span>松开发送</span
+              >
+              <span v-else>按住说话</span>
+            </button>
+            <div
+              v-if="!voiceMode && slashMenuOpen"
+              class="slash-skill-popover"
+              role="listbox"
+              aria-label="斜杠技能菜单"
+            >
+              <div class="slash-skill-header">
+                <span>使用技能</span>
+                <small>/{{ slashQuery }}</small>
+              </div>
+              <div class="skill-options slash-skill-options">
                 <button
-                  v-for="skill in filteredAgentSkills"
+                  v-for="skill in filteredSlashSkills"
                   :key="skill.extensionId"
+                  :id="`slash-skill-${filteredSlashSkills.indexOf(skill)}`"
                   type="button"
                   class="skill-option"
-                  :class="{ 'is-selected': selectedSkillNames.includes(skill.name) }"
+                  :class="{
+                    'is-selected': selectedSkillNames.includes(skill.name),
+                    'is-active':
+                      filteredSlashSkills.indexOf(skill) === slashActiveIndex,
+                  }"
                   role="option"
                   :aria-selected="selectedSkillNames.includes(skill.name)"
-                  @click="toggleSkill(skill.name)"
+                  @mousedown.prevent="selectSlashSkill(skill.name)"
+                  @mouseenter="
+                    slashActiveIndex = filteredSlashSkills.indexOf(skill)
+                  "
                 >
-                  <span class="skill-option-icon"><el-icon><MagicStick /></el-icon></span>
+                  <span class="skill-option-icon"
+                    ><el-icon><MagicStick /></el-icon
+                  ></span>
                   <span class="skill-option-copy">
                     <strong>{{ skill.displayName || skill.name }}</strong>
-                    <small>{{ skill.shortDescription || skill.description || "暂无描述" }}</small>
+                    <small>{{
+                      skill.shortDescription || skill.description || "暂无描述"
+                    }}</small>
                   </span>
-                  <span class="skill-scope">{{ skill.scope === "character" ? "角色" : "全局" }}</span>
-                  <el-icon v-if="selectedSkillNames.includes(skill.name)" class="skill-check"><Check /></el-icon>
+                  <el-icon
+                    v-if="selectedSkillNames.includes(skill.name)"
+                    class="skill-check"
+                    ><Check
+                  /></el-icon>
                 </button>
-                <div v-if="!filteredAgentSkills.length" class="skill-empty">
-                  {{ agentSkills.length ? "没有匹配的技能" : "暂无可用技能" }}
+                <div
+                  v-if="!filteredSlashSkills.length"
+                  class="skill-empty"
+                  aria-live="polite"
+                >
+                  {{
+                    skillsLoading
+                      ? "正在加载技能..."
+                      : agentSkills.length
+                        ? "没有匹配的技能"
+                        : "暂无技能"
+                  }}
                 </div>
-              </div>
-            </div>
-          </el-popover>
-        </div>
-
-        <div class="input-body">
-          <textarea
-            v-show="!voiceMode"
-            ref="inputRef"
-            v-model="text"
-            class="input-field"
-            :placeholder="isWechatActive ? '微信消息请在微信端发送...' : isQQActive ? 'QQ消息请在QQ端发送...' : '输入消息...'"
-            :disabled="isInputDisabled"
-            rows="1"
-            :aria-expanded="slashMenuOpen"
-            aria-haspopup="listbox"
-            :aria-activedescendant="slashMenuOpen && filteredSlashSkills.length ? `slash-skill-${slashActiveIndex}` : undefined"
-            @keydown="handleComposerKeydown"
-            @input="handleComposerInput"
-          />
-          <button
-            v-show="voiceMode"
-            type="button"
-            class="hold-voice-btn"
-            :class="{ 'is-recording': holding }"
-            :disabled="isInputDisabled"
-            @pointerdown.prevent="startHold"
-            @pointerup.prevent="endHold"
-            @pointercancel.prevent="cancelHold"
-            @keydown.space.prevent="startHold"
-            @keyup.space.prevent="endHold"
-            @keydown.enter.prevent="startHold"
-            @keyup.enter.prevent="endHold"
-            @contextmenu.prevent
-          >
-            <span v-if="holding" class="hold-voice-label"><span class="hold-voice-dot"></span>松开发送</span>
-            <span v-else>按住说话</span>
-          </button>
-          <div v-if="!voiceMode && slashMenuOpen" class="slash-skill-popover" role="listbox" aria-label="斜杠技能菜单">
-            <div class="slash-skill-header">
-              <span>使用技能</span>
-              <small>/{{ slashQuery }}</small>
-            </div>
-            <div class="skill-options slash-skill-options">
-              <button
-                v-for="skill in filteredSlashSkills"
-                :key="skill.extensionId"
-                :id="`slash-skill-${filteredSlashSkills.indexOf(skill)}`"
-                type="button"
-                class="skill-option"
-                :class="{
-                  'is-selected': selectedSkillNames.includes(skill.name),
-                  'is-active': filteredSlashSkills.indexOf(skill) === slashActiveIndex,
-                }"
-                role="option"
-                :aria-selected="selectedSkillNames.includes(skill.name)"
-                @mousedown.prevent="selectSlashSkill(skill.name)"
-                @mouseenter="slashActiveIndex = filteredSlashSkills.indexOf(skill)"
-              >
-                <span class="skill-option-icon"><el-icon><MagicStick /></el-icon></span>
-                <span class="skill-option-copy">
-                  <strong>{{ skill.displayName || skill.name }}</strong>
-                  <small>{{ skill.shortDescription || skill.description || "暂无描述" }}</small>
-                </span>
-                <el-icon v-if="selectedSkillNames.includes(skill.name)" class="skill-check"><Check /></el-icon>
-              </button>
-              <div v-if="!filteredSlashSkills.length" class="skill-empty" aria-live="polite">
-                {{ skillsLoading ? "正在加载技能..." : agentSkills.length ? "没有匹配的技能" : "暂无技能" }}
               </div>
             </div>
           </div>
-        </div>
 
           <div class="input-actions">
             <el-button
@@ -217,7 +365,16 @@ SPDX-License-Identifier: AGPL-3.0-only
               :icon="generating ? CloseBold : Promotion"
               circle
               size="small"
-              :disabled="!generating && (isInputDisabled || uploadingVideo || (!text.trim() && !attachedImagePreview && !attachedVideo && !selectedSkillNames.length) || isSubmitting)"
+              :disabled="
+                !generating &&
+                (isInputDisabled ||
+                  uploadingVideo ||
+                  (!text.trim() &&
+                    !attachedImagePreview &&
+                    !attachedVideo &&
+                    !selectedSkillNames.length) ||
+                  isSubmitting)
+              "
               @click="generating ? $emit('stop') : handleSendClick()"
               :title="generating ? '停止生成' : '发送 (Enter)'"
             />
@@ -239,8 +396,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
-import { ElMessage } from "element-plus"
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import {
   ArrowLeft,
   ArrowRight,
@@ -254,48 +411,49 @@ import {
   Promotion,
   Search,
   VideoCamera,
-} from "@element-plus/icons-vue"
-import { useTextInput } from "../composables/useTextInput"
-import { useMediaUpload } from "../composables/useMediaUpload"
-import { useVoiceInput } from "../composables/useVoiceInput"
-import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api"
-import type { AgentSkillDefinition } from "../views/extensions/types"
-import EmotePicker from "./EmotePicker.vue"
+} from "@element-plus/icons-vue";
+import { useTextInput } from "../composables/useTextInput";
+import { useMediaUpload } from "../composables/useMediaUpload";
+import { useVoiceInput } from "../composables/useVoiceInput";
+import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
+import type { AgentSkillDefinition } from "../views/extensions/types";
+import EmotePicker from "./EmotePicker.vue";
 
 const props = defineProps<{
-  isWechatActive?: boolean
-  isQQActive?: boolean
-  disabled?: boolean
-  sending?: boolean
-  generating?: boolean
-  isSubmitting?: boolean
-  callActive?: boolean
-  replyTarget?: any
-}>()
+  isWechatActive?: boolean;
+  isQQActive?: boolean;
+  disabled?: boolean;
+  sending?: boolean;
+  generating?: boolean;
+  isSubmitting?: boolean;
+  callActive?: boolean;
+  replyTarget?: any;
+}>();
 
 const emit = defineEmits<{
-  send: [text: string, imageBase64?: string, videoBase64?: string]
-  stop: []
-  toggleCall: []
-  voiceText: [text: string]
-  voiceAudio: [blob: Blob, transcript?: string, duration?: number]
-  image: [file: File, base64: string]
-  removeImage: []
-  video: [file: File, videoUrl: string]
-  removeVideo: []
-  cancelReply: []
-	emote: [emote: any]
-}>()
+  send: [text: string, imageBase64?: string, videoBase64?: string];
+  stop: [];
+  toggleCall: [];
+  voiceText: [text: string];
+  voiceAudio: [blob: Blob, transcript?: string, duration?: number];
+  image: [file: File, base64: string];
+  removeImage: [];
+  video: [file: File, videoUrl: string];
+  removeVideo: [];
+  cancelReply: [];
+  emote: [emote: any];
+}>();
 
-const isDisabled = () => !!props.disabled || !!props.isWechatActive || !!props.isQQActive
-const isInputDisabled = computed(isDisabled)
-const textInput = useTextInput(emit as any, isDisabled)
+const isDisabled = () =>
+  !!props.disabled || !!props.isWechatActive || !!props.isQQActive;
+const isInputDisabled = computed(isDisabled);
+const textInput = useTextInput(emit as any, isDisabled);
 const mediaUpload = useMediaUpload(
   (file: File, base64: string) => emit("image", file, base64),
   (file: File, videoUrl: string) => emit("video", file, videoUrl),
   () => emit("removeImage"),
   () => emit("removeVideo"),
-)
+);
 
 const {
   text,
@@ -306,7 +464,7 @@ const {
   focus,
   setText,
   clear: clearText,
-} = textInput
+} = textInput;
 
 const {
   attachedImage,
@@ -321,259 +479,301 @@ const {
   handleVideoSelect,
   clearVideo,
   fileToBase64,
-} = mediaUpload
+} = mediaUpload;
 
-const addMenuOpen = ref(false)
-const inputWrapperRef = ref<HTMLElement>()
-const skillsPanelOpen = ref(false)
-const skillSearch = ref("")
-const agentSkills = ref<AgentSkillDefinition[]>([])
-const selectedSkillNames = ref<string[]>([])
-const slashMenuOpen = ref(false)
-const slashQuery = ref("")
-const slashRange = ref<{ start: number; end: number } | null>(null)
-const slashActiveIndex = ref(0)
-const skillsLoading = ref(false)
-const voiceMode = ref(false)
+const addMenuOpen = ref(false);
+const inputWrapperRef = ref<HTMLElement>();
+const skillsPanelOpen = ref(false);
+const skillSearch = ref("");
+const agentSkills = ref<AgentSkillDefinition[]>([]);
+const selectedSkillNames = ref<string[]>([]);
+const slashMenuOpen = ref(false);
+const slashQuery = ref("");
+const slashRange = ref<{ start: number; end: number } | null>(null);
+const slashActiveIndex = ref(0);
+const skillsLoading = ref(false);
+const voiceMode = ref(false);
 
-const {
-  holding,
-  startHold,
-  endHold,
-  cancelHold,
-} = useVoiceInput(
-  (blob: Blob, duration?: number) => emit("voiceAudio", blob, undefined, duration),
+const { holding, startHold, endHold, cancelHold } = useVoiceInput(
+  (blob: Blob, duration?: number) =>
+    emit("voiceAudio", blob, undefined, duration),
   isDisabled,
   () => !!props.generating || !!props.isSubmitting,
   () => ElMessage.warning("无法使用麦克风，请检查录音权限"),
-)
+);
 
 const replyTargetExcerpt = computed(() => {
-  const target = props.replyTarget
-  if (!target) return ""
-  const excerpt = target.replyToExcerpt || target.content || ""
-  return excerpt.length > 60 ? `${excerpt.slice(0, 60)}...` : excerpt
-})
+  const target = props.replyTarget;
+  if (!target) return "";
+  const excerpt = target.replyToExcerpt || target.content || "";
+  return excerpt.length > 60 ? `${excerpt.slice(0, 60)}...` : excerpt;
+});
 
-const hasComposerContext = computed(() =>
-  !!attachedImagePreview.value || !!attachedVideo.value || selectedSkillNames.value.length > 0,
-)
+const hasComposerContext = computed(
+  () =>
+    !!attachedImagePreview.value ||
+    !!attachedVideo.value ||
+    selectedSkillNames.value.length > 0,
+);
 
 const filteredAgentSkills = computed(() => {
-  const query = skillSearch.value.trim().toLowerCase()
-  return agentSkills.value.filter((skill) => {
-    if (!query) return true
-    return [skill.name, skill.displayName, skill.description, skill.shortDescription]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query))
-  }).slice(0, 30)
-})
+  const query = skillSearch.value.trim().toLowerCase();
+  return agentSkills.value
+    .filter((skill) => {
+      if (!query) return true;
+      return [
+        skill.name,
+        skill.displayName,
+        skill.description,
+        skill.shortDescription,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    })
+    .slice(0, 30);
+});
 
 const filteredSlashSkills = computed(() => {
-  const query = slashQuery.value.trim().toLowerCase()
-  return agentSkills.value.filter((skill) => {
-    if (!query) return true
-    return [skill.name, skill.displayName, skill.description, skill.shortDescription]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query))
-  }).slice(0, 12)
-})
+  const query = slashQuery.value.trim().toLowerCase();
+  return agentSkills.value
+    .filter((skill) => {
+      if (!query) return true;
+      return [
+        skill.name,
+        skill.displayName,
+        skill.description,
+        skill.shortDescription,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    })
+    .slice(0, 12);
+});
 
 async function loadAgentSkills() {
-  skillsLoading.value = true
+  skillsLoading.value = true;
   try {
-    const characterId = await resolveCharacterId()
-    if (!characterId) return
-    const page = await fetchAgentSkills(characterId, { pageSize: 100 })
-    agentSkills.value = (page.items || []).filter((skill) => skill.enabled && skill.compatibilityStatus !== "blocked")
+    const characterId = await resolveCharacterId();
+    if (!characterId) return;
+    const page = await fetchAgentSkills(characterId, { pageSize: 100 });
+    agentSkills.value = (page.items || []).filter(
+      (skill) => skill.enabled && skill.compatibilityStatus !== "blocked",
+    );
   } catch {
   } finally {
-    skillsLoading.value = false
+    skillsLoading.value = false;
   }
 }
 
 function resetAddMenu() {
-  skillsPanelOpen.value = false
-  skillSearch.value = ""
+  skillsPanelOpen.value = false;
+  skillSearch.value = "";
 }
 
 function openImagePicker() {
-  addMenuOpen.value = false
-  fileInputRef.value?.click()
+  addMenuOpen.value = false;
+  fileInputRef.value?.click();
 }
 
 function openVideoPicker() {
-  addMenuOpen.value = false
-  videoInputRef.value?.click()
+  addMenuOpen.value = false;
+  videoInputRef.value?.click();
 }
 
 function handleImageInput(event: Event) {
-  if (attachedVideo.value) clearVideo()
-  handleImageSelect(event)
+  if (attachedVideo.value) clearVideo();
+  handleImageSelect(event);
 }
 
 function handleVideoInput(event: Event) {
-  if (attachedImage.value) clearImage()
-  handleVideoSelect(event)
+  if (attachedImage.value) clearImage();
+  handleVideoSelect(event);
 }
 
 function toggleSkill(name: string) {
   if (selectedSkillNames.value.includes(name)) {
-    removeSkill(name)
+    removeSkill(name);
   } else {
-    selectedSkillNames.value.push(name)
+    selectedSkillNames.value.push(name);
   }
 }
 
 function removeSkill(name: string) {
-  selectedSkillNames.value = selectedSkillNames.value.filter((item) => item !== name)
+  selectedSkillNames.value = selectedSkillNames.value.filter(
+    (item) => item !== name,
+  );
 }
 
 function closeSlashMenu() {
-  slashMenuOpen.value = false
-  slashQuery.value = ""
-  slashRange.value = null
-  slashActiveIndex.value = 0
+  slashMenuOpen.value = false;
+  slashQuery.value = "";
+  slashRange.value = null;
+  slashActiveIndex.value = 0;
 }
 
 function handleComposerInput(event: Event) {
-  autoResize()
-  const target = event.target as HTMLTextAreaElement
-  const caret = target.selectionStart ?? text.value.length
-  const beforeCaret = text.value.slice(0, caret)
-  const match = beforeCaret.match(/(?:^|\s)\/([^\s/]*)$/)
+  autoResize();
+  const target = event.target as HTMLTextAreaElement;
+  const caret = target.selectionStart ?? text.value.length;
+  const beforeCaret = text.value.slice(0, caret);
+  const match = beforeCaret.match(/(?:^|\s)\/([^\s/]*)$/);
   if (!match) {
-    closeSlashMenu()
-    return
+    closeSlashMenu();
+    return;
   }
-  slashQuery.value = match[1] || ""
-  slashRange.value = { start: caret - slashQuery.value.length - 1, end: caret }
-  slashActiveIndex.value = 0
-  slashMenuOpen.value = true
+  slashQuery.value = match[1] || "";
+  slashRange.value = { start: caret - slashQuery.value.length - 1, end: caret };
+  slashActiveIndex.value = 0;
+  slashMenuOpen.value = true;
 }
 
 function scrollActiveSlashSkillIntoView() {
   nextTick(() => {
-    inputWrapperRef.value?.querySelector(".slash-skill-popover .skill-option.is-active")?.scrollIntoView({ block: "nearest" })
-  })
+    inputWrapperRef.value
+      ?.querySelector(".slash-skill-popover .skill-option.is-active")
+      ?.scrollIntoView({ block: "nearest" });
+  });
 }
 
 function handleComposerKeydown(event: KeyboardEvent) {
   if (slashMenuOpen.value) {
-    const count = filteredSlashSkills.value.length
+    const count = filteredSlashSkills.value.length;
     if (event.key === "ArrowDown" && count) {
-      event.preventDefault()
-      slashActiveIndex.value = (slashActiveIndex.value + 1) % count
-      scrollActiveSlashSkillIntoView()
-      return
+      event.preventDefault();
+      slashActiveIndex.value = (slashActiveIndex.value + 1) % count;
+      scrollActiveSlashSkillIntoView();
+      return;
     }
     if (event.key === "ArrowUp" && count) {
-      event.preventDefault()
-      slashActiveIndex.value = (slashActiveIndex.value - 1 + count) % count
-      scrollActiveSlashSkillIntoView()
-      return
+      event.preventDefault();
+      slashActiveIndex.value = (slashActiveIndex.value - 1 + count) % count;
+      scrollActiveSlashSkillIntoView();
+      return;
     }
-    if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey && !event.isComposing) {
-      event.preventDefault()
-      const skill = filteredSlashSkills.value[slashActiveIndex.value]
-      if (skill) selectSlashSkill(skill.name)
-      return
+    if (
+      (event.key === "Enter" || event.key === "Tab") &&
+      !event.shiftKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault();
+      const skill = filteredSlashSkills.value[slashActiveIndex.value];
+      if (skill) selectSlashSkill(skill.name);
+      return;
     }
     if (event.key === "Escape") {
-      event.preventDefault()
-      closeSlashMenu()
-      return
+      event.preventDefault();
+      closeSlashMenu();
+      return;
     }
   }
-  if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
-    handleEnterSend(event)
+  if (
+    event.key === "Enter" &&
+    !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.isComposing
+  ) {
+    handleEnterSend(event);
   }
 }
 
 function selectSlashSkill(name: string) {
-  const range = slashRange.value
-  if (!range) return
-  if (!selectedSkillNames.value.includes(name)) selectedSkillNames.value.push(name)
-  const before = text.value.slice(0, range.start)
-  const after = text.value.slice(range.end)
-  setText(`${before}${after}`)
-  closeSlashMenu()
-  nextTick(() => inputRef.value?.focus())
+  const range = slashRange.value;
+  if (!range) return;
+  if (!selectedSkillNames.value.includes(name))
+    selectedSkillNames.value.push(name);
+  const before = text.value.slice(0, range.start);
+  const after = text.value.slice(range.end);
+  setText(`${before}${after}`);
+  closeSlashMenu();
+  nextTick(() => inputRef.value?.focus());
 }
 
 function handleComposerOutsidePointer(event: PointerEvent) {
-  if (!inputWrapperRef.value?.contains(event.target as Node)) closeSlashMenu()
+  if (!inputWrapperRef.value?.contains(event.target as Node)) closeSlashMenu();
 }
 
 function buildOutgoingText(content: string) {
-  const skillPrefix = selectedSkillNames.value.map((name) => `$${name}`).join(" ")
-  return [skillPrefix, content.trim()].filter(Boolean).join(" ")
+  const skillPrefix = selectedSkillNames.value
+    .map((name) => `$${name}`)
+    .join(" ");
+  return [skillPrefix, content.trim()].filter(Boolean).join(" ");
 }
 
 function finishSubmit() {
-  selectedSkillNames.value = []
-  closeSlashMenu()
+  selectedSkillNames.value = [];
+  closeSlashMenu();
 }
 
 async function submitComposer(event?: KeyboardEvent) {
-  if (event) event.preventDefault()
-  if (isInputDisabled.value || props.generating || props.isSubmitting || uploadingVideo.value) return
-  const outgoingText = buildOutgoingText(text.value)
+  if (event) event.preventDefault();
+  if (
+    isInputDisabled.value ||
+    props.generating ||
+    props.isSubmitting ||
+    uploadingVideo.value
+  )
+    return;
+  const outgoingText = buildOutgoingText(text.value);
 
   if (attachedVideo.value) {
-    if (!attachedVideoUrl.value) return
-    sendWithVideo(outgoingText || "[视频]", attachedVideoUrl.value)
-    clearVideo()
-    finishSubmit()
-    return
+    if (!attachedVideoUrl.value) return;
+    sendWithVideo(outgoingText || "[视频]", attachedVideoUrl.value);
+    clearVideo();
+    finishSubmit();
+    return;
   }
 
   if (attachedImage.value) {
     if (attachedImagePreview.value) {
-      sendWithImage(outgoingText, attachedImagePreview.value)
+      sendWithImage(outgoingText, attachedImagePreview.value);
     } else {
-      sendWithImage(outgoingText, await fileToBase64(attachedImage.value))
+      sendWithImage(outgoingText, await fileToBase64(attachedImage.value));
     }
-    clearImage()
-    finishSubmit()
-    return
+    clearImage();
+    finishSubmit();
+    return;
   }
 
-  if (!outgoingText) return
-  emit("send", outgoingText)
-  clearText()
-  finishSubmit()
-  nextTick(autoResize)
+  if (!outgoingText) return;
+  emit("send", outgoingText);
+  clearText();
+  finishSubmit();
+  nextTick(autoResize);
 }
 
 function handleEnterSend(event: KeyboardEvent) {
-  submitComposer(event)
+  submitComposer(event);
 }
 
 function handleSendClick() {
-  submitComposer()
+  submitComposer();
 }
 
 function toggleVoiceMode() {
-  if (holding.value) cancelHold()
-  voiceMode.value = !voiceMode.value
-  closeSlashMenu()
-  if (!voiceMode.value) nextTick(() => inputRef.value?.focus())
+  if (holding.value) cancelHold();
+  voiceMode.value = !voiceMode.value;
+  closeSlashMenu();
+  if (!voiceMode.value) nextTick(() => inputRef.value?.focus());
 }
 
-watch(() => props.disabled, (value) => {
-  if (!value) loadAgentSkills()
-})
+watch(
+  () => props.disabled,
+  (value) => {
+    if (!value) loadAgentSkills();
+  },
+);
 
 onMounted(() => {
-  loadAgentSkills()
-  document.addEventListener("pointerdown", handleComposerOutsidePointer)
-})
+  loadAgentSkills();
+  document.addEventListener("pointerdown", handleComposerOutsidePointer);
+});
 onUnmounted(() => {
-  document.removeEventListener("pointerdown", handleComposerOutsidePointer)
-})
+  document.removeEventListener("pointerdown", handleComposerOutsidePointer);
+});
 
-defineExpose({ focus, setText, clear: clearText })
+defineExpose({ focus, setText, clear: clearText });
 </script>
 
 <style scoped>
@@ -584,7 +784,8 @@ defineExpose({ focus, setText, clear: clearText })
   padding: 10px 12px;
   border-top: 1px solid var(--tp-glass-border);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
 }
 
 .hidden-input {
@@ -613,12 +814,15 @@ defineExpose({ focus, setText, clear: clearText })
   border: 1px solid var(--ac-color-border);
   border-radius: 18px;
   background: var(--ac-color-surface);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .input-wrapper:focus-within {
   border-color: var(--ac-color-border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac-color-primary) 10%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--ac-color-primary) 10%, transparent);
 }
 
 .input-left-actions,
@@ -723,7 +927,10 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 .voice-mode-toggle {
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
 }
 
 .voice-mode-toggle.is-voice-mode {
@@ -750,7 +957,10 @@ defineExpose({ focus, setText, clear: clearText })
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
 }
 
 .hold-voice-btn.is-recording {
@@ -779,8 +989,14 @@ defineExpose({ focus, setText, clear: clearText })
 }
 
 @keyframes voiceRecordPulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ac-color-danger) 24%, transparent); }
-  50% { box-shadow: 0 0 0 5px transparent; }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, var(--ac-color-danger) 24%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px transparent;
+  }
 }
 
 .composer-context {

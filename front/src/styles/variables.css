@@ -50,8 +50,11 @@
   --ac-mobile-header-height: 44px;
   --ac-mobile-input-min-height: 44px;
   --ac-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --ac-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --ac-font-family-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ac-font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --ac-font-family-mono:
+    "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --ac-font-size-xs: 12px;
   --ac-font-size-sm: 13px;
   --ac-font-size-base: 14px;
@@ -131,7 +134,8 @@ body {
   background: var(--tp-glass-bg);
   border: 1px solid var(--tp-glass-border);
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
+    saturate(var(--tp-glass-saturate));
 }
 
 .glass-surface--strong {
@@ -174,7 +178,9 @@ body {
   cursor: pointer;
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .glass-surface,
   .glass-surface--strong,
   .side-nav,

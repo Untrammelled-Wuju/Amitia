@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="ob-shell"
-    :class="`ob-stage-${currentStage}`"
-  >
+  <div class="ob-shell" :class="`ob-stage-${currentStage}`">
     <div
       class="onboarding-world"
       ref="worldRef"
@@ -13,7 +10,9 @@
       :data-core-reveal-pending="coreRevealPending ? 'true' : null"
       :data-config-transition="configStageTransition ? 'true' : null"
       :data-identity-state="currentStage === 7 ? identityState : null"
-      :data-memory-step="currentStage === 8 ? (memoryComplete ? 'complete' : memoryStep) : null"
+      :data-memory-step="
+        currentStage === 8 ? (memoryComplete ? 'complete' : memoryStep) : null
+      "
     >
       <StarfieldBg />
       <CoreZone ref="coreZoneRef" :caption="currentCaption" />
@@ -22,13 +21,29 @@
         class="ob-back"
         :class="{ show: currentStage > 0 }"
         @click="prevStage"
-      >返回上一层</button>
+      >
+        返回上一层
+      </button>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 0 || leavingStage === 0), 'stage-leaving': leavingStage === 0, 'stage-enter-prep': enterPrepStage === 0 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 0 || leavingStage === 0),
+          'stage-leaving': leavingStage === 0,
+          'stage-enter-prep': enterPrepStage === 0,
+        }"
+      >
         <StageIntro @next="nextStage" />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 1 || leavingStage === 1), 'stage-leaving': leavingStage === 1, 'stage-enter-prep': enterPrepStage === 1 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 1 || leavingStage === 1),
+          'stage-leaving': leavingStage === 1,
+          'stage-enter-prep': enterPrepStage === 1,
+        }"
+      >
         <StageDeployMode
           :deployMode="deployMode"
           :serverURL="serverURL"
@@ -41,7 +56,14 @@
         />
       </section>
 
-      <section class="ob-stage ob-setup-stage" :class="{ active: stageInitReady && (currentStage === 2 || leavingStage === 2), 'stage-leaving': leavingStage === 2, 'stage-enter-prep': enterPrepStage === 2 }">
+      <section
+        class="ob-stage ob-setup-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 2 || leavingStage === 2),
+          'stage-leaving': leavingStage === 2,
+          'stage-enter-prep': enterPrepStage === 2,
+        }"
+      >
         <StageAdminSetup
           :deployMode="deployMode"
           :step="adminStep"
@@ -54,7 +76,14 @@
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 3 || leavingStage === 3), 'stage-leaving': leavingStage === 3, 'stage-enter-prep': enterPrepStage === 3 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 3 || leavingStage === 3),
+          'stage-leaving': leavingStage === 3,
+          'stage-enter-prep': enterPrepStage === 3,
+        }"
+      >
         <StageModelConfig
           :detecting="detectingModels"
           :modelReady="modelReady"
@@ -75,7 +104,14 @@
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 4 || leavingStage === 4), 'stage-leaving': leavingStage === 4, 'stage-enter-prep': enterPrepStage === 4 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 4 || leavingStage === 4),
+          'stage-leaving': leavingStage === 4,
+          'stage-enter-prep': enterPrepStage === 4,
+        }"
+      >
         <StageVisionMode
           :visionMode="visionMode"
           :modelReady="modelReady"
@@ -95,7 +131,14 @@
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 5 || leavingStage === 5), 'stage-leaving': leavingStage === 5, 'stage-enter-prep': enterPrepStage === 5 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 5 || leavingStage === 5),
+          'stage-leaving': leavingStage === 5,
+          'stage-enter-prep': enterPrepStage === 5,
+        }"
+      >
         <StageVoice
           :voiceModelMode="voiceModelMode"
           :voiceModelKey="voiceModelKey"
@@ -116,7 +159,14 @@
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 6 || leavingStage === 6), 'stage-leaving': leavingStage === 6, 'stage-enter-prep': enterPrepStage === 6 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 6 || leavingStage === 6),
+          'stage-leaving': leavingStage === 6,
+          'stage-enter-prep': enterPrepStage === 6,
+        }"
+      >
         <StageVectorModel
           :vectorModelKey="vectorModelKey"
           :vectorModelName="vectorModelName"
@@ -124,26 +174,38 @@
           :vectorReady="vectorReady"
           :vectorDetected="vectorDetected"
           :detecting="detectingVector"
-            :vectorModelMode="vectorModelMode"
+          :vectorModelMode="vectorModelMode"
           :statusText="vectorStatusText"
           @update:vectorModelKey="vectorModelKey = $event"
           @update:vectorModelName="vectorModelName = $event"
           @update:vectorModelURL="vectorModelURL = $event"
-            @update:vectorModelMode="vectorModelMode = $event"
+          @update:vectorModelMode="vectorModelMode = $event"
           @next="nextStage"
           @detect="detectVector"
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 7 || leavingStage === 7), 'stage-leaving': leavingStage === 7, 'stage-enter-prep': enterPrepStage === 7 }"><StageIdentity
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 7 || leavingStage === 7),
+          'stage-leaving': leavingStage === 7,
+          'stage-enter-prep': enterPrepStage === 7,
+        }"
+      >
+        <StageIdentity
           v-if="currentIdentityQuestion"
-:step="identityStep"
+          :step="identityStep"
           :question="currentIdentityQuestion.question"
           :context="currentIdentityQuestion.context"
           :placeholder="currentIdentityQuestion.placeholder"
           :quickChoices="currentIdentityQuestion.quickChoices"
           :maxLength="currentIdentityQuestion.maxLength"
-          :ledger="{ name: identityName, role: identityRole, personality: identityPersonality }"
+          :ledger="{
+            name: identityName,
+            role: identityRole,
+            personality: identityPersonality,
+          }"
           :state="identityState"
           :avatarPreviewUrl="identityAvatarPreviewUrl"
           :avatarUploaded="identityAvatarUploaded"
@@ -154,9 +216,16 @@
           @avatarContinue="handleAvatarContinue"
           @next="nextStage"
         />
-</section>
+      </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 8 || leavingStage === 8), 'stage-leaving': leavingStage === 8, 'stage-enter-prep': enterPrepStage === 8 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 8 || leavingStage === 8),
+          'stage-leaving': leavingStage === 8,
+          'stage-enter-prep': enterPrepStage === 8,
+        }"
+      >
         <StageMemory
           v-if="currentMemoryQuestion"
           :step="memoryStep"
@@ -177,7 +246,14 @@
         />
       </section>
 
-      <section class="ob-stage" :class="{ active: stageInitReady && (currentStage === 9 || leavingStage === 9), 'stage-leaving': leavingStage === 9, 'stage-enter-prep': enterPrepStage === 9 }">
+      <section
+        class="ob-stage"
+        :class="{
+          active: stageInitReady && (currentStage === 9 || leavingStage === 9),
+          'stage-leaving': leavingStage === 9,
+          'stage-enter-prep': enterPrepStage === 9,
+        }"
+      >
         <StageBoundary
           :permissions="permissions"
           :entering="entering"
@@ -191,32 +267,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from "vue"
-import StarfieldBg from "./components/StarfieldBg.vue"
-import CoreZone from "./components/CoreZone.vue"
-import StageIntro from "./components/StageIntro.vue"
-import StageDeployMode from "./components/StageDeployMode.vue"
-import StageAdminSetup from "./components/StageAdminSetup.vue"
-import StageModelConfig from "./components/StageModelConfig.vue"
-import StageVisionMode from "./components/StageVisionMode.vue"
-import StageVoice from "./components/StageVoice.vue"
-import StageVectorModel from "./components/StageVectorModel.vue"
-import StageIdentity from "./components/StageIdentity.vue"
-import StageMemory from "./components/StageMemory.vue"
-import StageBoundary from "./components/StageBoundary.vue"
-import AmitiaEntryTransition from "./components/AmitiaEntryTransition.vue"
-import { useImmersiveOnboarding } from "./composables/useImmersiveOnboarding"
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
+import StarfieldBg from "./components/StarfieldBg.vue";
+import CoreZone from "./components/CoreZone.vue";
+import StageIntro from "./components/StageIntro.vue";
+import StageDeployMode from "./components/StageDeployMode.vue";
+import StageAdminSetup from "./components/StageAdminSetup.vue";
+import StageModelConfig from "./components/StageModelConfig.vue";
+import StageVisionMode from "./components/StageVisionMode.vue";
+import StageVoice from "./components/StageVoice.vue";
+import StageVectorModel from "./components/StageVectorModel.vue";
+import StageIdentity from "./components/StageIdentity.vue";
+import StageMemory from "./components/StageMemory.vue";
+import StageBoundary from "./components/StageBoundary.vue";
+import AmitiaEntryTransition from "./components/AmitiaEntryTransition.vue";
+import { useImmersiveOnboarding } from "./composables/useImmersiveOnboarding";
 
-import "./styles/onboarding.css"
-import "./styles/stages.css"
-import "./styles/typography.css"
-import "./styles/stage-specific.css"
-import "./styles/identity-memory.css"
-import "./styles/boundary.css"
-import "./styles/core-layout.css"
-import "./styles/entry-transition.css"
-import "./styles/bottom-alignment.css"
-import "./styles/completion-buttons.css"
+import "./styles/onboarding.css";
+import "./styles/stages.css";
+import "./styles/typography.css";
+import "./styles/stage-specific.css";
+import "./styles/identity-memory.css";
+import "./styles/boundary.css";
+import "./styles/core-layout.css";
+import "./styles/entry-transition.css";
+import "./styles/bottom-alignment.css";
+import "./styles/completion-buttons.css";
 
 const {
   currentStage,
@@ -305,80 +381,79 @@ const {
   leavingStage,
   configStageTransition,
   enterPrepStage,
-} = useImmersiveOnboarding()
+} = useImmersiveOnboarding();
 
-const coreZoneRef = ref<InstanceType<typeof CoreZone> | null>(null)
-const coreLayoutStage = ref<number | null>(null)
-const stageInitReady = ref(true)
+const coreZoneRef = ref<InstanceType<typeof CoreZone> | null>(null);
+const coreLayoutStage = ref<number | null>(null);
+const stageInitReady = ref(true);
 
-const detectingRemote = ref(false)
-const remoteStatusText = ref("")
+const detectingRemote = ref(false);
+const remoteStatusText = ref("");
 
-const worldRef = ref<HTMLDivElement | null>(null)
+const worldRef = ref<HTMLDivElement | null>(null);
 
 watch(currentStage, (val) => {
   if (stageInitReady.value && coreLayoutStage.value !== val) {
-    coreLayoutStage.value = val
+    coreLayoutStage.value = val;
   }
   nextTick(() => {
-    const el = coreZoneRef.value?.getEl()
-    if (!el) return
+    const el = coreZoneRef.value?.getEl();
+    if (!el) return;
     if (val === 9) {
       setTimeout(() => {
-        el.style.transition = "none"
-        el.style.animation = "none"
-      }, 750)
+        el.style.transition = "none";
+        el.style.animation = "none";
+      }, 750);
     } else {
-      el.style.transition = ""
-      el.style.animation = ""
+      el.style.transition = "";
+      el.style.animation = "";
     }
-  })
-})
+  });
+});
 
 watch(serverURL, () => {
-  remoteStatusText.value = ""
-})
+  remoteStatusText.value = "";
+});
 
 async function onHealthCheckDone() {
-  await checkAdminExists()
-  adminStep.value = "account"
+  await checkAdminExists();
+  adminStep.value = "account";
 }
 
 function checkRemoteConnection() {
-  const url = serverURL.value.trim()
-  if (!url) return
-  serverURL.value = url
+  const url = serverURL.value.trim();
+  if (!url) return;
+  serverURL.value = url;
 
-  detectingRemote.value = true
-  remoteStatusText.value = "正在检测"
-  coreZoneRef.value?.ping()
+  detectingRemote.value = true;
+  remoteStatusText.value = "正在检测";
+  coreZoneRef.value?.ping();
 
-  const healthUrl = url.replace(/\/+$/, "") + "/api/health"
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10000)
+  const healthUrl = url.replace(/\/+$/, "") + "/api/health";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
 
   fetch(healthUrl, { signal: controller.signal })
     .then((res) => {
       if (res.ok) {
-        remoteStatusText.value = "连接成功"
+        remoteStatusText.value = "连接成功";
       } else {
-        remoteStatusText.value = `服务器返回 ${res.status}`
+        remoteStatusText.value = `服务器返回 ${res.status}`;
       }
     })
     .catch(() => {
-      remoteStatusText.value = "无法连接，请检查地址"
+      remoteStatusText.value = "无法连接，请检查地址";
     })
     .finally(() => {
-      clearTimeout(timeout)
-      detectingRemote.value = false
-    })
+      clearTimeout(timeout);
+      detectingRemote.value = false;
+    });
 }
 onMounted(() => {
   requestAnimationFrame(() => {
-    coreLayoutStage.value = 0
-  })
-})
-
+    coreLayoutStage.value = 0;
+  });
+});
 </script>
 
 <style scoped>

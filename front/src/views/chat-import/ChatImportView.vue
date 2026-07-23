@@ -6,7 +6,12 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="import-page">
     <h2 class="page-title">导入聊天记录</h2>
 
-    <el-alert type="warning" :closable="true" show-icon style="margin-bottom:12px">
+    <el-alert
+      type="warning"
+      :closable="true"
+      show-icon
+      style="margin-bottom: 12px"
+    >
       <template #title>
         导入内容可能包含隐私信息，需自行移除验证码、密码、银行卡号和身份证号再导入。
       </template>
@@ -57,17 +62,13 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
     <el-card shadow="never" class="section-card" v-if="parseResult">
-      <template #header>
-        <span class="step-badge">3</span> 确认导入
-      </template>
+      <template #header> <span class="step-badge">3</span> 确认导入 </template>
       <div class="confirm-options">
         <el-checkbox v-model="genSummary">生成会话摘要</el-checkbox>
         <el-checkbox v-model="extractMemories">提取记忆候选项</el-checkbox>
-        <span class="confirm-hint">
-          将从导入的消息创建一个新的会话。
-        </span>
+        <span class="confirm-hint"> 将从导入的消息创建一个新的会话。 </span>
       </div>
-      <div style="margin-top:12px">
+      <div style="margin-top: 12px">
         <el-button
           type="primary"
           size="large"
@@ -85,23 +86,40 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="step-badge">4</span> 导入后处理
       </template>
       <div class="post-actions">
-        <el-button :loading="genSummaryLoading" @click="handleGenSummary" v-if="genSummary">
+        <el-button
+          :loading="genSummaryLoading"
+          @click="handleGenSummary"
+          v-if="genSummary"
+        >
           生成摘要
         </el-button>
-        <el-button :loading="extractLoading" @click="handleExtractMemories" v-if="extractMemories">
+        <el-button
+          :loading="extractLoading"
+          @click="handleExtractMemories"
+          v-if="extractMemories"
+        >
           提取记忆
         </el-button>
         <router-link v-if="importedConvId" :to="'/logs'" class="inline-link">
           查看已导入会话
         </router-link>
       </div>
-      <div v-if="memCandidates.length > 0" style="margin-top:10px">
-        <div v-for="c in memCandidates.slice(0, 5)" :key="c.key" class="mem-candidate">
+      <div v-if="memCandidates.length > 0" style="margin-top: 10px">
+        <div
+          v-for="c in memCandidates.slice(0, 5)"
+          :key="c.key"
+          class="mem-candidate"
+        >
           <el-tag size="small">{{ c.key }}</el-tag>
           <span class="mc-val">{{ c.value }}</span>
           <span class="mc-imp">重要性： {{ c.importance }}/10</span>
         </div>
-        <el-button text size="small" @click="router.push('/memory')" v-if="memCandidates.length > 0">
+        <el-button
+          text
+          size="small"
+          @click="router.push('/memory')"
+          v-if="memCandidates.length > 0"
+        >
           在记忆中管理
         </el-button>
       </div>
@@ -124,11 +142,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue"
-import ImportInputPanel from "./components/ImportInputPanel.vue"
-import ImportPreviewPanel from "./components/ImportPreviewPanel.vue"
-import ImportHistoryPanel from "./components/ImportHistoryPanel.vue"
-import { useImportWizard } from "./useImportWizard"
+import { onMounted } from "vue";
+import ImportInputPanel from "./components/ImportInputPanel.vue";
+import ImportPreviewPanel from "./components/ImportPreviewPanel.vue";
+import ImportHistoryPanel from "./components/ImportHistoryPanel.vue";
+import { useImportWizard } from "./useImportWizard";
 
 const {
   rawText,
@@ -164,33 +182,89 @@ const {
   viewBatch,
   delBatch,
   router,
-} = useImportWizard()
+} = useImportWizard();
 
 onMounted(() => {
-  fetchCharacters()
-  fetchBatches()
-})
+  fetchCharacters();
+  fetchBatches();
+});
 </script>
 
 <style scoped>
-.import-page { }
-.page-title { font-size: 24px; font-weight: 600; margin-bottom: 14px; color: var(--ac-color-text); }
-.section-card { margin-bottom: 12px; }
-
-.step-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 50%;
-  background: var(--ac-color-primary); color: var(--ac-color-text-on-primary);
-  font-size: 11px; font-weight: 700; margin-right: 6px; flex-shrink: 0;
+.import-page {
+}
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: var(--ac-color-text);
+}
+.section-card {
+  margin-bottom: 12px;
 }
 
-.confirm-options { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.confirm-hint { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted); flex-basis: 100%; margin-top: 4px; }
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ac-color-primary);
+  color: var(--ac-color-text-on-primary);
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
 
-.post-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ac-color-border-light); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.inline-link { display: inline-block; margin-left: 8px; font-size: var(--ac-font-size-sm); color: var(--ac-color-primary); text-decoration: underline; }
+.confirm-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.confirm-hint {
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-muted);
+  flex-basis: 100%;
+  margin-top: 4px;
+}
 
-.mem-candidate { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
-.mc-val { font-size: var(--ac-font-size-xs); color: var(--ac-color-text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-imp { font-size: 10px; color: var(--ac-color-text-muted); white-space: nowrap; }
+.post-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ac-color-border-light);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inline-link {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: var(--ac-font-size-sm);
+  color: var(--ac-color-primary);
+  text-decoration: underline;
+}
+
+.mem-candidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.mc-val {
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mc-imp {
+  font-size: 10px;
+  color: var(--ac-color-text-muted);
+  white-space: nowrap;
+}
 </style>

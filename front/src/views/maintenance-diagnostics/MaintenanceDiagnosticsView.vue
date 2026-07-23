@@ -30,19 +30,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import DiagnosticsPanel from "./DiagnosticsPanel.vue"
-import ServiceStatusPanel from "./ServiceStatusPanel.vue"
-import OperationsPanel from "./OperationsPanel.vue"
-import ExportHistoryPanel from "./ExportHistoryPanel.vue"
-import type { ExportRecord } from "./types"
+import { ref } from "vue";
+import DiagnosticsPanel from "./DiagnosticsPanel.vue";
+import ServiceStatusPanel from "./ServiceStatusPanel.vue";
+import OperationsPanel from "./OperationsPanel.vue";
+import ExportHistoryPanel from "./ExportHistoryPanel.vue";
+import type { ExportRecord } from "./types";
 
-const showRestartWarning = ref(true)
-const exportHistory = ref<ExportRecord[]>([])
+const showRestartWarning = ref(true);
+const exportHistory = ref<ExportRecord[]>([]);
 
 function onExported(record: ExportRecord) {
-  exportHistory.value.unshift(record)
-  if (exportHistory.value.length > 10) exportHistory.value.pop()
+  exportHistory.value.unshift(record);
+  if (exportHistory.value.length > 10) exportHistory.value.pop();
 }
 </script>
 

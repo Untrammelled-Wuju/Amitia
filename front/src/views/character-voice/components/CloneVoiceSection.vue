@@ -20,8 +20,18 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="clone-id">{{ v.speakerId }}</span>
         </div>
         <div class="clone-actions">
-          <el-button size="small" @click.stop="emit('preview', v.speakerId)" :loading="previewCloneId === v.speakerId">试听</el-button>
-          <el-button size="small" type="danger" @click.stop="emit('delete', v.speakerId, v.name)">删除</el-button>
+          <el-button
+            size="small"
+            @click.stop="emit('preview', v.speakerId)"
+            :loading="previewCloneId === v.speakerId"
+            >试听</el-button
+          >
+          <el-button
+            size="small"
+            type="danger"
+            @click.stop="emit('delete', v.speakerId, v.name)"
+            >删除</el-button
+          >
         </div>
       </div>
     </div>
@@ -30,8 +40,18 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="form-item-label">训练新音色</div>
       <p class="sub-desc">填入已购买的复刻槽位ID并上传语音样本</p>
       <div class="clone-form-row">
-        <el-input v-model="trainSpeakerIdModel" placeholder="槽位ID，如 S_xxxxxxxx" size="default" style="width:220px" />
-        <el-input v-model="trainVoiceNameModel" placeholder="备注名称" size="default" style="width:140px" />
+        <el-input
+          v-model="trainSpeakerIdModel"
+          placeholder="槽位ID，如 S_xxxxxxxx"
+          size="default"
+          style="width: 220px"
+        />
+        <el-input
+          v-model="trainVoiceNameModel"
+          placeholder="备注名称"
+          size="default"
+          style="width: 140px"
+        />
       </div>
       <div class="clone-upload-row">
         <el-upload
@@ -47,7 +67,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           </template>
         </el-upload>
       </div>
-      <el-button type="success" @click="emit('train')" :loading="trainLoading" :disabled="!trainSpeakerId.trim() || !cloneFile" size="small">
+      <el-button
+        type="success"
+        @click="emit('train')"
+        :loading="trainLoading"
+        :disabled="!trainSpeakerId.trim() || !cloneFile"
+        size="small"
+      >
         开始训练
       </el-button>
       <span v-if="trainResult" class="clone-result">{{ trainResult }}</span>
@@ -56,39 +82,39 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed } from "vue";
 
 const props = defineProps<{
-  clonedVoices: any[]
-  customVoiceId: string
-  previewCloneId: string
-  trainSpeakerId: string
-  trainVoiceName: string
-  cloneFile: File | null
-  cloneFileList: any[]
-  trainLoading: boolean
-  trainResult: string
-}>()
+  clonedVoices: any[];
+  customVoiceId: string;
+  previewCloneId: string;
+  trainSpeakerId: string;
+  trainVoiceName: string;
+  cloneFile: File | null;
+  cloneFileList: any[];
+  trainLoading: boolean;
+  trainResult: string;
+}>();
 
 const emit = defineEmits<{
-  (e: "select", speakerId: string): void
-  (e: "preview", speakerId: string): void
-  (e: "delete", speakerId: string, name: string): void
-  (e: "fileChange", file: any): void
-  (e: "train"): void
-  (e: "update:trainSpeakerId", v: string): void
-  (e: "update:trainVoiceName", v: string): void
-}>()
+  (e: "select", speakerId: string): void;
+  (e: "preview", speakerId: string): void;
+  (e: "delete", speakerId: string, name: string): void;
+  (e: "fileChange", file: any): void;
+  (e: "train"): void;
+  (e: "update:trainSpeakerId", v: string): void;
+  (e: "update:trainVoiceName", v: string): void;
+}>();
 
 const trainSpeakerIdModel = computed({
   get: () => props.trainSpeakerId,
   set: (v) => emit("update:trainSpeakerId", v),
-})
+});
 
 const trainVoiceNameModel = computed({
   get: () => props.trainVoiceName,
   set: (v) => emit("update:trainVoiceName", v),
-})
+});
 </script>
 
 <style scoped>
@@ -116,7 +142,9 @@ const trainVoiceNameModel = computed({
   border-radius: 6px;
   margin-bottom: 6px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 .clone-option:hover {
   border-color: var(--ac-color-primary);

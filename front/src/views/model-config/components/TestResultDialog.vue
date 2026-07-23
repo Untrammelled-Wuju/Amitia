@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <CircleCheckFilled v-if="testResult.success" />
           <CircleCloseFilled v-else />
         </el-icon>
-        <span>{{ testResult.success ? '连接成功' : '连接失败' }}</span>
+        <span>{{ testResult.success ? "连接成功" : "连接失败" }}</span>
       </div>
       <div class="tr-meta">
         <div class="tr-row">
@@ -31,22 +31,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
-import { CircleCheckFilled, CircleCloseFilled } from "@element-plus/icons-vue"
+import { computed } from "vue";
+import { CircleCheckFilled, CircleCloseFilled } from "@element-plus/icons-vue";
 
 const props = defineProps<{
-  modelValue: boolean
-  testResult: any
-}>()
+  modelValue: boolean;
+  testResult: any;
+}>();
 
 const emit = defineEmits<{
-  (e: "update:modelValue", v: boolean): void
-}>()
+  (e: "update:modelValue", v: boolean): void;
+}>();
 
 const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit("update:modelValue", v),
-})
+});
 </script>
 
 <style scoped>
@@ -64,8 +64,12 @@ const visible = computed({
   font-weight: 600;
 }
 
-.tr-status.success { color: var(--ac-color-success); }
-.tr-status.fail { color: var(--ac-color-danger); }
+.tr-status.success {
+  color: var(--ac-color-success);
+}
+.tr-status.fail {
+  color: var(--ac-color-danger);
+}
 
 .tr-meta {
   display: flex;

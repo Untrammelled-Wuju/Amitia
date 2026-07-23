@@ -8,7 +8,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="setup-header">
         <div class="setup-icon">\u{1F510}</div>
         <h1>首次设置管理员</h1>
-        <p>这是你第一次启动私有云部署。<br/>请设置管理员账号和密码以保护你的数据。</p>
+        <p>
+          这是你第一次启动私有云部署。<br />请设置管理员账号和密码以保护你的数据。
+        </p>
       </div>
 
       <el-form
@@ -49,7 +51,12 @@ SPDX-License-Identifier: AGPL-3.0-only
           />
         </el-form-item>
 
-        <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
           <template #title>请牢记你的管理员密码，丢失后无法找回</template>
         </el-alert>
 
@@ -58,7 +65,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             type="primary"
             native-type="submit"
             :loading="loading"
-            style="width:100%"
+            style="width: 100%"
             size="large"
           >
             完成设置并登录
@@ -70,28 +77,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue"
-import { useRouter } from "vue-router"
-import { ElMessage } from "element-plus"
-import { apiClient, setToken } from "../../ui-index"
+import { ref, reactive, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { apiClient, setToken } from "../../ui-index";
 
-const router = useRouter()
-const formRef = ref()
-const loading = ref(false)
+const router = useRouter();
+const formRef = ref();
+const loading = ref(false);
 
 const form = reactive({
   username: "",
   password: "",
   confirmPassword: "",
-})
+});
 
 const validateConfirm = (_rule: any, value: string, callback: any) => {
   if (value !== form.password) {
-    callback(new Error("两次输入的密码不一致"))
+    callback(new Error("两次输入的密码不一致"));
   } else {
-    callback()
+    callback();
   }
-}
+};
 
 const rules = {
   username: [
@@ -106,51 +113,51 @@ const rules = {
     { required: true, message: "请确认密码", trigger: "blur" },
     { validator: validateConfirm, trigger: "blur" },
   ],
-}
+};
 
 // Check if setup is allowed before showing page
 onMounted(async () => {
   try {
-    const res = await apiClient.get("/api/auth/status")
-    const data = res.data?.data || res.data
+    const res = await apiClient.get("/api/auth/status");
+    const data = res.data?.data || res.data;
     // If already set up and user is logged in, redirect
     if (data?.hasAdmin) {
-      const token = localStorage.getItem("ai-companion-token")
+      const token = localStorage.getItem("ai-companion-token");
       if (token) {
-        router.replace("/chat")
+        router.replace("/chat");
       } else {
-        router.replace("/login")
+        router.replace("/login");
       }
     }
   } catch {
     // If status endpoint fails (not yet implemented), just show setup page
   }
-})
+});
 
 async function handleSetup() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
 
-  loading.value = true
+  loading.value = true;
   try {
     const res = await apiClient.post("/api/auth/setup", {
       username: form.username,
       password: form.password,
-    })
-    const data = res.data?.data || res.data
+    });
+    const data = res.data?.data || res.data;
     if (data?.token) {
-      setToken(data.token)
-      ElMessage.success("管理员设置成功，已自动登录")
-      router.push("/chat")
+      setToken(data.token);
+      ElMessage.success("管理员设置成功，已自动登录");
+      router.push("/chat");
     }
   } catch (err: any) {
     // If 409 - admin already exists, go to login
     if (err?.response?.status === 409 || err?.response?.data?.code === 20006) {
-      ElMessage.warning("管理员已存在，请直接登录")
-      router.push("/login")
+      ElMessage.warning("管理员已存在，请直接登录");
+      router.push("/login");
     }
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>

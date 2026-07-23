@@ -10,7 +10,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div v-if="recentImports.length > 0" class="list-compact">
       <div v-for="b in recentImports" :key="b.id" class="list-item">
         <span class="li-title">{{ b.title }}</span>
-        <span class="li-meta">{{ b.itemCount || 0 }}条 · {{ fmtDateShort(b.createdAt) }}</span>
+        <span class="li-meta"
+          >{{ b.itemCount || 0 }}条 · {{ fmtDateShort(b.createdAt) }}</span
+        >
       </div>
     </div>
     <div v-else class="empty-hint">
@@ -23,12 +25,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { Download } from "@element-plus/icons-vue"
+import { Download } from "@element-plus/icons-vue";
 
 defineProps<{
-  recentImports: any[]
-  fmtDateShort: (d: string) => string
-}>()
+  recentImports: any[];
+  fmtDateShort: (d: string) => string;
+}>();
 </script>
 
 <style scoped>
@@ -40,13 +42,45 @@ defineProps<{
   background: var(--ac-color-surface);
   box-shadow: none;
 }
-.section-header-row { display: flex; justify-content: space-between; align-items: center; }
-.panel-title { font-size: 18px; font-weight: 800; color: var(--console-text); }
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--console-text);
+}
 
-.list-compact { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
-.list-item { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 9px; background: var(--ac-color-surface); font-size: 14px; }
-.li-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.li-meta { font-size: 12px; color: var(--console-text-muted); white-space: nowrap; margin-left: 8px; }
+.list-compact {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--ac-color-surface);
+  font-size: 14px;
+}
+.li-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.li-meta {
+  font-size: 12px;
+  color: var(--console-text-muted);
+  white-space: nowrap;
+  margin-left: 8px;
+}
 
 .empty-hint {
   height: 210px;

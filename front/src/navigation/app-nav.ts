@@ -1,4 +1,4 @@
-import type { Component } from "vue"
+import type { Component } from "vue";
 import {
   ChatDotRound,
   ChatDotSquare,
@@ -7,28 +7,40 @@ import {
   Opportunity,
   Setting,
   Share,
-} from "@element-plus/icons-vue"
+} from "@element-plus/icons-vue";
 
 export type AppNavItem = {
-  key: string
-  to: string
-  label: string
-  icon: Component
-  match?: string[]
-  mobile?: boolean
-}
+  key: string;
+  to: string;
+  label: string;
+  icon: Component;
+  match?: string[];
+  mobile?: boolean;
+};
 
 export type AppNavGroup = {
-  key: string
-  items: AppNavItem[]
-}
+  key: string;
+  items: AppNavItem[];
+};
 
 export const desktopNavGroups: AppNavGroup[] = [
   {
     key: "core",
     items: [
-      { key: "chat", to: "/chat", label: "聊天", icon: ChatDotRound, mobile: true },
-      { key: "dashboard", to: "/dashboard/data", label: "概览", icon: Odometer, match: ["/dashboard/data", "/dashboard/run"] },
+      {
+        key: "chat",
+        to: "/chat",
+        label: "聊天",
+        icon: ChatDotRound,
+        mobile: true,
+      },
+      {
+        key: "dashboard",
+        to: "/dashboard/data",
+        label: "概览",
+        icon: Odometer,
+        match: ["/dashboard/data", "/dashboard/run"],
+      },
     ],
   },
   {
@@ -41,18 +53,34 @@ export const desktopNavGroups: AppNavGroup[] = [
   {
     key: "system",
     items: [
-      { key: "runtimeDebug", to: "/runtime-debug", label: "运行时调试", icon: Opportunity },
-      { key: 'decisionViz', to: '/decision-viz', label: '决策可视化', icon: Share },
-      { key: "settings", to: "/settings", label: "设置", icon: Setting, mobile: true },
+      {
+        key: "runtimeDebug",
+        to: "/runtime-debug",
+        label: "运行时调试",
+        icon: Opportunity,
+      },
+      {
+        key: "decisionViz",
+        to: "/decision-viz",
+        label: "决策可视化",
+        icon: Share,
+      },
+      {
+        key: "settings",
+        to: "/settings",
+        label: "设置",
+        icon: Setting,
+        mobile: true,
+      },
     ],
   },
-]
+];
 
 export const mobileNavItems = desktopNavGroups.flatMap((group) =>
-  group.items.filter((item) => item.mobile)
-)
+  group.items.filter((item) => item.mobile),
+);
 
-const titleItems = desktopNavGroups.flatMap((group) => group.items)
+const titleItems = desktopNavGroups.flatMap((group) => group.items);
 
 const extraTitles = [
   { path: "/login", label: "登录" },
@@ -71,23 +99,23 @@ const extraTitles = [
   { path: "/extensions/workshop", label: "扩展工坊" },
   { path: "/extensions/runs", label: "技能执行记录" },
   { path: "/extensions", label: "扩展中心" },
-]
+];
 
 export function isNavItemActive(path: string, item: AppNavItem) {
   if (path === item.to) {
-    return true
+    return true;
   }
-  return (item.match || []).some((prefix) => path.startsWith(prefix))
+  return (item.match || []).some((prefix) => path.startsWith(prefix));
 }
 
 export function getPageTitle(path: string) {
-  const navItem = titleItems.find((item) => isNavItemActive(path, item))
+  const navItem = titleItems.find((item) => isNavItemActive(path, item));
   if (navItem) {
-    return navItem.label
+    return navItem.label;
   }
-  const extra = extraTitles.find((item) => item.path === path)
+  const extra = extraTitles.find((item) => item.path === path);
   if (extra) {
-    return extra.label
+    return extra.label;
   }
-  return "AI-Amitia"
+  return "AI-Amitia";
 }

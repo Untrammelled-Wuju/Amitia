@@ -74,22 +74,41 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { useCharacterVoice } from "./composables/useCharacterVoice"
-import PresetVoiceSection from "./components/PresetVoiceSection.vue"
-import CloneVoiceSection from "./components/CloneVoiceSection.vue"
-import VoiceSettingsPanel from "./components/VoiceSettingsPanel.vue"
-import VoicePreviewBar from "./components/VoicePreviewBar.vue"
+import { useCharacterVoice } from "./composables/useCharacterVoice";
+import PresetVoiceSection from "./components/PresetVoiceSection.vue";
+import CloneVoiceSection from "./components/CloneVoiceSection.vue";
+import VoiceSettingsPanel from "./components/VoiceSettingsPanel.vue";
+import VoicePreviewBar from "./components/VoicePreviewBar.vue";
 
 const {
-  voicePresets, emotions, saving, previewLoading, previewText, previewAudio,
-  voiceMode, form,
-  trainSpeakerId, trainVoiceName, cloneFile, cloneFileList, trainLoading, trainResult,
-  clonedVoices, previewCloneId,
+  voicePresets,
+  emotions,
+  saving,
+  previewLoading,
+  previewText,
+  previewAudio,
+  voiceMode,
+  form,
+  trainSpeakerId,
+  trainVoiceName,
+  cloneFile,
+  cloneFileList,
+  trainLoading,
+  trainResult,
+  clonedVoices,
+  previewCloneId,
   currentVoiceSupportsEmotion,
-  onModeChange, selectCloneVoice, onVoiceTypeChange, onCloneFileChange,
-  submitTrain, previewClone, deleteClone,
-  doPreview, saveVoice, resetForm,
-} = useCharacterVoice()
+  onModeChange,
+  selectCloneVoice,
+  onVoiceTypeChange,
+  onCloneFileChange,
+  submitTrain,
+  previewClone,
+  deleteClone,
+  doPreview,
+  saveVoice,
+  resetForm,
+} = useCharacterVoice();
 </script>
 
 <style scoped>

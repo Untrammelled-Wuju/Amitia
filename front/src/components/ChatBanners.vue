@@ -8,7 +8,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>
           模型未配置 &mdash;
-          <router-link to="/settings/model" class="banner-link">去配置模型</router-link>
+          <router-link to="/settings/model" class="banner-link"
+            >去配置模型</router-link
+          >
         </template>
       </el-alert>
     </div>
@@ -26,14 +28,21 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div v-if="importContext" class="import-banner">
-      <el-alert type="success" :closable="true" show-icon @close="$emit('closeImport')">
+      <el-alert
+        type="success"
+        :closable="true"
+        show-icon
+        @close="$emit('closeImport')"
+      >
         <template #title>
           Chatting based on imported records
           <span class="import-badge">import</span>
         </template>
         <template #default v-if="showImportDetail">
           <div class="import-detail">
-            <p v-if="importContext.summary" class="import-summary">{{ importContext.summary }}</p>
+            <p v-if="importContext.summary" class="import-summary">
+              {{ importContext.summary }}
+            </p>
             <p v-if="importContext.memoryCount" class="import-memories">
               {{ importContext.memoryCount }} confirmed memories available
             </p>
@@ -46,8 +55,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-alert type="info" :closable="false">
         <template #title>
           会话摘要
-          <el-button text size="small" style="margin-left:8px" @click="$emit('toggleSummary')">
-            {{ showSummary ? '收起' : '展开' }}
+          <el-button
+            text
+            size="small"
+            style="margin-left: 8px"
+            @click="$emit('toggleSummary')"
+          >
+            {{ showSummary ? "收起" : "展开" }}
           </el-button>
         </template>
         <template #default v-if="showSummary">
@@ -60,20 +74,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 defineProps<{
-  modelMissing: boolean
-  isOffline: boolean
-  modelError: string
-  importContext: any
-  showImportDetail: boolean
-  convSummary: string
-  showSummary: boolean
-}>()
+  modelMissing: boolean;
+  isOffline: boolean;
+  modelError: string;
+  importContext: any;
+  showImportDetail: boolean;
+  convSummary: string;
+  showSummary: boolean;
+}>();
 
 defineEmits<{
-  closeError: []
-  closeImport: []
-  toggleSummary: []
-}>()
+  closeError: [];
+  closeImport: [];
+  toggleSummary: [];
+}>();
 </script>
 
 <style scoped>
@@ -137,4 +151,3 @@ defineEmits<{
   margin-top: 4px;
 }
 </style>
-

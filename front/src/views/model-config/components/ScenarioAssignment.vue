@@ -5,7 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="scenario-section">
     <h3 class="section-title">用途分配</h3>
-    <p class="section-desc">为不同场景指定使用的模型。未分配时回退到默认模型。</p>
+    <p class="section-desc">
+      为不同场景指定使用的模型。未分配时回退到默认模型。
+    </p>
 
     <div class="scenario-grid">
       <div
@@ -15,7 +17,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       >
         <div class="sc-card-header">
           <span class="sc-label">{{ label(route.scenario) }}</span>
-          <el-tag v-if="!route.modelConfigId" size="small" type="info">使用默认</el-tag>
+          <el-tag v-if="!route.modelConfigId" size="small" type="info"
+            >使用默认</el-tag
+          >
           <el-tag v-else size="small" type="success">已分配</el-tag>
         </div>
         <div class="sc-card-body">
@@ -27,8 +31,10 @@ SPDX-License-Identifier: AGPL-3.0-only
             :placeholder="'使用默认模型'"
             clearable
             size="small"
-            style="width:100%"
-            @change="(val: number|null) => emit('assign', route.scenario, val)"
+            style="width: 100%"
+            @change="
+              (val: number | null) => emit('assign', route.scenario, val)
+            "
           >
             <el-option
               v-for="cfg in configs"
@@ -45,30 +51,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 defineProps<{
-  configs: any[]
-  scenarioRoutes: any[]
-  routeAssignments: Record<string, number | null>
-}>()
+  configs: any[];
+  scenarioRoutes: any[];
+  routeAssignments: Record<string, number | null>;
+}>();
 
 const emit = defineEmits<{
-  (e: "assign", scenario: string, modelConfigId: number | null): void
-}>()
+  (e: "assign", scenario: string, modelConfigId: number | null): void;
+}>();
 
 function label(scenario: string): string {
   const labels: Record<string, string> = {
-    chat: "聊天对话", summary: "会话摘要", memory_extract: "记忆提取",
-    safety_rewrite: "安全改写", import_parse: "导入解析", reply_timing_check: "完整性判断",
-  }
-  return labels[scenario] || scenario
+    chat: "聊天对话",
+    summary: "会话摘要",
+    memory_extract: "记忆提取",
+    safety_rewrite: "安全改写",
+    import_parse: "导入解析",
+    reply_timing_check: "完整性判断",
+  };
+  return labels[scenario] || scenario;
 }
 
 function desc(scenario: string): string {
   const descs: Record<string, string> = {
-    chat: "日常聊天和对话回复", summary: "生成对话历史摘要",
-    memory_extract: "从对话中提取用户记忆", safety_rewrite: "安全边界内容改写",
-    import_parse: "解析导入的聊天记录文本", reply_timing_check: "判断回复用户是否发送完成完整信息",
-  }
-  return descs[scenario] || ""
+    chat: "日常聊天和对话回复",
+    summary: "生成对话历史摘要",
+    memory_extract: "从对话中提取用户记忆",
+    safety_rewrite: "安全边界内容改写",
+    import_parse: "解析导入的聊天记录文本",
+    reply_timing_check: "判断回复用户是否发送完成完整信息",
+  };
+  return descs[scenario] || "";
 }
 </script>
 

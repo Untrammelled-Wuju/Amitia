@@ -8,7 +8,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <span class="card-title">第一步：选择清理条件</span>
       </template>
-      <el-form :model="form" label-width="120px" label-position="top" class="cleanup-form">
+      <el-form
+        :model="form"
+        label-width="120px"
+        label-position="top"
+        class="cleanup-form"
+      >
         <el-row :gutter="20">
           <el-col :xs="24" :sm="12">
             <el-form-item label="清理此日期之前的数据">
@@ -67,7 +72,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-row :gutter="20">
           <el-col :xs="24" :sm="12">
             <el-form-item>
-              <el-checkbox v-model="form.includeMemories">同时清理关联的记忆数据</el-checkbox>
+              <el-checkbox v-model="form.includeMemories"
+                >同时清理关联的记忆数据</el-checkbox
+              >
               <div class="form-hint">默认不清理记忆，除非你明确需要</div>
             </el-form-item>
           </el-col>
@@ -91,7 +98,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="preview-stats">
         <div class="preview-stat">
           <div class="preview-stat-label">待清理会话</div>
-          <div class="preview-stat-value">{{ previewResult.conversationCount }}</div>
+          <div class="preview-stat-value">
+            {{ previewResult.conversationCount }}
+          </div>
         </div>
         <div class="preview-stat">
           <div class="preview-stat-label">待清理消息</div>
@@ -99,7 +108,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="preview-stat">
           <div class="preview-stat-label">估算释放空间</div>
-          <div class="preview-stat-value">{{ previewResult.estimatedSize }}</div>
+          <div class="preview-stat-value">
+            {{ previewResult.estimatedSize }}
+          </div>
         </div>
         <div v-if="previewResult.memoryCount > 0" class="preview-stat warn">
           <div class="preview-stat-label">关联记忆</div>
@@ -145,7 +156,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="report-item">
           <span class="report-label">清理会话数：</span>
-          <span class="report-value">{{ cleanupResult.conversationCount }}</span>
+          <span class="report-value">{{
+            cleanupResult.conversationCount
+          }}</span>
         </div>
         <div class="report-item">
           <span class="report-label">清理消息数：</span>
@@ -161,7 +174,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { useChatCleanup } from "../composables/useChatCleanup"
+import { useChatCleanup } from "../composables/useChatCleanup";
 
 const {
   form,
@@ -172,7 +185,7 @@ const {
   cleanupResult,
   previewCleanup,
   executeCleanup,
-} = useChatCleanup()
+} = useChatCleanup();
 </script>
 
 <style scoped>

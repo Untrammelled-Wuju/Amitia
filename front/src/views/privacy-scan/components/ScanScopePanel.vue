@@ -15,7 +15,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-checkbox label="logs">操作日志（可选）</el-checkbox>
     </el-checkbox-group>
     <div style="margin-top: 12px">
-      <el-button type="primary" :loading="scanning" @click="$emit('scan', scope)">
+      <el-button
+        type="primary"
+        :loading="scanning"
+        @click="$emit('scan', scope)"
+      >
         开始扫描
       </el-button>
     </div>
@@ -23,21 +27,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref } from "vue";
 
 defineProps<{
-  scanning: boolean
-}>()
+  scanning: boolean;
+}>();
 
 defineEmits<{
-  scan: [scope: string[]]
-}>()
+  scan: [scope: string[]];
+}>();
 
-const scope = ref<string[]>(["messages", "memories", "import_items"])
+const scope = ref<string[]>(["messages", "memories", "import_items"]);
 </script>
 
 <style scoped>
-.section-card { margin-bottom: 16px; border: 1px solid var(--el-border-color-light); }
-.card-title { font-size: 15px; font-weight: 600; }
-.scope-group { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.section-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.scope-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
 </style>

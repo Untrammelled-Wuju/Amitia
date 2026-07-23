@@ -101,8 +101,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="privacy-section">
         <h3>Cookie 与追踪</h3>
         <p>
-          本产品<strong>不使用任何 Cookie 追踪技术</strong>。登录状态通过浏览器本地存储（localStorage）
-          中的 JWT 令牌维护。不包含任何第三方追踪脚本或分析工具。
+          本产品<strong>不使用任何 Cookie 追踪技术</strong
+          >。登录状态通过浏览器本地存储（localStorage） 中的 JWT
+          令牌维护。不包含任何第三方追踪脚本或分析工具。
         </p>
       </div>
 
@@ -118,16 +119,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           <li>模型 API 服务商的数据处理行为</li>
           <li>用户主动分享数据库文件导致的信息泄露</li>
         </ul>
-        <p class="update-note">
-          最后更新：2026 年 5 月
-        </p>
+        <p class="update-note">最后更新：2026 年 5 月</p>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft } from "@element-plus/icons-vue"
+import { ArrowLeft } from "@element-plus/icons-vue";
 </script>
 
 <style scoped>

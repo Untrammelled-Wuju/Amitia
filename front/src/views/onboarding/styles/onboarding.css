@@ -21,17 +21,33 @@
   --amitia-core-start-delay: 90ms;
   --amitia-core-move: 1280ms;
   --amitia-core-resize: 1340ms;
-  --amitia-core-ease: cubic-bezier(.42, 0, .22, 1);
+  --amitia-core-ease: cubic-bezier(0.42, 0, 0.22, 1);
 }
 
 .onboarding-world {
   position: relative;
   width: 100%;
   height: 100%;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
   background:
-    radial-gradient(circle at 50% 45%, rgba(200, 121, 91, 0.08), transparent 26%),
-    radial-gradient(circle at 12% 14%, rgba(181, 154, 120, 0.05), transparent 24%),
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(200, 121, 91, 0.08),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 12% 14%,
+      rgba(181, 154, 120, 0.05),
+      transparent 24%
+    ),
     linear-gradient(145deg, #000 0%, #000 54%, #000 100%);
   color: var(--ob-text);
   overflow: hidden;
@@ -85,9 +101,15 @@
 }
 
 @keyframes ob-drift {
-  from { transform: translate3d(0, 14px, 0); }
-  50% { opacity: calc(var(--op) * 0.4); }
-  to { transform: translate3d(var(--dx), -26px, 0); }
+  from {
+    transform: translate3d(0, 14px, 0);
+  }
+  50% {
+    opacity: calc(var(--op) * 0.4);
+  }
+  to {
+    transform: translate3d(var(--dx), -26px, 0);
+  }
 }
 
 .onboarding-world .core-zone {
@@ -99,24 +121,40 @@
   transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  transition: transform 0.7s var(--ob-ease), left 0.7s var(--ob-ease), top 0.7s var(--ob-ease), width 0.65s var(--ob-ease), height 0.65s var(--ob-ease), opacity 0.5s ease;
+  transition:
+    transform 0.7s var(--ob-ease),
+    left 0.7s var(--ob-ease),
+    top 0.7s var(--ob-ease),
+    width 0.65s var(--ob-ease),
+    height 0.65s var(--ob-ease),
+    opacity 0.5s ease;
 }
 
 .onboarding-world .core-halo {
   position: absolute;
   inset: 5%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(200, 121, 91, 0.15), rgba(200, 121, 91, 0.035) 45%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(200, 121, 91, 0.15),
+    rgba(200, 121, 91, 0.035) 45%,
+    transparent 70%
+  );
   filter: blur(6px);
   opacity: 0.5;
-  transition: opacity 0.6s ease, transform 0.8s var(--ob-ease);
+  transition:
+    opacity 0.6s ease,
+    transform 0.8s var(--ob-ease);
 }
 
 .onboarding-world .orbit {
   position: absolute;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 50%;
-  transition: border-color 0.5s ease, opacity 0.5s ease, transform 0.7s var(--ob-ease);
+  transition:
+    border-color 0.5s ease,
+    opacity 0.5s ease,
+    transform 0.7s var(--ob-ease);
 }
 
 .onboarding-world .orbit.o1 {
@@ -137,11 +175,15 @@
 }
 
 @keyframes ob-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes ob-spin-reverse {
-  to { transform: rotate(-360deg); }
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .onboarding-world .orbit::after {
@@ -163,7 +205,10 @@
   height: 54%;
   opacity: 0.3;
   transform: scale(0.92) rotate(-2deg);
-  transition: opacity 0.6s ease, filter 0.6s ease, transform 0.8s var(--ob-ease);
+  transition:
+    opacity 0.6s ease,
+    filter 0.6s ease,
+    transform 0.8s var(--ob-ease);
   animation: ob-breathe 5.8s ease-in-out infinite;
   filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.04));
 }
@@ -202,7 +247,11 @@
   transform: translate(-50%, -50%) rotate(45deg);
   border: 1px solid rgba(224, 154, 125, 0.68);
   border-radius: 34%;
-  background: radial-gradient(circle at 35% 35%, rgba(224, 154, 125, 0.22), rgba(200, 121, 91, 0.045));
+  background: radial-gradient(
+    circle at 35% 35%,
+    rgba(224, 154, 125, 0.22),
+    rgba(200, 121, 91, 0.045)
+  );
   box-shadow: 0 0 26px rgba(200, 121, 91, 0.16);
 }
 
@@ -232,13 +281,28 @@
 }
 
 @keyframes ob-breathe {
-  0%, 100% { transform: scale(0.92) rotate(-2deg); }
-  50% { transform: scale(0.955) rotate(1deg); }
+  0%,
+  100% {
+    transform: scale(0.92) rotate(-2deg);
+  }
+  50% {
+    transform: scale(0.955) rotate(1deg);
+  }
 }
 
-.onboarding-world[data-level="1"] .core-symbol { opacity: 0.46; filter: drop-shadow(0 0 18px rgba(200, 121, 91, 0.1)); }
-.onboarding-world[data-level="2"] .core-symbol { opacity: 0.6; filter: drop-shadow(0 0 24px rgba(200, 121, 91, 0.16)); }
-.onboarding-world[data-level="3"] .core-symbol { opacity: 0.74; transform: scale(0.98); filter: drop-shadow(0 0 29px rgba(224, 154, 125, 0.22)); }
+.onboarding-world[data-level="1"] .core-symbol {
+  opacity: 0.46;
+  filter: drop-shadow(0 0 18px rgba(200, 121, 91, 0.1));
+}
+.onboarding-world[data-level="2"] .core-symbol {
+  opacity: 0.6;
+  filter: drop-shadow(0 0 24px rgba(200, 121, 91, 0.16));
+}
+.onboarding-world[data-level="3"] .core-symbol {
+  opacity: 0.74;
+  transform: scale(0.98);
+  filter: drop-shadow(0 0 29px rgba(224, 154, 125, 0.22));
+}
 .onboarding-world[data-level="4"] .core-symbol,
 .onboarding-world[data-level="5"] .core-symbol,
 .onboarding-world[data-level="6"] .core-symbol,
@@ -271,8 +335,14 @@
 }
 
 @keyframes ob-pulse {
-  0% { opacity: 0.7; transform: scale(0.78); }
-  100% { opacity: 0; transform: scale(1.9); }
+  0% {
+    opacity: 0.7;
+    transform: scale(0.78);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
 }
 
 .onboarding-world .core-caption {
@@ -289,7 +359,6 @@
   transition: opacity 0.4s ease;
 }
 
-
 .onboarding-world {
 }
 
@@ -305,16 +374,13 @@
   height: 0;
 }
 
-
-
-
 .ob-stage {
   display: block !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
   transform: none !important;
-  transition: opacity .38s ease !important;
+  transition: opacity 0.38s ease !important;
   animation: none !important;
   z-index: 0 !important;
 }
@@ -325,7 +391,7 @@
   visibility: visible !important;
   pointer-events: auto !important;
   transform: none !important;
-  animation: amitiaStageEnter .32s var(--ob-ease) both;
+  animation: amitiaStageEnter 0.32s var(--ob-ease) both;
   z-index: 10 !important;
 }
 
@@ -340,7 +406,7 @@
   visibility: visible !important;
   pointer-events: none !important;
   z-index: 11 !important;
-  transition: opacity .38s var(--ob-ease) !important;
+  transition: opacity 0.38s var(--ob-ease) !important;
 }
 
 .onboarding-world[data-stage-transitioning="true"] .ob-back {
@@ -360,7 +426,7 @@
     width var(--amitia-core-resize) var(--amitia-core-ease),
     height var(--amitia-core-resize) var(--amitia-core-ease),
     transform var(--amitia-core-move) var(--amitia-core-ease),
-    opacity .24s ease !important;
+    opacity 0.24s ease !important;
 }
 
 .onboarding-world[data-core-reveal-pending="true"] .core-zone {
@@ -368,14 +434,14 @@
 }
 
 .ob-stage.step-fade-surface {
-  transition: opacity .38s ease !important;
+  transition: opacity 0.38s ease !important;
   animation: none !important;
 }
 
 .ob-stage.step-fade-surface.step-fade-out {
   opacity: 0 !important;
   pointer-events: none !important;
-  transition-duration: .28s !important;
+  transition-duration: 0.28s !important;
 }
 
 .ob-stage.step-fade-surface.step-fade-prep {
@@ -384,27 +450,32 @@
 }
 
 @keyframes amitiaStageEnter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage {
-  transition-duration: .42s !important;
+  transition-duration: 0.42s !important;
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage.stage-leaving {
-  transition-duration: .42s !important;
+  transition-duration: 0.42s !important;
 }
 
 .onboarding-world[data-config-transition="true"] .ob-stage.active {
-  animation-duration: .36s !important;
+  animation-duration: 0.36s !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ob-stage,
   .step-fade-surface,
   .core-zone {
-    transition-duration: .01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
-

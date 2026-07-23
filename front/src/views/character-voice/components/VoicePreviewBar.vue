@@ -5,40 +5,51 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div>
     <div class="preview-row">
-      <el-input v-model="previewTextModel" placeholder="输入试听文本" style="flex:1" />
-      <el-button type="primary" :loading="previewLoading" @click="emit('preview')">试听</el-button>
+      <el-input
+        v-model="previewTextModel"
+        placeholder="输入试听文本"
+        style="flex: 1"
+      />
+      <el-button
+        type="primary"
+        :loading="previewLoading"
+        @click="emit('preview')"
+        >试听</el-button
+      >
     </div>
     <div v-if="previewAudio" class="audio-preview">
-      <audio :src="previewAudio" controls style="width:100%" />
+      <audio :src="previewAudio" controls style="width: 100%" />
     </div>
     <div class="save-bar">
-      <el-button type="primary" :loading="saving" @click="emit('save')">保存配置</el-button>
+      <el-button type="primary" :loading="saving" @click="emit('save')"
+        >保存配置</el-button
+      >
       <el-button @click="emit('reset')">重置</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed } from "vue";
 
 const props = defineProps<{
-  previewText: string
-  previewLoading: boolean
-  previewAudio: string
-  saving: boolean
-}>()
+  previewText: string;
+  previewLoading: boolean;
+  previewAudio: string;
+  saving: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: "update:previewText", v: string): void
-  (e: "preview"): void
-  (e: "save"): void
-  (e: "reset"): void
-}>()
+  (e: "update:previewText", v: string): void;
+  (e: "preview"): void;
+  (e: "save"): void;
+  (e: "reset"): void;
+}>();
 
 const previewTextModel = computed({
   get: () => props.previewText,
   set: (v) => emit("update:previewText", v),
-})
+});
 </script>
 
 <style scoped>

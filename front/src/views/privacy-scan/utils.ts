@@ -7,6 +7,6 @@ export function sourceTableLabel(table: string): string {
     import_items: "导入内容",
     import_batches: "导入批次",
     operation_logs: "日志",
-  }
-  return map[table] || table
+  };
+  return map[table] || table;
 }

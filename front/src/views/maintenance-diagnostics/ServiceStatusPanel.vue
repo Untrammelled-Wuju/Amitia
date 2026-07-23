@@ -9,22 +9,41 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="section-title">
           <el-icon><Odometer /></el-icon> 服务状态
         </span>
-        <el-button size="small" @click="handleFetchStatus" :loading="statusLoading">刷新</el-button>
+        <el-button
+          size="small"
+          @click="handleFetchStatus"
+          :loading="statusLoading"
+          >刷新</el-button
+        >
       </div>
     </template>
     <div v-if="statusData" class="status-simple">
       <div class="ss-overall">
         <span class="ss-label">系统状态</span>
-        <el-tag :type="statusData.status === 'healthy' ? 'success' : 'warning'" size="large">
-          {{ statusData.status === 'healthy' ? '健康' : '部分异常' }}
+        <el-tag
+          :type="statusData.status === 'healthy' ? 'success' : 'warning'"
+          size="large"
+        >
+          {{ statusData.status === "healthy" ? "健康" : "部分异常" }}
         </el-tag>
-        <span class="ss-time" v-if="statusData.lastCheck">上次检查: {{ statusData.lastCheck }}</span>
+        <span class="ss-time" v-if="statusData.lastCheck"
+          >上次检查: {{ statusData.lastCheck }}</span
+        >
       </div>
-      <div v-if="statusData.issues && statusData.issues.length > 0" class="ss-issues">
+      <div
+        v-if="statusData.issues && statusData.issues.length > 0"
+        class="ss-issues"
+      >
         <div class="ss-issues-title">
-          <el-icon><WarningFilled /></el-icon> 发现问题 ({{ statusData.issues.length }})
+          <el-icon><WarningFilled /></el-icon> 发现问题 ({{
+            statusData.issues.length
+          }})
         </div>
-        <div v-for="(issue, idx) in statusData.issues" :key="idx" class="ss-issue-item">
+        <div
+          v-for="(issue, idx) in statusData.issues"
+          :key="idx"
+          class="ss-issue-item"
+        >
           <span class="ssi-type">{{ issue.type }}</span>
           <span class="ssi-msg">{{ issue.msg }}</span>
         </div>
@@ -37,33 +56,30 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue"
-import {
-  Odometer,
-  CircleCheck, WarningFilled,
-} from "@element-plus/icons-vue"
-import { fetchStatusApi } from "./api"
-import type { StatusData } from "./types"
+import { ref, onMounted } from "vue";
+import { Odometer, CircleCheck, WarningFilled } from "@element-plus/icons-vue";
+import { fetchStatusApi } from "./api";
+import type { StatusData } from "./types";
 
-const statusLoading = ref(false)
-const statusData = ref<StatusData | null>(null)
+const statusLoading = ref(false);
+const statusData = ref<StatusData | null>(null);
 
 async function handleFetchStatus() {
-  statusLoading.value = true
+  statusLoading.value = true;
   try {
-    statusData.value = await fetchStatusApi()
+    statusData.value = await fetchStatusApi();
   } catch (e: any) {
     // silent
   } finally {
-    statusLoading.value = false
+    statusLoading.value = false;
   }
 }
 
 onMounted(() => {
-  handleFetchStatus()
-})
+  handleFetchStatus();
+});
 
-defineExpose({ fetchStatus: handleFetchStatus })
+defineExpose({ fetchStatus: handleFetchStatus });
 </script>
 
 <style scoped>

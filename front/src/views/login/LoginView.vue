@@ -29,7 +29,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="login-panel-wrapper">
         <div class="login-panel">
           <div class="login-title">登录 Amitia</div>
-          <div class="login-desc">登录后进入管理页面，保护配置、聊天记录和记忆数据。</div>
+          <div class="login-desc">
+            登录后进入管理页面，保护配置、聊天记录和记忆数据。
+          </div>
 
           <div v-if="checkingStatus" class="login-status">
             <span class="ob-spin-icon"></span>
@@ -40,17 +42,32 @@ SPDX-License-Identifier: AGPL-3.0-only
             <div class="login-form">
               <label class="login-input-label">
                 账号
-                <input v-model="form.username" autocomplete="username" placeholder="请输入账号" @keyup.enter="handleLogin" />
+                <input
+                  v-model="form.username"
+                  autocomplete="username"
+                  placeholder="请输入账号"
+                  @keyup.enter="handleLogin"
+                />
               </label>
               <label class="login-input-label">
                 密码
-                <input v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码" @keyup.enter="handleLogin" />
+                <input
+                  v-model="form.password"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder="请输入密码"
+                  @keyup.enter="handleLogin"
+                />
               </label>
             </div>
             <div class="login-error">{{ errorMsg }}</div>
-            <button class="login-action" :disabled="loading" @click="handleLogin">
+            <button
+              class="login-action"
+              :disabled="loading"
+              @click="handleLogin"
+            >
               <span v-if="loading" class="ob-spin-icon"></span>
-              {{ loading ? '登录中...' : '登录' }}
+              {{ loading ? "登录中..." : "登录" }}
             </button>
           </template>
         </div>
@@ -60,68 +77,66 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue"
-import { useRouter, useRoute } from "vue-router"
-import { ElMessage } from "element-plus"
-import { apiClient, setToken } from "../../composables/useApi"
+import { ref, reactive, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { ElMessage } from "element-plus";
+import { apiClient, setToken } from "../../composables/useApi";
 
-const router = useRouter()
-const route = useRoute()
-const loading = ref(false)
-const checkingStatus = ref(true)
-const errorMsg = ref("")
+const router = useRouter();
+const route = useRoute();
+const loading = ref(false);
+const checkingStatus = ref(true);
+const errorMsg = ref("");
 
-const form = reactive({ username: "", password: "" })
+const form = reactive({ username: "", password: "" });
 
 const stars = Array.from({ length: 56 }, (_, i) => ({
   id: i,
   style: {
     left: `${Math.random() * 100}%`,
     top: `${Math.random() * 100}%`,
-    '--dur': `${12 + Math.random() * 24}s`,
-    '--op': (0.08 + Math.random() * 0.25).toFixed(2),
-    '--dx': `${(-18 + Math.random() * 36).toFixed(1)}px`,
+    "--dur": `${12 + Math.random() * 24}s`,
+    "--op": (0.08 + Math.random() * 0.25).toFixed(2),
+    "--dx": `${(-18 + Math.random() * 36).toFixed(1)}px`,
     animationDelay: `${(-Math.random() * 20).toFixed(1)}s`,
   },
-}))
+}));
 
 onMounted(() => {
-  checkingStatus.value = false
-})
+  checkingStatus.value = false;
+});
 
 async function handleLogin() {
-  errorMsg.value = ""
-  const name = form.username.trim()
-  const pw = form.password
+  errorMsg.value = "";
+  const name = form.username.trim();
+  const pw = form.password;
 
   if (!name || !pw) {
-    errorMsg.value = "请输入账号和密码"
-    return
+    errorMsg.value = "请输入账号和密码";
+    return;
   }
 
-  loading.value = true
+  loading.value = true;
   try {
     const res = await apiClient.post("/api/auth/login", {
       username: name,
       password: pw,
-    })
-    const data = res.data?.data || res.data
+    });
+    const data = res.data?.data || res.data;
     if (data?.token) {
-      setToken(data.token)
-      ElMessage.success(`欢迎回来，${data.username || name}`)
-      const redirect = (route.query.redirect as string) || "/chat"
-      router.push(redirect)
+      setToken(data.token);
+      ElMessage.success(`欢迎回来，${data.username || name}`);
+      const redirect = (route.query.redirect as string) || "/chat";
+      router.push(redirect);
     }
   } catch {
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
 
 <style scoped>
-
-
 .login-shell {
   width: 100%;
   height: 100%;
@@ -135,7 +150,15 @@ async function handleLogin() {
   position: relative;
   width: 100%;
   height: 100%;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
   background: var(--tp-page);
   color: var(--tp-text);
   overflow: hidden;
@@ -184,9 +207,15 @@ async function handleLogin() {
 }
 
 @keyframes star-drift {
-  from { transform: translate3d(0, 14px, 0); }
-  50% { opacity: calc(var(--op) * 0.4); }
-  to { transform: translate3d(var(--dx), -26px, 0); }
+  from {
+    transform: translate3d(0, 14px, 0);
+  }
+  50% {
+    opacity: calc(var(--op) * 0.4);
+  }
+  to {
+    transform: translate3d(var(--dx), -26px, 0);
+  }
 }
 
 .core-zone {
@@ -204,7 +233,12 @@ async function handleLogin() {
   position: absolute;
   inset: 5%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(200, 121, 91, 0.15), rgba(200, 121, 91, 0.035) 45%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(200, 121, 91, 0.15),
+    rgba(200, 121, 91, 0.035) 45%,
+    transparent 70%
+  );
   filter: blur(6px);
   opacity: 0.5;
 }
@@ -233,11 +267,15 @@ async function handleLogin() {
 }
 
 @keyframes orbit-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes orbit-spin-reverse {
-  to { transform: rotate(-360deg); }
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .orbit::after {
@@ -297,7 +335,11 @@ async function handleLogin() {
   transform: translate(-50%, -50%) rotate(45deg);
   border: 1px solid rgba(224, 154, 125, 0.68);
   border-radius: 34%;
-  background: radial-gradient(circle at 35% 35%, rgba(224, 154, 125, 0.22), rgba(200, 121, 91, 0.045));
+  background: radial-gradient(
+    circle at 35% 35%,
+    rgba(224, 154, 125, 0.22),
+    rgba(200, 121, 91, 0.045)
+  );
   box-shadow: 0 0 26px rgba(200, 121, 91, 0.16);
 }
 
@@ -327,8 +369,13 @@ async function handleLogin() {
 }
 
 @keyframes core-breathe {
-  0%, 100% { transform: scale(0.92) rotate(-2deg); }
-  50% { transform: scale(0.955) rotate(1deg); }
+  0%,
+  100% {
+    transform: scale(0.92) rotate(-2deg);
+  }
+  50% {
+    transform: scale(0.955) rotate(1deg);
+  }
 }
 
 .core-caption {
@@ -363,7 +410,6 @@ async function handleLogin() {
   flex-direction: column;
   align-items: center;
 }
-
 
 .login-title {
   font-size: 28px;
@@ -401,7 +447,9 @@ async function handleLogin() {
 }
 
 @keyframes ob-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .login-form {
@@ -475,7 +523,6 @@ async function handleLogin() {
 }
 
 @media (max-width: 860px) {
-
   .login-panel-wrapper {
     left: 50%;
     top: auto;
@@ -489,7 +536,6 @@ async function handleLogin() {
 }
 
 @media (max-width: 480px) {
-
   .login-panel-wrapper {
     bottom: 6%;
   }
@@ -525,7 +571,11 @@ html[data-theme="light"] .sigil-loop {
 
 html[data-theme="light"] .sigil-center {
   border-color: rgba(160, 110, 60, 0.5);
-  background: radial-gradient(circle at 35% 35%, rgba(160, 110, 60, 0.16), rgba(155, 100, 45, 0.04));
+  background: radial-gradient(
+    circle at 35% 35%,
+    rgba(160, 110, 60, 0.16),
+    rgba(155, 100, 45, 0.04)
+  );
   box-shadow: 0 0 26px rgba(160, 110, 60, 0.12);
 }
 
@@ -538,4 +588,3 @@ html[data-theme="light"] .core-caption {
   color: var(--tp-text-muted);
 }
 </style>
-

@@ -13,9 +13,16 @@ SPDX-License-Identifier: AGPL-3.0-only
   >
     <template v-if="backup">
       <div class="restore-info">
-        <div class="report-row"><span>备份名称：</span><strong>{{ backup.name }}</strong></div>
-        <div class="report-row"><span>创建时间：</span><span>{{ backup.createdAt?.slice(0, 19) || '—' }}</span></div>
-        <div class="report-row"><span>大小：</span><span>{{ backup.sizeFormatted }}</span></div>
+        <div class="report-row">
+          <span>备份名称：</span><strong>{{ backup.name }}</strong>
+        </div>
+        <div class="report-row">
+          <span>创建时间：</span
+          ><span>{{ backup.createdAt?.slice(0, 19) || "—" }}</span>
+        </div>
+        <div class="report-row">
+          <span>大小：</span><span>{{ backup.sizeFormatted }}</span>
+        </div>
       </div>
 
       <el-alert
@@ -26,7 +33,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         style="margin: 12px 0"
       >
         <template #default>
-          <p style="margin: 0; font-size: 12px">恢复前将自动备份当前数据至 data/backups/ 目录。恢复完成后需要重启 Core 服务。</p>
+          <p style="margin: 0; font-size: 12px">
+            恢复前将自动备份当前数据至 data/backups/ 目录。恢复完成后需要重启
+            Core 服务。
+          </p>
         </template>
       </el-alert>
 
@@ -72,7 +82,10 @@ SPDX-License-Identifier: AGPL-3.0-only
             </ul>
           </template>
         </el-alert>
-        <div v-if="restoreVerifyResult.warnings?.length" style="margin-top: 8px">
+        <div
+          v-if="restoreVerifyResult.warnings?.length"
+          style="margin-top: 8px"
+        >
           <el-alert
             type="warning"
             :title="restoreVerifyResult.warnings.join('; ')"
@@ -107,70 +120,77 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { ElMessage } from "element-plus"
-import { apiClient } from "../../../composables/useApi"
+import { ref } from "vue";
+import { ElMessage } from "element-plus";
+import { apiClient } from "../../../composables/useApi";
 
 const props = defineProps<{
-  visible: boolean
-  backup: any | null
-}>()
+  visible: boolean;
+  backup: any | null;
+}>();
 
 const emit = defineEmits<{
-  (e: "update:visible", value: boolean): void
-}>()
+  (e: "update:visible", value: boolean): void;
+}>();
 
-const restorePassword = ref("")
-const restoreVerifyResult = ref<any>(null)
-const restoreVerifying = ref(false)
-const restoreExecuting = ref(false)
-const restoreConfirmText = ref("")
+const restorePassword = ref("");
+const restoreVerifyResult = ref<any>(null);
+const restoreVerifying = ref(false);
+const restoreExecuting = ref(false);
+const restoreConfirmText = ref("");
 
 function handleClosed() {
-  restorePassword.value = ""
-  restoreVerifyResult.value = null
-  restoreConfirmText.value = ""
+  restorePassword.value = "";
+  restoreVerifyResult.value = null;
+  restoreConfirmText.value = "";
 }
 
 async function verifyRestore() {
-  if (!restorePassword.value || !props.backup) return
-  restoreVerifying.value = true
-  restoreVerifyResult.value = null
+  if (!restorePassword.value || !props.backup) return;
+  restoreVerifying.value = true;
+  restoreVerifyResult.value = null;
   try {
     const res = await apiClient.post("/api/storage/restore/verify", {
       backupName: props.backup.name,
       password: restorePassword.value,
-    })
-    const d = res.data?.data || res.data
-    restoreVerifyResult.value = d
+    });
+    const d = res.data?.data || res.data;
+    restoreVerifyResult.value = d;
     if (d.valid) {
-      ElMessage.success("验证通过")
+      ElMessage.success("验证通过");
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message || err.message
-    restoreVerifyResult.value = { valid: false, errors: [msg] }
-    ElMessage.error("验证失败: " + msg)
+    const msg = err.response?.data?.message || err.message;
+    restoreVerifyResult.value = { valid: false, errors: [msg] };
+    ElMessage.error("验证失败: " + msg);
   } finally {
-    restoreVerifying.value = false
+    restoreVerifying.value = false;
   }
 }
 
 async function executeRestore() {
-  if (restoreConfirmText.value !== "确认恢复" || !props.backup || !restorePassword.value) return
-  restoreExecuting.value = true
+  if (
+    restoreConfirmText.value !== "确认恢复" ||
+    !props.backup ||
+    !restorePassword.value
+  )
+    return;
+  restoreExecuting.value = true;
   try {
     const res = await apiClient.post("/api/storage/restore/encrypted", {
       backupName: props.backup.name,
       password: restorePassword.value,
       confirmText: "确认恢复",
-    })
-    const d = res.data?.data || res.data
-    ElMessage.success(d.message || "恢复完成")
-    emit("update:visible", false)
+    });
+    const d = res.data?.data || res.data;
+    ElMessage.success(d.message || "恢复完成");
+    emit("update:visible", false);
   } catch (err: any) {
-    ElMessage.error("恢复失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "恢复失败: " + (err.response?.data?.message || err.message),
+    );
   } finally {
-    restoreExecuting.value = false
+    restoreExecuting.value = false;
   }
 }
 </script>

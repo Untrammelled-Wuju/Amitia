@@ -2,12 +2,14 @@
   <div class="privacy-scan-view">
     <div class="page-header">
       <div class="page-header-row">
-      <el-button text @click="$router.back()" class="back-btn">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-button>
-      <h2>敏感数据扫描</h2>
+        <el-button text @click="$router.back()" class="back-btn">
+          <el-icon><ArrowLeft /></el-icon>
+        </el-button>
+        <h2>敏感数据扫描</h2>
       </div>
-      <p class="page-desc">扫描历史记录、记忆和导入数据中的敏感信息，进行脱敏处理</p>
+      <p class="page-desc">
+        扫描历史记录、记忆和导入数据中的敏感信息，进行脱敏处理
+      </p>
     </div>
 
     <el-alert
@@ -18,7 +20,9 @@
       class="notice-alert"
     >
       <template #default>
-        <p>扫描仅检测敏感信息，不会自动修改或删除你的数据。脱敏操作需要你手动确认。</p>
+        <p>
+          扫描仅检测敏感信息，不会自动修改或删除你的数据。脱敏操作需要你手动确认。
+        </p>
       </template>
     </el-alert>
 
@@ -31,47 +35,75 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
-import { ArrowLeft } from "@element-plus/icons-vue"
-import { ElMessage } from "element-plus"
-import ScanScopePanel from "./components/ScanScopePanel.vue"
-import ScanResultsPanel from "./components/ScanResultsPanel.vue"
-import ScanHistoryPanel from "./components/ScanHistoryPanel.vue"
-import { postScan } from "./api"
+import { ref } from "vue";
+import { ArrowLeft } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import ScanScopePanel from "./components/ScanScopePanel.vue";
+import ScanResultsPanel from "./components/ScanResultsPanel.vue";
+import ScanHistoryPanel from "./components/ScanHistoryPanel.vue";
+import { postScan } from "./api";
 
-const scanning = ref(false)
-const scanSummary = ref<any>(null)
+const scanning = ref(false);
+const scanSummary = ref<any>(null);
 
 async function runScan(scope: string[]) {
-  scanning.value = true
-  scanSummary.value = null
+  scanning.value = true;
+  scanSummary.value = null;
   try {
-    const d = await postScan(scope)
-    scanSummary.value = d
-    ElMessage.success(d.message || "扫描完成")
+    const d = await postScan(scope);
+    scanSummary.value = d;
+    ElMessage.success(d.message || "扫描完成");
   } catch (err: any) {
-    ElMessage.error("扫描失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "扫描失败: " + (err.response?.data?.message || err.message),
+    );
   } finally {
-    scanning.value = false
+    scanning.value = false;
   }
 }
 
 function onViewHistoryResult(scanId: number) {
-  ElMessage.info("历史扫描 ID: " + scanId + "，请重新执行扫描以查看最新结果")
+  ElMessage.info("历史扫描 ID: " + scanId + "，请重新执行扫描以查看最新结果");
 }
 </script>
 
 <style scoped>
-.back-btn { padding: 4px; }
-.privacy-scan-view { max-width: 900px; }
-.page-header { margin-bottom: 16px; }
-.page-header-row { display: flex; align-items: center; gap: 8px; }
-.page-header h2 { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; color: var(--el-text-color-primary); }
-.page-desc { font-size: 13px; color: var(--el-text-color-secondary); margin: 0; }
-.notice-alert { margin-bottom: 16px; }
-.notice-alert p { margin: 0; font-size: 13px; }
+.back-btn {
+  padding: 4px;
+}
+.privacy-scan-view {
+  max-width: 900px;
+}
+.page-header {
+  margin-bottom: 16px;
+}
+.page-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--el-text-color-primary);
+}
+.page-desc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 0;
+}
+.notice-alert {
+  margin-bottom: 16px;
+}
+.notice-alert p {
+  margin: 0;
+  font-size: 13px;
+}
 
 @media (max-width: 600px) {
-  .privacy-scan-view { max-width: 100%; }
+  .privacy-scan-view {
+    max-width: 100%;
+  }
 }
 </style>

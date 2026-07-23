@@ -12,7 +12,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="sr-slider-wrap">
         <el-slider
           :model-value="props.modelValue"
-          @update:model-value="(v: number) => $emit('update:modelValue', Math.round(v))"
+          @update:model-value="
+            (v: number) => $emit('update:modelValue', Math.round(v))
+          "
           :min="min"
           :max="max"
           :step="1"
@@ -27,20 +29,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
-  modelValue?: number
-  label: string
-  left: string
-  right: string
-  min: number
-  max: number
-}>(), {
-  modelValue: 50
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue?: number;
+    label: string;
+    left: string;
+    right: string;
+    min: number;
+    max: number;
+  }>(),
+  {
+    modelValue: 50,
+  },
+);
 
 defineEmits<{
-  (e: "update:modelValue", v: number): void
-}>()
+  (e: "update:modelValue", v: number): void;
+}>();
 </script>
 
 <style scoped>
@@ -68,13 +73,16 @@ defineEmits<{
   gap: 6px;
 }
 
-.sr-left, .sr-right {
+.sr-left,
+.sr-right {
   font-size: 10px;
   color: var(--ac-color-text-placeholder);
   min-width: 24px;
 }
 
-.sr-left { text-align: right; }
+.sr-left {
+  text-align: right;
+}
 
 .sr-slider-wrap {
   flex: 1;

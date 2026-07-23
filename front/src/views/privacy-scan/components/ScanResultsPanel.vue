@@ -35,12 +35,24 @@
     </template>
 
     <div class="filter-bar">
-      <el-select v-model="filter.riskLevel" placeholder="风险等级" clearable style="width: 130px" @change="loadResults">
+      <el-select
+        v-model="filter.riskLevel"
+        placeholder="风险等级"
+        clearable
+        style="width: 130px"
+        @change="loadResults"
+      >
         <el-option label="高风险" value="high" />
         <el-option label="中风险" value="medium" />
         <el-option label="低风险" value="low" />
       </el-select>
-      <el-select v-model="filter.sourceTable" placeholder="数据来源" clearable style="width: 130px" @change="loadResults">
+      <el-select
+        v-model="filter.sourceTable"
+        placeholder="数据来源"
+        clearable
+        style="width: 130px"
+        @change="loadResults"
+      >
         <el-option
           v-for="st in sourceTables"
           :key="st.source_table"
@@ -48,7 +60,13 @@
           :value="st.source_table"
         />
       </el-select>
-      <el-select v-model="filter.riskType" placeholder="风险类型" clearable style="width: 150px" @change="loadResults">
+      <el-select
+        v-model="filter.riskType"
+        placeholder="风险类型"
+        clearable
+        style="width: 150px"
+        @change="loadResults"
+      >
         <el-option
           v-for="rt in riskTypes"
           :key="rt.risk_type"
@@ -58,12 +76,23 @@
       </el-select>
     </div>
 
-    <el-table :data="results" style="width: 100%; margin-top: 12px" @selection-change="onSelectionChange" size="small">
+    <el-table
+      :data="results"
+      style="width: 100%; margin-top: 12px"
+      @selection-change="onSelectionChange"
+      size="small"
+    >
       <el-table-column type="selection" width="40" />
       <el-table-column prop="risk_level" label="等级" width="70">
         <template #default="{ row }">
           <span :class="['risk-tag', row.risk_level]">
-            {{ row.risk_level === 'high' ? '高' : row.risk_level === 'medium' ? '中' : '低' }}
+            {{
+              row.risk_level === "high"
+                ? "高"
+                : row.risk_level === "medium"
+                  ? "中"
+                  : "低"
+            }}
           </span>
         </template>
       </el-table-column>
@@ -73,7 +102,12 @@
           {{ sourceTableLabel(row.source_table) }}
         </template>
       </el-table-column>
-      <el-table-column prop="snippet" label="上下文片段" min-width="200" show-overflow-tooltip />
+      <el-table-column
+        prop="snippet"
+        label="上下文片段"
+        min-width="200"
+        show-overflow-tooltip
+      />
       <el-table-column prop="masked" label="状态" width="70">
         <template #default="{ row }">
           <span v-if="row.masked" class="masked-yes">已脱敏</span>
@@ -145,15 +179,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from "vue"
-import { ElMessage, ElMessageBox } from "element-plus"
-import { Download } from "@element-plus/icons-vue"
-import { getScanResults, postMask, getExportScanReport } from "../api"
-import { sourceTableLabel } from "../utils"
+import { ref, reactive, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Download } from "@element-plus/icons-vue";
+import { getScanResults, postMask, getExportScanReport } from "../api";
+import { sourceTableLabel } from "../utils";
 
 const props = defineProps<{
-  scanSummary: any
-}>()
+  scanSummary: any;
+}>();
 
 const filter = reactive({
   riskLevel: "" as string,
@@ -161,35 +195,37 @@ const filter = reactive({
   sourceTable: "" as string,
   page: 1,
   pageSize: 50,
-})
+});
 
-const results = ref<any[]>([])
-const totalResults = ref(0)
-const riskTypes = ref<any[]>([])
-const sourceTables = ref<any[]>([])
-const selectedIds = ref<number[]>([])
-const masking = ref(false)
-const maskConfirmText = ref("")
-const maskResult = ref<any>(null)
+const results = ref<any[]>([]);
+const totalResults = ref(0);
+const riskTypes = ref<any[]>([]);
+const sourceTables = ref<any[]>([]);
+const selectedIds = ref<number[]>([]);
+const masking = ref(false);
+const maskConfirmText = ref("");
+const maskResult = ref<any>(null);
 
 function onSelectionChange(rows: any[]) {
-  selectedIds.value = rows.map(r => r.id)
+  selectedIds.value = rows.map((r) => r.id);
 }
 
 async function loadResults() {
   try {
-    const params: any = { page: filter.page, pageSize: filter.pageSize }
-    if (filter.riskLevel) params.riskLevel = filter.riskLevel
-    if (filter.riskType) params.riskType = filter.riskType
-    if (filter.sourceTable) params.sourceTable = filter.sourceTable
+    const params: any = { page: filter.page, pageSize: filter.pageSize };
+    if (filter.riskLevel) params.riskLevel = filter.riskLevel;
+    if (filter.riskType) params.riskType = filter.riskType;
+    if (filter.sourceTable) params.sourceTable = filter.sourceTable;
 
-    const d = await getScanResults(params)
-    results.value = d.items || []
-    totalResults.value = d.total || 0
-    riskTypes.value = d.riskTypes || []
-    sourceTables.value = d.sourceTables || []
+    const d = await getScanResults(params);
+    results.value = d.items || [];
+    totalResults.value = d.total || 0;
+    riskTypes.value = d.riskTypes || [];
+    sourceTables.value = d.sourceTables || [];
   } catch (err: any) {
-    ElMessage.error("加载结果失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "加载结果失败: " + (err.response?.data?.message || err.message),
+    );
   }
 }
 
@@ -198,111 +234,234 @@ async function maskSingle(id: number) {
     await ElMessageBox.confirm(
       "将此条记录中的敏感信息替换为 [已脱敏]。此操作不可撤销。",
       "确认脱敏",
-      { confirmButtonText: "确认脱敏", cancelButtonText: "取消", type: "warning" }
-    )
-    const d = await postMask([id], "确认脱敏")
-    maskResult.value = d
-    ElMessage.success("已脱敏")
-    await loadResults()
+      {
+        confirmButtonText: "确认脱敏",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+    const d = await postMask([id], "确认脱敏");
+    maskResult.value = d;
+    ElMessage.success("已脱敏");
+    await loadResults();
   } catch (err: any) {
     if (err !== "cancel" && err !== "close") {
-      ElMessage.error("脱敏失败: " + (err.response?.data?.message || err.message))
+      ElMessage.error(
+        "脱敏失败: " + (err.response?.data?.message || err.message),
+      );
     }
   }
 }
 
 async function batchMask() {
-  if (maskConfirmText.value !== "确认脱敏") return
-  masking.value = true
+  if (maskConfirmText.value !== "确认脱敏") return;
+  masking.value = true;
   try {
-    const d = await postMask(selectedIds.value, "确认脱敏")
-    maskResult.value = d
-    ElMessage.success(`已脱敏 ${d.maskedCount} 条`)
-    selectedIds.value = []
-    maskConfirmText.value = ""
-    await loadResults()
+    const d = await postMask(selectedIds.value, "确认脱敏");
+    maskResult.value = d;
+    ElMessage.success(`已脱敏 ${d.maskedCount} 条`);
+    selectedIds.value = [];
+    maskConfirmText.value = "";
+    await loadResults();
   } catch (err: any) {
-    ElMessage.error("批量脱敏失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "批量脱敏失败: " + (err.response?.data?.message || err.message),
+    );
   } finally {
-    masking.value = false
+    masking.value = false;
   }
 }
 
 async function exportReport(format: "csv" | "json") {
   try {
-    const blob = await getExportScanReport({ format })
-    const ext = format === "csv" ? "csv" : "json"
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `privacy-scan-report.${ext}`
-    a.click()
-    URL.revokeObjectURL(url)
-    ElMessage.success(`报告已导出为 ${ext.toUpperCase()} 格式`)
+    const blob = await getExportScanReport({ format });
+    const ext = format === "csv" ? "csv" : "json";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `privacy-scan-report.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success(`报告已导出为 ${ext.toUpperCase()} 格式`);
   } catch (err: any) {
-    ElMessage.error("导出失败: " + (err.response?.data?.message || err.message))
+    ElMessage.error(
+      "导出失败: " + (err.response?.data?.message || err.message),
+    );
   }
 }
 
-watch(() => props.scanSummary, (val) => {
-  if (val) {
-    filter.page = 1
-    results.value = []
-    maskResult.value = null
-    selectedIds.value = []
-    maskConfirmText.value = ""
-    loadResults()
-  }
-}, { immediate: true })
+watch(
+  () => props.scanSummary,
+  (val) => {
+    if (val) {
+      filter.page = 1;
+      results.value = [];
+      maskResult.value = null;
+      selectedIds.value = [];
+      maskConfirmText.value = "";
+      loadResults();
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
-.section-card { margin-bottom: 16px; border: 1px solid var(--el-border-color-light); }
-.card-title { font-size: 15px; font-weight: 600; }
-.card-header-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.header-actions { display: flex; gap: 6px; }
-
-.summary-stats { display: flex; gap: 20px; }
-.summary-stat {
-  padding: 10px 20px; background: var(--el-fill-color);
-  border: 1px solid var(--el-border-color-light); border-radius: 6px;
-  text-align: center; min-width: 100px;
+.section-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--el-border-color-light);
 }
-.summary-stat.high { border-color: var(--ac-color-danger); background: var(--ac-color-danger-bg); }
-.summary-stat.high .summary-stat-value { color: var(--ac-color-danger); }
-.summary-stat.medium { border-color: var(--ac-color-warning); background: var(--ac-color-warning-bg); }
-.summary-stat.medium .summary-stat-value { color: var(--ac-color-warning); }
-.summary-stat-label { display: block; font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
-.summary-stat-value { font-size: 22px; font-weight: 700; color: var(--el-text-color-primary); }
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
 
-.filter-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+.summary-stats {
+  display: flex;
+  gap: 20px;
+}
+.summary-stat {
+  padding: 10px 20px;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  text-align: center;
+  min-width: 100px;
+}
+.summary-stat.high {
+  border-color: var(--ac-color-danger);
+  background: var(--ac-color-danger-bg);
+}
+.summary-stat.high .summary-stat-value {
+  color: var(--ac-color-danger);
+}
+.summary-stat.medium {
+  border-color: var(--ac-color-warning);
+  background: var(--ac-color-warning-bg);
+}
+.summary-stat.medium .summary-stat-value {
+  color: var(--ac-color-warning);
+}
+.summary-stat-label {
+  display: block;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 4px;
+}
+.summary-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
 
-.risk-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-.risk-tag.high { background: var(--ac-color-danger-bg); color: var(--ac-color-danger); border: 1px solid var(--ac-color-danger); }
-.risk-tag.medium { background: var(--ac-color-warning-bg); color: var(--ac-color-warning); border: 1px solid var(--ac-color-warning); }
-.risk-tag.low { background: var(--el-fill-color); color: var(--el-text-color-secondary); border: 1px solid var(--el-border-color-light); }
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
-.masked-yes { color: var(--el-color-success); font-size: 12px; }
-.masked-no { color: var(--el-color-danger); font-size: 12px; font-weight: 500; }
-.masked-done { color: var(--el-text-color-placeholder); }
+.risk-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.risk-tag.high {
+  background: var(--ac-color-danger-bg);
+  color: var(--ac-color-danger);
+  border: 1px solid var(--ac-color-danger);
+}
+.risk-tag.medium {
+  background: var(--ac-color-warning-bg);
+  color: var(--ac-color-warning);
+  border: 1px solid var(--ac-color-warning);
+}
+.risk-tag.low {
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  border: 1px solid var(--el-border-color-light);
+}
 
-.batch-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--el-border-color-extra-light); }
-.batch-info { font-size: 13px; color: var(--el-text-color-secondary); }
+.masked-yes {
+  color: var(--el-color-success);
+  font-size: 12px;
+}
+.masked-no {
+  color: var(--el-color-danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+.masked-done {
+  color: var(--el-text-color-placeholder);
+}
 
-.pagination-wrap { display: flex; justify-content: center; margin-top: 12px; }
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-extra-light);
+}
+.batch-info {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
 
-.mask-report { font-size: 14px; }
-.report-row { padding: 6px 0; }
-.report-row strong { color: var(--el-text-color-primary); }
+.pagination-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
 
-.result-card { border-color: var(--el-color-success-light-5); }
+.mask-report {
+  font-size: 14px;
+}
+.report-row {
+  padding: 6px 0;
+}
+.report-row strong {
+  color: var(--el-text-color-primary);
+}
+
+.result-card {
+  border-color: var(--el-color-success-light-5);
+}
 
 @media (max-width: 600px) {
-  .summary-stats { flex-wrap: wrap; gap: 8px; }
-  .summary-stat { flex: 1; min-width: 80px; }
-  .filter-bar { flex-direction: column; }
-  .filter-bar :deep(.el-select) { width: 100% !important; }
-  .batch-actions { flex-direction: column; align-items: flex-start; }
-  .card-header-row { flex-direction: column; align-items: flex-start; }
+  .summary-stats {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .summary-stat {
+    flex: 1;
+    min-width: 80px;
+  }
+  .filter-bar {
+    flex-direction: column;
+  }
+  .filter-bar :deep(.el-select) {
+    width: 100% !important;
+  }
+  .batch-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .card-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
