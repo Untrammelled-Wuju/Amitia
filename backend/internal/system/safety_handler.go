@@ -36,3 +36,7 @@ func (h *Handler) SafetyEvents(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	util.SuccessResponse(c, h.service.SafetyEvents(page, pageSize))
 }
+
+func (h *Handler) DeleteSafetyEvents(c *gin.Context) {
+	util.SuccessResponse(c, h.service.DeleteSafetyEvents())
+}

@@ -76,6 +76,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/safety/check-output", handler.CheckOutputSafety)
 	r.POST("/safety/check-import", handler.SafetyImportCheck)
 	r.GET("/safety/events", handler.SafetyEvents)
+	r.DELETE("/safety/events", handler.DeleteSafetyEvents)
 	r.PUT("/safety/events/:id/handle", handler.CheckInputSafety)
 
 	r.GET("/auth/current-session", handler.CurrentSession)

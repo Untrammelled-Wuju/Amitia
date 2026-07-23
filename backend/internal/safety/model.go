@@ -43,6 +43,20 @@ type AuditLog struct {
 	Action string `json:"action"`
 }
 
+type SafetyConfig struct {
+	PreventEmotionalBlackmail        bool   `json:"preventEmotionalBlackmail"`
+	PreventExclusiveDependency       bool   `json:"preventExclusiveDependency"`
+	PreventRealityIsolation          bool   `json:"preventRealityIsolation"`
+	PreventPunitiveExpression        bool   `json:"preventPunitiveExpression"`
+	PreventPretendingHuman           bool   `json:"preventPretendingHuman"`
+	PreventSensitiveProactiveMention bool   `json:"preventSensitiveProactiveMention"`
+	RestrictAdultContent             bool   `json:"restrictAdultContent"`
+	NegativeEmotionCap               int    `json:"negativeEmotionCap"`
+	IntimacyExpressionCap            int    `json:"intimacyExpressionCap"`
+	ViolationAction                  string `json:"violationAction"`
+	AuditLogRetentionDays            int    `json:"auditLogRetentionDays"`
+}
+
 type Handler struct {
 	db *gorm.DB
 }

@@ -14,7 +14,7 @@ type FeatureFlags struct {
 func FeatureFlagsFromEnvironment() FeatureFlags {
 	return FeatureFlags{
 		TemporalCoreEnabled:     environmentBool("AMITIA_TEMPORAL_CORE_ENABLED", true),
-		RelationshipTimeEnabled: environmentBool("AMITIA_RELATIONSHIP_TIME_ENABLED", false),
+		RelationshipTimeEnabled: environmentBool("AMITIA_RELATIONSHIP_TIME_ENABLED", true),
 	}
 }
 

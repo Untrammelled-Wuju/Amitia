@@ -45,6 +45,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page { max-width: 960px; margin: 0 auto; padding: 20px 16px; }
+.page { margin: 0 auto; padding: 20px 16px; }
 .page-title { font-size: 20px; font-weight: 600; margin: 0 0 12px; }
 </style>

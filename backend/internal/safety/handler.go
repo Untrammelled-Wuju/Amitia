@@ -64,3 +64,49 @@ func (h *Handler) GetAuditLogs(c *gin.Context) {
 	}
 	util.SuccessResponse(c, logs)
 }
+
+func defaultSafetyConfig() *SafetyConfig {
+	return &SafetyConfig{
+		PreventEmotionalBlackmail:        true,
+		PreventExclusiveDependency:       true,
+		PreventRealityIsolation:          true,
+		PreventPunitiveExpression:        true,
+		PreventPretendingHuman:           true,
+		PreventSensitiveProactiveMention: true,
+		RestrictAdultContent:             true,
+		NegativeEmotionCap:               5,
+		IntimacyExpressionCap:            7,
+		ViolationAction:                  "block",
+		AuditLogRetentionDays:            30,
+	}
+}
+
+func (h *Handler) GetConfig(c *gin.Context) {
+	var value string
+	h.db.Raw("SELECT value FROM app_settings WHERE key = 'safety_config' LIMIT 1").Row().Scan(&value)
+	if value == "" || value == "{}" {
+		util.SuccessResponse(c, defaultSafetyConfig())
+		return
+	}
+	var cfg SafetyConfig
+	if err := json.Unmarshal([]byte(value), &cfg); err != nil {
+		util.ErrorResponse(c, response.InternalError, "配置解析失败", nil)
+		return
+	}
+	util.SuccessResponse(c, &cfg)
+}
+
+func (h *Handler) PutConfig(c *gin.Context) {
+	var body SafetyConfig
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		return
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "序列化失败", nil)
+		return
+	}
+	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('safety_config', ?, datetime('now', 'localtime'))", string(data))
+	util.SuccessMsgResponse(c, "安全配置已保存", nil)
+}
