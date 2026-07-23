@@ -31,8 +31,8 @@ extraResources:
 asar: true
 compression: normal
 win:
-  signAndEditExecutable: false
-  icon: resources/icon.ico
+  signExecutable: false
+  icon: ../Logo/amitia-icon-light.ico
   target:
     - target: nsis
       arch:
@@ -52,7 +52,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.1
+  releaseName: Amitia 26.1.2
   releaseNotesFile: release-notes.md
 
 publish:
