@@ -52,7 +52,7 @@ import MobileNav from "./MobileNav.vue"
 import { useTheme } from "../composables/useTheme"
 import { apiClient, getToken, removeToken, isLoggedIn } from "../composables/useApi"
 import { getPageTitle } from "@/navigation/app-nav"
-import { useUserAvatar } from "@/composables/useUserAvatar"
+import { useAppStore } from "@/stores/app"
 
 const router = useRouter()
 const { state: theme, resolvedMode: resolvedTheme, toggleLightDark: toggleTheme } = useTheme()
@@ -77,7 +77,8 @@ const health = ref({
 const currentCharName = ref("")
 
 const authUsername = ref("")
-const { avatar: authAvatar } = useUserAvatar()
+const appStore = useAppStore()
+const authAvatar = computed(() => appStore.avatar)
 
 const modelClass = computed(() =>
   health.value.model === "configured" ? "status-on" : "status-off"

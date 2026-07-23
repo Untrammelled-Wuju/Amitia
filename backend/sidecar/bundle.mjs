@@ -77329,31 +77329,31 @@ var init_puny = __esm({
 
 // node_modules/.pnpm/typebox@1.1.39/node_modules/typebox/build/format/_idna.mjs
 function IsNonspacingMark(cp) {
-  return /\p{Mn}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Mn}", "u").test(String.fromCodePoint(cp));
 }
 function IsSpacingCombiningMark(cp) {
-  return /\p{Mc}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Mc}", "u").test(String.fromCodePoint(cp));
 }
 function IsEnclosingMark(cp) {
-  return /\p{Me}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Me}", "u").test(String.fromCodePoint(cp));
 }
 function IsCombiningMark2(cp) {
   return IsNonspacingMark(cp) || IsSpacingCombiningMark(cp) || IsEnclosingMark(cp);
 }
 function IsGreek(cp) {
-  return /\p{Script=Greek}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Script=Greek}", "u").test(String.fromCodePoint(cp));
 }
 function IsHebrew(cp) {
-  return /\p{Script=Hebrew}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Script=Hebrew}", "u").test(String.fromCodePoint(cp));
 }
 function IsHiragana(cp) {
-  return /\p{Script=Hiragana}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Script=Hiragana}", "u").test(String.fromCodePoint(cp));
 }
 function IsKatakana(cp) {
-  return /\p{Script=Katakana}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Script=Katakana}", "u").test(String.fromCodePoint(cp));
 }
 function IsHan(cp) {
-  return /\p{Script=Han}/u.test(String.fromCodePoint(cp));
+  return new RegExp("\\p{Script=Han}", "u").test(String.fromCodePoint(cp));
 }
 function IsArabicIndicDigit(cp) {
   return cp >= 1632 && cp <= 1641;
@@ -134671,7 +134671,7 @@ function stringToBytes(string2, encoding) {
   return [...string2].map((character) => character.charCodeAt(0));
 }
 function tarHeaderChecksumMatches(arrayBuffer, offset = 0) {
-  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(/\0.*$/v, "").trim(), 8);
+  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(new RegExp("\\0.*$", "v"), "").trim(), 8);
   if (Number.isNaN(readSum)) {
     return false;
   }
@@ -135510,7 +135510,7 @@ async function detectZip(tokenizer) {
           };
         }
         default:
-          if (/classes\d*\.dex/v.test(zipHeader.filename)) {
+          if (new RegExp("classes\\d*\\.dex", "v").test(zipHeader.filename)) {
             fileType = {
               ext: "apk",
               mime: "application/vnd.android.package-archive"
@@ -135668,7 +135668,7 @@ async function detectEbml(tokenizer) {
         }
         const documentTypeLength = getSafeBound(element.len, maximumEbmlDocumentTypeSizeInBytes, "EBML DocType");
         const rawValue = await tokenizer.readToken(new StringType(documentTypeLength));
-        return rawValue.replaceAll(/\0.*$/gv, "");
+        return rawValue.replaceAll(new RegExp("\\0.*$", "gv"), "");
       }
       if (hasUnknownFileSize(tokenizer) && (!Number.isFinite(element.len) || element.len < 0 || element.len > maximumEbmlElementPayloadSizeInBytes)) {
         return;
@@ -136790,7 +136790,7 @@ var init_source2 = __esm({
         }
         if (this.checkString("AC")) {
           const version2 = new StringType(4, "latin1").get(this.buffer, 2);
-          if (/^\d+$/v.test(version2) && version2 >= 1e3 && version2 <= 1050) {
+          if (new RegExp("^\\d+$", "v").test(version2) && version2 >= 1e3 && version2 <= 1050) {
             return {
               ext: "dwg",
               mime: "image/vnd.dwg"

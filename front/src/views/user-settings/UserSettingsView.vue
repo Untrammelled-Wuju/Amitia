@@ -14,7 +14,7 @@
       <section class="profile-overview">
         <div class="profile-main">
           <span class="account-avatar">
-            <img v-if="avatar" :src="avatar" alt="用户头像" />
+            <img v-if="appStore.avatar" :src="appStore.avatar" alt="用户头像" />
             <el-icon v-else><UserFilled /></el-icon>
           </span>
           <div class="account-copy">
@@ -33,7 +33,7 @@
               @change="handleAvatarChange"
             />
             <el-button size="small" :loading="avatarUpdating" @click="avatarFileInput?.click()">更换头像</el-button>
-            <el-button v-if="avatar" size="small" text @click="removeAvatar">恢复默认</el-button>
+            <el-button v-if="appStore.avatar" size="small" text @click="removeAvatar">恢复默认</el-button>
           </div>
         </div>
 
@@ -134,7 +134,7 @@ import { useRouter } from "vue-router"
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus"
 import { Calendar, CircleCheck, Clock, Key, Lock, SwitchButton, UserFilled } from "@element-plus/icons-vue"
 import { apiClient, removeToken } from "@/composables/useApi"
-import { useUserAvatar } from "@/composables/useUserAvatar"
+import { useAppStore } from "@/stores/app"
 
 type UserInfo = {
   id?: number
@@ -150,7 +150,7 @@ const logoutLoading = ref(false)
 const avatarUpdating = ref(false)
 const avatarFileInput = ref<HTMLInputElement>()
 const passwordFormRef = ref<FormInstance>()
-const { avatar, setAvatar } = useUserAvatar()
+const appStore = useAppStore()
 const router = useRouter()
 const userInfo = reactive<UserInfo>({
   username: "",
@@ -239,7 +239,7 @@ async function handleAvatarChange(event: Event) {
   }
   avatarUpdating.value = true
   try {
-    setAvatar(await createAvatar(file))
+    appStore.setAvatar(await createAvatar(file))
     ElMessage.success("头像已更新")
   } catch (error: any) {
     ElMessage.error(error?.message || "头像更新失败")
@@ -249,7 +249,7 @@ async function handleAvatarChange(event: Event) {
 }
 
 function removeAvatar() {
-  setAvatar("")
+  appStore.removeAvatar()
   ElMessage.success("已恢复默认头像")
 }
 

@@ -1,0 +1,3 @@
+service:
+  http_port: 9178
+  grpc_port: 9179

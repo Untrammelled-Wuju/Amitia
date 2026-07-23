@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="chat-bubble" :class="[message.role, { 'is-emote': isEmote }]">
     <div class="bubble-avatar">
-      <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : (userAvatar || undefined)">
+      <el-avatar :size="32" :src="message.role === 'assistant' ? charAvatar : (appStore.avatar || undefined)">
         <el-icon v-if="message.role === 'user'"><UserFilled /></el-icon>
         <template v-else>{{ charInitial }}</template>
       </el-avatar>
@@ -74,7 +74,7 @@ import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue"
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue"
 import EmoteMessage from "./chat-bubble/EmoteMessage.vue"
 import { fmtTime } from "./chat-bubble/utils"
-import { useUserAvatar } from "@/composables/useUserAvatar"
+import { useAppStore } from "@/stores/app"
 
 const props = defineProps<{
   message: {
@@ -103,7 +103,7 @@ const emit = defineEmits<{
   "scroll-to-message": [id: string]
 }>()
 
-const { avatar: userAvatar } = useUserAvatar()
+const appStore = useAppStore()
 
 const hasAudio = computed(() => !!((props.message as any).audioUrl))
 const isEmote = computed(() => {

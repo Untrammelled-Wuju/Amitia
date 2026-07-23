@@ -174,7 +174,7 @@
 }
 
 .el-menu .el-menu-item {
-  margin: 3px 12px 0;
+  margin: 3px 12px 0 !important;
 }
 
 .el-menu-item.is-active {

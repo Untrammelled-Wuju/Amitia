@@ -80,3 +80,4 @@ noa.rs-7.cn/
 .php/
 *.py
 *.extension-key
+backend/surrealdb/surreal.exe
