@@ -1,6 +1,6 @@
 {
   "name": "@ai-companion/web",
-  "version": "26.1.0",
+  "version": "26.1.1",
   "private": true,
   "type": "module",
   "main": "../desktop/dist/main/index.js",

@@ -11,9 +11,11 @@ extraResources:
   - from: resources/core
     to: core
     filter:
-      - "**/*"
-      - "!qdrant/storage"
-      - "!qdrant/storage/**/*"
+      - "AmitiaCore.exe"
+      - "sidecar/bundle.mjs"
+      - "sidecar/launcher.mjs"
+      - "qq-sidecar/bundle.mjs"
+      - "qq-sidecar/launcher.mjs"
   - from: resources/bridge
     to: bridge
   - from: resources/migrations
@@ -27,6 +29,7 @@ extraResources:
   - from: resources/surrealdb
     to: surrealdb
 asar: true
+compression: normal
 win:
   signAndEditExecutable: false
   icon: resources/icon.ico
@@ -38,6 +41,8 @@ win:
 nsis:
   oneClick: false
   perMachine: false
+  differentialPackage: true
+  installerIcon: ../Logo/amitia-icon-light.ico
   allowElevation: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
@@ -45,6 +50,10 @@ nsis:
   shortcutName: Amitia
   runAfterFinish: true
   deleteAppDataOnUninstall: false
+
+releaseInfo:
+  releaseName: Amitia 26.1.1
+  releaseNotesFile: release-notes.md
 
 publish:
   - provider: github

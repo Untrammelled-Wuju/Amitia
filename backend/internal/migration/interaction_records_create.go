@@ -2,8 +2,9 @@ package migration
 
 func InteractionRecordsCreateMigration() Migration {
 	return Migration{
-		Version: "202607030000",
-		Name:    "create_interaction_records_table",
+		Version:           "202607030000",
+		Name:              "create_interaction_records_table",
+		AcceptedChecksums: []string{"f34ba38300554c243c88cf1b79551ec44ed96a5216f4b0795f28b612b0cde8f4"},
 		Up: func(step *Step) error {
 			step.CreateTable(`CREATE TABLE IF NOT EXISTS interaction_records (
 				id TEXT PRIMARY KEY,
@@ -33,16 +34,7 @@ func InteractionRecordsCreateMigration() Migration {
 				started_at DATETIME,
 				committed_at DATETIME,
 				completed_at DATETIME,
-				updated_at DATETIME,
-				owner_instance_id TEXT DEFAULT '',
-				heartbeat_at DATETIME,
-				commit_token TEXT DEFAULT '',
-				commit_owner TEXT DEFAULT '',
-				commit_acquired_at DATETIME,
-				result_message_ids TEXT DEFAULT '',
-				delivery_intent_ids TEXT DEFAULT '',
-				correlation_id TEXT DEFAULT '',
-				causation_id TEXT DEFAULT ''
+				updated_at DATETIME
 			)`)
 
 			if err := step.CreateIndex("idx_interaction_scope_active", "interaction_records", []string{"user_id", "character_id", "conversation_id", "status"}, false); err != nil {
@@ -79,18 +71,6 @@ func InteractionRecordsCreateMigration() Migration {
 				return err
 			}
 			if err := step.CreateIndex("idx_interaction_request_unique", "interaction_records", []string{"user_id", "request_id"}, true); err != nil {
-				return err
-			}
-
-			if err := step.CreateIndex("idx_interaction_conv_request_unique", "interaction_records", []string{"conversation_id", "request_id"}, true); err != nil {
-				return err
-			}
-
-			if err := step.CreateIndex("idx_interaction_owner_heartbeat", "interaction_records", []string{"owner_instance_id", "heartbeat_at"}, false); err != nil {
-				return err
-			}
-
-			if err := step.CreateIndex("idx_interaction_commit_token", "interaction_records", []string{"commit_token"}, false); err != nil {
 				return err
 			}
 

@@ -49,6 +49,7 @@ func DefaultMigrations() []Migration {
 		MessageSequenceCheckpointMigration(),
 		TombstoneRebuildMigration(),
 		InteractionRecordsCreateMigration(),
+		InteractionRecordsV2Migration(),
 		ProactiveDeliveryTrackingMigration(),
 		RuntimeQueueMigration(),
 		LegacyDataMigration(),
@@ -77,5 +78,6 @@ func DefaultMigrations() []Migration {
 		CanonicalSingleUserMigration(),
 		CharacterBaseColumnMigration(),
 		MCPClientMigration(),
+		UserProfileCharacterScopeMigration(),
 	}
 }

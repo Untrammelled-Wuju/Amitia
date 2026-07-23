@@ -1,17 +1,17 @@
 {
   "name": "@amitia/desktop",
-  "version": "26.1.0",
+  "version": "26.1.1",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && vite build && node -e \"const{cpSync}=require('fs');cpSync('src/renderer/update-check','dist/renderer/update-check',{recursive:true})\"",
-    "dist:win": "electron-builder --win --x64",
+    "dist:win": "node scripts/build-release.mjs",
     "dist:win:dir": "electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "pnpm run build && electron-builder --win --x64"
+    "package": "pnpm run build && node scripts/build-release.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.7",

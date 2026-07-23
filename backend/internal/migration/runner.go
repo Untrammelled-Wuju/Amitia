@@ -12,9 +12,10 @@ import (
 )
 
 type Migration struct {
-	Version string
-	Name    string
-	Up      func(*Step) error
+	Version           string
+	Name              string
+	AcceptedChecksums []string
+	Up                func(*Step) error
 }
 
 type Record struct {
@@ -116,7 +117,19 @@ func (r Runner) applyOne(migration Migration) error {
 			return fmt.Errorf("migration checksum compute failed %s: %w", migration.Version, csErr)
 		}
 		if existing.Checksum != "" && currentChecksum != existing.Checksum {
-			return fmt.Errorf("checksum mismatch for migration %s: recorded=%s current=%s", migration.Version, existing.Checksum, currentChecksum)
+			accepted := false
+			for _, checksum := range migration.AcceptedChecksums {
+				if existing.Checksum == checksum {
+					accepted = true
+					break
+				}
+			}
+			if !accepted {
+				return fmt.Errorf("checksum mismatch for migration %s: recorded=%s current=%s", migration.Version, existing.Checksum, currentChecksum)
+			}
+			if err := r.DB.Model(&Record{}).Where("version = ?", migration.Version).Update("checksum", currentChecksum).Error; err != nil {
+				return fmt.Errorf("normalize migration checksum %s: %w", migration.Version, err)
+			}
 		}
 		return nil
 	}
