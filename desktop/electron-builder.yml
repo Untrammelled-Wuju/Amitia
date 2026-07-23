@@ -8,6 +8,8 @@ files:
   - resources/tray*.png
   - package.json
 extraResources:
+  - from: release-notes.md
+    to: release-notes.md
   - from: resources/core
     to: core
     filter:

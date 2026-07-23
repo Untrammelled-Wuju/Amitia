@@ -28,6 +28,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
+    <el-card v-if="releaseNotes" shadow="never" class="section-card">
+      <template #header><span>更新内容</span></template>
+      <pre class="release-notes">{{ releaseNotes }}</pre>
+    </el-card>
+
     <el-card shadow="never" class="section-card">
       <template #header><span>版权与许可</span></template>
       <el-descriptions :column="1" border size="small">
@@ -53,13 +58,21 @@ import { useBrandLogo } from "@/composables/useBrandLogo"
 const version = "26.1.0"
 
 const checking = ref(false)
+const releaseNotes = ref("")
 const isDesktop = ref(false)
 const { logoUrl } = useBrandLogo()
 
-function handleCheckUpdate() {
+let updateHandled = false
+
+async function handleCheckUpdate() {
   if (!window.amitiaDesktop) return
   checking.value = true
-  window.amitiaDesktop.checkUpdate()
+  updateHandled = false
+  await window.amitiaDesktop.checkUpdate()
+  if (!updateHandled) {
+    checking.value = false
+    ElMessage.success("已是最新版本")
+  }
 }
 
 onMounted(() => {
@@ -68,6 +81,10 @@ onMounted(() => {
   if (!window.amitiaDesktop) return
 
   const api = window.amitiaDesktop
+
+  api.getReleaseNotes().then((notes) => {
+    releaseNotes.value = notes
+  })
 
   api.onUpdateChecking(() => {
     checking.value = true
@@ -79,11 +96,13 @@ onMounted(() => {
 
   api.onUpdateNotAvailable(() => {
     checking.value = false
+    updateHandled = true
     ElMessage.success("已是最新版本")
   })
 
   api.onUpdateError(() => {
     checking.value = false
+    updateHandled = true
   })
 })
 </script>
@@ -148,5 +167,15 @@ onMounted(() => {
 .desktop-only-hint {
   font-size: 12px;
   color: var(--ac-color-text-muted);
+}
+
+.release-notes {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ac-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 4px 0;
 }
 </style>

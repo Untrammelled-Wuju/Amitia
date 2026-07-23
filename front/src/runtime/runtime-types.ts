@@ -67,6 +67,7 @@ export interface AmitiaDesktopAPI {
   cancelAndEnter(): Promise<void>
   getCurrentVersion(): Promise<string>
   openGiteeRelease(): Promise<void>
+  getReleaseNotes(): Promise<string>
   onUpdateChecking(callback: () => void): () => void
   onUpdateAvailable(callback: (event: unknown, data: unknown) => void): () => void
   onUpdateNotAvailable(callback: () => void): () => void

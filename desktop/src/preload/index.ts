@@ -94,6 +94,9 @@ const api = {
   openGiteeRelease(): Promise<void> {
     return ipcRenderer.invoke("update:open-gitee-release")
   },
+  getReleaseNotes(): Promise<string> {
+    return ipcRenderer.invoke("release-notes:get")
+  },
   onUpdateChecking(callback: () => void): () => void {
     ipcRenderer.on("update:checking", callback)
     return () => ipcRenderer.removeListener("update:checking", callback)

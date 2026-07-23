@@ -2,7 +2,8 @@ import { BrowserWindow, ipcMain, app, shell } from "electron"
 import { autoUpdater, UpdateInfo } from "electron-updater"
 import log from "electron-log"
 import path from "path"
-import { getAmitiaDataDir } from "./path-manager"
+import fs from "fs"
+import { getAmitiaDataDir, getInstallDir } from "./path-manager"
 
 let mainWindow: BrowserWindow | null = null
 let startupResolve: (() => void) | null = null
@@ -143,6 +144,22 @@ export function registerUpdateManager(win: BrowserWindow): void {
       console.error("[UpdateManager] 手动检查更新失败:", msg)
       mainWindow?.webContents.send("update:error", { message: msg })
       return null
+    }
+  })
+
+  ipcMain.handle("release-notes:get", () => {
+    try {
+      const notesPath = app.isPackaged
+        ? path.join(process.resourcesPath, "release-notes.md")
+        : path.join(getInstallDir(), "release-notes.md")
+      if (fs.existsSync(notesPath)) {
+        return fs.readFileSync(notesPath, "utf-8")
+      }
+      return ""
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error("[UpdateManager] 读取 release notes 失败:", msg)
+      return ""
     }
   })
 }
