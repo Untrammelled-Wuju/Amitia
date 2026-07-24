@@ -1,4 +1,4 @@
-﻿import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi, setToken } from "../../../composables/useApi";
@@ -152,7 +152,7 @@ export function useImmersiveOnboarding() {
     },
     {
       question: "我的性格是怎样的？",
-      context: "温和、克制、开朗，还是别的样子？",
+      context: "温和、克制、开朗，还是别的样子？（提示词文本决定角色行为，此处性格描述仅作角色展示）",
       placeholder: "例如：温和、体贴、有耐心",
       maxLength: 30,
       quickChoices: ["温和、克制", "开朗、热情", "冷静、理性", "幽默、随性"],
