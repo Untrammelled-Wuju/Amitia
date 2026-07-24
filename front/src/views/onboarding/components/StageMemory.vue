@@ -226,7 +226,7 @@ function handleSend() {
 }
 
 function selectChoice(choice: string) {
-  emit("answer", choice);
+  inputValue.value = choice;
 }
 
 function triggerFileInput() {

@@ -603,14 +603,19 @@
   right: 0%;
   max-width: 420px;
   top: 30%;
-  padding: 0 16px 10px;
+  padding-bottom: 10px;
   z-index: 5;
 }
 
+.onboarding-world .ob-identity-prompt-presets {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
 .onboarding-world .ob-identity-prompt-textarea {
   width: 100%;
-  max-height: 100px;
-  min-height: 54px;
+  height: 200px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
@@ -618,10 +623,10 @@
   font-size: 13px;
   line-height: 1.5;
   padding: 8px 12px;
-  resize: vertical;
-  outline: none;
+  resize: none;
   font-family: inherit;
   display: block;
+  outline: none;
   margin: 0 auto;
 }
 
@@ -630,6 +635,9 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.onboarding-world .ob-identity-prompt-textarea:focus-visible {
+  outline: none;
+}
 .onboarding-world .ob-identity-prompt-textarea::placeholder {
   color: rgba(255, 255, 255, 0.25);
 }
