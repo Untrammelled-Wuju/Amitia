@@ -248,6 +248,12 @@ func startEnvironment() *Environment {
 		log.Printf("[Env] 根目录: %s", workspace)
 	}
 
+	if useBundled {
+		if err := ensureBundledNode(bundledRoot); err != nil {
+			log.Printf("[Env] Node运行时解压失败: %v", err)
+		}
+	}
+
 	sidecarCmd := "npx"
 	sidecarArgs := []string{"tsx", "src/index.ts"}
 	sidecarDir := "backend/sidecar"
@@ -255,7 +261,7 @@ func startEnvironment() *Environment {
 		sidecarCmd = "npx.cmd"
 	}
 	if useBundled {
-		sidecarCmd = "node"
+		sidecarCmd = bundledNodePath(bundledRoot)
 		sidecarArgs = []string{"launcher.mjs"}
 		sidecarDir = "sidecar"
 	}
@@ -265,7 +271,7 @@ func startEnvironment() *Environment {
 	qqSidecarArgs := []string{"tsx", "src/index.ts"}
 	qqSidecarDir := "backend/qq-sidecar"
 	if useBundled {
-		qqSidecarCmd = "node"
+		qqSidecarCmd = bundledNodePath(bundledRoot)
 		qqSidecarArgs = []string{"launcher.mjs"}
 		qqSidecarDir = "qq-sidecar"
 	}
@@ -312,4 +318,36 @@ func findWorkspace() string {
 
 	cwd, _ = os.Getwd()
 	return cwd
+}
+
+func bundledNodePath(root string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(root, "node.exe")
+	}
+	return filepath.Join(root, "node")
+}
+
+func ensureBundledNode(root string) error {
+	nodeExe := "node"
+	zipName := "node.zip"
+	if runtime.GOOS == "windows" {
+		nodeExe = "node.exe"
+		zipName = "node.exe.zip"
+	}
+	nodePath := filepath.Join(root, nodeExe)
+	if _, err := os.Stat(nodePath); err == nil {
+		return nil
+	}
+	zipPath := filepath.Join(root, zipName)
+	if _, err := os.Stat(zipPath); err != nil {
+		return fmt.Errorf("node压缩包不存在: %s", zipPath)
+	}
+	log.Printf("[Env] 正在解压Node运行时: %s", zipPath)
+	if err := util.UnzipFile(zipPath, root); err != nil {
+		return fmt.Errorf("解压Node失败: %w", err)
+	}
+	if _, err := os.Stat(nodePath); err != nil {
+		return fmt.Errorf("解压后未找到Node: %s", nodePath)
+	}
+	return nil
 }

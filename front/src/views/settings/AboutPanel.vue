@@ -61,7 +61,7 @@ import { ElMessage } from "element-plus";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 
-const version = "26.1.0";
+const version = "26.1.5";
 
 const checking = ref(false);
 const releaseNotes = ref("");

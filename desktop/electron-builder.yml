@@ -14,6 +14,8 @@ extraResources:
     to: core
     filter:
       - "AmitiaCore.exe"
+      - "node.exe.zip"
+      - "node.zip"
       - "sidecar/bundle.mjs"
       - "sidecar/launcher.mjs"
       - "qq-sidecar/bundle.mjs"
@@ -54,7 +56,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.3
+  releaseName: Amitia 26.1.5
   releaseNotesFile: release-notes.md
 
 publish:

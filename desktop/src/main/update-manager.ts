@@ -19,7 +19,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   log.transports.file.resolvePathFn = () => path.join(logDir, "update.log");
   log.transports.file.level = "info";
   autoUpdater.logger = log;
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("checking-for-update", () => {
