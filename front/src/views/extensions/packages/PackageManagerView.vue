@@ -3,6 +3,8 @@
     <ExtensionPageHeader
       title="本地扩展包"
       description="导入、验证、导出并管理 workflow 与 instructions Skill 的本地版本。"
+      :parent-title="parentTitle"
+      :parent-path="parentPath"
     />
 
     <el-tabs v-model="tab" class="package-tabs" @tab-change="refreshTab">
@@ -571,6 +573,8 @@ const characterLoadError = ref("");
 const fileInput = ref<HTMLInputElement>();
 const directoryInput = ref<HTMLInputElement>();
 const upgradeInput = ref<HTMLInputElement>();
+const parentPath = computed(() => route.query.from === 'creative-workshop' ? '/creative-workshop' : '/extensions');
+const parentTitle = computed(() => route.query.from === 'creative-workshop' ? '创意工坊' : '扩展中心');
 const preview = ref<PackageImportPreview>();
 const loading = ref(false);
 const uploadProgress = ref(0);

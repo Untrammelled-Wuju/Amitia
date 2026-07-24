@@ -5,9 +5,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <DesktopTitleBar v-if="isDesktopShell()" />
   <UpdateDialog />
-  <MCPInteractionGuard v-if="!isPublicPage" />
-  <PrivacyConsent v-if="!isPublicPage" />
-  <Transition name="route-slide" mode="out-in">
+  <MCPInteractionGuard v-if="!isPublicPage && !renderError" />
+  <PrivacyConsent v-if="!isPublicPage && !renderError" />
+  <NotFoundView v-if="renderError" :error="capturedError" />
+  <Transition v-else name="route-slide" mode="out-in">
     <AppLayout v-if="!isPublicPage" key="app">
       <router-view />
     </AppLayout>
@@ -23,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onErrorCaptured, onMounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
@@ -33,9 +34,12 @@ import DesktopTitleBar from "./components/DesktopTitleBar.vue";
 import MCPInteractionGuard from "./components/MCPInteractionGuard.vue";
 import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
+import NotFoundView from "./views/NotFoundView.vue";
 
 const router = useRouter();
 const route = useRoute();
+const renderError = ref(false);
+const capturedError = ref<string | null>(null);
 
 const TOKEN_KEY = "ai-companion-token";
 
@@ -53,6 +57,13 @@ const isPublicPage = computed(() =>
 function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
+
+onErrorCaptured((err, _instance, info) => {
+  console.error("[App] render error:", err, info);
+  renderError.value = true;
+  capturedError.value = err instanceof Error ? err.message : String(err);
+  return false;
+});
 
 onMounted(async () => {
   try {

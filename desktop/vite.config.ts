@@ -7,6 +7,7 @@ export default defineConfig({
   root: resolve(__dirname, "../front"),
   publicDir: false,
   server: {
+    port: 5178,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:18899",

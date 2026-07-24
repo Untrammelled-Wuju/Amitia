@@ -102,7 +102,8 @@ const router = createRouter({
     { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
     { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
     { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
-    { path: "/:pathMatch(.*)*", redirect: "/chat" },
+    { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
+    { path: "/:pathMatch(.*)*", name: "catchAll", component: () => import("@/views/NotFoundView.vue") },
   ],
 })
 

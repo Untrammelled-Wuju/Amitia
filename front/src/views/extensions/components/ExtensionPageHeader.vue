@@ -5,8 +5,8 @@
         <nav aria-label="扩展页面层级">
           <ol class="breadcrumb-list">
             <li>
-              <RouterLink class="center-link" to="/extensions"
-                >扩展中心</RouterLink
+              <RouterLink class="center-link" :to="parentPath"
+                >{{ parentTitle }}</RouterLink
               >
             </li>
             <li class="separator" aria-hidden="true">/</li>
@@ -27,10 +27,15 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+const props = withDefaults(defineProps<{
   title: string;
   description?: string;
-}>();
+  parentTitle?: string;
+  parentPath?: string;
+}>(), {
+  parentTitle: '扩展中心',
+  parentPath: '/extensions',
+});
 </script>
 
 <style scoped>

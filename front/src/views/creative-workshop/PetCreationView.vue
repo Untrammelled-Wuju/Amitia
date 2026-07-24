@@ -4,9 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-creation">
-    <header class="page-header">
-      <h1>桌宠制作</h1>
-    </header>
+    <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴角色" parent-title="创意工坊" parent-path="/creative-workshop" />
     <el-result icon="info" title="敬请期待" sub-title="桌宠制作功能正在开发中，敬请期待" />
   </main>
 </template>
@@ -15,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 import { Upload, Delete } from "@element-plus/icons-vue";
 import type { UploadFile } from "element-plus";
 import { useApi } from "../../composables/useApi";
