@@ -83,5 +83,9 @@ func DefaultMigrations() []Migration {
 		DesktopPetActionDefinitionsMigration(),
 		ImageGenConfigEnabledMigration(),
 		DesktopPetGenerationTasksMigration(),
+		DesktopPetTaskExecutionFieldsMigration(),
+		DesktopPetActionExecutionFieldsMigration(),
+		DesktopPetGenerationFramesMigration(),
+		DesktopPetGenerationCallLogsMigration(),
 	}
 }

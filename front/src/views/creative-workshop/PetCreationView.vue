@@ -6,316 +6,8 @@ SPDX-License-Identifier: AGPL-3.0-only
   <main class="pet-creation">
     <header class="page-header">
       <h1>桌宠制作</h1>
-      <p>上传参考图、选择动作,提交后由后端生成桌宠精灵图</p>
     </header>
-
-    <el-steps
-      v-if="step < 3"
-      :active="step"
-      finish-status="success"
-      align-center
-      class="wizard-steps"
-    >
-      <el-step title="基础配置" />
-      <el-step title="动作选择" />
-      <el-step title="确认创建" />
-    </el-steps>
-
-    <section v-if="step < 3" class="step-body">
-      <el-card v-show="step === 0" shadow="never" class="step-card">
-        <el-form label-position="top" :model="form">
-          <el-form-item label="参考图" required>
-            <div class="upload-row">
-              <el-upload
-                :auto-upload="false"
-                :show-file-list="false"
-                accept=".png,.jpg,.jpeg,.webp"
-                :on-change="onReferenceChange"
-              >
-                <el-button :icon="Upload">选择图片</el-button>
-              </el-upload>
-              <div v-if="referencePreview" class="reference-preview">
-                <img :src="referencePreview" alt="参考图预览" />
-                <el-button
-                  text
-                  type="danger"
-                  :icon="Delete"
-                  @click="clearReference"
-                  >移除</el-button
-                >
-              </div>
-              <span v-else class="upload-tip"
-                >支持 PNG / JPG / JPEG / WEBP,仅可上传 1 张</span
-              >
-            </div>
-          </el-form-item>
-
-          <el-form-item label="生图模型" required>
-            <el-select
-              v-model="form.modelConfigId"
-              placeholder="选择生图模型"
-              style="width: 100%"
-              :loading="modelLoading"
-            >
-              <el-option
-                v-for="m in modelConfigs"
-                :key="m.id"
-                :label="m.name"
-                :value="m.id"
-              />
-            </el-select>
-            <span v-if="!modelConfigs.length && !modelLoading" class="hint"
-              >未找到已启用的生图模型,请先在设置中配置</span
-            >
-          </el-form-item>
-
-          <el-form-item label="桌宠名称" required>
-            <el-input
-              v-model="form.name"
-              placeholder="为本次桌宠生成任务命名"
-              maxlength="60"
-              show-word-limit
-            />
-          </el-form-item>
-
-          <el-form-item label="绑定角色" required>
-            <el-select
-              v-model="form.characterId"
-              placeholder="选择绑定的角色"
-              style="width: 100%"
-              :loading="characterLoading"
-            >
-              <el-option
-                v-for="c in characters"
-                :key="c.id"
-                :label="c.name"
-                :value="c.id"
-              />
-            </el-select>
-            <span v-if="!characters.length && !characterLoading" class="hint"
-              >未找到可用角色,请先在角色管理中启用</span
-            >
-          </el-form-item>
-
-          <el-form-item label="输出尺寸" required>
-            <el-select
-              v-model="sizePreset"
-              style="width: 220px"
-              @change="onSizeChange"
-            >
-              <el-option label="512 × 512" value="512x512" />
-              <el-option label="768 × 768" value="768x768" />
-              <el-option label="1024 × 1024" value="1024x1024" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="补充描述(prompt)">
-            <el-input
-              v-model="form.prompt"
-              type="textarea"
-              :rows="3"
-              placeholder="可选,补充画面风格或细节要求"
-              maxlength="500"
-              show-word-limit
-            />
-          </el-form-item>
-
-          <el-form-item label="负面描述(negativePrompt)">
-            <el-input
-              v-model="form.negativePrompt"
-              type="textarea"
-              :rows="2"
-              placeholder="可选,描述不希望出现的内容"
-              maxlength="500"
-              show-word-limit
-            />
-          </el-form-item>
-        </el-form>
-
-        <div class="step-actions">
-          <el-button type="primary" :disabled="!step1Valid" @click="goNext"
-            >下一步</el-button
-          >
-        </div>
-      </el-card>
-
-      <div v-show="step === 1" class="step-card">
-        <el-alert
-          v-if="actionError"
-          :title="actionError"
-          type="warning"
-          show-icon
-          :closable="false"
-          class="action-alert"
-        />
-
-        <div class="action-toolbar">
-          <div class="preset-buttons">
-            <span class="toolbar-label">快捷方案:</span>
-            <el-button
-              v-for="preset in presets"
-              :key="preset.key"
-              size="small"
-              @click="applyPreset(preset)"
-              >{{ preset.name }}</el-button
-            >
-          </div>
-          <div class="toolbar-stats">
-            <el-tag type="info">已选 {{ selectedCount }} 个动作</el-tag>
-            <el-tag type="warning">预估 {{ estimatedGenerationCount }} 张</el-tag>
-            <el-button
-              size="small"
-              :disabled="selectedCount === 0"
-              @click="clearAll"
-              >清空</el-button
-            >
-          </div>
-        </div>
-
-        <el-empty
-          v-if="!categories.length && !loading"
-          description="暂无可用动作"
-        />
-
-        <el-card
-          v-for="cat in categories"
-          :key="cat.key"
-          shadow="never"
-          class="category-card"
-        >
-          <template #header>
-            <div class="category-header">
-              <el-checkbox
-                :model-value="isCategoryAllSelected(cat.key)"
-                :indeterminate="isCategoryPartialSelected(cat.key)"
-                @change="toggleCategory(cat.key)"
-              >
-                <strong>{{ cat.name }}</strong>
-              </el-checkbox>
-              <div class="category-actions">
-                <el-button text size="small" @click="selectAllCategory(cat.key)"
-                  >全选</el-button
-                >
-                <el-button text size="small" @click="clearCategory(cat.key)"
-                  >取消</el-button
-                >
-              </div>
-            </div>
-          </template>
-
-          <div
-            v-for="action in cat.actions"
-            :key="action.key"
-            class="action-row"
-          >
-            <el-checkbox
-              :model-value="isSelected(action.key)"
-              @change="toggle(action.key)"
-            >
-              <span class="action-name">{{ action.name }}</span>
-            </el-checkbox>
-            <el-tag v-if="action.recommended" size="small" type="success"
-              >推荐</el-tag
-            >
-            <el-tag
-              v-if="action.supportsDefaultIdle"
-              size="small"
-              type="primary"
-              >可作待机</el-tag
-            >
-            <span class="action-desc">{{ action.description || "—" }}</span>
-            <span class="action-estimate"
-              >预估 {{ action.estimatedGenerationCount }} 张</span
-            >
-          </div>
-        </el-card>
-
-        <div class="step-actions">
-          <el-button @click="goPrev">上一步</el-button>
-          <el-button type="primary" @click="goNext">下一步</el-button>
-        </div>
-      </div>
-
-      <el-card v-show="step === 2" shadow="never" class="step-card">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="桌宠名称">{{
-            form.name
-          }}</el-descriptions-item>
-          <el-descriptions-item label="绑定角色">{{
-            selectedCharacterName || "—"
-          }}</el-descriptions-item>
-          <el-descriptions-item label="生图模型">{{
-            selectedModelName || "—"
-          }}</el-descriptions-item>
-          <el-descriptions-item label="输出尺寸"
-            >{{ form.outputWidth }} × {{ form.outputHeight }}</el-descriptions-item
-          >
-          <el-descriptions-item label="已选动作"
-            >{{ selectedCount }} 个</el-descriptions-item
-          >
-          <el-descriptions-item label="预估图片"
-            >{{ estimatedGenerationCount }} 张</el-descriptions-item
-          >
-          <el-descriptions-item label="补充描述" :span="2">{{
-            form.prompt || "—"
-          }}</el-descriptions-item>
-          <el-descriptions-item label="负面描述" :span="2">{{
-            form.negativePrompt || "—"
-          }}</el-descriptions-item>
-          <el-descriptions-item label="参考图" :span="2">
-            <img
-              v-if="referencePreview"
-              :src="referencePreview"
-              class="confirm-reference"
-              alt="参考图"
-            />
-            <span v-else>—</span>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">已选动作明细</el-divider>
-        <div
-          v-for="cat in selectedCategories"
-          :key="cat.key"
-          class="confirm-category"
-        >
-          <div class="confirm-cat-name">{{ cat.name }}</div>
-          <div class="confirm-action-list">
-            <el-tag
-              v-for="action in selectedActionsInCategory(cat.key)"
-              :key="action.key"
-              class="confirm-tag"
-              >{{ action.name }}</el-tag
-            >
-          </div>
-        </div>
-        <el-empty
-          v-if="selectedCount === 0"
-          description="未选择任何动作"
-          :image-size="60"
-        />
-
-        <div class="step-actions">
-          <el-button @click="goPrev">上一步</el-button>
-          <el-button type="primary" :loading="submitting" @click="submit"
-            >确认并创建</el-button
-          >
-        </div>
-      </el-card>
-    </section>
-
-    <section v-else class="complete-state">
-      <el-result
-        icon="success"
-        title="任务已创建"
-        sub-title="任务已加入生成队列,可在任务列表查看进度"
-      >
-        <template #extra>
-          <el-button type="primary" @click="goTaskList">查看任务列表</el-button>
-          <el-button @click="resetWizard">继续创建</el-button>
-        </template>
-      </el-result>
-    </section>
+    <el-result icon="info" title="敬请期待" sub-title="桌宠制作功能正在开发中，敬请期待" />
   </main>
 </template>
 
@@ -359,6 +51,10 @@ const {
 const step = ref(0);
 const submitting = ref(false);
 const actionError = ref("");
+const createdTaskId = ref<string | number | null>(null);
+const startLoading = ref(false);
+const startFailed = ref(false);
+const startError = ref("");
 
 interface ModelConfig {
   id: number | string;
@@ -521,11 +217,19 @@ async function submit() {
     fd.append("outputWidth", String(form.outputWidth));
     fd.append("outputHeight", String(form.outputHeight));
     fd.append("selectedActionKeys", JSON.stringify(selectedKeys.value));
-    await post("/api/desktop-pets/generation-tasks", fd, {
-      timeout: 60000,
-    });
+    const created = await post<{ id: string | number }>(
+      "/api/desktop-pets/generation-tasks",
+      fd,
+      { timeout: 60000 },
+    );
+    const taskId = created?.id;
+    if (!taskId) {
+      ElMessage.error("任务已创建,但未能获取任务ID");
+      return;
+    }
+    createdTaskId.value = taskId;
     ElMessage.success("任务已创建");
-    step.value = 3;
+    await startTask(taskId);
   } catch (err: any) {
     ElMessage.error(err?.message || "创建失败");
   } finally {
@@ -533,12 +237,41 @@ async function submit() {
   }
 }
 
+async function startTask(taskId: string | number) {
+  startLoading.value = true;
+  startFailed.value = false;
+  startError.value = "";
+  try {
+    await post(`/api/desktop-pets/generation-tasks/${taskId}/start`);
+    ElMessage.success("已开始生成");
+    step.value = 3;
+    goTaskList();
+  } catch (err: any) {
+    startFailed.value = true;
+    startError.value = err?.message || "开始生成请求失败,请稍后重试";
+    step.value = 3;
+    ElMessage.warning("任务已保存,但尚未开始生成");
+  } finally {
+    startLoading.value = false;
+  }
+}
+
+async function restartStart() {
+  if (!createdTaskId.value) return;
+  await startTask(createdTaskId.value);
+}
+
 function goTaskList() {
-  router.push("/creative-workshop/pet/tasks");
+  const query: Record<string, string> = {};
+  if (createdTaskId.value) query.taskId = String(createdTaskId.value);
+  router.push({ path: "/creative-workshop/pet/tasks", query });
 }
 
 function resetWizard() {
   step.value = 0;
+  startFailed.value = false;
+  startError.value = "";
+  createdTaskId.value = null;
   clearReference();
   form.modelConfigId = "";
   form.characterId = "";

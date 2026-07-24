@@ -12,13 +12,13 @@ import (
 
 func (s *service) sidecarGet(path string) (*http.Response, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	return client.Get("http://127.0.0.1:9876" + path)
+	return client.Get("http://127.0.0.1:19876" + path)
 }
 
 func (s *service) sidecarPost(path string, body map[string]interface{}) (*http.Response, error) {
 	jsonBody, _ := json.Marshal(body)
 	client := &http.Client{Timeout: 30 * time.Second}
-	return client.Post("http://127.0.0.1:9876"+path, "application/json", bytes.NewReader(jsonBody))
+	return client.Post("http://127.0.0.1:19876"+path, "application/json", bytes.NewReader(jsonBody))
 }
 
 func (s *service) readSidecarResponse(resp *http.Response, err error) map[string]interface{} {
@@ -38,13 +38,13 @@ func (s *service) readSidecarResponse(resp *http.Response, err error) map[string
 
 func (s *service) qqSidecarGet(path string) (*http.Response, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	return client.Get("http://127.0.0.1:9877" + path)
+	return client.Get("http://127.0.0.1:19877" + path)
 }
 
 func (s *service) qqSidecarPost(path string, body map[string]interface{}) (*http.Response, error) {
 	jsonBody, _ := json.Marshal(body)
 	client := &http.Client{Timeout: 30 * time.Second}
-	return client.Post("http://127.0.0.1:9877"+path, "application/json", bytes.NewReader(jsonBody))
+	return client.Post("http://127.0.0.1:19877"+path, "application/json", bytes.NewReader(jsonBody))
 }
 
 func (s *service) qqReadSidecarResponse(resp *http.Response, err error) map[string]interface{} {

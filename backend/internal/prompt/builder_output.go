@@ -15,9 +15,6 @@ func appendSanitizerSections(ctx *buildContext) {
 
 func appendUserAndTraceSections(ctx *buildContext) {
 	content := ctx.req.CurrentUserInput
-	if ctx.req.ProactiveTaskInstruction != "" {
-		content = "(proactive)"
-	}
 	ctx.appendSection("current_user_message", GwSectionCurrentUserMessage, TrustUntrusted, ModeUserRequest, "user", 100, content, "GwSectionCurrentUserMessage")
 	if ctx.req.TraceOnly != "" {
 		ctx.appendSection("trace_only", GwSectionTraceOnly, TrustUntrusted, ModeDataOnly, "trace", 10, ctx.req.TraceOnly, "GwSectionTraceOnly")

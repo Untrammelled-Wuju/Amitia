@@ -102,7 +102,11 @@ func (s *service) buildResolvedProactiveTimeContext(ctx context.Context, scope p
 	if !snapshot.Policy.AllowProactive {
 		return proactiveTimeContext{blocked: true}
 	}
-	return proactiveTimeContext{value: temporal.RenderSnapshot(snapshot)}
+	rendered := temporal.RenderSnapshot(snapshot)
+	if rendered == "" {
+		return proactiveTimeContext{value: s.buildProactiveTimeContext()}
+	}
+	return proactiveTimeContext{value: rendered}
 }
 
 func (s *service) shouldProactivelyMessage(conversationID string) bool {

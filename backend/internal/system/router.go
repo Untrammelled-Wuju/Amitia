@@ -29,19 +29,21 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 		if channel == "" {
 			channel = "web"
 		}
-		bus.PublishMessageCreated(event.ConversationID, event.UserMessageID, channel, "inbound", "user", event.UserMessage, nowStr)
-		if event.MessagePlan != nil {
-			for _, item := range event.MessagePlan.Items {
-				bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr)
+		if !event.IsInternal {
+			bus.PublishMessageCreated(event.ConversationID, event.UserMessageID, channel, "inbound", "user", event.UserMessage, nowStr)
+			if event.MessagePlan != nil {
+				for _, item := range event.MessagePlan.Items {
+					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr)
+				}
+				return
 			}
-			return
-		}
-		for i, msgID := range event.MessageIDs {
-			content := ""
-			if i < len(event.Lines) {
-				content = event.Lines[i]
+			for i, msgID := range event.MessageIDs {
+				content := ""
+				if i < len(event.Lines) {
+					content = event.Lines[i]
+				}
+				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr)
 			}
-			bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr)
 		}
 	})
 

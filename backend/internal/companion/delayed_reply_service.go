@@ -3,13 +3,12 @@
 package companion
 
 import (
+	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 	"math/rand"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/google/uuid"
 )
 
 func (s *service) ListDelayedReplies(characterID string) []map[string]interface{} {
@@ -102,11 +101,9 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				channel = "web"
 			}
 
-			msgID := fmt.Sprintf("reply-%s", uuid.New().String())
-			displayContent := "💬 " + content
-			err := s.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'delayed_reply', 'normal', 'sent', 1, ?)",
-				msgID, convID, displayContent, nowStr).Error
-			if err != nil {
+			requestID := fmt.Sprintf("delayed-reply-%s", uuid.New().String())
+			dispatchResult, dispatchErr := s.submitProactiveMessage(context.Background(), characterID, convID, channel, content, requestID)
+			if dispatchErr != nil {
 				retryCount := 0
 				if rc, ok := t["retry_count"]; ok {
 					switch v := rc.(type) {
@@ -123,9 +120,24 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				} else {
 					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
 				}
+			} else if dispatchResult == nil {
+				newTime := now.Add(30 * time.Minute)
+				s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+					newTime.Format("2006-01-02 15:04:05"), id)
+				delayed++
 			} else {
+				messageContent := content
+				if dispatchResult.Response != nil && dispatchResult.Response.Reply != "" {
+					messageContent = dispatchResult.Response.Reply
+				}
+				interactionID := ""
+				if dispatchResult != nil {
+					interactionID = dispatchResult.InteractionID
+				}
+				deliveryID := uuid.New().String()
+				s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)",
+					convID, messageContent, channel, interactionID, deliveryID, requestID, nowStr, nowStr)
 				s.db.Exec("UPDATE delayed_replies SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id = ?", nowStr, id)
-				sendProactiveNotification(s.db, convID, msgID, content)
 				sent++
 			}
 		}
@@ -137,8 +149,4 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 		"delayed":   delayed,
 		"failed":    failed,
 	}
-}
-
-func sendProactiveNotification(db *gorm.DB, convID, msgID, content string) {
-	db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=datetime('now', 'localtime') WHERE id=?", convID, convID)
 }

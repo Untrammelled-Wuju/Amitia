@@ -20,7 +20,7 @@ chat:
 
 qdrant:
   host: "127.0.0.1"
-  port: 9178
+  port: 19178
   collectionName: "memory_embeddings"
   vectorDim: 1536
   limit: 10
@@ -48,7 +48,7 @@ embedding:
 
 surrealdb:
   host: "127.0.0.1"
-  port: 8000
+  port: 18000
   namespace: "uai"
   database: "memory_graph"
   username: "root"

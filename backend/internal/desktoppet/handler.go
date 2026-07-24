@@ -5,8 +5,10 @@ package desktoppet
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -111,6 +113,111 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		c.Header("Content-Type", mimeType)
 	}
 	c.File(fullPath)
+}
+
+func (h *Handler) StartTask(c *gin.Context) {
+	taskID := c.Param("taskId")
+	summary, err := h.service.StartTask(taskID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	PublishTaskEvent(taskID, "task.started", map[string]interface{}{
+		"taskId":   summary.ID,
+		"status":   summary.Status,
+		"stage":    summary.CurrentStage,
+		"progress": summary.Progress,
+	})
+	util.SuccessMsgResponse(c, "任务已开始", summary)
+}
+
+func (h *Handler) CancelTask(c *gin.Context) {
+	taskID := c.Param("taskId")
+	if err := h.service.CancelTask(taskID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	PublishTaskEvent(taskID, "task.cancel_requested", map[string]interface{}{
+		"taskId": taskID,
+	})
+	util.SuccessMsgResponse(c, "任务已请求取消", nil)
+}
+
+func (h *Handler) RetryAction(c *gin.Context) {
+	taskID := c.Param("taskId")
+	actionKey := c.Param("actionKey")
+	action, err := h.service.RetryAction(taskID, actionKey)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	PublishTaskEvent(taskID, "action.retry", map[string]interface{}{
+		"taskId":    taskID,
+		"actionKey": actionKey,
+		"status":    action.Status,
+	})
+	util.SuccessMsgResponse(c, "动作已重新加入队列", action)
+}
+
+func (h *Handler) ActionFrameImage(c *gin.Context) {
+	taskID := c.Param("taskId")
+	actionKey := c.Param("actionKey")
+	frameIndex, err := strconv.Atoi(c.Param("frameIndex"))
+	if err != nil || frameIndex < 0 {
+		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
+		return
+	}
+	fullPath, mimeType, err := h.service.GetFrameImage(taskID, actionKey, frameIndex)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	if _, statErr := os.Stat(fullPath); statErr != nil {
+		util.ErrorResponse(c, response.NotFound, "帧图片不存在", nil)
+		return
+	}
+	if mimeType != "" {
+		c.Header("Content-Type", mimeType)
+	}
+	c.File(fullPath)
+}
+
+func (h *Handler) TaskEventsStream(c *gin.Context) {
+	taskID := c.Param("taskId")
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	bus := DefaultEventBus()
+	subscriberID := c.Query("subscriberId")
+	if subscriberID == "" {
+		subscriberID = fmt.Sprintf("sse-%p-%d", c.Request, time.Now().UnixNano())
+	}
+	events := bus.Subscribe(taskID, subscriberID)
+	defer bus.Unsubscribe(taskID, subscriberID)
+
+	c.SSEvent("connected", gin.H{"taskId": taskID})
+	c.Writer.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case evt, ok := <-events:
+			if !ok {
+				return
+			}
+			payload, _ := json.Marshal(evt)
+			c.SSEvent(evt.EventType, string(payload))
+			c.Writer.Flush()
+		case <-ticker.C:
+			c.SSEvent("ping", "{}")
+			c.Writer.Flush()
+		case <-c.Done():
+			return
+		}
+	}
 }
 
 func writeServiceError(c *gin.Context, err error) {

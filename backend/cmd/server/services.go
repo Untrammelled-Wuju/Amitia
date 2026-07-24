@@ -19,6 +19,8 @@ import (
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
@@ -69,6 +71,7 @@ type AppServices struct {
 	RuntimeQueue        *queue.SQLiteRuntimeQueueStore
 	NewOutbox           *newoutbox.SQLiteOutboxStore
 	OutboxWorker        *newoutbox.Worker
+	DesktopPetWorker    *worker.Worker
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
@@ -177,8 +180,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
 	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
 		delivery.NewWebChannelAdapter(),
-		delivery.NewQQChannelAdapter("http://127.0.0.1:9877"),
-		delivery.NewWechatChannelAdapter("http://127.0.0.1:9876"),
+		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
+		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
 	}, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
@@ -310,6 +313,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := connectionManager.Restore(context.Background()); err != nil {
 		log.Warn("MCP connection restore warning: ", err)
 	}
+	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
+	desktopPetRegistry := desktoppet.NewProviderRegistry()
+	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -327,6 +333,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		DeliveryStore:       deliveryStore,
 		DeliveryWorker:      deliveryWorker,
 		OutboxWorker:        newOutboxWorker,
+		DesktopPetWorker:    desktopPetWorker,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,

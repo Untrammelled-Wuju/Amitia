@@ -1,4 +1,4 @@
-package chat
+﻿package chat
 
 import (
 	"context"
@@ -77,8 +77,8 @@ type MessageCommitEvent struct {
 	PeerID         string
 	RequestID      string
 	MessagePlan    *interaction.MessagePlan
+	IsInternal     bool
 }
-
 type messageCommitPlan struct {
 	Request         *ProcessMessageRequest
 	Conversation    string
@@ -225,24 +225,22 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			return err
 		}
 		if shouldCommitRuntime(plan.Request) {
-			if !plan.Request.IsInternal {
-				if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
-					if err := s.applyAppraisalResultTx(tx, plan); err != nil {
-						return err
-					}
-				}
-				if err := s.updatePsycheStateTx(tx, plan); err != nil {
+			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
+				if err := s.applyAppraisalResultTx(tx, plan); err != nil {
 					return err
 				}
-				if err := s.updateRelationshipStateTx(tx, plan); err != nil {
-					return err
-				}
-				if err := s.updateNeedStateTx(tx, plan); err != nil {
-					return err
-				}
-				if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
-					return err
-				}
+			}
+			if err := s.updatePsycheStateTx(tx, plan); err != nil {
+				return err
+			}
+			if err := s.updateRelationshipStateTx(tx, plan); err != nil {
+				return err
+			}
+			if err := s.updateNeedStateTx(tx, plan); err != nil {
+				return err
+			}
+			if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
+				return err
 			}
 			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
 			if err != nil {
@@ -281,6 +279,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			PeerID:         plan.Request.PeerID,
 			RequestID:      plan.Request.RequestID,
 			MessagePlan:    result.MessagePlan,
+			IsInternal:     plan.Request.IsInternal,
 		}
 		for _, hook := range messageCommitHooks {
 			hook(event)

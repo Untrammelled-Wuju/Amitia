@@ -135,7 +135,7 @@ func main() {
 	fmt.Printf("    SurrealDB:   %s:%d\n", config.AppCfg.Surreal.Host, config.AppCfg.Surreal.Port)
 	fmt.Printf("  ========================================\n\n")
 
-	qqMgr := qq.NewManager("http://127.0.0.1:9877")
+	qqMgr := qq.NewManager("http://127.0.0.1:19877")
 	qq.SetManager(qqMgr)
 
 	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
@@ -189,6 +189,8 @@ func main() {
 	defer services.OutboxWorker.Stop()
 	services.DeliveryWorker.Start(rootCtx)
 	defer services.DeliveryWorker.Stop()
+	services.DesktopPetWorker.Start(rootCtx)
+	defer services.DesktopPetWorker.Stop()
 	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true

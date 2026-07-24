@@ -38531,7 +38531,7 @@ function envStr(key, fallback) {
 var qqSidecarConfig = {
   mergeWindowMs: parseInt(process.env.MERGE_WINDOW_MS || "6000", 10),
   host: envStr("QQ_SIDECAR_HOST", "127.0.0.1"),
-  port: parseInt(envStr("QQ_SIDECAR_PORT", "9877"), 10),
+  port: parseInt(envStr("QQ_SIDECAR_PORT", "19877"), 10),
   coreUrl: envStr("CORE_URL", "http://127.0.0.1:18899"),
   bridgeApiToken: envStr("BRIDGE_API_TOKEN", ""),
   qqbot: {

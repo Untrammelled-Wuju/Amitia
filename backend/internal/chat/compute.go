@@ -181,7 +181,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
 	if source == "proactive" {
-		userContent = "(proactive)"
+		userContent = req.ProactiveTaskInstruction
 	}
 
 	if req.ReplyToMessageID != nil && *req.ReplyToMessageID != "" {

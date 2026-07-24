@@ -1,10 +1,7 @@
-package prompt
+﻿package prompt
 
 func appendProactiveSections(ctx *buildContext) {
 	req := ctx.req
-	if req.ProactiveTaskInstruction != "" && ctx.flags.ProactiveRawEnabled {
-		ctx.appendSection("proactive_task_instruction", GwSectionProactiveTaskInstruction, TrustTrusted, ModeAuthoritative, "proactive", 510, req.ProactiveTaskInstruction, "GwSectionProactiveTaskInstruction")
-	}
 	if req.ProactiveRaw != "" && ctx.flags.ProactiveRawEnabled {
 		ctx.appendSection("proactive_raw", GwSectionProactiveRaw, TrustTrusted, ModeAuthoritative, "proactive", 500, req.ProactiveRaw, "GwSectionProactiveRaw")
 	}

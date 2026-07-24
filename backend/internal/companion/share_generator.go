@@ -164,7 +164,7 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 			chaseTime := now.Add(time.Duration(5+rng.Intn(11)) * time.Minute)
 			if !isBlocked(chaseTime) {
 				idleHours := int(idleDuration.Hours())
-				prompt := fmt.Sprintf("你已经%d小时没收到回复了。你有点失落，但不是指责。请生成一条自然的追问，1-2句，像微信里随口发的那种。", idleHours)
+				prompt := fmt.Sprintf("你已经%d小时没收到回复了。你有点失落，但不想指责对方。你拿起手机想再发条消息问问。", idleHours)
 				tasks = append(tasks, ShareTask{Type: "chase_up", DueTime: chaseTime, Prompt: prompt, Reason: fmt.Sprintf("追问(%dh未回复)", idleHours)})
 			}
 		}
@@ -254,32 +254,27 @@ func (s *service) GenerateSharePrompt(characterID string, taskType string, sched
 	switch taskType {
 	case "morning_share":
 		prompt = fmt.Sprintf(
-			"你刚睡醒。昨晚睡眠状态：%s。现在心情：%s，精力：%d/100。今天的计划：%s。最近记忆：%s。"+
-				"请生成一条自然的早安分享，像微信里随手发给熟人的消息，1-3句，不要客服腔，不要emoji，不要解释。避免重复这些话题：%s。",
+			"你刚醒。昨晚睡得%s。现在心情%s，精力%d。今天计划：%s。想起了：%s。你拿起手机，想给朋友发条早安消息。回避这些话题：%s。",
 			sleepSummary, mood, energy, scheduleSummary, memoriesStr, recentTopicsStr)
 	case "noon_daily":
 		prompt = fmt.Sprintf(
-			"现在是午间。现在心情：%s，精力：%d/100。今天的计划：%s。"+
-				"请生成一条午间日常分享，像微信短消息，1-3句，不要emoji，不要解释。避免重复这些话题：%s。",
+			"午间了。心情%s，精力%d。今天计划：%s。肚子有点饿了，你拿起手机想跟朋友聊两句。回避这些话题：%s。",
 			mood, energy, scheduleSummary, recentTopicsStr)
 	case "evening_reflection":
 		prompt = fmt.Sprintf(
-			"现在是傍晚。今天的日期：%s。当前心情：%s，精力：%d/100。最近记忆：%s。"+
-				"请生成一条傍晚小感受，语气自然，1-3句，不要emoji，不要解释。避免重复这些话题：%s。",
+			"傍晚了，今天%s。心情%s，精力%d。想起了：%s。你想跟朋友随便聊聊今天过得怎么样。回避这些话题：%s。",
 			dateStr, mood, energy, memoriesStr, recentTopicsStr)
 	case "bedtime_mood":
 		prompt = fmt.Sprintf(
-			"快睡觉了。今天的日期：%s。当前心情：%s，精力：%d/100。最近记忆：%s。"+
-				"请生成一条睡前分享，轻松、自然、不要肉麻，1-3句，不要emoji，不要解释。避免重复这些话题：%s。",
+			"快睡了，今天%s。心情%s，精力%d。想到了：%s。你躺在床上，想跟朋友说句晚安之类的话。回避这些话题：%s。",
 			dateStr, mood, energy, memoriesStr, recentTopicsStr)
 	case "nap_wake":
 		prompt = fmt.Sprintf(
-			"刚午睡醒来。当前心情：%s，精力恢复到：%d/100。最近记忆：%s。"+
-				"请生成一条刚醒来的自然分享，1-2句，不要emoji，不要解释。避免重复这些话题：%s。",
+			"午睡刚醒。心情%s，精力恢复到%d。想起了：%s。你迷糊着摸到手机，想跟朋友说句话。回避这些话题：%s。",
 			mood, energy, memoriesStr, recentTopicsStr)
 	default:
 		prompt = fmt.Sprintf(
-			"当前心情：%s，精力：%d/100。请生成一条自然的日常分享，像微信消息，1-2句，不要emoji，不要解释。",
+			"现在心情%s，精力%d。你想跟朋友随便聊两句。",
 			mood, energy)
 	}
 	return prompt

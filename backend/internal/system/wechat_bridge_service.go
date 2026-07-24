@@ -59,7 +59,7 @@ func (s *service) GetWechatBridgeStatusDetail() map[string]interface{} {
 }
 
 func (s *service) GetWechatBridgeConfig() map[string]interface{} {
-	return map[string]interface{}{"config": map[string]interface{}{"mode": "openclaw", "sidecarPort": 9876}, "available": true}
+	return map[string]interface{}{"config": map[string]interface{}{"mode": "openclaw", "sidecarPort": 19876}, "available": true}
 }
 
 func (s *service) GetWechatBridgeEvents() map[string]interface{} {

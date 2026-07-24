@@ -259,7 +259,7 @@ func startEnvironment() *Environment {
 		sidecarArgs = []string{"launcher.mjs"}
 		sidecarDir = "sidecar"
 	}
-	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 9876, nil)
+	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 19876, nil)
 
 	qqSidecarCmd := "npx.cmd"
 	qqSidecarArgs := []string{"tsx", "src/index.ts"}
@@ -269,7 +269,7 @@ func startEnvironment() *Environment {
 		qqSidecarArgs = []string{"launcher.mjs"}
 		qqSidecarDir = "qq-sidecar"
 	}
-	env.AddService("qq-sidecar", qqSidecarDir, qqSidecarCmd, qqSidecarArgs, 9877, nil)
+	env.AddService("qq-sidecar", qqSidecarDir, qqSidecarCmd, qqSidecarArgs, 19877, nil)
 
 	env.SetupSignalHandler()
 	env.StartAll()

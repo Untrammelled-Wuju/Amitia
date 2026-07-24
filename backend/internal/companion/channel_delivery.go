@@ -17,7 +17,7 @@ func (s *service) sendToWechatSidecar(toUserID, content string) {
 		toUserID = toUserID[5:]
 	}
 	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9876/api/send", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:19876/api/send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *service) sendToQQSidecar(toUserID, content string) {
 		toUserID = toUserID[5:]
 	}
 	body, _ := json.Marshal(map[string]string{"toUserId": toUserID, "text": content})
-	req, _ := http.NewRequest("POST", "http://127.0.0.1:9877/api/send", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", "http://127.0.0.1:19877/api/send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {

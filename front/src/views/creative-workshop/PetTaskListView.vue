@@ -36,6 +36,10 @@ SPDX-License-Identifier: AGPL-3.0-only
           />
         </el-select>
         <span class="filter-tip">共 {{ total }} 个任务</span>
+        <span v-if="connected && trackedTaskId" class="filter-tip sse-tip">
+          <span class="sse-dot"></span>
+          实时跟踪任务 #{{ trackedTaskId }}
+        </span>
       </div>
     </el-card>
 
@@ -45,6 +49,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :data="items"
         row-key="id"
         empty-text="暂无任务"
+        :expand-row-keys="expandedRowKeys"
         @expand-change="onExpandChange"
       >
         <el-table-column type="expand">
@@ -54,20 +59,85 @@ SPDX-License-Identifier: AGPL-3.0-only
                 加载明细中...
               </div>
               <template v-else-if="detailMap[row.id]">
-                <el-descriptions :column="2" border size="small">
+                <el-descriptions :column="3" border size="small">
                   <el-descriptions-item label="任务ID">{{
                     row.id
                   }}</el-descriptions-item>
-                  <el-descriptions-item label="当前阶段">{{
-                    detailMap[row.id]?.currentStage || "—"
+                  <el-descriptions-item label="任务名称">{{
+                    detailMap[row.id]?.name || row.name || "—"
                   }}</el-descriptions-item>
                   <el-descriptions-item label="模型">{{
-                    row.modelName || "—"
+                    detailMap[row.id]?.modelName || row.modelName || "—"
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="状态">
+                    <el-tag :type="statusTagType(detailMap[row.id]?.status)">{{
+                      statusLabel(detailMap[row.id]?.status)
+                    }}</el-tag>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="当前阶段">{{
+                    stageLabel(detailMap[row.id]?.currentStage)
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="当前动作">{{
+                    detailMap[row.id]?.currentAction || "—"
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="已选动作">{{
+                    detailMap[row.id]?.selectedActionCount ?? "—"
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="成功动作">{{
+                    detailMap[row.id]?.succeededActionCount ?? 0
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="失败动作">{{
+                    detailMap[row.id]?.failedActionCount ?? 0
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="开始时间">{{
+                    formatTime(detailMap[row.id]?.startedAt)
+                  }}</el-descriptions-item>
+                  <el-descriptions-item label="已运行时长">{{
+                    formatDuration(detailMap[row.id]?.durationSeconds)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="预估生成">{{
-                    row.estimatedGenerationCount ?? "—"
-                  }}</el-descriptions-item>
+                    detailMap[row.id]?.estimatedGenerationCount ?? "—"
+                  }}张</el-descriptions-item>
+                  <el-descriptions-item label="真实进度" :span="3">
+                    <div class="progress-cell">
+                      <el-progress
+                        :percentage="Number(detailMap[row.id]?.progress || 0)"
+                        :status="progressStatus(detailMap[row.id]?.status)"
+                      />
+                      <span class="progress-text">{{
+                        formatProgress(detailMap[row.id]?.progress)
+                      }}</span>
+                    </div>
+                  </el-descriptions-item>
+                  <el-descriptions-item
+                    v-if="detailMap[row.id]?.errorMessage"
+                    label="错误信息"
+                    :span="3"
+                  >
+                    <span class="error-text">{{
+                      detailMap[row.id]?.errorMessage
+                    }}</span>
+                  </el-descriptions-item>
                 </el-descriptions>
+
+                <div class="detail-actions">
+                  <el-button
+                    v-if="canCancel(detailMap[row.id]?.status)"
+                    type="danger"
+                    plain
+                    :loading="cancellingId === row.id"
+                    @click="confirmCancel(row)"
+                    >取消任务</el-button
+                  >
+                  <el-button
+                    v-if="canStart(detailMap[row.id]?.status)"
+                    type="primary"
+                    :loading="startingId === row.id"
+                    @click="startTask(row)"
+                    >开始生成</el-button
+                  >
+                </div>
+
                 <div class="detail-block">
                   <div class="detail-title">动作明细</div>
                   <el-empty
@@ -75,15 +145,84 @@ SPDX-License-Identifier: AGPL-3.0-only
                     description="暂无动作明细"
                     :image-size="60"
                   />
-                  <div v-else class="action-grid">
-                    <el-tag
+                  <div v-else class="action-list">
+                    <div
                       v-for="action in detailMap[row.id]?.actions || []"
-                      :key="actionKey(action)"
-                      :type="actionTagType(action.status)"
-                      >{{ actionName(action) }}</el-tag
+                      :key="action.actionKey || action.id"
+                      class="action-item"
                     >
+                      <div class="action-item-head">
+                        <div class="action-item-name">
+                          <strong>{{
+                            action.actionName ||
+                            action.actionKey ||
+                            "未命名动作"
+                          }}</strong>
+                          <el-tag
+                            size="small"
+                            :type="actionTagType(action.status)"
+                            >{{ actionStatusLabel(action.status) }}</el-tag
+                          >
+                          <el-tag
+                            v-if="action.categoryName"
+                            size="small"
+                            type="info"
+                            >{{ action.categoryName }}</el-tag
+                          >
+                        </div>
+                        <div class="action-item-meta">
+                          <span
+                            >帧完成：{{ action.frameSucceeded ?? 0 }}/{{
+                              action.frameTotal ??
+                              action.estimatedGenerationCount ??
+                              "—"
+                            }}</span
+                          >
+                          <span v-if="action.frameFailed" class="warn-text"
+                            >失败 {{ action.frameFailed }}</span
+                          >
+                          <span v-if="action.attemptNumber"
+                            >第 {{ action.attemptNumber }} 次尝试</span
+                          >
+                        </div>
+                      </div>
+                      <div v-if="action.errorMessage" class="action-error">
+                        失败原因：{{ action.errorMessage }}
+                      </div>
+                      <div class="action-item-foot">
+                        <el-button
+                          v-if="canRetry(action.status)"
+                          size="small"
+                          :loading="retryingKey === actionKey(action)"
+                          @click="confirmRetry(row, action)"
+                          >重试动作</el-button
+                        >
+                      </div>
+                      <div v-if="shouldShowFrames(action)" class="frame-preview">
+                        <div class="frame-preview-label">
+                          原始生成素材 / 尚未处理
+                        </div>
+                        <div class="frame-grid">
+                          <div
+                            v-for="idx in frameIndexList(action)"
+                            :key="idx"
+                            class="frame-thumb"
+                          >
+                            <img
+                              v-if="frameImageUrls[frameKey(row.id, action, idx)]"
+                              :src="frameImageUrls[frameKey(row.id, action, idx)]"
+                              :alt="`帧 ${idx}`"
+                            />
+                            <div v-else class="frame-thumb-placeholder">
+                              加载中
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
+
                 <div v-if="referenceUrls[row.id]" class="detail-block">
                   <div class="detail-title">参考图</div>
                   <img
@@ -150,14 +289,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import { useApi, apiClient } from "../../composables/useApi";
+import {
+  useGenerationTask,
+  isTerminalStatus,
+} from "../../composables/useGenerationTask";
 
 const router = useRouter();
-const { get } = useApi();
+const route = useRoute();
+const { get, post } = useApi();
 
 interface TaskItem {
   id: string | number;
@@ -174,11 +318,50 @@ interface TaskItem {
   createdAt?: string;
 }
 
+interface TaskAction {
+  id?: string | number;
+  actionKey: string;
+  actionName?: string;
+  actionDescription?: string;
+  categoryKey?: string;
+  categoryName?: string;
+  definitionVersion?: string;
+  supportsDefaultIdle?: boolean;
+  sortOrder?: number;
+  frameCount?: number;
+  estimatedGenerationCount?: number;
+  status?: string;
+  progress?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  attemptNumber?: number;
+  startedAt?: string;
+  completedAt?: string;
+  frameSucceeded?: number;
+  frameFailed?: number;
+  frameTotal?: number;
+}
+
 interface TaskDetail {
   id: string | number;
-  actions?: Array<Record<string, any>>;
-  referenceImageUrl?: string;
+  name?: string;
+  modelName?: string;
+  status?: string;
   currentStage?: string;
+  progress?: number;
+  selectedActionCount?: number;
+  estimatedGenerationCount?: number;
+  referenceImageUrl?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  actions?: TaskAction[];
+  succeededActionCount?: number;
+  failedActionCount?: number;
+  currentAction?: string;
+  durationSeconds?: number;
   [key: string]: any;
 }
 
@@ -195,7 +378,12 @@ const loading = ref(false);
 const detailLoadingId = ref<string | number | null>(null);
 const detailMap = reactive<Record<string, TaskDetail>>({});
 const referenceUrls = reactive<Record<string, string>>({});
-const expandedIds = new Set<string | number>();
+const frameImageUrls = reactive<Record<string, string>>({});
+const expandedRowKeys = ref<string[]>([]);
+const cancellingId = ref<string | number | null>(null);
+const startingId = ref<string | number | null>(null);
+const retryingKey = ref<string | null>(null);
+const trackedTaskId = ref<string | number | null>(null);
 
 const filter = reactive({
   status: "",
@@ -205,60 +393,144 @@ const filter = reactive({
 
 const statusOptions = [
   { label: "等待生成", value: "pending" },
-  { label: "生成中", value: "running" },
-  { label: "已完成", value: "success" },
+  { label: "排队中", value: "queued" },
+  { label: "处理中", value: "processing" },
+  { label: "已完成", value: "succeeded" },
+  { label: "部分成功", value: "partially_succeeded" },
   { label: "失败", value: "failed" },
+  { label: "已取消", value: "cancelled" },
 ];
 
 const statusMeta: Record<string, { label: string; type: string }> = {
   pending: { label: "等待生成", type: "info" },
   queued: { label: "排队中", type: "info" },
-  running: { label: "生成中", type: "warning" },
   processing: { label: "处理中", type: "warning" },
-  success: { label: "已完成", type: "success" },
-  completed: { label: "已完成", type: "success" },
+  succeeded: { label: "已完成", type: "success" },
+  partially_succeeded: { label: "部分成功", type: "warning" },
   failed: { label: "失败", type: "danger" },
   cancelled: { label: "已取消", type: "info" },
+  success: { label: "已完成", type: "success" },
+  completed: { label: "已完成", type: "success" },
+  running: { label: "生成中", type: "warning" },
 };
 
-function statusLabel(status: string): string {
-  return statusMeta[status]?.label || status || "—";
+const stageMeta: Record<string, string> = {
+  queued: "排队中",
+  preparing: "准备中",
+  generating_actions: "生成动作帧",
+  downloading_results: "下载结果",
+  finalizing: "收尾处理",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+const actionStatusMeta: Record<string, { label: string; type: string }> = {
+  pending: { label: "等待中", type: "info" },
+  queued: { label: "排队中", type: "info" },
+  processing: { label: "生成中", type: "warning" },
+  succeeded: { label: "已完成", type: "success" },
+  failed: { label: "失败", type: "danger" },
+  cancelled: { label: "已取消", type: "info" },
+  success: { label: "已完成", type: "success" },
+  completed: { label: "已完成", type: "success" },
+  running: { label: "生成中", type: "warning" },
+};
+
+function statusLabel(status?: string): string {
+  if (!status) return "—";
+  return statusMeta[status]?.label || status;
 }
 
-function statusTagType(status: string): any {
-  const t = statusMeta[status]?.type;
+function statusTagType(status?: string): any {
+  const t = status ? statusMeta[status]?.type : "";
   if (t === "success") return "success";
   if (t === "warning") return "warning";
   if (t === "danger") return "danger";
   return "info";
 }
 
+function stageLabel(stage?: string): string {
+  if (!stage) return "—";
+  return stageMeta[stage] || stage;
+}
+
+function actionStatusLabel(status?: string): string {
+  if (!status) return "—";
+  return actionStatusMeta[status]?.label || status;
+}
+
 function actionTagType(status?: string): any {
   if (!status) return "info";
-  if (status === "success" || status === "completed") return "success";
-  if (status === "running" || status === "processing") return "warning";
-  if (status === "failed") return "danger";
+  const t = actionStatusMeta[status]?.type;
+  if (t === "success") return "success";
+  if (t === "warning") return "warning";
+  if (t === "danger") return "danger";
   return "info";
 }
 
-function progressStatus(status: string): "" | "success" | "exception" {
-  if (status === "success" || status === "completed") return "success";
+function progressStatus(status?: string): "" | "success" | "exception" {
+  if (status === "succeeded" || status === "completed") return "success";
   if (status === "failed") return "exception";
   return "";
 }
 
-function actionKey(action: Record<string, any>): string | number {
-  return action.key || action.id || action.name || Math.random().toString(36);
+function canCancel(status?: string): boolean {
+  return (
+    status === "queued" || status === "processing" || status === "pending"
+  );
 }
 
-function actionName(action: Record<string, any>): string {
+function canStart(status?: string): boolean {
   return (
-    action.name ||
-    action.key ||
-    action.actionName ||
-    action.actionKey ||
-    "未命名动作"
+    status === "pending" ||
+    status === "failed" ||
+    status === "partially_succeeded"
   );
+}
+
+function canRetry(status?: string): boolean {
+  return (
+    status === "failed" ||
+    status === "succeeded" ||
+    status === "cancelled" ||
+    status === "completed" ||
+    status === "success"
+  );
+}
+
+function shouldShowFrames(action: TaskAction): boolean {
+  const succeeded =
+    action.status === "succeeded" ||
+    action.status === "success" ||
+    action.status === "completed";
+  const total =
+    Number(action.frameTotal ?? action.frameSucceeded ?? 0) || 0;
+  return succeeded && total > 0;
+}
+
+function actionKey(action: TaskAction): string {
+  return (
+    action.actionKey ||
+    (action.id as any) ||
+    action.actionName ||
+    Math.random().toString(36)
+  );
+}
+
+function frameKey(
+  taskId: string | number,
+  action: TaskAction,
+  idx: number,
+): string {
+  return `${taskId}:${action.actionKey}:${idx}`;
+}
+
+function frameIndexList(action: TaskAction): number[] {
+  const total = Number(action.frameTotal ?? action.frameSucceeded ?? 0) || 0;
+  const list: number[] = [];
+  for (let i = 0; i < total; i++) list.push(i);
+  return list;
 }
 
 function formatTime(value?: string): string {
@@ -269,6 +541,27 @@ function formatTime(value?: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate(),
   )} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatDuration(seconds?: number): string {
+  if (
+    seconds === undefined ||
+    seconds === null ||
+    Number.isNaN(Number(seconds))
+  )
+    return "—";
+  const s = Math.max(0, Math.floor(Number(seconds)));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(sec)}`;
+  return `${m}:${pad(sec)}`;
+}
+
+function formatProgress(progress?: number): string {
+  if (progress === undefined || progress === null) return "0%";
+  return `${Math.round(Number(progress) || 0)}%`;
 }
 
 async function loadList() {
@@ -304,18 +597,45 @@ function onPageSizeChange() {
   loadList();
 }
 
+const { connected, start: startTracking, stop: stopTracking } =
+  useGenerationTask({
+    refresh: async () => {
+      if (trackedTaskId.value) {
+        await loadDetail(trackedTaskId.value);
+        await loadActionFrames(trackedTaskId.value);
+      }
+    },
+    getStatus: () => {
+      if (!trackedTaskId.value) return undefined;
+      return detailMap[String(trackedTaskId.value)]?.status;
+    },
+  });
+
 async function onExpandChange(row: TaskItem, expanded: TaskItem[]) {
   const isExpanded = expanded.some((r) => r.id === row.id);
+  const idStr = String(row.id);
   if (isExpanded) {
-    expandedIds.add(row.id);
-    if (!detailMap[String(row.id)]) {
+    if (!expandedRowKeys.value.includes(idStr)) {
+      expandedRowKeys.value = [...expandedRowKeys.value, idStr];
+    }
+    if (!detailMap[idStr]) {
       await loadDetail(row.id);
     }
-    if (!referenceUrls[String(row.id)]) {
+    if (!referenceUrls[idStr]) {
       await loadReference(row.id);
     }
+    await loadActionFrames(row.id);
+    const status = detailMap[idStr]?.status;
+    if (!isTerminalStatus(status)) {
+      trackedTaskId.value = row.id;
+      await startTracking(row.id);
+    }
   } else {
-    expandedIds.delete(row.id);
+    expandedRowKeys.value = expandedRowKeys.value.filter((k) => k !== idStr);
+    if (trackedTaskId.value === row.id) {
+      stopTracking();
+      trackedTaskId.value = null;
+    }
   }
 }
 
@@ -349,16 +669,184 @@ async function loadReference(taskId: string | number) {
   }
 }
 
+async function loadActionFrames(taskId: string | number) {
+  const detail = detailMap[String(taskId)];
+  if (!detail?.actions) return;
+  const tasks: Promise<void>[] = [];
+  for (const action of detail.actions) {
+    if (!shouldShowFrames(action)) continue;
+    const total = Number(action.frameTotal ?? action.frameSucceeded ?? 0) || 0;
+    for (let i = 0; i < total; i++) {
+      const key = frameKey(taskId, action, i);
+      if (frameImageUrls[key]) continue;
+      tasks.push(loadFrame(taskId, action.actionKey, i, key));
+    }
+  }
+  await Promise.all(tasks);
+}
+
+async function loadFrame(
+  taskId: string | number,
+  actionKey: string,
+  idx: number,
+  key: string,
+) {
+  try {
+    const res = await apiClient.get(
+      `/api/desktop-pets/generation-tasks/${taskId}/actions/${actionKey}/frames/${idx}/image`,
+      { responseType: "blob" },
+    );
+    const blob = res.data as Blob;
+    if (blob && blob.size > 0) {
+      frameImageUrls[key] = URL.createObjectURL(blob);
+    }
+  } catch {
+    // ignore missing frame
+  }
+}
+
+function confirmCancel(row: TaskItem) {
+  ElMessageBox.confirm(
+    "取消将停止未开始的动作,已产生的模型调用与已生成素材不会删除,可在任务详情继续查看。",
+    "确认取消任务",
+    {
+      confirmButtonText: "确认取消",
+      cancelButtonText: "再想想",
+      type: "warning",
+    },
+  )
+    .then(async () => {
+      cancellingId.value = row.id;
+      try {
+        await post(`/api/desktop-pets/generation-tasks/${row.id}/cancel`);
+        ElMessage.success("已请求取消任务");
+        await loadDetail(row.id);
+        const status = detailMap[String(row.id)]?.status;
+        if (!isTerminalStatus(status)) {
+          trackedTaskId.value = row.id;
+          await startTracking(row.id);
+        } else if (trackedTaskId.value === row.id) {
+          stopTracking();
+          trackedTaskId.value = null;
+        }
+      } catch (err: any) {
+        ElMessage.error(err?.message || "取消任务失败");
+      } finally {
+        cancellingId.value = null;
+      }
+    })
+    .catch(() => {});
+}
+
+async function startTask(row: TaskItem) {
+  startingId.value = row.id;
+  try {
+    await post(`/api/desktop-pets/generation-tasks/${row.id}/start`);
+    ElMessage.success("已开始生成");
+    await loadDetail(row.id);
+    const status = detailMap[String(row.id)]?.status;
+    if (!isTerminalStatus(status)) {
+      trackedTaskId.value = row.id;
+      await startTracking(row.id);
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "开始生成失败");
+  } finally {
+    startingId.value = null;
+  }
+}
+
+function confirmRetry(row: TaskItem, action: TaskAction) {
+  const key = actionKey(action);
+  const succeeded =
+    action.status === "succeeded" ||
+    action.status === "success" ||
+    action.status === "completed";
+  const message = succeeded
+    ? "重试已成功的动作会产生新的模型调用和费用,旧版本素材将保留不覆盖。是否继续?"
+    : "将重新生成该动作,会产生新的模型调用。是否继续?";
+  ElMessageBox.confirm(message, "确认重试动作", {
+    confirmButtonText: "确认重试",
+    cancelButtonText: "取消",
+    type: succeeded ? "warning" : "info",
+  })
+    .then(async () => {
+      retryingKey.value = key;
+      try {
+        await post(
+          `/api/desktop-pets/generation-tasks/${row.id}/actions/${action.actionKey}/retry`,
+        );
+        ElMessage.success("已请求重试动作");
+        await loadDetail(row.id);
+        const status = detailMap[String(row.id)]?.status;
+        if (!isTerminalStatus(status)) {
+          trackedTaskId.value = row.id;
+          await startTracking(row.id);
+        }
+      } catch (err: any) {
+        ElMessage.error(err?.message || "重试动作失败");
+      } finally {
+        retryingKey.value = null;
+      }
+    })
+    .catch(() => {});
+}
+
 function goCreate() {
   router.push("/creative-workshop/pet");
 }
 
-onMounted(() => {
-  loadList();
+async function expandTaskFromQuery() {
+  const taskId = route.query.taskId;
+  if (!taskId) return;
+  const idStr = String(taskId);
+  let row = items.value.find((r) => String(r.id) === idStr);
+  if (!row) {
+    try {
+      const data = await get<TaskDetail>(
+        `/api/desktop-pets/generation-tasks/${idStr}`,
+      );
+      row = {
+        id: idStr,
+        name: data?.name || "未命名任务",
+        characterName: (data as any)?.characterName,
+        modelName: data?.modelName,
+        status: data?.status || "pending",
+        currentStage: data?.currentStage,
+        progress: data?.progress,
+        selectedActionCount: data?.selectedActionCount,
+        estimatedGenerationCount: data?.estimatedGenerationCount,
+        createdAt: data?.createdAt,
+      } as TaskItem;
+      items.value = [row, ...items.value];
+    } catch {
+      return;
+    }
+  }
+  if (!expandedRowKeys.value.includes(idStr)) {
+    expandedRowKeys.value = [...expandedRowKeys.value, idStr];
+  }
+  await loadDetail(row.id);
+  await loadReference(row.id);
+  await loadActionFrames(row.id);
+  const status = detailMap[idStr]?.status;
+  if (!isTerminalStatus(status)) {
+    trackedTaskId.value = row.id;
+    await startTracking(row.id);
+  }
+}
+
+onMounted(async () => {
+  await loadList();
+  await expandTaskFromQuery();
 });
 
 onUnmounted(() => {
+  stopTracking();
   Object.values(referenceUrls).forEach((url) => {
+    if (url) URL.revokeObjectURL(url);
+  });
+  Object.values(frameImageUrls).forEach((url) => {
     if (url) URL.revokeObjectURL(url);
   });
 });
@@ -407,6 +895,30 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
+.sse-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-color-success);
+  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.6);
+  animation: sse-pulse 1.6s infinite;
+}
+@keyframes sse-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(82, 196, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+  }
+}
 .table-card {
   border: 1px solid var(--el-border-color-light);
   background: var(--ac-color-surface);
@@ -425,6 +937,33 @@ onUnmounted(() => {
   font-size: 13px;
   padding: 8px 0;
 }
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.progress-cell :deep(.el-progress) {
+  flex: 1;
+}
+.progress-text {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.error-text {
+  color: var(--el-color-danger);
+  font-size: 13px;
+  word-break: break-all;
+}
+.warn-text {
+  color: var(--el-color-warning);
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
 .detail-block {
   margin-top: 14px;
 }
@@ -433,10 +972,87 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
-.action-grid {
+.action-list {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.action-item {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--ac-color-surface);
+}
+.action-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 6px;
+}
+.action-item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.action-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.action-error {
+  margin-top: 6px;
+  color: var(--el-color-danger);
+  font-size: 12px;
+  word-break: break-all;
+}
+.action-item-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.frame-preview {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+}
+.frame-preview-label {
+  margin-bottom: 8px;
+  color: var(--el-color-warning);
+  font-size: 12px;
+  font-weight: 500;
+}
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+.frame-thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ac-color-bg-secondary, #f5f7fa);
+}
+.frame-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.frame-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .detail-reference {
   width: 140px;

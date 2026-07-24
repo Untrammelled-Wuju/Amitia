@@ -761,17 +761,16 @@ func TestGolden_ProactiveTaskInstructionNotInCurrentUserMessage(t *testing.T) {
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
 		BaseIdentity:             "测试BaseIdentity",
-		ProactiveTaskInstruction: "这是一条主动消息任务指令，不应出现在用户消息中",
 		CurrentUserInput:         "你好",
 	})
 
-	if !containsSection(ir, "proactive_task_instruction") {
-		t.Fatal("期望包含 proactive_task_instruction section")
+	if containsSection(ir, "proactive_task_instruction") {
+		t.Fatal("proactive_task_instruction section 不应再出现，prompt 文本现通过 CurrentUserInput 流入")
 	}
 
 	currentUserSection := getSectionContent(ir, "current_user_message")
-	if currentUserSection != "(proactive)" {
-		t.Errorf("current_user_message 内容应为 (proactive)，实际为: %s", currentUserSection)
+	if currentUserSection != "你好" {
+		t.Errorf("current_user_message 内容应为 你好，实际为: %s", currentUserSection)
 	}
 
 	r := NewRenderer()
@@ -784,22 +783,12 @@ func TestGolden_ProactiveTaskInstructionNotInCurrentUserMessage(t *testing.T) {
 		t.Fatal("渲染后消息为空")
 	}
 
-	lastMsg := msgs[len(msgs)-1]
-	if containsSub(lastMsg.Content, "这是一条主动消息任务指令") {
-		t.Error("ProactiveTaskInstruction 文本不应出现在 current_user_message 中")
-	}
-
-	systemMsg := msgs[0].Content
-	if !containsSub(systemMsg, "这是一条主动消息任务指令") {
-		t.Error("ProactiveTaskInstruction 文本应出现在 system 消息中")
-	}
-
 	for _, m := range msgs {
-		if m.Role == "user" && containsSub(m.Content, "<current_user_message>") {
-			cmContent := m.Content
-			if containsSub(cmContent, "这是一条主动消息任务指令") {
-				t.Error("ProactiveTaskInstruction 文本泄漏到了 <current_user_message> 块中")
-			}
+		if m.Role == "system" && containsSub(m.Content, "这是一条主动消息任务指令") {
+			t.Error("ProactiveTaskInstruction 不再注入 SYSTEM section，不应出现在 system 消息中")
+		}
+		if m.Role == "user" && containsSub(m.Content, "这是一条主动消息任务指令") {
+			t.Error("ProactiveTaskInstruction 文本不应出现在 user 消息中")
 		}
 	}
 }

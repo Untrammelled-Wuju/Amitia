@@ -1,4 +1,4 @@
-package interaction
+﻿package interaction
 
 import (
 	"context"
@@ -164,7 +164,7 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 
 	var behaviorPlan *decision.BehaviorPlan
 	var expressionPlan *decision.ExpressionPlan
-	if p.candidateRegistry != nil && !req.IsInternal {
+	if p.candidateRegistry != nil {
 		bp, ep := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality)
 		behaviorPlan = bp
 		expressionPlan = ep

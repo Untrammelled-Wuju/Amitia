@@ -60,7 +60,7 @@ func (s *service) GetQQBridgeStatusDetail() map[string]interface{} {
 }
 
 func (s *service) GetQQBridgeConfig() map[string]interface{} {
-	return map[string]interface{}{"config": map[string]interface{}{"mode": "qqbot", "sidecarPort": 9877}, "available": true}
+	return map[string]interface{}{"config": map[string]interface{}{"mode": "qqbot", "sidecarPort": 19877}, "available": true}
 }
 
 func (s *service) GetQQBridgeEvents() map[string]interface{} {

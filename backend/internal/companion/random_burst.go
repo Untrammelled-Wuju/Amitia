@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 彭旭
+﻿// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package companion
 
@@ -194,7 +194,7 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 	history := s.getShareHistory(characterID)
 	recentTopics := strings.Join(history.RecentTopics, "、")
 	if s.dataLifecycleCoordinator != nil && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID) {
-		return fmt.Sprintf("当前你处于%s状态，心情%s，精力%d/100。请生成一条自然短消息。", currentState, mood, energy)
+		return fmt.Sprintf("当前你处于%s状态，心情%s，精力%d。你想跟朋友聊两句。", currentState, mood, energy)
 	}
 	if recentTopics == "" {
 		recentTopics = "无"
@@ -237,7 +237,7 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 	if recentMemoriesStr == "" {
 		recentMemoriesStr = "无"
 	}
-	return fmt.Sprintf("\u5f53\u524d\u4f60\u5904\u4e8e %s \u72b6\u6001\uff0c\u5fc3\u60c5 %s\uff0c\u7cbe\u529b %d/100\u3002\u6700\u8fd1\u8bb0\u5fc6\uff1a%s\u3002\u8bf7\u751f\u6210\u4e00\u6761\u50cf\u5fae\u4fe1\u91cc\u7a81\u7136\u60f3\u5230\u5c31\u53d1\u51fa\u7684\u81ea\u7136\u77ed\u6d88\u606f\uff0c1-2\u53e5\uff0c\u4e0d\u8981\u5ba2\u670d\u8154\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981 emoji\uff0c\u907f\u514d\u91cd\u590d\u8fd9\u4e9b\u8bdd\u9898\uff1a%s\u3002", currentState, mood, energy, recentMemoriesStr, recentTopics)
+	return fmt.Sprintf("\u5f53\u524d\u4f60\u5904\u4e8e %s \u72b6\u6001\uff0c\u5fc3\u60c5 %s\uff0c\u7cbe\u529b %d/100\u3002\u6700\u8fd1\u8bb0\u5fc6\uff1a%s\u3002\u7a81\u7136\u60f3\u8ddf\u670b\u53cb\u53d1\u6761\u6d88\u606f\uff0c\u968f\u4fbf\u804a\u804a\u3002\u56de\u907f\u8fd9\u4e9b\u8bdd\u9898\uff1a%s\u3002", currentState, mood, energy, recentMemoriesStr, recentTopics)
 }
 
 func (s *service) persistAndDeliver(characterID, msgID, convID, content string, now time.Time) error {

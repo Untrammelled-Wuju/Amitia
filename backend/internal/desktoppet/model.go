@@ -50,6 +50,12 @@ type GenerationTask struct {
 	UpdatedAt                string `gorm:"column:updated_at" json:"updatedAt"`
 	StartedAt                string `gorm:"column:started_at" json:"startedAt"`
 	CompletedAt              string `gorm:"column:completed_at" json:"completedAt"`
+	ExecutionID              string `gorm:"column:execution_id" json:"executionId"`
+	WorkerID                 string `gorm:"column:worker_id" json:"workerId"`
+	LeaseExpiresAt           string `gorm:"column:lease_expires_at" json:"leaseExpiresAt"`
+	LastHeartbeatAt          string `gorm:"column:last_heartbeat_at" json:"lastHeartbeatAt"`
+	AttemptCount             int    `gorm:"column:attempt_count" json:"attemptCount"`
+	CancelRequestedAt        string `gorm:"column:cancel_requested_at" json:"cancelRequestedAt"`
 }
 
 func (GenerationTask) TableName() string { return "desktop_pet_generation_tasks" }
@@ -76,9 +82,67 @@ type GenerationTaskAction struct {
 	UpdatedAt                string `gorm:"column:updated_at" json:"updatedAt"`
 	StartedAt                string `gorm:"column:started_at" json:"startedAt"`
 	CompletedAt              string `gorm:"column:completed_at" json:"completedAt"`
+	AttemptNumber            int    `gorm:"column:attempt_number" json:"attemptNumber"`
+	GenerationSpecVersion    string `gorm:"column:generation_spec_version" json:"generationSpecVersion"`
+	CurrentAttempt           int    `gorm:"column:current_attempt" json:"currentAttempt"`
 }
 
 func (GenerationTaskAction) TableName() string { return "desktop_pet_generation_task_actions" }
+
+type GenerationFrame struct {
+	ID                     string `gorm:"column:id;primaryKey" json:"id"`
+	TaskID                 string `gorm:"column:task_id" json:"taskId"`
+	TaskActionID           string `gorm:"column:task_action_id" json:"taskActionId"`
+	ExecutionID            string `gorm:"column:execution_id" json:"executionId"`
+	FrameIndex             int    `gorm:"column:frame_index" json:"frameIndex"`
+	FramePhase             string `gorm:"column:frame_phase" json:"framePhase"`
+	Status                 string `gorm:"column:status" json:"status"`
+	AttemptNumber          int    `gorm:"column:attempt_number" json:"attemptNumber"`
+	PromptSnapshot         string `gorm:"column:prompt_snapshot" json:"promptSnapshot"`
+	NegativePromptSnapshot string `gorm:"column:negative_prompt_snapshot" json:"negativePromptSnapshot"`
+	Provider               string `gorm:"column:provider" json:"provider"`
+	Model                  string `gorm:"column:model" json:"model"`
+	ProviderRequestID      string `gorm:"column:provider_request_id" json:"providerRequestId"`
+	ProviderOperationID    string `gorm:"column:provider_operation_id" json:"providerOperationId"`
+	SourceImagePath        string `gorm:"column:source_image_path" json:"sourceImagePath"`
+	PreviousFramePath      string `gorm:"column:previous_frame_path" json:"previousFramePath"`
+	ResultImagePath        string `gorm:"column:result_image_path" json:"resultImagePath"`
+	ResultMimeType         string `gorm:"column:result_mime_type" json:"resultMimeType"`
+	ResultWidth            int    `gorm:"column:result_width" json:"resultWidth"`
+	ResultHeight           int    `gorm:"column:result_height" json:"resultHeight"`
+	ResultSize             int    `gorm:"column:result_size" json:"resultSize"`
+	ResultHash             string `gorm:"column:result_hash" json:"resultHash"`
+	ProviderSeed           string `gorm:"column:provider_seed" json:"providerSeed"`
+	ErrorCode              string `gorm:"column:error_code" json:"errorCode"`
+	ErrorMessage           string `gorm:"column:error_message" json:"errorMessage"`
+	CreatedAt              string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt              string `gorm:"column:updated_at" json:"updatedAt"`
+	StartedAt              string `gorm:"column:started_at" json:"startedAt"`
+	CompletedAt            string `gorm:"column:completed_at" json:"completedAt"`
+}
+
+func (GenerationFrame) TableName() string { return "desktop_pet_generation_frames" }
+
+type GenerationCallLog struct {
+	ID                 string `gorm:"column:id;primaryKey" json:"id"`
+	TaskID             string `gorm:"column:task_id" json:"taskId"`
+	TaskActionID       string `gorm:"column:task_action_id" json:"taskActionId"`
+	FrameID            string `gorm:"column:frame_id" json:"frameId"`
+	ExecutionID        string `gorm:"column:execution_id" json:"executionId"`
+	Provider           string `gorm:"column:provider" json:"provider"`
+	Model              string `gorm:"column:model" json:"model"`
+	ProviderRequestID  string `gorm:"column:provider_request_id" json:"providerRequestId"`
+	RequestStartedAt   string `gorm:"column:request_started_at" json:"requestStartedAt"`
+	RequestCompletedAt string `gorm:"column:request_completed_at" json:"requestCompletedAt"`
+	RequestStatus      string `gorm:"column:request_status" json:"requestStatus"`
+	AttemptNumber      int    `gorm:"column:attempt_number" json:"attemptNumber"`
+	Usage              string `gorm:"column:usage" json:"usage"`
+	ErrorCode          string `gorm:"column:error_code" json:"errorCode"`
+	ErrorMessage       string `gorm:"column:error_message" json:"errorMessage"`
+	CreatedAt          string `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (GenerationCallLog) TableName() string { return "desktop_pet_generation_call_logs" }
 
 type ActionItemResponse struct {
 	ID                       int    `json:"id"`
@@ -140,6 +204,12 @@ type TaskActionResponse struct {
 	Progress                 int    `json:"progress"`
 	ErrorCode                string `json:"errorCode"`
 	ErrorMessage             string `json:"errorMessage"`
+	AttemptNumber            int    `json:"attemptNumber"`
+	StartedAt                string `json:"startedAt"`
+	CompletedAt              string `json:"completedAt"`
+	FrameSucceeded           int    `json:"frameSucceeded"`
+	FrameFailed              int    `json:"frameFailed"`
+	FrameTotal               int    `json:"frameTotal"`
 }
 
 type TaskDetailResponse struct {
@@ -161,6 +231,10 @@ type TaskDetailResponse struct {
 	StartedAt                string              `json:"startedAt"`
 	CompletedAt              string              `json:"completedAt"`
 	Actions                  []TaskActionResponse `json:"actions"`
+	SucceededActionCount     int                 `json:"succeededActionCount"`
+	FailedActionCount        int                 `json:"failedActionCount"`
+	CurrentAction            string              `json:"currentAction"`
+	DurationSeconds          int64               `json:"durationSeconds"`
 }
 
 type TaskListItemResponse struct {
