@@ -136,6 +136,14 @@ SPDX-License-Identifier: AGPL-3.0-only
                     @click="startTask(row)"
                     >开始生成</el-button
                   >
+                  <el-button
+                    v-if="canProcess(detailMap[row.id]?.status)"
+                    type="success"
+                    :icon="Cpu"
+                    :loading="processingId === row.id"
+                    @click="openProcessDialog(row)"
+                    >处理素材</el-button
+                  >
                 </div>
 
                 <div class="detail-block">
@@ -285,6 +293,88 @@ SPDX-License-Identifier: AGPL-3.0-only
         />
       </div>
     </el-card>
+
+    <el-dialog
+      v-model="processDialogVisible"
+      title="创建处理任务"
+      width="540px"
+      destroy-on-close
+    >
+      <el-form :model="processForm" label-width="140px">
+        <el-form-item label="输出宽度">
+          <el-input-number
+            v-model="processForm.outputWidth"
+            :min="64"
+            :max="2048"
+            :step="32"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="输出高度">
+          <el-input-number
+            v-model="processForm.outputHeight"
+            :min="64"
+            :max="2048"
+            :step="32"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="角色高度比例">
+          <el-input-number
+            v-model="processForm.targetCharacterHeightRatio"
+            :min="0.1"
+            :max="1"
+            :step="0.05"
+            :precision="2"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="锚点模式">
+          <el-select v-model="processForm.anchorMode" style="width: 100%">
+            <el-option label="底部居中" value="bottom_center" />
+            <el-option label="居中" value="center" />
+            <el-option label="顶部居中" value="top_center" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="背景模式">
+          <el-select v-model="processForm.backgroundMode" style="width: 100%">
+            <el-option label="透明背景" value="remove_background" />
+            <el-option label="保留背景" value="keep_background" />
+            <el-option label="纯色背景" value="solid_color" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="输出格式">
+          <el-select v-model="processForm.outputFormat" style="width: 100%">
+            <el-option label="PNG" value="png" />
+            <el-option label="WebP" value="webp" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="默认 FPS">
+          <el-input-number
+            v-model="processForm.defaultFps"
+            :min="1"
+            :max="60"
+            controls-position="right"
+          />
+        </el-form-item>
+      </el-form>
+      <el-alert
+        v-if="processError"
+        :title="processError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
+      <template #footer>
+        <el-button @click="processDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="processingId !== null"
+          @click="submitProcess"
+          >创建并跳转</el-button
+        >
+      </template>
+    </el-dialog>
   </main>
 </template>
 
@@ -292,12 +382,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Plus, Refresh } from "@element-plus/icons-vue";
+import { Plus, Refresh, Cpu } from "@element-plus/icons-vue";
 import { useApi, apiClient } from "../../composables/useApi";
 import {
   useGenerationTask,
   isTerminalStatus,
 } from "../../composables/useGenerationTask";
+import { useProcessingTask } from "../../composables/useProcessingTask";
 
 const router = useRouter();
 const route = useRoute();
@@ -384,6 +475,19 @@ const cancellingId = ref<string | number | null>(null);
 const startingId = ref<string | number | null>(null);
 const retryingKey = ref<string | null>(null);
 const trackedTaskId = ref<string | number | null>(null);
+const processingId = ref<string | number | null>(null);
+const processDialogVisible = ref(false);
+const processError = ref("");
+const processForm = reactive({
+  taskId: "" as string | number,
+  outputWidth: 512,
+  outputHeight: 512,
+  targetCharacterHeightRatio: 0.8,
+  anchorMode: "bottom_center",
+  backgroundMode: "remove_background",
+  outputFormat: "png",
+  defaultFps: 12,
+});
 
 const filter = reactive({
   status: "",
@@ -499,6 +603,15 @@ function canRetry(status?: string): boolean {
   );
 }
 
+function canProcess(status?: string): boolean {
+  return (
+    status === "succeeded" ||
+    status === "partially_succeeded" ||
+    status === "success" ||
+    status === "completed"
+  );
+}
+
 function shouldShowFrames(action: TaskAction): boolean {
   const succeeded =
     action.status === "succeeded" ||
@@ -610,6 +723,66 @@ const { connected, start: startTracking, stop: stopTracking } =
       return detailMap[String(trackedTaskId.value)]?.status;
     },
   });
+
+const { createProcessingTask: createProcessingTaskApi } =
+  useProcessingTask();
+
+function openProcessDialog(row: TaskItem) {
+  processForm.taskId = row.id;
+  processError.value = "";
+  const detail = detailMap[String(row.id)];
+  const width = Number(detail?.outputWidth) || 512;
+  const height = Number(detail?.outputHeight) || 512;
+  processForm.outputWidth = width;
+  processForm.outputHeight = height;
+  processForm.targetCharacterHeightRatio = 0.8;
+  processForm.anchorMode = "bottom_center";
+  processForm.backgroundMode = "remove_background";
+  processForm.outputFormat = "png";
+  processForm.defaultFps = 12;
+  processDialogVisible.value = true;
+}
+
+async function submitProcess() {
+  if (!processForm.taskId) {
+    processError.value = "缺少任务 ID";
+    return;
+  }
+  if (
+    !processForm.outputWidth ||
+    !processForm.outputHeight ||
+    processForm.outputWidth < 64 ||
+    processForm.outputHeight < 64
+  ) {
+    processError.value = "输出宽高必须 ≥ 64";
+    return;
+  }
+  processError.value = "";
+  processingId.value = processForm.taskId;
+  try {
+    const task = await createProcessingTaskApi(processForm.taskId, {
+      outputWidth: processForm.outputWidth,
+      outputHeight: processForm.outputHeight,
+      targetCharacterHeightRatio: processForm.targetCharacterHeightRatio,
+      anchorMode: processForm.anchorMode,
+      backgroundMode: processForm.backgroundMode,
+      outputFormat: processForm.outputFormat,
+      defaultFps: processForm.defaultFps,
+    });
+    ElMessage.success("处理任务已创建");
+    processDialogVisible.value = false;
+    if (task?.id) {
+      router.push({
+        name: "creativeWorkshopPetProcessing",
+        params: { processingTaskId: String(task.id) },
+      });
+    }
+  } catch (err: any) {
+    processError.value = err?.message || "创建处理任务失败";
+  } finally {
+    processingId.value = null;
+  }
+}
 
 async function onExpandChange(row: TaskItem, expanded: TaskItem[]) {
   const isExpanded = expanded.some((r) => r.id === row.id);

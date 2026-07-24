@@ -56,7 +56,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	userID := resolveUserID(c)
+	userID := ResolveUserID(c)
 
 	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
@@ -229,7 +229,7 @@ func writeServiceError(c *gin.Context, err error) {
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
-func resolveUserID(c *gin.Context) string {
+func ResolveUserID(c *gin.Context) string {
 	auth := c.GetHeader("Authorization")
 	if len(auth) <= 7 || auth[:7] != "Bearer " {
 		return "default"

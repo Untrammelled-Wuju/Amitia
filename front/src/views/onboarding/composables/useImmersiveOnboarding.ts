@@ -1,4 +1,4 @@
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
+﻿import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi, setToken } from "../../../composables/useApi";
@@ -76,6 +76,7 @@ export function useImmersiveOnboarding() {
   const identityName = ref("");
   const identityRole = ref("");
   const identityPersonality = ref("");
+  const identityPromptBase = ref("");
 
   const identityAvatarFile = ref<File | null>(null);
   const identityAvatarPreviewUrl = ref("");
@@ -748,6 +749,7 @@ export function useImmersiveOnboarding() {
           name: identityName.value,
           identity: identityRole.value || "AI 陪伴角色",
           personality: identityPersonality.value || "温和、体贴",
+          characterBase: identityPromptBase.value || "",
           isActive: 1,
           isDefault: true,
         }).then((charRes: any) => {
@@ -764,10 +766,13 @@ export function useImmersiveOnboarding() {
           const me = await get<any>("/api/auth/me");
           userId = me?.id ? String(me.id) : "";
         } catch {}
-        for (const item of memoryItems.value.filter(Boolean)) {
+        const memoryAttrNames = ["称呼", "交流风格", "初始记忆"];
+        for (let i = 0; i < memoryItems.value.length; i++) {
+          const item = memoryItems.value[i];
+          if (!item) continue;
           await post("/api/profiles", {
             category: "memory",
-            attributeName: "initial_memory",
+            attributeName: memoryAttrNames[i],
             attributeValue: item,
             userId: userId,
           }).catch(() => {});
@@ -870,6 +875,7 @@ export function useImmersiveOnboarding() {
     identityName,
     identityRole,
     identityPersonality,
+    identityPromptBase,
     identityAvatarFile,
     identityAvatarPreviewUrl,
     identityAvatarUploaded,

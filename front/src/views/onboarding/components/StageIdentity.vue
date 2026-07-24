@@ -59,6 +59,19 @@
           </div>
 
           <div
+            v-show="showPromptInput"
+            class="ob-identity-prompt-input"
+          >
+            <textarea
+              :value="promptValue"
+              @input="onPromptInput"
+              rows="3"
+              placeholder="输入角色的基础提示词，用于塑造角色行为方式。"
+              class="ob-identity-prompt-textarea"
+            ></textarea>
+          </div>
+
+          <div
             v-show="!isAvatarStep"
             class="ob-identity-answer"
             ref="identityAnswerRef"
@@ -195,6 +208,8 @@ const props = defineProps<{
   avatarPreviewUrl: string;
   avatarUploaded: boolean;
   isAvatarStep: boolean;
+  showPromptInput: boolean;
+  promptValue: string;
 }>();
 
 const emit = defineEmits<{
@@ -203,6 +218,7 @@ const emit = defineEmits<{
   avatarSkip: [];
   avatarContinue: [];
   avatarFileSelected: [file: File];
+  'update:promptValue': [v: string];
 }>();
 
 const inputValue = ref("");
@@ -215,6 +231,11 @@ const identityAnswerRef = ref<HTMLElement | null>(null);
 const identityQuickRef = ref<HTMLElement | null>(null);
 const identityPromptRef = ref<HTMLElement | null>(null);
 
+
+function onPromptInput(e: Event) {
+  const target = e.target as HTMLTextAreaElement;
+  emit('update:promptValue', target.value);
+}
 function handleSend() {
   const val = inputValue.value.trim();
   if (!val) return;

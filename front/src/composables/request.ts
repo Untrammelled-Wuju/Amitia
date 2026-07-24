@@ -30,7 +30,7 @@ export interface RequestError {
 // Error classification
 // ============================================================
 
-function classifyError(
+export function classifyError(
   body: ApiResponse | null,
   axiosError: AxiosError | null,
 ): RequestError {
@@ -87,12 +87,16 @@ function classifyError(
   if (
     code === 401 ||
     code === 403 ||
+    code === 700 ||
+    code === 701 ||
+    code === 702 ||
     code === ERR.TOKEN_EXPIRED ||
-    code === ERR.TOKEN_INVALID ||
-    code === 702
+    code === ERR.TOKEN_INVALID
   ) {
     if (
       code === 401 ||
+      code === 700 ||
+      code === 701 ||
       code === ERR.TOKEN_EXPIRED ||
       code === ERR.TOKEN_INVALID
     ) {
@@ -146,7 +150,7 @@ export function setErrorBannerHandler(fn: (err: RequestError) => void) {
 // Display error based on severity
 // ============================================================
 
-function displayError(err: RequestError) {
+export function displayError(err: RequestError) {
   switch (err.severity) {
     case "toast":
       if (err.action) {

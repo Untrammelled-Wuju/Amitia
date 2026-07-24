@@ -210,6 +210,9 @@
           :avatarPreviewUrl="identityAvatarPreviewUrl"
           :avatarUploaded="identityAvatarUploaded"
           :isAvatarStep="identityStep === 3"
+          :showPromptInput="identityStep === 2"
+          :promptValue="identityPromptBase"
+          @update:promptValue="identityPromptBase = $event"
           @answer="handleIdentityAnswer"
           @avatarFileSelected="handleAvatarFileSelected"
           @avatarSkip="handleAvatarSkip"
@@ -341,6 +344,7 @@ const {
   identityName,
   identityRole,
   identityPersonality,
+  identityPromptBase,
   identityAvatarFile,
   identityAvatarPreviewUrl,
   identityAvatarUploaded,

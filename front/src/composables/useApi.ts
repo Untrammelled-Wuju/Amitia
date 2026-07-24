@@ -1,15 +1,12 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
+import type { AxiosError } from "axios";
 import { ref } from "vue";
-import { ElMessage } from "element-plus";
 import type { ApiResponse } from "@/types";
-import { ERR } from "@/types";
 import { getRuntimeConnection } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
-
-// Import from the unified request module for error classification
-import { request as unifiedRequest } from "./request";
+import { classifyError, displayError } from "./request";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 const TOKEN_KEY = "ai-companion-token";
@@ -33,7 +30,7 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response interceptor: delegate to unified error handling
+// Response interceptor: unwrap and handle errors
 apiClient.interceptors.response.use(
   (response) => {
     const body = response.data as ApiResponse;
@@ -42,12 +39,9 @@ apiClient.interceptors.response.use(
         response.data = body.data ?? (body as any);
         return response;
       }
-      // Delegate to unified request module for error classification
-      return (
-        unifiedRequest.interceptors.response.handlers?.[0]?.fulfilled?.(
-          response,
-        ) ?? response
-      );
+      const err = classifyError(body, null);
+      displayError(err);
+      return Promise.reject(err);
     }
     return response;
   },
@@ -55,10 +49,11 @@ apiClient.interceptors.response.use(
     if (error && typeof error === "object" && "severity" in error) {
       return Promise.reject(error);
     }
-    return (
-      unifiedRequest.interceptors.response.handlers?.[0]?.rejected?.(error) ??
-      Promise.reject(error)
-    );
+    const body = (error.response?.data as ApiResponse) || null;
+    const err = classifyError(body, error as AxiosError);
+    err.raw = body;
+    displayError(err);
+    return Promise.reject(err);
   },
 );
 

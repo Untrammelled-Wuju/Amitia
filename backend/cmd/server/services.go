@@ -20,6 +20,8 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/processing"
+	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -72,6 +74,7 @@ type AppServices struct {
 	NewOutbox           *newoutbox.SQLiteOutboxStore
 	OutboxWorker        *newoutbox.Worker
 	DesktopPetWorker    *worker.Worker
+	ProcessingWorker    *processingworker.Worker
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
@@ -316,6 +319,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetRegistry := desktoppet.NewProviderRegistry()
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)
+	processingRepo := processing.NewRepository(ctx.DB, ctx)
+	processingDataDir := mcpDataDirectory(ctx)
+	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir)
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -334,6 +340,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		DeliveryWorker:      deliveryWorker,
 		OutboxWorker:        newOutboxWorker,
 		DesktopPetWorker:    desktopPetWorker,
+		ProcessingWorker:    processingWorker,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,

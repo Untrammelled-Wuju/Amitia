@@ -56,7 +56,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.5
+  releaseName: Amitia 26.1.6
   releaseNotesFile: release-notes.md
 
 publish:

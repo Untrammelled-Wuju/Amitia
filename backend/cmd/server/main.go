@@ -191,6 +191,8 @@ func main() {
 	defer services.DeliveryWorker.Stop()
 	services.DesktopPetWorker.Start(rootCtx)
 	defer services.DesktopPetWorker.Stop()
+	services.ProcessingWorker.Start(rootCtx)
+	defer services.ProcessingWorker.Stop()
 	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true

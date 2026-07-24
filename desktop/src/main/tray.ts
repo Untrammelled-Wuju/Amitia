@@ -4,6 +4,7 @@ import type { DeploymentModeConfig } from "../shared/types";
 import type { ConfigStore } from "./config-store";
 import { IPC_CHANNELS } from "../shared/ipc";
 import { getInitialBrandImage } from "./branding";
+import { getAmitiaDataDir } from "./path-manager";
 
 let latestUpdateMenu: (() => Promise<void>) | null = null;
 
@@ -48,11 +49,12 @@ export function createAppTray(
             win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next);
           },
         },
-        { type: "separator" },
-        {
-          label: "打开日志目录",
-          click: () => void shell.openPath(app.getPath("logs")),
+       { type: "separator" },
+       {
+          label: "打开数据目录",
+          click: () => void shell.openPath(getAmitiaDataDir()),
         },
+        { type: "separator" },
         {
           label: "退出 Amitia",
           click: () => {
