@@ -602,7 +602,11 @@
   left: calc(50% - 130px + clamp(280px, var(--stage7-core-size), 320px) * 0.5);
   right: 0%;
   max-width: 420px;
-  top: 30%;
+  top: calc(
+    37.5vh - max(0px, (680px - 100vh) * 0.5 + 20px) - var(--stage7-shift) *
+      1.333 + var(--stage7-core-size) * 0.5 - clamp(26px, 4.5vh, 48px) + 28px
+      - 155px
+  );
   padding-bottom: 10px;
   z-index: 5;
 }
