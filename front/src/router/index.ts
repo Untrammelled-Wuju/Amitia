@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
 import { apiClient } from "../ui-index"
@@ -37,6 +37,7 @@ const router = createRouter({
     { path: "/extensions/runs", name: "extensionRuns", component: () => import("@/views/extensions/RunHistoryView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetCreationView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop/pet/tasks", name: "creativeWorkshopPetTasks", component: () => import("@/views/creative-workshop/PetTaskListView.vue"), meta: { requiresAuth: true } },
     { path: "/qq", name: "qq", component: () => import("@/views/qq-connect/QqConnectView.vue"), meta: { requiresAuth: true } },
     { path: "/wechat", name: "wechat", component: () => import("@/views/wechat-connect/WechatConnectView.vue"), meta: { requiresAuth: true } },
     {

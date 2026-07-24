@@ -793,3 +793,13 @@ ALTER TABLE messages ADD COLUMN reply_to_excerpt TEXT DEFAULT '';
 ALTER TABLE user_profiles ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE user_profiles ADD COLUMN source TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS image_gen_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    api_key TEXT DEFAULT '',
+    model_name TEXT DEFAULT 'doubao-seedream-5-0',
+    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
+    is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);

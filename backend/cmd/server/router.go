@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
@@ -19,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
@@ -71,6 +73,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
+		imagegen.RegisterImageGenRouter(apiGroup, ctx)
+		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)

@@ -79,5 +79,9 @@ func DefaultMigrations() []Migration {
 		CharacterBaseColumnMigration(),
 		MCPClientMigration(),
 		UserProfileCharacterScopeMigration(),
+		ImageGenConfigMigration(),
+		DesktopPetActionDefinitionsMigration(),
+		ImageGenConfigEnabledMigration(),
+		DesktopPetGenerationTasksMigration(),
 	}
 }
