@@ -9,6 +9,9 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"archive/zip"
+	"io"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -355,6 +358,8 @@ func writeProcessingError(c *gin.Context, err error) {
 
 func mapProcessingErrorCode(code string) int {
 	switch code {
+	case "PACKAGE_NOT_FOUND":
+		return response.NotFound
 	case ErrCodeProcessingTaskAlreadyRunning,
 		ErrCodeProcessingTaskStateConflict,
 		ErrCodeProcessingActionNotRetryable,
@@ -388,5 +393,68 @@ func mapProcessingErrorCode(code string) int {
 		return response.BusinessError
 	default:
 		return response.InternalError
+	}
+}
+
+func (h *Handler) ListPackages(c *gin.Context) {
+	userID := desktoppet.ResolveUserID(c)
+	generationTaskID := c.Query("generationTaskId")
+	if generationTaskID != "" {
+		packages, err := h.service.ListPackagesByGenerationTask(userID, generationTaskID)
+		if err != nil {
+			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+			return
+		}
+		util.SuccessResponse(c, gin.H{"items": packages, "total": len(packages)})
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if page < 1 { page = 1 }
+	if pageSize < 1 { pageSize = 20 }
+	if pageSize > 100 { pageSize = 100 }
+
+	packages, total, err := h.service.ListPackages(userID, page, pageSize)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": packages, "total": total, "page": page, "pageSize": pageSize})
+}
+
+func (h *Handler) DownloadPackage(c *gin.Context) {
+	packageID := c.Param("packageId")
+	if packageID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "包 ID 为空", nil)
+		return
+	}
+
+	packageDir, pkg, err := h.service.DownloadPackage(packageID)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
+	fileName := fmt.Sprintf("%s.zip", pkg.Name)
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+
+	zipWriter := zip.NewWriter(c.Writer)
+	defer zipWriter.Close()
+
+	err = filepath.Walk(packageDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil { return err }
+		if info.IsDir() { return nil }
+		relPath, _ := filepath.Rel(packageDir, path)
+		zipEntry, zerr := zipWriter.Create(filepath.ToSlash(relPath))
+		if zerr != nil { return zerr }
+		f, ferr := os.Open(path)
+		if ferr != nil { return ferr }
+		defer f.Close()
+		_, cperr := io.Copy(zipEntry, f)
+		return cperr
+	})
+	if err != nil {
+		_ = err
 	}
 }

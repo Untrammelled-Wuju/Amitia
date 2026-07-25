@@ -15,6 +15,8 @@ func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	g := r.Group("/desktop-pets")
 	{
+		g.GET("/packages", handler.ListPackages)
+		g.GET("/packages/:packageId/download", handler.DownloadPackage)
 		g.POST("/generation-tasks/:taskId/process", handler.CreateProcessingTask)
 		g.GET("/processing-tasks/:processingTaskId", handler.GetProcessingTask)
 		g.POST("/processing-tasks/:processingTaskId/cancel", handler.CancelProcessingTask)

@@ -7,8 +7,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ExtensionPageHeader
       title="处理结果审核"
       description="审核桌宠动作处理结果并打包资源"
-      parent-title="创意工坊"
-      parent-path="/creative-workshop"
+      grandparent-title="创意工坊"
+      grandparent-path="/creative-workshop"
+      parent-title="桌宠"
+      parent-path="/creative-workshop/pet"
     >
       <template #actions>
         <el-button :icon="Back" @click="goBack">返回</el-button>

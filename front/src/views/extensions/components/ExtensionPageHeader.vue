@@ -4,6 +4,14 @@
       <div class="title-line">
         <nav aria-label="扩展页面层级">
           <ol class="breadcrumb-list">
+            <template v-if="grandparentTitle">
+              <li>
+                <RouterLink class="center-link" :to="grandparentPath"
+                  >{{ grandparentTitle }}</RouterLink
+                >
+              </li>
+              <li class="separator" aria-hidden="true">/</li>
+            </template>
             <li>
               <RouterLink class="center-link" :to="parentPath"
                 >{{ parentTitle }}</RouterLink
@@ -32,6 +40,8 @@ const props = withDefaults(defineProps<{
   description?: string;
   parentTitle?: string;
   parentPath?: string;
+  grandparentTitle?: string;
+  grandparentPath?: string;
 }>(), {
   parentTitle: '扩展中心',
   parentPath: '/extensions',

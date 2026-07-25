@@ -36,8 +36,8 @@ const entries = [
   },
   {
     to: "/creative-workshop/pet",
-    title: "桌宠制作",
-    description: "创建和定制你的桌面陪伴角色",
+    title: "桌宠",
+    description: "管理桌宠制作、安装与记录",
     icon: Star,
   },
 ];

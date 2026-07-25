@@ -4,20 +4,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-task-list">
-    <header class="page-header">
-      <div class="title-row">
-        <div>
-          <h1>桌宠生成任务</h1>
-          <p>查看桌宠生成任务的状态与动作明细</p>
-        </div>
-        <div class="header-actions">
-          <el-button :icon="Plus" @click="goCreate">新建桌宠</el-button>
-          <el-button :icon="Refresh" :loading="loading" @click="loadList"
-            >刷新</el-button
-          >
-        </div>
-      </div>
-    </header>
+    <ExtensionPageHeader
+      title="制作记录"
+      description="查看桌宠生成任务的状态与进度"
+      grandparent-title="创意工坊"
+      grandparent-path="/creative-workshop"
+      parent-title="桌宠"
+      parent-path="/creative-workshop/pet"
+    >
+      <template #actions>
+        <el-button :icon="Plus" @click="goCreate">新建桌宠</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="loadList"
+          >刷新</el-button
+        >
+      </template>
+    </ExtensionPageHeader>
 
     <el-card shadow="never" class="filter-card">
       <div class="filter-row">
@@ -143,6 +144,14 @@ SPDX-License-Identifier: AGPL-3.0-only
                     :loading="processingId === row.id"
                     @click="openProcessDialog(row)"
                     >处理素材</el-button
+                  >
+                  <el-button
+                    v-if="hasPackageForTask(row.id)"
+                    type="primary"
+                    :icon="Download"
+                    :loading="exportingId === row.id"
+                    @click="exportPackage(row)"
+                    >导出桌宠</el-button
                   >
                 </div>
 
@@ -382,13 +391,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Plus, Refresh, Cpu } from "@element-plus/icons-vue";
+import { Plus, Refresh, Cpu, Download } from "@element-plus/icons-vue";
 import { useApi, apiClient } from "../../composables/useApi";
 import {
   useGenerationTask,
   isTerminalStatus,
 } from "../../composables/useGenerationTask";
 import { useProcessingTask } from "../../composables/useProcessingTask";
+import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -488,6 +498,16 @@ const processForm = reactive({
   outputFormat: "png",
   defaultFps: 12,
 });
+
+const exportingId = ref<string | number | null>(null);
+const taskPackageMap = reactive<Record<string, PackageSummary[]>>({});
+
+interface PackageSummary {
+  id: string;
+  name: string;
+  version: number;
+  status: string;
+}
 
 const filter = reactive({
   status: "",
@@ -610,6 +630,52 @@ function canProcess(status?: string): boolean {
     status === "success" ||
     status === "completed"
   );
+}
+
+function hasPackageForTask(taskId: string | number): boolean {
+  const packages = taskPackageMap[String(taskId)];
+  return packages && packages.length > 0;
+}
+
+async function fetchTaskPackages(taskId: string | number) {
+  try {
+    const data = await get<{ items: PackageSummary[] }>(
+      `/api/desktop-pets/packages?generationTaskId=${taskId}`,
+    );
+    taskPackageMap[String(taskId)] = data?.items || [];
+  } catch {
+    taskPackageMap[String(taskId)] = [];
+  }
+}
+
+async function exportPackage(row: TaskItem) {
+  const packages = taskPackageMap[String(row.id)];
+  if (!packages || !packages.length) {
+    ElMessage.warning("暂无可用资源包");
+    return;
+  }
+  const pkg = packages[0];
+  exportingId.value = row.id;
+  try {
+    const res = await apiClient.get(
+      `/api/desktop-pets/packages/${pkg.id}/download`,
+      { responseType: "blob" },
+    );
+    const blob = res.data as Blob;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${pkg.name}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    ElMessage.success("导出成功");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "导出失败");
+  } finally {
+    exportingId.value = null;
+  }
 }
 
 function shouldShowFrames(action: TaskAction): boolean {
@@ -819,6 +885,9 @@ async function loadDetail(taskId: string | number) {
       `/api/desktop-pets/generation-tasks/${taskId}`,
     );
     detailMap[String(taskId)] = data || { id: taskId, actions: [] };
+    if (data && canProcess(data.status)) {
+      await fetchTaskPackages(taskId);
+    }
   } catch (err: any) {
     ElMessage.error(err?.message || "加载任务明细失败");
     detailMap[String(taskId)] = { id: taskId, actions: [] };
@@ -966,7 +1035,7 @@ function confirmRetry(row: TaskItem, action: TaskAction) {
 }
 
 function goCreate() {
-  router.push("/creative-workshop/pet");
+  router.push("/creative-workshop/pet/create");
 }
 
 async function expandTaskFromQuery() {
@@ -1030,28 +1099,6 @@ onUnmounted(() => {
   height: 100%;
   overflow: auto;
   padding: 0;
-}
-.page-header h1 {
-  margin: 0 0 6px;
-  color: var(--console-text);
-  font-size: 24px;
-}
-.page-header p {
-  margin: 0;
-  color: var(--console-text-muted);
-  line-height: 1.6;
-}
-.title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.header-actions {
-  display: flex;
-  gap: 8px;
 }
 .filter-card {
   margin-bottom: 12px;

@@ -5,13 +5,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <main class="pet-installations">
     <ExtensionPageHeader
-      title="桌宠安装管理"
+      title="安装管理"
       description="管理已安装的桌宠、启用停用、运行配置与动作"
-      parent-title="创意工坊"
-      parent-path="/creative-workshop"
+      grandparent-title="创意工坊"
+      grandparent-path="/creative-workshop"
+      parent-title="桌宠"
+      parent-path="/creative-workshop/pet"
     >
       <template #actions>
         <el-button :icon="Back" @click="goBack">返回任务列表</el-button>
+        <el-button type="success" :icon="Plus" @click="openInstallDialog">安装桌宠</el-button>
         <el-button
           v-if="hasActiveInstallation"
           type="warning"
@@ -347,13 +350,64 @@ SPDX-License-Identifier: AGPL-3.0-only
       </template>
     </el-dialog>
   </main>
+
+    <el-dialog
+      v-model="installDialogVisible"
+      title="安装桌宠"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form label-width="100px">
+        <el-form-item label="资源包">
+          <el-select
+            v-model="installForm.packageId"
+            placeholder="请选择资源包"
+            style="width: 100%"
+            filterable
+            @change="onInstallPackageChange"
+          >
+            <el-option
+              v-for="pkg in availablePackages"
+              :key="pkg.id"
+              :label="`${pkg.name} (v${pkg.version})`"
+              :value="pkg.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="绑定角色">
+          <el-select
+            v-model="installForm.characterId"
+            placeholder="请选择角色"
+            style="width: 100%"
+            filterable
+          >
+            <el-option
+              v-for="char in characters"
+              :key="char.id"
+              :label="char.name"
+              :value="String(char.id)"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="installDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="installSubmitting"
+          :disabled="!installForm.packageId || !installForm.characterId"
+          @click="submitInstall"
+          >安装</el-button
+        >
+      </template>
+    </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Back, Refresh, Picture } from "@element-plus/icons-vue";
+import { Back, Refresh, Picture, Plus } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 import { useApi } from "../../composables/useApi";
 import {
@@ -370,6 +424,15 @@ interface CharacterOption {
   status?: string;
   isActive?: number | boolean;
   isDefault?: number | boolean;
+}
+
+interface PackageOption {
+  id: string;
+  name: string;
+  version: number;
+  characterId: string;
+  generationTaskId: string;
+  status: string;
 }
 
 const router = useRouter();
@@ -423,6 +486,11 @@ const defaultActionForm = reactive({
   name: "",
   actionKey: "",
 });
+
+const installDialogVisible = ref(false);
+const installSubmitting = ref(false);
+const availablePackages = ref<PackageOption[]>([]);
+const installForm = reactive({ packageId: "", characterId: "" });
 
 const statusMeta: Record<string, { label: string; type: string }> = {
   installing: { label: "安装中", type: "warning" },
@@ -841,6 +909,47 @@ function goBack() {
 
 function goToTasks() {
   router.push("/creative-workshop/pet/tasks");
+}
+
+async function openInstallDialog() {
+  installForm.packageId = "";
+  installForm.characterId = "";
+  await loadCharacters();
+  await loadAvailablePackages();
+  installDialogVisible.value = true;
+}
+
+async function loadAvailablePackages() {
+  try {
+    const data = await get<{ items: PackageOption[] }>("/api/desktop-pets/packages", { pageSize: 100 });
+    availablePackages.value = data?.items || [];
+  } catch {
+    availablePackages.value = [];
+  }
+}
+
+function onInstallPackageChange() {
+  const pkg = availablePackages.value.find((p) => p.id === installForm.packageId);
+  if (pkg) {
+    installForm.characterId = String(pkg.characterId);
+  }
+}
+
+async function submitInstall() {
+  if (!installForm.packageId || !installForm.characterId) {
+    ElMessage.warning("请选择资源包和角色");
+    return;
+  }
+  installSubmitting.value = true;
+  try {
+    await install(installForm.packageId, installForm.characterId);
+    installDialogVisible.value = false;
+    await refresh();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "安装失败");
+  } finally {
+    installSubmitting.value = false;
+  }
 }
 
 onMounted(() => {

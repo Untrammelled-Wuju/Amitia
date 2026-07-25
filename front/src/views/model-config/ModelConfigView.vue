@@ -11,6 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-tab-pane label="语音模型" name="voice" />
       <el-tab-pane label="视觉模型" name="vision" />
       <el-tab-pane label="向量模型" name="embedding" />
+      <el-tab-pane label="生图模型" name="imagegen" />
     </el-tabs>
 
     <router-view />
@@ -30,6 +31,7 @@ const activeTab = computed(() => {
   if (path.includes("/model/voice")) return "voice";
   if (path.includes("/model/vision")) return "vision";
   if (path.includes("/model/embedding")) return "embedding";
+  if (path.includes("/model/imagegen")) return "imagegen";
   return "llm";
 });
 

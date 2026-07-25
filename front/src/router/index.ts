@@ -36,7 +36,9 @@ const router = createRouter({
     { path: "/extensions/workshop/:id", name: "extensionWorkshopSession", component: () => import("@/views/extensions/workshop/WorkshopSessionView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/runs", name: "extensionRuns", component: () => import("@/views/extensions/RunHistoryView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
-    { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetCreationView.vue"), meta: { requiresAuth: true } },
+
+    { path: "/creative-workshop/pet", name: "creativeWorkshopPet", component: () => import("@/views/creative-workshop/PetHubView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop/pet/create", name: "creativeWorkshopPetCreate", component: () => import("@/views/creative-workshop/PetCreationView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop/pet/tasks", name: "creativeWorkshopPetTasks", component: () => import("@/views/creative-workshop/PetTaskListView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop/pet/processing/:processingTaskId", name: "creativeWorkshopPetProcessing", component: () => import("@/views/creative-workshop/PetProcessingReviewView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop/pet/installations", name: "pet-installations", component: () => import("@/views/creative-workshop/PetInstallationsView.vue"), meta: { requiresAuth: true } },

@@ -126,6 +126,13 @@ export function useActionDefinitions() {
     selectedKeys.value = [];
   }
 
+  function reorderSelected(fromIndex: number, toIndex: number): void {
+    const keys = [...selectedKeys.value];
+    const [moved] = keys.splice(fromIndex, 1);
+    keys.splice(toIndex, 0, moved);
+    selectedKeys.value = keys;
+  }
+
   function applyPreset(target: ActionPreset | string | string[]): void {
     let keys: string[];
     if (Array.isArray(target)) {
@@ -185,6 +192,7 @@ export function useActionDefinitions() {
     clearAll,
     applyPreset,
     isCategoryAllSelected,
+    reorderSelected,
     isCategoryPartialSelected,
     categoryActions,
     selectedCount,

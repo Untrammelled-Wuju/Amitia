@@ -5,6 +5,7 @@ package processing
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -61,6 +62,10 @@ type Service interface {
 	GetProcessedFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetSourceFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetActionPreview(processingTaskID, actionKey string) (fullPath, mimeType string, err error)
+	ListPackages(userID string, page, pageSize int) ([]Package, int64, error)
+	ListPackagesByGenerationTask(userID, generationTaskID string) ([]Package, error)
+	GetPackage(id string) (*Package, error)
+	DownloadPackage(id string) (packageDir string, pkg *Package, err error)
 }
 
 type service struct {
@@ -948,4 +953,39 @@ func (s *service) GetActionPreview(processingTaskID, actionKey string) (fullPath
 		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion),
 		"actions", actionKey, "preview.png")
 	return fullPath, "image/png", nil
+}
+
+func (s *service) ListPackages(userID string, page, pageSize int) ([]Package, int64, error) {
+	return s.repo.ListPackagesByUser(userID, page, pageSize)
+}
+
+func (s *service) ListPackagesByGenerationTask(userID, generationTaskID string) ([]Package, error) {
+	return s.repo.ListPackagesByGenerationTask(generationTaskID)
+}
+
+func (s *service) GetPackage(id string) (*Package, error) {
+	pkg, err := s.repo.GetPackage(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, NewProcessingError("PACKAGE_NOT_FOUND", "包不存在")
+		}
+		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询包失败", err)
+	}
+	return pkg, nil
+}
+
+func (s *service) DownloadPackage(id string) (packageDir string, pkg *Package, err error) {
+	pkg, err = s.repo.GetPackage(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil, NewProcessingError("PACKAGE_NOT_FOUND", "包不存在")
+		}
+		return "", nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询包失败", err)
+	}
+
+	packageDir = filepath.Join(s.dataDir, "desktop-pets", "generation-tasks", pkg.GenerationTaskID, "packages", pkg.ID)
+	if _, statErr := os.Stat(packageDir); statErr != nil {
+		return "", nil, NewProcessingError("PACKAGE_NOT_FOUND", "包目录不存在")
+	}
+	return packageDir, pkg, nil
 }
