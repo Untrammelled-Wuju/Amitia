@@ -39,6 +39,6 @@ describe("引导页渠道连接", () => {
       getDeploymentConfig: async () => ({ mode: "local" }),
     };
     resetRuntimeConnectionCache();
-    await expect(getQQApiBaseURL()).resolves.toBe("http://127.0.0.1:9877/api");
+    await expect(getQQApiBaseURL()).resolves.toBe("http://127.0.0.1:19877/api");
   });
 });

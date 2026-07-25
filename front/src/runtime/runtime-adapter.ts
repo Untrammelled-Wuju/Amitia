@@ -45,7 +45,7 @@ export async function getApiBaseURL(): Promise<string> {
 export async function getQQApiBaseURL(): Promise<string> {
   const base = await getApiBaseURL();
   if (base === "http://127.0.0.1:18899") {
-    return "http://127.0.0.1:9877/api";
+    return "http://127.0.0.1:19877/api";
   }
   return base;
 }
