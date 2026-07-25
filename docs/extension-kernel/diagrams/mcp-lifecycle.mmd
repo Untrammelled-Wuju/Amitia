@@ -1,0 +1,109 @@
+%% 地图 F：MCP 生命周期图
+%% 依据：04-mcp.md 链路 MCP-1~MCP-8
+%% 覆盖：创建、认证、连接、发现、注册、执行、重连、断开、删除
+flowchart TB
+    subgraph Create[MCP-1 创建链]
+        direction TB
+        Form[前端 MCP 表单<br/>MCPServerView.vue]:::fe
+        API[/api/mcp/servers POST]:::api
+        Handler[mcpapi/router.go→Handler]:::be
+        Validate[ServerInput 校验]:::be
+        Repo[Repository.Save<br/>mcp/repository.go]:::repo
+        Secret[Credential/Secret 保存<br/>mcp/auth/]:::auth
+        Resp[返回 Server]:::out
+
+        Form --> API --> Handler --> Validate --> Repo --> Secret --> Resp
+    end
+
+    subgraph Connect[MCP-2 连接链]
+        direction TB
+        Trigger[Connect API / 启动恢复]:::api
+        Mgr[mcpmanager.Connect<br/>mcp/manager/manager.go:194]:::be
+        Factory[Factory.Build<br/>mcp/client/factory.go]:::be
+        Transport{Transport 类型}:::be
+        Stdio[stdio Transport<br/>mcp/transport/stdio]:::ext
+        HTTP[Streamable HTTP Transport<br/>mcp/transport/http]:::ext
+        Auth[OAuth/Secret/Header/Environment<br/>mcp/auth/]:::auth
+        Init[MCP initialize]:::proto
+        Cap[Capability 保存]:::repo
+        Ready[Ready Handler]:::be
+
+        Trigger --> Mgr --> Factory --> Transport
+        Transport -->|stdio| Stdio
+        Transport -->|http| HTTP
+        Stdio --> Auth
+        HTTP --> Auth
+        Auth --> Init --> Cap --> Ready
+        Note1>注：connect 旧连接 Close 导致进行中调用失败 P1-MCP-4]:::risk
+    end
+
+    subgraph Discover[MCP-8 Discovery+Register 链]
+        direction TB
+        ReadyH[Ready Handler Attach]:::be
+        Disc[Discovery.Service<br/>mcp/discovery/service.go:97]:::be
+        ListTools[tools/list]:::proto
+        SaveTools[ToolDefinition 入库<br/>mcp/repository.go]:::repo
+        Reg[skill.Runtime.RegisterServer<br/>mcp/skill/runtime.go:92]:::be
+        Convert[转 extension.SkillDefinition]:::be
+        ExtReg[Registry.Register<br/>extension/registry.go]:::reg
+        Visible[模型工具列表可见]:::out
+
+        ReadyH --> Disc --> ListTools --> SaveTools --> Reg --> Convert --> ExtReg --> Visible
+        Note2>注：list_changed 不触发 RegisterServer P1-MCP-2<br/>工具更新后 Registry 不同步]:::risk
+        Note3>注：RegisterServer 旧 Skill 清理依赖前缀字符串匹配 P1-MCP-5]:::risk
+    end
+
+    subgraph Exec[MCP-6 调用链]
+        direction TB
+        Model[模型 tool_call]:::out
+        Runtime[Extension.ExecuteModelTool]:::ext
+        Skill[Registry.GetByModelName]:::reg
+        Handler[SkillHandler 调用<br/>mcp/skill/runtime.go]:::be
+        MgrCall[Manager.Call tools/call<br/>mcp/manager/manager.go]:::be
+        Client[Client Connection]:::be
+        Server[外部 MCP Server]:::ext
+        Normalize[返回内容标准化]:::be
+        SideEff[SideEffect 推断]:::be
+        Redact[敏感信息脱敏]:::be
+
+        Model --> Runtime --> Skill --> Handler --> MgrCall --> Client --> Server
+        Server --> Client --> Normalize --> SideEff --> Redact
+    end
+
+    subgraph Reconnect[MCP-3 断线重连链]
+        direction TB
+        Fail[连接失败或断开]:::ext
+        Record[recordFailure]:::be
+        StateUp[状态更新 reconnecting]:::repo
+        Sched[scheduleReconnect<br/>Backoff 硬编码 P3-MCP-1]:::be
+        Recon[Reconnect]:::be
+        ReDisc[重新发现/注册]:::be
+
+        Fail --> Record --> StateUp --> Sched --> Recon --> ReDisc
+    end
+
+    subgraph Delete[MCP-4 删除链]
+        direction TB
+        DelAPI[/api/mcp/servers/:id DELETE]:::api
+        DelRepo[Repository.DeleteServer<br/>mcp/repository.go:174]:::repo
+        DelOAuth[删除 OAuthSession]:::auth
+        Done[完成]:::out
+
+        DelAPI --> DelRepo --> DelOAuth --> Done
+        Note4>注：DeleteServer 不调 RegisterServer/Unregister<br/>→孤儿 Skill P1-MCP-1<br/>不撤销远端 OAuth token P1-MCP-3]:::risk
+    end
+
+    Resp -.-> Trigger
+    Ready -.-> ReadyH
+    ReDisc -.-> Reg
+
+    classDef fe fill:#e1f5ff,stroke:#0288d1
+    classDef api fill:#fff4e1,stroke:#f57c00
+    classDef be fill:#f3e5f5,stroke:#7b1fa2
+    classDef repo fill:#e8f5e9,stroke:#388e3c
+    classDef auth fill:#fce4ec,stroke:#c2185b
+    classDef proto fill:#f5f5f5,stroke:#616161
+    classDef ext fill:#e0f2f1,stroke:#00695c
+    classDef reg fill:#e1f5ff,stroke:#0288d1
+    classDef out fill:#f5f5f5,stroke:#616161
+    classDef risk fill:#ffebee,stroke:#c62828,stroke-width:2px

@@ -1,3 +1,8 @@
+/**
+ * Deprecated: Legacy extension architecture.
+ * Do not add new capabilities. This module is retained only for
+ * compatibility, maintenance, testing, and migration to Extension Kernel.
+ */
 import { apiClient } from "@/composables/useApi";
 import type { Character } from "@/types";
 import type {

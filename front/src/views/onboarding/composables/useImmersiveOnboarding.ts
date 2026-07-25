@@ -82,6 +82,8 @@ export function useImmersiveOnboarding() {
   const identityAvatarPreviewUrl = ref("");
   const identityAvatarUploaded = ref(false);
 
+  const characterCreatedInSession = ref(false);
+
   const memoryStep = ref(0);
   const memoryComplete = ref(false);
   const memoryItems = ref(["", "", ""]);
@@ -749,7 +751,7 @@ export function useImmersiveOnboarding() {
         }).catch(() => {});
       }
 
-      if (identityName.value) {
+      if (identityName.value && !characterCreatedInSession.value) {
         await post("/api/characters", {
           name: identityName.value,
           identity: identityRole.value || "AI 陪伴角色",
@@ -763,6 +765,7 @@ export function useImmersiveOnboarding() {
             localStorage.setItem("webchat-char-id", charId);
           }
         });
+        characterCreatedInSession.value = true;
       }
 
       if (memoryItems.value.some((item) => item)) {
@@ -894,6 +897,7 @@ export function useImmersiveOnboarding() {
     memoryQuestions,
     permissions,
     entering,
+    characterCreatedInSession,
     entryPreparing,
     enteringState,
     onboardingComplete,

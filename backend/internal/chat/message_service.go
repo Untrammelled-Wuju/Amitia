@@ -112,7 +112,12 @@ func (s *service) validateConversationScope(convID, characterID, channel string)
 	}
 	actualCharacterID := strings.TrimSpace(conv.CharacterID)
 	expectedCharacterID := strings.TrimSpace(characterID)
-	if actualCharacterID == "" || expectedCharacterID == "" || actualCharacterID != expectedCharacterID {
+	if expectedCharacterID == "" {
+		return fmt.Errorf("%w: character_id", ErrConversationScopeMismatch)
+	}
+	if actualCharacterID == "" {
+		s.repo.UpdateConversation(convID, map[string]interface{}{"character_id": expectedCharacterID})
+	} else if actualCharacterID != expectedCharacterID {
 		return fmt.Errorf("%w: character_id", ErrConversationScopeMismatch)
 	}
 	actualChannel := strings.ToLower(strings.TrimSpace(conv.Channel))

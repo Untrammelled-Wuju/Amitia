@@ -16,38 +16,24 @@ await app.register(cors, {
   credentials: false,
 })
 
-
-// ============================================================
-// Auth guard DISABLED for debugging
 app.addHook("onRequest", async (req, reply) => {
-  // Allow all local requests
   return
 })
 
-
-// Security headers
 app.addHook("onSend", async (_req, reply) => {
   reply.header("X-Content-Type-Options", "nosniff")
   reply.header("X-Frame-Options", "DENY")
   void reply.header("X-Powered-By", "")
 })
 
-// ============================================================
 const manager = getWechatManager()
 const contextTokenCache = new Map<string, string>()
-// 消息去抖缓冲区：按 fromUserId 分组
 const msgBuffers = new Map<string, { msgs: Array<{ text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; audioBase64?: string; imageBase64?: string; aeskey?: string }>; timer: ReturnType<typeof setTimeout> }>()
 
-// ============================================================
-// Forward messages to Core AI
-// ============================================================
-
 manager.onMessage(async (msg) => {
-  // ---- 5秒去抖缓冲：连续消息自动合并 ----
   const BUFFER_MS = sidecarConfig.mergeWindowMs
   type BMsg = { text: string; contextToken: string; fromUserId: string; toUserId: string; messageId: string; createdAt: number; isVoice?: boolean; imageUrl?: string; audioBase64?: string; imageBase64?: string; aeskey?: string }
   
-  // 使用 module-level Map（定义在文件顶部）
   const key = msg.fromUserId
   const existing = msgBuffers.get(key)
   console.log(`[Sidecar][DIAG] buffer入: text="${msg.text.substring(0,60)}" isVoice=${(msg as any).isVoice} hasImage=${!!((msg as any).imageUrl)}`);
@@ -132,6 +118,7 @@ manager.onMessage(async (msg) => {
       })
       const json = await resp.json() as any
       console.log(`[Sidecar][DIAG] 后端响应: code=${json?.code} msg=${json?.msg} hasData=${!!json?.data} hasOutMsg=${!!json?.data?.outgoingMessage} hasText=${!!json?.data?.outgoingMessage?.text}`)
+
     } catch (err: any) { console.error("[Sidecar] Forward failed:", err.message) }
   }, BUFFER_MS)
 
@@ -139,11 +126,6 @@ manager.onMessage(async (msg) => {
 })
 
 
-// ============================================================
-// HTTP API
-// ============================================================
-
-// Health check
 app.get("/api/health", async (_req, reply) => {
   const state = manager.getState()
   return reply.send({
@@ -154,7 +136,6 @@ app.get("/api/health", async (_req, reply) => {
   })
 })
 
-// Full status
 app.get("/api/status", async (_req, reply) => {
   const state = manager.getState()
     return reply.send({
@@ -173,7 +154,6 @@ app.get("/api/status", async (_req, reply) => {
   })
 })
 
-// Start QR login
 app.post("/api/login/start", async (_req, reply) => {
   try {
     if (manager.getState().status === "connected") {
@@ -186,7 +166,6 @@ app.post("/api/login/start", async (_req, reply) => {
 
     const result = await manager.startLogin()
 
-    // Fire-and-forget: wait for scan in background
     manager.waitForScan(120000).then((scanResult) => {
       if (scanResult.connected) {
         manager.startPolling().catch((err) =>
@@ -210,13 +189,11 @@ app.post("/api/login/start", async (_req, reply) => {
   }
 })
 
-// Reset current session and start a fresh QR login
 app.post("/api/login/rescan", async (_req, reply) => {
   try {
     await manager.resetLogin()
     const result = await manager.startLogin({ force: true })
 
-    // Fire-and-forget: wait for scan in background
     manager.waitForScan(120000).then((scanResult) => {
       if (scanResult.connected) {
         manager.startPolling().catch((err) =>
@@ -240,11 +217,9 @@ app.post("/api/login/rescan", async (_req, reply) => {
   }
 })
 
-// Wait for QR scan
 app.post("/api/login/wait", async (req, reply) => {
   try {
     const state = manager.getState()
-    // Already connected - return immediately
     if (state.status === "connected" && state.accountId) {
       return reply.send({
         success: true,
@@ -280,7 +255,6 @@ app.post("/api/login/wait", async (req, reply) => {
   }
 })
 
-// Get QR code
 app.get("/api/qrcode", async (_req, reply) => {
   const state = manager.getState()
   if (!state.qrCodeUrl) {
@@ -295,7 +269,6 @@ app.get("/api/qrcode", async (_req, reply) => {
   })
 })
 
-// Reconnect: restart polling to refresh friend connections
 app.post("/api/login/reconnect", async (_req, reply) => {
   try {
     await manager.stopPolling()
@@ -305,7 +278,6 @@ app.post("/api/login/reconnect", async (_req, reply) => {
   }
 })
 
-// Send message
 app.post("/api/send", async (req, reply) => {
   try {
     const body = req.body as { toUserId?: string; text?: string; contextToken?: string; deliveryKey?: string }
@@ -328,8 +300,6 @@ app.post("/api/send", async (req, reply) => {
   }
 })
 
-
-// Send voice message (for proactive / system messages)
 app.post("/api/send-voice", async (req, reply) => {
   try {
     const body = req.body as { toUserId?: string; audioUrl?: string; text?: string; contextToken?: string; deliveryKey?: string }
@@ -385,12 +355,8 @@ app.post("/api/send-image", async (req, reply) => {
     return reply.status(500).send({ success: false, message: err.message || "服务器错误" })
   }
 })
-// ============================================================
-// Startup
-// ============================================================
 
 try {
-  // Try to load saved account and start polling if available
   const hasAccount = manager.loadSavedAccount()
 
   await app.listen({ host: sidecarConfig.host, port: sidecarConfig.port })
@@ -404,7 +370,6 @@ try {
   console.log("  ========================================")
   console.log("")
 
-  // Auto-start polling if already logged in
   if (hasAccount) {
     manager.startPolling().catch((err) =>
       console.error("[Sidecar] Auto-polling failed:", err)

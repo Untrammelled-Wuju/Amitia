@@ -368,7 +368,7 @@ func TestLegacyAdapterAndRuntimeRegistration(t *testing.T) {
 		t.Fatalf("legacy mapping invalid: %+v %s", definition, definition.InputSchema)
 	}
 	result, err := handler(context.Background(), ExecuteSkillRequest{Input: json.RawMessage(`{}`), Scope: ExecutionScope{Trigger: TriggerManual}})
-	if err != nil || result.Status != RunSucceeded || !strings.Contains(result.VisibleText, "本地时间") {
+	if err != nil || result.Status != RunSucceeded || !strings.Contains(result.VisibleText, "系统参考时间") {
 		t.Fatalf("legacy result invalid: %+v %v", result, err)
 	}
 	missingDefinition, missingHandler, err := adapter.Adapt(tool.Tool{Type: "function", Function: tool.Function{Name: "missing_legacy", Description: "missing", Parameters: tool.Parameters{Type: "object", Properties: map[string]tool.Property{}, Required: []string{}}}}, false)

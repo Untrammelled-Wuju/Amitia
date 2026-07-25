@@ -1,3 +1,8 @@
+<!--
+Deprecated: Legacy extension architecture.
+Do not add new capabilities. This view is retained only for
+compatibility, maintenance, testing, and migration to Extension Kernel.
+-->
 <template>
   <main class="agent-page">
     <ExtensionPageHeader

@@ -3,6 +3,9 @@
 package agent
 
 import (
+	"io"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -34,6 +37,8 @@ func (h *Handler) Test(c *gin.Context) {
 }
 
 func (h *Handler) Webhook(c *gin.Context) {
+	rawBody, _ := c.GetRawData()
+	c.Request.Body = io.NopCloser(strings.NewReader(string(rawBody)))
 	var body struct {
 		Channel        string `json:"channel"`
 		AccountID      string `json:"accountId"`

@@ -1,0 +1,81 @@
+%% 地图 E：Agent Skill Prompt 图
+%% 依据：03-agent-skill.md 链路 AS-1~AS-6
+%% 覆盖：导入、Prompt 激活、资源读取、删除（含 MCP 依赖）
+flowchart TB
+    subgraph Import[导入链 AS-1]
+        direction TB
+        Upload[上传 ZIP/目录<br/>agent_skill_handler.go]:::api
+        Safe[安全检查<br/>agent_skill_service.go:69,103]:::svc
+        Parse[parseAgentSkillFiles<br/>agent_skill_parser.go:47]:::svc
+        FM[Frontmatter 解析<br/>SKILL.md]:::svc
+        Validate[name正则+description校验<br/>reserved 检查]:::svc
+        Index[资源索引<br/>artifact 清单]:::svc
+        Compat[兼容性报告]:::svc
+        SaveMeta[保存 Metadata+Artifact<br/>agent_skill_repository.go]:::repo
+        Cache[Catalog 缓存刷新]:::svc
+
+        Upload --> Safe --> Parse --> FM --> Validate --> Index --> Compat --> SaveMeta --> Cache
+    end
+
+    subgraph Prompt[激活链 AS-3]
+        direction TB
+        UserMsg[用户消息<br/>chat/message_pipeline.go]:::chat
+        Prepare[PrepareAgentSkillPrompt]:::svc
+        Resolve[ResolveCatalog<br/>缓存]:::svc
+        Explicit{显式 $skill-name?}:::perm
+        Pick[Agent Skill 选择]:::svc
+        Activate[Activate<br/>Token限制+单体限制+Round总量限制]:::svc
+        Render[renderActiveAgentSkill]:::svc
+        Inject[注入 system prompt]:::chat
+        Round[EndAgentSkillRound 清理]:::svc
+
+        UserMsg --> Prepare --> Resolve --> Explicit
+        Explicit -->|是| Pick
+        Explicit -->|否| AutoPick[自动选择]:::svc
+        Pick --> Activate
+        AutoPick --> Activate
+        Activate --> Render --> Inject --> Round
+    end
+
+    subgraph Resource[资源读取链 AS-4]
+        direction TB
+        ToolCall[模型调用 internal 工具<br/>agent_skill_get_asset]:::out
+        ActiveDef[activeDefinition<br/>round 校验]:::svc
+        PathCheck[路径校验]:::perm
+        Load[loadAgentSkill]:::svc
+        RoundBudget[Round 预算校验]:::svc
+        Wrap[内容包装]:::svc
+        Return[返回内容]:::out
+
+        ToolCall --> ActiveDef --> PathCheck --> Load --> RoundBudget --> Wrap --> Return
+        Note1>注：agent_skill_get_asset handler<br/>绕过 ReadResource round 预算 P1-AS-1]:::risk
+    end
+
+    subgraph Delete[删除链 AS-5、AS-6]
+        direction TB
+        DelReq[删除 Agent Skill<br/>agent_skill_handler.go]:::api
+        ScopeCheck[作用域检查]:::perm
+        DelMeta[Metadata/Artifact 删除<br/>agent_skill_repository.go]:::repo
+        CacheClr[Cache/Round 清理]:::svc
+        AfterRemove[afterRemove 回调<br/>agent_skill_service.go:396]:::svc
+        DepUninstall[dep.Uninstall<br/>mcp/dependency/service.go:268]:::dep
+        RefCount[引用计数/所有权判断]:::dep
+        Disable[禁用或删除 Server]:::dep
+        RegClean[Tool Registry 清理<br/>P0-1 未实现]:::risk
+
+        DelReq --> ScopeCheck --> DelMeta --> CacheClr --> AfterRemove --> DepUninstall --> RefCount
+        RefCount --> Disable --> RegClean
+        Note2>注：MCPDependencies 未持久化到 DB P0-2<br/>afterRemove 失败时 Agent Skill 已删但 MCP link 残留 P0-5]:::risk
+    end
+
+    Cache -.->|Catalog| Resolve
+    Inject -.->|internal 工具| ToolCall
+
+    classDef api fill:#e1f5ff,stroke:#0288d1
+    classDef svc fill:#f3e5f5,stroke:#7b1fa2
+    classDef repo fill:#fff4e1,stroke:#f57c00
+    classDef chat fill:#e8f5e9,stroke:#388e3c
+    classDef perm fill:#ffebee,stroke:#c62828
+    classDef dep fill:#e0f2f1,stroke:#00695c
+    classDef out fill:#f5f5f5,stroke:#616161
+    classDef risk fill:#ffebee,stroke:#c62828,stroke-width:2px

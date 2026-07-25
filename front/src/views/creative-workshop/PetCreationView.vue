@@ -2,6 +2,11 @@
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
+<!--
+Deprecated: Legacy extension architecture.
+Do not add new capabilities. This view is retained only for
+compatibility, maintenance, testing, and migration to Extension Kernel.
+-->
 <template>
   <main class="pet-creation">
     <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴角色" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />

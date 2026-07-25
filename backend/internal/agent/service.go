@@ -188,7 +188,8 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 		convID = "channel-" + req.Channel
 	}
 
-	s.ensureWebhookConversation(convID, req.Channel, req.Text)
+	characterID := s.getDefaultCharacterID()
+	s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text)
 	sessionID := stableWebhookSessionID(req, convID)
 	userID := stableWebhookUserID(req)
 	source := stableWebhookSource(req)
@@ -311,6 +312,17 @@ func (s *service) getActiveModel() map[string]string {
 	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName}
 }
 
+func (s *service) getDefaultCharacterID() string {
+	var id string
+	if err := s.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&id); err == nil && id != "" {
+		return id
+	}
+	if err := s.db.Table("characters").Select("id").Limit(1).Row().Scan(&id); err == nil && id != "" {
+		return id
+	}
+	return ""
+}
+
 func (s *service) callLLM(cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
 	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
 	reqBody := map[string]interface{}{
@@ -349,7 +361,7 @@ func truncate(s string, n int) string {
 	return string(runes[:n]) + "..."
 }
 
-func (s *service) ensureWebhookConversation(convID, channel, text string) {
+func (s *service) ensureWebhookConversation(convID, characterID, channel, text string) {
 	var count int64
 	s.db.Table("conversations").Where("id = ?", convID).Count(&count)
 	if count > 0 {
@@ -360,5 +372,5 @@ func (s *service) ensureWebhookConversation(convID, channel, text string) {
 		title = string([]rune(title)[:50])
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec("INSERT OR IGNORE INTO conversations (id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'webhook', ?, ?)", convID, title, channel, now, now)
+	s.db.Exec("INSERT OR IGNORE INTO conversations (id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'webhook', ?, ?)", convID, title, channel, characterID, now, now)
 }

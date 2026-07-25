@@ -1,5 +1,11 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
+/**
+ * Deprecated: Legacy extension architecture.
+ * Do not add new static routes or navigation entries for the legacy
+ * extension center. Retained only for compatibility, maintenance,
+ * testing, and migration to Extension Kernel.
+ */
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
 import { apiClient } from "../ui-index"
 import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
@@ -24,6 +30,12 @@ const router = createRouter({
       { path: "/dashboard/run", name: "dashboardRun", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
       { path: "/dashboard/data", name: "dashboardData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
     { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
+    /**
+     * Deprecated: Legacy extension architecture.
+     * Do not add new static routes or navigation entries for the legacy
+     * extension center. Retained only for compatibility, maintenance,
+     * testing, and migration to Extension Kernel.
+     */
     { path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/mcp", name: "extensionMCP", component: () => import("@/views/mcp/MCPServerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
@@ -119,6 +131,15 @@ router.beforeEach(async (to, _from, next) => {
   if (isPublic) {
     if (token && (to.path === "/login" || to.path === "/setup")) {
       return next("/chat")
+    }
+    if (token && to.path === "/onboarding") {
+      try {
+        const res = await apiClient.get("/api/onboarding/status")
+        const data = res.data?.data || res.data
+        if (data?.completed) {
+          return next("/chat")
+        }
+      } catch {}
     }
     return next()
   }

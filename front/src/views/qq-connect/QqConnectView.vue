@@ -13,11 +13,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-form-item label="AppID">
             <el-input v-model="appId" placeholder="输入Bot AppID" />
           </el-form-item>
-          <el-form-item label="Token">
+          <el-form-item label="Secret">
             <el-input
               v-model="token"
               type="password"
-              placeholder="输入Bot Token"
+              placeholder="输入Bot Secret"
               show-password
             />
           </el-form-item>
@@ -43,7 +43,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           1. 前往
           <a href="https://q.qq.com/" target="_blank">QQ开放平台</a> 创建机器人
         </p>
-        <p>2. 获取 AppID 和 Token</p>
+        <p>2. 获取 AppID 和 Secret</p>
         <p>3. 填入上方表单，点击"连接"</p>
         <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
       </div>
@@ -150,11 +150,11 @@ SPDX-License-Identifier: AGPL-3.0-only
                     style="width: 100%; max-width: 400px"
                   />
                 </el-form-item>
-                <el-form-item label="Token">
+                <el-form-item label="Secret">
                   <el-input
                     v-model="token"
                     type="password"
-                    placeholder="输入Bot Token"
+                    placeholder="输入Bot Secret"
                     style="width: 100%; max-width: 400px"
                     show-password
                   />
@@ -213,7 +213,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 >
                 创建机器人
               </p>
-              <p>2. 获取 AppID 和 Token</p>
+              <p>2. 获取 AppID 和 Secret</p>
               <p>3. 填入上方表单，点击"连接"</p>
               <p>4. 连接成功后，在QQ中 @机器人 即可对话</p>
             </div>
@@ -324,11 +324,11 @@ async function doConnect() {
         stopConnectPoll();
         connecting.value = false;
         loginStatus.value = "";
-        ElMessage.error("连接超时，请检查AppID和Token是否有效");
+        ElMessage.error("连接超时，请检查AppID和Secret是否有效");
       }
     }, 2000);
   } catch (e: any) {
-    const msg = e?.response?.data?.error || "连接失败，请检查AppID和Token";
+    const msg = e?.response?.data?.error || "连接失败，请检查AppID和Secret";
     ElMessage.error(msg);
     connecting.value = false;
   }

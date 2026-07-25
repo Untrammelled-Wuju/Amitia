@@ -77384,31 +77384,31 @@ var init_puny = __esm({
 
 // node_modules/.pnpm/typebox@1.1.39/node_modules/typebox/build/format/_idna.mjs
 function IsNonspacingMark(cp) {
-  return new RegExp("\\p{Mn}", "u").test(String.fromCodePoint(cp));
+  return /\p{Mn}/u.test(String.fromCodePoint(cp));
 }
 function IsSpacingCombiningMark(cp) {
-  return new RegExp("\\p{Mc}", "u").test(String.fromCodePoint(cp));
+  return /\p{Mc}/u.test(String.fromCodePoint(cp));
 }
 function IsEnclosingMark(cp) {
-  return new RegExp("\\p{Me}", "u").test(String.fromCodePoint(cp));
+  return /\p{Me}/u.test(String.fromCodePoint(cp));
 }
 function IsCombiningMark2(cp) {
   return IsNonspacingMark(cp) || IsSpacingCombiningMark(cp) || IsEnclosingMark(cp);
 }
 function IsGreek(cp) {
-  return new RegExp("\\p{Script=Greek}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Greek}/u.test(String.fromCodePoint(cp));
 }
 function IsHebrew(cp) {
-  return new RegExp("\\p{Script=Hebrew}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Hebrew}/u.test(String.fromCodePoint(cp));
 }
 function IsHiragana(cp) {
-  return new RegExp("\\p{Script=Hiragana}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Hiragana}/u.test(String.fromCodePoint(cp));
 }
 function IsKatakana(cp) {
-  return new RegExp("\\p{Script=Katakana}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Katakana}/u.test(String.fromCodePoint(cp));
 }
 function IsHan(cp) {
-  return new RegExp("\\p{Script=Han}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Han}/u.test(String.fromCodePoint(cp));
 }
 function IsArabicIndicDigit(cp) {
   return cp >= 1632 && cp <= 1641;
@@ -134851,7 +134851,7 @@ function stringToBytes(string2, encoding) {
   return [...string2].map((character) => character.charCodeAt(0));
 }
 function tarHeaderChecksumMatches(arrayBuffer, offset = 0) {
-  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(new RegExp("\\0.*$", "v"), "").trim(), 8);
+  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(/\0.*$/v, "").trim(), 8);
   if (Number.isNaN(readSum)) {
     return false;
   }
@@ -135690,7 +135690,7 @@ async function detectZip(tokenizer) {
           };
         }
         default:
-          if (new RegExp("classes\\d*\\.dex", "v").test(zipHeader.filename)) {
+          if (/classes\d*\.dex/v.test(zipHeader.filename)) {
             fileType = {
               ext: "apk",
               mime: "application/vnd.android.package-archive"
@@ -135848,7 +135848,7 @@ async function detectEbml(tokenizer) {
         }
         const documentTypeLength = getSafeBound(element.len, maximumEbmlDocumentTypeSizeInBytes, "EBML DocType");
         const rawValue = await tokenizer.readToken(new StringType(documentTypeLength));
-        return rawValue.replaceAll(new RegExp("\\0.*$", "gv"), "");
+        return rawValue.replaceAll(/\0.*$/gv, "");
       }
       if (hasUnknownFileSize(tokenizer) && (!Number.isFinite(element.len) || element.len < 0 || element.len > maximumEbmlElementPayloadSizeInBytes)) {
         return;
@@ -136970,7 +136970,7 @@ var init_source2 = __esm({
         }
         if (this.checkString("AC")) {
           const version2 = new StringType(4, "latin1").get(this.buffer, 2);
-          if (new RegExp("^\\d+$", "v").test(version2) && version2 >= 1e3 && version2 <= 1050) {
+          if (/^\d+$/v.test(version2) && version2 >= 1e3 && version2 <= 1050) {
             return {
               ext: "dwg",
               mime: "image/vnd.dwg"
@@ -150006,8 +150006,9 @@ var OpenClawWechatManager = class {
         this.state.status = "connected";
         return { connected: true, message: result.message };
       }
-      this.state.status = "error";
-      this.state.lastError = result.message;
+      this.state.status = "idle";
+      this.state.lastError = null;
+      this.state.message = result.message;
       return { connected: false, message: result.message };
     } catch (err2) {
       this.state.status = "error";
@@ -150036,6 +150037,8 @@ var OpenClawWechatManager = class {
       console.warn(`[OpenClaw] notifyStart failed (ignored):`, err2.message);
     }
     console.log(`[OpenClaw] Starting message polling on ${this.state.baseUrl} gen=${generation}`);
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
     const poll = async () => {
       while (this.pollGeneration === generation && this.polling && !controller.signal.aborted) {
         try {
@@ -150047,9 +150050,10 @@ var OpenClawWechatManager = class {
           });
           if (this.pollGeneration !== generation) break;
           if (resp.errcode && resp.errcode !== 0) {
-            console.error(`[OpenClaw] getUpdates error: ${resp.errcode} ${resp.errmsg}`);
-            if (resp.errcode === -14) {
-              console.warn("[OpenClaw] Session expired, auto-reconnecting...");
+            consecutiveErrors++;
+            console.error(`[OpenClaw] getUpdates error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${resp.errcode} ${resp.errmsg}`);
+            if (resp.errcode === -14 && consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              console.warn(`[OpenClaw] Session expired after ${consecutiveErrors} errors, auto-reconnecting...`);
               this.polling = false;
               this.autoReconnect().catch((err2) => console.error("[OpenClaw] Auto-reconnect failed:", err2));
               break;
@@ -150057,6 +150061,7 @@ var OpenClawWechatManager = class {
             await new Promise((r) => setTimeout(r, 5e3));
             continue;
           }
+          consecutiveErrors = 0;
           console.log("[OpenClaw] getUpdates OK: ret=" + (resp.ret ?? "?") + " msgs=" + (resp.msgs && resp.msgs.length || 0));
           if (resp.get_updates_buf) {
             this.getUpdatesBuf = resp.get_updates_buf;

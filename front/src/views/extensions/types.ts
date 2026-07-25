@@ -1,3 +1,8 @@
+/**
+ * Deprecated: Legacy extension architecture.
+ * Do not add new capabilities. This module is retained only for
+ * compatibility, maintenance, testing, and migration to Extension Kernel.
+ */
 export type SkillTrigger = "llm" | "manual" | "schedule" | "system_event";
 export type RunStatus =
   | "pending"

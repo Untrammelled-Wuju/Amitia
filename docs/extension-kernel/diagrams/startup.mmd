@@ -1,0 +1,49 @@
+%% 地图 A：系统启动装配图
+%% 依据：01-startup-shutdown.md 链路 SU-1~SU-4
+%% 节点使用真实类型/函数名 + 文件路径
+sequenceDiagram
+    autonumber
+    participant M as main<br/>cmd/server/main.go
+    participant Svc as NewAppServices<br/>cmd/server/services.go
+    participant Ext as extension.NewRuntime<br/>extension/runtime.go
+    participant Reg as PluginRegistry<br/>extension/plugin_registry.go
+    participant Legacy as LegacyToolAdapter<br/>extension/legacy_tool_adapter.go
+    participant AS as AgentSkillService.Restore<br/>extension/agent_skill_service.go
+    participant PM as PluginManager.Start<br/>extension/plugin_manager.go
+    participant WS as Workshop.Restore<br/>extension/workshop_service.go
+    participant PKG as PackageService.Restore<br/>extension/package_recovery.go
+    participant Chat as chat.NewService<br/>chat/service.go
+    participant MCP as mcpmanager.New<br/>mcp/manager/manager.go
+    participant MCPSkill as mcpskill.New<br/>mcp/skill/runtime.go
+    participant Dep as mcpdependency.New<br/>mcp/dependency/service.go
+    participant Router as setupRouter<br/>cmd/server/router.go
+
+    M->>Svc: NewAppServices(ctx, graphSvc)
+    Svc->>Ext: NewRuntime(ctx, db, "1.0.0")
+    Ext->>Reg: NewPluginRegistry(engineVersion, validator)
+    Ext->>Reg: Register(newDiagnosticPlugin())<br/>仅内置 builtin
+    Ext->>Legacy: 注册旧工具→SkillDefinition
+    Ext->>AS: Restore(ctx)<br/>失败终止启动
+    Ext->>PM: Start(ctx)<br/>启动 4 Worker
+    Ext->>WS: Restore(ctx)<br/>失败仅 Warn
+    Ext->>PKG: Restore(ctx)<br/>失败终止启动
+    Svc->>Chat: chatSvc.SetSkillRuntime(extRuntime)
+    Note over Svc,Chat: 反向依赖 RD-1: Chat 依赖 Ext
+    Svc->>Ext: Workshop.SetModelGenerator(chatSvc)
+    Note over Svc,Ext: 反向依赖 RD-2: Workshop→Chat
+    Svc->>Ext: configureWorkflowHost(chat,mem,delivery)
+    Note over Svc,Ext: 装配层泄漏 AL-1: 4 Host 函数闭包注入
+    Svc->>MCP: mcpmanager.New(repo,factory,cfg)
+    Svc->>MCPSkill: mcpskill.New(repo, connMgr, extRuntime)
+    Note over Svc,MCPSkill: 反向依赖 RD-3: MCPSkill→Ext
+    Svc->>Dep: mcpdependency.New(repo,connMgr,discovery,skillRuntime)
+    Svc->>Ext: AgentSkills.SetAfterRemove(dep.Uninstall)
+    Note over Svc,Ext: 反向依赖 RD-4: AgentSkill删除→MCP Dep
+    Svc->>MCP: RegisterReadyHandler(Attach→Discover→RegisterServer)
+    Svc->>MCPSkill: RegisterAll(ctx)<br/>失败仅 Warn
+    Svc->>MCP: Restore(ctx)<br/>失败仅 Warn
+    Svc-->>M: *AppServices
+    M->>Router: setupRouter
+    Router->>Ext: extension.RegisterRouter
+    Router->>MCP: mcpapi.RegisterRouter
+    M->>M: Workers.Start / cron.Start
