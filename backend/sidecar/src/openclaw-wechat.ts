@@ -281,8 +281,9 @@ export class OpenClawWechatManager {
         return { connected: true, message: result.message }
       }
 
-      this.state.status = "error"
-      this.state.lastError = result.message
+      this.state.status = "idle"
+      this.state.lastError = null
+      this.state.message = result.message
       return { connected: false, message: result.message }
     } catch (err: any) {
       this.state.status = "error"
@@ -316,6 +317,9 @@ export class OpenClawWechatManager {
 
     console.log(`[OpenClaw] Starting message polling on ${this.state.baseUrl} gen=${generation}`)
 
+
+    let consecutiveErrors = 0
+    const MAX_CONSECUTIVE_ERRORS = 3
     const poll = async () => {
       while (this.pollGeneration === generation && this.polling && !controller.signal.aborted) {
         try {
@@ -329,9 +333,10 @@ export class OpenClawWechatManager {
           if (this.pollGeneration !== generation) break
 
           if (resp.errcode && resp.errcode !== 0) {
-            console.error(`[OpenClaw] getUpdates error: ${resp.errcode} ${resp.errmsg}`)
-            if (resp.errcode === -14) {
-              console.warn("[OpenClaw] Session expired, auto-reconnecting...")
+            consecutiveErrors++
+            console.error(`[OpenClaw] getUpdates error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${resp.errcode} ${resp.errmsg}`)
+            if (resp.errcode === -14 && consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              console.warn(`[OpenClaw] Session expired after ${consecutiveErrors} errors, auto-reconnecting...`)
               this.polling = false
               this.autoReconnect().catch((err) => console.error("[OpenClaw] Auto-reconnect failed:", err))
               break
@@ -340,6 +345,7 @@ export class OpenClawWechatManager {
             continue
           }
 
+          consecutiveErrors = 0
           console.log("[OpenClaw] getUpdates OK: ret=" + (resp.ret ?? "?") + " msgs=" + ((resp.msgs && resp.msgs.length) || 0))
           if (resp.get_updates_buf) {
             this.getUpdatesBuf = resp.get_updates_buf
@@ -897,7 +903,7 @@ export class OpenClawWechatManager {
     console.log("[OpenClaw][DIAG] 调用handler: text=" + text.substring(0,80) + " isVoice=" + isVoice + " handlers=" + this.handlers.length);
     for (const handler of this.handlers) {
       try {
-        const reply = await handler({
+        await handler({
           fromUserId,
           toUserId,
           messageId,
@@ -911,31 +917,6 @@ export class OpenClawWechatManager {
           createdAt,
         })
 
-        if (reply) {
-          const rawReply = typeof reply === "string" ? reply : String(reply)
-          console.log('[OpenClaw] Raw reply (' + rawReply.length + ' chars): ' + rawReply.substring(0, 200))
-
-          let replyParts = rawReply.split("\n").map((p) => p.trim()).filter((p) => p.length > 0)
-          if (replyParts.length <= 1) {
-            replyParts = rawReply.split("\\").map((p) => p.trim()).filter((p) => p.length > 0)
-            if (replyParts.length > 1) console.log('[OpenClaw] Split by \\ into ' + replyParts.length + ' parts')
-          }
-          if (replyParts.length <= 1) {
-            replyParts = rawReply.split('/').map((p) => p.trim()).filter((p) => p.length > 0)
-            if (replyParts.length > 1) console.log('[OpenClaw] Split by / into ' + replyParts.length + ' parts')
-          }
-          console.log('[OpenClaw] Split into ' + replyParts.length + ' part(s)')
-
-          for (let i = 0; i < replyParts.length; i++) {
-            await this.sendTextMessage(fromUserId, replyParts[i], contextToken).catch(
-              (err) => console.error(`[OpenClaw] Reply part ${i+1}/${replyParts.length} failed:`, err.message)
-            )
-            if (i < replyParts.length - 1) {
-              await new Promise(r => setTimeout(r, 800 + Math.random() * 1200))
-            }
-          }
-
-        }
       } catch (err: any) {
         console.error(`[OpenClaw] Handler error:`, err.message)
 
