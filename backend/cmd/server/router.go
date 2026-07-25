@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
@@ -77,6 +78,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx)
 		processing.RegisterProcessingRouter(apiGroup, ctx)
+		installation.RegisterRoutes(apiGroup, services.InstallationService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)

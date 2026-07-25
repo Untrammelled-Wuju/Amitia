@@ -273,6 +273,11 @@ export function useImmersiveOnboarding() {
           identityStep.value = 0;
         }
 
+        if (stage === 8) {
+          identityState.value = "filling";
+          identityStep.value = 0;
+        }
+
         setTimeout(
           () => {
             if (token !== stageTransitionToken) return;

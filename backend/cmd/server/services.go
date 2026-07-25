@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
@@ -75,6 +76,7 @@ type AppServices struct {
 	OutboxWorker        *newoutbox.Worker
 	DesktopPetWorker    *worker.Worker
 	ProcessingWorker    *processingworker.Worker
+	InstallationService installation.Service
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
@@ -322,6 +324,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
 	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir)
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+	installationInstaller := installation.NewInstaller(installationRepo, processingRepo, charRepo, processingDataDir)
+	installationUninstaller := installation.NewUninstaller(installationRepo, processingDataDir)
+	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir)
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -341,6 +347,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		OutboxWorker:        newOutboxWorker,
 		DesktopPetWorker:    desktopPetWorker,
 		ProcessingWorker:    processingWorker,
+		InstallationService: installationService,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,

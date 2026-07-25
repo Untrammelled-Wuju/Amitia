@@ -91,5 +91,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetProcessingActionsMigration(),
 		DesktopPetProcessedFramesMigration(),
 		DesktopPetPackagesMigration(),
+		DesktopPetInstallationsMigration(),
+		DesktopPetRuntimeSettingsMigration(),
 	}
 }

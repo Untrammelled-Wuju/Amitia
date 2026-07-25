@@ -35,6 +35,13 @@ SPDX-License-Identifier: AGPL-3.0-only
           @click="openPackageDialog"
           >打包资源</el-button
         >
+        <el-button
+          v-if="canInstallPackage"
+          type="success"
+          :icon="Download"
+          @click="openInstallDialog"
+          >安装到桌宠</el-button
+        >
       </template>
     </ExtensionPageHeader>
 
@@ -381,6 +388,58 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="installDialogVisible"
+      title="安装到桌宠"
+      width="460px"
+      destroy-on-close
+    >
+      <div class="install-dialog-body">
+        <el-form label-width="120px">
+          <el-form-item label="资源包 ID">
+            <span class="install-package-id">{{ installForm.packageId }}</span>
+          </el-form-item>
+          <el-form-item label="绑定角色">
+            <el-select
+              v-model="installForm.characterId"
+              placeholder="请选择绑定的 Amitia 角色"
+              style="width: 100%"
+              filterable
+            >
+              <el-option
+                v-for="c in installCharacters"
+                :key="c.id"
+                :label="c.name"
+                :value="c.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="安装会复制资源包到桌宠运行时目录，不会修改原资源包"
+        />
+        <el-alert
+          v-if="installError"
+          :title="installError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+      </div>
+      <template #footer>
+        <el-button @click="installDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="installSubmitting"
+          @click="submitInstall"
+          >确认安装</el-button
+        >
+      </template>
+    </el-dialog>
   </main>
 </template>
 
@@ -397,6 +456,7 @@ import {
   Switch,
   Close,
   Picture,
+  Download,
 } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 import { useApi } from "../../composables/useApi";
@@ -406,6 +466,7 @@ import {
   type ProcessingActionInfo,
   type CreatePackageResponse,
 } from "../../composables/useProcessingTask";
+import { useDesktopPetInstallations } from "../../composables/useDesktopPetInstallations";
 
 const route = useRoute();
 const router = useRouter();
@@ -437,9 +498,12 @@ const {
   revokeObjectUrls,
 } = useProcessingTask();
 
+const { install: installPet } = useDesktopPetInstallations();
+
 interface GenerationTaskDetail {
   id: string | number;
   name?: string;
+  characterId?: string | number;
   characterName?: string;
   status?: string;
   actions?: Array<{
@@ -485,6 +549,27 @@ const packageForm = reactive({
 });
 const packageError = ref("");
 const packageResult = ref<CreatePackageResponse | null>(null);
+
+interface InstallCharacterOption {
+  id: string | number;
+  name: string;
+  status?: string;
+  isActive?: number | boolean;
+  isDefault?: number | boolean;
+}
+
+const installDialogVisible = ref(false);
+const installSubmitting = ref(false);
+const installError = ref("");
+const installCharacters = ref<InstallCharacterOption[]>([]);
+const installForm = reactive({
+  packageId: "",
+  characterId: "" as string | number,
+});
+
+const canInstallPackage = computed(
+  () => !!packageResult.value && packageResult.value.status === "ready",
+);
 
 const statusMeta: Record<string, { label: string; type: string }> = {
   pending: { label: "等待中", type: "info" },
@@ -999,6 +1084,69 @@ async function submitPackage() {
   }
 }
 
+async function loadInstallCharacters() {
+  try {
+    const list =
+      (await get<InstallCharacterOption[]>("/api/characters")) || [];
+    installCharacters.value = list.filter(
+      (c) =>
+        c.status === "enabled" ||
+        c.isActive === true ||
+        c.isActive === 1,
+    );
+    if (!installForm.characterId && installCharacters.value.length) {
+      const defaultChar =
+        installCharacters.value.find((c) => c.isDefault) ||
+        installCharacters.value.find((c) => c.isActive) ||
+        installCharacters.value[0];
+      installForm.characterId = defaultChar?.id || "";
+    }
+  } catch {
+    installCharacters.value = [];
+  }
+}
+
+function openInstallDialog() {
+  if (!packageResult.value?.packageId) {
+    ElMessage.warning("请先生成资源包");
+    return;
+  }
+  installForm.packageId = packageResult.value.packageId;
+  installForm.characterId =
+    generationTaskDetail.value?.characterId ||
+    installCharacters.value[0]?.id ||
+    "";
+  installError.value = "";
+  installDialogVisible.value = true;
+  void loadInstallCharacters();
+}
+
+async function submitInstall() {
+  if (!installForm.packageId) {
+    installError.value = "缺少资源包 ID";
+    return;
+  }
+  if (!installForm.characterId) {
+    installError.value = "请选择绑定的 Amitia 角色";
+    return;
+  }
+  installError.value = "";
+  installSubmitting.value = true;
+  try {
+    await installPet(
+      installForm.packageId,
+      String(installForm.characterId),
+    );
+    installDialogVisible.value = false;
+    ElMessage.success("桌宠已安装，正在跳转到安装管理");
+    router.push("/creative-workshop/pet/installations");
+  } catch (err: any) {
+    installError.value = err?.message || "安装失败";
+  } finally {
+    installSubmitting.value = false;
+  }
+}
+
 onMounted(() => {
   void initLoad();
 });
@@ -1287,5 +1435,16 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
+}
+.install-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.install-package-id {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 </style>

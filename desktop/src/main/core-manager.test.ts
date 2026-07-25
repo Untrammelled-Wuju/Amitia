@@ -51,6 +51,10 @@ describe("validateCorePrerequisites", () => {
   const dataDir = getTestDataDir();
   const coreDir = path.dirname(getTestCorePath());
 
+  beforeEach(() => {
+    cleanup(dataDir, coreDir);
+  });
+
   afterEach(() => {
     cleanup(dataDir, coreDir);
   });
