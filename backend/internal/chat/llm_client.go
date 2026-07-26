@@ -46,7 +46,7 @@ func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []
 	defer resp.Body.Close()
 	respBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, truncateStr(string(respBytes), 200))
+		return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 	var result struct {
 		Choices []struct {
@@ -91,7 +91,7 @@ func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messag
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, truncateStr(string(rb), 200))
+		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
 	}
 	var r struct {
 		Choices []struct {
@@ -110,9 +110,11 @@ func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messag
 		}
 		Usage struct{ TotalTokens int }
 	}
-	json.Unmarshal(rb, &r)
+	if err := json.Unmarshal(rb, &r); err != nil {
+		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
+	}
 	if len(r.Choices) == 0 {
-		return "", "", nil, 0, fmt.Errorf("no choices")
+		return "", "", nil, 0, fmt.Errorf("API 未返回有效回复，原始响应: %s", string(rb))
 	}
 	choice := r.Choices[0]
 	var toolCalls []map[string]interface{}

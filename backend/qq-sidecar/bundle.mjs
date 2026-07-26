@@ -11,7 +11,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -38516,11 +38520,11 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// src/index.ts
+// dist/index.js
 var import_fastify = __toESM(require_fastify(), 1);
 var import_cors = __toESM(require_cors(), 1);
 
-// src/config.ts
+// dist/config.js
 function envStr(key, fallback) {
   return process.env[key] || fallback;
 }
@@ -38548,7 +38552,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/qqbot-client.ts
+// dist/qqbot-client.js
 import fs from "node:fs";
 import path from "node:path";
 var TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
@@ -38578,7 +38582,8 @@ var QQBotClient = class {
   _startedAt = "";
   lastErrorMessage = "";
   get apiBase() {
-    if (!this.config) return "https://api.sgroup.qq.com";
+    if (!this.config)
+      return "https://api.sgroup.qq.com";
     return this.config.sandbox ? "https://sandbox.api.sgroup.qq.com" : "https://api.sgroup.qq.com";
   }
   getLastError() {
@@ -38616,11 +38621,13 @@ var QQBotClient = class {
   }
   resolveStatsPath() {
     const dir = path.join(process.cwd(), "qq-stats");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir))
+      fs.mkdirSync(dir, { recursive: true });
     return path.join(dir, `${this.accountId}.stats.json`);
   }
   persistStats() {
-    if (!this.accountId) return;
+    if (!this.accountId)
+      return;
     try {
       fs.writeFileSync(this.resolveStatsPath(), JSON.stringify({
         messageCount: this._messageCount,
@@ -38630,13 +38637,16 @@ var QQBotClient = class {
     }
   }
   loadStats() {
-    if (!this.accountId) return;
+    if (!this.accountId)
+      return;
     try {
       const statsPath = this.resolveStatsPath();
       if (fs.existsSync(statsPath)) {
         const data = JSON.parse(fs.readFileSync(statsPath, "utf-8"));
-        if (typeof data.messageCount === "number") this._messageCount = data.messageCount;
-        if (typeof data.replyCount === "number") this._replyCount = data.replyCount;
+        if (typeof data.messageCount === "number")
+          this._messageCount = data.messageCount;
+        if (typeof data.replyCount === "number")
+          this._replyCount = data.replyCount;
       }
     } catch {
     }
@@ -38764,7 +38774,8 @@ var QQBotClient = class {
   }
   handleGatewayMessage(payload) {
     const { op, d, s, t } = payload;
-    if (s) this.seq = s;
+    if (s)
+      this.seq = s;
     switch (op) {
       case 0:
         this.handleDispatch(t, d);
@@ -38873,7 +38884,8 @@ var QQBotClient = class {
     const isVoice = extracted.isVoice;
     const imageUrl = extracted.imageUrl;
     const fileUrl = extracted.fileUrl;
-    if (!text && !isVoice && !imageUrl && !fileUrl) return;
+    if (!text && !isVoice && !imageUrl && !fileUrl)
+      return;
     const msg = {
       fromUserId: data?.author?.id || "",
       toUserId: this.accountId,
@@ -38900,7 +38912,8 @@ var QQBotClient = class {
     const isVoice = extracted.isVoice;
     const imageUrl = extracted.imageUrl;
     const fileUrl = extracted.fileUrl;
-    if (!text && !isVoice && !imageUrl && !fileUrl) return;
+    if (!text && !isVoice && !imageUrl && !fileUrl)
+      return;
     const msg = {
       fromUserId: data?.author?.id || "",
       toUserId: this.accountId,
@@ -38928,26 +38941,19 @@ var QQBotClient = class {
     if (Array.isArray(data.content)) {
       this.debugLog("[QQBot][EXTRACT] msgId=" + rawDataId + " content\u6570\u7EC4\u957F\u5EA6=" + data.content.length + " types=" + data.content.map((c) => c.type || c.msg_type || "?").join(","));
     }
-    const hasAttachmentsVideo = data?.attachments?.some(
-      (a) => a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video"
-    );
+    const hasAttachmentsVideo = data?.attachments?.some((a) => a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video");
     if (hasAttachmentsVideo) {
-      const vidAtt = data.attachments.find(
-        (a) => a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video"
-      );
+      const vidAtt = data.attachments.find((a) => a?.content_type?.startsWith("video/") || a?.type === "video" || a?.content_type === "video");
       const vidUrl = vidAtt?.url || vidAtt?.src_url || vidAtt?.url_src || "";
       const text = typeof data.content === "string" ? data.content.trim() : "";
       this.debugLog("[QQBot][VIDEO-DETECT] msgId=" + rawDataId + " \u68C0\u6D4B\u5230\u89C6\u9891! url=" + vidUrl);
-      if (text) return { text, isVoice: false, imageUrl: "", videoUrl: vidUrl };
+      if (text)
+        return { text, isVoice: false, imageUrl: "", videoUrl: vidUrl };
       return { text: "", isVoice: false, imageUrl: "", videoUrl: vidUrl };
     }
-    const hasAttachmentsImage = data?.attachments?.some(
-      (a) => a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image"
-    );
+    const hasAttachmentsImage = data?.attachments?.some((a) => a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image");
     if (hasAttachmentsImage) {
-      const imgAtt = data.attachments.find(
-        (a) => a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image"
-      );
+      const imgAtt = data.attachments.find((a) => a?.content_type?.startsWith("image/") || a?.type === "image" || a?.content_type === "image");
       const imgUrl = imgAtt?.url || "";
       this.debugLog("[QQBot][IMAGE-DETECT] msgId=" + rawDataId + " \u68C0\u6D4B\u5230\u56FE\u7247! url=" + imgUrl);
       if (typeof data?.content === "string" && data.content.trim()) {
@@ -38962,16 +38968,16 @@ var QQBotClient = class {
     }
     if (typeof data?.content === "string") {
       const text = data.content.trim();
-      if (text) return { text, isVoice: false, imageUrl: "" };
+      if (text)
+        return { text, isVoice: false, imageUrl: "" };
     }
     if (data?.content && typeof data.content === "object") {
       if (Array.isArray(data.content)) {
         const textParts = data.content.filter((s) => s.type === "text" && s.text).map((s) => s.text);
-        const hasVoice = data.content.some(
-          (s) => s.type === "voice" || s.type === "audio" || s.msg_type === "voice" || s.msg_type === "audio"
-        );
+        const hasVoice = data.content.some((s) => s.type === "voice" || s.type === "audio" || s.msg_type === "voice" || s.msg_type === "audio");
         const contentImageUrls = data.content.filter((c) => c.type === "image" || c.msg_type === "image").map((c) => c.url || "").filter(Boolean);
-        if (textParts.length > 0) return { text: textParts.join(""), isVoice: hasVoice, imageUrl: contentImageUrls[0] || "" };
+        if (textParts.length > 0)
+          return { text: textParts.join(""), isVoice: hasVoice, imageUrl: contentImageUrls[0] || "" };
         if (hasVoice) {
           this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " \u68C0\u6D4B\u5230\u8BED\u97F3\u6D88\u606F! content\u6570\u7EC4\u8BE6\u60C5:" + JSON.stringify(data.content).substring(0, 2e3));
           return { text: "[\u8BED\u97F3]", isVoice: true, imageUrl: contentImageUrls[0] || "" };
@@ -38984,16 +38990,13 @@ var QQBotClient = class {
       }
       if (typeof data.content.text === "string") {
         const text = data.content.text.trim();
-        if (text) return { text, isVoice: false, imageUrl: "" };
+        if (text)
+          return { text, isVoice: false, imageUrl: "" };
       }
     }
-    const hasAttachmentsVoice = data?.attachments?.some(
-      (a) => a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice"
-    );
+    const hasAttachmentsVoice = data?.attachments?.some((a) => a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice");
     if (hasAttachmentsVoice) {
-      const voiceAtt = data.attachments.find(
-        (a) => a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice"
-      );
+      const voiceAtt = data.attachments.find((a) => a?.content_type?.startsWith("audio/") || a?.type === "voice" || a?.content_type === "voice");
       const asrText = voiceAtt?.asr_refer_text || "";
       this.debugLog("[QQBot][VOICE-DETECT] msgId=" + rawDataId + " \u68C0\u6D4B\u5230\u8BED\u97F3\u6D88\u606F! attachments\u8BE6\u60C5:" + JSON.stringify(data.attachments).substring(0, 2e3));
       this.debugLog("[QQBot][VOICE-ASR] msgId=" + rawDataId + " QQ\u8BED\u97F3\u8BC6\u522B\u6587\u672C: " + asrText);
@@ -39002,13 +39005,9 @@ var QQBotClient = class {
       }
       return { text: "[\u8BED\u97F3]", isVoice: true, imageUrl: "", voiceUrl: voiceAtt?.url || "" };
     }
-    const hasAttachmentsFile = data?.attachments?.some(
-      (a) => a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file"
-    );
+    const hasAttachmentsFile = data?.attachments?.some((a) => a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file");
     if (hasAttachmentsFile) {
-      const fileAtt = data.attachments.find(
-        (a) => a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file"
-      );
+      const fileAtt = data.attachments.find((a) => a?.content_type?.startsWith("file/") || a?.type === "file" || a?.content_type === "file");
       const fUrl = fileAtt?.url || "";
       const fName = fileAtt?.filename || fileAtt?.file_name || "";
       const fContentType = fileAtt?.content_type || "";
@@ -39018,13 +39017,9 @@ var QQBotClient = class {
         return { text: ftext, isVoice: false, imageUrl: "", fileUrl: fUrl, fileName: fName, fileContentType: fContentType };
       }
     }
-    const hasAttachmentsOther = data?.attachments?.some(
-      (a) => a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice")
-    );
+    const hasAttachmentsOther = data?.attachments?.some((a) => a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice"));
     if (hasAttachmentsOther) {
-      const otherAtt = data.attachments.find(
-        (a) => a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice")
-      );
+      const otherAtt = data.attachments.find((a) => a?.url && !a?.content_type?.startsWith("image/") && !a?.content_type?.startsWith("video/") && !a?.content_type?.startsWith("audio/") && !(a?.type === "voice"));
       const oUrl = otherAtt?.url || "";
       const oName = otherAtt?.filename || otherAtt?.file_name || "";
       const oContentType = otherAtt?.content_type || "";
@@ -39046,7 +39041,8 @@ var QQBotClient = class {
     }
   }
   async sendGroupMsg(groupId, text) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const url = `${this.apiBase}/v2/groups/${groupId}/messages`;
       const resp = await fetch(url, {
@@ -39070,7 +39066,8 @@ var QQBotClient = class {
     }, "\u53D1\u9001\u7FA4\u6D88\u606F");
   }
   async sendPrivateMsg(userId, text) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const url = `${this.apiBase}/v2/users/${userId}/messages`;
       const resp = await fetch(url, {
@@ -39117,7 +39114,8 @@ var QQBotClient = class {
     }
   }
   async uploadGroupMedia(groupId, fileBuffer, fileName, fileType) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const b64 = fileBuffer.toString("base64");
       this.debugLog("[QQBot][UPLOAD-JSON] groupId=" + groupId + " fileType=" + fileType + " b64Len=" + b64.length);
@@ -39136,12 +39134,14 @@ var QQBotClient = class {
         throw new Error("\u4E0A\u4F20\u7FA4\u6587\u4EF6\u5931\u8D25 (" + resp.status + "): " + errText);
       }
       const data = await resp.json();
-      if (!data.file_info) throw new Error("\u4E0A\u4F20\u6210\u529F\u4F46\u672A\u8FD4\u56DEfile_info");
+      if (!data.file_info)
+        throw new Error("\u4E0A\u4F20\u6210\u529F\u4F46\u672A\u8FD4\u56DEfile_info");
       return data.file_info;
     }, "\u4E0A\u4F20\u7FA4\u5A92\u4F53");
   }
   async uploadPrivateMedia(userId, fileBuffer, fileName, fileType) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const b64 = fileBuffer.toString("base64");
       this.debugLog("[QQBot][UPLOAD-JSON] userId=" + userId + " fileType=" + fileType + " b64Len=" + b64.length);
@@ -39160,12 +39160,14 @@ var QQBotClient = class {
         throw new Error("\u4E0A\u4F20\u79C1\u804A\u6587\u4EF6\u5931\u8D25 (" + resp.status + "): " + errText);
       }
       const data = await resp.json();
-      if (!data.file_info) throw new Error("\u4E0A\u4F20\u6210\u529F\u4F46\u672A\u8FD4\u56DEfile_info");
+      if (!data.file_info)
+        throw new Error("\u4E0A\u4F20\u6210\u529F\u4F46\u672A\u8FD4\u56DEfile_info");
       return data.file_info;
     }, "\u4E0A\u4F20\u79C1\u804A\u5A92\u4F53");
   }
   async sendGroupVoice(groupId, fileInfo) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const url = this.apiBase + "/v2/groups/" + groupId + "/messages";
       const resp = await fetch(url, {
@@ -39191,7 +39193,8 @@ var QQBotClient = class {
     }, "\u53D1\u9001\u7FA4\u8BED\u97F3");
   }
   async sendPrivateVoice(userId, fileInfo) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const url = this.apiBase + "/v2/users/" + userId + "/messages";
       const resp = await fetch(url, {
@@ -39217,33 +39220,38 @@ var QQBotClient = class {
     }, "\u53D1\u9001\u79C1\u804A\u8BED\u97F3");
   }
   async sendGroupImage(groupId, fileInfo) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const resp = await fetch(this.apiBase + "/v2/groups/" + groupId + "/messages", {
         method: "POST",
         headers: { "Authorization": "QQBot " + token, "Content-Type": "application/json" },
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1e3) })
       });
-      if (!resp.ok) throw new Error("\u53D1\u9001\u7FA4\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
+      if (!resp.ok)
+        throw new Error("\u53D1\u9001\u7FA4\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
       this._replyCount++;
       this.persistStats();
     }, "\u53D1\u9001\u7FA4\u56FE\u7247");
   }
   async sendPrivateImage(userId, fileInfo) {
-    if (!this.config) throw new Error("\u672A\u8FDE\u63A5");
+    if (!this.config)
+      throw new Error("\u672A\u8FDE\u63A5");
     return this._sendWithRetry(async (token) => {
       const resp = await fetch(this.apiBase + "/v2/users/" + userId + "/messages", {
         method: "POST",
         headers: { "Authorization": "QQBot " + token, "Content-Type": "application/json" },
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1e3) })
       });
-      if (!resp.ok) throw new Error("\u53D1\u9001\u79C1\u804A\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
+      if (!resp.ok)
+        throw new Error("\u53D1\u9001\u79C1\u804A\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
       this._replyCount++;
       this.persistStats();
     }, "\u53D1\u9001\u79C1\u804A\u56FE\u7247");
   }
   async downloadImage(url) {
-    if (!this.config) return null;
+    if (!this.config)
+      return null;
     try {
       const token = await this.getAccessToken();
       const resp = await fetch(url, {
@@ -39313,7 +39321,7 @@ var QQBotClient = class {
   }
 };
 
-// src/qqbot-persist.ts
+// dist/qqbot-persist.js
 import fs2 from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39338,7 +39346,8 @@ function loadQQBotConfig() {
 function saveQQBotConfig(config) {
   try {
     const dir = path2.dirname(CONFIG_FILE);
-    if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
+    if (!fs2.existsSync(dir))
+      fs2.mkdirSync(dir, { recursive: true });
     fs2.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
     console.log("[QQBot] \u51ED\u8BC1\u5DF2\u6301\u4E45\u5316\u5230\u78C1\u76D8");
   } catch (err) {
@@ -39356,7 +39365,7 @@ function clearQQBotConfig() {
   }
 }
 
-// src/file-router.ts
+// dist/file-router.js
 var MAGIC_BYTES = {
   "image/jpeg": [[255, 216, 255]],
   "image/png": [[137, 80, 78, 71]],
@@ -39419,11 +39428,13 @@ var FileRouter = class {
           if (match) {
             if (mimeType === "audio/wav" && buffer.length > 8) {
               const waveId = buffer.slice(8, 12).toString("ascii");
-              if (waveId !== "WAVE") continue;
+              if (waveId !== "WAVE")
+                continue;
             }
             if (mimeType === "application/zip" && buffer.length > 40) {
               const docType = buffer.slice(30, 40).toString("ascii");
-              if (docType.includes("mimetype")) continue;
+              if (docType.includes("mimetype"))
+                continue;
             }
             return mimeType;
           }
@@ -39481,7 +39492,7 @@ function createDefaultRouter() {
   return router;
 }
 
-// src/index.ts
+// dist/index.js
 import path3 from "node:path";
 import fs3 from "node:fs";
 process.on("unhandledRejection", (reason) => {
@@ -39588,7 +39599,8 @@ qq.onMessage(async (msg) => {
     }
     const headers = { "Content-Type": "application/json" };
     const t = qqSidecarConfig.bridgeApiToken;
-    if (t) headers["Authorization"] = "Bearer " + t;
+    if (t)
+      headers["Authorization"] = "Bearer " + t;
     try {
       let imageUrl = "";
       let videoUrl = "";
@@ -39712,9 +39724,11 @@ qq.onMessage(async (msg) => {
               } catch (partErr) {
                 logLine("Voice part " + (i + 1) + " error: " + (partErr?.message || String(partErr)));
               }
-              if (i < audioUrls.length - 1) await new Promise((r) => setTimeout(r, 800));
+              if (i < audioUrls.length - 1)
+                await new Promise((r) => setTimeout(r, 800));
             }
-            if (voiceSent) return;
+            if (voiceSent)
+              return;
             logLine("No voice parts sent successfully, falling back to text");
           } catch (ttsErr) {
             logLine("Voice send error: " + (ttsErr?.message || String(ttsErr)) + ", falling back to text");
@@ -39729,7 +39743,8 @@ qq.onMessage(async (msg) => {
           logLine("Split reply (" + texts.length + " parts) via delivery");
           for (let i = 0; i < texts.length; i++) {
             const line = texts[i];
-            if (!line || line.trim() === "") continue;
+            if (!line || line.trim() === "")
+              continue;
             const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId;
             logLine("Delivery [" + (i + 1) + "/" + texts.length + "] to " + sendTarget + " text=" + line.substring(0, 50));
             try {
@@ -39750,7 +39765,8 @@ qq.onMessage(async (msg) => {
             } catch (sendErr) {
               logLine("Delivery FAILED for part " + (i + 1) + ": " + (sendErr?.message || String(sendErr)));
             }
-            if (i < texts.length - 1) await new Promise((r) => setTimeout(r, 500));
+            if (i < texts.length - 1)
+              await new Promise((r) => setTimeout(r, 500));
           }
         } else if (reply) {
           const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId;
@@ -39865,10 +39881,12 @@ app.post("/api/send-voice", async (req, reply) => {
         });
         const ttsJson = await ttsResp.json();
         const audioUrl = ttsJson?.data?.audioUrl;
-        if (!audioUrl) throw new Error("TTS returned no audioUrl");
+        if (!audioUrl)
+          throw new Error("TTS returned no audioUrl");
         const fullAudioUrl = qqSidecarConfig.coreUrl + audioUrl;
         const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(3e4) });
-        if (!audioResp.ok) throw new Error("audio download failed: " + audioResp.status);
+        if (!audioResp.ok)
+          throw new Error("audio download failed: " + audioResp.status);
         const audioBuffer = Buffer.from(await audioResp.arrayBuffer());
         const fileInfo = groupId ? await qq.uploadGroupMedia(groupId, audioBuffer, "voice" + i + ".mp3", 3) : await qq.uploadPrivateMedia(toUserId, audioBuffer, "voice" + i + ".mp3", 3);
         if (groupId) {
@@ -39887,7 +39905,8 @@ app.post("/api/send-voice", async (req, reply) => {
         } catch {
         }
       }
-      if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 800));
+      if (i < parts.length - 1)
+        await new Promise((r) => setTimeout(r, 800));
     }
     return reply.send({ success: true });
   } catch (err) {
@@ -39896,11 +39915,13 @@ app.post("/api/send-voice", async (req, reply) => {
   }
 });
 app.post("/api/send-image", async (req, reply) => {
-  if (!qq.isOnline()) return reply.status(503).send({ success: false, error: "QQBot\u672A\u8FDE\u63A5" });
+  if (!qq.isOnline())
+    return reply.status(503).send({ success: false, error: "QQBot\u672A\u8FDE\u63A5" });
   const body = req.body;
   const toUserId = body?.toUserId;
   const groupId = body?.groupId;
-  if (!toUserId && !groupId) return reply.status(400).send({ success: false, error: "toUserId or groupId required" });
+  if (!toUserId && !groupId)
+    return reply.status(400).send({ success: false, error: "toUserId or groupId required" });
   const candidates = [body?.assetUrl, body?.fallbackUrl].filter(Boolean);
   try {
     let imageBuffer = null;
@@ -39909,7 +39930,8 @@ app.post("/api/send-image", async (req, reply) => {
       const url = String(candidate).startsWith("http") ? String(candidate) : qqSidecarConfig.coreUrl + String(candidate);
       try {
         const response = await fetch(url, { signal: AbortSignal.timeout(3e4) });
-        if (!response.ok) continue;
+        if (!response.ok)
+          continue;
         imageBuffer = Buffer.from(await response.arrayBuffer());
         const pathname = new URL(url).pathname;
         filename = path3.basename(pathname) || filename;
@@ -39917,10 +39939,13 @@ app.post("/api/send-image", async (req, reply) => {
       } catch {
       }
     }
-    if (!imageBuffer) throw new Error("\u8868\u60C5\u8D44\u6E90\u4E0B\u8F7D\u5931\u8D25");
+    if (!imageBuffer)
+      throw new Error("\u8868\u60C5\u8D44\u6E90\u4E0B\u8F7D\u5931\u8D25");
     const fileInfo = groupId ? await qq.uploadGroupMedia(groupId, imageBuffer, filename, 1) : await qq.uploadPrivateMedia(toUserId, imageBuffer, filename, 1);
-    if (groupId) await qq.sendGroupImage(groupId, fileInfo);
-    else await qq.sendPrivateImage(toUserId, fileInfo);
+    if (groupId)
+      await qq.sendGroupImage(groupId, fileInfo);
+    else
+      await qq.sendPrivateImage(toUserId, fileInfo);
     return reply.send({ success: true });
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });

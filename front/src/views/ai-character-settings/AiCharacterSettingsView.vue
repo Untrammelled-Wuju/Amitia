@@ -124,7 +124,7 @@ import WorkProfileSection from "./components/WorkProfileSection.vue";
 import PromptEditorDialog from "./components/PromptEditorDialog.vue";
 import EmoteSettingsSection from "./components/EmoteSettingsSection.vue";
 
-const { get, post } = useApi();
+const { get, post, put } = useApi();
 const { invalidateCache } = useCachedApi();
 
 const injectedCharacterId = inject<Ref<string | null>>(
@@ -165,17 +165,13 @@ async function onLifeIdentityChange(val: string) {
   if (PRESET_IDENTITIES.includes(val)) {
     lifeIdentityCustom.value = "";
   }
+  if (!charId.value) return;
   try {
-    const payload: any = {
+    await put<any>(`/api/characters/${charId.value}`, {
       lifeIdentity: isCustomLifeIdentity.value
         ? lifeIdentityCustom.value || lifeIdentity.value
         : lifeIdentity.value,
-      name: form.name.trim(),
-      description: form.description.trim(),
-      personalityConfig: form.personalityConfig,
-    };
-    if (charId.value) payload.id = charId.value;
-    await post<any>("/api/ai/character/save", payload);
+    });
   } catch {}
 }
 
@@ -219,6 +215,36 @@ const form = reactive({
   sceneRules: null as any,
 });
 
+function normalizePersonalityConfig(value: unknown) {
+  if (!value) return { ...DEFAULT_CONFIG };
+  if (typeof value === "string") {
+    try {
+      return { ...DEFAULT_CONFIG, ...JSON.parse(value) };
+    } catch {
+      return { ...DEFAULT_CONFIG };
+    }
+  }
+  return { ...DEFAULT_CONFIG, ...(value as Record<string, number>) };
+}
+
+function applyCharacter(data: any) {
+  if (!data) return;
+  charId.value = data.id || charId.value;
+  form.name = data.name || form.name;
+  form.description = data.description || form.description;
+  form.isDefault = !!data.isDefault;
+  form.personalityConfig = normalizePersonalityConfig(data.personalityConfig);
+  if (data.lifeIdentity) {
+    if (PRESET_IDENTITIES.includes(data.lifeIdentity)) {
+      lifeIdentity.value = data.lifeIdentity;
+      lifeIdentityCustom.value = "";
+    } else {
+      lifeIdentity.value = "CUSTOM";
+      lifeIdentityCustom.value = data.lifeIdentity;
+    }
+  }
+}
+
 const genderForm = reactive({
   roleName: "阿米提亚",
   gender: "UNSPECIFIED" as string,
@@ -261,52 +287,10 @@ onMounted(async () => {
   if (cid) {
     try {
       const data = await get<any>("/api/characters/" + cid);
-      if (data) {
-        charId.value = data.id || cid;
-        form.name = data.name || form.name;
-        form.description = data.description || form.description;
-        form.isDefault = !!data.isDefault;
-        if (data.personalityConfig) {
-          form.personalityConfig = {
-            ...DEFAULT_CONFIG,
-            ...data.personalityConfig,
-          };
-        }
-        if (data.lifeIdentity) {
-          if (PRESET_IDENTITIES.includes(data.lifeIdentity)) {
-            lifeIdentity.value = data.lifeIdentity;
-          } else {
-            lifeIdentity.value = "CUSTOM";
-            lifeIdentityCustom.value = data.lifeIdentity;
-          }
-        }
-      }
+      if (data) applyCharacter(data);
     } catch {}
   }
   if (!charId.value) {
-    try {
-      const data = await get<any>("/api/ai/character/default");
-      if (data) {
-        charId.value = data.id || "";
-        form.name = data.name || form.name;
-        form.description = data.description || form.description;
-        form.isDefault = !!data.isDefault;
-        if (data.personalityConfig) {
-          form.personalityConfig = {
-            ...DEFAULT_CONFIG,
-            ...data.personalityConfig,
-          };
-        }
-        if (data.lifeIdentity) {
-          if (PRESET_IDENTITIES.includes(data.lifeIdentity)) {
-            lifeIdentity.value = data.lifeIdentity;
-          } else {
-            lifeIdentity.value = "CUSTOM";
-            lifeIdentityCustom.value = data.lifeIdentity;
-          }
-        }
-      }
-    } catch {}
     try {
       const chars = await get<any[]>("/api/characters?includeDisabled=true");
       const active =
@@ -314,23 +298,13 @@ onMounted(async () => {
         chars.find((c: any) => c.isDefault) ||
         chars[0];
       if (active) {
-        charId.value = active.id;
-        form.name = active.name || form.name;
-        form.description = active.description || form.description;
-        if (active.lifeIdentity) {
-          if (PRESET_IDENTITIES.includes(active.lifeIdentity)) {
-            lifeIdentity.value = active.lifeIdentity;
-          } else {
-            lifeIdentity.value = "CUSTOM";
-            lifeIdentityCustom.value = active.lifeIdentity;
-          }
-        }
+        applyCharacter(active);
       }
     } catch {}
   }
 
   try {
-    const rp = await getRoleProfile(injectedCharacterId?.value ?? undefined);
+    const rp = await getRoleProfile(charId.value || undefined);
     if (rp) {
       genderForm.roleName = rp.roleName || "阿米提亚";
       genderForm.gender = rp.gender || "UNSPECIFIED";
@@ -343,7 +317,7 @@ onMounted(async () => {
   } catch {}
 
   try {
-    const ss = await getSleepSetting(injectedCharacterId?.value ?? undefined);
+    const ss = await getSleepSetting(charId.value || undefined);
     if (ss) {
       sleepForm.sleepReplyEnabled = ss.sleepReplyEnabled;
       sleepForm.sleepReplyMode = ss.sleepReplyMode;
@@ -351,7 +325,7 @@ onMounted(async () => {
   } catch {}
 
   try {
-    const wp = await getWorkProfile(injectedCharacterId?.value ?? undefined);
+    const wp = await getWorkProfile(charId.value || undefined);
     if (wp) {
       workForm.enabled = wp.enabled;
       workForm.workDaysArr = wp.workDays
@@ -381,7 +355,7 @@ onMounted(async () => {
 async function saveConfig() {
   saving.value = true;
   try {
-    const payload: any = {
+    const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
       personalityConfig: form.personalityConfig,
@@ -390,8 +364,9 @@ async function saveConfig() {
         ? lifeIdentityCustom.value || lifeIdentity.value
         : lifeIdentity.value,
     };
-    if (charId.value) payload.id = charId.value;
-    const result = await post<any>("/api/ai/character/save", payload);
+    const result = charId.value
+      ? await put<any>(`/api/characters/${charId.value}`, payload)
+      : await post<any>("/api/characters", payload);
     if (result?.id) charId.value = result.id;
 
     try {
@@ -406,7 +381,7 @@ async function saveConfig() {
           userAddressingStyle: genderForm.userAddressingStyle,
           genderExpression: genderForm.genderExpression,
         },
-        injectedCharacterId?.value ?? undefined,
+        charId.value || undefined,
       );
     } catch (e: any) {
       console.warn("Role profile save failed:", e);
@@ -418,7 +393,7 @@ async function saveConfig() {
           sleepReplyEnabled: sleepForm.sleepReplyEnabled,
           sleepReplyMode: sleepForm.sleepReplyMode,
         },
-        injectedCharacterId?.value ?? undefined,
+        charId.value || undefined,
       );
     } catch (e: any) {
       console.warn("Sleep setting save failed:", e);
@@ -447,7 +422,7 @@ async function saveConfig() {
           commuteHomeShareEnabled: workForm.commuteHomeShareEnabled,
           commuteHomeShareProbability: workForm.commuteHomeShareProbability,
         } as any,
-        injectedCharacterId?.value ?? undefined,
+        charId.value || undefined,
       );
     } catch (e: any) {
       console.warn("Work profile save failed:", e);
@@ -463,13 +438,8 @@ async function saveConfig() {
 async function setAsDefault(val: boolean) {
   if (!charId.value) return;
   try {
-    if (val) {
-      await post<any>("/api/ai/character/" + charId.value + "/set-default");
-      ElMessage.success("已设为默认角色");
-    } else {
-      await post<any>("/api/ai/character/reset-default");
-      ElMessage.success("已取消默认角色");
-    }
+    await put<any>(`/api/characters/${charId.value}`, { isDefault: val });
+    ElMessage.success(val ? "已设为默认角色" : "已取消默认角色");
     if (val) {
       localStorage.setItem(
         "uai-default-char",
@@ -496,24 +466,11 @@ async function setAsDefault(val: boolean) {
 async function resetConfig() {
   resetting.value = true;
   try {
+    form.personalityConfig = { ...DEFAULT_CONFIG };
     if (charId.value) {
-      const result = await post<any>("/api/ai/character/reset-default", {
-        id: charId.value,
+      await put<any>(`/api/characters/${charId.value}`, {
+        personalityConfig: form.personalityConfig,
       });
-      if (result) {
-        form.name = result.name || form.name;
-        form.description = result.description || form.description;
-        if (result.personalityConfig) {
-          form.personalityConfig = {
-            ...DEFAULT_CONFIG,
-            ...result.personalityConfig,
-          };
-        }
-      }
-    } else {
-      form.personalityConfig = { ...DEFAULT_CONFIG };
-      form.name = "轻熟朋友";
-      form.description = "自然、简短、有反应，有一点熟悉感，但不过度装熟。";
     }
     ElMessage.success("已重置为默认配置");
   } catch {

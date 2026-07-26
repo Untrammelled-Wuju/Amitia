@@ -504,7 +504,7 @@ async function forkRevision() {
     ElMessage.success(
       `已创建 ${session.revision?.normalizedDraft.metadata.version || "新版本"} Revision`,
     );
-    await router.push(`/extensions/workshop/${session.id}`);
+    await router.push(`/creative-workshop/skills/${session.id}`);
   } finally {
     forking.value = false;
   }

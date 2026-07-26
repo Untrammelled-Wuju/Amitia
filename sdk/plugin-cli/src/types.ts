@@ -27,7 +27,7 @@ export interface CliCommand {
   readonly aliases?: string[];
   readonly subcommands?: CliCommand[];
   readonly options?: CliOption[];
-  readonly run(ctx: CliContext, args: string[]): Promise<CliCommandResult> | CliCommandResult;
+  run(ctx: CliContext, args: string[]): Promise<CliCommandResult> | CliCommandResult;
 }
 
 export interface CliOption {

@@ -8,6 +8,8 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
     <ExtensionPageHeader
       title="技能制作"
       description="用自然语言创建声明式工作流或纯指令 Agent Skill。工坊不会生成脚本。"
+      parent-title="创意工坊"
+      parent-path="/creative-workshop"
     >
       <template #actions
         ><el-button type="primary" :icon="Plus" @click="createOpen = true"
@@ -219,7 +221,7 @@ async function create() {
     );
     createOpen.value = false;
     requirement.value = "";
-    await router.push(`/extensions/workshop/${session.id}`);
+    await router.push(`/creative-workshop/skills/${session.id}`);
   } catch (error: any) {
     ElMessage.error(
       error?.response?.data?.detail || error?.message || "创建失败",
@@ -230,7 +232,7 @@ async function create() {
 }
 
 function openSession(id: string) {
-  router.push(`/extensions/workshop/${encodeURIComponent(id)}`);
+  router.push(`/creative-workshop/skills/${encodeURIComponent(id)}`);
 }
 async function archive(session: WorkshopSession) {
   await ElMessageBox.confirm(

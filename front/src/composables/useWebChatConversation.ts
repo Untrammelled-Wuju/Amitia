@@ -62,6 +62,15 @@ export function useWebChatConversation(
       if (item.id) serverMap.set(String(item.id), item);
     }
     const localOnly = messages.value.filter((m) => isLocalMessage(m));
+    const pendingKey = `uai-pending-msg:${convId.value}`;
+    let pendingMsg: any = null;
+    try {
+      const raw = sessionStorage.getItem(pendingKey);
+      if (raw) pendingMsg = JSON.parse(raw);
+    } catch {}
+    if (pendingMsg && !serverMap.has(String(pendingMsg.id)) && !localOnly.some((m: any) => m.id === pendingMsg.id)) {
+      localOnly.push(pendingMsg);
+    }
     const merged = serverItems.map((raw: any) => {
       const m = normalizeRealtimeMessage(raw);
       if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" };
@@ -101,6 +110,7 @@ export function useWebChatConversation(
     isWechatActive.value = false;
     isQQActive.value = false;
     localStorage.setItem("webchat-last-conv", "char");
+    localStorage.removeItem("webchat-conv-id");
     selectCharacter(c);
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
@@ -112,7 +122,7 @@ export function useWebChatConversation(
   async function loadCharacterConversation() {
     if (!characterId.value) return;
     const c = characters.value.find((x: any) => x.id === characterId.value);
-    let dedicatedConvId = c?.conversationId;
+    let dedicatedConvId = localStorage.getItem("webchat-conv-id") || c?.conversationId;
     if (!dedicatedConvId) {
       try {
         const created = await post<any>("/api/web-chat/conversations", {
@@ -253,11 +263,12 @@ export function useWebChatConversation(
         });
       } catch (e: any) {
         if (e !== "cancel" && e !== "close")
-          console.error("[handleSelectWechat] confirm error:", e);
+      console.error("[handleSelectWechat] confirm error:", e);
         return;
       }
     }
     showDrawer.value = false;
+    localStorage.removeItem("webchat-conv-id");
     try {
       const convs = await get<any>("/api/web-chat/conversations", {
         pageSize: 50,
@@ -319,11 +330,12 @@ export function useWebChatConversation(
         });
       } catch (e: any) {
         if (e !== "cancel" && e !== "close")
-          console.error("[handleSelectQQ] confirm error:", e);
+      console.error("[handleSelectQQ] confirm error:", e);
         return;
       }
     }
     showDrawer.value = false;
+    localStorage.removeItem("webchat-conv-id");
     try {
       if (!qqOnline.value) {
         ElMessage.warning("QQ未连接，仅展示历史消息");

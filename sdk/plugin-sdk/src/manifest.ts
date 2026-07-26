@@ -1,4 +1,4 @@
-import type { LocalizedText, PermissionRequirement, ScopeRule, IntegrityReference } from "./types";
+import type { LocalizedText, PermissionRequirement, ScopeRule } from "./types";
 
 export type ModuleKind =
   | "tool"
@@ -13,43 +13,96 @@ export type ModuleKind =
 
 export interface AmitiaxManifestV2 {
   manifestVersion: 2;
-  extensionId: string;
-  publisher: string;
-  displayName: LocalizedText;
-  description: LocalizedText;
-  version: string;
-  contractVersion: number;
+  extension: {
+    id: string;
+    name: LocalizedText;
+    description: LocalizedText;
+    version: string;
+    license?: string;
+    homepage?: string;
+    repository?: string;
+    categories?: string[];
+    keywords?: string[];
+    icon?: string;
+  };
+  publisher: {
+    id: string;
+    displayName: string;
+    trustLevel?: string;
+    contact?: string;
+    website?: string;
+  };
+  compatibility?: {
+    minHostVersion?: string;
+    maxHostVersion?: string;
+    platforms?: string[];
+    featureFlags?: string[];
+  };
   modules: ModuleDeclaration[];
-  permissions?: PermissionRequirement[];
-  scopeRule?: ScopeRule;
-  integrity?: IntegrityReference;
-  icon?: string;
-  homepage?: string;
-  repository?: string;
-  license?: string;
-  category?: string;
-  keywords?: string[];
-  platforms?: Array<"windows" | "macos" | "linux" | "web">;
-  minHostVersion?: string;
+  dependencies?: ManifestDependency[];
+  permissions?: ManifestPermission[];
+  resources?: ManifestResource[];
+  lifecycle?: Record<string, unknown>;
+  integrity: {
+    algorithm: "sha256";
+    contentTreeHash: string;
+    fileHashes?: Record<string, string>;
+  };
+  development?: Record<string, unknown>;
 }
 
 export interface ModuleDeclaration {
-  moduleId: string;
-  kind: ModuleKind;
-  entry: string;
-  runtime?: string;
-  displayName?: LocalizedText;
+  id: string;
+  name: LocalizedText;
   description?: LocalizedText;
-  tools?: string[];
-  skills?: string[];
-  workflows?: string[];
-  mcpServers?: string[];
-  uiContributions?: string[];
-  permissions?: PermissionRequirement[];
-  scopeRule?: ScopeRule;
-  integrity?: IntegrityReference;
-  deprecated?: boolean;
-  deprecationNote?: string;
+  type: "builtin" | "native" | "javascript" | "wasm" | "service" | "data_only";
+  version?: string;
+  runtime?: {
+    type: string;
+    entryPoint?: string;
+    workerCount?: number;
+    timeout?: string;
+    memory?: number;
+    permissions?: string[];
+    capabilities?: Record<string, boolean>;
+    env?: Record<string, string>;
+  };
+  contributions?: ManifestContribution[];
+  dependencies?: ManifestDependency[];
+}
+
+export interface ManifestContribution {
+  id: string;
+  kind: string;
+  name: LocalizedText;
+  description?: LocalizedText;
+  version?: string;
+  spec?: Record<string, unknown>;
+  requiredPermissions?: string[];
+  requiredScope?: string[];
+}
+
+export interface ManifestDependency {
+  type: string;
+  id: string;
+  version?: string;
+  optional?: boolean;
+  reason?: string;
+}
+
+export interface ManifestPermission {
+  name: string;
+  reason?: string;
+  required?: boolean;
+  scope?: string;
+}
+
+export interface ManifestResource {
+  id: string;
+  type: string;
+  path: string;
+  hash?: string;
+  size?: number;
 }
 
 export interface ToolContributionDefinition {
@@ -145,31 +198,37 @@ export function validateManifest(manifest: AmitiaxManifestV2): string[] {
   if (manifest.manifestVersion !== 2) {
     errors.push("manifestVersion must be 2");
   }
-  if (!manifest.extensionId) {
-    errors.push("extensionId is required");
+  if (!manifest.extension?.id) {
+    errors.push("extension.id is required");
   }
-  if (!manifest.publisher) {
-    errors.push("publisher is required");
+  if (!manifest.publisher?.id) {
+    errors.push("publisher.id is required");
   }
-  if (!manifest.displayName?.default) {
-    errors.push("displayName.default is required");
+  if (!manifest.extension?.name?.default) {
+    errors.push("extension.name.default is required");
   }
-  if (!manifest.version) {
-    errors.push("version is required");
+  if (!manifest.extension?.version) {
+    errors.push("extension.version is required");
   }
   if (!manifest.modules || manifest.modules.length === 0) {
     errors.push("at least one module is required");
   }
   for (const module of manifest.modules ?? []) {
-    if (!module.moduleId) {
-      errors.push("module.moduleId is required");
+    if (!module.id) {
+      errors.push("module.id is required");
     }
-    if (!module.kind) {
-      errors.push(`module ${module.moduleId}: kind is required`);
+    if (!module.type) {
+      errors.push(`module ${module.id}: type is required`);
     }
-    if (!module.entry) {
-      errors.push(`module ${module.moduleId}: entry is required`);
+    if (!module.name?.default) {
+      errors.push(`module ${module.id}: name.default is required`);
     }
+    if (module.runtime && !module.runtime.type) {
+      errors.push(`module ${module.id}: runtime.type is required`);
+    }
+  }
+  if (!manifest.integrity?.algorithm) {
+    errors.push("integrity.algorithm is required");
   }
   return errors;
 }

@@ -6,8 +6,8 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
 <template>
   <div class="plugin-page">
     <ExtensionPageHeader
-      title="插件"
-      description="管理 Plugin Runtime 生命周期、健康状态、权限与扩展协议。"
+      title="系统插件"
+      description="管理系统 Plugin Runtime 生命周期、健康状态、权限与扩展协议。"
     >
       <template #actions
         ><el-button :icon="Refresh" :loading="loading" @click="load"
@@ -30,7 +30,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
         v-loading="loading"
         :data="page.items"
         row-key="manifest.metadata.id"
-        empty-text="暂无插件"
+        empty-text="暂无系统插件"
         stripe
       >
         <el-table-column label="插件" min-width="260">

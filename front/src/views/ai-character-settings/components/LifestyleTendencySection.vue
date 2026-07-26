@@ -41,7 +41,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, watch } from "vue";
 import { ElMessage } from "element-plus";
 import SliderRow from "../../../components/SliderRow.vue";
 import {
@@ -82,9 +82,10 @@ const lifestyleGroups = computed(() =>
   })),
 );
 
-onMounted(async () => {
+async function loadLifestyle() {
+  if (!props.characterId) return;
   try {
-    const lt = await getLifestyleTendency(props.characterId || undefined);
+    const lt = await getLifestyleTendency(props.characterId);
     if (lt) {
       lifestyleForm.punctualityTendency = lt.punctualityTendency ?? 50;
       lifestyleForm.earlyPrepareTendency = lt.earlyPrepareTendency ?? 50;
@@ -98,7 +99,9 @@ onMounted(async () => {
       lifestyleConfigured.value = (lt as any).manuallyConfigured || false;
     }
   } catch {}
-});
+}
+
+watch(() => props.characterId, loadLifestyle, { immediate: true });
 
 async function saveLifestyle() {
   lifestyleSaving.value = true;

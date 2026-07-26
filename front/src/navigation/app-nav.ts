@@ -47,6 +47,7 @@ export const desktopNavGroups: AppNavGroup[] = [
         to: "/creative-workshop",
         label: "创意工坊",
         icon: MagicStick,
+        match: ["/creative-workshop"],
       },
     ],
   },
@@ -100,10 +101,13 @@ const extraTitles = [
   { path: "/runtime-debug", label: "运行时调试" },
   { path: "/user-settings", label: "用户信息" },
   { path: "/creative-workshop", label: "创意工坊" },
+  { path: "/creative-workshop/pet", label: "桌宠" },
+  { path: "/creative-workshop/skills", label: "技能制作" },
   { path: "/emotes", label: "表情包管理" },
   { path: "/extensions/mcp", label: "MCP 服务" },
+  { path: "/extensions/packages", label: "本地扩展包" },
   { path: "/extensions/skills", label: "技能管理" },
-  { path: "/extensions/plugins", label: "插件管理" },
+  { path: "/extensions/plugins", label: "系统插件" },
   { path: "/extensions/workshop", label: "技能制作" },
   { path: "/extensions/runs", label: "技能执行记录" },
   { path: "/extensions", label: "扩展中心" },
@@ -117,13 +121,13 @@ export function isNavItemActive(path: string, item: AppNavItem) {
 }
 
 export function getPageTitle(path: string) {
-  const navItem = titleItems.find((item) => isNavItemActive(path, item));
-  if (navItem) {
-    return navItem.label;
-  }
   const extra = extraTitles.find((item) => item.path === path);
   if (extra) {
     return extra.label;
+  }
+  const navItem = titleItems.find((item) => isNavItemActive(path, item));
+  if (navItem) {
+    return navItem.label;
   }
   return "AI-Amitia";
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/temporal"
 
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -77,7 +78,10 @@ func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, 
 	if queryText == "" {
 		return nil, fmt.Errorf("缺少查询文本")
 	}
-	vector, err := s.embeddingSvc.Embed(queryText)
+	vector, rawModelError, err := s.embeddingSvc.EmbedWithRawError(queryText)
+	if rawModelError != "" {
+		modelerror.Report(modelerror.Event{ModelType: "vector", ConversationID: req.ConversationID, RequestID: req.RequestID, Channel: req.Channel, RawError: rawModelError})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("向量化失败: %w", err)
 	}

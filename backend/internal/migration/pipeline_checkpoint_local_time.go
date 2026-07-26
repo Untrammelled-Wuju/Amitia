@@ -1,0 +1,16 @@
+package migration
+
+func PipelineCheckpointLocalTimeMigration() Migration {
+	return Migration{
+		Version: "202607260002",
+		Name:    "convert_pipeline_checkpoint_times_to_local",
+		Up: func(step *Step) error {
+			exists, err := step.TableExists("pipeline_checkpoints")
+			if err != nil || !exists {
+				return err
+			}
+			step.Execute("UPDATE pipeline_checkpoints SET created_at = CASE WHEN created_at != '' THEN datetime(created_at, 'localtime') ELSE created_at END, updated_at = CASE WHEN updated_at != '' THEN datetime(updated_at, 'localtime') ELSE updated_at END, lease_expires_at = CASE WHEN lease_expires_at != '' THEN datetime(lease_expires_at, 'localtime') ELSE lease_expires_at END")
+			return nil
+		},
+	}
+}

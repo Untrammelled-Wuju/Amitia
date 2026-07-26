@@ -45,8 +45,8 @@ const router = createRouter({
     { path: "/extensions/agent-skills", name: "extensionAgentSkills", component: () => import("@/views/extensions/agent-skills/AgentSkillListView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/plugins", name: "extensionPlugins", component: () => import("@/views/extensions/PluginListView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/plugins/:id", name: "extensionPluginDetail", component: () => import("@/views/extensions/PluginDetailView.vue"), meta: { requiresAuth: true } },
-    { path: "/extensions/workshop", name: "extensionWorkshop", component: () => import("@/views/extensions/workshop/WorkshopListView.vue"), meta: { requiresAuth: true } },
-    { path: "/extensions/workshop/:id", name: "extensionWorkshopSession", component: () => import("@/views/extensions/workshop/WorkshopSessionView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop/skills", alias: "/extensions/workshop", name: "extensionWorkshop", component: () => import("@/views/extensions/workshop/WorkshopListView.vue"), meta: { requiresAuth: true } },
+    { path: "/creative-workshop/skills/:id", alias: "/extensions/workshop/:id", name: "extensionWorkshopSession", component: () => import("@/views/extensions/workshop/WorkshopSessionView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/runs", name: "extensionRuns", component: () => import("@/views/extensions/RunHistoryView.vue"), meta: { requiresAuth: true } },
     { path: "/creative-workshop", name: "creativeWorkshop", component: () => import("@/views/creative-workshop/CreativeWorkshopView.vue"), meta: { requiresAuth: true } },
 

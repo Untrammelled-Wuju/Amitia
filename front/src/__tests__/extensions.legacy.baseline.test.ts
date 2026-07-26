@@ -58,6 +58,12 @@ describe("Extension Center — Legacy Baseline", () => {
       expect(route.name).toBe("extensionWorkshop")
     })
 
+    it("resolves creative workshop skill route", async () => {
+      const router = (await import("@/router")).default
+      const route = router.resolve("/creative-workshop/skills")
+      expect(route.name).toBe("extensionWorkshop")
+    })
+
     it("resolves workshop session route with parameter", async () => {
       const router = (await import("@/router")).default
       const route = router.resolve("/extensions/workshop/test-session-id")
@@ -194,6 +200,12 @@ describe("Extension Center — Legacy Baseline", () => {
       const title = getPageTitle("/extensions/workshop")
       expect(typeof title).toBe("string")
       expect(title.length).toBeGreaterThan(0)
+    })
+
+    it("getPageTitle resolves creative workshop card paths", async () => {
+      const { getPageTitle } = await import("@/navigation/app-nav")
+      expect(getPageTitle("/creative-workshop/pet")).toBe("桌宠")
+      expect(getPageTitle("/creative-workshop/skills")).toBe("技能制作")
     })
   })
 })

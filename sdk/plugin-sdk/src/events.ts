@@ -19,8 +19,8 @@ export interface EventDeliveryContext {
   readonly deadline?: number;
   readonly signal?: AbortSignal;
   readonly logger: EventLogger;
-  readonly ack(): Promise<void>;
-  readonly nack(reason?: string): Promise<void>;
+  ack(): Promise<void>;
+  nack(reason?: string): Promise<void>;
 }
 
 export interface EventLogger {

@@ -140,20 +140,20 @@ export class NamespacedStorageClient implements StorageClient {
   async get<T>(key: string, options?: StorageReadOptions): Promise<StorageValue<T> | null> {
     assertKeyValid(key);
     assertNotSecretKey(key);
-    const entry = await this.backend.get<T>(this.namespace, key, options);
-    return entry;
+    const entry = await this.backend.get(this.namespace, key, options);
+    return entry as StorageValue<T> | null;
   }
 
   async set<T>(key: string, value: T, options?: StorageSetOptions): Promise<StorageValue<T>> {
     assertKeyValid(key);
     assertNotSecretKey(key);
-    return this.backend.set<T>(this.namespace, key, value, options);
+    return this.backend.set(this.namespace, key, value, options) as Promise<StorageValue<T>>;
   }
 
   async compareAndSwap<T>(request: StorageCASRequest<T>): Promise<StorageValue<T>> {
     assertKeyValid(request.key);
     assertNotSecretKey(request.key);
-    return this.backend.cas<T>(this.namespace, request);
+    return this.backend.cas(this.namespace, request) as Promise<StorageValue<T>>;
   }
 
   async delete(key: string, options?: StorageDeleteOptions): Promise<void> {
@@ -162,11 +162,11 @@ export class NamespacedStorageClient implements StorageClient {
   }
 
   async list<T>(query?: StorageListQuery): Promise<StoragePage<T>> {
-    return this.backend.list<T>(this.namespace, query);
+    return this.backend.list(this.namespace, query) as Promise<StoragePage<T>>;
   }
 
   async transaction<T>(callback: StorageTransactionCallback<T>): Promise<T> {
-    const result = await this.backend.transaction<T>(this.namespace, callback as StorageTransactionCallback<unknown>);
+    const result = await this.backend.transaction(this.namespace, callback as StorageTransactionCallback<unknown>);
     return result as T;
   }
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -128,6 +129,8 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 				audioUrl = ttsResult.AudioURL
 				audioIntent := delivery.NewDeliveryIntent(result.InteractionID, req.Channel, req.PeerID, "audio", serializeVoiceDeliveryPayload(audioUrl, ttsResult.Duration, reply))
 				_ = deliveryStore.CreateIntent(audioIntent)
+			} else {
+				modelerror.Report(modelerror.Event{ModelType: "voice", ConversationID: req.ConversationID, RequestID: req.TurnID, Channel: req.Channel, RawError: ttsErr.Error()})
 			}
 		}
 		util.SuccessResponse(c, gin.H{

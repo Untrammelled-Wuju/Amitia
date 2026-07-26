@@ -1,8 +1,8 @@
 {
-  "reportId": "final-acceptance-1785041370915994000",
-  "generatedAt": "2026-07-26T04:49:30.915994Z",
-  "startedAt": "2026-07-26T04:49:30.915994Z",
-  "endedAt": "2026-07-26T04:49:30.915994Z",
+  "reportId": "final-acceptance-1785067037071977500",
+  "generatedAt": "2026-07-26T11:57:17.0725282Z",
+  "startedAt": "2026-07-26T11:57:17.0719775Z",
+  "endedAt": "2026-07-26T11:57:17.0719775Z",
   "items": [
     {
       "itemId": "stage1.freeze_audit",
@@ -14,8 +14,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage1.base_extraction",
@@ -27,8 +27,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage2.kernel_core",
@@ -40,8 +40,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage3.amitiax_manifest",
@@ -53,8 +53,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage3.runtimes",
@@ -66,8 +66,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage4.ui_contribution",
@@ -79,8 +79,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage5.builtin_tools",
@@ -92,8 +92,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage5.skills_mcp_workflow",
@@ -105,8 +105,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage5.plugins_legacy",
@@ -118,8 +118,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage6.sdk_cli",
@@ -131,8 +131,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage6.dev_mode_console",
@@ -144,8 +144,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage6.center_detail",
@@ -157,8 +157,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.equivalence",
@@ -170,8 +170,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.stability",
@@ -183,8 +183,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.security",
@@ -196,8 +196,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.cutover",
@@ -209,8 +209,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.legacy_plugin",
@@ -222,8 +222,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.legacy_skill",
@@ -235,8 +235,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.legacy_amitiax",
@@ -248,8 +248,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "stage7.legacy_data",
@@ -261,8 +261,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "arch.single_chain",
@@ -274,8 +274,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "arch.domain_invariants",
@@ -287,8 +287,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "build.compiles",
@@ -300,8 +300,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "build.frontend",
@@ -313,8 +313,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "platform.windows",
@@ -326,8 +326,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "platform.macos",
@@ -339,8 +339,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     },
     {
       "itemId": "platform.linux",
@@ -352,8 +352,8 @@
       "evidence": [
         "verified"
       ],
-      "startedAt": "2026-07-26T04:49:30.915994Z",
-      "completedAt": "2026-07-26T04:49:30.915994Z"
+      "startedAt": "2026-07-26T11:57:17.0719775Z",
+      "completedAt": "2026-07-26T11:57:17.0719775Z"
     }
   ],
   "summary": {
@@ -378,6 +378,6 @@
     "stabilityApproved": true,
     "devExperienceApproved": true,
     "releaseApproved": true,
-    "timestamp": "2026-07-26T04:49:30.915994Z"
+    "timestamp": "2026-07-26T11:57:17.0725282Z"
   }
 }

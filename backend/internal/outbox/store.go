@@ -144,7 +144,7 @@ func (s *SQLiteOutboxStore) ClaimNext(batchSize int, owner string) ([]OutboxReco
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now().UTC()
+	now := time.Now()
 	availableAt := now.Format("2006-01-02 15:04:05")
 	leasedUntil := now.Add(s.cfg.LeaseTTL).Format("2006-01-02 15:04:05")
 
@@ -183,7 +183,7 @@ func (s *SQLiteOutboxStore) MarkPublished(id, leaseToken string) error {
 	if !s.validateLease(id, leaseToken) {
 		return ErrLeaseConflict
 	}
-	now := time.Now().UTC()
+	now := time.Now()
 	res := s.db.Model(&OutboxRecordModel{}).
 		Where("id = ? AND lease_token = ? AND status = ?", id, leaseToken, string(OutboxStatusLeased)).
 		Updates(map[string]interface{}{
@@ -204,7 +204,7 @@ func (s *SQLiteOutboxStore) MarkFailed(id, leaseToken, errMsg string) error {
 	if !s.validateLease(id, leaseToken) {
 		return ErrLeaseConflict
 	}
-	now := time.Now().UTC()
+	now := time.Now()
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var m OutboxRecordModel
 		if err := tx.Where("id = ? AND lease_token = ? AND status = ?", id, leaseToken, string(OutboxStatusLeased)).Take(&m).Error; err != nil {
@@ -252,7 +252,7 @@ func (s *SQLiteOutboxStore) MarkFailed(id, leaseToken, errMsg string) error {
 }
 
 func (s *SQLiteOutboxStore) RenewLease(id, leaseToken string) error {
-	now := time.Now().UTC()
+	now := time.Now()
 	leasedUntil := now.Add(s.cfg.LeaseTTL).Format("2006-01-02 15:04:05")
 	res := s.db.Model(&OutboxRecordModel{}).
 		Where("id = ? AND lease_token = ? AND status = ? AND leased_until > ?",
@@ -271,7 +271,7 @@ func (s *SQLiteOutboxStore) RenewLease(id, leaseToken string) error {
 }
 
 func (s *SQLiteOutboxStore) ReleaseExpiredLeases() (int64, error) {
-	now := time.Now().UTC()
+	now := time.Now()
 	res := s.db.Model(&OutboxRecordModel{}).
 		Where("status = ? AND leased_until <= ?", string(OutboxStatusLeased), now.Format("2006-01-02 15:04:05")).
 		Updates(map[string]interface{}{
@@ -289,7 +289,7 @@ func (s *SQLiteOutboxStore) validateLease(id, token string) bool {
 	if err := s.db.Where("id = ? AND status = ?", id, string(OutboxStatusLeased)).Take(&m).Error; err != nil {
 		return false
 	}
-	return m.LeaseToken == token && m.LeasedUntil > time.Now().UTC().Format("2006-01-02 15:04:05")
+	return m.LeaseToken == token && m.LeasedUntil > time.Now().Format("2006-01-02 15:04:05")
 }
 
 func generateLeaseToken() string {
@@ -335,7 +335,7 @@ func parseTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
-	t, _ := time.Parse("2006-01-02 15:04:05", s)
+	t, _ := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local)
 	return t
 }
 
@@ -343,7 +343,7 @@ func parseTimePtr(s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	t, err := time.Parse("2006-01-02 15:04:05", s)
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local)
 	if err != nil {
 		return nil
 	}

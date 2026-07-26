@@ -566,11 +566,5 @@ func (w *logWriter) Write(p []byte) (int, error) {
 }
 
 func newSysProcAttr() *syscall.SysProcAttr {
-	if runtimeGOOS() == "windows" {
-		return &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-		}
-	}
-	return &syscall.SysProcAttr{}
+	return newPlatformSysProcAttr()
 }

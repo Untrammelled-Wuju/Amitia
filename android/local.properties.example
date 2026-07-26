@@ -1,0 +1,16 @@
+# Amitia Android 本地配置示例
+#
+# 使用前请复制本文件为 local.properties 并按实际路径修改 sdk.dir。
+# local.properties 已被 .gitignore 忽略，不会提交到版本控制。
+#
+# Windows 示例（注意路径分隔符使用双反斜杠或正斜杠）：
+# sdk.dir=C\:\\Users\\Untrammelled\\AppData\\Local\\Android\\Sdk
+# 或
+# sdk.dir=C:/Users/Untrammelled/AppData/Local/Android/Sdk
+#
+# macOS 示例：
+# sdk.dir=/Users/yourname/Library/Android/sdk
+#
+# Linux 示例：
+# sdk.dir=/home/yourname/Android/Sdk
+sdk.dir=C\:/Users/Untrammelled/AppData/Local/Android/Sdk

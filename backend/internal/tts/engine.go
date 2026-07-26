@@ -126,7 +126,7 @@ func Synthesize(cfg *TtsConfig, text string) (*SynthesizeResponse, error) {
 
 	if resp.StatusCode != 200 {
 		rawBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("火山引擎 TTS 返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+		return nil, fmt.Errorf("火山引擎 TTS 返回 %d: %s", resp.StatusCode, string(rawBody))
 	}
 
 	var audioBuffer bytes.Buffer

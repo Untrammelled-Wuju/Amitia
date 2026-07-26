@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -167,6 +168,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
 		panic("failed to initialize skill runtime")
+	}
+	kernelRoot := filepath.Join(os.TempDir(), "amitia-extension-kernel")
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		kernelRoot = filepath.Join(config.AppCfg.Storage.DataDir, "extensions-v2")
+	}
+	if err := extensionRuntime.AttachKernel(kernelRoot); err != nil {
+		log.Error("failed to initialize extension kernel:", err)
+		panic("failed to initialize extension kernel")
 	}
 	chatSvc.SetSkillRuntime(extensionRuntime)
 	extensionRuntime.Workshop.SetModelGenerator(chatSvc)

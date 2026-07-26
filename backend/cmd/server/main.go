@@ -34,7 +34,7 @@ import (
 
 func killExistingServer(addr string) {
 	log.Warn("检测到服务端口已被占用，正在终止旧进程...")
-	if err := platform.Detect().KillExistingServer(addr); err != nil {
+	if err := platform.Get().KillExistingServer(addr); err != nil {
 		log.Warn("终止旧进程失败:", err)
 	}
 }

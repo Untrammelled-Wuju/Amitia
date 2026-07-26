@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -107,7 +108,6 @@ func (h *Handler) Test(c *gin.Context) {
 	util.SuccessMsgResponse(c, "连接测试成功", nil)
 }
 
-
 func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 	var body struct {
 		ApiKey     string `json:"apiKey"`
@@ -147,6 +147,7 @@ func (h *Handler) Synthesize(c *gin.Context) {
 		result, err = h.service.SynthesizeWithActive(req.Text)
 	}
 	if err != nil {
+		modelerror.Report(modelerror.Event{ModelType: "voice", ConversationID: req.ConversationID, RequestID: req.RequestID, Channel: "web", RawError: err.Error()})
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}

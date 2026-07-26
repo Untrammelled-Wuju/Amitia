@@ -162,7 +162,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, watch } from "vue";
 import { ElMessage } from "element-plus";
 import {
   useFixedEvents,
@@ -229,15 +229,14 @@ const courseForm = reactive({
   replyMode: "SHORT_REPLY",
 });
 
-onMounted(async () => {
-  await loadCourses();
-});
-
 async function loadCourses() {
+  if (!props.characterId) return;
   try {
     courses.value = await getFixedEvents(props.characterId || undefined);
   } catch {}
 }
+
+watch(() => props.characterId, loadCourses, { immediate: true });
 
 function addCourse() {
   editingCourse.value = null;

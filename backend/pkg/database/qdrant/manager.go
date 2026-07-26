@@ -13,6 +13,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
+	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -59,6 +60,101 @@ func killExistingQdrant(port int) {
 	log.Warn("旧Qdrant未能在10秒内释放端口，继续启动...")
 }
 
+func resolveQdrantBinaryPath(qdrantDir string) string {
+	if cfgPath := config.AppCfg.Qdrant.BinaryPath; cfgPath != "" {
+		if filepath.IsAbs(cfgPath) {
+			return cfgPath
+		}
+		return filepath.Join(qdrantDir, cfgPath)
+	}
+
+	p := platform.Get()
+	if rootfs := p.RootFSDir(); rootfs != "" && !p.IsWindows() {
+		binName := "qdrant" + p.BinarySuffix()
+		rootfsPath := filepath.Join(rootfs, "bin", binName)
+		if _, err := os.Stat(rootfsPath); err == nil {
+			return rootfsPath
+		}
+		if IsLinuxARM64() {
+			candidates := []string{
+				filepath.Join(rootfs, "bin", "qdrant_linux_aarch64"),
+				filepath.Join(rootfs, "bin", "qdrant"),
+				filepath.Join(rootfs, "qdrant"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
+		if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+			candidates := []string{
+				filepath.Join(rootfs, "bin", "qdrant_linux_x86"),
+				filepath.Join(rootfs, "bin", "qdrant"),
+				filepath.Join(rootfs, "qdrant"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
+	}
+
+	suffix := p.ExecutableSuffix()
+	defaultPath := filepath.Join(qdrantDir, "qdrant"+suffix)
+	if _, err := os.Stat(defaultPath); err == nil {
+		return defaultPath
+	}
+
+	if IsLinuxARM64() {
+		candidates := []string{
+			filepath.Join(qdrantDir, "qdrant_linux_aarch64"),
+			filepath.Join(qdrantDir, "qdrant"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		candidates := []string{
+			filepath.Join(qdrantDir, "qdrant_linux_x86"),
+			filepath.Join(qdrantDir, "qdrant"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+
+	return defaultPath
+}
+
+func resolveQdrantWorkDir(qdrantDir string) string {
+	p := platform.Get()
+	if rootfs := p.RootFSDir(); rootfs != "" && !p.IsWindows() {
+		binDir := filepath.Join(rootfs, "bin")
+		if info, err := os.Stat(binDir); err == nil && info.IsDir() {
+			return binDir
+		}
+	}
+	return qdrantDir
+}
+
+func resolveQdrantDataDir(qdrantDir string) string {
+	if cfgDir := config.AppCfg.Qdrant.DataDir; cfgDir != "" {
+		if filepath.IsAbs(cfgDir) {
+			return cfgDir
+		}
+		return filepath.Join(qdrantDir, cfgDir)
+	}
+	return filepath.Join(qdrantDir, "data")
+}
+
 func StartQdrant() error {
 	cfg := config.AppCfg.Qdrant
 	workDir := util.RuntimeRoot()
@@ -71,28 +167,10 @@ func StartQdrant() error {
 
 	_ = os.MkdirAll(configDir, 0755)
 
-	configContent := fmt.Sprintf("service:\n  http_port: %d\n  grpc_port: %d\n", cfg.Port, cfg.Port+1)
+	configContent := fmt.Sprintf("service:\n  http_port: %d\n  grpc_port: %d\nstorage:\n  storage_path: %s\n", cfg.Port, cfg.Port+1, resolveQdrantDataDir(qdrantDir))
 	_ = os.WriteFile(configPath, []byte(configContent), 0644)
 
-	var qdrantPath string
-	switch runtime.GOOS {
-	case "windows":
-		qdrantPath = filepath.Join(qdrantDir, "qdrant.exe")
-	case "linux":
-		if IsLinuxARM64() {
-			qdrantPath = filepath.Join(qdrantDir, "qdrant_linux_aarch64")
-		} else {
-			qdrantPath = filepath.Join(qdrantDir, "qdrant_linux_x86")
-		}
-		if _, statErr := os.Stat(qdrantPath); statErr != nil {
-			fallbackPath := filepath.Join(qdrantDir, "qdrant")
-			if _, fallbackErr := os.Stat(fallbackPath); fallbackErr == nil {
-				qdrantPath = fallbackPath
-			}
-		}
-	default:
-		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
-	}
+	qdrantPath := resolveQdrantBinaryPath(qdrantDir)
 
 	if _, err := os.Stat(qdrantPath); os.IsNotExist(err) {
 		if err := ensureQdrantBinary(qdrantPath, qdrantDir); err != nil {
@@ -100,8 +178,11 @@ func StartQdrant() error {
 		}
 	}
 
+	dataDir := resolveQdrantDataDir(qdrantDir)
+	_ = os.MkdirAll(dataDir, 0755)
+
 	cmd := exec.Command(qdrantPath, "--config-path", configPath)
-	cmd.Dir = qdrantDir
+	cmd.Dir = resolveQdrantWorkDir(qdrantDir)
 	cmd.Stdout = &qdrantWriter{}
 	cmd.Stderr = &qdrantWriter{}
 

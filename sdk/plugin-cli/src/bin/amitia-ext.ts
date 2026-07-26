@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { runCli } from "../registry";
+import { runCli } from "../registry.js";
 
 async function main(): Promise<void> {
   const result = await runCli(process.argv);

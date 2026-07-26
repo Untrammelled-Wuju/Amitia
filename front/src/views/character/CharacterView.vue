@@ -352,7 +352,7 @@ async function loadVoices() {
   try {
     voicePresets.value = await apiClient
       .get("/api/tts/voices")
-      .then((r) => r.data?.data || []);
+      .then((r) => (Array.isArray(r.data) ? r.data : []));
   } catch {
     voicePresets.value = [];
   }
@@ -362,7 +362,7 @@ async function loadGlobalApiKey() {
   try {
     const configs = await apiClient
       .get("/api/tts/configs")
-      .then((r) => r.data?.data || []);
+      .then((r) => (Array.isArray(r.data) ? r.data : []));
     const active = configs.find((c: any) => c.isActive);
     if (active) globalApiKey.value = active.apiKey || "";
   } catch {}
@@ -472,7 +472,7 @@ async function ensureTtsConfig() {
   if (!globalApiKey.value) return;
   const configs = await apiClient
     .get("/api/tts/configs")
-    .then((r) => r.data?.data || []);
+    .then((r) => (Array.isArray(r.data) ? r.data : []));
   const existing = configs.find((c: any) => c.isActive);
   if (existing) {
     if (!existing.hasApiKey)
@@ -534,7 +534,7 @@ async function previewClone() {
   try {
     const configs = await apiClient
       .get("/api/tts/configs")
-      .then((r) => r.data?.data || []);
+      .then((r) => (Array.isArray(r.data) ? r.data : []));
     const cfg = configs.find((c: any) => c.isActive) || configs[0];
     if (!cfg) {
       ElMessage.warning("未找到音色配置");

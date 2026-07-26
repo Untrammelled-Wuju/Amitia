@@ -213,6 +213,7 @@ export function useWebChatSend(
     const safeText = typeof text === "string" ? text : "";
     if (isSubmitting.value) return;
     isSubmitting.value = true;
+    const requestEnvelope = createRequestEnvelope();
     const userMsgLocalId = "user-" + Date.now();
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
@@ -241,6 +242,7 @@ export function useWebChatSend(
             : safeText;
     messages.value.push({
       id: userMsgLocalId,
+      requestId: requestEnvelope.requestId,
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
@@ -254,13 +256,36 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
+    if (convId.value) {
+      try {
+        sessionStorage.setItem(
+          `uai-pending-msg:${convId.value}`,
+          JSON.stringify({
+            id: userMsgLocalId,
+            requestId: requestEnvelope.requestId,
+            role: "user",
+            content: sendContent,
+            imageUrl: imgUrl || undefined,
+            audioUrl: finalAudioUrl || undefined,
+            audioDuration: 0,
+            videoUrl: finalVideoUrl || undefined,
+            status: "sent",
+            conversationId: convId.value,
+            createdAt: new Date().toISOString(),
+            replyToMessageId: replyTarget?.value?.id || undefined,
+            replyToRole: replyTarget?.value?.role || undefined,
+            replyToExcerpt: replyTarget?.value?.content || undefined,
+          })
+        );
+      } catch {}
+    }
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
     clearSendingTimer();
     try {
       const payload = {
-        ...createRequestEnvelope(),
+        ...requestEnvelope,
         conversationId: convId.value || undefined,
         characterId: characterId.value || undefined,
         message: sendContent,
@@ -299,8 +324,11 @@ export function useWebChatSend(
           );
         }
       }
+      if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
       if (result.conversationId && !convId.value)
         convId.value = result.conversationId;
+      if (result.conversationId)
+        localStorage.setItem("webchat-conv-id", result.conversationId);
       if (replyTarget) replyTarget.value = null;
       startGenerationPhaseTracking(result.mergeWindowMs);
       startSendingTimeout(result.userMessageId || userMsgLocalId);
@@ -321,6 +349,7 @@ export function useWebChatSend(
       }
       sending.value = false;
       isSubmitting.value = false;
+      if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
       clearSendingTimer();
     } finally {
       const lastMsg = messages.value[messages.value.length - 1];
@@ -405,6 +434,7 @@ export function useWebChatSend(
       }
       messages.value = [];
       ElMessage.success("已清空");
+      if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
     } catch {}
   }
 

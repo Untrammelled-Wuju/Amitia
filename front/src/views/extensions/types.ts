@@ -25,6 +25,15 @@ export type ScopeType =
   | "channel"
   | "session";
 
+export interface LocalExtensionPackage {
+  id: string;
+  name: string;
+  version: string;
+  publisher: string;
+  moduleCount: number;
+  installedAt: string;
+}
+
 export interface RunView {
   runId: string;
   extensionId: string;

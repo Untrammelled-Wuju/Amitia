@@ -5,12 +5,30 @@ import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { calcTypingDelay } from "@/utils/typing";
 import {
   compareChatMessages,
+  insertTransientModelError,
   mergeChatMessage,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
 export function isWebChatReplyEvent(message: any): boolean {
   return message?.role === "assistant";
+}
+
+export function isVisionErrorReplyEvent(message: any): boolean {
+  return isWebChatReplyEvent(message) && message?.msgType === "vision_error";
+}
+
+export function isTransientModelErrorReplyEvent(message: any): boolean {
+  return (
+    isWebChatReplyEvent(message) &&
+    ["vision_error", "text_error", "voice_error", "vector_error"].includes(
+      message?.msgType,
+    )
+  );
+}
+
+export function shouldFinishSendingForModelError(message: any): boolean {
+  return message?.msgType === "text_error";
 }
 
 export function useWebChatSSE(
@@ -66,6 +84,8 @@ export function useWebChatSSE(
 
   function normalizeEventMessage(event: any): any | null {
     if (!event.messageId && !event.id) return null;
+    const metadata =
+      event.data && typeof event.data === "object" ? event.data : {};
     return {
       id: event.messageId || event.id,
       conversationId: event.conversationId,
@@ -75,6 +95,11 @@ export function useWebChatSSE(
       status: event.status,
       channel: event.channel,
       direction: event.direction,
+      msgType: metadata.messageType,
+      rawError: metadata.rawError,
+      requestId: metadata.requestId,
+      anchorMessageId: metadata.userMessageId,
+      anchorSequence: metadata.userMessageSequence,
     };
   }
 
@@ -100,6 +125,17 @@ export function useWebChatSSE(
         !messages.value.some((m: any) => m.id === msg.id) &&
         !typingQueue.some((m: any) => m.id === msg.id)
       ) {
+        if (isTransientModelErrorReplyEvent(msg)) {
+          if (shouldFinishSendingForModelError(msg)) sending.value = false;
+          insertTransientModelError(messages.value, {
+            ...msg,
+            typingDone: true,
+          });
+          lastPolledMsgId = msg.id || lastPolledMsgId;
+          sortMessages();
+          nextTick(() => scrollToBottom());
+          return;
+        }
         sending.value = false;
         typingQueue.push(msg);
         if (!typingTimer) processTypingQueue();

@@ -1,1 +1,1 @@
-export * from "./extension-config";
+export * from "./extension-config.js";

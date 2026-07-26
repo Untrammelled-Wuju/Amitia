@@ -103,11 +103,15 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 }
 
 func (s *service) Delete(id string) error {
+	memory, _ := s.repo.FindByID(id)
 	if err := s.repo.Delete(id); err != nil {
 		return err
 	}
 	if s.graphSvc != nil {
 		_ = s.graphSvc.DeleteNode("episodic:" + id)
+		if memory != nil && memory.UserID != "" {
+			_ = s.graphSvc.DeleteNodeIfOrphan("user:" + memory.UserID)
+		}
 	}
 	return nil
 }

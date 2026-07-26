@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/requestidentity"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -276,7 +277,10 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
-	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	visionError := chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	if visionError != "" {
+		h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
+	}
 	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
@@ -318,6 +322,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		h.publishTextModelError(convID, requestID, "web", err)
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -398,7 +403,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 				h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
 			}
 		}()
-		chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+		visionError := chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+		if visionError != "" {
+			h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
+		}
 		chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
 		bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
@@ -440,6 +448,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		})
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))
+			h.publishTextModelError(convID, requestID, "web", err)
 			h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
 		} else if orchResult != nil && orchResult.Response != nil {
 			applog.Info(fmt.Sprintf("[WebChatSubmitMessage] generation completed for %s, assistant count=%d", convID, len(orchResult.Response.MessageIDs)))
@@ -503,6 +512,67 @@ func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, c
 		return nil, err
 	}
 	return msg, nil
+}
+
+func (h *Handler) publishModelError(event modelerror.Event) {
+	if strings.TrimSpace(event.ConversationID) == "" || strings.TrimSpace(event.RawError) == "" {
+		return
+	}
+	var userMessage struct {
+		ID       string
+		Sequence int64
+	}
+	requestID := strings.TrimSpace(event.RequestID)
+	if h.db != nil && requestID != "" {
+		h.db.Model(&chat.Message{}).
+			Select("id, sequence").
+			Where("conversation_id = ? AND request_id = ? AND role = ?", event.ConversationID, requestID, "user").
+			Order("sequence ASC").
+			Limit(1).
+			Scan(&userMessage)
+	}
+	labels := map[string]string{
+		"vision": "图片识别模型",
+		"text":   "文本模型",
+		"voice":  "语音模型",
+		"vector": "向量模型",
+	}
+	label := labels[event.ModelType]
+	if label == "" {
+		label = "模型"
+	}
+	channel := strings.TrimSpace(event.Channel)
+	if channel == "" {
+		channel = "web"
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	content := label + "调用失败\n\n原始错误：" + event.RawError
+	GetMessageEventBus().Publish(MessageEvent{
+		Type:           EventMessageCreated,
+		ConversationID: event.ConversationID,
+		MessageID:      event.ModelType + "-error-" + uuid.New().String(),
+		Channel:        channel,
+		Direction:      "outbound",
+		Role:           "assistant",
+		Content:        content,
+		CreatedAt:      now,
+		Status:         "failed",
+		Data: map[string]interface{}{
+			"messageType":         event.ModelType + "_error",
+			"modelType":           event.ModelType,
+			"rawError":            event.RawError,
+			"requestId":           requestID,
+			"userMessageId":       userMessage.ID,
+			"userMessageSequence": userMessage.Sequence,
+		},
+	})
+}
+
+func (h *Handler) publishTextModelError(convID, requestID, channel string, err error) {
+	var textModelError *chat.TextModelCallError
+	if errors.As(err, &textModelError) {
+		h.publishModelError(modelerror.Event{ModelType: "text", ConversationID: convID, RequestID: requestID, Channel: channel, RawError: textModelError.RawError})
+	}
 }
 
 func (h *Handler) WebChatGenerationStatus(c *gin.Context) {

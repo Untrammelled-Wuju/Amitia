@@ -123,8 +123,8 @@ export interface HostBridgeLike {
 export class DefaultHostClient implements HostClient {
   constructor(
     private readonly bridge: HostBridgeLike,
-    private readonly scope: RuntimeScope,
-    private readonly traceId: string,
+    _scope: RuntimeScope,
+    _traceId: string,
   ) {}
 
   readonly tools: HostToolClient = {

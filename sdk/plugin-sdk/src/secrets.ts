@@ -23,9 +23,9 @@ export interface SecretLeaseHandle {
   readonly reference: SecretReference;
   readonly purpose: string;
   readonly expiresAt: string;
-  readonly getValue(): string;
-  readonly renew(durationMs: number): Promise<void>;
-  readonly release(): Promise<void>;
+  getValue(): string;
+  renew(durationMs: number): Promise<void>;
+  release(): Promise<void>;
 }
 
 export interface SecretReferenceClient {
@@ -156,7 +156,7 @@ export class InMemorySecretBackend implements SecretBackend {
   }
 
   async lease(
-    namespace: string,
+    _namespace: string,
     reference: SecretReference,
     purpose: string,
     ttlMs: number,
@@ -173,7 +173,7 @@ export class InMemorySecretBackend implements SecretBackend {
       purpose,
       expiresAt,
       getValue: () => entry.value,
-      renew: async (durationMs: number) => {
+      renew: async (_durationMs: number) => {
         // in-memory: no-op, expiry is only checked on access
       },
       release: async () => {
@@ -184,7 +184,7 @@ export class InMemorySecretBackend implements SecretBackend {
     return handle;
   }
 
-  async revoke(namespace: string, reference: SecretReference): Promise<void> {
+  async revoke(_namespace: string, reference: SecretReference): Promise<void> {
     this.secrets.delete(reference.referenceId);
   }
 
@@ -198,7 +198,7 @@ export class InMemorySecretBackend implements SecretBackend {
     return refs;
   }
 
-  async rotate(namespace: string, reference: SecretReference, newValue: string): Promise<SecretReference> {
+  async rotate(_namespace: string, reference: SecretReference, newValue: string): Promise<SecretReference> {
     const entry = this.secrets.get(reference.referenceId);
     if (!entry) {
       throw new ValidationError(`secret ${reference.name} not found`);

@@ -1,4 +1,4 @@
-import type { CliLogger, LogLevel } from "../types";
+import type { CliLogger, LogLevel } from "./types.js";
 
 const SEVERITY_ORDER: Record<LogLevel, number> = {
   quiet: 100,

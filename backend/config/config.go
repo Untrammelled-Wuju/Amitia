@@ -50,6 +50,8 @@ type ChatConfig struct {
 type QdrantConfig struct {
 	Host           string                      `mapstructure:"host"`
 	Port           int                         `mapstructure:"port"`
+	BinaryPath     string                      `mapstructure:"binaryPath"`
+	DataDir        string                      `mapstructure:"dataDir"`
 	CollectionName string                      `mapstructure:"collectionName"`
 	VectorDim      int                         `mapstructure:"vectorDim"`
 	Limit          int                         `mapstructure:"limit"`
@@ -68,13 +70,14 @@ type EmbeddingConfig struct {
 }
 
 type SurrealConfig struct {
-	Host      string `mapstructure:"host"`
-	Port      int    `mapstructure:"port"`
-	Namespace string `mapstructure:"namespace"`
-	Database  string `mapstructure:"database"`
-	Username  string `mapstructure:"username"`
-	Password  string `mapstructure:"password"`
-	DataPath  string `mapstructure:"dataPath"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	BinaryPath string `mapstructure:"binaryPath"`
+	Namespace  string `mapstructure:"namespace"`
+	Database   string `mapstructure:"database"`
+	Username   string `mapstructure:"username"`
+	Password   string `mapstructure:"password"`
+	DataPath   string `mapstructure:"dataPath"`
 }
 
 type PromptFeatureFlags struct {
@@ -142,6 +145,11 @@ func InitConfig(configPath string) {
 	v.SetDefault("prompt.proactiveRawEnabled", true)
 
 	v.AutomaticEnv()
+
+	v.BindEnv("qdrant.binaryPath", "QDRANT_BIN")
+	v.BindEnv("qdrant.dataDir", "QDRANT_DATA_DIR")
+	v.BindEnv("surrealdb.binaryPath", "SURREAL_BIN")
+	v.BindEnv("surrealdb.dataPath", "SURREAL_DATA_PATH")
 
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("[Config] 未找到配置文件，使用默认值: %v\n", err)

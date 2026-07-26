@@ -1,14 +1,10 @@
-<!--
-Deprecated: Legacy extension architecture.
-Do not add new capabilities. This view is retained only for
-compatibility, maintenance, testing, and migration to Extension Kernel.
--->
 <template>
   <main class="center-page">
     <header>
       <h1>扩展中心</h1>
-      <p>集中管理 Skill、Plugin、工坊草案与执行记录。</p>
+      <p>统一管理扩展包、系统插件、Skill 与外部能力。</p>
     </header>
+
     <section class="entry-grid">
       <router-link
         v-for="entry in entries"
@@ -26,55 +22,28 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
     </section>
   </main>
 </template>
+
 <script setup lang="ts">
 import {
-  MagicStick,
+  ArrowRight,
+  Box,
+  Connection,
+  DocumentChecked,
   Operation,
   SetUp,
   Tickets,
-  ArrowRight,
-  DocumentChecked,
-  Connection,
 } from "@element-plus/icons-vue";
+
 const entries = [
-  {
-    to: "/extensions/mcp",
-    title: "MCP 服务",
-    description: "连接外部服务，管理工具、资源、提示词与角色权限",
-    icon: Connection,
-  },
-  {
-    to: "/extensions/agent-skills",
-    title: "Agent Skills",
-    description: "导入和管理通用 SKILL.md 指令包及其文件",
-    icon: DocumentChecked,
-  },
-  {
-    to: "/extensions/plugins",
-    title: "插件",
-    description: "管理受宿主管控的 Plugin Runtime",
-    icon: SetUp,
-  },
-  {
-    to: "/extensions/workshop",
-    title: "技能制作",
-    description: "从自然语言创建安全的声明式 Skill",
-    icon: MagicStick,
-  },
-  {
-    to: "/extensions/skills",
-    title: "技能管理",
-    description: "统一管理模型可调用技能、启用状态与工具适配",
-    icon: Operation,
-  },
-  {
-    to: "/extensions/runs",
-    title: "执行记录",
-    description: "检查 Skill 运行结果、耗时和标准错误",
-    icon: Tickets,
-  },
+  { to: "/extensions/packages", title: "本地扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
+  { to: "/extensions/mcp", title: "MCP 服务", description: "连接外部 MCP 服务", icon: Connection },
+  { to: "/extensions/agent-skills", title: "Agent Skills", description: "管理 SKILL.md 指令包", icon: DocumentChecked },
+  { to: "/extensions/plugins", title: "系统插件", description: "管理系统 Plugin Runtime", icon: SetUp },
+  { to: "/extensions/skills", title: "兼容技能", description: "管理旧 Skill 能力", icon: Operation },
+  { to: "/extensions/runs", title: "执行记录", description: "查看运行结果和耗时", icon: Tickets },
 ];
 </script>
+
 <style scoped>
 .center-page {
   height: 100%;

@@ -1,13 +1,13 @@
 package amitiax
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"archive/zip"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,17 +19,17 @@ import (
 )
 
 const (
-	ManifestFile       = "manifest.json"
-	IntegrityDir       = "integrity/"
-	IntegrityFiles     = "integrity/files.json"
-	IntegrityTree      = "integrity/content-tree.json"
-	ModulesDir         = "modules/"
-	ResourcesDir       = "resources/"
-	AssetsDir          = "assets/"
-	MigrationsDir      = "migrations/"
-	LicensesDir        = "licenses/"
-	DocsDir            = "docs/"
-	SignaturesDir      = "signatures/"
+	ManifestFile   = "manifest.json"
+	IntegrityDir   = "integrity/"
+	IntegrityFiles = "integrity/files.json"
+	IntegrityTree  = "integrity/content-tree.json"
+	ModulesDir     = "modules/"
+	ResourcesDir   = "resources/"
+	AssetsDir      = "assets/"
+	MigrationsDir  = "migrations/"
+	LicensesDir    = "licenses/"
+	DocsDir        = "docs/"
+	SignaturesDir  = "signatures/"
 )
 
 var allowedRootDirs = map[string]bool{
@@ -45,53 +45,53 @@ var allowedRootDirs = map[string]bool{
 }
 
 type PackageLayout struct {
-	ManifestPath  string
-	Modules       map[string]string
-	Resources     []string
-	Assets        []string
-	Migrations    []string
-	Licenses      []string
-	Docs          []string
-	Signatures    []string
+	ManifestPath   string
+	Modules        map[string]string
+	Resources      []string
+	Assets         []string
+	Migrations     []string
+	Licenses       []string
+	Docs           []string
+	Signatures     []string
 	IntegrityFiles string
-	IntegrityTree string
+	IntegrityTree  string
 }
 
 type FileEntry struct {
-	Path     string `json:"path"`
-	Size     int64  `json:"size"`
-	Hash     string `json:"hash"`
+	Path     string    `json:"path"`
+	Size     int64     `json:"size"`
+	Hash     string    `json:"hash"`
 	Modified time.Time `json:"modified"`
-	IsDir    bool   `json:"isDir,omitempty"`
+	IsDir    bool      `json:"isDir,omitempty"`
 }
 
 type IntegrityFilesDoc struct {
-	Algorithm string               `json:"algorithm"`
-	Files     map[string]FileEntry `json:"files"`
-	GeneratedAt time.Time          `json:"generatedAt"`
+	Algorithm   string               `json:"algorithm"`
+	Files       map[string]FileEntry `json:"files"`
+	GeneratedAt time.Time            `json:"generatedAt"`
 }
 
 type IntegrityTreeDoc struct {
-	Algorithm    string `json:"algorithm"`
-	TreeHash     string `json:"treeHash"`
-	GeneratedAt  time.Time `json:"generatedAt"`
+	Algorithm   string    `json:"algorithm"`
+	TreeHash    string    `json:"treeHash"`
+	GeneratedAt time.Time `json:"generatedAt"`
 }
 
 type Package struct {
-	Manifest   manifest_v2.Manifest
-	Layout     PackageLayout
-	Files      []FileEntry
-	Integrity  IntegrityFilesDoc
-	Tree       IntegrityTreeDoc
+	Manifest  manifest_v2.Manifest
+	Layout    PackageLayout
+	Files     []FileEntry
+	Integrity IntegrityFilesDoc
+	Tree      IntegrityTreeDoc
 }
 
 var (
-	ErrInvalidArchive     = errors.New("amitiax: invalid archive")
-	ErrManifestMissing    = errors.New("amitiax: manifest.json missing")
-	ErrInvalidStructure   = errors.New("amitiax: invalid package structure")
-	ErrPathTraversal      = errors.New("amitiax: path traversal detected")
-	ErrIntegrityMissing   = errors.New("amitiax: integrity files missing")
-	ErrIntegrityMismatch  = errors.New("amitiax: integrity mismatch")
+	ErrInvalidArchive    = errors.New("amitiax: invalid archive")
+	ErrManifestMissing   = errors.New("amitiax: manifest.json missing")
+	ErrInvalidStructure  = errors.New("amitiax: invalid package structure")
+	ErrPathTraversal     = errors.New("amitiax: path traversal detected")
+	ErrIntegrityMissing  = errors.New("amitiax: integrity files missing")
+	ErrIntegrityMismatch = errors.New("amitiax: integrity mismatch")
 )
 
 func OpenArchive(archivePath string) (*Package, error) {
@@ -116,9 +116,9 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 			return nil, err
 		}
 		entry := FileEntry{
-			Path:    name,
-			Size:    int64(f.UncompressedSize64),
-			IsDir:   f.FileInfo().IsDir(),
+			Path:  name,
+			Size:  int64(f.UncompressedSize64),
+			IsDir: f.FileInfo().IsDir(),
 		}
 		if !entry.IsDir {
 			data, err := readZipFile(f)
@@ -152,6 +152,11 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 	m, err := manifest_v2.Parse(manifestData)
 	if err != nil {
 		return nil, err
+	}
+	if m.Integrity.ContentTreeHash == "" {
+		m.Integrity.ContentTreeHash = pkg.Tree.TreeHash
+	} else if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
+		return nil, fmt.Errorf("%w: manifest content tree hash mismatch", ErrIntegrityMismatch)
 	}
 	pkg.Manifest = m
 	pkg.Layout = layout
@@ -265,8 +270,12 @@ func ComputeTreeHash(files []FileEntry) string {
 }
 
 func VerifyIntegrity(pkg *Package) error {
+	verifiedFiles := make([]FileEntry, 0, len(pkg.Integrity.Files))
 	for _, f := range pkg.Files {
 		if f.IsDir {
+			continue
+		}
+		if f.Path == IntegrityFiles || f.Path == IntegrityTree {
 			continue
 		}
 		entry, ok := pkg.Integrity.Files[f.Path]
@@ -279,8 +288,9 @@ func VerifyIntegrity(pkg *Package) error {
 		if entry.Size != f.Size {
 			return fmt.Errorf("%w: %s size mismatch", ErrIntegrityMismatch, f.Path)
 		}
+		verifiedFiles = append(verifiedFiles, f)
 	}
-	computedTree := ComputeTreeHash(pkg.Files)
+	computedTree := ComputeTreeHash(verifiedFiles)
 	if pkg.Tree.TreeHash != "" && computedTree != pkg.Tree.TreeHash {
 		return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
 	}

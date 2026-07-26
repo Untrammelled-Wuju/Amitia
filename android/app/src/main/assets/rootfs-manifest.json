@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "createdAt": "2026-07-26",
+  "description": "Amitia Android RootFS distribution manifest",
+  "components": [
+    {
+      "name": "amitia-backend",
+      "file": "amitia-backend-arm64",
+      "size": 57283044,
+      "sha256": "ABDD63EB020A01718684EDCF130785DA0CFD45DCB691AAB5D260A8E17386879B",
+      "type": "go-backend",
+      "target": "linux/arm64",
+      "buildCommand": "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o amitia-backend-arm64 ./cmd/server/"
+    },
+    {
+      "name": "qdrant",
+      "file": "qdrant_linux_aarch64",
+      "size": 77835808,
+      "sha256": "6CB81123D2A3E405335C984EFB7928DC21A1EAC47A3B73A7609AEE076DBE0B04",
+      "type": "vector-db",
+      "target": "linux/arm64",
+      "source": "https://github.com/qdrant/qdrant/releases/latest/download/qdrant-aarch64-unknown-linux-musl.tar.gz",
+      "variant": "musl-static"
+    },
+    {
+      "name": "surrealdb",
+      "file": "surreal_linux_aarch64",
+      "size": 116424792,
+      "sha256": "A235206F2C4A803616D7669F56BC5BCA5CC0AE7ED2B79ACBE91F14712B28FE5C",
+      "type": "graph-db",
+      "target": "linux/arm64",
+      "source": "https://github.com/surrealdb/surrealdb/releases/download/v3.2.0/surreal-v3.2.0.linux-arm64.tgz",
+      "variant": "gnu-dynamic"
+    }
+  ],
+  "totalSize": 251542644,
+  "checksumAlgorithm": "SHA-256"
+}

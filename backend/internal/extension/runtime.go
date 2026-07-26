@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	applog "github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
@@ -28,6 +29,16 @@ type Runtime struct {
 	WorkflowHost  *WorkflowHostAdapter
 	AgentSkills   *AgentSkillService
 	Packages      *PackageService
+	Kernel        *kernelruntime.Runtime
+}
+
+func (r *Runtime) AttachKernel(root string) error {
+	kernel, err := kernelruntime.NewRuntime(root)
+	if err != nil {
+		return err
+	}
+	r.Kernel = kernel
+	return nil
 }
 
 func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtime, error) {

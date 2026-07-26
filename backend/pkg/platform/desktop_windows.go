@@ -29,6 +29,14 @@ func (windowsPlatform) ExecutableSuffix() string {
 	return ".exe"
 }
 
+func (windowsPlatform) BinarySuffix() string {
+	return ".exe"
+}
+
+func (windowsPlatform) RootFSDir() string {
+	return ""
+}
+
 func (windowsPlatform) DefaultDataDir() string {
 	return "data"
 }
@@ -38,6 +46,10 @@ func (windowsPlatform) IsWindows() bool {
 }
 
 func (windowsPlatform) IsLinux() bool {
+	return false
+}
+
+func (windowsPlatform) IsAndroid() bool {
 	return false
 }
 

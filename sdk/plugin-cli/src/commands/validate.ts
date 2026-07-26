@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types";
-import { EXIT_CODES } from "../exit-codes";
-import { validateManifest, type AmitiaxManifestV2 } from "@amitia/plugin-sdk";
+import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types.js";
+import { EXIT_CODES } from "../exit-codes.js";
+import { validateManifest, type AmitiaxManifestV2 } from "../manifest.js";
 
 export const validateCommand: CliCommand = {
   name: "validate",
@@ -77,8 +77,8 @@ export const validateCommand: CliCommand = {
         : `validation passed (${reports.length} informational)`,
       reports,
       data: {
-        manifest: manifest.extensionId,
-        version: manifest.version,
+        manifest: manifest.extension.id,
+        version: manifest.extension.version,
         modules: manifest.modules.length,
       },
     };
@@ -89,12 +89,13 @@ function validateEntryPaths(ctx: CliContext, manifest: AmitiaxManifestV2, manife
   const reports: CliReport[] = [];
   const baseDir = path.dirname(manifestPath);
   for (const module of manifest.modules ?? []) {
-    const entry = path.resolve(baseDir, module.entry);
+    if (!module.runtime?.entryPoint) continue;
+    const entry = path.resolve(baseDir, "modules", module.id, module.runtime.entryPoint);
     if (!fs.existsSync(entry)) {
       reports.push({
         ruleId: "module.entry.missing",
         severity: "warning",
-        message: `module ${module.moduleId} entry not found: ${path.relative(ctx.cwd, entry)}`,
+        message: `module ${module.id} entry not found: ${path.relative(ctx.cwd, entry)}`,
         file: entry,
       });
     }
@@ -106,11 +107,11 @@ function validatePermissions(manifest: AmitiaxManifestV2, manifestPath: string):
   const reports: CliReport[] = [];
   const highRisk = ["desktop.shell", "filesystem.write", "network.request", "process.spawn"];
   for (const perm of manifest.permissions ?? []) {
-    if (highRisk.includes(perm.permission) && !perm.reason) {
+    if (highRisk.includes(perm.name) && !perm.reason) {
       reports.push({
         ruleId: "permission.high_risk_no_reason",
         severity: "warning",
-        message: `high-risk permission ${perm.permission} requires a reason`,
+        message: `high-risk permission ${perm.name} requires a reason`,
         file: manifestPath,
       });
     }
@@ -120,7 +121,7 @@ function validatePermissions(manifest: AmitiaxManifestV2, manifestPath: string):
 
 function validatePlatforms(manifest: AmitiaxManifestV2, manifestPath: string): CliReport[] {
   const reports: CliReport[] = [];
-  if (!manifest.platforms || manifest.platforms.length === 0) {
+  if (!manifest.compatibility?.platforms || manifest.compatibility.platforms.length === 0) {
     reports.push({
       ruleId: "platforms.empty",
       severity: "info",
@@ -135,23 +136,15 @@ function validateModules(manifest: AmitiaxManifestV2, manifestPath: string): Cli
   const reports: CliReport[] = [];
   const moduleIds = new Set<string>();
   for (const module of manifest.modules ?? []) {
-    if (moduleIds.has(module.moduleId)) {
+    if (moduleIds.has(module.id)) {
       reports.push({
         ruleId: "module.duplicate_id",
         severity: "error",
-        message: `duplicate module id: ${module.moduleId}`,
+        message: `duplicate module id: ${module.id}`,
         file: manifestPath,
       });
     }
-    moduleIds.add(module.moduleId);
-    if (module.deprecated && !module.deprecationNote) {
-      reports.push({
-        ruleId: "module.deprecated_no_note",
-        severity: "warning",
-        message: `module ${module.moduleId} is deprecated without note`,
-        file: manifestPath,
-      });
-    }
+    moduleIds.add(module.id);
   }
   return reports;
 }

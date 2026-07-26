@@ -1,5 +1,9 @@
-import type { CliCommand, CliContext, CliCommandResult } from "../types";
-import { EXIT_CODES } from "../exit-codes";
+import type { CliCommand, CliContext, CliCommandResult } from "../types.js";
+import { EXIT_CODES } from "../exit-codes.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { spawnSync } from "node:child_process";
+import { buildPackage, inspectPackage } from "../archive.js";
 
 export const testCommand: CliCommand = {
   name: "test",
@@ -12,13 +16,8 @@ export const testCommand: CliCommand = {
     { name: "--arch", description: "Target architecture", takesValue: true, choices: ["x64", "arm64"] },
     { name: "--watch", description: "Watch mode" },
   ],
-  async run(ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    ctx.logger.info("running tests via vitest");
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "tests passed (placeholder; vitest invocation pending)",
-      data: { filter: ctx.args },
-    };
+  async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
+    return runLocalTool(ctx, "vitest", ["run", ...args], "tests");
   },
 };
 
@@ -27,16 +26,15 @@ export const buildCommand: CliCommand = {
   description: "Build the extension TypeScript sources",
   usage: "amitia-ext build [options]",
   options: [
+    { name: "--config", shortName: "-c", description: "TypeScript config path", takesValue: true },
     { name: "--manifest", shortName: "-m", description: "Manifest path", takesValue: true },
     { name: "--output", shortName: "-o", description: "Output directory", takesValue: true },
     { name: "--sourcemap", description: "Generate source maps" },
   ],
-  async run(ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    ctx.logger.info("building via tsc");
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "build succeeded (placeholder; tsc invocation pending)",
-    };
+  async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
+    const opts = parseOptions(args);
+    const config = path.resolve(ctx.cwd, opts["--config"] ?? "tsconfig.json");
+    return runLocalTool(ctx, "typescript", ["-p", config], "build", "typescript/bin/tsc");
   },
 };
 
@@ -46,15 +44,19 @@ export const packCommand: CliCommand = {
   usage: "amitia-ext pack [options]",
   options: [
     { name: "--manifest", shortName: "-m", description: "Manifest path", takesValue: true },
-    { name: "--output", shortName: "-o", description: "Output directory", takesValue: true, defaultValue: "./package" },
+    { name: "--output", shortName: "-o", description: "Output package", takesValue: true, defaultValue: "./package.amitiax" },
     { name: "--deterministic", description: "Produce deterministic content tree" },
   ],
-  async run(ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    ctx.logger.info("packing .amitiax");
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "pack succeeded (placeholder; archive assembly pending)",
-    };
+  async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
+    const opts = parseOptions(args);
+    const manifestPath = path.resolve(ctx.cwd, opts["--manifest"] ?? "manifest.json");
+    const output = path.resolve(ctx.cwd, opts["--output"] ?? "package.amitiax");
+    try {
+      const inspection = buildPackage(ctx.cwd, manifestPath, output);
+      return { exitCode: EXIT_CODES.SUCCESS, message: `packed ${path.relative(ctx.cwd, output)}`, data: inspection };
+    } catch (cause) {
+      return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: cause instanceof Error ? cause.message : String(cause) };
+    }
   },
 };
 
@@ -75,10 +77,9 @@ export const signCommand: CliCommand = {
         message: "missing required options: --package and --key-id",
       };
     }
-    ctx.logger.info(`signing ${opts["--package"]} with key ${opts["--key-id"]}`);
     return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "sign succeeded (placeholder; signing implementation pending)",
+      exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR,
+      message: "package signing is not available in the MVP",
     };
   },
 };
@@ -99,11 +100,12 @@ export const verifyCommand: CliCommand = {
         message: "missing required option: --package",
       };
     }
-    ctx.logger.info(`verifying ${opts["--package"]}`);
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "verify succeeded (placeholder; verification implementation pending)",
-    };
+    try {
+      const inspection = inspectPackage(path.resolve(ctx.cwd, opts["--package"]));
+      return { exitCode: EXIT_CODES.SUCCESS, message: "package integrity verified", data: inspection };
+    } catch (cause) {
+      return { exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR, message: cause instanceof Error ? cause.message : String(cause) };
+    }
   },
 };
 
@@ -123,11 +125,12 @@ export const inspectCommand: CliCommand = {
         message: "missing required option: --package",
       };
     }
-    ctx.logger.info(`inspecting ${opts["--package"]}`);
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "inspect succeeded (placeholder; archive reader pending)",
-    };
+    try {
+      const inspection = inspectPackage(path.resolve(ctx.cwd, opts["--package"]));
+      return { exitCode: EXIT_CODES.SUCCESS, message: `${inspection.manifest.extension.id} v${inspection.manifest.extension.version}`, data: inspection };
+    } catch (cause) {
+      return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: cause instanceof Error ? cause.message : String(cause) };
+    }
   },
 };
 
@@ -147,10 +150,9 @@ export const installCommand: CliCommand = {
         message: "missing required option: --package",
       };
     }
-    ctx.logger.info(`submitting ${opts["--package"]} to ${opts["--host"] ?? "developer host"}`);
     return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "install submitted (placeholder; Developer Host client pending)",
+      exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
+      message: "CLI host installation is not available in the MVP; use the extension center",
     };
   },
 };
@@ -170,10 +172,9 @@ export const uninstallCommand: CliCommand = {
         message: "extensionId is required",
       };
     }
-    ctx.logger.info(`uninstalling ${extensionId}`);
     return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "uninstall submitted (placeholder; Developer Host client pending)",
+      exitCode: EXIT_CODES.HOST_CONNECTION_ERROR,
+      message: "CLI host uninstall is not available in the MVP",
     };
   },
 };
@@ -186,12 +187,17 @@ export const publishCheckCommand: CliCommand = {
     { name: "--package", shortName: "-p", description: "Package path", takesValue: true },
     { name: "--strict", description: "Treat warnings as errors" },
   ],
-  async run(ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    ctx.logger.info("running publish checks");
-    return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "publish-check passed (placeholder; full checklist pending)",
-    };
+  async run(ctx: CliContext, args: string[]): Promise<CliCommandResult> {
+    const opts = parseOptions(args);
+    if (!opts["--package"]) {
+      return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "missing required option: --package" };
+    }
+    try {
+      const inspection = inspectPackage(path.resolve(ctx.cwd, opts["--package"]));
+      return { exitCode: EXIT_CODES.SUCCESS, message: "publish-check passed", data: inspection };
+    } catch (cause) {
+      return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: cause instanceof Error ? cause.message : String(cause) };
+    }
   },
 };
 
@@ -203,11 +209,10 @@ export const migrateCommand: CliCommand = {
     { name: "--source", shortName: "-s", description: "Legacy source directory", takesValue: true },
     { name: "--report", description: "Write migration report to file", takesValue: true },
   ],
-  async run(ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
-    ctx.logger.info("generating migration report");
+  async run(_ctx: CliContext, _args: string[]): Promise<CliCommandResult> {
     return {
-      exitCode: EXIT_CODES.SUCCESS,
-      message: "migration report generated (placeholder; legacy scanner pending)",
+      exitCode: EXIT_CODES.CONFIGURATION_ERROR,
+      message: "legacy migration is not available in the MVP",
     };
   },
 };
@@ -263,4 +268,15 @@ function parseOptions(args: string[]): Record<string, string | undefined> {
     }
   }
   return opts;
+}
+
+function runLocalTool(ctx: CliContext, packageName: string, args: string[], label: string, relativeBinary = `${packageName}/vitest.mjs`): CliCommandResult {
+  const binary = path.resolve(ctx.cwd, "node_modules", relativeBinary);
+  if (!fs.existsSync(binary)) {
+    return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: `${packageName} is not installed in ${ctx.cwd}` };
+  }
+  const result = spawnSync(process.execPath, [binary, ...args], { cwd: ctx.cwd, stdio: "inherit" });
+  if (result.error) return { exitCode: EXIT_CODES.ENVIRONMENT_ERROR, message: result.error.message };
+  const exitCode = result.status ?? EXIT_CODES.ENVIRONMENT_ERROR;
+  return { exitCode, message: exitCode === 0 ? `${label} succeeded` : `${label} failed` };
 }

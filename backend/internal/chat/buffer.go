@@ -113,9 +113,9 @@ func (mb *MessageBuffer) Buffer(convID, text string) ([]string, error) {
 	return msgs, nil
 }
 
-func (mb *MessageBuffer) AnalyzeImage(convID, imageUrl string) {
+func (mb *MessageBuffer) AnalyzeImage(convID, imageUrl string) string {
 	if imageUrl == "" {
-		return
+		return ""
 	}
 	buf := mb.getOrCreate(convID)
 
@@ -134,6 +134,7 @@ func (mb *MessageBuffer) AnalyzeImage(convID, imageUrl string) {
 		buf.mu.Unlock()
 		applog.Info(fmt.Sprintf("[Image] Context appended, total contexts=%d", len(buf.imageContexts)))
 	}
+	return errDetail
 }
 
 func (mb *MessageBuffer) AnalyzeVideo(convID, videoUrl string) {

@@ -1,8 +1,5 @@
 import type {
   ToolContributionDefinition,
-  SkillContributionDefinition,
-  WorkflowContributionDefinition,
-  UIContributionDefinition,
 } from "./manifest";
 import type { ExtensionID, ModuleID } from "./types";
 import { makeExtensionID, makeModuleID } from "./types";
@@ -20,7 +17,7 @@ import {
   listHooks,
   clearHooks,
 } from "./hooks";
-import type { TaskDefinition } from "./tasks";
+import type { TaskDefinition, TaskInput } from "./tasks";
 import { defineTask, listTasks, clearTasks } from "./tasks";
 import type { StorageClient } from "./storage";
 import { NamespacedStorageClient, type StorageBackend } from "./storage";
@@ -48,7 +45,7 @@ export interface RuntimeLifecycleClient {
   readonly generation: number;
   readonly startedAt: string;
   readonly signal: AbortSignal;
-  readonly abort(reason?: string): void;
+  abort(reason?: string): void;
 }
 
 export interface ExtensionLogger {
@@ -74,7 +71,7 @@ export interface HandlerBinder {
   bindFilterHook<I>(entryName: string, pipeline: string, stage: string, handler: (input: I, ctx: unknown) => Promise<unknown>): HookRegistration;
   bindTransformHook<I, O>(entryName: string, pipeline: string, stage: string, handler: (input: I, ctx: unknown) => Promise<O>): HookRegistration<I, O>;
   bindObserveHook<I>(entryName: string, pipeline: string, stage: string, handler: (input: I, ctx: unknown) => Promise<void>): HookRegistration<I, void>;
-  bindTask<I, O>(entryName: string, definition: TaskDefinition<I, O>): TaskDefinition<I, O>;
+  bindTask<I extends TaskInput, O>(entryName: string, definition: TaskDefinition<I, O>): TaskDefinition<I, O>;
   bindUIAction(entryName: string, actionId: string, handler: unknown): void;
 }
 

@@ -77,7 +77,7 @@ func (m *Manager) Advance(conversationID, pipelineType string, lastSequence int6
 	if err := m.ensureLeaseColumns(); err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(timeLayout)
+	now := time.Now().Format(timeLayout)
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		var current Record
 		err := tx.Where("conversation_id = ? AND pipeline_type = ?", conversationID, pipelineType).First(&current).Error
@@ -120,7 +120,7 @@ func (m *Manager) AdvanceLeased(conversationID, pipelineType string, lastSequenc
 	if err := m.ensureLeaseColumns(); err != nil {
 		return err
 	}
-	now := time.Now().UTC().Format(timeLayout)
+	now := time.Now().Format(timeLayout)
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		var current Record
 		err := tx.Where("conversation_id = ? AND pipeline_type = ?", conversationID, pipelineType).First(&current).Error
@@ -171,7 +171,7 @@ func (m *Manager) AcquirePendingRange(conversationID, pipelineType string, conte
 	if leaseOwner == "" {
 		leaseOwner = "unknown"
 	}
-	now := time.Now().UTC()
+	now := time.Now()
 	nowText := now.Format(timeLayout)
 	leaseExpiresAt := now.Add(leaseTTL).Format(timeLayout)
 
@@ -194,7 +194,7 @@ func (m *Manager) AcquirePendingRange(conversationID, pipelineType string, conte
 			}
 		}
 		if current.LeaseExpiresAt != "" {
-			expiresAt, parseErr := time.ParseInLocation(timeLayout, current.LeaseExpiresAt, time.UTC)
+			expiresAt, parseErr := time.ParseInLocation(timeLayout, current.LeaseExpiresAt, time.Local)
 			if parseErr == nil && expiresAt.After(now) {
 				maxSequence = current.LastMessageSequence
 				return nil

@@ -77329,31 +77329,31 @@ var init_puny = __esm({
 
 // node_modules/.pnpm/typebox@1.1.39/node_modules/typebox/build/format/_idna.mjs
 function IsNonspacingMark(cp) {
-  return new RegExp("\\p{Mn}", "u").test(String.fromCodePoint(cp));
+  return /\p{Mn}/u.test(String.fromCodePoint(cp));
 }
 function IsSpacingCombiningMark(cp) {
-  return new RegExp("\\p{Mc}", "u").test(String.fromCodePoint(cp));
+  return /\p{Mc}/u.test(String.fromCodePoint(cp));
 }
 function IsEnclosingMark(cp) {
-  return new RegExp("\\p{Me}", "u").test(String.fromCodePoint(cp));
+  return /\p{Me}/u.test(String.fromCodePoint(cp));
 }
 function IsCombiningMark2(cp) {
   return IsNonspacingMark(cp) || IsSpacingCombiningMark(cp) || IsEnclosingMark(cp);
 }
 function IsGreek(cp) {
-  return new RegExp("\\p{Script=Greek}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Greek}/u.test(String.fromCodePoint(cp));
 }
 function IsHebrew(cp) {
-  return new RegExp("\\p{Script=Hebrew}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Hebrew}/u.test(String.fromCodePoint(cp));
 }
 function IsHiragana(cp) {
-  return new RegExp("\\p{Script=Hiragana}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Hiragana}/u.test(String.fromCodePoint(cp));
 }
 function IsKatakana(cp) {
-  return new RegExp("\\p{Script=Katakana}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Katakana}/u.test(String.fromCodePoint(cp));
 }
 function IsHan(cp) {
-  return new RegExp("\\p{Script=Han}", "u").test(String.fromCodePoint(cp));
+  return /\p{Script=Han}/u.test(String.fromCodePoint(cp));
 }
 function IsArabicIndicDigit(cp) {
   return cp >= 1632 && cp <= 1641;
@@ -134671,7 +134671,7 @@ function stringToBytes(string2, encoding) {
   return [...string2].map((character) => character.charCodeAt(0));
 }
 function tarHeaderChecksumMatches(arrayBuffer, offset = 0) {
-  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(new RegExp("\\0.*$", "v"), "").trim(), 8);
+  const readSum = Number.parseInt(new StringType(6).get(arrayBuffer, 148).replace(/\0.*$/v, "").trim(), 8);
   if (Number.isNaN(readSum)) {
     return false;
   }
@@ -135510,7 +135510,7 @@ async function detectZip(tokenizer) {
           };
         }
         default:
-          if (new RegExp("classes\\d*\\.dex", "v").test(zipHeader.filename)) {
+          if (/classes\d*\.dex/v.test(zipHeader.filename)) {
             fileType = {
               ext: "apk",
               mime: "application/vnd.android.package-archive"
@@ -135668,7 +135668,7 @@ async function detectEbml(tokenizer) {
         }
         const documentTypeLength = getSafeBound(element.len, maximumEbmlDocumentTypeSizeInBytes, "EBML DocType");
         const rawValue = await tokenizer.readToken(new StringType(documentTypeLength));
-        return rawValue.replaceAll(new RegExp("\\0.*$", "gv"), "");
+        return rawValue.replaceAll(/\0.*$/gv, "");
       }
       if (hasUnknownFileSize(tokenizer) && (!Number.isFinite(element.len) || element.len < 0 || element.len > maximumEbmlElementPayloadSizeInBytes)) {
         return;
@@ -136790,7 +136790,7 @@ var init_source2 = __esm({
         }
         if (this.checkString("AC")) {
           const version2 = new StringType(4, "latin1").get(this.buffer, 2);
-          if (new RegExp("^\\d+$", "v").test(version2) && version2 >= 1e3 && version2 <= 1050) {
+          if (/^\d+$/v.test(version2) && version2 >= 1e3 && version2 <= 1050) {
             return {
               ext: "dwg",
               mime: "image/vnd.dwg"
@@ -143862,11 +143862,11 @@ var require_lib4 = __commonJS({
   }
 });
 
-// src/index.ts
+// dist/index.js
 var import_fastify = __toESM(require_fastify(), 1);
 var import_cors = __toESM(require_cors(), 1);
 
-// src/config.ts
+// dist/config.js
 function envStr(key, fallback) {
   return process.env[key] || fallback;
 }
@@ -149467,13 +149467,13 @@ async function silkToWav(silkBuf) {
   }
 }
 
-// src/openclaw-wechat.ts
+// dist/openclaw-wechat.js
 var import_qrcode = __toESM(require_lib4(), 1);
 import crypto5 from "node:crypto";
 import fs40 from "node:fs";
 import path50 from "node:path";
 
-// src/delivery-idempotency.ts
+// dist/delivery-idempotency.js
 import crypto4 from "node:crypto";
 import fs39 from "node:fs";
 import path49 from "node:path";
@@ -149597,7 +149597,7 @@ var DeliveryIdempotencyStore = class {
   }
 };
 
-// src/openclaw-wechat.ts
+// dist/openclaw-wechat.js
 var OpenClawWechatManager = class {
   debugLog(...args2) {
     if (process.env.NODE_ENV === "development" || process.env.DEBUG) {
@@ -149651,7 +149651,8 @@ var OpenClawWechatManager = class {
   }
   loadSavedAccount() {
     const ids = listIndexedWeixinAccountIds();
-    if (ids.length === 0) return false;
+    if (ids.length === 0)
+      return false;
     const id = ids[ids.length - 1];
     const data = loadWeixinAccount(id);
     if (data?.token) {
@@ -149674,11 +149675,13 @@ var OpenClawWechatManager = class {
   }
   resolveStatsPath() {
     const dir = path50.join(resolveStateDir(), "openclaw-weixin", "accounts");
-    if (!fs40.existsSync(dir)) fs40.mkdirSync(dir, { recursive: true });
+    if (!fs40.existsSync(dir))
+      fs40.mkdirSync(dir, { recursive: true });
     return path50.join(dir, `${this.state.accountId}.stats.json`);
   }
   persistStats() {
-    if (!this.state.accountId) return;
+    if (!this.state.accountId)
+      return;
     try {
       fs40.writeFileSync(this.resolveStatsPath(), JSON.stringify({
         messageCount: this.state.messageCount,
@@ -149688,13 +149691,16 @@ var OpenClawWechatManager = class {
     }
   }
   loadStats() {
-    if (!this.state.accountId) return;
+    if (!this.state.accountId)
+      return;
     try {
       const statsPath = this.resolveStatsPath();
       if (fs40.existsSync(statsPath)) {
         const data = JSON.parse(fs40.readFileSync(statsPath, "utf-8"));
-        if (typeof data.messageCount === "number") this.state.messageCount = data.messageCount;
-        if (typeof data.replyCount === "number") this.state.replyCount = data.replyCount;
+        if (typeof data.messageCount === "number")
+          this.state.messageCount = data.messageCount;
+        if (typeof data.replyCount === "number")
+          this.state.replyCount = data.replyCount;
       }
     } catch {
     }
@@ -149771,7 +149777,8 @@ var OpenClawWechatManager = class {
     }
   }
   async startPolling() {
-    if (this.polling && this.pollPromise) return;
+    if (this.polling && this.pollPromise)
+      return;
     if (!this.token || !this.state.accountId) {
       console.warn("[OpenClaw] Cannot start polling: no credentials");
       return;
@@ -149801,7 +149808,8 @@ var OpenClawWechatManager = class {
             get_updates_buf: this.getUpdatesBuf,
             timeoutMs: 35e3
           });
-          if (this.pollGeneration !== generation) break;
+          if (this.pollGeneration !== generation)
+            break;
           if (resp.errcode && resp.errcode !== 0) {
             consecutiveErrors++;
             console.error(`[OpenClaw] getUpdates error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${resp.errcode} ${resp.errmsg}`);
@@ -149826,8 +149834,10 @@ var OpenClawWechatManager = class {
             }
           }
         } catch (err2) {
-          if (this.pollGeneration !== generation) break;
-          if (err2.name === "AbortError") break;
+          if (this.pollGeneration !== generation)
+            break;
+          if (err2.name === "AbortError")
+            break;
           console.error(`[OpenClaw] Poll error:`, err2.message);
           this.sessionStaleCount++;
           await this.checkSessionHealth();
@@ -149889,7 +149899,8 @@ var OpenClawWechatManager = class {
   async sendPreExpiryWarning() {
     try {
       const lastUserId = this._lastFromUserId;
-      if (!lastUserId) return;
+      if (!lastUserId)
+        return;
       console.log("[OpenClaw] Generating pre-expiry QR code...");
       await this.startLogin();
       const qrUrl = this.state.qrCodeUrl;
@@ -149908,7 +149919,8 @@ var OpenClawWechatManager = class {
     }
   }
   async sendTextMessage(toUserId, text, contextToken, deliveryKey) {
-    if (!this.token) throw new Error("Not logged in");
+    if (!this.token)
+      throw new Error("Not logged in");
     if (deliveryKey) {
       const store = this.getDeliveryStore();
       return store.execute(deliveryKey, async (clientId) => {
@@ -149959,7 +149971,8 @@ var OpenClawWechatManager = class {
     }
   }
   async sendVoiceMessage(toUserId, audioBuffer, encodeType = 7, playtime = 0, contextToken, deliveryKey) {
-    if (!this.token) throw new Error("Not logged in");
+    if (!this.token)
+      throw new Error("Not logged in");
     if (deliveryKey) {
       const store = this.getDeliveryStore();
       return store.execute(deliveryKey, async (clientId2) => {
@@ -150006,7 +150019,8 @@ var OpenClawWechatManager = class {
       const m = uploadResp.upload_full_url.match(/encrypted_query_param=([^&]+)/);
       return m ? decodeURIComponent(m[1]) : "";
     })();
-    if (!encryptQueryParam) throw new Error("encrypt_query_param missing");
+    if (!encryptQueryParam)
+      throw new Error("encrypt_query_param missing");
     console.log("[OpenClaw][VOICE-SEND] CDN POST...");
     const putResp = await fetch(uploadResp.upload_full_url, {
       method: "POST",
@@ -150047,7 +150061,8 @@ var OpenClawWechatManager = class {
     console.log("[OpenClaw][VOICE-SEND] Message sent OK");
   }
   async sendImageMessage(toUserId, imageBuffer, contextToken, deliveryKey) {
-    if (!this.token) throw new Error("Not logged in");
+    if (!this.token)
+      throw new Error("Not logged in");
     if (deliveryKey) {
       const store = this.getDeliveryStore();
       return store.execute(deliveryKey, async (clientId2) => {
@@ -150079,15 +150094,19 @@ var OpenClawWechatManager = class {
       aeskey: aesKey.toString("hex"),
       no_need_thumb: true
     });
-    if (uploadResp.errcode && uploadResp.errcode !== 0) throw new Error("getUploadUrl failed: " + uploadResp.errcode);
-    if (!uploadResp.upload_full_url) throw new Error("getUploadUrl returned no upload_full_url");
+    if (uploadResp.errcode && uploadResp.errcode !== 0)
+      throw new Error("getUploadUrl failed: " + uploadResp.errcode);
+    if (!uploadResp.upload_full_url)
+      throw new Error("getUploadUrl returned no upload_full_url");
     const encryptQueryParam = uploadResp.encrypt_query_param || (() => {
       const match = uploadResp.upload_full_url.match(/encrypted_query_param=([^&]+)/);
       return match ? decodeURIComponent(match[1]) : "";
     })();
-    if (!encryptQueryParam) throw new Error("encrypt_query_param missing");
+    if (!encryptQueryParam)
+      throw new Error("encrypt_query_param missing");
     const upload = await fetch(uploadResp.upload_full_url, { method: "POST", body: encrypted, signal: AbortSignal.timeout(3e4) });
-    if (!upload.ok) throw new Error("CDN upload failed: " + upload.status);
+    if (!upload.ok)
+      throw new Error("CDN upload failed: " + upload.status);
     await sendMessage({
       baseUrl: this.state.baseUrl,
       token: this.token,
@@ -150145,10 +150164,12 @@ var OpenClawWechatManager = class {
     this.resetDeliveryStore();
   }
   persistBuf() {
-    if (!this.state.accountId) return;
+    if (!this.state.accountId)
+      return;
     try {
       const data = { messageCount: this.state.messageCount };
-      if (this.getUpdatesBuf) data.getUpdatesBuf = this.getUpdatesBuf;
+      if (this.getUpdatesBuf)
+        data.getUpdatesBuf = this.getUpdatesBuf;
       saveWeixinAccount(this.state.accountId, data);
     } catch {
     }
@@ -150181,7 +150202,8 @@ var OpenClawWechatManager = class {
     return false;
   }
   cleanupInboundSeen() {
-    if (this.inboundSeen.size < 1e3) return;
+    if (this.inboundSeen.size < 1e3)
+      return;
     const cutoff = Date.now() - 10 * 60 * 1e3;
     for (const [key, ts] of this.inboundSeen) {
       if (ts < cutoff) {
@@ -150191,7 +150213,8 @@ var OpenClawWechatManager = class {
   }
   async processMessage(msg) {
     console.log("[OpenClaw][DIAG] === processMessage === msg_type=" + msg.message_type + " from=" + this.hashId(String(msg.from_user_id || "")) + " items.len=" + (msg.item_list ? msg.item_list.length : 0));
-    if (msg.message_type === 2) return;
+    if (msg.message_type === 2)
+      return;
     const fromUserId = msg.from_user_id || "";
     this._lastFromUserId = fromUserId;
     const toUserId = msg.to_user_id || "";
@@ -150213,7 +150236,8 @@ var OpenClawWechatManager = class {
           console.log("[OpenClaw][DIAG] voice_item: playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " hasText=" + (item.voice_item.text ? "YES len=" + item.voice_item.text.length : "NO") + " hasMedia=" + !!item.voice_item.media);
           const vt = item.voice_item.text || "";
           console.log("[OpenClaw][VOICE] playtime=" + item.voice_item.playtime + " encode_type=" + item.voice_item.encode_type + " text=" + vt.substring(0, 100));
-          if (vt) text += vt;
+          if (vt)
+            text += vt;
         }
         if (item.type === 1 && item.text_item?.text) {
           text += item.text_item.text;
@@ -150232,13 +150256,7 @@ var OpenClawWechatManager = class {
           if (item.voice_item.media && item.voice_item.media.encrypt_query_param && item.voice_item.media.aes_key) {
             try {
               console.log("[OpenClaw][VOICE-DL] \u5F00\u59CB\u4E0B\u8F7D\u8BED\u97F3...");
-              const silkBuf = await downloadAndDecryptBuffer(
-                item.voice_item.media.encrypt_query_param,
-                item.voice_item.media.aes_key,
-                this.state.baseUrl,
-                "wechat-voice",
-                item.voice_item.media.full_url
-              );
+              const silkBuf = await downloadAndDecryptBuffer(item.voice_item.media.encrypt_query_param, item.voice_item.media.aes_key, this.state.baseUrl, "wechat-voice", item.voice_item.media.full_url);
               console.log("[OpenClaw][VOICE-DL] \u4E0B\u8F7D\u5B8C\u6210, size=" + silkBuf.length);
               const wavBuf = await silkToWav(silkBuf);
               const audioBuf = wavBuf || silkBuf;
@@ -150315,11 +150333,12 @@ var OpenClawWechatManager = class {
 };
 var instance2 = null;
 function getWechatManager() {
-  if (!instance2) instance2 = new OpenClawWechatManager();
+  if (!instance2)
+    instance2 = new OpenClawWechatManager();
   return instance2;
 }
 
-// src/index.ts
+// dist/index.js
 var app = (0, import_fastify.default)({
   logger: { level: process.env.LOG_LEVEL || "info" }
 });
@@ -150403,7 +150422,8 @@ manager.onMessage(async (msg) => {
     }
     const headers = { "Content-Type": "application/json" };
     const t = sidecarConfig.bridgeApiToken;
-    if (t) headers["Authorization"] = "Bearer " + t;
+    if (t)
+      headers["Authorization"] = "Bearer " + t;
     try {
       const resp = await fetch(`${sidecarConfig.coreUrl}/api/agent/webhook`, {
         method: "POST",
@@ -150472,9 +150492,7 @@ app.post("/api/login/start", async (_req, reply) => {
     const result = await manager.startLogin();
     manager.waitForScan(12e4).then((scanResult) => {
       if (scanResult.connected) {
-        manager.startPolling().catch(
-          (err2) => console.error("[Sidecar] Auto-polling start failed:", err2)
-        );
+        manager.startPolling().catch((err2) => console.error("[Sidecar] Auto-polling start failed:", err2));
       }
     }).catch((err2) => console.error("[Sidecar] Background waitForScan failed:", err2));
     return reply.send({
@@ -150498,9 +150516,7 @@ app.post("/api/login/rescan", async (_req, reply) => {
     const result = await manager.startLogin({ force: true });
     manager.waitForScan(12e4).then((scanResult) => {
       if (scanResult.connected) {
-        manager.startPolling().catch(
-          (err2) => console.error("[Sidecar] Auto-polling start failed:", err2)
-        );
+        manager.startPolling().catch((err2) => console.error("[Sidecar] Auto-polling start failed:", err2));
       }
     }).catch((err2) => console.error("[Sidecar] Background waitForScan failed:", err2));
     return reply.send({
@@ -150535,9 +150551,7 @@ app.post("/api/login/wait", async (req, reply) => {
     const body2 = req.body;
     const result = await manager.waitForScan(body2.timeoutMs || 12e4);
     if (result.connected) {
-      manager.startPolling().catch(
-        (err2) => console.error("[Sidecar] Polling start failed:", err2)
-      );
+      manager.startPolling().catch((err2) => console.error("[Sidecar] Polling start failed:", err2));
     }
     return reply.send({
       success: result.connected,
@@ -150616,7 +150630,8 @@ app.post("/api/send-voice", async (req, reply) => {
     const effectiveKey = deliveryKey || idempotencyKey;
     const fullAudioUrl = body2.audioUrl.startsWith("http") ? body2.audioUrl : sidecarConfig.coreUrl + body2.audioUrl;
     const audioResp = await fetch(fullAudioUrl, { signal: AbortSignal.timeout(3e4) });
-    if (!audioResp.ok) throw new Error("Audio download failed: " + audioResp.status);
+    if (!audioResp.ok)
+      throw new Error("Audio download failed: " + audioResp.status);
     const audioBuffer = Buffer.from(await audioResp.arrayBuffer());
     const result = await manager.sendVoiceMessage(body2.toUserId, audioBuffer, 7, 0, body2.contextToken, effectiveKey || void 0);
     return reply.send({ success: true, message: "Voice sent", duplicate: result.duplicate, deliveryKey: effectiveKey || "" });
@@ -150628,7 +150643,8 @@ app.post("/api/send-voice", async (req, reply) => {
 app.post("/api/send-image", async (req, reply) => {
   try {
     const body2 = req.body;
-    if (!body2.toUserId || !body2.assetUrl && !body2.fallbackUrl) return reply.status(422).send({ success: false, message: "toUserId and assetUrl are required" });
+    if (!body2.toUserId || !body2.assetUrl && !body2.fallbackUrl)
+      return reply.status(422).send({ success: false, message: "toUserId and assetUrl are required" });
     const deliveryKey = body2.deliveryKey || "";
     const idempotencyKey = req.headers["idempotency-key"] || "";
     if (deliveryKey && idempotencyKey && deliveryKey !== idempotencyKey) {
@@ -150641,13 +150657,15 @@ app.post("/api/send-image", async (req, reply) => {
       const url2 = candidate.startsWith("http") ? candidate : sidecarConfig.coreUrl + candidate;
       try {
         const response = await fetch(url2, { signal: AbortSignal.timeout(3e4) });
-        if (!response.ok) continue;
+        if (!response.ok)
+          continue;
         buffer = Buffer.from(await response.arrayBuffer());
         break;
       } catch {
       }
     }
-    if (!buffer) throw new Error("\u8868\u60C5\u8D44\u6E90\u4E0B\u8F7D\u5931\u8D25");
+    if (!buffer)
+      throw new Error("\u8868\u60C5\u8D44\u6E90\u4E0B\u8F7D\u5931\u8D25");
     const result = await manager.sendImageMessage(body2.toUserId, buffer, body2.contextToken, effectiveKey || void 0);
     return reply.send({ success: true, message: "Image sent", duplicate: result.duplicate, deliveryKey: effectiveKey || "" });
   } catch (err2) {
@@ -150666,9 +150684,7 @@ try {
   console.log("  ========================================");
   console.log("");
   if (hasAccount) {
-    manager.startPolling().catch(
-      (err2) => console.error("[Sidecar] Auto-polling failed:", err2)
-    );
+    manager.startPolling().catch((err2) => console.error("[Sidecar] Auto-polling failed:", err2));
   }
 } catch (err2) {
   app.log.error(err2);

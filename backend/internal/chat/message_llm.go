@@ -25,7 +25,10 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		if llmErr != nil {
 			s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 			applog.TraceError(trace.WithStage("model_call_failed"), applog.Fields{"round": round, "user_message_id": userMsgID}, llmErr, "process message model call failed")
-			return "", false, 0, fmt.Errorf("AI 调用失败: %w", llmErr)
+			if ctx.Err() != nil {
+				return "", false, 0, ctx.Err()
+			}
+			return "", false, 0, &TextModelCallError{RawError: llmErr.Error()}
 		}
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{"round": round, "tool_call_count": len(toolCalls), "reply_size": len(aiContent), "reasoning_size": len(reasoning)}, "process message model call completed")
 		if len(toolCalls) == 0 {

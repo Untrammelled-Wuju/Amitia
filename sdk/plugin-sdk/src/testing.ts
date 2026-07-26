@@ -1,12 +1,8 @@
-import type { ToolContributionDefinition } from "./manifest";
-import type { ToolHandler } from "./tools";
-import type { EventSubscriptionSpec, EventEnvelope } from "./events";
 import type { HookRegistration, HookContext } from "./hooks";
-import type { TaskDefinition, TaskContext, TaskResult, TaskInput } from "./tasks";
-import type { StorageClient, StorageBackend, StorageValue } from "./storage";
-import { NamespacedStorageClient } from "./storage";
-import type { SecretReferenceClient, SecretBackend } from "./secrets";
-import { NamespacedSecretClient, InMemorySecretBackend } from "./secrets";
+import type { TaskDefinition, TaskResult, TaskInput } from "./tasks";
+import type { StorageBackend, StorageValue } from "./storage";
+import type { SecretBackend } from "./secrets";
+import { InMemorySecretBackend } from "./secrets";
 import type { HostBridgeLike } from "./host";
 import { type ExtensionContext, type ExtensionBootstrap, type ResourceBackend, type ExtensionLogger } from "./context";
 import { bootstrapExtension, defineExtension, type ExtensionDefinition } from "./context";
@@ -53,7 +49,6 @@ export function createMockHost(
   definition: ExtensionDefinition,
   options: MockHostOptions = {},
 ): MockHost {
-  const namespace = options.namespace ?? "mock/publisher#mock-module";
   const allowedEntries = new Set(options.allowedEntries ?? ["*"]);
   const scope = options.scope ?? { scope: "global" as const };
 
@@ -72,13 +67,13 @@ export function createMockHost(
   let currentScope = scope;
 
   const hostBridge: HostBridgeLike = {
-    invokeTool: async (request) => {
+    invokeTool: async (_request) => {
       return { ok: true, value: undefined, durationMs: 0 };
     },
     listTools: async () => [],
     networkRequest: async () => ({ status: 200, headers: {}, body: null, ok: true }),
     getMessage: async () => null,
-    sendMessage: async (_conversationId, content) => ({
+    sendMessage: async (_conversationId, _content) => ({
       messageId: `msg-${Date.now()}`,
       conversationId: _conversationId,
     }),
@@ -127,7 +122,7 @@ export function createMockHost(
     emitEvent: async (type, payload) => {
       await context.events.emit(type, payload);
     },
-    executeHook: async (registration, input) => {
+    executeHook: async <I, O>(registration: HookRegistration<I, O>, input: I) => {
       const hookCtx: HookContext = {
         phase: registration.phase,
         pipeline: registration.pipeline,
@@ -251,7 +246,7 @@ export class InMemoryStorageBackend implements StorageBackend {
   async delete(_namespace: string, key: string): Promise<void> {
     this.store.delete(key);
   }
-  async list(namespace: string, query?: { prefix?: string }): Promise<import("./storage").StoragePage> {
+  async list(_namespace: string, query?: { prefix?: string }): Promise<import("./storage").StoragePage> {
     const items: StorageValue[] = [];
     for (const entry of this.store.values()) {
       if (query?.prefix && !entry.key.startsWith(query.prefix)) continue;

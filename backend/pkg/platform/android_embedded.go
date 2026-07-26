@@ -29,6 +29,20 @@ func (androidPlatform) ExecutableSuffix() string {
 	return ""
 }
 
+func (androidPlatform) BinarySuffix() string {
+	return ""
+}
+
+func (androidPlatform) RootFSDir() string {
+	if v := os.Getenv("AMITIA_ROOTFS_DIR"); v != "" {
+		return v
+	}
+	if absDir := os.Getenv("AMITIA_DATA_DIR"); absDir != "" {
+		return absDir
+	}
+	return ""
+}
+
 func (androidPlatform) DefaultDataDir() string {
 	return "data"
 }
@@ -38,6 +52,10 @@ func (androidPlatform) IsWindows() bool {
 }
 
 func (androidPlatform) IsLinux() bool {
+	return true
+}
+
+func (androidPlatform) IsAndroid() bool {
 	return true
 }
 

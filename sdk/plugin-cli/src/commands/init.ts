@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CliCommand, CliContext, CliCommandResult } from "../types";
-import { EXIT_CODES } from "../exit-codes";
-import { getTemplateDescriptor, listTemplateKinds, type TemplateKind, type TemplateScaffoldInput } from "../templates";
+import type { CliCommand, CliContext, CliCommandResult } from "../types.js";
+import { EXIT_CODES } from "../exit-codes.js";
+import { getTemplateDescriptor, listTemplateKinds, type TemplateKind, type TemplateScaffoldInput } from "../templates/index.js";
 
 export const initCommand: CliCommand = {
   name: "init",
@@ -42,7 +42,7 @@ export const initCommand: CliCommand = {
       sdkVersion: opts["--sdk-version"] ?? "1.0.0",
     };
 
-    const descriptor = getTemplateDescriptor(template);
+    const descriptor = getTemplateDescriptor(template, input);
     const force = opts["--force"] !== undefined;
 
     try {

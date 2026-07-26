@@ -67,16 +67,16 @@ var forbiddenNodeTypes = map[string]bool{
 type BindingSource string
 
 const (
-	SourceInput            BindingSource = "input"
-	SourceState            BindingSource = "state"
-	SourceQuery            BindingSource = "query"
-	SourceRuntime          BindingSource = "runtime"
-	SourceHost             BindingSource = "host"
-	SourceForm             BindingSource = "form"
-	SourceStatic           BindingSource = "static"
-	SourceStorage          BindingSource = "storage"
-	SourceRuntimeStatus    BindingSource = "runtime_status"
-	SourceResourceList     BindingSource = "resource_list"
+	SourceInput         BindingSource = "input"
+	SourceState         BindingSource = "state"
+	SourceQuery         BindingSource = "query"
+	SourceRuntime       BindingSource = "runtime"
+	SourceHost          BindingSource = "host"
+	SourceForm          BindingSource = "form"
+	SourceStatic        BindingSource = "static"
+	SourceStorage       BindingSource = "storage"
+	SourceRuntimeStatus BindingSource = "runtime_status"
+	SourceResourceList  BindingSource = "resource_list"
 )
 
 var allowedBindingSources = map[BindingSource]bool{
@@ -87,17 +87,17 @@ var allowedBindingSources = map[BindingSource]bool{
 }
 
 type SchemaUIBinding struct {
-	Path   string         `json:"path"`
-	Source BindingSource  `json:"source"`
-	Format string         `json:"format,omitempty"`
+	Path    string          `json:"path"`
+	Source  BindingSource   `json:"source"`
+	Format  string          `json:"format,omitempty"`
 	Default json.RawMessage `json:"default,omitempty"`
 }
 
 type SchemaUIActionBinding struct {
-	ActionID  string          `json:"action_id"`
-	Target    string          `json:"target"`
-	Input     json.RawMessage `json:"input,omitempty"`
-	Confirmation string       `json:"confirmation,omitempty"`
+	ActionID     string          `json:"action_id"`
+	Target       string          `json:"target"`
+	Input        json.RawMessage `json:"input,omitempty"`
+	Confirmation string          `json:"confirmation,omitempty"`
 }
 
 type UICondition struct {
@@ -107,28 +107,28 @@ type UICondition struct {
 }
 
 type SchemaUINode struct {
-	ID         string                   `json:"id"`
-	Type       NodeType                 `json:"type"`
-	Props      json.RawMessage          `json:"props,omitempty"`
-	Bindings   []SchemaUIBinding        `json:"bindings,omitempty"`
-	Actions    []SchemaUIActionBinding  `json:"actions,omitempty"`
-	Visibility []UICondition            `json:"visibility,omitempty"`
-	Children   []SchemaUINode           `json:"children,omitempty"`
+	ID         string                  `json:"id"`
+	Type       NodeType                `json:"type"`
+	Props      json.RawMessage         `json:"props,omitempty"`
+	Bindings   []SchemaUIBinding       `json:"bindings,omitempty"`
+	Actions    []SchemaUIActionBinding `json:"actions,omitempty"`
+	Visibility []UICondition           `json:"visibility,omitempty"`
+	Children   []SchemaUINode          `json:"children,omitempty"`
 }
 
 type SchemaUIDocument struct {
-	SchemaVersion string         `json:"schemaVersion"`
-	Type          string         `json:"type"`
-	Title         string         `json:"title,omitempty"`
-	Layout        map[string]any `json:"layout,omitempty"`
-	Children      []SchemaUINode `json:"children"`
-	DataSources   []SchemaUIDataSource `json:"dataSources,omitempty"`
+	SchemaVersion string                   `json:"schemaVersion"`
+	Type          string                   `json:"type"`
+	Title         string                   `json:"title,omitempty"`
+	Layout        map[string]any           `json:"layout,omitempty"`
+	Children      []SchemaUINode           `json:"children"`
+	DataSources   []SchemaUIDataSource     `json:"dataSources,omitempty"`
 	Actions       []SchemaUIDeclaredAction `json:"actions,omitempty"`
 }
 
 type SchemaUIDataSource struct {
 	ID            string          `json:"id"`
-	Type          BindingSource  `json:"type"`
+	Type          BindingSource   `json:"type"`
 	InputSchema   json.RawMessage `json:"inputSchema,omitempty"`
 	OutputSchema  json.RawMessage `json:"outputSchema,omitempty"`
 	RefreshPolicy string          `json:"refreshPolicy,omitempty"`
@@ -142,13 +142,13 @@ type SchemaUIDeclaredAction struct {
 }
 
 type SchemaLimits struct {
-	MaxNodes        int
-	MaxDepth        int
-	MaxGridColumns  int
-	MaxTableRows    int
-	MaxMarkdownKB   int
-	MaxImageKB      int
-	MaxChildren     int
+	MaxNodes       int
+	MaxDepth       int
+	MaxGridColumns int
+	MaxTableRows   int
+	MaxMarkdownKB  int
+	MaxImageKB     int
+	MaxChildren    int
 }
 
 func DefaultLimits() SchemaLimits {
@@ -172,7 +172,7 @@ var (
 	ErrTooManyChildren      = errors.New("schema_ui: too many children")
 	ErrGridColumnsExceeded  = errors.New("schema_ui: grid columns exceeded")
 	ErrInvalidBindingSource = errors.New("schema_ui: invalid binding source")
-	ErrInvalidExpression     = errors.New("schema_ui: invalid expression")
+	ErrInvalidExpression    = errors.New("schema_ui: invalid expression")
 	ErrActionNotDeclared    = errors.New("schema_ui: action not declared")
 	ErrMissingNodeID        = errors.New("schema_ui: missing node id")
 	ErrDuplicateNodeID      = errors.New("schema_ui: duplicate node id")
@@ -198,12 +198,12 @@ func (v *Validator) WithLimits(limits SchemaLimits) *Validator {
 }
 
 type ValidationResult struct {
-	Valid       bool
-	NodeCount   int
-	MaxDepth    int
-	Errors      []string
-	Warnings    []string
-	ActionIDs   map[string]bool
+	Valid         bool
+	NodeCount     int
+	MaxDepth      int
+	Errors        []string
+	Warnings      []string
+	ActionIDs     map[string]bool
 	DataSourceIDs map[string]bool
 }
 
@@ -217,7 +217,7 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		return result
 	}
 	if doc.SchemaVersion != SchemaUIVersion {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: expected %s got %s", ErrInvalidSchemaVersion, SchemaUIVersion, doc.SchemaVersion))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: expected %s got %s", ErrInvalidSchemaVersion, SchemaUIVersion, doc.SchemaVersion))
 		return result
 	}
 	if doc.Type == "" {
@@ -242,10 +242,10 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		v.validateNode(&doc.Children[i], 1, result, seenIDs)
 	}
 	if result.NodeCount > v.limits.MaxNodes {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: %d > %d", ErrTooManyNodes, result.NodeCount, v.limits.MaxNodes))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrTooManyNodes, result.NodeCount, v.limits.MaxNodes))
 	}
 	if result.MaxDepth > v.limits.MaxDepth {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: %d > %d", ErrDepthExceeded, result.MaxDepth, v.limits.MaxDepth))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrDepthExceeded, result.MaxDepth, v.limits.MaxDepth))
 	}
 	result.Valid = len(result.Errors) == 0
 	return result
@@ -261,27 +261,27 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		result.MaxDepth = depth
 	}
 	if node.ID == "" {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w at depth %d", ErrMissingNodeID, depth))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v at depth %d", ErrMissingNodeID, depth))
 	} else {
 		if seenIDs[node.ID] {
-			result.Errors = append(result.Errors, fmt.Sprintf("%w: %s", ErrDuplicateNodeID, node.ID))
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrDuplicateNodeID, node.ID))
 		}
 		seenIDs[node.ID] = true
 	}
 	if forbiddenNodeTypes[string(node.Type)] {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: %s", ErrForbiddenNodeType, node.Type))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrForbiddenNodeType, node.Type))
 		return
 	}
 	if !allowedNodeTypes[node.Type] {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: %s", ErrInvalidNodeType, node.Type))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidNodeType, node.Type))
 		return
 	}
 	for _, b := range node.Bindings {
 		if !allowedBindingSources[b.Source] {
-			result.Errors = append(result.Errors, fmt.Sprintf("%w: %s", ErrInvalidBindingSource, b.Source))
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidBindingSource, b.Source))
 		}
 		if b.Path != "" && !exprAllowedPattern.MatchString(b.Path) {
-			result.Errors = append(result.Errors, fmt.Sprintf("%w: %s", ErrInvalidExpression, b.Path))
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, b.Path))
 		}
 	}
 	for _, a := range node.Actions {
@@ -295,7 +295,7 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		}
 		_ = json.Unmarshal(node.Props, &props)
 		if props.Columns > v.limits.MaxGridColumns {
-			result.Errors = append(result.Errors, fmt.Sprintf("%w: %d > %d", ErrGridColumnsExceeded, props.Columns, v.limits.MaxGridColumns))
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrGridColumnsExceeded, props.Columns, v.limits.MaxGridColumns))
 		}
 	}
 	if node.Type == NodeTable {
@@ -332,7 +332,7 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		}
 	}
 	if len(node.Children) > v.limits.MaxChildren {
-		result.Errors = append(result.Errors, fmt.Sprintf("%w: node %s has %d children", ErrTooManyChildren, node.ID, len(node.Children)))
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: node %s has %d children", ErrTooManyChildren, node.ID, len(node.Children)))
 	}
 	for i := range node.Children {
 		v.validateNode(&node.Children[i], depth+1, result, seenIDs)
@@ -340,10 +340,10 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 }
 
 type CompiledDocument struct {
-	Document    *SchemaUIDocument
-	Hash        string
-	NodeIndex   map[string]*SchemaUINode
-	ActionIndex map[string]*SchemaUIDeclaredAction
+	Document        *SchemaUIDocument
+	Hash            string
+	NodeIndex       map[string]*SchemaUINode
+	ActionIndex     map[string]*SchemaUIDeclaredAction
 	DataSourceIndex map[string]*SchemaUIDataSource
 }
 
@@ -395,14 +395,14 @@ func computeHash(doc *SchemaUIDocument) string {
 type PageState string
 
 const (
-	PageStateIdle              PageState = "idle"
-	PageStateLoading           PageState = "loading"
-	PageStateReady             PageState = "ready"
-	PageStateSubmitting        PageState = "submitting"
-	PageStateSuccess           PageState = "success"
-	PageStateError             PageState = "error"
-	PageStateEmpty             PageState = "empty"
-	PageStateOffline           PageState = "offline"
+	PageStateIdle               PageState = "idle"
+	PageStateLoading            PageState = "loading"
+	PageStateReady              PageState = "ready"
+	PageStateSubmitting         PageState = "submitting"
+	PageStateSuccess            PageState = "success"
+	PageStateError              PageState = "error"
+	PageStateEmpty              PageState = "empty"
+	PageStateOffline            PageState = "offline"
 	PageStateRuntimeUnavailable PageState = "runtime_unavailable"
 )
 
@@ -420,10 +420,10 @@ type ThemeTokens struct {
 
 type Renderer struct {
 	compiled *CompiledDocument
-	theme   ThemeTokens
-	locale  string
-	state   map[string]any
-	mu      struct {
+	theme    ThemeTokens
+	locale   string
+	state    map[string]any
+	mu       struct {
 		sync.Mutex
 	}
 }
@@ -431,9 +431,9 @@ type Renderer struct {
 func NewRenderer(compiled *CompiledDocument, theme ThemeTokens, locale string) *Renderer {
 	return &Renderer{
 		compiled: compiled,
-		theme:   theme,
-		locale:  locale,
-		state:   make(map[string]any),
+		theme:    theme,
+		locale:   locale,
+		state:    make(map[string]any),
 	}
 }
 
@@ -450,11 +450,11 @@ func (r *Renderer) GetState(key string) any {
 }
 
 type RenderedNode struct {
-	ID       string                 `json:"id"`
-	Type     NodeType               `json:"type"`
-	Props    map[string]any         `json:"props,omitempty"`
-	Visible  bool                   `json:"visible"`
-	Children []RenderedNode         `json:"children,omitempty"`
+	ID       string         `json:"id"`
+	Type     NodeType       `json:"type"`
+	Props    map[string]any `json:"props,omitempty"`
+	Visible  bool           `json:"visible"`
+	Children []RenderedNode `json:"children,omitempty"`
 }
 
 func (r *Renderer) Render(data map[string]any) []RenderedNode {
@@ -582,9 +582,9 @@ func (d *ActionDispatcher) Dispatch(actionID string, input map[string]any) (map[
 }
 
 type SecretReference struct {
-	RefID    string `json:"ref_id"`
-	Field    string `json:"field"`
-	LeaseID  string `json:"lease_id,omitempty"`
+	RefID   string `json:"ref_id"`
+	Field   string `json:"field"`
+	LeaseID string `json:"lease_id,omitempty"`
 }
 
 type SecretInputResolver struct {

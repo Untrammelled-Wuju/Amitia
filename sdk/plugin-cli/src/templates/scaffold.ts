@@ -1,30 +1,42 @@
-import type { TemplateDescriptor, TemplateKind, TemplateFile, TemplateScaffoldInput } from "./types";
+import type { TemplateDescriptor, TemplateKind, TemplateFile, TemplateScaffoldInput } from "./types.js";
 
 export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKind): string {
   const module = moduleForTemplate(kind);
   const permissions = permissionsForTemplate(kind);
   const manifest = {
     manifestVersion: 2,
-    extensionId: input.extensionId,
-    publisher: input.publisher,
-    displayName: { default: input.displayName },
-    description: { default: input.description },
-    version: input.version,
-    contractVersion: 1,
+    extension: {
+      id: input.extensionId,
+      name: { default: input.displayName },
+      description: { default: input.description },
+      version: input.version,
+      license: input.license,
+    },
+    publisher: {
+      id: input.publisher,
+      displayName: input.publisher,
+    },
+    compatibility: {
+      minHostVersion: "0.1.0",
+      platforms: input.targets,
+    },
     modules: [
       {
-        moduleId: module.moduleId,
-        kind: module.kind,
-        entry: module.entry,
-        runtime: module.runtime,
-        displayName: { default: input.displayName },
+        id: module.moduleId,
+        type: "javascript",
+        name: { default: input.displayName },
         description: { default: input.description },
+        runtime: {
+          type: module.runtime,
+          entryPoint: "index.js",
+        },
       },
     ],
-    permissions: permissions.map((p) => ({ permission: p, required: true })),
-    license: input.license,
-    platforms: input.targets,
-    minHostVersion: "0.1.0",
+    permissions: permissions.map((p) => ({ name: p, required: true })),
+    integrity: {
+      algorithm: "sha256",
+      contentTreeHash: "",
+    },
   };
   return JSON.stringify(manifest, null, 2) + "\n";
 }
@@ -372,9 +384,9 @@ export default defineExtension({
 `;
 }
 
-export function getTemplateDescriptor(kind: TemplateKind): TemplateDescriptor {
+export function getTemplateDescriptor(kind: TemplateKind, scaffoldInput?: TemplateScaffoldInput): TemplateDescriptor {
   const module = moduleForTemplate(kind);
-  const input: TemplateScaffoldInput = {
+  const input: TemplateScaffoldInput = scaffoldInput ?? {
     extensionId: "publisher/my-extension",
     publisher: "publisher",
     displayName: "My Extension",
@@ -401,8 +413,8 @@ export function getTemplateDescriptor(kind: TemplateKind): TemplateDescriptor {
       { path: "package.json", content: packageJson },
       { path: "tsconfig.json", content: tsconfig },
       entry,
-      { path: "README.md", content: `# My Extension\n\nScaffolded by amitia-ext.\n` },
-      { path: "LICENSE", content: "MIT License\n" },
+      { path: "README.md", content: `# ${input.displayName}\n\nScaffolded by amitia-ext.\n` },
+      { path: "LICENSE", content: `${input.license}\n` },
       { path: ".gitignore", content: "node_modules/\ndist/\npackage/\n*.amitiax\n" },
     ],
   };

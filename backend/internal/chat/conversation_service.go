@@ -124,7 +124,7 @@ func (s *service) DeleteConversation(id string) (bool, error) {
 	s.db.Table("characters").Select("name").Where("conversation_id = ?", id).Limit(1).Row().Scan(&charName)
 	characterDeleted := charName != ""
 	if characterDeleted {
-		s.db.Exec("DELETE FROM characters WHERE conversation_id = ?", id)
+		s.db.Exec("UPDATE characters SET conversation_id = '' WHERE conversation_id = ?", id)
 	}
 	if err := s.repo.DeleteConversation(id); err != nil {
 		return false, err

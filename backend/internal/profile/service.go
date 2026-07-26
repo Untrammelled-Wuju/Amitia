@@ -131,6 +131,7 @@ func (s *service) Delete(id string) error {
 			nodeID = userID + ":" + p.CharacterID + ":" + p.Category + ":" + p.AttributeName
 		}
 		_ = s.graphSvc.DeleteNode("profile:" + nodeID)
+		_ = s.graphSvc.DeleteNodeIfOrphan("user:" + userID)
 	}
 	return nil
 }

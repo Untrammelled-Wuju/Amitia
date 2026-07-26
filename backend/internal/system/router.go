@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/pkg/app"
@@ -21,6 +22,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	svc := NewService(ctx)
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry)
 	svc.AttachTemporalService(temporalSvc)
+	modelerror.SetReporter(handler.publishModelError)
 
 	chat.RegisterMessageCommitHook(func(event *chat.MessageCommitEvent) {
 		bus := GetMessageEventBus()

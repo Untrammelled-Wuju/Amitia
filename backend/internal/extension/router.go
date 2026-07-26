@@ -18,6 +18,7 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	extensions := group.Group("/extensions")
 	extensions.GET("/openapi.json", handler.OpenAPI)
 	extensions.Use(extensionAuth(userService))
+	registerExtensionPackageRoutes(extensions, runtime)
 	extensions.GET("/capabilities", handler.Capabilities)
 	extensions.POST("/packages/import/preview", packageHandler.Preview)
 	extensions.POST("/packages/import/install", packageHandler.Install)

@@ -49,8 +49,10 @@ export interface AmitiaErrorInit {
   cause?: unknown;
 }
 
+type SpecializedErrorInit = Omit<AmitiaErrorInit, "code"> & { code?: string };
+
 export class PermissionDeniedError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "permission_denied",
       category: "permission",
@@ -62,7 +64,7 @@ export class PermissionDeniedError extends AmitiaError {
 }
 
 export class ScopeDeniedError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "scope_denied",
       category: "scope",
@@ -74,7 +76,7 @@ export class ScopeDeniedError extends AmitiaError {
 }
 
 export class ValidationError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "invalid_input",
       category: "validation",
@@ -86,7 +88,7 @@ export class ValidationError extends AmitiaError {
 }
 
 export class ConflictError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "conflict",
       category: "conflict",
@@ -98,7 +100,7 @@ export class ConflictError extends AmitiaError {
 }
 
 export class TimeoutError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "timeout",
       category: "timeout",
@@ -110,7 +112,7 @@ export class TimeoutError extends AmitiaError {
 }
 
 export class CancelledError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "cancelled",
       category: "cancelled",
@@ -122,7 +124,7 @@ export class CancelledError extends AmitiaError {
 }
 
 export class DependencyUnavailableError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "dependency_unavailable",
       category: "dependency",
@@ -134,7 +136,7 @@ export class DependencyUnavailableError extends AmitiaError {
 }
 
 export class RuntimeUnavailableError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "runtime_unavailable",
       category: "runtime",
@@ -146,7 +148,7 @@ export class RuntimeUnavailableError extends AmitiaError {
 }
 
 export class RateLimitError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "rate_limit",
       category: "rate_limit",
@@ -158,7 +160,7 @@ export class RateLimitError extends AmitiaError {
 }
 
 export class StorageConflictError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "storage_conflict",
       category: "storage",
@@ -170,7 +172,7 @@ export class StorageConflictError extends AmitiaError {
 }
 
 export class InternalError extends AmitiaError {
-  constructor(message: string, init?: Omit<AmitiaErrorInit, "code">) {
+  constructor(message: string, init?: SpecializedErrorInit) {
     super(message, {
       code: init?.code ?? "internal_error",
       category: "internal",

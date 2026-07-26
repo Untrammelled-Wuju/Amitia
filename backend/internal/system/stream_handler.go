@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/requestidentity"
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -207,7 +208,10 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	c.Header("X-Source", source)
 
 	applog.Info(fmt.Sprintf("[Webhook] ImageUrl=%s VideoUrl=%s", body.ImageUrl[:min(len(body.ImageUrl), 60)], body.VideoUrl[:min(len(body.VideoUrl), 60)]))
-	chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	visionError := chat.GetBuffer().AnalyzeImage(convID, body.ImageUrl)
+	if visionError != "" {
+		h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
+	}
 	chat.GetBuffer().AnalyzeVideo(convID, body.VideoUrl)
 
 	bufferedMsgs, bufErr := chat.GetBuffer().Buffer(convID, msgContent)
@@ -251,6 +255,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		h.publishTextModelError(convID, requestID, "web", err)
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -343,6 +348,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 			synthResult, synthErr := ttsSynthesizeWithTimeout(ttsCfg, line, 8*time.Second)
 			if synthErr != nil {
 				applog.Info(fmt.Sprintf("[Voice] TTS err: %v", synthErr))
+				modelerror.Report(modelerror.Event{ModelType: "voice", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: synthErr.Error()})
 			} else {
 				audioURL = synthResult.AudioURL
 				audioDuration = synthResult.Duration

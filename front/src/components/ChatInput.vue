@@ -39,17 +39,19 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <div v-if="hasComposerContext" class="composer-context">
-        <div
-          v-if="attachedImagePreview"
-          class="attachment-card image-attachment"
-        >
+        <div v-if="attachedImage" class="attachment-card image-attachment">
           <span
             class="attachment-thumb"
-            :style="{ backgroundImage: `url(${attachedImagePreview})` }"
+            :style="{
+              backgroundImage: attachedImagePreview
+                ? `url(${attachedImagePreview})`
+                : undefined,
+            }"
           ></span>
           <span class="attachment-copy">
             <strong>{{ attachedImage?.name || "图片" }}</strong>
-            <small>图片</small>
+            <small v-if="processingImage">图片处理中...</small>
+            <small v-else>图片</small>
           </span>
           <button
             type="button"
@@ -369,6 +371,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 !generating &&
                 (isInputDisabled ||
                   uploadingVideo ||
+                  processingImage ||
                   (!text.trim() &&
                     !attachedImagePreview &&
                     !attachedVideo &&
@@ -474,6 +477,7 @@ const {
   attachedVideo,
   attachedVideoUrl,
   uploadingVideo,
+  processingImage,
   handleImageSelect,
   clearImage,
   handleVideoSelect,
@@ -511,7 +515,7 @@ const replyTargetExcerpt = computed(() => {
 
 const hasComposerContext = computed(
   () =>
-    !!attachedImagePreview.value ||
+    !!attachedImage.value ||
     !!attachedVideo.value ||
     selectedSkillNames.value.length > 0,
 );
@@ -580,9 +584,15 @@ function openVideoPicker() {
   videoInputRef.value?.click();
 }
 
-function handleImageInput(event: Event) {
+async function handleImageInput(event: Event) {
   if (attachedVideo.value) clearVideo();
-  handleImageSelect(event);
+  try {
+    await handleImageSelect(event);
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : "图片转换为 PNG 失败",
+    );
+  }
 }
 
 function handleVideoInput(event: Event) {
@@ -712,6 +722,7 @@ async function submitComposer(event?: KeyboardEvent) {
     isInputDisabled.value ||
     props.generating ||
     props.isSubmitting ||
+    processingImage.value ||
     uploadingVideo.value
   )
     return;

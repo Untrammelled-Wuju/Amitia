@@ -1,5 +1,5 @@
-import type { CliCommand, CliContext, CliCommandResult } from "../types";
-import { EXIT_CODES } from "../exit-codes";
+import type { CliCommand, CliContext, CliCommandResult } from "../types.js";
+import { EXIT_CODES } from "../exit-codes.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { watch } from "node:fs";

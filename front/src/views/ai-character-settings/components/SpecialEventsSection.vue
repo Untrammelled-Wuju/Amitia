@@ -165,7 +165,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, watch } from "vue";
 import { ElMessage } from "element-plus";
 import {
   useSpecialEvents,
@@ -209,17 +209,16 @@ const specialForm = reactive({
   affectSleep: false,
 });
 
-onMounted(async () => {
-  await loadSpecialEvents();
-});
-
 async function loadSpecialEvents() {
+  if (!props.characterId) return;
   try {
     specialEvents.value = await getSpecialEvents(
       props.characterId || undefined,
     );
   } catch {}
 }
+
+watch(() => props.characterId, loadSpecialEvents, { immediate: true });
 
 function addSpecial() {
   editingSpecial.value = null;

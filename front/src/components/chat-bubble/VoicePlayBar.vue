@@ -58,6 +58,8 @@ const props = defineProps<{
   messageContent?: string;
   messageRole?: string;
   characterId?: string;
+  conversationId?: string;
+  requestId?: string;
 }>();
 
 const hasContent = computed(() => !!props.messageContent);
@@ -103,6 +105,8 @@ async function toggleVoice() {
     if (!url && props.messageRole === "assistant") {
       const res = await post<any>("/api/tts/synthesize", {
         characterId: props.characterId || undefined,
+        conversationId: props.conversationId || undefined,
+        requestId: props.requestId || undefined,
         text: props.messageContent || "",
       });
       url = res?.audioUrl;

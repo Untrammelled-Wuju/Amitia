@@ -10,13 +10,13 @@ import (
 )
 
 type TaskExecutor struct {
-	mu             sync.RWMutex
-	tasks          map[string]*Task
-	queue          []*Task
-	running        map[string]*Task
-	maxConcurrent  int
-	workspaceRoot  string
-	completed      []*Task
+	mu            sync.RWMutex
+	tasks         map[string]*Task
+	queue         []*Task
+	running       map[string]*Task
+	maxConcurrent int
+	workspaceRoot string
+	completed     []*Task
 }
 
 func NewTaskExecutor(maxConcurrent int, workspaceRoot string) *TaskExecutor {
@@ -34,11 +34,11 @@ func NewTaskExecutor(maxConcurrent int, workspaceRoot string) *TaskExecutor {
 type TaskHandler func(ctx context.Context, task *Task) (output []byte, outputHash string, artifactRef string, err error)
 
 type EnqueueResult struct {
-	TaskID     string
+	TaskID      string
 	OperationID string
-	Queued     bool
-	Position   int
-	Reason     string
+	Queued      bool
+	Position    int
+	Reason      string
 }
 
 func (e *TaskExecutor) Enqueue(task *Task) EnqueueResult {
@@ -47,8 +47,14 @@ func (e *TaskExecutor) Enqueue(task *Task) EnqueueResult {
 	if _, exists := e.tasks[task.definition.TaskID]; exists {
 		return EnqueueResult{TaskID: task.definition.TaskID, Reason: "task already exists"}
 	}
+	activeCount := 0
+	for _, existing := range e.tasks {
+		switch existing.State() {
+		case TaskStateCreated, TaskStateStarting, TaskStateRunning:
+			activeCount++
+		}
+	}
 	e.tasks[task.definition.TaskID] = task
-	activeCount := len(e.running) + len(e.queue)
 	if activeCount >= e.maxConcurrent {
 		task.SetState(TaskStateQueued)
 		e.queue = append(e.queue, task)
@@ -75,10 +81,10 @@ type ExecuteRequest struct {
 }
 
 type ExecuteResult struct {
-	TaskID  string
-	Status  TaskState
-	Output  []byte
-	Error   string
+	TaskID   string
+	Status   TaskState
+	Output   []byte
+	Error    string
 	Duration time.Duration
 }
 
@@ -130,9 +136,9 @@ func (e *TaskExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 
 	if task.CancelSignal().IsCancelled() {
 		return ExecuteResult{
-			TaskID:  req.TaskID,
-			Status:  TaskStateCancelled,
-			Error:   task.CancelSignal().Reason(),
+			TaskID: req.TaskID,
+			Status: TaskStateCancelled,
+			Error:  task.CancelSignal().Reason(),
 		}
 	}
 

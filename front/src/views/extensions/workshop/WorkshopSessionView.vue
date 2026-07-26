@@ -8,6 +8,10 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
     <ExtensionPageHeader
       :title="draft?.metadata.name || '技能制作会话'"
       :description="session?.requirement"
+      grandparent-title="创意工坊"
+      grandparent-path="/creative-workshop"
+      parent-title="技能制作"
+      parent-path="/creative-workshop/skills"
     >
       <template #actions
         ><div class="header-status">

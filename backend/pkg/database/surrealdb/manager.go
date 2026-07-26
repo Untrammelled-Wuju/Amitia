@@ -16,6 +16,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
+	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -69,6 +70,91 @@ func killExistingSurreal(port int) {
 	log.Warn("旧SurrealDB未能在10秒内释放端口，继续启动...")
 }
 
+func resolveSurrealBinaryPath(surrealDir string) string {
+	if cfgPath := config.AppCfg.Surreal.BinaryPath; cfgPath != "" {
+		if filepath.IsAbs(cfgPath) {
+			return cfgPath
+		}
+		return filepath.Join(surrealDir, cfgPath)
+	}
+
+	p := platform.Get()
+	if rootfs := p.RootFSDir(); rootfs != "" && !p.IsWindows() {
+		binName := "surreal" + p.BinarySuffix()
+		rootfsPath := filepath.Join(rootfs, "bin", binName)
+		if _, err := os.Stat(rootfsPath); err == nil {
+			return rootfsPath
+		}
+		if IsLinuxARM64() {
+			candidates := []string{
+				filepath.Join(rootfs, "bin", "surreal_linux_aarch64"),
+				filepath.Join(rootfs, "bin", "surreal"),
+				filepath.Join(rootfs, "surreal"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
+		if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+			candidates := []string{
+				filepath.Join(rootfs, "bin", "surreal_linux_x86"),
+				filepath.Join(rootfs, "bin", "surreal"),
+				filepath.Join(rootfs, "surreal"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
+	}
+
+	suffix := p.ExecutableSuffix()
+	defaultPath := filepath.Join(surrealDir, "surreal"+suffix)
+	if _, err := os.Stat(defaultPath); err == nil {
+		return defaultPath
+	}
+
+	if IsLinuxARM64() {
+		candidates := []string{
+			filepath.Join(surrealDir, "surreal_linux_aarch64"),
+			filepath.Join(surrealDir, "surreal"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		candidates := []string{
+			filepath.Join(surrealDir, "surreal_linux_x86"),
+			filepath.Join(surrealDir, "surreal"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+
+	return defaultPath
+}
+
+func resolveSurrealWorkDir(surrealDir string) string {
+	p := platform.Get()
+	if rootfs := p.RootFSDir(); rootfs != "" && !p.IsWindows() {
+		binDir := filepath.Join(rootfs, "bin")
+		if info, err := os.Stat(binDir); err == nil && info.IsDir() {
+			return binDir
+		}
+	}
+	return surrealDir
+}
+
 func StartSurreal() error {
 	surrealMu.Lock()
 	defer surrealMu.Unlock()
@@ -84,25 +170,7 @@ func startSurrealInternal() error {
 
 	surrealDir := filepath.Join(workDir, "surrealdb")
 
-	var surrealPath string
-	switch runtime.GOOS {
-	case "windows":
-		surrealPath = filepath.Join(surrealDir, "surreal.exe")
-	case "linux":
-		if IsLinuxARM64() {
-			surrealPath = filepath.Join(surrealDir, "surreal_linux_aarch64")
-		} else {
-			surrealPath = filepath.Join(surrealDir, "surreal_linux_x86")
-		}
-		if _, statErr := os.Stat(surrealPath); statErr != nil {
-			fallbackPath := filepath.Join(surrealDir, "surreal")
-			if _, fallbackErr := os.Stat(fallbackPath); fallbackErr == nil {
-				surrealPath = fallbackPath
-			}
-		}
-	default:
-		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
-	}
+	surrealPath := resolveSurrealBinaryPath(surrealDir)
 
 	if _, err := os.Stat(surrealPath); os.IsNotExist(err) {
 		if err := ensureSurrealBinary(surrealPath, surrealDir); err != nil {
@@ -126,7 +194,7 @@ func startSurrealInternal() error {
 		"--bind", bindAddr,
 		storagePath,
 	)
-	cmd.Dir = surrealDir
+	cmd.Dir = resolveSurrealWorkDir(surrealDir)
 	cmd.Stdout = &surrealWriter{}
 	cmd.Stderr = &surrealWriter{}
 

@@ -23,6 +23,10 @@ type Service struct {
 	db *gorm.DB
 }
 
+type embeddingData struct {
+	Embedding []float32 `json:"embedding"`
+}
+
 func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
@@ -47,9 +51,14 @@ func (s *Service) getConfig() (baseURL, apiKey, modelName string) {
 }
 
 func (s *Service) Embed(text string) ([]float32, error) {
+	vector, _, err := s.EmbedWithRawError(text)
+	return vector, err
+}
+
+func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 	baseURL, apiKey, modelName := s.getConfig()
 	if baseURL == "" || apiKey == "" {
-		return fallbackEmbedding(text), nil
+		return fallbackEmbedding(text), "", nil
 	}
 
 	baseURL = strings.TrimRight(baseURL, "/")
@@ -62,7 +71,7 @@ func (s *Service) Embed(text string) ([]float32, error) {
 
 	req, err := http.NewRequest("POST", baseURL+"/embeddings/multimodal", bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, err
+		return nil, err.Error(), err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -71,31 +80,31 @@ func (s *Service) Embed(text string) ([]float32, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Warn("嵌入请求失败，使用本地向量:", err)
-		return fallbackEmbedding(text), nil
+		return fallbackEmbedding(text), err.Error(), nil
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
 		log.Warn(fmt.Sprintf("嵌入API错误(%d)，使用本地向量: %s", resp.StatusCode, truncateStr(string(body), 300)))
-		return fallbackEmbedding(text), nil
+		rawError := fmt.Sprintf("嵌入API返回 %d: %s", resp.StatusCode, string(body))
+		return fallbackEmbedding(text), rawError, nil
 	}
 
-	var result struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("解析嵌入响应失败: %w", err)
+	vectors, err := parseEmbeddingVectors(body)
+	if err != nil {
+		rawError := fmt.Sprintf("解析嵌入响应失败: %v; 原始响应: %s", err, string(body))
+		return nil, rawError, fmt.Errorf("%s", rawError)
 	}
 
-	if len(result.Data) == 0 {
-		return nil, fmt.Errorf("嵌入API未返回向量数据")
+	if len(vectors) == 0 {
+		rawError := "嵌入API未返回向量数据，原始响应: " + string(body)
+		return nil, rawError, fmt.Errorf("%s", rawError)
 	}
 
-	log.Info(fmt.Sprintf("嵌入生成成功 维度:%d", len(result.Data[0].Embedding)))
-	return result.Data[0].Embedding, nil
+	vector := fitEmbeddingDimension(vectors[0])
+	log.Info(fmt.Sprintf("嵌入生成成功 维度:%d", len(vector)))
+	return vector, "", nil
 }
 
 func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
@@ -138,21 +147,74 @@ func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
 		return fallbackEmbeddings(texts), nil
 	}
 
-	var result struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
+	vectors, err := parseEmbeddingVectors(body)
+	if err != nil {
 		return nil, fmt.Errorf("解析嵌入响应失败: %w", err)
 	}
-
-	vectors := make([][]float32, len(result.Data))
-	for i, d := range result.Data {
-		vectors[i] = d.Embedding
+	for i := range vectors {
+		vectors[i] = fitEmbeddingDimension(vectors[i])
 	}
+
 	log.Info(fmt.Sprintf("批量嵌入生成成功 数量:%d", len(vectors)))
 	return vectors, nil
+}
+
+func parseEmbeddingVectors(body []byte) ([][]float32, error) {
+	var response struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	data := bytes.TrimSpace(response.Data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil, fmt.Errorf("data字段为空")
+	}
+	var items []embeddingData
+	switch data[0] {
+	case '[':
+		if err := json.Unmarshal(data, &items); err != nil {
+			return nil, err
+		}
+	case '{':
+		var item embeddingData
+		if err := json.Unmarshal(data, &item); err != nil {
+			return nil, err
+		}
+		items = []embeddingData{item}
+	default:
+		return nil, fmt.Errorf("data字段格式不支持")
+	}
+	vectors := make([][]float32, 0, len(items))
+	for _, item := range items {
+		if len(item.Embedding) > 0 {
+			vectors = append(vectors, item.Embedding)
+		}
+	}
+	return vectors, nil
+}
+
+func fitEmbeddingDimension(vector []float32) []float32 {
+	if config.AppCfg == nil || config.AppCfg.Qdrant.VectorDim <= 0 || len(vector) == config.AppCfg.Qdrant.VectorDim {
+		return vector
+	}
+	dimension := config.AppCfg.Qdrant.VectorDim
+	fitted := make([]float32, dimension)
+	for i, value := range vector {
+		fitted[i%dimension] += value
+	}
+	var norm float64
+	for _, value := range fitted {
+		norm += float64(value * value)
+	}
+	if norm == 0 {
+		return fitted
+	}
+	scale := float32(1 / math.Sqrt(norm))
+	for i := range fitted {
+		fitted[i] *= scale
+	}
+	return fitted
 }
 
 func truncateStr(s string, maxLen int) string {

@@ -1,5 +1,5 @@
-import type { CliCommand, CliContext, CliCommandResult } from "./types";
-import { ConsoleLogger } from "./logger";
+import type { CliCommand, CliContext, CliCommandResult } from "./types.js";
+import { ConsoleLogger } from "./logger.js";
 import {
   initCommand,
   devCommand,
@@ -17,7 +17,7 @@ import {
   migrateCommand,
   doctorCommand,
   sdkCommand,
-} from "./commands";
+} from "./commands/index.js";
 
 export const commands: ReadonlyArray<CliCommand> = [
   initCommand,

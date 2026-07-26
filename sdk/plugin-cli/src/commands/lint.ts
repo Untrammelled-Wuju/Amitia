@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types";
-import { EXIT_CODES } from "../exit-codes";
+import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types.js";
+import { EXIT_CODES } from "../exit-codes.js";
 
 const FORBIDDEN_BUILTINS = ["child_process", "fs", "net", "http", "https", "os", "path"];
 const FORBIDDEN_GLOBALS = ["require", "process", "global", "Buffer"];

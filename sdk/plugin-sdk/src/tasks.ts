@@ -4,9 +4,9 @@ export interface TaskInput {
   readonly [key: string]: unknown;
 }
 
-export interface TaskResult {
+export interface TaskResult<O = unknown> {
   readonly success: boolean;
-  readonly output?: unknown;
+  readonly output?: O;
   readonly error?: { code: string; message: string };
   readonly artifacts?: TaskArtifact[];
   readonly metadata?: Record<string, unknown>;

@@ -105,9 +105,8 @@ export function createAmitiaUI(bridge: UIBridge): UIBridge {
 }
 
 export class InMemoryUIBridge implements UIBridge {
-  private readonly state = new Map<string, unknown>();
+  private readonly stateValues = new Map<string, unknown>();
   private readonly subscribers = new Map<string, Set<(value: unknown) => void>>();
-  private title = "";
 
   async ready(): Promise<UIReadyEvent> {
     return {
@@ -135,10 +134,10 @@ export class InMemoryUIBridge implements UIBridge {
 
   readonly state: UIStateClient = {
     get: async <T>(key: string): Promise<T | null> => {
-      return (this.state.get(key) as T) ?? null;
+      return (this.stateValues.get(key) as T) ?? null;
     },
     set: async <T>(key: string, value: T): Promise<void> => {
-      this.state.set(key, value);
+      this.stateValues.set(key, value);
       const subs = this.subscribers.get(key);
       if (subs) {
         for (const cb of subs) cb(value);
@@ -164,9 +163,7 @@ export class InMemoryUIBridge implements UIBridge {
     copyToClipboard: async (_text: string): Promise<void> => {
       // no-op in memory
     },
-    setTitle: async (title: string): Promise<void> => {
-      this.title = title;
-    },
+    setTitle: async (_title: string): Promise<void> => {},
     notify: async (_message: string, _kind?: "info" | "success" | "warning" | "error"): Promise<void> => {
       // no-op in memory
     },

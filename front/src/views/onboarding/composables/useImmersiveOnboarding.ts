@@ -705,8 +705,8 @@ export function useImmersiveOnboarding() {
         ? modelApiKey.value && modelBaseUrl.value
         : visionModelKey.value && visionModelURL.value;
       if (visionMode.value !== "disabled" && hasVisionCreds) {
-        await post("/api/model/configs", {
-          apiType: "vision",
+        await post("/api/vision/configs", {
+          name: "视觉模型",
           baseUrl:
             visionMode.value === "inherit"
               ? modelBaseUrl.value
@@ -719,22 +719,18 @@ export function useImmersiveOnboarding() {
             visionMode.value === "inherit"
               ? modelName.value
               : visionModelName.value,
-          visionMode: visionMode.value,
           isActive: 1,
-        }).catch(() => {});
+        });
       }
 
       if (voiceModelMode.value !== "disabled" && voiceModelKey.value) {
-        await post("/api/model/configs", {
-          apiType: "voice",
-          provider: voiceModelMode.value,
+        await post("/api/tts/configs", {
+          name: "默认配置",
           apiKey: voiceModelKey.value,
-          baseUrl: voiceModelURL.value,
-          resource: voiceModelResource.value,
+          resourceId: voiceModelResource.value,
           voiceType: voiceModelVoiceType.value,
-          voiceStyle: voiceStyle.value,
           isActive: 1,
-        }).catch(() => {});
+        });
       }
 
       if (
@@ -742,13 +738,13 @@ export function useImmersiveOnboarding() {
         vectorModelKey.value &&
         vectorModelURL.value
       ) {
-        await post("/api/model/configs", {
-          apiType: "vector",
+        await post("/api/embedding/configs", {
+          name: "向量模型",
           baseUrl: vectorModelURL.value,
           apiKey: vectorModelKey.value,
           modelName: vectorModelName.value,
           isActive: 1,
-        }).catch(() => {});
+        });
       }
 
       if (identityName.value && !characterCreatedInSession.value) {

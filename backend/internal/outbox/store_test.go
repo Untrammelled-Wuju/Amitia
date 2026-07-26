@@ -28,7 +28,7 @@ func newOutboxTestDB(t *testing.T) *SQLiteOutboxStore {
 
 func seedRecord(t *testing.T, store *SQLiteOutboxStore, id, eventType, payload, status string) {
 	t.Helper()
-	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	now := time.Now().Format("2006-01-02 15:04:05")
 	rec := OutboxRecordModel{
 		ID:             id,
 		AggregateID:    "agg-1",
@@ -69,6 +69,18 @@ func TestClaimNextSingle(t *testing.T) {
 	}
 	if r.LeaseToken == "" {
 		t.Error("expected non-empty lease token")
+	}
+}
+
+func TestStoredTimesUseLocalLocation(t *testing.T) {
+	value := time.Now().Format("2006-01-02 15:04:05")
+	parsed := parseTime(value)
+	if parsed.Location() != time.Local {
+		t.Fatalf("expected local location, got %s", parsed.Location())
+	}
+	parsedPtr := parseTimePtr(value)
+	if parsedPtr == nil || parsedPtr.Location() != time.Local {
+		t.Fatalf("expected local location from pointer parser")
 	}
 }
 

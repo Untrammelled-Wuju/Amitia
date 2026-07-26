@@ -45,10 +45,12 @@ type CreateTtsConfigRequest struct {
 }
 
 type SynthesizeRequest struct {
-	SpeakerID   string `json:"speakerId"`
-	Text        string `json:"text"`
-	VoiceID     int    `json:"voiceId"`
-	CharacterID string `json:"characterId"`
+	SpeakerID      string `json:"speakerId"`
+	Text           string `json:"text"`
+	VoiceID        int    `json:"voiceId"`
+	CharacterID    string `json:"characterId"`
+	ConversationID string `json:"conversationId"`
+	RequestID      string `json:"requestId"`
 }
 
 type SynthesizeResponse struct {

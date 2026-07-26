@@ -42,6 +42,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         :message-content="message.content"
         :message-role="message.role"
         :character-id="characterId"
+        :conversation-id="message.conversationId"
+        :request-id="message.id"
         @click.stop
       />
       <div
@@ -146,6 +148,7 @@ import { useAppStore } from "@/stores/app";
 const props = defineProps<{
   message: {
     id?: string;
+    conversationId?: string;
     role: string;
     content: string;
     createdAt?: string;

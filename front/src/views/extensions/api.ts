@@ -31,6 +31,7 @@ import type {
   AgentSkillPage,
   AgentSkillPreview,
   AgentSkillScope,
+  LocalExtensionPackage,
   PackageImportPreview,
   PackageOperation,
   PackageOperationResult,
@@ -604,6 +605,35 @@ export async function previewExtensionPackage(
       ),
   });
   return response.data as PackageImportPreview;
+}
+
+export async function fetchLocalExtensionPackageStatus() {
+  const response = await apiClient.get("/api/extensions/packages/status");
+  return response.data as { ready: boolean; installed: number };
+}
+
+export async function fetchLocalExtensionPackages() {
+  const response = await apiClient.get("/api/extensions/packages");
+  return response.data as LocalExtensionPackage[];
+}
+
+export async function installLocalExtensionPackage(
+  file: File,
+  onProgress?: (percent: number) => void,
+) {
+  const data = new FormData();
+  data.append("package", file);
+  const response = await apiClient.post(
+    "/api/extensions/packages/install",
+    data,
+    {
+      onUploadProgress: (event) =>
+        onProgress?.(
+          event.total ? Math.round((event.loaded * 100) / event.total) : 0,
+        ),
+    },
+  );
+  return response.data as LocalExtensionPackage;
 }
 export async function previewExtensionDirectory(
   rootName: string,

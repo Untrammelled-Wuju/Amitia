@@ -31,13 +31,13 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
   </main>
 </template>
 <script setup lang="ts">
-import { Box, ArrowRight, Star } from "@element-plus/icons-vue";
+import { ArrowRight, MagicStick, Star } from "@element-plus/icons-vue";
 const entries = [
   {
-    to: "/extensions/packages?from=creative-workshop",
-    title: "本地扩展包",
-    description: "统一导入、导出、升级、比较、回滚与卸载",
-    icon: Box,
+    to: "/creative-workshop/skills",
+    title: "技能制作",
+    description: "创建声明式 Skill",
+    icon: MagicStick,
   },
   {
     to: "/creative-workshop/pet",

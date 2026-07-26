@@ -11,7 +11,7 @@ export interface HookContext {
   readonly deadline?: number;
   readonly signal?: AbortSignal;
   readonly logger: HookLogger;
-  readonly abort(): void;
+  abort(): void;
 }
 
 export interface HookLogger {
@@ -163,7 +163,7 @@ function registerHook<I, O>(reg: Omit<HookRegistration<I, O>, never>): HookRegis
   }
   const phaseIndex = nextPhaseIndex(reg.pipeline, reg.stage, reg.phase);
   const key = hookKey(reg.pipeline, reg.stage, reg.phase, phaseIndex);
-  hookRegistry.set(key, reg);
+  hookRegistry.set(key, reg as HookRegistration);
   return reg;
 }
 

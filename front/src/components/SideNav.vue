@@ -152,6 +152,9 @@ const activeIndex = computed(() => {
     }
     return "/extensions";
   }
+  if (path.startsWith("/creative-workshop")) {
+    return "/creative-workshop";
+  }
   return path;
 });
 
