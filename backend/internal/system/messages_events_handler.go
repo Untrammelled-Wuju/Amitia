@@ -51,6 +51,9 @@ func (h *Handler) MessagesEventsStream(c *gin.Context) {
 			if !ok {
 				return
 			}
+			if !isAssistantMessageEvent(event) {
+				continue
+			}
 			eventData := gin.H{
 				"conversationId": event.ConversationID,
 				"messageId":      event.MessageID,
@@ -72,4 +75,8 @@ func (h *Handler) MessagesEventsStream(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
+}
+
+func isAssistantMessageEvent(event MessageEvent) bool {
+	return event.Role == "assistant"
 }

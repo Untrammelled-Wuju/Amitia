@@ -19,6 +19,7 @@ import (
 	applog "github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 type webChatSendRequest struct {
@@ -378,22 +379,14 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		}
 	}
 
-	now := time.Now().Format("2006-01-02 15:04:05")
-	msgID := uuid.New().String()
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, status, audio_url, audio_duration, image_url, video_url, request_id, reply_to_message_id, reply_to_role, reply_to_excerpt, created_at, updated_at) VALUES (?, ?, 'user', ?, 'text', ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		msgID, convID, msgContent, source,
-		body.AudioUrl, body.AudioDuration, body.ImageUrl, body.VideoUrl,
-		requestID, body.ReplyToMessageID, replyToRole, replyToExcerpt,
-		now, now)
-
-	var convExists int64
-	h.db.Table("conversations").Where("id = ?", convID).Count(&convExists)
-	if convExists == 0 {
-		h.db.Exec("INSERT INTO conversations (id, title, character_id, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', ?, ?, ?)",
-			convID, msgContent, characterID, source, now, now)
-	} else {
-		h.db.Exec("UPDATE conversations SET updated_at = ? WHERE id = ?", now, convID)
+	userMsg, err := h.persistQueuedWebChatMessage(body, convID, characterID, source, requestID, msgContent, replyToRole, replyToExcerpt)
+	if err != nil {
+		applog.Error(fmt.Sprintf("[WebChatSubmitMessage] persist user message failed: %v", err))
+		util.ErrorResponse(c, response.InternalError, "消息存储失败", nil)
+		return
 	}
+	msgID := userMsg.ID
+	h.db.Exec("UPDATE characters SET conversation_id = ? WHERE id = ?", convID, characterID)
 
 	c.Header("X-Request-ID", requestID)
 	genID := chat.GetGenerationQueue().StartCollection(convID)
@@ -461,6 +454,57 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	})
 }
 
+func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, characterID, source, requestID, msgContent string, replyToRole, replyToExcerpt *string) (*chat.Message, error) {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	msg := &chat.Message{
+		ID:               uuid.New().String(),
+		ConversationID:   convID,
+		Role:             "user",
+		Content:          msgContent,
+		MsgType:          "text",
+		Source:           source,
+		Status:           "queued",
+		AudioUrl:         body.AudioUrl,
+		AudioDuration:    body.AudioDuration,
+		ImageUrl:         body.ImageUrl,
+		VideoUrl:         body.VideoUrl,
+		RequestID:        requestID,
+		ReplyToMessageID: body.ReplyToMessageID,
+		ReplyToRole:      replyToRole,
+		ReplyToExcerpt:   replyToExcerpt,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		var convExists int64
+		if err := tx.Model(&chat.Conversation{}).Where("id = ?", convID).Count(&convExists).Error; err != nil {
+			return err
+		}
+		if convExists == 0 {
+			conv := &chat.Conversation{ID: convID, Title: msgContent, CharacterID: characterID, Channel: "web", Source: source, CreatedAt: now, UpdatedAt: now}
+			if err := tx.Create(conv).Error; err != nil {
+				return err
+			}
+		} else if err := tx.Model(&chat.Conversation{}).Where("id = ?", convID).Update("updated_at", now).Error; err != nil {
+			return err
+		}
+		var existing chat.Message
+		result := tx.Where("conversation_id = ? AND request_id = ? AND role = ?", convID, requestID, "user").Order("sequence ASC").Limit(1).Find(&existing)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			msg = &existing
+			return nil
+		}
+		return tx.Create(msg).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
 func (h *Handler) WebChatGenerationStatus(c *gin.Context) {
 	convID := c.Param("id")
 	if convID == "" {
@@ -482,7 +526,6 @@ func (h *Handler) WebChatCancelGeneration(c *gin.Context) {
 	chat.GetGenerationQueue().Cancel(convID)
 	util.SuccessResponse(c, gin.H{"cancelled": true, "conversationId": convID})
 }
-
 
 func resolveRequestID(c *gin.Context, candidates ...string) string {
 	candidates = append(candidates, c.GetHeader("X-Request-ID"), c.GetHeader("X-Idempotency-Key"), c.Query("requestId"), c.Query("request_id"), c.Query("idempotencyKey"))

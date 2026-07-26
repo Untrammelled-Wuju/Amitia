@@ -9,6 +9,10 @@ import {
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
+export function isWebChatReplyEvent(message: any): boolean {
+  return message?.role === "assistant";
+}
+
 export function useWebChatSSE(
   convId: Ref<string>,
   messages: Ref<any[]>,
@@ -80,7 +84,7 @@ export function useWebChatSSE(
       const msg = normalizeEventMessage(raw);
       if (!msg) return;
       if (msg.conversationId !== convId.value) return;
-      if (!msg.role || msg.role === "tool") return;
+      if (!isWebChatReplyEvent(msg)) return;
       if ((msg as any).tool_calls_json) return;
       if (mergeChatMessage(messages.value, msg)) {
         lastPolledMsgId = msg.id || lastPolledMsgId;
@@ -96,24 +100,9 @@ export function useWebChatSSE(
         !messages.value.some((m: any) => m.id === msg.id) &&
         !typingQueue.some((m: any) => m.id === msg.id)
       ) {
-        if (msg.role === "user") {
-          if (sending.value) {
-            lastPolledMsgId = msg.id || lastPolledMsgId;
-            return;
-          }
-        }
-        if (msg.role === "assistant") {
-          sending.value = false;
-          typingQueue.push(msg);
-          if (!typingTimer) processTypingQueue();
-        } else {
-          messages.value.push(msg);
-          if (!sending.value) sortMessages();
-          lastPolledMsgId = msg.id || lastPolledMsgId;
-          scrollToBottom();
-          fetchWechatMsgCount();
-          fetchQQStatus();
-        }
+        sending.value = false;
+        typingQueue.push(msg);
+        if (!typingTimer) processTypingQueue();
       }
     } catch {}
   }

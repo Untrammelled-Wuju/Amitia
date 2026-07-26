@@ -30,7 +30,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 			channel = "web"
 		}
 		if !event.IsInternal {
-			bus.PublishMessageCreated(event.ConversationID, event.UserMessageID, channel, "inbound", "user", event.UserMessage, nowStr)
 			if event.MessagePlan != nil {
 				for _, item := range event.MessagePlan.Items {
 					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr)
@@ -165,7 +164,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/version", handler.Version)
 	r.GET("/about", handler.About)
 
-
 	r.POST("/storage/backup", handler.StorageBackup)
 	r.POST("/storage/backup/encrypted", handler.StorageBackupEncrypted)
 	r.GET("/storage/backups", handler.StorageBackups)
@@ -227,8 +225,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/proactive-sse", sse.SSEHandler)
 
 	r.GET("/messages/events", handler.MessagesEventsStream)
-
-
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
 	r.POST("/web-chat/conversations", handler.WebChatCreateConv)
