@@ -393,26 +393,29 @@ android/app/src/main/assets/
 | Linux ARM64 amitia-backend-arm64 | `android/app/src/main/assets/amitia-backend-arm64` | 54.63 MB（57283044 字节） | 交叉编译成功 |
 | Qdrant ARM64 | `android/app/src/main/assets/qdrant_linux_aarch64` | 74.23 MB | 已下载 |
 | SurrealDB ARM64 | `android/app/src/main/assets/surreal_linux_aarch64` | 111.03 MB | 已下载 |
-| RootFS 分发包合计 | `android/app/src/main/assets/` | 240 MB | 完整 |
-| Debug APK | `android/app/build/outputs/apk/debug/app-debug.apk` | — | 未生成（classpath 阻塞） |
+| PRoot ARM64 | `android/app/src/main/assets/proot_linux_aarch64` | 1.43 MB | 已下载（proot-rs v0.1.0） |
+| RootFS 分发包合计 | `android/app/src/main/assets/` | 241 MB | 完整（含 PRoot 二进制） |
+| Debug APK | `android/app/build/outputs/apk/debug/app-debug.apk` | 131.07 MB（137436908 字节） | 已生成（含 PRoot 集成 + manifest totalSize 修正，clean+assembleDebug 可复现） |
 
 ---
 
 ## 12. APK 路径
 
-**当前状态**：未最终生成
+**当前状态**：已最终生成
 
-**原因**：
-
-- AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 阻塞，`assembleDebug` 在测试任务配置阶段失败
-- 主源码 Kotlin compile 通过，资源合并通过
-- APK 打包步骤未执行
-
-**预期路径**（修复后）：
+**产物**：
 
 ```
-android/app/build/outputs/apk/debug/app-debug.apk
+路径: android/app/build/outputs/apk/debug/app-debug.apk
+大小: 131.07 MB (137436908 bytes)
+SHA-256: 8d4739c617be328dc8f364a54faf5ae18c76548db9cc1da41def5323b7e8d380
+构建时间: 2026-07-27 00:05:09
 ```
+
+**构建可复现**：
+
+- `./gradlew clean assembleDebug` 退出码 0，BUILD SUCCESSFUL
+- 含 PRoot 集成代码（Phase 6.9）与 PRoot 二进制资源
 
 详见 `docs/android/09-build-and-run.md` 第 4.4 节。
 
@@ -436,13 +439,17 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 | 序号 | 阻塞项 | 影响 | 应对 |
 |---|---|---|---|
-| 1 | AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 问题 | 单元测试无法执行 | 升级 AGP 或降级 Kotlin 1.9 |
-| 2 | ARM64 真机未连接 | 22 项真机验证全部待执行 | 采购 / 借用真机 |
-| 3 | assembleDebug APK 未最终生成 | 无法分发安装包 | 临时绕过：`-x test` |
-| 4 | FilePickerImpl / AudioPlayerImpl / AudioRecorderImpl 占位实现 | 图片选择 / 音频录制播放功能受限 | 接入 Activity Result API |
-| 5 | ProactiveMessageObserver 未自动启动 | 主动消息推送未生效 | 在 Runtime Running 状态注册 |
-| 6 | 通知点击 PendingIntent 跳转未解析 | 通知点击不跳转 | MainActivity.onNewIntent 解析 |
-| 7 | PermissionBrokerImpl 权限回调未注册 | 权限请求无法路由 | registerForActivityResult 接入 |
+| 1 | ARM64 真机未连接 | 22 项真机验证 + 集成测试 + UI 测试全部待执行 | 采购 / 借用 ARM64 真机（Pixel 6+ / 小米 11+ / 一加 9+） |
+| 2 | FilePickerImpl / AudioPlayerImpl / AudioRecorderImpl 占位实现 | 图片选择 / 音频录制播放功能受限 | 接入 Activity Result API（第二阶段早期） |
+| 3 | ProactiveMessageObserver 未在 Runtime Running 状态自动注册 | 主动消息实时推送未生效 | 在 AmitiaCoreService 监听 RuntimeManager.observeState()（第二阶段早期） |
+| 4 | 通知点击 PendingIntent 跳转未在 MainActivity.onNewIntent 解析 | 通知点击不跳转 | MainActivity.onNewIntent 解析 extras + NavHost 导航（第二阶段早期） |
+| 5 | PermissionBrokerImpl 权限回调未在 MainActivity 注册 | 权限请求无法路由到 Activity Result | registerForActivityResult 接入（第二阶段早期） |
+| 6 | SurrealDB gnu 动态版本依赖 glibc | PRoot 内最小化 rootfs 无 glibc，预期启动失败 | 启动失败时进入 Degraded 状态（已实现）；长期方案：预置 glibc 或社区构建 musl 静态变体 |
+
+**已解决的阻塞（仅作记录）**：
+
+- ~~AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 问题~~ — 已解决（`gradle.properties` 设置 `file.encoding=GBK` + 移除测试 JVM args 覆盖）
+- ~~assembleDebug APK 未最终生成~~ — 已解决（`./gradlew clean assembleDebug` 退出码 0，APK 131.07 MB，SHA-256 已校验）
 
 详见 `docs/android/12-known-limitations.md`。
 
@@ -468,15 +475,20 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 | 项 | 阻塞原因 | 应对 |
 |---|---|---|
-| 单元测试执行 | AGP + Kotlin 2.0 classpath 兼容性问题 | 待升级 / 降级 |
-| ARM64 真机验证 22 项 | 本机无 ARM64 真机 | 待真机接入 |
-| Debug APK 完整生成 | 测试任务配置失败 | 待 classpath 修复 |
+| ARM64 真机验证 22 项 | 本机无 ARM64 真机 | 待真机接入（外部阻塞） |
+| 集成测试覆盖 | 需 ARM64 真机执行 Linux 二进制链路 | 待真机接入（外部阻塞） |
+| UI 测试覆盖 14 项 | 需真机或模拟器 | 待真机接入（外部阻塞） |
+| FilePicker/AudioPlayer/AudioRecorder 占位 | Activity Result API 未接入 | 第二阶段早期接入 |
+| ProactiveMessageObserver 自启动 | 未在 Runtime Running 状态注册 | 第二阶段早期接入 |
+| 通知点击跳转 | MainActivity.onNewIntent 未解析 | 第二阶段早期接入 |
+| PermissionBrokerImpl 权限回调 | MainActivity 未注册 launcher | 第二阶段早期接入 |
 
 ### 15.3 结论
 
-**第一阶段验收结论**：部分达到。
+**第一阶段验收结论**：部分达到（约 34/38 项达成）。
 
-- 工程骨架、Runtime、Go 后端、数据库、UI、系统集成、文档**全部完成**
-- 测试执行、APK 生成、真机验证**阻塞**，需在后续阶段处理
+- 工程骨架、Runtime、Go 后端、数据库、UI、系统集成、文档、PRoot 集成**全部完成**
+- 单元测试 270/270 通过（Debug & Release 双变体），APK 真实生成（131.07 MB，含 PRoot 集成）
+- 真机验证、集成测试、UI 测试**外部阻塞**（无 ARM64 真机），占位 Provider 待第二阶段接入
 
 详见 `docs/android/13-next-stage-plan.md`。

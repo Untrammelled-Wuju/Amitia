@@ -142,10 +142,10 @@ android/
 # 清理
 ./gradlew clean
 
-# 编译 Debug APK（注意：当前阻塞，详见第 4 节）
+# 编译 Debug APK（已通过，退出码 0，APK 131.07 MB）
 ./gradlew assembleDebug
 
-# 单元测试（注意：当前阻塞，详见第 4 节）
+# 单元测试（已通过，270 tests/0 failures/2 ignored，Debug & Release 双变体）
 ./gradlew test
 
 # 静态检查
@@ -198,9 +198,9 @@ Phase 7 期间 `./gradlew assembleDebug` 阶段陆续修复以下编译错误：
 | testOptions | 在 `app/build.gradle.kts` 添加 `testOptions { unitTests { ... } }` | `android/app/build.gradle.kts:88-93` |
 | native 模块 | `native/build.gradle.kts` 移除 `externalNativeBuild` 引用（PRoot JNI 仅占位） | `android/native/build.gradle.kts` |
 
-### 4.3 测试 classpath 阻塞（外部阻塞）
+### 4.3 测试 classpath 阻塞（已解决）
 
-**问题描述**：
+**历史问题**：
 
 执行 `./gradlew test` 或 `./gradlew assembleDebug` 时，测试任务配置阶段失败：
 
@@ -209,29 +209,37 @@ class com.android.build.gradle.internal.dsl.TestOptions$UnitTestOptions_Decorate
 cannot be cast to org.gradle.api.tasks.testing.Test
 ```
 
-**根因**：AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 已知兼容性问题（社区广泛报告）。
+**根因**：AGP 8.5.2 + Kotlin 2.0.20 ASM transform 兼容性问题 + 项目路径含非 ASCII 字符（`桌面/跟进项目`）导致 Gradle Worker 进程无法正确读取 classpath。
+
+**解决方案**：
+
+- `android/gradle.properties` 设置 `file.encoding=GBK` 匹配 Windows 系统编码
+- `android/build.gradle.kts` 移除 subprojects 测试 JVM args 覆盖
+- `CharacterViewModelTest` 角色列表加载前显式 `listCharacters()` + `advanceUntilIdle()`
 
 **当前状态**：
 
-- 记录为外部阻塞，不在本阶段处理
-- 待后续通过升级 AGP 或降级 Kotlin 1.9.x 解决
-- 详见 `docs/android/12-known-limitations.md`
+- `./gradlew test` 退出码 0，270 tests / 0 failures / 2 ignored（Debug & Release 双变体）
+- `./gradlew clean assembleDebug` 退出码 0，APK 真实生成 131.07 MB
+- 详见 `docs/android/10-testing-report.md` 4.3 节 + `docs/android/12-known-limitations.md` 第 1 节
 
 ### 4.4 APK 路径
 
-**当前状态**：未最终生成
+**当前状态**：已最终生成（含 PRoot 集成）
 
-**原因**：
-
-- 因测试 classpath 阻塞，`assembleDebug` 在测试任务配置阶段失败
-- 主源码编译已通过（Kotlin compile 成功，资源合并成功）
-- APK 打包步骤未执行
-
-**预期路径**（修复后）：
+**产物**：
 
 ```
-android/app/build/outputs/apk/debug/app-debug.apk
+路径: android/app/build/outputs/apk/debug/app-debug.apk
+大小: 131.07 MB (137436908 bytes)
+SHA-256: 8d4739c617be328dc8f364a54faf5ae18c76548db9cc1da41def5323b7e8d380
+构建时间: 2026-07-27 00:05:09
 ```
+
+**构建可复现**：
+
+- `./gradlew clean assembleDebug` 退出码 0，BUILD SUCCESSFUL
+- 含 PRoot 集成代码（Phase 6.9）与 PRoot 二进制资源（proot_linux_aarch64 1.43 MB）
 
 ---
 
@@ -291,7 +299,8 @@ RootFS 分发包位于 `android/app/src/main/assets/`，作为 APK 内置资源�
 | `amitia-backend-arm64` | 57283044 字节（54.63 MB） | `ABDD63EB020A01718684EDCF130785DA0CFD45DCB691AAB5D260A8E17386879B` | Go 后端 | linux/arm64 | 静态 | `rootfs-manifest.json:9-14` |
 | `qdrant_linux_aarch64` | 77835808 字节（74.23 MB） | `6CB81123D2A3E405335C984EFB7928DC21A1EAC47A3B73A7609AEE076DBE0B04` | 向量数据库 | linux/arm64 | musl 静态 | `rootfs-manifest.json:15-24` |
 | `surreal_linux_aarch64` | 116424792 字节（111.03 MB） | `A235206F2C4A803616D7669F56BC5BCA5CC0AE7ED2B79ACBE91F14712B28FE5C` | 图数据库 | linux/arm64 | gnu 动态 | `rootfs-manifest.json:25-34` |
-| **合计** | 251542644 字节（约 240 MB） | — | — | — | — | `rootfs-manifest.json:36` |
+| `proot_linux_aarch64` | 1504544 字节（1.43 MB） | `56399E908B36C20EAE73457D6F2DA9988914FD62183D36AA7FB2CFA60B8EC7EB` | PRoot 运行时 | linux/arm64 | android-shared | `rootfs-manifest.json:35-44` |
+| **合计** | 253048188 字节（约 241 MB） | — | — | — | — | `rootfs-manifest.json:46` |
 
 ### 6.2 二进制来源
 
@@ -300,6 +309,7 @@ RootFS 分发包位于 `android/app/src/main/assets/`，作为 APK 内置资源�
 | `amitia-backend-arm64` | 本地交叉编译 | 项目源码 |
 | `qdrant_linux_aarch64` | GitHub Release `qdrant-aarch64-unknown-linux-musl.tar.gz` | musl 静态版本，避免 glibc 依赖 |
 | `surreal_linux_aarch64` | GitHub Release `surreal-v3.2.0.linux-arm64.tgz` | gnu 动态版本，PRoot 中 glibc 兼容性待真机验证 |
+| `proot_linux_aarch64` | GitHub Release `proot-rs-v0.1.0-aarch64-linux-android.tar.gz` | proot-rs 静态二进制，无 Root Linux 用户空间 |
 
 ### 6.3 配置与脚本
 
@@ -429,22 +439,24 @@ adb logcat -s AmitiaCoreService:V AmitiaApplication:V
 
 ## 8. 常见问题
 
-### 8.1 Gradle 构建失败：测试 classpath
+### 8.1 Gradle 构建失败：测试 classpath（已解决）
 
-**现象**：
+**历史现象**：
 
 ```
 class com.android.build.gradle.internal.dsl.TestOptions$UnitTestOptions_Decorated
 cannot be cast to org.gradle.api.tasks.testing.Test
 ```
 
-**根因**：AGP 8.5.2 + Kotlin 2.0.20 兼容性问题。
+**根因**：AGP 8.5.2 + Kotlin 2.0.20 ASM transform 兼容性问题 + 项目路径含非 ASCII 字符。
 
-**临时绕过**：跳过测试任务（仅用于生成 APK）：
+**解决方案**（已实施）：
 
-```bash
-./gradlew assembleDebug -x test
-```
+- `android/gradle.properties` 设置 `file.encoding=GBK`
+- `android/build.gradle.kts` 移除 subprojects 测试 JVM args 覆盖
+- 测试用例加载前显式 `listCharacters()` + `advanceUntilIdle()`
+
+**当前状态**：`./gradlew test` 退出码 0，270 tests / 0 failures / 2 ignored。详见第 4.3 节。
 
 **根本解决**：升级 AGP 至 8.6+ 或降级 Kotlin 至 1.9.x（待后续阶段处理）。
 
@@ -462,9 +474,9 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o amitia-backend-arm64 ./cmd/ser
 
 ### 8.3 APK 体积过大
 
-**现象**：APK 体积约 240 MB（RootFS 内置）。
+**现象**：APK 体积 131.07 MB（RootFS 内置 + PRoot 集成）。
 
-**临时方案**：当前阶段接受该体积，确保首次启动即可用。
+**当前阶段策略**：接受该体积，确保首次启动即可用，仅在内部测试分发。
 
 **长期方案**（待后续阶段）：
 

@@ -248,16 +248,23 @@ func (m Manifest) Validate() ValidationReport {
 	}
 	moduleIDs := make(map[string]bool)
 	moduleTypes := map[string]bool{
-		"builtin": true, "native": true, "javascript": true,
-		"wasm": true, "service": true, "data_only": true,
+		"builtin": true, "javascript": true, "data_only": true,
+	}
+	runtimeTypes := map[string]bool{
+		"javascript": true, "mcp": true, "workflow": true, "static": true,
 	}
 	contributionKinds := map[string]bool{
 		"tool": true, "agent_skill": true, "workflow": true,
-		"mcp_server": true, "provider": true, "hook": true,
-		"event_subscription": true, "schedule": true,
-		"background_task": true, "ui_page": true, "ui_panel": true,
-		"ui_chat": true, "ui_context_action": true, "ui_desktop": true,
-		"resource": true,
+		"mcp_server": true,
+	}
+	unsupportedContributionKinds := map[string]bool{
+		"provider": true, "hook": true, "event_subscription": true,
+		"schedule": true, "background_task": true,
+		"ui_page": true, "ui_panel": true, "ui_chat": true,
+		"ui_context_action": true, "ui_desktop": true, "resource": true,
+	}
+	unsupportedModuleTypes := map[string]bool{
+		"native": true, "wasm": true, "service": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -276,11 +283,17 @@ func (m Manifest) Validate() ValidationReport {
 		}
 		if mod.Type == "" {
 			report.AddError(path+".type", "missing", "module type required")
+		} else if unsupportedModuleTypes[mod.Type] {
+			report.AddError(path+".type", "unsupported_runtime", fmt.Sprintf(`{"code":"unsupported_runtime","moduleId":"%s","runtimeType":"%s"}`, mod.ID, mod.Type))
 		} else if !moduleTypes[mod.Type] {
 			report.AddError(path+".type", "unknown_type", fmt.Sprintf("unknown module type: %s", mod.Type))
 		}
-		if mod.Runtime != nil && mod.Runtime.Type == "" {
-			report.AddError(path+".runtime.type", "missing", "runtime type required")
+		if mod.Runtime != nil {
+			if mod.Runtime.Type == "" {
+				report.AddError(path+".runtime.type", "missing", "runtime type required")
+			} else if !runtimeTypes[mod.Runtime.Type] {
+				report.AddError(path+".runtime.type", "unsupported_runtime", fmt.Sprintf(`{"code":"unsupported_runtime","moduleId":"%s","runtimeType":"%s"}`, mod.ID, mod.Runtime.Type))
+			}
 		}
 		for j, c := range mod.Contributions {
 			cpath := fmt.Sprintf("%s.contributions[%d]", path, j)
@@ -295,6 +308,8 @@ func (m Manifest) Validate() ValidationReport {
 			contributionIDs[c.ID] = true
 			if c.Kind == "" {
 				report.AddError(cpath+".kind", "missing", "contribution kind required")
+			} else if unsupportedContributionKinds[c.Kind] {
+				report.AddError(cpath+".kind", "unsupported_contribution", fmt.Sprintf(`{"code":"unsupported_contribution","moduleId":"%s","contributionId":"%s","kind":"%s"}`, mod.ID, c.ID, c.Kind))
 			} else if !contributionKinds[c.Kind] {
 				report.AddError(cpath+".kind", "unknown_kind", fmt.Sprintf("unknown contribution kind: %s", c.Kind))
 			}

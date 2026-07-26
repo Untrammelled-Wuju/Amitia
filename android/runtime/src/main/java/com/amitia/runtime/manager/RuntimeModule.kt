@@ -12,8 +12,12 @@ import com.amitia.runtime.health.HealthChecker
 import com.amitia.runtime.health.HealthCheckerImpl
 import com.amitia.runtime.linux.LinuxRootfsManager
 import com.amitia.runtime.linux.LinuxRootfsManagerImpl
+import com.amitia.runtime.linux.ProotBinaryManager
+import com.amitia.runtime.linux.ProotBinaryManagerImpl
 import com.amitia.runtime.process.LinuxProcessManager
 import com.amitia.runtime.process.LinuxProcessManagerImpl
+import com.amitia.runtime.process.ProotCommandWrapper
+import com.amitia.runtime.process.ProotCommandWrapperImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -55,4 +59,12 @@ abstract class RuntimeModule {
     @Binds
     @Singleton
     abstract fun bindRuntimeBridge(impl: RuntimeBridgeStub): RuntimeBridge
+
+    @Binds
+    @Singleton
+    abstract fun bindProotBinaryManager(impl: ProotBinaryManagerImpl): ProotBinaryManager
+
+    @Binds
+    @Singleton
+    abstract fun bindProotCommandWrapper(impl: ProotCommandWrapperImpl): ProotCommandWrapper
 }

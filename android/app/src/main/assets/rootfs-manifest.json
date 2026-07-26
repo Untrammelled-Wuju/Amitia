@@ -31,8 +31,18 @@
       "target": "linux/arm64",
       "source": "https://github.com/surrealdb/surrealdb/releases/download/v3.2.0/surreal-v3.2.0.linux-arm64.tgz",
       "variant": "gnu-dynamic"
+    },
+    {
+      "name": "proot",
+      "file": "proot_linux_aarch64",
+      "size": 1504544,
+      "sha256": "56399e908b36c20eae73457d6f2da9988914fd62183d36aa7fb2cfa60b8ec7eb",
+      "type": "proot-runtime",
+      "target": "linux/arm64",
+      "source": "https://github.com/proot-me/proot-rs/releases/download/v0.1.0/proot-rs-v0.1.0-aarch64-linux-android.tar.gz",
+      "variant": "android-shared"
     }
   ],
-  "totalSize": 251542644,
+  "totalSize": 253048188,
   "checksumAlgorithm": "SHA-256"
 }

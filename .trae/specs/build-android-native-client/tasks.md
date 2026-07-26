@@ -124,6 +124,53 @@
 - [x] Task 6.7: Native Capability Bridge（文件/图片/相机/麦克风/音频/通知/剪贴板/分享/应用目录/主题/网络/电池/前后台，PermissionBroker 校验，预留 Accessibility/MediaProjection/悬浮窗/Shizuku/Root/屏幕理解/手势/Computer Use）— `ActivityResultBridge` 统一桥接 8 类 launcher；`FilePickerImpl`（GetContent/OpenDocument）+ `AudioPlayerImpl`（ExoPlayer + 音频焦点）+ `AudioRecorderImpl`（MediaRecorder + 权限校验）+ `PermissionBrokerImpl` 在 MainActivity.onCreate 注册回调路由，onDestroy 释放资源
 - [x] Task 6.8: 日志与诊断（日志滚动、脱敏、导出诊断包）
 
+## Phase 6.9 — PRoot 集成与 Linux 用户空间（PRoot 路线落地）
+
+> 背景：第一阶段验收 #6「Linux 用户空间可以启动」是硬指标。Phase 2.5 收尾时 `LinuxRootfsManagerImpl.install()` 仅复制 3 个二进制到 `files/runtime/bin/`，`LinuxProcessManagerImpl` 用 `ProcessBuilder(command).start()` 直接 spawn Linux ARM64 ELF，未接入 PRoot；Android Bionic libc 与 glibc 不兼容 + 无 `/bin/sh`，直接 spawn 在真机必定失败。Phase 6.9 补齐 PRoot 集成代码框架，使代码层满足验收 #6，真机验证待外部 ARM64 设备。
+
+- [x] Task 6.9.1: 实现 `ProotBinaryManager` 接口与实现
+  - [x] SubTask 6.9.1.1: 新建 `android/runtime/src/main/java/com/amitia/runtime/linux/ProotBinaryManager.kt` 接口（`isAvailable`/`install`/`version`/`binaryPath`/`verify`/`unavailableReason`）+ `ProotInstallProgress` / `ProotInstallPhase` 数据类
+  - [x] SubTask 6.9.1.2: 新建 `ProotBinaryManagerImpl.kt` 实现，从 assets 读取 `proot_linux_aarch64` 静态二进制，校验 SHA-256（可选 `proot_linux_aarch64.sha256`），写入 `files/runtime/bin/proot`，设置可执行，写入版本文件 `.amitia-proot-version`
+  - [x] SubTask 6.9.1.3: assets 缺失 PRoot 二进制时返回明确错误「PRoot 二进制未预置，请下载 proot-rs ARM64 静态版本放入 assets/」，并指出获取方式（proot-rs releases / Termux packages）
+  - [x] SubTask 6.9.1.4: SHA-256 校验失败时返回明确错误并发出 FAILED 事件
+- [x] Task 6.9.2: 扩展 `LinuxRootfsManager` 接口与实现，新增 `ensureMinimalRootfs()` / `minimalRootfsDir()`
+  - [x] SubTask 6.9.2.1: 在 `LinuxRootfsManager` 接口追加 `ensureMinimalRootfs(): Result<Unit>` 与 `minimalRootfsDir(): File`（不破坏已有方法签名，向后兼容）
+  - [x] SubTask 6.9.2.2: 在 `LinuxRootfsManagerImpl` 实现最小化 RootFS：创建 `rootfs/minimal/{bin,lib,lib64,etc,tmp,usr/bin,usr/lib,var,dev,proc,sys}` 目录树
+  - [x] SubTask 6.9.2.3: 生成 `etc/passwd`（root + amitia 用户）、`etc/group`、`etc/resolv.conf`（8.8.8.8 / 1.1.1.1）、`etc/nsswitch.conf`、`etc/hosts`（127.0.0.1 localhost）
+  - [x] SubTask 6.9.2.4: 复制 `amitia-backend-arm64` / `qdrant_linux_aarch64` / `surreal_linux_aarch64` / `proot` 到 `rootfs/minimal/bin/` 并设置可执行
+- [x] Task 6.9.3: 实现 `ProotCommandWrapper` 接口与实现
+  - [x] SubTask 6.9.3.1: 新建 `android/runtime/src/main/java/com/amitia/runtime/process/ProotCommandWrapper.kt` 接口（`isProotAvailable`/`wrap`/`fallbackReason`）
+  - [x] SubTask 6.9.3.2: 新建 `ProotCommandWrapperImpl.kt` 实现，将原始命令包装为 `proot --rootfs=<rootfs> --root-id --cwd=<workDir> --bind=/dev --bind=/proc --bind=/sys --bind=<rootfs>:/ --bind=<workDir> --bind=<dataDir> --env <k=v>... -- <cmd>`
+  - [x] SubTask 6.9.3.3: PRoot 不可用时返回原命令并通过 `stateMachine.emitError` 记录致命错误（不假装运行成功，由 BootstrapSequence 上层决定 fail）
+- [x] Task 6.9.4: 修改 `BootstrapSequenceImpl` 通过 PRoot 启动
+  - [x] SubTask 6.9.4.1: 注入 `ProotBinaryManager` 与 `ProotCommandWrapper` 依赖（构造函数新增 2 个参数）
+  - [x] SubTask 6.9.4.2: 在 `start()` 中 RootFS 安装完成后追加 `ensureProotReady(progress)`（若 PRoot 未就绪则触发 install Flow，失败时返回 `fail(retryable=false, requiresUserAction=true)`）
+  - [x] SubTask 6.9.4.3: 在 `start()` 中调用 `rootfsManager.ensureMinimalRootfs()`，失败时返回 `fail`
+  - [x] SubTask 6.9.4.4: 在 `startSurrealdb` / `startQdrant` / `startBackend` 中通过 `wrapWithProot(rawCommand, env, workDir)` 包装命令后再交给 `processManager.start()`
+  - [x] SubTask 6.9.4.5: 在 `Running` / `Degraded` 状态机日志中明确记录 PRoot 模式是否 active
+- [x] Task 6.9.5: Hilt 绑定
+  - [x] SubTask 6.9.5.1: 在 `RuntimeModule` 中追加 `@Binds bindProotBinaryManager(impl: ProotBinaryManagerImpl): ProotBinaryManager`
+  - [x] SubTask 6.9.5.2: 在 `RuntimeModule` 中追加 `@Binds bindProotCommandWrapper(impl: ProotCommandWrapperImpl): ProotCommandWrapper`
+- [x] Task 6.9.6: 编译验证
+  - [x] SubTask 6.9.6.1: `./gradlew :runtime:compileDebugKotlin` 通过（退出码 0），仅有预存在的 `BootstrapSequenceImpl.kt:550:30 parentFile nullable` 警告（非本次引入）
+  - [x] SubTask 6.9.6.2: `./gradlew :runtime:compileDebugUnitTestKotlin` 通过（退出码 0）
+- [x] Task 6.9.7: 单元测试
+  - [x] SubTask 6.9.7.1: 新建 `ProotCommandWrapperImplTest.kt`（11 个测试）：覆盖 isProotAvailable/fallbackReason/wrap 命令包装（rootfs/root-id/cwd/bind/--/env 处理/empty env/empty command/binaryPath null/log 信息/data bind/参数顺序保留）
+  - [x] SubTask 6.9.7.2: 新建 `ProotBinaryManagerImplTest.kt`（20 个测试）：覆盖 isAvailable（asset 缺失/SHA 匹配/不匹配/无 SHA 文件）/binaryPath/version/verify/unavailableReason（asset 缺失/未安装/可用）/install（STARTED/COPYING/VERIFYING/COMPLETED/FAILED 流程 + 可执行权限 + 版本文件 + 幂等 + 错误日志）
+  - [x] SubTask 6.9.7.3: 更新 `BootstrapSequenceImplTest.kt` 适配新构造函数（保留原有 14 个测试全部通过），在 `stubCommonDirs` 中追加 PRoot 桩（`isAvailable=true`/`binaryPath`/`install` completed flow/`wrap` 返回原命令）
+  - [x] SubTask 6.9.7.4: 执行 `./gradlew :runtime:testDebugUnitTest` 全部通过 — 127 tests, 0 failures, 2 skipped（原 90 tests + 新增 37 tests，无回归）
+- [x] Task 6.9.8: 更新 Spec / Checklist / Docs
+  - [x] SubTask 6.9.8.1: 在 `spec.md` Why 段追加 PRoot 集成补充说明，在 ADDED 中追加 PRoot 集成项，在 ADDED Requirements 中追加「Requirement: PRoot 集成与 Linux 用户空间启动」+ 4 个 Scenario
+  - [x] SubTask 6.9.8.2: 在 `tasks.md` 追加 Phase 6.9 段（本段）
+  - [x] SubTask 6.9.8.3: 在 `checklist.md` 勾选 B2（代码层完成，真机验证仍待外部 ARM64 设备），更新 I4 / M2 说明 PRoot 集成已实现
+  - [x] SubTask 6.9.8.4: 在 `docs/android/05-linux-runtime-design.md` 追加 PRoot 集成设计章节
+  - [x] SubTask 6.9.8.5: 在 `docs/android/10-testing-report.md` 追加 PRoot 集成测试结果
+- [ ] Task 6.9.9: 真机 ARM64 验证（外部阻塞）
+  - [ ] SubTask 6.9.9.1: 在 ARM64 真机或模拟器上验证 PRoot 实际可执行 surreal/qdrant/backend Linux ARM64 ELF
+  - [ ] SubTask 6.9.9.2: 验证 PRoot 命令包装参数（rootfs/cwd/bind/env）在实际设备上工作正常
+  - [ ] SubTask 6.9.9.3: 验证 surreal/qdrant/backend 健康接口在 PRoot 内可访问 127.0.0.1
+  - **阻塞原因**：当前环境无 ARM64 真机或模拟器，无法进行端到端真机验证
+
 ## Phase 7 — 测试与构建（stage.md 步骤 43-49）
 
 - [x] Task 7.1: 单元测试（Runtime 状态机/启动顺序/停止顺序/进程退出/健康检查/Endpoint 切换/Token 保存/API 错误映射/流式事件解析/消息去重/角色切换/草稿/Runtime 版本迁移/数据目录策略）— 233 tests, 0 failures, 2 ignored (platform-specific)，core:112 + feature:31 + runtime:90

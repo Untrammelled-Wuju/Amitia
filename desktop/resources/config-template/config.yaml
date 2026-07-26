@@ -12,7 +12,7 @@ jwt:
 
 app:
   name: "U-Ai"
-  version: "1.0.0-beta"
+  version: "26.1.8"
   deployMode: "desktop-local"
 chat:
   mergeWindowMs: 5000

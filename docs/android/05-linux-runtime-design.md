@@ -404,33 +404,273 @@ RootFS 资产以 **ZIP** 格式打包（`rootfs.zip`），通过 Android `assets
 
 ---
 
-## 10. PRoot 集成预留
+## 10. PRoot 集成设计（Phase 6.9）
 
-当前 Phase 2 实现**不依赖 PRoot**，直接通过 `ProcessBuilder` 启动原生 Linux ARM64 二进制。PRoot 集成预留点：
+### 10.1 背景与问题
+
+第一阶段原计划已声明「优先 PRoot/proot-rs 路线」建立无 Root Linux 用户空间，但 Phase 2.5 收尾时 Runtime 模块实际只完成了：
+
+- `LinuxRootfsManagerImpl.install()` 将 assets 中 3 个 Linux ARM64 二进制（`amitia-backend-arm64` / `qdrant_linux_aarch64` / `surreal_linux_aarch64`）+ `rootfs-manifest.json` 复制到 `files/runtime/bin/` 与 `files/runtime/rootfs/`
+- `LinuxProcessManagerImpl.start()` 用 `ProcessBuilder(command).start()` 直接 spawn Linux ARM64 ELF
+- `BootstrapSequenceImpl.startSurrealdb/startQdrant/startBackend` 构造原始命令后直接交给 `processManager.start()`
+
+这在 Android 真机必定失败，原因：
+
+1. Android 使用 Bionic libc 而非 glibc，Linux ARM64 二进制（特别是 surreal 的 GNU dynamic 变体）依赖 glibc 动态链接器 `/lib/ld-linux-aarch64.so.1`，Bionic 不提供
+2. Android 系统无 `/bin/sh`、`/bin/ls` 等 coreutils，surreal/qdrant 启动时若依赖 shell 解释参数会失败
+3. Android 文件系统权限模型与 Linux 不同，`/dev`、`/proc`、`/sys` 访问受限
+4. Android 不允许应用 mount 文件系统，无法用 chroot 实现 RootFS 隔离
+
+PRoot 通过 `ptrace` 系统调用拦截文件路径访问并重定向到应用私有目录中的 RootFS，无需 Root 权限即可模拟 Linux 用户空间，是 Android 上无 Root 运行 Linux 二进制的标准方案（Termux 即采用此路线）。
+
+### 10.2 PRoot 二进制管理（`ProotBinaryManager`）
+
+**接口位置**：`android/runtime/src/main/java/com/amitia/runtime/linux/ProotBinaryManager.kt`
+
+```kotlin
+interface ProotBinaryManager {
+    fun isAvailable(): Boolean
+    fun install(): Flow<ProotInstallProgress>
+    fun version(): String?
+    fun binaryPath(): File?
+    fun verify(): Result<Unit>
+    fun unavailableReason(): String?
+}
+```
+
+**实现**：`ProotBinaryManagerImpl.kt`
+
+- 资产来源：`app/src/main/assets/proot_linux_aarch64`（PRoot ARM64 静态二进制，需提前预置）
+- SHA-256 校验：可选 `app/src/main/assets/proot_linux_aarch64.sha256`，存在则校验，不存在则跳过（仅记录警告）
+- 安装目标：`files/runtime/bin/proot`，设置可执行权限 `setExecutable(true, false)`
+- 版本文件：`files/runtime/bin/.amitia-proot-version`，默认值 `proot-rs-aarch64-static-0.1.0`
+- 安装进度：通过 `Flow<ProotInstallProgress>` 暴露 `STARTED` → `COPYING`（字节级）→ `VERIFYING` → `COMPLETED` / `FAILED` 五阶段
+- 失败处理：assets 缺失或 SHA-256 不匹配时发出 `FAILED` 事件，并通过 `stateMachine.emitError(retryable=false, requiresUserAction=true)` 上报致命错误
+
+**PRoot 二进制获取方式**（assets 缺失时的错误信息中明示）：
+
+1. 从 proot-rs releases 下载：`https://github.com/proot-me/proot-rs/releases`，选择 `proot-rs-aarch64-linux-static` 变体
+2. 从 Termux packages 提取：`proot-aarch64` 静态二进制包
+3. 自行编译 proot-rs：`cargo build --release --target aarch64-unknown-linux-musl`（需 Rust + musl 交叉工具链）
+
+获取后将文件重命名为 `proot_linux_aarch64` 放入 `android/app/src/main/assets/`，并可选地生成 `proot_linux_aarch64.sha256` 文件（仅包含 64 位十六进制 SHA-256 字符串）。
+
+### 10.3 最小化 RootFS（`LinuxRootfsManager.ensureMinimalRootfs`）
+
+第一阶段不要求完整 glibc RootFS（glibc + coreutils + bash 通常 50MB+，超出第一阶段范围），但需为 PRoot 提供最小化目录结构，使二进制可解析路径与基础配置。
+
+**接口扩展**（向后兼容，不破坏 Phase 2.5 已稳定契约）：
+
+```kotlin
+interface LinuxRootfsManager {
+    // ... 已有方法保持不变 ...
+    suspend fun ensureMinimalRootfs(): Result<Unit>
+    fun minimalRootfsDir(): File
+}
+```
+
+**目录布局**（`files/runtime/rootfs/minimal/`）：
+
+```
+minimal/
+├── bin/           # amitia-backend-arm64, qdrant_linux_aarch64, surreal_linux_aarch64, proot (复制自 files/runtime/bin/)
+├── lib/           # 预留（未来放 glibc 动态库）
+├── lib64/         # 预留（ld-linux-aarch64.so.1）
+├── etc/
+│   ├── passwd     # root:x:0:0:root:/home/amitia:/bin/sh + amitia:x:1000:1000:amitia:/home/amitia:/bin/sh
+│   ├── group      # root:x:0: + amitia:x:1000:
+│   ├── resolv.conf # nameserver 8.8.8.8 / 1.1.1.1 / options timeout:1 attempts:1
+│   ├── nsswitch.conf # passwd: files / group: files / hosts: files dns / networks: files dns
+│   └── hosts      # 127.0.0.1 localhost + ::1 localhost ip6-localhost
+├── tmp/
+├── usr/
+│   ├── bin/
+│   └── lib/
+├── var/
+├── dev/           # PRoot 运行时 bind /dev
+├── proc/          # PRoot 运行时 bind /proc
+├── sys/           # PRoot 运行时 bind /sys
+└── home/
+    └── amitia/    # $HOME 默认目录
+```
+
+**二进制链接策略**：第一阶段采用 `copyTo`（不使用 symlink，避免 Android 文件系统对 symlink 的支持差异）。未来若 glibc RootFS 落地，可改为 symlink 节省空间。
+
+### 10.4 PRoot 命令包装（`ProotCommandWrapper`）
+
+**接口位置**：`android/runtime/src/main/java/com/amitia/runtime/process/ProotCommandWrapper.kt`
+
+```kotlin
+interface ProotCommandWrapper {
+    fun isProotAvailable(): Boolean
+    fun wrap(command: List<String>, env: Map<String, String>, workDir: File): List<String>
+    fun fallbackReason(): String?
+}
+```
+
+**包装后的命令格式**：
+
+```
+proot
+  --rootfs=<minimalRootfsDir>
+  --root-id
+  --cwd=<workDir>
+  --bind=/dev
+  --bind=/proc
+  --bind=/sys
+  --bind=<minimalRootfsDir>:/
+  --bind=<workDir>:<workDir>
+  --bind=<amitiaDataRoot>:<amitiaDataRoot>   # 若存在
+  --env
+    HOME=<workDir>
+    TMPDIR=<tmpDir>
+    ... <其他 env 变量>
+  --
+  <原始命令...>
+```
+
+**关键参数说明**：
+
+- `--rootfs`：指定最小化 RootFS 目录，PRoot 将所有绝对路径访问重定向到此目录
+- `--root-id`：使应用进程在 RootFS 内显示为 root（uid=0），避免权限检查失败
+- `--cwd`：设置工作目录（必须存在于 RootFS 内或通过 `--bind` 暴露）
+- `--bind=/dev`、`--bind=/proc`、`--bind=/sys`：绑定 Android 系统的 `/dev`、`/proc`、`/sys` 到 RootFS 内同名路径（PRoot 通过 ptrace 拦截 open 等系统调用并重定向）
+- `--bind=<minimalRootfsDir>:/`：将 RootFS 内容绑定到根路径，使 `/bin/proot` 等路径可解析
+- `--bind=<workDir>:<workDir>`：将 Android 工作目录（如 `files/amitia-data/surrealdb`）映射到 RootFS 内同路径，使数据持久化到 Android 私有目录
+- `--env`：注入环境变量（HOME、TMPDIR、QDRANT__SERVICE__HTTP_PORT 等）
+- `--`：分隔 PRoot 参数与被执行命令
+
+**fallback 策略**：
+
+- PRoot 不可用时（`isProotAvailable() == false`），`wrap()` 返回原命令，并通过 `stateMachine.emitError(retryable=false, requiresUserAction=true)` 记录致命错误
+- 上层 `BootstrapSequenceImpl.wrapWithProot` 检测到不可用时，由 `start()` 立即返回 `fail(retryable=false, requiresUserAction=true)`
+- **绝不假装运行成功**，也**绝不退化为直接 `ProcessBuilder` 启动 Linux ELF**（在 Android 上必定失败）
+
+### 10.5 BootstrapSequenceImpl 集成
+
+`BootstrapSequenceImpl` 构造函数新增 2 个依赖：
+
+```kotlin
+@Singleton
+class BootstrapSequenceImpl @Inject constructor(
+    private val directories: RuntimeDirectories,
+    private val rootfsManager: LinuxRootfsManager,
+    private val processManager: LinuxProcessManager,
+    private val healthChecker: HealthChecker,
+    private val stateMachine: RuntimeStateMachine,
+    private val prootBinaryManager: ProotBinaryManager,        // 新增
+    private val prootCommandWrapper: ProotCommandWrapper       // 新增
+) : BootstrapSequence
+```
+
+**`start()` 流程更新**（PRoot 阶段插在 RootFS 安装后、二进制检查前）：
+
+1. `preparing` (0.05)：检查 RootFS 安装状态
+2. `installing` (0.1-0.3)：安装 RootFS（如有需要）
+3. `installed` (0.3)：RootFS 已就绪
+4. **`checking-proot` (0.31)：检查 PRoot 二进制** — `ensureProotReady(progress)`
+   - 已就绪：直接继续
+   - 未就绪：触发 `prootBinaryManager.install()` Flow，按 `STARTED/COPYING/VERIFYING/COMPLETED/FAILED` 上报进度
+   - 失败：`fail("PRoot 不可用: <原因>", retryable=false, requiresUserAction=true)`
+5. **`ensuring-rootfs` (0.33)：准备最小化 RootFS** — `rootfsManager.ensureMinimalRootfs()`
+6. `checking-bin` (0.35)：检查 Runtime 二进制
+7. `checking-dirs` (0.4)：检查数据目录
+8. `checking-config` (0.42)：检查配置文件
+9. `starting-surrealdb` (0.45)：启动 SurrealDB (PRoot) — `wrapWithProot(rawCommand, env, workDir)`
+10. `starting-qdrant` (0.6)：启动 Qdrant (PRoot)
+11. `starting-backend` (0.75)：启动 Go 后端 (PRoot)
+12. `repository-connect` (0.95)：重建 Repository 连接
+13. `running` (1.0)：运行时已启动 (PRoot 模式)
+
+**`wrapWithProot` 私有方法**：
+
+```kotlin
+private fun wrapWithProot(
+    command: List<String>,
+    env: Map<String, String>,
+    workDir: File
+): List<String> {
+    if (!prootCommandWrapper.isProotAvailable()) {
+        stateMachine.emitError(
+            error = "PRoot 不可用: ${prootCommandWrapper.fallbackReason() ?: "未知原因"}",
+            retryable = false,
+            requiresUserAction = true
+        )
+        return command
+    }
+    return prootCommandWrapper.wrap(command, env, workDir)
+}
+```
+
+注意：在 `start()` 阶段已经通过 `ensureProotReady` 确保了 PRoot 可用，`wrapWithProot` 中的不可用分支理论上不会触发，但作为防御性编程保留。如果 PRoot 在启动过程中突然不可用（如文件被外部删除），`processManager.start()` 会因命令找不到而失败，由 `startBackend` 失败时返回 `fail(retryable=true)`。
+
+### 10.6 Hilt 绑定
+
+`RuntimeModule` 中追加：
+
+```kotlin
+@Binds @Singleton
+abstract fun bindProotBinaryManager(impl: ProotBinaryManagerImpl): ProotBinaryManager
+
+@Binds @Singleton
+abstract fun bindProotCommandWrapper(impl: ProotCommandWrapperImpl): ProotCommandWrapper
+```
+
+### 10.7 限制与已知问题
+
+1. **PRoot 静态二进制未预置**：assets 中 `proot_linux_aarch64` 文件未提交（无法在 Windows 主机获取 ARM64 静态二进制）。代码已设计为缺失时进入 Failed 状态，明确错误信息指引获取方式。真机验证前必须将该文件放入 `android/app/src/main/assets/`。
+
+2. **最小化 RootFS 无 glibc**：第一阶段仅创建目录树 + 配置文件 + 复制业务二进制，未包含 glibc 动态库。`surreal_linux_aarch64` 是 GNU dynamic 变体（依赖 glibc），在真机上可能因缺 `ld-linux-aarch64.so.1` 启动失败。建议未来：
+   - 替换 surreal 为 musl 静态变体（与 qdrant 一致）
+   - 或下载完整 glibc RootFS（alpine-arm64 / ubuntu-arm64 minimal rootfs，约 30-50MB）
+
+3. **PRoot 性能**：PRoot 通过 ptrace 拦截系统调用，性能损耗约 2-5 倍。对 surreal/qdrant/backend 启动时间有影响，但对运行时性能（SQLite/向量检索/SSE 推流）影响较小（CPU 密集型操作不经过 ptrace）。若性能问题严重，可考虑 proot-rs 的「seccomp filter」模式（需 Linux 5.x+ 内核支持）。
+
+4. **真机 ARM64 验证待外部设备**：当前环境无 ARM64 真机或模拟器，无法验证 PRoot 实际可执行 surreal/qdrant/backend。代码层单元测试覆盖命令包装逻辑与二进制安装/校验，真机端到端验证记录为外部阻塞。
+
+### 10.8 与现有契约的关系
+
+| 契约 | 是否破坏 | 说明 |
+|------|---------|------|
+| `BootstrapSequence` 接口（start/stop/restart/repair） | 不破坏 | 仅修改实现类构造函数，接口不变 |
+| `LinuxRootfsManager` 接口 | 扩展（向后兼容） | 仅追加 `ensureMinimalRootfs()` / `minimalRootfsDir()`，已有方法签名不变 |
+| `LinuxProcessManager` 接口 | 不破坏 | 完全不变，PRoot 包装在 Bootstrap 层完成 |
+| `LinuxRootfsManagerImpl` 现有 90 单元测试 | 不破坏 | 新增方法不影响已有测试，已验证全部通过 |
+| `BootstrapSequenceImplTest` 现有 14 测试 | 适配（构造函数新增参数） | 在 `stubCommonDirs` 中追加 PRoot 桩，14 个测试全部通过 |
+| `RuntimeModule` Hilt 绑定 | 扩展 | 追加 2 个 `@Binds`，不影响已有绑定 |
+
+
+---
+
+## 11. PRoot 集成预留（Phase 2 历史记录，已被 Phase 6.9 落地，参见第 10 章）
+
+> 本章节为 Phase 2 收尾时的预留说明，Phase 6.9 已落地 PRoot 集成，详见第 10 章「PRoot 集成设计（Phase 6.9）」。本节保留用于历史追溯。
+
+Phase 2 实现原本**不依赖 PRoot**，直接通过 `ProcessBuilder` 启动原生 Linux ARM64 二进制。PRoot 集成预留点：
 
 1. **BootstrapSequence 命令构建**：`buildSurrealdbCommand` 等方法可在 Phase 3 包装为 `proot -r <rootfs> -b /proc -b /dev -b /sys -- <原始命令>`
 2. **RootfsIntegrityChecker**：manifest 已记录完整文件列表，PRoot 模式下可校验 `/proc`、`/dev` 绑定
 3. **LinuxProcessManager**：进程监控与日志滚动逻辑与 PRoot 无关，PRoot 透明
 4. **HealthChecker**：HTTP/端口检查与 PRoot 无关（loopback 共享 Android 网络栈）
 
-PRoot 不可用时的降级路径：
+PRoot 不可用时的降级路径（Phase 6.9 已实现）：
 
-- 优先尝试原生运行（当前实现）
-- 二进制无法原生运行 → 评估 proot-rs
-- 仍不可用 → 进入 `Failed` 状态，提示用户设备不兼容
+- ~~优先尝试原生运行（当前实现）~~ → Phase 6.9 改为：PRoot 不可用时立即 `fail(retryable=false, requiresUserAction=true)`，不退化为直接 `ProcessBuilder` 启动 Linux ELF
+- 二进制无法原生运行 → 评估 proot-rs → Phase 6.9 已采用 proot-rs ARM64 静态二进制路线
+- 仍不可用 → 进入 `Failed` 状态，提示用户设备不兼容（保留）
 
 ---
 
-## 11. 与 Android 应用生命周期集成
+## 12. 与 Android 应用生命周期集成
 
-### 11.1 进程保活
+### 12.1 进程保活
 
 - **Foreground Service**：显示常驻通知，保持 Linux Runtime 运行
 - **START_STICKY**：系统杀进程后自动重启服务
 - **通知权限**：引导用户开启通知权限
 - **电池优化白名单**：引导用户加入白名单
 
-### 11.2 生命周期事件映射
+### 12.2 生命周期事件映射
 
 | Android 事件 | Runtime 行为 |
 |---|---|
@@ -442,15 +682,15 @@ PRoot 不可用时的降级路径：
 | `onTrimMemory(TRIM_MEMORY_RUNNING_LOW)` | 触发 GC，清理日志临时文件 |
 | 系统杀进程 | 数据已持久化，重启后恢复 |
 
-### 11.3 状态持久化
+### 12.3 状态持久化
 
 `RuntimeStateMachine` 的当前状态通过 DataStore 持久化，应用重启后恢复到 `Stopped` 或 `Failed`（不自动 Running，需用户确认）。
 
 ---
 
-## 12. 内存与耗电策略
+## 13. 内存与耗电策略
 
-### 12.1 内存预估
+### 13.1 内存预估
 
 | 组件 | 预估内存 |
 |---|---|
@@ -461,7 +701,7 @@ PRoot 不可用时的降级路径：
 | Linux Runtime 进程开销 | 10-20 MB |
 | **总计** | **250-700 MB** |
 
-### 12.2 内存控制
+### 13.2 内存控制
 
 - `largeHeap=true`（app build.gradle.kts）
 - Go 后端 `GOGC=50` 降低 GC 阈值
@@ -469,7 +709,7 @@ PRoot 不可用时的降级路径：
 - SurrealDB 通过启动参数限制
 - 监听 `onTrimMemory` 主动释放缓存
 
-### 12.3 耗电策略
+### 13.3 耗电策略
 
 - **默认 OnDemand 模式**：不盲目 AlwaysOn，按需启动
 - **Doze 模式感知**：系统进入 Doze 时降级为 Degraded，降低轮询频率
@@ -477,7 +717,7 @@ PRoot 不可用时的降级路径：
 - **前台服务通知**：用户可见当前状态，可手动停止以省电
 - **网络复用**：所有服务监听 127.0.0.1，不唤醒基带
 
-### 12.4 设备要求
+### 13.4 设备要求
 
 - 推荐 6 GB+ RAM 设备
 - ARM64 架构（`arm64-v8a`）
@@ -486,7 +726,7 @@ PRoot 不可用时的降级路径：
 
 ---
 
-## 13. 关键实现决策
+## 14. 关键实现决策
 
 | 决策点 | 选择 | 原因 |
 |---|---|---|
@@ -497,10 +737,11 @@ PRoot 不可用时的降级路径：
 | 健康检查 | Socket + OkHttp | 双重验证，端口与 HTTP 均可 |
 | Hilt 绑定 | @Binds Module | 编译期校验，无运行时反射 |
 | 二进制路径 | `runtime/bin/` | 与 rootfs 隔离，便于升级 |
+| PRoot 路线（Phase 6.9） | proot-rs ARM64 静态二进制 + 最小化 RootFS | 无 Root、不依赖 Termux、不破坏现有契约 |
 
 ---
 
-## 14. 后续 Phase 依赖
+## 15. 后续 Phase 依赖
 
 | 依赖项 | 状态 | 说明 |
 |---|---|---|
@@ -509,13 +750,13 @@ PRoot 不可用时的降级路径：
 | kotlinx-serialization | 已在 libs.versions.toml | 1.7.1 |
 | Hilt | 已在 libs.versions.toml | 2.52 |
 | RootFS 资产 (rootfs.zip) | 待 Phase 3 | 需打包 Linux ARM64 二进制 |
-| PRoot 二进制 | 待 Phase 3 | 当前直接原生运行，PRoot 为备选 |
+| PRoot 二进制 | Phase 6.9 已落地 | 已设计 `ProotBinaryManager`，assets 中需预置 `proot_linux_aarch64` |
 | Foreground Service | 待 Phase 4 | Android 通知与保活实现 |
 | 持久化状态恢复 | 待 Phase 4 | DataStore 存储最后状态 |
 
 ---
 
-## 15. 验证清单
+## 16. 验证清单
 
 - [x] 状态机 10 个状态完整定义
 - [x] 状态转换矩阵覆盖所有合法路径
@@ -531,7 +772,11 @@ PRoot 不可用时的降级路径：
 - [x] 所有 IO 在 Dispatchers.IO
 - [x] 所有 @Singleton 用 Hilt 注入
 - [x] 代码无注释（遵循 AGENTS.md）
+- [x] PRoot 集成框架完整（Phase 6.9）— `ProotBinaryManager` / `ProotCommandWrapper` / `LinuxRootfsManager.ensureMinimalRootfs` / `BootstrapSequenceImpl.wrapWithProot` 全部实现并测试通过
+- [x] PRoot 不可用时进入 Failed 状态，retryable=false，requiresUserAction=true，明确错误信息（Phase 6.9）
+- [x] 单元测试覆盖 PRoot 命令包装与二进制安装/校验（Phase 6.9）— 127 tests, 0 failures, 2 skipped
+- [ ] 真机 ARM64 端到端验证 PRoot 实际可执行 surreal/qdrant/backend（外部阻塞）
 
 ---
 
-**文档结束。Phase 2 Runtime 实现层设计完整。**
+**文档结束。Phase 2 Runtime 实现层设计完整；Phase 6.9 追加 PRoot 集成设计章节（第 10 章）。**

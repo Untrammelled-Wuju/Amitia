@@ -1,6 +1,6 @@
 {
   "name": "@amitia/desktop",
-  "version": "26.1.7",
+  "version": "26.1.8",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",

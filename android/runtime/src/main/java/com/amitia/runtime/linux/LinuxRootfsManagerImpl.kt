@@ -475,6 +475,131 @@ class LinuxRootfsManagerImpl @Inject constructor(
         )
     }
 
+    override fun minimalRootfsDir(): File = File(rootfsDir(), "minimal")
+
+    override suspend fun ensureMinimalRootfs(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val rootfs = minimalRootfsDir()
+            rootfs.mkdirs()
+            listOf(
+                File(rootfs, "bin"),
+                File(rootfs, "lib"),
+                File(rootfs, "lib64"),
+                File(rootfs, "etc"),
+                File(rootfs, "tmp"),
+                File(rootfs, "usr/bin"),
+                File(rootfs, "usr/lib"),
+                File(rootfs, "var"),
+                File(rootfs, "dev"),
+                File(rootfs, "proc"),
+                File(rootfs, "sys")
+            ).forEach { dir ->
+                if (!dir.exists()) {
+                    dir.mkdirs()
+                }
+            }
+
+            writeEtcFiles(rootfs)
+
+            linkBinaries(rootfs)
+
+            stateMachine.emitLog(
+                RuntimeEvent.LogEmitted.Level.INFO,
+                TAG,
+                "最小化 RootFS 已准备 path=${rootfs.absolutePath}"
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            stateMachine.emitError(
+                error = "最小化 RootFS 创建失败: ${e.message}",
+                retryable = true,
+                requiresUserAction = false,
+                cause = e
+            )
+            Result.failure(e)
+        }
+    }
+
+    private fun writeEtcFiles(rootfs: File) {
+        val etcDir = File(rootfs, "etc").apply { mkdirs() }
+
+        val passwdFile = File(etcDir, "passwd")
+        if (!passwdFile.exists()) {
+            passwdFile.writeText(
+                buildString {
+                    appendLine("root:x:0:0:root:${ROOTFS_HOME_PATH}:/bin/sh")
+                    appendLine("amitia:x:1000:1000:amitia:${ROOTFS_HOME_PATH}:/bin/sh")
+                }
+            )
+        }
+
+        val groupFile = File(etcDir, "group")
+        if (!groupFile.exists()) {
+            groupFile.writeText(
+                buildString {
+                    appendLine("root:x:0:")
+                    appendLine("amitia:x:1000:")
+                }
+            )
+        }
+
+        val resolvFile = File(etcDir, "resolv.conf")
+        if (!resolvFile.exists()) {
+            resolvFile.writeText(
+                buildString {
+                    appendLine("nameserver 8.8.8.8")
+                    appendLine("nameserver 1.1.1.1")
+                    appendLine("options timeout:1 attempts:1")
+                }
+            )
+        }
+
+        val nsswitchFile = File(etcDir, "nsswitch.conf")
+        if (!nsswitchFile.exists()) {
+            nsswitchFile.writeText(
+                buildString {
+                    appendLine("passwd: files")
+                    appendLine("group: files")
+                    appendLine("hosts: files dns")
+                    appendLine("networks: files dns")
+                }
+            )
+        }
+
+        val hostsFile = File(etcDir, "hosts")
+        if (!hostsFile.exists()) {
+            hostsFile.writeText(
+                buildString {
+                    appendLine("127.0.0.1 localhost")
+                    appendLine("::1 localhost ip6-localhost")
+                }
+            )
+        }
+
+        val homeDir = File(rootfs, ROOTFS_HOME_PATH.substring(1))
+        if (!homeDir.exists()) {
+            homeDir.mkdirs()
+        }
+    }
+
+    private fun linkBinaries(rootfs: File) {
+        val binDir = File(rootfs, "bin").apply { mkdirs() }
+        val runtimeBin = binDir()
+        if (!runtimeBin.exists()) return
+
+        for (binaryName in listOf(BACKEND_BINARY, QDRANT_BINARY, SURREAL_BINARY, PROOT_BINARY_NAME)) {
+            val source = File(runtimeBin, binaryName)
+            if (!source.exists()) continue
+            val target = File(binDir, binaryName)
+            if (target.exists()) continue
+            try {
+                source.copyTo(target, overwrite = false)
+                target.setExecutable(true, false)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun readManifest(): RootfsManifest? {
         return try {
             context.assets.open(MANIFEST_ASSET_NAME).use { stream ->
@@ -544,5 +669,10 @@ class LinuxRootfsManagerImpl @Inject constructor(
         private const val MANIFEST_ASSET_NAME = "rootfs-manifest.json"
         private const val TYPE_CONFIG = "config"
         private const val BUFFER_SIZE = 64 * 1024
+        private const val ROOTFS_HOME_PATH = "/home/amitia"
+        private const val BACKEND_BINARY = "amitia-backend-arm64"
+        private const val QDRANT_BINARY = "qdrant_linux_aarch64"
+        private const val SURREAL_BINARY = "surreal_linux_aarch64"
+        private const val PROOT_BINARY_NAME = "proot"
     }
 }

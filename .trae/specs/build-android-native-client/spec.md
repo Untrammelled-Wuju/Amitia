@@ -10,6 +10,8 @@
 
 Amitia 当前只有 Web（Vue3）和 Electron（Windows）两个客户端，无法在 Android 设备上提供陪伴角色与本地 Agent Runtime 体验。本阶段目标是在仓库内构建一个可编译、可安装、可运行的 Android 原生客户端，通过内嵌无 Root Linux 用户空间运行现有 Go 后端 + SQLite + Qdrant + SurrealDB，复用现有业务逻辑而非重写一套 Kotlin 后端，为后续 Computer Use、MCP、Skill、AmitiaX 扩展预留正确架构。
 
+> PRoot 集成补充（Phase 6.9）：第一阶段原计划已声明「优先 PRoot/proot-rs 路线」，但 Runtime 模块在 Phase 2.5 收尾时仅完成 RootFS 资产解压 + ProcessBuilder 直接 spawn Linux ARM64 ELF，未真正接入 PRoot。Android Bionic libc 与 Linux glibc 不兼容，且无 `/bin/sh`，直接 `ProcessBuilder` 启动 surreal/qdrant/backend ELF 在真机必定失败。Phase 6.9 补齐 `ProotBinaryManager` / `ProotCommandWrapper` / `LinuxRootfsManager.ensureMinimalRootfs` / `BootstrapSequenceImpl` PRoot 包装路径，使第一阶段验收 #6「Linux 用户空间可以启动」在代码层满足（assets 中需预置 `proot_linux_aarch64` 静态二进制，真机 ARM64 验证仍待外部设备）。
+
 ## What Changes
 
 ### 新增（ADDED）
@@ -24,6 +26,7 @@ Amitia 当前只有 Web（Vue3）和 Electron（Windows）两个客户端，无�
 - **Room 缓存层 / DataStore 偏好 / Keystore 凭据**：仅作 UI 缓存与偏好，核心业务数据仍由 Go 后端 SQLite 管理。
 - **前台服务 + 通知 + 运行策略**（AlwaysOn / OnDemand / RemoteOnly）。
 - **文档体系**：`docs/android/01~13 + third-party-licenses.md` 共 14 份。
+- **PRoot 集成（Phase 6.9）**：新增 `ProotBinaryManager`（接口 + 实现）从 assets 加载 `proot_linux_aarch64` 静态二进制并校验 SHA-256；新增 `ProotCommandWrapper` 将 surreal/qdrant/backend 原始命令包装为 `proot --rootfs=<rootfs> --root-id --cwd=<workDir> --bind=... --env ... -- <cmd>`；`LinuxRootfsManager` 新增 `ensureMinimalRootfs()` 创建最小化 RootFS 目录树（bin/lib/lib64/etc/tmp/usr/var/dev/proc/sys）+ passwd/group/resolv.conf(8.8.8.8/1.1.1.1)/nsswitch.conf/hosts 并复制 amitia-backend/qdrant/surreal/proot 到 `rootfs/minimal/bin/`；`BootstrapSequenceImpl` 注入 PRoot 依赖并在 `start()` 中先 `ensureProotReady` → `ensureMinimalRootfs` → 通过 `wrapWithProot` 包装每个子进程命令，PRoot 不可用时立即 `fail(retryable=false, requiresUserAction=true)`，不假装运行成功。
 
 ### 修改（MODIFIED）
 
@@ -197,6 +200,30 @@ Amitia 当前只有 Web（Vue3）和 Electron（Windows）两个客户端，无�
 ### Requirement: 文档体系完整
 
 系统 MUST 生成 `docs/android/` 下 14 份文档：`01-current-system-audit.md`、`02-capability-migration-matrix.md`、`03-runtime-dependency-audit.md`、`04-android-architecture.md`、`05-linux-runtime-design.md`、`06-process-lifecycle.md`、`07-api-mapping.md`、`08-ui-design-system.md`、`09-build-and-run.md`、`10-testing-report.md`、`11-migration-report.md`、`12-known-limitations.md`、`13-next-stage-plan.md`、`third-party-licenses.md`。
+
+### Requirement: PRoot 集成与 Linux 用户空间启动
+
+系统 SHALL 通过 PRoot 静态二进制（`proot_linux_aarch64`，预置于 `app/src/main/assets/`）在 Android 应用私有目录建立无 Root Linux 用户空间，使 surreal/qdrant/backend Linux ARM64 ELF 二进制可在 Android Bionic 环境下间接执行。系统 MUST 提供 `ProotBinaryManager`（接口 + 实现，从 assets 读取、SHA-256 校验、写入 `files/runtime/bin/proot`、设置可执行）、`ProotCommandWrapper`（接口 + 实现，将原始命令包装为 `proot --rootfs=<rootfs> --root-id --cwd=<workDir> --bind=/dev --bind=/proc --bind=/sys --bind=<data> --env <vars> -- <cmd>`）、`LinuxRootfsManager.ensureMinimalRootfs()`（创建 bin/lib/lib64/etc/tmp/usr/var/dev/proc/sys 目录 + passwd/group/resolv.conf(8.8.8.8/1.1.1.1)/nsswitch.conf/hosts + 复制 backend/qdrant/surreal/proot 到 `rootfs/minimal/bin/`），并修改 `BootstrapSequenceImpl` 在 `start()` 中先 `ensureProotReady` → `ensureMinimalRootfs` → 通过 `wrapWithProot` 包装每个子进程命令。
+
+#### Scenario: PRoot 二进制未预置时进入 Failed 状态
+- **WHEN** assets 中 `proot_linux_aarch64` 缺失
+- **THEN** `ProotBinaryManager.install()` 发出 FAILED 事件，`BootstrapSequenceImpl.start()` 立即返回 `fail(retryable=false, requiresUserAction=true)`，明确错误信息包含「PRoot 二进制未预置，请下载 proot-rs ARM64 静态版本放入 assets/」
+- **AND NOT** 假装运行成功或退化为直接 `ProcessBuilder` 启动 Linux ELF
+
+#### Scenario: PRoot 可用时通过 PRoot 启动子进程
+- **WHEN** PRoot 二进制已安装并通过 SHA-256 校验
+- **THEN** `BootstrapSequenceImpl.startSurrealdb/startQdrant/startBackend` 中调用 `prootCommandWrapper.wrap(command, env, workDir)` 得到带 PRoot 前缀的命令列表，再交给 `LinuxProcessManager.start()` 执行
+- **AND** 命令列表首项为 `proot` 二进制绝对路径，包含 `--rootfs`、`--root-id`、`--cwd`、`--bind=/dev`、`--bind=/proc`、`--bind=/sys`、`--` 参数
+
+#### Scenario: 真机 ARM64 验证待外部设备
+- **WHEN** ARM64 真机或模拟器不可用
+- **THEN** 代码层完成 PRoot 集成框架，单元测试覆盖命令包装与二进制安装/校验逻辑，真机端到端验证（PRoot 实际执行 surreal/qdrant/backend）记录为外部阻塞
+- **AND NOT** 在文档中声称已通过真机验收
+
+#### Scenario: Hilt 绑定与契约稳定
+- **WHEN** 编译 `:runtime` 模块
+- **THEN** `RuntimeModule` 中绑定 `ProotBinaryManager` → `ProotBinaryManagerImpl`、`ProotCommandWrapper` → `ProotCommandWrapperImpl`
+- **AND** 现有 `BootstrapSequence`、`LinuxProcessManager`、`LinuxRootfsManager` 接口契约不被破坏（仅追加 `ensureMinimalRootfs` / `minimalRootfsDir` 接口方法，不修改已有方法签名）
 
 ## MODIFIED Requirements
 

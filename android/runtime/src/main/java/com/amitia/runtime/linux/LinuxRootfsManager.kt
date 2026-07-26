@@ -29,6 +29,10 @@ interface LinuxRootfsManager {
 
     suspend fun info(): RootfsInfo?
 
+    suspend fun ensureMinimalRootfs(): Result<Unit>
+
+    fun minimalRootfsDir(): File
+
     data class RootfsInfo(
         val version: String,
         val manifestVersion: String,

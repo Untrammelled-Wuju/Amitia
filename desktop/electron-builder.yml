@@ -26,12 +26,19 @@ extraResources:
     to: migrations
   - from: resources/data
     to: data
+    filter:
+      - "sql.sql"
   - from: resources/config-template
     to: config-template
   - from: resources/qdrant
     to: qdrant
+    filter:
+      - "qdrant.zip"
+      - "config/config.yaml"
   - from: resources/surrealdb
     to: surrealdb
+    filter:
+      - "surreal.zip"
 asar: true
 compression: normal
 win:
@@ -56,7 +63,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.1.7
+  releaseName: Amitia 26.1.8
   releaseNotesFile: release-notes.md
 
 publish:

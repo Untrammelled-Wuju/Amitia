@@ -29,7 +29,7 @@ jwt:
   expireDays: 7
 app:
   name: "Amitia"
-  version: "26.1.7"
+  version: "26.1.8"
   deployMode: "android-embedded"
 qdrant:
   host: "127.0.0.1"

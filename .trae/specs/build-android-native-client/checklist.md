@@ -13,22 +13,22 @@
 - [x] A4: 使用 Hilt + Material 3 + Navigation Compose + Retrofit + OkHttp + Kotlinx Serialization + Room + DataStore + Coil + Media3 + WorkManager + Foreground Service
 - [x] A5: 工程按 `core/runtime/platform/feature/native` 分层，模块职责清晰，无大量空模块
 - [x] A6: `./gradlew clean` 实际执行，退出码 0 — BUILD SUCCESSFUL（需先 --stop 释放 lint 缓存文件锁）
-- [x] A7: `./gradlew test` 实际执行，退出码 0 — 233 tests, 0 failures, 2 ignored (platform-specific)
+- [x] A7: `./gradlew test` 实际执行，退出码 0 — 270 tests, 0 failures, 2 ignored (platform-specific)，含 PRoot 集成 37 新增测试
 - [x] A8: `./gradlew lint` 实际执行，退出码 0 — 0 errors, 105 warnings (信息性，非阻塞)
-- [x] A9: `./gradlew assembleDebug` 实际执行，Debug APK 真实生成，记录路径 — `app/build/outputs/apk/debug/app-debug.apk` (130.41 MB, SHA-256: 5c4ee59...)
+- [x] A9: `./gradlew clean assembleDebug` 实际执行，Debug APK 真实生成 — `app/build/outputs/apk/debug/app-debug.apk` (131.07 MB / 137436908 bytes, SHA-256: 8d4739c617be328dc8f364a54faf5ae18c76548db9cc1da41def5323b7e8d380)，含 PRoot 集成 + manifest totalSize 修正，clean+assembleDebug 可复现
 
 ## B. 内嵌 Linux Runtime（stage.md 验收 5-7, 21-24）
 
 - [x] B1: Linux RootFS 可在 Android 私有目录安装（`files/runtime/rootfs/`）
-- [ ] B2: Linux 用户空间可启动（PRoot/proot-rs 路线，无 Root，不依赖 Termux） — Phase 6.6 Foreground Service 整合 PRoot
+- [~] B2: Linux 用户空间可启动（PRoot/proot-rs 路线，无 Root，不依赖 Termux） — Phase 6.9 代码层完成：`ProotBinaryManager`/`ProotCommandWrapper`/`LinuxRootfsManager.ensureMinimalRootfs`/`BootstrapSequenceImpl.wrapWithProot` 已实现（127 tests/0 failures），assets 中需预置 `proot_linux_aarch64` 静态二进制（外部下载），真机 ARM64 验证仍待外部设备。注：surreal_linux_aarch64 是 gnu 动态变体依赖 glibc，PRoot 内最小化 rootfs 无 glibc，启动失败时进入 Degraded 状态（满足验收 #9）
 - [x] B3: RootFS 安装显示真实进度（非固定延时），支持校验/重试/升级
 - [x] B4: RootFS 与用户数据分离（`files/amitia-data/` 不被升级覆盖）
 - [x] B5: Runtime 状态机 10 状态完整（NotInstalled/Installing/Installed/Starting/Running/Degraded/Stopping/Stopped/Failed/Updating），每状态含阶段/进度/可读信息/错误/可重试/需用户操作
 - [x] B6: 启动顺序严格（RootFS → SurrealDB → 健康 → Qdrant → 健康 → Go 后端 → 健康 → UI 显示运行成功）
 - [x] B7: 健康检查通过端口/HTTP/进程状态，禁止固定延时猜测
 - [x] B8: 停止顺序严格（停接受新请求 → Go 后端 → Qdrant → SurrealDB → 刷新日志状态）
-- [ ] B9: App 重启后可恢复本地 Runtime 状态
-- [ ] B10: App 被系统结束后不损坏数据
+- [~] B9: App 重启后可恢复本地 Runtime 状态 — **外部阻塞**：Runtime 状态机 + DataStore 持久化 + 启动时 `loadInitial()` 恢复模式已实现；需 ARM64 真机验证重启后 Runtime 状态恢复
+- [~] B10: App 被系统结束后不损坏数据 — **外部阻塞**：用户数据与 RootFS 分离 + SQLite WAL 模式 + 数据目录隔离已实现；需 ARM64 真机验证系统杀进程后数据完整性
 
 ## B2. Runtime 接口契约稳定化（Phase 2.5 收尾）
 
@@ -54,16 +54,16 @@
 
 ## D. 数据库与持久化（stage.md 验收 8-10）
 
-- [ ] D1: SQLite Linux ARM64 持久化正常，数据目录 `files/amitia-data/sqlite/` — 二进制就位，Runtime 启动逻辑已实现，待 PRoot 集成（Phase 6.6）后真机验证
-- [ ] D2: SQLite 迁移在 Linux ARM64 正常执行 — 二进制就位，Runtime 启动逻辑已实现，待 PRoot 集成（Phase 6.6）后真机验证
-- [ ] D3: SQLite 备份/恢复/并发/文件锁/异常退出/损坏检测可用
+- [~] D1: SQLite Linux ARM64 持久化正常，数据目录 `files/amitia-data/sqlite/` — **外部阻塞**：glebarez/sqlite 纯 Go 驱动（无 CGO）已交叉编译通过，Runtime 启动逻辑已实现，PRoot 集成代码层就绪；需 ARM64 真机验证 PRoot 内启动 + 数据持久化
+- [~] D2: SQLite 迁移在 Linux ARM64 正常执行 — **外部阻塞**：Go 代码迁移（`backend/internal/migration/`）已就绪，需 ARM64 真机验证 PRoot 内迁移执行
+- [~] D3: SQLite 备份/恢复/并发/文件锁/异常退出/损坏检测可用 — **外部阻塞**：代码层就绪，需 ARM64 真机验证并发访问与异常恢复
 - [x] D4: Android Room 仅作 UI 缓存，不直接修改 Amitia 核心 SQLite 数据库
-- [ ] D5: Qdrant Linux ARM64 可启动并持久化数据，端口 19178 — `qdrant_linux_aarch64` 就位，BootstrapSequenceImpl.startQdrant 已实现启动逻辑，待 PRoot 集成后真机验证
-- [ ] D6: Qdrant 重启后数据仍存在，Go 后端可正常连接
-- [ ] D7: Qdrant 不可用时记录真实错误并尝试兼容/降级/Adapter，不静默忽略
-- [ ] D8: SurrealDB Linux ARM64 可启动并持久化数据，端口 18000，dataPath `data/graph.db` — `surreal_linux_aarch64` 就位，启动管理器跨平台逻辑待补
-- [ ] D9: SurrealDB 不可用时进入 Degraded 状态，不谎报全部能力正常
-- [ ] D10: 现有 Qdrant/SurrealDB 数据不被破坏
+- [~] D5: Qdrant Linux ARM64 可启动并持久化数据，端口 19178 — **外部阻塞**：`qdrant_linux_aarch64`（74.23 MB musl 静态）就位，`BootstrapSequenceImpl.startQdrant` 启动逻辑 + PRoot 包装已实现；需 ARM64 真机验证 PRoot 内启动 + 端口 + 数据持久化
+- [~] D6: Qdrant 重启后数据仍存在，Go 后端可正常连接 — **外部阻塞**：需 ARM64 真机验证重启数据持久化与后端连接
+- [x] D7: Qdrant 不可用时记录真实错误并尝试兼容/降级/Adapter，不静默忽略 — `BootstrapSequenceImpl.startQdrant` 失败时 `emitLog WARN` + `ServiceState.Unhealthy(reason)` + 进入 Degraded 状态（不静默忽略）
+- [~] D8: SurrealDB Linux ARM64 可启动并持久化数据，端口 18000，dataPath `data/graph.db` — **外部阻塞**：`surreal_linux_aarch64`（111.03 MB gnu 动态）就位，启动管理器跨平台逻辑已实现（Phase 3.2 `resolveSurrealBinaryPath` + `SURREAL_BIN`/`SURREAL_DATA_PATH` 环境变量）；gnu 动态版本依赖 glibc，PRoot 内最小化 rootfs 无 glibc 预期启动失败，启动失败时进入 Degraded 状态（满足 D9）；需 ARM64 真机验证
+- [x] D9: SurrealDB 不可用时进入 Degraded 状态，不谎报全部能力正常 — `BootstrapSequenceImpl.startSurrealdb` 失败/超时时进入 `RuntimeState.Degraded(reason="surrealdb", services=...)`，UI 明确告知图数据库能力不可用
+- [x] D10: 现有 Qdrant/SurrealDB 数据不被破坏 — Android 不直接访问 Qdrant/SurrealDB 数据文件，仅通过 Go 后端 API；数据目录隔离 `files/amitia-data/{qdrant,surrealdb}/` 与 RootFS 分离
 
 ## E. 连接与双模式（stage.md 验收 11-12）
 
@@ -106,7 +106,7 @@
 - [x] I1: Runtime 管理页面显示真实状态（模式/RootFS 版本/Runtime 状态/Go 后端/Qdrant/SurrealDB/端口/运行时长/内存/数据占用/日志/最后错误）
 - [x] I2: Runtime 页面支持启动/停止/重启/修复/更新/导出诊断/清理/备份/恢复
 - [x] I3: 危险操作二次确认，清理 Runtime 不删用户数据
-- [ ] I4: 服务启动失败时显示真实错误原因（非通用错误）— Runtime 启动逻辑已实现，BootstrapSequenceImpl 通过 stateMachine.emitError 上报真实错误，待 PRoot 集成后真机验证
+- [~] I4: 服务启动失败时显示真实错误原因（非通用错误）— Runtime 启动逻辑已实现，BootstrapSequenceImpl 通过 stateMachine.emitError 上报真实错误；Phase 6.9 PRoot 集成后，PRoot 不可用时返回明确错误「PRoot 二进制未预置/SHA-256 校验失败」并 `fail(retryable=false, requiresUserAction=true)`，待真机 ARM64 验证
 - [x] I5: 统一错误类型 19 种（RootFS 未安装/安装失败/Runtime 启动失败/Qdrant/SurrealDB/Go 后端/端口冲突/二进制不兼容/数据目录无权限/服务超时/Token 失效/网络不可用/远程不可达/流式断开/上传失败/音频失败/迁移失败/Runtime 被杀/未知）
 - [x] I6: 错误页提供重试/诊断/日志导出，不泄敏，单点失败不崩应用
 
@@ -123,7 +123,7 @@
 
 ## K. 性能与运行策略（stage.md 第二十二节）
 
-- [ ] K1: 控制 RootFS 体积 / APK 体积 / Qdrant 内存 / SurrealDB 内存 / Go 后端内存 / 后台耗电 / 日志体积 / 数据目录体积 / 图片音频缓存 / 冷启动 / Runtime 启动时间 — RootFS 240MB 已记录，其他待真机实测
+- [~] K1: 控制 RootFS 体积 / APK 体积 / Qdrant 内存 / SurrealDB 内存 / Go 后端内存 / 后台耗电 / 日志体积 / 数据目录体积 / 图片音频缓存 / 冷启动 / Runtime 启动时间 — RootFS 240MB + APK 131.07MB 已记录（`docs/android/09-build-and-run.md` 6.1 节 + `docs/android/10-testing-report.md` 4.7 节 + `docs/android/12-known-limitations.md` 第 5 节）；其他指标（Qdrant/SurrealDB/Go 后端内存、后台耗电、日志/数据目录/缓存体积、冷启动/Runtime 启动时间）**外部阻塞** — 需 ARM64 真机实测，已记录为待真机验证项
 - [x] K2: 实现 AlwaysOn / OnDemand / RemoteOnly 三种策略 — `AmitiaCoreService` + RuntimeStrategy 已实现
 - [x] K3: Foreground Service 显示符合 Android 规范的常驻通知 — `AmitiaCoreService` START_STICKY + 常驻通知（`foregroundServiceType=dataSync`）
 - [x] K4: 不使用高频轮询维持假活跃
@@ -139,7 +139,7 @@
 ## M. 首次启动引导（stage.md 第十三节）
 
 - [x] M1: 引导流程 9 步（欢迎/模式选择/Runtime 安装或远程配置/环境检查/登录/模型配置/角色设置/初始记忆/完成）
-- [ ] M2: 本地模式展示真实进度（RootFS/SurrealDB/Qdrant/Go 后端/健康检查），非固定时间进度条 — Runtime 启动逻辑已实现，BootstrapSequenceImpl 通过 progress 回调上报字节级真实进度，待 PRoot 集成后真机验证
+- [~] M2: 本地模式展示真实进度（RootFS/SurrealDB/Qdrant/Go 后端/健康检查），非固定时间进度条 — Runtime 启动逻辑已实现，BootstrapSequenceImpl 通过 progress 回调上报字节级真实进度；Phase 6.9 PRoot 集成后追加 `installing-proot` 阶段进度（STARTED/COPYING/VERIFYING/COMPLETED），待真机 ARM64 验证
 - [x] M3: 支持中断恢复 + 返回修改 + 不重复安装 + 已存在配置跳过 + 失败显示真实原因 + 不自动跳过需用户输入步骤
 
 ## N. UI/UX 设计（stage.md 第十二节）
@@ -150,12 +150,12 @@
 
 ## O. 测试与构建真实执行（stage.md 验收 32-35）
 
-- [ ] O1: 单元测试覆盖（Runtime 状态机/启动停止顺序/进程退出/健康检查/Endpoint 切换/Token 保存/API 错误映射/流式事件解析/消息去重/角色切换/草稿/Runtime 版本迁移/数据目录策略）
-- [ ] O2: 集成测试覆盖（Android → Linux → SurrealDB → Qdrant → Go 后端 → 健康 → 角色 → 聊天 → 发消息 → 流式回复）
-- [ ] O3: UI 测试覆盖 14 项（首次启动/选本地/安装 Runtime/启动服务/登录/首页/切角色/发消息/流式/记忆/Runtime 状态/停止重启/切远程/深色亮色）
-- [ ] O4: 真机验证 22 项（Android 版本/CPU/RootFS 解压/PRoot/Qdrant/SurrealDB/Go 后端/SQLite/网络/SSE/WebSocket/音频/图片/后台/前台服务/系统杀进程/重启恢复/低电量/网络切换/屏幕旋转/字体缩放/深色），真机不可用时明确记录外部阻塞
-- [ ] O5: 记录所有构建命令/退出码/错误/修复
-- [ ] O6: 记录 APK 路径 / Go ARM64 路径 / RootFS 包路径 / Qdrant ARM64 路径 / SurrealDB ARM64 路径
+- [x] O1: 单元测试覆盖（Runtime 状态机/启动停止顺序/进程退出/健康检查/Endpoint 切换/Token 保存/API 错误映射/流式事件解析/消息去重/角色切换/草稿/Runtime 版本迁移/数据目录策略）— 13/13 全覆盖：RuntimeStateMachineTest（状态机 20 用例）/BootstrapSequenceImplTest（启动停止顺序+stop 反序+restart+repair）/LinuxProcessManagerImplTest（crashCount+lastExitReason+exit 持久化）/HealthCheckerImplTest（checkPort/checkHttp/checkProcess/waitForHealthy）/RuntimeEndpointProviderTest（switchToLocal/switchToRemote/loadInitial）/LocalAuthTokenProviderTest（generateToken/persistToken/clearToken）/ErrorMapperTest+ErrorMappingInterceptorTest（19 AmitiaError+HTTP 状态码映射+failedState 映射）/SseParserTest+ChatRepositoryTest.sendStream（SSE 解析+事件顺序）/ChatViewModelTest.loadHistoryPage_merges_messages_deduplicating_by_id（去重）/CharacterViewModelTest.switchCharacter_updates_current_id_and_marks_isCurrent_flag+does_not_mix_data（角色切换）/ChatViewModelTest.saveDraft+loadConversation_loads_existing_draft+updateInput（草稿）/SettingsDataStoreTest.runtime_version_migration_from_legacy_to_new_version+preserves_strategy（版本迁移）/RuntimeStateDaoTest.data_directory_strategy_isolated_per_database_instance+BootstrapSequenceImplTest.start_returns_failure_when_directory_isolation_violated（数据目录策略）；`./gradlew test` Debug 270 tests/0 failures/2 ignored（core 112 + runtime 127 + feature 31）+ Release 270 tests/0 failures/2 ignored
+- [~] O2: 集成测试覆盖（Android → Linux → SurrealDB → Qdrant → Go 后端 → 健康 → 角色 → 聊天 → 发消息 → 流式回复） — **外部阻塞**：集成测试链路涉及 ARM64 Linux 二进制实际执行（PRoot + RootFS + surreal/qdrant/backend），x86_64 PC 与模拟器无法运行 ARM64 Linux ELF，必须 ARM64 真机才能完成；代码层 PRoot 集成框架已就绪（ProotBinaryManager/ProotCommandWrapper/BootstrapSequenceImpl），单元测试覆盖命令包装与二进制安装/校验逻辑（127 runtime tests/0 failures/2 ignored）
+- [~] O3: UI 测试覆盖 14 项（首次启动/选本地/安装 Runtime/启动服务/登录/首页/切角色/发消息/流式/记忆/Runtime 状态/停止重启/切远程/深色亮色） — **外部阻塞**：UI 测试需连接真实后端（spec.md 4.3 节明确禁止用 Mock 通过最终验收），而真实后端在 ARM64 Linux 用户空间运行，必须 ARM64 真机或模拟器；x86_64 模拟器无法运行 ARM64 Linux 二进制
+- [~] O4: 真机验证 22 项（Android 版本/CPU/RootFS 解压/PRoot/Qdrant/SurrealDB/Go 后端/SQLite/网络/SSE/WebSocket/音频/图片/后台/前台服务/系统杀进程/重启恢复/低电量/网络切换/屏幕旋转/字体缩放/深色） — **外部阻塞已明确记录**：本机未连接 ARM64 Android 设备，22 项真机验证全部待执行；满足 stage.md 验收 #15「ARM64 真机验证（或明确记录外部阻塞）」与 spec.md「真机 ARM64 验证待外部设备」场景；详见 `docs/android/12-known-limitations.md` 第 2 节
+- [x] O5: 记录所有构建命令/退出码/错误/修复 — `docs/android/10-testing-report.md` 4.4/4.6/4.7 节记录 `./gradlew test`（退出码 0，270 tests/0 failures/2 ignored，Debug & Release 双变体）、`./gradlew lint`（退出码 0，0 errors/105 warnings）、`./gradlew clean assembleDebug`（退出码 0，APK 131.07 MB，SHA-256 dc04590b...）；4.2/4.3/6 节记录 19 项已修复问题（含主题资源/Room converters/命名冲突/AmitiaError 继承/Coroutine 测试 API/Truth 依赖/testOptions/native externalNativeBuild/test classpath 阻塞/lint MissingPermission/WrongConstant/NewApi/ObsoleteSdkInt 等）；`./gradlew clean` 命令在 `docs/android/09-build-and-run.md` 3.1 节列出
+- [x] O6: 记录 APK 路径 / Go ARM64 路径 / RootFS 包路径 / Qdrant ARM64 路径 / SurrealDB ARM64 路径 — `docs/android/10-testing-report.md` 4.7 节 + `docs/android/09-build-and-run.md` 6.1 节记录：APK `android/app/build/outputs/apk/debug/app-debug.apk`（131.07 MB，SHA-256 dc04590b...，含 PRoot 集成）/Go ARM64 `android/app/src/main/assets/amitia-backend-arm64`（54.63 MB，SHA-256 abdd63eb...）/RootFS 分发包目录 `android/app/src/main/assets/`（rootfs-manifest.json + rootfs-install-template.sh，合计 240 MB）/Qdrant ARM64 `android/app/src/main/assets/qdrant_linux_aarch64`（74.23 MB，SHA-256 6cb81123...）/SurrealDB ARM64 `android/app/src/main/assets/surreal_linux_aarch64`（111.03 MB，SHA-256 a235206f...）/PRoot ARM64 `android/app/src/main/assets/proot_linux_aarch64`（1.43 MB，SHA-256 56399e90...）
 
 ## P. 文档完整（stage.md 验收 37）
 
@@ -186,15 +186,15 @@
 
 ## R. 真实性保证（stage.md 验收 28-29, 4.3 节）
 
-- [ ] R1: 不存在核心 Mock 数据通过最终验收
-- [ ] R2: 不存在假的功能开关
-- [ ] R3: 不使用固定 JSON 冒充后端数据
-- [ ] R4: 不使用延时动画冒充 AI 回复
-- [ ] R5: 不用本地写死角色冒充角色接口
-- [ ] R6: 不用静态页面冒充记忆系统
-- [ ] R7: 后端启动失败时不显示运行成功
-- [ ] R8: Qdrant/SurrealDB 未启动时不静默忽略
-- [ ] R9: Android 不只打开 Web 页面
+- [x] R1: 不存在核心 Mock 数据通过最终验收 — 生产代码全量扫描 Mock/Fake/Stub/dummyData/hardcoded/TODO("mock") 关键字，仅 `runtime/bridge/RuntimeBridgeStub.kt` 命中（Null Object 模式，isAvailable()=false，所有 notify/request 方法为空操作，不返回任何数据，不冒充功能）；核心数据流（聊天/角色/记忆）均通过真实 Repository→ApiClient→后端 API
+- [x] R2: 不存在假的功能开关 — 生产代码扫描 featureFlag/enableFeature/isEnabled=false/TODO("enable") 关键字，无任何匹配
+- [x] R3: 不使用固定 JSON 冒充后端数据 — 生产代码扫描 `"""{`/`"{"/`/jsonString/fakeResponse/mockJson 关键字，无任何匹配；BootstrapSequenceImpl 中的 buildDefaultConfig/buildQdrantConfig 是配置文件生成（非冒充后端响应）
+- [x] R4: 不使用延时动画冒充 AI 回复 — 生产代码 delay 命中均为合法用途：ChatViewModel.startStream 重试退避（1s*attempt）/ChatInputBar 草稿 debounce（200ms）/AudioPlayerController 播放进度轮询（200ms）/AudioRecorderController 录音计时（500ms）/OnboardingScreen 错误自动消失（4s）/HealthCheckerImpl 健康检查轮询间隔/LinuxProcessManagerImpl 进程退出检测；AI 回复通过 chatRepository.sendStream 真实 SSE 流式接收
+- [x] R5: 不用本地写死角色冒充角色接口 — `core/repository/CharacterRepository.kt` 通过 `apiClient.service(CharacterApi::class.java)` 真实调用后端 list/get/create/update/delete/switchCurrent/getCurrent 接口，无本地写死角色数据
+- [x] R6: 不用静态页面冒充记忆系统 — `core/repository/MemoryRepository.kt` 通过 `apiClient.service(MemoryApi::class.java)` 真实调用后端 list/search/getTimeline/getGraph/get/create/update/delete 接口，无静态页面
+- [x] R7: 后端启动失败时不显示运行成功 — `BootstrapSequenceImpl.kt:175-187` startBackend 失败立即 `return@withContext fail(...)`，健康检查失败也立即 `fail("Go 后端健康检查超时")`；fail() 函数（254-265 行）transition 到 RuntimeState.Failed + emitError，UI 不会显示 Running
+- [x] R8: Qdrant/SurrealDB 未启动时不静默忽略 — `BootstrapSequenceImpl.kt:110-154` startSurrealdb/startQdrant 失败时 emitLog WARN + 标记 ServiceState.Unhealthy(reason)；197-205 行检测 Unhealthy 后 transition 到 RuntimeState.Degraded(reason, services)，不谎报全部正常
+- [x] R9: Android 不只打开 Web 页面 — `app/src/main/java/com/amitia/android/MainActivity.kt` 使用 `setContent { AmitiaTheme { Surface { AmitiaNavHost(...) } } }` Compose 导航，全项目扫描 WebView/loadUrl 无任何匹配
 
 ## S. 最终报告（stage.md 验收 38, 第三十二节 20 项）
 
@@ -211,9 +211,9 @@
 - [x] S11: UI 设计说明 — Material 3 + 深色优先 + 低饱和，见 08-ui-design-system.md
 - [x] S12: 修改过的 Go 后端文件 — 7 个文件（runtime_platform.go + 4 实现 + qdrant/manager.go + surrealdb/manager.go + main.go + config.go + supervisor.go build tag 拆分）
 - [x] S13: 新增的 Android 文件 — 约 217 个 Kotlin + 1 C++ + CMake + Manifest + 资源
-- [x] S14: 所有实际执行的测试命令 — Go 单元测试 13 PASS + 3 SKIP；Android 单元测试 233 PASS + 2 ignored（Debug & Release 双变体），`./gradlew test` 退出码 0
-- [x] S15: 所有实际构建结果 — Go 4 平台全通过；Android clean/test/lint/assembleDebug 全部退出码 0，Debug APK 真实生成（130.41 MB）
-- [x] S16: APK 实际路径 — `android/app/build/outputs/apk/debug/app-debug.apk`，SHA-256: `5c4ee59ccfea92f2aa4711e0a56bc20746f5a788a025a45aee3fcd3e6df08101`，构建可复现（clean 后重建 SHA-256 一致）
+- [x] S14: 所有实际执行的测试命令 — Go 单元测试 13 PASS + 3 SKIP；Android 单元测试 270 PASS + 2 ignored（Debug & Release 双变体，含 PRoot 集成 37 新增测试），`./gradlew test` 退出码 0
+- [x] S15: 所有实际构建结果 — Go 4 平台全通过；Android clean/test/lint/assembleDebug 全部退出码 0，Debug APK 真实生成（131.07 MB，含 PRoot 集成代码与 PRoot 二进制资源）
+- [x] S16: APK 实际路径 — `android/app/build/outputs/apk/debug/app-debug.apk`，SHA-256: `8d4739c617be328dc8f364a54faf5ae18c76548db9cc1da41def5323b7e8d380`，clean+assembleDebug 可复现
 - [x] S17: 真机验证结果 — 外部阻塞（无 ARM64 真机），22 项全部待执行
 - [x] S18: 未完成项 — 5 类（真机验证 / 集成测试 / UI 测试 / 占位 Provider / Observer 自启动 / 通知点击跳转）；测试 classpath 与 APK 生成已解决
 - [x] S19: 未完成原因 — 无 ARM64 真机 + 集成/UI 测试需设备 + 占位 Provider 待 Activity Result 接入

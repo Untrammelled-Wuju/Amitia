@@ -8,10 +8,13 @@ import com.amitia.runtime.api.RuntimeState
 import com.amitia.runtime.api.ServiceState
 import com.amitia.runtime.health.HealthChecker
 import com.amitia.runtime.linux.LinuxRootfsManager
+import com.amitia.runtime.linux.ProotBinaryManager
+import com.amitia.runtime.linux.ProotInstallPhase
 import com.amitia.runtime.linux.RootfsInstallPhase
 import com.amitia.runtime.manager.RuntimeDirectories
 import com.amitia.runtime.manager.RuntimeStateMachine
 import com.amitia.runtime.process.LinuxProcessManager
+import com.amitia.runtime.process.ProotCommandWrapper
 import com.amitia.runtime.process.RestartPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -27,7 +30,9 @@ class BootstrapSequenceImpl @Inject constructor(
     private val rootfsManager: LinuxRootfsManager,
     private val processManager: LinuxProcessManager,
     private val healthChecker: HealthChecker,
-    private val stateMachine: RuntimeStateMachine
+    private val stateMachine: RuntimeStateMachine,
+    private val prootBinaryManager: ProotBinaryManager,
+    private val prootCommandWrapper: ProotCommandWrapper
 ) : BootstrapSequence {
 
     private val localAuthToken: String = UUID.randomUUID().toString().replace("-", "")
@@ -56,7 +61,26 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.transition(RuntimeState.Installed)
                 progress(stageOf("installed", 0.3f, "RootFS 已就绪"))
 
-                progress(stageOf("checking-bin", 0.32f, "检查 Runtime 二进制"))
+                progress(stageOf("checking-proot", 0.31f, "检查 PRoot 二进制"))
+                val prootInstallError = ensureProotReady(progress)
+                if (prootInstallError != null) {
+                    return@withContext fail(
+                        prootInstallError,
+                        retryable = false,
+                        requiresUserAction = true
+                    )
+                }
+
+                progress(stageOf("ensuring-rootfs", 0.33f, "准备最小化 RootFS"))
+                val rootfsResult = rootfsManager.ensureMinimalRootfs()
+                if (rootfsResult.isFailure) {
+                    return@withContext fail(
+                        rootfsResult.exceptionOrNull()?.message ?: "最小化 RootFS 创建失败",
+                        retryable = true
+                    )
+                }
+
+                progress(stageOf("checking-bin", 0.35f, "检查 Runtime 二进制"))
                 val binCheck = checkRuntimeBinaries()
                 if (binCheck.isFailure) {
                     return@withContext fail(
@@ -66,7 +90,7 @@ class BootstrapSequenceImpl @Inject constructor(
                     )
                 }
 
-                progress(stageOf("checking-dirs", 0.35f, "检查数据目录"))
+                progress(stageOf("checking-dirs", 0.4f, "检查数据目录"))
                 val dirResult = directories.ensureAllCreated()
                 if (dirResult.isFailure) {
                     return@withContext fail(
@@ -82,7 +106,7 @@ class BootstrapSequenceImpl @Inject constructor(
                     )
                 }
 
-                progress(stageOf("checking-config", 0.4f, "检查配置文件"))
+                progress(stageOf("checking-config", 0.42f, "检查配置文件"))
                 val configFile = File(directories.configDir(), CONFIG_FILE_NAME)
                 if (!configFile.exists()) {
                     configFile.parentFile?.mkdirs()
@@ -101,7 +125,7 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.transition(
                     RuntimeState.Starting(stage = "surrealdb", progressValue = 0.45f)
                 )
-                progress(stageOf("starting-surrealdb", 0.45f, "启动 SurrealDB"))
+                progress(stageOf("starting-surrealdb", 0.45f, "启动 SurrealDB (PRoot)"))
                 val surrealdbResult = startSurrealdb()
                 if (surrealdbResult.isFailure) {
                     stateMachine.emitLog(
@@ -134,7 +158,7 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.transition(
                     RuntimeState.Starting(stage = "qdrant", progressValue = 0.6f)
                 )
-                progress(stageOf("starting-qdrant", 0.6f, "启动 Qdrant"))
+                progress(stageOf("starting-qdrant", 0.6f, "启动 Qdrant (PRoot)"))
                 val qdrantResult = startQdrant()
                 if (qdrantResult.isFailure) {
                     stateMachine.emitLog(
@@ -167,7 +191,7 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.transition(
                     RuntimeState.Starting(stage = "backend", progressValue = 0.75f)
                 )
-                progress(stageOf("starting-backend", 0.75f, "启动 Go 后端"))
+                progress(stageOf("starting-backend", 0.75f, "启动 Go 后端 (PRoot)"))
                 val backendResult = startBackend()
                 if (backendResult.isFailure) {
                     return@withContext fail(
@@ -198,7 +222,7 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.emitLog(
                     RuntimeEvent.LogEmitted.Level.INFO,
                     TAG,
-                    "Repository 连接已通过 ConnectionManager 重建 Endpoint"
+                    "Repository 连接已通过 ConnectionManager 重建 Endpoint (PRoot 模式 active=${prootCommandWrapper.isProotAvailable()})"
                 )
 
                 val services = RuntimeServices(
@@ -217,12 +241,12 @@ class BootstrapSequenceImpl @Inject constructor(
                     stateMachine.transition(
                         RuntimeState.Degraded(reason = reasons.joinToString(","), services = services)
                     )
-                    progress(stageOf("degraded", 1f, "运行时降级: ${reasons.joinToString(",")}"))
+                    progress(stageOf("degraded", 1f, "运行时降级: ${reasons.joinToString(",")} (PRoot 模式)"))
                 } else {
                     stateMachine.transition(
                         RuntimeState.Running(uptimeMs = 0L, services = services)
                     )
-                    progress(stageOf("running", 1f, "运行时已启动"))
+                    progress(stageOf("running", 1f, "运行时已启动 (PRoot 模式)"))
                 }
 
                 Result.success(services)
@@ -230,6 +254,43 @@ class BootstrapSequenceImpl @Inject constructor(
                 fail(e.message ?: "启动异常", retryable = true, cause = e)
             }
         }
+
+    private suspend fun ensureProotReady(progress: (RuntimeStage) -> Unit): String? {
+        if (prootBinaryManager.isAvailable()) {
+            stateMachine.emitLog(
+                RuntimeEvent.LogEmitted.Level.INFO,
+                TAG,
+                "PRoot 二进制已就绪 version=${prootBinaryManager.version()}"
+            )
+            return null
+        }
+        stateMachine.emitLog(
+            RuntimeEvent.LogEmitted.Level.INFO,
+            TAG,
+            "PRoot 二进制未就绪,触发安装"
+        )
+        var installError: String? = null
+        try {
+            prootBinaryManager.install().collect { p ->
+                progress(stageOf("installing-proot", 0.31f + p.percent * 0.02f, p.message))
+                stateMachine.emitLog(
+                    RuntimeEvent.LogEmitted.Level.INFO,
+                    TAG,
+                    "PRoot 安装: phase=${p.phase} pct=${p.percent} msg=${p.message}"
+                )
+                if (p.phase == ProotInstallPhase.FAILED) {
+                    installError = p.error ?: p.message
+                }
+            }
+        } catch (e: Exception) {
+            installError = e.message ?: "PRoot 安装异常"
+        }
+        if (installError != null) return installError
+        if (!prootBinaryManager.isAvailable()) {
+            return prootBinaryManager.unavailableReason() ?: "PRoot 安装完成但仍不可用"
+        }
+        return null
+    }
 
     override suspend fun stop(progress: (RuntimeStage) -> Unit): Result<Unit> =
         withContext(Dispatchers.IO) {
@@ -358,11 +419,12 @@ class BootstrapSequenceImpl @Inject constructor(
     private suspend fun startSurrealdb(): Result<Int> {
         val workDir = directories.surrealdbDir().apply { mkdirs() }
         val dataPath = File(workDir, "graph.db")
-        val command = buildSurrealdbCommand(workDir, dataPath)
+        val rawCommand = buildSurrealdbCommand(workDir, dataPath)
         val env = mapOf(
             "HOME" to workDir.absolutePath,
             "TMPDIR" to directories.tmpDir().absolutePath
         )
+        val command = wrapWithProot(rawCommand, env, workDir)
         return processManager.start(
             name = SURREALDB_PROC_NAME,
             command = command,
@@ -380,13 +442,14 @@ class BootstrapSequenceImpl @Inject constructor(
         if (!configPath.exists()) {
             configPath.writeText(buildQdrantConfig())
         }
-        val command = buildQdrantCommand(workDir, dataPath)
+        val rawCommand = buildQdrantCommand(workDir, dataPath)
         val env = mapOf(
             "HOME" to workDir.absolutePath,
             "TMPDIR" to directories.tmpDir().absolutePath,
             "QDRANT__SERVICE__HTTP_PORT" to Constants.QDRANT_PORT.toString(),
             "QDRANT__SERVICE__GRPC_PORT" to (Constants.QDRANT_PORT + 1).toString()
         )
+        val command = wrapWithProot(rawCommand, env, workDir)
         return processManager.start(
             name = QDRANT_PROC_NAME,
             command = command,
@@ -400,8 +463,9 @@ class BootstrapSequenceImpl @Inject constructor(
     private suspend fun startBackend(): Result<Int> {
         val workDir = directories.amitiaDataRoot().apply { mkdirs() }
         val configPath = File(directories.configDir(), CONFIG_FILE_NAME)
-        val command = buildBackendCommand(directories.binDir(), configPath, workDir)
+        val rawCommand = buildBackendCommand(directories.binDir(), configPath, workDir)
         val env = buildBackendEnv(configPath)
+        val command = wrapWithProot(rawCommand, env, workDir)
         return processManager.start(
             name = BACKEND_PROC_NAME,
             command = command,
@@ -410,6 +474,22 @@ class BootstrapSequenceImpl @Inject constructor(
             restartPolicy = RestartPolicy.ON_FAILURE,
             timeoutMs = null
         )
+    }
+
+    private fun wrapWithProot(
+        command: List<String>,
+        env: Map<String, String>,
+        workDir: File
+    ): List<String> {
+        if (!prootCommandWrapper.isProotAvailable()) {
+            stateMachine.emitError(
+                error = "PRoot 不可用: ${prootCommandWrapper.fallbackReason() ?: "未知原因"}",
+                retryable = false,
+                requiresUserAction = true
+            )
+            return command
+        }
+        return prootCommandWrapper.wrap(command, env, workDir)
     }
 
     private fun checkRuntimeBinaries(): Result<Unit> {
@@ -467,7 +547,7 @@ class BootstrapSequenceImpl @Inject constructor(
 
     private fun buildBackendEnv(configPath: File): Map<String, String> {
         return mapOf(
-            "CONFIG_PATH" to configPath.parentFile.absolutePath,
+            "CONFIG_PATH" to (configPath.parentFile?.absolutePath ?: configPath.absolutePath),
             "STORAGE_DATADIR" to directories.sqliteDir().absolutePath,
             "AMITIA_DATA_DIR" to directories.amitiaDataRoot().absolutePath,
             "AMITIA_SQLITE_DIR" to directories.sqliteDir().absolutePath,

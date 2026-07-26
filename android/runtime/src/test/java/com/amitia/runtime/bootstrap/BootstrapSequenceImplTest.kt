@@ -6,11 +6,15 @@ import com.amitia.runtime.api.RuntimeState
 import com.amitia.runtime.api.ServiceState
 import com.amitia.runtime.health.HealthChecker
 import com.amitia.runtime.linux.LinuxRootfsManager
+import com.amitia.runtime.linux.ProotBinaryManager
+import com.amitia.runtime.linux.ProotInstallPhase
+import com.amitia.runtime.linux.ProotInstallProgress
 import com.amitia.runtime.linux.RootfsInstallPhase
 import com.amitia.runtime.linux.RootfsInstallProgress
 import com.amitia.runtime.manager.RuntimeDirectories
 import com.amitia.runtime.manager.RuntimeStateMachine
 import com.amitia.runtime.process.LinuxProcessManager
+import com.amitia.runtime.process.ProotCommandWrapper
 import com.amitia.runtime.process.RestartPolicy
 import com.google.common.truth.Truth.assertThat
 import io.mockk.Runs
@@ -33,9 +37,12 @@ class BootstrapSequenceImplTest {
     private val processManager: LinuxProcessManager = mockk(relaxed = true)
     private val healthChecker: HealthChecker = mockk(relaxed = true)
     private val stateMachine: RuntimeStateMachine = mockk(relaxed = true)
+    private val prootBinaryManager: ProotBinaryManager = mockk(relaxed = true)
+    private val prootCommandWrapper: ProotCommandWrapper = mockk(relaxed = true)
 
     private val bootstrap = BootstrapSequenceImpl(
-        directories, rootfsManager, processManager, healthChecker, stateMachine
+        directories, rootfsManager, processManager, healthChecker, stateMachine,
+        prootBinaryManager, prootCommandWrapper
     )
 
     private val noopStage: (com.amitia.runtime.api.RuntimeStage) -> Unit = {}
@@ -75,6 +82,27 @@ class BootstrapSequenceImplTest {
         every { directories.configDir() } returns File(tempDir, "config").apply { mkdirs() }
         coEvery { directories.ensureAllCreated() } returns Result.success(Unit)
         every { directories.validateIsolation() } returns true
+        every { rootfsManager.minimalRootfsDir() } returns File(tempDir, "rootfs/minimal").apply { mkdirs() }
+        coEvery { rootfsManager.ensureMinimalRootfs() } returns Result.success(Unit)
+        every { prootBinaryManager.isAvailable() } returns true
+        every { prootBinaryManager.version() } returns "proot-test-0.1.0"
+        every { prootBinaryManager.binaryPath() } returns File(tempDir, "bin/proot").apply {
+            writeText("dummy")
+            setExecutable(true, false)
+        }
+        every { prootBinaryManager.unavailableReason() } returns null
+        every { prootBinaryManager.install() } returns flowOf(
+            ProotInstallProgress(
+                phase = ProotInstallPhase.COMPLETED,
+                percent = 1f,
+                message = "PRoot 安装完成"
+            )
+        )
+        every { prootCommandWrapper.isProotAvailable() } returns true
+        every { prootCommandWrapper.fallbackReason() } returns null
+        every { prootCommandWrapper.wrap(any(), any(), any()) } answers {
+            firstArg<List<String>>()
+        }
     }
 
     private fun stubBinaries(tempDir: File) {

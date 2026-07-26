@@ -8,11 +8,11 @@
 
 ---
 
-## 1. 测试 classpath 阻塞（外部阻塞）
+## 1. 测试 classpath 阻塞（已解决）
 
-**问题描述**：
+**历史问题**：
 
-执行 `./gradlew test` 或 `./gradlew assembleDebug` 时，测试任务配置阶段失败：
+执行 `./gradlew test` 时，测试任务配置阶段失败：
 
 ```
 class com.android.build.gradle.internal.dsl.TestOptions$UnitTestOptions_Decorated
@@ -21,30 +21,23 @@ cannot be cast to org.gradle.api.tasks.testing.Test
 
 **根因**：
 
-AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 已知兼容性问题，社区广泛报告。
+项目路径含非 ASCII 字符（`桌面/跟进项目`），Gradle Worker 进程无法正确读取 classpath，叠加 AGP 8.5.2 + Kotlin 2.0.20 ASM transform 兼容性问题。
 
-**影响范围**：
+**解决方案**：
 
-- 单元测试用例无法执行（编译通过但 task 配置阶段失败）
-- 集成测试与 UI 测试同样受阻
-- 间接导致 `assembleDebug` 无法完整生成 APK
+- `android/gradle.properties` 设置 `file.encoding=GBK` 匹配 Windows 系统编码
+- `android/build.gradle.kts` 移除 subprojects 测试 JVM args 覆盖
+- CharacterViewModelTest 角色列表加载前显式 `listCharacters()` + `advanceUntilIdle()`
 
-**临时绕过**：
+**当前状态**：
 
-```bash
-./gradlew assembleDebug -x test
-```
-
-**根本解决**（待后续阶段）：
-
-- 升级 AGP 至 8.6+
-- 或降级 Kotlin 至 1.9.x
-- 或等待 Kotlin 2.0.x + AGP 8.5.x 兼容性补丁
+- `./gradlew test` 退出码 0，233 tests / 0 failures / 2 ignored（Debug & Release 双变体）
+- `./gradlew assembleDebug` 退出码 0，APK 真实生成
 
 **引用**：
 
-- `android/gradle/libs.versions.toml:2-3`
-- `android/app/build.gradle.kts:88-93`
+- `android/gradle.properties`
+- `docs/android/10-testing-report.md` 4.3 节
 
 ---
 
@@ -77,74 +70,75 @@ AGP 8.5.2 + Kotlin 2.0.20 测试 classpath 已知兼容性问题，社区广泛�
 
 ---
 
-## 3. APK 未最终生成
-
-**问题描述**：
-
-`assembleDebug` 因测试 classpath 阻塞未能完整生成 APK。
+## 3. APK 已真实生成（已解决）
 
 **当前状态**：
 
-- 主源码 Kotlin compile 通过
-- 资源合并通过
-- APK 打包步骤未执行
+`./gradlew clean assembleDebug` 退出码 0，Debug APK 真实生成（含 PRoot 集成）。
 
-**预期路径**（修复后）：
+**产物**：
 
 ```
-android/app/build/outputs/apk/debug/app-debug.apk
+路径: android/app/build/outputs/apk/debug/app-debug.apk
+大小: 131.07 MB (137436908 bytes)
+SHA-256: 8d4739c617be328dc8f364a54faf5ae18c76548db9cc1da41def5323b7e8d380
+构建时间: 2026-07-27 00:05:09
 ```
 
-**临时绕过**：
-
-```bash
-./gradlew assembleDebug -x test
-```
+**构建可复现**：clean 后重新执行 `assembleDebug`，APK 真实生成，BUILD SUCCESSFUL。
 
 **引用**：
 
-- `docs/android/09-build-and-run.md` 第 4.4 节
+- `docs/android/09-build-and-run.md` 6.1 节
+- `docs/android/10-testing-report.md` 4.7 节
 
 ---
 
-## 4. SurrealDB gnu 动态版本兼容性（技术风险）
+## 4. SurrealDB gnu 动态版本兼容性（技术风险，已有降级方案）
 
 **问题描述**：
 
-SurrealDB 官方未提供 musl 静态 ARM64 版本，当前使用 gnu 动态版本（111 MB）。
+SurrealDB 官方未提供 musl 静态 ARM64 版本（BUILDING.md 明确标记 `❌ Cross-compile for x86_64-unknown-linux-musl - This does not yet build successfully`），当前使用 gnu 动态版本（111 MB），依赖 `/lib/ld-linux-aarch64.so.1`。
 
-**风险**：
+**PRoot 集成后状态**：
 
-- PRoot 环境中 glibc 版本可能与 SurrealDB 编译时版本不一致
-- 启动时可能报 `version 'GLIBC_2.xx' not found` 错误
+- `qdrant_linux_aarch64`：statically linked，PRoot 内可直接运行
+- `amitia-backend-arm64`：statically linked（Go CGO_ENABLED=0），PRoot 内可直接运行
+- `surreal_linux_aarch64`：dynamically linked (interpreter /lib/ld-linux-aarch64.so.1)，PRoot 内最小化 rootfs 无 glibc，**预期无法启动**
 
-**当前状态**：
+**代码层降级方案**（已实现）：
 
-- 未在真机验证
-- Phase 7 真机验证为外部阻塞
+`BootstrapSequenceImpl.startSurrealdb()` 启动失败或健康检查超时时：
+1. `stateMachine.emitLog(WARN, "SurrealDB 启动失败(非致命): ...")` 记录真实错误
+2. `ServiceState.Unhealthy(reason)` 标记服务不可用
+3. Runtime 状态机进入 `Degraded(reason="surrealdb", services=...)` 状态
+4. UI 显示运行时降级，明确告知用户图数据库能力不可用
 
-**应对方案**（若真机启动失败）：
+满足 stage.md 验收 #9「SurrealDB 不可用时进入 Degraded 状态，不谎报全部能力正常」。
 
-1. 改用 musl 静态版本（社区构建或自行编译）
-2. 从源码编译：`cargo build --release --target aarch64-unknown-linux-musl`
-3. 切换到其他图数据库（如 Redis Graph）作为降级方案
+**真机验证方案**（待外部 ARM64 设备）：
+
+1. 预置 glibc ARM64 到 `rootfs/minimal/lib/` 和 `rootfs/minimal/lib64/`（预计增加 ~30MB 体积）
+2. 或社区构建 surreal musl 静态变体
+3. 或切换到其他图数据库作为降级方案
 
 **引用**：
 
 - `android/app/src/main/assets/rootfs-manifest.json:25-34`
+- `android/runtime/src/main/java/com/amitia/runtime/bootstrap/BootstrapSequenceImpl.kt:128-160`（startSurrealdb + Degraded 逻辑）
 - `docs/android/03-runtime-dependency-audit.md`
 
 ---
 
-## 5. RootFS 体积 240 MB
+## 5. RootFS 体积 241 MB
 
 **问题描述**：
 
-RootFS 分发包总体积 251542644 字节（约 240 MB），作为 APK assets 内置导致 APK 体积过大。
+RootFS 分发包总体积 253048188 字节（约 241 MB，含 PRoot 二进制 1.43 MB），作为 APK assets 内置导致 APK 体积过大。
 
 **影响**：
 
-- APK 体积预估 250 MB+
+- APK 体积 131.07 MB（含 PRoot 集成代码 + 二进制资源）
 - Play Store 单 APK 上限 200 MB（需 AAB 或 APK Expansion File）
 - 用户首次下载体验差
 
@@ -162,7 +156,7 @@ RootFS 分发包总体积 251542644 字节（约 240 MB），作为 APK assets �
 
 **引用**：
 
-- `android/app/src/main/assets/rootfs-manifest.json:36`
+- `android/app/src/main/assets/rootfs-manifest.json:46`
 
 ---
 
@@ -398,11 +392,11 @@ PRoot 通过 `ptrace` 拦截系统调用实现 Linux 用户空间，存在性能
 
 | 序号 | 限制项 | 类型 | 优先级 | 应对阶段 |
 |---|---|---|---|---|
-| 1 | 测试 classpath 阻塞 | 外部阻塞 | 高 | 第二阶段早期 |
+| 1 | ~~测试 classpath 阻塞~~（已解决） | ~~外部阻塞~~ | — | — |
 | 2 | ARM64 真机验证未执行 | 外部阻塞 | 高 | 第二阶段早期 |
-| 3 | APK 未最终生成 | 间接阻塞 | 高 | 随 1 解决 |
+| 3 | ~~APK 未最终生成~~（已解决，131.07 MB） | ~~间接阻塞~~ | — | — |
 | 4 | SurrealDB gnu 兼容性 | 技术风险 | 中 | 真机验证后判断 |
-| 5 | RootFS 体积 240 MB | 体验问题 | 中 | 第二阶段 |
+| 5 | RootFS 体积 241 MB | 体验问题 | 中 | 第二阶段 |
 | 6 | FilePicker/AudioPlayer/AudioRecorder 占位 | 功能受限 | 中 | 第二阶段早期 |
 | 7 | ProactiveMessageObserver 未自动启动 | 功能受限 | 中 | 第二阶段早期 |
 | 8 | 通知点击跳转未解析 | 功能受限 | 中 | 第二阶段早期 |
