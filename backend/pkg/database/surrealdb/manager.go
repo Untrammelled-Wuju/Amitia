@@ -89,7 +89,17 @@ func startSurrealInternal() error {
 	case "windows":
 		surrealPath = filepath.Join(surrealDir, "surreal.exe")
 	case "linux":
-		surrealPath = filepath.Join(surrealDir, "surreal")
+		if IsLinuxARM64() {
+			surrealPath = filepath.Join(surrealDir, "surreal_linux_aarch64")
+		} else {
+			surrealPath = filepath.Join(surrealDir, "surreal_linux_x86")
+		}
+		if _, statErr := os.Stat(surrealPath); statErr != nil {
+			fallbackPath := filepath.Join(surrealDir, "surreal")
+			if _, fallbackErr := os.Stat(fallbackPath); fallbackErr == nil {
+				surrealPath = fallbackPath
+			}
+		}
 	default:
 		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
 	}
@@ -198,12 +208,23 @@ func StopSurrealMonitor() {
 	}
 }
 
+func IsLinuxARM64() bool {
+	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
+}
+
 func ensureSurrealBinary(surrealPath, surrealDir string) error {
 	if _, err := os.Stat(surrealPath); err == nil {
 		return nil
 	}
 
-	for _, name := range []string{"surreal.exe.zip", "surreal.zip"} {
+	candidates := []string{"surreal.exe.zip", "surreal.zip"}
+	if IsLinuxARM64() {
+		candidates = []string{"surreal_linux_aarch64.zip", "surreal-arm64.zip", "surreal.zip"}
+	} else if runtime.GOOS == "linux" {
+		candidates = []string{"surreal_linux_x86.zip", "surreal-x86_64.zip", "surreal.zip"}
+	}
+
+	for _, name := range candidates {
 		zipPath := filepath.Join(surrealDir, name)
 		if _, err := os.Stat(zipPath); err == nil {
 			log.Info("正在解压SurrealDB程序", "zip", zipPath)

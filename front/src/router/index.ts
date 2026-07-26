@@ -37,6 +37,7 @@ const router = createRouter({
      * testing, and migration to Extension Kernel.
      */
     { path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/extension/:extensionId/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/mcp", name: "extensionMCP", component: () => import("@/views/mcp/MCPServerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/skills", name: "extensionSkills", component: () => import("@/views/extensions/SkillListView.vue"), meta: { requiresAuth: true } },

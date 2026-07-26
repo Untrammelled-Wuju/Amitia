@@ -1,3 +1,9 @@
+// Deprecated: Legacy plugin runtime migration creating old schema tables
+// (extension_states/events/schedules/plugin_runs/audits). Retained to keep
+// historical schema intact during cutover; new writes go through
+// extension/kernel/data_migration. Removal scheduled at Amitia extension
+// refactor step 66 — see docs/amitiax/Amitia_扩展系统重构_第66步_删除旧PluginRuntime.md.
+
 package migration
 
 func PluginRuntimeMigration() Migration {

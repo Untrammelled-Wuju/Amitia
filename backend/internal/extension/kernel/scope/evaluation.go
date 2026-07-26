@@ -1,0 +1,148 @@
+package scope
+
+import (
+	"context"
+)
+
+const (
+	ReasonNoBinding                = "no_binding"
+	ReasonCharacterMismatch        = "character_mismatch"
+	ReasonConversationMismatch     = "conversation_mismatch"
+	ReasonExtensionMismatch        = "extension_mismatch"
+	ReasonModuleDisabled           = "module_disabled"
+	ReasonResourceMismatch         = "resource_mismatch"
+	ReasonBindingExpired           = "binding_expired"
+	ReasonBindingRevoked           = "binding_revoked"
+	ReasonParentScopeTooNarrow     = "parent_scope_too_narrow"
+	ReasonConversationNotOwned     = "conversation_not_owned_by_character"
+	ReasonCharacterDeleted         = "character_deleted"
+	ReasonConversationDeleted      = "conversation_deleted"
+	ReasonExtensionDisabled        = "extension_disabled"
+	ReasonInvocationExpired        = "invocation_expired"
+	ReasonSessionExpired           = "session_expired"
+)
+
+type ScopeEvaluationRequest struct {
+	SubjectType    ScopeSubjectType `json:"subjectType"`
+	SubjectID      string          `json:"subjectId"`
+	CharacterID    string          `json:"characterId,omitempty"`
+	ConversationID string          `json:"conversationId,omitempty"`
+	ExtensionID    string          `json:"extensionId,omitempty"`
+	ModuleID       string          `json:"moduleId,omitempty"`
+	ParentSnapshot *ScopeSnapshot  `json:"parentSnapshot,omitempty"`
+}
+
+type ScopeEvaluator interface {
+	Evaluate(ctx context.Context, req ScopeEvaluationRequest) ScopeDecision
+}
+
+type DefaultScopeEvaluator struct {
+	store ScopeStore
+	checker ScopeRelationChecker
+}
+
+func NewScopeEvaluator(store ScopeStore, checker ScopeRelationChecker) *DefaultScopeEvaluator {
+	return &DefaultScopeEvaluator{store: store, checker: checker}
+}
+
+func (e *DefaultScopeEvaluator) Evaluate(ctx context.Context, req ScopeEvaluationRequest) ScopeDecision {
+	bindings, err := e.store.ListBindings(ctx, ScopeBindingFilter{
+		SubjectType: req.SubjectType,
+		SubjectID:   req.SubjectID,
+	})
+	if err != nil || len(bindings) == 0 {
+		return ScopeDecision{
+			Allowed: false,
+			Reasons: []ScopeReason{{Code: ReasonNoBinding, Description: "no scope binding found"}},
+		}
+	}
+
+	var matched []ScopeBinding
+	for _, b := range bindings {
+		if !b.IsActive() {
+			continue
+		}
+		if e.matchesContext(b.Scope, req) {
+			matched = append(matched, b)
+		}
+	}
+
+	if len(matched) == 0 {
+		reasons := e.buildDenialReasons(bindings, req)
+		return ScopeDecision{Allowed: false, Reasons: reasons}
+	}
+
+	if req.ParentSnapshot != nil {
+		if !e.checkInheritance(matched, *req.ParentSnapshot) {
+			return ScopeDecision{
+				Allowed: false,
+				Reasons: []ScopeReason{{Code: ReasonParentScopeTooNarrow, Description: "child scope would exceed parent scope"}},
+			}
+		}
+	}
+
+	return ScopeDecision{Allowed: true, Matched: matched}
+}
+
+func (e *DefaultScopeEvaluator) matchesContext(scope ScopeRef, req ScopeEvaluationRequest) bool {
+	switch scope.Type {
+	case ScopeGlobal:
+		return true
+	case ScopeCharacter:
+		return req.CharacterID != "" && scope.CharacterID == req.CharacterID
+	case ScopeConversation:
+		return req.ConversationID != "" && scope.ConversationID == req.ConversationID
+	case ScopeExtension:
+		return req.ExtensionID != "" && scope.ExtensionID == req.ExtensionID
+	case ScopeModule:
+		return req.ExtensionID != "" && req.ModuleID != "" &&
+			scope.ExtensionID == req.ExtensionID && scope.ModuleID == req.ModuleID
+	case ScopeResource:
+		return true
+	case ScopeInvocation:
+		return true
+	case ScopeSession:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e *DefaultScopeEvaluator) buildDenialReasons(bindings []ScopeBinding, req ScopeEvaluationRequest) []ScopeReason {
+	reasons := make([]ScopeReason, 0)
+	for _, b := range bindings {
+		switch {
+		case b.State == StateExpired || b.ExpiresAt != nil:
+			reasons = append(reasons, ScopeReason{
+				Code:      ReasonBindingExpired,
+				SubjectID: b.SubjectID,
+			})
+		case b.State == StateRevoked:
+			reasons = append(reasons, ScopeReason{
+				Code:      ReasonBindingRevoked,
+				SubjectID: b.SubjectID,
+			})
+		case b.Scope.Type == ScopeCharacter && b.Scope.CharacterID != req.CharacterID:
+			reasons = append(reasons, ScopeReason{
+				Code:      ReasonCharacterMismatch,
+				SubjectID: b.SubjectID,
+			})
+		}
+	}
+	return reasons
+}
+
+func (e *DefaultScopeEvaluator) checkInheritance(matched []ScopeBinding, parent ScopeSnapshot) bool {
+	for _, b := range matched {
+		if !parent.Contains(b.Scope) {
+			return false
+		}
+	}
+	return true
+}
+
+type ScopeRelationChecker interface {
+	ConversationBelongsToCharacter(conversationID, characterID string) bool
+	IsCharacterDeleted(characterID string) bool
+	IsConversationDeleted(conversationID string) bool
+}

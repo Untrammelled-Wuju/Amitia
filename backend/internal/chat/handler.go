@@ -77,11 +77,12 @@ func (h *Handler) GetMessages(c *gin.Context) {
 
 func (h *Handler) DeleteConversation(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.DeleteConversation(id); err != nil {
+	characterDeleted, err := h.service.DeleteConversation(id)
+	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "删除失败", nil)
 		return
 	}
-	util.SuccessMsgResponse(c, "对话已删除", nil)
+	util.SuccessResponse(c, gin.H{"deleted": true, "characterDeleted": characterDeleted})
 }
 
 func (h *Handler) DeleteAllConversations(c *gin.Context) {

@@ -1,0 +1,196 @@
+import { AmitiaError, ValidationError, PermissionDeniedError } from "./errors";
+
+export interface UIActionRequest {
+  readonly actionId: string;
+  readonly payload?: unknown;
+}
+
+export interface UIActionResponse {
+  readonly ok: boolean;
+  readonly result?: unknown;
+  readonly error?: { code: string; message: string };
+}
+
+export interface UIReadyEvent {
+  readonly extensionId: string;
+  readonly contributionId: string;
+  readonly contractVersion: number;
+}
+
+export interface UIBridge {
+  ready(): Promise<UIReadyEvent>;
+  actions: UIActionClient;
+  state: UIStateClient;
+  host: UIHostClient;
+}
+
+export interface UIActionClient {
+  invoke(request: UIActionRequest): Promise<UIActionResponse>;
+  list(): Promise<UIActionDescriptor[]>;
+}
+
+export interface UIActionDescriptor {
+  readonly actionId: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly deprecated?: boolean;
+}
+
+export interface UIStateClient {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T): Promise<void>;
+  subscribe(key: string, callback: (value: unknown) => void): Promise<() => void>;
+}
+
+export interface UIHostClient {
+  openExternal(url: string): Promise<void>;
+  copyToClipboard(text: string): Promise<void>;
+  setTitle(title: string): Promise<void>;
+  notify(message: string, kind?: "info" | "success" | "warning" | "error"): Promise<void>;
+}
+
+export type UIActionHandler = (
+  payload: unknown,
+  context: UIActionContext,
+) => Promise<UIActionResponse> | UIActionResponse;
+
+export interface UIActionContext {
+  readonly actionId: string;
+  readonly traceId: string;
+  readonly signal?: AbortSignal;
+  readonly logger: UILogger;
+}
+
+export interface UILogger {
+  debug(message: string, fields?: Record<string, unknown>): void;
+  info(message: string, fields?: Record<string, unknown>): void;
+  warn(message: string, fields?: Record<string, unknown>): void;
+  error(message: string, fields?: Record<string, unknown>): void;
+}
+
+const uiActionRegistry = new Map<string, { handler: UIActionHandler; descriptor: UIActionDescriptor }>();
+
+export function defineUIAction(
+  actionId: string,
+  handler: UIActionHandler,
+  descriptor?: Partial<UIActionDescriptor>,
+): void {
+  if (!actionId) {
+    throw new ValidationError("actionId is required");
+  }
+  if (typeof handler !== "function") {
+    throw new ValidationError("handler must be a function");
+  }
+  uiActionRegistry.set(actionId, {
+    handler,
+    descriptor: {
+      actionId,
+      title: descriptor?.title ?? actionId,
+      description: descriptor?.description,
+      deprecated: descriptor?.deprecated,
+    },
+  });
+}
+
+export function listUIActions(): UIActionDescriptor[] {
+  return Array.from(uiActionRegistry.values()).map((r) => r.descriptor);
+}
+
+export function clearUIActions(): void {
+  uiActionRegistry.clear();
+}
+
+export function createAmitiaUI(bridge: UIBridge): UIBridge {
+  return bridge;
+}
+
+export class InMemoryUIBridge implements UIBridge {
+  private readonly state = new Map<string, unknown>();
+  private readonly subscribers = new Map<string, Set<(value: unknown) => void>>();
+  private title = "";
+
+  async ready(): Promise<UIReadyEvent> {
+    return {
+      extensionId: "in-memory",
+      contributionId: "in-memory",
+      contractVersion: 1,
+    };
+  }
+
+  readonly actions: UIActionClient = {
+    invoke: async (request: UIActionRequest): Promise<UIActionResponse> => {
+      const entry = uiActionRegistry.get(request.actionId);
+      if (!entry) {
+        return { ok: false, error: { code: "action_not_found", message: `action ${request.actionId} not found` } };
+      }
+      const ctx: UIActionContext = {
+        actionId: request.actionId,
+        traceId: `ui-${Date.now()}`,
+        logger: noopUILogger,
+      };
+      return entry.handler(request.payload, ctx);
+    },
+    list: async (): Promise<UIActionDescriptor[]> => listUIActions(),
+  };
+
+  readonly state: UIStateClient = {
+    get: async <T>(key: string): Promise<T | null> => {
+      return (this.state.get(key) as T) ?? null;
+    },
+    set: async <T>(key: string, value: T): Promise<void> => {
+      this.state.set(key, value);
+      const subs = this.subscribers.get(key);
+      if (subs) {
+        for (const cb of subs) cb(value);
+      }
+    },
+    subscribe: async (key: string, callback: (value: unknown) => void): Promise<(() => void)> => {
+      let subs = this.subscribers.get(key);
+      if (!subs) {
+        subs = new Set();
+        this.subscribers.set(key, subs);
+      }
+      subs.add(callback);
+      return () => {
+        subs?.delete(callback);
+      };
+    },
+  };
+
+  readonly host: UIHostClient = {
+    openExternal: async (_url: string): Promise<void> => {
+      // no-op in memory
+    },
+    copyToClipboard: async (_text: string): Promise<void> => {
+      // no-op in memory
+    },
+    setTitle: async (title: string): Promise<void> => {
+      this.title = title;
+    },
+    notify: async (_message: string, _kind?: "info" | "success" | "warning" | "error"): Promise<void> => {
+      // no-op in memory
+    },
+  };
+}
+
+const noopUILogger: UILogger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
+export function mapUIError(cause: unknown): AmitiaError {
+  if (cause instanceof AmitiaError) return cause;
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (/permission|denied|forbidden/i.test(message)) {
+    return new PermissionDeniedError(message);
+  }
+  return new ValidationError(message);
+}
+
+export function assertUIActionAllowed(actionId: string, allowed: string[]): void {
+  if (!allowed.includes(actionId)) {
+    throw new PermissionDeniedError(`UI action ${actionId} not allowed`);
+  }
+}

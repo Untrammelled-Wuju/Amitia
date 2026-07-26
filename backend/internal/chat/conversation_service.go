@@ -119,11 +119,17 @@ func (s *service) BackfillMissingConversations() (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
-func (s *service) DeleteConversation(id string) error {
-	if err := s.repo.DeleteConversation(id); err != nil {
-		return err
+func (s *service) DeleteConversation(id string) (bool, error) {
+	var charName string
+	s.db.Table("characters").Select("name").Where("conversation_id = ?", id).Limit(1).Row().Scan(&charName)
+	characterDeleted := charName != ""
+	if characterDeleted {
+		s.db.Exec("DELETE FROM characters WHERE conversation_id = ?", id)
 	}
-	return pipelinecheckpoint.New(s.db).ResetConversation(id)
+	if err := s.repo.DeleteConversation(id); err != nil {
+		return false, err
+	}
+	return characterDeleted, pipelinecheckpoint.New(s.db).ResetConversation(id)
 }
 
 func (s *service) DeleteAllConversations() error {

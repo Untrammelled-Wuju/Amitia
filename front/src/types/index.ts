@@ -517,3 +517,210 @@ export interface TriggerQueueSummary {
 }
 
 export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";
+
+// ============================================================
+// Extension Kernel - 新领域类型 解除Skill概念过载
+// ============================================================
+
+export type ToolSource = "builtin" | "plugin" | "mcp" | "workflow" | "internal" | "legacy_tool";
+
+export type RiskLevel = "low" | "medium" | "high";
+
+export type SideEffectLevel = "none" | "read_only" | "write" | "financial";
+
+export interface ScopeRule {
+  type: string;
+  id?: string;
+}
+
+export interface PermissionRequirement {
+  capability: string;
+  description?: string;
+  risk?: string;
+}
+
+export interface ToolDefinition {
+  id: string;
+  modelName: string;
+  extensionId?: string;
+  moduleId?: string;
+  source: ToolSource;
+  name: string;
+  description: string;
+  version?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  permissions?: PermissionRequirement[];
+  riskLevel?: RiskLevel;
+  sideEffect?: SideEffectLevel;
+  scope?: ScopeRule;
+  enabled: boolean;
+  compatible?: boolean;
+  internal?: boolean;
+  hasSideEffects: boolean;
+  idempotent: boolean;
+  retryable: boolean;
+  timeoutMs: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ToolInvocation {
+  toolId: string;
+  input: Record<string, unknown>;
+  idempotencyKey?: string;
+  traceId?: string;
+}
+
+export interface ToolResult {
+  invocationId: string;
+  status: string;
+  output?: Record<string, unknown>;
+  error?: string;
+  visibleText?: string;
+  durationMs: number;
+}
+
+export interface ActivationRule {
+  explicit: boolean;
+  autoMatch?: string;
+  keywords?: string[];
+  priority?: number;
+}
+
+export interface ToolReference {
+  toolId: string;
+  constraint?: string;
+}
+
+export interface MCPReference {
+  serverId: string;
+  optional?: boolean;
+}
+
+export interface SkillResource {
+  path: string;
+  kind: string;
+  mimeType?: string;
+  size: number;
+  textReadable?: boolean;
+}
+
+export type AgentSkillScope = "global" | "character";
+
+export interface AgentSkillDefinition {
+  id: string;
+  extensionId: string;
+  moduleId?: string;
+  name: string;
+  description: string;
+  displayName?: string;
+  instructions: string;
+  activation: ActivationRule;
+  requiredTools?: ToolReference[];
+  requiredMCP?: MCPReference[];
+  resources?: SkillResource[];
+  tokenBudget?: number;
+  scope: AgentSkillScope;
+  scopeId?: string;
+  enabled: boolean;
+  compatible?: boolean;
+  source: string;
+  version?: string;
+  license?: string;
+  author?: string;
+  compatibilityStatus?: string;
+  toolMappings?: Record<string, unknown>[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentSkillCatalogEntry {
+  extensionId: string;
+  name: string;
+  description: string;
+  displayName?: string;
+  scope: AgentSkillScope;
+  compatibility: string;
+  source?: string;
+}
+
+export interface WorkflowNode {
+  id: string;
+  type: string;
+  step: {
+    input: Record<string, unknown>;
+    when?: Record<string, unknown>;
+    onError?: {
+      mode: string;
+      default?: Record<string, unknown>;
+    };
+  };
+}
+
+export interface WorkflowLimits {
+  maxSteps: number;
+  maxExecutionDurationMs: number;
+  maxStepDurationMs: number;
+  maxInputBytes: number;
+  maxOutputBytes: number;
+  maxIntermediateBytes: number;
+  maxHttpResponseBytes: number;
+  maxHttpRedirects: number;
+  maxSkillCallDepth: number;
+  maxSkillCalls: number;
+  maxArrayItems: number;
+  maxExpressionDepth: number;
+  maxTemplateLength: number;
+  maxEventsEmitted: number;
+  maxSchedulesCreated: number;
+  maxSideEffects: number;
+}
+
+export interface WorkflowDefinition {
+  schemaVersion: string;
+  id: string;
+  extensionId?: string;
+  moduleId?: string;
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  nodes: WorkflowNode[];
+  permissions?: string[];
+  scope?: string;
+  callableByAgent: boolean;
+  enabled: boolean;
+  hasSideEffects?: boolean;
+  idempotent?: boolean;
+  limits?: WorkflowLimits;
+  version?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type ContributionType = "tool" | "agent_skill" | "workflow" | "mcp" | "ui" | "hook" | "background_task" | "provider" | "asset";
+
+export interface BaseContribution {
+  id: string;
+  type: ContributionType;
+  extensionId: string;
+  moduleId?: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ToolContribution extends BaseContribution {
+  toolId: string;
+}
+
+export interface AgentSkillContribution extends BaseContribution {
+  agentSkillId: string;
+}
+
+export interface WorkflowContribution extends BaseContribution {
+  workflowId: string;
+}
+
+export interface MCPContribution extends BaseContribution {
+  serverId: string;
+  descriptor?: Record<string, unknown>;
+}

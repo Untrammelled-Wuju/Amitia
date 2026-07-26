@@ -79,10 +79,16 @@ func StartQdrant() error {
 	case "windows":
 		qdrantPath = filepath.Join(qdrantDir, "qdrant.exe")
 	case "linux":
-		if runtime.GOARCH == "arm64" {
+		if IsLinuxARM64() {
 			qdrantPath = filepath.Join(qdrantDir, "qdrant_linux_aarch64")
 		} else {
 			qdrantPath = filepath.Join(qdrantDir, "qdrant_linux_x86")
+		}
+		if _, statErr := os.Stat(qdrantPath); statErr != nil {
+			fallbackPath := filepath.Join(qdrantDir, "qdrant")
+			if _, fallbackErr := os.Stat(fallbackPath); fallbackErr == nil {
+				qdrantPath = fallbackPath
+			}
 		}
 	default:
 		return fmt.Errorf("不支持的操作系统: %s", runtime.GOOS)
@@ -108,12 +114,23 @@ func StartQdrant() error {
 	return nil
 }
 
+func IsLinuxARM64() bool {
+	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
+}
+
 func ensureQdrantBinary(qdrantPath, qdrantDir string) error {
 	if _, err := os.Stat(qdrantPath); err == nil {
 		return nil
 	}
 
-	for _, name := range []string{"qdrant.exe.zip", "qdrant.zip"} {
+	candidates := []string{"qdrant.exe.zip", "qdrant.zip"}
+	if IsLinuxARM64() {
+		candidates = []string{"qdrant_linux_aarch64.zip", "qdrant-aarch64-unknown-linux-gnu.zip", "qdrant-arm64.zip", "qdrant.zip"}
+	} else if runtime.GOOS == "linux" {
+		candidates = []string{"qdrant_linux_x86.zip", "qdrant-x86_64-unknown-linux-gnu.zip", "qdrant.zip"}
+	}
+
+	for _, name := range candidates {
 		zipPath := filepath.Join(qdrantDir, name)
 		if _, err := os.Stat(zipPath); err == nil {
 			log.Info("正在解压Qdrant程序", "zip", zipPath)

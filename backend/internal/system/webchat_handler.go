@@ -124,12 +124,16 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
+	if body.CharacterID != "" {
+		h.db.Table("characters").Where("id = ?", body.CharacterID).Update("conversation_id", conv.ID)
+	}
 	util.SuccessResponse(c, gin.H{"id": conv.ID, "title": conv.Title, "channel": conv.Channel, "source": conv.Source, "characterId": conv.CharacterID})
 }
 
 func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.chatSvc.DeleteConversation(id); err != nil {
+	_, err := h.chatSvc.DeleteConversation(id)
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}

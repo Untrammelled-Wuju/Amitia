@@ -1,0 +1,431 @@
+package permission
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+)
+
+type PermissionBroker interface {
+	Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult
+	Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error)
+	Revoke(ctx context.Context, grantID string) error
+	RevokeBySubject(ctx context.Context, subject PermissionSubject) (int, error)
+	RevokeByExtension(ctx context.Context, extensionID string) (int, error)
+	ListGrants(ctx context.Context, filter PermissionGrantFilter) ([]PermissionGrant, error)
+	Explain(ctx context.Context, request PermissionEvaluationRequest) PermissionExplanation
+	DetectUpgrade(ctx context.Context, oldPermissions, newPermissions []PermissionRequirement) []PermissionUpgrade
+}
+
+type DefaultPermissionBroker struct {
+	registry   *PermissionDefinitionRegistry
+	storage    PermissionStorage
+	cache      *PermissionCache
+	auditRec   *PermissionAuditRecorder
+	mu         sync.RWMutex
+
+	SystemPolicy func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
+}
+
+func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage PermissionStorage) *DefaultPermissionBroker {
+	return &DefaultPermissionBroker{
+		registry: registry,
+		storage:  storage,
+		cache:    NewPermissionCache(5 * time.Minute),
+		auditRec: NewPermissionAuditRecorder(),
+	}
+}
+
+func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult {
+	if len(request.Requirements) == 0 {
+		return PermissionEvaluationResult{
+			Decision: DecisionAllow,
+			Reasons:  []PermissionReason{{Code: "no_requirements"}},
+		}
+	}
+
+	result := PermissionEvaluationResult{
+		Decision:      DecisionAllow,
+		Reasons:       make([]PermissionReason, 0),
+		MatchedGrants: make([]PermissionGrant, 0),
+		Missing:       make([]PermissionRequirement, 0),
+	}
+
+	for _, req := range request.Requirements {
+		def, ok := b.registry.Get(req.PermissionID)
+		if !ok {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "unknown_permission",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
+		if def.TrustedOnly && b.isNotTrusted(request.Subject) {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "trusted_only",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
+		if request.IsBackground && !def.BackgroundAllowed {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "background_not_allowed",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
+		effectiveScope := b.resolveEffectiveScope(req, request)
+		if !b.isScopeAllowed(def, effectiveScope) {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "scope_not_allowed",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
+		if b.SystemPolicy != nil {
+			if decision, handled := b.SystemPolicy(ctx, request.Subject, req.PermissionID, effectiveScope); handled {
+				if decision == DecisionDeny {
+					result.Missing = append(result.Missing, req)
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "system_policy_deny",
+						Permission: req.PermissionID,
+					})
+				}
+				continue
+			}
+		}
+
+		grants := b.cache.GetOrLoad(ctx, request.Subject, req.PermissionID, func() []PermissionGrant {
+			filter := PermissionGrantFilter{
+				Subject:      &request.Subject,
+				PermissionID: req.PermissionID,
+				ActiveOnly:   true,
+			}
+			loaded, _ := b.storage.List(ctx, filter)
+			result := make([]PermissionGrant, 0, len(loaded))
+			for _, sg := range loaded {
+				result = append(result, b.storedToGrant(sg))
+			}
+			return result
+		})
+
+		matched := b.matchGrants(grants, effectiveScope, req)
+		if len(matched) > 0 {
+			result.MatchedGrants = append(result.MatchedGrants, matched...)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "grant_matched",
+				Permission: req.PermissionID,
+			})
+		} else {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "missing_grant",
+				Permission: req.PermissionID,
+			})
+		}
+	}
+
+	if len(result.Missing) > 0 {
+		b.determineDenyOrApproval(&result, request)
+	} else {
+		result.Decision = DecisionAllow
+	}
+
+	b.auditRec.RecordEvaluation(ctx, request, result)
+
+	return result
+}
+
+func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error) {
+	def, ok := b.registry.Get(request.PermissionID)
+	if !ok {
+		return PermissionGrant{}, fmt.Errorf("unknown permission: %s", request.PermissionID)
+	}
+
+	if !b.isScopeAllowed(def, request.Scope) {
+		return PermissionGrant{}, fmt.Errorf("scope %s not allowed for permission %s", request.Scope.Type, request.PermissionID)
+	}
+
+	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable {
+		return PermissionGrant{}, fmt.Errorf("persistent grant not allowed for permission %s", request.PermissionID)
+	}
+
+	grantID := b.generateGrantID(request)
+	now := time.Now()
+
+	var inputBinding *InputBinding
+	if request.InputHash != "" {
+		inputBinding = &InputBinding{InputHash: request.InputHash}
+	}
+
+	grant := PermissionGrant{
+		GrantID:       grantID,
+		Subject:       request.Subject,
+		PermissionID:  request.PermissionID,
+		Scope:         request.Scope,
+		Decision:      request.Decision,
+		InputBinding:  inputBinding,
+		TargetBinding: request.TargetBinding,
+		IssuedAt:      now,
+		ExpiresAt:     request.ExpiresAt,
+		IssuedBy:      request.IssuedBy,
+		Reason:        request.Reason,
+		ManifestVer:   request.ManifestVer,
+	}
+
+	stored := b.grantToStored(grant)
+	if err := b.storage.Save(ctx, stored); err != nil {
+		return PermissionGrant{}, err
+	}
+
+	b.cache.Invalidate(request.Subject, request.PermissionID)
+	b.auditRec.RecordGrant(ctx, grant)
+
+	return grant, nil
+}
+
+func (b *DefaultPermissionBroker) Revoke(ctx context.Context, grantID string) error {
+	if err := b.storage.MarkRevoked(ctx, grantID); err != nil {
+		return err
+	}
+
+	b.cache.InvalidateAll()
+	b.auditRec.RecordRevoke(ctx, grantID)
+
+	return nil
+}
+
+func (b *DefaultPermissionBroker) RevokeBySubject(ctx context.Context, subject PermissionSubject) (int, error) {
+	grants, err := b.storage.ListBySubject(ctx, subject)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, g := range grants {
+		if g.RevokedAt == nil && (g.ExpiresAt == nil || time.Now().Before(*g.ExpiresAt)) {
+			if err := b.storage.MarkRevoked(ctx, g.GrantID); err != nil {
+				return count, err
+			}
+			count++
+		}
+	}
+
+	b.cache.InvalidateAll()
+	return count, nil
+}
+
+func (b *DefaultPermissionBroker) RevokeByExtension(ctx context.Context, extensionID string) (int, error) {
+	return b.RevokeBySubject(ctx, SubjectForExtension(extensionID))
+}
+
+func (b *DefaultPermissionBroker) ListGrants(ctx context.Context, filter PermissionGrantFilter) ([]PermissionGrant, error) {
+	stored, err := b.storage.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	grants := make([]PermissionGrant, 0, len(stored))
+	for _, sg := range stored {
+		grants = append(grants, b.storedToGrant(sg))
+	}
+	return grants, nil
+}
+
+func (b *DefaultPermissionBroker) Explain(ctx context.Context, request PermissionEvaluationRequest) PermissionExplanation {
+	result := b.Evaluate(ctx, request)
+
+	explanation := PermissionExplanation{
+		Decision:      result.Decision,
+		Reasons:       result.Reasons,
+		MatchedGrants: result.MatchedGrants,
+	}
+
+	switch result.Decision {
+	case DecisionDeny:
+		explanation.RequiredAction = "revoked_or_blocked"
+	case DecisionRequireApproval:
+		explanation.RequiredAction = "manual_approval"
+	case DecisionAllow:
+		explanation.RequiredAction = "none"
+	}
+
+	for _, req := range request.Requirements {
+		if def, ok := b.registry.Get(req.PermissionID); ok {
+			explanation.AvailableScopes = append(explanation.AvailableScopes, def.AllowedScopes...)
+		}
+	}
+
+	return explanation
+}
+
+func (b *DefaultPermissionBroker) DetectUpgrade(ctx context.Context, oldPermissions, newPermissions []PermissionRequirement) []PermissionUpgrade {
+	detector := NewUpgradeDetector(b.registry)
+	return detector.Detect(ctx, oldPermissions, newPermissions)
+}
+
+func (b *DefaultPermissionBroker) resolveEffectiveScope(req PermissionRequirement, evalReq PermissionEvaluationRequest) PermissionScope {
+	if req.Scope.IsValid() {
+		return req.Scope
+	}
+
+	switch evalReq.Subject.Type {
+	case SubjectExtension:
+		return ScopeForExtension(evalReq.Subject.ExtensionID)
+	case SubjectTool:
+		return ScopeForExtension(evalReq.Subject.ExtensionID)
+	default:
+		return ScopeGlobalOnly()
+	}
+}
+
+func (b *DefaultPermissionBroker) isScopeAllowed(def PermissionDefinition, scope PermissionScope) bool {
+	if scope.Type == ScopeGlobal {
+		return true
+	}
+	for _, allowed := range def.AllowedScopes {
+		if allowed == scope.Type {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope PermissionScope, req PermissionRequirement) []PermissionGrant {
+	matched := make([]PermissionGrant, 0)
+	for _, g := range grants {
+		if !g.IsValid() {
+			continue
+		}
+		if scope.Type != ScopeGlobal && !g.Scope.Contains(scope) {
+			continue
+		}
+		if g.IsPersistent() || g.Decision == DecisionAllowSession || g.Decision == DecisionAllow {
+			matched = append(matched, g)
+		}
+	}
+	return matched
+}
+
+func (b *DefaultPermissionBroker) determineDenyOrApproval(result *PermissionEvaluationResult, request PermissionEvaluationRequest) {
+	hasApprovalPath := false
+	for _, req := range result.Missing {
+		if req.Optional {
+			continue
+		}
+		def, ok := b.registry.Get(req.PermissionID)
+		if !ok {
+			result.Decision = DecisionDeny
+			return
+		}
+		if def.DefaultApproval == ApprovalManual || def.DefaultApproval == ApprovalFullControl {
+			hasApprovalPath = true
+		}
+		if def.DefaultApproval == ApprovalDeny {
+			result.Decision = DecisionDeny
+			return
+		}
+	}
+
+	if hasApprovalPath {
+		result.Decision = DecisionRequireApproval
+	} else {
+		result.Decision = DecisionDeny
+	}
+}
+
+func (b *DefaultPermissionBroker) isNotTrusted(subject PermissionSubject) bool {
+	return false
+}
+
+func (b *DefaultPermissionBroker) generateGrantID(request PermissionGrantRequest) string {
+	input := fmt.Sprintf("%s:%s:%s:%d", request.Subject.ID, request.PermissionID, request.Scope.Type, time.Now().UnixNano())
+	h := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(h[:16])
+}
+
+func (b *DefaultPermissionBroker) grantToStored(grant PermissionGrant) StoredGrant {
+	scopeData, _ := json.Marshal(grant.Scope)
+	var ib json.RawMessage
+	if grant.InputBinding != nil {
+		ib, _ = json.Marshal(grant.InputBinding)
+	}
+	var tb json.RawMessage
+	if grant.TargetBinding != nil {
+		tb, _ = json.Marshal(grant.TargetBinding)
+	}
+
+	return StoredGrant{
+		GrantID:       grant.GrantID,
+		SubjectType:   string(grant.Subject.Type),
+		SubjectID:     grant.Subject.ID,
+		PermissionID:  grant.PermissionID,
+		ScopeType:     string(grant.Scope.Type),
+		ScopeID:       grant.Scope.ID,
+		ScopeData:     scopeData,
+		Decision:      string(grant.Decision),
+		InputBinding:  ib,
+		TargetBinding: tb,
+		IssuedAt:      grant.IssuedAt,
+		ExpiresAt:     grant.ExpiresAt,
+		IssuedBy:      string(grant.IssuedBy),
+		Reason:        grant.Reason,
+		RevokedAt:     grant.RevokedAt,
+		ManifestVer:   grant.ManifestVer,
+	}
+}
+
+func (b *DefaultPermissionBroker) storedToGrant(sg StoredGrant) PermissionGrant {
+	var scope PermissionScope
+	if sg.ScopeData != nil {
+		json.Unmarshal(sg.ScopeData, &scope)
+	}
+	if scope.Type == "" {
+		scope.Type = ScopeType(sg.ScopeType)
+		scope.ID = sg.ScopeID
+	}
+
+	var inputBinding *InputBinding
+	if sg.InputBinding != nil {
+		var ib InputBinding
+		if json.Unmarshal(sg.InputBinding, &ib) == nil {
+			inputBinding = &ib
+		}
+	}
+
+	var targetBinding *TargetBinding
+	if sg.TargetBinding != nil {
+		var tb TargetBinding
+		if json.Unmarshal(sg.TargetBinding, &tb) == nil {
+			targetBinding = &tb
+		}
+	}
+
+	return PermissionGrant{
+		GrantID:       sg.GrantID,
+		Subject:       PermissionSubject{Type: SubjectType(sg.SubjectType), ID: sg.SubjectID},
+		PermissionID:  sg.PermissionID,
+		Scope:         scope,
+		Decision:      PermissionDecision(sg.Decision),
+		InputBinding:  inputBinding,
+		TargetBinding: targetBinding,
+		IssuedAt:      sg.IssuedAt,
+		ExpiresAt:     sg.ExpiresAt,
+		IssuedBy:      GrantIssuer(sg.IssuedBy),
+		Reason:        sg.Reason,
+		RevokedAt:     sg.RevokedAt,
+		ManifestVer:   sg.ManifestVer,
+	}
+}

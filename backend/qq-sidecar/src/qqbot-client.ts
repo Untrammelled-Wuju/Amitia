@@ -3,6 +3,7 @@
 // QQBot 官方 WebSocket 客户端
 import WebSocket from "ws"
 import fs from "node:fs"
+import path from "node:path"
 
 const TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 const API_BASE = "https://api.sgroup.qq.com"
@@ -58,6 +59,7 @@ export class QQBotClient {
   private accessToken: string = ""
   private accessTokenExpiry: number = 0
   private _messageCount: number = 0
+  private _replyCount: number = 0
   private _manualDisconnect: boolean = false
   private _startedAt: string = ""
 
@@ -70,6 +72,7 @@ export class QQBotClient {
   getLastError(): string { return this.lastErrorMessage }
   getStatus() { return this.loginStatus }
   getMessageCount(): number { return this._messageCount }
+  getReplyCount(): number { return this._replyCount }
   getAccountId() { return this.accountId }
   getStartedAt() { return this._startedAt }
   isOnline() { return this.loginStatus === "online" }
@@ -84,6 +87,34 @@ export class QQBotClient {
     console.log(line)
     try {
       fs.appendFileSync("qqbot-debug.log", line + "\n")
+    } catch {}
+  }
+
+  private resolveStatsPath(): string {
+    const dir = path.join(process.cwd(), "qq-stats")
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    return path.join(dir, `${this.accountId}.stats.json`)
+  }
+
+  private persistStats(): void {
+    if (!this.accountId) return
+    try {
+      fs.writeFileSync(this.resolveStatsPath(), JSON.stringify({
+        messageCount: this._messageCount,
+        replyCount: this._replyCount,
+      }), "utf-8")
+    } catch {}
+  }
+
+  private loadStats(): void {
+    if (!this.accountId) return
+    try {
+      const statsPath = this.resolveStatsPath()
+      if (fs.existsSync(statsPath)) {
+        const data = JSON.parse(fs.readFileSync(statsPath, "utf-8"))
+        if (typeof data.messageCount === "number") this._messageCount = data.messageCount
+        if (typeof data.replyCount === "number") this._replyCount = data.replyCount
+      }
     } catch {}
   }
 
@@ -314,6 +345,7 @@ export class QQBotClient {
         this.identifyRetries = 0
         this.reconnectAttempts = 0
         this._startedAt = new Date().toISOString()
+        this.loadStats()
         this.debugLog(`已上线! Bot=${this.botName} (${this.accountId})`)
         break
 
@@ -359,6 +391,7 @@ export class QQBotClient {
     }
 
     this._messageCount++
+    this.persistStats()
     const preview = msg.text.substring(0, 80)
     console.log(`[QQBot][群:${msg.groupId}] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (语音)" : ""}`)
     this.notifyHandlers(msg)
@@ -386,6 +419,7 @@ export class QQBotClient {
     }
 
     this._messageCount++
+    this.persistStats()
     const preview = msg.text.substring(0, 80)
     console.log(`[QQBot][私聊] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (语音)" : ""}`)
     this.notifyHandlers(msg)
@@ -539,6 +573,8 @@ export class QQBotClient {
         throw new Error(`发送群消息失败 (${resp.status}): ${errText}`)
       }
       console.log(`[QQBot] 发送群消息: ->${groupId} (${text.length} chars)`)
+      this._replyCount++
+      this.persistStats()
     }, "发送群消息")
   }
 
@@ -562,6 +598,8 @@ export class QQBotClient {
         throw new Error(`发送私聊失败 (${resp.status}): ${errText}`)
       }
       console.log(`[QQBot] 发送私聊: ->${userId} (${text.length} chars)`)
+      this._replyCount++
+      this.persistStats()
     }, "发送私聊")
   }
 
@@ -662,6 +700,8 @@ export class QQBotClient {
         throw new Error("发送群语音失败 (" + resp.status + "): " + errText)
       }
       console.log("[QQBot] 发送群语音: ->" + groupId)
+      this._replyCount++
+      this.persistStats()
     }, "发送群语音")
   }
 
@@ -687,6 +727,8 @@ export class QQBotClient {
         throw new Error("发送私聊语音失败 (" + resp.status + "): " + errText)
       }
       console.log("[QQBot] 发送私聊语音: ->" + userId)
+      this._replyCount++
+      this.persistStats()
     }, "发送私聊语音")
   }
 
@@ -699,6 +741,8 @@ export class QQBotClient {
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1000) }),
       })
       if (!resp.ok) throw new Error("发送群图片失败 (" + resp.status + "): " + await resp.text())
+      this._replyCount++
+      this.persistStats()
     }, "发送群图片")
   }
 
@@ -711,6 +755,8 @@ export class QQBotClient {
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1000) }),
       })
       if (!resp.ok) throw new Error("发送私聊图片失败 (" + resp.status + "): " + await resp.text())
+      this._replyCount++
+      this.persistStats()
     }, "发送私聊图片")
   }
 

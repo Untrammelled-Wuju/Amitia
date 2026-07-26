@@ -11,11 +11,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -3504,8 +3500,8 @@ var require_req = __commonJS({
       if (req.originalUrl) {
         _req.url = req.originalUrl;
       } else {
-        const path3 = req.path;
-        _req.url = typeof path3 === "string" ? path3 : req.url ? req.url.path || req.url : void 0;
+        const path4 = req.path;
+        _req.url = typeof path4 === "string" ? path4 : req.url ? req.url.path || req.url : void 0;
       }
       if (req.query) {
         _req.query = req.query;
@@ -3670,14 +3666,14 @@ var require_redact = __commonJS({
       }
       return obj;
     }
-    function parsePath(path3) {
+    function parsePath(path4) {
       const parts = [];
       let current = "";
       let inBrackets = false;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path3.length; i++) {
-        const char = path3[i];
+      for (let i = 0; i < path4.length; i++) {
+        const char = path4[i];
         if (!inBrackets && char === ".") {
           if (current) {
             parts.push(current);
@@ -3808,10 +3804,10 @@ var require_redact = __commonJS({
       return current;
     }
     function redactPaths(obj, paths, censor, remove = false) {
-      for (const path3 of paths) {
-        const parts = parsePath(path3);
+      for (const path4 of paths) {
+        const parts = parsePath(path4);
         if (parts.includes("*")) {
-          redactWildcardPath(obj, parts, censor, path3, remove);
+          redactWildcardPath(obj, parts, censor, path4, remove);
         } else {
           if (remove) {
             removeKey(obj, parts);
@@ -3896,8 +3892,8 @@ var require_redact = __commonJS({
           }
         } else {
           if (afterWildcard.includes("*")) {
-            const wrappedCensor = typeof censor === "function" ? (value, path3) => {
-              const fullPath = [...pathArray.slice(0, pathLength), ...path3];
+            const wrappedCensor = typeof censor === "function" ? (value, path4) => {
+              const fullPath = [...pathArray.slice(0, pathLength), ...path4];
               return censor(value, fullPath);
             } : censor;
             redactWildcardPath(current, afterWildcard, wrappedCensor, originalPath, remove);
@@ -3932,8 +3928,8 @@ var require_redact = __commonJS({
         return null;
       }
       const pathStructure = /* @__PURE__ */ new Map();
-      for (const path3 of pathsToClone) {
-        const parts = parsePath(path3);
+      for (const path4 of pathsToClone) {
+        const parts = parsePath(path4);
         let current = pathStructure;
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i];
@@ -3985,24 +3981,24 @@ var require_redact = __commonJS({
       }
       return cloneSelectively(obj, pathStructure);
     }
-    function validatePath(path3) {
-      if (typeof path3 !== "string") {
+    function validatePath(path4) {
+      if (typeof path4 !== "string") {
         throw new Error("Paths must be (non-empty) strings");
       }
-      if (path3 === "") {
+      if (path4 === "") {
         throw new Error("Invalid redaction path ()");
       }
-      if (path3.includes("..")) {
-        throw new Error(`Invalid redaction path (${path3})`);
+      if (path4.includes("..")) {
+        throw new Error(`Invalid redaction path (${path4})`);
       }
-      if (path3.includes(",")) {
-        throw new Error(`Invalid redaction path (${path3})`);
+      if (path4.includes(",")) {
+        throw new Error(`Invalid redaction path (${path4})`);
       }
       let bracketCount = 0;
       let inQuotes = false;
       let quoteChar = "";
-      for (let i = 0; i < path3.length; i++) {
-        const char = path3[i];
+      for (let i = 0; i < path4.length; i++) {
+        const char = path4[i];
         if ((char === '"' || char === "'") && bracketCount > 0) {
           if (!inQuotes) {
             inQuotes = true;
@@ -4016,20 +4012,20 @@ var require_redact = __commonJS({
         } else if (char === "]" && !inQuotes) {
           bracketCount--;
           if (bracketCount < 0) {
-            throw new Error(`Invalid redaction path (${path3})`);
+            throw new Error(`Invalid redaction path (${path4})`);
           }
         }
       }
       if (bracketCount !== 0) {
-        throw new Error(`Invalid redaction path (${path3})`);
+        throw new Error(`Invalid redaction path (${path4})`);
       }
     }
     function validatePaths(paths) {
       if (!Array.isArray(paths)) {
         throw new TypeError("paths must be an array");
       }
-      for (const path3 of paths) {
-        validatePath(path3);
+      for (const path4 of paths) {
+        validatePath(path4);
       }
     }
     function slowRedact(options = {}) {
@@ -4197,8 +4193,8 @@ var require_redaction = __commonJS({
         if (shape[k] === null) {
           o[k] = (value) => topCensor(value, [k]);
         } else {
-          const wrappedCensor = typeof censor === "function" ? (value, path3) => {
-            return censor(value, [k, ...path3]);
+          const wrappedCensor = typeof censor === "function" ? (value, path4) => {
+            return censor(value, [k, ...path4]);
           } : censor;
           o[k] = Redact({
             paths: shape[k],
@@ -4419,7 +4415,7 @@ var require_sonic_boom = __commonJS({
     var fs4 = __require("fs");
     var EventEmitter = __require("events");
     var inherits = __require("util").inherits;
-    var path3 = __require("path");
+    var path4 = __require("path");
     var sleep = require_atomic_sleep();
     var assert = __require("assert");
     var BUSY_WRITE_TIMEOUT = 100;
@@ -4473,7 +4469,7 @@ var require_sonic_boom = __commonJS({
       const mode = sonic.mode;
       if (sonic.sync) {
         try {
-          if (sonic.mkdir) fs4.mkdirSync(path3.dirname(file), { recursive: true });
+          if (sonic.mkdir) fs4.mkdirSync(path4.dirname(file), { recursive: true });
           const fd = fs4.openSync(file, flags, mode);
           fileOpened(null, fd);
         } catch (err) {
@@ -4481,7 +4477,7 @@ var require_sonic_boom = __commonJS({
           throw err;
         }
       } else if (sonic.mkdir) {
-        fs4.mkdir(path3.dirname(file), { recursive: true }, (err) => {
+        fs4.mkdir(path4.dirname(file), { recursive: true }, (err) => {
           if (err) return fileOpened(err);
           fs4.open(file, flags, mode, fileOpened);
         });
@@ -17199,8 +17195,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path3) {
-      let input = path3;
+    function removeDotSegments(path4) {
+      let input = path4;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -17452,8 +17448,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path3, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
+        const [path4, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -20846,8 +20842,8 @@ var require_schemes2 = __commonJS({
         wsComponents.secure = void 0;
       }
       if (wsComponents.resourceName) {
-        const [path3, query] = wsComponents.resourceName.split("?");
-        wsComponents.path = path3 && path3 !== "/" ? path3 : void 0;
+        const [path4, query] = wsComponents.resourceName.split("?");
+        wsComponents.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponents.query = query;
         wsComponents.resourceName = void 0;
       }
@@ -28525,40 +28521,40 @@ var require_node = __commonJS({
         super();
         this.staticChildren = {};
       }
-      findStaticMatchingChild(path3, pathIndex) {
-        const staticChild = this.staticChildren[path3.charAt(pathIndex)];
-        if (staticChild === void 0 || !staticChild.matchPrefix(path3, pathIndex)) {
+      findStaticMatchingChild(path4, pathIndex) {
+        const staticChild = this.staticChildren[path4.charAt(pathIndex)];
+        if (staticChild === void 0 || !staticChild.matchPrefix(path4, pathIndex)) {
           return null;
         }
         return staticChild;
       }
-      getStaticChild(path3, pathIndex = 0) {
-        if (path3.length === pathIndex) {
+      getStaticChild(path4, pathIndex = 0) {
+        if (path4.length === pathIndex) {
           return this;
         }
-        const staticChild = this.findStaticMatchingChild(path3, pathIndex);
+        const staticChild = this.findStaticMatchingChild(path4, pathIndex);
         if (staticChild) {
-          return staticChild.getStaticChild(path3, pathIndex + staticChild.prefix.length);
+          return staticChild.getStaticChild(path4, pathIndex + staticChild.prefix.length);
         }
         return null;
       }
-      createStaticChild(path3) {
-        if (path3.length === 0) {
+      createStaticChild(path4) {
+        if (path4.length === 0) {
           return this;
         }
-        let staticChild = this.staticChildren[path3.charAt(0)];
+        let staticChild = this.staticChildren[path4.charAt(0)];
         if (staticChild) {
           let i = 1;
           for (; i < staticChild.prefix.length; i++) {
-            if (path3.charCodeAt(i) !== staticChild.prefix.charCodeAt(i)) {
+            if (path4.charCodeAt(i) !== staticChild.prefix.charCodeAt(i)) {
               staticChild = staticChild.split(this, i);
               break;
             }
           }
-          return staticChild.createStaticChild(path3.slice(i));
+          return staticChild.createStaticChild(path4.slice(i));
         }
-        const label = path3.charAt(0);
-        this.staticChildren[label] = new StaticNode(path3);
+        const label = path4.charAt(0);
+        this.staticChildren[label] = new StaticNode(path4);
         return this.staticChildren[label];
       }
     };
@@ -28618,8 +28614,8 @@ var require_node = __commonJS({
         parentNode.staticChildren[parentPrefix.charAt(0)] = staticNode;
         return staticNode;
       }
-      getNextNode(path3, pathIndex, nodeStack, paramsCount) {
-        let node = this.findStaticMatchingChild(path3, pathIndex);
+      getNextNode(path4, pathIndex, nodeStack, paramsCount) {
+        let node = this.findStaticMatchingChild(path4, pathIndex);
         let parametricBrotherNodeIndex = 0;
         if (node === null) {
           if (this.parametricChildren.length === 0) {
@@ -28666,8 +28662,8 @@ var require_node = __commonJS({
         this.kind = NODE_TYPES.PARAMETRIC;
         this.nodePaths = /* @__PURE__ */ new Set([nodePath]);
       }
-      getNextNode(path3, pathIndex) {
-        return this.findStaticMatchingChild(path3, pathIndex);
+      getNextNode(path4, pathIndex) {
+        return this.findStaticMatchingChild(path4, pathIndex);
       }
     };
     var WildcardNode = class extends Node {
@@ -29002,33 +28998,33 @@ var require_url_sanitizer = __commonJS({
       }
       return null;
     }
-    function safeDecodeURI(path3, useSemicolonDelimiter) {
+    function safeDecodeURI(path4, useSemicolonDelimiter) {
       let shouldDecode = false;
       let shouldDecodeParam = false;
       let querystring = "";
-      for (let i = 1; i < path3.length; i++) {
-        const charCode = path3.charCodeAt(i);
+      for (let i = 1; i < path4.length; i++) {
+        const charCode = path4.charCodeAt(i);
         if (charCode === 37) {
-          const highCharCode = path3.charCodeAt(i + 1);
-          const lowCharCode = path3.charCodeAt(i + 2);
+          const highCharCode = path4.charCodeAt(i + 1);
+          const lowCharCode = path4.charCodeAt(i + 2);
           if (decodeComponentChar(highCharCode, lowCharCode) === null) {
             shouldDecode = true;
           } else {
             shouldDecodeParam = true;
             if (highCharCode === 50 && lowCharCode === 53) {
               shouldDecode = true;
-              path3 = path3.slice(0, i + 1) + "25" + path3.slice(i + 1);
+              path4 = path4.slice(0, i + 1) + "25" + path4.slice(i + 1);
               i += 2;
             }
             i += 2;
           }
         } else if (charCode === 63 || charCode === 35 || charCode === 59 && useSemicolonDelimiter) {
-          querystring = path3.slice(i + 1);
-          path3 = path3.slice(0, i);
+          querystring = path4.slice(i + 1);
+          path4 = path4.slice(0, i);
           break;
         }
       }
-      const decodedPath = shouldDecode ? decodeURI(path3) : path3;
+      const decodedPath = shouldDecode ? decodeURI(path4) : path4;
       return { path: decodedPath, querystring, shouldDecodeParam };
     }
     function safeDecodeURIComponent(uriComponent) {
@@ -29113,7 +29109,7 @@ var require_find_my_way = __commonJS({
       this.routes = [];
       this.trees = {};
     }
-    Router.prototype.on = function on(method, path3, opts, handler, store) {
+    Router.prototype.on = function on(method, path4, opts, handler, store) {
       if (typeof opts === "function") {
         if (handler !== void 0) {
           store = handler;
@@ -29121,34 +29117,34 @@ var require_find_my_way = __commonJS({
         handler = opts;
         opts = {};
       }
-      assert(typeof path3 === "string", "Path should be a string");
-      assert(path3.length > 0, "The path could not be empty");
-      assert(path3[0] === "/" || path3[0] === "*", "The first character of a path should be `/` or `*`");
+      assert(typeof path4 === "string", "Path should be a string");
+      assert(path4.length > 0, "The path could not be empty");
+      assert(path4[0] === "/" || path4[0] === "*", "The first character of a path should be `/` or `*`");
       assert(typeof handler === "function", "Handler should be a function");
-      const optionalParamMatch = path3.match(OPTIONAL_PARAM_REGEXP);
+      const optionalParamMatch = path4.match(OPTIONAL_PARAM_REGEXP);
       if (optionalParamMatch) {
-        assert(path3.length === optionalParamMatch.index + optionalParamMatch[0].length, "Optional Parameter needs to be the last parameter of the path");
-        const pathFull = path3.replace(OPTIONAL_PARAM_REGEXP, "$1$2");
-        const pathOptional = path3.replace(OPTIONAL_PARAM_REGEXP, "$2") || "/";
+        assert(path4.length === optionalParamMatch.index + optionalParamMatch[0].length, "Optional Parameter needs to be the last parameter of the path");
+        const pathFull = path4.replace(OPTIONAL_PARAM_REGEXP, "$1$2");
+        const pathOptional = path4.replace(OPTIONAL_PARAM_REGEXP, "$2") || "/";
         this.on(method, pathFull, opts, handler, store);
         this.on(method, pathOptional, opts, handler, store);
         return;
       }
-      const route = path3;
+      const route = path4;
       if (this.ignoreDuplicateSlashes) {
-        path3 = removeDuplicateSlashes(path3);
+        path4 = removeDuplicateSlashes(path4);
       }
       if (this.ignoreTrailingSlash) {
-        path3 = trimLastSlash(path3);
+        path4 = trimLastSlash(path4);
       }
       const methods = Array.isArray(method) ? method : [method];
       for (const method2 of methods) {
         assert(typeof method2 === "string", "Method should be a string");
         assert(httpMethods.includes(method2), `Method '${method2}' is not an http method.`);
-        this._on(method2, path3, opts, handler, store, route);
+        this._on(method2, path4, opts, handler, store, route);
       }
     };
-    Router.prototype._on = function _on(method, path3, opts, handler, store) {
+    Router.prototype._on = function _on(method, path4, opts, handler, store) {
       let constraints = {};
       if (opts.constraints !== void 0) {
         assert(typeof opts.constraints === "object" && opts.constraints !== null, "Constraints should be an object");
@@ -29161,7 +29157,7 @@ var require_find_my_way = __commonJS({
       if (this.trees[method] === void 0) {
         this.trees[method] = new StaticNode("/");
       }
-      let pattern = path3;
+      let pattern = path4;
       if (pattern === "*" && this.trees[method].prefix.length !== 0) {
         const currentRoot = this.trees[method];
         this.trees[method] = new StaticNode("");
@@ -29264,19 +29260,19 @@ var require_find_my_way = __commonJS({
           throw new Error(`Method '${method}' already declared for route '${pattern}' with constraints '${JSON.stringify(constraints)}'`);
         }
       }
-      const route = { method, path: path3, pattern, params, opts, handler, store };
+      const route = { method, path: path4, pattern, params, opts, handler, store };
       this.routes.push(route);
       currentNode.addRoute(route, this.constrainer);
     };
-    Router.prototype.hasRoute = function hasRoute(method, path3, constraints) {
-      const route = this.findRoute(method, path3, constraints);
+    Router.prototype.hasRoute = function hasRoute(method, path4, constraints) {
+      const route = this.findRoute(method, path4, constraints);
       return route !== null;
     };
-    Router.prototype.findRoute = function findNode(method, path3, constraints = {}) {
+    Router.prototype.findRoute = function findNode(method, path4, constraints = {}) {
       if (this.trees[method] === void 0) {
         return null;
       }
-      let pattern = path3;
+      let pattern = path4;
       let currentNode = this.trees[method];
       let parentNodePathIndex = currentNode.prefix.length;
       const params = [];
@@ -29394,39 +29390,39 @@ var require_find_my_way = __commonJS({
       this.trees = {};
       this.routes = [];
     };
-    Router.prototype.off = function off(method, path3, constraints) {
-      assert(typeof path3 === "string", "Path should be a string");
-      assert(path3.length > 0, "The path could not be empty");
-      assert(path3[0] === "/" || path3[0] === "*", "The first character of a path should be `/` or `*`");
+    Router.prototype.off = function off(method, path4, constraints) {
+      assert(typeof path4 === "string", "Path should be a string");
+      assert(path4.length > 0, "The path could not be empty");
+      assert(path4[0] === "/" || path4[0] === "*", "The first character of a path should be `/` or `*`");
       assert(
         typeof constraints === "undefined" || typeof constraints === "object" && !Array.isArray(constraints) && constraints !== null,
         "Constraints should be an object or undefined."
       );
-      const optionalParamMatch = path3.match(OPTIONAL_PARAM_REGEXP);
+      const optionalParamMatch = path4.match(OPTIONAL_PARAM_REGEXP);
       if (optionalParamMatch) {
-        assert(path3.length === optionalParamMatch.index + optionalParamMatch[0].length, "Optional Parameter needs to be the last parameter of the path");
-        const pathFull = path3.replace(OPTIONAL_PARAM_REGEXP, "$1$2");
-        const pathOptional = path3.replace(OPTIONAL_PARAM_REGEXP, "$2");
+        assert(path4.length === optionalParamMatch.index + optionalParamMatch[0].length, "Optional Parameter needs to be the last parameter of the path");
+        const pathFull = path4.replace(OPTIONAL_PARAM_REGEXP, "$1$2");
+        const pathOptional = path4.replace(OPTIONAL_PARAM_REGEXP, "$2");
         this.off(method, pathFull, constraints);
         this.off(method, pathOptional, constraints);
         return;
       }
       if (this.ignoreDuplicateSlashes) {
-        path3 = removeDuplicateSlashes(path3);
+        path4 = removeDuplicateSlashes(path4);
       }
       if (this.ignoreTrailingSlash) {
-        path3 = trimLastSlash(path3);
+        path4 = trimLastSlash(path4);
       }
       const methods = Array.isArray(method) ? method : [method];
       for (const method2 of methods) {
-        this._off(method2, path3, constraints);
+        this._off(method2, path4, constraints);
       }
     };
-    Router.prototype._off = function _off(method, path3, constraints) {
+    Router.prototype._off = function _off(method, path4, constraints) {
       assert(typeof method === "string", "Method should be a string");
       assert(httpMethods.includes(method), `Method '${method}' is not an http method.`);
       function matcherWithoutConstraints(route) {
-        return method !== route.method || path3 !== route.path;
+        return method !== route.method || path4 !== route.path;
       }
       function matcherWithConstraints(route) {
         return matcherWithoutConstraints(route) || !deepEqual(constraints, route.opts.constraints || {});
@@ -29463,37 +29459,37 @@ var require_find_my_way = __commonJS({
       if (handle === null) return this._defaultRoute(req, res, ctx);
       return ctx === void 0 ? handle.handler(req, res, handle.params, handle.store, handle.searchParams) : handle.handler.call(ctx, req, res, handle.params, handle.store, handle.searchParams);
     };
-    Router.prototype.find = function find(method, path3, derivedConstraints) {
+    Router.prototype.find = function find(method, path4, derivedConstraints) {
       let currentNode = this.trees[method];
       if (currentNode === void 0) return null;
-      if (path3.charCodeAt(0) !== 47) {
-        path3 = path3.replace(FULL_PATH_REGEXP, "/");
+      if (path4.charCodeAt(0) !== 47) {
+        path4 = path4.replace(FULL_PATH_REGEXP, "/");
       }
       if (this.ignoreDuplicateSlashes) {
-        path3 = removeDuplicateSlashes(path3);
+        path4 = removeDuplicateSlashes(path4);
       }
       let sanitizedUrl;
       let querystring2;
       let shouldDecodeParam;
       try {
-        sanitizedUrl = safeDecodeURI(path3, this.useSemicolonDelimiter);
-        path3 = sanitizedUrl.path;
+        sanitizedUrl = safeDecodeURI(path4, this.useSemicolonDelimiter);
+        path4 = sanitizedUrl.path;
         querystring2 = sanitizedUrl.querystring;
         shouldDecodeParam = sanitizedUrl.shouldDecodeParam;
       } catch (error) {
-        return this._onBadUrl(path3);
+        return this._onBadUrl(path4);
       }
       if (this.ignoreTrailingSlash) {
-        path3 = trimLastSlash(path3);
+        path4 = trimLastSlash(path4);
       }
-      const originPath = path3;
+      const originPath = path4;
       if (this.caseSensitive === false) {
-        path3 = path3.toLowerCase();
+        path4 = path4.toLowerCase();
       }
       const maxParamLength = this.maxParamLength;
       let pathIndex = currentNode.prefix.length;
       const params = [];
-      const pathLen = path3.length;
+      const pathLen = path4.length;
       const brothersNodesStack = [];
       while (true) {
         if (pathIndex === pathLen && currentNode.isLeafNode) {
@@ -29507,7 +29503,7 @@ var require_find_my_way = __commonJS({
             };
           }
         }
-        let node = currentNode.getNextNode(path3, pathIndex, brothersNodesStack, params.length);
+        let node = currentNode.getNextNode(path4, pathIndex, brothersNodesStack, params.length);
         if (node === null) {
           if (brothersNodesStack.length === 0) {
             return null;
@@ -29561,8 +29557,8 @@ var require_find_my_way = __commonJS({
     Router.prototype._rebuild = function(routes) {
       this.reset();
       for (const route of routes) {
-        const { method, path: path3, opts, handler, store } = route;
-        this._on(method, path3, opts, handler, store);
+        const { method, path: path4, opts, handler, store } = route;
+        this._on(method, path4, opts, handler, store);
       }
     };
     Router.prototype._defaultRoute = function(req, res, ctx) {
@@ -29573,13 +29569,13 @@ var require_find_my_way = __commonJS({
         res.end();
       }
     };
-    Router.prototype._onBadUrl = function(path3) {
+    Router.prototype._onBadUrl = function(path4) {
       if (this.onBadUrl === null) {
         return null;
       }
       const onBadUrl = this.onBadUrl;
       return {
-        handler: (req, res, ctx) => onBadUrl(path3, req, res),
+        handler: (req, res, ctx) => onBadUrl(path4, req, res),
         params: {},
         store: null
       };
@@ -29611,25 +29607,25 @@ var require_find_my_way = __commonJS({
       if (!httpMethods.hasOwnProperty(i)) continue;
       const m = httpMethods[i];
       const methodName = m.toLowerCase();
-      Router.prototype[methodName] = function(path3, handler, store) {
-        return this.on(m, path3, handler, store);
+      Router.prototype[methodName] = function(path4, handler, store) {
+        return this.on(m, path4, handler, store);
       };
     }
-    Router.prototype.all = function(path3, handler, store) {
-      this.on(httpMethods, path3, handler, store);
+    Router.prototype.all = function(path4, handler, store) {
+      this.on(httpMethods, path4, handler, store);
     };
     module.exports = Router;
     function escapeRegExp(string) {
       return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
-    function removeDuplicateSlashes(path3) {
-      return path3.replace(/\/\/+/g, "/");
+    function removeDuplicateSlashes(path4) {
+      return path4.replace(/\/\/+/g, "/");
     }
-    function trimLastSlash(path3) {
-      if (path3.length > 1 && path3.charCodeAt(path3.length - 1) === 47) {
-        return path3.slice(0, -1);
+    function trimLastSlash(path4) {
+      if (path4.length > 1 && path4.charCodeAt(path4.length - 1) === 47) {
+        return path4.slice(0, -1);
       }
-      return path3;
+      return path4;
     }
     function trimRegExpStartAndEnd(regexString) {
       if (regexString.charCodeAt(1) === 94) {
@@ -29640,22 +29636,22 @@ var require_find_my_way = __commonJS({
       }
       return regexString;
     }
-    function getClosingParenthensePosition(path3, idx) {
+    function getClosingParenthensePosition(path4, idx) {
       let parentheses = 1;
-      while (idx < path3.length) {
+      while (idx < path4.length) {
         idx++;
-        if (path3[idx] === "\\") {
+        if (path4[idx] === "\\") {
           idx++;
           continue;
         }
-        if (path3[idx] === ")") {
+        if (path4[idx] === ")") {
           parentheses--;
-        } else if (path3[idx] === "(") {
+        } else if (path4[idx] === "(") {
           parentheses++;
         }
         if (!parentheses) return idx;
       }
-      throw new TypeError('Invalid regexp expression in "' + path3 + '"');
+      throw new TypeError('Invalid regexp expression in "' + path4 + '"');
     }
     function defaultBuildPrettyMeta(route) {
       if (!route) return {};
@@ -29884,28 +29880,28 @@ var require_route = __commonJS({
         const isHeadRoute = opts.method === "HEAD" || Array.isArray(opts.method) && opts.method.includes("HEAD");
         const headOpts = shouldExposeHead && isGetRoute ? { ...options2 } : null;
         throwIfAlreadyStarted("Cannot add route!");
-        const path3 = opts.url || opts.path || "";
+        const path4 = opts.url || opts.path || "";
         if (Array.isArray(opts.method)) {
           for (var i = 0; i < opts.method.length; ++i) {
             opts.method[i] = normalizeAndValidateMethod(opts.method[i]);
-            validateSchemaBodyOption(opts.method[i], path3, opts.schema);
+            validateSchemaBodyOption(opts.method[i], path4, opts.schema);
           }
         } else {
           opts.method = normalizeAndValidateMethod(opts.method);
-          validateSchemaBodyOption(opts.method, path3, opts.schema);
+          validateSchemaBodyOption(opts.method, path4, opts.schema);
         }
         if (!opts.handler) {
-          throw new FST_ERR_ROUTE_MISSING_HANDLER(opts.method, path3);
+          throw new FST_ERR_ROUTE_MISSING_HANDLER(opts.method, path4);
         }
         if (opts.errorHandler !== void 0 && typeof opts.errorHandler !== "function") {
-          throw new FST_ERR_ROUTE_HANDLER_NOT_FN(opts.method, path3);
+          throw new FST_ERR_ROUTE_HANDLER_NOT_FN(opts.method, path4);
         }
         validateBodyLimitOption(opts.bodyLimit);
         const prefix = this[kRoutePrefix];
-        if (path3 === "/" && prefix.length > 0 && opts.method !== "HEAD") {
+        if (path4 === "/" && prefix.length > 0 && opts.method !== "HEAD") {
           switch (opts.prefixTrailingSlash) {
             case "slash":
-              addNewRoute.call(this, { path: path3, isFastify });
+              addNewRoute.call(this, { path: path4, isFastify });
               break;
             case "no-slash":
               addNewRoute.call(this, { path: "", isFastify });
@@ -29914,20 +29910,20 @@ var require_route = __commonJS({
             default:
               addNewRoute.call(this, { path: "", isFastify });
               if (ignoreTrailingSlash !== true && (ignoreDuplicateSlashes !== true || !prefix.endsWith("/"))) {
-                addNewRoute.call(this, { path: path3, prefixing: true, isFastify });
+                addNewRoute.call(this, { path: path4, prefixing: true, isFastify });
               }
           }
-        } else if (path3[0] === "/" && prefix.endsWith("/")) {
-          addNewRoute.call(this, { path: path3.slice(1), isFastify });
+        } else if (path4[0] === "/" && prefix.endsWith("/")) {
+          addNewRoute.call(this, { path: path4.slice(1), isFastify });
         } else {
-          addNewRoute.call(this, { path: path3, isFastify });
+          addNewRoute.call(this, { path: path4, isFastify });
         }
         return this;
-        function addNewRoute({ path: path4, prefixing = false, isFastify: isFastify2 = false }) {
-          const url = prefix + path4;
+        function addNewRoute({ path: path5, prefixing = false, isFastify: isFastify2 = false }) {
+          const url = prefix + path5;
           opts.url = url;
           opts.path = url;
-          opts.routePath = path4;
+          opts.routePath = path5;
           opts.prefix = prefix;
           opts.logLevel = opts.logLevel || this[kLogLevel];
           if (this[kLogSerializers] || opts.logSerializers) {
@@ -30058,7 +30054,7 @@ var require_route = __commonJS({
           });
           if (shouldExposeHead && isGetRoute && !isHeadRoute && !hasHEADHandler) {
             const onSendHandlers = parseHeadOnSendHandlers(headOpts.onSend);
-            prepareRoute.call(this, { method: "HEAD", url: path4, options: { ...headOpts, onSend: onSendHandlers }, isFastify: true });
+            prepareRoute.call(this, { method: "HEAD", url: path5, options: { ...headOpts, onSend: onSendHandlers }, isFastify: true });
           } else if (hasHEADHandler && exposeHeadRoute) {
             FSTDEP007();
           }
@@ -30172,9 +30168,9 @@ var require_route = __commonJS({
       }
       return method;
     }
-    function validateSchemaBodyOption(method, path3, schema) {
+    function validateSchemaBodyOption(method, path4, schema) {
       if ((method === "GET" || method === "HEAD") && schema && schema.body) {
-        throw new FST_ERR_ROUTE_BODY_VALIDATION_SCHEMA_NOT_SUPPORTED(method, path3);
+        throw new FST_ERR_ROUTE_BODY_VALIDATION_SCHEMA_NOT_SUPPORTED(method, path4);
       }
     }
     function validateBodyLimitOption(bodyLimit) {
@@ -30253,7 +30249,7 @@ var require_fourOhFour = __commonJS({
         });
       }
       function createOnBadUrl() {
-        return function onBadUrl(path3, req, res) {
+        return function onBadUrl(path4, req, res) {
           const fourOhFourContext = this[kFourOhFourLevelInstance][kFourOhFourContext];
           const id = getGenReqId(fourOhFourContext.server, req);
           const childLogger = createChildLogger(fourOhFourContext, logger, req, id);
@@ -33862,7 +33858,7 @@ ${body}`);
         }
         fourOhFour.router.lookup(req, res);
       }
-      function onBadUrl(path3, req, res) {
+      function onBadUrl(path4, req, res) {
         if (frameworkErrors) {
           const id = getGenReqId(onBadUrlContext.server, req);
           const childLogger = createChildLogger(onBadUrlContext, logger, req, id);
@@ -33871,9 +33867,9 @@ ${body}`);
           if (disableRequestLogging === false) {
             childLogger.info({ req: request }, "incoming request");
           }
-          return frameworkErrors(new FST_ERR_BAD_URL(path3), request, reply);
+          return frameworkErrors(new FST_ERR_BAD_URL(path4), request, reply);
         }
-        const body = `{"error":"Bad Request","code":"FST_ERR_BAD_URL","message":"'${path3}' is not a valid url component","statusCode":400}`;
+        const body = `{"error":"Bad Request","code":"FST_ERR_BAD_URL","message":"'${path4}' is not a valid url component","statusCode":400}`;
         res.writeHead(400, {
           "Content-Type": "application/json",
           "Content-Length": body.length
@@ -38554,6 +38550,7 @@ var wrapper_default = import_websocket.default;
 
 // src/qqbot-client.ts
 import fs from "node:fs";
+import path from "node:path";
 var TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
 var API_BASE = "https://api.sgroup.qq.com";
 var FULL_INTENTS = 1 << 30 | 1 << 12 | 1 << 25 | 1 << 26;
@@ -38576,6 +38573,7 @@ var QQBotClient = class {
   accessToken = "";
   accessTokenExpiry = 0;
   _messageCount = 0;
+  _replyCount = 0;
   _manualDisconnect = false;
   _startedAt = "";
   lastErrorMessage = "";
@@ -38591,6 +38589,9 @@ var QQBotClient = class {
   }
   getMessageCount() {
     return this._messageCount;
+  }
+  getReplyCount() {
+    return this._replyCount;
   }
   getAccountId() {
     return this.accountId;
@@ -38610,6 +38611,33 @@ var QQBotClient = class {
     console.log(line);
     try {
       fs.appendFileSync("qqbot-debug.log", line + "\n");
+    } catch {
+    }
+  }
+  resolveStatsPath() {
+    const dir = path.join(process.cwd(), "qq-stats");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, `${this.accountId}.stats.json`);
+  }
+  persistStats() {
+    if (!this.accountId) return;
+    try {
+      fs.writeFileSync(this.resolveStatsPath(), JSON.stringify({
+        messageCount: this._messageCount,
+        replyCount: this._replyCount
+      }), "utf-8");
+    } catch {
+    }
+  }
+  loadStats() {
+    if (!this.accountId) return;
+    try {
+      const statsPath = this.resolveStatsPath();
+      if (fs.existsSync(statsPath)) {
+        const data = JSON.parse(fs.readFileSync(statsPath, "utf-8"));
+        if (typeof data.messageCount === "number") this._messageCount = data.messageCount;
+        if (typeof data.replyCount === "number") this._replyCount = data.replyCount;
+      }
     } catch {
     }
   }
@@ -38822,6 +38850,7 @@ var QQBotClient = class {
         this.identifyRetries = 0;
         this.reconnectAttempts = 0;
         this._startedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.loadStats();
         this.debugLog(`\u5DF2\u4E0A\u7EBF! Bot=${this.botName} (${this.accountId})`);
         break;
       case "AT_MESSAGE_CREATE":
@@ -38860,6 +38889,7 @@ var QQBotClient = class {
       voiceUrl: extracted.voiceUrl || void 0
     };
     this._messageCount++;
+    this.persistStats();
     const preview = msg.text.substring(0, 80);
     console.log(`[QQBot][\u7FA4:${msg.groupId}] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (\u8BED\u97F3)" : ""}`);
     this.notifyHandlers(msg);
@@ -38884,6 +38914,7 @@ var QQBotClient = class {
       voiceUrl: extracted.voiceUrl || void 0
     };
     this._messageCount++;
+    this.persistStats();
     const preview = msg.text.substring(0, 80);
     console.log(`[QQBot][\u79C1\u804A] ${msg.fromUserId}: ${preview}${msg.isVoice ? " (\u8BED\u97F3)" : ""}`);
     this.notifyHandlers(msg);
@@ -39034,6 +39065,8 @@ var QQBotClient = class {
         throw new Error(`\u53D1\u9001\u7FA4\u6D88\u606F\u5931\u8D25 (${resp.status}): ${errText}`);
       }
       console.log(`[QQBot] \u53D1\u9001\u7FA4\u6D88\u606F: ->${groupId} (${text.length} chars)`);
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u7FA4\u6D88\u606F");
   }
   async sendPrivateMsg(userId, text) {
@@ -39056,6 +39089,8 @@ var QQBotClient = class {
         throw new Error(`\u53D1\u9001\u79C1\u804A\u5931\u8D25 (${resp.status}): ${errText}`);
       }
       console.log(`[QQBot] \u53D1\u9001\u79C1\u804A: ->${userId} (${text.length} chars)`);
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u79C1\u804A");
   }
   async _sendWithRetry(sendFn, label) {
@@ -39151,6 +39186,8 @@ var QQBotClient = class {
         throw new Error("\u53D1\u9001\u7FA4\u8BED\u97F3\u5931\u8D25 (" + resp.status + "): " + errText);
       }
       console.log("[QQBot] \u53D1\u9001\u7FA4\u8BED\u97F3: ->" + groupId);
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u7FA4\u8BED\u97F3");
   }
   async sendPrivateVoice(userId, fileInfo) {
@@ -39175,6 +39212,8 @@ var QQBotClient = class {
         throw new Error("\u53D1\u9001\u79C1\u804A\u8BED\u97F3\u5931\u8D25 (" + resp.status + "): " + errText);
       }
       console.log("[QQBot] \u53D1\u9001\u79C1\u804A\u8BED\u97F3: ->" + userId);
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u79C1\u804A\u8BED\u97F3");
   }
   async sendGroupImage(groupId, fileInfo) {
@@ -39186,6 +39225,8 @@ var QQBotClient = class {
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1e3) })
       });
       if (!resp.ok) throw new Error("\u53D1\u9001\u7FA4\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u7FA4\u56FE\u7247");
   }
   async sendPrivateImage(userId, fileInfo) {
@@ -39197,6 +39238,8 @@ var QQBotClient = class {
         body: JSON.stringify({ msg_type: 7, media: { file_info: fileInfo }, msg_id: "", msg_seq: Math.floor(Date.now() / 1e3) })
       });
       if (!resp.ok) throw new Error("\u53D1\u9001\u79C1\u804A\u56FE\u7247\u5931\u8D25 (" + resp.status + "): " + await resp.text());
+      this._replyCount++;
+      this.persistStats();
     }, "\u53D1\u9001\u79C1\u804A\u56FE\u7247");
   }
   async downloadImage(url) {
@@ -39272,11 +39315,11 @@ var QQBotClient = class {
 
 // src/qqbot-persist.ts
 import fs2 from "node:fs";
-import path from "node:path";
+import path2 from "node:path";
 import { fileURLToPath } from "node:url";
 var __filename = fileURLToPath(import.meta.url);
-var __dirname2 = path.dirname(__filename);
-var CONFIG_FILE = path.resolve(__dirname2, "..", "data", "qqbot-config.json");
+var __dirname2 = path2.dirname(__filename);
+var CONFIG_FILE = path2.resolve(__dirname2, "..", "data", "qqbot-config.json");
 function loadQQBotConfig() {
   try {
     if (fs2.existsSync(CONFIG_FILE)) {
@@ -39294,7 +39337,7 @@ function loadQQBotConfig() {
 }
 function saveQQBotConfig(config) {
   try {
-    const dir = path.dirname(CONFIG_FILE);
+    const dir = path2.dirname(CONFIG_FILE);
     if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
     fs2.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
     console.log("[QQBot] \u51ED\u8BC1\u5DF2\u6301\u4E45\u5316\u5230\u78C1\u76D8");
@@ -39439,7 +39482,7 @@ function createDefaultRouter() {
 }
 
 // src/index.ts
-import path2 from "node:path";
+import path3 from "node:path";
 import fs3 from "node:fs";
 process.on("unhandledRejection", (reason) => {
   console.error("[QQ-Sidecar] Unhandled Rejection:", reason);
@@ -39869,7 +39912,7 @@ app.post("/api/send-image", async (req, reply) => {
         if (!response.ok) continue;
         imageBuffer = Buffer.from(await response.arrayBuffer());
         const pathname = new URL(url).pathname;
-        filename = path2.basename(pathname) || filename;
+        filename = path3.basename(pathname) || filename;
         break;
       } catch {
       }
@@ -39895,6 +39938,7 @@ app.get("/api/status", async (_req, reply) => {
       accountId: qq.getAccountId(),
       error: qq.getLastError(),
       messageCount: qq.getMessageCount(),
+      replyCount: qq.getReplyCount(),
       startedAt: qq.getStartedAt()
     }
   });

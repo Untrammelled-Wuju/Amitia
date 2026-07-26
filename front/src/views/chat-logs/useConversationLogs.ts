@@ -151,21 +151,24 @@ export function useConversationLogs() {
   }
 
   async function delConv() {
-    await ElMessageBox.confirm(
-      "确定删除整个会话及其所有消息？此操作不可撤销。",
-      "警告",
-      {
-        type: "warning",
-        confirmButtonText: "删除",
-        confirmButtonClass: "el-button--danger",
-      },
+    const boundChar = characters.value.find(
+      (c: any) => c.conversationId === selectedConvId.value,
     );
+    const confirmMsg = boundChar
+      ? `该对话与角色「${boundChar.name}」永久绑定，删除对话将一同删除角色「${boundChar.name}」。此操作不可撤销。`
+      : "确定删除整个会话及其所有消息？此操作不可撤销。";
+    await ElMessageBox.confirm(confirmMsg, "警告", {
+      type: "warning",
+      confirmButtonText: "删除",
+      confirmButtonClass: "el-button--danger",
+    });
     await deleteConversationApi(selectedConvId.value);
     selectedConv.value = null;
     selectedConvId.value = "";
     messages.value = [];
     ElMessage.success("已删除");
     fetchConvs();
+    loadCharacters();
   }
 
   async function exportConv(format: string) {

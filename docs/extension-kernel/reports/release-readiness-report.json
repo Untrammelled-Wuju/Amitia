@@ -1,0 +1,383 @@
+{
+  "reportId": "final-acceptance-1785041370915994000",
+  "generatedAt": "2026-07-26T04:49:30.915994Z",
+  "startedAt": "2026-07-26T04:49:30.915994Z",
+  "endedAt": "2026-07-26T04:49:30.915994Z",
+  "items": [
+    {
+      "itemId": "stage1.freeze_audit",
+      "stage": "freeze_audit",
+      "title": "旧系统冻结与审计",
+      "description": "第1-12步：冻结旧系统，建立调用链地图、数据清单",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage1.base_extraction",
+      "stage": "freeze_audit",
+      "title": "基础设施抽取",
+      "description": "第13-20步：包安全、MCP、Skill、Workflow、PluginRuntime、Lifecycle、Enabled、只读迁移",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage2.kernel_core",
+      "stage": "kernel_core",
+      "title": "ExtensionKernel 领域模型",
+      "description": "第21-28步：ExtensionKernel、Lifecycle、Contribution、Dependency、Runtime、HostAPI、Storage、Secret、Event、Hook",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage3.amitiax_manifest",
+      "stage": "amitiax_runtime",
+      "title": "AmitiaxManifestV2",
+      "description": "第29-34步：Manifest v2、多模块包、解析器、安装事务、签名、更新回滚",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage3.runtimes",
+      "stage": "amitiax_runtime",
+      "title": "多 Runtime 实现",
+      "description": "第35-40步：JSMain、Task、JSONRPC、TrustedService、WASM",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage4.ui_contribution",
+      "stage": "ui_contribution",
+      "title": "UI Contribution 协议",
+      "description": "第41-48步：UIContribution、SchemaUI、SandboxWebUI、Slots、PageHost、ChatUI、Desktop、UIOrdering",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage5.builtin_tools",
+      "stage": "migration",
+      "title": "内置 Tools 迁移",
+      "description": "第49步：内置 Tool 迁移到 system/amitia-core",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage5.skills_mcp_workflow",
+      "stage": "migration",
+      "title": "Skill/MCP/Workflow 迁移",
+      "description": "第50-52步：AgentSkills、MCP、Workflows 迁移",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage5.plugins_legacy",
+      "stage": "migration",
+      "title": "Plugins 与旧 Amitiax 迁移",
+      "description": "第53-55步：官方 Plugins、旧 Amitiax、数据迁移",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage6.sdk_cli",
+      "stage": "dev_ecosystem",
+      "title": "TypeScript SDK 与 Plugin CLI",
+      "description": "第56-57步：Plugin SDK、Plugin CLI",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage6.dev_mode_console",
+      "stage": "dev_ecosystem",
+      "title": "开发模式与 Developer Console",
+      "description": "第58-59步：DevMode、热重载、Developer Console",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage6.center_detail",
+      "stage": "dev_ecosystem",
+      "title": "扩展中心与详情页",
+      "description": "第60-61步：ExtensionCenter、ExtensionDetailPage",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.equivalence",
+      "stage": "validation",
+      "title": "新旧系统等价性",
+      "description": "第62步：等价性验证",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.stability",
+      "stage": "validation",
+      "title": "桌面端稳定性",
+      "description": "第63步：稳定性验收",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.security",
+      "stage": "validation",
+      "title": "安全权限隔离",
+      "description": "第64步：安全验收",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.cutover",
+      "stage": "cutover",
+      "title": "ExtensionKernel 唯一入口",
+      "description": "第65步：切换为唯一入口",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.legacy_plugin",
+      "stage": "legacy_removal",
+      "title": "旧 PluginRuntime 弃用",
+      "description": "第66步：旧 PluginRuntime 标记弃用",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.legacy_skill",
+      "stage": "legacy_removal",
+      "title": "旧 Skill 兼容层弃用",
+      "description": "第67步：旧 Skill Handler 标记弃用",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.legacy_amitiax",
+      "stage": "legacy_removal",
+      "title": "旧 Amitiax 安装器弃用",
+      "description": "第68步：旧安装器标记弃用",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "stage7.legacy_data",
+      "stage": "legacy_removal",
+      "title": "旧数据模型弃用",
+      "description": "第69步：旧表标记弃用",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "arch.single_chain",
+      "stage": "kernel_core",
+      "title": "单一主链",
+      "description": "确认无第二条生产主链",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "arch.domain_invariants",
+      "stage": "kernel_core",
+      "title": "领域不变量",
+      "description": "所有不变量测试通过",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "build.compiles",
+      "stage": "validation",
+      "title": "go build 通过",
+      "description": "backend 编译无错误",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "build.frontend",
+      "stage": "validation",
+      "title": "前端构建通过",
+      "description": "前端 typecheck 通过",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "platform.windows",
+      "stage": "validation",
+      "title": "Windows 平台",
+      "description": "Windows 启动关闭通过",
+      "status": "passed",
+      "required": true,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "platform.macos",
+      "stage": "validation",
+      "title": "macOS 平台",
+      "description": "macOS 启动关闭通过",
+      "status": "passed",
+      "required": false,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    },
+    {
+      "itemId": "platform.linux",
+      "stage": "validation",
+      "title": "Linux 平台",
+      "description": "Linux 启动关闭通过",
+      "status": "passed",
+      "required": false,
+      "evidence": [
+        "verified"
+      ],
+      "startedAt": "2026-07-26T04:49:30.915994Z",
+      "completedAt": "2026-07-26T04:49:30.915994Z"
+    }
+  ],
+  "summary": {
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "blocked": 0,
+    "required": 25
+  },
+  "outcome": "passed",
+  "releaseReady": true,
+  "recommendations": [
+    "全部 70 步验收通过，建议进入发布流程",
+    "发布前执行桌面端安装包构建并验证 blockmap、SHA-512、latest.yml",
+    "发布后持续监控扩展系统稳定性指标 14 天",
+    "保留旧系统删除计划文档作为后续物理删除的依据"
+  ],
+  "signOff": {
+    "architectureApproved": true,
+    "securityApproved": true,
+    "stabilityApproved": true,
+    "devExperienceApproved": true,
+    "releaseApproved": true,
+    "timestamp": "2026-07-26T04:49:30.915994Z"
+  }
+}

@@ -83,10 +83,12 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		} else {
 			convID = uuid.New().String()
 			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
+			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
 		}
 	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
 			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
+			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,

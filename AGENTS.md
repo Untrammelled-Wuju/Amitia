@@ -1,4 +1,5 @@
 禁止使用cmd和powershell工具进行批量替换。
+项目中不使用系统Node环境，必须使用nodeexe或Linux版本可直接运行的Node二进制文件。
 电脑中已经安装powershell7,必须使用powershell时优先使用powershell7。
 必须中文回复。
 项目中不写注释。

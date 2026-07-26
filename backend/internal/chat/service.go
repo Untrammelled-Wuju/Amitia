@@ -33,7 +33,7 @@ type Service interface {
 	ListConversations(q ConversationQuery) (*ConversationListResponse, error)
 	GetConversation(id string) (*Conversation, error)
 	CreateConversation(req *CreateConversationRequest) (*Conversation, error)
-	DeleteConversation(id string) error
+	DeleteConversation(id string) (bool, error)
 	DeleteAllConversations() error
 	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
 	DeleteMessages(convID string) error

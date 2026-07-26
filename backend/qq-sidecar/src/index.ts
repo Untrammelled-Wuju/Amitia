@@ -471,6 +471,7 @@ app.get("/api/status", async (_req, reply) => {
       accountId: qq.getAccountId(),
       error: qq.getLastError(),
       messageCount: qq.getMessageCount(),
+      replyCount: qq.getReplyCount(),
       startedAt: qq.getStartedAt(),
     },
   })

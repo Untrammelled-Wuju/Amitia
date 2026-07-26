@@ -4,6 +4,7 @@ package character
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
@@ -108,6 +109,10 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	if err := s.repo.Create(c); err != nil {
 		return nil, fmt.Errorf("创建角色失败: %w", err)
 	}
+	convID := uuid.New().String()
+	now := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', 'system', ?, ?)", convID, c.ID, c.Name, now, now)
+	s.db.Table("characters").Where("id = ?", c.ID).Update("conversation_id", convID)
 	presetRules := []struct {
 		Name, Channel, RuleType, ScheduleCron, PromptTemplate string
 		MaxPerDay, RandomMinutes                              int

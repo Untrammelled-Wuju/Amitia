@@ -12,14 +12,10 @@ import (
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/temporal"
 	"gorm.io/gorm"
-	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +25,7 @@ import (
 	"github.com/u-ai/backend/pkg/database/mysql"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
+	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
@@ -36,23 +33,10 @@ import (
 )
 
 func killExistingServer(addr string) {
-	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-	if err != nil {
-		return
-	}
-	conn.Close()
 	log.Warn("检测到服务端口已被占用，正在终止旧进程...")
-	_, port, _ := net.SplitHostPort(addr)
-	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :"+port+" | findstr LISTENING").Output()
-	fields := strings.Fields(string(out))
-	for _, f := range fields {
-		if pid, err2 := strconv.Atoi(f); err2 == nil {
-			if pid != os.Getpid() {
-				exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
-			}
-		}
+	if err := platform.Detect().KillExistingServer(addr); err != nil {
+		log.Warn("终止旧进程失败:", err)
 	}
-	time.Sleep(2 * time.Second)
 }
 
 func main() {

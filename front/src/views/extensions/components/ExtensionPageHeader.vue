@@ -4,7 +4,7 @@
       <div class="title-line">
         <nav aria-label="扩展页面层级">
           <ol class="breadcrumb-list">
-            <template v-if="grandparentTitle">
+            <template v-if="grandparentTitle && grandparentPath">
               <li>
                 <RouterLink class="center-link" :to="grandparentPath"
                   >{{ grandparentTitle }}</RouterLink
