@@ -1,6 +1,6 @@
 import { apiClient } from "@/composables/useApi";
 
-const BASE = "/api/extensions/kernel/hooks";
+const BASE = "/api/extensions/hooks";
 
 export interface HookPointSummary {
   id: string;

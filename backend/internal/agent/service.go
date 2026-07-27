@@ -297,19 +297,19 @@ func stableWebhookSource(req WebhookRequest) string {
 }
 
 func (s *service) getActiveModel() map[string]string {
-	var baseURL, apiKey, modelName string
+	var baseURL, apiKey, modelName, apiType string
 	var temp, maxTokens, topP float64
 	err := s.db.Table("model_configs").
-		Select("base_url, api_key, model_name, temperature, max_tokens, top_p").
+		Select("base_url, api_key, model_name, temperature, max_tokens, top_p, api_type").
 		Where("is_active = 1").Limit(1).Row().
-		Scan(&baseURL, &apiKey, &modelName, &temp, &maxTokens, &topP)
+		Scan(&baseURL, &apiKey, &modelName, &temp, &maxTokens, &topP, &apiType)
 	if err != nil {
 		return nil
 	}
 	_ = temp
 	_ = maxTokens
 	_ = topP
-	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName}
+	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName, "apiType": apiType}
 }
 
 func (s *service) getDefaultCharacterID() string {
@@ -324,6 +324,9 @@ func (s *service) getDefaultCharacterID() string {
 }
 
 func (s *service) callLLM(cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
+	if cfg["apiType"] == "ollama" {
+		return s.callOllamaLLM(cfg, messages)
+	}
 	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
 	reqBody := map[string]interface{}{
 		"model": cfg["modelName"], "messages": messages,
@@ -351,6 +354,43 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 		return "", 0, fmt.Errorf("no choices")
 	}
 	return r.Choices[0].Message.Content, r.Usage.TotalTokens, nil
+}
+
+func (s *service) callOllamaLLM(cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
+	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
+	reqBody := map[string]interface{}{
+		"model":    cfg["modelName"],
+		"messages": messages,
+		"stream":   false,
+		"options": map[string]interface{}{
+			"temperature": 0.7,
+			"num_ctx":     4096,
+		},
+	}
+	jsonBody, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", 0, fmt.Errorf("API %d: %s", resp.StatusCode, truncate(string(rb), 200))
+	}
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+		EvalCount       int `json:"eval_count"`
+		PromptEvalCount int `json:"prompt_eval_count"`
+	}
+	if err := json.Unmarshal(rb, &result); err != nil {
+		return "", 0, fmt.Errorf("解析响应失败: %w", err)
+	}
+	total := result.EvalCount + result.PromptEvalCount
+	return result.Message.Content, total, nil
 }
 
 func truncate(s string, n int) string {

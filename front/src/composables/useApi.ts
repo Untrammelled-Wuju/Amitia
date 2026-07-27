@@ -14,7 +14,6 @@ const TOKEN_KEY = "ai-companion-token";
 export const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
-  headers: { "Content-Type": "application/json" },
 });
 
 // Request interceptor: attach auth token

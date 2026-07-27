@@ -89,7 +89,7 @@ val AmitiaTypography = Typography(
     ),
     labelSmall = TextStyle(
         fontFamily = SystemFontFamily,
-        fontWeight = FontWeight.Regular,
+        fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 17.sp
     )
@@ -97,7 +97,7 @@ val AmitiaTypography = Typography(
 
 val AmitiaCaptionStyle = TextStyle(
     fontFamily = SystemFontFamily,
-    fontWeight = FontWeight.Regular,
+    fontWeight = FontWeight.Normal,
     fontSize = 12.sp,
     lineHeight = 17.sp
 )

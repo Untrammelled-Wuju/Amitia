@@ -35,7 +35,7 @@ import {
 } from "@element-plus/icons-vue";
 
 const entries = [
-  { to: "/extensions/packages", title: "本地扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
+  { to: "/extensions/packages", title: "扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
   { to: "/extensions/mcp", title: "MCP 服务", description: "连接外部 MCP 服务", icon: Connection },
   { to: "/extensions/agent-skills", title: "Agent Skills", description: "管理 SKILL.md 指令包", icon: DocumentChecked },
   { to: "/extensions/plugins", title: "系统插件", description: "管理系统 Plugin Runtime", icon: SetUp },

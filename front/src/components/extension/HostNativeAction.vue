@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { apiClient } from "@/composables/useApi";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
@@ -13,12 +14,8 @@ const icon = computed(() => props.contribution.icon ?? "");
 
 async function invokeAction(actionId: string) {
   try {
-    await fetch(`/api/extension/action/${props.contribution.contributionId}/${actionId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        context: props.context ?? {},
-      }),
+    await apiClient.post(`/api/extensions/ui/action/${props.contribution.contributionId}/${actionId}`, {
+      context: props.context ?? {},
     });
   } catch (e) {
     console.error("Action invoke failed:", e);

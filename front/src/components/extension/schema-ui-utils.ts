@@ -66,6 +66,34 @@ export interface SchemaUINode {
   children?: SchemaUINode[];
 }
 
+export type UITheme = "light" | "dark" | "auto";
+
+export interface ThemeConfig {
+  mode: UITheme;
+  overrides?: Record<string, string>;
+}
+
+export interface LocaleConfig {
+  current: string;
+  available?: string[];
+}
+
+export interface AccessibilityConfig {
+  enabled: boolean;
+  highContrast?: boolean;
+  reducedMotion?: boolean;
+  screenReader?: boolean;
+  keyboardNav?: boolean;
+}
+
+export interface PerformanceBudget {
+  maxRenderTimeMs: number;
+  maxLayoutCount: number;
+  maxNodeCount: number;
+  maxDataFetchCount: number;
+  maxActionCount: number;
+}
+
 export interface SchemaUIDocument {
   schemaVersion?: string;
   version?: string;
@@ -75,6 +103,10 @@ export interface SchemaUIDocument {
   children?: SchemaUINode[];
   dataSources?: unknown[];
   actions?: Array<{ actionId: string; target?: string; inputSchema?: unknown }>;
+  theme?: ThemeConfig;
+  locale?: LocaleConfig;
+  accessibility?: AccessibilityConfig;
+  performanceBudget?: PerformanceBudget;
 }
 
 export const SCHEMA_UI_VERSION = "schema-ui/1";

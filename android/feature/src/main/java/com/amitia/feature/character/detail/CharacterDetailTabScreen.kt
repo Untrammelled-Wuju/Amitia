@@ -177,7 +177,7 @@ fun DetailErrorBox(
     modifier: Modifier = Modifier
 ) {
     com.amitia.core.designsystem.component.AmitiaErrorState(
-        icon = androidx.compose.material.icons.Icons.Outlined.Error,
+        icon = com.amitia.core.designsystem.AmitiaIcons.Error,
         title = "加载失败",
         description = message,
         onRetry = onRetry,

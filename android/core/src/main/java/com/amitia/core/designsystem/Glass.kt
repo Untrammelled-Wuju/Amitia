@@ -57,33 +57,30 @@ fun amitiaGlassConfig(level: GlassLevel, isDark: Boolean): GlassConfig {
     return remember(level, isDark) {
         when (level) {
             GlassLevel.Navigation -> {
-                val colors = if (isDark) AmitiaDarkColors else AmitiaLightColors
                 GlassConfig(
-                    fillColor = colors.GlassNavigation,
-                    borderColor = colors.GlassBorder,
-                    innerBorderColor = colors.GlassInnerBorder,
+                    fillColor = if (isDark) AmitiaDarkColors.GlassNavigation else AmitiaLightColors.GlassNavigation,
+                    borderColor = if (isDark) AmitiaDarkColors.GlassBorder else AmitiaLightColors.GlassBorder,
+                    innerBorderColor = if (isDark) AmitiaDarkColors.GlassInnerBorder else AmitiaLightColors.GlassInnerBorder,
                     blurRadius = 32.dp,
                     cornerRadius = AmitiaRadius.XXL,
                     shadowElevation = AmitiaElevation.Level2Blur
                 )
             }
             GlassLevel.Sheet -> {
-                val colors = if (isDark) AmitiaDarkColors else AmitiaLightColors
                 GlassConfig(
-                    fillColor = colors.GlassSheet,
-                    borderColor = colors.GlassBorder,
-                    innerBorderColor = colors.GlassInnerBorder,
+                    fillColor = if (isDark) AmitiaDarkColors.GlassSheet else AmitiaLightColors.GlassSheet,
+                    borderColor = if (isDark) AmitiaDarkColors.GlassBorder else AmitiaLightColors.GlassBorder,
+                    innerBorderColor = if (isDark) AmitiaDarkColors.GlassInnerBorder else AmitiaLightColors.GlassInnerBorder,
                     blurRadius = 24.dp,
                     cornerRadius = AmitiaRadius.XXL,
                     shadowElevation = AmitiaElevation.Level2Blur
                 )
             }
             GlassLevel.Chip -> {
-                val colors = if (isDark) AmitiaDarkColors else AmitiaLightColors
                 GlassConfig(
-                    fillColor = colors.GlassChip,
-                    borderColor = colors.GlassBorder,
-                    innerBorderColor = colors.GlassInnerBorder,
+                    fillColor = if (isDark) AmitiaDarkColors.GlassChip else AmitiaLightColors.GlassChip,
+                    borderColor = if (isDark) AmitiaDarkColors.GlassBorder else AmitiaLightColors.GlassBorder,
+                    innerBorderColor = if (isDark) AmitiaDarkColors.GlassInnerBorder else AmitiaLightColors.GlassInnerBorder,
                     blurRadius = 12.dp,
                     cornerRadius = AmitiaRadius.Pill,
                     shadowElevation = 0.dp
@@ -107,7 +104,7 @@ fun AmitiaGlassSurface(
     val context = LocalContext.current
     val useRealBlur = remember(isBlurEnabled, enabled) {
         GlassPerformancePolicy.shouldUseRealBlur(
-            sdkInt = context.resources.configuration.sdkInt,
+            sdkInt = Build.VERSION.SDK_INT,
             isLowPowerMode = false,
             isBlurEnabled = isBlurEnabled && enabled
         )

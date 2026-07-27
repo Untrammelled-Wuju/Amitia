@@ -1,5 +1,7 @@
 package com.amitia.feature.today
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,12 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -267,16 +272,18 @@ private fun Modifier.androidx_clickable(
     source: androidx.compose.foundation.interaction.MutableInteractionSource,
     onClick: () -> Unit
 ): Modifier = this.then(
-    androidx.compose.foundation.clickable(
+    this.clickable(
         interactionSource = source,
         indication = null,
-        role = androidx.compose.ui.semantics.Role.Button,
+        role = Role.Button,
         onClick = onClick
     )
 )
 
-private fun Modifier.androidx_clip_circle() = this.then(androidx.compose.ui.draw.clip(androidx.compose.foundation.shape.CircleShape))
-private fun Modifier.androidx_bg_primary() = this.then(androidx.compose.foundation.background(MaterialTheme.colorScheme.primary))
+private fun Modifier.androidx_clip_circle() = this.then(this.clip(CircleShape))
+
+@Composable
+private fun Modifier.androidx_bg_primary() = this.then(this.background(MaterialTheme.colorScheme.primary))
 
 @Preview(name = "Today Home - Light", showBackground = true)
 @Composable

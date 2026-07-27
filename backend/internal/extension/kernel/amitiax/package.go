@@ -297,7 +297,7 @@ func VerifyIntegrity(pkg *Package) error {
 		if f.IsDir {
 			continue
 		}
-		if f.Path == IntegrityFiles || f.Path == IntegrityTree {
+		if f.Path == IntegrityFiles || f.Path == IntegrityTree || f.Path == SignatureFile {
 			continue
 		}
 		entry, ok := pkg.Integrity.Files[f.Path]

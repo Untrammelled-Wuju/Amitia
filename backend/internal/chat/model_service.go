@@ -55,7 +55,41 @@ func (s *service) UpdateModelRoutes(routes []map[string]interface{}) error {
 	return s.repo.UpdateModelRoutes(routes)
 }
 
-func (s *service) DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
+func (s *service) DetectModels(baseURL, apiKey, apiType string) ([]ModelDetectItem, error) {
+	if apiType == "ollama" {
+		return s.detectOllamaModels(baseURL)
+	}
+	return s.detectOpenAIModels(baseURL, apiKey)
+}
+
+func (s *service) detectOllamaModels(baseURL string) ([]ModelDetectItem, error) {
+	base := strings.TrimRight(baseURL, "/")
+	req, _ := http.NewRequest("GET", base+"/api/tags", nil)
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(rb))
+	}
+	var r struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(rb, &r); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	items := make([]ModelDetectItem, len(r.Models))
+	for i, m := range r.Models {
+		items[i] = ModelDetectItem{ID: m.Name}
+	}
+	return items, nil
+}
+
+func (s *service) detectOpenAIModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
 	base := strings.TrimRight(baseURL, "/")
 	req, _ := http.NewRequest("GET", base+"/models", nil)
 	req.Header.Set("Authorization", "Bearer "+apiKey)

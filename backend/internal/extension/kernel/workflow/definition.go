@@ -35,9 +35,10 @@ type WorkflowOnError struct {
 }
 
 type WorkflowNode struct {
-	ID   string           `json:"id"`
-	Type string           `json:"type"`
-	Step WorkflowStepInput `json:"step"`
+	ID        string            `json:"id"`
+	Type      string            `json:"type"`
+	DependsOn []string          `json:"dependsOn,omitempty"`
+	Step      WorkflowStepInput `json:"step"`
 }
 
 type WorkflowDefinition struct {

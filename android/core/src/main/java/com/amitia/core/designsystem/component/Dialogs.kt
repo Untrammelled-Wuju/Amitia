@@ -73,10 +73,23 @@ fun AmitiaBottomSheet(
         onDismissRequest = onDismiss,
         modifier = modifier,
         sheetState = sheetState,
-        sheetShape = AmitiaBottomSheetShape,
+        shape = AmitiaBottomSheetShape,
         containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = if (showDragHandle) {
-            { ModalBottomSheetDefaults.DragHandle() }
+            {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = AmitiaSpacing.Sm)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        modifier = Modifier.size(width = 32.dp, height = 4.dp),
+                        shape = RoundedCornerShape(2.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    ) {}
+                }
+            }
         } else null
     ) {
         if (title != null) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -124,7 +125,7 @@ private fun TodayDetailContent(
             }
             else -> {
                 val activities = (activityState as ScreenState.Content<List<TodayActivity>>).data
-                androidx.compose.foundation.lazy.items(activities, key = { it.id }) { activity ->
+                items(activities, key = { it.id }) { activity ->
                     val index = activities.indexOf(activity)
                     TimelineItem(
                         title = activity.title,

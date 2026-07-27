@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
 type UIContributionKind string
@@ -23,6 +25,8 @@ const (
 	UIContributionComposerAction  UIContributionKind = "composer_action"
 	UIContributionSettingsSection UIContributionKind = "settings_section"
 	UIContributionDesktopCommand  UIContributionKind = "desktop_command"
+	UIContributionDetailSectionKind UIContributionKind = "detail_section"
+	UIContributionChatSidebarKind   UIContributionKind = "chat_sidebar"
 )
 
 func (k UIContributionKind) Valid() bool {
@@ -32,7 +36,8 @@ func (k UIContributionKind) Valid() bool {
 		UIContributionToolbarItem, UIContributionStatusItem,
 		UIContributionMessageAction, UIContributionMessageRenderer,
 		UIContributionComposerAction, UIContributionSettingsSection,
-		UIContributionDesktopCommand:
+		UIContributionDesktopCommand, UIContributionDetailSectionKind,
+		UIContributionChatSidebarKind:
 		return true
 	}
 	return false
@@ -52,6 +57,8 @@ func (k UIContributionKind) DefaultSandbox() UISandboxType {
 		return SandboxSchemaRenderer
 	case UIContributionMessageRenderer:
 		return SandboxWebRestricted
+	case UIContributionDetailSectionKind, UIContributionChatSidebarKind:
+		return SandboxSchemaRenderer
 	}
 	return SandboxHostNative
 }
@@ -543,6 +550,40 @@ func (e *UIError) Error() string {
 
 func NewUIError(code UIErrorCode, msg string, detail map[string]any) *UIError {
 	return &UIError{Code: code, Message: msg, Detail: detail}
+}
+
+type SchemaUIDoc = schema_ui.SchemaUIDocument
+
+type WebPageConfig struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+}
+
+type UIContributionDetailSection struct {
+	ID         string         `json:"id"`
+	Target     string         `json:"target"`
+	Slot       string         `json:"slot"`
+	Title      LocalizedText  `json:"title"`
+	Order      int            `json:"order"`
+	Renderer   string         `json:"renderer"`
+	SchemaUI   *SchemaUIDoc   `json:"schemaUi,omitempty"`
+	WebPage    *WebPageConfig `json:"webPage,omitempty"`
+	Permission string         `json:"permission,omitempty"`
+}
+
+type UIContributionChatSidebar struct {
+	ID          string         `json:"id"`
+	Title       LocalizedText  `json:"title"`
+	Icon        string         `json:"icon,omitempty"`
+	Order       int            `json:"order"`
+	DefaultOpen bool           `json:"defaultOpen"`
+	Renderer    string         `json:"renderer"`
+	SchemaUI    *SchemaUIDoc   `json:"schemaUi,omitempty"`
+	WebPage     *WebPageConfig `json:"webPage,omitempty"`
+	Permission  string         `json:"permission,omitempty"`
+	Width       int            `json:"width,omitempty"`
+	Resizable   bool           `json:"resizable,omitempty"`
 }
 
 var DefaultSlots = map[string]*UISlotContract{

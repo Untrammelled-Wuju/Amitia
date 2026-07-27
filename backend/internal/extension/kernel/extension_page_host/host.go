@@ -486,6 +486,56 @@ func (h *PageHost) SetValidator(v PageValidator) {
 	h.validator = v
 }
 
+type PageRegistrationInput struct {
+	PageID          PageID
+	ExtensionID     ExtensionID
+	ModuleID        string
+	ContributionID  ContributionID
+	Generation      int64
+	ContractVersion int
+	EntryKind       PageKind
+	EntryPath       string
+	SchemaPath      string
+	Title           LocalizedText
+	Description     LocalizedText
+	Icon            string
+	Permissions     []string
+}
+
+func NewExtensionPageDefinition(input PageRegistrationInput) *ExtensionPageDefinition {
+	return &ExtensionPageDefinition{
+		PageSpec: &ExtensionPageSpec{
+			PageID:      input.PageID,
+			RouteKey:    fmt.Sprintf("%s/%s", input.ExtensionID, input.PageID),
+			Title:       input.Title,
+			Description: input.Description,
+			Icon:        input.Icon,
+			EntryKind:   input.EntryKind,
+			EntryPath:   input.EntryPath,
+			SchemaPath:  input.SchemaPath,
+			Scope:       ScopeGlobal,
+			Permissions: input.Permissions,
+			StatePolicy: StatePolicyEphemeral,
+		},
+		contributionID:  input.ContributionID,
+		extensionID:     input.ExtensionID,
+		moduleID:        input.ModuleID,
+		generation:      input.Generation,
+		contractVersion: input.ContractVersion,
+		effective:       true,
+		enabled:         true,
+		runtimeReady:    true,
+	}
+}
+
+func (h *PageHost) RegisterPage(ctx context.Context, def *ExtensionPageDefinition) error {
+	return h.registry.Register(ctx, def)
+}
+
+func (h *PageHost) UnregisterPage(ctx context.Context, contributionID ContributionID) error {
+	return h.registry.Unregister(ctx, contributionID)
+}
+
 type OpenPageRequest struct {
 	ExtensionID    ExtensionID       `json:"extensionId"`
 	PageID         PageID            `json:"pageId"`

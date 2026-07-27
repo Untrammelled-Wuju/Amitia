@@ -686,7 +686,6 @@ async function submitImport() {
       ),
     );
     const response = await apiClient.post("/api/emotes/batch-upload", form, {
-      headers: { "Content-Type": "multipart/form-data" },
       timeout: 180000,
     });
     const data = response.data;

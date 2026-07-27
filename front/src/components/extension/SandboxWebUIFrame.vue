@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { apiClient } from "@/composables/useApi";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
@@ -31,27 +32,29 @@ async function createSession() {
   ready.value = false;
   iframeLoaded.value = false;
   try {
-    const response = await fetch(`/api/extension/webui/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contributionId: props.contribution.contributionId,
-        extensionId: props.contribution.extensionId,
-        moduleId: props.contribution.moduleId,
-        slotId: props.slotId,
-        generation: props.contribution.generation,
-        sandbox: props.contribution.sandbox ?? "web_restricted",
-        entryPath: props.contribution.entryPath ?? "index.html",
-        allowedActions: (props.contribution.actions ?? []).map((a) => a.actionId),
-      }),
+    const res = await apiClient.post<{
+      sessionId: string;
+      nonce: string;
+      origin: string;
+      csp: string;
+      resourceUrl?: string;
+      entryUrl?: string;
+    }>("/api/extension/webui/session", {
+      contributionId: props.contribution.contributionId,
+      extensionId: props.contribution.extensionId,
+      moduleId: props.contribution.moduleId,
+      slotId: props.slotId,
+      generation: props.contribution.generation,
+      sandbox: props.contribution.sandbox ?? "web_restricted",
+      entryPath: props.contribution.entryPath ?? "index.html",
+      allowedActions: (props.contribution.actions ?? []).map((a) => a.actionId),
     });
-    if (!response.ok) throw new Error(`session create failed: ${response.status}`);
-    const data = await response.json();
+    const data = res.data;
     sessionId.value = data.sessionId;
     sessionNonce.value = data.nonce;
     sessionOrigin.value = data.origin;
     sessionCSP.value = data.csp;
-    resourceUrl.value = data.resourceUrl || data.entryUrl;
+    resourceUrl.value = data.resourceUrl || data.entryUrl || "";
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
     emit("error", error.value);
@@ -63,9 +66,7 @@ async function createSession() {
 async function destroySession() {
   if (!sessionId.value) return;
   try {
-    await fetch(`/api/extension/webui/session/${sessionId.value}`, {
-      method: "DELETE",
-    });
+    await apiClient.delete(`/api/extension/webui/session/${sessionId.value}`);
   } catch {
   }
   sessionId.value = "";
@@ -97,13 +98,8 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     emit("action", actionId, input?.input);
   }
   try {
-    const response = await fetch(`/api/extension/webui/bridge/${sessionId.value}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msg),
-    });
-    const result = await response.json();
-    sendBridgeResponse(msg, result);
+    const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, msg);
+    sendBridgeResponse(msg, res.data as Record<string, unknown>);
   } catch (e) {
     sendBridgeResponse(msg, {
       ok: false,

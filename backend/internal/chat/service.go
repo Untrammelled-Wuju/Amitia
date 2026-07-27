@@ -50,7 +50,7 @@ type Service interface {
 	ActivateModel(id int) (*ModelConfig, error)
 	GetModelRoutes() ([]map[string]interface{}, error)
 	UpdateModelRoutes(routes []map[string]interface{}) error
-	DetectModels(baseURL, apiKey string) ([]ModelDetectItem, error)
+	DetectModels(baseURL, apiKey, apiType string) ([]ModelDetectItem, error)
 	EnsureChannelConversation(channel string) (*Conversation, error)
 	RecalculateMessageCounts() (int64, error)
 	BackfillMissingConversations() (int64, error)

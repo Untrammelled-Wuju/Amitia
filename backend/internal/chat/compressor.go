@@ -120,12 +120,12 @@ func (c *Compressor) MaybeCompress(ctx context.Context, convID string) {
 }
 
 func (c *Compressor) generateSummary(ctx context.Context, conversationText, parentSummary string) string {
-	var baseURL, apiKey, modelName string
+	var baseURL, apiKey, modelName, apiType string
 	var temperature, maxTokens float64
 	err := c.db.WithContext(ctx).Table("model_configs").
-		Select("base_url, api_key, model_name, temperature, max_tokens").
+		Select("base_url, api_key, model_name, temperature, max_tokens, api_type").
 		Where("is_active = 1").Limit(1).Row().
-		Scan(&baseURL, &apiKey, &modelName, &temperature, &maxTokens)
+		Scan(&baseURL, &apiKey, &modelName, &temperature, &maxTokens, &apiType)
 	if err != nil {
 		return ""
 	}
@@ -144,6 +144,11 @@ func (c *Compressor) generateSummary(ctx context.Context, conversationText, pare
 	}
 
 	baseURL = strings.TrimRight(baseURL, "/")
+
+	if apiType == "ollama" {
+		return c.generateOllamaSummary(ctx, baseURL, modelName, temperature, int(maxTokens), messages)
+	}
+
 	reqBody := map[string]interface{}{
 		"model":       modelName,
 		"messages":    messages,
@@ -177,6 +182,42 @@ func (c *Compressor) generateSummary(ctx context.Context, conversationText, pare
 		return ""
 	}
 	return strings.TrimSpace(result.Choices[0].Message.Content)
+}
+
+func (c *Compressor) generateOllamaSummary(ctx context.Context, baseURL, modelName string, temperature float64, maxTokens int, messages []map[string]interface{}) string {
+	reqBody := map[string]interface{}{
+		"model":    modelName,
+		"messages": messages,
+		"stream":   false,
+		"options": map[string]interface{}{
+			"temperature": temperature,
+			"num_ctx":     maxTokens,
+		},
+	}
+	jsonBody, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 120 * time.Second}).Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(rb, &result); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(result.Message.Content)
 }
 
 func (c *Compressor) GetCompressionStatus(convID string) map[string]interface{} {

@@ -3,7 +3,7 @@ import { autoUpdater, UpdateInfo } from "electron-updater";
 import log from "electron-log";
 import path from "path";
 import fs from "fs";
-import { getAmitiaDataDir, getInstallDir } from "./path-manager";
+import { getAmitiaDataDir, getInstallDir, isDevMode } from "./path-manager";
 
 let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
@@ -154,7 +154,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
 
   ipcMain.handle("release-notes:get", () => {
     try {
-      const notesPath = app.isPackaged
+      const notesPath = !isDevMode()
         ? path.join(process.resourcesPath, "release-notes.md")
         : path.join(getInstallDir(), "release-notes.md");
       if (fs.existsSync(notesPath)) {
@@ -170,6 +170,10 @@ export function registerUpdateManager(win: BrowserWindow): void {
 }
 
 export async function waitForStartupCheck(): Promise<void> {
+  if (isDevMode()) {
+    console.log("[UpdateManager] 开发模式, 跳过更新检查");
+    return;
+  }
   try {
     const result = await autoUpdater.checkForUpdates();
     if (!result || !result.updateInfo) {

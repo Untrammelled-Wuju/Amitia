@@ -33,7 +33,7 @@ function buildQuery(params: Record<string, unknown>): string {
 }
 
 export async function listMigrations(extensionId?: string): Promise<{ items: MigrationDefinition[]; total: number }> {
-  const qs = buildQuery({ extension_id: extensionId });
+  const qs = buildQuery({ extensionId });
   const res = await apiClient.get(`${MIGRATIONS_BASE}${qs}`);
   return res.data;
 }
@@ -59,7 +59,7 @@ export async function getMigrationOperation(operationId: string): Promise<Migrat
 }
 
 export async function listRollbacks(extensionId?: string): Promise<{ items: RollbackPlan[]; total: number }> {
-  const qs = buildQuery({ extension_id: extensionId });
+  const qs = buildQuery({ extensionId });
   const res = await apiClient.get(`${ROLLBACKS_BASE}${qs}`);
   return res.data;
 }
@@ -95,13 +95,12 @@ export async function executeRecovery(action: RecoveryAction): Promise<{ operati
 }
 
 export async function getJournalEntries(operationId: string): Promise<{ items: LifecycleJournalEntry[]; total: number }> {
-  const qs = buildQuery({ operation_id: operationId });
-  const res = await apiClient.get(`${JOURNAL_BASE}${qs}`);
+  const res = await apiClient.get(`${JOURNAL_BASE}/${encodeURIComponent(operationId)}`);
   return res.data;
 }
 
 export async function listCanaryPolicies(extensionId?: string): Promise<{ items: CanaryPolicy[]; total: number }> {
-  const qs = buildQuery({ extension_id: extensionId });
+  const qs = buildQuery({ extensionId });
   const res = await apiClient.get(`${CANARY_BASE}/policies${qs}`);
   return res.data;
 }
@@ -117,7 +116,7 @@ export async function createCanaryPolicy(policy: Partial<CanaryPolicy>): Promise
 }
 
 export async function listCanaryStates(extensionId?: string): Promise<{ items: CanaryState[]; total: number }> {
-  const qs = buildQuery({ extension_id: extensionId });
+  const qs = buildQuery({ extensionId });
   const res = await apiClient.get(`${CANARY_BASE}/states${qs}`);
   return res.data;
 }
@@ -163,7 +162,7 @@ export async function listCanaryMetrics(
   startTime?: string,
   endTime?: string,
 ): Promise<{ items: CanaryMetric[]; total: number }> {
-  const qs = buildQuery({ extension_id: extensionId, generation, start_time: startTime, end_time: endTime });
+  const qs = buildQuery({ extensionId, generation, startTime, endTime });
   const res = await apiClient.get(`${CANARY_BASE}/metrics${qs}`);
   return res.data;
 }
@@ -178,8 +177,8 @@ export async function getHealthEvaluation(
   generation: number,
   baselineWindow?: string,
 ): Promise<HealthEvaluation> {
-  const qs = buildQuery({ extension_id: extensionId, generation, baseline_window: baselineWindow });
-  const res = await apiClient.get(`${CANARY_BASE}/health${qs}`);
+  const qs = buildQuery({ generation, baselineWindow });
+  const res = await apiClient.get(`${CANARY_BASE}/health/${encodeURIComponent(extensionId)}${qs}`);
   return res.data;
 }
 
@@ -188,7 +187,7 @@ export async function getGenerationRoute(
   cohortType: string,
   cohortId: string,
 ): Promise<GenerationRoute> {
-  const qs = buildQuery({ extension_id: extensionId, cohort_type: cohortType, cohort_id: cohortId });
-  const res = await apiClient.get(`${CANARY_BASE}/routes${qs}`);
+  const qs = buildQuery({ cohortType, cohortId });
+  const res = await apiClient.get(`${CANARY_BASE}/routes/${encodeURIComponent(extensionId)}${qs}`);
   return res.data;
 }

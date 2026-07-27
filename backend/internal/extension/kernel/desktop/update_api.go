@@ -84,6 +84,9 @@ func (api *UpdateAPI) ListUpdates(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	updates, err := api.manager.CheckForUpdates(c.Request.Context(), extID)
 	if err != nil {
 		apiError(c, http.StatusInternalServerError, err.Error())
@@ -98,6 +101,9 @@ func (api *UpdateAPI) CheckUpdates(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	updates, err := api.manager.CheckForUpdates(c.Request.Context(), extID)
 	if err != nil {
 		apiError(c, http.StatusInternalServerError, err.Error())
@@ -112,6 +118,9 @@ func (api *UpdateAPI) DownloadUpdate(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	var req struct {
 		Version string `json:"version"`
 	}
@@ -137,6 +146,9 @@ func (api *UpdateAPI) InstallUpdate(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	var req struct {
 		OperationID string `json:"operationId"`
 	}
@@ -161,6 +173,9 @@ func (api *UpdateAPI) CancelUpdate(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	var req struct {
 		OperationID string `json:"operationId"`
 	}
@@ -185,6 +200,9 @@ func (api *UpdateAPI) RetryUpdate(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	var req struct {
 		OperationID string `json:"operationId"`
 	}
@@ -209,6 +227,9 @@ func (api *UpdateAPI) RollbackUpdate(c *gin.Context) {
 		return
 	}
 	extID := c.Param("extensionId")
+	if extID == "" {
+		extID = c.Param("id")
+	}
 	var req struct {
 		OperationID string `json:"operationId"`
 	}

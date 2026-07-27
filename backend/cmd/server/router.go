@@ -52,6 +52,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	r.Use(middleware.TraceMiddleware())
 	r.Use(security.CorsMiddleware())
 	apiGroup := r.Group("/api")
+	apiGroup.Use(middleware.AuthMiddleware())
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)

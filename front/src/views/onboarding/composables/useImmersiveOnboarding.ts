@@ -424,10 +424,14 @@ export function useImmersiveOnboarding() {
       accountName.value = data.username;
       nextStage();
     } catch (e: any) {
-      stageError.value =
+      const msg =
         e?.response?.data?.message ||
         e?.message ||
         (hasAdmin.value ? "登录失败，请检查密码" : "创建账号失败，请重试");
+      stageError.value = msg;
+      if (e?.severity === "fatal" || !e?.severity) {
+        ElMessage.error(msg);
+      }
     }
   }
 

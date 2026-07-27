@@ -126,6 +126,43 @@ type SchemaUIDocument struct {
 	Children      []SchemaUINode           `json:"children"`
 	DataSources   []SchemaUIDataSource     `json:"dataSources,omitempty"`
 	Actions       []SchemaUIDeclaredAction `json:"actions,omitempty"`
+	Theme         *ThemeConfig             `json:"theme,omitempty"`
+	Locale        *LocaleConfig            `json:"locale,omitempty"`
+	Accessibility *AccessibilityConfig     `json:"accessibility,omitempty"`
+}
+
+type UITheme string
+
+const (
+	UIThemeLight UITheme = "light"
+	UIThemeDark  UITheme = "dark"
+	UIThemeAuto  UITheme = "auto"
+)
+
+type ThemeConfig struct {
+	Mode      UITheme           `json:"mode"`
+	Overrides map[string]string `json:"overrides,omitempty"`
+}
+
+type LocaleConfig struct {
+	Current   string   `json:"current"`
+	Available []string `json:"available,omitempty"`
+}
+
+type AccessibilityConfig struct {
+	Enabled       bool `json:"enabled"`
+	HighContrast  bool `json:"highContrast,omitempty"`
+	ReducedMotion bool `json:"reducedMotion,omitempty"`
+	ScreenReader  bool `json:"screenReader,omitempty"`
+	KeyboardNav   bool `json:"keyboardNav,omitempty"`
+}
+
+type PerformanceBudget struct {
+	MaxRenderTimeMS   int64 `json:"maxRenderTimeMs"`
+	MaxLayoutCount    int   `json:"maxLayoutCount"`
+	MaxNodeCount      int   `json:"maxNodeCount"`
+	MaxDataFetchCount int   `json:"maxDataFetchCount"`
+	MaxActionCount    int   `json:"maxActionCount"`
 }
 
 type SchemaUIDataSource struct {
@@ -144,13 +181,14 @@ type SchemaUIDeclaredAction struct {
 }
 
 type SchemaLimits struct {
-	MaxNodes       int
-	MaxDepth       int
-	MaxGridColumns int
-	MaxTableRows   int
-	MaxMarkdownKB  int
-	MaxImageKB     int
-	MaxChildren    int
+	MaxNodes          int
+	MaxDepth          int
+	MaxGridColumns    int
+	MaxTableRows      int
+	MaxMarkdownKB     int
+	MaxImageKB        int
+	MaxChildren       int
+	PerformanceBudget *PerformanceBudget
 }
 
 func DefaultLimits() SchemaLimits {

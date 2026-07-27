@@ -352,9 +352,6 @@ async function handleImportFile(file: any) {
     const res = await axios.post(
       apiBaseUrl.value + "/api/storage/import-amitia",
       formData,
-      {
-        headers: { "Content-Type": "multipart/form-data" },
-      },
     );
     const data = res.data?.data || res.data;
     if (data?.imported) {

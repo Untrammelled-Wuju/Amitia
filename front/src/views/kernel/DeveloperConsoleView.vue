@@ -802,9 +802,7 @@ onUnmounted(() => {
 
 <style scoped>
 .developer-console {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  padding: 20px;
 }
 
 .console-header {

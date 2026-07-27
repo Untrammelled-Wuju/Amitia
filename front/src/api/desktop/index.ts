@@ -17,8 +17,11 @@ const DESKTOP_BASE = "/api/extensions/desktop";
 const UPDATES_OPS_BASE = "/api/extensions/updates/operations";
 
 export async function listDesktopContributions(extensionId: string): Promise<ResolvedContribution[]> {
-  const res = await apiClient.get(`/api/extensions/${encodeURIComponent(extensionId)}/desktop`);
-  return res.data;
+  const res = await apiClient.get(`${DESKTOP_BASE}/contributions`, { params: { extensionId } });
+  const data = res.data;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
 }
 
 export async function getDesktopContribution(contributionId: string): Promise<ResolvedContribution> {

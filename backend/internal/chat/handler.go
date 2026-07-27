@@ -381,12 +381,13 @@ func (h *Handler) DetectModels(c *gin.Context) {
 	var body struct {
 		BaseURL string `json:"baseUrl"`
 		APIKey  string `json:"apiKey"`
+		APIType string `json:"apiType"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.BaseURL == "" {
 		util.ErrorResponse(c, response.InvalidParams, "baseUrl 不能为空", nil)
 		return
 	}
-	models, err := h.service.DetectModels(body.BaseURL, body.APIKey)
+	models, err := h.service.DetectModels(body.BaseURL, body.APIKey, body.APIType)
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
 		return
@@ -453,7 +454,7 @@ func (h *Handler) TestModel(c *gin.Context) {
 		util.SuccessResponse(c, gin.H{"success": false, "latencyMs": 0, "status": "error", "message": "配置不存在"})
 		return
 	}
-	h.doTestConnection(c, cfg.BaseURL, cfg.APIKey, cfg.ModelName)
+	h.doTestConnection(c, cfg.BaseURL, cfg.APIKey, cfg.ModelName, cfg.APIType)
 }
 func (h *Handler) ProviderSchema(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"fields": []string{"baseUrl", "apiKey", "modelName"}})
@@ -463,12 +464,20 @@ func (h *Handler) ListProviders(c *gin.Context) {
 	util.SuccessResponse(c, h.service.ListProviders())
 }
 
-func (h *Handler) doTestConnection(c *gin.Context, baseURL, apiKey, modelName string) {
+func (h *Handler) doTestConnection(c *gin.Context, baseURL, apiKey, modelName, apiType string) {
 	start := time.Now()
 	base := strings.TrimRight(baseURL, "/")
 
-	req, _ := http.NewRequest("GET", base+"/models", nil)
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var reqURL string
+	if apiType == "ollama" {
+		reqURL = base + "/api/tags"
+	} else {
+		reqURL = base + "/models"
+	}
+	req, _ := http.NewRequest("GET", reqURL, nil)
+	if apiType != "ollama" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	latency := int(time.Since(start).Milliseconds())
@@ -507,13 +516,14 @@ func (h *Handler) TestModelStandalone(c *gin.Context) {
 		BaseURL   string `json:"baseUrl"`
 		APIKey    string `json:"apiKey"`
 		ModelName string `json:"modelName"`
+		APIType   string `json:"apiType"`
 	}
 	c.ShouldBindJSON(&body)
 	if body.BaseURL == "" {
 		util.SuccessResponse(c, gin.H{"success": false, "latencyMs": 0, "status": "error", "message": "Base URL 不能为空"})
 		return
 	}
-	h.doTestConnection(c, body.BaseURL, body.APIKey, body.ModelName)
+	h.doTestConnection(c, body.BaseURL, body.APIKey, body.ModelName, body.APIType)
 }
 
 func (h *Handler) CompressionStatus(c *gin.Context) {

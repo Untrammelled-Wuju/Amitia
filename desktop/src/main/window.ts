@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { app, BrowserWindow, nativeTheme, shell } from "electron";
 import { getInitialBrandImage } from "./branding";
+import { isDevMode } from "./path-manager";
 import { get as httpGet } from "node:http";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -84,7 +85,7 @@ export function createMainWindow(): BrowserWindow {
     }
   });
 
-  if (!app.isPackaged) {
+  if (isDevMode()) {
     void waitForDevServer().then((ok) => {
       if (ok) {
         void win.loadURL(DEV_SERVER_URL);

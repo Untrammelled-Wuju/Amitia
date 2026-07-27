@@ -528,9 +528,7 @@ onMounted(() => {
 
 <style scoped>
 .wasm-runtime-view {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 20px;
 }
 
 .wasm-header {

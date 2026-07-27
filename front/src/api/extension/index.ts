@@ -83,7 +83,8 @@ export async function fetchContributions(): Promise<UIContributionSummary[]> {
 
 export async function fetchExtensionContributions(extensionId: string): Promise<UIContributionSummary[]> {
   const res = await apiClient.get<{ contributions: BackendUIContributionDefinition[] }>(
-    `/api/extensions/${encodeURIComponent(extensionId)}/ui`,
+    `/api/extensions/ui/by-extension`,
+    { params: { extensionId } },
   );
   return res.data.contributions.map(transformContribution);
 }
@@ -135,8 +136,10 @@ export async function openExtensionPage(extensionId: string, pageId: string, par
   deepLinkOrigin?: string;
 }): Promise<BackendOpenPageResult> {
   const res = await apiClient.post<BackendOpenPageResult>(
-    `/api/extensions/${encodeURIComponent(extensionId)}/pages/${encodeURIComponent(pageId)}/open`,
+    `/api/extensions/ui/open-page`,
     {
+      extensionId,
+      pageId,
       params: params?.params ?? {},
       scopeSnapshot: params?.scopeSnapshot ?? "",
       deepLinkOrigin: params?.deepLinkOrigin ?? "",
@@ -158,7 +161,7 @@ export async function closePageSession(sessionId: string): Promise<void> {
 
 export async function fetchSchemaDocument(extensionId: string, contributionId: string): Promise<unknown> {
   const res = await apiClient.get<{ document: unknown }>(
-    `/api/extension/schema/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}`,
+    `/api/extensions/ui/schema/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}`,
   );
   return res.data.document;
 }

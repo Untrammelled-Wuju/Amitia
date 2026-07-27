@@ -53,16 +53,15 @@ func (a *DesktopAPIAdapter) RegisterRoutes(group *gin.RouterGroup) {
 	desktopGroup.GET("/circuit/status", a.circuitStatus)
 	desktopGroup.POST("/circuit/reset", a.circuitReset)
 
-	updateGroup := group.Group("/updates")
-	updateGroup.GET("/extensions/:extensionId/updates", a.listUpdates)
-	updateGroup.POST("/extensions/:extensionId/updates/check", a.checkUpdates)
-	updateGroup.POST("/extensions/:extensionId/updates/download", a.downloadUpdate)
-	updateGroup.POST("/extensions/:extensionId/updates/install", a.installUpdate)
-	updateGroup.POST("/extensions/:extensionId/updates/cancel", a.cancelUpdate)
-	updateGroup.POST("/extensions/:extensionId/updates/retry", a.retryUpdate)
-	updateGroup.POST("/extensions/:extensionId/updates/rollback", a.rollbackUpdate)
-	updateGroup.GET("/operations/:operationId", a.getOperation)
-	updateGroup.GET("/operations/:operationId/steps", a.getOperationSteps)
+	group.GET("/:id/updates", a.listUpdates)
+	group.POST("/:id/updates/check", a.checkUpdates)
+	group.POST("/:id/updates/download", a.downloadUpdate)
+	group.POST("/:id/updates/install", a.installUpdate)
+	group.POST("/:id/updates/cancel", a.cancelUpdate)
+	group.POST("/:id/updates/retry", a.retryUpdate)
+	group.POST("/:id/updates/rollback", a.rollbackUpdate)
+	group.GET("/updates/operations/:operationId", a.getOperation)
+	group.GET("/updates/operations/:operationId/steps", a.getOperationSteps)
 }
 
 func (a *DesktopAPIAdapter) listAllContributions(c *gin.Context) {

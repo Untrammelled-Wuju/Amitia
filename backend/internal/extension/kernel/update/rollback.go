@@ -314,7 +314,7 @@ func (e *RollbackExecutor) Execute(ctx context.Context, req RollbackRequest) Rol
 		return result
 	}
 
-	if err := e.generations.Transition(ctx, req.ExtensionID, rollbackGen.GenerationID, GenerationStateActive); err != nil {
+	if err := e.generations.Reactivate(ctx, req.ExtensionID, rollbackGen.GenerationID); err != nil {
 		result.Reason = fmt.Sprintf("activate rollback generation failed: %v", err)
 		result.Steps = append(result.Steps, RollbackStep{Name: "activate_rollback", Status: "failed", Error: err.Error()})
 		return result

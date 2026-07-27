@@ -101,7 +101,8 @@ export function classifyError(
       code === ERR.TOKEN_INVALID
     ) {
       localStorage.removeItem(TOKEN_KEY);
-      if (window.location.pathname !== "/login") {
+      const PUBLIC_PATHS = ["/login", "/setup", "/onboarding", "/privacy", "/usage-boundary"];
+      if (!PUBLIC_PATHS.includes(window.location.pathname)) {
         window.location.href = "/login";
       }
       return { code, message: message || "Please login", severity: "fatal" };
@@ -183,7 +184,6 @@ export function displayError(err: RequestError) {
 export const request: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
-  headers: { "Content-Type": "application/json" },
 });
 
 // Request interceptor: attach token

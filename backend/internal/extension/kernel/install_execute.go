@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
@@ -230,6 +231,38 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 			_ = r.container.UIHost.RegisterContribution(&uiDef)
 			if r.container.UIContributionRepo != nil {
 				_ = r.container.UIContributionRepo.PutContribution(ctx, &uiDef)
+			}
+			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
+				entryKind := extension_page_host.PageKindWeb
+				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
+					entryKind = extension_page_host.PageKindSchema
+				}
+				perms := make([]string, 0, len(uiDef.Permissions))
+				for _, p := range uiDef.Permissions {
+					perms = append(perms, p.Name)
+				}
+				pageDef := extension_page_host.NewExtensionPageDefinition(extension_page_host.PageRegistrationInput{
+					PageID:          extension_page_host.PageID(uiDef.ContributionID),
+					ExtensionID:     extension_page_host.ExtensionID(uiDef.ExtensionID),
+					ModuleID:        string(uiDef.ModuleID),
+					ContributionID:  extension_page_host.ContributionID(uiDef.ContributionID),
+					Generation:      inst.Generation,
+					ContractVersion: uiDef.ContractVersion,
+					EntryKind:       entryKind,
+					EntryPath:       uiDef.Entry.Path,
+					SchemaPath:      uiDef.Entry.SchemaPath,
+					Title: extension_page_host.LocalizedText{
+						Default:      uiDef.Display.Title.Default,
+						Translations: uiDef.Display.Title.I18n,
+					},
+					Description: extension_page_host.LocalizedText{
+						Default:      uiDef.Display.Description.Default,
+						Translations: uiDef.Display.Description.I18n,
+					},
+					Icon:        uiDef.Display.Icon,
+					Permissions: perms,
+				})
+				_ = r.container.PageHost.RegisterPage(ctx, pageDef)
 			}
 		}
 	}

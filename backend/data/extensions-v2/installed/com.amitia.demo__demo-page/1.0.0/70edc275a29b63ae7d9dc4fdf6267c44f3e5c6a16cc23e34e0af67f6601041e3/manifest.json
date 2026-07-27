@@ -1,0 +1,85 @@
+{
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows"
+    ]
+  },
+  "extension": {
+    "description": {
+      "default": "A demo extension with a UI page",
+      "translations": {}
+    },
+    "name": {
+      "default": "Demo Extension",
+      "translations": {}
+    },
+    "id": "com.amitia.demo/demo-page",
+    "version": "1.0.0"
+  },
+  "publisher": {
+    "displayName": "Amitia Demo",
+    "trustLevel": "untrusted",
+    "id": "amitia-demo"
+  },
+  "modules": [
+    {
+      "type": "builtin",
+      "contributions": [
+        {
+          "spec": {
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "Demo Page"
+              },
+              "icon": "extension",
+              "description": {
+                "default": "A demo extension page"
+              }
+            },
+            "sandbox": {
+              "enable_scripts": false,
+              "type": "web_restricted",
+              "csp": "default-src 'self'"
+            },
+            "kind": "web_page",
+            "slot": {
+              "slot_id": "extension.settings.page",
+              "contract_version": 1
+            },
+            "integrity": {
+              "definition_hash": "53cd84746d887a6e12b515ec7d0221030ac8ba0add6dc78eb8b6c4b4e583deba",
+              "generation": 1
+            },
+            "entry": {
+              "type": "web_restricted",
+              "content_hash": "53cd84746d887a6e12b515ec7d0221030ac8ba0add6dc78eb8b6c4b4e583deba",
+              "path": "modules/main/index.html"
+            }
+          },
+          "kind": "ui_page",
+          "name": {
+            "default": "Demo Page",
+            "translations": {}
+          },
+          "id": "demo-page",
+          "description": {
+            "default": "A demo UI page",
+            "translations": {}
+          }
+        }
+      ],
+      "name": {
+        "default": "Main Module",
+        "translations": {}
+      },
+      "id": "main"
+    }
+  ],
+  "manifestVersion": 2
+}

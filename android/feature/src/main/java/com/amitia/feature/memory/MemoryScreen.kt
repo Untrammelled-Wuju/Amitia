@@ -171,7 +171,7 @@ private fun MemoryListTab(
             item {
                 AmitiaEmptyState(
                     title = "暂无记忆",
-                    subtitle = "创建一条初始记忆开始",
+                    description = "创建一条初始记忆开始",
                     icon = Icons.Outlined.Add,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -273,7 +273,8 @@ private fun TimelineTab(state: MemoryUiState, onOpenDetail: (String) -> Unit) {
     if (state.timeline.isEmpty() && !state.loading) {
         AmitiaEmptyState(
             title = "尚无时间线",
-            subtitle = "切换到「记忆」标签查看或创建",
+            description = "切换到「记忆」标签查看或创建",
+            icon = Icons.Outlined.Search,
             modifier = Modifier.fillMaxWidth()
         )
         return
@@ -328,7 +329,8 @@ private fun GraphTab(state: MemoryUiState, onOpenDetail: (String) -> Unit) {
     val graph: MemoryGraphDto = state.graphSummary ?: run {
         AmitiaEmptyState(
             title = "尚未加载图谱",
-            subtitle = "等待加载完成",
+            description = "等待加载完成",
+            icon = Icons.Outlined.Search,
             modifier = Modifier.fillMaxWidth()
         )
         return

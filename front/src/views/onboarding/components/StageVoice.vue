@@ -209,9 +209,7 @@ const voiceModelModes = [
 ];
 
 const { get } = useApi();
-const voicePresets = ref<any[]>([
-  { name: "zh_female_vv_jupiter_bigtts", label: "vv - 活泼灵动女声" },
-]);
+const voicePresets = ref<any[]>([]);
 
 onMounted(async () => {
   try {

@@ -110,6 +110,9 @@ export function useModelConfig() {
       providers.value.find((p: any) => p.id === apiType) || null;
     detectedModels.value = [];
     detectError.value = "";
+    if (apiType === "ollama" && !form.baseUrl) {
+      form.baseUrl = "http://127.0.0.1:11434";
+    }
   }
 
   async function detectModels() {

@@ -48,7 +48,8 @@ const router = createRouter({
     { path: "/kernel/updates", name: "updateCenter", component: () => import("@/views/kernel/UpdateCenterView.vue"), meta: { requiresAuth: true } },
     { path: "/kernel/dev-console", name: "developerConsole", component: () => import("@/views/kernel/DeveloperConsoleView.vue"), meta: { requiresAuth: true } },
     { path: "/kernel/migrations", name: "migrationCenter", component: () => import("@/views/kernel/MigrationCenterView.vue"), meta: { requiresAuth: true } },
-    { path: "/extension/:extensionId/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/dev-mode", name: "devMode", component: () => import("@/views/kernel/DevModeView.vue"), meta: { requiresAuth: true } },
+    { path: "/extension/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/mcp", name: "extensionMCP", component: () => import("@/views/mcp/MCPServerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/skills", name: "extensionSkills", component: () => import("@/views/extensions/SkillListView.vue"), meta: { requiresAuth: true } },
@@ -144,12 +145,12 @@ router.beforeEach(async (to, _from, next) => {
     if (token && (to.path === "/login" || to.path === "/setup")) {
       return next("/chat")
     }
-    if (token && to.path === "/onboarding") {
+    if (to.path === "/onboarding") {
       try {
         const res = await apiClient.get("/api/onboarding/status")
         const data = res.data?.data || res.data
         if (data?.completed) {
-          return next("/chat")
+          return next(token ? "/chat" : "/login")
         }
       } catch {}
     }

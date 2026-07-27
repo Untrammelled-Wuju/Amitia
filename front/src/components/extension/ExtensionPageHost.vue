@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent 
 import { useRoute, useRouter } from "vue-router";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
 
 const SchemaUIRenderer = defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
 const SandboxWebUIFrame = defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
@@ -53,7 +54,7 @@ const missingPermissions = ref<string[]>([]);
 const errorReason = ref<string>("");
 const diagnostics = ref<Record<string, unknown>>({});
 
-const extensionId = computed(() => String(route.params.extensionId ?? ""));
+const extensionId = computed(() => String(route.query.extensionId ?? route.params.extensionId ?? ""));
 const pageId = computed(() => String(route.params.pageId ?? ""));
 
 const title = computed(() => pageSpec.value?.title.default ?? pageId.value);
@@ -120,19 +121,13 @@ async function openPage() {
   pageState.value = "resolving";
   errorReason.value = "";
   try {
-    const response = await fetch(`/api/extensions/${extensionId.value}/pages/${pageId.value}/open`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        params: route.query,
-        scopeSnapshot: buildScopeSnapshot(),
-      }),
+    const result = await openExtensionPage(extensionId.value, pageId.value, {
+      params: route.query as Record<string, unknown>,
+      scopeSnapshot: buildScopeSnapshot(),
     });
-    if (!response.ok) throw new Error(`open page failed: ${response.status}`);
-    const result: OpenPageResult = await response.json();
     sessionId.value = result.sessionId;
-    pageState.value = result.state;
-    pageSpec.value = result.definition ?? null;
+    pageState.value = result.state as PageState;
+    pageSpec.value = (result.definition as PageSpec) ?? null;
     missingPermissions.value = result.missingPermissions ?? [];
     errorReason.value = result.reason ?? "";
     if (result.state === "loading" || result.state === "runtime_starting") {
@@ -157,11 +152,9 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null;
 async function pollPageStatus() {
   if (!sessionId.value) return;
   try {
-    const response = await fetch(`/api/extensions/ui/page-sessions/${sessionId.value}/status`);
-    if (!response.ok) throw new Error(`poll status failed: ${response.status}`);
-    const result: OpenPageResult = await response.json();
-    pageState.value = result.state;
-    pageSpec.value = result.definition ?? pageSpec.value;
+    const result = await pollPageSessionStatus(sessionId.value);
+    pageState.value = result.state as PageState;
+    pageSpec.value = (result.definition as PageSpec) ?? pageSpec.value;
     missingPermissions.value = result.missingPermissions ?? [];
     errorReason.value = result.reason ?? "";
     if (result.state === "loading" || result.state === "runtime_starting") {
@@ -180,9 +173,7 @@ async function closePage() {
   }
   if (!sessionId.value) return;
   try {
-    await fetch(`/api/extensions/ui/page-sessions/${sessionId.value}`, {
-      method: "DELETE",
-    });
+    await closePageSession(sessionId.value);
   } catch {
   }
   uiStore.unregisterSession(`${extensionId.value}/${pageId.value}`);
@@ -212,7 +203,7 @@ async function retry() {
 
 async function goBack() {
   await closePage();
-  router.push({ name: "extension-center" });
+  router.push({ name: "extensionCenter" });
 }
 
 onMounted(openPage);

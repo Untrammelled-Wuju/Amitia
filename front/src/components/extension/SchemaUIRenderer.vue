@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onErrorCaptured } from "vue";
+import { ref, reactive, computed, watch, onMounted, onErrorCaptured, provide } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { apiClient } from "@/composables/useApi";
+import { fetchSchemaDocument } from "@/api/extension";
 import SchemaUINode from "./SchemaUINode.vue";
 import {
   validateDocument,
+  countNodes,
   type SchemaUIDocument,
   type SchemaUINode as SchemaUINodeType,
   type SchemaUIActionBinding,
+  type UITheme,
 } from "./schema-ui-utils";
 
 const props = defineProps<{
@@ -51,6 +55,54 @@ const rootNode = computed<SchemaUINodeType | null>(() => schema.value?.root ?? n
 const rootList = computed<SchemaUINodeType[]>(() => schema.value?.children ?? []);
 const hasRoot = computed(() => rootNode.value !== null || rootList.value.length > 0);
 
+const themeConfig = computed(() => schema.value?.theme ?? null);
+const localeConfig = computed(() => schema.value?.locale ?? null);
+const accessibilityConfig = computed(() => schema.value?.accessibility ?? null);
+const performanceBudget = computed(() => schema.value?.performanceBudget ?? null);
+
+const themeMode = computed<UITheme>(() => themeConfig.value?.mode ?? "auto");
+const effectiveTheme = computed<"light" | "dark">(() => {
+  if (themeMode.value === "auto") {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  }
+  return themeMode.value;
+});
+
+const themeOverridesStyle = computed(() => {
+  const overrides = themeConfig.value?.overrides;
+  if (!overrides) return undefined;
+  const entries = Object.entries(overrides).map(([k, v]) => `${k}: ${v}`);
+  return entries.length > 0 ? entries.join("; ") : undefined;
+});
+
+const localeValue = computed(() => localeConfig.value?.current ?? "zh-CN");
+provide("schema-ui-locale", localeValue);
+
+const accessibilityAttrs = computed<Record<string, string>>(() => {
+  const cfg = accessibilityConfig.value;
+  if (!cfg || !cfg.enabled) return {};
+  const attrs: Record<string, string> = {};
+  attrs["role"] = "region";
+  attrs["aria-label"] = schema.value?.title || "Schema UI";
+  if (cfg.highContrast) attrs["data-high-contrast"] = "true";
+  if (cfg.reducedMotion) attrs["data-reduced-motion"] = "true";
+  if (cfg.screenReader) attrs["aria-live"] = "polite";
+  if (cfg.keyboardNav) attrs["tabindex"] = "0";
+  return attrs;
+});
+
+const nodeCountExceeded = computed(() => {
+  const budget = performanceBudget.value;
+  if (!budget || budget.maxNodeCount <= 0) return false;
+  const roots: SchemaUINodeType[] = schema.value?.root ? [schema.value.root] : schema.value?.children ?? [];
+  let total = 0;
+  for (const r of roots) total += countNodes(r);
+  return total > budget.maxNodeCount;
+});
+
 onErrorCaptured((err) => {
   const message = err instanceof Error ? err.message : String(err);
   capturedError.value = message;
@@ -79,15 +131,10 @@ async function loadSchema() {
   validationErrors.value = [];
   schema.value = null;
   try {
-    const response = await fetch(
-      `/api/extension/schema/${props.contribution.extensionId}/${props.contribution.contributionId}`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-    if (!response.ok) throw new Error(`schema 加载失败: ${response.status}`);
-    const data = (await response.json()) as SchemaUIDocument;
+    const data = (await fetchSchemaDocument(
+      props.contribution.extensionId,
+      props.contribution.contributionId,
+    )) as SchemaUIDocument;
     const result = validateDocument(data);
     if (!result.valid) {
       validationErrors.value = result.errors;
@@ -113,19 +160,14 @@ async function ensureSession(): Promise<string> {
     return sessionId.value;
   }
   try {
-    const res = await fetch("/api/extensions/ui/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        extensionId: props.contribution.extensionId,
-        contributionId: props.contribution.contributionId,
-        moduleId: props.contribution.moduleId,
-        slotId: props.slotId,
-        context: mergedContext.value,
-      }),
+    const res = await apiClient.post<{ sessionId?: string; session_id?: string }>("/api/extensions/ui/sessions", {
+      extensionId: props.contribution.extensionId,
+      contributionId: props.contribution.contributionId,
+      moduleId: props.contribution.moduleId,
+      slotId: props.slotId,
+      context: mergedContext.value,
     });
-    if (!res.ok) throw new Error(`session 创建失败: ${res.status}`);
-    const data = (await res.json()) as { sessionId?: string; session_id?: string };
+    const data = res.data;
     const sid = data.sessionId ?? data.session_id ?? "";
     if (!sid) throw new Error("session 创建响应缺少 sessionId");
     sessionId.value = sid;
@@ -258,7 +300,13 @@ watch(
 </script>
 
 <template>
-  <div class="schema-ui-renderer" :data-contribution-id="contribution.contributionId">
+  <div
+    class="schema-ui-renderer"
+    :data-contribution-id="contribution.contributionId"
+    :data-theme="effectiveTheme"
+    :style="themeOverridesStyle"
+    v-bind="accessibilityAttrs"
+  >
     <template v-if="loading">
       <div class="schema-ui-renderer__loading">
         <span class="schema-ui-renderer__spinner"></span>
@@ -286,7 +334,13 @@ watch(
       >
         <span>schema 校验警告: {{ validationErrors.join("; ") }}</span>
       </div>
-      <div class="schema-ui-renderer__content">
+      <div
+        v-if="nodeCountExceeded"
+        class="schema-ui-renderer__warning"
+      >
+        <span>节点数量超出性能预算限制</span>
+      </div>
+      <div v-if="!nodeCountExceeded" class="schema-ui-renderer__content">
         <template v-if="hasRoot">
           <SchemaUINode
             v-if="rootNode"

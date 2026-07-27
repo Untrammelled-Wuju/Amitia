@@ -89,7 +89,7 @@ fun CharacterScreen(
                 }
                 state.characters.isEmpty() -> AmitiaEmptyState(
                     title = "还没有角色",
-                    subtitle = "点击右下角创建第一个角色",
+                    description = "点击右下角创建第一个角色",
                     icon = Icons.Outlined.Add,
                     modifier = Modifier.fillMaxSize()
                 )

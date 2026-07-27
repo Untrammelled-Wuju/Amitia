@@ -3,6 +3,8 @@ package com.amitia.feature.onboarding.steps
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amitia.core.designsystem.ScreenState
+import com.amitia.runtime.linux.LinuxRootfsManager
+import com.amitia.runtime.linux.RootfsInstallPhase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -123,10 +125,27 @@ data class OnboardingFlowUiState(
 }
 
 @HiltViewModel
-class OnboardingFlowViewModel @Inject constructor() : ViewModel() {
+class OnboardingFlowViewModel @Inject constructor(
+    private val linuxRootfsManager: LinuxRootfsManager
+) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingFlowUiState())
     val state: StateFlow<OnboardingFlowUiState> = _state.asStateFlow()
+
+    private val fileToDisplayName = mapOf(
+        "proot_linux_aarch64" to "内嵌 Linux 环境",
+        "amitia-backend-arm64" to "Amitia Go Backend",
+        "qdrant_linux_aarch64" to "Qdrant",
+        "surreal_linux_aarch64" to "SurrealDB"
+    )
+
+    private val installItemOrder = listOf(
+        "内嵌 Linux 环境",
+        "Amitia Go Backend",
+        "Qdrant",
+        "SurrealDB",
+        "SQLite 数据目录"
+    )
 
     fun goToStep(step: OnboardingFlowStep) {
         viewModelScope.launch {
@@ -172,19 +191,71 @@ class OnboardingFlowViewModel @Inject constructor() : ViewModel() {
 
     fun startRuntimeInstall() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(runtimeInstalling = true, runtimeItems = emptyList())
-            val names = listOf("内嵌 Linux 环境", "Amitia Go Backend", "Qdrant", "SurrealDB", "SQLite 数据目录")
-            names.forEach { name ->
-                val statuses = InstallStatus.entries.filter { it != InstallStatus.Pending }
-                statuses.forEach { status ->
-                    delay(180)
-                    _state.value = _state.value.copy(
-                        runtimeItems = updateRuntimeItem(_state.value.runtimeItems, name, status)
-                    )
+            _state.value = _state.value.copy(
+                runtimeInstalling = true,
+                runtimeItems = installItemOrder.map { RuntimeInstallItem(it, InstallStatus.Pending) },
+                error = null
+            )
+
+            var lastFile: String? = null
+
+            try {
+                linuxRootfsManager.install().collect { progress ->
+                    val displayName = fileToDisplayName[progress.currentFile]
+
+                    when (progress.phase) {
+                        RootfsInstallPhase.STARTED -> {
+                        }
+                        RootfsInstallPhase.COPYING -> {
+                            if (lastFile != null && lastFile != progress.currentFile) {
+                                fileToDisplayName[lastFile]?.let { updateItemStatus(it, InstallStatus.Done) }
+                            }
+                            lastFile = progress.currentFile
+                            displayName?.let { updateItemStatus(it, InstallStatus.Downloading) }
+                        }
+                        RootfsInstallPhase.VERIFYING -> {
+                            displayName?.let { updateItemStatus(it, InstallStatus.Verifying) }
+                        }
+                        RootfsInstallPhase.FINALIZING -> {
+                            fileToDisplayName[lastFile]?.let { updateItemStatus(it, InstallStatus.Done) }
+                            updateItemStatus("SQLite 数据目录", InstallStatus.Installing)
+                        }
+                        RootfsInstallPhase.COMPLETED -> {
+                            _state.value = _state.value.copy(
+                                runtimeItems = _state.value.runtimeItems.map {
+                                    it.copy(status = InstallStatus.Done)
+                                }
+                            )
+                        }
+                        RootfsInstallPhase.FAILED -> {
+                            val failedName = displayName ?: fileToDisplayName[lastFile]
+                            if (failedName != null) {
+                                updateItemStatus(failedName, InstallStatus.Failed)
+                            } else {
+                                _state.value = _state.value.copy(
+                                    runtimeItems = _state.value.runtimeItems.map {
+                                        if (it.status != InstallStatus.Done) it.copy(status = InstallStatus.Failed)
+                                        else it
+                                    }
+                                )
+                            }
+                            _state.value = _state.value.copy(error = progress.error ?: progress.message)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                fileToDisplayName[lastFile]?.let { updateItemStatus(it, InstallStatus.Failed) }
+                _state.value = _state.value.copy(error = e.message ?: "安装过程中发生异常")
             }
+
             _state.value = _state.value.copy(runtimeInstalling = false)
         }
+    }
+
+    private fun updateItemStatus(name: String, status: InstallStatus) {
+        _state.value = _state.value.copy(
+            runtimeItems = updateRuntimeItem(_state.value.runtimeItems, name, status)
+        )
     }
 
     private fun updateRuntimeItem(items: List<RuntimeInstallItem>, name: String, status: InstallStatus): List<RuntimeInstallItem> {

@@ -680,6 +680,6 @@ class LinuxRootfsManagerImpl @Inject constructor(
         private const val BACKEND_BINARY = "amitia-backend-arm64"
         private const val QDRANT_BINARY = "qdrant_linux_aarch64"
         private const val SURREAL_BINARY = "surreal_linux_aarch64"
-        private const val PROOT_BINARY_NAME = "proot"
+        private const val PROOT_BINARY_NAME = "proot_linux_aarch64"
     }
 }

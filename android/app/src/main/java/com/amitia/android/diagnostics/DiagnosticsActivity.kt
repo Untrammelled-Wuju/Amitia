@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,10 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +41,23 @@ import com.amitia.android.navigation.AmitiaRoutes
 import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.AmitiaTheme
 import com.amitia.core.designsystem.AmitiaSpacing
+import com.amitia.feature.diagnostics.AuditScreen
+import com.amitia.feature.diagnostics.AutoUpdateScreen
+import com.amitia.feature.diagnostics.DatabaseStatusScreen
+import com.amitia.feature.diagnostics.DataMigrationScreen
+import com.amitia.feature.diagnostics.DiagnosticsOverviewScreen
+import com.amitia.feature.diagnostics.EventsScreen
+import com.amitia.feature.diagnostics.FeatureFlagsScreen
+import com.amitia.feature.diagnostics.HooksScreen
+import com.amitia.feature.diagnostics.PerformanceScreen
+import com.amitia.feature.diagnostics.RawLogsScreen
+import com.amitia.feature.diagnostics.RestrictedWebUiScreen
+import com.amitia.feature.diagnostics.SchedulesScreen
+import com.amitia.feature.diagnostics.ServicesStatusScreen
+import com.amitia.feature.diagnostics.TaskRuntimeScreen
+import com.amitia.feature.diagnostics.TrustedServiceRuntimeScreen
+import com.amitia.feature.diagnostics.UiContributionsScreen
+import com.amitia.feature.diagnostics.WasmRuntimeScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -52,7 +67,7 @@ class DiagnosticsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            AmitiaTheme {
+            AmitiaTheme(darkTheme = isSystemInDarkTheme()) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     DiagnosticsNavHost()
                 }
@@ -107,11 +122,23 @@ private fun DiagnosticsNavHost() {
                 navController = navController,
                 startDestination = AmitiaRoutes.Diagnostics.OVERVIEW
             ) {
-                diagnosticsItems.forEach { item ->
-                    composable(item.route) {
-                        DiagnosticsContentScreen(title = item.title)
-                    }
-                }
+                composable(AmitiaRoutes.Diagnostics.OVERVIEW) { DiagnosticsOverviewScreen() }
+                composable(AmitiaRoutes.Diagnostics.SERVICES) { ServicesStatusScreen() }
+                composable(AmitiaRoutes.Diagnostics.DATABASES) { DatabaseStatusScreen() }
+                composable(AmitiaRoutes.Diagnostics.TASK_RUNTIME) { TaskRuntimeScreen() }
+                composable(AmitiaRoutes.Diagnostics.TRUSTED_SERVICE_RUNTIME) { TrustedServiceRuntimeScreen() }
+                composable(AmitiaRoutes.Diagnostics.WASM_RUNTIME) { WasmRuntimeScreen() }
+                composable(AmitiaRoutes.Diagnostics.HOOKS) { HooksScreen() }
+                composable(AmitiaRoutes.Diagnostics.EVENTS) { EventsScreen() }
+                composable(AmitiaRoutes.Diagnostics.SCHEDULES) { SchedulesScreen() }
+                composable(AmitiaRoutes.Diagnostics.UI_CONTRIBUTIONS) { UiContributionsScreen() }
+                composable(AmitiaRoutes.Diagnostics.RESTRICTED_WEB_UI) { RestrictedWebUiScreen() }
+                composable(AmitiaRoutes.Diagnostics.UPDATES) { AutoUpdateScreen() }
+                composable(AmitiaRoutes.Diagnostics.MIGRATIONS) { DataMigrationScreen() }
+                composable(AmitiaRoutes.Diagnostics.AUDIT) { AuditScreen() }
+                composable(AmitiaRoutes.Diagnostics.PERFORMANCE) { PerformanceScreen() }
+                composable(AmitiaRoutes.Diagnostics.LOGS) { RawLogsScreen() }
+                composable(AmitiaRoutes.Diagnostics.FEATURE_FLAGS) { FeatureFlagsScreen() }
             }
         }
     }
@@ -193,28 +220,6 @@ private fun DiagnosticsSidebarItem(
             text = item.title,
             style = MaterialTheme.typography.bodyMedium,
             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-private fun DiagnosticsContentScreen(title: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(AmitiaSpacing.Xxl),
-        verticalArrangement = Arrangement.spacedBy(AmitiaSpacing.Base)
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "此面板为 $title 的诊断视图占位，后续将接入实际运行时数据与控制接口。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

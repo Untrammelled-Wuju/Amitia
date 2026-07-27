@@ -1,7 +1,7 @@
 package com.amitia.core.designsystem
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.ZeroCornerSize
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.Shapes
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
@@ -14,6 +14,7 @@ object AmitiaRadius {
     val XL = 24.dp
     val XXL = 28.dp
     val Hero = 32.dp
+    val Pill = 50.dp
 }
 
 val AmitiaShapes = Shapes(
@@ -30,10 +31,10 @@ val AmitiaHeroCardShape: Shape = RoundedCornerShape(AmitiaRadius.Hero)
 val AmitiaListItemShape: Shape = RoundedCornerShape(AmitiaRadius.M)
 val AmitiaInputShape: Shape = RoundedCornerShape(AmitiaRadius.L)
 val AmitiaBottomSheetShape: Shape = RoundedCornerShape(
-    topStart = AmitiaRadius.XXL,
-    topEnd = AmitiaRadius.XXL,
-    bottomEnd = ZeroCornerSize,
-    bottomStart = ZeroCornerSize
+    topStart = CornerSize(AmitiaRadius.XXL),
+    topEnd = CornerSize(AmitiaRadius.XXL),
+    bottomEnd = CornerSize(0.dp),
+    bottomStart = CornerSize(0.dp)
 )
 val AmitiaBottomNavShape: Shape = RoundedCornerShape(AmitiaRadius.XXL)
 val AmitiaChatDockShape: Shape = RoundedCornerShape(AmitiaRadius.XL)

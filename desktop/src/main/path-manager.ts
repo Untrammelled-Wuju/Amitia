@@ -3,20 +3,27 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";
 
+export function isDevMode(): boolean {
+  if (!app.isPackaged) return true;
+  const execName = path.basename(process.execPath).toLowerCase();
+  return execName === "electron" || execName === "electron.exe";
+}
+
 export function getInstallDir(): string {
-  if (app.isPackaged) {
+  if (!isDevMode()) {
     return path.dirname(app.getPath("exe"));
   }
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
 export function getAmitiaDataDir(): string {
-  if (app.isPackaged) {
+  if (!isDevMode()) {
     const installDir = getInstallDir();
     const parentDir = path.dirname(installDir);
     return path.join(parentDir, "AmitiaData");
   }
-  return path.resolve(process.cwd(), "..", "AmitiaData");
+  const installDir = getInstallDir();
+  return path.join(path.dirname(installDir), "AmitiaData");
 }
 
 export function ensureAmitiaDataDir(): string {

@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,7 @@ class SecureActionActivity : ComponentActivity() {
         enableEdgeToEdge()
         val startRoute = intent.getStringExtra(EXTRA_ROUTE) ?: AmitiaRoutes.Secure.APP_UNLOCK
         setContent {
-            AmitiaTheme {
+            AmitiaTheme(darkTheme = isSystemInDarkTheme()) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SecureActionNavHost(
                         startRoute = startRoute,

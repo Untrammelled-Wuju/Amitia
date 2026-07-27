@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amitia.core.designsystem.AmitiaColors
+import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.component.AmitiaEmptyState
 import com.amitia.core.designsystem.component.AmitiaLoadingIndicator
 import com.amitia.core.designsystem.component.AmitiaStatusDot
@@ -85,8 +86,9 @@ fun ChannelsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) { AmitiaLoadingIndicator() }
             state.channels.isEmpty() -> AmitiaEmptyState(
+                icon = AmitiaIcons.Hub,
                 title = "尚无渠道",
-                subtitle = "通过 Onboarding 或后端配置接入微信/QQ/Web",
+                description = "通过 Onboarding 或后端配置接入微信/QQ/Web",
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)

@@ -128,8 +128,16 @@ async function handleLogin() {
       ElMessage.success(`欢迎回来，${data.username || name}`);
       const redirect = (route.query.redirect as string) || "/chat";
       router.push(redirect);
+    } else {
+      errorMsg.value = "登录失败，未收到有效的认证信息";
+      ElMessage.error("登录失败，未收到有效的认证信息");
     }
-  } catch {
+  } catch (err: any) {
+    const msg = err?.message || "登录失败，请重试";
+    errorMsg.value = msg;
+    if (err?.severity === "fatal" || !err?.severity) {
+      ElMessage.error(msg);
+    }
   } finally {
     loading.value = false;
   }

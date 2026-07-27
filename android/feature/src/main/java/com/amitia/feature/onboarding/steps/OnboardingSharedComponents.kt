@@ -137,18 +137,15 @@ fun OnboardingStepScaffold(
                 Spacer(modifier = Modifier.size(AmitiaTouchTarget.Minimum))
             }
         }
-        Box(
+        AnimatedVisibility(
+            visible = !transitioning,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            AnimatedVisibility(
-                visible = !transitioning,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                content()
-            }
+            content()
         }
     }
 }

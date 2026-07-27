@@ -25,6 +25,9 @@ func (s *service) callLLMJSON(ctx context.Context, cfg *ModelConfig, messages []
 }
 
 func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	if cfg.APIType == "ollama" {
+		return s.callOllamaMode(ctx, cfg, messages, jsonOnly)
+	}
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	reqBody := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
 	if jsonOnly {
@@ -75,6 +78,9 @@ func (s *service) invokeProcessLLMWithTools(ctx context.Context, cfg *ModelConfi
 }
 
 func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	if cfg.APIType == "ollama" {
+		return s.callOllamaWithTools(ctx, cfg, messages, tools)
+	}
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	reqMap := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
 	if len(tools) > 0 {
@@ -125,6 +131,107 @@ func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messag
 		})
 	}
 	return choice.Message.Content, choice.Message.ReasoningContent, toolCalls, r.Usage.TotalTokens, nil
+}
+
+func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	base := strings.TrimRight(cfg.BaseURL, "/")
+	reqBody := map[string]interface{}{
+		"model":    cfg.ModelName,
+		"messages": messages,
+		"stream":   false,
+		"options": map[string]interface{}{
+			"temperature": cfg.Temperature,
+			"num_ctx":     cfg.MaxTokens,
+		},
+	}
+	if jsonOnly {
+		reqBody["format"] = "json"
+	}
+	jsonBody, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", base+"/api/chat", bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 180 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	respBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
+	}
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+		EvalCount       int `json:"eval_count"`
+		PromptEvalCount int `json:"prompt_eval_count"`
+	}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return "", 0, fmt.Errorf("解析响应失败: %w", err)
+	}
+	total := result.EvalCount + result.PromptEvalCount
+	return result.Message.Content, total, nil
+}
+
+func (s *service) callOllamaWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	base := strings.TrimRight(cfg.BaseURL, "/")
+	reqBody := map[string]interface{}{
+		"model":    cfg.ModelName,
+		"messages": messages,
+		"stream":   false,
+		"options": map[string]interface{}{
+			"temperature": cfg.Temperature,
+			"num_ctx":     cfg.MaxTokens,
+		},
+	}
+	if len(tools) > 0 {
+		reqBody["tools"] = tools
+	}
+	jsonBody, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/api/chat", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", "", nil, 0, fmt.Errorf("API %d: %s", resp.StatusCode, string(rb))
+	}
+	var r struct {
+		Message struct {
+			Content   string `json:"content"`
+			ToolCalls []struct {
+				Function struct {
+					Name      string          `json:"name"`
+					Arguments json.RawMessage `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
+		} `json:"message"`
+		EvalCount       int `json:"eval_count"`
+		PromptEvalCount int `json:"prompt_eval_count"`
+	}
+	if err := json.Unmarshal(rb, &r); err != nil {
+		return "", "", nil, 0, fmt.Errorf("解析响应失败: %v; 原始响应: %s", err, string(rb))
+	}
+	var toolCalls []map[string]interface{}
+	for i, tc := range r.Message.ToolCalls {
+		toolCalls = append(toolCalls, map[string]interface{}{
+			"id":   fmt.Sprintf("call_%d_%d", time.Now().UnixNano(), i),
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      tc.Function.Name,
+				"arguments": string(tc.Function.Arguments),
+			},
+		})
+	}
+	total := r.EvalCount + r.PromptEvalCount
+	return r.Message.Content, "", toolCalls, total, nil
 }
 
 func truncateStr(s string, n int) string {

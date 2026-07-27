@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amitia.core.designsystem.AmitiaColors
+import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.component.AmitiaEmptyState
 import com.amitia.core.designsystem.component.AmitiaLoadingIndicator
 import com.amitia.core.designsystem.component.AmitiaSectionHeader
@@ -84,8 +85,9 @@ fun ModelsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) { AmitiaLoadingIndicator() }
             state.models.isEmpty() -> AmitiaEmptyState(
+                icon = AmitiaIcons.Memory,
                 title = "尚无模型",
-                subtitle = "在 Onboarding 或后端配置中添加模型",
+                description = "在 Onboarding 或后端配置中添加模型",
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)

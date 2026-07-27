@@ -7,6 +7,7 @@ import {
   getAmitiaDataDir,
   ensureAmitiaDataDir,
   getInstallDir,
+  isDevMode,
 } from "./path-manager";
 import { validateCorePrerequisites } from "./core-prereq";
 import type { CorePrerequisiteResult } from "./core-prereq";
@@ -16,14 +17,14 @@ export type { CorePrerequisiteResult };
 let coreProcess: ChildProcessWithoutNullStreams | null = null;
 
 export function getCorePath(): string {
-  if (app.isPackaged) {
+  if (!isDevMode()) {
     return path.join(process.resourcesPath, "core", "AmitiaCore.exe");
   }
   return path.join(getInstallDir(), "resources", "core", "AmitiaCore.exe");
 }
 
 export function getCoreResourcesPath(): string {
-  if (app.isPackaged) {
+  if (!isDevMode()) {
     return process.resourcesPath;
   }
   return path.join(getInstallDir(), "resources");

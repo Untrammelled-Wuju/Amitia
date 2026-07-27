@@ -41,6 +41,20 @@ SPDX-License-Identifier: AGPL-3.0-only
         @reply="$emit('reply', $event)"
         @scroll-to-message="(id) => scrollToMessage(id)"
       />
+      <MessageExtensionHost
+        :message="{
+          messageId: msg.id,
+          type: msg.type || 'text',
+          direction: msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system',
+          senderType: msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system',
+          createdAt: msg.createdAt || '',
+          status: msg.status || 'sent',
+          hasText: !!(msg.content || msg.text),
+          attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
+        }"
+        :character-id="charName"
+        :conversation-id="msg.conversationId || ''"
+      />
     </div>
 
     <transition name="fade">
@@ -60,6 +74,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue";
 import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
+import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
 
 defineProps<{
   messages: any[];

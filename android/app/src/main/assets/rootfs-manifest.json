@@ -1,13 +1,23 @@
 {
   "version": "1.0.0",
-  "createdAt": "2026-07-26",
+  "createdAt": "2026-07-28",
   "description": "Amitia Android RootFS distribution manifest",
   "components": [
     {
+      "name": "proot",
+      "file": "proot_linux_aarch64",
+      "size": 1504544,
+      "sha256": "56399E908B36C20EAE73457D6F2DA9988914FD62183D36AA7FB2CFA60B8EC7EB",
+      "type": "proot-runtime",
+      "target": "linux/arm64",
+      "source": "https://github.com/proot-me/proot-rs/releases/download/v0.1.0/proot-rs-v0.1.0-aarch64-linux-android.tar.gz",
+      "variant": "android-shared"
+    },
+    {
       "name": "amitia-backend",
       "file": "amitia-backend-arm64",
-      "size": 57283044,
-      "sha256": "ABDD63EB020A01718684EDCF130785DA0CFD45DCB691AAB5D260A8E17386879B",
+      "size": 68097189,
+      "sha256": "508E6BE870610DFEB4AFDA26E7184E68B60E0E5A4685892C5E974AF1B8B0C4C5",
       "type": "go-backend",
       "target": "linux/arm64",
       "buildCommand": "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o amitia-backend-arm64 ./cmd/server/"
@@ -25,24 +35,14 @@
     {
       "name": "surrealdb",
       "file": "surreal_linux_aarch64",
-      "size": 116424792,
-      "sha256": "A235206F2C4A803616D7669F56BC5BCA5CC0AE7ED2B79ACBE91F14712B28FE5C",
+      "size": 116428800,
+      "sha256": "232BB23386D111AB5D36F35A4B4EA402F25C2CF06EDAEBFD47D6FE7038D9B5DC",
       "type": "graph-db",
       "target": "linux/arm64",
       "source": "https://github.com/surrealdb/surrealdb/releases/download/v3.2.0/surreal-v3.2.0.linux-arm64.tgz",
       "variant": "gnu-dynamic"
-    },
-    {
-      "name": "proot",
-      "file": "proot_linux_aarch64",
-      "size": 1504544,
-      "sha256": "56399e908b36c20eae73457d6f2da9988914fd62183d36aa7fb2cfa60b8ec7eb",
-      "type": "proot-runtime",
-      "target": "linux/arm64",
-      "source": "https://github.com/proot-me/proot-rs/releases/download/v0.1.0/proot-rs-v0.1.0-aarch64-linux-android.tar.gz",
-      "variant": "android-shared"
     }
   ],
-  "totalSize": 253048188,
+  "totalSize": 263866341,
   "checksumAlgorithm": "SHA-256"
 }

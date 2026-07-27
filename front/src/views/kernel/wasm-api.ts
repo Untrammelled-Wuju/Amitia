@@ -114,9 +114,7 @@ export async function uploadModule(moduleId: string, file: File): Promise<WasmMo
   const formData = new FormData();
   formData.append("module_id", moduleId);
   formData.append("module", file);
-  const res = await apiClient.post(`${BASE}/modules`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await apiClient.post(`${BASE}/modules`, formData);
   return res.data;
 }
 
@@ -146,8 +144,6 @@ export async function listInstances(): Promise<WasmInstance[]> {
 export async function validateModule(file: File): Promise<ValidationReport> {
   const formData = new FormData();
   formData.append("module", file);
-  const res = await apiClient.post(`${BASE}/validate`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await apiClient.post(`${BASE}/validate`, formData);
   return res.data;
 }

@@ -313,7 +313,7 @@ private fun MigrationLightPreview() {
                 steps = listOf(
                     MigrationStep("备份当前数据", done = true),
                     MigrationStep("迁移数据库结构", done = true),
-                    MigrationStep("迁移记忆索引", inProgress = true),
+                    MigrationStep("迁移记忆索引", done = false, inProgress = true),
                     MigrationStep("迁移角色配置", done = false),
                     MigrationStep("校验数据完整性", done = false)
                 )

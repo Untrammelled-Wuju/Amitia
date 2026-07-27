@@ -187,6 +187,12 @@ func (c *Connection) Close(ctx context.Context) error {
 func (c *Connection) receiveLoop() {
 	defer close(c.loopDone)
 	defer c.cancelInbound()
+	defer func() {
+		c.requests.FailAll(protocol.ErrTransportClosed)
+		if c.State() != StateStopping {
+			c.setState(StateDisconnected)
+		}
+	}()
 	for {
 		var message protocol.Message
 		var ok bool
@@ -210,10 +216,6 @@ func (c *Connection) receiveLoop() {
 		case protocol.MessageRequest:
 			go c.handleServerRequest(message)
 		}
-	}
-	c.requests.FailAll(protocol.ErrTransportClosed)
-	if c.State() != StateStopping {
-		c.setState(StateDisconnected)
 	}
 }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { apiClient } from "@/composables/useApi";
 
 interface SessionStats {
   total: number;
@@ -19,9 +20,8 @@ async function fetchStats() {
   loading.value = true;
   error.value = null;
   try {
-    const res = await fetch("/api/extension/webui/stats");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    stats.value = await res.json();
+    const res = await apiClient.get<SessionStats>("/api/extensions/ui/webui/stats");
+    stats.value = res.data;
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {

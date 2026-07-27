@@ -20,6 +20,15 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
     <div class="composer-stack">
+      <ComposerExtensionHost
+        v-if="currentCharacterId"
+        :character-id="currentCharacterId"
+        :conversation-id="currentConversationId"
+        channel="web"
+        platform="desktop"
+        :conversation-state="generating ? 'generating' : 'idle'"
+        :capabilities="agentSkillNames"
+      />
       <div v-if="replyTarget" class="reply-preview-bar">
         <div class="reply-preview-content">
           <span class="reply-preview-label"
@@ -421,6 +430,7 @@ import { useVoiceInput } from "../composables/useVoiceInput";
 import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
 import EmotePicker from "./EmotePicker.vue";
+import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
 
 const props = defineProps<{
   isWechatActive?: boolean;
@@ -497,6 +507,12 @@ const slashRange = ref<{ start: number; end: number } | null>(null);
 const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
+const currentCharacterId = ref<string>("");
+const currentConversationId = ref<string>("");
+
+const agentSkillNames = computed(() =>
+  agentSkills.value.map((s) => s.name).filter(Boolean),
+);
 
 const { holding, startHold, endHold, cancelHold } = useVoiceInput(
   (blob: Blob, duration?: number) =>
@@ -559,6 +575,7 @@ async function loadAgentSkills() {
   try {
     const characterId = await resolveCharacterId();
     if (!characterId) return;
+    currentCharacterId.value = characterId;
     const page = await fetchAgentSkills(characterId, { pageSize: 100 });
     agentSkills.value = (page.items || []).filter(
       (skill) => skill.enabled && skill.compatibilityStatus !== "blocked",

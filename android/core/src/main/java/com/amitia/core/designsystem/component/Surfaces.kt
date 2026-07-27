@@ -49,8 +49,8 @@ fun AmitiaPageScaffold(
         color = MaterialTheme.colorScheme.background
     ) {
         Scaffold(
-            topBar = topBar,
-            bottomBar = bottomBar,
+            topBar = { topBar?.invoke() },
+            bottomBar = { bottomBar?.invoke() },
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.statusBars,
             content = content

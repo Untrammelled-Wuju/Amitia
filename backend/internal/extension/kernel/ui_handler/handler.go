@@ -56,6 +56,8 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/sessions", h.handleSessionsCollection)
 	mux.HandleFunc("/api/extensions/ui/sessions/", h.handleSessionItem)
 	mux.HandleFunc("/api/extensions/ui/page-sessions/", h.handlePageSession)
+	mux.HandleFunc("/api/extensions/ui/open-page", h.handleOpenPage)
+	mux.HandleFunc("/api/extensions/ui/by-extension", h.handleExtensionContributions)
 	mux.HandleFunc("/api/extensions/", h.handleExtensionScoped)
 	mux.HandleFunc("/api/extension/schema/", h.handleSchema)
 	mux.HandleFunc("/api/extension/webui/session", h.handleWebUISessionCollection)
@@ -320,6 +322,70 @@ func (h *HTTPHandler) openExtensionPage(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *HTTPHandler) handleExtensionContributions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	extensionID := r.URL.Query().Get("extensionId")
+	if extensionID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "extensionId query parameter required")
+		return
+	}
+	all := h.uiHost.ListAll()
+	out := make([]*ui_contribution.UIContributionDefinition, 0)
+	for _, def := range all {
+		if string(def.ExtensionID) == extensionID {
+			out = append(out, def)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"extensionId":   extensionID,
+		"contributions": out,
+	})
+}
+
+func (h *HTTPHandler) handleOpenPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	var body struct {
+		ExtensionID    string         `json:"extensionId"`
+		PageID         string         `json:"pageId"`
+		Params         map[string]any `json:"params"`
+		ScopeSnapshot  string         `json:"scopeSnapshot"`
+		DeepLinkOrigin string         `json:"deepLinkOrigin"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	if body.ExtensionID == "" || body.PageID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "extensionId and pageId required")
+		return
+	}
+	params := map[string]string{}
+	for k, v := range body.Params {
+		if s, ok := v.(string); ok {
+			params[k] = s
+		}
+	}
+	req := extension_page_host.OpenPageRequest{
+		ExtensionID:    extension_page_host.ExtensionID(body.ExtensionID),
+		PageID:         extension_page_host.PageID(body.PageID),
+		Params:         params,
+		ScopeSnapshot:  body.ScopeSnapshot,
+		DeepLinkOrigin: body.DeepLinkOrigin,
+	}
+	result, err := h.pageHost.OpenPage(r.Context(), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "page_open_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -384,6 +450,14 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 	if sandbox == "" {
 		sandbox = sandbox_webui.SandboxWebRestricted
 	}
+	basePath := req.BasePath
+	if basePath == "" {
+		basePath = h.resolveExtensionBasePath(req.ExtensionID)
+	}
+	if basePath == "" {
+		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
+		return
+	}
 	sreq := sandbox_webui.CreateSessionRequest{
 		ContributionID:     req.ContributionID,
 		ExtensionID:        req.ExtensionID,
@@ -396,7 +470,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		AllowedDataSources: req.AllowedDataSources,
 		Theme:              req.Theme,
 		Locale:             req.Locale,
-		BasePath:           req.BasePath,
+		BasePath:           basePath,
 		EntryPath:          req.EntryPath,
 	}
 	result, err := h.sandboxHost.CreateSession(sreq)
@@ -559,10 +633,32 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 }
 
 func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
-	if h.extRoot != "" {
-		candidate := filepath.Join(h.extRoot, extensionID)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
+	if h.extRoot == "" || extensionID == "" {
+		return ""
+	}
+	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installedRoot := filepath.Join(h.extRoot, "installed", safeID)
+	entries, err := os.ReadDir(installedRoot)
+	if err != nil {
+		return ""
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		if !entries[i].IsDir() {
+			continue
+		}
+		versionDir := filepath.Join(installedRoot, entries[i].Name())
+		subEntries, err := os.ReadDir(versionDir)
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() {
+				continue
+			}
+			candidate := filepath.Join(versionDir, sub.Name())
+			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+				return candidate
+			}
 		}
 	}
 	return ""

@@ -20,12 +20,14 @@ func NewKernelAPI(runtime *Runtime) *KernelAPI {
 func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel := group.Group("/kernel")
 	kernel.GET("/extensions", api.listExtensions)
-	kernel.GET("/extensions/:id", api.getExtension)
+	kernel.GET("/extension", api.getExtension)
 	kernel.POST("/extensions/preview", api.previewInstall)
 	kernel.POST("/extensions/install", api.install)
-	kernel.POST("/extensions/:id/enable", api.enable)
-	kernel.POST("/extensions/:id/disable", api.disable)
-	kernel.DELETE("/extensions/:id", api.uninstall)
+	kernel.POST("/extensions/enable", api.enable)
+	kernel.POST("/extensions/disable", api.disable)
+	kernel.POST("/extensions/uninstall", api.uninstall)
+	kernel.POST("/extensions/pause", api.pause)
+	kernel.POST("/extensions/rollback", api.rollback)
 	kernel.GET("/status", api.status)
 }
 
@@ -99,7 +101,11 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "container unavailable"})
 		return
 	}
-	extID := c.Param("id")
+	extID := c.Query("id")
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id query parameter required"})
+		return
+	}
 	ctx := c.Request.Context()
 
 	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
@@ -217,7 +223,19 @@ func (api *KernelAPI) enable(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return
 	}
-	extID := c.Param("id")
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
 	if err := api.runtime.Kernel.Enable(c.Request.Context(), extID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -230,7 +248,19 @@ func (api *KernelAPI) disable(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return
 	}
-	extID := c.Param("id")
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
 	if err := api.runtime.Kernel.Disable(c.Request.Context(), extID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -243,12 +273,89 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return
 	}
-	extID := c.Param("id")
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
 	if err := api.runtime.Kernel.Uninstall(c.Request.Context(), extID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "uninstalled": true})
+}
+
+func (api *KernelAPI) pause(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	if err := api.runtime.Kernel.Disable(c.Request.Context(), extID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "state": "paused"})
+}
+
+func (api *KernelAPI) rollback(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	container := api.runtime.Kernel.Container()
+	if container == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "container unavailable"})
+		return
+	}
+	ctx := c.Request.Context()
+	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "extension not found"})
+		return
+	}
+	if inst.Generation > 1 {
+		inst.Generation--
+		inst.UpdatedAt = time.Now().UTC()
+		if err := container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "rolledBack": true})
 }
 
 func saveUploadToTemp(c *gin.Context) (string, func(), error) {

@@ -47,6 +47,7 @@ import com.amitia.core.designsystem.AmitiaIconSize
 import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.AmitiaInputShape
 import com.amitia.core.designsystem.AmitiaMotion
+import com.amitia.core.designsystem.AmitiaMotionDuration
 import com.amitia.core.designsystem.AmitiaPillShape
 import com.amitia.core.designsystem.AmitiaSmallButtonShape
 import com.amitia.core.designsystem.AmitiaSpacing

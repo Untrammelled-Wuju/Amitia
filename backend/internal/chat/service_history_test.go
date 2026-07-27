@@ -139,7 +139,6 @@ func TestBuildRoleSystemPartsUsesRuntimeProfile(t *testing.T) {
 		Personality:       "温和、敏锐",
 		SpeakingStyle:     "短句回应",
 		RelationshipStyle: "稳定陪伴",
-		SystemPrompt:      "保持一致",
 		BoundaryRules:     "不越界",
 		PersonalityConfig: map[string]interface{}{"version": "runtime-profile-v1", "openness": 72},
 		ChatStyleConfig:   map[string]interface{}{"version": "runtime-profile-v1", "pace": "slow"},

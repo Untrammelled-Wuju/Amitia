@@ -21,8 +21,38 @@ export interface KernelExtension {
 }
 
 export interface KernelExtensionDetail extends KernelExtension {
+  publisher?: string;
+  signatureStatus?: string;
+  trustLevel?: string;
+  runtimeStatus?: string;
+  permissions?: KernelPermission[];
+  scopes?: KernelScope[];
+  dependencies?: KernelDependency[];
+  circuitState?: string;
+  quarantineState?: string;
   modules: KernelModule[];
   contributions: KernelContribution[];
+}
+
+export interface KernelPermission {
+  name: string;
+  scope?: string;
+  reason?: string;
+  required?: boolean;
+  granted?: boolean;
+}
+
+export interface KernelScope {
+  name: string;
+  granted?: boolean;
+}
+
+export interface KernelDependency {
+  type: string;
+  id: string;
+  version?: string;
+  optional?: boolean;
+  satisfied?: boolean;
 }
 
 export interface KernelModule {
@@ -110,39 +140,45 @@ export async function listExtensions(): Promise<{ extensions: KernelExtension[];
 }
 
 export async function getExtension(id: string): Promise<KernelExtensionDetail> {
-  const res = await apiClient.get(`${BASE}/extensions/${encodeURIComponent(id)}`);
+  const res = await apiClient.get(`${BASE}/extension`, { params: { id } });
   return res.data;
 }
 
 export async function previewInstall(file: File): Promise<InstallPreview> {
   const formData = new FormData();
   formData.append("package", file);
-  const res = await apiClient.post(`${BASE}/extensions/preview`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await apiClient.post(`${BASE}/extensions/preview`, formData);
   return res.data;
 }
 
 export async function installExtension(file: File): Promise<InstallResult> {
   const formData = new FormData();
   formData.append("package", file);
-  const res = await apiClient.post(`${BASE}/extensions/install`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await apiClient.post(`${BASE}/extensions/install`, formData);
   return res.data;
 }
 
 export async function enableExtension(id: string): Promise<{ extensionId: string; enablement: string }> {
-  const res = await apiClient.post(`${BASE}/extensions/${encodeURIComponent(id)}/enable`);
+  const res = await apiClient.post(`${BASE}/extensions/enable`, { id });
   return res.data;
 }
 
 export async function disableExtension(id: string): Promise<{ extensionId: string; enablement: string }> {
-  const res = await apiClient.post(`${BASE}/extensions/${encodeURIComponent(id)}/disable`);
+  const res = await apiClient.post(`${BASE}/extensions/disable`, { id });
   return res.data;
 }
 
 export async function uninstallExtension(id: string): Promise<{ extensionId: string; uninstalled: boolean }> {
-  const res = await apiClient.delete(`${BASE}/extensions/${encodeURIComponent(id)}`);
+  const res = await apiClient.post(`${BASE}/extensions/uninstall`, { id });
+  return res.data;
+}
+
+export async function pauseExtension(id: string): Promise<{ extensionId: string; state: string }> {
+  const res = await apiClient.post(`${BASE}/extensions/pause`, { id });
+  return res.data;
+}
+
+export async function rollbackExtension(id: string): Promise<{ extensionId: string; rolledBack: boolean }> {
+  const res = await apiClient.post(`${BASE}/extensions/rollback`, { id });
   return res.data;
 }

@@ -151,10 +151,14 @@ async function handleSetup() {
       router.push("/chat");
     }
   } catch (err: any) {
-    // If 409 - admin already exists, go to login
     if (err?.response?.status === 409 || err?.response?.data?.code === 20006) {
       ElMessage.warning("管理员已存在，请直接登录");
       router.push("/login");
+    } else {
+      const msg = err?.message || "设置失败，请重试";
+      if (err?.severity === "fatal" || !err?.severity) {
+        ElMessage.error(msg);
+      }
     }
   } finally {
     loading.value = false;

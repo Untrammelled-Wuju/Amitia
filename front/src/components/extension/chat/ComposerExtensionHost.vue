@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+import { apiClient } from "@/composables/useApi";
 
 const props = defineProps<{
   characterId: string;
@@ -24,13 +25,9 @@ const composerContext = computed(() => ({
 
 async function invokeComposerAction(actionId: string) {
   try {
-    await fetch(`/api/extension/composer/action/${actionId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        draft: draft.value,
-        context: composerContext.value,
-      }),
+    await apiClient.post(`/api/extensions/ui/composer/action/${actionId}`, {
+      draft: draft.value,
+      context: composerContext.value,
     });
   } catch (e) {
     console.error("Composer action failed:", e);

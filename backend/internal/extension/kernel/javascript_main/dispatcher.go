@@ -15,7 +15,7 @@ type InvocationContext struct {
 	InvocationID    string
 	TraceID         string
 	Deadline        time.Time
-	CancelSignal    CancelSignal
+	CancelSignal    *CancelSignal
 	ScopeSummary    string
 	IdempotencyKey  string
 	EntryType       string
@@ -163,7 +163,7 @@ func (d *InvocationDispatcher) Dispatch(ctx context.Context, handlerType Handler
 	invCtx := InvocationContext{
 		InvocationID: invocationID,
 		Deadline:     deadline,
-		CancelSignal: *cancelSignal,
+		CancelSignal: cancelSignal,
 		EntryType:    string(handlerType),
 		EntryName:    entryName,
 	}

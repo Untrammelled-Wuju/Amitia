@@ -69,15 +69,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-input v-model="form.baseUrl" placeholder="http://127.0.0.1:11434" />
       </el-form-item>
 
-      <el-form-item label="API Key" prop="apiKey">
+      <el-form-item :label="isOllama ? 'API Key (可选)' : 'API Key'" prop="apiKey">
         <el-input
           v-model="form.apiKey"
           type="password"
           show-password
-          :placeholder="editingId ? '留空则保留现有 Key' : 'sk-...'"
+          :placeholder="isOllama ? '本地 Ollama 无需填写' : (editingId ? '留空则保留现有 Key' : 'sk-...')"
         />
         <div class="form-hint">
-          Ollama 本地模式可以不填。编辑时留空则保留现有 Key。
+          {{
+            isOllama
+              ? 'Ollama 本地模式默认无需 API Key，如已配置鉴权可填写。'
+              : '编辑时留空则保留现有 Key。'
+          }}
         </div>
       </el-form-item>
 
@@ -210,6 +214,8 @@ const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit("update:modelValue", v),
 });
+
+const isOllama = computed(() => props.form?.apiType === "ollama");
 
 const formRef = ref<FormInstance>();
 const localDetectError = ref("");

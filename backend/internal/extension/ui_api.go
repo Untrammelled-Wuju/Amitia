@@ -40,8 +40,6 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 	handler.Register(mux)
 
 	extensions.Any("/ui/*uiPath", gin.WrapH(mux))
-	extensions.POST("/:id/pages/:pageId/open", gin.WrapH(mux))
-	extensions.GET("/:id/ui", gin.WrapH(mux))
 
 	if parent != nil {
 		parent.Any("/extension/*extPath", gin.WrapH(mux))
