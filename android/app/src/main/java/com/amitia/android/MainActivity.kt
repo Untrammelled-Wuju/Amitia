@@ -6,9 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.amitia.android.navigation.AmitiaNavHost
+import androidx.navigation.compose.rememberNavController
+import com.amitia.android.navigation.AmitiaAdaptiveNavigationContainer
+import com.amitia.android.navigation.AmitiaMainNavHost
 import com.amitia.android.navigation.NavEvent
 import com.amitia.android.navigation.NavEventBus
 import com.amitia.core.designsystem.AmitiaTheme
@@ -50,7 +53,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             AmitiaTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AmitiaNavHost(navEventBus = navEventBus)
+                    val navController = rememberNavController()
+                    AmitiaAdaptiveNavigationContainer(navController = navController) { padding ->
+                        AmitiaMainNavHost(
+                            navController = navController,
+                            navEventBus = navEventBus,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(padding)
+                        )
+                    }
                 }
             }
         }

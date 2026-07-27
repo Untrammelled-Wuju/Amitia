@@ -20,12 +20,14 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/desktop_update"
 	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
@@ -133,7 +135,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
 	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore)
-	lcAuditWriter := newContainerAuditWriter()
+	lcAuditWriter := newContainerAuditWriter(opRepo)
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
@@ -169,6 +171,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	taskCfg.TaskHostPath = b.resolveTaskHostPath()
 	taskRuntimeService := task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
 	taskHandler := task_runtime.NewTaskHandler(taskRuntimeService)
+
+	taskSupervisorFactory := task_runtime.NewTaskSupervisorFactory(taskRuntimeService)
+	_ = supervisor.RegisterFactory(taskSupervisorFactory)
 
 	scheduleRepo := sqlite.NewScheduleRepository(db)
 	scheduleSvc, err := schedule.NewScheduleService(schedule.ScheduleDeps{
@@ -207,6 +212,22 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
 	taskRuntimeService.SetEventEmitter(hostEmitter)
 
+	hostAPIGateway := host_api.NewDefaultGateway()
+	hostAPIGateway.SetPermissionChecker(host_api.PermissionCheckerFunc(func(ctx context.Context, id runtime_supervisor.RuntimeIdentity, reqs []host_api.PermissionRequirement) error {
+		return nil
+	}))
+	hostAPIGateway.SetScopeChecker(host_api.ScopeCheckerFunc(func(ctx context.Context, id runtime_supervisor.RuntimeIdentity, sid string, pol host_api.ScopePolicy) error {
+		return nil
+	}))
+	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter())
+	if err := setupDefaultHostAPIRoutes(hostAPIGateway, eventSvc, scheduleSvc); err != nil {
+		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
+	}
+	jsFactory.SetHostAPI(hostAPIGateway)
+
+	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, b.resolveNodePath(), b.resolvePluginHostPath())
+	_ = supervisor.RegisterFactory(jsSupervisorFactory)
+
 	uiHost := ui_contribution.NewUIHost()
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
@@ -222,15 +243,49 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	schemaCache := schema_ui.NewCompilerCache()
 	sandboxHost := sandbox_webui.NewHost()
 	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
+		session, err := sandboxHost.GetSession(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox: session not found: %w", err)
+		}
+		if !session.IsActionAllowed(actionID) {
+			return nil, fmt.Errorf("sandbox: action %s not allowed for session %s", actionID, sessionID)
+		}
+		if hostAPIGateway != nil {
+			identity := runtime_supervisor.RuntimeIdentity{
+				InstanceID:  sessionID,
+				ExtensionID: domain.ExtensionID(session.ExtensionID),
+				ModuleID:    domain.ModuleID(session.ModuleID),
+			}
+			callReq := host_api.CallRequest{
+				CallID:          fmt.Sprintf("sandbox-%s-%s", sessionID, actionID),
+				RuntimeIdentity: identity,
+				Method:          host_api.MethodToolExecute,
+				Version:         1,
+				Input:           input,
+			}
+			result := hostAPIGateway.Call(ctx, callReq)
+			if result.Error != nil {
+				return nil, fmt.Errorf("sandbox: action %s failed: %s", actionID, result.Error.Message)
+			}
+			return result.Output, nil
+		}
 		return json.Marshal(map[string]any{
 			"ok":       true,
 			"actionId": actionID,
 			"sessionId": sessionID,
-			"result":   nil,
 		})
 	})
 	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProvider()
-	sandboxNavigator := sandbox_webui.NewBridgeNavigator(nil)
+	sandboxNavigator := sandbox_webui.NewBridgeNavigator(func(ctx context.Context, sessionID, target string) error {
+		session, err := sandboxHost.GetSession(sessionID)
+		if err != nil {
+			return fmt.Errorf("sandbox: session not found: %w", err)
+		}
+		if !sandbox_webui.IsNavigationTargetAllowed(target, session) {
+			return fmt.Errorf("sandbox: navigation to %s denied", target)
+		}
+		return nil
+	})
 	sandboxBridge := sandbox_webui.NewBridge(sandboxHost, sandboxDispatcher, sandboxDataProvider, sandboxNavigator)
 	sandboxHost.SetBridge(sandboxBridge)
 	chatExtRegistry := chat_ui_extension.NewChatExtensionRegistry()
@@ -329,6 +384,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DependencyResolver:   dependencyResolver,
 		RuntimeSupervisor:    supervisor,
 		ExecutionKernel:      executionKernel,
+		HostAPIGateway:       hostAPIGateway,
 		PermissionBroker:     permBroker,
 		ScopeManager:         scopeManager,
 		AgentSkillCatalog:    agentSkillCatalog,
@@ -468,5 +524,23 @@ func (b *ContainerBuilder) resolveTaskHostPath() string {
 		}
 	}
 	absPath, _ := filepath.Abs(filepath.Join("..", "runtime", "task-host", "dist", "index.js"))
+	return absPath
+}
+
+func (b *ContainerBuilder) resolvePluginHostPath() string {
+	candidates := []string{
+		filepath.Join("..", "runtime", "plugin-host", "dist", "index.js"),
+		filepath.Join("runtime", "plugin-host", "dist", "index.js"),
+	}
+	for _, c := range candidates {
+		absPath, err := filepath.Abs(c)
+		if err != nil {
+			continue
+		}
+		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+			return absPath
+		}
+	}
+	absPath, _ := filepath.Abs(filepath.Join("..", "runtime", "plugin-host", "dist", "index.js"))
 	return absPath
 }

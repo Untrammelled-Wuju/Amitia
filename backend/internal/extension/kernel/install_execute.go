@@ -54,6 +54,34 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		return result, fmt.Errorf("kernel: open archive: %w", err)
 	}
 
+	if err := amitiax.VerifyIntegrity(pkg); err != nil {
+		return result, fmt.Errorf("kernel: integrity verification failed: %w", err)
+	}
+
+	if pkg.Signatures != nil {
+		sigVerifier := r.container.PackageSecurity.GetSignatureVerifier()
+		if sigVerifier != nil {
+			pkgSig := package_security.PackageSignature{
+				Algorithm:       pkg.Signatures.Algorithm,
+				KeyID:           pkg.Signatures.KeyID,
+				PublisherID:     pkg.Signatures.PublisherID,
+				SignedAt:        pkg.Signatures.SignedAt,
+				ContentTreeHash: pkg.Tree.TreeHash,
+				Signature:       pkg.Signatures.Signature,
+			}
+			for keyID, pubKey := range sigVerifier.TrustedKeys() {
+				verResult := sigVerifier.Verify(ctx, package_security.SignatureVerificationInput{
+					Signature:            pkgSig,
+					PublicKey:            pubKey,
+					ActualContentTreeHash: pkg.Tree.TreeHash,
+				})
+				if verResult.Status == package_security.SignatureInvalid {
+					return result, fmt.Errorf("kernel: signature verification failed for key %s", keyID)
+				}
+			}
+		}
+	}
+
 	manifest := pkg.Manifest
 	report := manifest.Validate()
 	if report.HasErrors() {

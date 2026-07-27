@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
@@ -61,6 +62,7 @@ type Container struct {
 	DependencyResolver   dependency.Resolver
 	RuntimeSupervisor    runtime_supervisor.Supervisor
 	ExecutionKernel      *execution.ExecutionPipeline
+	HostAPIGateway       *host_api.DefaultGateway
 	PermissionBroker     permission.PermissionBroker
 	ScopeManager         scope.ScopeManager
 	AgentSkillCatalog    *agent_skill.AgentSkillCatalog

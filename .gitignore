@@ -81,3 +81,13 @@ noa.rs-7.cn/
 *.py
 *.extension-key
 backend/surrealdb/surreal.exe
+
+1-10000.txt
+
+backend/cmd/server/server.exe
+backend/node.exe
+server.exe
+android/app/src/main/assets/amitia-backend-arm64
+android/app/src/main/assets/proot_linux_aarch64
+android/app/src/main/assets/qdrant_linux_aarch64
+android/app/src/main/assets/surreal_linux_aarch64

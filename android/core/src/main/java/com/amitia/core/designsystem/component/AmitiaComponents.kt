@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.amitia.core.designsystem.AmitiaColors
 
 @Composable
 fun AmitiaEntryCard(
@@ -40,7 +39,7 @@ fun AmitiaEntryCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp
     ) {
@@ -135,43 +134,6 @@ fun AmitiaSectionHeader(
         Spacer(modifier = Modifier.weight(1f))
         if (trailing != null) {
             trailing()
-        }
-    }
-}
-
-@Composable
-fun AmitiaEmptyState(
-    title: String,
-    subtitle: String? = null,
-    icon: ImageVector? = null,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = AmitiaColors.OnSurfaceMuted,
-                modifier = Modifier.size(48.dp)
-            )
-        }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (subtitle != null) {
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = AmitiaColors.OnSurfaceMuted
-            )
         }
     }
 }

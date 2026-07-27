@@ -62,6 +62,14 @@ func (v *SignatureVerifier) AddTrustedKey(keyID string, publicKey []byte) {
 	v.trustedKeys[keyID] = publicKey
 }
 
+func (v *SignatureVerifier) TrustedKeys() map[string][]byte {
+	out := make(map[string][]byte, len(v.trustedKeys))
+	for k, val := range v.trustedKeys {
+		out[k] = val
+	}
+	return out
+}
+
 func (v *SignatureVerifier) Verify(ctx context.Context, input SignatureVerificationInput) SignatureVerificationResult {
 	result := SignatureVerificationResult{
 		KeyID:     input.Signature.KeyID,

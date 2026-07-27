@@ -241,6 +241,123 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		}
 		result.Applied = append(result.Applied, "uninstall")
 
+	case lifecycle_manager.CmdInstall:
+		now := time.Now().UTC()
+		inst := domain.ExtensionInstallation{
+			ExtensionID:       extID,
+			InstalledVersion:  plan.Command.TargetVersion,
+			PackageID:         plan.Command.PackageID,
+			InstallationState: domain.InstallationStateInstalled,
+			EnablementState:   domain.EnablementDisabled,
+			InstalledAt:       now,
+			UpdatedAt:         now,
+			Generation:        1,
+		}
+		if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+			result.Status = "failed"
+			result.Error = err.Error()
+			return result, err
+		}
+		result.Applied = append(result.Applied, "create_installation")
+
+	case lifecycle_manager.CmdUpdate:
+		if plan.CurrentState.Installation != nil {
+			inst := *plan.CurrentState.Installation
+			inst.InstalledVersion = plan.Command.TargetVersion
+			inst.UpdatedAt = time.Now().UTC()
+			inst.Generation = inst.Generation + 1
+			if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
+			result.Applied = append(result.Applied, "update_version")
+		} else {
+			result.Status = "failed"
+			result.Error = "installation not found for update"
+		}
+
+	case lifecycle_manager.CmdRollback:
+		if plan.CurrentState.Installation != nil {
+			inst := *plan.CurrentState.Installation
+			inst.InstalledVersion = plan.Command.TargetVersion
+			inst.UpdatedAt = time.Now().UTC()
+			if inst.Generation > 1 {
+				inst.Generation = inst.Generation - 1
+			}
+			if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
+			result.Applied = append(result.Applied, "rollback_version")
+		} else {
+			result.Status = "failed"
+			result.Error = "installation not found for rollback"
+		}
+
+	case lifecycle_manager.CmdRepair:
+		if plan.CurrentState.Installation != nil {
+			inst := *plan.CurrentState.Installation
+			inst.InstallationState = domain.InstallationStateInstalled
+			inst.UpdatedAt = time.Now().UTC()
+			if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
+			result.Applied = append(result.Applied, "repair_installation")
+		}
+
+	case lifecycle_manager.CmdEnableModule:
+		modSubject := enablement.StateSubject{
+			Kind:     enablement.SubjectModule,
+			ID:       string(plan.Command.ModuleID),
+			ParentID: string(extID),
+		}
+		if err := e.enablement.SetEnablement(ctx, modSubject, enablement.EnablementEnabled); err != nil {
+			result.Status = "failed"
+			result.Error = err.Error()
+			return result, err
+		}
+		result.Applied = append(result.Applied, "enable_module")
+
+	case lifecycle_manager.CmdDisableModule:
+		modSubject := enablement.StateSubject{
+			Kind:     enablement.SubjectModule,
+			ID:       string(plan.Command.ModuleID),
+			ParentID: string(extID),
+		}
+		if err := e.enablement.SetEnablement(ctx, modSubject, enablement.EnablementDisabled); err != nil {
+			result.Status = "failed"
+			result.Error = err.Error()
+			return result, err
+		}
+		result.Applied = append(result.Applied, "disable_module")
+
+	case lifecycle_manager.CmdSetContributionOverride:
+		if plan.Command.ContributionID != "" {
+			contrib, err := e.contribRepo.GetContribution(ctx, extID, plan.Command.ContributionID)
+			if err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
+			if override, ok := plan.Command.Metadata["enabled_override"].(bool); ok {
+				if override {
+					contrib.Definition["enabled_override"] = "enabled"
+				} else {
+					contrib.Definition["enabled_override"] = "disabled"
+				}
+			}
+			if err := e.contribRepo.PutContribution(ctx, contrib); err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
+			result.Applied = append(result.Applied, "set_contribution_override")
+		}
+
 	default:
 		result.Status = "skipped"
 		result.Skipped = append(result.Skipped, string(plan.Command.Kind))
@@ -252,15 +369,40 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 	return result, nil
 }
 
-type containerAuditWriter struct{}
+type containerAuditWriter struct {
+	opRepo sqlite.OperationRepository
+}
 
-func newContainerAuditWriter() *containerAuditWriter {
-	return &containerAuditWriter{}
+func newContainerAuditWriter(opRepo sqlite.OperationRepository) *containerAuditWriter {
+	return &containerAuditWriter{opRepo: opRepo}
 }
 
 func (w *containerAuditWriter) Record(ctx context.Context, event lifecycle_manager.LifecycleAuditEvent) {
 	log.Printf("[lifecycle-audit] op=%s cmd=%s phase=%s status=%s err=%s",
 		event.OperationID, event.Command.Kind, event.Phase, event.Status, event.Error)
+
+	if w.opRepo == nil {
+		return
+	}
+
+	op := sqlite.Operation{
+		OperationID:   event.OperationID,
+		OperationType: string(event.Command.Kind),
+		ExtensionID:   event.Command.ExtensionID,
+		Status:        event.Status,
+		StartedAt:     event.Timestamp,
+	}
+
+	if event.Error != "" {
+		op.ErrorMessage = event.Error
+	}
+
+	if event.Phase == "execute" && (event.Status == "succeeded" || event.Status == "failed" || event.Status == "skipped") {
+		now := time.Now().UTC()
+		op.FinishedAt = &now
+	}
+
+	_ = w.opRepo.PutOperation(ctx, op)
 }
 
 type containerExtensionSummaryProvider struct {

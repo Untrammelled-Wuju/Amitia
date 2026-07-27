@@ -426,6 +426,10 @@ func (b *Bridge) handleDialog(ctx context.Context, session *WebSession, msg Brid
 }
 
 func isNavigationAllowed(target string, session *WebSession) bool {
+	return IsNavigationTargetAllowed(target, session)
+}
+
+func IsNavigationTargetAllowed(target string, session *WebSession) bool {
 	if target == "" {
 		return false
 	}

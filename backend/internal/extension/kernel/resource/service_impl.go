@@ -302,5 +302,23 @@ func (s *DefaultResourceOwnershipService) ScanOrphans(ctx context.Context) (*Orp
 }
 
 func (s *DefaultResourceOwnershipService) collectAllRefs(ctx context.Context) []ResourceReference {
-	return nil
+	var allRefs []ResourceReference
+	resources, err := s.store.ListResourcesByType(ctx, "")
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	for _, res := range resources {
+		refs, err := s.store.ListAllReferences(ctx, res.ResourceID)
+		if err != nil {
+			continue
+		}
+		for _, ref := range refs {
+			if !seen[ref.ReferenceID] {
+				seen[ref.ReferenceID] = true
+				allRefs = append(allRefs, ref)
+			}
+		}
+	}
+	return allRefs
 }

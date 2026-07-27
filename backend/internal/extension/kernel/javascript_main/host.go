@@ -15,8 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 type HostState string
@@ -52,6 +55,7 @@ type PluginHost struct {
 	shutdownCoordinator *ShutdownCoordinator
 	rpcVersion          string
 	definitionHash      string
+	hostAPI             host_api.Gateway
 
 	nodePath       string
 	pluginHostPath string
@@ -87,6 +91,7 @@ type PluginHostConfig struct {
 	NodePath             string
 	PluginHostPath       string
 	WorkingDirectory     string
+	HostAPI              host_api.Gateway
 }
 
 type AllowedContribution struct {
@@ -114,6 +119,7 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		boundary:            cfg.ProcessBoundary,
 		definitionHash:      cfg.DefinitionHash,
 		rpcVersion:          cfg.HostAPIVersion,
+		hostAPI:             cfg.HostAPI,
 		nodePath:            cfg.NodePath,
 		pluginHostPath:      cfg.PluginHostPath,
 		workDir:             cfg.WorkingDirectory,
@@ -130,6 +136,12 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 func (h *PluginHost) InstanceID() string  { return h.instanceID }
 func (h *PluginHost) ExtensionID() string { return h.extensionID }
 func (h *PluginHost) ModuleID() string    { return h.moduleID }
+
+func (h *PluginHost) SetHostAPI(gateway host_api.Gateway) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.hostAPI = gateway
+}
 
 func (h *PluginHost) PID() int {
 	h.mu.RLock()
@@ -407,12 +419,71 @@ func (h *PluginHost) handleNotification(n *jsonrpc.Notification) {
 func (h *PluginHost) handleRequest(req *jsonrpc.Request) {
 	switch req.Method {
 	case "host.call":
-		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError("host.call not implemented"))
-		_ = h.writeMessage(resp)
+		h.handleHostCall(req)
 	default:
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.MethodNotFoundError(req.Method))
 		_ = h.writeMessage(resp)
 	}
+}
+
+type hostCallParams struct {
+	Method  string          `json:"method"`
+	Version int             `json:"version"`
+	Input   json.RawMessage `json:"input"`
+}
+
+func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
+	h.mu.RLock()
+	gateway := h.hostAPI
+	procCtx := h.procCtx
+	h.mu.RUnlock()
+
+	if gateway == nil {
+		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError("host_api: gateway not configured"))
+		_ = h.writeMessage(resp)
+		return
+	}
+
+	if procCtx == nil {
+		procCtx = context.Background()
+	}
+
+	var p hostCallParams
+	if err := json.Unmarshal(req.Params, &p); err != nil {
+		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: decode params: %v", err)))
+		_ = h.writeMessage(resp)
+		return
+	}
+
+	identity := runtime_supervisor.RuntimeIdentity{
+		InstanceID:  h.instanceID,
+		ExtensionID: domain.ExtensionID(h.extensionID),
+		ModuleID:    domain.ModuleID(h.moduleID),
+	}
+
+	callReq := host_api.CallRequest{
+		CallID:          req.ID.String(),
+		RuntimeIdentity: identity,
+		Method:          host_api.Method(p.Method),
+		Version:         p.Version,
+		Input:           p.Input,
+	}
+
+	result := gateway.Call(procCtx, callReq)
+
+	if result.Error != nil {
+		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: %s: %s", result.Error.Code, result.Error.Message)))
+		_ = h.writeMessage(resp)
+		return
+	}
+
+	resp, err := jsonrpc.EncodeResponse(req.ID, result.Output)
+	if err != nil {
+		errResp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: encode response: %v", err)))
+		_ = h.writeMessage(errResp)
+		return
+	}
+	_ = h.writeMessage(resp)
 }
 
 func (h *PluginHost) deliverResponse(resp *jsonrpc.Response) {

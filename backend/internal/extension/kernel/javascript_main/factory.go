@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 )
 
@@ -14,6 +15,7 @@ type RuntimeFactory struct {
 	mu       sync.Mutex
 	hosts    map[string]*PluginHost
 	history  []*PluginHost
+	hostAPI  host_api.Gateway
 }
 
 func NewRuntimeFactory() *RuntimeFactory {
@@ -21,6 +23,12 @@ func NewRuntimeFactory() *RuntimeFactory {
 		hosts:   make(map[string]*PluginHost),
 		history: make([]*PluginHost, 0),
 	}
+}
+
+func (f *RuntimeFactory) SetHostAPI(gateway host_api.Gateway) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hostAPI = gateway
 }
 
 type CreateHostRequest struct {
@@ -71,6 +79,10 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 	boundary := runtime.DefaultProcessBoundary()
 	boundary.ResourceLimits = req.ResourceLimits
 
+	f.mu.Lock()
+	gateway := f.hostAPI
+	f.mu.Unlock()
+
 	host, err := NewPluginHost(PluginHostConfig{
 		InstanceID:           instanceID,
 		ExtensionID:          req.ExtensionID,
@@ -80,6 +92,7 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 		DefinitionHash:       req.DefinitionHash,
 		HostAPIVersion:       req.HostAPIVersion,
 		AllowedContributions: req.AllowedContributions,
+		HostAPI:              gateway,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: create host failed: %w", err)

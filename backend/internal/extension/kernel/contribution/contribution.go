@@ -3,16 +3,17 @@ package contribution
 type ContributionType string
 
 const (
-	ContributionTypeTool           ContributionType = "tool"
-	ContributionTypeAgentSkill     ContributionType = "agent_skill"
-	ContributionTypeWorkflow       ContributionType = "workflow"
-	ContributionTypeMCP            ContributionType = "mcp"
-	ContributionTypeUI             ContributionType = "ui"
-	ContributionTypeHook           ContributionType = "hook"
-	ContributionTypeBackgroundTask ContributionType = "background_task"
-	ContributionTypeProvider       ContributionType = "provider"
-	ContributionTypeAsset          ContributionType = "asset"
-	ContributionTypeSchedule       ContributionType = "schedule"
+	ContributionTypeTool              ContributionType = "tool"
+	ContributionTypeAgentSkill        ContributionType = "agent_skill"
+	ContributionTypeWorkflow          ContributionType = "workflow"
+	ContributionTypeMCP               ContributionType = "mcp"
+	ContributionTypeUI                ContributionType = "ui"
+	ContributionTypeHook              ContributionType = "hook"
+	ContributionTypeEventSubscription ContributionType = "event_subscription"
+	ContributionTypeBackgroundTask    ContributionType = "background_task"
+	ContributionTypeProvider          ContributionType = "provider"
+	ContributionTypeAsset             ContributionType = "asset"
+	ContributionTypeSchedule          ContributionType = "schedule"
 )
 
 type Contribution interface {
@@ -66,6 +67,14 @@ type HookContribution struct {
 	BaseContribution
 	Event  string `json:"event"`
 	Handler string `json:"handler"`
+}
+
+type EventSubscriptionContribution struct {
+	BaseContribution
+	EventType  string   `json:"eventType"`
+	Filter     string   `json:"filter,omitempty"`
+	Handler    string   `json:"handler"`
+	SourceIDs  []string `json:"sourceIds,omitempty"`
 }
 
 type ProviderContribution struct {

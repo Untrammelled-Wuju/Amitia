@@ -293,6 +293,7 @@ func checksumFor(parts []string) string {
 
 func (r Runner) computeMigrationChecksum(migration Migration) (string, error) {
 	step := &Step{}
+	step.db = r.DB
 	if err := migration.Up(step); err != nil {
 		return "", err
 	}
