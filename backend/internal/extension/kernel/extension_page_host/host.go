@@ -466,6 +466,14 @@ func NewPageHost(registry PageRegistry, sessions *SessionManager) *PageHost {
 	}
 }
 
+func NewPageHostWithValidator(registry PageRegistry, sessions *SessionManager, validator PageValidator) *PageHost {
+	return &PageHost{
+		registry:  registry,
+		sessions:  sessions,
+		validator: validator,
+	}
+}
+
 func (h *PageHost) SetRouteResolver(r RouteResolver) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -567,6 +575,10 @@ func (h *PageHost) ClosePage(ctx context.Context, sessionID PageSessionID) error
 	return h.sessions.Destroy(sessionID)
 }
 
+func (h *PageHost) GetSession(sessionID PageSessionID) (*ExtensionPageSession, error) {
+	return h.sessions.Get(sessionID)
+}
+
 func (h *PageHost) HandleExtensionDisabled(ctx context.Context, extensionID ExtensionID) int {
 	return h.sessions.DestroyByExtension(extensionID)
 }
@@ -577,7 +589,13 @@ func (h *PageHost) HandleExtensionUpdated(ctx context.Context, extensionID Exten
 
 func (h *PageHost) HandleExtensionUninstalled(ctx context.Context, extensionID ExtensionID) (int, error) {
 	count := h.sessions.DestroyByExtension(extensionID)
-	_ = h.registry.Unregister(ctx, "")
+	defs, err := h.registry.ListByExtension(ctx, extensionID)
+	if err != nil {
+		return count, err
+	}
+	for _, def := range defs {
+		_ = h.registry.Unregister(ctx, def.contributionID)
+	}
 	return count, nil
 }
 

@@ -226,6 +226,14 @@ func main() {
 			log.Error("Plugin Runtime 关闭失败:", err)
 		}
 		pluginCancel()
+		if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
+			taskShutdownCtx, taskCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			services.KernelContainer.TaskRuntimeService.Shutdown(taskShutdownCtx)
+			taskCancel()
+		}
+		if services.KernelContainer != nil && services.KernelContainer.EventService != nil {
+			services.KernelContainer.EventService.Stop()
+		}
 		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

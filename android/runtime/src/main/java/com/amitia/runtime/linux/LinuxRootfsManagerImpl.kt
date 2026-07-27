@@ -1,6 +1,7 @@
 package com.amitia.runtime.linux
 
 import android.content.Context
+import android.system.Os
 import com.amitia.runtime.api.RuntimeEvent
 import com.amitia.runtime.manager.RuntimeStateMachine
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -127,9 +128,7 @@ class LinuxRootfsManagerImpl @Inject constructor(
                 }
 
                 if (component.type != TYPE_CONFIG) {
-                    if (!targetFile.canExecute()) {
-                        targetFile.setExecutable(true, false)
-                    }
+                    ensureExecutable(targetFile)
                 }
 
                 trySend(
@@ -594,9 +593,17 @@ class LinuxRootfsManagerImpl @Inject constructor(
             if (target.exists()) continue
             try {
                 source.copyTo(target, overwrite = false)
-                target.setExecutable(true, false)
+                ensureExecutable(target)
             } catch (_: Exception) {
             }
+        }
+    }
+
+    private fun ensureExecutable(file: File) {
+        try {
+            Os.chmod(file.absolutePath, 493)
+        } catch (_: Exception) {
+            file.setExecutable(true, false)
         }
     }
 

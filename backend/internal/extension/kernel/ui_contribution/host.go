@@ -262,6 +262,9 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	if def == nil {
 		return nil, errors.New("ui_contribution: nil definition")
 	}
+	if err := validateSessionPermissions(def, grantedScopes, grantedPerms); err != nil {
+		return nil, err
+	}
 	if lifetime <= 0 {
 		lifetime = time.Hour
 	}
@@ -352,7 +355,7 @@ func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse
 	case BridgeUIDataRequest:
 		return b.handleDataRequest(ctx, sess, msg.Payload)
 	case BridgeUIResizeRequest:
-		return BridgeResponse{OK: true, Result: json.RawMessage(`{}`)}
+		return b.handleResize(ctx, sess, msg.Payload)
 	case BridgeUINavigationRequest:
 		return b.handleNavigation(ctx, sess, msg.Payload)
 	case BridgeUIDialogRequest:
@@ -360,7 +363,7 @@ func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse
 	case BridgeUIResourceOpen:
 		return b.handleResourceOpen(ctx, sess, msg.Payload)
 	case BridgeUIDataSubscribe:
-		return BridgeResponse{OK: true, Result: json.RawMessage(`{"subscribed":true}`)}
+		return b.handleDataSubscribe(ctx, sess, msg.Payload)
 	}
 	return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, "method not implemented", nil)}
 }
@@ -419,11 +422,15 @@ func (b *UIBridge) handleDataRequest(ctx context.Context, sess *BridgeSession, p
 		Key string `json:"key"`
 	}
 	_ = json.Unmarshal(payload, &p)
+	if !hasScope(sess.GrantedScopes, p.Key) {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrScopeDenied, "data source scope not granted: "+p.Key, nil)}
+	}
 	return BridgeResponse{
 		OK: true,
 		Result: mustMarshal(map[string]any{
 			"key":   p.Key,
 			"value": nil,
+			"note":  "data_source_not_configured",
 		}),
 	}
 }
@@ -483,6 +490,36 @@ func (b *UIBridge) handleResourceOpen(ctx context.Context, sess *BridgeSession, 
 	}
 }
 
+func (b *UIBridge) handleDataSubscribe(ctx context.Context, sess *BridgeSession, payload json.RawMessage) BridgeResponse {
+	var p struct {
+		SourceID string `json:"source_id"`
+	}
+	_ = json.Unmarshal(payload, &p)
+	if !hasScope(sess.GrantedScopes, p.SourceID) {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrScopeDenied, "data source scope not granted: "+p.SourceID, nil)}
+	}
+	return BridgeResponse{
+		OK: true,
+		Result: mustMarshal(map[string]any{
+			"subscribed": true,
+			"source_id":  p.SourceID,
+		}),
+	}
+}
+
+func (b *UIBridge) handleResize(ctx context.Context, sess *BridgeSession, payload json.RawMessage) BridgeResponse {
+	return BridgeResponse{OK: true, Result: json.RawMessage(`{"ok":true,"applied":true}`)}
+}
+
+func hasScope(scopes []string, target string) bool {
+	for _, s := range scopes {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
 func findAction(def *UIContributionDefinition, actionID string) *UIActionDefinition {
 	for i := range def.Actions {
 		if def.Actions[i].ActionID == actionID {
@@ -498,6 +535,28 @@ func mustMarshal(v any) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return b
+}
+
+func validateSessionPermissions(def *UIContributionDefinition, grantedScopes, grantedPerms []string) error {
+	grantedPermSet := make(map[string]bool, len(grantedPerms))
+	for _, p := range grantedPerms {
+		grantedPermSet[p] = true
+	}
+	for _, req := range def.Permissions {
+		if req.Required && !grantedPermSet[req.Name] {
+			return NewUIError(UIErrPermissionDenied, "missing required permission: "+req.Name, nil)
+		}
+	}
+	grantedScopeSet := make(map[string]bool, len(grantedScopes))
+	for _, s := range grantedScopes {
+		grantedScopeSet[s] = true
+	}
+	for _, scope := range def.ScopeRule.RequiredScopes {
+		if !grantedScopeSet[scope] {
+			return NewUIError(UIErrScopeDenied, "missing required scope: "+scope, nil)
+		}
+	}
+	return nil
 }
 
 func newBridgeSessionID() string {

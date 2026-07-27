@@ -1,6 +1,7 @@
 package com.amitia.runtime.process
 
 import android.content.Context
+import android.system.Os
 import com.amitia.runtime.api.RuntimeEvent
 import com.amitia.runtime.manager.RuntimeStateMachine
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -106,7 +107,51 @@ class LinuxProcessManagerImpl @Inject constructor(
                 "启动进程 $name: ${command.joinToString(" ")} workDir=${workDir.absolutePath}"
             )
 
-            val process = builder.start()
+            val process = try {
+                builder.start()
+            } catch (ioe: java.io.IOException) {
+                val msg = ioe.message ?: ""
+                if (msg.contains("error=13") || msg.contains("Permission denied")) {
+                    val linker = resolveLinker()
+                    if (linker != null) {
+                        val retryCommand = listOf(linker) + command
+                        val retryBuilder = ProcessBuilder(retryCommand)
+                            .directory(workDir)
+                            .redirectErrorStream(false)
+                        retryBuilder.environment().putAll(env)
+                        stateMachine.emitLog(
+                            RuntimeEvent.LogEmitted.Level.WARN,
+                            TAG,
+                            "进程 $name 直接执行失败(noexec),通过 $linker 重试"
+                        )
+                        try {
+                            retryBuilder.start()
+                        } catch (ioe2: java.io.IOException) {
+                            stateMachine.emitLog(
+                                RuntimeEvent.LogEmitted.Level.WARN,
+                                TAG,
+                                "进程 $name linker 重试也失败: ${ioe2.message}, 尝试可执行副本"
+                            )
+                            val tmpExec = tryTempExec(name, command, env, workDir)
+                            if (tmpExec != null) {
+                                tmpExec
+                            } else {
+                                throw ioe
+                            }
+                        }
+                    } else {
+                        val tmpExec = tryTempExec(name, command, env, workDir)
+                        if (tmpExec != null) {
+                            tmpExec
+                        } else {
+                            throw ioe
+                        }
+                    }
+                } else {
+                    throw ioe
+                }
+            }
+
             val pid = try {
                 val method = Process::class.java.getMethod("pid")
                 method.isAccessible = true
@@ -505,5 +550,70 @@ class LinuxProcessManagerImpl @Inject constructor(
         private const val RESTART_DELAY_MS = 1000L
         private const val STDOUT_BUFFER = 256
         private const val LOG_TIMESTAMP_PATTERN = "yyyyMMdd-HHmmss"
+        private const val LINKER64 = "/system/bin/linker64"
+        private const val LINKER = "/system/bin/linker"
+        private const val APEX_LINKER64 = "/apex/com.android.runtime/bin/linker64"
+        private const val APEX_LINKER = "/apex/com.android.runtime/bin/linker"
+
+        fun resolveLinker(): String? {
+            val linker64 = File(LINKER64)
+            if (linker64.exists() && linker64.canExecute()) return LINKER64
+            val linker = File(LINKER)
+            if (linker.exists() && linker.canExecute()) return LINKER
+            val apexLinker64 = File(APEX_LINKER64)
+            if (apexLinker64.exists() && apexLinker64.canExecute()) return APEX_LINKER64
+            val apexLinker = File(APEX_LINKER)
+            if (apexLinker.exists() && apexLinker.canExecute()) return APEX_LINKER
+            return null
+        }
+
+    }
+
+    private fun tryTempExec(
+        name: String,
+        command: List<String>,
+        env: Map<String, String>,
+        workDir: File
+    ): Process? {
+        if (command.isEmpty()) return null
+        val origBin = File(command[0])
+        val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+        val tmpDir = File("/data/local/tmp/amitia/bin").apply { mkdirs() }
+        val tmpBin = File(tmpDir, origBin.name)
+
+        val execAt = fun(dest: File): Process? {
+            return try {
+                origBin.copyTo(dest, overwrite = true)
+                dest.setExecutable(true, false)
+                dest.setReadable(true, false)
+                if (!dest.canExecute()) {
+                    try { Os.chmod(dest.absolutePath, 493) } catch (_: Exception) {}
+                }
+                val tmpCommand = listOf(dest.absolutePath) + command.drop(1)
+                val tmpBuilder = ProcessBuilder(tmpCommand)
+                    .directory(workDir)
+                    .redirectErrorStream(false)
+                tmpBuilder.environment().putAll(env)
+                tmpBuilder.start()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        val nativeCandidate = File(nativeLibDir, "libproot_exec.so")
+        if (nativeCandidate.exists() && nativeCandidate.canExecute()) {
+            val nativeCommand = listOf(nativeCandidate.absolutePath) + command.drop(1)
+            return try {
+                val nb = ProcessBuilder(nativeCommand)
+                    .directory(workDir)
+                    .redirectErrorStream(false)
+                nb.environment().putAll(env)
+                nb.start()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        return execAt(tmpBin)
     }
 }

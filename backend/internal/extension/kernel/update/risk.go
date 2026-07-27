@@ -12,6 +12,12 @@ const (
 	RollbackLevelDataSnapshotRequired RollbackLevel = "data_snapshot_required"
 	RollbackLevelManual              RollbackLevel = "manual"
 	RollbackLevelNotSupported        RollbackLevel = "not_supported"
+	RollbackLevelRuntimeOnly         RollbackLevel = "runtime_only"
+	RollbackLevelContributionOnly    RollbackLevel = "contribution_only"
+	RollbackLevelGeneration          RollbackLevel = "generation"
+	RollbackLevelDataAndGeneration   RollbackLevel = "data_and_generation"
+	RollbackLevelFullExtension       RollbackLevel = "full_extension"
+	RollbackLevelManualRecovery      RollbackLevel = "manual_recovery"
 )
 
 type SwitchStrategy string

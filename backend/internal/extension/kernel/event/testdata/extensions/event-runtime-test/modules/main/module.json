@@ -1,0 +1,11 @@
+{
+  "moduleId": "main",
+  "runtimeType": "javascript_main",
+  "entry": "index.js",
+  "handlers": [
+    {
+      "type": "event",
+      "name": "on-test-event"
+    }
+  ]
+}

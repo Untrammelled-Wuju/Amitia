@@ -1,14 +1,18 @@
 package dev_mode
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,16 +21,16 @@ import (
 type RevisionID string
 
 type Revision struct {
-	RevisionID  RevisionID
-	WorkspaceID WorkspaceID
-	ManifestHash string
-	SourceHash   string
-	BuiltAt      time.Time
+	RevisionID      RevisionID
+	WorkspaceID     WorkspaceID
+	ManifestHash    string
+	SourceHash      string
+	BuiltAt         time.Time
 	BuildDurationMs int64
-	ArtifactPath string
-	Errors       []BuildError
-	Warnings     []string
-	Status       RevisionStatus
+	ArtifactPath    string
+	Errors          []BuildError
+	Warnings        []string
+	Status          RevisionStatus
 }
 
 type RevisionStatus string
@@ -61,22 +65,41 @@ type RebuildPipeline struct {
 	building   map[WorkspaceID]bool
 	history    map[WorkspaceID][]Revision
 	maxHistory int
+	nodePath   string
+	tscPath    string
 }
 
-func NewRebuildPipeline(registry *WorkspaceRegistry) *RebuildPipeline {
+func NewRebuildPipeline(nodePath string) *RebuildPipeline {
+	if nodePath == "" {
+		nodePath = "node"
+	}
 	return &RebuildPipeline{
-		registry:   registry,
 		revisions:  make(map[WorkspaceID]RevisionID),
 		building:   make(map[WorkspaceID]bool),
 		history:    make(map[WorkspaceID][]Revision),
 		maxHistory: 10,
+		nodePath:   nodePath,
 	}
 }
 
+func (p *RebuildPipeline) WithRegistry(r *WorkspaceRegistry) *RebuildPipeline {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.registry = r
+	return p
+}
+
+func (p *RebuildPipeline) SetTscPath(path string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.tscPath = path
+}
+
 var (
-	ErrBuildInProgress = errors.New("dev_mode: build already in progress")
-	ErrBuildFailed     = errors.New("dev_mode: build failed")
-	ErrNoSourceFiles   = errors.New("dev_mode: no source files found")
+	ErrBuildInProgress   = errors.New("dev_mode: build already in progress")
+	ErrBuildFailed       = errors.New("dev_mode: build failed")
+	ErrNoSourceFiles     = errors.New("dev_mode: no source files found")
+	ErrRegistryNotConfigured = errors.New("dev_mode: registry not configured")
 )
 
 func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildOptions) (*Revision, error) {
@@ -86,6 +109,7 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 		return nil, fmt.Errorf("%w: %s", ErrBuildInProgress, id)
 	}
 	p.building[id] = true
+	registry := p.registry
 	p.mu.Unlock()
 
 	defer func() {
@@ -94,7 +118,11 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 		p.mu.Unlock()
 	}()
 
-	ws, err := p.registry.Get(id)
+	if registry == nil {
+		return nil, ErrRegistryNotConfigured
+	}
+
+	ws, err := registry.Get(id)
 	if err != nil {
 		return nil, err
 	}
@@ -102,10 +130,10 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 	start := time.Now()
 	revID := newRevisionID(ws, start)
 	rev := Revision{
-		RevisionID: revID,
+		RevisionID:  revID,
 		WorkspaceID: id,
-		Status:     RevisionStatusBuilding,
-		BuiltAt:    start,
+		Status:      RevisionStatusBuilding,
+		BuiltAt:     start,
 	}
 
 	manifestHash, err := hashFile(ws.ManifestPath)
@@ -161,20 +189,103 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 			rev.Warnings = append(rev.Warnings, fmt.Sprintf("copy failed for %s: %v", src, err))
 		}
 	}
-	rev.ArtifactPath = opts.OutDir
 
+	tsErrors := p.compileTypeScript(ctx, ws.PathReference, opts.OutDir)
+	if len(tsErrors) > 0 {
+		rev.Errors = append(rev.Errors, tsErrors...)
+		rev.Status = RevisionStatusFailed
+		rev.BuildDurationMs = time.Since(start).Milliseconds()
+		rev.ArtifactPath = opts.OutDir
+		p.commitRevision(id, rev)
+		_ = registry.UpdateStatus(id, WorkspaceStatusFailed, fmt.Sprintf("typescript: %d errors", len(tsErrors)))
+		return &rev, fmt.Errorf("%w: typescript compilation produced %d errors", ErrBuildFailed, len(tsErrors))
+	}
+
+	rev.ArtifactPath = opts.OutDir
 	rev.BuildDurationMs = time.Since(start).Milliseconds()
 	rev.Status = RevisionStatusSucceeded
 
-	if err := p.registry.SetCurrentRevision(id, revID); err != nil {
+	if err := registry.SetCurrentRevision(id, revID); err != nil {
 		return &rev, err
 	}
-	if err := p.registry.UpdateStatus(id, WorkspaceStatusReady, ""); err != nil {
+	if err := registry.UpdateStatus(id, WorkspaceStatusReady, ""); err != nil {
 		return &rev, err
 	}
 
 	p.commitRevision(id, rev)
 	return &rev, nil
+}
+
+func (p *RebuildPipeline) compileTypeScript(ctx context.Context, workspacePath, outputPath string) []BuildError {
+	tsconfig := filepath.Join(workspacePath, "tsconfig.json")
+	if _, err := os.Stat(tsconfig); err != nil {
+		return nil
+	}
+
+	p.mu.Lock()
+	tsc := p.tscPath
+	nodeBin := p.nodePath
+	p.mu.Unlock()
+
+	if tsc == "" {
+		candidate := filepath.Join(workspacePath, "node_modules", "typescript", "bin", "tsc")
+		if _, err := os.Stat(candidate); err == nil {
+			tsc = candidate
+		} else {
+			tsc = "tsc"
+		}
+	}
+	if nodeBin == "" {
+		nodeBin = "node"
+	}
+
+	args := []string{tsc, "--project", workspacePath, "--outDir", outputPath, "--sourceMap"}
+	cmd := exec.CommandContext(ctx, nodeBin, args...)
+	cmd.Dir = workspacePath
+	var combined bytes.Buffer
+	cmd.Stdout = &combined
+	cmd.Stderr = &combined
+	runErr := cmd.Run()
+	out := combined.String()
+	if runErr != nil {
+		if errs := parseTSCErrors(out); len(errs) > 0 {
+			return errs
+		}
+		return []BuildError{{
+			Message: fmt.Sprintf("tsc invocation failed: %v; output: %s", runErr, strings.TrimSpace(out)),
+			Code:    "tsc_invoke_failed",
+		}}
+	}
+	return parseTSCErrors(out)
+}
+
+var tscErrorRe = regexp.MustCompile(`^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$`)
+
+func parseTSCErrors(out string) []BuildError {
+	var errs []BuildError
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := tscErrorRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		if m[4] != "error" {
+			continue
+		}
+		lineNo, _ := strconv.Atoi(m[2])
+		colNo, _ := strconv.Atoi(m[3])
+		errs = append(errs, BuildError{
+			File:    m[1],
+			Line:    lineNo,
+			Column:  colNo,
+			Code:    m[5],
+			Message: m[6],
+		})
+	}
+	return errs
 }
 
 func (p *RebuildPipeline) commitRevision(id WorkspaceID, rev Revision) {

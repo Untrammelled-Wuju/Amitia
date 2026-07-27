@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme, Tray } from "electron";
+import { join } from "node:path";
 import { initLogger, closeLogger } from "./logger";
 import { ConfigStore } from "./config-store";
 import { registerIpcHandlers } from "./ipc-handlers";
@@ -15,6 +16,7 @@ import {
   ensureDataAndConfig,
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager";
+import { registerExtensionProtocol } from "./protocol";
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
@@ -156,6 +158,8 @@ async function enterMainApp(): Promise<void> {
   } else {
     notifyStatus(runtimeManager, "ready");
   }
+
+  registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));
 
   mainWindow = createMainWindow();
   const trayResult = createAppTray(

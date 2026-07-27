@@ -89,6 +89,7 @@ const (
 
 type ChatMessageActionSpec struct {
 	ActionID        string   `json:"actionId"`
+	ExtensionID     string   `json:"extensionId,omitempty"`
 	SupportedTypes  []string `json:"supportedTypes,omitempty"`
 	Position        string   `json:"position,omitempty"`
 	RequiresContent bool     `json:"requiresContent"`
@@ -202,8 +203,9 @@ func (r *ChatExtensionRegistry) UnregisterByExtension(extensionID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, a := range r.messageActions {
-		_ = a
-		_ = id
+		if a.ExtensionID == extensionID {
+			delete(r.messageActions, id)
+		}
 	}
 	for key, mt := range r.customMessageTypes {
 		if mt.OwnerExtension == extensionID {

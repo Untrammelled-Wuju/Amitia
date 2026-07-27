@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onErrorCaptured } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { useExtensionUIStore } from "@/stores/extensionUI";
+import SchemaUINode from "./SchemaUINode.vue";
+import {
+  validateDocument,
+  type SchemaUIDocument,
+  type SchemaUINode as SchemaUINodeType,
+  type SchemaUIActionBinding,
+} from "./schema-ui-utils";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
@@ -8,24 +17,85 @@ const props = defineProps<{
   slotId: string;
 }>();
 
-const schema = ref<Record<string, unknown> | null>(null);
+const uiStore = useExtensionUIStore();
+
+const schema = ref<SchemaUIDocument | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
+const validationErrors = ref<string[]>([]);
+const sessionId = ref<string>("");
+const sessionReady = ref(false);
+const actionLoading = reactive<Record<string, boolean>>({});
+const capturedError = ref<string | null>(null);
+
+const formState = reactive<Record<string, unknown>>({});
+const localContextOverride = reactive<Record<string, unknown>>({});
+
+const mergedContext = computed<Record<string, unknown>>(() => ({
+  ...(props.context ?? {}),
+  ...localContextOverride,
+  extensionId: props.contribution.extensionId,
+  contributionId: props.contribution.contributionId,
+  moduleId: props.contribution.moduleId,
+  slotId: props.slotId,
+  permissions: props.contribution.permissions ?? [],
+  runtimeReady: props.contribution.runtimeReady,
+  enabled: props.contribution.enabled,
+  effective: props.contribution.effective,
+  sandbox: props.contribution.sandbox,
+  form_state: formState,
+  formState: formState,
+}));
+
+const rootNode = computed<SchemaUINodeType | null>(() => schema.value?.root ?? null);
+const rootList = computed<SchemaUINodeType[]>(() => schema.value?.children ?? []);
+const hasRoot = computed(() => rootNode.value !== null || rootList.value.length > 0);
+
+onErrorCaptured((err) => {
+  const message = err instanceof Error ? err.message : String(err);
+  capturedError.value = message;
+  try {
+    uiStore.recordError({
+      contributionId: props.contribution.contributionId,
+      slotId: props.slotId,
+      message,
+      timestamp: Date.now(),
+      recoverable: true,
+    });
+  } catch {
+  }
+  return false;
+});
 
 async function loadSchema() {
-  if (!props.contribution.schemaPath) {
+  if (!props.contribution.schemaPath && !props.contribution.entryPath) {
     loading.value = false;
+    error.value = "该贡献未提供 schema 路径";
     return;
   }
   loading.value = true;
   error.value = null;
+  capturedError.value = null;
+  validationErrors.value = [];
+  schema.value = null;
   try {
-    const response = await fetch(`/api/extension/schema/${props.contribution.extensionId}/${props.contribution.contributionId}`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) throw new Error(`schema load failed: ${response.status}`);
-    schema.value = await response.json();
+    const response = await fetch(
+      `/api/extension/schema/${props.contribution.extensionId}/${props.contribution.contributionId}`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+    if (!response.ok) throw new Error(`schema 加载失败: ${response.status}`);
+    const data = (await response.json()) as SchemaUIDocument;
+    const result = validateDocument(data);
+    if (!result.valid) {
+      validationErrors.value = result.errors;
+      error.value = `schema 校验未通过: ${result.errors.join("; ")}`;
+      schema.value = data;
+    } else {
+      schema.value = data;
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -33,22 +103,226 @@ async function loadSchema() {
   }
 }
 
-onMounted(loadSchema);
-watch(() => props.contribution.contributionId, loadSchema);
+async function ensureSession(): Promise<string> {
+  if (sessionId.value && sessionReady.value) return sessionId.value;
+  const key = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
+  const existing = uiStore.sessions.get(key);
+  if (existing?.sessionId) {
+    sessionId.value = existing.sessionId;
+    sessionReady.value = true;
+    return sessionId.value;
+  }
+  try {
+    const res = await fetch("/api/extensions/ui/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        extensionId: props.contribution.extensionId,
+        contributionId: props.contribution.contributionId,
+        moduleId: props.contribution.moduleId,
+        slotId: props.slotId,
+        context: mergedContext.value,
+      }),
+    });
+    if (!res.ok) throw new Error(`session 创建失败: ${res.status}`);
+    const data = (await res.json()) as { sessionId?: string; session_id?: string };
+    const sid = data.sessionId ?? data.session_id ?? "";
+    if (!sid) throw new Error("session 创建响应缺少 sessionId");
+    sessionId.value = sid;
+    sessionReady.value = true;
+    uiStore.registerSession({
+      contributionId: key,
+      sessionId: sid,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+    });
+    return sid;
+  } catch (e) {
+    const fallback = `${props.contribution.extensionId}:${props.contribution.contributionId}`;
+    sessionId.value = fallback;
+    sessionReady.value = false;
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+      console.warn("[SchemaUIRenderer] session 创建失败，使用回退 sessionId:", e);
+    }
+    return fallback;
+  }
+}
+
+async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType }) {
+  const { action, node } = payload;
+  if (!action?.action_id) {
+    ElMessage.warning("操作缺少 action_id");
+    return;
+  }
+  if (action.confirmation) {
+    try {
+      await ElMessageBox.confirm(action.confirmation, "确认操作", {
+        type: "warning",
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+      });
+    } catch {
+      return;
+    }
+  }
+  actionLoading[action.action_id] = true;
+  try {
+    const sid = await ensureSession();
+    const res = await fetch(`/api/extensions/ui/sessions/${sid}/bridge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action_id: action.action_id,
+        target: action.target,
+        target_type: action.target_type,
+        input: {
+          ...(action.input ?? {}),
+          node_id: node.id,
+          form_state: { ...formState },
+        },
+        context: mergedContext.value,
+        form_state: { ...formState },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`操作调用失败: ${res.status} ${text}`);
+    }
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (data && typeof data === "object") {
+      if (data.form_state && typeof data.form_state === "object") {
+        const incoming = data.form_state as Record<string, unknown>;
+        for (const k of Object.keys(incoming)) formState[k] = incoming[k];
+      }
+      if (data.context_update && typeof data.context_update === "object") {
+        const update = data.context_update as Record<string, unknown>;
+        for (const k of Object.keys(update)) localContextOverride[k] = update[k];
+      }
+      if (data.reload_schema === true) {
+        await loadSchema();
+      }
+      if (typeof data.message === "string" && data.message) {
+        ElMessage.success(data.message);
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    ElMessage.error(message);
+    try {
+      uiStore.recordError({
+        contributionId: props.contribution.contributionId,
+        slotId: props.slotId,
+        message,
+        timestamp: Date.now(),
+        recoverable: true,
+      });
+    } catch {
+    }
+  } finally {
+    actionLoading[action.action_id] = false;
+  }
+}
+
+function onNodeError(payload: { nodeId: string; message: string }) {
+  capturedError.value = `节点 ${payload.nodeId}: ${payload.message}`;
+}
+
+function retry() {
+  loadSchema();
+}
+
+onMounted(() => {
+  loadSchema();
+  ensureSession().catch(() => {});
+});
+
+watch(
+  () => props.contribution.contributionId,
+  () => {
+    for (const k of Object.keys(formState)) delete formState[k];
+    for (const k of Object.keys(localContextOverride)) delete localContextOverride[k];
+    sessionId.value = "";
+    sessionReady.value = false;
+    capturedError.value = null;
+    loadSchema();
+    ensureSession().catch(() => {});
+  }
+);
+
+watch(
+  () => props.contribution.schemaPath,
+  () => {
+    loadSchema();
+  }
+);
 </script>
 
 <template>
   <div class="schema-ui-renderer" :data-contribution-id="contribution.contributionId">
     <template v-if="loading">
-      <div class="schema-ui-renderer__loading">加载中...</div>
+      <div class="schema-ui-renderer__loading">
+        <span class="schema-ui-renderer__spinner"></span>
+        <span>加载中...</span>
+      </div>
     </template>
-    <template v-else-if="error">
-      <div class="schema-ui-renderer__error">{{ error }}</div>
+    <template v-else-if="capturedError">
+      <div class="schema-ui-renderer__error">
+        <div class="schema-ui-renderer__error-title">渲染异常</div>
+        <div class="schema-ui-renderer__error-detail">{{ capturedError }}</div>
+        <button class="schema-ui-renderer__retry" @click="retry">重试</button>
+      </div>
+    </template>
+    <template v-else-if="error && !schema">
+      <div class="schema-ui-renderer__error">
+        <div class="schema-ui-renderer__error-title">加载失败</div>
+        <div class="schema-ui-renderer__error-detail">{{ error }}</div>
+        <button class="schema-ui-renderer__retry" @click="retry">重试</button>
+      </div>
     </template>
     <template v-else-if="schema">
-      <div class="schema-ui-renderer__content">
-        <pre>{{ JSON.stringify(schema, null, 2) }}</pre>
+      <div
+        v-if="validationErrors.length > 0"
+        class="schema-ui-renderer__warning"
+      >
+        <span>schema 校验警告: {{ validationErrors.join("; ") }}</span>
       </div>
+      <div class="schema-ui-renderer__content">
+        <template v-if="hasRoot">
+          <SchemaUINode
+            v-if="rootNode"
+            :node="rootNode"
+            :depth="1"
+            :form-state="formState"
+            :context="mergedContext"
+            :session-id="sessionId"
+            :extension-id="contribution.extensionId"
+            :contribution-id="contribution.contributionId"
+            @action="invokeAction"
+            @error="onNodeError"
+          />
+          <template v-else>
+            <SchemaUINode
+              v-for="r in rootList"
+              :key="r.id"
+              :node="r"
+              :depth="1"
+              :form-state="formState"
+              :context="mergedContext"
+              :session-id="sessionId"
+              :extension-id="contribution.extensionId"
+              :contribution-id="contribution.contributionId"
+              @action="invokeAction"
+              @error="onNodeError"
+            />
+          </template>
+        </template>
+        <div v-else class="schema-ui-renderer__empty">
+          该贡献未提供可渲染的 schema 内容
+        </div>
+      </div>
+    </template>
+    <template v-else>
+      <div class="schema-ui-renderer__empty">暂无 schema 数据</div>
     </template>
   </div>
 </template>
@@ -57,18 +331,92 @@ watch(() => props.contribution.contributionId, loadSchema);
 .schema-ui-renderer {
   width: 100%;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--amitia-color-text, inherit);
+  background: var(--amitia-color-surface, transparent);
 }
 .schema-ui-renderer__loading {
-  padding: 8px;
-  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
   font-size: 12px;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.8));
+}
+.schema-ui-renderer__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(127, 127, 127, 0.2);
+  border-top-color: var(--amitia-color-accent, rgba(127, 127, 127, 0.8));
+  border-radius: 50%;
+  animation: schema-ui-spin 0.9s linear infinite;
+}
+@keyframes schema-ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .schema-ui-renderer__error {
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.25);
   color: rgb(180, 40, 40);
   font-size: 12px;
 }
+.schema-ui-renderer__error-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.schema-ui-renderer__error-detail {
+  opacity: 0.9;
+  word-break: break-word;
+}
+.schema-ui-renderer__retry {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(180, 40, 40);
+  font-size: 12px;
+  cursor: pointer;
+}
+.schema-ui-renderer__retry:hover {
+  background: rgba(220, 60, 60, 0.1);
+}
+.schema-ui-renderer__warning {
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(220, 160, 40, 0.1);
+  border: 1px solid rgba(220, 160, 40, 0.3);
+  color: rgb(160, 100, 20);
+  font-size: 11px;
+  word-break: break-word;
+}
 .schema-ui-renderer__content {
   width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.schema-ui-renderer__empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--amitia-color-text-secondary, rgba(127, 127, 127, 0.6));
+  text-align: center;
+  border: 1px dashed var(--amitia-color-border, rgba(127, 127, 127, 0.25));
+  border-radius: 6px;
+}
+@media (max-width: 480px) {
+  .schema-ui-renderer__content {
+    gap: 8px;
+  }
 }
 </style>

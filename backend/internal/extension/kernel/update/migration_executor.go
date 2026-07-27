@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -246,12 +247,6 @@ func hashSnapshotData(data map[string][]byte) string {
 }
 
 func simpleHash(b []byte) []byte {
-	if len(b) == 0 {
-		return []byte{}
-	}
-	h := make([]byte, 32)
-	for i, byteVal := range b {
-		h[i%32] ^= byteVal
-	}
-	return h
+	h := sha256.Sum256(b)
+	return h[:]
 }

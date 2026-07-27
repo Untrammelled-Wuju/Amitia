@@ -37,6 +37,17 @@ const router = createRouter({
      * testing, and migration to Extension Kernel.
      */
     { path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel", name: "kernelCenter", component: () => import("@/views/kernel/KernelCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/wasm", name: "wasmRuntime", component: () => import("@/views/kernel/WasmRuntimeDetailView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/hooks", name: "hookCenter", component: () => import("@/views/kernel/HookCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/trusted-services", name: "trustedServices", component: () => import("@/views/kernel/TrustedServiceView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/tasks", name: "taskCenter", component: () => import("@/views/kernel/tasks/TaskCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/events", name: "eventCenter", component: () => import("@/views/kernel/EventCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/schedules", name: "scheduleCenter", component: () => import("@/views/kernel/ScheduleCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/desktop", name: "desktopCenter", component: () => import("@/views/kernel/DesktopCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/updates", name: "updateCenter", component: () => import("@/views/kernel/UpdateCenterView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/dev-console", name: "developerConsole", component: () => import("@/views/kernel/DeveloperConsoleView.vue"), meta: { requiresAuth: true } },
+    { path: "/kernel/migrations", name: "migrationCenter", component: () => import("@/views/kernel/MigrationCenterView.vue"), meta: { requiresAuth: true } },
     { path: "/extension/:extensionId/page/:pageId", name: "extensionPage", component: () => import("@/components/extension/ExtensionPageHost.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/mcp", name: "extensionMCP", component: () => import("@/views/mcp/MCPServerView.vue"), meta: { requiresAuth: true } },
     { path: "/extensions/packages", name: "extensionPackages", component: () => import("@/views/extensions/packages/PackageManagerView.vue"), meta: { requiresAuth: true } },

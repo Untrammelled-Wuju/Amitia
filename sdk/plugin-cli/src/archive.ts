@@ -121,7 +121,7 @@ function computeTreeHash(entries: IntegrityEntry[]): string {
   return hash.digest("hex");
 }
 
-function createZip(entries: ArchiveEntry[]): Buffer {
+export function createZip(entries: ArchiveEntry[]): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
@@ -162,7 +162,7 @@ function createZip(entries: ArchiveEntry[]): Buffer {
   return Buffer.concat([...localParts, centralData, end]);
 }
 
-function readZip(data: Buffer): Map<string, Buffer> {
+export function readZip(data: Buffer): Map<string, Buffer> {
   const endOffset = findSignature(data, 0x06054b50);
   if (endOffset < 0) throw new Error("invalid ZIP end record");
   const count = data.readUInt16LE(endOffset + 10);

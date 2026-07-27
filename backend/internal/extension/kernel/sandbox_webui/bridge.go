@@ -30,6 +30,7 @@ type Bridge struct {
 	navigator  Navigator
 	mu         sync.RWMutex
 	pendingRequests map[string]chan BridgeMessage
+	rateLimiter *RateLimiter
 }
 
 func NewBridge(host *Host, dispatcher ActionDispatcher, provider DataSourceProvider, navigator Navigator) *Bridge {
@@ -39,6 +40,7 @@ func NewBridge(host *Host, dispatcher ActionDispatcher, provider DataSourceProvi
 		dataProvider:    provider,
 		navigator:       navigator,
 		pendingRequests: make(map[string]chan BridgeMessage),
+		rateLimiter:     NewRateLimiter(),
 	}
 }
 
@@ -70,6 +72,21 @@ func (b *Bridge) HandleMessage(ctx context.Context, req InvokeRequest) (*InvokeR
 		return nil, err
 	}
 
+	if b.rateLimiter != nil {
+		if !b.rateLimiter.Allow(session.SessionID, BridgeMethod(req.Message.Method)) {
+			b.host.auditLog(AuditEntry{
+				Timestamp: time.Now().UTC(),
+				SessionID: req.SessionID,
+				Extension: session.ExtensionID,
+				Method:    req.Message.Method,
+				Success:   false,
+				Error:     "rate_limited",
+				BytesIn:   req.Message.Size,
+			})
+			return &InvokeResult{Error: ErrBridgeRateLimited.Error()}, nil
+		}
+	}
+
 	var result json.RawMessage
 	var dispatchErr error
 	method := BridgeMethod(req.Message.Method)
@@ -77,6 +94,8 @@ func (b *Bridge) HandleMessage(ctx context.Context, req InvokeRequest) (*InvokeR
 	switch method {
 	case MethodReady:
 		result, dispatchErr = b.handleReady(ctx, session)
+	case MethodContextGet:
+		result, dispatchErr = b.handleContextGet(ctx, session)
 	case MethodActionInvoke:
 		result, dispatchErr = b.handleActionInvoke(ctx, session, req.Message)
 	case MethodDataRequest:
@@ -89,8 +108,14 @@ func (b *Bridge) HandleMessage(ctx context.Context, req InvokeRequest) (*InvokeR
 		result, dispatchErr = b.handleResize(ctx, session, req.Message)
 	case MethodResourceOpen:
 		result, dispatchErr = b.handleResourceOpen(ctx, session, req.Message)
+	case MethodResourceRead:
+		result, dispatchErr = b.handleResourceRead(ctx, session, req.Message)
+	case MethodArtifactCreate:
+		result, dispatchErr = b.handleArtifactCreate(ctx, session, req.Message)
 	case MethodLog:
 		result, dispatchErr = b.handleLog(ctx, session, req.Message)
+	case MethodSessionPing:
+		result, dispatchErr = b.handleSessionPing(ctx, session)
 	case MethodClipboardRead:
 		result, dispatchErr = b.handleClipboardRead(ctx, session, req.Message)
 	case MethodClipboardWrite:
@@ -128,7 +153,7 @@ func (b *Bridge) HandleMessage(ctx context.Context, req InvokeRequest) (*InvokeR
 }
 
 func (b *Bridge) handleReady(ctx context.Context, session *WebSession) (json.RawMessage, error) {
-	session.SetState(SessionStateReady)
+	session.SetState(SessionStateActive)
 	readyPayload := map[string]any{
 		"sessionId":  session.SessionID,
 		"contributionId": session.ContributionID,
@@ -140,6 +165,32 @@ func (b *Bridge) handleReady(ctx context.Context, session *WebSession) (json.Raw
 		"generation": session.Generation,
 	}
 	return json.Marshal(readyPayload)
+}
+
+func (b *Bridge) handleContextGet(ctx context.Context, session *WebSession) (json.RawMessage, error) {
+	contextPayload := map[string]any{
+		"theme":    session.Theme,
+		"locale":   session.Locale,
+		"platform": "desktop",
+		"slotId":   session.SlotID,
+		"scope": map[string]any{
+			"extensionId": session.ExtensionID,
+			"moduleId":    session.ModuleID,
+		},
+		"generation": session.Generation,
+	}
+	return json.Marshal(contextPayload)
+}
+
+func (b *Bridge) handleSessionPing(ctx context.Context, session *WebSession) (json.RawMessage, error) {
+	session.mu.Lock()
+	session.LastActiveAt = time.Now().UTC()
+	session.mu.Unlock()
+	return json.Marshal(map[string]any{
+		"ok":         true,
+		"timestamp":  time.Now().UTC(),
+		"expiresAt":  session.ExpiresAt,
+	})
 }
 
 type actionInvokeInput struct {
@@ -281,6 +332,62 @@ func (b *Bridge) handleResourceOpen(ctx context.Context, session *WebSession, ms
 	})
 }
 
+type resourceReadInput struct {
+	HandleID string `json:"handleId"`
+	Offset   int64  `json:"offset"`
+	Length   int64  `json:"length"`
+}
+
+func (b *Bridge) handleResourceRead(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
+	var in resourceReadInput
+	if err := json.Unmarshal(msg.Input, &in); err != nil {
+		return nil, ErrInvalidMessage
+	}
+	handle, err := session.ConsumeResourceHandle(in.HandleID)
+	if err != nil {
+		return nil, err
+	}
+	if !handle.ReadOnly {
+		return nil, ErrResourcePathForbidden
+	}
+	return json.Marshal(map[string]any{
+		"handleId": handle.HandleID,
+		"path":     handle.Path,
+		"mimeType": handle.MIME,
+		"size":     handle.Size,
+		"readOnly": handle.ReadOnly,
+	})
+}
+
+type artifactCreateInput struct {
+	ContentType string          `json:"contentType"`
+	Data        json.RawMessage `json:"data"`
+	Filename    string          `json:"filename"`
+}
+
+func (b *Bridge) handleArtifactCreate(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
+	var in artifactCreateInput
+	if err := json.Unmarshal(msg.Input, &in); err != nil {
+		return nil, ErrInvalidMessage
+	}
+	if in.ContentType == "" {
+		return nil, ErrInvalidMessage
+	}
+	if !IsMIMEAllowed(in.ContentType) {
+		return nil, ErrMimeNotAllowed
+	}
+	if len(in.Data) > 10*1024*1024 {
+		return nil, ErrBundleTooLarge
+	}
+	handle := newResourceHandleID()
+	return json.Marshal(map[string]any{
+		"artifactId":  handle,
+		"contentType": in.ContentType,
+		"size":        len(in.Data),
+		"filename":    in.Filename,
+	})
+}
+
 func (b *Bridge) handleLog(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
 	return json.Marshal(map[string]any{"ok": true})
 }
@@ -302,19 +409,11 @@ type networkInput struct {
 
 func (b *Bridge) handleNetwork(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
 	var in networkInput
-	if err := json.Unmarshal(msg.Input, &in); err != nil {
-		return nil, ErrInvalidMessage
-	}
-	if !isURLAllowed(in.URL) {
-		return nil, ErrNetworkDenied
-	}
-	if len(in.Body) > MaxMessageBytes {
-		return nil, ErrMessageTooLarge
-	}
+	_ = json.Unmarshal(msg.Input, &in)
 	return json.Marshal(map[string]any{
-		"ok":     true,
-		"status": 200,
-		"body":   "{}",
+		"ok":    false,
+		"error": "network_access_denied",
+		"code":  "NETWORK_NOT_ALLOWED",
 	})
 }
 

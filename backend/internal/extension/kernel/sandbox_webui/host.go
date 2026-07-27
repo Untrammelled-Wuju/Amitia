@@ -2,11 +2,14 @@ package sandbox_webui
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,16 +17,73 @@ import (
 )
 
 const (
-	ProtocolScheme        = "amitia-extension"
+	ProtocolScheme         = "amitia-extension"
 	ResourceProtocolScheme = "amitia-resource"
-	DefaultCSP            = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' amitia-resource:; font-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
-	MaxBundleBytes        = 50 * 1024 * 1024
-	MaxSessionDuration    = 24 * time.Hour
-	MaxMessageBytes       = 256 * 1024
-	MaxResourceHandleTTL  = 1 * time.Hour
-	MaxResizePerMinute    = 30
-	MaxDataSubscriptions  = 16
+	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
+	MaxBundleBytes         = 50 * 1024 * 1024
+	MaxSessionDuration     = 24 * time.Hour
+	MaxMessageBytes        = 256 * 1024
+	MaxResourceHandleTTL   = 1 * time.Hour
+	MaxResizePerMinute     = 30
+	MaxDataSubscriptions   = 16
+	MaxBridgeCallsPerSec   = 20
+	MaxDataQueriesPerMin   = 60
+	MaxActionsPerMin       = 30
+	MaxLogPerSec           = 10
+	MaxResourcePerMin      = 120
+	ReadyTimeout           = 10 * time.Second
+	IdleTimeout            = 30 * time.Minute
 )
+
+var AllowedMIMETypes = map[string]bool{
+	"text/html":             true,
+	"text/css":              true,
+	"text/javascript":       true,
+	"application/javascript": true,
+	"application/json":      true,
+	"image/png":             true,
+	"image/jpeg":            true,
+	"image/webp":            true,
+	"image/svg+xml":         true,
+	"font/woff2":            true,
+	"application/wasm":      true,
+}
+
+func IsMIMEAllowed(mime string) bool {
+	mime = strings.ToLower(strings.TrimSpace(mime))
+	if idx := strings.Index(mime, ";"); idx > 0 {
+		mime = strings.TrimSpace(mime[:idx])
+	}
+	return AllowedMIMETypes[mime]
+}
+
+func LookupMIME(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".html", ".htm":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".js", ".mjs":
+		return "text/javascript"
+	case ".json":
+		return "application/json"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".woff2":
+		return "font/woff2"
+	case ".wasm":
+		return "application/wasm"
+	default:
+		return ""
+	}
+}
 
 type SandboxType string
 
@@ -35,12 +95,17 @@ const (
 type SessionState string
 
 const (
-	SessionStateCreated   SessionState = "created"
-	SessionStateLoading   SessionState = "loading"
-	SessionStateReady     SessionState = "ready"
-	SessionStateSuspended SessionState = "suspended"
-	SessionStateFailed    SessionState = "failed"
-	SessionStateClosed    SessionState = "closed"
+	SessionStateCreating     SessionState = "creating"
+	SessionStateLoading      SessionState = "loading"
+	SessionStateHandshaking  SessionState = "handshaking"
+	SessionStateActive       SessionState = "active"
+	SessionStateReady        SessionState = "ready"
+	SessionStateSuspended    SessionState = "suspended"
+	SessionStateClosing      SessionState = "closing"
+	SessionStateClosed       SessionState = "closed"
+	SessionStateExpired      SessionState = "expired"
+	SessionStateFailed       SessionState = "failed"
+	SessionStateQuarantined  SessionState = "quarantined"
 )
 
 type WebSession struct {
@@ -53,6 +118,8 @@ type WebSession struct {
 	Origin        string
 	Nonce         string
 	CreatedAt     time.Time
+	ReadyAt       *time.Time
+	LastActiveAt  time.Time
 	ExpiresAt     time.Time
 	State         SessionState
 	Sandbox       SandboxType
@@ -97,41 +164,48 @@ type ResourceHandle struct {
 }
 
 type BridgeMessage struct {
-	Method   string          `json:"method"`
-	Version  int             `json:"version"`
-	ID       string          `json:"id"`
-	WindowID string          `json:"windowId"`
-	Origin   string          `json:"origin"`
-	Nonce    string          `json:"nonce"`
-	Input    json.RawMessage `json:"input,omitempty"`
-	Output   json.RawMessage `json:"output,omitempty"`
-	Deadline time.Time       `json:"deadline,omitempty"`
-	Size     int             `json:"size"`
-	Session  string          `json:"session"`
+	Method     string          `json:"method"`
+	Version    int             `json:"version"`
+	ID         string          `json:"id"`
+	WindowID   string          `json:"windowId"`
+	Origin     string          `json:"origin"`
+	Nonce      string          `json:"nonce"`
+	Generation int64           `json:"generation"`
+	Input      json.RawMessage `json:"input,omitempty"`
+	Output     json.RawMessage `json:"output,omitempty"`
+	Deadline   time.Time       `json:"deadline,omitempty"`
+	Size       int             `json:"size"`
+	Session    string          `json:"session"`
 }
 
 type BridgeMethod string
 
 const (
-	MethodReady         BridgeMethod = "ui.ready"
-	MethodActionInvoke  BridgeMethod = "ui.action.invoke"
-	MethodDataRequest   BridgeMethod = "ui.data.request"
-	MethodDataSubscribe BridgeMethod = "ui.data.subscribe"
-	MethodNavigate      BridgeMethod = "ui.navigation.request"
-	MethodResize        BridgeMethod = "ui.resize.request"
-	MethodDialog        BridgeMethod = "ui.dialog.request"
-	MethodResourceOpen  BridgeMethod = "ui.resource.open"
-	MethodLog           BridgeMethod = "ui.log"
-	MethodClipboardRead BridgeMethod = "ui.clipboard.read"
+	MethodReady          BridgeMethod = "ui.ready"
+	MethodContextGet     BridgeMethod = "ui.context.get"
+	MethodActionInvoke   BridgeMethod = "ui.action.invoke"
+	MethodDataRequest    BridgeMethod = "ui.data.query"
+	MethodDataSubscribe  BridgeMethod = "ui.data.subscribe"
+	MethodResourceRead   BridgeMethod = "ui.resource.read"
+	MethodArtifactCreate BridgeMethod = "ui.artifact.create"
+	MethodNavigate       BridgeMethod = "ui.navigation.request"
+	MethodResize         BridgeMethod = "ui.resize.request"
+	MethodDialog         BridgeMethod = "ui.dialog.request"
+	MethodResourceOpen   BridgeMethod = "ui.resource.open"
+	MethodLog            BridgeMethod = "ui.log"
+	MethodSessionPing    BridgeMethod = "ui.session.ping"
+	MethodClipboardRead  BridgeMethod = "ui.clipboard.read"
 	MethodClipboardWrite BridgeMethod = "ui.clipboard.write"
-	MethodNetwork       BridgeMethod = "ui.network.request"
-	MethodStorage       BridgeMethod = "ui.storage"
+	MethodNetwork        BridgeMethod = "ui.network.request"
+	MethodStorage        BridgeMethod = "ui.storage"
 )
 
 var allowedMethods = map[BridgeMethod]bool{
-	MethodReady: true, MethodActionInvoke: true, MethodDataRequest: true,
-	MethodDataSubscribe: true, MethodNavigate: true, MethodResize: true,
-	MethodDialog: true, MethodResourceOpen: true, MethodLog: true,
+	MethodReady: true, MethodContextGet: true, MethodActionInvoke: true,
+	MethodDataRequest: true, MethodDataSubscribe: true,
+	MethodNavigate: true, MethodResize: true,
+	MethodDialog: true, MethodResourceOpen: true, MethodResourceRead: true,
+	MethodArtifactCreate: true, MethodLog: true, MethodSessionPing: true,
 	MethodClipboardRead: true, MethodClipboardWrite: true,
 	MethodNetwork: true, MethodStorage: true,
 }
@@ -141,6 +215,9 @@ type Host struct {
 	sessions    map[string]*WebSession
 	protocol    *ProtocolHandler
 	verifier    *BundleVerifier
+	bridge      *Bridge
+	lifecycle   *LifecycleManager
+	perfMonitor *PerformanceMonitor
 	auditLog    func(entry AuditEntry)
 	cspReporter func(sessionID, violation string)
 	closed      bool
@@ -158,13 +235,36 @@ type AuditEntry struct {
 }
 
 func NewHost() *Host {
-	return &Host{
+	h := &Host{
 		sessions: make(map[string]*WebSession),
 		protocol: NewProtocolHandler(),
 		verifier: NewBundleVerifier(),
 		auditLog: func(entry AuditEntry) {},
 		cspReporter: func(sessionID, violation string) {},
 	}
+	h.lifecycle = NewLifecycleManager(h)
+	h.perfMonitor = NewPerformanceMonitor()
+	return h
+}
+
+func (h *Host) SetBridge(b *Bridge) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.bridge = b
+}
+
+func (h *Host) GetBridge() *Bridge {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.bridge
+}
+
+func (h *Host) Lifecycle() *LifecycleManager {
+	return h.lifecycle
+}
+
+func (h *Host) PerformanceMonitor() *PerformanceMonitor {
+	return h.perfMonitor
 }
 
 func (h *Host) SetAuditLogger(fn func(entry AuditEntry)) {
@@ -189,6 +289,7 @@ type CreateSessionRequest struct {
 	Locale         string
 	BasePath       string
 	EntryPath      string
+	ExpectedHash   string
 }
 
 type CreateSessionResult struct {
@@ -212,12 +313,21 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	if req.EntryPath == "" {
 		return nil, ErrEntryMissing
 	}
+	if req.Generation <= 0 {
+		return nil, ErrInvalidRequest
+	}
 	cleanPath, err := h.protocol.SanitizePath(req.BasePath, req.EntryPath)
 	if err != nil {
 		return nil, err
 	}
 	if err := h.verifier.Verify(req.BasePath, cleanPath); err != nil {
 		return nil, err
+	}
+	if req.ExpectedHash != "" {
+		if err := h.verifier.VerifyIntegrity(req.BasePath, cleanPath, req.ExpectedHash); err != nil {
+			h.cspReporter("", "resource_integrity_failed")
+			return nil, err
+		}
 	}
 	csp := req.CSP
 	if csp == "" {
@@ -241,8 +351,9 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		Origin:        origin,
 		Nonce:         nonce,
 		CreatedAt:     time.Now().UTC(),
+		LastActiveAt:  time.Now().UTC(),
 		ExpiresAt:     time.Now().UTC().Add(MaxSessionDuration),
-		State:         SessionStateCreated,
+		State:         SessionStateCreating,
 		Sandbox:       req.Sandbox,
 		CSP:           csp,
 		AllowedActions: req.AllowedActions,
@@ -284,11 +395,13 @@ func (h *Host) GetSession(sessionID string) (*WebSession, error) {
 
 func (h *Host) CloseSession(sessionID, reason string) error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	session, exists := h.sessions[sessionID]
 	if !exists {
+		h.mu.Unlock()
 		return ErrSessionNotFound
 	}
+	delete(h.sessions, sessionID)
+	h.mu.Unlock()
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	for _, sub := range session.subscriptions {
@@ -305,6 +418,7 @@ func (h *Host) CloseSession(sessionID, reason string) error {
 		Extension: session.ExtensionID,
 		Method:    "session.close",
 		Success:   true,
+		Error:     reason,
 	})
 	return nil
 }
@@ -471,12 +585,36 @@ func (p *ProtocolHandler) SanitizePath(basePath, requested string) (string, erro
 	if requested == "" {
 		return "", ErrInvalidPath
 	}
+	if len(requested) > 1024 {
+		return "", ErrPathTooLong
+	}
+	if strings.ContainsRune(requested, 0) {
+		return "", ErrPathTraversal
+	}
+	lowerReq := strings.ToLower(requested)
+	if strings.Contains(lowerReq, "%2e") || strings.Contains(lowerReq, "%5c") || strings.Contains(lowerReq, "%2f") || strings.Contains(lowerReq, "%00") {
+		return "", ErrPathTraversal
+	}
+	if strings.Contains(requested, "\\") {
+		return "", ErrPathTraversal
+	}
 	cleaned := filepath.Clean(requested)
 	if strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, "..\\") || strings.Contains(cleaned, "../") {
 		return "", ErrPathTraversal
 	}
-	if filepath.IsAbs(cleaned) && basePath != "" {
-		rel, err := filepath.Rel(basePath, cleaned)
+	if filepath.IsAbs(cleaned) {
+		if basePath == "" {
+			return "", ErrPathOutsideBundle
+		}
+		absBase, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", ErrPathOutsideBundle
+		}
+		absCleaned, err := filepath.Abs(cleaned)
+		if err != nil {
+			return "", ErrPathOutsideBundle
+		}
+		rel, err := filepath.Rel(absBase, absCleaned)
 		if err != nil || strings.HasPrefix(rel, "..") {
 			return "", ErrPathOutsideBundle
 		}
@@ -498,6 +636,55 @@ func (v *BundleVerifier) Verify(basePath, entryPath string) error {
 	if !strings.HasSuffix(entryPath, ".html") && !strings.HasSuffix(entryPath, ".htm") {
 		return ErrEntryNotHTML
 	}
+	fullPath := filepath.Join(basePath, entryPath)
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return ErrBundleNotFound
+	}
+	if info.Size() > 5*1024*1024 {
+		return ErrBundleTooLarge
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return ErrBundleNotFound
+	}
+	lower := strings.ToLower(string(content))
+	if strings.Contains(lower, "<script") {
+		return ErrBundleScriptForbidden
+	}
+	if strings.Contains(lower, "javascript:") {
+		return ErrBundleScriptForbidden
+	}
+	if strings.Contains(lower, "onload=") || strings.Contains(lower, "onerror=") {
+		return ErrBundleScriptForbidden
+	}
+	if strings.Contains(lower, "<iframe") {
+		return ErrBundleIframeForbidden
+	}
+	if strings.Contains(lower, "<object") {
+		return ErrBundleObjectForbidden
+	}
+	return nil
+}
+
+func (v *BundleVerifier) ComputeHash(basePath, entryPath string) (string, int64, error) {
+	fullPath := filepath.Join(basePath, entryPath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", 0, err
+	}
+	h := sha256.Sum256(content)
+	return "sha256-" + base64.StdEncoding.EncodeToString(h[:]), int64(len(content)), nil
+}
+
+func (v *BundleVerifier) VerifyIntegrity(basePath, entryPath, expectedHash string) error {
+	actualHash, _, err := v.ComputeHash(basePath, entryPath)
+	if err != nil {
+		return ErrBundleNotFound
+	}
+	if actualHash != expectedHash {
+		return ErrIntegrityMismatch
+	}
 	return nil
 }
 
@@ -505,23 +692,54 @@ func ValidateCSP(csp string) error {
 	if csp == "" {
 		return ErrCSPEmpty
 	}
-	forbidden := []string{"'unsafe-inline'", "'unsafe-eval'", "*", "data:", "blob:"}
 	lower := strings.ToLower(csp)
-	for _, f := range forbidden {
-		if strings.Contains(lower, "script-src") && strings.Contains(lower, f) {
-			if f == "data:" || f == "blob:" {
-				if strings.Contains(lower, "script-src "+f) || strings.Contains(lower, "script-src '"+f+"'") {
-					return fmt.Errorf("%w: script-src cannot allow %s", ErrCSPViolation, f)
-				}
-			} else {
-				return fmt.Errorf("%w: script-src cannot allow %s", ErrCSPViolation, f)
+	directives := parseCSPDirectives(lower)
+	scriptSrc, hasScriptSrc := directives["script-src"]
+	if hasScriptSrc {
+		for _, token := range scriptSrc {
+			switch token {
+			case "'unsafe-inline'", "'unsafe-eval'", "*", "data:", "blob:", "http:", "https:":
+				return fmt.Errorf("%w: script-src cannot allow %s", ErrCSPViolation, token)
 			}
 		}
 	}
-	if !strings.Contains(csp, "default-src") {
+	connectSrc, hasConnectSrc := directives["connect-src"]
+	if hasConnectSrc {
+		for _, token := range connectSrc {
+			switch token {
+			case "*", "http:", "https:", "ws:", "wss:":
+				return fmt.Errorf("%w: connect-src cannot allow %s", ErrCSPViolation, token)
+			}
+		}
+	}
+	defaultSrc, hasDefaultSrc := directives["default-src"]
+	if !hasDefaultSrc {
 		return fmt.Errorf("%w: default-src required", ErrCSPViolation)
 	}
+	for _, token := range defaultSrc {
+		if token == "*" {
+			return fmt.Errorf("%w: default-src cannot allow *", ErrCSPViolation)
+		}
+	}
+	if strings.Contains(lower, "'unsafe-eval'") {
+		return fmt.Errorf("%w: unsafe-eval globally forbidden", ErrCSPViolation)
+	}
+	_ = connectSrc
 	return nil
+}
+
+func parseCSPDirectives(csp string) map[string][]string {
+	result := make(map[string][]string)
+	parts := strings.Split(csp, ";")
+	for _, part := range parts {
+		tokens := strings.Fields(part)
+		if len(tokens) == 0 {
+			continue
+		}
+		directive := tokens[0]
+		result[directive] = tokens[1:]
+	}
+	return result
 }
 
 func BuildOrigin(extensionID, moduleID string) string {
@@ -560,6 +778,9 @@ func ValidateBridgeMessage(msg *BridgeMessage, session *WebSession) error {
 	if msg.Nonce != session.Nonce {
 		return ErrNonceMismatch
 	}
+	if msg.Generation != session.Generation && msg.Generation != 0 {
+		return ErrGenerationStale
+	}
 	if len(msg.Input) > MaxMessageBytes {
 		return ErrMessageTooLarge
 	}
@@ -579,6 +800,7 @@ var (
 	ErrEntryMissing          = errors.New("sandbox_webui: entry missing")
 	ErrEntryNotHTML          = errors.New("sandbox_webui: entry must be html")
 	ErrInvalidPath           = errors.New("sandbox_webui: invalid path")
+	ErrPathTooLong           = errors.New("sandbox_webui: path too long")
 	ErrPathTraversal         = errors.New("sandbox_webui: path traversal detected")
 	ErrPathOutsideBundle     = errors.New("sandbox_webui: path outside bundle")
 	ErrResourceNotFound      = errors.New("sandbox_webui: resource not found")
@@ -603,6 +825,17 @@ var (
 	ErrBridgeClosed          = errors.New("sandbox_webui: bridge closed")
 	ErrActionNotDeclared     = errors.New("sandbox_webui: action not declared")
 	ErrDataSourceNotDeclared = errors.New("sandbox_webui: data source not declared")
+	ErrBundleNotFound         = errors.New("sandbox_webui: bundle not found")
+	ErrBundleTooLarge         = errors.New("sandbox_webui: bundle too large")
+	ErrBundleScriptForbidden  = errors.New("sandbox_webui: bundle contains forbidden script")
+	ErrBundleIframeForbidden  = errors.New("sandbox_webui: bundle contains forbidden iframe")
+	ErrBundleObjectForbidden  = errors.New("sandbox_webui: bundle contains forbidden object")
+	ErrIntegrityMismatch      = errors.New("sandbox_webui: resource integrity mismatch")
+	ErrMimeNotAllowed         = errors.New("sandbox_webui: mime type not allowed")
+	ErrGenerationStale        = errors.New("sandbox_webui: generation stale")
+	ErrQuarantined            = errors.New("sandbox_webui: contribution quarantined")
+	ErrBridgeRateLimited      = errors.New("sandbox_webui: bridge rate limited")
+	ErrResourcePathForbidden  = errors.New("sandbox_webui: resource path forbidden")
 )
 
 var _ = url.Parse

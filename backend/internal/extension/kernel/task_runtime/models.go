@@ -1,0 +1,297 @@
+package task_runtime
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type TaskIdempotency string
+
+const (
+	Idempotent              TaskIdempotency = "idempotent"
+	ConditionallyIdempotent TaskIdempotency = "conditionally_idempotent"
+	NonIdempotent           TaskIdempotency = "non_idempotent"
+)
+
+type TaskRecoverability string
+
+const (
+	NotRecoverable          TaskRecoverability = "not_recoverable"
+	CheckpointRecoverable   TaskRecoverability = "checkpoint_recoverable"
+	RestartableFromBeginning TaskRecoverability = "restartable_from_beginning"
+	ManualRecovery          TaskRecoverability = "manual_recovery"
+)
+
+type TaskResultPolicy string
+
+const (
+	ResultInlineJSON TaskResultPolicy = "inline_json"
+	ResultArtifact   TaskResultPolicy = "artifact"
+	ResultAuto       TaskResultPolicy = "auto"
+)
+
+type TaskCleanupPolicy string
+
+const (
+	CleanupAlways         TaskCleanupPolicy = "always"
+	CleanupOnSuccess      TaskCleanupPolicy = "on_success"
+	CleanupOnFailure      TaskCleanupPolicy = "on_failure"
+	CleanupRetainForDebug TaskCleanupPolicy = "retain_for_debug"
+)
+
+type TaskRuntimeType string
+
+const (
+	RuntimeTaskJavaScript TaskRuntimeType = "task_javascript"
+)
+
+type PermissionRequirement struct {
+	Permission string          `json:"permission"`
+	Reason     string          `json:"reason,omitempty"`
+	Required   bool            `json:"required"`
+	Scope      json.RawMessage `json:"scope,omitempty"`
+}
+
+type ScopeRule struct {
+	ScopeType   string   `json:"scopeType"`
+	ScopeIDs    []string `json:"scopeIds,omitempty"`
+	Namespaces  []string `json:"namespaces,omitempty"`
+}
+
+type TaskRetryPolicy struct {
+	MaxAttempts        int           `json:"maxAttempts"`
+	InitialBackoff     time.Duration `json:"initialBackoff"`
+	MaxBackoff         time.Duration `json:"maxBackoff"`
+	Multiplier         float64       `json:"multiplier"`
+	RetryableErrorCodes []string     `json:"retryableErrorCodes,omitempty"`
+}
+
+func DefaultRetryPolicy() TaskRetryPolicy {
+	return TaskRetryPolicy{
+		MaxAttempts:    3,
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     5 * time.Minute,
+		Multiplier:     2.0,
+	}
+}
+
+type TaskTimeoutPolicy struct {
+	DefaultTimeout time.Duration `json:"defaultTimeout"`
+	MaxTimeout     time.Duration `json:"maxTimeout"`
+	HardKillAfter  time.Duration `json:"hardKillAfter"`
+}
+
+func DefaultTimeoutPolicy() TaskTimeoutPolicy {
+	return TaskTimeoutPolicy{
+		DefaultTimeout: 30 * time.Minute,
+		MaxTimeout:     24 * time.Hour,
+		HardKillAfter:  30 * time.Second,
+	}
+}
+
+type TaskRunStatus string
+
+const (
+	RunStatusCreated             TaskRunStatus = "created"
+	RunStatusQueued              TaskRunStatus = "queued"
+	RunStatusStarting            TaskRunStatus = "starting"
+	RunStatusRunning             TaskRunStatus = "running"
+	RunStatusCheckpointing       TaskRunStatus = "checkpointing"
+	RunStatusPausing            TaskRunStatus = "pausing"
+	RunStatusPaused             TaskRunStatus = "paused"
+	RunStatusResuming           TaskRunStatus = "resuming"
+	RunStatusCancelling         TaskRunStatus = "cancelling"
+	RunStatusCancelled          TaskRunStatus = "cancelled"
+	RunStatusSucceeded          TaskRunStatus = "succeeded"
+	RunStatusFailed             TaskRunStatus = "failed"
+	RunStatusTimedOut           TaskRunStatus = "timed_out"
+	RunStatusRecoveryRequired   TaskRunStatus = "recovery_required"
+	RunStatusManualIntervention TaskRunStatus = "manual_intervention"
+)
+
+func (s TaskRunStatus) IsTerminal() bool {
+	switch s {
+	case RunStatusSucceeded, RunStatusFailed, RunStatusCancelled,
+		RunStatusTimedOut, RunStatusManualIntervention:
+		return true
+	}
+	return false
+}
+
+func (s TaskRunStatus) IsActive() bool {
+	switch s {
+	case RunStatusCreated, RunStatusQueued, RunStatusStarting, RunStatusRunning,
+		RunStatusCheckpointing, RunStatusPausing, RunStatusPaused,
+		RunStatusResuming, RunStatusCancelling, RunStatusRecoveryRequired:
+		return true
+	}
+	return false
+}
+
+var validTransitions = map[TaskRunStatus][]TaskRunStatus{
+	RunStatusCreated:       {RunStatusQueued, RunStatusCancelled},
+	RunStatusQueued:        {RunStatusStarting, RunStatusCancelled},
+	RunStatusStarting:      {RunStatusRunning, RunStatusFailed, RunStatusCancelled, RunStatusRecoveryRequired},
+	RunStatusRunning:       {RunStatusCheckpointing, RunStatusPausing, RunStatusCancelling, RunStatusSucceeded, RunStatusFailed, RunStatusTimedOut, RunStatusRecoveryRequired},
+	RunStatusCheckpointing: {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
+	RunStatusPausing:       {RunStatusPaused, RunStatusRunning},
+	RunStatusPaused:        {RunStatusResuming, RunStatusCancelling, RunStatusRecoveryRequired},
+	RunStatusResuming:      {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
+	RunStatusCancelling:    {RunStatusCancelled, RunStatusFailed},
+	RunStatusRecoveryRequired: {RunStatusStarting, RunStatusManualIntervention, RunStatusCancelled},
+}
+
+func IsValidTransition(from, to TaskRunStatus) bool {
+	if from == to {
+		return true
+	}
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
+}
+
+func MustTransition(from, to TaskRunStatus) error {
+	if !IsValidTransition(from, to) {
+		return NewTaskError(ErrTaskStateTransitionInvalid,
+			"invalid transition from "+string(from)+" to "+string(to))
+	}
+	return nil
+}
+
+type TaskRun struct {
+	TaskRunID        string          `json:"taskRunId"`
+	OperationID      string          `json:"operationId"`
+	InvocationID     string          `json:"invocationId"`
+	TaskDefinitionID string          `json:"taskDefinitionId"`
+	ExtensionID      string          `json:"extensionId"`
+	ModuleID         string          `json:"moduleId"`
+	Status           TaskRunStatus   `json:"status"`
+	Priority         int             `json:"priority"`
+	Input            json.RawMessage `json:"input"`
+	InputHash        string          `json:"inputHash"`
+	InputArtifactID  *string         `json:"inputArtifactId,omitempty"`
+	ScopeSnapshotID      string  `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID string  `json:"permissionSnapshotId,omitempty"`
+	DependencySnapshotID string  `json:"dependencySnapshotId,omitempty"`
+	RuntimeInstanceID *string `json:"runtimeInstanceId,omitempty"`
+	CheckpointID      *string `json:"checkpointId,omitempty"`
+	ResultArtifactID  *string `json:"resultArtifactId,omitempty"`
+	Attempt      int    `json:"attempt"`
+	MaxAttempts  int    `json:"maxAttempts"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	QueuedAt     *time.Time `json:"queuedAt,omitempty"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
+	DeadlineAt   *time.Time `json:"deadlineAt,omitempty"`
+	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
+	ErrorCode    *string `json:"errorCode,omitempty"`
+	ErrorMessage *string `json:"errorMessage,omitempty"`
+	Generation   int64   `json:"generation"`
+}
+
+type TaskRunProgress struct {
+	TaskRunID  string          `json:"taskRunId"`
+	Sequence   int64           `json:"sequence"`
+	Current    *float64        `json:"current,omitempty"`
+	Total      *float64        `json:"total,omitempty"`
+	Percentage *float64        `json:"percentage,omitempty"`
+	Stage      string          `json:"stage,omitempty"`
+	Message    string          `json:"message,omitempty"`
+	Details    json.RawMessage `json:"details,omitempty"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
+}
+
+type TaskCheckpoint struct {
+	CheckpointID   string          `json:"checkpointId"`
+	TaskRunID      string          `json:"taskRunId"`
+	Version        int64           `json:"version"`
+	Payload        json.RawMessage `json:"payload"`
+	PayloadHash    string          `json:"payloadHash"`
+	DefinitionHash string          `json:"definitionHash"`
+	InputHash      string          `json:"inputHash"`
+	CreatedAt      time.Time       `json:"createdAt"`
+}
+
+type TaskRunResult struct {
+	TaskRunID    string          `json:"taskRunId"`
+	ResultType   TaskResultPolicy `json:"resultType"`
+	ResultJSON   json.RawMessage `json:"resultJson,omitempty"`
+	ArtifactID   string          `json:"artifactId,omitempty"`
+	ResultHash   string          `json:"resultHash,omitempty"`
+	CreatedAt    time.Time       `json:"createdAt"`
+}
+
+type TaskQueueEntry struct {
+	TaskRunID       string    `json:"taskRunId"`
+	Priority        int       `json:"priority"`
+	AvailableAt     time.Time `json:"availableAt"`
+	LeaseOwner      string    `json:"leaseOwner,omitempty"`
+	LeaseExpiresAt  *time.Time `json:"leaseExpiresAt,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+type TaskRuntimeConfig struct {
+	GlobalMaxConcurrent      int
+	PerExtensionMaxConcurrent int
+	PerDefinitionMaxConcurrent int
+	DefaultTimeout           time.Duration
+	MaxProgressPerSecond     int
+	MaxCheckpointBytes       int
+	MaxInlineResultBytes     int
+	MaxRetryAttempts         int
+	WorkspaceRoot            string
+	NodePath                 string
+	TaskHostPath             string
+	LeaseDuration            time.Duration
+	CancelGracePeriod        time.Duration
+}
+
+func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
+	return TaskRuntimeConfig{
+		GlobalMaxConcurrent:       4,
+		PerExtensionMaxConcurrent: 2,
+		PerDefinitionMaxConcurrent: 1,
+		DefaultTimeout:            30 * time.Minute,
+		MaxProgressPerSecond:      5,
+		MaxCheckpointBytes:        1 << 20,
+		MaxInlineResultBytes:      256 << 10,
+		MaxRetryAttempts:          3,
+		WorkspaceRoot:             "",
+		NodePath:                  "",
+		TaskHostPath:              "",
+		LeaseDuration:             2 * time.Minute,
+		CancelGracePeriod:         10 * time.Second,
+	}
+}
+
+type EnqueueTaskRequest struct {
+	TaskDefinitionID string          `json:"taskDefinitionId"`
+	ExtensionID      string          `json:"extensionId"`
+	ModuleID         string          `json:"moduleId"`
+	Input            json.RawMessage `json:"input"`
+	Priority         int             `json:"priority"`
+	OperationID      string          `json:"operationId"`
+	ScopeSnapshotID  string          `json:"scopeSnapshotId"`
+	PermissionSnapshotID string      `json:"permissionSnapshotId"`
+}
+
+type EnqueueTaskResult struct {
+	TaskRunID  string `json:"taskRunId"`
+	Status     TaskRunStatus `json:"status"`
+	Queued     bool   `json:"queued"`
+	Position   int    `json:"position,omitempty"`
+}
+
+type ListTasksFilter struct {
+	ExtensionID string `json:"extensionId,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Limit       int    `json:"limit,omitempty"`
+	Offset      int    `json:"offset,omitempty"`
+}

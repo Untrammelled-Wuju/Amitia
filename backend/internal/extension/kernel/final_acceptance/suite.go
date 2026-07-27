@@ -9,6 +9,13 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
+	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 )
 
 type Stage string
@@ -273,11 +280,81 @@ func DefaultSuite() *Suite {
 	}
 	for _, it := range items {
 		it.Status = StatusPassed
+		if it.ItemID == "stage4.ui_contribution" {
+			s.Register(it, verifyUIContribution)
+			continue
+		}
 		s.Register(it, func(ctx context.Context) ([]string, error) {
 			return []string{"verified"}, nil
 		})
 	}
 	return s
+}
+
+func verifyUIContribution(ctx context.Context) ([]string, error) {
+	uiHost := ui_contribution.NewUIHost()
+	if uiHost == nil {
+		return nil, fmt.Errorf("ui_contribution: NewUIHost returned nil")
+	}
+	if _, ok := uiHost.GetSlot("extension.settings.page"); !ok {
+		return nil, fmt.Errorf("ui_contribution: default slot extension.settings.page missing")
+	}
+	testDef := &ui_contribution.UIContributionDefinition{
+		ContributionID:  "acceptance.ui.verify.settings",
+		ExtensionID:     "acceptance.ui.verify",
+		ModuleID:        "verify",
+		Kind:            ui_contribution.UIContributionSettingsSection,
+		Slot:            ui_contribution.UISlotReference{SlotID: "extension.settings.page", ContractVersion: 1},
+		ContractVersion: 1,
+		Display:         ui_contribution.UIDisplayMetadata{Title: ui_contribution.LocalizedText{Default: "Acceptance Verify"}},
+		Entry:           ui_contribution.UIEntryDefinition{Type: ui_contribution.SandboxSchemaRenderer, Path: "schema.json", ContentHash: "sha256:verify"},
+		Sandbox:         ui_contribution.UISandboxPolicy{Type: ui_contribution.SandboxSchemaRenderer},
+		Lifecycle:       ui_contribution.UILifecyclePolicy{Initial: "registered"},
+		Integrity:       ui_contribution.ContributionIntegrity{DefinitionHash: "sha256:verify-def", Generation: 1},
+	}
+	if err := uiHost.RegisterContribution(testDef); err != nil {
+		return nil, fmt.Errorf("ui_contribution: RegisterContribution failed: %w", err)
+	}
+
+	slotReg := extension_slots.DefaultSlotRegistry()
+	if slotReg == nil {
+		return nil, fmt.Errorf("extension_slots: DefaultSlotRegistry returned nil")
+	}
+	defaultSlots := slotReg.List()
+	if len(defaultSlots) == 0 {
+		return nil, fmt.Errorf("extension_slots: no default slots")
+	}
+
+	validator := schema_ui.NewValidator()
+	if validator == nil {
+		return nil, fmt.Errorf("schema_ui: NewValidator returned nil")
+	}
+
+	webHost := sandbox_webui.NewHost()
+	if webHost == nil {
+		return nil, fmt.Errorf("sandbox_webui: NewHost returned nil")
+	}
+
+	pageReg := extension_page_host.NewPageRegistry()
+	sessionMgr := extension_page_host.NewSessionManager()
+	pageHost := extension_page_host.NewPageHost(pageReg, sessionMgr)
+	if pageHost == nil {
+		return nil, fmt.Errorf("extension_page_host: NewPageHost returned nil")
+	}
+
+	orderingEngine := ui_ordering.NewOrderingEngine()
+	if orderingEngine == nil {
+		return nil, fmt.Errorf("ui_ordering: NewOrderingEngine returned nil")
+	}
+
+	return []string{
+		fmt.Sprintf("ui_contribution.UIHost 实例化成功,默认slot=%d,测试贡献注册成功", len(ui_contribution.DefaultSlots)),
+		fmt.Sprintf("extension_slots.DefaultSlotRegistry 实例化成功,slot数量=%d", len(defaultSlots)),
+		"schema_ui.NewValidator 实例化成功",
+		"sandbox_webui.NewHost 实例化成功",
+		"extension_page_host.NewPageHost 实例化成功",
+		"ui_ordering.NewOrderingEngine 实例化成功",
+	}, nil
 }
 
 var _ = runtime.GOOS

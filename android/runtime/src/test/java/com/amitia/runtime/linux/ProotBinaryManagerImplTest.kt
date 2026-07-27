@@ -99,6 +99,30 @@ class ProotBinaryManagerImplTest {
     }
 
     @Test
+    fun isAvailable_returns_true_when_sha256_asset_uses_sha256sum_format_with_filename() = runTest {
+        val binaryContent = "fake-proot-binary-content".toByteArray()
+        val sha = sha256Hex(binaryContent)
+        stubAsset(ProotBinaryManagerImpl.PROOT_ASSET_NAME, binaryContent)
+        stubSha256Asset("$sha  proot_linux_aarch64")
+
+        collectInstall()
+
+        assertThat(manager.isAvailable()).isTrue()
+    }
+
+    @Test
+    fun isAvailable_returns_true_when_sha256_asset_uses_sha256sum_binary_format_with_star() = runTest {
+        val binaryContent = "fake-proot-binary-content".toByteArray()
+        val sha = sha256Hex(binaryContent)
+        stubAsset(ProotBinaryManagerImpl.PROOT_ASSET_NAME, binaryContent)
+        stubSha256Asset("$sha *proot_linux_aarch64")
+
+        collectInstall()
+
+        assertThat(manager.isAvailable()).isTrue()
+    }
+
+    @Test
     fun isAvailable_returns_true_when_no_sha256_asset_present() = runTest {
         val binaryContent = "no-sha-proot".toByteArray()
         stubAsset(ProotBinaryManagerImpl.PROOT_ASSET_NAME, binaryContent)

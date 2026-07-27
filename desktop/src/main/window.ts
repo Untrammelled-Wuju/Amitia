@@ -107,6 +107,7 @@ export function createMainWindow(): BrowserWindow {
 function isAllowedNavigation(url: string): boolean {
   return (
     url.startsWith("file://") ||
+    url.startsWith("amitia-extension://") ||
     url.startsWith(DEV_SERVER_URL) ||
     url.startsWith(DEV_SERVER_URL.replace("127.0.0.1", "localhost"))
   );

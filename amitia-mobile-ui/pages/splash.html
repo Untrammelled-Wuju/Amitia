@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amitia</title>
+    <style id="theme-vars">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --amitia-background: #000000;
+  --amitia-foreground: #ffffff;
+  --amitia-card: #1c1c1e;
+  --amitia-card-foreground: #ffffff;
+  --amitia-popover: #2c2c2e;
+  --amitia-popover-foreground: #ffffff;
+  --amitia-primary: #c99557;
+  --amitia-primary-foreground: #000000;
+  --amitia-muted: #1c1c1e;
+  --amitia-muted-foreground: #8e8e93;
+  --amitia-border: #38383a;
+  --amitia-input: #1c1c1e;
+  --amitia-ring: rgba(201, 149, 87, 0.5);
+  --amitia-radius-small: 8px;
+  --amitia-radius-medium: 12px;
+  --amitia-radius-large: 16px;
+
+  --bg: #000000;
+  --bg-elevated: #1c1c1e;
+  --bg-grouped: #000000;
+  --shell: rgba(28, 28, 30, 0.82);
+  --surface: #1c1c1e;
+  --surface-soft: #2c2c2e;
+  --surface-secondary: #2c2c2e;
+  --surface-tertiary: #3a3a3c;
+  --surface-control: #3a3a3c;
+  --surface-control-hover: #48484a;
+  --surface-float: #2c2c2e;
+  --fill: rgba(120, 120, 128, 0.24);
+  --fill-secondary: rgba(120, 120, 128, 0.16);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  --separator: rgba(84, 84, 88, 0.5);
+  --separator-opaque: #38383a;
+  --on-bg: #ffffff;
+  --on-surface: #ffffff;
+  --on-surface-secondary: rgba(235, 235, 245, 0.6);
+  --on-surface-tertiary: rgba(235, 235, 245, 0.3);
+  --label: #ffffff;
+  --label-secondary: rgba(235, 235, 245, 0.6);
+  --label-tertiary: rgba(235, 235, 245, 0.3);
+  --primary: #c99557;
+  --primary-hover: #d8a96a;
+  --primary-active: #ad773d;
+  --primary-soft: rgba(201, 149, 87, 0.16);
+  --primary-bg: rgba(201, 149, 87, 0.16);
+  --primary-border: rgba(201, 149, 87, 0.3);
+  --on-primary: #000000;
+  --primary-container: rgba(201, 149, 87, 0.2);
+  --on-primary-container: #f0c987;
+  --secondary: #bf7a4e;
+  --secondary-soft: rgba(191, 122, 78, 0.14);
+  --on-secondary: #ffffff;
+  --secondary-container: rgba(191, 122, 78, 0.18);
+  --on-secondary-container: #d9a07f;
+  --state-running: #30d158;
+  --state-degraded: #ff9f0a;
+  --state-failed: #ff453a;
+  --state-installing: #c99557;
+  --state-idle: #8e8e93;
+  --error: #ff453a;
+  --error-soft: rgba(255, 69, 58, 0.16);
+  --on-error: #ffffff;
+  --error-container: rgba(255, 69, 58, 0.2);
+  --on-error-container: #ff8a80;
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.16);
+  --success-container: rgba(48, 209, 88, 0.2);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, 0.16);
+  --info: #64d2ff;
+  --info-soft: rgba(100, 210, 255, 0.16);
+  --purple: #bf5af2;
+  --purple-soft: rgba(191, 90, 242, 0.16);
+  --pink: #ff375f;
+  --pink-soft: rgba(255, 55, 95, 0.16);
+  --indigo: #5e5ce6;
+  --indigo-soft: rgba(94, 92, 230, 0.16);
+  --teal: #64d2ff;
+  --teal-soft: rgba(100, 210, 255, 0.16);
+  --outline: #38383a;
+  --outline-variant: #2c2c2e;
+  --divider: rgba(84, 84, 88, 0.35);
+  --border-strong: #48484a;
+  --overlay: rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.4);
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-bg-strong: rgba(22, 22, 24, 0.88);
+  --glass-bg-light: rgba(44, 44, 46, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-blur: 24px;
+  --glass-saturate: 200%;
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 24px rgba(201, 149, 87, 0.3);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Noto Sans SC', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --tabbar-height: 49px;
+  --header-height: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --logo-gradient: linear-gradient(135deg, #e0b374, #a66f39);
+  --avatar-gradient: linear-gradient(135deg, #3a3a3c, #1c1c1e);
+  --card-radius: 16px;
+  --sheet-radius: 20px;
+  --button-radius: 14px;
+  --pill-radius: 9999px;
+}
+
+@theme inline {
+  --color-background: var(--amitia-background);
+  --color-foreground: var(--amitia-foreground);
+  --color-card: var(--amitia-card);
+  --color-card-foreground: var(--amitia-card-foreground);
+  --color-popover: var(--amitia-popover);
+  --color-popover-foreground: var(--amitia-popover-foreground);
+  --color-primary: var(--amitia-primary);
+  --color-primary-foreground: var(--amitia-primary-foreground);
+  --color-muted: var(--amitia-muted);
+  --color-muted-foreground: var(--amitia-muted-foreground);
+  --color-border: var(--amitia-border);
+  --color-input: var(--amitia-input);
+  --color-ring: var(--amitia-ring);
+  --radius-sm: var(--amitia-radius-small);
+  --radius-md: var(--amitia-radius-medium);
+  --radius-lg: var(--amitia-radius-large);
+  --radius-full: 9999px;
+  --font-sans: var(--font-sans);
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--amitia-background);
+    --color-foreground: var(--amitia-foreground);
+    --color-card: var(--amitia-card);
+    --color-card-foreground: var(--amitia-card-foreground);
+    --color-popover: var(--amitia-popover);
+    --color-popover-foreground: var(--amitia-popover-foreground);
+    --color-primary: var(--amitia-primary);
+    --color-primary-foreground: var(--amitia-primary-foreground);
+    --color-muted: var(--amitia-muted);
+    --color-muted-foreground: var(--amitia-muted-foreground);
+    --color-border: var(--amitia-border);
+    --color-input: var(--amitia-input);
+    --color-ring: var(--amitia-ring);
+    --color-secondary: var(--secondary);
+    --radius-sm: var(--amitia-radius-small);
+    --radius-md: var(--amitia-radius-medium);
+    --radius-lg: var(--amitia-radius-large);
+  }
+  @layer base {
+    body { background: var(--amitia-background); color: var(--amitia-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--amitia-background); }
+      .text-background { color: var(--amitia-background); }
+      .border-background { border-color: var(--amitia-background); }
+      .ring-background { --tw-ring-color: var(--amitia-background); }
+      .bg-foreground { background-color: var(--amitia-foreground); }
+      .text-foreground { color: var(--amitia-foreground); }
+      .border-foreground { border-color: var(--amitia-foreground); }
+      .ring-foreground { --tw-ring-color: var(--amitia-foreground); }
+      .bg-card { background-color: var(--amitia-card); }
+      .text-card { color: var(--amitia-card); }
+      .border-card { border-color: var(--amitia-card); }
+      .ring-card { --tw-ring-color: var(--amitia-card); }
+      .bg-card-foreground { background-color: var(--amitia-card-foreground); }
+      .text-card-foreground { color: var(--amitia-card-foreground); }
+      .border-card-foreground { border-color: var(--amitia-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--amitia-card-foreground); }
+      .bg-popover { background-color: var(--amitia-popover); }
+      .text-popover { color: var(--amitia-popover); }
+      .border-popover { border-color: var(--amitia-popover); }
+      .ring-popover { --tw-ring-color: var(--amitia-popover); }
+      .bg-popover-foreground { background-color: var(--amitia-popover-foreground); }
+      .text-popover-foreground { color: var(--amitia-popover-foreground); }
+      .border-popover-foreground { border-color: var(--amitia-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--amitia-popover-foreground); }
+      .bg-primary { background-color: var(--amitia-primary); }
+      .text-primary { color: var(--amitia-primary); }
+      .border-primary { border-color: var(--amitia-primary); }
+      .ring-primary { --tw-ring-color: var(--amitia-primary); }
+      .bg-primary-foreground { background-color: var(--amitia-primary-foreground); }
+      .text-primary-foreground { color: var(--amitia-primary-foreground); }
+      .border-primary-foreground { border-color: var(--amitia-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--amitia-primary-foreground); }
+      .bg-muted { background-color: var(--amitia-muted); }
+      .text-muted { color: var(--amitia-muted); }
+      .border-muted { border-color: var(--amitia-muted); }
+      .ring-muted { --tw-ring-color: var(--amitia-muted); }
+      .bg-muted-foreground { background-color: var(--amitia-muted-foreground); }
+      .text-muted-foreground { color: var(--amitia-muted-foreground); }
+      .border-muted-foreground { border-color: var(--amitia-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--amitia-muted-foreground); }
+      .bg-border { background-color: var(--amitia-border); }
+      .text-border { color: var(--amitia-border); }
+      .border-border { border-color: var(--amitia-border); }
+      .ring-border { --tw-ring-color: var(--amitia-border); }
+      .bg-input { background-color: var(--amitia-input); }
+      .text-input { color: var(--amitia-input); }
+      .border-input { border-color: var(--amitia-input); }
+      .ring-input { --tw-ring-color: var(--amitia-input); }
+      .bg-ring { background-color: var(--amitia-ring); }
+      .text-ring { color: var(--amitia-ring); }
+      .border-ring { border-color: var(--amitia-ring); }
+      .ring-ring { --tw-ring-color: var(--amitia-ring); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen bg-black text-white font-sans antialiased" style="-webkit-font-smoothing:antialiased;">
+<div class="flex min-h-screen flex-col items-center justify-center relative overflow-hidden">
+  <div class="flex flex-col items-center justify-center flex-1">
+    <div class="logo-glow" style="width:84px;height:84px;border-radius:22px;background:linear-gradient(135deg,#e0b374,#a66f39);display:flex;align-items:center;justify-content:center;">
+      <span style="color:#fff;font-size:32px;font-weight:800;font-family:var(--font-sans);">A</span>
+    </div>
+    <h1 style="font-size:38px;font-weight:700;letter-spacing:-1px;margin-top:20px;color:#fff;font-family:var(--font-sans);">Amitia</h1>
+    <p style="font-size:12px;color:rgba(235,235,245,0.3);letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-top:6px;font-family:var(--font-sans);">AI COMPANION</p>
+  </div>
+  <div class="flex flex-col items-center" style="position:absolute;bottom:calc(48px + var(--safe-bottom));">
+    <div class="flex items-center" style="gap:8px;">
+      <div class="dot-pulse" style="width:8px;height:8px;border-radius:50%;background:#c99557;"></div>
+      <div class="dot-pulse" style="width:8px;height:8px;border-radius:50%;background:#c99557;"></div>
+      <div class="dot-pulse" style="width:8px;height:8px;border-radius:50%;background:#c99557;"></div>
+    </div>
+    <p style="font-size:11px;color:rgba(235,235,245,0.3);margin-top:16px;font-family:var(--font-sans);">v0.1.0</p>
+  </div>
+</div>
+
+    <style>
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+}
+.glass {
+  background: rgba(28,28,30,0.72);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.glass-strong {
+  background: rgba(22,22,24,0.88);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.ios-btn-primary {
+  background: linear-gradient(135deg, #e0b374, #c99557, #a66f39);
+  color: #000;
+  border: none;
+  border-radius: 14px;
+  height: 50px;
+  font-size: 17px;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 200ms ease;
+  box-shadow: 0 0 24px rgba(201,149,87,0.3);
+  font-family: var(--font-sans);
+}
+.ios-btn-primary:active {
+  transform: scale(0.97);
+}
+.ios-btn-secondary {
+  background: rgba(120,120,128,0.24);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  height: 50px;
+  font-size: 17px;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  transition: transform 100ms ease, background 200ms ease;
+  font-family: var(--font-sans);
+}
+.ios-btn-secondary:active {
+  transform: scale(0.97);
+  background: rgba(120,120,128,0.36);
+}
+.ios-input {
+  width: 100%;
+  height: 44px;
+  background: #1c1c1e;
+  border: 1px solid #38383a;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 16px;
+  color: #fff;
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+  font-family: var(--font-sans);
+}
+.ios-input::placeholder {
+  color: rgba(235,235,245,0.3);
+}
+.ios-input:focus {
+  border-color: #c99557;
+  box-shadow: 0 0 0 3px rgba(201,149,87,0.15);
+}
+.pt-safe { padding-top: var(--safe-top); }
+.pb-safe { padding-bottom: var(--safe-bottom); }
+.haptic-touch {
+  transition: transform 100ms ease;
+}
+.haptic-touch:active {
+  transform: scale(0.97);
+}
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.sheet-shadow {
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+}
+.gold-glow {
+  box-shadow: 0 0 24px rgba(201,149,87,0.3);
+}
+.logo-glow {
+  box-shadow: 0 0 60px rgba(201,149,87,0.35);
+}
+@keyframes pulse-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.dot-pulse {
+  animation: pulse-bounce 1.4s ease-in-out infinite both;
+}
+.dot-pulse:nth-child(1) { animation-delay: -0.32s; }
+.dot-pulse:nth-child(2) { animation-delay: -0.16s; }
+.dot-pulse:nth-child(3) { animation-delay: 0s; }
+</style>
+</body>
+</html>

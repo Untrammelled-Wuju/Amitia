@@ -225,9 +225,10 @@ type UIActionDefinition struct {
 }
 
 type PermissionRequirement struct {
-	Name    string `json:"name"`
-	Scope   string `json:"scope,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	Name     string `json:"name"`
+	Scope    string `json:"scope,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Required bool   `json:"required,omitempty"`
 }
 
 type ScopeRule struct {

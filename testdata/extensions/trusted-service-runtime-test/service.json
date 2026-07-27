@@ -1,0 +1,123 @@
+{
+  "service_id": "trusted-service-runtime-test",
+  "extension_id": "amitia.test.trusted-service-runtime",
+  "module_id": "trusted-service-runtime-test",
+  "name": "Trusted Service Runtime Test Service",
+  "description": "Minimal cross-platform JSON-RPC service for exercising the Amitia Trusted Service Runtime lifecycle, capabilities, sandboxing and recovery paths.",
+  "publisher": "amitia-test",
+  "trust_level": "trusted",
+  "executables": [
+    {
+      "platform": "windows/amd64",
+      "path": "bin/tsrt-windows-amd64.exe",
+      "sha256": "0267fdfe3e0042269a9884bb6217c74f0f63a8b6c9b722619dfc839bef054c9f",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    },
+    {
+      "platform": "windows/arm64",
+      "path": "bin/tsrt-windows-arm64.exe",
+      "sha256": "a376ef7f7bc6c55aecf8493e40c8b1ddc4088ec710510b44d8c7245485d82b78",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    },
+    {
+      "platform": "darwin/amd64",
+      "path": "bin/tsrt-darwin-amd64",
+      "sha256": "66b33bc802c16baa3b1eeade61e5523b4212e8c40ee5abbdc737a60eb7ea30f2",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    },
+    {
+      "platform": "darwin/arm64",
+      "path": "bin/tsrt-darwin-arm64",
+      "sha256": "89728af9e6fa0f871284bcaa430e8248d56b4177847a7322a27203d02f858226",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    },
+    {
+      "platform": "linux/amd64",
+      "path": "bin/tsrt-linux-amd64",
+      "sha256": "eddb69aa636bb750df4bc7a2ead573805f2bc8eaeea07412081fa8dc029d8222",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    },
+    {
+      "platform": "linux/arm64",
+      "path": "bin/tsrt-linux-arm64",
+      "sha256": "0dfdfcd83f8389fcd8d7b0d2d73163f19e247d16f5bc465de470948d20fabc74",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "test-signature-placeholder",
+        "signer": "amitia-test",
+        "trusted": true
+      }
+    }
+  ],
+  "protocol": "amitia_jsonrpc_v1",
+  "instance_policy": "single",
+  "health_check": {
+    "type": "rpc",
+    "interval": 15000000000,
+    "timeout": 5000000000,
+    "grace_period": 10000000000,
+    "max_consecutive_fails": 3,
+    "endpoint": "service.health"
+  },
+  "recovery": {
+    "max_restarts": 3,
+    "restart_delay": 2000000000,
+    "backoff_multiplier": 2.0,
+    "max_restart_delay": 30000000000,
+    "quarantine_on_fail": true
+  },
+  "shutdown": {
+    "grace_period": 5000000000,
+    "kill_timeout": 10000000000,
+    "cleanup_children": true,
+    "remove_temp_dir": true
+  },
+  "limits": {
+    "max_memory_mb": 256,
+    "max_cpu_percent": 50,
+    "max_file_descriptors": 64,
+    "max_disk_mb": 32,
+    "max_subprocesses": 8,
+    "cpu_time": 3600000000000
+  },
+  "network": {
+    "allow_inbound": true,
+    "allow_outbound": false,
+    "allowed_domains": [],
+    "allowed_ports": [],
+    "loopback_only": true,
+    "require_proxy": false,
+    "audit_all": true
+  },
+  "allowed_namespaces": [
+    "amitia.test.trusted-service-runtime"
+  ],
+  "manifest_hash": "sha256:trusted-service-runtime-test",
+  "definition_version": 1,
+  "auto_start": false
+}

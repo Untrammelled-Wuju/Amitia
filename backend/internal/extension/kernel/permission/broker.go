@@ -21,12 +21,17 @@ type PermissionBroker interface {
 	DetectUpgrade(ctx context.Context, oldPermissions, newPermissions []PermissionRequirement) []PermissionUpgrade
 }
 
+type TrustLevelChecker interface {
+	IsTrusted(subject PermissionSubject) bool
+}
+
 type DefaultPermissionBroker struct {
-	registry   *PermissionDefinitionRegistry
-	storage    PermissionStorage
-	cache      *PermissionCache
-	auditRec   *PermissionAuditRecorder
-	mu         sync.RWMutex
+	registry     *PermissionDefinitionRegistry
+	storage      PermissionStorage
+	cache        *PermissionCache
+	auditRec     *PermissionAuditRecorder
+	mu           sync.RWMutex
+	trustChecker TrustLevelChecker
 
 	SystemPolicy func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
 }
@@ -38,6 +43,19 @@ func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage 
 		cache:    NewPermissionCache(5 * time.Minute),
 		auditRec: NewPermissionAuditRecorder(),
 	}
+}
+
+func (b *DefaultPermissionBroker) SetTrustLevelChecker(checker TrustLevelChecker) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.trustChecker = checker
+	b.cache.InvalidateAll()
+}
+
+func (b *DefaultPermissionBroker) GetTrustLevelChecker() TrustLevelChecker {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.trustChecker
 }
 
 func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult {
@@ -347,7 +365,13 @@ func (b *DefaultPermissionBroker) determineDenyOrApproval(result *PermissionEval
 }
 
 func (b *DefaultPermissionBroker) isNotTrusted(subject PermissionSubject) bool {
-	return false
+	b.mu.RLock()
+	checker := b.trustChecker
+	b.mu.RUnlock()
+	if checker == nil {
+		return false
+	}
+	return !checker.IsTrusted(subject)
 }
 
 func (b *DefaultPermissionBroker) generateGrantID(request PermissionGrantRequest) string {

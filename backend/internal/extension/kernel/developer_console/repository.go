@@ -444,6 +444,187 @@ func (r *DiagnosticRepository) ListCompatibility(ctx context.Context) ([]Compati
 	return out, nil
 }
 
+type DiagnosticExport struct {
+	GeneratedAt   time.Time               `json:"generatedAt"`
+	Invocations   []InvocationRecord      `json:"invocations"`
+	Events        []EventRecord           `json:"events"`
+	Hooks         []HookRecord            `json:"hooks"`
+	Tasks         []TaskRecord            `json:"tasks"`
+	UISessions    []UISessionRecord       `json:"uiSessions"`
+	Storage       []StorageEntryRecord    `json:"storage"`
+	Permissions   []PermissionGrantRecord `json:"permissions"`
+	Scopes        []ScopeRecord           `json:"scopes"`
+	Resources     []ResourceRecord        `json:"resources"`
+	Lifecycle     []LifecycleEventRecord  `json:"lifecycle"`
+	Logs          []LogEntry              `json:"logs"`
+	Performance   []PerformanceRecord     `json:"performance"`
+	Migration     []MigrationRecord       `json:"migration"`
+	Compatibility []CompatibilityRecord   `json:"compatibility"`
+}
+
+func (r *DiagnosticRepository) ExportDiagnostics(ctx context.Context, filter ConsoleFilters) (*DiagnosticExport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	export := &DiagnosticExport{GeneratedAt: time.Now().UTC()}
+
+	export.Invocations = r.filterInvocationsLocked(filter)
+	export.Events = r.filterEventsLocked(filter)
+	export.Hooks = r.filterHooksLocked(filter)
+	export.Tasks = r.filterTasksLocked(filter)
+	export.UISessions = r.filterUISessionsLocked(filter)
+	export.Storage = r.filterStorageLocked(filter)
+	export.Permissions = r.filterPermissionsLocked(filter)
+	export.Scopes = append([]ScopeRecord(nil), r.scopes...)
+	export.Resources = r.filterResourcesLocked(filter)
+	export.Lifecycle = r.filterLifecycleLocked(filter)
+	export.Logs = r.filterLogsLocked(filter)
+	export.Performance = r.filterPerformanceLocked(filter)
+	export.Migration = append([]MigrationRecord(nil), r.migration...)
+	export.Compatibility = append([]CompatibilityRecord(nil), r.compat...)
+
+	return export, nil
+}
+
+func (r *DiagnosticRepository) filterInvocationsLocked(filter ConsoleFilters) []InvocationRecord {
+	out := make([]InvocationRecord, 0)
+	for _, rec := range r.invocations {
+		if filter.ExtensionID != "" && rec.ExtensionID != filter.ExtensionID {
+			continue
+		}
+		if filter.StartTime != nil && rec.StartedAt.Before(*filter.StartTime) {
+			continue
+		}
+		if filter.EndTime != nil && rec.StartedAt.After(*filter.EndTime) {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterEventsLocked(filter ConsoleFilters) []EventRecord {
+	out := make([]EventRecord, 0)
+	for _, rec := range r.events {
+		if filter.StartTime != nil && rec.EmittedAt.Before(*filter.StartTime) {
+			continue
+		}
+		if filter.EndTime != nil && rec.EmittedAt.After(*filter.EndTime) {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterHooksLocked(filter ConsoleFilters) []HookRecord {
+	out := make([]HookRecord, 0)
+	for _, rec := range r.hooks {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterTasksLocked(filter ConsoleFilters) []TaskRecord {
+	out := make([]TaskRecord, 0)
+	for _, rec := range r.tasks {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterUISessionsLocked(filter ConsoleFilters) []UISessionRecord {
+	out := make([]UISessionRecord, 0)
+	for _, rec := range r.sessions {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterStorageLocked(filter ConsoleFilters) []StorageEntryRecord {
+	out := make([]StorageEntryRecord, 0)
+	for _, rec := range r.storage {
+		if filter.ExtensionID != "" && !startsWith(rec.Namespace, filter.ExtensionID) {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterPermissionsLocked(filter ConsoleFilters) []PermissionGrantRecord {
+	out := make([]PermissionGrantRecord, 0)
+	for _, rec := range r.permissions {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterResourcesLocked(filter ConsoleFilters) []ResourceRecord {
+	out := make([]ResourceRecord, 0)
+	for _, rec := range r.resources {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterLifecycleLocked(filter ConsoleFilters) []LifecycleEventRecord {
+	out := make([]LifecycleEventRecord, 0)
+	for _, rec := range r.lifecycle {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterLogsLocked(filter ConsoleFilters) []LogEntry {
+	out := make([]LogEntry, 0)
+	for _, rec := range r.logs {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		if filter.Severity != "" && rec.Level != filter.Severity {
+			continue
+		}
+		if filter.StartTime != nil && rec.At.Before(*filter.StartTime) {
+			continue
+		}
+		if filter.EndTime != nil && rec.At.After(*filter.EndTime) {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func (r *DiagnosticRepository) filterPerformanceLocked(filter ConsoleFilters) []PerformanceRecord {
+	out := make([]PerformanceRecord, 0)
+	for _, rec := range r.performance {
+		if filter.ExtensionID != "" && rec.Extension != filter.ExtensionID {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
 func (r *DiagnosticRepository) JSON(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }

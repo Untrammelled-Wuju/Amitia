@@ -3,7 +3,7 @@ package com.amitia.core.network.client
 sealed class AmitiaApiException(
     message: String,
     cause: Throwable? = null
-) : Exception(message, cause) {
+) : java.io.IOException(message, cause) {
 
     data object NetworkUnavailable : AmitiaApiException("网络不可用")
 

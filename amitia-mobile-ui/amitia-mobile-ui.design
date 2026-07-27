@@ -1,0 +1,362 @@
+{
+  "data": [
+    {
+      "id": "page-splash",
+      "title": "启动页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/splash.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-onboarding",
+      "title": "引导页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 309,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/onboarding.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-login",
+      "title": "登录页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 618,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-setup",
+      "title": "初始化设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 927,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/setup.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-home",
+      "title": "首页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 0,
+        "y": 376,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/home.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat",
+      "title": "对话",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 309,
+        "y": 376,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat-drawer",
+      "title": "会话列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 618,
+        "y": 376,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-drawer.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat-logs",
+      "title": "聊天记录",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 927,
+        "y": 376,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-logs.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-character-list",
+      "title": "角色列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 0,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/character-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-character-detail",
+      "title": "角色详情",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 309,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/character-detail.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-memory-hub",
+      "title": "记忆中心",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 618,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/memory-hub.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-memory-graph",
+      "title": "记忆图谱",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 927,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/memory-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-memory-timeline",
+      "title": "记忆时间线",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 1236,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/memory-timeline.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-reminders",
+      "title": "日程提醒",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 1545,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/reminders.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-emotes",
+      "title": "表情包管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 1854,
+        "y": 841,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/emotes.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-capability",
+      "title": "能力中心",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 0,
+        "y": 1290,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/capability.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-extensions",
+      "title": "扩展管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 309,
+        "y": 1290,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/extensions.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-creative-workshop",
+      "title": "创意工坊",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 618,
+        "y": 1290,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/creative-workshop.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-channels",
+      "title": "渠道绑定",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 927,
+        "y": 1290,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/channels.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings",
+      "title": "设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 0,
+        "y": 1666,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings-model",
+      "title": "模型配置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 309,
+        "y": 1666,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings-model.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings-runtime",
+      "title": "运行时设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753603200000,
+      "canvasData": {
+        "x": 618,
+        "y": 1666,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings-runtime.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "mobile",
+    "projectName": "Amitia 移动端 UI",
+    "designLibrary": null
+  }
+}

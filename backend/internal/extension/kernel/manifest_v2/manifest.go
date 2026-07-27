@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -173,19 +175,25 @@ func (l LocalizedText) ToDomain() domain.LocalizedText {
 }
 
 type ValidationReport struct {
-	Errors []ValidationError
-	Warnings []ValidationWarning
+	Errors   []ValidationError   `json:"errors"`
+	Warnings []ValidationWarning `json:"warnings"`
 }
 
 type ValidationError struct {
-	Path    string
-	Code    string
-	Message string
+	Path    string `json:"path"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	File    string `json:"file,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Column  int    `json:"column,omitempty"`
 }
 
 type ValidationWarning struct {
-	Path    string
-	Message string
+	Path    string `json:"path"`
+	Message string `json:"message"`
+	File    string `json:"file,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Column  int    `json:"column,omitempty"`
 }
 
 func (r *ValidationReport) HasErrors() bool {
@@ -196,8 +204,29 @@ func (r *ValidationReport) AddError(path, code, msg string) {
 	r.Errors = append(r.Errors, ValidationError{Path: path, Code: code, Message: msg})
 }
 
+func (r *ValidationReport) AddErrorWithLocation(path, code, msg, file string, line, col int) {
+	r.Errors = append(r.Errors, ValidationError{Path: path, Code: code, Message: msg, File: file, Line: line, Column: col})
+}
+
 func (r *ValidationReport) AddWarning(path, msg string) {
 	r.Warnings = append(r.Warnings, ValidationWarning{Path: path, Message: msg})
+}
+
+func (r *ValidationReport) AddWarningWithLocation(path, msg, file string, line, col int) {
+	r.Warnings = append(r.Warnings, ValidationWarning{Path: path, Message: msg, File: file, Line: line, Column: col})
+}
+
+func (r *ValidationReport) AttachFile(file string) {
+	for i := range r.Errors {
+		if r.Errors[i].File == "" {
+			r.Errors[i].File = file
+		}
+	}
+	for i := range r.Warnings {
+		if r.Warnings[i].File == "" {
+			r.Warnings[i].File = file
+		}
+	}
 }
 
 var (
@@ -248,23 +277,19 @@ func (m Manifest) Validate() ValidationReport {
 	}
 	moduleIDs := make(map[string]bool)
 	moduleTypes := map[string]bool{
-		"builtin": true, "javascript": true, "data_only": true,
+		"builtin": true, "javascript": true, "data_only": true, "wasm": true,
+		"native": true, "service": true,
 	}
 	runtimeTypes := map[string]bool{
-		"javascript": true, "mcp": true, "workflow": true, "static": true,
+		"javascript": true, "mcp": true, "workflow": true, "static": true, "wasm": true,
 	}
 	contributionKinds := map[string]bool{
 		"tool": true, "agent_skill": true, "workflow": true,
 		"mcp_server": true,
-	}
-	unsupportedContributionKinds := map[string]bool{
 		"provider": true, "hook": true, "event_subscription": true,
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "resource": true,
-	}
-	unsupportedModuleTypes := map[string]bool{
-		"native": true, "wasm": true, "service": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -283,8 +308,6 @@ func (m Manifest) Validate() ValidationReport {
 		}
 		if mod.Type == "" {
 			report.AddError(path+".type", "missing", "module type required")
-		} else if unsupportedModuleTypes[mod.Type] {
-			report.AddError(path+".type", "unsupported_runtime", fmt.Sprintf(`{"code":"unsupported_runtime","moduleId":"%s","runtimeType":"%s"}`, mod.ID, mod.Type))
 		} else if !moduleTypes[mod.Type] {
 			report.AddError(path+".type", "unknown_type", fmt.Sprintf("unknown module type: %s", mod.Type))
 		}
@@ -308,8 +331,6 @@ func (m Manifest) Validate() ValidationReport {
 			contributionIDs[c.ID] = true
 			if c.Kind == "" {
 				report.AddError(cpath+".kind", "missing", "contribution kind required")
-			} else if unsupportedContributionKinds[c.Kind] {
-				report.AddError(cpath+".kind", "unsupported_contribution", fmt.Sprintf(`{"code":"unsupported_contribution","moduleId":"%s","contributionId":"%s","kind":"%s"}`, mod.ID, c.ID, c.Kind))
 			} else if !contributionKinds[c.Kind] {
 				report.AddError(cpath+".kind", "unknown_kind", fmt.Sprintf("unknown contribution kind: %s", c.Kind))
 			}
@@ -499,4 +520,419 @@ func deref[T any](p *T) T {
 		return zero
 	}
 	return *p
+}
+
+const manifestV2Schema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["manifestVersion", "extension", "publisher"],
+  "properties": {
+    "manifestVersion": {"type": "integer", "const": 2},
+    "extension": {
+      "type": "object",
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9-]+)+/[a-z0-9][a-z0-9-]*$"},
+        "name": {
+          "type": "object",
+          "required": ["default"],
+          "properties": {
+            "default": {"type": "string", "minLength": 1},
+            "translations": {"type": "object"}
+          }
+        },
+        "description": {
+          "type": "object",
+          "properties": {
+            "default": {"type": "string"},
+            "translations": {"type": "object"}
+          }
+        },
+        "version": {"type": "string", "pattern": "^(\\d+)\\.(\\d+)\\.(\\d+)(?:-[0-9A-Za-z-.]+)?(?:\\+[0-9A-Za-z-.]+)?$"},
+        "license": {"type": "string"},
+        "homepage": {"type": "string"},
+        "repository": {"type": "string"},
+        "categories": {"type": "array", "items": {"type": "string"}},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+        "icon": {"type": "string"},
+        "metadata": {"type": "object"}
+      }
+    },
+    "publisher": {
+      "type": "object",
+      "required": ["id", "displayName"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "displayName": {"type": "string", "minLength": 1},
+        "trustLevel": {"type": "string", "enum": ["untrusted", "trusted", "verified", "official"]},
+        "contact": {"type": "string"},
+        "website": {"type": "string"}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "minHostVersion": {"type": "string"},
+        "maxHostVersion": {"type": "string"},
+        "platforms": {"type": "array", "items": {"type": "string"}},
+        "featureFlags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "name": {
+            "type": "object",
+            "required": ["default"],
+            "properties": {
+              "default": {"type": "string", "minLength": 1},
+              "translations": {"type": "object"}
+            }
+          },
+          "description": {
+            "type": "object",
+            "properties": {
+              "default": {"type": "string"},
+              "translations": {"type": "object"}
+            }
+          },
+          "type": {"type": "string", "enum": ["builtin", "javascript", "data_only", "wasm", "native", "service"]},
+          "version": {"type": "string"},
+          "runtime": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {"type": "string", "enum": ["javascript", "mcp", "workflow", "static", "wasm"]},
+              "entryPoint": {"type": "string"},
+              "workerCount": {"type": "integer"},
+              "timeout": {"type": "string"},
+              "memory": {"type": "integer"},
+              "permissions": {"type": "array", "items": {"type": "string"}},
+              "capabilities": {"type": "object"},
+              "env": {"type": "object"}
+            }
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "name"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "resource"]},
+                "name": {
+                  "type": "object",
+                  "required": ["default"],
+                  "properties": {
+                    "default": {"type": "string", "minLength": 1},
+                    "translations": {"type": "object"}
+                  }
+                },
+                "description": {
+                  "type": "object",
+                  "properties": {
+                    "default": {"type": "string"},
+                    "translations": {"type": "object"}
+                  }
+                },
+                "version": {"type": "string"},
+                "spec": {"type": "object"},
+                "requiredPermissions": {"type": "array", "items": {"type": "string"}},
+                "requiredScope": {"type": "array", "items": {"type": "string"}},
+                "exposure": {
+                  "type": "object",
+                  "properties": {
+                    "visibleByDefault": {"type": "boolean"},
+                    "hiddenFromDiscovery": {"type": "boolean"},
+                    "requiredRoles": {"type": "array", "items": {"type": "string"}}
+                  }
+                },
+                "runtimeBinding": {
+                  "type": "object",
+                  "required": ["runtimeId"],
+                  "properties": {
+                    "runtimeId": {"type": "string", "minLength": 1},
+                    "generation": {"type": "integer"}
+                  }
+                },
+                "dependencies": {"type": "array", "items": {"type": "object"}}
+              }
+            }
+          },
+          "dependencies": {"type": "array", "items": {"type": "object"}},
+          "compatibility": {
+            "type": "object",
+            "properties": {
+              "minHostVersion": {"type": "string"},
+              "platforms": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "policies": {
+            "type": "object",
+            "properties": {
+              "isolation": {"type": "string"},
+              "networkAccess": {"type": "boolean"},
+              "fileSystemAccess": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "id"],
+        "properties": {
+          "type": {"type": "string", "enum": ["extension", "module", "mcp", "provider", "host_api"]},
+          "id": {"type": "string", "minLength": 1},
+          "version": {"type": "string"},
+          "optional": {"type": "boolean"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "reason": {"type": "string"},
+          "required": {"type": "boolean"},
+          "scope": {"type": "string"}
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "path"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "hash": {"type": "string"},
+          "size": {"type": "integer"}
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "properties": {
+        "autoUpdate": {"type": "boolean"},
+        "backgroundTasks": {"type": "boolean"},
+        "networkAccess": {"type": "boolean"},
+        "isolation": {"type": "string"},
+        "sandbox": {"type": "boolean"}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "contentTreeHash"],
+      "properties": {
+        "algorithm": {"type": "string", "minLength": 1},
+        "contentTreeHash": {"type": "string", "minLength": 1},
+        "fileHashes": {"type": "object"}
+      }
+    },
+    "development": {
+      "type": "object",
+      "properties": {
+        "developerMode": {"type": "boolean"},
+        "hotReload": {"type": "boolean"},
+        "sourceMaps": {"type": "boolean"},
+        "testEntry": {"type": "string"},
+        "watchPaths": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}`
+
+func schemaValueEqual(a, b any) bool {
+	if af, ok := a.(float64); ok {
+		if bf, ok2 := b.(float64); ok2 {
+			return af == bf
+		}
+	}
+	return a == b
+}
+
+func checkSchemaType(value any, t string) bool {
+	switch t {
+	case "object":
+		_, ok := value.(map[string]any)
+		return ok
+	case "array":
+		_, ok := value.([]any)
+		return ok
+	case "string":
+		_, ok := value.(string)
+		return ok
+	case "integer":
+		f, ok := value.(float64)
+		return ok && f == float64(int64(f))
+	case "number":
+		_, ok := value.(float64)
+		return ok
+	case "boolean":
+		_, ok := value.(bool)
+		return ok
+	case "null":
+		return value == nil
+	}
+	return true
+}
+
+func validateSchemaValue(value any, schema map[string]any, path string, report *ValidationReport) {
+	if t, ok := schema["type"].(string); ok {
+		if !checkSchemaType(value, t) {
+			report.AddError(path, "schema_type", fmt.Sprintf("expected type %s, got %T", t, value))
+			return
+		}
+	}
+	if c, ok := schema["const"]; ok {
+		if !schemaValueEqual(value, c) {
+			report.AddError(path, "schema_const", fmt.Sprintf("expected const %v, got %v", c, value))
+		}
+	}
+	if enum, ok := schema["enum"].([]any); ok {
+		found := false
+		for _, e := range enum {
+			if schemaValueEqual(value, e) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			report.AddError(path, "schema_enum", fmt.Sprintf("value %v not in enum %v", value, enum))
+		}
+	}
+	if pattern, ok := schema["pattern"].(string); ok {
+		if s, ok2 := value.(string); ok2 {
+			if re, err := regexp.Compile(pattern); err == nil {
+				if !re.MatchString(s) {
+					report.AddError(path, "schema_pattern", fmt.Sprintf("value %q does not match pattern %s", s, pattern))
+				}
+			}
+		}
+	}
+	if minLen, ok := schema["minLength"].(float64); ok {
+		if s, ok2 := value.(string); ok2 {
+			if len(s) < int(minLen) {
+				report.AddError(path, "schema_minLength", fmt.Sprintf("string length %d less than minLength %d", len(s), int(minLen)))
+			}
+		}
+	}
+	switch t := schema["type"].(string); t {
+	case "object":
+		obj, ok := value.(map[string]any)
+		if !ok {
+			return
+		}
+		if required, ok := schema["required"].([]any); ok {
+			for _, r := range required {
+				if rs, ok2 := r.(string); ok2 {
+					if _, exists := obj[rs]; !exists {
+						report.AddError(path+"."+rs, "schema_required", fmt.Sprintf("required field %s missing", rs))
+					}
+				}
+			}
+		}
+		if props, ok := schema["properties"].(map[string]any); ok {
+			for key, val := range obj {
+				if ps, ok2 := props[key].(map[string]any); ok2 {
+					validateSchemaValue(val, ps, path+"."+key, report)
+				}
+			}
+		}
+	case "array":
+		arr, ok := value.([]any)
+		if !ok {
+			return
+		}
+		if minItems, ok := schema["minItems"].(float64); ok {
+			if len(arr) < int(minItems) {
+				report.AddError(path, "schema_minItems", fmt.Sprintf("array length %d less than minItems %d", len(arr), int(minItems)))
+			}
+		}
+		if items, ok := schema["items"].(map[string]any); ok {
+			for i, item := range arr {
+				validateSchemaValue(item, items, fmt.Sprintf("%s[%d]", path, i), report)
+			}
+		}
+	}
+}
+
+func (m Manifest) ValidateWithSchema() *ValidationReport {
+	report := &ValidationReport{}
+	data, err := json.Marshal(m)
+	if err != nil {
+		report.AddError("", "schema_marshal", fmt.Sprintf("failed to marshal manifest: %v", err))
+		return report
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		report.AddError("", "schema_parse", fmt.Sprintf("failed to parse manifest: %v", err))
+		return report
+	}
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(manifestV2Schema), &schema); err != nil {
+		report.AddError("", "schema_parse", fmt.Sprintf("failed to parse schema: %v", err))
+		return report
+	}
+	validateSchemaValue(raw, schema, "", report)
+	return report
+}
+
+func ValidateFile(filePath string) (*Manifest, *ValidationReport) {
+	report := &ValidationReport{}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		report.AddErrorWithLocation("", "file_read", fmt.Sprintf("failed to read file: %v", err), filePath, 0, 0)
+		return nil, report
+	}
+	var m Manifest
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(&m); err != nil {
+		offset := dec.InputOffset()
+		if se, ok := err.(*json.SyntaxError); ok {
+			offset = se.Offset
+		} else if ute, ok := err.(*json.UnmarshalTypeError); ok {
+			offset = ute.Offset
+		}
+		line, col := offsetToLineColumn(data, offset)
+		report.AddErrorWithLocation("", "parse_error", fmt.Sprintf("failed to parse manifest: %v", err), filePath, line, col)
+		return nil, report
+	}
+	r := m.Validate()
+	r.AttachFile(filePath)
+	return &m, &r
+}
+
+func offsetToLineColumn(data []byte, offset int64) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > int64(len(data)) {
+		offset = int64(len(data))
+	}
+	line := 1
+	col := 1
+	for i := int64(0); i < offset; i++ {
+		if data[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return line, col
 }

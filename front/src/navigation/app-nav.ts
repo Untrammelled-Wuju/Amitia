@@ -111,6 +111,11 @@ const extraTitles = [
   { path: "/extensions/workshop", label: "技能制作" },
   { path: "/extensions/runs", label: "技能执行记录" },
   { path: "/extensions", label: "扩展中心" },
+  { path: "/kernel", label: "扩展内核" },
+  { path: "/kernel/hooks", label: "Hook 管理" },
+  { path: "/kernel/tasks", label: "任务运行时" },
+  { path: "/kernel/events", label: "事件中心" },
+  { path: "/kernel/dev-console", label: "开发者诊断控制台" },
 ];
 
 export function isNavItemActive(path: string, item: AppNavItem) {

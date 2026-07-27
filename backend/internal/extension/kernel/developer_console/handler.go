@@ -35,6 +35,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dev-console/migration", h.handleMigration)
 	mux.HandleFunc("/api/dev-console/compatibility", h.handleCompatibility)
 	mux.HandleFunc("/api/dev-console/stream", h.handleStream)
+	mux.HandleFunc("/api/dev-console/export-diagnostics", h.handleExportDiagnostics)
 }
 
 func (h *HTTPHandler) handleOverview(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +243,27 @@ func (h *HTTPHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func (h *HTTPHandler) handleExportDiagnostics(w http.ResponseWriter, r *http.Request) {
+	filter := parseFilters(r)
+	export, err := h.repository.ExportDiagnostics(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	overview, err := h.service.BuildOverview(r.Context())
+	if err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", `attachment; filename="amitia-diagnostics.json"`)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"overview":  overview,
+			"diagnostics": export,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, export)
 }
 
 func parseFilters(r *http.Request) ConsoleFilters {

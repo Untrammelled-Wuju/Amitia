@@ -12,6 +12,7 @@ const (
 	ContributionTypeBackgroundTask ContributionType = "background_task"
 	ContributionTypeProvider       ContributionType = "provider"
 	ContributionTypeAsset          ContributionType = "asset"
+	ContributionTypeSchedule       ContributionType = "schedule"
 )
 
 type Contribution interface {
@@ -80,4 +81,9 @@ type AssetContribution struct {
 type BackgroundTaskContribution struct {
 	BaseContribution
 	TaskID string `json:"taskId"`
+}
+
+type ScheduleContribution struct {
+	BaseContribution
+	ScheduleID string `json:"scheduleId"`
 }

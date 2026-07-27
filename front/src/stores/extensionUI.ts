@@ -1,5 +1,11 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import {
+  fetchUISnapshot,
+  fetchContributions,
+  createBridgeSession,
+  revokeBridgeSession,
+} from "@/api/extension";
 
 export interface UIContributionSummary {
   contributionId: string;
@@ -155,6 +161,53 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     snapshot.value = null;
   }
 
+  async function refreshSnapshot(force = false): Promise<void> {
+    if (loading.value) return;
+    if (!force && snapshot.value && Date.now() - lastFetchAt.value < 30_000) return;
+    loading.value = true;
+    try {
+      const next = await fetchUISnapshot();
+      snapshot.value = next;
+      lastFetchAt.value = Date.now();
+    } catch (e) {
+      recordError({
+        contributionId: "",
+        slotId: "",
+        message: e instanceof Error ? e.message : String(e),
+        timestamp: Date.now(),
+        recoverable: true,
+      });
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function loadAllContributions(): Promise<UIContributionSummary[]> {
+    return fetchContributions();
+  }
+
+  async function startSession(params: {
+    contributionId: string;
+    origin?: string;
+    grantedScopes?: string[];
+    grantedPerms?: string[];
+  }): Promise<string> {
+    const res = await createBridgeSession(params);
+    const key = params.contributionId;
+    registerSession({
+      contributionId: key,
+      sessionId: res.sessionId,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+    });
+    return res.sessionId;
+  }
+
+  async function endSession(sessionId: string, contributionId: string): Promise<void> {
+    await revokeBridgeSession(sessionId);
+    unregisterSession(contributionId);
+  }
+
   return {
     snapshot,
     loading,
@@ -173,5 +226,9 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     updateLayoutPreference,
     clearScope,
     invalidateSnapshot,
+    refreshSnapshot,
+    loadAllContributions,
+    startSession,
+    endSession,
   };
 });

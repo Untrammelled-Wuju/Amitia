@@ -2,6 +2,7 @@ package amitiax
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,12 +16,13 @@ import (
 type InstallPhase string
 
 const (
-	PhaseValidate       InstallPhase = "validate"
-	PhaseExtract        InstallPhase = "extract"
-	PhaseVerify         InstallPhase = "verify"
-	PhaseRegister       InstallPhase = "register"
-	PhaseFinalize       InstallPhase = "finalize"
-	PhaseCleanup        InstallPhase = "cleanup"
+	PhaseValidate        InstallPhase = "validate"
+	PhaseExtract         InstallPhase = "extract"
+	PhaseVerify          InstallPhase = "verify"
+	PhaseVerifySignature InstallPhase = "verify_signature"
+	PhaseRegister        InstallPhase = "register"
+	PhaseFinalize        InstallPhase = "finalize"
+	PhaseCleanup         InstallPhase = "cleanup"
 )
 
 type InstallStatus string
@@ -34,25 +36,27 @@ const (
 )
 
 type InstallRequest struct {
-	ArchivePath  string
-	TargetDir    string
-	ExtensionID  domain.ExtensionID
-	ExpectedHash string
-	EnableAfter  bool
+	ArchivePath   string
+	TargetDir     string
+	ExtensionID   domain.ExtensionID
+	ExpectedHash  string
+	EnableAfter   bool
 	DeveloperMode bool
+	PublicKey     ed25519.PublicKey
+	RequireSigned bool
 }
 
 type InstallResult struct {
-	InstallID    string
-	ExtensionID  domain.ExtensionID
-	Version      domain.SemanticVersion
-	Status       InstallStatus
-	Definition   domain.ExtensionDefinition
+	InstallID      string
+	ExtensionID    domain.ExtensionID
+	Version        domain.SemanticVersion
+	Status         InstallStatus
+	Definition     domain.ExtensionDefinition
 	InstalledFiles []string
-	Errors       []InstallError
-	StartedAt    time.Time
-	FinishedAt   *time.Time
-	RollbackLog  []string
+	Errors         []InstallError
+	StartedAt      time.Time
+	FinishedAt     *time.Time
+	RollbackLog    []string
 }
 
 type InstallError struct {
@@ -62,16 +66,16 @@ type InstallError struct {
 }
 
 type InstallStep struct {
-	Phase     InstallPhase
-	StepID    string
-	Status    InstallStatus
-	StartedAt time.Time
+	Phase      InstallPhase
+	StepID     string
+	Status     InstallStatus
+	StartedAt  time.Time
 	FinishedAt *time.Time
-	Error     *InstallError
+	Error      *InstallError
 }
 
 type Installer struct {
-	mu           sync.Mutex
+	mu            sync.Mutex
 	installations map[string]*InstallResult
 }
 
@@ -108,6 +112,13 @@ func (i *Installer) Install(ctx context.Context, request InstallRequest) Install
 		return result
 	}
 	if err := i.verify(ctx, pkg, &result); err != nil {
+		i.rollback(rollback, &result)
+		result.Status = InstallFailed
+		now := time.Now().UTC()
+		result.FinishedAt = &now
+		return result
+	}
+	if err := i.verifySignature(ctx, request, pkg, &result); err != nil {
 		i.rollback(rollback, &result)
 		result.Status = InstallFailed
 		now := time.Now().UTC()
@@ -197,6 +208,28 @@ func (i *Installer) verify(_ context.Context, pkg *Package, result *InstallResul
 	if err := VerifyIntegrity(pkg); err != nil {
 		result.Errors = append(result.Errors, InstallError{Phase: PhaseVerify, Code: "integrity", Message: err.Error()})
 		return err
+	}
+	return nil
+}
+
+func (i *Installer) verifySignature(_ context.Context, request InstallRequest, pkg *Package, result *InstallResult) error {
+	if pkg.Signatures == nil {
+		if request.RequireSigned {
+			result.Errors = append(result.Errors, InstallError{Phase: PhaseVerifySignature, Code: "unsigned", Message: "package is not signed but signature required"})
+			return fmt.Errorf("verify_signature: package not signed")
+		}
+		return nil
+	}
+	if len(request.PublicKey) == 0 {
+		if request.RequireSigned {
+			result.Errors = append(result.Errors, InstallError{Phase: PhaseVerifySignature, Code: "missing_public_key", Message: "signature present but no public key provided"})
+			return fmt.Errorf("verify_signature: missing public key")
+		}
+		return nil
+	}
+	if err := VerifySignature(pkg, request.PublicKey); err != nil {
+		result.Errors = append(result.Errors, InstallError{Phase: PhaseVerifySignature, Code: "signature_invalid", Message: err.Error()})
+		return fmt.Errorf("verify_signature: %w", err)
 	}
 	return nil
 }

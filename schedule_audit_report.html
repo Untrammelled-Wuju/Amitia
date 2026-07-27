@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amitia 第三方 Schedule 审计报告</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --heading: #f0f6fc;
+  --accent: #58a6ff;
+  --danger: #f85149;
+  --warning: #d29922;
+  --success: #3fb950;
+  --muted: #8b949e;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+  line-height: 1.7;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+h1 { color: var(--heading); font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { color: var(--heading); font-size: 1.4rem; margin: 2rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+h3 { color: var(--accent); font-size: 1.15rem; margin: 1.5rem 0 0.75rem; }
+h4 { color: var(--text); font-size: 1rem; margin: 1rem 0 0.5rem; }
+p { margin-bottom: 0.75rem; }
+code { background: #1f2428; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; color: #f0883e; }
+pre { background: #1f2428; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.75rem 0; font-size: 0.85rem; }
+ul { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+li { margin-bottom: 0.3rem; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+th { background: #1f2428; color: var(--heading); }
+tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+.badge-danger { background: rgba(248,81,73,0.15); color: var(--danger); }
+.badge-warning { background: rgba(210,153,34,0.15); color: var(--warning); }
+.badge-success { background: rgba(63,185,80,0.15); color: var(--success); }
+.badge-muted { background: rgba(139,148,158,0.15); color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin: 0.75rem 0; }
+.summary-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+.stat-num { font-size: 2rem; font-weight: 700; }
+.stat-label { color: var(--muted); font-size: 0.85rem; }
+.toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.5rem; margin: 1rem 0; }
+.toc ul { list-style: none; margin-left: 0; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Amitia 第三方 Schedule 系统完整审计报告</h1>
+<p style="color: var(--muted);">审计日期: 2026-07-27 | 审计范围: d:\桌面\跟进项目\U-Ai | 审计阶段: 编码前强制审计(文档第二章)</p>
+
+<div class="summary-box">
+  <div class="stat"><div class="stat-num" style="color: var(--danger)">5</div><div class="stat-label">严重缺陷</div></div>
+  <div class="stat"><div class="stat-num" style="color: var(--warning)">3</div><div class="stat-label">套并行调度系统</div></div>
+  <div class="stat"><div class="stat-num" style="color: var(--success)">6</div><div class="stat-label">可复用核心组件</div></div>
+  <div class="stat"><div class="stat-num" style="color: var(--danger)">0</div><div class="stat-label">ScheduleContribution 类型</div></div>
+  <div class="stat"><div class="stat-num" style="color: var(--danger)">0</div><div class="stat-label">extension_schedule_* 表</div></div>
+  <div class="stat"><div class="stat-num" style="color: var(--warning)">13</div><div class="stat-label">硬编码 Passed=true</div></div>
+</div>
+
+<div class="toc">
+  <strong>目录</strong>
+  <ul>
+    <li><a href="#s1">一、审计总览(20 领域)</a></li>
+    <li><a href="#s2">二、现有调度系统盘点(领域 1-6)</a></li>
+    <li><a href="#s3">三、扩展内核核心系统(领域 7-13)</a></li>
+    <li><a href="#s4">四、持久化与前端测试(领域 14-20)</a></li>
+    <li><a href="#s5">五、严重缺陷清单</a></li>
+    <li><a href="#s6">六、可复用资产清单</a></li>
+    <li><a href="#s7">七、关键架构决策</a></li>
+    <li><a href="#s8">八、FROZEN 约束</a></li>
+  </ul>
+</div>
+
+<h2 id="s1">一、审计总览</h2>
+<table>
+  <thead><tr><th>#</th><th>审计领域</th><th>实现程度</th><th>关键风险</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Schedule / Scheduler 目录</td><td><span class="badge badge-warning">部分</span></td><td>companion/schedule_service 是"日程表"非"调度器";时区用 time.Local</td></tr>
+    <tr><td>2</td><td>Workflow Scheduler</td><td><span class="badge badge-muted">占位</span></td><td>不存在调度器,仅同步执行器;schedule 步骤委托宿主</td></tr>
+    <tr><td>3</td><td>Plugin Timer / Cron</td><td><span class="badge badge-danger">完整(3套并存)</span></td><td>ProactiveCron + SafeScheduler + Plugin Schedule Worker 三套并行;无 Lease/无幂等/无 Misfire 上界</td></tr>
+    <tr><td>4</td><td>主动消息调度</td><td><span class="badge badge-warning">完整</span></td><td>时区全 time.Local;离线后无上界补跑;burstScopes 内存态</td></tr>
+    <tr><td>5</td><td>Background Task</td><td><span class="badge badge-warning">部分</span></td><td>无统一框架,各模块自管 goroutine;panic 自重启无退避</td></tr>
+    <tr><td>6</td><td>Task Runtime</td><td><span class="badge badge-success">完整(最成熟)</span></td><td>有持久化/租约/幂等/检查点/恢复/并发限制;无 cron 触发字段</td></tr>
+    <tr><td>7</td><td>Event Bus</td><td><span class="badge badge-success">完整</span></td><td>内存态无持久化;有 Generation 字段但无演进逻辑</td></tr>
+    <tr><td>8</td><td>Hook Pipeline</td><td><span class="badge badge-success">完整</span></td><td>5 阶段门控链;Permission/Scope/Dependency 以接口注入</td></tr>
+    <tr><td>9</td><td>Contribution Registry</td><td><span class="badge badge-success">完整</span></td><td><strong>无 ScheduleContribution 类型</strong>;仅 9 种 ContributionType</td></tr>
+    <tr><td>10</td><td>Runtime Supervisor</td><td><span class="badge badge-success">完整</span></td><td>有 Snapshot/Generation;InstanceStrategy 覆盖单例/池</td></tr>
+    <tr><td>11</td><td>Execution Kernel</td><td><span class="badge badge-warning">部分</span></td><td>18 个门控组件设计完整但<strong>生产容器传入空结构体</strong></td></tr>
+    <tr><td>12</td><td>Permission Broker</td><td><span class="badge badge-success">完整</span></td><td>Evaluate/Grant/Revoke/DetectUpgrade 完整;IsBackground 适配后台</td></tr>
+    <tr><td>13</td><td>Scope Manager</td><td><span class="badge badge-success">完整</span></td><td>有 Snapshot 机制;需新增 SubjectSchedule</td></tr>
+    <tr><td>14</td><td>Operation/Invocation/Audit</td><td><span class="badge badge-warning">部分</span></td><td>新系统设计完整但<strong>内存态未接线</strong>;旧系统多套并行</td></tr>
+    <tr><td>15</td><td>SQLite 持久化</td><td><span class="badge badge-warning">部分</span></td><td>旧 20 表 + 新 33 表;<strong>无 extension_schedule_*</strong>;同名表冲突</td></tr>
+    <tr><td>16</td><td>Lifecycle Manager</td><td><span class="badge badge-danger">设计完整/生产不可用</span></td><td><strong>生产容器全 nil 依赖</strong>;DefaultExecutor 多空壳;补偿未实现</td></tr>
+    <tr><td>17</td><td>Resource Ownership</td><td><span class="badge badge-warning">部分</span></td><td>旧系统仅 schedule_create 单类型;新系统模块完整未接线</td></tr>
+    <tr><td>18</td><td>启动恢复/关闭</td><td><span class="badge badge-warning">部分</span></td><td>流程可用但粗糙;lifecycle.Coordinator <strong>未生产接入</strong></td></tr>
+    <tr><td>19</td><td>前端 Schedule 页面</td><td><span class="badge badge-muted">占位</span></td><td><strong>无独立页面</strong>;仅 PluginDetail tab + Workshop 声明</td></tr>
+    <tr><td>20</td><td>测试/占位/固定 Passed</td><td><span class="badge badge-warning">部分</span></td><td>13 项硬编码 Passed=true;10 处 t.Skip;多处空壳</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s2">二、现有调度系统盘点(领域 1-6)</h2>
+
+<h3>2.1 三套并行调度实现(系统 3 — 最严重)</h3>
+<div class="card">
+<h4>(A) ProactiveCron — 进程级单例</h4>
+<ul>
+  <li>文件:<code>backend/cmd/server/proactive_cron.go</code></li>
+  <li>4 个 goroutine:runReminderScanner(10s)、runActiveTaskScanner(30s)、runDailyRegenerator(60s)、runRandomBurstTrigger(60s)</li>
+  <li>另启动 SafeScheduler.Start()</li>
+  <li>缺陷:<code>cleanStaleSchedules</code>(:221)定义但无调用方 → 每日计数器永不重置;<code>lastRegenerateDate</code> 内存态重启后重置;panic 自重启无退避</li>
+</ul>
+</div>
+
+<div class="card">
+<h4>(B) SafeScheduler — Timer 模式</h4>
+<ul>
+  <li>文件:<code>backend/internal/proactive/safe_scheduler.go</code></li>
+  <li><code>loop()</code>(:46) 每次计算最早触发时间 → <code>time.NewTimer(delay)</code> → 到点 <code>fireRules()</code></li>
+  <li><strong>NextRun 未持久化</strong>:<code>calcNextFire</code>(:81) 每轮从 DB 读 schedule_cron + random_minutes 重新计算</li>
+  <li>时区:全程 <code>time.Local</code>(:126);随机种子依赖 <code>now.Unix()/86400</code>(:114)</li>
+  <li>Misfire:仅 <code>window+5min</code> 跳过(:222),无策略枚举</li>
+</ul>
+</div>
+
+<div class="card">
+<h4>(C) Plugin Schedule Worker — 持久化但无锁</h4>
+<ul>
+  <li>文件:<code>backend/internal/extension/plugin_manager.go</code>(:576 scheduleWorker)</li>
+  <li>表:<code>extension_schedules</code>(plugin_repository.go:49),支持 once/interval 两种</li>
+  <li><strong>NextRunAt 已持久化</strong>,但查询无行锁(:392 <code>WHERE enabled=1 AND next_run_at&lt;=now</code>)</li>
+  <li><strong>忽略 Timezone 字段</strong>:<code>nextScheduleRun</code>(:766) 恒用 <code>time.Now().UTC().Add(duration)</code></li>
+  <li>无 IdempotencyKey、无 Lease、无 Misfire 上界</li>
+</ul>
+</div>
+
+<div class="card">
+<h4>(D) Executor — 死代码</h4>
+<ul>
+  <li>文件:<code>backend/internal/proactive/executor.go</code></li>
+  <li><code>ScanAndExecute</code>/<code>ScanRules</code>/<code>ScanReminders</code> 全仓库无调用方</li>
+  <li>若被误调用将与 SafeScheduler 双重触发同一规则</li>
+</ul>
+</div>
+
+<h3>2.2 Task Runtime — 最成熟的底座(系统 6)</h3>
+<div class="card">
+<p><code>backend/internal/extension/kernel/task_runtime/</code> 是现有唯一具备完整执行保障的子系统:</p>
+<ul>
+  <li><strong>持久化</strong>:TaskRun/QueueEntry/Checkpoint/Progress/Result 全持久化</li>
+  <li><strong>租约出队</strong>:<code>DequeueTask(leaseOwner, leaseDuration)</code>(queue.go:54)</li>
+  <li><strong>三级并发限制</strong>:global/extension/definition(queue.go:89)</li>
+  <li><strong>幂等</strong>:OperationID + InputHash(models.go:48-53)</li>
+  <li><strong>检查点恢复</strong>:handleCheckpoint(service.go:345),带 hash 校验</li>
+  <li><strong>启动恢复</strong>:StartupRecovery(service.go:638),扫描 7 种非终态任务</li>
+  <li><strong>三套 Snapshot ID 已贯通</strong>:ScopeSnapshotID/PermissionSnapshotID/DependencySnapshotID(models.go:180-182)</li>
+  <li><strong>Generation 机制</strong>:Retry +1(service.go:566),Recover ++(service.go:610)</li>
+</ul>
+<p><strong>关键缺口</strong>:TaskDefinition 无 cron/定时/schedule 触发字段;它是"异步任务运行时"而非"定时调度"。但所有执行保障基础设施可直接复用。</p>
+</div>
+
+<h2 id="s3">三、扩展内核核心系统(领域 7-13)</h2>
+
+<h3>3.1 Contribution Registry(系统 9)— 需扩展</h3>
+<div class="card">
+<ul>
+  <li>文件:<code>backend/internal/extension/kernel/contribution/contribution.go</code></li>
+  <li>现有 9 种 ContributionType:tool/agent_skill/workflow/mcp/ui/hook/background_task/provider/asset</li>
+  <li><strong>不存在 ScheduleContribution 类型</strong>(全仓 Grep 无匹配)</li>
+  <li>最接近的是 BackgroundTaskContribution(contribution.go:80-82),仅含 TaskID</li>
+  <li>需新增 <code>ContributionTypeSchedule</code> 与对应结构体</li>
+</ul>
+</div>
+
+<h3>3.2 可复用组件清单</h3>
+<table>
+  <thead><tr><th>组件</th><th>文件</th><th>关键接口</th><th>Snapshot</th><th>Generation</th><th>复用度</th></tr></thead>
+  <tbody>
+    <tr><td>Permission Broker</td><td>kernel/permission/broker.go</td><td>Evaluate/Grant/Revoke/DetectUpgrade</td><td>无(类型在 update/diff.go)</td><td>部分(Upgrade)</td><td><span class="badge badge-success">可复用</span></td></tr>
+    <tr><td>Scope Manager</td><td>kernel/scope/manager.go</td><td>Bind/Unbind/Evaluate/Snapshot</td><td><strong>有</strong>(manager.go:117)</td><td>无</td><td><span class="badge badge-success">高度可复用</span></td></tr>
+    <tr><td>Dependency Resolver</td><td>kernel/dependency/resolver.go</td><td>Resolve/BuildGraph/Snapshot</td><td><strong>有</strong>(resolver.go:319)</td><td>有(resolver.go:276)</td><td><span class="badge badge-success">高度可复用</span></td></tr>
+    <tr><td>Runtime Supervisor</td><td>kernel/runtime_supervisor/supervisor.go</td><td>Reconcile/Invoke/Stop/Snapshot</td><td><strong>有</strong>(types.go:174)</td><td><strong>有</strong>(types.go:107)</td><td><span class="badge badge-success">高度可复用</span></td></tr>
+    <tr><td>Event Bus</td><td>kernel/event_bus/bus.go</td><td>Publish/Subscribe/Redrive</td><td>无</td><td>部分(字段)</td><td><span class="badge badge-warning">部分(内存态)</span></td></tr>
+    <tr><td>Hook Pipeline</td><td>kernel/hook/pipeline.go</td><td>Invoke(5阶段门控链)</td><td>部分(仅ID)</td><td>部分(ContractVer)</td><td><span class="badge badge-warning">参考(门控模式)</span></td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 生产未接线的关键组件</h3>
+<div class="card" style="border-color: var(--danger);">
+<h4 style="color: var(--danger);">LifecycleManager — 生产全 nil</h4>
+<ul>
+  <li><code>container_builder.go:111</code>:<code>lifecycle_manager.NewManager(nil, nil, nil, nil)</code></li>
+  <li>loader/preflight/executor/audit 全部传 nil → Manager.Execute 会 panic</li>
+  <li>DefaultExecutor 多个 action 空操作:snapshot/install/replace/activate/deactivate/pause/drain/reconcile/load/restore/audit</li>
+  <li><code>runCompensations</code> 空实现(defaults.go:194-199)</li>
+</ul>
+</div>
+
+<div class="card" style="border-color: var(--danger);">
+<h4 style="color: var(--danger);">ExecutionPipeline — 生产空结构体</h4>
+<ul>
+  <li><code>container_builder.go:113</code>:<code>execution.ExecutionPipeline{}</code></li>
+  <li>所有 18 个门控组件(InvocationValidator/InputValidator/ScopeGate/PermissionGate/ApprovalGate/RetryCtrl/AuditRec 等)均为 nil</li>
+  <li>设计完整但生产不可用</li>
+</ul>
+</div>
+
+<h2 id="s4">四、持久化与前端测试(领域 14-20)</h2>
+
+<h3>4.1 数据库现状</h3>
+<div class="card">
+<ul>
+  <li><code>backend/data/sql.sql</code> 中<strong>无任何 extension_ 表</strong>(仅业务表 43 个)</li>
+  <li>旧系统 20 张表由 GORM AutoMigrate 创建(含 <code>extension_schedules</code> 单数表)</li>
+  <li>新系统 33 张表由 kernel migration 创建(migration.go:9-487)</li>
+  <li><strong>无 extension_schedule_*(复数)表</strong></li>
+  <li>新旧同名表冲突:<code>extension_scope_bindings</code>(repository.go:107 vs migration.go:121)</li>
+  <li>schedule 相关仅字段级:affect_schedule、source='schedule_based'、schedule_cron</li>
+</ul>
+</div>
+
+<h3>4.2 前端现状</h3>
+<div class="card">
+<ul>
+  <li><strong>无独立 Schedule 路由</strong>:路由表中无 schedule 相关路径</li>
+  <li>仅 PluginDetailView.vue:228 有 <code>&lt;el-tab-pane label="调度" name="schedules"&gt;</code></li>
+  <li>API 仅 fetchPluginSchedules/setPluginScheduleEnabled(front/.../api.ts:286-300)</li>
+  <li>Workshop 中 schedule 作为 side effect 类型声明(含 timezone/idempotencyKey/cron 校验)</li>
+</ul>
+</div>
+
+<h3>4.3 FROZEN 约束</h3>
+<div class="card" style="border-color: var(--warning);">
+<p><code>backend/internal/extension/FROZEN.md</code> — 冻结开始:2026-07-25</p>
+<ul>
+  <li><strong>禁止</strong>:新增扩展类型、扩展旧 Manifest、新增旧系统数据库表、新增平行 Registry、新增永久兼容层</li>
+  <li><strong>允许</strong>:阻塞性缺陷修复、安全修复、回归测试、可观测性、迁移辅助</li>
+  <li>旧系统预计在 Extension Kernel 重构完成后删除</li>
+</ul>
+<p style="color: var(--warning);"><strong>影响:新 Schedule 必须建在 kernel/ 架构内,不能在旧 extension/ 顶层新增。</strong></p>
+</div>
+
+<h2 id="s5">五、严重缺陷清单</h2>
+<table>
+  <thead><tr><th>#</th><th>缺陷</th><th>位置</th><th>影响</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>NextRun 未持久化,每轮 time.Now() 重算</td><td>safe_scheduler.go:81,114,126</td><td>应用重启后节奏丢失</td></tr>
+    <tr><td>2</td><td>时区不一致(Local vs UTC,Timezone 字段存而不用)</td><td>companion/safe_scheduler/plugin_manager</td><td>DST 重复/跳过执行</td></tr>
+    <tr><td>3</td><td>Misfire 无上界,离线后全部补跑</td><td>executor.go:190, plugin_repository.go:392, debug_service.go:175</td><td>无界补跑导致系统过载</td></tr>
+    <tr><td>4</td><td>无分布式 Lease/IdempotencyKey</td><td>proactive rules(内存 sync.Map), plugin schedules(无行锁)</td><td>多 Worker 重复触发</td></tr>
+    <tr><td>5</td><td>死代码导致潜在双触发</td><td>executor.go ScanAndExecute/ScanRules/ScanReminders, cleanStaleSchedules</td><td>若被误调用则双重触发</td></tr>
+    <tr><td>6</td><td>LifecycleManager 生产全 nil</td><td>container_builder.go:111</td><td>Manager.Execute 会 panic</td></tr>
+    <tr><td>7</td><td>ExecutionPipeline 生产空结构体</td><td>container_builder.go:113</td><td>18 个门控组件全部 nil</td></tr>
+    <tr><td>8</td><td>cutover 预检 13 项全硬编码 Passed=true</td><td>cutover/manager.go:232-247</td><td>切换预检形同虚设</td></tr>
+    <tr><td>9</td><td>每日计数器永不重置</td><td>cleanStaleSchedules 无调用方</td><td>proactive_rules.sent_count_today 累积</td></tr>
+    <tr><td>10</td><td>panic 自重启无退避</td><td>proactive_cron.go:87,105,133,170</td><td>递归 goroutine 无 backoff</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s6">六、可复用资产清单</h2>
+<table>
+  <thead><tr><th>资产</th><th>复用方式</th><th>需要做的</th></tr></thead>
+  <tbody>
+    <tr><td>Task Runtime 执行保障</td><td>直接复用 Queue/Lease/Concurrency/Checkpoint/Recovery</td><td>补充 cron 触发器层,不修改 Task Runtime 核心</td></tr>
+    <tr><td>Permission Broker</td><td>注入 ScheduleExecutor,执行前 Evaluate</td><td>新增 schedule.execute 等权限定义</td></tr>
+    <tr><td>Scope Manager</td><td>调用 Snapshot() 生成 ScopeSnapshot</td><td>新增 SubjectSchedule 到 ScopeSubjectType</td></tr>
+    <tr><td>Dependency Resolver</td><td>调用 Snapshot() 生成 DependencySnapshot</td><td>声明 Schedule 的依赖需求</td></tr>
+    <tr><td>Runtime Supervisor</td><td>管理 runtime_handler 类型的 Schedule 执行实例</td><td>注册 Schedule Handler Factory</td></tr>
+    <tr><td>Contribution Registry</td><td>注册 ScheduleContribution</td><td>新增 ContributionTypeSchedule + 结构体</td></tr>
+    <tr><td>kernel/persistence/sqlite/migration</td><td>新增 extension_schedule_* 表</td><td>8 张新表 migration</td></tr>
+    <tr><td>kernel/resource 模块</td><td>登记 Schedule 资源所有权</td><td>新增 schedule 相关 ResourceType</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s7">七、关键架构决策</h2>
+
+<h3>决策 1:Schedule 系统放置位置</h3>
+<div class="card">
+<p>由于 FROZEN.md 冻结旧 extension/ 顶层,新 Schedule 必须建在 <code>backend/internal/extension/kernel/schedule/</code> 目录下,作为 kernel 子系统。</p>
+<p>这与 task_runtime、hook、execution 等同级,符合 kernel 架构分层。</p>
+</div>
+
+<h3>决策 2:与 Task Runtime 的关系</h3>
+<div class="card">
+<p>Task Runtime 是"异步任务运行时"(请求驱动),Schedule 是"定时调度器"(时间驱动)。二者职责不同:</p>
+<ul>
+  <li>Schedule 负责:计算何时触发 → 创建 Trigger Record → 调用 Target Adapter</li>
+  <li>Task Runtime 负责:执行长耗时任务(可作为 Target 之一)</li>
+</ul>
+<p>Schedule 不修改 Task Runtime 核心,但 Task Target 类型会调用 <code>TaskRuntimeService.Enqueue()</code>。</p>
+</div>
+
+<h3>决策 3:旧调度系统处理</h3>
+<div class="card">
+<p>三套旧调度系统需分类处理:</p>
+<ul>
+  <li><strong>Plugin Schedule Worker</strong>(extension_schedules 表):迁移到新 Schedule,旧表保留只读</li>
+  <li><strong>SafeScheduler + ProactiveCron</strong>:保留为系统内部调度(主动消息/提醒),不属于第三方 Extension Schedule</li>
+  <li><strong>Executor(死代码)</strong>:删除</li>
+</ul>
+<p>不把所有 Timer 都迁成 Extension Schedule(MCP Reconnect/Runtime Health/内部 Housekeeping 保留为系统内部)。</p>
+</div>
+
+<h3>决策 4:Clock 抽象</h3>
+<div class="card">
+<p>所有 Schedule 逻辑使用 Clock 接口,禁止直接 time.Now()。已有 <code>backend/internal/extension/fake_clock.go</code> 可参考。</p>
+</div>
+
+<h3>决策 5:实现分阶段</h3>
+<div class="card">
+<table>
+  <thead><tr><th>阶段</th><th>内容</th><th>依赖</th></tr></thead>
+  <tbody>
+    <tr><td>P1: 核心定义层</td><td>ScheduleContribution 类型 + 8 张表 + ScheduleCalculator(cron/interval/one-shot + 时区/DST)</td><td>无</td></tr>
+    <tr><td>P2: 调度引擎层</td><td>ScheduleScanner + LeaseManager + TriggerPlanner + IdempotencyKey</td><td>P1</td></tr>
+    <tr><td>P3: 执行与策略层</td><td>ScheduleExecutor + Target Adapters + Misfire/Overlap/Retry/Jitter/Circuit</td><td>P2 + Permission/Scope/Dependency</td></tr>
+    <tr><td>P4: 生命周期层</td><td>RecoveryService + 启动恢复 + 关闭 + 旧调度切断</td><td>P3</td></tr>
+    <tr><td>P5: API 与前端</td><td>14 个 API 端点 + 前端 Schedule 管理页面</td><td>P4</td></tr>
+    <tr><td>P6: SDK 与测试</td><td>@amitia/sdk/schedules + 测试扩展 + 单元/集成/E2E/故障注入/安全</td><td>P5</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr class="divider">
+<p style="color: var(--muted); text-align: center;">本报告基于源码静态审计,未修改任何文件。审计完成后等待确认,再进入实现阶段。</p>
+
+</body>
+</html>

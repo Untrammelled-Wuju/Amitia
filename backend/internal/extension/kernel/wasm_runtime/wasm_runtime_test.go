@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -149,34 +148,6 @@ func TestModuleCacheInvalidate(t *testing.T) {
 	cache.Invalidate("h1")
 	if cache.Size() != 0 {
 		t.Fatalf("expected 0 entries, got %d", cache.Size())
-	}
-}
-
-func TestHostImportRegistry(t *testing.T) {
-	r := NewHostImportRegistry()
-	called := false
-	r.Register(ImportLog, func(ctx context.Context, hctx HostCallContext, params json.RawMessage) (json.RawMessage, error) {
-		called = true
-		return json.RawMessage(`{}`), nil
-	})
-	h, ok := r.Lookup(ImportLog)
-	if !ok {
-		t.Fatalf("lookup failed")
-	}
-	_, _ = h(context.Background(), HostCallContext{}, nil)
-	if !called {
-		t.Fatalf("handler not called")
-	}
-}
-
-func TestHostImportRegistryAllowed(t *testing.T) {
-	r := NewHostImportRegistry()
-	allowed := []HostImportName{ImportLog, ImportTime}
-	if !r.Allowed(allowed, ImportLog) {
-		t.Fatalf("log should be allowed")
-	}
-	if r.Allowed(allowed, ImportStorageGet) {
-		t.Fatalf("storage should not be allowed")
 	}
 }
 

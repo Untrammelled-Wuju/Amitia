@@ -118,80 +118,10 @@ class BootstrapSequenceImpl @Inject constructor(
                     )
                 }
 
-                var surrealdbState: ServiceState = ServiceState.Stopped
-                var qdrantState: ServiceState = ServiceState.Stopped
-                var backendState: ServiceState = ServiceState.Stopped
-
                 stateMachine.transition(
-                    RuntimeState.Starting(stage = "surrealdb", progressValue = 0.45f)
+                    RuntimeState.Starting(stage = "backend", progressValue = 0.45f)
                 )
-                progress(stageOf("starting-surrealdb", 0.45f, "启动 SurrealDB (PRoot)"))
-                val surrealdbResult = startSurrealdb()
-                if (surrealdbResult.isFailure) {
-                    stateMachine.emitLog(
-                        RuntimeEvent.LogEmitted.Level.WARN,
-                        TAG,
-                        "SurrealDB 启动失败(非致命): ${surrealdbResult.exceptionOrNull()?.message}"
-                    )
-                    surrealdbState = ServiceState.Unhealthy(
-                        surrealdbResult.exceptionOrNull()?.message ?: "SurrealDB 启动失败"
-                    )
-                } else {
-                    val healthy = healthChecker.waitForHealthy(
-                        name = "surrealdb",
-                        check = {
-                            healthChecker.checkHttp(
-                                url = surrealdbHealthUrl(),
-                                timeoutMs = HEALTH_CHECK_TIMEOUT_MS
-                            )
-                        },
-                        intervalMs = HEALTH_CHECK_INTERVAL_MS,
-                        timeoutMs = SURREALDB_READY_TIMEOUT_MS
-                    )
-                    surrealdbState = if (healthy.isSuccess) {
-                        ServiceState.Healthy(Constants.SURREALDB_PORT)
-                    } else {
-                        ServiceState.Unhealthy("SurrealDB 健康检查超时")
-                    }
-                }
-
-                stateMachine.transition(
-                    RuntimeState.Starting(stage = "qdrant", progressValue = 0.6f)
-                )
-                progress(stageOf("starting-qdrant", 0.6f, "启动 Qdrant (PRoot)"))
-                val qdrantResult = startQdrant()
-                if (qdrantResult.isFailure) {
-                    stateMachine.emitLog(
-                        RuntimeEvent.LogEmitted.Level.WARN,
-                        TAG,
-                        "Qdrant 启动失败(非致命): ${qdrantResult.exceptionOrNull()?.message}"
-                    )
-                    qdrantState = ServiceState.Unhealthy(
-                        qdrantResult.exceptionOrNull()?.message ?: "Qdrant 启动失败"
-                    )
-                } else {
-                    val healthy = healthChecker.waitForHealthy(
-                        name = "qdrant",
-                        check = {
-                            healthChecker.checkHttp(
-                                url = qdrantHealthUrl(),
-                                timeoutMs = HEALTH_CHECK_TIMEOUT_MS
-                            )
-                        },
-                        intervalMs = HEALTH_CHECK_INTERVAL_MS,
-                        timeoutMs = QDRANT_READY_TIMEOUT_MS
-                    )
-                    qdrantState = if (healthy.isSuccess) {
-                        ServiceState.Healthy(Constants.QDRANT_PORT)
-                    } else {
-                        ServiceState.Unhealthy("Qdrant 健康检查超时")
-                    }
-                }
-
-                stateMachine.transition(
-                    RuntimeState.Starting(stage = "backend", progressValue = 0.75f)
-                )
-                progress(stageOf("starting-backend", 0.75f, "启动 Go 后端 (PRoot)"))
+                progress(stageOf("starting-backend", 0.5f, "启动运行时 (PRoot)"))
                 val backendResult = startBackend()
                 if (backendResult.isFailure) {
                     return@withContext fail(
@@ -212,11 +142,15 @@ class BootstrapSequenceImpl @Inject constructor(
                 )
                 if (backendHealthy.isFailure) {
                     return@withContext fail(
-                        "Go 后端健康检查超时",
+                        "Go 后端启动超时 (SurrealDB/Qdrant/侧车由后端内部管理)",
                         retryable = true
                     )
                 }
-                backendState = ServiceState.Healthy(Constants.BACKEND_PORT)
+                val backendState = ServiceState.Healthy(Constants.BACKEND_PORT)
+
+                progress(stageOf("verify-services", 0.9f, "验证子服务状态"))
+                val surrealdbState = verifyService("surrealdb", surrealdbHealthUrl(), Constants.SURREALDB_PORT)
+                val qdrantState = verifyService("qdrant", qdrantHealthUrl(), Constants.QDRANT_PORT)
 
                 progress(stageOf("repository-connect", 0.95f, "重建 Repository 连接"))
                 stateMachine.emitLog(
@@ -298,14 +232,8 @@ class BootstrapSequenceImpl @Inject constructor(
                 stateMachine.transition(RuntimeState.Stopping(stage = "reject"))
                 progress(stageOf("stopping-reject", 0.1f, "停止接受新请求"))
 
-                progress(stageOf("stopping-backend", 0.3f, "停止 Go 后端"))
-                runCatching { processManager.stop(BACKEND_PROC_NAME, timeoutMs = 10000L) }
-
-                progress(stageOf("stopping-qdrant", 0.6f, "停止 Qdrant"))
-                runCatching { processManager.stop(QDRANT_PROC_NAME, timeoutMs = 8000L) }
-
-                progress(stageOf("stopping-surrealdb", 0.85f, "停止 SurrealDB"))
-                runCatching { processManager.stop(SURREALDB_PROC_NAME, timeoutMs = 8000L) }
+                progress(stageOf("stopping-backend", 0.5f, "停止 Go 后端 (含 SurrealDB/Qdrant/侧车)"))
+                runCatching { processManager.stop(BACKEND_PROC_NAME, timeoutMs = 15000L) }
 
                 stateMachine.transition(RuntimeState.Stopped)
                 progress(stageOf("stopped", 1f, "运行时已停止"))
@@ -416,50 +344,6 @@ class BootstrapSequenceImpl @Inject constructor(
         return failed
     }
 
-    private suspend fun startSurrealdb(): Result<Int> {
-        val workDir = directories.surrealdbDir().apply { mkdirs() }
-        val dataPath = File(workDir, "graph.db")
-        val rawCommand = buildSurrealdbCommand(workDir, dataPath)
-        val env = mapOf(
-            "HOME" to workDir.absolutePath,
-            "TMPDIR" to directories.tmpDir().absolutePath
-        )
-        val command = wrapWithProot(rawCommand, env, workDir)
-        return processManager.start(
-            name = SURREALDB_PROC_NAME,
-            command = command,
-            env = env,
-            workDir = workDir,
-            restartPolicy = RestartPolicy.ALWAYS,
-            timeoutMs = null
-        )
-    }
-
-    private suspend fun startQdrant(): Result<Int> {
-        val workDir = directories.qdrantDir().apply { mkdirs() }
-        val dataPath = File(workDir, "storage")
-        val configPath = File(workDir, "config.yaml")
-        if (!configPath.exists()) {
-            configPath.writeText(buildQdrantConfig())
-        }
-        val rawCommand = buildQdrantCommand(workDir, dataPath)
-        val env = mapOf(
-            "HOME" to workDir.absolutePath,
-            "TMPDIR" to directories.tmpDir().absolutePath,
-            "QDRANT__SERVICE__HTTP_PORT" to Constants.QDRANT_PORT.toString(),
-            "QDRANT__SERVICE__GRPC_PORT" to (Constants.QDRANT_PORT + 1).toString()
-        )
-        val command = wrapWithProot(rawCommand, env, workDir)
-        return processManager.start(
-            name = QDRANT_PROC_NAME,
-            command = command,
-            env = env,
-            workDir = workDir,
-            restartPolicy = RestartPolicy.ALWAYS,
-            timeoutMs = null
-        )
-    }
-
     private suspend fun startBackend(): Result<Int> {
         val workDir = directories.amitiaDataRoot().apply { mkdirs() }
         val configPath = File(directories.configDir(), CONFIG_FILE_NAME)
@@ -501,43 +385,31 @@ class BootstrapSequenceImpl @Inject constructor(
         if (!backend.canExecute()) {
             backend.setExecutable(true, false)
         }
-        val qdrant = File(bin, QDRANT_BINARY)
-        if (!qdrant.exists()) {
-            return Result.failure(IllegalStateException("Qdrant 二进制缺失: ${qdrant.absolutePath}"))
-        }
-        if (!qdrant.canExecute()) {
-            qdrant.setExecutable(true, false)
-        }
-        val surreal = File(bin, SURREAL_BINARY)
-        if (!surreal.exists()) {
-            return Result.failure(IllegalStateException("SurrealDB 二进制缺失: ${surreal.absolutePath}"))
-        }
-        if (!surreal.canExecute()) {
-            surreal.setExecutable(true, false)
-        }
         return Result.success(Unit)
     }
 
-    private fun buildSurrealdbCommand(workDir: File, dataPath: File): List<String> {
-        val binary = File(directories.binDir(), SURREAL_BINARY).absolutePath
-        return listOf(
-            binary,
-            "start",
-            "--log", "info",
-            "--user", "root",
-            "--password", "root",
-            "--bind", "${Constants.LOCAL_HOST}:${Constants.SURREALDB_PORT}",
-            "file:${dataPath.absolutePath}"
+    private suspend fun verifyService(name: String, healthUrl: String, port: Int): ServiceState {
+        val healthy = healthChecker.waitForHealthy(
+            name = name,
+            check = {
+                healthChecker.checkHttp(
+                    url = healthUrl,
+                    timeoutMs = HEALTH_CHECK_TIMEOUT_MS
+                )
+            },
+            intervalMs = HEALTH_CHECK_INTERVAL_MS,
+            timeoutMs = SERVICE_VERIFY_TIMEOUT_MS
         )
-    }
-
-    private fun buildQdrantCommand(workDir: File, dataPath: File): List<String> {
-        val binary = File(directories.binDir(), QDRANT_BINARY).absolutePath
-        val configPath = File(workDir, "config.yaml")
-        return listOf(
-            binary,
-            "--config-path", configPath.absolutePath
-        )
+        return if (healthy.isSuccess) {
+            ServiceState.Healthy(port)
+        } else {
+            stateMachine.emitLog(
+                RuntimeEvent.LogEmitted.Level.WARN,
+                TAG,
+                "$name 未就绪 (后端已启动,子服务可能仍在初始化)"
+            )
+            ServiceState.Unhealthy("$name 验证超时")
+        }
     }
 
     private fun buildBackendCommand(binDir: File, configPath: File, dataDir: File): List<String> {
@@ -562,18 +434,6 @@ class BootstrapSequenceImpl @Inject constructor(
             "TMPDIR" to directories.tmpDir().absolutePath,
             "GOGC" to "50"
         )
-    }
-
-    private fun buildQdrantConfig(): String {
-        return buildString {
-            appendLine("service:")
-            appendLine("  host: ${Constants.LOCAL_HOST}")
-            appendLine("  http_port: ${Constants.QDRANT_PORT}")
-            appendLine("  grpc_port: ${Constants.QDRANT_PORT + 1}")
-            appendLine("storage:")
-            appendLine("  storage_path: ./storage")
-            appendLine("telemetry_disabled: true")
-        }
     }
 
     private fun buildDefaultConfig(): String {
@@ -646,15 +506,10 @@ class BootstrapSequenceImpl @Inject constructor(
         private const val TAG = "Bootstrap"
         private const val CONFIG_FILE_NAME = "config.yml"
         private const val BACKEND_BINARY = "amitia-backend-arm64"
-        private const val QDRANT_BINARY = "qdrant_linux_aarch64"
-        private const val SURREAL_BINARY = "surreal_linux_aarch64"
         private const val BACKEND_PROC_NAME = "amitia-backend"
-        private const val QDRANT_PROC_NAME = "qdrant"
-        private const val SURREALDB_PROC_NAME = "surrealdb"
         private const val HEALTH_CHECK_TIMEOUT_MS = 2000L
         private const val HEALTH_CHECK_INTERVAL_MS = 500L
-        private const val SURREALDB_READY_TIMEOUT_MS = 30_000L
-        private const val QDRANT_READY_TIMEOUT_MS = 30_000L
-        private const val BACKEND_READY_TIMEOUT_MS = 60_000L
+        private const val BACKEND_READY_TIMEOUT_MS = 120_000L
+        private const val SERVICE_VERIFY_TIMEOUT_MS = 10_000L
     }
 }

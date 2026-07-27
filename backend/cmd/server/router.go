@@ -3,6 +3,7 @@
 package main
 
 import (
+	"net/http"
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
@@ -88,6 +90,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		if services.KernelContainer != nil && services.KernelContainer.WASMRuntimeFactory != nil {
+			wasmService := wasm_runtime.NewAPIService(services.KernelContainer.WASMRuntimeFactory, services.KernelContainer.WASMDefinitionRepo)
+			wasmHandler := wasm_runtime.NewHTTPHandler(wasmService)
+			wasmMux := http.NewServeMux()
+			wasmHandler.Register(wasmMux)
+			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
+		}
 		emote.RegisterRouter(apiGroup, services.Emote)
 		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)

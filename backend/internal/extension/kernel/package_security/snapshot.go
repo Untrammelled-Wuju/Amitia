@@ -2,8 +2,13 @@ package package_security
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -151,5 +156,63 @@ func copyDir(src, dst string) error {
 }
 
 func computeDirHash(dir string, hasher *ContentHasher) string {
-	return "sha256:placeholder"
+	type fileEntry struct {
+		path string
+		size int64
+	}
+	var entries []fileEntry
+	seenPaths := make(map[string]bool)
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symbolic link not allowed: %s", path)
+		}
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		if strings.HasPrefix(rel, ".staging") || strings.HasPrefix(rel, ".install-") || strings.HasPrefix(rel, ".amitia-tmp") {
+			return nil
+		}
+		lower := strings.ToLower(rel)
+		if seenPaths[lower] {
+			return fmt.Errorf("case conflict detected: %s", rel)
+		}
+		seenPaths[lower] = true
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		entries = append(entries, fileEntry{path: rel, size: info.Size()})
+		return nil
+	})
+	if err != nil {
+		return "sha256:error:" + err.Error()
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].path < entries[j].path
+	})
+	treeHash := sha256.New()
+	for _, entry := range entries {
+		fullPath := filepath.Join(dir, filepath.FromSlash(entry.path))
+		data, readErr := os.ReadFile(fullPath)
+		if readErr != nil {
+			return "sha256:error:" + readErr.Error()
+		}
+		fileHash := sha256.Sum256(data)
+		fileHashStr := hex.EncodeToString(fileHash[:])
+		treeHash.Write([]byte(entry.path))
+		treeHash.Write([]byte{0})
+		treeHash.Write([]byte(fmt.Sprintf("%d", entry.size)))
+		treeHash.Write([]byte{0})
+		treeHash.Write([]byte(fileHashStr))
+		treeHash.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(treeHash.Sum(nil))
 }

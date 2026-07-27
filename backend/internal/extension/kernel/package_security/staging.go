@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/google/uuid"
@@ -126,12 +127,52 @@ func (m *StagingManager) Cleanup(ctx context.Context, stagingID string) error {
 		return nil
 	}
 
-	if err := os.RemoveAll(area.Path); err != nil {
+	if err := robustRemoveAll(area.Path); err != nil {
 		return err
 	}
 
 	area.Status = StagingCleaned
 	delete(m.stagings, stagingID)
+	return nil
+}
+
+func robustRemoveAll(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+
+	var dirs []string
+	walkErr := filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			dirs = append(dirs, p)
+			return nil
+		}
+		os.Chmod(p, 0o666)
+		return os.Remove(p)
+	})
+	if walkErr != nil {
+		return walkErr
+	}
+
+	for i := len(dirs) - 1; i >= 0; i-- {
+		os.Remove(dirs[i])
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return os.RemoveAll(path)
+	}
+
 	return nil
 }
 

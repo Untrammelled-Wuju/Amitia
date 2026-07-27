@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,7 +15,7 @@ type InstancePolicy string
 const (
 	InstancePolicyPerInvocation InstancePolicy = "per_invocation"
 	InstancePolicyPooled        InstancePolicy = "pooled"
-	InstancePolicySingleton     InstancePolicy = "singleton"
+	InstancePolicySingleton     InstancePolicy = "singleton_per_module"
 )
 
 type WASIVersion string
@@ -35,13 +36,15 @@ const (
 type HostImportName string
 
 const (
-	ImportLog         HostImportName = "amitia.log"
-	ImportTime        HostImportName = "amitia.time"
-	ImportRandom      HostImportName = "amitia.random"
-	ImportResourceRead HostImportName = "amitia.resource.read"
-	ImportStorageGet  HostImportName = "amitia.storage.get"
-	ImportStorageCAS  HostImportName = "amitia.storage.cas"
-	ImportToolInvoke  HostImportName = "amitia.tool.invoke"
+	ImportLog           HostImportName = "amitia.log"
+	ImportTime          HostImportName = "amitia.time"
+	ImportRandom        HostImportName = "amitia.random"
+	ImportStorageGet    HostImportName = "amitia.storage_get"
+	ImportStorageCAS    HostImportName = "amitia.storage_cas"
+	ImportResourceRead  HostImportName = "amitia.resource_read"
+	ImportArtifactWrite HostImportName = "amitia.artifact_write"
+	ImportToolInvoke    HostImportName = "amitia.tool_invoke"
+	ImportResultSetError HostImportName = "amitia.result_set_error"
 )
 
 var DefaultAllowedImports = []HostImportName{
@@ -49,27 +52,97 @@ var DefaultAllowedImports = []HostImportName{
 	ImportTime,
 }
 
+var FullAllowedImports = []HostImportName{
+	ImportLog,
+	ImportTime,
+	ImportRandom,
+	ImportStorageGet,
+	ImportStorageCAS,
+	ImportResourceRead,
+	ImportArtifactWrite,
+	ImportToolInvoke,
+	ImportResultSetError,
+}
+
+var ForbiddenHostFunctions = map[string]bool{
+	"filesystem_raw":   true,
+	"network_raw":      true,
+	"socket_open":      true,
+	"process_spawn":    true,
+	"shell_execute":    true,
+	"electron_ipc":     true,
+	"database_query":   true,
+	"secret_read_raw":  true,
+	"memory_raw":       true,
+	"message_send_raw": true,
+	"desktop_control":  true,
+	"clipboard_raw":    true,
+}
+
+type WasmEntryDefinition struct {
+	ExportName  string `json:"export_name"`
+	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+}
+
+type WasmABIDefinition struct {
+	Version       string `json:"version"`
+	AllocExport   string `json:"alloc_export"`
+	DeallocExport string `json:"dealloc_export"`
+	InvokeExport  string `json:"invoke_export"`
+}
+
+type WasmImportRequirement struct {
+	ModuleName   string `json:"module_name"`
+	FunctionName string `json:"function_name"`
+}
+
+type WasmExportDefinition struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
 type WASMRuntimeDefinition struct {
-	ModuleID         string                  `json:"module_id"`
-	ExtensionID      string                  `json:"extension_id"`
-	ModulePath       string                  `json:"module_path"`
-	ModuleHash       string                  `json:"module_hash"`
-	InterfacePath    string                  `json:"interface_path,omitempty"`
-	InterfaceHash    string                  `json:"interface_hash,omitempty"`
-	ABI              ABIKind                 `json:"abi"`
-	WASIVersion      WASIVersion             `json:"wasi_version"`
-	MemoryLimitBytes int64                   `json:"memory_limit_bytes"`
-	FuelLimit        uint64                  `json:"fuel_limit"`
-	InstancePolicy   InstancePolicy          `json:"instance_policy"`
-	AllowedImports   []HostImportName        `json:"allowed_imports"`
-	Deterministic    bool                    `json:"deterministic"`
-	EntryExport      string                  `json:"entry_export"`
-	InputSchema      json.RawMessage         `json:"input_schema,omitempty"`
-	OutputSchema     json.RawMessage         `json:"output_schema,omitempty"`
-	MaxOutputBytes   int64                   `json:"max_output_bytes"`
-	MaxHostCalls     int                     `json:"max_host_calls"`
-	CallTimeout      time.Duration           `json:"call_timeout"`
-	DefinitionVersion int                    `json:"definition_version"`
+	RuntimeDefinitionID string                  `json:"runtime_definition_id"`
+	ModuleID            string                  `json:"module_id"`
+	ExtensionID         string                  `json:"extension_id"`
+	ModulePath          string                  `json:"module_path"`
+	ModuleHash          string                  `json:"module_hash"`
+	ModuleSHA256        string                  `json:"module_sha256"`
+	InterfacePath       string                  `json:"interface_path,omitempty"`
+	InterfaceHash       string                  `json:"interface_hash,omitempty"`
+
+	EngineType          string                  `json:"engine_type"`
+	Entry               WasmEntryDefinition     `json:"entry"`
+
+	ABI                 ABIKind                 `json:"abi"`
+	ABIDef              WasmABIDefinition       `json:"abi_def,omitempty"`
+	WASIVersion         WASIVersion             `json:"wasi_version"`
+	Imports             []WasmImportRequirement  `json:"imports,omitempty"`
+	Exports             []WasmExportDefinition   `json:"exports,omitempty"`
+	AllowedImports      []HostImportName        `json:"allowed_imports"`
+
+	Limits              WasmResourceLimits      `json:"limits"`
+	MemoryLimitBytes    int64                   `json:"memory_limit_bytes"`
+	FuelLimit           uint64                  `json:"fuel_limit"`
+	InstancePolicy      InstancePolicy          `json:"instance_policy"`
+	DeterminismPolicy   WasmDeterminismPolicy   `json:"determinism_policy"`
+	Deterministic       bool                    `json:"deterministic"`
+
+	EntryExport         string                  `json:"entry_export"`
+	InputSchema         json.RawMessage         `json:"input_schema,omitempty"`
+	OutputSchema        json.RawMessage         `json:"output_schema,omitempty"`
+	MaxOutputBytes      int64                   `json:"max_output_bytes"`
+	MaxHostCalls        int                     `json:"max_host_calls"`
+	CallTimeout         time.Duration           `json:"call_timeout"`
+
+	PermissionRequirements []string             `json:"permission_requirements,omitempty"`
+	ScopeRule              string               `json:"scope_rule,omitempty"`
+
+	DefinitionHash      string                  `json:"definition_hash"`
+	DefinitionVersion   int                     `json:"definition_version"`
+	Version             string                  `json:"version"`
+	Generation          int64                   `json:"generation"`
 }
 
 type InvocationResult struct {
@@ -123,16 +196,33 @@ func (e *WASMError) Unwrap() error { return e.Cause }
 type WASMErrorCode string
 
 const (
-	ErrCodeModuleInvalid    WASMErrorCode = "module_invalid"
-	ErrCodeABIMismatch      WASMErrorCode = "abi_mismatch"
-	ErrCodeImportDenied     WASMErrorCode = "import_denied"
-	ErrCodeMemoryLimit      WASMErrorCode = "memory_limit"
-	ErrCodeFuelExhausted    WASMErrorCode = "fuel_exhausted"
-	ErrCodeTimeout          WASMErrorCode = "timeout"
-	ErrCodeTrap             WASMErrorCode = "trap"
-	ErrCodeOutputInvalid    WASMErrorCode = "output_invalid"
-	ErrCodeHostCallFailed   WASMErrorCode = "host_call_failed"
-	ErrCodeCancelled        WASMErrorCode = "cancelled"
+	ErrCodeModuleInvalid     WASMErrorCode = "wasm_module_invalid"
+	ErrCodeModuleMissing     WASMErrorCode = "wasm_module_missing"
+	ErrCodeIntegrityFailed   WASMErrorCode = "wasm_module_integrity_failed"
+	ErrCodeFeatureUnsupported WASMErrorCode = "wasm_feature_unsupported"
+	ErrCodeImportNotAllowed  WASMErrorCode = "wasm_import_not_allowed"
+	ErrCodeExportMissing     WASMErrorCode = "wasm_export_missing"
+	ErrCodeABIMismatch       WASMErrorCode = "wasm_abi_incompatible"
+	ErrCodeCompileFailed     WASMErrorCode = "wasm_compile_failed"
+	ErrCodeInstantiateFailed WASMErrorCode = "wasm_instantiate_failed"
+	ErrCodeMemoryLimit       WASMErrorCode = "wasm_memory_limit_exceeded"
+	ErrCodeMemoryAccess      WASMErrorCode = "wasm_memory_access_invalid"
+	ErrCodeFuelExhausted     WASMErrorCode = "wasm_fuel_exhausted"
+	ErrCodeTimeout           WASMErrorCode = "wasm_execution_timeout"
+	ErrCodeCancelled         WASMErrorCode = "wasm_execution_cancelled"
+	ErrCodeTrap              WASMErrorCode = "wasm_trap"
+	ErrCodeOutputInvalid     WASMErrorCode = "wasm_output_invalid"
+	ErrCodeOutputTooLarge    WASMErrorCode = "wasm_output_too_large"
+	ErrCodeHostCallLimit     WASMErrorCode = "wasm_host_call_limit_exceeded"
+	ErrCodeHostFunctionDenied WASMErrorCode = "wasm_host_function_denied"
+	ErrCodePermissionDenied  WASMErrorCode = "wasm_permission_denied"
+	ErrCodeScopeDenied       WASMErrorCode = "wasm_scope_denied"
+	ErrCodeRecursionDetected WASMErrorCode = "wasm_recursion_detected"
+	ErrCodeDepthExceeded     WASMErrorCode = "wasm_depth_exceeded"
+	ErrCodeCircuitOpen       WASMErrorCode = "wasm_runtime_circuit_open"
+	ErrCodeQuarantined       WASMErrorCode = "wasm_runtime_quarantined"
+
+	ErrCodeHostCallFailed   WASMErrorCode = "wasm_host_call_failed"
 	ErrCodeInstanceDisposed WASMErrorCode = "instance_disposed"
 	ErrCodeImportUnknown    WASMErrorCode = "import_unknown"
 	ErrCodeSchemaInvalid    WASMErrorCode = "schema_invalid"
@@ -145,7 +235,7 @@ func NewWASMError(code WASMErrorCode, msg string, cause error) *WASMError {
 var (
 	ErrModuleInvalid    = NewWASMError(ErrCodeModuleInvalid, "module invalid", nil)
 	ErrABIMismatch      = NewWASMError(ErrCodeABIMismatch, "abi mismatch", nil)
-	ErrImportDenied     = NewWASMError(ErrCodeImportDenied, "import denied", nil)
+	ErrImportDenied     = NewWASMError(ErrCodeImportNotAllowed, "import denied", nil)
 	ErrMemoryLimit      = NewWASMError(ErrCodeMemoryLimit, "memory limit exceeded", nil)
 	ErrFuelExhausted    = NewWASMError(ErrCodeFuelExhausted, "fuel exhausted", nil)
 	ErrTimeout          = NewWASMError(ErrCodeTimeout, "timeout", nil)
@@ -174,41 +264,95 @@ func ValidateDefinition(def *WASMRuntimeDefinition) error {
 	if def.ModulePath == "" {
 		return NewWASMError(ErrCodeModuleInvalid, "missing module path", nil)
 	}
-	if def.ModuleHash == "" {
+	if err := ValidateModulePath(def.ModulePath); err != nil {
+		return err
+	}
+	if def.ModuleHash == "" && def.ModuleSHA256 == "" {
 		return NewWASMError(ErrCodeModuleInvalid, "missing module hash", nil)
 	}
+	if def.ModuleSHA256 == "" {
+		def.ModuleSHA256 = def.ModuleHash
+	}
 	if def.MemoryLimitBytes <= 0 {
-		return NewWASMError(ErrCodeModuleInvalid, "memory limit must be > 0", nil)
+		if def.Limits.MaxMemoryPages > 0 {
+			def.MemoryLimitBytes = int64(def.Limits.MaxMemoryPages) * WasmPageSize
+		} else {
+			return NewWASMError(ErrCodeMemoryLimit, "memory limit must be > 0", nil)
+		}
 	}
 	if def.MemoryLimitBytes > 1<<30 {
-		return NewWASMError(ErrCodeModuleInvalid, "memory limit exceeds 1GB", nil)
+		return NewWASMError(ErrCodeMemoryLimit, "memory limit exceeds 1GB", nil)
+	}
+	if def.FuelLimit == 0 && def.Limits.Fuel == 0 {
+		return NewWASMError(ErrCodeFuelExhausted, "fuel limit must be > 0", nil)
 	}
 	if def.FuelLimit == 0 {
-		return NewWASMError(ErrCodeModuleInvalid, "fuel limit must be > 0", nil)
+		def.FuelLimit = def.Limits.Fuel
+	}
+	if def.EntryExport == "" && def.Entry.ExportName == "" {
+		return NewWASMError(ErrCodeABIMismatch, "entry export required", nil)
 	}
 	if def.EntryExport == "" {
-		return NewWASMError(ErrCodeABIMismatch, "entry export required", nil)
+		def.EntryExport = def.Entry.ExportName
 	}
 	if def.ABI == "" {
 		return NewWASMError(ErrCodeABIMismatch, "abi kind required", nil)
 	}
 	if def.MaxOutputBytes <= 0 {
-		return NewWASMError(ErrCodeModuleInvalid, "max output bytes must be > 0", nil)
+		if def.Limits.MaxOutputBytes > 0 {
+			def.MaxOutputBytes = def.Limits.MaxOutputBytes
+		} else {
+			return NewWASMError(ErrCodeOutputTooLarge, "max output bytes must be > 0", nil)
+		}
+	}
+	if def.MaxHostCalls <= 0 {
+		if def.Limits.MaxHostCalls > 0 {
+			def.MaxHostCalls = def.Limits.MaxHostCalls
+		} else {
+			def.MaxHostCalls = 128
+		}
+	}
+	if def.CallTimeout <= 0 {
+		if def.Limits.MaxExecutionDuration > 0 {
+			def.CallTimeout = def.Limits.MaxExecutionDuration
+		} else {
+			def.CallTimeout = 5 * time.Second
+		}
 	}
 	if def.WASIVersion != WASINone && def.WASIVersion != WASIV1 {
-		return NewWASMError(ErrCodeModuleInvalid, "unsupported wasi version", nil)
+		return NewWASMError(ErrCodeFeatureUnsupported, "unsupported wasi version", nil)
 	}
-	switch def.InstancePolicy {
-	case InstancePolicyPerInvocation, InstancePolicyPooled, InstancePolicySingleton:
-	default:
-		return NewWASMError(ErrCodeModuleInvalid, "invalid instance policy: "+string(def.InstancePolicy), nil)
+	if def.WASIVersion == WASIV1 {
+		return NewWASMError(ErrCodeFeatureUnsupported, "wasi not supported in v1, use host functions instead", nil)
+	}
+	if err := ValidateInstancePolicy(def.InstancePolicy); err != nil {
+		return err
 	}
 	if def.Deterministic {
+		policy := DeterministicPolicy()
 		for _, imp := range def.AllowedImports {
-			if imp == ImportRandom || imp == ImportTime {
-				return NewWASMError(ErrCodeImportDenied, "deterministic mode forbids time/random imports", nil)
+			if !policy.AllowsImport(imp) {
+				return NewWASMError(ErrCodeImportNotAllowed, "deterministic mode forbids time/random/host imports: "+string(imp), nil)
 			}
 		}
+	}
+	for _, imp := range def.AllowedImports {
+		if ForbiddenHostFunctions[string(imp)] {
+			return NewWASMError(ErrCodeHostFunctionDenied, "forbidden host function: "+string(imp), nil)
+		}
+	}
+	return nil
+}
+
+func ValidateModulePath(path string) error {
+	if path == "" {
+		return NewWASMError(ErrCodeModuleInvalid, "empty module path", nil)
+	}
+	if len(path) > 0 && (path[0] == '/' || (len(path) > 2 && path[1] == ':')) {
+		return NewWASMError(ErrCodeModuleInvalid, "absolute path not allowed: "+path, nil)
+	}
+	if strings.Contains(path, "..") {
+		return NewWASMError(ErrCodeModuleInvalid, "path traversal not allowed: "+path, nil)
 	}
 	return nil
 }

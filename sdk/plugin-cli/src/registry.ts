@@ -17,6 +17,7 @@ import {
   migrateCommand,
   doctorCommand,
   sdkCommand,
+  exportDiagnosticsCommand,
 } from "./commands/index.js";
 
 export const commands: ReadonlyArray<CliCommand> = [
@@ -36,6 +37,7 @@ export const commands: ReadonlyArray<CliCommand> = [
   migrateCommand,
   doctorCommand,
   sdkCommand,
+  exportDiagnosticsCommand,
 ];
 
 export function findCommand(name: string): CliCommand | undefined {
@@ -59,6 +61,9 @@ export async function runCli(argv: string[]): Promise<CliCommandResult> {
     };
   }
   const rest = args.slice(1);
+  if (rest.includes("--help") || rest.includes("-h")) {
+    return printCommandHelp(command);
+  }
   const logger = new ConsoleLogger(detectLogLevel(rest));
   const ctx: CliContext = {
     cwd: process.cwd(),
@@ -113,5 +118,33 @@ function printHelp(): CliCommandResult {
   lines.push("  --format <fmt>   Output format: human|json|sarif");
   lines.push("  --help, -h       Show this help");
   lines.push("  --version, -v    Show CLI version");
+  return { exitCode: 0, message: lines.join("\n") };
+}
+
+function printCommandHelp(command: CliCommand): CliCommandResult {
+  const lines: string[] = [];
+  lines.push(`${command.name} - ${command.description}`);
+  if (command.usage) {
+    lines.push(`Usage: ${command.usage}`);
+  }
+  if (command.options && command.options.length > 0) {
+    lines.push("");
+    lines.push("Options:");
+    for (const opt of command.options) {
+      const flag = opt.shortName ? `${opt.shortName}, ${opt.name}` : opt.name;
+      const value = opt.takesValue ? " <value>" : "";
+      const parts: string[] = [opt.description];
+      if (opt.required) parts.push("(required)");
+      if (opt.defaultValue) parts.push(`(default: ${opt.defaultValue})`);
+      if (opt.choices) parts.push(`(choices: ${opt.choices.join("|")})`);
+      lines.push(`  ${flag}${value}  ${parts.join(" ")}`);
+    }
+  }
+  lines.push("");
+  lines.push("Global Options:");
+  lines.push("  --verbose        Verbose output");
+  lines.push("  --debug          Debug output");
+  lines.push("  --quiet          Suppress non-error output");
+  lines.push("  --help, -h       Show this help");
   return { exitCode: 0, message: lines.join("\n") };
 }

@@ -1,0 +1,23 @@
+{
+  "subscriptions": [
+    {
+      "contributionId": "test-event-subscription",
+      "moduleId": "main",
+      "eventTypeId": "test.event.triggered",
+      "eventVersionRange": "*",
+      "entry": "on-test-event",
+      "eventType": "ext.event-runtime-test.event.triggered",
+      "deliveryPolicy": {
+        "timeout": "5s",
+        "maxInFlight": 4,
+        "ordering": "none"
+      },
+      "retryPolicy": {
+        "maxAttempts": 3,
+        "initialBackoff": "1s",
+        "maxBackoff": "10s",
+        "backoffMultiplier": 2.0
+      }
+    }
+  ]
+}

@@ -32,31 +32,43 @@ func (s TaskState) IsTerminal() bool {
 }
 
 type TaskDefinition struct {
-	TaskID                string
-	ExtensionID           string
-	ModuleID              string
-	RuntimeType           string
-	Entry                 string
-	EntryHash             string
-	InputSchema           json.RawMessage
-	OutputSchema          json.RawMessage
-	Checkpoint            bool
-	Idempotent            bool
-	Recoverable           bool
-	ResourceLimits        TaskResourceLimits
-	PermissionRequirements []string
-	AllowedNamespaces     []string
-	DefinitionVersion     int
-	MaxDuration           time.Duration
+	TaskID                     string                   `json:"taskId"`
+	ExtensionID                string                   `json:"extensionId"`
+	ModuleID                   string                   `json:"moduleId"`
+	ContributionID             string                   `json:"contributionId,omitempty"`
+	RuntimeType                string                   `json:"runtimeType"`
+	Entry                      string                   `json:"entry"`
+	EntryHash                  string                   `json:"entryHash,omitempty"`
+	InputSchema                json.RawMessage          `json:"inputSchema,omitempty"`
+	OutputSchema               json.RawMessage          `json:"outputSchema,omitempty"`
+	CheckpointSchema           json.RawMessage          `json:"checkpointSchema,omitempty"`
+	Checkpoint                 bool                     `json:"checkpoint"`
+	Idempotent                 bool                     `json:"idempotent"`
+	Recoverable                bool                     `json:"recoverable"`
+	Idempotency                TaskIdempotency          `json:"idempotency,omitempty"`
+	Recoverability             TaskRecoverability       `json:"recoverability,omitempty"`
+	ResourceLimits             TaskResourceLimits       `json:"resourceLimits,omitempty"`
+	PermissionRequirements     []PermissionRequirement  `json:"permissionRequirements,omitempty"`
+	PermissionRequirementStrings []string               `json:"permissionRequirementStrings,omitempty"`
+	AllowedNamespaces          []string                 `json:"allowedNamespaces,omitempty"`
+	ScopeRule                  ScopeRule                `json:"scopeRule,omitempty"`
+	RetryPolicy                TaskRetryPolicy          `json:"retryPolicy,omitempty"`
+	TimeoutPolicy              TaskTimeoutPolicy        `json:"timeoutPolicy,omitempty"`
+	ResultPolicy               TaskResultPolicy         `json:"resultPolicy,omitempty"`
+	CleanupPolicy              TaskCleanupPolicy        `json:"cleanupPolicy,omitempty"`
+	DefinitionVersion          int                      `json:"definitionVersion,omitempty"`
+	DefinitionHash             string                   `json:"definitionHash,omitempty"`
+	Version                    string                   `json:"version,omitempty"`
+	MaxDuration                time.Duration            `json:"maxDuration,omitempty"`
 }
 
 type TaskResourceLimits struct {
-	MaxMemoryMB       int
-	MaxCPUPercent     int
-	MaxDiskMB         int
-	MaxOutputSizeMB   int
-	MaxLogSizeMB      int
-	MaxConcurrentTasks int
+	MaxMemoryMB        int `json:"maxMemoryMB,omitempty"`
+	MaxCPUPercent      int `json:"maxCPUPercent,omitempty"`
+	MaxDiskMB          int `json:"maxDiskMB,omitempty"`
+	MaxOutputSizeMB    int `json:"maxOutputSizeMB,omitempty"`
+	MaxLogSizeMB       int `json:"maxLogSizeMB,omitempty"`
+	MaxConcurrentTasks int `json:"maxConcurrentTasks,omitempty"`
 }
 
 func DefaultTaskResourceLimits() TaskResourceLimits {

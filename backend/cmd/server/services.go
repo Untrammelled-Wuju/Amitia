@@ -28,6 +28,8 @@ import (
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mcp"
@@ -82,6 +84,7 @@ type AppServices struct {
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
 	Extension           *extension.Runtime
+	KernelContainer     *kernel.Container
 	Emote               *emote.Service
 	Temporal            *temporal.Service
 	RelTimeCoordinator  *temporal.RelationshipTimeCoordinator
@@ -177,7 +180,47 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("failed to initialize extension kernel:", err)
 		panic("failed to initialize extension kernel")
 	}
+	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
+	kernelContainer, err := kernel.NewContainerBuilder().
+		WithDBPath(kernelDBPath).
+		WithExtensionRoot(kernelRoot).
+		Build(context.Background())
+	if err != nil {
+		log.Error("failed to initialize kernel container:", err)
+		panic("failed to initialize kernel container")
+	}
+	if err := kernelContainer.Recover(context.Background()); err != nil {
+		log.Warn("kernel recovery warning: ", err)
+	}
+	if kernelContainer.UpdateRecoveryManager != nil {
+		recoveryActions, err := kernelContainer.UpdateRecoveryManager.ScanOnStartup(context.Background())
+		if err != nil {
+			log.Warn("update recovery scan warning: ", err)
+		}
+		for _, action := range recoveryActions {
+			if err := kernelContainer.UpdateRecoveryManager.ExecuteRecovery(context.Background(), action); err != nil {
+				log.Warn(fmt.Sprintf("update recovery execute failed for %s: %v", action.OperationID, err))
+			} else {
+				log.Info(fmt.Sprintf("update recovery completed for %s (strategy: %s)", action.OperationID, action.Strategy))
+			}
+		}
+	}
+	if kernelContainer.TaskRuntimeService != nil {
+		if err := kernelContainer.TaskRuntimeService.StartupRecovery(context.Background()); err != nil {
+			log.Warn("task runtime recovery warning: ", err)
+		}
+		kernelContainer.TaskRuntimeService.Start(context.Background())
+	}
+	if kernelContainer.EventService != nil {
+		if err := kernelContainer.EventService.Start(context.Background()); err != nil {
+			log.Warn("event service start warning: ", err)
+		}
+	}
+	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	chatSvc.SetSkillRuntime(extensionRuntime)
+	if kernelContainer.HookService != nil {
+		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
+	}
 	extensionRuntime.Workshop.SetModelGenerator(chatSvc)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
@@ -293,7 +336,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("failed to init delivery store schema:", err)
 		panic("failed to init delivery store schema")
 	}
-	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore)
+	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
 	mcpRepository := mcp.NewRepository(ctx.DB)
 	mcpStorageDir := mcpDataDirectory(ctx)
 	secretStore, err := mcpauth.NewEncryptedFileStore(filepath.Join(mcpStorageDir, "mcp-secrets.json"), filepath.Join(mcpStorageDir, "mcp-secrets.key"))
@@ -316,6 +359,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		if discoverErr := discoveryService.Discover(readyCtx, serverID); discoverErr != nil {
 			log.Warn("MCP capability discovery failed server=", serverID, " error=", discoverErr)
 			return
+		}
+		mcpPayload, _ := json.Marshal(map[string]interface{}{
+			"serverId":    serverID,
+			"status":      "connected",
+			"connectedAt": time.Now().UTC().Format(time.RFC3339),
+		})
+		mcpOpts := event.PublishOptions{
+			AggregateType: "mcp_server",
+			AggregateID:   serverID,
+		}
+		if kernelContainer.HostEventEmitter != nil {
+			_, _ = kernelContainer.HostEventEmitter.EmitMCPConnectionChanged(readyCtx, mcpPayload, mcpOpts)
 		}
 		if registerErr := skillRuntime.RegisterServer(readyCtx, serverID); registerErr != nil {
 			log.Warn("MCP skill registration failed server=", serverID, " error=", registerErr)
@@ -361,6 +416,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,
 		Extension:           extensionRuntime,
+		KernelContainer:     kernelContainer,
 		Emote:               emoteSvc,
 		Temporal:            temporalSvc,
 		RelTimeCoordinator:  relTimeCoordinator,
@@ -395,8 +451,8 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 	return filepath.Join(".", "data")
 }
 
-func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
-	runtime.WorkflowHost.Schedule = func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore, hostEmitter event.HostEventEmitter) {
+	runtime.WorkflowHost.Schedule = wrapWithWorkflowEvent(hostEmitter, "schedule", func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
 		var payload map[string]interface{}
 		if err := json.Unmarshal(input, &payload); err != nil {
 			return nil, nil, fmt.Errorf("日程参数无效: %w", err)
@@ -412,8 +468,8 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		}
 		result, err := registered.Handler(ctx, extension.ExecuteSkillRequest{SkillID: registered.Definition.ID, Input: normalized, Scope: scope, IdempotencyKey: idempotencyKey})
 		return result.Output, result.SideEffects, err
-	}
-	runtime.WorkflowHost.Notification = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+	})
+	runtime.WorkflowHost.Notification = wrapWithWorkflowEvent(hostEmitter, "notification", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
 		var payload struct {
 			Content string `json:"content"`
 		}
@@ -442,8 +498,8 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		}
 		output, _ := json.Marshal(map[string]string{"intentId": intent.ID, "status": string(intent.Status)})
 		return output, []extension.SideEffectRecord{{Type: "notification_send", TargetID: intent.ID, Confirmed: true}}, nil
-	}
-	runtime.WorkflowHost.MemoryCandidate = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+	})
+	runtime.WorkflowHost.MemoryCandidate = wrapWithWorkflowEvent(hostEmitter, "memory_candidate", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
 		var payload struct {
 			Key        string `json:"key"`
 			Value      string `json:"value"`
@@ -460,8 +516,8 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		}
 		output, _ := json.Marshal(map[string]interface{}{"candidateId": candidate.ID, "status": "pending_review"})
 		return output, []extension.SideEffectRecord{{Type: "memory_candidate_write", TargetID: candidate.ID, Confirmed: true}}, nil
-	}
-	runtime.WorkflowHost.ContextContribution = func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+	})
+	runtime.WorkflowHost.ContextContribution = wrapWithWorkflowEvent(hostEmitter, "context_contribution", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
 		var payload struct {
 			Content    string `json:"content"`
 			TokenLimit int    `json:"tokenLimit"`
@@ -475,6 +531,27 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		}
 		output, _ := json.Marshal(map[string]interface{}{"content": payload.Content, "tokenLimit": payload.TokenLimit, "conversationId": scope.ConversationID})
 		return output, []extension.SideEffectRecord{{Type: "context_injection", TargetID: scope.ConversationID, Confirmed: true}}, nil
+	})
+}
+
+func wrapWithWorkflowEvent(hostEmitter event.HostEventEmitter, action string, handler func(context.Context, json.RawMessage, extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error)) func(context.Context, json.RawMessage, extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+	return func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
+		output, effects, err := handler(ctx, input, scope)
+		if err == nil && hostEmitter != nil {
+			payload, _ := json.Marshal(map[string]interface{}{
+				"action":         action,
+				"characterId":    scope.CharacterID,
+				"conversationId": scope.ConversationID,
+				"channel":        scope.Channel,
+				"requestId":      scope.RequestID,
+			})
+			opts := event.PublishOptions{
+				TraceID:     scope.TraceID,
+				OperationID: scope.RequestID,
+			}
+			_, _ = hostEmitter.EmitWorkflowCompleted(ctx, payload, opts)
+		}
+		return output, effects, err
 	}
 }
 

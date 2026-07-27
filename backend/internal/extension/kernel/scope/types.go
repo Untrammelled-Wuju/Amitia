@@ -39,7 +39,8 @@ const (
 	SubjectMCPTool      ScopeSubjectType = "mcp_tool"
 	SubjectUIContribution ScopeSubjectType = "ui_contribution"
 	SubjectBackgroundTask ScopeSubjectType = "background_task"
-	SubjectProvider     ScopeSubjectType = "provider"
+	SubjectSchedule       ScopeSubjectType = "schedule"
+	SubjectProvider       ScopeSubjectType = "provider"
 )
 
 type ScopeBindingState string

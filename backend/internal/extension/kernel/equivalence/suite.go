@@ -5,6 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/desktop_extension"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
+	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 )
 
 type Suite struct {
@@ -141,10 +148,55 @@ func (s *Suite) registerEventHookChecks() {
 
 func (s *Suite) registerUITests() {
 	s.register(CategoryUIContribution, "ui.slots", "UI Contribution Slots 系统就位", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
-		return ResultImproved, []Evidence{{Kind: "ui", Content: "extension_slots 24 个默认 Slot"}}, nil
+		reg := extension_slots.DefaultSlotRegistry()
+		if reg == nil {
+			return ResultRegressed, nil, fmt.Errorf("extension_slots: DefaultSlotRegistry returned nil")
+		}
+		slots := reg.List()
+		if len(slots) == 0 {
+			return ResultRegressed, nil, fmt.Errorf("extension_slots: no default slots")
+		}
+		return ResultImproved, []Evidence{{Kind: "ui", Content: fmt.Sprintf("extension_slots.DefaultSlotRegistry 实例化成功,默认slot数量=%d", len(slots))}}, nil
+	})
+	s.register(CategoryUIContribution, "ui.schema", "SchemaUI 验证器可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
+		v := schema_ui.NewValidator()
+		if v == nil {
+			return ResultRegressed, nil, fmt.Errorf("schema_ui: NewValidator returned nil")
+		}
+		return ResultImproved, []Evidence{{Kind: "ui", Content: "schema_ui.NewValidator 实例化成功,验证器可用"}}, nil
+	})
+	s.register(CategoryUIContribution, "ui.sandbox", "SandboxWebUI Host 可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
+		h := sandbox_webui.NewHost()
+		if h == nil {
+			return ResultRegressed, nil, fmt.Errorf("sandbox_webui: NewHost returned nil")
+		}
+		if h.IsClosed() {
+			return ResultRegressed, nil, fmt.Errorf("sandbox_webui: host closed after creation")
+		}
+		return ResultImproved, []Evidence{{Kind: "ui", Content: "sandbox_webui.NewHost 实例化成功,Host 未关闭"}}, nil
+	})
+	s.register(CategoryUIContribution, "ui.page_host", "ExtensionPageHost 可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
+		reg := extension_page_host.NewPageRegistry()
+		sm := extension_page_host.NewSessionManager()
+		h := extension_page_host.NewPageHost(reg, sm)
+		if h == nil {
+			return ResultRegressed, nil, fmt.Errorf("extension_page_host: NewPageHost returned nil")
+		}
+		return ResultImproved, []Evidence{{Kind: "ui", Content: "extension_page_host.NewPageHost 实例化成功"}}, nil
+	})
+	s.register(CategoryUIContribution, "ui.ordering", "UIOrdering 引擎可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
+		e := ui_ordering.NewOrderingEngine()
+		if e == nil {
+			return ResultRegressed, nil, fmt.Errorf("ui_ordering: NewOrderingEngine returned nil")
+		}
+		return ResultImproved, []Evidence{{Kind: "ui", Content: "ui_ordering.NewOrderingEngine 实例化成功"}}, nil
 	})
 	s.register(CategoryDesktopContribution, "desktop.extension_points", "桌面扩展点已实现", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
-		return ResultImproved, []Evidence{{Kind: "desktop", Content: "desktop_extension/host.go 已实现"}}, nil
+		h := desktop_extension.NewDesktopExtensionHost()
+		if h == nil {
+			return ResultRegressed, nil, fmt.Errorf("desktop_extension: NewDesktopExtensionHost returned nil")
+		}
+		return ResultImproved, []Evidence{{Kind: "desktop", Content: "desktop_extension.NewDesktopExtensionHost 实例化成功"}}, nil
 	})
 }
 

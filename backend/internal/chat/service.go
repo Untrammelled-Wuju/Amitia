@@ -65,6 +65,7 @@ type Service interface {
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetSkillRuntime(*extension.Runtime)
+	SetHookInvoker(HookInvoker)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 }
 
@@ -115,6 +116,7 @@ type service struct {
 	outboxStore        OutboxStore
 	deliveryStore      DeliveryStore
 	skillRuntime       *extension.Runtime
+	hookInvoker        HookInvoker
 	relTimeCoordinator *temporal.RelationshipTimeCoordinator
 }
 

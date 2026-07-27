@@ -299,5 +299,47 @@ func DefaultRegistry() *DeprecationRegistry {
 		_ = r.Mark(f)
 	}
 
+	step70Files := []LegacyFile{
+		{
+			FilePath:         "backend/internal/extension/kernel/event_bus/bus.go",
+			Package:          "event_bus",
+			Step:             70,
+			Reason:           "旧 EventBus 实现，由 extension/kernel/event 替代",
+			Replacement:      "extension/kernel/event",
+			Status:           StatusFrozen,
+			BlockingDeletion: false,
+			ProductionRefs:   []string{},
+			TestRefs:         []string{"event_bus/bus_test.go"},
+			Remediation:      "零调用，可直接删除；保留 bus_test.go 至新 Event 系统测试覆盖率达标后一并删除",
+		},
+		{
+			FilePath:         "backend/internal/extension/kernel/event_bus/pipeline.go",
+			Package:          "event_bus",
+			Step:             70,
+			Reason:           "旧 Event Pipeline，由 extension/kernel/event.Dispatcher 替代",
+			Replacement:      "extension/kernel/event.Dispatcher",
+			Status:           StatusFrozen,
+			BlockingDeletion: false,
+			ProductionRefs:   []string{},
+			TestRefs:         []string{},
+			Remediation:      "零调用，可直接删除",
+		},
+		{
+			FilePath:         "backend/internal/extension/plugin_handler.go",
+			Package:          "extension",
+			Step:             70,
+			Reason:           "旧 Plugin Event API（GetPluginEvents/GetPluginDeadLetters/RetryPluginEvent），由 extension/kernel/event API 替代",
+			Replacement:      "extension/event_api.go EventAPI",
+			Status:           StatusMarked,
+			BlockingDeletion: true,
+			ProductionRefs:   []string{"router.go:101-103"},
+			TestRefs:         []string{},
+			Remediation:      "router.go 保留旧路由至前端迁移完成，新代码禁止扩展旧 API",
+		},
+	}
+	for _, f := range step70Files {
+		_ = r.Mark(f)
+	}
+
 	return r
 }

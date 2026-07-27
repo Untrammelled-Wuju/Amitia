@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -260,7 +261,13 @@ window.amitiaUI = (function() {
   const sessionId = "` + session.SessionID + `";
   const origin = "` + session.Origin + `";
   const nonce = "` + session.Nonce + `";
-  const allowedMethods = ["ready","action.invoke","data.request","data.subscribe","navigation.request","resize.request","dialog.request","resource.open","log","clipboard.read","clipboard.write","network.request","storage"];
+  const generation = ` + fmt.Sprintf("%d", session.Generation) + `;
+  const allowedMethods = ["ready","context.get","action.invoke","data.query","data.subscribe","navigation.request","resize.request","dialog.request","resource.open","resource.read","artifact.create","log","session.ping","clipboard.read","clipboard.write","network.request","storage"];
+  let hostOrigin = null;
+  let pendingMessages = [];
+  let pendingCallbacks = new Map();
+  let readyCallbacks = [];
+  let isReady = false;
 
   function validateMethod(name) {
     if (!allowedMethods.includes(name)) {
@@ -268,29 +275,100 @@ window.amitiaUI = (function() {
     }
   }
 
-  function postMessage(method, input) {
+  function flushPending() {
+    if (hostOrigin) {
+      for (const msg of pendingMessages) {
+        window.parent.postMessage(msg, hostOrigin);
+      }
+      pendingMessages = [];
+    }
+  }
+
+  function postMessage(method, input, callback) {
     validateMethod(method);
-    return window.parent.postMessage({
+    const id = crypto.randomUUID();
+    const msg = {
       method: "ui." + method,
       version: 1,
-      id: crypto.randomUUID(),
+      id: id,
       origin: origin,
       nonce: nonce,
+      generation: generation,
       session: sessionId,
       input: input || null,
       timestamp: Date.now()
-    }, "*");
+    };
+    if (callback) {
+      pendingCallbacks.set(id, callback);
+    }
+    if (hostOrigin) {
+      window.parent.postMessage(msg, hostOrigin);
+    } else {
+      pendingMessages.push(msg);
+    }
+    return id;
   }
 
-  const api = {
-    ready: function() { return postMessage("ready", null); },
-    invokeAction: function(actionId, input) { return postMessage("action.invoke", {actionId: actionId, input: input}); },
-    requestData: function(sourceId, params) { return postMessage("data.request", {sourceId: sourceId, params: params}); },
-    subscribeData: function(sourceId, params, rate) { return postMessage("data.subscribe", {sourceId: sourceId, params: params, ratePerMinute: rate}); },
-    navigate: function(target, type) { return postMessage("navigation.request", {target: target, type: type}); },
-    requestResize: function(width, height) { return postMessage("resize.request", {width: width, height: height}); },
-    openResource: function(handleId) { return postMessage("resource.open", {handleId: handleId}); },
-    log: function(level, message) { return postMessage("log", {level: level, message: message}); }
+  function call(method, input) {
+    return new Promise(function(resolve, reject) {
+      postMessage(method, input, function(err, result) {
+        if (err) { reject(err); }
+        else { resolve(result); }
+      });
+    });
+  }
+
+  window.addEventListener("message", function(event) {
+    if (!event.data || typeof event.data !== "object") return;
+    var data = event.data;
+    if (data.type === "host.welcome" && data.hostOrigin) {
+      hostOrigin = data.hostOrigin;
+      flushPending();
+      return;
+    }
+    if (data.type === "bridge.response") {
+      var cb = pendingCallbacks.get(data.id);
+      if (cb) {
+        pendingCallbacks.delete(data.id);
+        if (data.error) { cb(new Error(data.error), null); }
+        else { cb(null, data.output || data); }
+      }
+      return;
+    }
+  });
+
+  var api = {
+    ready: function() {
+      return new Promise(function(resolve) {
+        if (isReady) { resolve(); return; }
+        readyCallbacks.push(resolve);
+        postMessage("ready", null, function(err, result) {
+          isReady = true;
+          for (var i = 0; i < readyCallbacks.length; i++) {
+            readyCallbacks[i]();
+          }
+          readyCallbacks = [];
+        });
+      });
+    },
+    getContext: function() { return call("context.get", null); },
+    invokeAction: function(actionId, input) { return call("action.invoke", {actionId: actionId, input: input}); },
+    queryData: function(sourceId, params) { return call("data.query", {sourceId: sourceId, params: params}); },
+    subscribeData: function(sourceId, params, rate) { return call("data.subscribe", {sourceId: sourceId, params: params, ratePerMinute: rate}); },
+    navigate: function(target, type) { return call("navigation.request", {target: target, type: type}); },
+    requestResize: function(width, height) { return call("resize.request", {width: width, height: height}); },
+    openResource: function(handleId) { return call("resource.open", {handleId: handleId}); },
+    readResource: function(handleId) { return call("resource.read", {handleId: handleId}); },
+    createArtifact: function(contentType, data, filename) { return call("artifact.create", {contentType: contentType, data: data, filename: filename}); },
+    log: function(level, message) { return call("log", {level: level, message: message}); },
+    ping: function() { return call("session.ping", null); },
+    onReady: function(cb) {
+      if (isReady) { cb(); return; }
+      readyCallbacks.push(cb);
+    },
+    sessionId: sessionId,
+    origin: origin,
+    generation: generation
   };
 
   Object.freeze(api);

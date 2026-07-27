@@ -24,7 +24,7 @@ func NewEntryValidator(policy ArchivePolicy) *EntryValidator {
 			".exe": true, ".com": true, ".bat": true, ".cmd": true,
 			".msi": true, ".dll": true, ".sys": true, ".scr": true,
 			".pif": true, ".cpl": true, ".so": true, ".dylib": true,
-			".app": true, ".wasm": true, ".class": true, ".jar": true,
+			".app": true, ".class": true, ".jar": true,
 			".apk": true, ".deb": true, ".rpm": true,
 		},
 		nestedArchiveExt: map[string]bool{

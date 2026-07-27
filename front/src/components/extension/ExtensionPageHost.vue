@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import type { UIContributionSummary } from "@/stores/extensionUI";
+
+const SchemaUIRenderer = defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
+const SandboxWebUIFrame = defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
 
 type PageState =
   | "resolving"
@@ -77,6 +81,40 @@ const isError = computed(() =>
 const isSchemaPage = computed(() => pageSpec.value?.entryKind === "schema_page");
 const isWebPage = computed(() => pageSpec.value?.entryKind === "web_page");
 
+const pageContribution = computed<UIContributionSummary | null>(() => {
+  if (!pageSpec.value) return null;
+  return {
+    contributionId: `${extensionId.value}/${pageId.value}`,
+    extensionId: extensionId.value,
+    moduleId: "",
+    kind: pageSpec.value.entryKind,
+    slotId: "extension.page.main",
+    contractVersion: 1,
+    generation: 1,
+    title: pageSpec.value.title.default,
+    ordering: 0,
+    visible: true,
+    effective: true,
+    enabled: true,
+    runtimeReady: true,
+    permissions: pageSpec.value.permissions ?? [],
+    sandbox: pageSpec.value.entryKind === "web_page" ? "web_restricted" : "schema_renderer",
+    entryPath: pageSpec.value.entryPath,
+    schemaPath: pageSpec.value.schemaPath,
+    actions: [],
+  };
+});
+
+const pageContext = computed<Record<string, unknown>>(() => ({
+  extensionId: extensionId.value,
+  pageId: pageId.value,
+  sessionId: sessionId.value,
+  scope: pageSpec.value?.scope ?? "global",
+  params: route.query,
+  platform: detectPlatform(),
+  locale: navigator.language ?? "en",
+}));
+
 async function openPage() {
   if (!extensionId.value || !pageId.value) return;
   pageState.value = "resolving";
@@ -98,11 +136,7 @@ async function openPage() {
     missingPermissions.value = result.missingPermissions ?? [];
     errorReason.value = result.reason ?? "";
     if (result.state === "loading" || result.state === "runtime_starting") {
-      setTimeout(() => {
-        if (pageState.value === "loading" || pageState.value === "runtime_starting") {
-          pageState.value = "ready";
-        }
-      }, 800);
+      pollPageStatus();
     }
     if (result.sessionId) {
       uiStore.registerSession({
@@ -118,7 +152,32 @@ async function openPage() {
   }
 }
 
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function pollPageStatus() {
+  if (!sessionId.value) return;
+  try {
+    const response = await fetch(`/api/extensions/ui/page-sessions/${sessionId.value}/status`);
+    if (!response.ok) throw new Error(`poll status failed: ${response.status}`);
+    const result: OpenPageResult = await response.json();
+    pageState.value = result.state;
+    pageSpec.value = result.definition ?? pageSpec.value;
+    missingPermissions.value = result.missingPermissions ?? [];
+    errorReason.value = result.reason ?? "";
+    if (result.state === "loading" || result.state === "runtime_starting") {
+      pollTimer = setTimeout(pollPageStatus, 1000);
+    }
+  } catch (e) {
+    pageState.value = "failed";
+    errorReason.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
 async function closePage() {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
   if (!sessionId.value) return;
   try {
     await fetch(`/api/extensions/ui/page-sessions/${sessionId.value}`, {
@@ -200,9 +259,23 @@ watch([extensionId, pageId], async () => {
           <p>{{ stateLabel[pageState] }}</p>
         </div>
       </template>
-      <template v-else-if="pageSpec">
+      <template v-else-if="pageContribution">
         <div class="extension-page-host__page-content">
-          <p class="extension-page-host__placeholder">扩展页面内容(由 {{ pageSpec.entryKind }} 渲染)</p>
+          <SchemaUIRenderer
+            v-if="isSchemaPage"
+            :contribution="pageContribution"
+            :slot-id="`extension.page.main`"
+            :context="pageContext"
+          />
+          <SandboxWebUIFrame
+            v-else-if="isWebPage"
+            :contribution="pageContribution"
+            :slot-id="`extension.page.main`"
+            :context="pageContext"
+          />
+          <div v-else class="extension-page-host__placeholder">
+            未知页面类型: {{ pageSpec?.entryKind }}
+          </div>
         </div>
       </template>
     </main>

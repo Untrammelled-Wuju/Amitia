@@ -31,7 +31,7 @@ func NewTaskExecutor(maxConcurrent int, workspaceRoot string) *TaskExecutor {
 	}
 }
 
-type TaskHandler func(ctx context.Context, task *Task) (output []byte, outputHash string, artifactRef string, err error)
+type TaskExecuteHandler func(ctx context.Context, task *Task) (output []byte, outputHash string, artifactRef string, err error)
 
 type EnqueueResult struct {
 	TaskID      string
@@ -77,7 +77,7 @@ func (e *TaskExecutor) Enqueue(task *Task) EnqueueResult {
 
 type ExecuteRequest struct {
 	TaskID  string
-	Handler TaskHandler
+	Handler TaskExecuteHandler
 }
 
 type ExecuteResult struct {
@@ -272,7 +272,7 @@ func (e *TaskExecutor) Cleanup(taskID string) error {
 	return nil
 }
 
-func (e *TaskExecutor) Recover(ctx context.Context, taskID string, handler TaskHandler) ExecuteResult {
+func (e *TaskExecutor) Recover(ctx context.Context, taskID string, handler TaskExecuteHandler) ExecuteResult {
 	e.mu.Lock()
 	task, exists := e.tasks[taskID]
 	if !exists {

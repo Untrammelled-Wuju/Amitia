@@ -1,6 +1,8 @@
 package schema_ui
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -389,7 +391,8 @@ func computeHash(doc *SchemaUIDocument) string {
 	if err != nil {
 		return ""
 	}
-	return fmt.Sprintf("sha256:%d", len(data))
+	hash := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(hash[:])
 }
 
 type PageState string
@@ -619,6 +622,7 @@ func (r *SecretInputResolver) ResolveFields(props map[string]any) (map[string]an
 }
 
 type CompilerCache struct {
+	mu      sync.RWMutex
 	entries map[string]*CompiledDocument
 }
 
@@ -627,12 +631,20 @@ func NewCompilerCache() *CompilerCache {
 }
 
 func (c *CompilerCache) Get(hash string) (*CompiledDocument, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	v, ok := c.entries[hash]
 	return v, ok
 }
 
 func (c *CompilerCache) Put(doc *CompiledDocument) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.entries[doc.Hash] = doc
 }
 
-func (c *CompilerCache) Size() int { return len(c.entries) }
+func (c *CompilerCache) Size() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.entries)
+}

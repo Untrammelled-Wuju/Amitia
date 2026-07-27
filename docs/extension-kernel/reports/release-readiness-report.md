@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1785067037071977500 |
-| 生成时间 | 2026-07-26T11:57:17Z |
-| 开始时间 | 2026-07-26T11:57:17Z |
-| 结束时间 | 2026-07-26T11:57:17Z |
+| Report ID | final-acceptance-1785135085671212800 |
+| 生成时间 | 2026-07-27T06:51:25Z |
+| 开始时间 | 2026-07-27T06:51:25Z |
+| 结束时间 | 2026-07-27T06:51:25Z |
 | 总项 | 27 |
 | 通过 | 27 |
 | 失败 | 0 |
@@ -38,7 +38,7 @@
 | stage2.kernel_core | kernel_core | ExtensionKernel 领域模型 | true | passed | verified |
 | stage3.amitiax_manifest | amitiax_runtime | AmitiaxManifestV2 | true | passed | verified |
 | stage3.runtimes | amitiax_runtime | 多 Runtime 实现 | true | passed | verified |
-| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | verified |
+| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | ui_contribution.UIHost 实例化成功,默认slot=8,测试贡献注册成功; extension_slots.DefaultSlotRegistry 实例化成功,slot数量=23; schema_ui.NewValidator 实例化成功; sandbox_webui.NewHost 实例化成功; extension_page_host.NewPageHost 实例化成功; ui_ordering.NewOrderingEngine 实例化成功 |
 | stage5.builtin_tools | migration | 内置 Tools 迁移 | true | passed | verified |
 | stage5.skills_mcp_workflow | migration | Skill/MCP/Workflow 迁移 | true | passed | verified |
 | stage5.plugins_legacy | migration | Plugins 与旧 Amitiax 迁移 | true | passed | verified |

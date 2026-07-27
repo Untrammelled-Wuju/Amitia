@@ -2,6 +2,7 @@ package amitiax
 
 import (
 	"archive/zip"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +31,7 @@ const (
 	LicensesDir    = "licenses/"
 	DocsDir        = "docs/"
 	SignaturesDir  = "signatures/"
+	SignatureFile  = "signatures/signature.json"
 )
 
 var allowedRootDirs = map[string]bool{
@@ -55,6 +57,7 @@ type PackageLayout struct {
 	Signatures     []string
 	IntegrityFiles string
 	IntegrityTree  string
+	SignatureFile  string
 }
 
 type FileEntry struct {
@@ -77,21 +80,33 @@ type IntegrityTreeDoc struct {
 	GeneratedAt time.Time `json:"generatedAt"`
 }
 
+type SignatureDoc struct {
+	Algorithm   string    `json:"algorithm"`
+	KeyID       string    `json:"keyId"`
+	Signature   []byte    `json:"signature"`
+	SignedAt    time.Time `json:"signedAt"`
+	PublisherID string    `json:"publisherId,omitempty"`
+}
+
 type Package struct {
-	Manifest  manifest_v2.Manifest
-	Layout    PackageLayout
-	Files     []FileEntry
-	Integrity IntegrityFilesDoc
-	Tree      IntegrityTreeDoc
+	Manifest   manifest_v2.Manifest
+	Layout     PackageLayout
+	Files      []FileEntry
+	Integrity  IntegrityFilesDoc
+	Tree       IntegrityTreeDoc
+	Signatures *SignatureDoc
 }
 
 var (
-	ErrInvalidArchive    = errors.New("amitiax: invalid archive")
-	ErrManifestMissing   = errors.New("amitiax: manifest.json missing")
-	ErrInvalidStructure  = errors.New("amitiax: invalid package structure")
-	ErrPathTraversal     = errors.New("amitiax: path traversal detected")
-	ErrIntegrityMissing  = errors.New("amitiax: integrity files missing")
-	ErrIntegrityMismatch = errors.New("amitiax: integrity mismatch")
+	ErrInvalidArchive          = errors.New("amitiax: invalid archive")
+	ErrManifestMissing         = errors.New("amitiax: manifest.json missing")
+	ErrInvalidStructure        = errors.New("amitiax: invalid package structure")
+	ErrPathTraversal           = errors.New("amitiax: path traversal detected")
+	ErrIntegrityMissing        = errors.New("amitiax: integrity files missing")
+	ErrIntegrityMismatch       = errors.New("amitiax: integrity mismatch")
+	ErrSignatureMissing        = errors.New("amitiax: signature missing")
+	ErrSignatureInvalid        = errors.New("amitiax: invalid signature")
+	ErrUnsupportedSigAlgorithm = errors.New("amitiax: unsupported signature algorithm")
 )
 
 func OpenArchive(archivePath string) (*Package, error) {
@@ -141,6 +156,13 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 				if err := json.Unmarshal(data, &pkg.Tree); err != nil {
 					return nil, fmt.Errorf("%w: parse tree: %v", ErrInvalidStructure, err)
 				}
+			case name == SignatureFile:
+				layout.SignatureFile = name
+				sig := &SignatureDoc{}
+				if err := json.Unmarshal(data, sig); err != nil {
+					return nil, fmt.Errorf("%w: parse signature: %v", ErrInvalidStructure, err)
+				}
+				pkg.Signatures = sig
 			}
 		}
 		files = append(files, entry)
@@ -293,6 +315,27 @@ func VerifyIntegrity(pkg *Package) error {
 	computedTree := ComputeTreeHash(verifiedFiles)
 	if pkg.Tree.TreeHash != "" && computedTree != pkg.Tree.TreeHash {
 		return fmt.Errorf("%w: tree hash mismatch", ErrIntegrityMismatch)
+	}
+	return nil
+}
+
+func VerifySignature(pkg *Package, publicKey ed25519.PublicKey) error {
+	if pkg == nil || pkg.Signatures == nil {
+		return ErrSignatureMissing
+	}
+	if pkg.Signatures.Algorithm != "ed25519" {
+		return fmt.Errorf("%w: %s", ErrUnsupportedSigAlgorithm, pkg.Signatures.Algorithm)
+	}
+	treeHash := pkg.Tree.TreeHash
+	if treeHash == "" {
+		return fmt.Errorf("%w: content tree hash empty", ErrSignatureInvalid)
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: invalid public key size", ErrSignatureInvalid)
+	}
+	msg := signatureMessage(pkg.Signatures.PublisherID, treeHash)
+	if !ed25519.Verify(publicKey, []byte(msg), pkg.Signatures.Signature) {
+		return ErrSignatureInvalid
 	}
 	return nil
 }

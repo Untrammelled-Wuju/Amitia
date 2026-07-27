@@ -1,0 +1,256 @@
+<!DOCTYPE html><html lang="zh-CN" class="dark"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扩展中心</title>
+    <style id="theme-vars">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --amitia-background: #000000;
+  --amitia-foreground: #ffffff;
+  --amitia-card: #1c1c1e;
+  --amitia-card-foreground: #ffffff;
+  --amitia-popover: #2c2c2e;
+  --amitia-popover-foreground: #ffffff;
+  --amitia-primary: #c99557;
+  --amitia-primary-foreground: #000000;
+  --amitia-muted: #1c1c1e;
+  --amitia-muted-foreground: #8e8e93;
+  --amitia-border: #38383a;
+  --amitia-input: #1c1c1e;
+  --amitia-ring: rgba(201, 149, 87, 0.5);
+  --amitia-radius-small: 8px;
+  --amitia-radius-medium: 12px;
+  --amitia-radius-large: 16px;
+
+  --bg: #000000;
+  --bg-elevated: #1c1c1e;
+  --bg-grouped: #000000;
+  --shell: rgba(28, 28, 30, 0.82);
+  --surface: #1c1c1e;
+  --surface-soft: #2c2c2e;
+  --surface-secondary: #2c2c2e;
+  --surface-tertiary: #3a3a3c;
+  --surface-control: #3a3a3c;
+  --surface-control-hover: #48484a;
+  --surface-float: #2c2c2e;
+  --fill: rgba(120, 120, 128, 0.24);
+  --fill-secondary: rgba(120, 120, 128, 0.16);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  --separator: rgba(84, 84, 88, 0.5);
+  --separator-opaque: #38383a;
+  --on-bg: #ffffff;
+  --on-surface: #ffffff;
+  --on-surface-secondary: rgba(235, 235, 245, 0.6);
+  --on-surface-tertiary: rgba(235, 235, 245, 0.3);
+  --label: #ffffff;
+  --label-secondary: rgba(235, 235, 245, 0.6);
+  --label-tertiary: rgba(235, 235, 245, 0.3);
+  --primary: #c99557;
+  --primary-hover: #d8a96a;
+  --primary-active: #ad773d;
+  --primary-soft: rgba(201, 149, 87, 0.16);
+  --primary-bg: rgba(201, 149, 87, 0.16);
+  --primary-border: rgba(201, 149, 87, 0.3);
+  --on-primary: #000000;
+  --primary-container: rgba(201, 149, 87, 0.2);
+  --on-primary-container: #f0c987;
+  --secondary: #bf7a4e;
+  --secondary-soft: rgba(191, 122, 78, 0.14);
+  --on-secondary: #ffffff;
+  --secondary-container: rgba(191, 122, 78, 0.18);
+  --on-secondary-container: #d9a07f;
+  --state-running: #30d158;
+  --state-degraded: #ff9f0a;
+  --state-failed: #ff453a;
+  --state-installing: #c99557;
+  --state-idle: #8e8e93;
+  --error: #ff453a;
+  --error-soft: rgba(255, 69, 58, 0.16);
+  --on-error: #ffffff;
+  --error-container: rgba(255, 69, 58, 0.2);
+  --on-error-container: #ff8a80;
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.16);
+  --success-container: rgba(48, 209, 88, 0.2);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, 0.16);
+  --info: #64d2ff;
+  --info-soft: rgba(100, 210, 255, 0.16);
+  --purple: #bf5af2;
+  --purple-soft: rgba(191, 90, 242, 0.16);
+  --pink: #ff375f;
+  --pink-soft: rgba(255, 55, 95, 0.16);
+  --indigo: #5e5ce6;
+  --indigo-soft: rgba(94, 92, 230, 0.16);
+  --teal: #64d2ff;
+  --teal-soft: rgba(100, 210, 255, 0.16);
+  --outline: #38383a;
+  --outline-variant: #2c2c2e;
+  --divider: rgba(84, 84, 88, 0.35);
+  --border-strong: #48484a;
+  --overlay: rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.4);
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-bg-strong: rgba(22, 22, 24, 0.88);
+  --glass-bg-light: rgba(44, 44, 46, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-blur: 24px;
+  --glass-saturate: 200%;
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 24px rgba(201, 149, 87, 0.3);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Noto Sans SC', 'PingFang SC', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --tabbar-height: 49px;
+  --header-height: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --logo-gradient: linear-gradient(135deg, #e0b374, #a66f39);
+  --avatar-gradient: linear-gradient(135deg, #3a3a3c, #1c1c1e);
+  --card-radius: 16px;
+  --sheet-radius: 20px;
+  --button-radius: 14px;
+  --pill-radius: 9999px;
+}
+
+@theme inline {
+  --color-background: var(--amitia-background);
+  --color-foreground: var(--amitia-foreground);
+  --color-card: var(--amitia-card);
+  --color-card-foreground: var(--amitia-card-foreground);
+  --color-popover: var(--amitia-popover);
+  --color-popover-foreground: var(--amitia-popover-foreground);
+  --color-primary: var(--amitia-primary);
+  --color-primary-foreground: var(--amitia-primary-foreground);
+  --color-muted: var(--amitia-muted);
+  --color-muted-foreground: var(--amitia-muted-foreground);
+  --color-border: var(--amitia-border);
+  --color-input: var(--amitia-input);
+  --color-ring: var(--amitia-ring);
+  --radius-sm: var(--amitia-radius-small);
+  --radius-md: var(--amitia-radius-medium);
+  --radius-lg: var(--amitia-radius-large);
+  --radius-full: 9999px;
+  --font-sans: var(--font-sans);
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--amitia-background);
+    --color-foreground: var(--amitia-foreground);
+    --color-card: var(--amitia-card);
+    --color-card-foreground: var(--amitia-card-foreground);
+    --color-popover: var(--amitia-popover);
+    --color-popover-foreground: var(--amitia-popover-foreground);
+    --color-primary: var(--amitia-primary);
+    --color-primary-foreground: var(--amitia-primary-foreground);
+    --color-muted: var(--amitia-muted);
+    --color-muted-foreground: var(--amitia-muted-foreground);
+    --color-border: var(--amitia-border);
+    --color-input: var(--amitia-input);
+    --color-ring: var(--amitia-ring);
+    --color-secondary: var(--secondary);
+    --radius-sm: var(--amitia-radius-small);
+    --radius-md: var(--amitia-radius-medium);
+    --radius-lg: var(--amitia-radius-large);
+  }
+  @layer base {
+    body { background: var(--amitia-background); color: var(--amitia-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--amitia-background); }
+      .text-background { color: var(--amitia-background); }
+      .border-background { border-color: var(--amitia-background); }
+      .ring-background { --tw-ring-color: var(--amitia-background); }
+      .bg-foreground { background-color: var(--amitia-foreground); }
+      .text-foreground { color: var(--amitia-foreground); }
+      .border-foreground { border-color: var(--amitia-foreground); }
+      .ring-foreground { --tw-ring-color: var(--amitia-foreground); }
+      .bg-card { background-color: var(--amitia-card); }
+      .text-card { color: var(--amitia-card); }
+      .border-card { border-color: var(--amitia-card); }
+      .ring-card { --tw-ring-color: var(--amitia-card); }
+      .bg-card-foreground { background-color: var(--amitia-card-foreground); }
+      .text-card-foreground { color: var(--amitia-card-foreground); }
+      .border-card-foreground { border-color: var(--amitia-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--amitia-card-foreground); }
+      .bg-popover { background-color: var(--amitia-popover); }
+      .text-popover { color: var(--amitia-popover); }
+      .border-popover { border-color: var(--amitia-popover); }
+      .ring-popover { --tw-ring-color: var(--amitia-popover); }
+      .bg-popover-foreground { background-color: var(--amitia-popover-foreground); }
+      .text-popover-foreground { color: var(--amitia-popover-foreground); }
+      .border-popover-foreground { border-color: var(--amitia-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--amitia-popover-foreground); }
+      .bg-primary { background-color: var(--amitia-primary); }
+      .text-primary { color: var(--amitia-primary); }
+      .border-primary { border-color: var(--amitia-primary); }
+      .ring-primary { --tw-ring-color: var(--amitia-primary); }
+      .bg-primary-foreground { background-color: var(--amitia-primary-foreground); }
+      .text-primary-foreground { color: var(--amitia-primary-foreground); }
+      .border-primary-foreground { border-color: var(--amitia-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--amitia-primary-foreground); }
+      .bg-muted { background-color: var(--amitia-muted); }
+      .text-muted { color: var(--amitia-muted); }
+      .border-muted { border-color: var(--amitia-muted); }
+      .ring-muted { --tw-ring-color: var(--amitia-muted); }
+      .bg-muted-foreground { background-color: var(--amitia-muted-foreground); }
+      .text-muted-foreground { color: var(--amitia-muted-foreground); }
+      .border-muted-foreground { border-color: var(--amitia-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--amitia-muted-foreground); }
+      .bg-border { background-color: var(--amitia-border); }
+      .text-border { color: var(--amitia-border); }
+      .border-border { border-color: var(--amitia-border); }
+      .ring-border { --tw-ring-color: var(--amitia-border); }
+      .bg-input { background-color: var(--amitia-input); }
+      .text-input { color: var(--amitia-input); }
+      .border-input { border-color: var(--amitia-input); }
+      .ring-input { --tw-ring-color: var(--amitia-input); }
+      .bg-ring { background-color: var(--amitia-ring); }
+      .text-ring { color: var(--amitia-ring); }
+      .border-ring { border-color: var(--amitia-ring); }
+      .ring-ring { --tw-ring-color: var(--amitia-ring); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head><body><div class="nav-bar"><div class="nav-inner"><button class="nav-btn haptic-touch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button><div class="nav-title">扩展中心</div><div class="nav-right"></div></div></div>
+<div class="seg" style="grid-template-columns:repeat(4,1fr)"><button class="on">MCP服务</button><button>技能</button><button>插件</button><button>安装包</button></div>
+<div style="padding:4px 16px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="background:#1c1c1e;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:12px;background:rgba(48,209,88,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">filesystem</div><div style="font-size:12px;color:rgba(235,235,245,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">本地文件系统访问服务</div></div><div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#30d158;flex-shrink:0;display:inline-block"></span><label class="ios-switch"><input type="checkbox" checked/><span class="slider"></span></label></div></div>
+<div style="background:#1c1c1e;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:12px;background:rgba(201,149,87,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c99557" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">memory</div><div style="font-size:12px;color:rgba(235,235,245,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">长期记忆存储与检索</div></div><div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#c99557;flex-shrink:0;display:inline-block"></span><label class="ios-switch"><input type="checkbox" checked/><span class="slider"></span></label></div></div>
+<div style="background:#1c1c1e;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:12px;background:rgba(120,120,128,0.16);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21" y1="12" x2="16" y2="12"/></svg></div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">browser</div><div style="font-size:12px;color:rgba(235,235,245,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">浏览器自动化控制</div></div><div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:rgba(120,120,128,0.4);flex-shrink:0;display:inline-block"></span><label class="ios-switch"><input type="checkbox" /><span class="slider"></span></label></div></div>
+<div style="background:#1c1c1e;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:12px;background:rgba(100,210,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64d2ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12s2-5 7-5 7 5 7 5-2 5-7 5-7-5-7-5z"/><circle cx="12" cy="12" r="3"/></svg></div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">fetch</div><div style="font-size:12px;color:rgba(235,235,245,0.5);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">网络请求与内容抓取</div></div><div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:#30d158;flex-shrink:0;display:inline-block"></span><label class="ios-switch"><input type="checkbox" checked/><span class="slider"></span></label></div></div>
+</div>
+<div style="padding:0 16px calc(24px + var(--safe-bottom));display:flex;flex-direction:column;gap:10px">
+<button class="haptic-touch" style="height:50px;background:#c99557;border-radius:14px;font-weight:600;font-size:16px;color:#000;border:none;width:100%;cursor:pointer;box-shadow:0 8px 24px rgba(201,149,87,0.3)">从文件安装</button>
+<button class="haptic-touch" style="text-align:center;font-size:15px;color:#c99557;padding:6px;background:transparent;border:none;cursor:pointer">浏览扩展商店</button>
+</div>
+    <style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{min-height:100vh;background:#000;color:#fff;font-family:var(--font-sans);-webkit-font-smoothing:antialiased}.glass{background:rgba(28,28,30,0.72);backdrop-filter:blur(24px) saturate(200%);-webkit-backdrop-filter:blur(24px) saturate(200%);border:1px solid rgba(255,255,255,0.1);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}.glass-strong{background:rgba(22,22,24,0.88);backdrop-filter:blur(30px) saturate(200%);-webkit-backdrop-filter:blur(30px) saturate(200%)}.haptic-touch:active{transform:scale(.97);transition:transform .1s}.ios-switch{position:relative;display:inline-block;width:51px;height:31px;flex-shrink:0}.ios-switch input{opacity:0;width:0;height:0}.ios-switch .slider{position:absolute;cursor:pointer;inset:0;border-radius:999px;background:rgba(120,120,128,0.3);transition:.3s}.ios-switch .slider:before{content:"";position:absolute;height:27px;width:27px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 2px 4px rgba(0,0,0,.2),0 3px 8px rgba(0,0,0,.15)}.ios-switch input:checked+.slider{background:#c99557}.ios-switch input:checked+.slider:before{transform:translateX(20px)}@keyframes breath{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.2)}}.breath{animation:breath 2s ease-in-out infinite}.nav-bar{position:sticky;top:0;z-index:40;background:#000;padding-top:var(--safe-top)}.nav-inner{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;position:relative}.nav-btn{width:34px;height:34px;border-radius:50%;background:rgba(120,120,128,0.24);display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;color:#fff}.nav-title{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:600;color:#fff;white-space:nowrap}.seg{margin:12px 16px;background:rgba(120,120,128,0.2);border-radius:10px;padding:2px;display:grid;gap:2px}.seg button{padding:7px 8px;border-radius:8px;font-size:13px;font-weight:500;color:rgba(235,235,245,0.6);text-align:center;border:none;background:transparent;cursor:pointer;white-space:nowrap}.seg button.on{background:#1c1c1e;color:#fff;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.3)}</style>
+</body></html>

@@ -211,3 +211,144 @@ func (r *WorkspaceRegistry) Remove(id WorkspaceID) error {
 	delete(r.byExtension, ws.ExtensionID)
 	return nil
 }
+
+type WorkspaceStore interface {
+	Save(ctx context.Context, ws DevelopmentWorkspace) error
+	Get(ctx context.Context, id WorkspaceID) (DevelopmentWorkspace, error)
+	GetByExtension(ctx context.Context, extID ExtensionID) (DevelopmentWorkspace, error)
+	List(ctx context.Context) ([]DevelopmentWorkspace, error)
+	UpdateStatus(ctx context.Context, id WorkspaceID, status WorkspaceStatus) error
+	SetCurrentRevision(ctx context.Context, id WorkspaceID, revision RevisionID) error
+	GrantDevTrust(ctx context.Context, id WorkspaceID) error
+	RevokeDevTrust(ctx context.Context, id WorkspaceID) error
+	Remove(ctx context.Context, id WorkspaceID) error
+}
+
+type MemoryWorkspaceStore struct {
+	mu          sync.RWMutex
+	workspaces  map[WorkspaceID]DevelopmentWorkspace
+	byExtension map[ExtensionID]WorkspaceID
+}
+
+func NewMemoryWorkspaceStore() *MemoryWorkspaceStore {
+	return &MemoryWorkspaceStore{
+		workspaces:  make(map[WorkspaceID]DevelopmentWorkspace),
+		byExtension: make(map[ExtensionID]WorkspaceID),
+	}
+}
+
+func (s *MemoryWorkspaceStore) Save(ctx context.Context, ws DevelopmentWorkspace) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ws.WorkspaceID == "" {
+		return fmt.Errorf("%w: empty workspace id", ErrInvalidWorkspaceInput)
+	}
+	if existing, ok := s.byExtension[ws.ExtensionID]; ok && existing != ws.WorkspaceID {
+		return fmt.Errorf("%w: %s", ErrWorkspaceConflict, ws.ExtensionID)
+	}
+	now := time.Now().UTC()
+	if ws.CreatedAt.IsZero() {
+		ws.CreatedAt = now
+	}
+	ws.UpdatedAt = now
+	s.workspaces[ws.WorkspaceID] = ws
+	s.byExtension[ws.ExtensionID] = ws.WorkspaceID
+	return nil
+}
+
+func (s *MemoryWorkspaceStore) Get(ctx context.Context, id WorkspaceID) (DevelopmentWorkspace, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return DevelopmentWorkspace{}, fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	return ws, nil
+}
+
+func (s *MemoryWorkspaceStore) GetByExtension(ctx context.Context, extID ExtensionID) (DevelopmentWorkspace, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	id, ok := s.byExtension[extID]
+	if !ok {
+		return DevelopmentWorkspace{}, fmt.Errorf("%w: %s", ErrWorkspaceNotFound, extID)
+	}
+	return s.workspaces[id], nil
+}
+
+func (s *MemoryWorkspaceStore) List(ctx context.Context) ([]DevelopmentWorkspace, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]DevelopmentWorkspace, 0, len(s.workspaces))
+	for _, ws := range s.workspaces {
+		out = append(out, ws)
+	}
+	return out, nil
+}
+
+func (s *MemoryWorkspaceStore) UpdateStatus(ctx context.Context, id WorkspaceID, status WorkspaceStatus) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	ws.Status = status
+	ws.UpdatedAt = time.Now().UTC()
+	if status == WorkspaceStatusReady {
+		ws.LastReloadAt = ws.UpdatedAt
+	}
+	s.workspaces[id] = ws
+	return nil
+}
+
+func (s *MemoryWorkspaceStore) SetCurrentRevision(ctx context.Context, id WorkspaceID, revision RevisionID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	ws.CurrentRevision = revision
+	ws.UpdatedAt = time.Now().UTC()
+	s.workspaces[id] = ws
+	return nil
+}
+
+func (s *MemoryWorkspaceStore) GrantDevTrust(ctx context.Context, id WorkspaceID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	ws.DevTrust = true
+	ws.UpdatedAt = time.Now().UTC()
+	s.workspaces[id] = ws
+	return nil
+}
+
+func (s *MemoryWorkspaceStore) RevokeDevTrust(ctx context.Context, id WorkspaceID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	ws.DevTrust = false
+	ws.UpdatedAt = time.Now().UTC()
+	s.workspaces[id] = ws
+	return nil
+}
+
+func (s *MemoryWorkspaceStore) Remove(ctx context.Context, id WorkspaceID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, ok := s.workspaces[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
+	}
+	delete(s.workspaces, id)
+	delete(s.byExtension, ws.ExtensionID)
+	return nil
+}

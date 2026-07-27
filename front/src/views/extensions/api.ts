@@ -39,6 +39,11 @@ import type {
   PackageVersion,
   ExportedPackage,
   PackageDependency,
+  TaskListFilters,
+  TaskProgress,
+  TaskResult,
+  TaskRun,
+  TaskRunPage,
 } from "./types";
 
 export async function fetchCharacterOptions() {
@@ -811,4 +816,48 @@ export async function setPackageSignerTrust(
   await apiClient.post(
     `/api/extensions/signers/${encodeURIComponent(fingerprint)}/${trusted ? "trust" : "untrust"}`,
   );
+}
+
+const taskRunPath = (taskRunId: string) =>
+  `/api/extensions/tasks/${encodeURIComponent(taskRunId)}`;
+
+export async function fetchTasks(filters: TaskListFilters = {}) {
+  const response = await apiClient.get("/api/extensions/tasks", {
+    params: {
+      extensionId: filters.extensionId || undefined,
+      status: filters.status || undefined,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    },
+  });
+  return response.data as TaskRunPage;
+}
+
+export async function fetchTask(taskRunId: string) {
+  const response = await apiClient.get(taskRunPath(taskRunId));
+  return response.data as TaskRun;
+}
+
+export async function cancelTask(taskRunId: string) {
+  await apiClient.post(`${taskRunPath(taskRunId)}/cancel`);
+}
+
+export async function retryTask(taskRunId: string) {
+  const response = await apiClient.post(`${taskRunPath(taskRunId)}/retry`);
+  return response.data as TaskRun;
+}
+
+export async function recoverTask(taskRunId: string) {
+  const response = await apiClient.post(`${taskRunPath(taskRunId)}/recover`);
+  return response.data as TaskRun;
+}
+
+export async function fetchTaskProgress(taskRunId: string) {
+  const response = await apiClient.get(`${taskRunPath(taskRunId)}/progress`);
+  return response.data as TaskProgress;
+}
+
+export async function fetchTaskResult(taskRunId: string) {
+  const response = await apiClient.get(`${taskRunPath(taskRunId)}/result`);
+  return response.data as TaskResult;
 }

@@ -32,6 +32,7 @@ type Runtime struct {
 	root      string
 	installer *amitiax.Installer
 	installed map[string]InstalledExtension
+	container *Container
 }
 
 func NewRuntime(root string) (*Runtime, error) {
@@ -50,6 +51,18 @@ func NewRuntime(root string) (*Runtime, error) {
 
 func (r *Runtime) Root() string {
 	return r.root
+}
+
+func (r *Runtime) SetContainer(c *Container) {
+	r.mu.Lock()
+	r.container = c
+	r.mu.Unlock()
+}
+
+func (r *Runtime) Container() *Container {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.container
 }
 
 func (r *Runtime) Recover() error {

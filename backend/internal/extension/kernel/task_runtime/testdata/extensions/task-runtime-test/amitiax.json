@@ -1,0 +1,20 @@
+{
+  "manifestVersion": 2,
+  "extensionId": "task-runtime-test",
+  "version": "1.0.0",
+  "name": "Task Runtime Test Extension",
+  "modules": [{
+    "moduleId": "main",
+    "runtimeType": "task_javascript",
+    "entry": "./tasks/index.js"
+  }],
+  "contributions": [
+    { "id": "counting_task", "type": "task", "entry": "./tasks/counting.js", "idempotent": true, "recoverable": false },
+    { "id": "checkpoint_task", "type": "task", "entry": "./tasks/checkpoint.js", "idempotent": true, "recoverable": true, "checkpoint": true },
+    { "id": "artifact_task", "type": "task", "entry": "./tasks/artifact.js", "idempotent": true, "recoverable": false },
+    { "id": "cancel_task", "type": "task", "entry": "./tasks/cancel.js", "idempotent": true, "recoverable": false },
+    { "id": "timeout_task", "type": "task", "entry": "./tasks/timeout.js", "idempotent": true, "recoverable": false },
+    { "id": "non_idempotent_task", "type": "task", "entry": "./tasks/non-idempotent.js", "idempotent": false, "recoverable": false },
+    { "id": "migration_task", "type": "task", "entry": "./tasks/migration.js", "idempotent": true, "recoverable": true, "checkpoint": true, "storageNamespaces": ["source", "target"] }
+  ]
+}

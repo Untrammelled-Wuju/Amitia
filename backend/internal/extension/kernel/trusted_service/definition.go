@@ -164,6 +164,12 @@ type ServiceInstance struct {
 	WorkingDir       string                  `json:"working_dir"`
 	StdioConn        string                  `json:"stdio_conn,omitempty"`
 	SessionToken     string                  `json:"session_token,omitempty"`
+	rpcSession       *RPCSession             `json:"-"`
+	managedProc      interface{}             `json:"-"`
+	procHandle       uint64                  `json:"-"`
+	circuit          *CircuitBreaker         `json:"-"`
+	lastExitCode     int                     `json:"-"`
+	lastExitError    string                  `json:"-"`
 	mu               sync.RWMutex
 	stopCh           chan struct{}
 	healthCancel     context.CancelFunc

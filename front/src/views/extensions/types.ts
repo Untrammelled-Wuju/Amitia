@@ -818,3 +818,90 @@ export interface ExportedPackage {
   signatureStatus: string;
   expiresAt: string;
 }
+
+export type TaskRunStatus =
+  | "created"
+  | "queued"
+  | "starting"
+  | "running"
+  | "checkpointing"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "cancelling"
+  | "cancelled"
+  | "succeeded"
+  | "failed"
+  | "timed_out"
+  | "recovery_required"
+  | "manual_intervention";
+
+export interface TaskProgress {
+  taskRunId: string;
+  sequence: number;
+  current: number;
+  total: number;
+  percentage: number;
+  stage: string;
+  message: string;
+  updatedAt: string;
+}
+
+export interface TaskCheckpoint {
+  checkpointId: string;
+  sequence: number;
+  status: string;
+  stage?: string;
+  message?: string;
+  payload?: unknown;
+  createdAt: string;
+}
+
+export type TaskResultType = "inline_json" | "artifact";
+
+export interface TaskResult {
+  taskRunId: string;
+  resultType: TaskResultType;
+  resultJson?: unknown;
+  artifactId?: string;
+  resultHash?: string;
+  artifactName?: string;
+  artifactSize?: number;
+  artifactMime?: string;
+}
+
+export interface TaskRun {
+  taskRunId: string;
+  operationId?: string;
+  invocationId?: string;
+  taskDefinitionId?: string;
+  extensionId: string;
+  moduleId?: string;
+  status: TaskRunStatus;
+  priority: number;
+  inputHash?: string;
+  attempt: number;
+  maxAttempts: number;
+  createdAt: string;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  deadlineAt?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  progress?: TaskProgress;
+  checkpoint?: TaskCheckpoint;
+  result?: TaskResult;
+}
+
+export interface TaskRunPage {
+  items: TaskRun[];
+  total: number;
+}
+
+export interface TaskListFilters {
+  extensionId?: string;
+  status?: TaskRunStatus | "";
+  page?: number;
+  pageSize?: number;
+}
