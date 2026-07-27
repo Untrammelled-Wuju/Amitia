@@ -124,8 +124,8 @@ private fun TodayDetailContent(
             }
             else -> {
                 val activities = (activityState as ScreenState.Content<List<TodayActivity>>).data
-                items(activities.size, key = { activities[it].id }) { index ->
-                    val activity = activities[index]
+                androidx.compose.foundation.lazy.items(activities, key = { it.id }) { activity ->
+                    val index = activities.indexOf(activity)
                     TimelineItem(
                         title = activity.title,
                         description = activity.description,
@@ -175,22 +175,12 @@ private fun TodayDetailContent(
     }
 }
 
-private fun androidx.compose.ui.graphics.vector.ImageVector.letIcon() = this
-
 private fun activityIcon(type: ActivityIconType) = when (type) {
     ActivityIconType.Chat -> AmitiaIcons.Chat
     ActivityIconType.Hub -> AmitiaIcons.Hub
     ActivityIconType.Memory -> AmitiaIcons.Memory
     ActivityIconType.Event -> AmitiaIcons.Event
     ActivityIconType.Settings -> AmitiaIcons.Settings
-}
-
-private fun <T> androidx.compose.foundation.lazy.LazyListScope.items(
-    count: Int,
-    key: (Int) -> Any,
-    itemContent: @Composable (Int) -> Unit
-) {
-    items(count = count, key = key, itemContent = { index -> itemContent(index) })
 }
 
 @Preview(name = "Today Detail - Light", showBackground = true)
