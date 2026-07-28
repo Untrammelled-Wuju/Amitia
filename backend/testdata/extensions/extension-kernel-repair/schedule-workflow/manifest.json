@@ -1,0 +1,48 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/schedule-workflow",
+		"name": {"default": "Schedule Workflow"},
+		"description": {"default": "Phase 10 E2E: interval schedule that triggers a workflow execution"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "workflow-schedule",
+					"kind": "schedule",
+					"name": {"default": "Workflow Schedule"},
+					"description": {"default": "Interval schedule targeting a workflow"},
+					"spec": {
+						"trigger": {
+							"type": "interval",
+							"interval": "60s"
+						},
+						"target": {
+							"type": "workflow",
+							"workflowId": "cleanup-workflow",
+							"input": {"mode": "scheduled"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "schedule.create", "reason": "Create interval schedule", "required": true},
+		{"name": "workflow.invoke", "reason": "Invoke scheduled workflow", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

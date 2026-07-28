@@ -1,0 +1,44 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/tool-basic",
+		"name": {"default": "Tool Basic"},
+		"description": {"default": "Phase 10 E2E: basic tool extension that returns a static echo"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "echo-tool",
+					"kind": "tool",
+					"name": {"default": "Echo Tool"},
+					"description": {"default": "Returns the input text as output"},
+					"modelName": "echo_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"text": {"type": "string", "description": "Text to echo"}
+						},
+						"required": ["text"]
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute echo tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

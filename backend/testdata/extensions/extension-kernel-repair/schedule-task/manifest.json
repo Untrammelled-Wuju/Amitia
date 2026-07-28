@@ -1,0 +1,48 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/schedule-task",
+		"name": {"default": "Schedule Task"},
+		"description": {"default": "Phase 10 E2E: cron schedule that creates a TaskRun"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "task-schedule",
+					"kind": "schedule",
+					"name": {"default": "Task Schedule"},
+					"description": {"default": "Cron schedule targeting a background task"},
+					"spec": {
+						"trigger": {
+							"type": "cron",
+							"expression": "0 */5 * * * *"
+						},
+						"target": {
+							"type": "task",
+							"taskName": "periodic-sync",
+							"input": {"source": "scheduled"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "schedule.create", "reason": "Create cron schedule", "required": true},
+		{"name": "task.run", "reason": "Run scheduled task", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

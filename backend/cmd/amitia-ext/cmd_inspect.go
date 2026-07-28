@@ -17,7 +17,7 @@ func runInspect(args []string, output *Output) int {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		output.fail(ExitConfig, "用法: amitia-ext inspect <package.amitiax> [--files] [--modules]")
+		output.fail(ExitConfig, "用法: amitiax inspect <package.amitiax> [--files] [--modules]")
 	}
 	archivePath := fs.Arg(0)
 

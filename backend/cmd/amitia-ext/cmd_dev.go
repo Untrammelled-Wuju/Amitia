@@ -53,7 +53,7 @@ func runDev(args []string, output *Output) int {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		output.fail(ExitConfig, "用法: amitia-ext dev <workspace-path> [--manifest <path>] [--watch] [--auto-reload] [--host host:port]")
+		output.fail(ExitConfig, "用法: amitiax dev <workspace-path> [--manifest <path>] [--watch] [--auto-reload] [--host host:port]")
 	}
 
 	workspacePath, err := filepath.Abs(fs.Arg(0))

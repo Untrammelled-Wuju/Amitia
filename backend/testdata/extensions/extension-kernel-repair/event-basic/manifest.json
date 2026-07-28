@@ -1,0 +1,51 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/event-basic",
+		"name": {"default": "Event Basic"},
+		"description": {"default": "Phase 10 E2E: basic event subscription that receives system.test events"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "test-subscription",
+					"kind": "event_subscription",
+					"name": {"default": "Test Subscription"},
+					"description": {"default": "Subscribes to system.test events"},
+					"spec": {
+						"eventTypeId": "system.test",
+						"eventVersionRange": "^1",
+						"entry": "onEvent",
+						"deliveryPolicy": {
+							"timeout": "5s",
+							"maxInFlight": 4
+						},
+						"retryPolicy": {
+							"maxAttempts": 3,
+							"initialBackoff": "100ms",
+							"maxBackoff": "1s",
+							"multiplier": 2
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "event.subscribe", "reason": "Subscribe to system.test events", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

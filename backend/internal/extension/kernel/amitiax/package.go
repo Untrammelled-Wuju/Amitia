@@ -32,6 +32,7 @@ const (
 	DocsDir        = "docs/"
 	SignaturesDir  = "signatures/"
 	SignatureFile  = "signatures/signature.json"
+	V2SignatureFile = "META-INF/amitia-signature.json"
 )
 
 var allowedRootDirs = map[string]bool{
@@ -44,20 +45,22 @@ var allowedRootDirs = map[string]bool{
 	"licenses":      true,
 	"docs":          true,
 	"signatures":    true,
+	"META-INF":      true,
 }
 
 type PackageLayout struct {
-	ManifestPath   string
-	Modules        map[string]string
-	Resources      []string
-	Assets         []string
-	Migrations     []string
-	Licenses       []string
-	Docs           []string
-	Signatures     []string
-	IntegrityFiles string
-	IntegrityTree  string
-	SignatureFile  string
+	ManifestPath    string
+	Modules         map[string]string
+	Resources       []string
+	Assets          []string
+	Migrations      []string
+	Licenses        []string
+	Docs            []string
+	Signatures      []string
+	IntegrityFiles  string
+	IntegrityTree   string
+	SignatureFile   string
+	V2SignatureFile string
 }
 
 type FileEntry struct {
@@ -89,12 +92,13 @@ type SignatureDoc struct {
 }
 
 type Package struct {
-	Manifest   manifest_v2.Manifest
-	Layout     PackageLayout
-	Files      []FileEntry
-	Integrity  IntegrityFilesDoc
-	Tree       IntegrityTreeDoc
-	Signatures *SignatureDoc
+	Manifest     manifest_v2.Manifest
+	Layout       PackageLayout
+	Files        []FileEntry
+	Integrity    IntegrityFilesDoc
+	Tree         IntegrityTreeDoc
+	Signatures   *SignatureDoc
+	V2Signature  json.RawMessage
 }
 
 var (
@@ -163,6 +167,10 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 					return nil, fmt.Errorf("%w: parse signature: %v", ErrInvalidStructure, err)
 				}
 				pkg.Signatures = sig
+			case name == V2SignatureFile:
+				layout.V2SignatureFile = name
+				pkg.V2Signature = make(json.RawMessage, len(data))
+				copy(pkg.V2Signature, data)
 			}
 		}
 		files = append(files, entry)

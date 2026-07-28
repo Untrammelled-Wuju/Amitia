@@ -44,7 +44,12 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 	} else {
 		hasher := package_security.NewContentHasher()
 		preview.ArchiveHash = hasher.HashArchive(raw)
-		preview.SecurityPassed = true
+		preview.SecurityPassed = false
+		preview.Issues = append(preview.Issues, PreviewIssue{
+			Category: PreviewNotInstallable,
+			Code:     "security_service_unavailable",
+			Message:  "安全检查服务不可用，无法验证包安全性",
+		})
 	}
 
 	pkg, err := amitiax.OpenArchive(archivePath)

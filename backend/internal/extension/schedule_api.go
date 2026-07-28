@@ -2,6 +2,7 @@ package extension
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,24 @@ func (api *ScheduleAPI) service(c *gin.Context) *schedule.ScheduleService {
 		return nil
 	}
 	return container.ScheduleService
+}
+
+func parseExpectedGeneration(c *gin.Context, svc *schedule.ScheduleService, scheduleID string) (int64, error) {
+	if raw := c.Query("expectedGeneration"); raw != "" {
+		var gen int64
+		if _, err := fmt.Sscanf(raw, "%d", &gen); err != nil {
+			return 0, fmt.Errorf("invalid expectedGeneration: %w", err)
+		}
+		return gen, nil
+	}
+	if svc == nil || scheduleID == "" {
+		return 0, nil
+	}
+	state, err := svc.GetScheduleState(c.Request.Context(), scheduleID)
+	if err != nil || state == nil {
+		return 0, schedule.ErrScheduleNotFound
+	}
+	return state.Generation, nil
 }
 
 func (api *ScheduleAPI) RegisterRoutes(group *gin.RouterGroup) {
@@ -142,7 +161,12 @@ func (api *ScheduleAPI) updateSchedule(c *gin.Context) {
 		return
 	}
 	def.ScheduleID = scheduleID
-	if err := svc.Update(c.Request.Context(), &def); err != nil {
+	expectedGen, err := parseExpectedGeneration(c, svc, scheduleID)
+	if err != nil {
+		writeScheduleError(c, err)
+		return
+	}
+	if err := svc.Update(c.Request.Context(), scheduleID, expectedGen, &def); err != nil {
 		writeScheduleError(c, err)
 		return
 	}
@@ -171,7 +195,12 @@ func (api *ScheduleAPI) enableSchedule(c *gin.Context) {
 		return
 	}
 	scheduleID := c.Param("scheduleId")
-	if err := svc.Enable(c.Request.Context(), scheduleID); err != nil {
+	expectedGen, err := parseExpectedGeneration(c, svc, scheduleID)
+	if err != nil {
+		writeScheduleError(c, err)
+		return
+	}
+	if err := svc.Enable(c.Request.Context(), scheduleID, expectedGen); err != nil {
 		writeScheduleError(c, err)
 		return
 	}
@@ -185,7 +214,12 @@ func (api *ScheduleAPI) disableSchedule(c *gin.Context) {
 		return
 	}
 	scheduleID := c.Param("scheduleId")
-	if err := svc.Disable(c.Request.Context(), scheduleID); err != nil {
+	expectedGen, err := parseExpectedGeneration(c, svc, scheduleID)
+	if err != nil {
+		writeScheduleError(c, err)
+		return
+	}
+	if err := svc.Disable(c.Request.Context(), scheduleID, expectedGen); err != nil {
 		writeScheduleError(c, err)
 		return
 	}
@@ -199,7 +233,12 @@ func (api *ScheduleAPI) pauseSchedule(c *gin.Context) {
 		return
 	}
 	scheduleID := c.Param("scheduleId")
-	if err := svc.Pause(c.Request.Context(), scheduleID); err != nil {
+	expectedGen, err := parseExpectedGeneration(c, svc, scheduleID)
+	if err != nil {
+		writeScheduleError(c, err)
+		return
+	}
+	if err := svc.Pause(c.Request.Context(), scheduleID, expectedGen); err != nil {
 		writeScheduleError(c, err)
 		return
 	}
@@ -213,7 +252,12 @@ func (api *ScheduleAPI) resumeSchedule(c *gin.Context) {
 		return
 	}
 	scheduleID := c.Param("scheduleId")
-	if err := svc.Resume(c.Request.Context(), scheduleID); err != nil {
+	expectedGen, err := parseExpectedGeneration(c, svc, scheduleID)
+	if err != nil {
+		writeScheduleError(c, err)
+		return
+	}
+	if err := svc.Resume(c.Request.Context(), scheduleID, expectedGen); err != nil {
 		writeScheduleError(c, err)
 		return
 	}

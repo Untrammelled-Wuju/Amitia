@@ -1,0 +1,48 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/schedule-tool",
+		"name": {"default": "Schedule Tool"},
+		"description": {"default": "Phase 10 E2E: one-shot schedule that triggers a tool execution"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "tool-schedule",
+					"kind": "schedule",
+					"name": {"default": "Tool Schedule"},
+					"description": {"default": "One-shot schedule targeting a tool"},
+					"spec": {
+						"trigger": {
+							"type": "one_shot",
+							"delay": "1s"
+						},
+						"target": {
+							"type": "tool",
+							"toolId": "echo-tool",
+							"input": {"text": "scheduled"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "schedule.create", "reason": "Create one-shot schedule", "required": true},
+		{"name": "tool.invoke", "reason": "Invoke scheduled tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

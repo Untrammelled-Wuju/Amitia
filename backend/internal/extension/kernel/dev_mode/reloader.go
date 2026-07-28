@@ -260,6 +260,18 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		return &ev, err
 	}
 
+	ev.Stage = ReloadStageValidate
+	r.emit(id, ev)
+	if vErrs := r.validateManifest(ws); len(vErrs) > 0 {
+		msg := vErrs[0]
+		ev.Success = false
+		ev.Error = msg
+		ev.CompletedAt = time.Now().UTC()
+		r.emit(id, ev)
+		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, msg)
+		return &ev, fmt.Errorf("%w: %s", ErrReloadValidationFailed, msg)
+	}
+
 	ev.Stage = ReloadStageRebuild
 	rev, err := r.pipeline.Build(ctx, id, BuildOptions{
 		Watch:            ws.WatchEnabled,
@@ -277,18 +289,6 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 	}
 	ev.RevisionID = rev.RevisionID
 	r.emit(id, ev)
-
-	ev.Stage = ReloadStageValidate
-	r.emit(id, ev)
-	if vErrs := r.validateManifest(ws); len(vErrs) > 0 {
-		msg := vErrs[0]
-		ev.Success = false
-		ev.Error = msg
-		ev.CompletedAt = time.Now().UTC()
-		r.emit(id, ev)
-		_ = r.registry.UpdateStatus(id, WorkspaceStatusFailed, msg)
-		return &ev, fmt.Errorf("%w: %s", ErrReloadValidationFailed, msg)
-	}
 
 	ev.Stage = ReloadStageLoad
 	r.emit(id, ev)
@@ -337,10 +337,15 @@ func (r *RuntimeReloader) validateManifest(ws *DevelopmentWorkspace) []string {
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return []string{fmt.Sprintf("parse manifest: %v", err)}
 	}
-	if _, ok := probe["id"]; !ok {
-		return []string{"manifest missing required field: id"}
+	if ext, ok := probe["extension"].(map[string]any); ok {
+		if id, _ := ext["id"].(string); id != "" {
+			return nil
+		}
 	}
-	return nil
+	if id, ok := probe["id"].(string); ok && id != "" {
+		return nil
+	}
+	return []string{"manifest missing required field: extension.id"}
 }
 
 func (r *RuntimeReloader) loadDefinitions(id WorkspaceID, rev *Revision) error {

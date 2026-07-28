@@ -81,7 +81,7 @@ func NewDeliveryPlanner(
 
 func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecord) error {
 	envelope := outboxToEnvelope(record)
-	subs, err := p.subscriptionRegistry.Resolve(ctx, envelope)
+	subs, err := p.subscriptionRegistry.ResolveForDelivery(ctx, envelope)
 	if err != nil {
 		return err
 	}
@@ -103,6 +103,8 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 				AvailableAt:    time.Now().UTC(),
 				ErrorCode:      "subscription_inactive",
 				ErrorMessage:   sub.Effective.DenyReason(),
+				SubscriptionGeneration: sub.Definition.Generation,
+				TargetGeneration:       sub.Definition.Generation,
 				CreatedAt:      time.Now().UTC(),
 				UpdatedAt:      time.Now().UTC(),
 			}
@@ -121,23 +123,25 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 			sequence = p.sequenceAllocator.Next(envelope.PartitionKey)
 		}
 		delivery := Delivery{
-			DeliveryID:           newDeliveryID(),
-			EventID:              envelope.EventID,
-			SubscriptionID:       sub.Definition.ContributionID,
-			ExtensionID:          sub.Definition.ExtensionID,
-			ModuleID:             sub.Definition.ModuleID,
-			Status:               DeliveryStatusPending,
-			PartitionKey:         envelope.PartitionKey,
-			OrderingKey:          envelope.OrderingKey,
-			Sequence:             sequence,
-			Attempt:              0,
-			MaxAttempts:          sub.Definition.RetryPolicy.MaxAttempts,
-			AvailableAt:          time.Now().UTC(),
-			ScopeSnapshotID:      envelope.ScopeSnapshotID,
-			PermissionSnapshotID: envelope.PermissionSnapshotID,
-			ProjectedPayloadHash: projection.Hash,
-			CreatedAt:            time.Now().UTC(),
-			UpdatedAt:            time.Now().UTC(),
+			DeliveryID:             newDeliveryID(),
+			EventID:                envelope.EventID,
+			SubscriptionID:         sub.Definition.ContributionID,
+			ExtensionID:            sub.Definition.ExtensionID,
+			ModuleID:               sub.Definition.ModuleID,
+			Status:                 DeliveryStatusPending,
+			PartitionKey:           envelope.PartitionKey,
+			OrderingKey:            envelope.OrderingKey,
+			Sequence:               sequence,
+			Attempt:                0,
+			MaxAttempts:            sub.Definition.RetryPolicy.MaxAttempts,
+			AvailableAt:            time.Now().UTC(),
+			ScopeSnapshotID:        envelope.ScopeSnapshotID,
+			PermissionSnapshotID:   envelope.PermissionSnapshotID,
+			ProjectedPayloadHash:   projection.Hash,
+			SubscriptionGeneration: sub.Definition.Generation,
+			TargetGeneration:       sub.Definition.Generation,
+			CreatedAt:              time.Now().UTC(),
+			UpdatedAt:              time.Now().UTC(),
 		}
 		if err := p.deliveryStore.CreateDelivery(ctx, delivery); err != nil {
 			return fmt.Errorf("event: create delivery: %w", err)
@@ -328,6 +332,11 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "handler_not_found", "subscription not found")
 		return
 	}
+	if sub.Definition.Generation != delivery.SubscriptionGeneration {
+		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancelled_stale_generation",
+			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration))
+		return
+	}
 	circuit := d.circuitRegistry.GetOrCreate(delivery.SubscriptionID)
 	allowed, state := circuit.Allow()
 	if !allowed {
@@ -382,6 +391,20 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 func (d *Dispatcher) ResetCircuit(subscriptionID string) {
 	d.circuitRegistry.Reset(subscriptionID)
 	d.subscriptionRegistry.MarkCircuitState(subscriptionID, CircuitClosed)
+}
+
+func (d *Dispatcher) SetHandler(handler DeliveryHandler) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.handler = handler
+}
+
+func (d *Dispatcher) LookupCircuitState(subscriptionID string) CircuitState {
+	cb, ok := d.circuitRegistry.Get(subscriptionID)
+	if !ok {
+		return CircuitClosed
+	}
+	return cb.State()
 }
 
 func (d *Dispatcher) CircuitStats() map[string]CircuitStats {

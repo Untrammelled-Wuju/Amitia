@@ -1,0 +1,46 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/event-permission-denied",
+		"name": {"default": "Event Permission Denied"},
+		"description": {"default": "Phase 10 E2E: event subscription requiring a permission that is not granted, must be denied"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "guarded-subscription",
+					"kind": "event_subscription",
+					"name": {"default": "Guarded Subscription"},
+					"description": {"default": "Subscription requiring event.subscribe.sensitive permission"},
+					"requiredPermissions": ["event.subscribe.sensitive"],
+					"spec": {
+						"eventTypeId": "system.sensitive",
+						"eventVersionRange": "^1",
+						"entry": "onEvent",
+						"deliveryPolicy": {
+							"timeout": "5s",
+							"maxInFlight": 2
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "event.subscribe.sensitive", "reason": "Subscribe to sensitive events", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

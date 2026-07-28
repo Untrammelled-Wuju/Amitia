@@ -65,6 +65,7 @@ type Service interface {
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetSkillRuntime(*extension.Runtime)
+	SetToolRuntime(ModelToolRuntime)
 	SetHookInvoker(HookInvoker)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 }
@@ -116,6 +117,7 @@ type service struct {
 	outboxStore        OutboxStore
 	deliveryStore      DeliveryStore
 	skillRuntime       *extension.Runtime
+	toolRuntime        ModelToolRuntime
 	hookInvoker        HookInvoker
 	relTimeCoordinator *temporal.RelationshipTimeCoordinator
 }
@@ -153,6 +155,10 @@ func (s *service) SetDeliveryStore(store DeliveryStore) {
 
 func (s *service) SetSkillRuntime(runtime *extension.Runtime) {
 	s.skillRuntime = runtime
+}
+
+func (s *service) SetToolRuntime(runtime ModelToolRuntime) {
+	s.toolRuntime = runtime
 }
 
 func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {

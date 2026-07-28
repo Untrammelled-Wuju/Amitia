@@ -1,0 +1,46 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/tool-scope-denied",
+		"name": {"default": "Tool Scope Denied"},
+		"description": {"default": "Phase 10 E2E: tool that requires a scope which is not bound by default, must be denied"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "scoped-tool",
+					"kind": "tool",
+					"name": {"default": "Scoped Tool"},
+					"description": {"default": "Tool requiring resource:private scope to execute"},
+					"modelName": "scoped_tool",
+					"requiredPermissions": ["tool.invoke"],
+					"requiredScope": ["resource:private"],
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"target": {"type": "string", "description": "Target resource id"}
+						},
+						"required": ["target"]
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Invoke scoped tool", "required": true, "scope": "resource:private"}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

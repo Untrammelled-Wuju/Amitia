@@ -1,0 +1,53 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/dev-hot-reload",
+		"name": {"default": "Dev Hot Reload v2"},
+		"description": {"default": "Phase 10 E2E: developer mode extension v2, replaces v1 via hot reload and must activate new generation"},
+		"version": "2.0.0",
+		"metadata": {
+			"expectedGeneration": 2,
+			"reloadScenario": "reloaded"
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "dev-tool",
+					"kind": "tool",
+					"name": {"default": "Dev Tool v2"},
+					"description": {"default": "Developer tool generation 2 after hot reload"},
+					"modelName": "dev_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"input": {"type": "string"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute dev tool", "required": true}
+	],
+	"development": {
+		"developerMode": true,
+		"hotReload": true,
+		"sourceMaps": true,
+		"watchPaths": ["modules/main/index.js"]
+	},
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

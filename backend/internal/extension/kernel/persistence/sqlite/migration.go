@@ -1396,7 +1396,60 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	if err := ensureSchemaColumns(ctx, db); err != nil {
+		return fmt.Errorf("sqlite: ensure schema columns: %w", err)
+	}
+
 	return nil
+}
+
+type columnAddition struct {
+	table  string
+	column string
+	def    string
+}
+
+var schemaColumnAdditions = []columnAddition{
+	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
+}
+
+func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {
+	for _, a := range schemaColumnAdditions {
+		exists, err := columnExists(ctx, db, a.table, a.column)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", a.table, a.column, a.def)
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("add column %s.%s: %w", a.table, a.column, err)
+		}
+	}
+	return nil
+}
+
+func columnExists(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func MigrationCount() int {

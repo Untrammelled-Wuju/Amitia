@@ -205,7 +205,7 @@ func (s *ScheduleService) InstallDefinition(ctx context.Context, def *ScheduleCo
 	return s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleService) Enable(ctx context.Context, scheduleID string) error {
+func (s *ScheduleService) Enable(ctx context.Context, scheduleID string, expectedGeneration int64) error {
 	def, err := s.store.GetDefinition(ctx, scheduleID)
 	if err != nil || def == nil {
 		return ErrScheduleNotFound
@@ -214,7 +214,7 @@ func (s *ScheduleService) Enable(ctx context.Context, scheduleID string) error {
 	if err != nil || state == nil {
 		return ErrScheduleNotFound
 	}
-	if state.Generation != state.Generation {
+	if state.Generation != expectedGeneration {
 		return ErrGenerationMismatch
 	}
 	if !IsValidDefinitionTransition(state.Status, DefinitionStatusEnabled) {
@@ -233,10 +233,13 @@ func (s *ScheduleService) Enable(ctx context.Context, scheduleID string) error {
 	return s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleService) Disable(ctx context.Context, scheduleID string) error {
+func (s *ScheduleService) Disable(ctx context.Context, scheduleID string, expectedGeneration int64) error {
 	state, err := s.store.GetState(ctx, scheduleID)
 	if err != nil || state == nil {
 		return ErrScheduleNotFound
+	}
+	if state.Generation != expectedGeneration {
+		return ErrGenerationMismatch
 	}
 	if !IsValidDefinitionTransition(state.Status, DefinitionStatusDisabled) {
 		return fmt.Errorf("%w: %s -> disabled", ErrInvalidStateTransition, state.Status)
@@ -250,10 +253,13 @@ func (s *ScheduleService) Disable(ctx context.Context, scheduleID string) error 
 	return s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleService) Pause(ctx context.Context, scheduleID string) error {
+func (s *ScheduleService) Pause(ctx context.Context, scheduleID string, expectedGeneration int64) error {
 	state, err := s.store.GetState(ctx, scheduleID)
 	if err != nil || state == nil {
 		return ErrScheduleNotFound
+	}
+	if state.Generation != expectedGeneration {
+		return ErrGenerationMismatch
 	}
 	if !IsValidDefinitionTransition(state.Status, DefinitionStatusPaused) {
 		return fmt.Errorf("%w: %s -> paused", ErrInvalidStateTransition, state.Status)
@@ -267,7 +273,7 @@ func (s *ScheduleService) Pause(ctx context.Context, scheduleID string) error {
 	return s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleService) Resume(ctx context.Context, scheduleID string) error {
+func (s *ScheduleService) Resume(ctx context.Context, scheduleID string, expectedGeneration int64) error {
 	def, err := s.store.GetDefinition(ctx, scheduleID)
 	if err != nil || def == nil {
 		return ErrScheduleNotFound
@@ -275,6 +281,9 @@ func (s *ScheduleService) Resume(ctx context.Context, scheduleID string) error {
 	state, err := s.store.GetState(ctx, scheduleID)
 	if err != nil || state == nil {
 		return ErrScheduleNotFound
+	}
+	if state.Generation != expectedGeneration {
+		return ErrGenerationMismatch
 	}
 	if !IsValidDefinitionTransition(state.Status, DefinitionStatusEnabled) {
 		return fmt.Errorf("%w: %s -> enabled", ErrInvalidStateTransition, state.Status)
@@ -381,14 +390,21 @@ func (s *ScheduleService) Recalculate(ctx context.Context, scheduleID string) er
 	return s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleService) Update(ctx context.Context, def *ScheduleContributionDefinition) error {
-	existing, err := s.store.GetDefinition(ctx, scheduleIDFromDef(def))
+func (s *ScheduleService) Update(ctx context.Context, scheduleID string, expectedGeneration int64, def *ScheduleContributionDefinition) error {
+	if def == nil {
+		return ErrScheduleNotFound
+	}
+	def.ScheduleID = scheduleID
+	existing, err := s.store.GetDefinition(ctx, scheduleID)
 	if err != nil || existing == nil {
 		return ErrScheduleNotFound
 	}
-	state, err := s.store.GetState(ctx, def.ScheduleID)
+	state, err := s.store.GetState(ctx, scheduleID)
 	if err != nil || state == nil {
 		return ErrScheduleNotFound
+	}
+	if state.Generation != expectedGeneration {
+		return ErrGenerationMismatch
 	}
 	newHash := GenerateDefinitionHash(def)
 	if newHash == existing.DefinitionHash {
@@ -523,6 +539,12 @@ func (s *ScheduleService) GetExecutor() *ScheduleExecutor {
 
 func (s *ScheduleService) GetCalculator() *ScheduleCalculator {
 	return s.calc
+}
+
+func (s *ScheduleService) IsRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.running
 }
 
 func scheduleIDFromDef(def *ScheduleContributionDefinition) string {

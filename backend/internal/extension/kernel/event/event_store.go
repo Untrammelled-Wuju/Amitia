@@ -56,14 +56,16 @@ func (s *SQLiteDeliveryStore) createDeliveryWithExec(ctx context.Context, exec i
 		(delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, started_at, finished_at, error_code, error_message, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 projected_payload_hash, subscription_generation, target_generation,
+		 started_at, finished_at, error_code, error_message, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(delivery_id) DO NOTHING
 	`,
 		delivery.DeliveryID, delivery.EventID, delivery.SubscriptionID, delivery.ExtensionID, delivery.ModuleID, string(delivery.Status),
 		delivery.PartitionKey, delivery.OrderingKey, delivery.Sequence, delivery.Attempt, delivery.MaxAttempts, delivery.AvailableAt,
 		delivery.LeaseOwner, leaseExpires, delivery.RuntimeInstanceID, delivery.ScopeSnapshotID, delivery.PermissionSnapshotID,
-		delivery.ProjectedPayloadHash, startedAt, finishedAt, delivery.ErrorCode, delivery.ErrorMessage, delivery.CreatedAt, delivery.UpdatedAt,
+		delivery.ProjectedPayloadHash, delivery.SubscriptionGeneration, delivery.TargetGeneration,
+		startedAt, finishedAt, delivery.ErrorCode, delivery.ErrorMessage, delivery.CreatedAt, delivery.UpdatedAt,
 	)
 	return err
 }
@@ -83,7 +85,8 @@ func (s *SQLiteDeliveryStore) ClaimNextDeliveries(ctx context.Context, owner str
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, started_at, finished_at, error_code, error_message, created_at, updated_at
+		 projected_payload_hash, subscription_generation, target_generation,
+		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE status IN (?, ?) AND (lease_expires_at IS NULL OR lease_expires_at < ?)
 		ORDER BY available_at ASC, sequence ASC, created_at ASC
@@ -190,7 +193,8 @@ func (s *SQLiteDeliveryStore) GetDelivery(ctx context.Context, deliveryID string
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, started_at, finished_at, error_code, error_message, created_at, updated_at
+		 projected_payload_hash, subscription_generation, target_generation,
+		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE delivery_id = ?
 	`, deliveryID)
@@ -205,7 +209,8 @@ func (s *SQLiteDeliveryStore) ListDeliveries(ctx context.Context, filter Deliver
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, started_at, finished_at, error_code, error_message, created_at, updated_at
+		 projected_payload_hash, subscription_generation, target_generation,
+		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE 1=1
 	`
@@ -254,9 +259,9 @@ func (s *SQLiteDeliveryStore) CancelPendingByExtension(ctx context.Context, exte
 	now := time.Now().UTC()
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE extension_event_deliveries
-		SET status = ?, error_code = 'cancelled', error_message = ?, lease_owner = NULL, lease_expires_at = NULL, finished_at = ?, updated_at = ?
+		SET status = ?, error_code = ?, error_message = ?, lease_owner = NULL, lease_expires_at = NULL, finished_at = ?, updated_at = ?
 		WHERE extension_id = ? AND status IN (?, ?, ?)
-	`, string(DeliveryStatusCancelled), reason, now, now, extensionID,
+	`, string(DeliveryStatusCancelled), reason, reason, now, now, extensionID,
 		string(DeliveryStatusPending), string(DeliveryStatusLeased), string(DeliveryStatusRetryWait))
 	if err != nil {
 		return 0, err
@@ -269,9 +274,9 @@ func (s *SQLiteDeliveryStore) CancelPendingBySubscription(ctx context.Context, s
 	now := time.Now().UTC()
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE extension_event_deliveries
-		SET status = ?, error_code = 'cancelled', error_message = ?, lease_owner = NULL, lease_expires_at = NULL, finished_at = ?, updated_at = ?
+		SET status = ?, error_code = ?, error_message = ?, lease_owner = NULL, lease_expires_at = NULL, finished_at = ?, updated_at = ?
 		WHERE subscription_id = ? AND status IN (?, ?, ?)
-	`, string(DeliveryStatusCancelled), reason, now, now, subscriptionID,
+	`, string(DeliveryStatusCancelled), reason, reason, now, now, subscriptionID,
 		string(DeliveryStatusPending), string(DeliveryStatusLeased), string(DeliveryStatusRetryWait))
 	if err != nil {
 		return 0, err
@@ -286,16 +291,28 @@ func scanDelivery(rows *sql.Rows) (Delivery, error) {
 	var leaseExpires sql.NullTime
 	var startedAt sql.NullTime
 	var finishedAt sql.NullTime
+	var partitionKey, orderingKey, leaseOwner sql.NullString
+	var runtimeInstanceID, scopeSnapshotID, permissionSnapshotID sql.NullString
+	var projectedPayloadHash, errorCode, errorMessage sql.NullString
 	err := rows.Scan(
 		&d.DeliveryID, &d.EventID, &d.SubscriptionID, &d.ExtensionID, &d.ModuleID, &status,
-		&d.PartitionKey, &d.OrderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
-		&d.LeaseOwner, &leaseExpires, &d.RuntimeInstanceID, &d.ScopeSnapshotID, &d.PermissionSnapshotID,
-		&d.ProjectedPayloadHash, &startedAt, &finishedAt, &d.ErrorCode, &d.ErrorMessage, &d.CreatedAt, &d.UpdatedAt,
+		&partitionKey, &orderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
+		&leaseOwner, &leaseExpires, &runtimeInstanceID, &scopeSnapshotID, &permissionSnapshotID,
+		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return d, err
 	}
 	d.Status = DeliveryStatus(status)
+	d.PartitionKey = partitionKey.String
+	d.OrderingKey = orderingKey.String
+	d.LeaseOwner = leaseOwner.String
+	d.RuntimeInstanceID = runtimeInstanceID.String
+	d.ScopeSnapshotID = scopeSnapshotID.String
+	d.PermissionSnapshotID = permissionSnapshotID.String
+	d.ProjectedPayloadHash = projectedPayloadHash.String
+	d.ErrorCode = errorCode.String
+	d.ErrorMessage = errorMessage.String
 	if leaseExpires.Valid {
 		t := leaseExpires.Time
 		d.LeaseExpiresAt = &t
@@ -317,16 +334,28 @@ func scanDeliveryRow(row *sql.Row) (Delivery, error) {
 	var leaseExpires sql.NullTime
 	var startedAt sql.NullTime
 	var finishedAt sql.NullTime
+	var partitionKey, orderingKey, leaseOwner sql.NullString
+	var runtimeInstanceID, scopeSnapshotID, permissionSnapshotID sql.NullString
+	var projectedPayloadHash, errorCode, errorMessage sql.NullString
 	err := row.Scan(
 		&d.DeliveryID, &d.EventID, &d.SubscriptionID, &d.ExtensionID, &d.ModuleID, &status,
-		&d.PartitionKey, &d.OrderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
-		&d.LeaseOwner, &leaseExpires, &d.RuntimeInstanceID, &d.ScopeSnapshotID, &d.PermissionSnapshotID,
-		&d.ProjectedPayloadHash, &startedAt, &finishedAt, &d.ErrorCode, &d.ErrorMessage, &d.CreatedAt, &d.UpdatedAt,
+		&partitionKey, &orderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
+		&leaseOwner, &leaseExpires, &runtimeInstanceID, &scopeSnapshotID, &permissionSnapshotID,
+		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return d, fmt.Errorf("%w: %v", ErrDeliveryNotFound, err)
 	}
 	d.Status = DeliveryStatus(status)
+	d.PartitionKey = partitionKey.String
+	d.OrderingKey = orderingKey.String
+	d.LeaseOwner = leaseOwner.String
+	d.RuntimeInstanceID = runtimeInstanceID.String
+	d.ScopeSnapshotID = scopeSnapshotID.String
+	d.PermissionSnapshotID = permissionSnapshotID.String
+	d.ProjectedPayloadHash = projectedPayloadHash.String
+	d.ErrorCode = errorCode.String
+	d.ErrorMessage = errorMessage.String
 	if leaseExpires.Valid {
 		t := leaseExpires.Time
 		d.LeaseExpiresAt = &t
@@ -379,8 +408,8 @@ func (s *SQLiteDeadLetterStore) CreateDeadLetter(ctx context.Context, record Dea
 		 event_type_id, event_version, reason, error_code, error_message, attempts,
 		 partition_key, ordering_key, payload_hash, projected_payload_hash, definition_hash,
 		 scope_snapshot_id, permission_snapshot_id, runtime_instance_id, trace_id, operation_id,
-		 origin_event_json, subscription_snapshot_json, created_at, replay_count, last_replay_at, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 origin_event_json, subscription_snapshot_json, created_at, replay_count, last_replay_at, status, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(dead_letter_id) DO NOTHING
 	`,
 		record.DeadLetterID, record.EventID, record.DeliveryID, record.SubscriptionID, record.ExtensionID, record.ModuleID,
@@ -388,6 +417,7 @@ func (s *SQLiteDeadLetterStore) CreateDeadLetter(ctx context.Context, record Dea
 		record.PartitionKey, record.OrderingKey, record.PayloadHash, record.ProjectedPayloadHash, record.DefinitionHash,
 		record.ScopeSnapshotID, record.PermissionSnapshotID, record.RuntimeInstanceID, record.TraceID, record.OperationID,
 		string(originEvent), string(subSnapshot), record.CreatedAt, record.ReplayCount, lastReplayAt, string(record.Status),
+		now,
 	)
 	return err
 }
@@ -480,13 +510,17 @@ func (s *SQLiteDeadLetterStore) MarkDiscarded(ctx context.Context, deadLetterID 
 func scanDeadLetter(rows *sql.Rows) (DeadLetterRecord, error) {
 	var r DeadLetterRecord
 	var eventTypeID, reason, status string
-	var originEvent, subSnapshot string
+	var originEvent, subSnapshot sql.NullString
 	var lastReplayAt sql.NullTime
+	var errorCode, errorMessage sql.NullString
+	var partitionKey, orderingKey, payloadHash, projectedPayloadHash sql.NullString
+	var definitionHash, scopeSnapshotID, permissionSnapshotID sql.NullString
+	var runtimeInstanceID, traceID, operationID sql.NullString
 	err := rows.Scan(
 		&r.DeadLetterID, &r.EventID, &r.DeliveryID, &r.SubscriptionID, &r.ExtensionID, &r.ModuleID,
-		&eventTypeID, &r.EventVersion, &reason, &r.ErrorCode, &r.ErrorMessage, &r.Attempts,
-		&r.PartitionKey, &r.OrderingKey, &r.PayloadHash, &r.ProjectedPayloadHash, &r.DefinitionHash,
-		&r.ScopeSnapshotID, &r.PermissionSnapshotID, &r.RuntimeInstanceID, &r.TraceID, &r.OperationID,
+		&eventTypeID, &r.EventVersion, &reason, &errorCode, &errorMessage, &r.Attempts,
+		&partitionKey, &orderingKey, &payloadHash, &projectedPayloadHash, &definitionHash,
+		&scopeSnapshotID, &permissionSnapshotID, &runtimeInstanceID, &traceID, &operationID,
 		&originEvent, &subSnapshot, &r.CreatedAt, &r.ReplayCount, &lastReplayAt,
 		&status,
 	)
@@ -496,8 +530,24 @@ func scanDeadLetter(rows *sql.Rows) (DeadLetterRecord, error) {
 	r.EventTypeID = EventTypeID(eventTypeID)
 	r.Reason = DeadLetterReason(reason)
 	r.Status = DeadLetterStatus(status)
-	r.OriginEvent = json.RawMessage(originEvent)
-	r.SubscriptionSnapshot = json.RawMessage(subSnapshot)
+	if originEvent.Valid {
+		r.OriginEvent = json.RawMessage(originEvent.String)
+	}
+	if subSnapshot.Valid {
+		r.SubscriptionSnapshot = json.RawMessage(subSnapshot.String)
+	}
+	r.ErrorCode = errorCode.String
+	r.ErrorMessage = errorMessage.String
+	r.PartitionKey = partitionKey.String
+	r.OrderingKey = orderingKey.String
+	r.PayloadHash = payloadHash.String
+	r.ProjectedPayloadHash = projectedPayloadHash.String
+	r.DefinitionHash = definitionHash.String
+	r.ScopeSnapshotID = scopeSnapshotID.String
+	r.PermissionSnapshotID = permissionSnapshotID.String
+	r.RuntimeInstanceID = runtimeInstanceID.String
+	r.TraceID = traceID.String
+	r.OperationID = operationID.String
 	if lastReplayAt.Valid {
 		t := lastReplayAt.Time
 		r.LastReplayAt = &t
@@ -508,13 +558,17 @@ func scanDeadLetter(rows *sql.Rows) (DeadLetterRecord, error) {
 func scanDeadLetterRow(row *sql.Row) (DeadLetterRecord, error) {
 	var r DeadLetterRecord
 	var eventTypeID, reason, status string
-	var originEvent, subSnapshot string
+	var originEvent, subSnapshot sql.NullString
 	var lastReplayAt sql.NullTime
+	var errorCode, errorMessage sql.NullString
+	var partitionKey, orderingKey, payloadHash, projectedPayloadHash sql.NullString
+	var definitionHash, scopeSnapshotID, permissionSnapshotID sql.NullString
+	var runtimeInstanceID, traceID, operationID sql.NullString
 	err := row.Scan(
 		&r.DeadLetterID, &r.EventID, &r.DeliveryID, &r.SubscriptionID, &r.ExtensionID, &r.ModuleID,
-		&eventTypeID, &r.EventVersion, &reason, &r.ErrorCode, &r.ErrorMessage, &r.Attempts,
-		&r.PartitionKey, &r.OrderingKey, &r.PayloadHash, &r.ProjectedPayloadHash, &r.DefinitionHash,
-		&r.ScopeSnapshotID, &r.PermissionSnapshotID, &r.RuntimeInstanceID, &r.TraceID, &r.OperationID,
+		&eventTypeID, &r.EventVersion, &reason, &errorCode, &errorMessage, &r.Attempts,
+		&partitionKey, &orderingKey, &payloadHash, &projectedPayloadHash, &definitionHash,
+		&scopeSnapshotID, &permissionSnapshotID, &runtimeInstanceID, &traceID, &operationID,
 		&originEvent, &subSnapshot, &r.CreatedAt, &r.ReplayCount, &lastReplayAt,
 		&status,
 	)
@@ -524,8 +578,24 @@ func scanDeadLetterRow(row *sql.Row) (DeadLetterRecord, error) {
 	r.EventTypeID = EventTypeID(eventTypeID)
 	r.Reason = DeadLetterReason(reason)
 	r.Status = DeadLetterStatus(status)
-	r.OriginEvent = json.RawMessage(originEvent)
-	r.SubscriptionSnapshot = json.RawMessage(subSnapshot)
+	if originEvent.Valid {
+		r.OriginEvent = json.RawMessage(originEvent.String)
+	}
+	if subSnapshot.Valid {
+		r.SubscriptionSnapshot = json.RawMessage(subSnapshot.String)
+	}
+	r.ErrorCode = errorCode.String
+	r.ErrorMessage = errorMessage.String
+	r.PartitionKey = partitionKey.String
+	r.OrderingKey = orderingKey.String
+	r.PayloadHash = payloadHash.String
+	r.ProjectedPayloadHash = projectedPayloadHash.String
+	r.DefinitionHash = definitionHash.String
+	r.ScopeSnapshotID = scopeSnapshotID.String
+	r.PermissionSnapshotID = permissionSnapshotID.String
+	r.RuntimeInstanceID = runtimeInstanceID.String
+	r.TraceID = traceID.String
+	r.OperationID = operationID.String
 	if lastReplayAt.Valid {
 		t := lastReplayAt.Time
 		r.LastReplayAt = &t

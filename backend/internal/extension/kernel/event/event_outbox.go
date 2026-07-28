@@ -379,13 +379,16 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 	var payload, metadata, defHash string
 	var status string
 	var eventTypeID string
+	var aggregateType, aggregateID, partitionKey, orderingKey sql.NullString
+	var scopeSnapshotID, permissionSnapshotID, traceID, operationID sql.NullString
+	var errorCode, errorMessage, leaseOwner sql.NullString
 	var err error
 	err = rows.Scan(
 		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &rec.ProducerType, &rec.ProducerGeneration,
-		&rec.AggregateType, &rec.AggregateID, &aggVersion, &rec.PartitionKey, &rec.OrderingKey, &rec.IdempotencyKey,
-		&rec.ScopeSnapshotID, &rec.PermissionSnapshotID, &rec.TraceID, &rec.OperationID, &parentID, &rec.Depth,
+		&aggregateType, &aggregateID, &aggVersion, &partitionKey, &orderingKey, &rec.IdempotencyKey,
+		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
-		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &rec.ErrorCode, &rec.ErrorMessage, &rec.LeaseOwner, &leaseExpires, &dispatchedAt,
+		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &errorCode, &errorMessage, &leaseOwner, &leaseExpires, &dispatchedAt,
 	)
 	if err != nil {
 		return rec, err
@@ -395,6 +398,17 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 	rec.Metadata = json.RawMessage(metadata)
 	rec.DefinitionHash = defHash
 	rec.Status = OutboxStatus(status)
+	rec.AggregateType = aggregateType.String
+	rec.AggregateID = aggregateID.String
+	rec.PartitionKey = partitionKey.String
+	rec.OrderingKey = orderingKey.String
+	rec.ScopeSnapshotID = scopeSnapshotID.String
+	rec.PermissionSnapshotID = permissionSnapshotID.String
+	rec.TraceID = traceID.String
+	rec.OperationID = operationID.String
+	rec.ErrorCode = errorCode.String
+	rec.ErrorMessage = errorMessage.String
+	rec.LeaseOwner = leaseOwner.String
 	if aggVersion.Valid {
 		v := aggVersion.Int64
 		rec.AggregateVersion = &v
@@ -428,12 +442,15 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 	var payload, metadata, defHash string
 	var status string
 	var eventTypeID string
+	var aggregateType, aggregateID, partitionKey, orderingKey sql.NullString
+	var scopeSnapshotID, permissionSnapshotID, traceID, operationID sql.NullString
+	var errorCode, errorMessage, leaseOwner sql.NullString
 	err := row.Scan(
 		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &rec.ProducerType, &rec.ProducerGeneration,
-		&rec.AggregateType, &rec.AggregateID, &aggVersion, &rec.PartitionKey, &rec.OrderingKey, &rec.IdempotencyKey,
-		&rec.ScopeSnapshotID, &rec.PermissionSnapshotID, &rec.TraceID, &rec.OperationID, &parentID, &rec.Depth,
+		&aggregateType, &aggregateID, &aggVersion, &partitionKey, &orderingKey, &rec.IdempotencyKey,
+		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
-		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &rec.ErrorCode, &rec.ErrorMessage, &rec.LeaseOwner, &leaseExpires, &dispatchedAt,
+		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &errorCode, &errorMessage, &leaseOwner, &leaseExpires, &dispatchedAt,
 	)
 	if err != nil {
 		return rec, fmt.Errorf("%w: %v", ErrDeliveryNotFound, err)
@@ -443,6 +460,17 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 	rec.Metadata = json.RawMessage(metadata)
 	rec.DefinitionHash = defHash
 	rec.Status = OutboxStatus(status)
+	rec.AggregateType = aggregateType.String
+	rec.AggregateID = aggregateID.String
+	rec.PartitionKey = partitionKey.String
+	rec.OrderingKey = orderingKey.String
+	rec.ScopeSnapshotID = scopeSnapshotID.String
+	rec.PermissionSnapshotID = permissionSnapshotID.String
+	rec.TraceID = traceID.String
+	rec.OperationID = operationID.String
+	rec.ErrorCode = errorCode.String
+	rec.ErrorMessage = errorMessage.String
+	rec.LeaseOwner = leaseOwner.String
 	if aggVersion.Valid {
 		v := aggVersion.Int64
 		rec.AggregateVersion = &v

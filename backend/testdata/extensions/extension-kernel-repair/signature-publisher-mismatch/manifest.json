@@ -1,0 +1,49 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.mismatch/signature-publisher-mismatch",
+		"name": {"default": "Signature Publisher Mismatch"},
+		"description": {"default": "Phase 10 E2E: extension where manifest publisher does not match the signature publisher, must fail install"},
+		"version": "1.0.0",
+		"metadata": {
+			"expectedSignatureStatus": "publisher_mismatch",
+			"expectedInstallStatus": "failed",
+			"signaturePublisher": "com.amitia.repair"
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.mismatch",
+		"displayName": "Mismatched Publisher",
+		"trustLevel": "untrusted"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "mismatch-tool",
+					"kind": "tool",
+					"name": {"default": "Mismatch Tool"},
+					"description": {"default": "Tool whose package publisher differs from manifest"},
+					"modelName": "mismatch_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"input": {"type": "string"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

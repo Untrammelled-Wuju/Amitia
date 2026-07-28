@@ -36,7 +36,11 @@ func (p RetryPolicy) IsRetryable(code string) bool {
 	if p.isNonRetryable(code) {
 		return false
 	}
-	for _, c := range p.RetryableErrorCodes {
+	codes := p.RetryableErrorCodes
+	if len(codes) == 0 {
+		codes = DefaultRetryPolicy().RetryableErrorCodes
+	}
+	for _, c := range codes {
 		if c == code {
 			return true
 		}

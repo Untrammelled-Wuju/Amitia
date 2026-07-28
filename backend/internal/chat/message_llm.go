@@ -69,55 +69,60 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			errorCode := ""
 			toolForceVoice := false
 			activationPrompt := ""
-			if s.skillRuntime != nil {
+			var outcome toolExecOutcome
+			if s.toolRuntime != nil {
+				toolScope := SkillScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+				toolResult, found := s.toolRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), toolScope, "")
+				outcome = toolResultToOutcome(toolResult, found)
+			} else if s.skillRuntime != nil {
 				skillScope := extension.ExecutionScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
 				skillResult, found := s.skillRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), skillScope, "")
-				ok = found
-				result = skillResult.VisibleText
-				status = string(skillResult.Status)
-				toolForceVoice = skillResult.ForceVoice
-				if skillResult.Error != nil {
-					errorCode = skillResult.Error.Code
-				}
-				if name == "agent_skill_activate" && skillResult.Error == nil {
-					var activation struct {
-						Prompt              string      `json:"prompt"`
-						ActivationID        string      `json:"activationId"`
-						ExtensionID         string      `json:"extensionId"`
-						Name                string      `json:"name"`
-						Source              string      `json:"source"`
-						Scope               string      `json:"scope"`
-						CompatibilityStatus string      `json:"compatibilityStatus"`
-						BodyTokens          int         `json:"bodyTokens"`
-						ToolMappings        interface{} `json:"toolMappings"`
-						InstructionPosition string      `json:"instructionPosition"`
-						Status              string      `json:"status"`
-					}
-					if json.Unmarshal(skillResult.Output, &activation) == nil && activation.Prompt != "" {
-						activationPrompt = activation.Prompt
-						appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{ActivationID: activation.ActivationID, ExtensionID: activation.ExtensionID, Name: activation.Name, Source: activation.Source, Scope: activation.Scope, Trigger: "automatic", CompatibilityStatus: activation.CompatibilityStatus, BodyTokens: activation.BodyTokens, ScriptsUsed: false, ToolMappings: activation.ToolMappings, InstructionPosition: activation.InstructionPosition, Status: activation.Status})
-					}
-				} else if name == "agent_skill_activate" && skillResult.Error != nil {
-					var input struct {
-						AgentSkill string `json:"agentSkill"`
-					}
-					_ = json.Unmarshal([]byte(args), &input)
-					appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{Name: input.AgentSkill, Trigger: "automatic", ScriptsUsed: false, Status: "failed", ErrorCode: skillResult.Error.Code})
-				} else if name == "agent_skill_read_resource" && skillResult.Error == nil {
-					var input struct {
-						AgentSkill string `json:"agentSkill"`
-					}
-					var content struct {
-						Path string `json:"path"`
-					}
-					_ = json.Unmarshal([]byte(args), &input)
-					if json.Unmarshal(skillResult.Output, &content) == nil {
-						appendAgentSkillResourceTrace(promptTrace, input.AgentSkill, content.Path)
-					}
-				}
+				outcome = skillResultToOutcome(skillResult, found)
 			} else {
-				result = "工具运行时不可用"
-				errorCode = extension.ErrSkillExecutionFailed
+				outcome = toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}
+			}
+			ok = outcome.Found
+			result = outcome.VisibleText
+			status = outcome.Status
+			toolForceVoice = outcome.ForceVoice
+			if outcome.HasError {
+				errorCode = outcome.ErrorCode
+			}
+			if name == "agent_skill_activate" && !outcome.HasError {
+				var activation struct {
+					Prompt              string      `json:"prompt"`
+					ActivationID        string      `json:"activationId"`
+					ExtensionID         string      `json:"extensionId"`
+					Name                string      `json:"name"`
+					Source              string      `json:"source"`
+					Scope               string      `json:"scope"`
+					CompatibilityStatus string      `json:"compatibilityStatus"`
+					BodyTokens          int         `json:"bodyTokens"`
+					ToolMappings        interface{} `json:"toolMappings"`
+					InstructionPosition string      `json:"instructionPosition"`
+					Status              string      `json:"status"`
+				}
+				if json.Unmarshal(outcome.Output, &activation) == nil && activation.Prompt != "" {
+					activationPrompt = activation.Prompt
+					appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{ActivationID: activation.ActivationID, ExtensionID: activation.ExtensionID, Name: activation.Name, Source: activation.Source, Scope: activation.Scope, Trigger: "automatic", CompatibilityStatus: activation.CompatibilityStatus, BodyTokens: activation.BodyTokens, ScriptsUsed: false, ToolMappings: activation.ToolMappings, InstructionPosition: activation.InstructionPosition, Status: activation.Status})
+				}
+			} else if name == "agent_skill_activate" && outcome.HasError {
+				var input struct {
+					AgentSkill string `json:"agentSkill"`
+				}
+				_ = json.Unmarshal([]byte(args), &input)
+				appendAgentSkillPromptTrace(promptTrace, promptir.AgentSkillTrace{Name: input.AgentSkill, Trigger: "automatic", ScriptsUsed: false, Status: "failed", ErrorCode: outcome.ErrorCode})
+			} else if name == "agent_skill_read_resource" && !outcome.HasError {
+				var input struct {
+					AgentSkill string `json:"agentSkill"`
+				}
+				var content struct {
+					Path string `json:"path"`
+				}
+				_ = json.Unmarshal([]byte(args), &input)
+				if json.Unmarshal(outcome.Output, &content) == nil {
+					appendAgentSkillResourceTrace(promptTrace, input.AgentSkill, content.Path)
+				}
 			}
 			if toolForceVoice {
 				forceVoice = true

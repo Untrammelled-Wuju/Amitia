@@ -52,6 +52,8 @@ type ConsoleOverview struct {
 	DevWorkspaces       int                 `json:"devWorkspaces"`
 	CompatibilityIssues int                 `json:"compatibilityIssues"`
 	TopExtensions       []ExtensionSummary  `json:"topExtensions"`
+	ToolFacadeCounters  map[string]int64    `json:"toolFacadeCounters"`
+	LegacyCallCounters  map[string]int64    `json:"legacyCallCounters"`
 }
 
 type ExtensionSummary struct {
@@ -79,6 +81,8 @@ type ConsoleAggregators struct {
 	StorageProvider    StorageSummaryProvider
 	PermissionProvider PermissionSummaryProvider
 	LifecycleProvider  LifecycleSummaryProvider
+	ToolFacadeProvider ToolFacadeSummaryProvider
+	LegacyCallProvider ToolFacadeSummaryProvider
 }
 
 type ExtensionSummaryProvider interface {
@@ -106,12 +110,34 @@ type LifecycleSummaryProvider interface {
 	Events(ctx context.Context, since time.Time) (int, error)
 }
 
+type ToolFacadeSummaryProvider interface {
+	Snapshot() map[string]int64
+}
+
 func NewConsoleService(aggregators *ConsoleAggregators) *ConsoleService {
 	return &ConsoleService{
 		sessions:    make(map[ConsoleSessionID]*ConsoleSession),
 		streams:     make(map[ConsoleSessionID]chan ConsoleStreamEvent),
 		aggregators: aggregators,
 	}
+}
+
+func (s *ConsoleService) SetToolFacadeProvider(provider ToolFacadeSummaryProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.aggregators == nil {
+		s.aggregators = &ConsoleAggregators{}
+	}
+	s.aggregators.ToolFacadeProvider = provider
+}
+
+func (s *ConsoleService) SetLegacyCallProvider(provider ToolFacadeSummaryProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.aggregators == nil {
+		s.aggregators = &ConsoleAggregators{}
+	}
+	s.aggregators.LegacyCallProvider = provider
 }
 
 var (
@@ -245,6 +271,12 @@ func (s *ConsoleService) BuildOverview(ctx context.Context) (*ConsoleOverview, e
 		if events, err := s.aggregators.LifecycleProvider.Events(ctx, time.Now().Add(-24*time.Hour)); err == nil {
 			overview.LifecycleEvents = events
 		}
+	}
+	if s.aggregators.ToolFacadeProvider != nil {
+		overview.ToolFacadeCounters = s.aggregators.ToolFacadeProvider.Snapshot()
+	}
+	if s.aggregators.LegacyCallProvider != nil {
+		overview.LegacyCallCounters = s.aggregators.LegacyCallProvider.Snapshot()
 	}
 	return overview, nil
 }

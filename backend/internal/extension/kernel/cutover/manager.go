@@ -453,18 +453,58 @@ func (f *DefaultOldSystemFreezer) FreezeToolHandler(ctx context.Context) error {
 
 func DefaultPreCheckItems() []PreCheckItem {
 	return []PreCheckItem{
-		{Name: "equiv.p0_cleared", Passed: true},
-		{Name: "stability.p0_cleared", Passed: true},
-		{Name: "security.p0_cleared", Passed: true},
-		{Name: "cutover.readiness_passed", Passed: true},
-		{Name: "old.write_frozen", Passed: true},
-		{Name: "old.scheduler_stopped", Passed: true},
-		{Name: "old.mcp_reconnect_stopped", Passed: true},
-		{Name: "old.plugin_init_stopped", Passed: true},
-		{Name: "old.tool_handler_stopped", Passed: true},
-		{Name: "new.registry_rebuildable", Passed: true},
-		{Name: "rollback.snapshot_complete", Passed: true},
-		{Name: "three_platform.startup_shutdown_passed", Passed: true},
-		{Name: "migration.dry_run_passed", Passed: true},
+		{Name: "equiv.p0_cleared", Passed: false},
+		{Name: "stability.p0_cleared", Passed: false},
+		{Name: "security.p0_cleared", Passed: false},
+		{Name: "cutover.readiness_passed", Passed: false},
+		{Name: "old.write_frozen", Passed: false},
+		{Name: "old.scheduler_stopped", Passed: false},
+		{Name: "old.mcp_reconnect_stopped", Passed: false},
+		{Name: "old.plugin_init_stopped", Passed: false},
+		{Name: "old.tool_handler_stopped", Passed: false},
+		{Name: "new.registry_rebuildable", Passed: false},
+		{Name: "rollback.snapshot_complete", Passed: false},
+		{Name: "three_platform.startup_shutdown_passed", Passed: false},
+		{Name: "migration.dry_run_passed", Passed: false},
 	}
+}
+
+type PreCheckProvider interface {
+	Check(ctx context.Context, name string) (passed bool, reason string, err error)
+}
+
+func (m *CutoverManager) RunPreCheck(ctx context.Context, provider PreCheckProvider) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state.Phase == PhaseComplete {
+		return ErrAlreadyCutOver
+	}
+	m.state.Phase = PhasePreCheck
+	if provider == nil {
+		m.state.Errors = append(m.state.Errors, "pre-check provider is nil")
+		m.state.Phase = PhaseFailed
+		return fmt.Errorf("%w: pre-check provider is nil", ErrPreCheckFailed)
+	}
+	items := DefaultPreCheckItems()
+	failed := make([]string, 0)
+	for _, item := range items {
+		passed, reason, err := provider.Check(ctx, item.Name)
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s: check error: %v", item.Name, err))
+			continue
+		}
+		if !passed {
+			if reason == "" {
+				reason = "not passed"
+			}
+			failed = append(failed, fmt.Sprintf("%s: %s", item.Name, reason))
+		}
+	}
+	if len(failed) > 0 {
+		m.state.Errors = append(m.state.Errors, failed...)
+		m.state.Phase = PhaseFailed
+		return fmt.Errorf("%w: %d pre-check(s) failed", ErrPreCheckFailed, len(failed))
+	}
+	m.state.PreCheckPassed = true
+	return nil
 }

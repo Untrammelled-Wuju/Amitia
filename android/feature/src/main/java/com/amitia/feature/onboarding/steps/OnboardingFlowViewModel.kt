@@ -156,11 +156,41 @@ class OnboardingFlowViewModel @Inject constructor(
     }
 
     fun next() {
-        _state.value.currentStep.next()?.let { goToStep(it) }
+        val current = _state.value.currentStep
+        val mode = _state.value.mode
+        var nextStep = current.next()
+        while (nextStep != null) {
+            val skip = when {
+                mode == OnboardingRunMode.Local && nextStep == OnboardingFlowStep.RemoteConfig -> true
+                mode == OnboardingRunMode.Remote && nextStep == OnboardingFlowStep.RuntimeInstall -> true
+                else -> false
+            }
+            if (skip) {
+                nextStep = nextStep.next()
+            } else {
+                break
+            }
+        }
+        nextStep?.let { goToStep(it) }
     }
 
     fun previous() {
-        _state.value.currentStep.previous()?.let { goToStep(it) }
+        val current = _state.value.currentStep
+        val mode = _state.value.mode
+        var prevStep = current.previous()
+        while (prevStep != null) {
+            val skip = when {
+                mode == OnboardingRunMode.Local && prevStep == OnboardingFlowStep.RemoteConfig -> true
+                mode == OnboardingRunMode.Remote && prevStep == OnboardingFlowStep.RuntimeInstall -> true
+                else -> false
+            }
+            if (skip) {
+                prevStep = prevStep.previous()
+            } else {
+                break
+            }
+        }
+        prevStep?.let { goToStep(it) }
     }
 
     fun selectMode(mode: OnboardingRunMode) {

@@ -42,6 +42,7 @@ type Service struct {
 	outboxRepo         *OutboxRepository
 	deliveryStore      *SQLiteDeliveryStore
 	deadLetterStore    *SQLiteDeadLetterStore
+	subscriptionRepo   *SQLiteSubscriptionRepository
 	loopGuard          *LoopGuard
 	traceRecorder      *EventTraceRecorder
 	subscriptionReg    *EventSubscriptionRegistry
@@ -71,9 +72,11 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	outboxRepo := NewOutboxRepository(cfg.DB)
 	deliveryStore := NewSQLiteDeliveryStore(cfg.DB)
 	deadLetterStore := NewSQLiteDeadLetterStore(cfg.DB)
+	subscriptionRepo := NewSQLiteSubscriptionRepository(cfg.DB)
 	loopGuard := NewLoopGuard(cfg.MaxDepth, cfg.MaxChainLength)
 	traceRecorder := NewEventTraceRecorder(cfg.TraceMaxEntries)
 	subscriptionReg := NewEventSubscriptionRegistry(schemaRegistry, cfg.MaxSubscribers)
+	subscriptionReg.SetRepository(subscriptionRepo)
 
 	svc := &Service{
 		config:          cfg,
@@ -82,6 +85,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		outboxRepo:      outboxRepo,
 		deliveryStore:   deliveryStore,
 		deadLetterStore: deadLetterStore,
+		subscriptionRepo: subscriptionRepo,
 		loopGuard:       loopGuard,
 		traceRecorder:   traceRecorder,
 		subscriptionReg: subscriptionReg,
@@ -157,7 +161,11 @@ func (s *Service) DeactivateSubscriptionsByExtension(ctx context.Context, extens
 }
 
 func (s *Service) UpdateExtensionGeneration(ctx context.Context, extensionID string, generation int64, defs []EventSubscriptionDefinition) error {
-	return s.subscriptionReg.UpdateGeneration(ctx, extensionID, generation, defs)
+	if err := s.subscriptionReg.UpdateGeneration(ctx, extensionID, generation, defs); err != nil {
+		return err
+	}
+	_, _ = s.deliveryStore.CancelPendingByExtension(ctx, extensionID, "cancelled_stale_generation")
+	return nil
 }
 
 func (s *Service) ListSubscriptionsByExtension(ctx context.Context, extensionID string) []*ResolvedSubscription {
@@ -237,20 +245,22 @@ func (s *Service) ReplayDeadLetter(ctx context.Context, req ReplayRequest) error
 			return fmt.Errorf("%w: subscription inactive: %s", ErrReplayDenied, sub.Effective.DenyReason())
 		}
 		delivery := Delivery{
-			DeliveryID:     newDeliveryID(),
-			EventID:        record.EventID,
-			SubscriptionID: record.SubscriptionID,
-			ExtensionID:    record.ExtensionID,
-			ModuleID:       record.ModuleID,
-			Status:         DeliveryStatusPending,
-			PartitionKey:   record.PartitionKey,
-			OrderingKey:    record.OrderingKey,
-			MaxAttempts:    sub.Definition.RetryPolicy.MaxAttempts,
-			AvailableAt:    time.Now().UTC(),
-			ScopeSnapshotID:      record.ScopeSnapshotID,
-			PermissionSnapshotID: record.PermissionSnapshotID,
-			CreatedAt:      time.Now().UTC(),
-			UpdatedAt:      time.Now().UTC(),
+			DeliveryID:             newDeliveryID(),
+			EventID:                record.EventID,
+			SubscriptionID:         record.SubscriptionID,
+			ExtensionID:            record.ExtensionID,
+			ModuleID:               record.ModuleID,
+			Status:                 DeliveryStatusPending,
+			PartitionKey:           record.PartitionKey,
+			OrderingKey:            record.OrderingKey,
+			MaxAttempts:            sub.Definition.RetryPolicy.MaxAttempts,
+			AvailableAt:            time.Now().UTC(),
+			ScopeSnapshotID:        record.ScopeSnapshotID,
+			PermissionSnapshotID:   record.PermissionSnapshotID,
+			SubscriptionGeneration: sub.Definition.Generation,
+			TargetGeneration:       sub.Definition.Generation,
+			CreatedAt:              time.Now().UTC(),
+			UpdatedAt:              time.Now().UTC(),
 		}
 		if err := s.deliveryStore.CreateDelivery(ctx, delivery); err != nil {
 			return err
@@ -297,6 +307,23 @@ func (s *Service) SetDeliveryHandler(handler DeliveryHandler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handler = handler
+	s.dispatcher.SetHandler(handler)
+}
+
+func (s *Service) SetEffectiveResolver(resolver EffectiveResolver) {
+	s.subscriptionReg.SetEffectiveResolver(resolver)
+}
+
+func (s *Service) GetSubscriptionRepository() *SQLiteSubscriptionRepository {
+	return s.subscriptionRepo
+}
+
+func (s *Service) GetSubscriptionRegistry() *EventSubscriptionRegistry {
+	return s.subscriptionReg
+}
+
+func (s *Service) GetDispatcher() *Dispatcher {
+	return s.dispatcher
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -307,6 +334,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.started = true
 	s.mu.Unlock()
+
+	if err := s.subscriptionReg.LoadFromRepository(ctx); err != nil {
+		log.Printf("[event] failed to load subscriptions from repository: %v", err)
+	}
+	s.subscriptionReg.RebuildEffectiveStates(ctx)
+
 	dispatchCtx, cancel := context.WithCancel(ctx)
 	s.stopCancel = cancel
 	s.dispatcher.Start(dispatchCtx)

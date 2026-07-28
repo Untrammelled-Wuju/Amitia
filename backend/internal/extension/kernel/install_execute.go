@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
 
@@ -59,9 +60,55 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		return result, fmt.Errorf("kernel: integrity verification failed: %w", err)
 	}
 
-	if pkg.Signatures != nil {
+	manifestHash := computeManifestHash(pkg)
+	artifactHash := computeArtifactHashFromPackage(pkg)
+
+	if len(pkg.V2Signature) > 0 && r.container.TrustService != nil {
+		doc, err := trust.ParseSignatureDocument(pkg.V2Signature)
+		if err != nil {
+			return result, fmt.Errorf("kernel: parse v2 signature: %w", err)
+		}
+		verifier := r.container.TrustService.Verifier()
+		verResult := verifier.VerifyPackage(ctx, trust.PackageVerificationInput{
+			Document:              doc,
+			ActualExtensionID:     pkg.Manifest.Extension.ID,
+			ActualVersion:         pkg.Manifest.Extension.Version,
+			ActualManifestVersion: pkg.Manifest.ManifestVersion,
+			ActualManifestHash:    manifestHash,
+			ActualContentTreeHash: pkg.Tree.TreeHash,
+			ActualArtifactHash:    artifactHash,
+		})
+		if !trust.IsSignatureValid(verResult) {
+			switch verResult.Status {
+			case trust.SignatureStatusUnknownKey:
+				return result, fmt.Errorf("kernel: signature verification failed: unknown_key: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusRevokedKey:
+				return result, fmt.Errorf("kernel: signature verification failed: revoked_key: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusExpiredKey:
+				return result, fmt.Errorf("kernel: signature verification failed: expired_key: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusPublisherMismatch:
+				return result, fmt.Errorf("kernel: signature verification failed: publisher_mismatch: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusContentMismatch:
+				return result, fmt.Errorf("kernel: signature verification failed: content_mismatch: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusUnsupportedAlgorithm:
+				return result, fmt.Errorf("kernel: signature verification failed: unsupported_algorithm: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusMalformedDocument:
+				return result, fmt.Errorf("kernel: signature verification failed: malformed_document: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusPayloadMismatch:
+				return result, fmt.Errorf("kernel: signature verification failed: payload_mismatch: %s: %s", verResult.Status, verResult.Reason)
+			case trust.SignatureStatusInvalidSignature:
+				return result, fmt.Errorf("kernel: signature verification failed: invalid_signature: %s: %s", verResult.Status, verResult.Reason)
+			default:
+				return result, fmt.Errorf("kernel: signature verification failed: %s: %s", verResult.Status, verResult.Reason)
+			}
+		}
+	} else if pkg.Signatures != nil {
 		sigVerifier := r.container.PackageSecurity.GetSignatureVerifier()
 		if sigVerifier != nil {
+			pubKey, ok := sigVerifier.TrustedKeys()[pkg.Signatures.KeyID]
+			if !ok {
+				return result, fmt.Errorf("kernel: legacy signature verification failed: unknown_key: %s", pkg.Signatures.KeyID)
+			}
 			pkgSig := package_security.PackageSignature{
 				Algorithm:       pkg.Signatures.Algorithm,
 				KeyID:           pkg.Signatures.KeyID,
@@ -70,14 +117,29 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 				ContentTreeHash: pkg.Tree.TreeHash,
 				Signature:       pkg.Signatures.Signature,
 			}
-			for keyID, pubKey := range sigVerifier.TrustedKeys() {
-				verResult := sigVerifier.Verify(ctx, package_security.SignatureVerificationInput{
-					Signature:            pkgSig,
-					PublicKey:            pubKey,
-					ActualContentTreeHash: pkg.Tree.TreeHash,
-				})
-				if verResult.Status == package_security.SignatureInvalid {
-					return result, fmt.Errorf("kernel: signature verification failed for key %s", keyID)
+			verResult := sigVerifier.Verify(ctx, package_security.SignatureVerificationInput{
+				Signature:            pkgSig,
+				PublicKey:            pubKey,
+				ActualContentTreeHash: pkg.Tree.TreeHash,
+			})
+			if verResult.Status != package_security.SignatureValid {
+				switch verResult.Status {
+				case package_security.SignatureUnknownKey:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: unknown_key: %s", verResult.Status)
+				case package_security.SignatureRevokedKey:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: revoked_key: %s", verResult.Status)
+				case package_security.SignatureExpiredKey:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: expired_key: %s", verResult.Status)
+				case package_security.SignaturePublisherMismatch:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: publisher_mismatch: %s", verResult.Status)
+				case package_security.SignatureContentMismatch:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: content_mismatch: %s", verResult.Status)
+				case package_security.SignatureUnsupportedAlgorithm:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: unsupported_algorithm: %s", verResult.Status)
+				case package_security.SignatureInvalid:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: invalid: %s", verResult.Status)
+				default:
+					return result, fmt.Errorf("kernel: legacy signature verification failed: %s", verResult.Status)
 				}
 			}
 		}
@@ -333,4 +395,31 @@ func copyDirContents(src, dst string) error {
 
 func isUIContributionKind(kind string) bool {
 	return strings.HasPrefix(kind, "ui_")
+}
+
+func computeManifestHash(pkg *amitiax.Package) string {
+	if entry, ok := pkg.Integrity.Files[amitiax.ManifestFile]; ok {
+		if strings.HasPrefix(entry.Hash, "sha256:") {
+			return entry.Hash
+		}
+		return "sha256:" + entry.Hash
+	}
+	return ""
+}
+
+func computeArtifactHashFromPackage(pkg *amitiax.Package) string {
+	entries := make([]trust.ArtifactEntry, 0, len(pkg.Integrity.Files))
+	for path, entry := range pkg.Integrity.Files {
+		hash := entry.Hash
+		if !strings.HasPrefix(hash, "sha256:") {
+			hash = "sha256:" + hash
+		}
+		entries = append(entries, trust.ArtifactEntry{
+			Path:   path,
+			MIME:   "",
+			Size:   entry.Size,
+			SHA256: hash,
+		})
+	}
+	return trust.ComputeCanonicalArtifactHash(entries)
 }

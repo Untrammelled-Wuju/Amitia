@@ -94,7 +94,7 @@ func TestScheduleServiceEnableDisable(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
-	if err := svc.Disable(context.Background(), "sched-test-1"); err != nil {
+	if err := svc.Disable(context.Background(), "sched-test-1", 1); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
 	_, state, err := svc.GetSchedule(context.Background(), "sched-test-1")
@@ -108,7 +108,7 @@ func TestScheduleServiceEnableDisable(t *testing.T) {
 		t.Fatalf("expected nil next scheduled at after disable, got %v", *state.NextScheduledAt)
 	}
 
-	if err := svc.Enable(context.Background(), "sched-test-1"); err != nil {
+	if err := svc.Enable(context.Background(), "sched-test-1", 1); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 	_, state, err = svc.GetSchedule(context.Background(), "sched-test-1")
@@ -122,7 +122,7 @@ func TestScheduleServiceEnableDisable(t *testing.T) {
 		t.Fatal("expected non-nil next scheduled at after enable")
 	}
 
-	if err := svc.Pause(context.Background(), "sched-test-1"); err != nil {
+	if err := svc.Pause(context.Background(), "sched-test-1", 1); err != nil {
 		t.Fatalf("pause: %v", err)
 	}
 	_, state, err = svc.GetSchedule(context.Background(), "sched-test-1")
@@ -136,7 +136,7 @@ func TestScheduleServiceEnableDisable(t *testing.T) {
 		t.Fatalf("expected nil next scheduled at after pause, got %v", *state.NextScheduledAt)
 	}
 
-	if err := svc.Resume(context.Background(), "sched-test-1"); err != nil {
+	if err := svc.Resume(context.Background(), "sched-test-1", 1); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 	_, state, err = svc.GetSchedule(context.Background(), "sched-test-1")

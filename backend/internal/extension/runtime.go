@@ -42,6 +42,14 @@ func (r *Runtime) AttachKernel(root string) error {
 }
 
 func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtime, error) {
+	return NewRuntimeWithOptions(ctx, db, engineVersion, RuntimeOptions{})
+}
+
+type RuntimeOptions struct {
+	SkipPluginManagerStart bool
+}
+
+func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion string, options RuntimeOptions) (*Runtime, error) {
 	validator, err := NewSchemaValidator()
 	if err != nil {
 		return nil, err
@@ -87,8 +95,11 @@ func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 	}
 	pluginManager := NewPluginManager(pluginRegistry, registry, executor, permissions, repository, validator)
 	service.AttachPluginManager(pluginManager)
-	if err := pluginManager.Start(ctx); err != nil {
-		return nil, err
+	if !options.SkipPluginManagerStart {
+		kernelruntime.GlobalLegacyCallCounter().IncPluginStart()
+		if err := pluginManager.Start(ctx); err != nil {
+			return nil, err
+		}
 	}
 	workshopRepository := NewWorkshopRepository(db)
 	workflowCompiler := NewWorkflowCompiler(registry)

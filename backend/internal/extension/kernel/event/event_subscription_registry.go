@@ -9,12 +9,14 @@ import (
 )
 
 type EventSubscriptionRegistry struct {
-	mu            sync.RWMutex
-	subscriptions map[string]*ResolvedSubscription
-	byType        map[EventTypeID][]string
-	byExtension   map[string][]string
-	schemaRegistry EventTypeRegistry
-	maxSubscribers int
+	mu                sync.RWMutex
+	subscriptions     map[string]*ResolvedSubscription
+	byType            map[EventTypeID][]string
+	byExtension       map[string][]string
+	schemaRegistry    EventTypeRegistry
+	maxSubscribers    int
+	repository        SubscriptionRepository
+	effectiveResolver EffectiveResolver
 }
 
 func NewEventSubscriptionRegistry(schemaRegistry EventTypeRegistry, maxSubscribers int) *EventSubscriptionRegistry {
@@ -22,11 +24,60 @@ func NewEventSubscriptionRegistry(schemaRegistry EventTypeRegistry, maxSubscribe
 		maxSubscribers = 64
 	}
 	return &EventSubscriptionRegistry{
-		subscriptions:  make(map[string]*ResolvedSubscription),
-		byType:         make(map[EventTypeID][]string),
-		byExtension:    make(map[string][]string),
-		schemaRegistry: schemaRegistry,
-		maxSubscribers: maxSubscribers,
+		subscriptions:     make(map[string]*ResolvedSubscription),
+		byType:            make(map[EventTypeID][]string),
+		byExtension:       make(map[string][]string),
+		schemaRegistry:    schemaRegistry,
+		maxSubscribers:    maxSubscribers,
+	}
+}
+
+func (r *EventSubscriptionRegistry) SetRepository(repo SubscriptionRepository) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.repository = repo
+}
+
+func (r *EventSubscriptionRegistry) SetEffectiveResolver(resolver EffectiveResolver) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.effectiveResolver = resolver
+}
+
+func (r *EventSubscriptionRegistry) LoadFromRepository(ctx context.Context) error {
+	if r.repository == nil {
+		return nil
+	}
+	defs, err := r.repository.ListActive(ctx)
+	if err != nil {
+		return fmt.Errorf("event: load subscriptions: %w", err)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, def := range defs {
+		if _, exists := r.subscriptions[def.ContributionID]; exists {
+			continue
+		}
+		resolved, err := r.resolveLocked(ctx, def)
+		if err != nil {
+			continue
+		}
+		r.subscriptions[def.ContributionID] = resolved
+		r.byType[def.EventTypeID] = append(r.byType[def.EventTypeID], def.ContributionID)
+		r.byExtension[def.ExtensionID] = append(r.byExtension[def.ExtensionID], def.ContributionID)
+	}
+	return nil
+}
+
+func (r *EventSubscriptionRegistry) RebuildEffectiveStates(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.effectiveResolver == nil {
+		return
+	}
+	for id, sub := range r.subscriptions {
+		sub.Effective = r.effectiveResolver.Resolve(ctx, sub.Definition)
+		r.subscriptions[id] = sub
 	}
 }
 
@@ -45,8 +96,16 @@ func (r *EventSubscriptionRegistry) RegisterBatch(ctx context.Context, defs []Ev
 		if _, exists := r.subscriptions[def.ContributionID]; exists {
 			continue
 		}
+		if r.repository != nil {
+			if err := r.repository.Upsert(ctx, def); err != nil {
+				return fmt.Errorf("event: persist subscription %s: %w", def.ContributionID, err)
+			}
+		}
 		resolved, err := r.resolveLocked(ctx, def)
 		if err != nil {
+			if r.repository != nil {
+				_ = r.repository.Delete(ctx, def.ContributionID)
+			}
 			return err
 		}
 		r.subscriptions[def.ContributionID] = resolved
@@ -65,8 +124,16 @@ func (r *EventSubscriptionRegistry) Register(ctx context.Context, def EventSubsc
 	if _, exists := r.subscriptions[def.ContributionID]; exists {
 		return fmt.Errorf("%w: %s", ErrSubscriptionConflict, def.ContributionID)
 	}
+	if r.repository != nil {
+		if err := r.repository.Upsert(ctx, def); err != nil {
+			return fmt.Errorf("event: persist subscription: %w", err)
+		}
+	}
 	resolved, err := r.resolveLocked(ctx, def)
 	if err != nil {
+		if r.repository != nil {
+			_ = r.repository.Delete(ctx, def.ContributionID)
+		}
 		return err
 	}
 	r.subscriptions[def.ContributionID] = resolved
@@ -102,19 +169,25 @@ func (r *EventSubscriptionRegistry) resolveLocked(ctx context.Context, def Event
 	if err := ValidateProjectionRequest(def.Projection, typeDef); err != nil {
 		return nil, err
 	}
+	var effective SubscriptionEffectiveState
+	if r.effectiveResolver != nil {
+		effective = r.effectiveResolver.Resolve(ctx, def)
+	} else {
+		effective = SubscriptionEffectiveState{
+			Enabled:           def.Enabled,
+			Generation:        def.Generation,
+			PermissionGranted: false,
+			ScopeValid:        false,
+			DependenciesReady: false,
+			RuntimeAvailable:  false,
+			CircuitState:      CircuitClosed,
+		}
+	}
 	return &ResolvedSubscription{
 		Definition:     def,
 		CompiledFilter: compiledFilter,
 		Projector:      projector,
-		Effective: SubscriptionEffectiveState{
-			Enabled:           def.Enabled,
-			Generation:        def.Generation,
-			PermissionGranted: true,
-			ScopeValid:        true,
-			DependenciesReady: true,
-			RuntimeAvailable:  true,
-			CircuitState:      CircuitClosed,
-		},
+		Effective:      effective,
 	}, nil
 }
 
@@ -126,8 +199,17 @@ func (r *EventSubscriptionRegistry) Unregister(ctx context.Context, contribution
 		return fmt.Errorf("%w: %s", ErrSubscriptionNotFound, contributionID)
 	}
 	delete(r.subscriptions, contributionID)
-	r.removeFromIndex(r.byType[sub.Definition.EventTypeID], contributionID)
-	r.removeFromIndex(r.byExtension[sub.Definition.ExtensionID], contributionID)
+	r.byType[sub.Definition.EventTypeID] = r.removeFromIndex(r.byType[sub.Definition.EventTypeID], contributionID)
+	if len(r.byType[sub.Definition.EventTypeID]) == 0 {
+		delete(r.byType, sub.Definition.EventTypeID)
+	}
+	r.byExtension[sub.Definition.ExtensionID] = r.removeFromIndex(r.byExtension[sub.Definition.ExtensionID], contributionID)
+	if len(r.byExtension[sub.Definition.ExtensionID]) == 0 {
+		delete(r.byExtension, sub.Definition.ExtensionID)
+	}
+	if r.repository != nil {
+		_ = r.repository.Delete(ctx, contributionID)
+	}
 	return nil
 }
 
@@ -149,6 +231,9 @@ func (r *EventSubscriptionRegistry) Activate(ctx context.Context, contributionID
 	}
 	sub.Effective.Enabled = true
 	sub.Definition.Enabled = true
+	if r.repository != nil {
+		_ = r.repository.SetEnabled(ctx, contributionID, true)
+	}
 	return nil
 }
 
@@ -161,33 +246,51 @@ func (r *EventSubscriptionRegistry) Deactivate(ctx context.Context, contribution
 	}
 	sub.Effective.Enabled = false
 	sub.Definition.Enabled = false
+	if r.repository != nil {
+		_ = r.repository.SetEnabled(ctx, contributionID, false)
+	}
 	return nil
 }
 
 func (r *EventSubscriptionRegistry) UpdateGeneration(ctx context.Context, extensionID string, newGeneration int64, defs []EventSubscriptionDefinition) error {
+	for i := range defs {
+		defs[i].Generation = newGeneration
+		defs[i].Enabled = true
+		if err := defs[i].Validate(); err != nil {
+			return fmt.Errorf("event: validate %s: %w", defs[i].ContributionID, err)
+		}
+	}
+	candidates := make([]*ResolvedSubscription, 0, len(defs))
+	for i := range defs {
+		resolved, err := r.resolveLocked(ctx, defs[i])
+		if err != nil {
+			return fmt.Errorf("event: resolve %s: %w", defs[i].ContributionID, err)
+		}
+		candidates = append(candidates, resolved)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	old := r.byExtension[extensionID]
 	for _, id := range old {
+		sub := r.subscriptions[id]
 		delete(r.subscriptions, id)
+		if sub != nil {
+			r.byType[sub.Definition.EventTypeID] = r.removeFromIndex(r.byType[sub.Definition.EventTypeID], id)
+			if len(r.byType[sub.Definition.EventTypeID]) == 0 {
+				delete(r.byType, sub.Definition.EventTypeID)
+			}
+		}
 	}
 	delete(r.byExtension, extensionID)
-	for _, t := range r.byType {
-		_ = t
+	for _, resolved := range candidates {
+		r.subscriptions[resolved.Definition.ContributionID] = resolved
+		r.byType[resolved.Definition.EventTypeID] = append(r.byType[resolved.Definition.EventTypeID], resolved.Definition.ContributionID)
+		r.byExtension[resolved.Definition.ExtensionID] = append(r.byExtension[resolved.Definition.ExtensionID], resolved.Definition.ContributionID)
 	}
-	for _, def := range defs {
-		def.Generation = newGeneration
-		def.Enabled = true
-		if err := def.Validate(); err != nil {
-			return err
+	if r.repository != nil {
+		if err := r.repository.UpdateGeneration(ctx, extensionID, newGeneration, defs); err != nil {
+			return fmt.Errorf("event: persist generation update: %w", err)
 		}
-		resolved, err := r.resolveLocked(ctx, def)
-		if err != nil {
-			return err
-		}
-		r.subscriptions[def.ContributionID] = resolved
-		r.byType[def.EventTypeID] = append(r.byType[def.EventTypeID], def.ContributionID)
-		r.byExtension[def.ExtensionID] = append(r.byExtension[def.ExtensionID], def.ContributionID)
 	}
 	return nil
 }
@@ -200,6 +303,9 @@ func (r *EventSubscriptionRegistry) DeactivateByExtension(ctx context.Context, e
 		if sub, ok := r.subscriptions[id]; ok {
 			sub.Effective.Enabled = false
 			sub.Definition.Enabled = false
+			if r.repository != nil {
+				_ = r.repository.SetEnabled(ctx, id, false)
+			}
 		}
 	}
 	return nil
@@ -214,9 +320,15 @@ func (r *EventSubscriptionRegistry) RemoveByExtension(ctx context.Context, exten
 		delete(r.subscriptions, id)
 		if sub != nil {
 			r.byType[sub.Definition.EventTypeID] = r.removeFromIndex(r.byType[sub.Definition.EventTypeID], id)
+			if len(r.byType[sub.Definition.EventTypeID]) == 0 {
+				delete(r.byType, sub.Definition.EventTypeID)
+			}
 		}
 	}
 	delete(r.byExtension, extensionID)
+	if r.repository != nil {
+		_, _ = r.repository.DeleteByExtension(ctx, extensionID)
+	}
 	return nil
 }
 
@@ -235,6 +347,48 @@ func (r *EventSubscriptionRegistry) Resolve(ctx context.Context, envelope EventE
 		}
 		if !sub.Effective.IsActive() {
 			continue
+		}
+		if sub.CompiledFilter != nil {
+			fields := ExtractFilterFields(envelope.Payload, sub.CompiledFilter.AllowedFieldsList())
+			if !sub.CompiledFilter.Match(fields) {
+				continue
+			}
+		}
+		result = append(result, sub)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].Definition.Generation != result[j].Definition.Generation {
+			return result[i].Definition.Generation > result[j].Definition.Generation
+		}
+		return result[i].Definition.ContributionID < result[j].Definition.ContributionID
+	})
+	if len(result) > r.maxSubscribers {
+		result = result[:r.maxSubscribers]
+	}
+	return result, nil
+}
+
+func (r *EventSubscriptionRegistry) ResolveForDelivery(ctx context.Context, envelope EventEnvelope) ([]*ResolvedSubscription, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := r.byType[envelope.EventTypeID]
+	var result []*ResolvedSubscription
+	for _, id := range ids {
+		sub, ok := r.subscriptions[id]
+		if !ok {
+			continue
+		}
+		if !sub.Definition.MatchesVersion(envelope.EventVersion) {
+			continue
+		}
+		if !sub.Effective.IsActive() {
+			continue
+		}
+		if r.effectiveResolver != nil {
+			deliveryState := r.effectiveResolver.ResolveForDelivery(ctx, sub.Definition, envelope)
+			if !deliveryState.IsActive() {
+				continue
+			}
 		}
 		if sub.CompiledFilter != nil {
 			fields := ExtractFilterFields(envelope.Payload, sub.CompiledFilter.AllowedFieldsList())

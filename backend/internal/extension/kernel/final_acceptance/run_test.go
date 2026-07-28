@@ -27,6 +27,11 @@ func TestFinalAcceptanceSuite(t *testing.T) {
 	}
 
 	if !report.ReleaseReady {
+		for _, it := range report.Items {
+			if it.Status != StatusPassed {
+				t.Logf("item %s: status=%s err=%s", it.ItemID, it.Status, it.Error)
+			}
+		}
 		t.Fatalf("release not ready: %d failed, blocking=%v", report.Summary.Failed, report.BlockingIssues)
 	}
 

@@ -41,6 +41,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
@@ -139,6 +140,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
+	toolRegistry := capability.NewToolRegistry()
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
@@ -163,6 +165,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
+	executionKernel.ToolResolver = func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
+		def, ok := toolRegistry.Get(ctx, toolID)
+		if !ok {
+			if alt, altOK := toolRegistry.GetByModelName(ctx, toolID); altOK {
+				return alt, nil
+			}
+			return capability.ToolDefinition{}, fmt.Errorf("tool %s not registered in kernel tool registry", toolID)
+		}
+		return def, nil
+	}
 
 	taskRepo := sqlite.NewTaskRepository(db)
 	taskCfg := task_runtime.DefaultTaskRuntimeConfig()
@@ -177,7 +189,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	scheduleRepo := sqlite.NewScheduleRepository(db)
 	scheduleSvc, err := schedule.NewScheduleService(schedule.ScheduleDeps{
-		Store: scheduleRepo,
+		Store:             scheduleRepo,
+		PermissionChecker: schedule.NewBrokerPermissionChecker(permBroker, scheduleRepo),
+		ScopeChecker:      schedule.NewManagerScopeChecker(scopeManager, scheduleRepo, scopeStore),
+		DependencyChecker: schedule.NewResolverDependencyChecker(dependencyResolver),
+		WorkflowExecutor:  NewKernelWorkflowFacadeAdapter(),
+		TaskEnqueueFn:     BuildScheduleTaskEnqueueFunc(taskRuntimeService),
+		RuntimeHandlerFn:  BuildScheduleRuntimeHandlerFn(supervisor),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: create schedule service: %w", err)
@@ -202,6 +220,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
 		return nil, fmt.Errorf("kernel: register default event types: %w", err)
 	}
+	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher())
+	eventSvc.SetEffectiveResolver(eventResolver)
 	eventBridge := event.NewRuntimeBridge(eventSvc)
 	eventBridge.Attach()
 	hostEmitter := event.NewHostEventEmitter(eventSvc)
@@ -213,16 +233,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	taskRuntimeService.SetEventEmitter(hostEmitter)
 
 	hostAPIGateway := host_api.NewDefaultGateway()
-	hostAPIGateway.SetPermissionChecker(host_api.PermissionCheckerFunc(func(ctx context.Context, id runtime_supervisor.RuntimeIdentity, reqs []host_api.PermissionRequirement) error {
-		return nil
-	}))
-	hostAPIGateway.SetScopeChecker(host_api.ScopeCheckerFunc(func(ctx context.Context, id runtime_supervisor.RuntimeIdentity, sid string, pol host_api.ScopePolicy) error {
-		return nil
-	}))
+	host_api.RegisterPermissionDefinitions(permDefRegistry)
+	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
+	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
 	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter())
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, eventSvc, scheduleSvc); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
+	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewHostAPIToolExecutorAdapter(hostAPIGateway)))
 	jsFactory.SetHostAPI(hostAPIGateway)
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, b.resolveNodePath(), b.resolvePluginHostPath())
@@ -392,6 +410,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EnablementService:    enablementService,
 		EnablementResolver:   enablementResolver,
 
+		ToolRegistry:    toolRegistry,
+		AdapterRegistry: adapterRegistry,
+
 		TaskRepository:     taskRepo,
 		TaskRuntimeService: taskRuntimeService,
 		TaskHandler:        taskHandler,
@@ -435,6 +456,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DevConsoleService:   devConsoleSvc,
 		DevConsoleRepo:      devConsoleRepo,
 		DevConsoleHandler:   devConsoleHandler,
+		TrustService:        trust.NewTrustService(trust.TrustServiceConfig{}),
 		AmitiaxInstaller:    amitiaxInstaller,
 		DevModeRegistry:     devModeRegistry,
 		DevModePipeline:     devModePipeline,

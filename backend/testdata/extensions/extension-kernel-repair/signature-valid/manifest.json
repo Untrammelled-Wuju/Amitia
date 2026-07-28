@@ -1,0 +1,48 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/signature-valid",
+		"name": {"default": "Signature Valid"},
+		"description": {"default": "Phase 10 E2E: extension with a valid signature from a trusted publisher"},
+		"version": "1.0.0",
+		"metadata": {
+			"expectedSignatureStatus": "valid",
+			"expectedInstallStatus": "succeeded"
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair",
+		"trustLevel": "trusted"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "signed-tool",
+					"kind": "tool",
+					"name": {"default": "Signed Tool"},
+					"description": {"default": "Tool from a validly signed package"},
+					"modelName": "signed_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"input": {"type": "string"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute signed tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

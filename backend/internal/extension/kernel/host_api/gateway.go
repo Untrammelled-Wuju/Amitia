@@ -118,31 +118,49 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		g.recordAudit(ctx, request, result)
 		return result
 	}
-	if g.permCheck != nil {
-		if err := g.permCheck.Check(ctx, request.RuntimeIdentity, route.Permission); err != nil {
-			result := CallResult{
-				Status: StatusRejected,
-				Error: &Error{
-					Code:    ErrorCodePermissionDenied,
-					Message: err.Error(),
-				},
-			}
-			g.recordAudit(ctx, request, result)
-			return result
+	if g.permCheck == nil {
+		result := CallResult{
+			Status: StatusRejected,
+			Error: &Error{
+				Code:    ErrorCodePermissionDenied,
+				Message: "host_api: permission checker not wired (fail closed)",
+			},
 		}
+		g.recordAudit(ctx, request, result)
+		return result
 	}
-	if g.scopeCheck != nil {
-		if err := g.scopeCheck.Check(ctx, request.RuntimeIdentity, request.ScopeSnapshotID, route.ScopePolicy); err != nil {
-			result := CallResult{
-				Status: StatusRejected,
-				Error: &Error{
-					Code:    ErrorCodeScopeDenied,
-					Message: err.Error(),
-				},
-			}
-			g.recordAudit(ctx, request, result)
-			return result
+	if err := g.permCheck.Check(ctx, request.RuntimeIdentity, route.Permission); err != nil {
+		result := CallResult{
+			Status: StatusRejected,
+			Error: &Error{
+				Code:    ErrorCodePermissionDenied,
+				Message: err.Error(),
+			},
 		}
+		g.recordAudit(ctx, request, result)
+		return result
+	}
+	if g.scopeCheck == nil {
+		result := CallResult{
+			Status: StatusRejected,
+			Error: &Error{
+				Code:    ErrorCodeScopeDenied,
+				Message: "host_api: scope checker not wired (fail closed)",
+			},
+		}
+		g.recordAudit(ctx, request, result)
+		return result
+	}
+	if err := g.scopeCheck.Check(ctx, request.RuntimeIdentity, request.ScopeSnapshotID, route.ScopePolicy); err != nil {
+		result := CallResult{
+			Status: StatusRejected,
+			Error: &Error{
+				Code:    ErrorCodeScopeDenied,
+				Message: err.Error(),
+			},
+		}
+		g.recordAudit(ctx, request, result)
+		return result
 	}
 	timeoutCtx := ctx
 	if route.Timeout > 0 {

@@ -7,6 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
@@ -35,6 +36,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
@@ -69,6 +71,10 @@ type Container struct {
 	WorkflowRegistry     *workflow.WorkflowRegistry
 	EnablementService    *enablement.EnablementService
 	EnablementResolver   enablement.EffectiveStateResolver
+
+	ToolRegistry      *capability.ToolRegistry
+	AdapterRegistry   *capability.RuntimeAdapterRegistry
+	ToolFacade        *ToolFacade
 
 	TaskRepository    *sqlite.TaskRepository
 	TaskRuntimeService *task_runtime.TaskRuntimeService
@@ -113,6 +119,7 @@ type Container struct {
 	DevConsoleService   *developer_console.ConsoleService
 	DevConsoleRepo      *developer_console.DiagnosticRepository
 	DevConsoleHandler   *developer_console.HTTPHandler
+	TrustService        *trust.TrustService
 	AmitiaxInstaller    *amitiax.Installer
 	DevModeRegistry     *dev_mode.WorkspaceRegistry
 	DevModePipeline     *dev_mode.RebuildPipeline

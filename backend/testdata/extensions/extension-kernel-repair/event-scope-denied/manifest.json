@@ -1,0 +1,46 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/event-scope-denied",
+		"name": {"default": "Event Scope Denied"},
+		"description": {"default": "Phase 10 E2E: event subscription requiring a scope that is not bound, must be denied"},
+		"version": "1.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "scoped-subscription",
+					"kind": "event_subscription",
+					"name": {"default": "Scoped Subscription"},
+					"description": {"default": "Subscription requiring resource:private scope"},
+					"requiredPermissions": ["event.subscribe"],
+					"requiredScope": ["resource:private"],
+					"spec": {
+						"eventTypeId": "system.scoped",
+						"eventVersionRange": "^1",
+						"entry": "onEvent",
+						"scopeRule": {
+							"requireAll": ["resource:private"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "event.subscribe", "reason": "Subscribe to scoped events", "required": true, "scope": "resource:private"}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

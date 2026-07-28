@@ -1,0 +1,49 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/signature-tampered",
+		"name": {"default": "Signature Tampered"},
+		"description": {"default": "Phase 10 E2E: extension whose package content has been tampered after signing, must fail integrity verification"},
+		"version": "1.0.0",
+		"metadata": {
+			"expectedSignatureStatus": "tampered",
+			"expectedInstallStatus": "failed",
+			"tamperHint": "modify index.js after packaging to break content tree hash"
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair",
+		"trustLevel": "trusted"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "tampered-tool",
+					"kind": "tool",
+					"name": {"default": "Tampered Tool"},
+					"description": {"default": "Tool whose package content was modified post-signing"},
+					"modelName": "tampered_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"input": {"type": "string"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

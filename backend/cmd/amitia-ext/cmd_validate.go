@@ -18,7 +18,7 @@ func runValidate(args []string, output *Output) int {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		output.fail(ExitConfig, "用法: amitia-ext validate <manifest.json|package.amitiax|目录> [--schema]")
+		output.fail(ExitConfig, "用法: amitiax validate <manifest.json|package.amitiax|目录> [--schema]")
 	}
 	target := fs.Arg(0)
 

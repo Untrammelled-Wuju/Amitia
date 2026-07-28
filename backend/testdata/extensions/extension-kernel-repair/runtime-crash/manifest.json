@@ -1,0 +1,47 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/runtime-crash",
+		"name": {"default": "Runtime Crash"},
+		"description": {"default": "Phase 10 E2E: extension that throws during invocation to validate runtime crash isolation and recovery"},
+		"version": "1.0.0",
+		"metadata": {
+			"expectedBehavior": "crash_on_invoke",
+			"crashType": "uncaught_exception"
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "crash-tool",
+					"kind": "tool",
+					"name": {"default": "Crash Tool"},
+					"description": {"default": "Tool that throws an uncaught exception to crash its runtime"},
+					"modelName": "crash_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"message": {"type": "string"}
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute crash tool", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

@@ -240,7 +240,24 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	agentSkillContext := ""
 	agentSkillCatalogIncluded := false
 	agentSkillTrace := []promptir.AgentSkillTrace{}
-	if s.skillRuntime != nil {
+	if s.toolRuntime != nil {
+		toolScope := toolScopeFromExtension(skillScope)
+		catalog, activated, activationErrors := s.toolRuntime.PrepareAgentSkillPrompt(ctx, toolScope, req.Message)
+		parts := []string{}
+		if catalog != "" {
+			parts = append(parts, catalog)
+			agentSkillCatalogIncluded = true
+		}
+		for _, item := range activated {
+			parts = append(parts, item.Prompt)
+			agentSkillTrace = append(agentSkillTrace, promptir.AgentSkillTrace{ActivationID: item.ActivationID, ExtensionID: item.ExtensionID, Name: item.Name, Source: item.Source, Scope: item.Scope, Trigger: "explicit", Explicit: true, CompatibilityStatus: item.CompatibilityStatus, BodyTokens: item.BodyTokens, ScriptsUsed: false, ToolMappings: item.ToolMappings, InstructionPosition: "after_character_rules", Status: "activated"})
+		}
+		if len(activationErrors) > 0 {
+			parts = append(parts, "<agent_skill_activation_errors>"+strings.Join(activationErrors, "; ")+"</agent_skill_activation_errors>")
+		}
+		agentSkillContext = strings.Join(parts, "\n\n")
+		defer s.toolRuntime.EndAgentSkillRound(toolScope)
+	} else if s.skillRuntime != nil {
 		catalog, activated, activationErrors := s.skillRuntime.PrepareAgentSkillPrompt(ctx, skillScope, req.Message)
 		parts := []string{}
 		if catalog != "" {
@@ -258,7 +275,10 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		defer s.skillRuntime.EndAgentSkillRound(skillScope)
 	}
 	pluginContributions := []extension.ContextContribution{}
-	if s.skillRuntime != nil {
+	if s.toolRuntime != nil {
+		toolScope := toolScopeFromExtension(skillScope)
+		pluginContributions = contextContributionsToExtension(s.toolRuntime.BeforePrompt(ctx, toolScope))
+	} else if s.skillRuntime != nil {
 		pluginContributions = s.skillRuntime.BeforePrompt(ctx, skillScope)
 	}
 	pluginContext, pluginSources := renderPluginContributions(pluginContributions)
@@ -306,7 +326,16 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		UserContent:               userContent,
 	})
 	var toolDefs []tool.Tool
-	if s.skillRuntime != nil {
+	if s.toolRuntime != nil {
+		toolScope := toolScopeFromExtension(skillScope)
+		resolved, resolveErr := s.toolRuntime.ModelTools(ctx, toolScope)
+		if resolveErr != nil {
+			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")
+			toolDefs = nil
+		} else {
+			toolDefs = resolved
+		}
+	} else if s.skillRuntime != nil {
 		resolved, resolveErr := s.skillRuntime.ModelTools(ctx, skillScope)
 		if resolveErr != nil {
 			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")

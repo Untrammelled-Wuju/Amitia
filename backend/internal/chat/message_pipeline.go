@@ -156,7 +156,10 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 }
 
 func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *ComputeResult, messageIDs []string) {
-	if s.skillRuntime == nil || result == nil || result.HasExistingUser || result.Reply == "" {
+	if result == nil || result.HasExistingUser || result.Reply == "" {
+		return
+	}
+	if s.toolRuntime == nil && s.skillRuntime == nil {
 		return
 	}
 	messageID := ""
@@ -164,5 +167,12 @@ func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *C
 		messageID = messageIDs[len(messageIDs)-1]
 	}
 	scope := extension.ExecutionScope{UserID: req.UserID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, SessionID: req.SessionID, TraceID: result.RequestID, RequestID: result.RequestID, CorrelationID: result.Trace.CorrelationID, CausationID: result.Trace.CausationID}
-	s.skillRuntime.AfterReply(scope, extension.ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()})
+	replyView := extension.ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()}
+	if s.toolRuntime != nil {
+		toolScope := toolScopeFromExtension(scope)
+		toolReply := ReplyView{MessageID: replyView.MessageID, CharacterID: replyView.CharacterID, ConversationID: replyView.ConversationID, Channel: replyView.Channel, Content: replyView.Content, CreatedAt: replyView.CreatedAt}
+		s.toolRuntime.AfterReply(toolScope, toolReply)
+		return
+	}
+	s.skillRuntime.AfterReply(scope, replyView)
 }

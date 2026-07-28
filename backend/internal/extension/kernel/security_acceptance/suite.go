@@ -108,7 +108,8 @@ func (s *Suite) Run(ctx context.Context) (*SecurityReport, error) {
 		c.StartedAt = &start
 		fn, ok := fns[c.CheckID]
 		if !ok {
-			c.Status = SecStatusSkipped
+			c.Status = SecStatusBlocked
+			c.Error = "no runner registered for security check"
 			c.CompletedAt = ptrTime(time.Now().UTC())
 			continue
 		}
@@ -120,13 +121,18 @@ func (s *Suite) Run(ctx context.Context) (*SecurityReport, error) {
 			c.Evidence = evidence
 			continue
 		}
+		if len(evidence) == 0 {
+			c.Status = SecStatusFailed
+			c.Error = "evidence is empty"
+			continue
+		}
 		c.Evidence = evidence
 		c.Status = SecStatusPassed
 	}
 
 	summary := summarizeSec(checks)
 	outcome := "passed"
-	if summary.Failed > 0 {
+	if summary.Failed > 0 || summary.Blocked > 0 {
 		outcome = "failed"
 	}
 	return &SecurityReport{
@@ -209,10 +215,7 @@ func DefaultSuite() *Suite {
 		{CheckID: "audit.no_sensitive_in_log", Category: "audit", Title: "日志不含敏感信息", Description: "日志过滤器移除敏感字段", Severity: SeverityCritical},
 	}
 	for _, c := range checks {
-		c.Status = SecStatusPassed
-		s.Register(c, func(ctx context.Context) ([]string, error) {
-			return []string{"security control verified"}, nil
-		})
+		s.Register(c, nil)
 	}
 	return s
 }

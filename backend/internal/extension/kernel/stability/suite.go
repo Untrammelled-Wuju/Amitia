@@ -116,7 +116,8 @@ func (s *Suite) Run(ctx context.Context, platform Platform) (*AcceptanceReport, 
 		}
 		fn, ok := fns[sc.ScenarioID]
 		if !ok {
-			sc.Status = StatusSkipped
+			sc.Status = StatusBlocked
+			sc.Error = "no runner registered for scenario"
 			continue
 		}
 		start := time.Now().UTC()
@@ -220,10 +221,7 @@ func DefaultSuite() *Suite {
 		{ScenarioID: "chinese_path", Category: "filesystem", Title: "中文路径", Description: "中文路径支持"},
 	}
 	for _, sc := range stabilityScenarios {
-		sc.Status = StatusPassed
-		s.Register(sc, func(ctx context.Context) (ScenarioMetrics, error) {
-			return CaptureMetrics(), nil
-		})
+		s.Register(sc, nil)
 	}
 	return s
 }

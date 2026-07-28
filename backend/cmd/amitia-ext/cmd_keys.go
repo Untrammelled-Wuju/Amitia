@@ -14,7 +14,7 @@ import (
 
 func runKeys(args []string, output *Output) int {
 	if len(args) < 1 {
-		output.fail(ExitConfig, "用法: amitia-ext keys <create|export-public> [选项]")
+		output.fail(ExitConfig, "用法: amitiax keys <create|export-public> [选项]")
 	}
 	subcmd := args[0]
 	rest := args[1:]

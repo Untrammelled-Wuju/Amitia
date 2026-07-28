@@ -1,0 +1,87 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/uninstall-cleanup",
+		"name": {"default": "Uninstall Cleanup"},
+		"description": {"default": "Phase 10 E2E: extension that creates subscriptions, schedules, runtime and UI sessions to verify full cleanup on uninstall"},
+		"version": "1.0.0",
+		"metadata": {
+			"expectedBehavior": "full_cleanup_on_uninstall",
+			"cleanupTargets": ["runtime", "event_subscription", "delivery", "schedule", "lease", "ui_session", "shortcut"]
+		}
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "cleanup-tool",
+					"kind": "tool",
+					"name": {"default": "Cleanup Tool"},
+					"description": {"default": "Tool that registers side effects to verify cleanup"},
+					"modelName": "cleanup_tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"action": {"type": "string"}
+						}
+					}
+				},
+				{
+					"id": "cleanup-subscription",
+					"kind": "event_subscription",
+					"name": {"default": "Cleanup Subscription"},
+					"description": {"default": "Subscription that must be removed on uninstall"},
+					"spec": {
+						"eventTypeId": "system.test",
+						"eventVersionRange": "^1",
+						"entry": "onEvent"
+					}
+				},
+				{
+					"id": "cleanup-schedule",
+					"kind": "schedule",
+					"name": {"default": "Cleanup Schedule"},
+					"description": {"default": "Schedule that must be removed on uninstall"},
+					"spec": {
+						"trigger": {
+							"type": "interval",
+							"interval": "60s"
+						},
+						"target": {
+							"type": "tool",
+							"toolId": "cleanup-tool",
+							"input": {"action": "scheduled"}
+						}
+					}
+				},
+				{
+					"id": "cleanup-page",
+					"kind": "ui_page",
+					"name": {"default": "Cleanup Page"},
+					"description": {"default": "UI page session that must be removed on uninstall"},
+					"spec": {
+						"route": "/cleanup",
+						"entry": "index.html"
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "tool.invoke", "reason": "Execute cleanup tool", "required": true},
+		{"name": "event.subscribe", "reason": "Subscribe for cleanup verification", "required": true},
+		{"name": "schedule.create", "reason": "Create schedule for cleanup verification", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}

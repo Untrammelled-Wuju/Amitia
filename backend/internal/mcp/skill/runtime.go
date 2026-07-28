@@ -24,10 +24,36 @@ type Caller interface {
 	Call(context.Context, string, string, any, client.CallOptions) (json.RawMessage, error)
 }
 
+type ToolFacadeSyncer interface {
+	SyncMCPTools(ctx context.Context, serverID string, tools []mcp.ToolDefinition) error
+	UnregisterMCPTools(ctx context.Context, serverID string) error
+}
+
 type Runtime struct {
-	repository *mcp.Repository
-	caller     Caller
-	extensions *extension.Runtime
+	repository       *mcp.Repository
+	caller           Caller
+	extensions       *extension.Runtime
+	toolFacadeSyncer ToolFacadeSyncer
+}
+
+type Option func(*Runtime)
+
+func WithToolFacadeSyncer(syncer ToolFacadeSyncer) Option {
+	return func(r *Runtime) {
+		r.toolFacadeSyncer = syncer
+	}
+}
+
+func New(repository *mcp.Repository, caller Caller, extensions *extension.Runtime, opts ...Option) *Runtime {
+	r := &Runtime{repository: repository, caller: caller, extensions: extensions}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func (r *Runtime) SetToolFacadeSyncer(syncer ToolFacadeSyncer) {
+	r.toolFacadeSyncer = syncer
 }
 
 type toolCallResult struct {
@@ -52,10 +78,6 @@ type contentItem struct {
 	MIMEType string          `json:"mimeType,omitempty"`
 	URI      string          `json:"uri,omitempty"`
 	Resource json.RawMessage `json:"resource,omitempty"`
-}
-
-func New(repository *mcp.Repository, caller Caller, extensions *extension.Runtime) *Runtime {
-	return &Runtime{repository: repository, caller: caller, extensions: extensions}
 }
 
 func (r *Runtime) RegisterAll(ctx context.Context) error {
@@ -107,6 +129,9 @@ func (r *Runtime) RegisterServer(ctx context.Context, serverID string) error {
 		if err := r.extensions.Registry.SetEnabled(ctx, definition.ID, tool.Enabled == 1); err != nil {
 			return err
 		}
+	}
+	if r.toolFacadeSyncer != nil {
+		_ = r.toolFacadeSyncer.SyncMCPTools(ctx, serverID, tools)
 	}
 	return nil
 }

@@ -7,10 +7,13 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `amitia-ext - Amitia 扩展 CLI 工具 (v%s)
+	fmt.Fprintf(os.Stderr, `amitiax - Amitia 扩展 CLI 工具 (v%s)
 
 用法:
-  amitia-ext <命令> [选项] [参数]
+  amitiax <命令> [选项] [参数]
+
+别名:
+  amitia-ext  (兼容别名，指向同一二进制)
 
 命令:
   init               创建新扩展项目
@@ -31,19 +34,19 @@ func usage() {
   --json        以 JSON 格式输出
 
 示例:
-  amitia-ext init --name com.example.my-ext --dir ./my-ext
-  amitia-ext validate manifest.json
-  amitia-ext validate my-ext.amitiax
-  amitia-ext pack --dir ./my-ext -o my-ext.amitiax
-  amitia-ext sign my-ext.amitiax --key private.key --key-id my-key --publisher com.example
-  amitia-ext verify my-ext.amitiax --pubkey public.key
-  amitia-ext inspect my-ext.amitiax --files
-  amitia-ext doctor
-  amitia-ext keys create --output ./keys
-  amitia-ext keys export-public --key private.key
-  amitia-ext dev ./my-ext --host localhost:18899
-  amitia-ext test ./my-ext --host-version 0.1.0 --platform windows
-  amitia-ext export-diagnostics ./my-ext diagnostics.json
+  amitiax init --name com.example.my-ext --dir ./my-ext
+  amitiax validate manifest.json
+  amitiax validate my-ext.amitiax
+  amitiax pack --dir ./my-ext -o my-ext.amitiax
+  amitiax sign my-ext.amitiax --key private.key --key-id my-key --publisher com.example
+  amitiax verify my-ext.amitiax --pubkey public.key
+  amitiax inspect my-ext.amitiax --files
+  amitiax doctor
+  amitiax keys create --output ./keys
+  amitiax keys export-public --key private.key
+  amitiax dev ./my-ext --host localhost:18899
+  amitiax test ./my-ext --host-version 0.1.0 --platform windows
+  amitiax export-diagnostics ./my-ext diagnostics.json
 `, CLIVersion)
 }
 
@@ -93,7 +96,7 @@ func main() {
 	case "export-diagnostics":
 		os.Exit(runExportDiagnostics(args, output))
 	case "version", "--version", "-v":
-		output.emit(Result{OK: true, Message: fmt.Sprintf("amitia-ext v%s", CLIVersion), Data: map[string]any{"version": CLIVersion}})
+		output.emit(Result{OK: true, Message: fmt.Sprintf("amitiax v%s", CLIVersion), Data: map[string]any{"version": CLIVersion}})
 	case "help", "--help", "-h":
 		usage()
 	default:

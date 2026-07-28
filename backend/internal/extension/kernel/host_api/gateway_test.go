@@ -35,8 +35,19 @@ func makeRequest(method Method, version int, input any) CallRequest {
 	}
 }
 
-func TestRegisterAndCall(t *testing.T) {
+func makeTestGateway() *DefaultGateway {
 	g := NewDefaultGateway()
+	g.SetPermissionChecker(PermissionCheckerFunc(func(_ context.Context, _ runtime_supervisor.RuntimeIdentity, _ []PermissionRequirement) error {
+		return nil
+	}))
+	g.SetScopeChecker(ScopeCheckerFunc(func(_ context.Context, _ runtime_supervisor.RuntimeIdentity, _ string, _ ScopePolicy) error {
+		return nil
+	}))
+	return g
+}
+
+func TestRegisterAndCall(t *testing.T) {
+	g := makeTestGateway()
 	handler := func(_ context.Context, req CallRequest) (CallResult, error) {
 		var in map[string]any
 		_ = json.Unmarshal(req.Input, &in)
@@ -133,7 +144,7 @@ func TestPermissionDenied(t *testing.T) {
 }
 
 func TestScopeDenied(t *testing.T) {
-	g := NewDefaultGateway()
+	g := makeTestGateway()
 	g.SetScopeChecker(ScopeCheckerFunc(func(_ context.Context, _ runtime_supervisor.RuntimeIdentity, _ string, _ ScopePolicy) error {
 		return ErrScopeDenied
 	}))
@@ -155,7 +166,7 @@ func TestScopeDenied(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	g := NewDefaultGateway()
+	g := makeTestGateway()
 	_ = g.RegisterRoute(Route{
 		Method:  MethodStateGet,
 		Version: 1,
@@ -228,7 +239,7 @@ func TestListMethods(t *testing.T) {
 }
 
 func TestVersionFallback(t *testing.T) {
-	g := NewDefaultGateway()
+	g := makeTestGateway()
 	_ = g.RegisterRoute(Route{Method: MethodStateGet, Version: 2, Handler: func(context.Context, CallRequest) (CallResult, error) {
 		return CallResult{Status: StatusSuccess}, nil
 	}})
@@ -253,7 +264,7 @@ func TestAuditWriter(t *testing.T) {
 }
 
 func TestConcurrentCalls(t *testing.T) {
-	g := NewDefaultGateway()
+	g := makeTestGateway()
 	var counter int32
 	var mu sync.Mutex
 	_ = g.RegisterRoute(Route{Method: MethodStateGet, Version: 1, Handler: func(context.Context, CallRequest) (CallResult, error) {

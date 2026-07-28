@@ -291,7 +291,9 @@ func parseTSCErrors(out string) []BuildError {
 func (p *RebuildPipeline) commitRevision(id WorkspaceID, rev Revision) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.revisions[id] = rev.RevisionID
+	if rev.Status != RevisionStatusFailed {
+		p.revisions[id] = rev.RevisionID
+	}
 	history := p.history[id]
 	history = append(history, rev)
 	if len(history) > p.maxHistory {

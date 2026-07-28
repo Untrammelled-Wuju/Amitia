@@ -4,6 +4,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as https from "node:https";
+import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildPackage, inspectPackage, readZip, createZip } from "../archive.js";
@@ -67,11 +68,11 @@ export const packCommand: CliCommand = {
 
 export const signCommand: CliCommand = {
   name: "sign",
-  description: "Sign a .amitiax package with a developer key",
+  description: "Sign a .amitiax package with a developer key (delegates to amitiax CLI)",
   usage: "amitia-ext sign [options]",
   options: [
     { name: "--package", shortName: "-p", description: "Package path (.amitiax)", takesValue: true, required: true },
-    { name: "--private-key", shortName: "-k", description: "Private key file path (PEM ed25519)", takesValue: true, required: true },
+    { name: "--private-key", shortName: "-k", description: "Private key file path (PEM ed25519 or hex)", takesValue: true, required: true },
     { name: "--key-id", description: "Signing key identifier (default: derived from key fingerprint)", takesValue: true },
     { name: "--publisher-id", description: "Publisher ID (default: read from manifest.json)", takesValue: true },
   ],
@@ -85,81 +86,61 @@ export const signCommand: CliCommand = {
     if (!privateKeyPath) {
       return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "missing required option: --private-key" };
     }
-    try {
-      const resolvedPackagePath = path.resolve(ctx.cwd, packagePath);
-      const resolvedKeyPath = path.resolve(ctx.cwd, privateKeyPath);
 
-      ctx.logger.info("reading package", { package: resolvedPackagePath });
-      const packageBuffer = fs.readFileSync(resolvedPackagePath);
-      const entries = readZip(packageBuffer);
+    const resolvedPackagePath = path.resolve(ctx.cwd, packagePath);
+    const resolvedKeyPath = path.resolve(ctx.cwd, privateKeyPath);
 
-      const treeData = entries.get("integrity/content-tree.json");
-      if (!treeData) {
-        return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: "package is missing integrity/content-tree.json" };
-      }
-      const treeDocument = JSON.parse(treeData.toString("utf8")) as { treeHash: string };
-      const treeHash = treeDocument.treeHash;
-
-      const manifestData = entries.get("manifest.json");
-      if (!manifestData) {
-        return { exitCode: EXIT_CODES.VALIDATION_OR_BUILD_FAILURE, message: "package is missing manifest.json" };
-      }
-      const manifest = JSON.parse(manifestData.toString("utf8")) as AmitiaxManifestV2;
-      const publisherId = opts["--publisher-id"] ?? manifest.publisher?.id;
-      if (!publisherId) {
-        return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: "publisher ID is required (provide --publisher-id or ensure manifest.json has publisher.id)" };
-      }
-
-      ctx.logger.info("loading private key", { key: resolvedKeyPath });
-      const keyPem = fs.readFileSync(resolvedKeyPath, "utf8");
-      const privateKey = crypto.createPrivateKey(keyPem);
-      if (privateKey.asymmetricKeyType !== "ed25519") {
-        return { exitCode: EXIT_CODES.CONFIGURATION_ERROR, message: `private key is not ed25519 (got ${privateKey.asymmetricKeyType ?? "unknown"})` };
-      }
-
-      let keyId = opts["--key-id"];
-      if (!keyId) {
-        const publicKey = crypto.createPublicKey(privateKey);
-        const publicKeyDer = publicKey.export({ type: "spki", format: "der" });
-        const fingerprint = crypto.createHash("sha256").update(publicKeyDer).digest("hex");
-        keyId = fingerprint.slice(0, 16);
-      }
-
-      const message = Buffer.from(`${publisherId}:${treeHash}`, "utf8");
-      const signature = crypto.sign(null, message, privateKey);
-      const signedAt = new Date().toISOString();
-
-      const signatureDocument = {
-        algorithm: "ed25519",
-        keyId,
-        publisherId,
-        treeHash,
-        signature: signature.toString("base64"),
-        signedAt,
-      };
-
-      const signatureJson = Buffer.from(JSON.stringify(signatureDocument, null, 2), "utf8");
-      entries.set("signatures/signature.json", signatureJson);
-
-      const archiveEntries: ArchiveEntry[] = [];
-      for (const [entryPath, data] of entries) {
-        archiveEntries.push({ path: entryPath, data });
-      }
-      archiveEntries.sort((a, b) => a.path.localeCompare(b.path));
-
-      const newZip = createZip(archiveEntries);
-      fs.writeFileSync(resolvedPackagePath, newZip);
-
-      ctx.logger.info("package signed", { keyId, publisherId, treeHash });
-
+    const amitiaxBinary = findAmitiaxBinary();
+    if (!amitiaxBinary) {
       return {
-        exitCode: EXIT_CODES.SUCCESS,
-        message: `signed ${path.relative(ctx.cwd, resolvedPackagePath)}`,
-        data: signatureDocument,
+        exitCode: EXIT_CODES.CONFIGURATION_ERROR,
+        message: "amitiax CLI binary not found. Please build it with: cd backend && go build -o amitiax ./cmd/amitia-ext",
       };
-    } catch (cause) {
-      return { exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR, message: cause instanceof Error ? cause.message : String(cause) };
     }
+
+    const hexKeyPath = await ensureHexKeyFile(resolvedKeyPath);
+    if (!hexKeyPath) {
+      return {
+        exitCode: EXIT_CODES.CONFIGURATION_ERROR,
+        message: "failed to convert private key to hex format",
+      };
+    }
+
+    const publisherId = opts["--publisher-id"] ?? "";
+    const keyId = opts["--key-id"] ?? "";
+
+    const cliArgs: string[] = ["sign", resolvedPackagePath, "--key", hexKeyPath, "--publisher", publisherId];
+    if (keyId) {
+      cliArgs.push("--key-id", keyId);
+    }
+
+    ctx.logger.info("delegating to amitiax CLI", { binary: amitiaxBinary, args: cliArgs });
+
+    const result = spawnSync(amitiaxBinary, cliArgs, {
+      cwd: ctx.cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    if (result.status !== 0) {
+      return {
+        exitCode: EXIT_CODES.SIGNATURE_OR_TRUST_ERROR,
+        message: `amitiax sign failed: ${result.stderr || result.stdout || "unknown error"}`,
+      };
+    }
+
+    let data: unknown = null;
+    try {
+      data = JSON.parse(result.stdout);
+    } catch {
+      data = { raw: result.stdout };
+    }
+
+    return {
+      exitCode: EXIT_CODES.SUCCESS,
+      message: `signed ${path.relative(ctx.cwd, resolvedPackagePath)} (via amitiax-signature-v1)`,
+      data,
+    };
   },
 };
 
@@ -452,4 +433,45 @@ function runLocalTool(ctx: CliContext, packageName: string, args: string[], labe
   if (result.error) return { exitCode: EXIT_CODES.ENVIRONMENT_ERROR, message: result.error.message };
   const exitCode = result.status ?? EXIT_CODES.ENVIRONMENT_ERROR;
   return { exitCode, message: exitCode === 0 ? `${label} succeeded` : `${label} failed` };
+}
+
+function findAmitiaxBinary(): string | null {
+  const candidates: string[] = [];
+  const ext = process.platform === "win32" ? ".exe" : "";
+  candidates.push(path.resolve(process.cwd(), "backend", `amitiax${ext}`));
+  candidates.push(path.resolve(process.cwd(), "backend", `amitia-ext${ext}`));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  const pathDirs = (process.env.PATH ?? "").split(path.delimiter);
+  for (const dir of pathDirs) {
+    const amitiaxPath = path.join(dir, `amitiax${ext}`);
+    if (fs.existsSync(amitiaxPath)) return amitiaxPath;
+    const amitiaExtPath = path.join(dir, `amitia-ext${ext}`);
+    if (fs.existsSync(amitiaExtPath)) return amitiaExtPath;
+  }
+  return null;
+}
+
+async function ensureHexKeyFile(keyPath: string): Promise<string | null> {
+  const raw = fs.readFileSync(keyPath, "utf8").trim();
+  if (/^[0-9a-fA-F]+$/.test(raw) && raw.length === 128) {
+    return keyPath;
+  }
+  try {
+    const privateKey = crypto.createPrivateKey(raw);
+    if (privateKey.asymmetricKeyType !== "ed25519") {
+      return null;
+    }
+    const pkcs8 = privateKey.export({ type: "pkcs8", format: "der" });
+    const rawKeyBytes = pkcs8.slice(pkcs8.length - 32);
+    const hexKey = Buffer.from(rawKeyBytes).toString("hex");
+    const tmpPath = path.join(os.tmpdir(), `amitiax-key-${Date.now()}.hex`);
+    fs.writeFileSync(tmpPath, hexKey, { mode: 0o600 });
+    return tmpPath;
+  } catch {
+    return null;
+  }
 }

@@ -167,7 +167,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to init relationship/need store schema")
 	}
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
-	extensionRuntime, err := extension.NewRuntime(context.Background(), ctx.DB, "1.0.0")
+	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
 		panic("failed to initialize skill runtime")
@@ -213,11 +213,30 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 	if kernelContainer.EventService != nil {
 		if err := kernelContainer.EventService.Start(context.Background()); err != nil {
-			log.Warn("event service start warning: ", err)
+			log.Error("event service start failed: ", err)
+			panic("failed to start event service")
+		}
+	}
+	if kernelContainer.ScheduleService != nil {
+		if err := kernelContainer.ScheduleService.Start(context.Background()); err != nil {
+			log.Error("schedule service start failed: ", err)
+			panic("failed to start schedule service")
 		}
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
-	chatSvc.SetSkillRuntime(extensionRuntime)
+	legacyDispatcher := newLegacyDispatcherAdapter(extensionRuntime)
+	toolFacade := kernel.NewToolFacade(
+		kernelContainer.ToolRegistry,
+		kernelContainer.ExecutionKernel,
+		legacyDispatcher,
+		kernel.DefaultToolFacadeConfig(),
+	)
+	kernelContainer.ToolFacade = toolFacade
+	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
+	if kernelContainer.DevConsoleService != nil {
+		kernelContainer.DevConsoleService.SetToolFacadeProvider(toolFacade.Counters())
+		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())
+	}
 	if kernelContainer.HookService != nil {
 		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
 	}
@@ -346,7 +365,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
 	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
 	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
-	skillRuntime := mcpskill.New(mcpRepository, connectionManager, extensionRuntime)
+	skillRuntime := mcpskill.New(mcpRepository, connectionManager, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)))
 	featureService := mcpfeatures.New(mcpRepository, connectionManager)
 	interactionBroker := mcphost.NewBroker(chatSvc)
 	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)

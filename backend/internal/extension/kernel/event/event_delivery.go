@@ -40,6 +40,8 @@ type Delivery struct {
 	ScopeSnapshotID        string
 	PermissionSnapshotID   string
 	ProjectedPayloadHash   string
+	SubscriptionGeneration int64
+	TargetGeneration       int64
 	StartedAt              *time.Time
 	FinishedAt             *time.Time
 	ErrorCode              string
@@ -51,22 +53,24 @@ type Delivery struct {
 func NewDelivery(eventID string, sub EventSubscriptionDefinition, sequence int64) Delivery {
 	now := time.Now().UTC()
 	return Delivery{
-		DeliveryID:           newDeliveryID(),
-		EventID:              eventID,
-		SubscriptionID:       sub.ContributionID,
-		ExtensionID:          sub.ExtensionID,
-		ModuleID:             sub.ModuleID,
-		Status:               DeliveryStatusPending,
-		PartitionKey:         "",
-		OrderingKey:          "",
-		Sequence:             sequence,
-		Attempt:              0,
-		MaxAttempts:          sub.RetryPolicy.MaxAttempts,
-		AvailableAt:          now,
-		ScopeSnapshotID:      "",
-		PermissionSnapshotID: "",
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		DeliveryID:             newDeliveryID(),
+		EventID:                eventID,
+		SubscriptionID:         sub.ContributionID,
+		ExtensionID:            sub.ExtensionID,
+		ModuleID:               sub.ModuleID,
+		Status:                 DeliveryStatusPending,
+		PartitionKey:           "",
+		OrderingKey:            "",
+		Sequence:               sequence,
+		Attempt:                0,
+		MaxAttempts:            sub.RetryPolicy.MaxAttempts,
+		AvailableAt:            now,
+		ScopeSnapshotID:        "",
+		PermissionSnapshotID:   "",
+		SubscriptionGeneration: sub.Generation,
+		TargetGeneration:       sub.Generation,
+		CreatedAt:              now,
+		UpdatedAt:              now,
 	}
 }
 

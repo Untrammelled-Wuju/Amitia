@@ -1,0 +1,47 @@
+{
+	"manifestVersion": 2,
+	"extension": {
+		"id": "com.amitia.repair/event-generation",
+		"name": {"default": "Event Generation v2"},
+		"description": {"default": "Phase 10 E2E: event subscription generation v2, replaces v1 and must cancel old deliveries"},
+		"version": "2.0.0"
+	},
+	"publisher": {
+		"id": "com.amitia.repair",
+		"displayName": "Amitia Repair"
+	},
+	"modules": [
+		{
+			"id": "main",
+			"name": {"default": "Main"},
+			"type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [
+				{
+					"id": "gen-subscription",
+					"kind": "event_subscription",
+					"name": {"default": "Generation v2 Subscription"},
+					"description": {"default": "Generation 2 subscription that replaces generation 1"},
+					"version": "2.0.0",
+					"spec": {
+						"eventTypeId": "system.test",
+						"eventVersionRange": "^1",
+						"entry": "onEvent",
+						"generation": 2,
+						"deliveryPolicy": {
+							"timeout": "5s",
+							"maxInFlight": 8
+						}
+					}
+				}
+			]
+		}
+	],
+	"permissions": [
+		{"name": "event.subscribe", "reason": "Subscribe to system.test events", "required": true}
+	],
+	"integrity": {
+		"algorithm": "sha256",
+		"contentTreeHash": ""
+	}
+}
