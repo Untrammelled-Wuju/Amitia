@@ -29,6 +29,10 @@ type ScopeEvaluationRequest struct {
 	ConversationID string          `json:"conversationId,omitempty"`
 	ExtensionID    string          `json:"extensionId,omitempty"`
 	ModuleID       string          `json:"moduleId,omitempty"`
+	ResourceType   string          `json:"resourceType,omitempty"`
+	ResourceID     string          `json:"resourceId,omitempty"`
+	InvocationID   string          `json:"invocationId,omitempty"`
+	SessionID      string          `json:"sessionId,omitempty"`
 	ParentSnapshot *ScopeSnapshot  `json:"parentSnapshot,omitempty"`
 }
 
@@ -98,10 +102,40 @@ func (e *DefaultScopeEvaluator) matchesContext(scope ScopeRef, req ScopeEvaluati
 		return req.ExtensionID != "" && req.ModuleID != "" &&
 			scope.ExtensionID == req.ExtensionID && scope.ModuleID == req.ModuleID
 	case ScopeResource:
+		if scope.ExtensionID != "" && req.ExtensionID != "" && scope.ExtensionID != req.ExtensionID {
+			return false
+		}
+		if scope.ModuleID != "" && req.ModuleID != "" && scope.ModuleID != req.ModuleID {
+			return false
+		}
+		if scope.ResourceType != "" && req.ResourceType != "" && scope.ResourceType != req.ResourceType {
+			return false
+		}
+		if scope.ResourceID != "" && req.ResourceID != "" && scope.ResourceID != req.ResourceID {
+			return false
+		}
 		return true
 	case ScopeInvocation:
+		if scope.ExtensionID != "" && req.ExtensionID != "" && scope.ExtensionID != req.ExtensionID {
+			return false
+		}
+		if scope.ModuleID != "" && req.ModuleID != "" && scope.ModuleID != req.ModuleID {
+			return false
+		}
+		if scope.InvocationID != "" && req.InvocationID != "" && scope.InvocationID != req.InvocationID {
+			return false
+		}
 		return true
 	case ScopeSession:
+		if scope.ExtensionID != "" && req.ExtensionID != "" && scope.ExtensionID != req.ExtensionID {
+			return false
+		}
+		if scope.ModuleID != "" && req.ModuleID != "" && scope.ModuleID != req.ModuleID {
+			return false
+		}
+		if scope.SessionID != "" && req.SessionID != "" && scope.SessionID != req.SessionID {
+			return false
+		}
 		return true
 	default:
 		return false
@@ -127,6 +161,42 @@ func (e *DefaultScopeEvaluator) buildDenialReasons(bindings []ScopeBinding, req 
 				Code:      ReasonCharacterMismatch,
 				SubjectID: b.SubjectID,
 			})
+		case b.Scope.Type == ScopeResource:
+			if b.Scope.ExtensionID != "" && req.ExtensionID != "" && b.Scope.ExtensionID != req.ExtensionID {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonExtensionMismatch,
+					SubjectID: b.SubjectID,
+				})
+			} else if b.Scope.ResourceType != "" && req.ResourceType != "" && b.Scope.ResourceType != req.ResourceType {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonResourceMismatch,
+					SubjectID: b.SubjectID,
+				})
+			}
+		case b.Scope.Type == ScopeInvocation:
+			if b.Scope.ExtensionID != "" && req.ExtensionID != "" && b.Scope.ExtensionID != req.ExtensionID {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonExtensionMismatch,
+					SubjectID: b.SubjectID,
+				})
+			} else if b.Scope.InvocationID != "" && req.InvocationID != "" && b.Scope.InvocationID != req.InvocationID {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonInvocationExpired,
+					SubjectID: b.SubjectID,
+				})
+			}
+		case b.Scope.Type == ScopeSession:
+			if b.Scope.ExtensionID != "" && req.ExtensionID != "" && b.Scope.ExtensionID != req.ExtensionID {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonExtensionMismatch,
+					SubjectID: b.SubjectID,
+				})
+			} else if b.Scope.SessionID != "" && req.SessionID != "" && b.Scope.SessionID != req.SessionID {
+				reasons = append(reasons, ScopeReason{
+					Code:      ReasonSessionExpired,
+					SubjectID: b.SubjectID,
+				})
+			}
 		}
 	}
 	return reasons

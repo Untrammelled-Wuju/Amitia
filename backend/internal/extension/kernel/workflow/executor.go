@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -12,10 +13,11 @@ type StepHandler interface {
 }
 
 type WorkflowExecutor struct {
-	registry   *WorkflowRegistry
-	handlers   map[string]StepHandler
-	checkpoint CheckpointStore
-	retryMax   int
+	registry     *WorkflowRegistry
+	handlers     map[string]StepHandler
+	checkpoint   CheckpointStore
+	compensation *CompensationManager
+	retryMax     int
 }
 
 type ExecuteRequest struct {
@@ -36,12 +38,13 @@ type ExecutionContext struct {
 }
 
 type ExecuteResult struct {
-	WorkflowID string
-	Output     json.RawMessage
-	Steps      []StepResult
-	Success    bool
-	Error      string
-	Duration   time.Duration
+	WorkflowID           string
+	Output               json.RawMessage
+	Steps                []StepResult
+	Success              bool
+	Error                string
+	Duration             time.Duration
+	CompensationResults   []CompensationResult
 }
 
 type StepResult struct {
@@ -69,6 +72,10 @@ func (e *WorkflowExecutor) SetCheckpointStore(store CheckpointStore) {
 	e.checkpoint = store
 }
 
+func (e *WorkflowExecutor) SetCompensationManager(cm *CompensationManager) {
+	e.compensation = cm
+}
+
 func (e *WorkflowExecutor) SetRetryMax(max int) {
 	e.retryMax = max
 }
@@ -89,12 +96,17 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		return nil, err
 	}
 
-	order, err := TopologicalSort(wf.Nodes)
+	levels, err := ComputeLevels(wf.Nodes)
 	if err != nil {
 		return nil, err
 	}
 
-	if wf.Limits.MaxSteps > 0 && len(order) > wf.Limits.MaxSteps {
+	totalNodes := 0
+	for _, level := range levels {
+		totalNodes += len(level)
+	}
+
+	if wf.Limits.MaxSteps > 0 && totalNodes > wf.Limits.MaxSteps {
 		return nil, ErrMaxStepsExceeded
 	}
 
@@ -112,18 +124,24 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 
 	result := &ExecuteResult{
 		WorkflowID: req.WorkflowID,
-		Steps:      make([]StepResult, 0, len(order)),
+		Steps:      make([]StepResult, 0, totalNodes),
 	}
 
 	outputs := make(map[string]json.RawMessage)
+	outputsMu := sync.RWMutex{}
 	nodeMap := make(map[string]WorkflowNode, len(wf.Nodes))
 	for _, node := range wf.Nodes {
 		nodeMap[node.ID] = node
 	}
 
-	var lastOutput json.RawMessage = req.Input
+	failed := false
+	var failError string
 
-	for _, nodeID := range order {
+	for _, level := range levels {
+		if failed {
+			break
+		}
+
 		select {
 		case <-execCtx.Done():
 			result.Success = false
@@ -137,108 +155,179 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		default:
 		}
 
-		node := nodeMap[nodeID]
-
-		if e.checkpoint != nil {
-			cp, cpErr := e.checkpoint.Load(execCtx, executionID, nodeID)
-			if cpErr == nil && cp != nil {
-				result.Steps = append(result.Steps, StepResult{
-					NodeID:  nodeID,
-					Status:  "succeeded",
-					Output:  cp.Output,
-					Attempt: 0,
-				})
-				outputs[nodeID] = cp.Output
-				lastOutput = cp.Output
-				continue
-			}
+		type nodeExecResult struct {
+			nodeID string
+			step   StepResult
 		}
 
-		input := lastOutput
-		if len(node.Step.Input) > 0 {
-			input = node.Step.Input
-		}
+		resultChan := make(chan nodeExecResult, len(level))
+		var wg sync.WaitGroup
 
-		if node.Step.When != nil && len(*node.Step.When) > 0 {
-			shouldExecute, _ := evaluateWhen(*node.Step.When)
-			if !shouldExecute {
-				result.Steps = append(result.Steps, StepResult{
-					NodeID: nodeID,
-					Status: "skipped",
-				})
-				if len(node.Step.OnError.Default) > 0 {
-					outputs[nodeID] = node.Step.OnError.Default
-					lastOutput = node.Step.OnError.Default
+		for _, nodeID := range level {
+			wg.Add(1)
+			go func(nid string) {
+				defer wg.Done()
+
+				node := nodeMap[nid]
+
+				if e.checkpoint != nil {
+					cp, cpErr := e.checkpoint.Load(execCtx, executionID, nid)
+					if cpErr == nil && cp != nil {
+						resultChan <- nodeExecResult{
+							nodeID: nid,
+							step: StepResult{
+								NodeID:  nid,
+								Status:  "succeeded",
+								Output:  cp.Output,
+								Attempt: 0,
+							},
+						}
+						return
+					}
 				}
-				continue
-			}
-		}
 
-		handler, ok := e.handlers[node.Type]
-		if !ok {
-			result.Steps = append(result.Steps, StepResult{
-				NodeID: nodeID,
-				Status: "failed",
-				Error:  ErrHandlerNotFound.Error(),
-			})
-			result.Success = false
-			result.Error = fmt.Sprintf("handler not found for node type: %s", node.Type)
-			result.Duration = time.Since(start)
-			return result, nil
-		}
-
-		stepResult := e.executeStep(execCtx, handler, node, input, wf.Limits)
-		stepResult.NodeID = nodeID
-		result.Steps = append(result.Steps, stepResult)
-
-		if stepResult.Status == "succeeded" {
-			outputs[nodeID] = stepResult.Output
-			lastOutput = stepResult.Output
-
-			if e.checkpoint != nil {
-				_ = e.checkpoint.Save(execCtx, Checkpoint{
-					WorkflowID:  req.WorkflowID,
-					ExecutionID: executionID,
-					NodeID:      nodeID,
-					Input:       input,
-					Output:      stepResult.Output,
-					CompletedAt: time.Now(),
-				})
-			}
-
-			if wf.Limits.MaxOutputBytes > 0 && int64(len(stepResult.Output)) > wf.Limits.MaxOutputBytes {
-				result.Success = false
-				result.Error = ErrOutputLimitExceeded.Error()
-				result.Duration = time.Since(start)
-				return result, nil
-			}
-		} else if stepResult.Status == "cancelled" {
-			result.Success = false
-			result.Error = stepResult.Error
-			result.Duration = time.Since(start)
-			return result, nil
-		} else {
-			switch node.Step.OnError.Mode {
-			case "continue":
-				if len(node.Step.OnError.Default) > 0 {
-					outputs[nodeID] = node.Step.OnError.Default
-					lastOutput = node.Step.OnError.Default
+				input := req.Input
+				if len(node.Step.Input) > 0 {
+					input = node.Step.Input
+				} else if len(node.DependsOn) > 0 {
+					outputsMu.RLock()
+					merged := make(map[string]json.RawMessage)
+					for _, dep := range node.DependsOn {
+						if out, depOK := outputs[dep]; depOK {
+							merged[dep] = out
+						}
+					}
+					outputsMu.RUnlock()
+					if len(merged) > 0 {
+						if mergedBytes, mErr := json.Marshal(merged); mErr == nil {
+							input = mergedBytes
+						}
+					}
 				}
-			case "retry":
-				if len(node.Step.OnError.Default) > 0 {
-					outputs[nodeID] = node.Step.OnError.Default
-					lastOutput = node.Step.OnError.Default
-				} else {
+
+				if node.Step.When != nil && len(*node.Step.When) > 0 {
+					shouldExecute, _ := evaluateWhen(*node.Step.When)
+					if !shouldExecute {
+						resultChan <- nodeExecResult{
+							nodeID: nid,
+							step: StepResult{
+								NodeID: nid,
+								Status: "skipped",
+							},
+						}
+						return
+					}
+				}
+
+				handler, hOK := e.handlers[node.Type]
+				if !hOK {
+					resultChan <- nodeExecResult{
+						nodeID: nid,
+						step: StepResult{
+							NodeID: nid,
+							Status: "failed",
+							Error:  ErrHandlerNotFound.Error(),
+						},
+					}
+					return
+				}
+
+				stepResult := e.executeStep(execCtx, handler, node, input, wf.Limits)
+				stepResult.NodeID = nid
+				resultChan <- nodeExecResult{
+					nodeID: nid,
+					step:   stepResult,
+				}
+			}(nodeID)
+		}
+
+		wg.Wait()
+		close(resultChan)
+
+		for ner := range resultChan {
+			result.Steps = append(result.Steps, ner.step)
+
+			if ner.step.Status == "succeeded" {
+				outputsMu.Lock()
+				outputs[ner.nodeID] = ner.step.Output
+				outputsMu.Unlock()
+
+				if e.checkpoint != nil {
+					_ = e.checkpoint.Save(execCtx, Checkpoint{
+						WorkflowID:  req.WorkflowID,
+						ExecutionID: executionID,
+						NodeID:      ner.nodeID,
+						Output:      ner.step.Output,
+						CompletedAt: time.Now(),
+					})
+				}
+
+				if wf.Limits.MaxOutputBytes > 0 && int64(len(ner.step.Output)) > wf.Limits.MaxOutputBytes {
 					result.Success = false
-					result.Error = stepResult.Error
+					result.Error = ErrOutputLimitExceeded.Error()
 					result.Duration = time.Since(start)
 					return result, nil
 				}
-			default:
+			} else if ner.step.Status == "skipped" {
+				node := nodeMap[ner.nodeID]
+				if len(node.Step.OnError.Default) > 0 {
+					outputsMu.Lock()
+					outputs[ner.nodeID] = node.Step.OnError.Default
+					outputsMu.Unlock()
+				}
+			} else if ner.step.Status == "cancelled" {
 				result.Success = false
-				result.Error = stepResult.Error
+				result.Error = ner.step.Error
 				result.Duration = time.Since(start)
 				return result, nil
+			} else {
+				node := nodeMap[ner.nodeID]
+				switch node.Step.OnError.Mode {
+				case "continue":
+					if len(node.Step.OnError.Default) > 0 {
+						outputsMu.Lock()
+						outputs[ner.nodeID] = node.Step.OnError.Default
+						outputsMu.Unlock()
+					}
+				case "retry":
+					if len(node.Step.OnError.Default) > 0 {
+						outputsMu.Lock()
+						outputs[ner.nodeID] = node.Step.OnError.Default
+						outputsMu.Unlock()
+					} else {
+						failed = true
+						if failError == "" {
+							failError = ner.step.Error
+						}
+					}
+				default:
+					failed = true
+					if failError == "" {
+						failError = ner.step.Error
+					}
+				}
+			}
+		}
+	}
+
+	if failed {
+		result.Success = false
+		result.Error = failError
+
+		if e.compensation != nil {
+			result.CompensationResults = e.compensation.Compensate(ctx, result.Steps)
+		}
+
+		result.Duration = time.Since(start)
+		return result, nil
+	}
+
+	var lastOutput json.RawMessage = req.Input
+	if len(result.Steps) > 0 {
+		for i := len(result.Steps) - 1; i >= 0; i-- {
+			if result.Steps[i].Status == "succeeded" && len(result.Steps[i].Output) > 0 {
+				lastOutput = result.Steps[i].Output
+				break
 			}
 		}
 	}

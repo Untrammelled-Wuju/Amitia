@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -685,4 +687,148 @@ func (c *CompilerCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.entries)
+}
+
+type SchemaRegistry struct {
+	mu        sync.RWMutex
+	validator *Validator
+	cache     *CompilerCache
+	schemas   map[string]*CompiledDocument
+}
+
+func NewSchemaRegistry(validator *Validator, cache *CompilerCache) *SchemaRegistry {
+	if validator == nil {
+		validator = NewValidator()
+	}
+	if cache == nil {
+		cache = NewCompilerCache()
+	}
+	return &SchemaRegistry{
+		validator: validator,
+		cache:     cache,
+		schemas:   make(map[string]*CompiledDocument),
+	}
+}
+
+func schemaKey(extensionID, pageID string) string {
+	return extensionID + "/" + pageID
+}
+
+func (r *SchemaRegistry) RegisterSchema(extensionID, pageID string, doc *SchemaUIDocument) error {
+	if extensionID == "" || pageID == "" {
+		return fmt.Errorf("schema_ui: extension id and page id required")
+	}
+	if doc == nil {
+		return fmt.Errorf("schema_ui: document is nil")
+	}
+	result := r.validator.Validate(doc)
+	if !result.Valid {
+		return fmt.Errorf("schema_ui: validation failed for %s: %s", schemaKey(extensionID, pageID), strings.Join(result.Errors, "; "))
+	}
+	compiled, err := Compile(doc)
+	if err != nil {
+		return fmt.Errorf("schema_ui: compile failed for %s: %w", schemaKey(extensionID, pageID), err)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.schemas[schemaKey(extensionID, pageID)] = compiled
+	r.cache.Put(compiled)
+	return nil
+}
+
+func (r *SchemaRegistry) LoadFromBytes(extensionID, pageID string, data []byte) error {
+	var doc SchemaUIDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("schema_ui: unmarshal failed for %s: %w", schemaKey(extensionID, pageID), err)
+	}
+	return r.RegisterSchema(extensionID, pageID, &doc)
+}
+
+func (r *SchemaRegistry) LoadFromPath(extensionID, pageID, basePath, schemaPath string) error {
+	cleanPath, err := safeSchemaPath(basePath, schemaPath)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return fmt.Errorf("schema_ui: read schema file %s: %w", cleanPath, err)
+	}
+	if int64(len(data)) > 10*1024*1024 {
+		return fmt.Errorf("schema_ui: schema file too large: %s", cleanPath)
+	}
+	return r.LoadFromBytes(extensionID, pageID, data)
+}
+
+func (r *SchemaRegistry) Get(extensionID, pageID string) (*CompiledDocument, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	compiled, ok := r.schemas[schemaKey(extensionID, pageID)]
+	return compiled, ok
+}
+
+func (r *SchemaRegistry) Unregister(extensionID string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for key := range r.schemas {
+		if strings.HasPrefix(key, extensionID+"/") {
+			delete(r.schemas, key)
+			count++
+		}
+	}
+	return count
+}
+
+func (r *SchemaRegistry) Validator() *Validator {
+	return r.validator
+}
+
+func (r *SchemaRegistry) Cache() *CompilerCache {
+	return r.cache
+}
+
+func (r *SchemaRegistry) Size() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.schemas)
+}
+
+func safeSchemaPath(basePath, schemaPath string) (string, error) {
+	if schemaPath == "" {
+		return "", fmt.Errorf("schema_ui: schema path is empty")
+	}
+	if len(schemaPath) > 1024 {
+		return "", fmt.Errorf("schema_ui: schema path too long")
+	}
+	if strings.ContainsRune(schemaPath, 0) {
+		return "", fmt.Errorf("schema_ui: schema path contains null byte")
+	}
+	lower := strings.ToLower(schemaPath)
+	if strings.Contains(lower, "%2e") || strings.Contains(lower, "%5c") || strings.Contains(lower, "%2f") {
+		return "", fmt.Errorf("schema_ui: path traversal detected")
+	}
+	cleaned := filepath.Clean(schemaPath)
+	if strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, "..\\") || strings.Contains(cleaned, "../") {
+		return "", fmt.Errorf("schema_ui: path traversal detected")
+	}
+	if filepath.IsAbs(cleaned) {
+		if basePath == "" {
+			return "", fmt.Errorf("schema_ui: absolute path not allowed without base")
+		}
+		absBase, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", fmt.Errorf("schema_ui: invalid base path")
+		}
+		absCleaned, err := filepath.Abs(cleaned)
+		if err != nil {
+			return "", fmt.Errorf("schema_ui: invalid schema path")
+		}
+		rel, err := filepath.Rel(absBase, absCleaned)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return "", fmt.Errorf("schema_ui: path outside base directory")
+		}
+		return absCleaned, nil
+	}
+	full := filepath.Join(basePath, cleaned)
+	return full, nil
 }

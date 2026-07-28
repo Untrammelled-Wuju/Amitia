@@ -96,6 +96,10 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		}
 	}
 
+	if r.container.ContributionInstaller != nil {
+		r.container.ContributionInstaller.ActivateContributions(ctx, extID)
+	}
+
 	return nil
 }
 
@@ -142,6 +146,10 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	r.container.UIHost.DisableExtension(ui_contribution.ExtensionID(extensionID))
 	r.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(extensionID))
 
+	if r.container.ContributionInstaller != nil {
+		r.container.ContributionInstaller.DeactivateContributions(ctx, extID)
+	}
+
 	return nil
 }
 
@@ -165,6 +173,10 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	contribs := r.container.ContributionRegistry.ListByExtension(extensionID)
 	for _, c := range contribs {
 		_ = r.container.ContributionRegistry.Unregister(c.ContributionID())
+	}
+
+	if r.container.ContributionInstaller != nil {
+		r.container.ContributionInstaller.UninstallContributions(ctx, extID)
 	}
 
 	_ = r.container.ContributionRepository.DeleteContributions(ctx, extID)

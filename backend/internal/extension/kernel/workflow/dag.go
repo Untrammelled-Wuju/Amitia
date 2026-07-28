@@ -97,3 +97,58 @@ func TopologicalSort(nodes []WorkflowNode) ([]string, error) {
 
 	return result, nil
 }
+
+func ComputeLevels(nodes []WorkflowNode) ([][]string, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+
+	inDegree := make(map[string]int)
+	adj := make(map[string][]string)
+	idSet := make(map[string]bool)
+
+	for _, node := range nodes {
+		idSet[node.ID] = true
+		inDegree[node.ID] = 0
+	}
+
+	for _, node := range nodes {
+		for _, dep := range node.DependsOn {
+			if !idSet[dep] {
+				return nil, fmt.Errorf("%w: node %s depends on non-existent node %s", ErrInvalidNodeID, node.ID, dep)
+			}
+			adj[dep] = append(adj[dep], node.ID)
+			inDegree[node.ID]++
+		}
+	}
+
+	var levels [][]string
+	var currentLevel []string
+	for _, node := range nodes {
+		if inDegree[node.ID] == 0 {
+			currentLevel = append(currentLevel, node.ID)
+		}
+	}
+
+	processed := 0
+	for len(currentLevel) > 0 {
+		levels = append(levels, currentLevel)
+		var nextLevel []string
+		for _, nodeID := range currentLevel {
+			for _, next := range adj[nodeID] {
+				inDegree[next]--
+				if inDegree[next] == 0 {
+					nextLevel = append(nextLevel, next)
+				}
+			}
+			processed++
+		}
+		currentLevel = nextLevel
+	}
+
+	if processed != len(nodes) {
+		return nil, ErrCycleDetected
+	}
+
+	return levels, nil
+}

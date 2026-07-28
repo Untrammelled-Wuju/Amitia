@@ -19,7 +19,8 @@ import (
 const (
 	ProtocolScheme         = "amitia-extension"
 	ResourceProtocolScheme = "amitia-resource"
-	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
+	DefaultCSP             = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
+	RestrictedCSP          = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
 	MaxBundleBytes         = 50 * 1024 * 1024
 	MaxSessionDuration     = 24 * time.Hour
 	MaxMessageBytes        = 256 * 1024
@@ -331,7 +332,11 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	}
 	csp := req.CSP
 	if csp == "" {
-		csp = DefaultCSP
+		if req.Sandbox == SandboxWebRestricted {
+			csp = RestrictedCSP
+		} else {
+			csp = DefaultCSP
+		}
 	}
 	if err := ValidateCSP(csp); err != nil {
 		return nil, err
@@ -391,6 +396,49 @@ func (h *Host) GetSession(sessionID string) (*WebSession, error) {
 		return nil, ErrSessionExpired
 	}
 	return session, nil
+}
+
+func (h *Host) ValidateSessionOrigin(sessionID, origin string) error {
+	session, err := h.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if origin != session.Origin {
+		return ErrOriginMismatch
+	}
+	return nil
+}
+
+func (h *Host) ValidateSessionOwnership(sessionID, extensionID, moduleID string) error {
+	session, err := h.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if session.ExtensionID != extensionID {
+		return ErrSessionOwnershipViolation
+	}
+	if session.ModuleID != moduleID {
+		return ErrSessionOwnershipViolation
+	}
+	return nil
+}
+
+func (h *Host) GetSessionForExtension(sessionID, extensionID string) (*WebSession, error) {
+	session, err := h.GetSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ExtensionID != extensionID {
+		return nil, ErrSessionOwnershipViolation
+	}
+	return session, nil
+}
+
+func (h *Host) ValidateHTTPRequestOrigin(sessionID, origin string) error {
+	if origin == "" {
+		return ErrOriginMismatch
+	}
+	return h.ValidateSessionOrigin(sessionID, origin)
 }
 
 func (h *Host) CloseSession(sessionID, reason string) error {
@@ -836,6 +884,7 @@ var (
 	ErrQuarantined            = errors.New("sandbox_webui: contribution quarantined")
 	ErrBridgeRateLimited      = errors.New("sandbox_webui: bridge rate limited")
 	ErrResourcePathForbidden  = errors.New("sandbox_webui: resource path forbidden")
+	ErrSessionOwnershipViolation = errors.New("sandbox_webui: session ownership violation")
 )
 
 var _ = url.Parse

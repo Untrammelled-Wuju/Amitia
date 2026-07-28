@@ -30,6 +30,7 @@ type Runtime struct {
 	AgentSkills   *AgentSkillService
 	Packages      *PackageService
 	Kernel        *kernelruntime.Runtime
+	Lifecycle    *extensionLifecycleService
 }
 
 func (r *Runtime) AttachKernel(root string) error {
@@ -78,7 +79,8 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 	executor := NewExecutor(registry, validator, permissions, repository)
 	service := NewService(registry, executor, repository, validator)
 	agentSkills := NewAgentSkillService(repository, registry, validator)
-	service.AttachLifecycleService(NewExtensionLifecycleService(registry, repository, agentSkills))
+	lifecycle := NewExtensionLifecycleService(registry, repository, agentSkills)
+	service.AttachLifecycleService(lifecycle)
 	if err := agentSkills.Restore(ctx); err != nil {
 		return nil, err
 	}
@@ -114,7 +116,7 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 	if err := packages.Restore(ctx); err != nil {
 		return nil, err
 	}
-	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages}, nil
+	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages, Lifecycle: lifecycle}, nil
 }
 
 func (r *Runtime) Close(ctx context.Context) error {

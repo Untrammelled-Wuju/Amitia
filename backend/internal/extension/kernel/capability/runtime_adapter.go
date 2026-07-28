@@ -15,6 +15,10 @@ const (
 	RuntimeTypeWorkflow      RuntimeType = "workflow"
 	RuntimeTypeInternal      RuntimeType = "internal"
 	RuntimeTypeLegacy        RuntimeType = "legacy"
+	RuntimeTypeJavaScript    RuntimeType = "javascript"
+	RuntimeTypeWASM          RuntimeType = "wasm"
+	RuntimeTypeTrustedService RuntimeType = "trusted_service"
+	RuntimeTypeTask          RuntimeType = "task"
 )
 
 type RuntimeBinding struct {

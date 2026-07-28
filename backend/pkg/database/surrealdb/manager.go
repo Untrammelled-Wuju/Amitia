@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,6 +25,15 @@ var surrealCmd *exec.Cmd
 var surrealMu sync.Mutex
 var surrealMonitorStop chan struct{}
 var surrealRestartFn func()
+var surrealShuttingDown atomic.Bool
+
+func SetSurrealShuttingDown() {
+	surrealShuttingDown.Store(true)
+}
+
+func IsSurrealShuttingDown() bool {
+	return surrealShuttingDown.Load()
+}
 
 func SetSurrealRestartCallback(fn func()) {
 	surrealRestartFn = fn
@@ -234,6 +244,9 @@ func StartSurrealMonitor() {
 		for {
 			select {
 			case <-ticker.C:
+				if IsSurrealShuttingDown() {
+					return
+				}
 				surrealMu.Lock()
 				needRestart := false
 				if surrealCmd == nil || surrealCmd.Process == nil {
@@ -241,7 +254,7 @@ func StartSurrealMonitor() {
 				} else if !isSurrealAlive(config.AppCfg.Surreal.Port) {
 					needRestart = true
 				}
-				if needRestart {
+				if needRestart && !IsSurrealShuttingDown() {
 					log.Warn("检测到SurrealDB进程异常，尝试重启...")
 					if err := startSurrealInternal(); err != nil {
 						log.Error("SurrealDB重启失败:", err)

@@ -2,25 +2,25 @@ package com.amitia.feature.chat
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -28,13 +28,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amitia.core.designsystem.AmitiaColors
+import com.amitia.core.designsystem.AmitiaGlassSurface
+import com.amitia.core.designsystem.AmitiaIconSize
+import com.amitia.core.designsystem.AmitiaIcons
+import com.amitia.core.designsystem.AmitiaSpacing
+import com.amitia.core.designsystem.GlassLevel
 import com.amitia.core.model.MessageDto
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,6 +53,7 @@ fun ChatScreen(
     characterId: String? = null,
     onOpenCharacter: (String) -> Unit,
     onBack: () -> Unit,
+    onMenu: () -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -86,54 +95,63 @@ fun ChatScreen(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = state.conversation?.title ?: "对话",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (state.generating) {
-                            Text(
-                                text = "正在生成…",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AmitiaColors.OnSurfaceMuted
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    val cid = characterId
-                    if (cid != null) {
-                        IconButton(onClick = { onOpenCharacter(cid) }) {
-                            Text(
-                                text = "角色",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        if (state.loading && state.messages.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "加载中…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AmitiaColors.OnSurfaceMuted
                 )
-            )
-        },
-        bottomBar = {
+            }
+        } else {
+            val grouped = remember(state.messages) { groupByDate(state.messages) }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = 123.dp,
+                    start = AmitiaSpacing.Base,
+                    end = AmitiaSpacing.Base,
+                    bottom = 105.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                grouped.forEach { (date, messages) ->
+                    item(key = "header_$date") { DateHeader(dateText = date) }
+                    items(messages, key = { it.id }) { message ->
+                        MessageBubble(
+                            message = message,
+                            onRetry = { viewModel.retryMessage(message.id) },
+                            onDelete = { viewModel.deleteMessage(message.id) },
+                            onCopy = {
+                                viewModel.copyMessage(message.id) { text ->
+                                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(
+                                        android.content.ClipData.newPlainText("Amitia", text)
+                                    )
+                                }
+                            },
+                            onPlayAudio = { }
+                        )
+                    }
+                }
+            }
+        }
+
+        ChatHeader(
+            title = state.conversation?.title ?: "对话",
+            generating = state.generating,
+            onBack = onBack,
+            onMenu = onMenu,
+            onMore = { onOpenCharacter(characterId) }
+        )
+
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
             ChatInputBar(
                 draft = state.draft,
                 sending = state.sending,
@@ -142,56 +160,104 @@ fun ChatScreen(
                 onSend = {
                     viewModel.sendMessage(state.draft)
                 },
-                onPickImage = { /* 由 ChatScreen 包装的 ImagePicker 处理 */ },
-                onTakePhoto = { /* 同上 */ },
-                onStartRecording = { /* 由 ChatScreen 包装的 VoiceRecorder 处理 */ }
+                onPickImage = { },
+                onTakePhoto = { },
+                onStartRecording = { }
             )
         }
-    ) { padding ->
-        Box(
+    }
+}
+
+@Composable
+private fun ChatHeader(
+    title: String,
+    generating: Boolean,
+    onBack: () -> Unit,
+    onMenu: () -> Unit,
+    onMore: () -> Unit
+) {
+    AmitiaGlassSurface(
+        level = GlassLevel.Navigation,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 44.dp)
+            .height(64.dp),
+        shape = RoundedCornerShape(23.dp)
+    ) {
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(padding)
+                .padding(horizontal = AmitiaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
         ) {
-            if (state.loading && state.messages.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "加载中…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AmitiaColors.OnSurfaceMuted
-                    )
-                }
-            } else {
-                val grouped = remember(state.messages) { groupByDate(state.messages) }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    grouped.forEach { (date, messages) ->
-                        item(key = "header_$date") { DateHeader(dateText = date) }
-                        items(messages, key = { it.id }) { message ->
-                            MessageBubble(
-                                message = message,
-                                onRetry = { viewModel.retryMessage(message.id) },
-                                onDelete = { viewModel.deleteMessage(message.id) },
-                                onCopy = {
-                                    viewModel.copyMessage(message.id) { text ->
-                                        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                                        clipboard?.setPrimaryClip(
-                                            android.content.ClipData.newPlainText("Amitia", text)
-                                        )
-                                    }
-                                },
-                                onPlayAudio = { /* 由 TTS/AudioPlayerController 处理 */ }
-                            )
-                        }
-                    }
-                }
+            HeaderIconButton(
+                icon = AmitiaIcons.Menu,
+                contentDescription = "菜单",
+                onClick = onMenu
+            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = AmitiaIcons.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(AmitiaIconSize.Medium)
+                )
             }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (generating) "正在生成…" else "在线",
+                    fontSize = 10.sp,
+                    color = AmitiaColors.OnSurfaceMuted
+                )
+            }
+            HeaderIconButton(
+                icon = AmitiaIcons.MoreHoriz,
+                contentDescription = "更多",
+                onClick = onMore
+            )
         }
+    }
+}
+
+@Composable
+private fun HeaderIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(AmitiaIconSize.Medium)
+        )
     }
 }
 

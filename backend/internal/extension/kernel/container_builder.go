@@ -129,13 +129,21 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	agentSkillCatalog := agent_skill.NewAgentSkillCatalog()
 
 	workflowRegistry := workflow.NewWorkflowRegistry()
+	workflowDefRepo := sqlite.NewWorkflowDefinitionRepository(db)
+	workflowRegistry.SetDefinitionStore(workflowDefRepo)
+	_ = workflowRegistry.LoadFromStore(ctx)
+	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
+	workflowExecutor.SetCheckpointStore(sqlite.NewSQLiteCheckpointStore(db))
+	workflowExecutor.SetCompensationManager(workflow.NewCompensationManager())
+	workflowExecRepo := sqlite.NewWorkflowExecutionRepository(db)
 
 	auditWriter := package_security.NewMemoryAuditWriter()
 	packageSec := package_security.NewPackageSecurityService(package_security.DefaultArchivePolicy(), auditWriter)
 
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
-	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore)
+	typedInstaller := NewTypedContributionInstaller(nil)
+	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller)
 	lcAuditWriter := newContainerAuditWriter(opRepo)
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
@@ -193,7 +201,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionChecker: schedule.NewBrokerPermissionChecker(permBroker, scheduleRepo),
 		ScopeChecker:      schedule.NewManagerScopeChecker(scopeManager, scheduleRepo, scopeStore),
 		DependencyChecker: schedule.NewResolverDependencyChecker(dependencyResolver),
-		WorkflowExecutor:  NewKernelWorkflowFacadeAdapter(),
+		WorkflowExecutor:  NewKernelWorkflowFacadeAdapter(workflowExecutor),
 		TaskEnqueueFn:     BuildScheduleTaskEnqueueFunc(taskRuntimeService),
 		RuntimeHandlerFn:  BuildScheduleRuntimeHandlerFn(supervisor),
 	})
@@ -220,7 +228,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
 		return nil, fmt.Errorf("kernel: register default event types: %w", err)
 	}
-	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher())
+	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver)
 	eventSvc.SetEffectiveResolver(eventResolver)
 	eventBridge := event.NewRuntimeBridge(eventSvc)
 	eventBridge.Attach()
@@ -237,14 +245,37 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
 	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter())
-	if err := setupDefaultHostAPIRoutes(hostAPIGateway, eventSvc, scheduleSvc); err != nil {
+	extensionStateStore := sqlite.NewExtensionStateStore(db)
+	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
+		StateStore:          extensionStateStore,
+		EventService:        eventSvc,
+		ScheduleService:     scheduleSvc,
+		ExecutionKernel:     executionKernel,
+		ToolRegistry:        toolRegistry,
+		OperationRepository: opRepo,
+		ExtensionRoot:       b.extRoot,
+	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
-	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewHostAPIToolExecutorAdapter(hostAPIGateway)))
+	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
 	jsFactory.SetHostAPI(hostAPIGateway)
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, b.resolveNodePath(), b.resolvePluginHostPath())
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
+
+	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
+		JSGlobalFactory:   jsFactory,
+		WASMFactory:       wasmFactory,
+		WASMModuleMgr:     wasmModuleMgr,
+		Supervisor:        supervisor,
+		TaskService:       taskRuntimeService,
+		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
+		BuiltinDispatcher: nil,
+	}); err != nil {
+		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
+	}
+
+	toolFacade := NewToolFacade(toolRegistry, executionKernel, nil, DefaultToolFacadeConfig())
 
 	uiHost := ui_contribution.NewUIHost()
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
@@ -259,6 +290,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	pageHost := extension_page_host.NewPageHostWithValidator(pageRegistry, pageSessionMgr, uiPermValidator)
 	schemaValidator := schema_ui.NewValidator()
 	schemaCache := schema_ui.NewCompilerCache()
+	schemaRegistry := schema_ui.NewSchemaRegistry(schemaValidator, schemaCache)
 	sandboxHost := sandbox_webui.NewHost()
 	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
 		session, err := sandboxHost.GetSession(sessionID)
@@ -268,32 +300,64 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if !session.IsActionAllowed(actionID) {
 			return nil, fmt.Errorf("sandbox: action %s not allowed for session %s", actionID, sessionID)
 		}
-		if hostAPIGateway != nil {
-			identity := runtime_supervisor.RuntimeIdentity{
-				InstanceID:  sessionID,
-				ExtensionID: domain.ExtensionID(session.ExtensionID),
-				ModuleID:    domain.ModuleID(session.ModuleID),
-			}
-			callReq := host_api.CallRequest{
-				CallID:          fmt.Sprintf("sandbox-%s-%s", sessionID, actionID),
-				RuntimeIdentity: identity,
-				Method:          host_api.MethodToolExecute,
-				Version:         1,
-				Input:           input,
-			}
-			result := hostAPIGateway.Call(ctx, callReq)
-			if result.Error != nil {
-				return nil, fmt.Errorf("sandbox: action %s failed: %s", actionID, result.Error.Message)
-			}
-			return result.Output, nil
+		if hostAPIGateway == nil {
+			return nil, fmt.Errorf("sandbox: host api gateway not configured for action %s", actionID)
 		}
-		return json.Marshal(map[string]any{
-			"ok":       true,
-			"actionId": actionID,
-			"sessionId": sessionID,
+		identity := runtime_supervisor.RuntimeIdentity{
+			InstanceID:  sessionID,
+			ExtensionID: domain.ExtensionID(session.ExtensionID),
+			ModuleID:    domain.ModuleID(session.ModuleID),
+		}
+		toolInput, _ := json.Marshal(map[string]any{
+			"toolId": actionID,
+			"input":  json.RawMessage(input),
 		})
+		callReq := host_api.CallRequest{
+			CallID:          fmt.Sprintf("sandbox-%s-%s", sessionID, actionID),
+			RuntimeIdentity: identity,
+			Method:          host_api.MethodToolExecute,
+			Version:         1,
+			Input:           toolInput,
+		}
+		result := hostAPIGateway.Call(ctx, callReq)
+		if result.Error != nil {
+			return nil, fmt.Errorf("sandbox: action %s failed: %s", actionID, result.Error.Message)
+		}
+		return result.Output, nil
 	})
-	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProvider()
+	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProviderWithHandler(func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
+		session, err := sandboxHost.GetSession(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox: session not found: %w", err)
+		}
+		if !session.IsDataSourceAllowed(sourceID) {
+			return nil, fmt.Errorf("sandbox: data source %s not allowed for session %s", sourceID, sessionID)
+		}
+		if hostAPIGateway == nil {
+			return nil, fmt.Errorf("sandbox: host api gateway not configured for data source %s", sourceID)
+		}
+		identity := runtime_supervisor.RuntimeIdentity{
+			InstanceID:  sessionID,
+			ExtensionID: domain.ExtensionID(session.ExtensionID),
+			ModuleID:    domain.ModuleID(session.ModuleID),
+		}
+		toolInput, _ := json.Marshal(map[string]any{
+			"toolId": sourceID,
+			"input":  json.RawMessage(params),
+		})
+		callReq := host_api.CallRequest{
+			CallID:          fmt.Sprintf("sandbox-ds-%s-%s", sessionID, sourceID),
+			RuntimeIdentity: identity,
+			Method:          host_api.MethodToolExecute,
+			Version:         1,
+			Input:           toolInput,
+		}
+		result := hostAPIGateway.Call(ctx, callReq)
+		if result.Error != nil {
+			return nil, fmt.Errorf("sandbox: data source %s failed: %s", sourceID, result.Error.Message)
+		}
+		return result.Output, nil
+	})
 	sandboxNavigator := sandbox_webui.NewBridgeNavigator(func(ctx context.Context, sessionID, target string) error {
 		session, err := sandboxHost.GetSession(sessionID)
 		if err != nil {
@@ -399,6 +463,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PackageSecurity:      packageSec,
 		LifecycleManager:     lifecycleMgr,
 		ContributionRegistry: contribRegistry,
+		ContributionInstaller: typedInstaller,
 		DependencyResolver:   dependencyResolver,
 		RuntimeSupervisor:    supervisor,
 		ExecutionKernel:      executionKernel,
@@ -407,11 +472,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ScopeManager:         scopeManager,
 		AgentSkillCatalog:    agentSkillCatalog,
 		WorkflowRegistry:     workflowRegistry,
+		WorkflowExecutor:     workflowExecutor,
+		WorkflowDefRepo:      workflowDefRepo,
+		WorkflowExecRepo:     workflowExecRepo,
 		EnablementService:    enablementService,
 		EnablementResolver:   enablementResolver,
 
 		ToolRegistry:    toolRegistry,
 		AdapterRegistry: adapterRegistry,
+		ToolFacade:      toolFacade,
 
 		TaskRepository:     taskRepo,
 		TaskRuntimeService: taskRuntimeService,
@@ -441,6 +510,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PageHost:            pageHost,
 		SchemaValidator:     schemaValidator,
 		SchemaCompilerCache: schemaCache,
+		SchemaRegistry:     schemaRegistry,
 		SandboxHost:         sandboxHost,
 		ChatExtensionRegistry: chatExtRegistry,
 		OrderingEngine:      orderingEngine,
@@ -492,6 +562,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CanaryShadowManager:     canaryShadowMgr,
 		CanaryOwnershipResolver: canaryOwnershipResolver,
 	}
+
+	typedInstaller.SetContainer(container)
 
 	return container, nil
 }

@@ -16,22 +16,38 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/pkg/util"
 )
 
+var envShuttingDown atomic.Bool
+
+func SetEnvShuttingDown() {
+	envShuttingDown.Store(true)
+}
+
+func IsEnvShuttingDown() bool {
+	return envShuttingDown.Load()
+}
+
 type Service struct {
-	Name      string
-	Dir       string
-	Cmd       string
-	Args      []string
-	Env       []string
-	Port      int
-	cmd       *exec.Cmd
-	cancel    context.CancelFunc
-	HealthURL string
+	Name          string
+	Dir           string
+	Cmd           string
+	Args          []string
+	Env           []string
+	Port          int
+	cmd           *exec.Cmd
+	cancel        context.CancelFunc
+	ctx           context.Context
+	HealthURL     string
+	stopped       bool
+	restartCount  int
+	maxRestarts   int
+	lastRestartAt time.Time
 }
 
 type Environment struct {
@@ -51,13 +67,14 @@ func (e *Environment) SetOnShutdown(fn func()) {
 
 func (e *Environment) AddService(name, dir, cmd string, args []string, port int, env []string) {
 	e.services = append(e.services, &Service{
-		Name:      name,
-		Dir:       filepath.Join(e.workspace, dir),
-		Cmd:       cmd,
-		Args:      args,
-		Env:       env,
-		Port:      port,
-		HealthURL: fmt.Sprintf("http://127.0.0.1:%d/api/health", port),
+		Name:        name,
+		Dir:         filepath.Join(e.workspace, dir),
+		Cmd:         cmd,
+		Args:        args,
+		Env:         env,
+		Port:        port,
+		HealthURL:   fmt.Sprintf("http://127.0.0.1:%d/api/health", port),
+		maxRestarts: 10,
 	})
 }
 
@@ -90,6 +107,7 @@ func (e *Environment) startService(svc *Service) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	svc.cancel = cancel
+	svc.ctx = ctx
 	svc.cmd = exec.CommandContext(ctx, svc.Cmd, svc.Args...)
 	svc.cmd.Dir = svc.Dir
 	svc.cmd.Stdout = &serviceWriter{prefix: svc.Name}
@@ -116,8 +134,45 @@ func (e *Environment) startService(svc *Service) error {
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
-		svc.cmd.Wait()
-		log.Printf("[Env] %s 已退出", svc.Name)
+		for {
+			svc.cmd.Wait()
+			log.Printf("[Env] %s 已退出", svc.Name)
+			if svc.stopped {
+				return
+			}
+			if IsEnvShuttingDown() {
+				log.Printf("[Env] %s 检测到全局关闭标志，停止保活", svc.Name)
+				return
+			}
+			svc.restartCount++
+			if svc.restartCount > svc.maxRestarts {
+				log.Printf("[Env] %s 已达最大重启次数 %d，停止保活", svc.Name, svc.maxRestarts)
+				return
+			}
+			backoff := time.Duration(svc.restartCount) * 2 * time.Second
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+			svc.lastRestartAt = time.Now()
+			log.Printf("[Env] %s 第 %d 次自动重启，等待 %v 后拉起...", svc.Name, svc.restartCount, backoff)
+			select {
+			case <-time.After(backoff):
+			case <-svc.ctx.Done():
+				return
+			}
+			if svc.stopped {
+				return
+			}
+			if IsEnvShuttingDown() {
+				log.Printf("[Env] %s 检测到全局关闭标志，取消重启", svc.Name)
+				return
+			}
+			if err := e.restartService(svc); err != nil {
+				log.Printf("[Env] %s 重启失败: %v", svc.Name, err)
+				continue
+			}
+			log.Printf("[Env] %s 重启成功 (第 %d 次)", svc.Name, svc.restartCount)
+		}
 	}()
 
 	return nil
@@ -134,6 +189,42 @@ func killByPort(port int) {
 			}
 		}
 	}
+}
+
+func (e *Environment) restartService(svc *Service) error {
+	if svc.Port > 0 {
+		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", svc.Port), 2*time.Second); err == nil {
+			conn.Close()
+			killByPort(svc.Port)
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.cancel = cancel
+	svc.ctx = ctx
+	svc.cmd = exec.CommandContext(ctx, svc.Cmd, svc.Args...)
+	svc.cmd.Dir = svc.Dir
+	svc.cmd.Stdout = &serviceWriter{prefix: svc.Name}
+	svc.cmd.Stderr = &serviceWriter{prefix: svc.Name}
+	svc.cmd.Env = os.Environ()
+	if svc.Env != nil {
+		svc.cmd.Env = append(svc.cmd.Env, svc.Env...)
+	}
+
+	if err := svc.cmd.Start(); err != nil {
+		cancel()
+		return fmt.Errorf("无法启动进程: %w", err)
+	}
+
+	if svc.Port > 0 {
+		if err := e.waitForHealthy(svc); err != nil {
+			cancel()
+			return fmt.Errorf("健康检查失败: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (e *Environment) waitForHealthy(svc *Service) error {
@@ -156,6 +247,7 @@ func (e *Environment) waitForHealthy(svc *Service) error {
 func (e *Environment) StopAll() {
 	log.Println("[Env] 正在停止所有附属服务...")
 	for _, svc := range e.services {
+		svc.stopped = true
 		if svc.cancel != nil {
 			svc.cancel()
 		}
@@ -186,12 +278,8 @@ func (e *Environment) SetupSignalHandler() {
 
 	go func() {
 		sig := <-sigCh
-		log.Printf("[Env] 收到信号 %v，正在关闭...", sig)
-		e.StopAll()
-		if e.onShutdown != nil {
-			e.onShutdown()
-		}
-		os.Exit(0)
+		log.Printf("[Env] 收到信号 %v，设置关闭标志...", sig)
+		SetEnvShuttingDown()
 	}()
 }
 

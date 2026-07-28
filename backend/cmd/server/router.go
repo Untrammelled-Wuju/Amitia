@@ -5,6 +5,7 @@ package main
 import (
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
@@ -51,6 +52,15 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.TraceMiddleware())
 	r.Use(security.CorsMiddleware())
+	r.POST("/api/shutdown", func(c *gin.Context) {
+		c.JSON(200, gin.H{"code": 200, "msg": "正在关闭服务..."})
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			if triggerShutdown != nil {
+				triggerShutdown()
+			}
+		}()
+	})
 	apiGroup := r.Group("/api")
 	apiGroup.Use(middleware.AuthMiddleware())
 	{

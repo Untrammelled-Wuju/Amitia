@@ -15,6 +15,7 @@ type ExtensionUpdateMeta struct {
 	ManifestVersion    int       `json:"manifestVersion"`
 	PackageURL         string    `json:"packageUrl"`
 	PackageSHA256      string    `json:"packageSha256"`
+	PackageSHA512      string    `json:"packageSha512,omitempty"`
 	PackageSize        int64     `json:"packageSize"`
 	PublisherID        string    `json:"publisherId"`
 	PublisherKeyID     string    `json:"publisherKeyId,omitempty"`

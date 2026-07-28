@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,20 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.ChatExtensionRegistry,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
+
+	if container.SchemaRegistry != nil {
+		handler.SetSchemaLookup(func(extensionID, contributionID string) (json.RawMessage, bool) {
+			compiled, ok := container.SchemaRegistry.Get(extensionID, contributionID)
+			if !ok || compiled == nil || compiled.Document == nil {
+				return nil, false
+			}
+			data, err := json.Marshal(compiled.Document)
+			if err != nil {
+				return nil, false
+			}
+			return data, true
+		})
+	}
 
 	mux := http.NewServeMux()
 	handler.Register(mux)

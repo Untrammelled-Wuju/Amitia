@@ -30,6 +30,8 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let currentConfig: DeploymentModeConfig = { mode: "local" };
 let quitting = false;
+let coreStopped = false;
+let shutdownInProgress = false;
 let desktopPetManager: DesktopPetManager | null = null;
 let chatStateSubscriber: ChatStateSubscriber | null = null;
 let characterWatcher: CharacterWatcher | null = null;
@@ -128,7 +130,7 @@ async function enterMainApp(): Promise<void> {
           }
         }
       } else {
-        stopCore();
+        void stopCore();
         notifyStatus(runtimeManager, "ready");
       }
     }
@@ -219,15 +221,25 @@ async function enterMainApp(): Promise<void> {
     }
   });
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     quitting = true;
-    void desktopPetManager?.shutdown().catch((err) => {
-      console.warn("[AmitiaDesktop] DesktopPetManager shutdown 失败:", err);
-    });
-    chatStateSubscriber?.stop();
-    characterWatcher?.stop();
-    stopCore();
-    closeLogger();
+    if (!coreStopped) {
+      event.preventDefault();
+      if (!shutdownInProgress) {
+        shutdownInProgress = true;
+        void desktopPetManager?.shutdown().catch((err) => {
+          console.warn("[AmitiaDesktop] DesktopPetManager shutdown 失败:", err);
+        });
+        chatStateSubscriber?.stop();
+        characterWatcher?.stop();
+        void stopCore().finally(() => {
+          coreStopped = true;
+          closeLogger();
+          app.quit();
+        });
+      }
+      return;
+    }
   });
 }
 

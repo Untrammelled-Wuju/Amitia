@@ -26,6 +26,7 @@ type PackageService struct {
 	limits            PackageLimits
 	locks             sync.Map
 	metrics           sync.Map
+	kernelProxy       *KernelLifecycleProxy
 }
 
 func NewPackageService(repository *Repository, registry *Registry, validator *SchemaValidator, compiler *WorkflowCompiler, workflowInstaller *WorkshopInstaller, agentSkills *AgentSkillService) *PackageService {
@@ -34,6 +35,10 @@ func NewPackageService(repository *Repository, registry *Registry, validator *Sc
 		service.metrics.Store(name, new(uint64))
 	}
 	return service
+}
+
+func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) {
+	s.kernelProxy = proxy
 }
 
 func (s *PackageService) Restore(ctx context.Context) error {

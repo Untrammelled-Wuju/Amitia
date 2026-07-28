@@ -358,6 +358,31 @@ func (m *SessionManager) Get(id PageSessionID) (*ExtensionPageSession, error) {
 	return session, nil
 }
 
+func (m *SessionManager) ValidateSessionOwnership(id PageSessionID, extensionID ExtensionID) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	session, exists := m.sessions[id]
+	if !exists {
+		return ErrSessionNotFound
+	}
+	if session.IsExpired(m.maxIdle) {
+		return ErrSessionExpired
+	}
+	if session.ExtensionID != extensionID {
+		return ErrSessionOwnershipViolation
+	}
+	return nil
+}
+
+func (m *SessionManager) GetSessionForExtension(id PageSessionID, extensionID ExtensionID) (*ExtensionPageSession, error) {
+	if err := m.ValidateSessionOwnership(id, extensionID); err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.sessions[id], nil
+}
+
 func (m *SessionManager) Touch(id PageSessionID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -703,4 +728,5 @@ var (
 	ErrSessionExpired        = errors.New("page_host: session expired")
 	ErrInvalidRequest        = errors.New("page_host: invalid request")
 	ErrInvalidDeepLink       = errors.New("page_host: invalid deep link")
+	ErrSessionOwnershipViolation = errors.New("page_host: session ownership violation")
 )

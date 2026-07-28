@@ -165,6 +165,9 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 	if err := s.repository.FinishPackageOperation(ctx, operationID, "succeeded", ""); err != nil {
 		return PackageOperationResult{}, err
 	}
+	if s.kernelProxy != nil && result.ExtensionID != "" {
+		_ = s.kernelProxy.NotifyInstall(ctx, result.ExtensionID, result.Version)
+	}
 	return result, nil
 }
 

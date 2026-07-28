@@ -19,13 +19,14 @@ import (
 )
 
 type HTTPHandler struct {
-	uiHost       *ui_contribution.UIHost
-	slotRegistry *extension_slots.SlotRegistry
-	pageHost     *extension_page_host.PageHost
-	sandboxHost  *sandbox_webui.Host
-	chatRegistry *chat_ui_extension.ChatExtensionRegistry
-	permChecker  *permission.UIPermissionChecker
-	extRoot      string
+	uiHost        *ui_contribution.UIHost
+	slotRegistry  *extension_slots.SlotRegistry
+	pageHost      *extension_page_host.PageHost
+	sandboxHost   *sandbox_webui.Host
+	chatRegistry  *chat_ui_extension.ChatExtensionRegistry
+	permChecker   *permission.UIPermissionChecker
+	schemaLookup  func(extensionID, contributionID string) (json.RawMessage, bool)
+	extRoot       string
 }
 
 func NewHTTPHandler(
@@ -47,6 +48,10 @@ func NewHTTPHandler(
 
 func (h *HTTPHandler) SetExtensionRoot(root string) {
 	h.extRoot = root
+}
+
+func (h *HTTPHandler) SetSchemaLookup(fn func(extensionID, contributionID string) (json.RawMessage, bool)) {
+	h.schemaLookup = fn
 }
 
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
@@ -403,11 +408,22 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "contribution_not_found", err.Error())
 		return
 	}
+	if h.schemaLookup != nil {
+		if doc, ok := h.schemaLookup(extensionID, contributionID); ok {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"extensionId":    extensionID,
+				"contributionId": contributionID,
+				"schemaPath":     def.Entry.SchemaPath,
+				"document":       json.RawMessage(doc),
+			})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionId":    extensionID,
 		"contributionId": contributionID,
 		"schemaPath":     def.Entry.SchemaPath,
-		"document":       buildSampleSchema(),
+		"document":       nil,
 	})
 }
 
@@ -622,12 +638,14 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 			content = injectPreloadScript(content, preloadScript, sess.CSP)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", sess.CSP)
 	} else {
 		w.Header().Set("Content-Type", mime)
 	}
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
 }
@@ -703,10 +721,11 @@ func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	msg.Session = sessionID
-	msg.Origin = sess.Origin
-	msg.Nonce = sess.Nonce
+	if msg.Origin == "" {
+		msg.Origin = sess.Origin
+	}
 	if err := sandbox_webui.ValidateBridgeMessage(&msg, sess); err != nil {
-		writeError(w, http.StatusBadRequest, "bridge_invalid", err.Error())
+		writeError(w, http.StatusForbidden, "bridge_invalid", err.Error())
 		return
 	}
 	bridge := h.sandboxHost.GetBridge()

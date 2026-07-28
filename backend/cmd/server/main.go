@@ -39,6 +39,8 @@ func killExistingServer(addr string) {
 	}
 }
 
+var triggerShutdown context.CancelFunc
+
 func main() {
 	runtimeRoot := util.RuntimeRoot()
 
@@ -57,6 +59,9 @@ func main() {
 
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopRoot()
+
+	appCtx, appCancel := context.WithCancel(rootCtx)
+	triggerShutdown = appCancel
 
 	db := mysql.NewSQLite(config.AppCfg.Storage.DataDir)
 
@@ -85,6 +90,7 @@ func main() {
 
 	startQdrant()
 	startSurreal()
+	qdrantDB.StartQdrantMonitor()
 	surrealdbDB.StartSurrealMonitor()
 
 	graphSvc := initGraph()
@@ -169,14 +175,17 @@ func main() {
 	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
 	defer services.UnifiedEntry.SetOrchestratorReady(false)
-	services.OutboxWorker.Start(rootCtx)
+	services.OutboxWorker.Start(appCtx)
 	defer services.OutboxWorker.Stop()
-	services.DeliveryWorker.Start(rootCtx)
+	services.DeliveryWorker.Start(appCtx)
 	defer services.DeliveryWorker.Stop()
-	services.DesktopPetWorker.Start(rootCtx)
+	services.DesktopPetWorker.Start(appCtx)
 	defer services.DesktopPetWorker.Stop()
-	services.ProcessingWorker.Start(rootCtx)
+	services.ProcessingWorker.Start(appCtx)
 	defer services.ProcessingWorker.Stop()
+
+	selfHeal := startSelfHealMonitor(appCtx, db)
+	defer selfHeal.Stop()
 	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true
@@ -193,13 +202,13 @@ func main() {
 			case <-ticker.C:
 				services.DataLifecycle.ExecuteOutboxCleanup()
 				services.DataLifecycle.ExecuteRecalculationTasks()
-			case <-rootCtx.Done():
+			case <-appCtx.Done():
 				return
 			}
 		}
 	}()
 
-	go services.Reconciliation.RunWorker(rootCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
+	go services.Reconciliation.RunWorker(appCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
 
 	srv := &http.Server{
 		Addr:    serverAddr,
@@ -218,8 +227,13 @@ func main() {
 			cleanup()
 			os.Exit(1)
 		}
-	case <-rootCtx.Done():
+	case <-appCtx.Done():
 		log.Info("收到关闭信号，开始排水...")
+		SetEnvShuttingDown()
+		qdrantDB.SetQdrantShuttingDown()
+		surrealdbDB.SetSurrealShuttingDown()
+		qdrantDB.StopQdrantMonitor()
+		surrealdbDB.StopSurrealMonitor()
 		services.UnifiedEntry.SetOrchestratorReady(false)
 		pluginShutdownCtx, pluginCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := services.Extension.Close(pluginShutdownCtx); err != nil {
@@ -249,7 +263,7 @@ func main() {
 			log.Error("服务退出异常:", err)
 		}
 	}
-	if err := rootCtx.Err(); err != nil && err != context.Canceled {
+	if err := appCtx.Err(); err != nil && err != context.Canceled {
 		log.Error("服务启动失败:", err)
 		cleanup()
 		os.Exit(1)

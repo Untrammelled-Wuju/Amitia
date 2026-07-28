@@ -161,41 +161,125 @@ export function startCore(): void {
   });
 }
 
-export function stopCore(): void {
+export async function stopCore(): Promise<void> {
   if (coreProcess && !coreProcess.killed) {
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid);
-    const pid = coreProcess.pid;
-    if (process.platform === "win32" && pid) {
-      try {
-        execSync(`taskkill /PID ${pid} /T /F`, {
-          windowsHide: true,
-          stdio: "pipe",
-        });
-        console.log("[CoreManager] 进程树已终止");
-        execSync(`taskkill /F /IM qdrant.exe`, {
-          windowsHide: true,
-          stdio: "pipe",
-        });
-      } catch (e) {
-        console.error("[CoreManager] taskkill异常:", e);
+    const pid = coreProcess.pid ?? 0;
+
+    try {
+      const success = await gracefulShutdown(pid);
+      if (!success) {
+        console.warn("[CoreManager] 优雅关闭超时，回退到强制终止");
+        forceKillProcessTree(pid);
       }
-      try {
-        execSync(`taskkill /F /IM surreal.exe`, {
-          windowsHide: true,
-          stdio: "pipe",
-        });
-      } catch (_) {}
-    } else {
-      coreProcess.kill("SIGTERM");
-      try {
-        execSync("pkill -9 qdrant", { stdio: "pipe" });
-      } catch (_) {}
-      try {
-        execSync("pkill -9 surreal", { stdio: "pipe" });
-      } catch (_) {}
+    } catch (err) {
+      console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
+      forceKillProcessTree(pid);
     }
+    cleanupRemainingProcesses();
     coreProcess = null;
+    return;
   }
+  cleanupRemainingProcesses();
+  coreProcess = null;
+}
+
+function forceKillProcessTree(pid: number): void {
+  if (process.platform === "win32" && pid) {
+    try {
+      execSync(`taskkill /PID ${pid} /T /F`, {
+        windowsHide: true,
+        stdio: "pipe",
+      });
+      console.log("[CoreManager] 进程树已强制终止");
+    } catch (e) {
+      console.error("[CoreManager] taskkill异常:", e);
+    }
+  } else if (pid) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch (_) {}
+  }
+}
+
+function cleanupRemainingProcesses(): void {
+  if (process.platform === "win32") {
+    try {
+      execSync(`taskkill /F /IM qdrant.exe`, {
+        windowsHide: true,
+        stdio: "pipe",
+      });
+    } catch (_) {}
+    try {
+      execSync(`taskkill /F /IM surreal.exe`, {
+        windowsHide: true,
+        stdio: "pipe",
+      });
+    } catch (_) {}
+  } else {
+    try {
+      execSync("pkill -9 qdrant", { stdio: "pipe" });
+    } catch (_) {}
+    try {
+      execSync("pkill -9 surreal", { stdio: "pipe" });
+    } catch (_) {}
+  }
+}
+
+async function gracefulShutdown(pid: number): Promise<boolean> {
+  const healthUrl = "http://127.0.0.1:18899/api/health";
+  const isAlive = await httpHealthCheck(healthUrl, 2000);
+  if (!isAlive) {
+    console.log("[CoreManager] 核心服务不可达，跳过优雅关闭");
+    return false;
+  }
+
+  console.log("[CoreManager] 尝试优雅关闭核心服务...");
+  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/shutdown", 3000);
+  if (!shutdownOk) {
+    console.warn("[CoreManager] 优雅关闭请求失败");
+    return false;
+  }
+
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    if (coreProcess === null || coreProcess.killed || coreProcess.exitCode !== null) {
+      console.log("[CoreManager] 核心进程已优雅退出");
+      return true;
+    }
+    const stillAlive = await httpHealthCheck(healthUrl, 1000);
+    if (!stillAlive) {
+      console.log("[CoreManager] 核心服务已停止响应，等待进程退出");
+      await new Promise((r) => setTimeout(r, 500));
+      if (coreProcess === null || coreProcess.killed || coreProcess.exitCode !== null) {
+        console.log("[CoreManager] 核心进程已优雅退出");
+        return true;
+      }
+      return false;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  return false;
+}
+
+function httpShutdown(url: string, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.request(
+      url,
+      { method: "POST", timeout: timeoutMs },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode === 200);
+      },
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
 }
 
 export function isCoreRunning(): boolean {

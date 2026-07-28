@@ -224,6 +224,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		}
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
+	kernelProxy := extension.NewKernelLifecycleProxy(extensionRuntime.Kernel)
+	extensionRuntime.Packages.AttachKernelProxy(kernelProxy)
+	if extensionRuntime.Lifecycle != nil {
+		extensionRuntime.Lifecycle.AttachKernelProxy(kernelProxy)
+	}
 	legacyDispatcher := newLegacyDispatcherAdapter(extensionRuntime)
 	toolFacade := kernel.NewToolFacade(
 		kernelContainer.ToolRegistry,
@@ -238,6 +243,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())
 	}
 	if kernelContainer.HookService != nil {
+		toolFacade.SetHookService(kernelContainer.HookService)
 		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
 	}
 	extensionRuntime.Workshop.SetModelGenerator(chatSvc)
@@ -401,6 +407,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := connectionManager.Restore(context.Background()); err != nil {
 		log.Warn("MCP connection restore warning: ", err)
 	}
+	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(connectionManager), makeKernelMCPHealth(connectionManager))
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetRegistry := desktoppet.NewProviderRegistry()
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)

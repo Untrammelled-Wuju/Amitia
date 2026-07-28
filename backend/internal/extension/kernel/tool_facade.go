@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/hook"
 )
 
 type ToolFacadeConfig struct {
@@ -18,8 +19,8 @@ type ToolFacadeConfig struct {
 
 func DefaultToolFacadeConfig() ToolFacadeConfig {
 	return ToolFacadeConfig{
-		PreferKernel: true,
-		FallbackOnError: true,
+		PreferKernel:   true,
+		FallbackOnError: false,
 	}
 }
 
@@ -27,6 +28,7 @@ type ToolFacade struct {
 	toolRegistry    *capability.ToolRegistry
 	executionKernel *execution.ExecutionPipeline
 	legacy          LegacyToolDispatcher
+	hookService     *hook.Service
 	counters        *ToolFacadeCounters
 	config          ToolFacadeConfig
 }
@@ -49,8 +51,15 @@ func (f *ToolFacade) SetLegacyDispatcher(dispatcher LegacyToolDispatcher) {
 	f.legacy = dispatcher
 }
 
+func (f *ToolFacade) SetHookService(svc *hook.Service) {
+	f.hookService = svc
+}
+
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
+	if f.hookService != nil {
+		return "", nil, nil
+	}
 	if f.legacy != nil {
 		f.counters.IncLegacyFallback("prepare_agent_skill_prompt")
 		return f.legacy.PrepareAgentSkillPrompt(ctx, scope, message)
@@ -60,6 +69,9 @@ func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacySc
 
 func (f *ToolFacade) EndAgentSkillRound(scope LegacyScope) {
 	f.counters.IncEndAgentSkillRound()
+	if f.hookService != nil {
+		return
+	}
 	if f.legacy != nil {
 		f.counters.IncLegacyFallback("end_agent_skill_round")
 		f.legacy.EndAgentSkillRound(scope)
@@ -68,6 +80,18 @@ func (f *ToolFacade) EndAgentSkillRound(scope LegacyScope) {
 
 func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []LegacyContextContribution {
 	f.counters.IncBeforePrompt()
+	if f.hookService != nil && f.hookService.Integrator != nil {
+		hookCtx := f.buildHookContext(scope)
+		payload := f.buildBeforePromptPayload(scope)
+		result, blocked, err := f.hookService.Integrator.InvokePromptBeforeAssemble(ctx, payload, hookCtx)
+		if err != nil {
+			f.counters.IncPipelineFailure("before_prompt_hook")
+		}
+		if blocked {
+			return nil
+		}
+		return f.parseContextContributions(result)
+	}
 	if f.legacy != nil {
 		f.counters.IncLegacyFallback("before_prompt")
 		return f.legacy.BeforePrompt(ctx, scope)
@@ -121,11 +145,109 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 
 func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
 	f.counters.IncAfterReply()
+	if f.hookService != nil && f.hookService.Integrator != nil {
+		hookCtx := f.buildHookContext(scope)
+		payload := f.buildAfterReplyPayload(reply)
+		_, blocked, err := f.hookService.Integrator.InvokeModelAfterResponse(context.Background(), payload, hookCtx)
+		if err != nil {
+			f.counters.IncPipelineFailure("after_reply_hook")
+		}
+		return !blocked
+	}
 	if f.legacy != nil {
 		f.counters.IncLegacyFallback("after_reply")
 		return f.legacy.AfterReply(scope, reply)
 	}
 	return false
+}
+
+func (f *ToolFacade) buildHookContext(scope LegacyScope) hook.HookContextSnapshot {
+	var charID *string
+	if scope.CharacterID != "" {
+		c := scope.CharacterID
+		charID = &c
+	}
+	var convID *string
+	if scope.ConversationID != "" {
+		c := scope.ConversationID
+		convID = &c
+	}
+	return hook.HookContextSnapshot{
+		TraceID:        scope.TraceID,
+		OperationID:    scope.RequestID,
+		InvocationID:   scope.ToolCallID,
+		CharacterID:    charID,
+		ConversationID: convID,
+		Platform:       scope.Channel,
+		Timestamp:      time.Now().UTC(),
+		Depth:          0,
+	}
+}
+
+func (f *ToolFacade) buildBeforePromptPayload(scope LegacyScope) json.RawMessage {
+	payload := map[string]interface{}{
+		"sections": map[string]interface{}{},
+		"context": map[string]interface{}{
+			"userId":         scope.UserID,
+			"characterId":    scope.CharacterID,
+			"conversationId": scope.ConversationID,
+			"channel":        scope.Channel,
+			"sessionId":      scope.SessionID,
+		},
+	}
+	b, _ := json.Marshal(payload)
+	return b
+}
+
+func (f *ToolFacade) buildAfterReplyPayload(reply LegacyReplyView) json.RawMessage {
+	payload := map[string]interface{}{
+		"response": map[string]interface{}{
+			"content":      reply.Content,
+			"finishReason": "stop",
+		},
+	}
+	b, _ := json.Marshal(payload)
+	return b
+}
+
+func (f *ToolFacade) parseContextContributions(result json.RawMessage) []LegacyContextContribution {
+	if len(result) == 0 {
+		return nil
+	}
+	var parsed struct {
+		Decision string                 `json:"decision"`
+		Patch    []map[string]any       `json:"patch"`
+		Sections map[string]interface{} `json:"sections"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		return nil
+	}
+	contributions := make([]LegacyContextContribution, 0)
+	if parsed.Sections != nil {
+		if extCtx, ok := parsed.Sections["extension_context"].(map[string]interface{}); ok {
+			for source, val := range extCtx {
+				if content, ok := val.(string); ok {
+					contributions = append(contributions, LegacyContextContribution{
+						Source:  source,
+						Content: content,
+					})
+				} else if obj, ok := val.(map[string]interface{}); ok {
+					if content, ok := obj["content"].(string); ok {
+						priority := 0
+						if p, ok := obj["priority"].(float64); ok {
+							priority = int(p)
+						}
+						contributions = append(contributions, LegacyContextContribution{
+							Source:   source,
+							Content:  content,
+							Priority: priority,
+						})
+					}
+				}
+			}
+		}
+	}
+	return contributions
 }
 
 func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScope) ([]tool.Tool, error) {

@@ -608,8 +608,10 @@ internal fun NavGraphBuilder.addCreativeWorkshopRoutes(navController: NavHostCon
 
 internal fun NavGraphBuilder.addMoreRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.MORE) {
+        val drawerState = LocalDrawerState.current
         MoreScreen(
             onBack = { navController.popBackStack() },
+            onMenu = { drawerState.open() },
             onNavigate = { route ->
                 val targetRoute = when (route) {
                     "schedule" -> AmitiaRoutes.Main.SCHEDULE

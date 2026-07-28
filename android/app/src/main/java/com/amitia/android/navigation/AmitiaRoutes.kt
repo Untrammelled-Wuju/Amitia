@@ -339,7 +339,6 @@ object AmitiaRoutes {
     const val KEY_CALL_ID = "callId"
 
     val primaryRoutes: Set<String> = setOf(
-        Main.TODAY,
         Main.CHAT,
         Main.CHARACTER,
         Main.MEMORY,

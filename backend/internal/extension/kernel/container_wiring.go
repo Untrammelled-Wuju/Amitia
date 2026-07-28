@@ -173,6 +173,7 @@ type containerPlanExecutor struct {
 	moduleRepo  sqlite.ModuleRepository
 	contribRepo sqlite.ContributionRepository
 	enablement  enablement.StateStore
+	installer   *TypedContributionInstaller
 }
 
 func newContainerPlanExecutor(
@@ -181,13 +182,15 @@ func newContainerPlanExecutor(
 	moduleRepo sqlite.ModuleRepository,
 	contribRepo sqlite.ContributionRepository,
 	enablementStore enablement.StateStore,
+	installer *TypedContributionInstaller,
 ) *containerPlanExecutor {
 	return &containerPlanExecutor{
 		instRepo:    instRepo,
-		defRepo:     defRepo,
+		defRepo:      defRepo,
 		moduleRepo:  moduleRepo,
 		contribRepo: contribRepo,
 		enablement:  enablementStore,
+		installer:   installer,
 	}
 }
 
@@ -215,6 +218,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		}
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementEnabled)
 		result.Applied = append(result.Applied, "set_enablement")
+		if e.installer != nil {
+			e.installer.ActivateContributions(ctx, extID)
+			result.Applied = append(result.Applied, "activate_contributions")
+		}
 
 	case lifecycle_manager.CmdDisable:
 		if plan.CurrentState.Installation != nil {
@@ -230,8 +237,17 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		}
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
 		result.Applied = append(result.Applied, "set_enablement")
+		if e.installer != nil {
+			e.installer.DeactivateContributions(ctx, extID)
+			result.Applied = append(result.Applied, "deactivate_contributions")
+		}
 
 	case lifecycle_manager.CmdUninstall:
+		if e.installer != nil {
+			e.installer.StopRuntimeInstances(ctx, extID)
+			e.installer.UninstallContributions(ctx, extID)
+			result.Applied = append(result.Applied, "uninstall_contributions")
+		}
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
 		_ = e.contribRepo.DeleteContributions(ctx, extID)
 		_ = e.moduleRepo.DeleteModules(ctx, extID)
@@ -259,6 +275,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			return result, err
 		}
 		result.Applied = append(result.Applied, "create_installation")
+		if e.installer != nil {
+			e.installer.InstallContributions(ctx, plan.CurrentState.Contributions)
+			result.Applied = append(result.Applied, "install_contributions")
+		}
 
 	case lifecycle_manager.CmdUpdate:
 		if plan.CurrentState.Installation != nil {
@@ -307,6 +327,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "repair_installation")
+		}
+		if e.installer != nil {
+			e.installer.RepairContributions(ctx, extID)
+			result.Applied = append(result.Applied, "repair_contributions")
 		}
 
 	case lifecycle_manager.CmdEnableModule:

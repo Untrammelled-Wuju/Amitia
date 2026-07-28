@@ -11,24 +11,30 @@ type PermissionMappingEntry struct {
 
 func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 	return map[Method][]PermissionMappingEntry{
-		MethodStateGet:       {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodStateCAS:       {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateDelete:    {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateList:      {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodSecretGet:      {{PermissionID: "secret.read", Resource: "secret"}},
-		MethodResourceOpen:   {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceRead:   {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceWrite:  {{PermissionID: "resource.write", Resource: "resource"}},
-		MethodEventEmit:      {{PermissionID: "event.emit", Resource: "event"}},
-		MethodEventSubscribe: {{PermissionID: "event.subscribe", Resource: "event"}},
-		MethodScheduleCreate: {{PermissionID: "schedule.create", Resource: "schedule"}},
-		MethodScheduleCancel: {{PermissionID: "schedule.cancel", Resource: "schedule"}},
-		MethodToolExecute:    {{PermissionID: "tool.invoke", Resource: "tool"}},
-		MethodCharacterRead:  {{PermissionID: "character.read", Resource: "character"}},
+		MethodStateGet:         {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodStateCAS:         {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateDelete:      {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateList:       {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodSecretGet:        {{PermissionID: "secret.read", Resource: "secret"}},
+		MethodResourceOpen:     {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceRead:     {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceWrite:    {{PermissionID: "resource.write", Resource: "resource"}},
+		MethodResourceClose:    {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceStat:     {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodEventEmit:        {{PermissionID: "event.emit", Resource: "event"}},
+		MethodEventSubscribe:   {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodEventUnsubscribe: {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodScheduleCreate:   {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodScheduleCancel:   {{PermissionID: "schedule.cancel", Resource: "schedule"}},
+		MethodScheduleList:     {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodToolExecute:      {{PermissionID: "tool.invoke", Resource: "tool"}},
+		MethodCharacterRead:    {{PermissionID: "character.read", Resource: "character"}},
 		MethodConversationRead: {{PermissionID: "conversation.read", Resource: "conversation"}},
-		MethodMemoryQuery:    {{PermissionID: "memory.read", Resource: "memory"}},
-		MethodProviderInvoke: {{PermissionID: "provider.invoke", Resource: "provider"}},
-		MethodUINotify:       {{PermissionID: "ui.notify", Resource: "ui"}},
+		MethodMemoryQuery:      {{PermissionID: "memory.read", Resource: "memory"}},
+		MethodProviderInvoke:   {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodUINotify:         {{PermissionID: "ui.notify", Resource: "ui"}},
+		MethodUIDialog:          {{PermissionID: "ui.notify", Resource: "ui"}},
+		MethodUINavigate:       {{PermissionID: "ui.notify", Resource: "ui"}},
 	}
 }
 
@@ -42,6 +48,10 @@ func RoutePermissionForMethod(method Method) []PermissionRequirement {
 		out = append(out, PermissionRequirement{Name: e.PermissionID, Resource: e.Resource})
 	}
 	return out
+}
+
+func RouteScopeForMethod(method Method) ScopePolicy {
+	return ScopePolicy{}
 }
 
 func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegistry) {

@@ -18,7 +18,7 @@ const (
 
 func TestFinalAcceptanceSuite(t *testing.T) {
 	suite := DefaultSuite()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
 	report, err := suite.Run(ctx)

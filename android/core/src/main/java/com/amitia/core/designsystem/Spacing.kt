@@ -18,7 +18,7 @@ object AmitiaSpacing {
 }
 
 object AmitiaContentPadding {
-    val Horizontal = 20.dp
+    val Horizontal = 18.dp
     val ChatHorizontal = 16.dp
     val TabletMaxWidth = 840.dp
     val FormMaxWidth = 680.dp
@@ -26,13 +26,13 @@ object AmitiaContentPadding {
 }
 
 object AmitiaNavDimensions {
-    val BottomNavHeight = 68.dp
-    val BottomNavSidePadding = 16.dp
+    val BottomNavHeight = 71.dp
+    val BottomNavSidePadding = 14.dp
     val BottomNavTopOffset = 8.dp
     val NavRailWidth = 80.dp
     val SideNavMaxWidth = 240.dp
     val TopBarHeight = 56.dp
-    val ChatDockHeight = 56.dp
+    val ChatDockHeight = 62.dp
 }
 
 object AmitiaIconSize {

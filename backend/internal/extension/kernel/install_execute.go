@@ -268,6 +268,14 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		}
 	}
 
+	if r.container.ContributionInstaller != nil {
+		allContribs := make([]domain.ContributionDefinition, 0)
+		for _, mod := range def.Modules {
+			allContribs = append(allContribs, mod.Contributions...)
+		}
+		r.container.ContributionInstaller.InstallContributions(ctx, allContribs)
+	}
+
 	for _, mod := range def.Modules {
 		for _, contrib := range mod.Contributions {
 			if !isUIContributionKind(string(contrib.Kind)) {
@@ -325,6 +333,14 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 					Permissions: perms,
 				})
 				_ = r.container.PageHost.RegisterPage(ctx, pageDef)
+			if entryKind == extension_page_host.PageKindSchema && uiDef.Entry.SchemaPath != "" && r.container.SchemaRegistry != nil {
+				_ = r.container.SchemaRegistry.LoadFromPath(
+					string(uiDef.ExtensionID),
+					string(uiDef.ContributionID),
+					installedDir,
+					uiDef.Entry.SchemaPath,
+				)
+			}
 			}
 		}
 	}

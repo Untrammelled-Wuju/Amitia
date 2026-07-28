@@ -3,6 +3,7 @@ package desktop_update
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -294,7 +295,7 @@ func (dm *DownloadManager) doDownload(ctx context.Context, operationID, rawURL s
 		return fmt.Errorf("%w: size mismatch, expected %d got %d", ErrDownloadFailed, state.ExpectedSize, written)
 	}
 
-	actualHash, err := computeFileSHA256(state.TempPath)
+	actualHash, err := computeFileHash(state.TempPath, state.ExpectedHash)
 	if err != nil {
 		return fmt.Errorf("%w: hash computation failed: %v", ErrDownloadFailed, err)
 	}
@@ -356,7 +357,7 @@ func (dm *DownloadManager) redownloadFromStart(ctx context.Context, operationID,
 		return fmt.Errorf("%w: size mismatch", ErrDownloadFailed)
 	}
 
-	actualHash, err := computeFileSHA256(state.TempPath)
+	actualHash, err := computeFileHash(state.TempPath, state.ExpectedHash)
 	if err != nil {
 		return fmt.Errorf("%w: hash computation failed: %v", ErrDownloadFailed, err)
 	}
@@ -518,4 +519,25 @@ func computeFileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func computeFileSHA512(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha512.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func computeFileHash(path, expectedHash string) (string, error) {
+	if len(expectedHash) == 128 {
+		return computeFileSHA512(path)
+	}
+	return computeFileSHA256(path)
 }

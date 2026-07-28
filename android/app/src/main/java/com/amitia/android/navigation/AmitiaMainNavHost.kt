@@ -203,7 +203,7 @@ fun AmitiaMainNavHost(
                         }
                     }
                     NavEvent.OpenHome -> {
-                        navController.navigate(AmitiaRoutes.Main.TODAY) {
+                        navController.navigate(AmitiaRoutes.Main.CHAT) {
                             launchSingleTop = true
                         }
                     }
@@ -215,7 +215,7 @@ fun AmitiaMainNavHost(
 
     NavHost(
         navController = navController,
-        startDestination = AmitiaRoutes.Main.TODAY,
+        startDestination = AmitiaRoutes.Main.CHAT,
         modifier = modifier
     ) {
         addTodayRoutes(navController)
@@ -280,11 +280,13 @@ private fun NavGraphBuilder.addTodayRoutes(navController: NavHostController) {
 
 private fun NavGraphBuilder.addChatRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.CHAT) {
+        val drawerState = LocalDrawerState.current
         ChatScreen(
             onOpenCharacter = { id ->
                 navController.navigate(AmitiaRoutes.Main.characterDetail(id))
             },
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onMenu = { drawerState.open() }
         )
     }
 
@@ -293,12 +295,14 @@ private fun NavGraphBuilder.addChatRoutes(navController: NavHostController) {
         arguments = listOf(navArgument(AmitiaRoutes.KEY_CHARACTER_ID) { type = NavType.StringType })
     ) { backStackEntry ->
         val characterId = backStackEntry.arguments?.getString(AmitiaRoutes.KEY_CHARACTER_ID).orEmpty()
+        val drawerState = LocalDrawerState.current
         ChatScreen(
             characterId = characterId,
             onOpenCharacter = { id ->
                 navController.navigate(AmitiaRoutes.Main.characterDetail(id))
             },
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onMenu = { drawerState.open() }
         )
     }
 
@@ -452,13 +456,15 @@ private fun NavGraphBuilder.addChatRoutes(navController: NavHostController) {
 
 private fun NavGraphBuilder.addCharacterRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.CHARACTER) {
+        val drawerState = LocalDrawerState.current
         CharacterScreen(
             onOpenDetail = { id ->
                 navController.navigate(AmitiaRoutes.Main.characterDetail(id))
             },
             onCreate = {
                 navController.navigate(AmitiaRoutes.Main.CHARACTER_CREATE)
-            }
+            },
+            onMenu = { drawerState.open() }
         )
     }
 
@@ -583,6 +589,7 @@ private fun NavGraphBuilder.addCharacterRoutes(navController: NavHostController)
 
 private fun NavGraphBuilder.addMemoryRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.MEMORY) {
+        val drawerState = LocalDrawerState.current
         MemoryHomeScreen(
             onSearch = { navController.navigate(AmitiaRoutes.Main.MEMORY_SEARCH) },
             onTimeline = { navController.navigate(AmitiaRoutes.Main.MEMORY_TIMELINE) },
@@ -590,7 +597,9 @@ private fun NavGraphBuilder.addMemoryRoutes(navController: NavHostController) {
             onWorldBook = { navController.navigate(AmitiaRoutes.Main.WORLD_BOOK_LIST) },
             onGraph = { navController.navigate(AmitiaRoutes.Main.MEMORY_GRAPH) },
             onPending = { navController.navigate(AmitiaRoutes.Main.PENDING_MEMORY) },
-            onMemoryDetail = { id -> navController.navigate(AmitiaRoutes.Main.memoryDetail(id)) }
+            onMemoryDetail = { id -> navController.navigate(AmitiaRoutes.Main.memoryDetail(id)) },
+            onMenu = { drawerState.open() },
+            onCreate = { navController.navigate(AmitiaRoutes.Main.MEMORY_NEW) }
         )
     }
 
@@ -797,12 +806,14 @@ private fun NavGraphBuilder.addEmojiRoutes(navController: NavHostController) {
 
 private fun NavGraphBuilder.addScheduleRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.SCHEDULE) {
+        val drawerState = LocalDrawerState.current
         ScheduleHomeScreen(
             onBack = { navController.popBackStack() },
             onNewSchedule = { navController.navigate(AmitiaRoutes.Main.SCHEDULE_EDIT) },
             onOpenCalendar = { navController.navigate(AmitiaRoutes.Main.SCHEDULE_CALENDAR) },
             onOpenDetail = { id -> navController.navigate(AmitiaRoutes.Main.scheduleDetail(id)) },
-            onOpenProactiveWindow = { navController.navigate(AmitiaRoutes.Main.PROACTIVE_TIME_WINDOW) }
+            onOpenProactiveWindow = { navController.navigate(AmitiaRoutes.Main.PROACTIVE_TIME_WINDOW) },
+            onMenu = { drawerState.open() }
         )
     }
 

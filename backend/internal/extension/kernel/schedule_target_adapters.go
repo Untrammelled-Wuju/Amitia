@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
 type HostAPIToolExecutorAdapter struct {
@@ -69,16 +72,143 @@ func (a *HostAPIToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID str
 	}, nil
 }
 
-type KernelWorkflowFacadeAdapter struct{}
+type KernelToolExecutorAdapter struct {
+	Kernel *execution.ExecutionPipeline
+}
 
-func NewKernelWorkflowFacadeAdapter() *KernelWorkflowFacadeAdapter {
-	return &KernelWorkflowFacadeAdapter{}
+func NewKernelToolExecutorAdapter(kernel *execution.ExecutionPipeline) *KernelToolExecutorAdapter {
+	return &KernelToolExecutorAdapter{Kernel: kernel}
+}
+
+func (a *KernelToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string) (*schedule.ToolExecutionResult, error) {
+	if a == nil || a.Kernel == nil {
+		return &schedule.ToolExecutionResult{
+			ErrorCode:    schedule.ErrCodeTargetNotFound,
+			ErrorMessage: "execution kernel not configured",
+		}, nil
+	}
+
+	inputPayload := input
+	if len(inputPayload) == 0 {
+		inputPayload = []byte(`{}`)
+	}
+
+	invocationID := operationID
+	if invocationID == "" {
+		invocationID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
+	}
+
+	invocation := capability.ToolInvocationContext{
+		InvocationID: invocationID,
+		Source:       capability.InvocationSourceScheduledTask,
+		TraceID:      invocationID,
+	}
+
+	req := execution.ToolExecutionRequest{
+		ToolID:     capability.CapabilityID(toolID),
+		Input:      json.RawMessage(inputPayload),
+		Invocation: invocation,
+	}
+
+	result := a.Kernel.Execute(ctx, req)
+
+	if result.Status != capability.ToolResultStatusSuccess {
+		errCode := schedule.ErrCodeTargetExecutionFailed
+		errMsg := "tool execution failed"
+		if result.Error != nil {
+			if result.Error.Code != "" {
+				errCode = result.Error.Code
+			}
+			if result.Error.Message != "" {
+				errMsg = result.Error.Message
+			}
+		}
+		return &schedule.ToolExecutionResult{
+			ErrorCode:    errCode,
+			ErrorMessage: errMsg,
+		}, nil
+	}
+
+	var outputBytes []byte
+	if len(result.Structured) > 0 {
+		outputBytes = result.Structured
+	} else if len(result.Content) > 0 {
+		for _, c := range result.Content {
+			if c.Type == capability.ToolContentText && c.Text != "" {
+				outputBytes = []byte(c.Text)
+				break
+			}
+		}
+	}
+	if len(outputBytes) == 0 {
+		outputBytes = []byte(`{}`)
+	}
+
+	return &schedule.ToolExecutionResult{
+		ResultJSON: outputBytes,
+	}, nil
+}
+
+type KernelWorkflowFacadeAdapter struct {
+	executor *workflow.WorkflowExecutor
+}
+
+func NewKernelWorkflowFacadeAdapter(executor *workflow.WorkflowExecutor) *KernelWorkflowFacadeAdapter {
+	return &KernelWorkflowFacadeAdapter{executor: executor}
 }
 
 func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workflowID string, input []byte, operationID string) (*schedule.WorkflowExecutionResult, error) {
+	if a == nil || a.executor == nil {
+		return &schedule.WorkflowExecutionResult{
+			ErrorCode:    "WORKFLOW_NOT_CONFIGURED",
+			ErrorMessage: "workflow executor not configured",
+		}, nil
+	}
+
+	inputPayload := input
+	if len(inputPayload) == 0 {
+		inputPayload = []byte(`{}`)
+	}
+
+	invocationID := operationID
+	if invocationID == "" {
+		invocationID = fmt.Sprintf("sched-wf-%s", uuid.NewString())
+	}
+
+	req := workflow.ExecuteRequest{
+		WorkflowID: workflowID,
+		Input:      json.RawMessage(inputPayload),
+		Context: workflow.ExecutionContext{
+			OperationID:  operationID,
+			InvocationID: invocationID,
+		},
+	}
+
+	result, err := a.executor.Execute(ctx, req)
+	if err != nil {
+		return &schedule.WorkflowExecutionResult{
+			OperationID:  operationID,
+			ErrorCode:    schedule.ErrCodeTargetExecutionFailed,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	if !result.Success {
+		return &schedule.WorkflowExecutionResult{
+			OperationID:  operationID,
+			ErrorCode:    schedule.ErrCodeTargetExecutionFailed,
+			ErrorMessage: result.Error,
+		}, nil
+	}
+
+	outputBytes := result.Output
+	if len(outputBytes) == 0 {
+		outputBytes = []byte(`{}`)
+	}
+
 	return &schedule.WorkflowExecutionResult{
-		ErrorCode:    "WORKFLOW_NOT_IMPLEMENTED",
-		ErrorMessage: "workflow executor not yet migrated to kernel facade",
+		OperationID: operationID,
+		ResultJSON: outputBytes,
 	}, nil
 }
 
@@ -211,4 +341,5 @@ func BuildScheduleRuntimeHandlerFn(supervisor runtime_supervisor.Supervisor) sch
 }
 
 var _ schedule.ToolExecutor = (*HostAPIToolExecutorAdapter)(nil)
+var _ schedule.ToolExecutor = (*KernelToolExecutorAdapter)(nil)
 var _ schedule.WorkflowExecutor = (*KernelWorkflowFacadeAdapter)(nil)

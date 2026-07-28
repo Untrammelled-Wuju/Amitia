@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
+	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -59,20 +60,59 @@ func (a *EventScopeCheckerAdapter) CheckSubscriptionScope(ctx context.Context, d
 	if a.Manager == nil {
 		return false, "scope_manager_missing", nil
 	}
-	if def.ScopeRule.RequiredScope == "" && !def.ScopeRule.CharacterBinding && !def.ScopeRule.ConversationBinding {
-		return true, "", nil
+	if envelope.IsFromHost() {
+		if def.ScopeRule.RequiredScope == "" && !def.ScopeRule.CharacterBinding && !def.ScopeRule.ConversationBinding {
+			return true, "", nil
+		}
+		req := scope.ScopeEvaluationRequest{
+			SubjectType: scope.SubjectExtension,
+			SubjectID:   def.ExtensionID,
+			ExtensionID: def.ExtensionID,
+			ModuleID:    def.ModuleID,
+		}
+		decision := a.Manager.Evaluate(ctx, req)
+		if decision.Allowed {
+			return true, "", nil
+		}
+		reason := "delivery_rejected_scope"
+		if len(decision.Reasons) > 0 {
+			reason = decision.Reasons[0].Code
+		}
+		return false, reason, nil
+	}
+	if envelope.ProducerID == def.ExtensionID {
+		if def.ScopeRule.RequiredScope == "" && !def.ScopeRule.CharacterBinding && !def.ScopeRule.ConversationBinding {
+			return true, "", nil
+		}
+		req := scope.ScopeEvaluationRequest{
+			SubjectType: scope.SubjectExtension,
+			SubjectID:   def.ExtensionID,
+			ExtensionID: def.ExtensionID,
+			ModuleID:    def.ModuleID,
+		}
+		decision := a.Manager.Evaluate(ctx, req)
+		if decision.Allowed {
+			return true, "", nil
+		}
+		reason := "delivery_rejected_scope"
+		if len(decision.Reasons) > 0 {
+			reason = decision.Reasons[0].Code
+		}
+		return false, reason, nil
 	}
 	req := scope.ScopeEvaluationRequest{
-		SubjectType: scope.SubjectExtension,
-		SubjectID:   def.ExtensionID,
-		ExtensionID: def.ExtensionID,
-		ModuleID:    def.ModuleID,
+		SubjectType:  scope.SubjectExtension,
+		SubjectID:    def.ExtensionID,
+		ExtensionID:  def.ExtensionID,
+		ModuleID:     def.ModuleID,
+		ResourceType: "cross_extension_event",
+		ResourceID:   envelope.ProducerID,
 	}
 	decision := a.Manager.Evaluate(ctx, req)
 	if decision.Allowed {
 		return true, "", nil
 	}
-	reason := "delivery_rejected_scope"
+	reason := "cross_extension_denied"
 	if len(decision.Reasons) > 0 {
 		reason = decision.Reasons[0].Code
 	}
@@ -122,14 +162,28 @@ func (a *EventDependencyCheckerAdapter) CheckSubscriptionDependencies(ctx contex
 }
 
 type EventRuntimeCheckerAdapter struct {
-	Supervisor runtime_supervisor.Supervisor
+	Supervisor          runtime_supervisor.Supervisor
+	EnablementResolver  enablement.EffectiveStateResolver
 }
 
-func NewEventRuntimeCheckerAdapter(supervisor runtime_supervisor.Supervisor) *EventRuntimeCheckerAdapter {
-	return &EventRuntimeCheckerAdapter{Supervisor: supervisor}
+func NewEventRuntimeCheckerAdapter(supervisor runtime_supervisor.Supervisor, enablementResolver enablement.EffectiveStateResolver) *EventRuntimeCheckerAdapter {
+	return &EventRuntimeCheckerAdapter{Supervisor: supervisor, EnablementResolver: enablementResolver}
 }
 
 func (a *EventRuntimeCheckerAdapter) CheckSubscriptionRuntime(ctx context.Context, def event.EventSubscriptionDefinition) (bool, string, error) {
+	if a.EnablementResolver != nil {
+		subject := enablement.StateSubject{
+			Kind: enablement.SubjectExtension,
+			ID:   def.ExtensionID,
+		}
+		eff := a.EnablementResolver.Resolve(ctx, subject, enablement.StateRuntimeContext{})
+		if !eff.Enabled {
+			return false, "extension_disabled", nil
+		}
+		if !eff.RuntimeReady {
+			return false, "runtime_not_ready", nil
+		}
+	}
 	if def.RuntimeBinding.Entry == "" {
 		return true, "", nil
 	}
@@ -175,12 +229,13 @@ func BuildEventEffectiveResolver(
 	depResolver dependency.Resolver,
 	supervisor runtime_supervisor.Supervisor,
 	dispatcher *event.Dispatcher,
+	enablementResolver enablement.EffectiveStateResolver,
 ) event.EffectiveResolver {
 	return event.NewDefaultEffectiveResolver(
 		NewEventPermissionCheckerAdapter(broker),
 		NewEventScopeCheckerAdapter(scopeManager),
 		NewEventDependencyCheckerAdapter(depResolver),
-		NewEventRuntimeCheckerAdapter(supervisor),
+		NewEventRuntimeCheckerAdapter(supervisor, enablementResolver),
 		NewEventCircuitStateLookupAdapter(dispatcher),
 	)
 }

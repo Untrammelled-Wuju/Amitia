@@ -52,6 +52,7 @@ type UpdateManager struct {
 	activeByExt     map[string]string
 	genCounter      int64
 	currentVersions map[string]string
+	registryClients map[string]*RegistryClient
 }
 
 func NewUpdateManager(dataDir, hostVersion string) *UpdateManager {
@@ -78,6 +79,7 @@ func NewUpdateManager(dataDir, hostVersion string) *UpdateManager {
 		activeByExt:     make(map[string]string),
 		genCounter:      0,
 		currentVersions: make(map[string]string),
+		registryClients: make(map[string]*RegistryClient),
 	}
 
 	SetDownloadStateProvider(func(operationID string) (*DownloadState, bool) {
@@ -213,8 +215,24 @@ func (m *UpdateManager) CheckForUpdates(ctx context.Context, extensionID string)
 	return results, nil
 }
 
+func (m *UpdateManager) getRegistryClient(source ExtensionUpdateSource) *RegistryClient {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if client, ok := m.registryClients[source.SourceID]; ok {
+		return client
+	}
+	client := NewRegistryClient(source.BaseURL)
+	m.registryClients[source.SourceID] = client
+	return client
+}
+
 func (m *UpdateManager) queryRegistry(ctx context.Context, source ExtensionUpdateSource, extensionID string) *ExtensionUpdateMetadata {
-	return nil
+	client := m.getRegistryClient(source)
+	meta, err := client.QueryExtension(ctx, extensionID)
+	if err != nil || meta == nil {
+		return nil
+	}
+	return meta
 }
 
 func (m *UpdateManager) CreateUpdateOperation(ctx context.Context, extensionID string, metadata ExtensionUpdateMetadata) (*UpdateOperation, error) {
@@ -297,7 +315,12 @@ func (m *UpdateManager) DownloadUpdate(ctx context.Context, operationID string) 
 		allowInternal = true
 	}
 
-	if err := m.downloads.StartDownload(ctx, operationID, op.Metadata.PackageURL, op.Metadata.PackageSHA256, op.Metadata.PackageSize, allowInternal); err != nil {
+	expectedHash := op.Metadata.PackageSHA256
+	if op.Metadata.PackageSHA512 != "" {
+		expectedHash = op.Metadata.PackageSHA512
+	}
+
+	if err := m.downloads.StartDownload(ctx, operationID, op.Metadata.PackageURL, expectedHash, op.Metadata.PackageSize, allowInternal); err != nil {
 		m.journal.FailStep(operationID, "download", err.Error(), "cancel download")
 		m.downloads.CancelDownload(operationID)
 		m.failOperation(op, "download_failed", err.Error())
@@ -399,16 +422,31 @@ func (m *UpdateManager) VerifyUpdate(ctx context.Context, operationID string) er
 		return err
 	}
 
-	if op.Metadata.PackageSHA256 != "" {
+	if op.Metadata.PackageSHA512 != "" && len(op.Metadata.PackageSHA512) == 128 {
+		actualSHA512, err := computeFileSHA512(op.DownloadPath)
+		if err != nil {
+			m.journal.FailStep(operationID, "verify", err.Error(), "")
+			m.failOperation(op, "verify_failed", err.Error())
+			return err
+		}
+		if actualSHA512 != op.Metadata.PackageSHA512 {
+			err := fmt.Errorf("%w: expected %s got %s", ErrHashMismatch, op.Metadata.PackageSHA512, actualSHA512)
+			m.journal.FailStep(operationID, "verify", err.Error(), "rollback")
+			m.compensate(op, "hash mismatch during verification")
+			return err
+		}
+		op.PackageHash = actualSHA512
+	} else if op.Metadata.PackageSHA256 != "" {
 		if len(op.Metadata.PackageSHA256) == 64 && actualHash != op.Metadata.PackageSHA256 {
 			err := fmt.Errorf("%w: expected %s got %s", ErrHashMismatch, op.Metadata.PackageSHA256, actualHash)
 			m.journal.FailStep(operationID, "verify", err.Error(), "rollback")
 			m.compensate(op, "hash mismatch during verification")
 			return err
 		}
+		op.PackageHash = actualHash
+	} else {
+		op.PackageHash = actualHash
 	}
-
-	op.PackageHash = actualHash
 
 	if err := m.transitionState(op, StateStaging); err != nil {
 		return err

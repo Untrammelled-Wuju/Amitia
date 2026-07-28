@@ -6,49 +6,56 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.amitia.core.designsystem.AmitiaColors
+import com.amitia.core.designsystem.AmitiaContentPadding
+import com.amitia.core.designsystem.AmitiaGlassSurface
 import com.amitia.core.designsystem.AmitiaIconSize
 import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.AmitiaSpacing
 import com.amitia.core.designsystem.AmitiaTheme
+import com.amitia.core.designsystem.GlassLevel
 import com.amitia.core.designsystem.ScreenState
 import com.amitia.core.designsystem.component.AmitiaEmptyState
-import com.amitia.core.designsystem.component.AmitiaEntryCard
 import com.amitia.core.designsystem.component.AmitiaErrorState
-import com.amitia.core.designsystem.component.AmitiaSearchField
-import com.amitia.core.designsystem.component.AmitiaSectionHeader
-import com.amitia.core.designsystem.component.AmitiaTopBar
 import com.amitia.core.designsystem.component.InlineLoading
-import com.amitia.core.model.MemoryDto
 
 @Composable
 fun MemoryHomeScreen(
@@ -59,6 +66,8 @@ fun MemoryHomeScreen(
     onGraph: () -> Unit,
     onPending: () -> Unit,
     onMemoryDetail: (String) -> Unit,
+    onMenu: () -> Unit = {},
+    onCreate: () -> Unit = {},
     viewModel: MemoryPagesViewModel = hiltViewModel()
 ) {
     val state by viewModel.timelineState.collectAsStateWithLifecycle()
@@ -70,7 +79,9 @@ fun MemoryHomeScreen(
         onWorldBook = onWorldBook,
         onGraph = onGraph,
         onPending = onPending,
-        onMemoryDetail = onMemoryDetail
+        onMemoryDetail = onMemoryDetail,
+        onMenu = onMenu,
+        onCreate = onCreate
     )
 }
 
@@ -83,94 +94,41 @@ fun MemoryHomeContent(
     onWorldBook: () -> Unit,
     onGraph: () -> Unit,
     onPending: () -> Unit,
-    onMemoryDetail: (String) -> Unit
+    onMemoryDetail: (String) -> Unit,
+    onMenu: () -> Unit = {},
+    onCreate: () -> Unit = {}
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        AmitiaTopBar(title = "记忆")
+    var selectedTab by remember { mutableStateOf(0) }
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = AmitiaSpacing.Base, vertical = AmitiaSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
+            contentPadding = PaddingValues(horizontal = AmitiaContentPadding.Horizontal)
         ) {
-            item(key = "search") {
-                val interactionSource = remember { MutableInteractionSource() }
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                            role = Role.Button,
-                            onClick = onSearch
-                        ),
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = AmitiaSpacing.Base, vertical = AmitiaSpacing.Sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
-                    ) {
-                        Icon(
-                            imageVector = AmitiaIcons.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(AmitiaIconSize.Medium)
-                        )
-                        Text(
-                            text = "搜索记忆",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            item(key = "topline") {
+                MemoryTopLine(onMenu = onMenu, onSearch = onSearch, onNew = onCreate)
+            }
+            item(key = "segmented") {
+                MemorySegmentedControl(
+                    selectedIndex = selectedTab,
+                    onSelect = { index ->
+                        selectedTab = index
+                        when (index) {
+                            0 -> onTimeline()
+                            1 -> onLongTerm()
+                            2 -> onGraph()
+                        }
                     }
-                }
+                )
             }
-
-            item(key = "entries") {
-                Column(verticalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)) {
-                    MemoryEntryRow(
-                        icon = AmitiaIcons.Schedule,
-                        title = "时间线",
-                        subtitle = "按时间浏览所有记忆",
-                        onClick = onTimeline
-                    )
-                    MemoryEntryRow(
-                        icon = AmitiaIcons.Psychology,
-                        title = "长期记忆",
-                        subtitle = "用户事实、偏好与关系",
-                        onClick = onLongTerm
-                    )
-                    MemoryEntryRow(
-                        icon = AmitiaIcons.MenuBook,
-                        title = "世界书",
-                        subtitle = "世界观与背景设定",
-                        onClick = onWorldBook
-                    )
-                    MemoryEntryRow(
-                        icon = AmitiaIcons.Hub,
-                        title = "记忆图谱",
-                        subtitle = "可视化记忆关联",
-                        onClick = onGraph
-                    )
-                    MemoryEntryRow(
-                        icon = AmitiaIcons.HelpOutlined,
-                        title = "待确认记忆",
-                        subtitle = "AI建议写入的记忆",
-                        onClick = onPending
-                    )
-                }
-            }
-
-            item(key = "recent_header") {
-                AmitiaSectionHeader(title = "最近重要记忆")
-            }
-
             when (state) {
                 is ScreenState.Loading -> {
                     item(key = "loading") {
-                        Box(modifier = Modifier.fillMaxWidth().padding(AmitiaSpacing.Xl), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 80.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             InlineLoading(message = "加载记忆...")
                         }
                     }
@@ -180,9 +138,11 @@ fun MemoryHomeContent(
                         AmitiaErrorState(
                             icon = AmitiaIcons.Error,
                             title = "加载失败",
-                            description = state.error.message,
+                            description = (state as ScreenState.Error).error.message,
                             onRetry = {},
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 40.dp)
                         )
                     }
                 }
@@ -192,20 +152,44 @@ fun MemoryHomeContent(
                             icon = AmitiaIcons.Memory,
                             title = "暂无记忆",
                             description = "随着对话的进行，记忆会自动保存到这里",
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 40.dp)
                         )
                     }
                 }
                 is ScreenState.Content -> {
-                    val recentItems = state.data.flatMap { it.items }.take(5)
-                    items(recentItems, key = { it.id }) { entry ->
-                        RecentMemoryCard(entry = entry, onClick = { onMemoryDetail(entry.id) })
+                    val data = (state as ScreenState.Content<List<MemoryTimelineGroup>>).data
+                    data.forEachIndexed { groupIndex, group ->
+                        item(key = "day_${groupIndex}") {
+                            TimelineDayHeader(title = group.title)
+                        }
+                        items(group.items, key = { "mem_${groupIndex}_${it.id}" }) { entry ->
+                            TimelineItem(
+                                entry = entry,
+                                onClick = { onMemoryDetail(entry.id) }
+                            )
+                        }
+                    }
+                    item(key = "bottom_spacer") {
+                        Spacer(modifier = Modifier.height(AmitiaSpacing.Xl))
                     }
                 }
                 is ScreenState.Partial -> {
-                    val recentItems = state.data.flatMap { it.items }.take(5)
-                    items(recentItems, key = { it.id }) { entry ->
-                        RecentMemoryCard(entry = entry, onClick = { onMemoryDetail(entry.id) })
+                    val data = (state as ScreenState.Partial<List<MemoryTimelineGroup>>).data
+                    data.forEachIndexed { groupIndex, group ->
+                        item(key = "day_${groupIndex}") {
+                            TimelineDayHeader(title = group.title)
+                        }
+                        items(group.items, key = { "mem_${groupIndex}_${it.id}" }) { entry ->
+                            TimelineItem(
+                                entry = entry,
+                                onClick = { onMemoryDetail(entry.id) }
+                            )
+                        }
+                    }
+                    item(key = "bottom_spacer") {
+                        Spacer(modifier = Modifier.height(AmitiaSpacing.Xl))
                     }
                 }
             }
@@ -214,29 +198,200 @@ fun MemoryHomeContent(
 }
 
 @Composable
-private fun MemoryEntryRow(
+private fun MemoryTopLine(
+    onMenu: () -> Unit,
+    onSearch: () -> Unit,
+    onNew: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = AmitiaSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
+    ) {
+        TopLineIconButton(
+            icon = AmitiaIcons.Menu,
+            contentDescription = "菜单",
+            onClick = onMenu
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "记忆",
+                fontSize = 27.sp,
+                fontWeight = FontWeight(620),
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = "关系不是记录，而是持续发生。",
+                fontSize = 13.sp,
+                color = AmitiaColors.OnSurfaceMuted
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
+        ) {
+            TopLineIconButton(
+                icon = AmitiaIcons.Search,
+                contentDescription = "搜索记忆",
+                onClick = onSearch
+            )
+            TopLineIconButton(
+                icon = AmitiaIcons.Add,
+                contentDescription = "新建记忆",
+                onClick = onNew
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopLineIconButton(
     icon: ImageVector,
-    title: String,
-    subtitle: String,
+    contentDescription: String?,
     onClick: () -> Unit
 ) {
-    AmitiaEntryCard(
-        onClick = onClick,
-        leading = {
+    val interactionSource = remember { MutableInteractionSource() }
+    AmitiaGlassSurface(
+        level = GlassLevel.Chip,
+        modifier = Modifier.size(44.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(AmitiaIconSize.Medium)
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(AmitiaIconSize.Nav)
             )
-        },
-        title = title,
-        subtitle = subtitle
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MemorySegmentedControl(
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit
+) {
+    val tabs = listOf("时间线", "卡片", "关系图谱")
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, label ->
+                val isActive = index == selectedIndex
+                Surface(
+                    onClick = { onSelect(index) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isActive) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    shadowElevation = if (isActive) 2.dp else 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 12.sp,
+                            color = if (isActive) MaterialTheme.colorScheme.onSurface else AmitiaColors.OnSurfaceMuted,
+                            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineDayHeader(title: String) {
+    Text(
+        text = title,
+        fontSize = 12.sp,
+        fontWeight = FontWeight(650),
+        color = AmitiaColors.OnSurfaceMuted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 5.dp, start = 2.dp, end = 2.dp)
     )
 }
 
 @Composable
-private fun RecentMemoryCard(entry: MemoryTimelineEntry, onClick: () -> Unit) {
+private fun TimelineItem(
+    entry: MemoryTimelineEntry,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max)
+            .padding(bottom = 9.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        TimelineAxis()
+        MemoryCard(entry = entry, onClick = onClick)
+    }
+}
+
+@Composable
+private fun TimelineAxis() {
+    Column(
+        modifier = Modifier
+            .width(16.dp)
+            .fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(13.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(9.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
+    }
+}
+
+@Composable
+private fun MemoryCard(
+    entry: MemoryTimelineEntry,
+    onClick: () -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     Surface(
         modifier = Modifier
@@ -247,87 +402,44 @@ private fun RecentMemoryCard(entry: MemoryTimelineEntry, onClick: () -> Unit) {
                 role = Role.Button,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(21.dp),
         color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
-            modifier = Modifier.padding(AmitiaSpacing.Base),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Base)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp, 36.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(importanceColor(entry.importance))
-            )
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
-                    text = entry.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    text = entry.source,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
-                Spacer(modifier = Modifier.height(AmitiaSpacing.Xs))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AmitiaSpacing.Sm)
-                ) {
-                    Text(
-                        text = entry.timestamp,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = entry.source,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = entry.character,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = entry.timestamp,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
             }
-            ImportanceBadge(level = entry.importance)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = entry.content,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = entry.character,
+                fontSize = 12.sp,
+                color = AmitiaColors.OnSurfaceMuted,
+                lineHeight = 19.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-    }
-}
-
-@Composable
-private fun ImportanceBadge(level: Int) {
-    val color = importanceColor(level)
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.12f)
-    ) {
-        Text(
-            text = "P$level",
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = AmitiaSpacing.Sm, vertical = AmitiaSpacing.Xxs)
-        )
-    }
-}
-
-private fun importanceColor(level: Int): androidx.compose.ui.graphics.Color {
-    return when {
-        level >= 4 -> androidx.compose.ui.graphics.Color(0xFFE85D4E)
-        level >= 3 -> androidx.compose.ui.graphics.Color(0xFFF5A623)
-        else -> androidx.compose.ui.graphics.Color(0xFF6B7280)
     }
 }
 
@@ -350,7 +462,9 @@ private fun MemoryHomeLightPreview() {
             onWorldBook = {},
             onGraph = {},
             onPending = {},
-            onMemoryDetail = {}
+            onMemoryDetail = {},
+            onMenu = {},
+            onCreate = {}
         )
     }
 }
@@ -367,7 +481,9 @@ private fun MemoryHomeDarkPreview() {
             onWorldBook = {},
             onGraph = {},
             onPending = {},
-            onMemoryDetail = {}
+            onMemoryDetail = {},
+            onMenu = {},
+            onCreate = {}
         )
     }
 }

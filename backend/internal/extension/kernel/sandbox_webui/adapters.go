@@ -27,6 +27,7 @@ type BridgeDataSourceProvider struct {
 	mu       sync.RWMutex
 	data     map[string]json.RawMessage
 	channels map[string][]chan json.RawMessage
+	handler  func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error)
 }
 
 func NewBridgeDataSourceProvider() *BridgeDataSourceProvider {
@@ -36,7 +37,18 @@ func NewBridgeDataSourceProvider() *BridgeDataSourceProvider {
 	}
 }
 
+func NewBridgeDataSourceProviderWithHandler(handler func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error)) *BridgeDataSourceProvider {
+	return &BridgeDataSourceProvider{
+		data:     make(map[string]json.RawMessage),
+		channels: make(map[string][]chan json.RawMessage),
+		handler:  handler,
+	}
+}
+
 func (p *BridgeDataSourceProvider) FetchData(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
+	if p.handler != nil {
+		return p.handler(ctx, sessionID, sourceID, params)
+	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if data, exists := p.data[sourceID]; exists {

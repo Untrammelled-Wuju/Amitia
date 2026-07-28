@@ -113,6 +113,7 @@ func convertMetadata(m desktop_update.ExtensionUpdateMetadata) desktop.Extension
 		ManifestVersion:    m.ManifestVersion,
 		PackageURL:         m.PackageURL,
 		PackageSHA256:      m.PackageSHA256,
+		PackageSHA512:      m.PackageSHA512,
 		PackageSize:        m.PackageSize,
 		PublisherID:        m.PublisherID,
 		PublisherKeyID:     m.PublisherKeyID,

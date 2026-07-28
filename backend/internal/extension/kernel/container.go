@@ -61,6 +61,7 @@ type Container struct {
 	PackageSecurity      *package_security.PackageSecurityService
 	LifecycleManager     *lifecycle_manager.Manager
 	ContributionRegistry *contribution.ContributionRegistry
+	ContributionInstaller *TypedContributionInstaller
 	DependencyResolver   dependency.Resolver
 	RuntimeSupervisor    runtime_supervisor.Supervisor
 	ExecutionKernel      *execution.ExecutionPipeline
@@ -69,6 +70,9 @@ type Container struct {
 	ScopeManager         scope.ScopeManager
 	AgentSkillCatalog    *agent_skill.AgentSkillCatalog
 	WorkflowRegistry     *workflow.WorkflowRegistry
+	WorkflowExecutor     *workflow.WorkflowExecutor
+	WorkflowDefRepo      *sqlite.WorkflowDefinitionRepository
+	WorkflowExecRepo     *sqlite.WorkflowExecutionRepository
 	EnablementService    *enablement.EnablementService
 	EnablementResolver   enablement.EffectiveStateResolver
 
@@ -104,6 +108,7 @@ type Container struct {
 	PageHost           *extension_page_host.PageHost
 	SchemaValidator    *schema_ui.Validator
 	SchemaCompilerCache *schema_ui.CompilerCache
+	SchemaRegistry     *schema_ui.SchemaRegistry
 	SandboxHost        *sandbox_webui.Host
 	ChatExtensionRegistry *chat_ui_extension.ChatExtensionRegistry
 	OrderingEngine     *ui_ordering.OrderingEngine

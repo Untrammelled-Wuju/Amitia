@@ -11,6 +11,7 @@ type ExtensionUpdateMetadata struct {
 	ManifestVersion    int
 	PackageURL         string
 	PackageSHA256      string
+	PackageSHA512      string
 	PackageSize        int64
 	PublisherID        string
 	PublisherKeyID     string
@@ -45,8 +46,8 @@ func (m *ExtensionUpdateMetadata) Validate() error {
 	if m.PackageURL == "" {
 		return fmt.Errorf("%w: package url required", ErrInvalidMetadata)
 	}
-	if m.PackageSHA256 == "" {
-		return fmt.Errorf("%w: package sha256 required", ErrInvalidMetadata)
+	if m.PackageSHA256 == "" && m.PackageSHA512 == "" {
+		return fmt.Errorf("%w: package sha256 or sha512 required", ErrInvalidMetadata)
 	}
 	if m.PublisherID == "" {
 		return fmt.Errorf("%w: publisher id required", ErrInvalidMetadata)

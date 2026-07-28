@@ -7,12 +7,12 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 
 object AmitiaRadius {
-    val Xs = 8.dp
-    val S = 12.dp
-    val M = 16.dp
-    val L = 20.dp
-    val XL = 24.dp
-    val XXL = 28.dp
+    val Xs = 10.dp
+    val S = 14.dp
+    val M = 18.dp
+    val L = 22.dp
+    val XL = 26.dp
+    val XXL = 30.dp
     val Hero = 32.dp
     val Pill = 50.dp
 }

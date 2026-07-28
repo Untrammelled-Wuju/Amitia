@@ -1374,6 +1374,81 @@ var schemaMigrations = []string{
 		cooldown_seconds INTEGER NOT NULL DEFAULT 60,
 		updated_at DATETIME NOT NULL
 	)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_kv_state (
+		extension_id TEXT NOT NULL,
+		module_id TEXT NOT NULL,
+		key TEXT NOT NULL,
+		value TEXT,
+		version INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (extension_id, module_id, key)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_kv_state_ext_id ON extension_kv_state(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_kv_state_ext_mod ON extension_kv_state(extension_id, module_id)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_definitions (
+		workflow_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		module_id TEXT,
+		name TEXT NOT NULL,
+		description TEXT,
+		schema_version TEXT NOT NULL DEFAULT '1.0',
+		version TEXT NOT NULL DEFAULT '1.0.0',
+		input_schema_json TEXT NOT NULL DEFAULT '{}',
+		output_schema_json TEXT NOT NULL DEFAULT '{}',
+		nodes_json TEXT NOT NULL DEFAULT '[]',
+		permissions_json TEXT NOT NULL DEFAULT '[]',
+		scope TEXT NOT NULL DEFAULT '',
+		callable_by_agent INTEGER NOT NULL DEFAULT 0,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		has_side_effects INTEGER NOT NULL DEFAULT 0,
+		idempotent INTEGER NOT NULL DEFAULT 0,
+		limits_json TEXT NOT NULL DEFAULT '{}',
+		source TEXT NOT NULL DEFAULT 'manual',
+		metadata_json TEXT NOT NULL DEFAULT '{}',
+		definition_hash TEXT NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_defs_ext_id ON extension_workflow_definitions(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_defs_enabled ON extension_workflow_definitions(enabled)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_executions (
+		execution_id TEXT PRIMARY KEY,
+		workflow_id TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'running',
+		input_json TEXT,
+		output_json TEXT,
+		error_message TEXT,
+		extension_id TEXT,
+		character_id TEXT,
+		conversation_id TEXT,
+		operation_id TEXT,
+		steps_json TEXT NOT NULL DEFAULT '[]',
+		compensation_json TEXT,
+		started_at DATETIME NOT NULL,
+		finished_at DATETIME,
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_exec_wf_id ON extension_workflow_executions(workflow_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_exec_status ON extension_workflow_executions(status)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_checkpoints (
+		checkpoint_id TEXT PRIMARY KEY,
+		workflow_id TEXT NOT NULL,
+		execution_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		input_json TEXT,
+		output_json TEXT,
+		completed_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL,
+		UNIQUE(execution_id, node_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_ckpts_exec_id ON extension_workflow_checkpoints(execution_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_ckpts_wf_id ON extension_workflow_checkpoints(workflow_id)`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {

@@ -97,8 +97,22 @@ func (c *PreflightChecker) checkSignature(result *PreflightResult, meta *Extensi
 }
 
 func (c *PreflightChecker) checkHash(result *PreflightResult, meta *ExtensionUpdateMetadata) {
-	if meta.PackageSHA256 == "" {
-		result.AddError("package sha256 hash missing")
+	if meta.PackageSHA256 == "" && meta.PackageSHA512 == "" {
+		result.AddError("package hash missing")
+		return
+	}
+	if meta.PackageSHA512 != "" {
+		if len(meta.PackageSHA512) != 128 {
+			result.AddError(fmt.Sprintf("package sha512 hash invalid length: %d", len(meta.PackageSHA512)))
+			return
+		}
+		lower := strings.ToLower(meta.PackageSHA512)
+		for _, ch := range lower {
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+				result.AddError("package sha512 hash contains invalid characters")
+				return
+			}
+		}
 		return
 	}
 	if len(meta.PackageSHA256) != 64 {

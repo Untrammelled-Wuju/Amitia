@@ -110,24 +110,38 @@ func (b *DesktopActionBridge) dispatchAction(ctx context.Context, binding deskto
 	}
 }
 
-func (b *DesktopActionBridge) executeHostAction(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType": binding.ActionType,
-		"targetId":   binding.TargetID,
-		"extensionId": extensionID,
-		"status":     "executed",
-		"timestamp":  time.Now().UTC(),
+func (b *DesktopActionBridge) buildInvocation(extensionID string, scopeCtx desktop.ScopeContext) capability.ToolInvocationContext {
+	invocationID := fmt.Sprintf("desktop-%s-%d", extensionID, time.Now().UnixNano())
+	inv := capability.ToolInvocationContext{
+		InvocationID:   invocationID,
+		UserID:         "desktop-host",
+		ExtensionID:    extensionID,
+		CharacterID:    scopeCtx.CharacterID,
+		ConversationID: scopeCtx.ConversationID,
+		Source:         capability.InvocationSourceUser,
+		Metadata: map[string]any{
+			"source":      "desktop_action_bridge",
+			"scopeGlobal": scopeCtx.Global,
+		},
 	}
-	return json.Marshal(result)
+	if scopeCtx.ExtensionID != "" {
+		inv.ExtensionID = scopeCtx.ExtensionID
+	}
+	return inv
 }
 
-func (b *DesktopActionBridge) executeToolInvoke(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
+func (b *DesktopActionBridge) executeViaKernel(ctx context.Context, toolID string, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
 	if b.executionKernel == nil {
 		return nil, fmt.Errorf("desktop: execution kernel not available")
 	}
+	input := binding.Input
+	if len(input) == 0 {
+		input = []byte(`{}`)
+	}
 	toolReq := execution.ToolExecutionRequest{
-		ToolID: capability.CapabilityID("desktop.action." + binding.TargetID),
-		Input:  binding.Input,
+		ToolID:     capability.CapabilityID(toolID),
+		Input:      input,
+		Invocation: b.buildInvocation(extensionID, scopeCtx),
 	}
 	result := b.executionKernel.Execute(ctx, toolReq)
 	if result.Status != capability.ToolResultStatusSuccess {
@@ -135,7 +149,7 @@ func (b *DesktopActionBridge) executeToolInvoke(ctx context.Context, binding des
 		if result.Error != nil {
 			errMsg = result.Error.Message
 		}
-		return nil, fmt.Errorf("desktop: tool execution failed: %s", errMsg)
+		return nil, fmt.Errorf("desktop: kernel execution failed for %s: %s", toolID, errMsg)
 	}
 	if len(result.Structured) > 0 {
 		return result.Structured, nil
@@ -143,59 +157,60 @@ func (b *DesktopActionBridge) executeToolInvoke(ctx context.Context, binding des
 	return []byte(`{"status":"success"}`), nil
 }
 
-func (b *DesktopActionBridge) executeWorkflow(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType":  binding.ActionType,
-		"workflowId":  binding.TargetID,
-		"extensionId": extensionID,
-		"status":      "queued",
-		"timestamp":   time.Now().UTC(),
+func (b *DesktopActionBridge) executeHostAction(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
+	toolID := "desktop.action.host_action"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.host_action." + binding.TargetID
 	}
-	return json.Marshal(result)
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
+}
+
+func (b *DesktopActionBridge) executeToolInvoke(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
+	toolID := binding.TargetID
+	if toolID == "" {
+		toolID = "desktop.action.tool_invoke"
+	}
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
+}
+
+func (b *DesktopActionBridge) executeWorkflow(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
+	toolID := "desktop.action.workflow_execute"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.workflow_execute." + binding.TargetID
+	}
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
 }
 
 func (b *DesktopActionBridge) executeTaskEnqueue(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType":  binding.ActionType,
-		"taskId":      binding.TargetID,
-		"extensionId": extensionID,
-		"status":      "enqueued",
-		"timestamp":   time.Now().UTC(),
+	toolID := "desktop.action.task_enqueue"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.task_enqueue." + binding.TargetID
 	}
-	return json.Marshal(result)
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
 }
 
 func (b *DesktopActionBridge) executeExtensionCommand(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType":  binding.ActionType,
-		"commandId":   binding.TargetID,
-		"extensionId": extensionID,
-		"status":      "dispatched",
-		"timestamp":   time.Now().UTC(),
+	toolID := "desktop.action.extension_command"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.extension_command." + binding.TargetID
 	}
-	return json.Marshal(result)
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
 }
 
 func (b *DesktopActionBridge) executeNavigation(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType":  binding.ActionType,
-		"route":       binding.TargetID,
-		"extensionId": extensionID,
-		"status":      "navigating",
-		"timestamp":   time.Now().UTC(),
+	toolID := "desktop.action.navigation"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.navigation." + binding.TargetID
 	}
-	return json.Marshal(result)
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
 }
 
 func (b *DesktopActionBridge) executeDialogOpen(ctx context.Context, binding desktop.DesktopActionBinding, extensionID string, scopeCtx desktop.ScopeContext) (json.RawMessage, error) {
-	result := map[string]any{
-		"actionType":  binding.ActionType,
-		"dialogId":    binding.TargetID,
-		"extensionId": extensionID,
-		"status":      "opened",
-		"timestamp":   time.Now().UTC(),
+	toolID := "desktop.action.dialog_open"
+	if binding.TargetID != "" {
+		toolID = "desktop.action.dialog_open." + binding.TargetID
 	}
-	return json.Marshal(result)
+	return b.executeViaKernel(ctx, toolID, binding, extensionID, scopeCtx)
 }
 
 func (b *DesktopActionBridge) GetAuditRecorder() *DesktopAuditRecorder {

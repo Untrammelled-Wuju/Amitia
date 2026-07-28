@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -17,7 +19,25 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-var qdrantCmd *exec.Cmd
+var (
+	qdrantCmd          *exec.Cmd
+	qdrantMu           sync.Mutex
+	qdrantMonitorStop  chan struct{}
+	qdrantRestartFn    func()
+	qdrantShuttingDown atomic.Bool
+)
+
+func SetQdrantShuttingDown() {
+	qdrantShuttingDown.Store(true)
+}
+
+func IsQdrantShuttingDown() bool {
+	return qdrantShuttingDown.Load()
+}
+
+func SetQdrantRestartCallback(fn func()) {
+	qdrantRestartFn = fn
+}
 
 type qdrantWriter struct{}
 
@@ -156,6 +176,12 @@ func resolveQdrantDataDir(qdrantDir string) string {
 }
 
 func StartQdrant() error {
+	qdrantMu.Lock()
+	defer qdrantMu.Unlock()
+	return startQdrantInternal()
+}
+
+func startQdrantInternal() error {
 	cfg := config.AppCfg.Qdrant
 	workDir := util.RuntimeRoot()
 
@@ -195,6 +221,88 @@ func StartQdrant() error {
 	return nil
 }
 
+func isQdrantAlive(port int) bool {
+	url := fmt.Sprintf("http://127.0.0.1:%d/readyz", port)
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+func StartQdrantMonitor() {
+	if qdrantMonitorStop != nil {
+		return
+	}
+	qdrantMonitorStop = make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warn("Qdrant监控协程异常恢复:", r)
+			}
+		}()
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if IsQdrantShuttingDown() {
+					return
+				}
+				qdrantMu.Lock()
+				needRestart := false
+				if qdrantCmd == nil || qdrantCmd.Process == nil {
+					needRestart = true
+				} else if !isQdrantAlive(config.AppCfg.Qdrant.Port) {
+					needRestart = true
+				}
+				if needRestart && !IsQdrantShuttingDown() {
+					log.Warn("检测到Qdrant进程异常，尝试重启...")
+					if err := startQdrantInternal(); err != nil {
+						log.Error("Qdrant重启失败:", err)
+						qdrantMu.Unlock()
+						continue
+					}
+					if err := WaitForQdrant(config.AppCfg.Qdrant.Port); err != nil {
+						log.Error("等待Qdrant就绪超时:", err)
+						qdrantMu.Unlock()
+						continue
+					}
+					if err := InitClient(); err != nil {
+						log.Error("Qdrant客户端重新初始化失败:", err)
+						qdrantMu.Unlock()
+						continue
+					}
+					if err := EnsureCollections(); err != nil {
+						log.Error("Qdrant集合重建失败:", err)
+						qdrantMu.Unlock()
+						continue
+					}
+					log.Info("Qdrant已自动恢复")
+					qdrantMu.Unlock()
+					if qdrantRestartFn != nil {
+						qdrantRestartFn()
+					}
+				} else {
+					qdrantMu.Unlock()
+				}
+			case <-qdrantMonitorStop:
+				return
+			}
+		}
+	}()
+	log.Info("Qdrant进程监控已启动")
+}
+
+func StopQdrantMonitor() {
+	if qdrantMonitorStop != nil {
+		close(qdrantMonitorStop)
+		qdrantMonitorStop = nil
+	}
+}
+
 func IsLinuxARM64() bool {
 	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
 }
@@ -229,6 +337,7 @@ func ensureQdrantBinary(qdrantPath, qdrantDir string) error {
 }
 
 func StopQdrant() {
+	StopQdrantMonitor()
 	if qdrantCmd == nil || qdrantCmd.Process == nil {
 		return
 	}

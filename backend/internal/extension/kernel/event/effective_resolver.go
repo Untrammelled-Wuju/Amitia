@@ -142,6 +142,13 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	if !state.IsActive() {
 		return state
 	}
+	if !envelope.IsFromHost() && envelope.ProducerID == def.ExtensionID {
+		if def.Generation > 0 && envelope.ProducerGeneration > 0 && def.Generation != envelope.ProducerGeneration {
+			state.ScopeValid = false
+			state.Reason = "stale_generation"
+			return state
+		}
+	}
 	if r.scopeChecker != nil {
 		valid, reason, err := r.scopeChecker.CheckSubscriptionScope(ctx, def, envelope)
 		if err != nil {

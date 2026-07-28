@@ -390,6 +390,9 @@ func (s *PackageService) Rollback(ctx context.Context, extensionID, version, use
 		s.agentSkills.invalidateAgentSkillCaches()
 	}
 	s.metric("extension_package_rollback_total")
+	if s.kernelProxy != nil {
+		_ = s.kernelProxy.NotifyInstall(ctx, extensionID, version)
+	}
 	return PackageOperationResult{OperationID: operationID, TraceID: traceID, Operation: PackageOperationRollback, ExtensionID: extensionID, Version: version, Enabled: current.Definition.Enabled, Status: "succeeded"}, nil
 }
 
@@ -510,6 +513,9 @@ func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, sco
 		return PackageOperationResult{}, NewExtensionError(ErrPackageOperationInProgress, "该扩展已有操作进行中", extensionID, true, nil)
 	}
 	defer unlock()
+	if s.kernelProxy != nil {
+		_ = s.kernelProxy.NotifyUninstall(ctx, extensionID)
+	}
 	if err := s.repository.CleanupOwnedResources(ctx, extensionID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
