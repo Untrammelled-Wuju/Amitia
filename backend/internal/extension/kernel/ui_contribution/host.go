@@ -235,30 +235,47 @@ func (h *UIHost) DisableExtension(extensionID ExtensionID) {
 }
 
 type BridgeSession struct {
-	SessionID       string
-	ContributionID  string
-	ExtensionID     string
-	ModuleID        string
-	Generation      int64
-	Origin          string
-	ContractVersion int
-	GrantedScopes   []string
-	GrantedPerms    []string
-	CreatedAt       time.Time
-	ExpiresAt       time.Time
+	SessionID           string
+	ContributionID      string
+	ExtensionID         string
+	ModuleID            string
+	Generation          int64
+	Origin              string
+	ContractVersion     int
+	GrantedScopes       []string
+	GrantedPerms        []string
+	CreatedAt           time.Time
+	ExpiresAt           time.Time
+	Surface             string
+	CharacterID         string
+	ConversationID      string
+	ScopeSnapshotID     string
+	PermissionSnapshotID string
 }
 
 type UIBridge struct {
-	host    *UIHost
-	mu      sync.RWMutex
-	sessions map[string]*BridgeSession
+	host          *UIHost
+	mu            sync.RWMutex
+	sessions      map[string]*BridgeSession
+	actionHandler func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error)
+	dataHandler   func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error)
 }
 
 func NewUIBridge(host *UIHost) *UIBridge {
 	return &UIBridge{host: host, sessions: make(map[string]*BridgeSession)}
 }
 
-func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, grantedScopes, grantedPerms []string, lifetime time.Duration) (*BridgeSession, error) {
+func (b *UIBridge) SetHandlers(
+	actionHandler func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error),
+	dataHandler func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error),
+) {
+	b.mu.Lock()
+	b.actionHandler = actionHandler
+	b.dataHandler = dataHandler
+	b.mu.Unlock()
+}
+
+func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, grantedScopes, grantedPerms []string, surface, characterID, conversationID string, lifetime time.Duration) (*BridgeSession, error) {
 	if def == nil {
 		return nil, errors.New("ui_contribution: nil definition")
 	}
@@ -270,17 +287,20 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	}
 	now := time.Now().UTC()
 	sess := &BridgeSession{
-		SessionID:       newBridgeSessionID(),
-		ContributionID:  string(def.ContributionID),
-		ExtensionID:     string(def.ExtensionID),
-		ModuleID:        string(def.ModuleID),
-		Generation:      def.Integrity.Generation,
-		Origin:          origin,
-		ContractVersion: def.ContractVersion,
-		GrantedScopes:   grantedScopes,
-		GrantedPerms:    grantedPerms,
-		CreatedAt:       now,
-		ExpiresAt:       now.Add(lifetime),
+		SessionID:           newBridgeSessionID(),
+		ContributionID:      string(def.ContributionID),
+		ExtensionID:         string(def.ExtensionID),
+		ModuleID:            string(def.ModuleID),
+		Generation:          def.Integrity.Generation,
+		Origin:              origin,
+		ContractVersion:     def.ContractVersion,
+		GrantedScopes:       grantedScopes,
+		GrantedPerms:        grantedPerms,
+		CreatedAt:           now,
+		ExpiresAt:           now.Add(lifetime),
+		Surface:             surface,
+		CharacterID:         characterID,
+		ConversationID:      conversationID,
 	}
 	b.mu.Lock()
 	b.sessions[sess.SessionID] = sess
@@ -323,18 +343,18 @@ func (b *UIBridge) SessionCount() int {
 }
 
 type BridgeMessage struct {
-	Method      UIBridgeMethod   `json:"method"`
-	SessionID   string           `json:"session_id"`
-	ContributionID string        `json:"contribution_id"`
-	Origin      string           `json:"origin"`
-	ContractVersion int          `json:"contract_version"`
-	Payload     json.RawMessage  `json:"payload,omitempty"`
+	Method          UIBridgeMethod  `json:"method"`
+	SessionID       string          `json:"session_id"`
+	ContributionID  string          `json:"contribution_id"`
+	Origin          string          `json:"origin"`
+	ContractVersion int             `json:"contract_version"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
 }
 
 type BridgeResponse struct {
-	OK      bool             `json:"ok"`
-	Result  json.RawMessage  `json:"result,omitempty"`
-	Error   *UIError         `json:"error,omitempty"`
+	OK     bool            `json:"ok"`
+	Result json.RawMessage `json:"result,omitempty"`
+	Error  *UIError        `json:"error,omitempty"`
 }
 
 func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse {
@@ -407,38 +427,45 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	if action == nil {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrActionNotDeclared, "action "+p.ActionID+" not declared", nil)}
 	}
-	return BridgeResponse{
-		OK: true,
-		Result: mustMarshal(map[string]any{
-			"action_id":   action.ActionID,
-			"target_type": action.Target.Type,
-			"accepted":    true,
-		}),
+	b.mu.RLock()
+	handler := b.actionHandler
+	b.mu.RUnlock()
+	if handler == nil {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, "action handler unavailable", nil)}
 	}
+	result, err := handler(ctx, sess, action, p.Input)
+	if err != nil {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
+	}
+	return BridgeResponse{OK: true, Result: result}
 }
 
 func (b *UIBridge) handleDataRequest(ctx context.Context, sess *BridgeSession, payload json.RawMessage) BridgeResponse {
 	var p struct {
-		Key string `json:"key"`
+		Key    string          `json:"key"`
+		Params json.RawMessage `json:"params,omitempty"`
 	}
 	_ = json.Unmarshal(payload, &p)
 	if !hasScope(sess.GrantedScopes, p.Key) {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrScopeDenied, "data source scope not granted: "+p.Key, nil)}
 	}
-	return BridgeResponse{
-		OK: true,
-		Result: mustMarshal(map[string]any{
-			"key":   p.Key,
-			"value": nil,
-			"note":  "data_source_not_configured",
-		}),
+	b.mu.RLock()
+	handler := b.dataHandler
+	b.mu.RUnlock()
+	if handler == nil {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, "data handler unavailable", nil)}
 	}
+	result, err := handler(ctx, sess, p.Key, p.Params)
+	if err != nil {
+		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
+	}
+	return BridgeResponse{OK: true, Result: result}
 }
 
 func (b *UIBridge) handleNavigation(ctx context.Context, sess *BridgeSession, payload json.RawMessage) BridgeResponse {
 	var p struct {
-		RouteID  string `json:"route_id"`
-		Params   map[string]any `json:"params,omitempty"`
+		RouteID string         `json:"route_id"`
+		Params  map[string]any `json:"params,omitempty"`
 	}
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, err.Error(), nil)}
@@ -484,8 +511,8 @@ func (b *UIBridge) handleResourceOpen(ctx context.Context, sess *BridgeSession, 
 	return BridgeResponse{
 		OK: true,
 		Result: mustMarshal(map[string]any{
-			"opened":    true,
-			"resource":  p.Resource,
+			"opened":   true,
+			"resource": p.Resource,
 		}),
 	}
 }

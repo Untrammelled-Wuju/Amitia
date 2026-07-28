@@ -7,6 +7,9 @@ import (
 
 type TaskStore interface {
 	PutTaskDefinition(ctx context.Context, def *TaskDefinition) error
+
+	DeleteTaskDefinition(ctx context.Context, defID string) error
+	DeleteByExtension(ctx context.Context, extensionID string) error
 	GetTaskDefinition(ctx context.Context, defID string) (*TaskDefinition, error)
 	ListTaskDefinitions(ctx context.Context, extensionID string) ([]*TaskDefinition, error)
 

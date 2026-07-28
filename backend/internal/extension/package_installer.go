@@ -38,6 +38,37 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		}
 		_ = s.repository.FinishPackageImportSession(context.Background(), session.ID, status)
 	}()
+	if s.kernelProxy == nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Extension Kernel 未接线", "", false, nil)
+	}
+	kernelResult, wasInstalled, err := s.kernelProxy.InstallPackage(ctx, session.PackageBlob, session.FileName, request.ExpectedExtensionID)
+	if err != nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Extension Kernel 安装失败", err.Error(), false, err)
+	}
+	operation := PackageOperationInstall
+	if wasInstalled {
+		operation = PackageOperationUpgrade
+	}
+	return PackageOperationResult{OperationID: kernelResult.InstallationID, TraceID: kernelResult.PackageHash, Operation: operation, ExtensionID: kernelResult.ExtensionID, Version: kernelResult.Version, Enabled: false, Status: "succeeded"}, nil
+}
+
+func (s *PackageService) installLegacyPackage(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {
+	if request.ScopeType == string(ScopeCharacter) {
+		if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); err != nil {
+			return PackageOperationResult{}, err
+		}
+	}
+	session, err := s.repository.AcquirePackageImportSession(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	if err != nil {
+		return PackageOperationResult{}, err
+	}
+	defer func() {
+		status := "installed"
+		if err != nil {
+			status = "failed"
+		}
+		_ = s.repository.FinishPackageImportSession(context.Background(), session.ID, status)
+	}()
 	operationID := uuid.NewString()
 	traceID := uuid.NewString()
 	operation := PackageOperationInstall

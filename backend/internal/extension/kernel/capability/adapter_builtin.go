@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-type DispatchFunc func(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error)
+type DispatchFunc func(ctx context.Context, handlerName string, input json.RawMessage, invocation ToolInvocationContext) (json.RawMessage, error)
 
 type BuiltinRuntimeAdapter struct {
 	dispatcher DispatchFunc
@@ -37,7 +37,7 @@ func (a *BuiltinRuntimeAdapter) Execute(
 		}
 	}
 
-	output, err := a.dispatcher(ctx, binding.HandlerName, input)
+	output, err := a.dispatcher(ctx, binding.HandlerName, input, invocation)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: invocation.InvocationID,

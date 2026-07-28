@@ -79,12 +79,12 @@ func (m *MisfireService) DetectMisfire(ctx context.Context, def *ScheduleContrib
 }
 
 type MisfireActionResult struct {
-	Action        string
-	FireCount     int
-	FireTimes     []time.Time
-	SkippedCount  int
-	SkipAll       bool
-	Reschedule    bool
+	Action       string
+	FireCount    int
+	FireTimes    []time.Time
+	SkippedCount int
+	SkipAll      bool
+	Reschedule   bool
 }
 
 func (m *MisfireService) ApplyMisfirePolicy(ctx context.Context, def *ScheduleContributionDefinition, detection *MisfireDetection) (*MisfireActionResult, error) {

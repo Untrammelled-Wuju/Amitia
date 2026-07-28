@@ -1,5 +1,8 @@
 package com.amitia.runtime.extension
 
+import com.amitia.core.database.dao.ExtensionInstallationDao
+import com.amitia.core.database.entity.ExtensionInstallationEntity
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -9,40 +12,27 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 interface ToolExecutor {
     suspend fun execute(request: ToolInvocationRequest, tool: ToolDefinition): Result<ToolInvocationResult>
 }
 
-class LocalToolExecutor : ToolExecutor {
-
-    override suspend fun execute(
-        request: ToolInvocationRequest,
-        tool: ToolDefinition
-    ): Result<ToolInvocationResult> = runCatching {
-        val start = System.currentTimeMillis()
-        val output = buildJsonObject {
-            put("toolId", request.toolId)
-            put("extensionId", request.extensionId)
-            put("status", "executed_locally")
-            put("message", "Tool executed via local skeleton executor")
-            put("arguments", request.arguments.toString())
-        }
-        ToolInvocationResult(
-            success = true,
-            output = output,
-            durationMs = System.currentTimeMillis() - start
-        )
-    }
-}
-
 @Singleton
 class ExtensionHostImpl(
     private val packageLoader: AmitiaxPackageLoader,
-    private val toolExecutor: ToolExecutor
+    private val toolExecutor: ToolExecutor,
+    private val apiClient: ExtensionApiClient,
+    private val installationDao: ExtensionInstallationDao,
+    private val permissionChecker: ExtensionPermissionChecker,
+    private val json: Json
 ) : ExtensionHost {
 
     private val extensions = ConcurrentHashMap<String, LoadedExtension>()
@@ -60,7 +50,10 @@ class ExtensionHostImpl(
         get() = extensions.toMap()
 
     override suspend fun loadPackage(file: File): Result<LoadedExtension> {
-        return packageLoader.loadFromFile(file).mapCatching { pkg ->
+        return runCatching {
+            val packageBytes = file.readBytes()
+            val pkg = packageLoader.loadFromStream(ByteArrayInputStream(packageBytes))
+            apiClient.installExtension(packageBytes, file.name)
             buildAndStoreExtension(pkg)
         }.onFailure { err ->
             val extId = extractExtensionIdFromFileName(file.name)
@@ -76,7 +69,10 @@ class ExtensionHostImpl(
     }
 
     override suspend fun loadPackage(stream: InputStream): Result<LoadedExtension> {
-        return runCatching { packageLoader.loadFromStream(stream) }.mapCatching { pkg ->
+        return runCatching {
+            val packageBytes = stream.readBytes()
+            val pkg = packageLoader.loadFromStream(ByteArrayInputStream(packageBytes))
+            apiClient.installExtension(packageBytes)
             buildAndStoreExtension(pkg)
         }.onFailure { err ->
             _events.tryEmit(
@@ -90,7 +86,7 @@ class ExtensionHostImpl(
         }
     }
 
-    private fun buildAndStoreExtension(pkg: AmitiaxPackage): LoadedExtension {
+    private suspend fun buildAndStoreExtension(pkg: AmitiaxPackage): LoadedExtension {
         val manifest = pkg.manifest
         val extensionId = manifest.extension.id
         val lock = extensionLocks.computeIfAbsent(extensionId) { Mutex() }
@@ -163,6 +159,17 @@ class ExtensionHostImpl(
             toolIndex[tool.toolId] = tool
         }
 
+        installationDao.insert(
+            ExtensionInstallationEntity(
+                extensionId = extensionId,
+                version = loaded.version,
+                manifestHash = loaded.packageHash,
+                installedAt = loaded.loadedAt,
+                status = ExtensionState.Loaded.name,
+                contributionIds = contributions.map { it.id }
+            )
+        )
+
         _events.tryEmit(
             ExtensionHostEvent(
                 type = ExtensionHostEventType.LoadSucceeded,
@@ -181,8 +188,13 @@ class ExtensionHostImpl(
             val current = extensions[extensionId]
                 ?: return@withLock Result.failure(IllegalStateException("Extension $extensionId not loaded"))
 
+            runCatching { apiClient.enableExtension(extensionId) }
+                .onFailure { return@withLock Result.failure(it) }
+
             val activated = current.copy(state = ExtensionState.Activated)
             extensions[extensionId] = activated
+
+            installationDao.updateStatus(extensionId, ExtensionState.Activated.name)
 
             _events.tryEmit(
                 ExtensionHostEvent(
@@ -203,8 +215,13 @@ class ExtensionHostImpl(
             val current = extensions[extensionId]
                 ?: return@withLock Result.failure(IllegalStateException("Extension $extensionId not loaded"))
 
+            runCatching { apiClient.disableExtension(extensionId) }
+                .onFailure { return@withLock Result.failure(it) }
+
             val deactivated = current.copy(state = ExtensionState.Deactivated)
             extensions[extensionId] = deactivated
+
+            installationDao.updateStatus(extensionId, ExtensionState.Deactivated.name)
 
             _events.tryEmit(
                 ExtensionHostEvent(
@@ -222,6 +239,8 @@ class ExtensionHostImpl(
     override suspend fun unload(extensionId: String): Result<Unit> {
         val lock = extensionLocks.computeIfAbsent(extensionId) { Mutex() }
         return lock.withLock {
+            runCatching { apiClient.uninstallExtension(extensionId) }
+
             val current = extensions.remove(extensionId)
             if (current != null) {
                 current.contributions.forEach { contrib ->
@@ -232,6 +251,8 @@ class ExtensionHostImpl(
                 }
             }
             extensionLocks.remove(extensionId)
+
+            installationDao.deleteByExtensionId(extensionId)
 
             _events.tryEmit(
                 ExtensionHostEvent(
@@ -255,6 +276,22 @@ class ExtensionHostImpl(
 
         if (ext.state != ExtensionState.Activated && ext.state != ExtensionState.Loaded) {
             return Result.failure(IllegalStateException("Extension ${request.extensionId} is not in an executable state: ${ext.state}"))
+        }
+
+        val hasPermission = permissionChecker.checkPermission(
+            request.extensionId,
+            tool.permissions.firstOrNull() ?: "tool.execute"
+        )
+        if (!hasPermission) {
+            _events.tryEmit(
+                ExtensionHostEvent(
+                    type = ExtensionHostEventType.ToolFailed,
+                    extensionId = request.extensionId,
+                    timestamp = System.currentTimeMillis(),
+                    message = "Tool ${request.toolId} denied: permission not granted"
+                )
+            )
+            return Result.failure(SecurityException("Permission denied for tool ${request.toolId}"))
         }
 
         val result = toolExecutor.execute(request, tool)
@@ -303,6 +340,11 @@ class ExtensionHostImpl(
             val current = extensions[extensionId]
                 ?: return@withLock Result.failure(IllegalStateException("Extension $extensionId not loaded for reload"))
 
+            runCatching {
+                apiClient.disableExtension(extensionId)
+                apiClient.enableExtension(extensionId)
+            }.onFailure { return@withLock Result.failure(it) }
+
             current.contributions.forEach { contrib ->
                 contributionIndex.remove(contrib.id)
             }
@@ -311,7 +353,7 @@ class ExtensionHostImpl(
             }
 
             val reloaded = current.copy(
-                state = ExtensionState.Loaded,
+                state = ExtensionState.Activated,
                 loadedAt = System.currentTimeMillis(),
                 error = null
             )
@@ -323,6 +365,8 @@ class ExtensionHostImpl(
             reloaded.tools.forEach { tool ->
                 toolIndex[tool.toolId] = tool
             }
+
+            installationDao.updateStatus(extensionId, ExtensionState.Activated.name)
 
             _events.tryEmit(
                 ExtensionHostEvent(
@@ -336,6 +380,110 @@ class ExtensionHostImpl(
             Result.success(reloaded)
         }
     }
+
+    override suspend fun restoreFromDatabase(): Result<List<LoadedExtension>> = runCatching {
+        val entities = installationDao.getAll()
+        if (entities.isEmpty()) return@runCatching emptyList()
+
+        val backendResponse = runCatching { apiClient.listExtensions() }.getOrNull()
+        val backendExtensions = backendResponse?.get("extensions")?.jsonArray
+            ?.associateBy { it.jsonObject["extensionId"]?.jsonPrimitive?.contentOrNull }
+            ?: emptyMap()
+
+        val restored = mutableListOf<LoadedExtension>()
+
+        entities.forEach { entity ->
+            val backendItem = backendExtensions[entity.extensionId]?.jsonObject
+            val enablement = backendItem?.get("enablement")?.jsonPrimitive?.contentOrNull
+
+            val state = when (enablement) {
+                "enabled" -> ExtensionState.Activated
+                "disabled" -> ExtensionState.Deactivated
+                else -> ExtensionState.Loaded
+            }
+
+            val detail = runCatching {
+                apiClient.getExtensionDetail(entity.extensionId)
+            }.getOrNull()
+
+            val modules = detail?.get("modules")?.jsonArray?.map { modElem ->
+                val mod = modElem.jsonObject
+                ModuleMeta(
+                    id = mod["id"]?.jsonPrimitive?.contentOrNull ?: "",
+                    name = LocalizedText(default = mod["id"]?.jsonPrimitive?.contentOrNull ?: ""),
+                    type = mod["type"]?.jsonPrimitive?.contentOrNull ?: "",
+                    runtime = mod["runtime"]?.jsonPrimitive?.contentOrNull?.let { rt ->
+                        RuntimeMeta(type = rt, entryPoint = mod["entryPoint"]?.jsonPrimitive?.contentOrNull)
+                    }
+                )
+            } ?: emptyList()
+
+            val contributionList = detail?.get("contributions")?.jsonArray?.map { contribElem ->
+                val contrib = contribElem.jsonObject
+                ExtensionContribution(
+                    id = contrib["id"]?.jsonPrimitive?.contentOrNull ?: "",
+                    type = ContributionType.fromValue(
+                        contrib["kind"]?.jsonPrimitive?.contentOrNull ?: "tool"
+                    ) ?: ContributionType.Tool,
+                    extensionId = entity.extensionId,
+                    moduleId = contrib["moduleId"]?.jsonPrimitive?.contentOrNull ?: "",
+                    toolId = if (contrib["kind"]?.jsonPrimitive?.contentOrNull == "tool")
+                        contrib["id"]?.jsonPrimitive?.contentOrNull else null
+                )
+            } ?: emptyList()
+
+            val tools = contributionList.filter { it.type == ContributionType.Tool }.map { contrib ->
+                val module = modules.firstOrNull { it.id == contrib.moduleId }
+                ToolDefinition(
+                    toolId = contrib.toolId ?: contrib.id,
+                    extensionId = entity.extensionId,
+                    moduleId = contrib.moduleId,
+                    name = module?.name?.default ?: contrib.id,
+                    description = "",
+                    entryPoint = module?.runtime?.entryPoint ?: "",
+                    timeout = parseTimeout(module?.runtime?.timeout),
+                    permissions = module?.runtime?.permissions ?: emptyList()
+                )
+            }
+
+            val manifest = ExtensionManifest(
+                extension = ExtensionMeta(
+                    id = entity.extensionId,
+                    name = LocalizedText(default = entity.extensionId),
+                    version = entity.version
+                ),
+                modules = modules
+            )
+
+            val loaded = LoadedExtension(
+                extensionId = entity.extensionId,
+                version = entity.version,
+                displayName = entity.extensionId,
+                manifest = manifest,
+                packageHash = entity.manifestHash,
+                state = state,
+                contributions = contributionList,
+                tools = tools,
+                loadedAt = entity.installedAt
+            )
+
+            extensions[entity.extensionId] = loaded
+            extensionLocks.computeIfAbsent(entity.extensionId) { Mutex() }
+
+            contributionList.forEach { contrib ->
+                contributionIndex[contrib.id] = contrib
+            }
+            tools.forEach { tool ->
+                toolIndex[tool.toolId] = tool
+            }
+
+            restored.add(loaded)
+        }
+
+        restored
+    }
+
+    override fun getPermissionChecker(): ExtensionPermissionChecker = permissionChecker
 
     private fun parseTimeout(timeout: String?): Long {
         if (timeout.isNullOrBlank()) return 30000L

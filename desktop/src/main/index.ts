@@ -25,6 +25,7 @@ import { DesktopPetManager } from "./pet/manager";
 import { ChatStateSubscriber } from "./pet/chat-state-subscriber";
 import { CharacterWatcher } from "./pet/character-watcher";
 import { registerPetIpcHandlers } from "./pet-ipc";
+import { DesktopHostManager, DesktopSnapshotSync } from "./desktop-host";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -35,6 +36,8 @@ let shutdownInProgress = false;
 let desktopPetManager: DesktopPetManager | null = null;
 let chatStateSubscriber: ChatStateSubscriber | null = null;
 let characterWatcher: CharacterWatcher | null = null;
+let desktopHostManager: DesktopHostManager | null = null;
+let desktopSnapshotSync: DesktopSnapshotSync | null = null;
 
 function syncSystemBrandTheme() {
   applyBrandTheme(
@@ -170,6 +173,12 @@ async function enterMainApp(): Promise<void> {
     configStore,
   );
   tray = trayResult.tray;
+  desktopHostManager = new DesktopHostManager(
+    mainWindow,
+    trayResult.setExtensionItems,
+  );
+  desktopSnapshotSync = new DesktopSnapshotSync(mainWindow, desktopHostManager);
+  desktopSnapshotSync.start();
   syncSystemBrandTheme();
 
   const autoLaunch = await configStore.getAutoLaunch();
@@ -232,6 +241,10 @@ async function enterMainApp(): Promise<void> {
         });
         chatStateSubscriber?.stop();
         characterWatcher?.stop();
+        desktopSnapshotSync?.stop();
+        desktopSnapshotSync = null;
+        desktopHostManager?.cleanup();
+        desktopHostManager = null;
         void stopCore().finally(() => {
           coreStopped = true;
           closeLogger();

@@ -74,10 +74,6 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				toolScope := SkillScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
 				toolResult, found := s.toolRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), toolScope, "")
 				outcome = toolResultToOutcome(toolResult, found)
-			} else if s.skillRuntime != nil {
-				skillScope := extension.ExecutionScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
-				skillResult, found := s.skillRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), skillScope, "")
-				outcome = skillResultToOutcome(skillResult, found)
 			} else {
 				outcome = toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}
 			}

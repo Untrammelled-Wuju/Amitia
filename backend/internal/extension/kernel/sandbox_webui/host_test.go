@@ -33,6 +33,9 @@ func TestCreateSession(t *testing.T) {
 	if result.Nonce == "" {
 		t.Error("Nonce should not be empty")
 	}
+	if result.Token == "" {
+		t.Error("Token should not be empty")
+	}
 	if result.Origin == "" {
 		t.Error("Origin should not be empty")
 	}

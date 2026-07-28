@@ -197,7 +197,6 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 		rev.BuildDurationMs = time.Since(start).Milliseconds()
 		rev.ArtifactPath = opts.OutDir
 		p.commitRevision(id, rev)
-		_ = registry.UpdateStatus(id, WorkspaceStatusFailed, fmt.Sprintf("typescript: %d errors", len(tsErrors)))
 		return &rev, fmt.Errorf("%w: typescript compilation produced %d errors", ErrBuildFailed, len(tsErrors))
 	}
 
@@ -205,15 +204,25 @@ func (p *RebuildPipeline) Build(ctx context.Context, id WorkspaceID, opts BuildO
 	rev.BuildDurationMs = time.Since(start).Milliseconds()
 	rev.Status = RevisionStatusSucceeded
 
-	if err := registry.SetCurrentRevision(id, revID); err != nil {
-		return &rev, err
-	}
-	if err := registry.UpdateStatus(id, WorkspaceStatusReady, ""); err != nil {
-		return &rev, err
-	}
-
 	p.commitRevision(id, rev)
 	return &rev, nil
+}
+
+func (p *RebuildPipeline) BuildCandidate(ctx context.Context, id WorkspaceID, opts BuildOptions) (*Revision, error) {
+	p.mu.Lock()
+	registry := p.registry
+	p.mu.Unlock()
+	if registry == nil {
+		return nil, ErrRegistryNotConfigured
+	}
+	ws, err := registry.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if opts.OutDir == "" {
+		opts.OutDir = filepath.Join(ws.PathReference, fmt.Sprintf("dist-candidate-%d", time.Now().UnixNano()))
+	}
+	return p.Build(ctx, id, opts)
 }
 
 func (p *RebuildPipeline) compileTypeScript(ctx context.Context, workspacePath, outputPath string) []BuildError {
@@ -291,15 +300,18 @@ func parseTSCErrors(out string) []BuildError {
 func (p *RebuildPipeline) commitRevision(id WorkspaceID, rev Revision) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if rev.Status != RevisionStatusFailed {
-		p.revisions[id] = rev.RevisionID
-	}
 	history := p.history[id]
 	history = append(history, rev)
 	if len(history) > p.maxHistory {
 		history = history[len(history)-p.maxHistory:]
 	}
 	p.history[id] = history
+}
+
+func (p *RebuildPipeline) PromoteRevision(id WorkspaceID, revID RevisionID) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.revisions[id] = revID
 }
 
 func (p *RebuildPipeline) CurrentRevision(id WorkspaceID) (Revision, bool) {

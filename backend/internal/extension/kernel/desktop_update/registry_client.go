@@ -2,6 +2,8 @@ package desktop_update
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,9 +14,29 @@ import (
 
 const DefaultRegistryURL = "https://registry.amitia.dev"
 
+type ReleaseIndex struct {
+	SchemaVersion   int      `json:"schemaVersion"`
+	GeneratedAt     string   `json:"generatedAt"`
+	ExtensionID     string   `json:"extensionId"`
+	PublisherID     string   `json:"publisherId"`
+	PublisherKeyID  string   `json:"publisherKeyId"`
+	Channel         string   `json:"channel"`
+	Version         string   `json:"version"`
+	DownloadURL     string   `json:"downloadURL"`
+	SHA256          string   `json:"sha256"`
+	SignatureURL    string   `json:"signatureURL"`
+	MinHostVersion  string   `json:"minHostVersion"`
+	Platforms       []string `json:"platforms"`
+	Architectures   []string `json:"architectures,omitempty"`
+	PackageSize     int64    `json:"packageSize"`
+	ManifestVersion int      `json:"manifestVersion,omitempty"`
+	Signature       string   `json:"signature"`
+}
+
 type RegistryClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	client    *http.Client
+	publicKey ed25519.PublicKey
 }
 
 func NewRegistryClient(baseURL string) *RegistryClient {
@@ -23,94 +45,113 @@ func NewRegistryClient(baseURL string) *RegistryClient {
 	}
 	return &RegistryClient{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-type registryExtensionResponse struct {
-	ExtensionID        string   `json:"extensionId"`
-	Version            string   `json:"version"`
-	ManifestVersion    int      `json:"manifestVersion"`
-	PackageURL         string   `json:"packageUrl"`
-	PackageSHA512      string   `json:"packageSha512"`
-	PackageSHA256      string   `json:"packageSha256"`
-	PackageSize        int64    `json:"packageSize"`
-	PublisherID        string   `json:"publisherId"`
-	PublisherKeyID     string   `json:"publisherKeyId,omitempty"`
-	Signature          string   `json:"signature,omitempty"`
-	MinimumHostVersion string   `json:"minimumHostVersion,omitempty"`
-	MaximumHostVersion string   `json:"maximumHostVersion,omitempty"`
-	SupportedPlatforms []string `json:"supportedPlatforms,omitempty"`
-	SupportedArch      []string `json:"supportedArch,omitempty"`
-	PublishedAt        string   `json:"publishedAt,omitempty"`
-	ReleaseChannel     string   `json:"releaseChannel,omitempty"`
+func (c *RegistryClient) SetPublicKeyBase64(encoded string) error {
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: invalid registry public key", ErrIndexSignatureInvalid)
+	}
+	c.publicKey = ed25519.PublicKey(key)
+	return nil
 }
 
 func (c *RegistryClient) QueryExtension(ctx context.Context, extensionID string) (*ExtensionUpdateMetadata, error) {
 	if extensionID == "" {
-		return nil, fmt.Errorf("%w: extension id required", ErrInvalidMetadata)
+		return nil, &UpdateError{Code: ErrorCodeIndexInvalid, Err: fmt.Errorf("%w: extension id required", ErrIndexInvalid)}
 	}
-
 	endpoint := fmt.Sprintf("%s/api/v1/extensions/%s/latest", c.baseURL, url.PathEscape(extensionID))
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("desktop_update: create registry request: %w", err)
+		return nil, &UpdateError{Code: ErrorCodeNetwork, Err: fmt.Errorf("%w: %v", ErrRegistryNetwork, err)}
 	}
 	req.Header.Set("Accept", "application/json")
-
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("desktop_update: registry request failed: %w", err)
+		return nil, &UpdateError{Code: ErrorCodeNetwork, Err: fmt.Errorf("%w: %v", ErrRegistryNetwork, err)}
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("desktop_update: registry returned status %d", resp.StatusCode)
+		return nil, &UpdateError{Code: ErrorCodeNetwork, Err: fmt.Errorf("%w: registry returned status %d", ErrRegistryNetwork, resp.StatusCode)}
 	}
+	var index ReleaseIndex
+	if err := json.NewDecoder(resp.Body).Decode(&index); err != nil {
+		return nil, &UpdateError{Code: ErrorCodeIndexInvalid, Err: fmt.Errorf("%w: %v", ErrIndexInvalid, err)}
+	}
+	if err := validateReleaseIndex(index, extensionID); err != nil {
+		return nil, &UpdateError{Code: ErrorCodeIndexInvalid, Err: err}
+	}
+	if err := c.verifyReleaseIndex(index); err != nil {
+		return nil, &UpdateError{Code: ErrorCodeIndexSignatureInvalid, Err: err}
+	}
+	if index.ManifestVersion == 0 {
+		index.ManifestVersion = 1
+	}
+	publishedAt, _ := time.Parse(time.RFC3339, index.GeneratedAt)
+	return &ExtensionUpdateMetadata{
+		ExtensionID: index.ExtensionID, Version: index.Version,
+		ManifestVersion: index.ManifestVersion, PackageURL: index.DownloadURL,
+		PackageSHA256: index.SHA256, PackageSize: index.PackageSize,
+		PublisherID: index.PublisherID, PublisherKeyID: index.PublisherKeyID,
+		Signature: index.SignatureURL, MinimumHostVersion: index.MinHostVersion,
+		SupportedPlatforms: index.Platforms, SupportedArch: index.Architectures,
+		PublishedAt: publishedAt, ReleaseChannel: index.Channel, SignedIndex: true,
+	}, nil
+}
 
-	var regResp registryExtensionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
-		return nil, fmt.Errorf("desktop_update: decode registry response: %w", err)
-	}
+func validateReleaseIndex(index ReleaseIndex, extensionID string) error {
+	return validateReleaseIndexFields(index, extensionID, true)
+}
 
-	meta := &ExtensionUpdateMetadata{
-		ExtensionID:        regResp.ExtensionID,
-		Version:            regResp.Version,
-		ManifestVersion:    regResp.ManifestVersion,
-		PackageURL:         regResp.PackageURL,
-		PackageSHA512:      regResp.PackageSHA512,
-		PackageSHA256:      regResp.PackageSHA256,
-		PackageSize:        regResp.PackageSize,
-		PublisherID:        regResp.PublisherID,
-		PublisherKeyID:     regResp.PublisherKeyID,
-		Signature:          regResp.Signature,
-		MinimumHostVersion: regResp.MinimumHostVersion,
-		MaximumHostVersion: regResp.MaximumHostVersion,
-		SupportedPlatforms: regResp.SupportedPlatforms,
-		SupportedArch:      regResp.SupportedArch,
-		ReleaseChannel:     regResp.ReleaseChannel,
+func validateReleaseIndexFields(index ReleaseIndex, extensionID string, requireSignature bool) error {
+	if index.SchemaVersion != 1 || index.ExtensionID != extensionID || index.PublisherID == "" ||
+		index.PublisherKeyID == "" || index.Version == "" || index.DownloadURL == "" ||
+		len(index.SHA256) != 64 || index.SignatureURL == "" || index.GeneratedAt == "" ||
+		(requireSignature && index.Signature == "") {
+		return ErrIndexInvalid
 	}
+	if _, err := time.Parse(time.RFC3339, index.GeneratedAt); err != nil {
+		return fmt.Errorf("%w: generatedAt", ErrIndexInvalid)
+	}
+	if index.ManifestVersion == 0 {
+		index.ManifestVersion = 1
+	}
+	return nil
+}
 
-	if meta.ExtensionID == "" {
-		meta.ExtensionID = extensionID
+func SignReleaseIndex(index ReleaseIndex, privateKey ed25519.PrivateKey) ([]byte, error) {
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("%w: invalid signing key", ErrIndexSignatureInvalid)
 	}
-	if meta.ManifestVersion == 0 {
-		meta.ManifestVersion = 1
+	index.Signature = ""
+	if err := validateReleaseIndexFields(index, index.ExtensionID, false); err != nil {
+		return nil, err
 	}
-	if regResp.PublishedAt != "" {
-		if parsed, err := time.Parse(time.RFC3339, regResp.PublishedAt); err == nil {
-			meta.PublishedAt = parsed
-		}
+	payload, err := json.Marshal(index)
+	if err != nil {
+		return nil, err
 	}
-	if meta.PublishedAt.IsZero() {
-		meta.PublishedAt = time.Now().UTC()
-	}
+	index.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+	return json.MarshalIndent(index, "", "  ")
+}
 
-	return meta, nil
+func (c *RegistryClient) verifyReleaseIndex(index ReleaseIndex) error {
+	if len(c.publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: trusted registry key unavailable", ErrIndexSignatureInvalid)
+	}
+	signature, err := base64.StdEncoding.DecodeString(index.Signature)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return ErrIndexSignatureInvalid
+	}
+	index.Signature = ""
+	payload, err := json.Marshal(index)
+	if err != nil || !ed25519.Verify(c.publicKey, payload, signature) {
+		return ErrIndexSignatureInvalid
+	}
+	return nil
 }

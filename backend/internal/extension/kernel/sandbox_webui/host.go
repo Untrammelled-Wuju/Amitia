@@ -19,8 +19,8 @@ import (
 const (
 	ProtocolScheme         = "amitia-extension"
 	ResourceProtocolScheme = "amitia-resource"
-	DefaultCSP             = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
-	RestrictedCSP          = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; navigate-to 'none'"
+	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
+	RestrictedCSP          = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
 	MaxBundleBytes         = 50 * 1024 * 1024
 	MaxSessionDuration     = 24 * time.Hour
 	MaxMessageBytes        = 256 * 1024
@@ -37,17 +37,17 @@ const (
 )
 
 var AllowedMIMETypes = map[string]bool{
-	"text/html":             true,
-	"text/css":              true,
-	"text/javascript":       true,
+	"text/html":              true,
+	"text/css":               true,
+	"text/javascript":        true,
 	"application/javascript": true,
-	"application/json":      true,
-	"image/png":             true,
-	"image/jpeg":            true,
-	"image/webp":            true,
-	"image/svg+xml":         true,
-	"font/woff2":            true,
-	"application/wasm":      true,
+	"application/json":       true,
+	"image/png":              true,
+	"image/jpeg":             true,
+	"image/webp":             true,
+	"image/svg+xml":          true,
+	"font/woff2":             true,
+	"application/wasm":       true,
 }
 
 func IsMIMEAllowed(mime string) bool {
@@ -96,44 +96,50 @@ const (
 type SessionState string
 
 const (
-	SessionStateCreating     SessionState = "creating"
-	SessionStateLoading      SessionState = "loading"
-	SessionStateHandshaking  SessionState = "handshaking"
-	SessionStateActive       SessionState = "active"
-	SessionStateReady        SessionState = "ready"
-	SessionStateSuspended    SessionState = "suspended"
-	SessionStateClosing      SessionState = "closing"
-	SessionStateClosed       SessionState = "closed"
-	SessionStateExpired      SessionState = "expired"
-	SessionStateFailed       SessionState = "failed"
-	SessionStateQuarantined  SessionState = "quarantined"
+	SessionStateCreating    SessionState = "creating"
+	SessionStateLoading     SessionState = "loading"
+	SessionStateHandshaking SessionState = "handshaking"
+	SessionStateActive      SessionState = "active"
+	SessionStateReady       SessionState = "ready"
+	SessionStateSuspended   SessionState = "suspended"
+	SessionStateClosing     SessionState = "closing"
+	SessionStateClosed      SessionState = "closed"
+	SessionStateExpired     SessionState = "expired"
+	SessionStateFailed      SessionState = "failed"
+	SessionStateQuarantined SessionState = "quarantined"
 )
 
 type WebSession struct {
-	SessionID     string
-	ContributionID string
-	ExtensionID   string
-	ModuleID      string
-	Generation    int64
-	SlotID        string
-	Origin        string
-	Nonce         string
-	CreatedAt     time.Time
-	ReadyAt       *time.Time
-	LastActiveAt  time.Time
-	ExpiresAt     time.Time
-	State         SessionState
-	Sandbox       SandboxType
-	CSP           string
-	AllowedActions []string
-	AllowedDataSources []string
-	Theme         ThemeSnapshot
-	Locale        string
-	mu            sync.Mutex
-	subscriptions map[string]*DataSubscription
-	resourceHandles map[string]*ResourceHandle
-	resizeCount   map[time.Time]int
-	bridgeClosed  bool
+	SessionID            string
+	ContributionID       string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
+	SlotID               string
+	Origin               string
+	Nonce                string
+	Token                string
+	CreatedAt            time.Time
+	ReadyAt              *time.Time
+	LastActiveAt         time.Time
+	ExpiresAt            time.Time
+	State                SessionState
+	Sandbox              SandboxType
+	CSP                  string
+	AllowedActions       []string
+	AllowedDataSources   []string
+	Theme                ThemeSnapshot
+	Locale               string
+	Surface              string
+	CharacterID          string
+	ConversationID       string
+	ScopeSnapshotID      string
+	PermissionSnapshotID string
+	mu                   sync.Mutex
+	subscriptions        map[string]*DataSubscription
+	resourceHandles      map[string]*ResourceHandle
+	resizeCount          map[time.Time]int
+	bridgeClosed         bool
 }
 
 type ThemeSnapshot struct {
@@ -154,29 +160,31 @@ type DataSubscription struct {
 }
 
 type ResourceHandle struct {
-	HandleID    string
-	Path        string
-	MIME        string
-	Size        int64
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	ReadOnly    bool
-	Consumed    bool
+	HandleID  string
+	Path      string
+	MIME      string
+	Size      int64
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	ReadOnly  bool
+	Consumed  bool
 }
 
 type BridgeMessage struct {
-	Method     string          `json:"method"`
-	Version    int             `json:"version"`
-	ID         string          `json:"id"`
-	WindowID   string          `json:"windowId"`
-	Origin     string          `json:"origin"`
-	Nonce      string          `json:"nonce"`
-	Generation int64           `json:"generation"`
-	Input      json.RawMessage `json:"input,omitempty"`
-	Output     json.RawMessage `json:"output,omitempty"`
-	Deadline   time.Time       `json:"deadline,omitempty"`
-	Size       int             `json:"size"`
-	Session    string          `json:"session"`
+	Method      string          `json:"method"`
+	Version     int             `json:"version"`
+	ID          string          `json:"id"`
+	WindowID    string          `json:"windowId"`
+	Origin      string          `json:"origin"`
+	Nonce       string          `json:"nonce"`
+	Token       string          `json:"token"`
+	Generation  int64           `json:"generation"`
+	CharacterID string          `json:"characterId,omitempty"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	Output      json.RawMessage `json:"output,omitempty"`
+	Deadline    time.Time       `json:"deadline,omitempty"`
+	Size        int             `json:"size"`
+	Session     string          `json:"session"`
 }
 
 type BridgeMethod string
@@ -237,10 +245,10 @@ type AuditEntry struct {
 
 func NewHost() *Host {
 	h := &Host{
-		sessions: make(map[string]*WebSession),
-		protocol: NewProtocolHandler(),
-		verifier: NewBundleVerifier(),
-		auditLog: func(entry AuditEntry) {},
+		sessions:    make(map[string]*WebSession),
+		protocol:    NewProtocolHandler(),
+		verifier:    NewBundleVerifier(),
+		auditLog:    func(entry AuditEntry) {},
 		cspReporter: func(sessionID, violation string) {},
 	}
 	h.lifecycle = NewLifecycleManager(h)
@@ -277,26 +285,30 @@ func (h *Host) SetCSPReporter(fn func(sessionID, violation string)) {
 }
 
 type CreateSessionRequest struct {
-	ContributionID string
-	ExtensionID    string
-	ModuleID       string
-	Generation     int64
-	SlotID         string
-	Sandbox        SandboxType
-	CSP            string
-	AllowedActions []string
+	ContributionID     string
+	ExtensionID        string
+	ModuleID           string
+	Generation         int64
+	SlotID             string
+	Sandbox            SandboxType
+	CSP                string
+	AllowedActions     []string
 	AllowedDataSources []string
-	Theme          ThemeSnapshot
-	Locale         string
-	BasePath       string
-	EntryPath      string
-	ExpectedHash   string
+	Theme              ThemeSnapshot
+	Locale             string
+	BasePath           string
+	EntryPath          string
+	ExpectedHash       string
+	Surface            string
+	CharacterID        string
+	ConversationID     string
 }
 
 type CreateSessionResult struct {
 	SessionID string
 	Origin    string
 	Nonce     string
+	Token     string
 	CSP       string
 	EntryURL  string
 }
@@ -345,29 +357,34 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	sessionID := newSessionID()
 	origin := BuildOrigin(req.ExtensionID, req.ModuleID)
 	nonce := newNonce()
+	token := newNonce()
 
 	session := &WebSession{
-		SessionID:     sessionID,
-		ContributionID: req.ContributionID,
-		ExtensionID:   req.ExtensionID,
-		ModuleID:      req.ModuleID,
-		Generation:    req.Generation,
-		SlotID:        req.SlotID,
-		Origin:        origin,
-		Nonce:         nonce,
-		CreatedAt:     time.Now().UTC(),
-		LastActiveAt:  time.Now().UTC(),
-		ExpiresAt:     time.Now().UTC().Add(MaxSessionDuration),
-		State:         SessionStateCreating,
-		Sandbox:       req.Sandbox,
-		CSP:           csp,
-		AllowedActions: req.AllowedActions,
-		AllowedDataSources: req.AllowedDataSources,
-		Theme:         req.Theme,
-		Locale:        req.Locale,
-		subscriptions: make(map[string]*DataSubscription),
-		resourceHandles: make(map[string]*ResourceHandle),
-		resizeCount:   make(map[time.Time]int),
+		SessionID:            sessionID,
+		ContributionID:       req.ContributionID,
+		ExtensionID:          req.ExtensionID,
+		ModuleID:             req.ModuleID,
+		Generation:           req.Generation,
+		SlotID:               req.SlotID,
+		Origin:               origin,
+		Nonce:                nonce,
+		Token:                token,
+		CreatedAt:            time.Now().UTC(),
+		LastActiveAt:         time.Now().UTC(),
+		ExpiresAt:            time.Now().UTC().Add(MaxSessionDuration),
+		State:                SessionStateCreating,
+		Sandbox:              req.Sandbox,
+		CSP:                  csp,
+		AllowedActions:       req.AllowedActions,
+		AllowedDataSources:   req.AllowedDataSources,
+		Theme:                req.Theme,
+		Locale:               req.Locale,
+		Surface:              req.Surface,
+		CharacterID:          req.CharacterID,
+		ConversationID:       req.ConversationID,
+		subscriptions:        make(map[string]*DataSubscription),
+		resourceHandles:      make(map[string]*ResourceHandle),
+		resizeCount:          make(map[time.Time]int),
 	}
 
 	h.mu.Lock()
@@ -380,6 +397,7 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		SessionID: sessionID,
 		Origin:    origin,
 		Nonce:     nonce,
+		Token:     token,
 		CSP:       csp,
 		EntryURL:  entryURL,
 	}, nil
@@ -826,8 +844,14 @@ func ValidateBridgeMessage(msg *BridgeMessage, session *WebSession) error {
 	if msg.Nonce != session.Nonce {
 		return ErrNonceMismatch
 	}
-	if msg.Generation != session.Generation && msg.Generation != 0 {
+	if msg.Token != session.Token {
+		return ErrTokenMismatch
+	}
+	if msg.Generation != session.Generation {
 		return ErrGenerationStale
+	}
+	if session.CharacterID != "" && msg.CharacterID != session.CharacterID {
+		return ErrCharacterIDMismatch
 	}
 	if len(msg.Input) > MaxMessageBytes {
 		return ErrMessageTooLarge
@@ -842,48 +866,50 @@ func ValidateBridgeMessage(msg *BridgeMessage, session *WebSession) error {
 }
 
 var (
-	ErrHostClosed            = errors.New("sandbox_webui: host closed")
-	ErrInvalidRequest        = errors.New("sandbox_webui: invalid request")
-	ErrInvalidSandboxType    = errors.New("sandbox_webui: invalid sandbox type")
-	ErrEntryMissing          = errors.New("sandbox_webui: entry missing")
-	ErrEntryNotHTML          = errors.New("sandbox_webui: entry must be html")
-	ErrInvalidPath           = errors.New("sandbox_webui: invalid path")
-	ErrPathTooLong           = errors.New("sandbox_webui: path too long")
-	ErrPathTraversal         = errors.New("sandbox_webui: path traversal detected")
-	ErrPathOutsideBundle     = errors.New("sandbox_webui: path outside bundle")
-	ErrResourceNotFound      = errors.New("sandbox_webui: resource not found")
-	ErrInvalidResource       = errors.New("sandbox_webui: invalid resource")
-	ErrSessionNotFound       = errors.New("sandbox_webui: session not found")
-	ErrSessionExpired        = errors.New("sandbox_webui: session expired")
-	ErrTooManySubscriptions  = errors.New("sandbox_webui: too many subscriptions")
-	ErrSubscriptionExists    = errors.New("sandbox_webui: subscription exists")
-	ErrResourceHandleExists  = errors.New("sandbox_webui: resource handle exists")
-	ErrResourceHandleNotFound = errors.New("sandbox_webui: resource handle not found")
-	ErrResourceHandleConsumed = errors.New("sandbox_webui: resource handle consumed")
-	ErrResourceHandleExpired = errors.New("sandbox_webui: resource handle expired")
-	ErrResizeRateLimit       = errors.New("sandbox_webui: resize rate limit exceeded")
-	ErrCSPEmpty              = errors.New("sandbox_webui: csp empty")
-	ErrCSPViolation          = errors.New("sandbox_webui: csp violation")
-	ErrInvalidMessage        = errors.New("sandbox_webui: invalid message")
-	ErrSessionMismatch       = errors.New("sandbox_webui: session mismatch")
-	ErrOriginMismatch        = errors.New("sandbox_webui: origin mismatch")
-	ErrNonceMismatch         = errors.New("sandbox_webui: nonce mismatch")
-	ErrMessageTooLarge       = errors.New("sandbox_webui: message too large")
-	ErrMethodNotAllowed      = errors.New("sandbox_webui: method not allowed")
-	ErrBridgeClosed          = errors.New("sandbox_webui: bridge closed")
-	ErrActionNotDeclared     = errors.New("sandbox_webui: action not declared")
-	ErrDataSourceNotDeclared = errors.New("sandbox_webui: data source not declared")
-	ErrBundleNotFound         = errors.New("sandbox_webui: bundle not found")
-	ErrBundleTooLarge         = errors.New("sandbox_webui: bundle too large")
-	ErrBundleScriptForbidden  = errors.New("sandbox_webui: bundle contains forbidden script")
-	ErrBundleIframeForbidden  = errors.New("sandbox_webui: bundle contains forbidden iframe")
-	ErrBundleObjectForbidden  = errors.New("sandbox_webui: bundle contains forbidden object")
-	ErrIntegrityMismatch      = errors.New("sandbox_webui: resource integrity mismatch")
-	ErrMimeNotAllowed         = errors.New("sandbox_webui: mime type not allowed")
-	ErrGenerationStale        = errors.New("sandbox_webui: generation stale")
-	ErrQuarantined            = errors.New("sandbox_webui: contribution quarantined")
-	ErrBridgeRateLimited      = errors.New("sandbox_webui: bridge rate limited")
-	ErrResourcePathForbidden  = errors.New("sandbox_webui: resource path forbidden")
+	ErrHostClosed                = errors.New("sandbox_webui: host closed")
+	ErrInvalidRequest            = errors.New("sandbox_webui: invalid request")
+	ErrInvalidSandboxType        = errors.New("sandbox_webui: invalid sandbox type")
+	ErrEntryMissing              = errors.New("sandbox_webui: entry missing")
+	ErrEntryNotHTML              = errors.New("sandbox_webui: entry must be html")
+	ErrInvalidPath               = errors.New("sandbox_webui: invalid path")
+	ErrPathTooLong               = errors.New("sandbox_webui: path too long")
+	ErrPathTraversal             = errors.New("sandbox_webui: path traversal detected")
+	ErrPathOutsideBundle         = errors.New("sandbox_webui: path outside bundle")
+	ErrResourceNotFound          = errors.New("sandbox_webui: resource not found")
+	ErrInvalidResource           = errors.New("sandbox_webui: invalid resource")
+	ErrSessionNotFound           = errors.New("sandbox_webui: session not found")
+	ErrSessionExpired            = errors.New("sandbox_webui: session expired")
+	ErrTooManySubscriptions      = errors.New("sandbox_webui: too many subscriptions")
+	ErrSubscriptionExists        = errors.New("sandbox_webui: subscription exists")
+	ErrResourceHandleExists      = errors.New("sandbox_webui: resource handle exists")
+	ErrResourceHandleNotFound    = errors.New("sandbox_webui: resource handle not found")
+	ErrResourceHandleConsumed    = errors.New("sandbox_webui: resource handle consumed")
+	ErrResourceHandleExpired     = errors.New("sandbox_webui: resource handle expired")
+	ErrResizeRateLimit           = errors.New("sandbox_webui: resize rate limit exceeded")
+	ErrCSPEmpty                  = errors.New("sandbox_webui: csp empty")
+	ErrCSPViolation              = errors.New("sandbox_webui: csp violation")
+	ErrInvalidMessage            = errors.New("sandbox_webui: invalid message")
+	ErrSessionMismatch           = errors.New("sandbox_webui: session mismatch")
+	ErrOriginMismatch            = errors.New("sandbox_webui: origin mismatch")
+	ErrNonceMismatch             = errors.New("sandbox_webui: nonce mismatch")
+	ErrTokenMismatch             = errors.New("sandbox_webui: token mismatch")
+	ErrMessageTooLarge           = errors.New("sandbox_webui: message too large")
+	ErrMethodNotAllowed          = errors.New("sandbox_webui: method not allowed")
+	ErrBridgeClosed              = errors.New("sandbox_webui: bridge closed")
+	ErrActionNotDeclared         = errors.New("sandbox_webui: action not declared")
+	ErrDataSourceNotDeclared     = errors.New("sandbox_webui: data source not declared")
+	ErrBundleNotFound            = errors.New("sandbox_webui: bundle not found")
+	ErrBundleTooLarge            = errors.New("sandbox_webui: bundle too large")
+	ErrBundleScriptForbidden     = errors.New("sandbox_webui: bundle contains forbidden script")
+	ErrBundleIframeForbidden     = errors.New("sandbox_webui: bundle contains forbidden iframe")
+	ErrBundleObjectForbidden     = errors.New("sandbox_webui: bundle contains forbidden object")
+	ErrIntegrityMismatch         = errors.New("sandbox_webui: resource integrity mismatch")
+	ErrMimeNotAllowed            = errors.New("sandbox_webui: mime type not allowed")
+	ErrGenerationStale           = errors.New("sandbox_webui: generation stale")
+	ErrCharacterIDMismatch       = errors.New("sandbox_webui: character id mismatch")
+	ErrQuarantined               = errors.New("sandbox_webui: contribution quarantined")
+	ErrBridgeRateLimited         = errors.New("sandbox_webui: bridge rate limited")
+	ErrResourcePathForbidden     = errors.New("sandbox_webui: resource path forbidden")
 	ErrSessionOwnershipViolation = errors.New("sandbox_webui: session ownership violation")
 )
 

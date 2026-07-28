@@ -10,11 +10,11 @@ import (
 )
 
 type ScheduleScanner struct {
-	store     ScheduleStore
-	clock     Clock
-	config    ScheduleConfig
-	calc      *ScheduleCalculator
-	planner   *TriggerPlanner
+	store   ScheduleStore
+	clock   Clock
+	config  ScheduleConfig
+	calc    *ScheduleCalculator
+	planner *TriggerPlanner
 
 	mu      sync.Mutex
 	ctx     context.Context

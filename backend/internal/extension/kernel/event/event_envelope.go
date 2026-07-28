@@ -26,6 +26,10 @@ type EventEnvelope struct {
 	IdempotencyKey      string
 	ScopeSnapshotID     string
 	PermissionSnapshotID string
+	CharacterID         string
+	ConversationID      string
+	ProducerExtensionID string
+	ProducerModuleID    string
 	TraceID             string
 	OperationID         string
 	ParentEventID       *string
@@ -86,6 +90,25 @@ func (e EventEnvelope) WithProducer(producerID, producerType string, generation 
 	e.ProducerID = producerID
 	e.ProducerType = producerType
 	e.ProducerGeneration = generation
+	return e
+}
+
+func (e EventEnvelope) WithProducerDetail(extensionID, moduleID string, generation int64) EventEnvelope {
+	e.ProducerExtensionID = extensionID
+	e.ProducerModuleID = moduleID
+	e.ProducerGeneration = generation
+	if e.ProducerID == "" {
+		e.ProducerID = extensionID
+	}
+	if e.ProducerType == "" {
+		e.ProducerType = "extension"
+	}
+	return e
+}
+
+func (e EventEnvelope) WithContext(characterID, conversationID string) EventEnvelope {
+	e.CharacterID = characterID
+	e.ConversationID = conversationID
 	return e
 }
 

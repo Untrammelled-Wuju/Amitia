@@ -37,22 +37,23 @@ type ResourceOwner struct {
 }
 
 type DesktopHost struct {
-	mu                sync.RWMutex
-	contracts         *DesktopContractRegistry
-	conflicts         *ConflictResolver
-	contributions     map[string]*ResolvedDesktopContribution
-	contribsByExt     map[string][]string
-	shortcutsByAccel  map[string]string
-	resources         []ResourceOwner
-	generation        int64
-	snapshot          *DesktopSnapshot
-	permChecker       PermissionChecker
-	scopeChecker      ScopeChecker
-	actionExecutor    ActionExecutor
-	circuitOpen       atomic.Bool
-	circuitFailures   atomic.Int32
-	circuitThreshold  int32
-	circuitResetAt    time.Time
+	mu               sync.RWMutex
+	contracts        *DesktopContractRegistry
+	conflicts        *ConflictResolver
+	contributions    map[string]*ResolvedDesktopContribution
+	contribsByExt    map[string][]string
+	shortcutsByAccel map[string]string
+	resources        []ResourceOwner
+	applyReports     map[int64]DesktopApplyReport
+	generation       int64
+	snapshot         *DesktopSnapshot
+	permChecker      PermissionChecker
+	scopeChecker     ScopeChecker
+	actionExecutor   ActionExecutor
+	circuitOpen      atomic.Bool
+	circuitFailures  atomic.Int32
+	circuitThreshold int32
+	circuitResetAt   time.Time
 }
 
 func NewDesktopHost() *DesktopHost {
@@ -62,8 +63,33 @@ func NewDesktopHost() *DesktopHost {
 		contributions:    make(map[string]*ResolvedDesktopContribution),
 		contribsByExt:    make(map[string][]string),
 		shortcutsByAccel: make(map[string]string),
+		applyReports:     make(map[int64]DesktopApplyReport),
 		circuitThreshold: 5,
 	}
+}
+
+type DesktopApplyReport struct {
+	Generation int64     `json:"generation"`
+	Hash       string    `json:"hash"`
+	Success    bool      `json:"success"`
+	Error      string    `json:"error,omitempty"`
+	AppliedAt  time.Time `json:"appliedAt"`
+}
+
+func (h *DesktopHost) RecordApplyReport(report DesktopApplyReport) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if report.AppliedAt.IsZero() {
+		report.AppliedAt = time.Now().UTC()
+	}
+	h.applyReports[report.Generation] = report
+}
+
+func (h *DesktopHost) GetApplyReport(generation int64) (DesktopApplyReport, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	report, ok := h.applyReports[generation]
+	return report, ok
 }
 
 func (h *DesktopHost) SetPermissionChecker(p PermissionChecker) {
@@ -107,6 +133,15 @@ func (h *DesktopHost) RegisterContribution(ctx context.Context, def DesktopContr
 	}
 	if !h.contracts.IsTargetAllowed(def.ContractID, def.ContractVersion, def.Target) {
 		return nil, fmt.Errorf("%w: target %s not allowed for contract %s v%d", ErrInvalidMenuTarget, def.Target, def.ContractID, def.ContractVersion)
+	}
+	permissionGranted := true
+	h.mu.RLock()
+	permissionChecker := h.permChecker
+	h.mu.RUnlock()
+	if permissionChecker != nil {
+		permissionID := permissionForType(def.DesktopType, def.Shortcut != nil && def.Shortcut.Global)
+		granted, err := permissionChecker.Check(ctx, def.ExtensionID, permissionID)
+		permissionGranted = err == nil && granted
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -159,6 +194,14 @@ func (h *DesktopHost) RegisterContribution(ctx context.Context, def DesktopContr
 		resolved.EffectiveLabel = def.Label.Get("")
 	}
 	if resolved.Status == ContributionStatusRegistered {
+		if !permissionGranted {
+			resolved.Status = ContributionStatusPendingPermission
+			if def.Shortcut != nil {
+				delete(h.shortcutsByAccel, NormalizeAccelerator(def.Shortcut.Accelerator))
+			}
+		}
+	}
+	if resolved.Status == ContributionStatusRegistered {
 		for _, existing := range h.contributions {
 			if existing.Definition.Target == def.Target {
 				if conflict := h.conflicts.DetectMenuIDConflict(&existing.Definition, &def); conflict != nil {
@@ -202,6 +245,7 @@ func (h *DesktopHost) UnregisterContribution(contributionID string) error {
 		delete(h.shortcutsByAccel, normalized)
 	}
 	h.releaseResource(contributionID)
+	atomic.AddInt64(&h.generation, 1)
 	return nil
 }
 
@@ -223,6 +267,9 @@ func (h *DesktopHost) UnregisterByExtension(extensionID string) int {
 	}
 	delete(h.contribsByExt, extensionID)
 	h.conflicts.ClearByExtension(extensionID)
+	if count > 0 {
+		atomic.AddInt64(&h.generation, 1)
+	}
 	return count
 }
 
@@ -268,8 +315,8 @@ func (h *DesktopHost) ListByTarget(target string) []ResolvedDesktopContribution 
 }
 
 func (h *DesktopHost) BuildSnapshot(sortCtx SortContext) *DesktopSnapshot {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	contribs := make([]ResolvedDesktopContribution, 0, len(h.contributions))
 	for _, c := range h.contributions {
 		contribs = append(contribs, *c)
@@ -395,4 +442,45 @@ func permissionForType(desktopType DesktopType, isGlobal bool) string {
 	default:
 		return "desktop.menu.execute"
 	}
+}
+
+func (h *DesktopHost) EnableExtension(ctx context.Context, extensionID string) {
+	permissions := make(map[string]bool)
+	for _, contribution := range h.ListByExtension(extensionID) {
+		granted := true
+		if h.permChecker != nil {
+			permissionID := permissionForType(contribution.Definition.DesktopType, contribution.Definition.Shortcut != nil && contribution.Definition.Shortcut.Global)
+			ok, err := h.permChecker.Check(ctx, extensionID, permissionID)
+			granted = err == nil && ok
+		}
+		permissions[contribution.Definition.ContributionID] = granted
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, id := range h.contribsByExt[extensionID] {
+		if resolved, ok := h.contributions[id]; ok {
+			if permissions[id] {
+				resolved.Status = ContributionStatusRegistered
+			} else {
+				resolved.Status = ContributionStatusPendingPermission
+			}
+			resolved.Generation = atomic.AddInt64(&h.generation, 1)
+			resolved.ResolvedAt = time.Now().UTC()
+		}
+	}
+}
+
+func (h *DesktopHost) DisableExtension(ctx context.Context, extensionID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, id := range h.contribsByExt[extensionID] {
+		if resolved, ok := h.contributions[id]; ok {
+			resolved.Status = ContributionStatusDisabled
+			resolved.Generation = atomic.AddInt64(&h.generation, 1)
+		}
+	}
+}
+
+func (h *DesktopHost) UninstallContributions(ctx context.Context, extensionID string) {
+	h.UnregisterByExtension(extensionID)
 }

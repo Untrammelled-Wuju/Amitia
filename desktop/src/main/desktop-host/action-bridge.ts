@@ -1,51 +1,13 @@
-import { BrowserWindow, ipcMain, type IpcMainEvent } from "electron";
-import { randomUUID } from "node:crypto";
-import { DESKTOP_IPC_CHANNELS } from "./ipc-channels";
+import { BrowserWindow } from "electron";
 import type { ActionInvokeRequest, ActionInvokeResult } from "./types";
-
-const ACTION_RESPONSE_CHANNEL = "desktop:action:bridge:response";
-
-interface ActionBridgeResponse {
-  requestId: string;
-  result?: ActionInvokeResult;
-  error?: string;
-}
-
-interface PendingRequest {
-  resolve: (result: ActionInvokeResult) => void;
-  reject: (error: Error) => void;
-  timer: NodeJS.Timeout;
-}
 
 export class DesktopActionBridge {
   private readonly mainWindow: BrowserWindow;
   private readonly timeoutMs: number;
-  private readonly pending = new Map<string, PendingRequest>();
-  private responseHandler:
-    | ((event: IpcMainEvent, payload: ActionBridgeResponse) => void)
-    | null = null;
 
   constructor(mainWindow: BrowserWindow, timeoutMs = 30000) {
     this.mainWindow = mainWindow;
     this.timeoutMs = timeoutMs;
-    this.registerResponseListener();
-  }
-
-  private registerResponseListener(): void {
-    this.responseHandler = (_event, payload) => {
-      const pending = this.pending.get(payload.requestId);
-      if (!pending) return;
-      clearTimeout(pending.timer);
-      this.pending.delete(payload.requestId);
-      if (payload.error) {
-        pending.reject(new Error(payload.error));
-      } else if (payload.result) {
-        pending.resolve(payload.result);
-      } else {
-        pending.reject(new Error("Action invoke returned empty result"));
-      }
-    };
-    ipcMain.on(ACTION_RESPONSE_CHANNEL, this.responseHandler);
   }
 
   async invokeAction(
@@ -54,21 +16,42 @@ export class DesktopActionBridge {
     if (this.mainWindow.isDestroyed()) {
       return { success: false, error: "Main window is destroyed" };
     }
-    const requestId = randomUUID();
-    const promise = new Promise<ActionInvokeResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.pending.delete(requestId)) {
-          reject(new Error("Action invoke timed out"));
-        }
-      }, this.timeoutMs);
-      this.pending.set(requestId, { resolve, reject, timer });
-    });
-    this.mainWindow.webContents.send(DESKTOP_IPC_CHANNELS.ACTION_INVOKE, {
-      requestId,
-      request,
-    });
     try {
-      return await promise;
+      const token = await this.mainWindow.webContents.executeJavaScript(
+        'localStorage.getItem("ai-companion-token")',
+        true,
+      );
+      if (typeof token !== "string" || token.length === 0) {
+        return { success: false, error: "Authentication required" };
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const response = await fetch(
+        `http://127.0.0.1:18899/api/extensions/desktop/contributions/${encodeURIComponent(request.contributionId)}/invoke`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            extensionId: request.extensionId,
+            characterId: request.scope?.characterId,
+            conversationId: request.scope?.conversationId,
+            global: request.scope?.global,
+            input: request.input,
+          }),
+          signal: controller.signal,
+        },
+      ).finally(() => clearTimeout(timer));
+      const payload = await response.json();
+      if (!response.ok) {
+        return {
+          success: false,
+          error: payload?.message ?? `Action invoke failed: ${response.status}`,
+        };
+      }
+      return { success: true, result: payload?.result };
     } catch (err) {
       return {
         success: false,
@@ -78,14 +61,5 @@ export class DesktopActionBridge {
   }
 
   cleanup(): void {
-    if (this.responseHandler) {
-      ipcMain.removeListener(ACTION_RESPONSE_CHANNEL, this.responseHandler);
-      this.responseHandler = null;
-    }
-    for (const [, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error("Action bridge cleanup"));
-    }
-    this.pending.clear();
   }
 }

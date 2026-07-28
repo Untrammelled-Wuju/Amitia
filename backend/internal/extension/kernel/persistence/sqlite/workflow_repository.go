@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -52,7 +50,7 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 		outputSchema = json.RawMessage("{}")
 	}
 
-	defHash := computeWorkflowHash(def)
+	defHash := workflow.ComputeDefinitionHash(def)
 
 	now := time.Now().UTC()
 	_, err = r.db.ExecContext(ctx, `
@@ -106,7 +104,7 @@ func (r *WorkflowDefinitionRepository) Get(ctx context.Context, workflowID strin
 		SELECT workflow_id, extension_id, module_id, name, description, schema_version, version,
 			input_schema_json, output_schema_json, nodes_json, permissions_json, scope,
 			callable_by_agent, enabled, has_side_effects, idempotent, limits_json,
-			source, metadata_json
+			source, metadata_json, definition_hash
 		FROM extension_workflow_definitions WHERE workflow_id = ?
 	`, workflowID)
 
@@ -122,7 +120,7 @@ func (r *WorkflowDefinitionRepository) List(ctx context.Context) ([]workflow.Wor
 		SELECT workflow_id, extension_id, module_id, name, description, schema_version, version,
 			input_schema_json, output_schema_json, nodes_json, permissions_json, scope,
 			callable_by_agent, enabled, has_side_effects, idempotent, limits_json,
-			source, metadata_json
+			source, metadata_json, definition_hash
 		FROM extension_workflow_definitions
 	`)
 	if err != nil {
@@ -151,6 +149,60 @@ func (r *WorkflowDefinitionRepository) SetEnabled(ctx context.Context, workflowI
 	return nil
 }
 
+func (r *WorkflowDefinitionRepository) SaveTrigger(ctx context.Context, binding workflow.TriggerBinding) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO extension_workflow_trigger_bindings
+			(binding_id, trigger_type, event_type, schedule_id, workflow_id, input_json, generation, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(binding_id) DO UPDATE SET
+			trigger_type = excluded.trigger_type, event_type = excluded.event_type,
+			schedule_id = excluded.schedule_id, workflow_id = excluded.workflow_id,
+			input_json = excluded.input_json, generation = excluded.generation,
+			enabled = excluded.enabled, updated_at = excluded.updated_at
+	`, binding.BindingID, binding.Type, binding.EventType, binding.ScheduleID, binding.WorkflowID, binding.Input, binding.Generation, boolToInt(binding.Enabled), now, now)
+	if err != nil {
+		return fmt.Errorf("save workflow trigger binding: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowDefinitionRepository) ListTriggers(ctx context.Context, triggerType workflow.TriggerType, eventType, scheduleID string) ([]workflow.TriggerBinding, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT binding_id, trigger_type, event_type, schedule_id, workflow_id, input_json, generation, enabled
+		FROM extension_workflow_trigger_bindings
+		WHERE trigger_type = ? AND enabled = 1
+			AND (? = '' OR event_type = ?)
+			AND (? = '' OR schedule_id = ?)
+		ORDER BY binding_id
+	`, triggerType, eventType, eventType, scheduleID, scheduleID)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow trigger bindings: %w", err)
+	}
+	defer rows.Close()
+	result := make([]workflow.TriggerBinding, 0)
+	for rows.Next() {
+		var binding workflow.TriggerBinding
+		var inputJSON string
+		var enabled int
+		if err := rows.Scan(&binding.BindingID, &binding.Type, &binding.EventType, &binding.ScheduleID, &binding.WorkflowID, &inputJSON, &binding.Generation, &enabled); err != nil {
+			return nil, fmt.Errorf("scan workflow trigger binding: %w", err)
+		}
+		binding.Input = json.RawMessage(inputJSON)
+		binding.Enabled = enabled == 1
+		result = append(result, binding)
+	}
+	return result, rows.Err()
+}
+
+func (r *WorkflowDefinitionRepository) DeleteTrigger(ctx context.Context, bindingID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_trigger_bindings WHERE binding_id = ?`, bindingID)
+	if err != nil {
+		return fmt.Errorf("delete workflow trigger binding: %w", err)
+	}
+	return nil
+}
+
 type scannerInterface interface {
 	Scan(dest ...any) error
 }
@@ -165,7 +217,7 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 		&def.SchemaVersion, &def.Version,
 		&inputSchema, &outputSchema, &nodesJSON, &permissionsJSON, &def.Scope,
 		&callableByAgent, &enabled, &hasSideEffects, &idempotent, &limitsJSON,
-		&def.Source, &metadataJSON,
+		&def.Source, &metadataJSON, &def.DefinitionHash,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -176,7 +228,7 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 
 	def.InputSchema = json.RawMessage(inputSchema)
 	def.OutputSchema = json.RawMessage(outputSchema)
-	def.CallableByAgent = enabled == 1
+	def.CallableByAgent = callableByAgent == 1
 	def.Enabled = enabled == 1
 	def.HasSideEffects = hasSideEffects == 1
 	def.Idempotent = idempotent == 1
@@ -196,17 +248,6 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 	}
 
 	return &def, nil
-}
-
-func computeWorkflowHash(def workflow.WorkflowDefinition) string {
-	payload := map[string]any{
-		"id":   def.ID,
-		"name": def.Name,
-		"version": def.Version,
-	}
-	raw, _ := json.Marshal(payload)
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:16])
 }
 
 type SQLiteCheckpointStore struct {
@@ -333,4 +374,189 @@ func (r *WorkflowExecutionRepository) Save(ctx context.Context, execID, workflow
 		return fmt.Errorf("save workflow execution: %w", err)
 	}
 	return nil
+}
+
+func (r *WorkflowExecutionRepository) Start(ctx context.Context, run workflow.WorkflowRun) (*workflow.WorkflowRun, bool, error) {
+	existing, err := r.Get(ctx, run.ExecutionID)
+	if err == nil {
+		if existing.Status == workflow.RunStatusFailed || existing.Status == workflow.RunStatusCancelled || run.Context.Recovery {
+			_, updateErr := r.db.ExecContext(ctx, `UPDATE extension_workflow_executions SET status = ?, error_message = '', finished_at = NULL, attempt = attempt + 1, updated_at = ? WHERE execution_id = ?`, workflow.RunStatusRunning, time.Now().UTC(), run.ExecutionID)
+			if updateErr != nil {
+				return nil, false, fmt.Errorf("restart workflow execution: %w", updateErr)
+			}
+		}
+		return existing, false, nil
+	}
+	if err != workflow.ErrWorkflowRunNotFound {
+		return nil, false, err
+	}
+
+	contextJSON, marshalErr := json.Marshal(run.Context)
+	if marshalErr != nil {
+		return nil, false, fmt.Errorf("marshal workflow context: %w", marshalErr)
+	}
+	now := time.Now().UTC()
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO extension_workflow_executions
+			(execution_id, workflow_id, status, input_json, output_json, error_message,
+			 extension_id, module_id, character_id, conversation_id, operation_id, invocation_id,
+			 schedule_id, trigger_id, trace_id, idempotency_key, scope_snapshot_id,
+			 permission_snapshot_id, generation, context_json, attempt, steps_json,
+			 compensation_json, started_at, duration_ms, created_at, updated_at)
+		VALUES (?, ?, ?, ?, NULL, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, 0, ?, ?)
+	`, run.ExecutionID, run.WorkflowID, workflow.RunStatusRunning, run.Input,
+		run.Context.ExtensionID, run.Context.ModuleID, run.Context.CharacterID, run.Context.ConversationID,
+		run.Context.OperationID, run.Context.InvocationID, run.Context.ScheduleID, run.Context.TriggerID,
+		run.Context.TraceID, run.Context.IdempotencyKey, run.Context.ScopeSnapshotID,
+		run.Context.PermissionSnapID, run.Context.Generation, contextJSON, maxInt(run.Attempt, 1),
+		run.StartedAt, now, now)
+	if err != nil {
+		if run.Context.IdempotencyKey != "" {
+			duplicate, queryErr := r.getByIdempotency(ctx, run.WorkflowID, run.Context.IdempotencyKey)
+			if queryErr == nil {
+				return duplicate, false, nil
+			}
+		}
+		return nil, false, fmt.Errorf("start workflow execution: %w", err)
+	}
+	return &run, true, nil
+}
+
+func (r *WorkflowExecutionRepository) SaveStep(ctx context.Context, step workflow.StepRun) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO extension_workflow_step_runs
+			(execution_id, workflow_id, node_id, status, input_json, output_json, error_message, attempt, started_at, finished_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(execution_id, node_id) DO UPDATE SET
+			status = excluded.status, input_json = excluded.input_json, output_json = excluded.output_json,
+			error_message = excluded.error_message, attempt = excluded.attempt,
+			started_at = excluded.started_at, finished_at = excluded.finished_at, updated_at = excluded.updated_at
+	`, step.ExecutionID, step.WorkflowID, step.NodeID, step.Status, step.Input, step.Output, step.Error, step.Attempt, step.StartedAt, step.FinishedAt, now)
+	if err != nil {
+		return fmt.Errorf("save workflow step run: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowExecutionRepository) Finish(ctx context.Context, run workflow.WorkflowRun) error {
+	stepsJSON, err := json.Marshal(run.Steps)
+	if err != nil {
+		return fmt.Errorf("marshal workflow steps: %w", err)
+	}
+	compJSON, err := json.Marshal(run.CompensationResults)
+	if err != nil {
+		return fmt.Errorf("marshal workflow compensation: %w", err)
+	}
+	duration := int64(0)
+	if run.FinishedAt != nil {
+		duration = run.FinishedAt.Sub(run.StartedAt).Milliseconds()
+	}
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE extension_workflow_executions
+		SET status = ?, output_json = ?, error_message = ?, steps_json = ?, compensation_json = ?,
+			finished_at = ?, duration_ms = ?, updated_at = ?
+		WHERE execution_id = ?
+	`, run.Status, run.Output, run.Error, stepsJSON, compJSON, run.FinishedAt, duration, run.UpdatedAt, run.ExecutionID)
+	if err != nil {
+		return fmt.Errorf("finish workflow execution: %w", err)
+	}
+	for _, compensation := range run.CompensationResults {
+		executedAt := compensation.ExecutedAt
+		if executedAt.IsZero() {
+			executedAt = run.UpdatedAt
+		}
+		if _, err := r.db.ExecContext(ctx, `
+			INSERT INTO extension_workflow_compensations (execution_id, node_id, status, error_message, executed_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(execution_id, node_id) DO UPDATE SET status = excluded.status, error_message = excluded.error_message, executed_at = excluded.executed_at
+		`, run.ExecutionID, compensation.NodeID, compensation.Status, compensation.Error, executedAt); err != nil {
+			return fmt.Errorf("save workflow compensation: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *WorkflowExecutionRepository) Get(ctx context.Context, executionID string) (*workflow.WorkflowRun, error) {
+	return r.scanRun(r.db.QueryRowContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
+		FROM extension_workflow_executions WHERE execution_id = ?
+	`, executionID))
+}
+
+func (r *WorkflowExecutionRepository) getByIdempotency(ctx context.Context, workflowID, idempotencyKey string) (*workflow.WorkflowRun, error) {
+	return r.scanRun(r.db.QueryRowContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
+		FROM extension_workflow_executions WHERE workflow_id = ? AND idempotency_key = ?
+	`, workflowID, idempotencyKey))
+}
+
+func (r *WorkflowExecutionRepository) ListRecoverable(ctx context.Context, limit int) ([]workflow.WorkflowRun, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
+		FROM extension_workflow_executions WHERE status IN (?, ?) ORDER BY updated_at LIMIT ?
+	`, workflow.RunStatusRunning, workflow.RunStatusCompensating, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list recoverable workflow executions: %w", err)
+	}
+	defer rows.Close()
+	result := make([]workflow.WorkflowRun, 0)
+	for rows.Next() {
+		run, scanErr := r.scanRun(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, *run)
+	}
+	return result, rows.Err()
+}
+
+func (r *WorkflowExecutionRepository) scanRun(row scannerInterface) (*workflow.WorkflowRun, error) {
+	var run workflow.WorkflowRun
+	var inputJSON, outputJSON, contextJSON, stepsJSON, compensationJSON sql.NullString
+	var errorMessage string
+	var finishedAt sql.NullTime
+	err := row.Scan(&run.ExecutionID, &run.WorkflowID, &run.Status, &inputJSON, &outputJSON, &errorMessage,
+		&contextJSON, &stepsJSON, &compensationJSON, &run.Attempt, &run.StartedAt, &finishedAt, &run.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, workflow.ErrWorkflowRunNotFound
+		}
+		return nil, fmt.Errorf("scan workflow execution: %w", err)
+	}
+	run.Input = json.RawMessage(inputJSON.String)
+	run.Output = json.RawMessage(outputJSON.String)
+	run.Error = errorMessage
+	if finishedAt.Valid {
+		run.FinishedAt = &finishedAt.Time
+	}
+	if contextJSON.Valid && contextJSON.String != "" {
+		if err := json.Unmarshal([]byte(contextJSON.String), &run.Context); err != nil {
+			return nil, fmt.Errorf("unmarshal workflow context: %w", err)
+		}
+	}
+	if stepsJSON.Valid && stepsJSON.String != "" {
+		if err := json.Unmarshal([]byte(stepsJSON.String), &run.Steps); err != nil {
+			return nil, fmt.Errorf("unmarshal workflow steps: %w", err)
+		}
+	}
+	if compensationJSON.Valid && compensationJSON.String != "" {
+		if err := json.Unmarshal([]byte(compensationJSON.String), &run.CompensationResults); err != nil {
+			return nil, fmt.Errorf("unmarshal workflow compensation: %w", err)
+		}
+	}
+	return &run, nil
+}
+
+func maxInt(value, fallback int) int {
+	if value > fallback {
+		return value
+	}
+	return fallback
 }

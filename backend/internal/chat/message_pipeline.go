@@ -159,7 +159,7 @@ func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *C
 	if result == nil || result.HasExistingUser || result.Reply == "" {
 		return
 	}
-	if s.toolRuntime == nil && s.skillRuntime == nil {
+	if s.toolRuntime == nil {
 		return
 	}
 	messageID := ""
@@ -174,5 +174,4 @@ func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *C
 		s.toolRuntime.AfterReply(toolScope, toolReply)
 		return
 	}
-	s.skillRuntime.AfterReply(scope, replyView)
 }

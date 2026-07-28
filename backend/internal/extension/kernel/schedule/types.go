@@ -25,38 +25,38 @@ const (
 type IdempotencyMode string
 
 const (
-	IdempotencyModeIdempotent         IdempotencyMode = "idempotent"
-	IdempotencyModeConditionallyIdem  IdempotencyMode = "conditionally_idempotent"
-	IdempotencyModeNonIdempotent      IdempotencyMode = "non_idempotent"
+	IdempotencyModeIdempotent        IdempotencyMode = "idempotent"
+	IdempotencyModeConditionallyIdem IdempotencyMode = "conditionally_idempotent"
+	IdempotencyModeNonIdempotent     IdempotencyMode = "non_idempotent"
 )
 
 type ScheduleDefinitionStatus string
 
 const (
-	DefinitionStatusCreated      ScheduleDefinitionStatus = "created"
-	DefinitionStatusEnabled      ScheduleDefinitionStatus = "enabled"
-	DefinitionStatusDisabled     ScheduleDefinitionStatus = "disabled"
-	DefinitionStatusPaused       ScheduleDefinitionStatus = "paused"
-	DefinitionStatusExpired      ScheduleDefinitionStatus = "expired"
-	DefinitionStatusUninstalled  ScheduleDefinitionStatus = "uninstalled"
+	DefinitionStatusCreated     ScheduleDefinitionStatus = "created"
+	DefinitionStatusEnabled     ScheduleDefinitionStatus = "enabled"
+	DefinitionStatusDisabled    ScheduleDefinitionStatus = "disabled"
+	DefinitionStatusPaused      ScheduleDefinitionStatus = "paused"
+	DefinitionStatusExpired     ScheduleDefinitionStatus = "expired"
+	DefinitionStatusUninstalled ScheduleDefinitionStatus = "uninstalled"
 )
 
 type ScheduleRunStatus string
 
 const (
-	RunStatusWaiting     ScheduleRunStatus = "waiting"
-	RunStatusDue         ScheduleRunStatus = "due"
-	RunStatusLeased      ScheduleRunStatus = "leased"
-	RunStatusTriggering  ScheduleRunStatus = "triggering"
-	RunStatusRunning     ScheduleRunStatus = "running"
-	RunStatusRetryWait   ScheduleRunStatus = "retry_wait"
-	RunStatusCompleted   ScheduleRunStatus = "completed"
-	RunStatusFailed      ScheduleRunStatus = "failed"
-	RunStatusExpired     ScheduleRunStatus = "expired"
-	RunStatusBlocked     ScheduleRunStatus = "blocked"
-	RunStatusSkipped     ScheduleRunStatus = "skipped"
-	RunStatusCancelled   ScheduleRunStatus = "cancelled"
-	RunStatusQuarantined ScheduleRunStatus = "quarantined"
+	RunStatusWaiting          ScheduleRunStatus = "waiting"
+	RunStatusDue              ScheduleRunStatus = "due"
+	RunStatusLeased           ScheduleRunStatus = "leased"
+	RunStatusTriggering       ScheduleRunStatus = "triggering"
+	RunStatusRunning          ScheduleRunStatus = "running"
+	RunStatusRetryWait        ScheduleRunStatus = "retry_wait"
+	RunStatusCompleted        ScheduleRunStatus = "completed"
+	RunStatusFailed           ScheduleRunStatus = "failed"
+	RunStatusExpired          ScheduleRunStatus = "expired"
+	RunStatusBlocked          ScheduleRunStatus = "blocked"
+	RunStatusSkipped          ScheduleRunStatus = "skipped"
+	RunStatusCancelled        ScheduleRunStatus = "cancelled"
+	RunStatusQuarantined      ScheduleRunStatus = "quarantined"
 	RunStatusRecoveryRequired ScheduleRunStatus = "recovery_required"
 )
 
@@ -81,9 +81,9 @@ func (s ScheduleRunStatus) IsActive() bool {
 type MisfirePolicy string
 
 const (
-	MisfirePolicySkip             MisfirePolicy = "skip"
-	MisfirePolicyFireOnce         MisfirePolicy = "fire_once"
-	MisfirePolicyCatchUpLimited   MisfirePolicy = "catch_up_limited"
+	MisfirePolicySkip              MisfirePolicy = "skip"
+	MisfirePolicyFireOnce          MisfirePolicy = "fire_once"
+	MisfirePolicyCatchUpLimited    MisfirePolicy = "catch_up_limited"
 	MisfirePolicyRescheduleFromNow MisfirePolicy = "reschedule_from_now"
 )
 
@@ -116,9 +116,9 @@ const (
 type CircuitState string
 
 const (
-	CircuitStateClosed    CircuitState = "closed"
-	CircuitStateOpen      CircuitState = "open"
-	CircuitStateHalfOpen  CircuitState = "half_open"
+	CircuitStateClosed   CircuitState = "closed"
+	CircuitStateOpen     CircuitState = "open"
+	CircuitStateHalfOpen CircuitState = "half_open"
 )
 
 type QuarantineReason string
@@ -149,17 +149,17 @@ type OneShotTriggerDefinition struct {
 }
 
 type ScheduleTriggerDefinition struct {
-	Type      TriggerType               `json:"type"`
-	Cron      *CronTriggerDefinition    `json:"cron,omitempty"`
-	Interval  *IntervalTriggerDefinition `json:"interval,omitempty"`
-	OneShot   *OneShotTriggerDefinition  `json:"oneShot,omitempty"`
+	Type     TriggerType                `json:"type"`
+	Cron     *CronTriggerDefinition     `json:"cron,omitempty"`
+	Interval *IntervalTriggerDefinition `json:"interval,omitempty"`
+	OneShot  *OneShotTriggerDefinition  `json:"oneShot,omitempty"`
 }
 
 type ScheduleTargetDefinition struct {
-	Type            TargetType        `json:"type"`
-	TargetID        string            `json:"targetId"`
-	InputTemplate   json.RawMessage   `json:"inputTemplate,omitempty"`
-	IdempotencyMode IdempotencyMode   `json:"idempotencyMode"`
+	Type            TargetType      `json:"type"`
+	TargetID        string          `json:"targetId"`
+	InputTemplate   json.RawMessage `json:"inputTemplate,omitempty"`
+	IdempotencyMode IdempotencyMode `json:"idempotencyMode"`
 }
 
 type ScheduleMisfirePolicy struct {
@@ -212,105 +212,105 @@ type DependencyRequirement struct {
 }
 
 type ScheduleContributionDefinition struct {
-	ContributionID       string                      `json:"contributionId"`
-	ExtensionID          string                      `json:"extensionId"`
-	ModuleID             string                      `json:"moduleId"`
-	ScheduleID           string                      `json:"scheduleId"`
-	Name                 string                      `json:"name"`
-	Description          string                      `json:"description"`
-	Trigger              ScheduleTriggerDefinition   `json:"trigger"`
-	Target               ScheduleTargetDefinition    `json:"target"`
-	Timezone             string                      `json:"timezone"`
-	StartAt              *time.Time                  `json:"startAt,omitempty"`
-	EndAt                *time.Time                  `json:"endAt,omitempty"`
-	EnabledByDefault     bool                        `json:"enabledByDefault"`
-	MisfirePolicy        ScheduleMisfirePolicy       `json:"misfirePolicy"`
-	OverlapPolicy        ScheduleOverlapPolicy       `json:"overlapPolicy"`
-	RetryPolicy          ScheduleRetryPolicy         `json:"retryPolicy"`
-	JitterPolicy         ScheduleJitterPolicy        `json:"jitterPolicy"`
-	ConcurrencyPolicy    ScheduleConcurrencyPolicy   `json:"concurrencyPolicy"`
+	ContributionID         string                    `json:"contributionId"`
+	ExtensionID            string                    `json:"extensionId"`
+	ModuleID               string                    `json:"moduleId"`
+	ScheduleID             string                    `json:"scheduleId"`
+	Name                   string                    `json:"name"`
+	Description            string                    `json:"description"`
+	Trigger                ScheduleTriggerDefinition `json:"trigger"`
+	Target                 ScheduleTargetDefinition  `json:"target"`
+	Timezone               string                    `json:"timezone"`
+	StartAt                *time.Time                `json:"startAt,omitempty"`
+	EndAt                  *time.Time                `json:"endAt,omitempty"`
+	EnabledByDefault       bool                      `json:"enabledByDefault"`
+	MisfirePolicy          ScheduleMisfirePolicy     `json:"misfirePolicy"`
+	OverlapPolicy          ScheduleOverlapPolicy     `json:"overlapPolicy"`
+	RetryPolicy            ScheduleRetryPolicy       `json:"retryPolicy"`
+	JitterPolicy           ScheduleJitterPolicy      `json:"jitterPolicy"`
+	ConcurrencyPolicy      ScheduleConcurrencyPolicy `json:"concurrencyPolicy"`
 	PermissionRequirements []PermissionRequirement   `json:"permissionRequirements,omitempty"`
-	ScopeRule            ScopeRule                   `json:"scopeRule"`
+	ScopeRule              ScopeRule                 `json:"scopeRule"`
 	DependencyRequirements []DependencyRequirement   `json:"dependencyRequirements,omitempty"`
-	DSTSpringPolicy      DSTSpringPolicy             `json:"dstSpringPolicy,omitempty"`
-	DSTFallPolicy        DSTFallPolicy               `json:"dstFallPolicy,omitempty"`
-	DefinitionHash       string                      `json:"definitionHash"`
-	Version              string                      `json:"version"`
+	DSTSpringPolicy        DSTSpringPolicy           `json:"dstSpringPolicy,omitempty"`
+	DSTFallPolicy          DSTFallPolicy             `json:"dstFallPolicy,omitempty"`
+	DefinitionHash         string                    `json:"definitionHash"`
+	Version                string                    `json:"version"`
 }
 
 type ScheduleState struct {
-	ScheduleID       string                `json:"scheduleId"`
-	Enabled          bool                  `json:"enabled"`
-	Paused           bool                  `json:"paused"`
-	Status           ScheduleDefinitionStatus `json:"status"`
-	LastScheduledAt  *time.Time            `json:"lastScheduledAt,omitempty"`
-	LastTriggeredAt  *time.Time            `json:"lastTriggeredAt,omitempty"`
-	LastFinishedAt   *time.Time            `json:"lastFinishedAt,omitempty"`
-	NextScheduledAt  *time.Time            `json:"nextScheduledAt,omitempty"`
-	NextEffectiveAt  *time.Time            `json:"nextEffectiveAt,omitempty"`
-	LastResult       string                `json:"lastResult,omitempty"`
-	FailureCount     int                   `json:"failureCount"`
-	Generation       int64                 `json:"generation"`
-	UpdatedAt        time.Time             `json:"updatedAt"`
+	ScheduleID      string                   `json:"scheduleId"`
+	Enabled         bool                     `json:"enabled"`
+	Paused          bool                     `json:"paused"`
+	Status          ScheduleDefinitionStatus `json:"status"`
+	LastScheduledAt *time.Time               `json:"lastScheduledAt,omitempty"`
+	LastTriggeredAt *time.Time               `json:"lastTriggeredAt,omitempty"`
+	LastFinishedAt  *time.Time               `json:"lastFinishedAt,omitempty"`
+	NextScheduledAt *time.Time               `json:"nextScheduledAt,omitempty"`
+	NextEffectiveAt *time.Time               `json:"nextEffectiveAt,omitempty"`
+	LastResult      string                   `json:"lastResult,omitempty"`
+	FailureCount    int                      `json:"failureCount"`
+	Generation      int64                    `json:"generation"`
+	UpdatedAt       time.Time                `json:"updatedAt"`
 }
 
 type ScheduleTriggerRecord struct {
-	TriggerID            string                 `json:"triggerId"`
-	ScheduleID           string                 `json:"scheduleId"`
-	ScheduledAt          time.Time              `json:"scheduledAt"`
-	EffectiveAt          time.Time              `json:"effectiveAt"`
-	TriggeredAt          *time.Time             `json:"triggeredAt,omitempty"`
-	IdempotencyKey       string                 `json:"idempotencyKey"`
-	Status               ScheduleRunStatus      `json:"status"`
-	LeaseOwner           *string                `json:"leaseOwner,omitempty"`
-	LeaseExpiresAt       *time.Time             `json:"leaseExpiresAt,omitempty"`
-	ScopeSnapshotID      string                 `json:"scopeSnapshotId,omitempty"`
-	PermissionSnapshotID string                 `json:"permissionSnapshotId,omitempty"`
-	DependencySnapshotID string                 `json:"dependencySnapshotId,omitempty"`
-	OperationID          *string                `json:"operationId,omitempty"`
-	InvocationID         *string                `json:"invocationId,omitempty"`
-	Attempt              int                    `json:"attempt"`
-	Generation           int64                  `json:"generation"`
-	Manual               bool                   `json:"manual"`
-	ErrorCode            *string                `json:"errorCode,omitempty"`
-	ErrorMessage         *string                `json:"errorMessage,omitempty"`
-	JitterApplied        time.Duration          `json:"jitterApplied,omitempty"`
-	MisfireDecision      string                 `json:"misfireDecision,omitempty"`
-	OverlapDecision      string                 `json:"overlapDecision,omitempty"`
-	DSTDecision          string                 `json:"dstDecision,omitempty"`
-	CreatedAt            time.Time              `json:"createdAt"`
-	UpdatedAt            time.Time              `json:"updatedAt"`
+	TriggerID            string            `json:"triggerId"`
+	ScheduleID           string            `json:"scheduleId"`
+	ScheduledAt          time.Time         `json:"scheduledAt"`
+	EffectiveAt          time.Time         `json:"effectiveAt"`
+	TriggeredAt          *time.Time        `json:"triggeredAt,omitempty"`
+	IdempotencyKey       string            `json:"idempotencyKey"`
+	Status               ScheduleRunStatus `json:"status"`
+	LeaseOwner           *string           `json:"leaseOwner,omitempty"`
+	LeaseExpiresAt       *time.Time        `json:"leaseExpiresAt,omitempty"`
+	ScopeSnapshotID      string            `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID string            `json:"permissionSnapshotId,omitempty"`
+	DependencySnapshotID string            `json:"dependencySnapshotId,omitempty"`
+	OperationID          *string           `json:"operationId,omitempty"`
+	InvocationID         *string           `json:"invocationId,omitempty"`
+	Attempt              int               `json:"attempt"`
+	Generation           int64             `json:"generation"`
+	Manual               bool              `json:"manual"`
+	ErrorCode            *string           `json:"errorCode,omitempty"`
+	ErrorMessage         *string           `json:"errorMessage,omitempty"`
+	JitterApplied        time.Duration     `json:"jitterApplied,omitempty"`
+	MisfireDecision      string            `json:"misfireDecision,omitempty"`
+	OverlapDecision      string            `json:"overlapDecision,omitempty"`
+	DSTDecision          string            `json:"dstDecision,omitempty"`
+	CreatedAt            time.Time         `json:"createdAt"`
+	UpdatedAt            time.Time         `json:"updatedAt"`
 }
 
 type ScheduleRunRecord struct {
-	RunID           string          `json:"runId"`
-	TriggerID       string          `json:"triggerId"`
-	ScheduleID      string          `json:"scheduleId"`
-	Status          ScheduleRunStatus `json:"status"`
-	Attempt         int             `json:"attempt"`
-	StartedAt       time.Time       `json:"startedAt"`
-	FinishedAt      *time.Time      `json:"finishedAt,omitempty"`
-	OperationID     string          `json:"operationId,omitempty"`
-	InvocationID    string          `json:"invocationId,omitempty"`
-	TargetType      TargetType      `json:"targetType"`
-	TargetID        string          `json:"targetId"`
-	ResultJSON      json.RawMessage `json:"resultJson,omitempty"`
-	ErrorCode       *string         `json:"errorCode,omitempty"`
-	ErrorMessage    *string         `json:"errorMessage,omitempty"`
-	Generation      int64           `json:"generation"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
+	RunID        string            `json:"runId"`
+	TriggerID    string            `json:"triggerId"`
+	ScheduleID   string            `json:"scheduleId"`
+	Status       ScheduleRunStatus `json:"status"`
+	Attempt      int               `json:"attempt"`
+	StartedAt    time.Time         `json:"startedAt"`
+	FinishedAt   *time.Time        `json:"finishedAt,omitempty"`
+	OperationID  string            `json:"operationId,omitempty"`
+	InvocationID string            `json:"invocationId,omitempty"`
+	TargetType   TargetType        `json:"targetType"`
+	TargetID     string            `json:"targetId"`
+	ResultJSON   json.RawMessage   `json:"resultJson,omitempty"`
+	ErrorCode    *string           `json:"errorCode,omitempty"`
+	ErrorMessage *string           `json:"errorMessage,omitempty"`
+	Generation   int64             `json:"generation"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
 }
 
 type ScheduleLease struct {
-	LeaseID      string    `json:"leaseId"`
-	TriggerID    string    `json:"triggerId"`
-	ScheduleID   string    `json:"scheduleId"`
-	LeaseOwner   string    `json:"leaseOwner"`
-	AcquiredAt   time.Time `json:"acquiredAt"`
-	ExpiresAt    time.Time `json:"expiresAt"`
-	Released     bool      `json:"released"`
-	ReleasedAt   *time.Time `json:"releasedAt,omitempty"`
+	LeaseID    string     `json:"leaseId"`
+	TriggerID  string     `json:"triggerId"`
+	ScheduleID string     `json:"scheduleId"`
+	LeaseOwner string     `json:"leaseOwner"`
+	AcquiredAt time.Time  `json:"acquiredAt"`
+	ExpiresAt  time.Time  `json:"expiresAt"`
+	Released   bool       `json:"released"`
+	ReleasedAt *time.Time `json:"releasedAt,omitempty"`
 }
 
 type ScheduleMisfireRecord struct {
@@ -325,73 +325,73 @@ type ScheduleMisfireRecord struct {
 }
 
 type ScheduleRetryRecord struct {
-	RetryID      string        `json:"retryId"`
-	TriggerID    string        `json:"triggerId"`
-	ScheduleID   string        `json:"scheduleId"`
-	Attempt      int           `json:"attempt"`
-	MaxAttempts  int           `json:"maxAttempts"`
-	ErrorCode    string        `json:"errorCode"`
-	Backoff      time.Duration `json:"backoff"`
-	AvailableAt  time.Time     `json:"availableAt"`
-	CreatedAt    time.Time     `json:"createdAt"`
+	RetryID     string        `json:"retryId"`
+	TriggerID   string        `json:"triggerId"`
+	ScheduleID  string        `json:"scheduleId"`
+	Attempt     int           `json:"attempt"`
+	MaxAttempts int           `json:"maxAttempts"`
+	ErrorCode   string        `json:"errorCode"`
+	Backoff     time.Duration `json:"backoff"`
+	AvailableAt time.Time     `json:"availableAt"`
+	CreatedAt   time.Time     `json:"createdAt"`
 }
 
 type ScheduleCircuitRecord struct {
-	ScheduleID       string        `json:"scheduleId"`
-	State            CircuitState  `json:"state"`
-	ConsecutiveFails int           `json:"consecutiveFails"`
-	TotalFails       int           `json:"totalFails"`
-	TotalSuccess     int           `json:"totalSuccess"`
-	LastFailCode     *string       `json:"lastFailCode,omitempty"`
-	LastFailTime     *time.Time    `json:"lastFailTime,omitempty"`
-	OpenedAt         *time.Time    `json:"openedAt,omitempty"`
-	UpdatedAt        time.Time     `json:"updatedAt"`
+	ScheduleID       string       `json:"scheduleId"`
+	State            CircuitState `json:"state"`
+	ConsecutiveFails int          `json:"consecutiveFails"`
+	TotalFails       int          `json:"totalFails"`
+	TotalSuccess     int          `json:"totalSuccess"`
+	LastFailCode     *string      `json:"lastFailCode,omitempty"`
+	LastFailTime     *time.Time   `json:"lastFailTime,omitempty"`
+	OpenedAt         *time.Time   `json:"openedAt,omitempty"`
+	UpdatedAt        time.Time    `json:"updatedAt"`
 }
 
 type ScheduleQuarantineRecord struct {
-	QuarantineID string           `json:"quarantineId"`
-	ScheduleID   string           `json:"scheduleId"`
-	Reason       QuarantineReason `json:"reason"`
-	Detail       string           `json:"detail"`
-	QuarantinedAt time.Time       `json:"quarantinedAt"`
-	ReleasedAt   *time.Time       `json:"releasedAt,omitempty"`
+	QuarantineID  string           `json:"quarantineId"`
+	ScheduleID    string           `json:"scheduleId"`
+	Reason        QuarantineReason `json:"reason"`
+	Detail        string           `json:"detail"`
+	QuarantinedAt time.Time        `json:"quarantinedAt"`
+	ReleasedAt    *time.Time       `json:"releasedAt,omitempty"`
 }
 
 type NextRunResult struct {
-	NextScheduledAt *time.Time
-	NextEffectiveAt *time.Time
+	NextScheduledAt   *time.Time
+	NextEffectiveAt   *time.Time
 	CalculationReason string
 	DSTDecision       string
 }
 
 type ScanResult struct {
-	DueTriggers []string
-	TotalScanned int
+	DueTriggers   []string
+	TotalScanned  int
 	LeaseAcquired int
 }
 
 type ExecuteResult struct {
-	TriggerID   string
-	Status      ScheduleRunStatus
-	OperationID string
+	TriggerID    string
+	Status       ScheduleRunStatus
+	OperationID  string
 	InvocationID string
-	ErrorCode   string
+	ErrorCode    string
 	ErrorMessage string
 }
 
 type ScheduleConfig struct {
-	ScanInterval          time.Duration
-	ScanBatchSize         int
-	GlobalMaxConcurrent   int
-	PerExtensionLimit     int
-	PerScheduleLimit      int
-	MaxCatchUp            int
-	MaxRetryAttempts      int
-	LeaseDuration         time.Duration
-	LeaseReclaimInterval  time.Duration
-	CircuitFailThreshold  int
-	CircuitRecoveryAfter  time.Duration
-	DefaultTimezone       string
+	ScanInterval         time.Duration
+	ScanBatchSize        int
+	GlobalMaxConcurrent  int
+	PerExtensionLimit    int
+	PerScheduleLimit     int
+	MaxCatchUp           int
+	MaxRetryAttempts     int
+	LeaseDuration        time.Duration
+	LeaseReclaimInterval time.Duration
+	CircuitFailThreshold int
+	CircuitRecoveryAfter time.Duration
+	DefaultTimezone      string
 }
 
 func DefaultScheduleConfig() ScheduleConfig {
@@ -459,11 +459,11 @@ func DefaultDSTFallPolicy() DSTFallPolicy {
 }
 
 var validDefinitionTransitions = map[ScheduleDefinitionStatus][]ScheduleDefinitionStatus{
-	DefinitionStatusCreated:     {DefinitionStatusEnabled, DefinitionStatusDisabled, DefinitionStatusUninstalled},
-	DefinitionStatusEnabled:     {DefinitionStatusDisabled, DefinitionStatusPaused, DefinitionStatusExpired, DefinitionStatusUninstalled},
-	DefinitionStatusDisabled:    {DefinitionStatusEnabled, DefinitionStatusUninstalled},
-	DefinitionStatusPaused:      {DefinitionStatusEnabled, DefinitionStatusDisabled, DefinitionStatusUninstalled},
-	DefinitionStatusExpired:     {DefinitionStatusUninstalled},
+	DefinitionStatusCreated:  {DefinitionStatusEnabled, DefinitionStatusDisabled, DefinitionStatusUninstalled},
+	DefinitionStatusEnabled:  {DefinitionStatusDisabled, DefinitionStatusPaused, DefinitionStatusExpired, DefinitionStatusUninstalled},
+	DefinitionStatusDisabled: {DefinitionStatusEnabled, DefinitionStatusUninstalled},
+	DefinitionStatusPaused:   {DefinitionStatusEnabled, DefinitionStatusDisabled, DefinitionStatusUninstalled},
+	DefinitionStatusExpired:  {DefinitionStatusUninstalled},
 }
 
 func IsValidDefinitionTransition(from, to ScheduleDefinitionStatus) bool {

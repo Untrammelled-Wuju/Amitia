@@ -18,7 +18,7 @@ type ScheduleExecutor struct {
 	retry        *RetryService
 	leaseManager *LeaseManager
 
-	targetAdapters map[TargetType]TargetAdapter
+	targetAdapters    map[TargetType]TargetAdapter
 	permissionChecker PermissionChecker
 	scopeChecker      ScopeChecker
 	dependencyChecker DependencyChecker
@@ -119,6 +119,7 @@ func (e *ScheduleExecutor) executionLoop() {
 		case <-e.ctx.Done():
 			return
 		case <-ticker.C:
+			_ = e.retry.ProcessDueRetries(e.ctx, e)
 			e.processDueTriggers()
 		}
 	}
@@ -174,10 +175,16 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		_ = e.leaseManager.ReleaseLease(ctx, trigger.TriggerID)
 	}()
 
+	if len(def.PermissionRequirements) > 0 && e.permissionChecker == nil {
+		return e.failTrigger(ctx, trigger, ErrCodePermissionDenied, "permission checker not configured")
+	}
 	if e.permissionChecker != nil && len(def.PermissionRequirements) > 0 {
 		allowed, reason, err := e.permissionChecker.CheckPermission(ctx, def.ScheduleID, def.PermissionRequirements, true)
 		if err != nil || !allowed {
 			return e.failTrigger(ctx, trigger, ErrCodePermissionDenied, reason)
+		}
+		if trigger.PermissionSnapshotID == "" {
+			trigger.PermissionSnapshotID = fmt.Sprintf("perm-snap-%s-%d", trigger.TriggerID, trigger.Generation)
 		}
 	}
 
@@ -188,9 +195,13 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 			return e.failTrigger(ctx, trigger, ErrCodeScopeDenied, reason)
 		}
 		snapshotID, err := e.scopeChecker.CreateSnapshot(ctx, def.ScheduleID, trigger.TriggerID, def.ScopeRule)
-		if err == nil {
-			scopeSnapshotID = snapshotID
+		if err != nil {
+			return e.failTrigger(ctx, trigger, ErrCodeScopeDenied, err.Error())
 		}
+		scopeSnapshotID = snapshotID
+	}
+	if e.scopeChecker == nil && def.ScopeRule.ScopeType != "" && def.ScopeRule.ScopeType != "global" {
+		return e.failTrigger(ctx, trigger, ErrCodeScopeDenied, "scope checker not configured")
 	}
 
 	var depSnapshotID string

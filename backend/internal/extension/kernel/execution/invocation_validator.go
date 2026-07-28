@@ -3,6 +3,8 @@ package execution
 import (
 	"context"
 	"fmt"
+
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 func NewInvocationValidator() *InvocationValidator {
@@ -19,7 +21,7 @@ func (v *InvocationValidator) Validate(ctx context.Context, request ToolExecutio
 	if request.ToolID == "" {
 		return fmt.Errorf("tool_id is required")
 	}
-	if inv.UserID == "" {
+	if inv.UserID == "" && inv.Source != capability.InvocationSourceScheduledTask {
 		return fmt.Errorf("user_id is required")
 	}
 	if inv.Source == "" {

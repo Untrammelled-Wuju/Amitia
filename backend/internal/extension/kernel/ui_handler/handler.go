@@ -19,14 +19,14 @@ import (
 )
 
 type HTTPHandler struct {
-	uiHost        *ui_contribution.UIHost
-	slotRegistry  *extension_slots.SlotRegistry
-	pageHost      *extension_page_host.PageHost
-	sandboxHost   *sandbox_webui.Host
-	chatRegistry  *chat_ui_extension.ChatExtensionRegistry
-	permChecker   *permission.UIPermissionChecker
-	schemaLookup  func(extensionID, contributionID string) (json.RawMessage, bool)
-	extRoot       string
+	uiHost       *ui_contribution.UIHost
+	slotRegistry *extension_slots.SlotRegistry
+	pageHost     *extension_page_host.PageHost
+	sandboxHost  *sandbox_webui.Host
+	chatRegistry *chat_ui_extension.ChatExtensionRegistry
+	permChecker  *permission.UIPermissionChecker
+	schemaLookup func(extensionID, contributionID string) (json.RawMessage, bool)
+	extRoot      string
 }
 
 func NewHTTPHandler(
@@ -65,6 +65,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/by-extension", h.handleExtensionContributions)
 	mux.HandleFunc("/api/extensions/", h.handleExtensionScoped)
 	mux.HandleFunc("/api/extension/schema/", h.handleSchema)
+	mux.HandleFunc("/api/extensions/ui/schema/", h.handleSchema)
 	mux.HandleFunc("/api/extension/webui/session", h.handleWebUISessionCollection)
 	mux.HandleFunc("/api/extension/webui/session/", h.handleWebUISessionItem)
 	mux.HandleFunc("/api/extension/webui/bridge/", h.handleWebUIBridge)
@@ -100,7 +101,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	slots := h.slotRegistry.List()
 	type slotSnapshotEntry struct {
-		SlotID        string                                `json:"slotId"`
+		SlotID        string                                      `json:"slotId"`
 		Contributions []*ui_contribution.UIContributionDefinition `json:"contributions"`
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
@@ -123,11 +124,14 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var req struct {
-		ContributionID string   `json:"contributionId"`
-		Origin         string   `json:"origin"`
-		GrantedScopes  []string `json:"grantedScopes"`
-		GrantedPerms   []string `json:"grantedPerms"`
-		LifetimeSeconds int64   `json:"lifetimeSeconds"`
+		ContributionID  string   `json:"contributionId"`
+		Origin          string   `json:"origin"`
+		GrantedScopes   []string `json:"grantedScopes"`
+		GrantedPerms    []string `json:"grantedPerms"`
+		LifetimeSeconds int64    `json:"lifetimeSeconds"`
+		Surface         string   `json:"surface"`
+		CharacterID     string   `json:"characterId"`
+		ConversationID  string   `json:"conversationId"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
@@ -137,6 +141,9 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		writeError(w, http.StatusNotFound, "contribution_not_found", err.Error())
 		return
+	}
+	if req.Surface == "" {
+		req.Surface = "web"
 	}
 	if h.permChecker != nil {
 		if err := h.permChecker.ValidateSessionRequest(def, req.GrantedScopes, req.GrantedPerms); err != nil {
@@ -148,7 +155,7 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 	if req.LifetimeSeconds > 0 {
 		lifetime = time.Duration(req.LifetimeSeconds) * time.Second
 	}
-	sess, err := h.uiHost.Bridge().CreateSession(def, req.Origin, req.GrantedScopes, req.GrantedPerms, lifetime)
+	sess, err := h.uiHost.Bridge().CreateSession(def, req.Origin, req.GrantedScopes, req.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_create_failed", err.Error())
 		return
@@ -236,11 +243,11 @@ func (h *HTTPHandler) handlePageSession(w http.ResponseWriter, r *http.Request) 
 			sess.SetState(extension_page_host.PageStateReady)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"sessionId":         sess.SessionID,
-			"state":             sess.State,
-			"definition":        nil,
+			"sessionId":          sess.SessionID,
+			"state":              sess.State,
+			"definition":         nil,
 			"missingPermissions": []string{},
-			"reason":            "",
+			"reason":             "",
 		})
 		return
 	}
@@ -281,7 +288,7 @@ func (h *HTTPHandler) handleExtensionScoped(w http.ResponseWriter, r *http.Reque
 				}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"extensionId":  extensionID,
+				"extensionId":   extensionID,
 				"contributions": out,
 			})
 			return
@@ -401,11 +408,15 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "extensionId and contributionId required")
 		return
 	}
-	extensionID := segs[3]
-	contributionID := segs[4]
+	extensionID := segs[len(segs)-2]
+	contributionID := segs[len(segs)-1]
 	def, err := h.uiHost.GetContribution(ui_contribution.ContributionID(contributionID))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "contribution_not_found", err.Error())
+		return
+	}
+	if string(def.ExtensionID) != extensionID || def.Kind != ui_contribution.UIContributionSchemaPage {
+		writeError(w, http.StatusNotFound, "schema_not_found", "schema contribution does not belong to extension")
 		return
 	}
 	if h.schemaLookup != nil {
@@ -419,12 +430,7 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"extensionId":    extensionID,
-		"contributionId": contributionID,
-		"schemaPath":     def.Entry.SchemaPath,
-		"document":       nil,
-	})
+	writeError(w, http.StatusNotFound, "schema_not_loaded", "schema resource is not loaded")
 }
 
 func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *http.Request) {
@@ -433,43 +439,53 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		return
 	}
 	var req struct {
-		ContributionID    string                       `json:"contributionId"`
-		ExtensionID       string                       `json:"extensionId"`
-		ModuleID          string                       `json:"moduleId"`
-		Generation        int64                        `json:"generation"`
-		SlotID            string                       `json:"slotId"`
-		Sandbox           string                       `json:"sandbox"`
-		CSP               string                       `json:"csp"`
-		AllowedActions    []string                     `json:"allowedActions"`
+		ContributionID     string                      `json:"contributionId"`
+		ExtensionID        string                      `json:"extensionId"`
+		ModuleID           string                      `json:"moduleId"`
+		Generation         int64                       `json:"generation"`
+		SlotID             string                      `json:"slotId"`
+		Sandbox            string                      `json:"sandbox"`
+		CSP                string                      `json:"csp"`
+		AllowedActions     []string                    `json:"allowedActions"`
 		AllowedDataSources []string                    `json:"allowedDataSources"`
-		Theme             sandbox_webui.ThemeSnapshot  `json:"theme"`
-		Locale            string                       `json:"locale"`
-		BasePath          string                       `json:"basePath"`
-		EntryPath         string                       `json:"entryPath"`
-		GrantedScopes     []string                     `json:"grantedScopes"`
-		GrantedPerms      []string                     `json:"grantedPerms"`
+		Theme              sandbox_webui.ThemeSnapshot `json:"theme"`
+		Locale             string                      `json:"locale"`
+		BasePath           string                      `json:"basePath"`
+		EntryPath          string                      `json:"entryPath"`
+		GrantedScopes      []string                    `json:"grantedScopes"`
+		GrantedPerms       []string                    `json:"grantedPerms"`
+		Surface            string                      `json:"surface"`
+		CharacterID        string                      `json:"characterId"`
+		ConversationID     string                      `json:"conversationId"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
 		return
 	}
-	if h.permChecker != nil && req.ContributionID != "" {
-		def, err := h.uiHost.GetContribution(ui_contribution.ContributionID(req.ContributionID))
-		if err == nil && def != nil {
-			if err := h.permChecker.ValidateSessionRequest(def, req.GrantedScopes, req.GrantedPerms); err != nil {
-				writeError(w, http.StatusForbidden, "permission_denied", err.Error())
-				return
-			}
+	def, err := h.uiHost.GetContribution(ui_contribution.ContributionID(req.ContributionID))
+	if err != nil || def == nil {
+		writeError(w, http.StatusNotFound, "contribution_not_found", "web ui contribution not found")
+		return
+	}
+	if def.Sandbox.Type != ui_contribution.SandboxWebRestricted && def.Sandbox.Type != ui_contribution.SandboxWebIsolated {
+		writeError(w, http.StatusBadRequest, "sandbox_invalid", "contribution is not a web ui")
+		return
+	}
+	if req.ExtensionID != string(def.ExtensionID) || req.ModuleID != string(def.ModuleID) || req.SlotID != def.Slot.SlotID || req.Generation != def.Integrity.Generation {
+		writeError(w, http.StatusForbidden, "session_identity_mismatch", "session request does not match contribution")
+		return
+	}
+	if req.Surface == "" {
+		req.Surface = "web"
+	}
+	if h.permChecker != nil {
+		if err := h.permChecker.ValidateSessionRequest(def, req.GrantedScopes, req.GrantedPerms); err != nil {
+			writeError(w, http.StatusForbidden, "permission_denied", err.Error())
+			return
 		}
 	}
-	sandbox := sandbox_webui.SandboxType(req.Sandbox)
-	if sandbox == "" {
-		sandbox = sandbox_webui.SandboxWebRestricted
-	}
-	basePath := req.BasePath
-	if basePath == "" {
-		basePath = h.resolveExtensionBasePath(req.ExtensionID)
-	}
+	sandbox := sandbox_webui.SandboxType(def.Sandbox.Type)
+	basePath := h.resolveExtensionBasePath(req.ExtensionID)
 	if basePath == "" {
 		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
 		return
@@ -481,26 +497,30 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Generation:         req.Generation,
 		SlotID:             req.SlotID,
 		Sandbox:            sandbox,
-		CSP:                req.CSP,
-		AllowedActions:     req.AllowedActions,
-		AllowedDataSources: req.AllowedDataSources,
+		CSP:                sandbox_webui.RestrictedCSP,
+		AllowedActions:     contributionActionIDs(def),
+		AllowedDataSources: contributionDataSourceIDs(def),
 		Theme:              req.Theme,
 		Locale:             req.Locale,
 		BasePath:           basePath,
-		EntryPath:          req.EntryPath,
+		EntryPath:          def.Entry.Path,
+		Surface:            req.Surface,
+		CharacterID:        req.CharacterID,
+		ConversationID:     req.ConversationID,
 	}
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "webui_session_create_failed", err.Error())
 		return
 	}
-	resourceURL := fmt.Sprintf("/api/extension/webui/resource/%s/%s", result.SessionID, req.EntryPath)
+	resourceURL := fmt.Sprintf("/api/extension/webui/resource/%s/%s", result.SessionID, def.Entry.Path)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessionId":   result.SessionID,
 		"entryUrl":    result.EntryURL,
 		"resourceUrl": resourceURL,
 		"origin":      result.Origin,
 		"nonce":       result.Nonce,
+		"token":       result.Token,
 		"csp":         result.CSP,
 	})
 }
@@ -602,6 +622,20 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
 		return
 	}
+	if resourcePath == "__bridge__/bridge.js" {
+		script, err := h.sandboxHost.GetPreloadScript(sessionID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "bridge_not_found", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", sess.CSP)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(script))
+		return
+	}
 	basePath := h.resolveExtensionBasePath(sess.ExtensionID)
 	if basePath == "" {
 		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
@@ -633,10 +667,7 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if strings.HasSuffix(cleanPath, ".html") || strings.HasSuffix(cleanPath, ".htm") {
-		preloadScript, err := h.sandboxHost.GetPreloadScript(sessionID)
-		if err == nil {
-			content = injectPreloadScript(content, preloadScript, sess.CSP)
-		}
+		content = injectBridgeScript(content, sess.CSP, sessionID)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", sess.CSP)
 	} else {
@@ -644,7 +675,6 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
@@ -682,13 +712,13 @@ func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
 	return ""
 }
 
-func injectPreloadScript(html []byte, preload string, csp string) []byte {
+func injectBridgeScript(html []byte, csp, sessionID string) []byte {
 	htmlStr := string(html)
 	if csp == "" {
 		csp = sandbox_webui.DefaultCSP
 	}
 	cspMeta := fmt.Sprintf(`<meta http-equiv="Content-Security-Policy" content="%s">`, csp)
-	scriptTag := fmt.Sprintf("<script>%s</script>", preload)
+	scriptTag := fmt.Sprintf(`<script src="/api/extension/webui/resource/%s/__bridge__/bridge.js"></script>`, sessionID)
 	if idx := strings.LastIndex(htmlStr, "</head>"); idx >= 0 {
 		htmlStr = htmlStr[:idx] + cspMeta + "\n" + scriptTag + "\n" + htmlStr[idx:]
 	} else if idx := strings.LastIndex(htmlStr, "</body>"); idx >= 0 {
@@ -721,9 +751,6 @@ func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	msg.Session = sessionID
-	if msg.Origin == "" {
-		msg.Origin = sess.Origin
-	}
 	if err := sandbox_webui.ValidateBridgeMessage(&msg, sess); err != nil {
 		writeError(w, http.StatusForbidden, "bridge_invalid", err.Error())
 		return
@@ -774,8 +801,8 @@ func (h *HTTPHandler) handleAction(w http.ResponseWriter, r *http.Request) {
 	contributionID := segs[3]
 	actionID := segs[4]
 	var req struct {
-		Context map[string]any    `json:"context"`
-		Input   json.RawMessage   `json:"input"`
+		Context map[string]any  `json:"context"`
+		Input   json.RawMessage `json:"input"`
 	}
 	_ = decodeJSON(r, &req)
 	resp := h.invokeAction(r, contributionID, actionID, req.Context, req.Input)
@@ -852,47 +879,23 @@ type bridgeSessionResponse struct {
 	ExpiresAt       time.Time `json:"expiresAt"`
 }
 
-func buildSampleSchema() map[string]any {
-	return map[string]any{
-		"type":    "page",
-		"version": 1,
-		"title":   "Extension Schema UI",
-		"nodes": []map[string]any{
-			{
-				"type":  "section",
-				"title": "General",
-				"nodes": []map[string]any{
-					{"type": "text", "content": "Welcome to the extension settings page."},
-					{
-						"type":  "button",
-						"label": "Save",
-						"action": map[string]any{
-							"type":      "host_command",
-							"command":   "save",
-							"riskLevel": "low",
-						},
-					},
-				},
-			},
-			{
-				"type":  "section",
-				"title": "Advanced",
-				"nodes": []map[string]any{
-					{"type": "text", "content": "Advanced configuration options."},
-					{
-						"type":  "button",
-						"label": "Reset",
-						"action": map[string]any{
-							"type":         "dialog",
-							"dialogId":     "reset-confirm",
-							"riskLevel":    "medium",
-							"confirmation": "Reset all settings to defaults?",
-						},
-					},
-				},
-			},
-		},
+func contributionActionIDs(def *ui_contribution.UIContributionDefinition) []string {
+	ids := make([]string, 0, len(def.Actions))
+	for _, action := range def.Actions {
+		ids = append(ids, action.ActionID)
 	}
+	return ids
+}
+
+func contributionDataSourceIDs(def *ui_contribution.UIContributionDefinition) []string {
+	if def == nil || len(def.DataSources) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(def.DataSources))
+	for _, ds := range def.DataSources {
+		ids = append(ids, ds.SourceID)
+	}
+	return ids
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

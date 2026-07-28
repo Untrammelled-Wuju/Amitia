@@ -24,13 +24,14 @@ type ExtensionUpdateMetadata struct {
 	ReleaseChannel     string
 	Migration          *MigrationMetadata
 	RollbackPolicy     string
+	SignedIndex        bool
 }
 
 type MigrationMetadata struct {
-	HasMigration              bool
-	IsReversible              bool
+	HasMigration               bool
+	IsReversible               bool
 	RequiresManualConfirmation bool
-	RollbackNotSupported      bool
+	RollbackNotSupported       bool
 }
 
 func (m *ExtensionUpdateMetadata) Validate() error {
@@ -55,7 +56,7 @@ func (m *ExtensionUpdateMetadata) Validate() error {
 	if m.ManifestVersion <= 0 {
 		return fmt.Errorf("%w: manifest version required", ErrInvalidMetadata)
 	}
-	if m.PackageSize <= 0 {
+	if m.PackageSize <= 0 && !m.SignedIndex {
 		return fmt.Errorf("%w: package size must be positive", ErrInvalidMetadata)
 	}
 	switch m.ReleaseChannel {

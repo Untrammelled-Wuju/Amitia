@@ -30,13 +30,13 @@ type ScopeRef struct {
 type ScopeSubjectType string
 
 const (
-	SubjectExtension    ScopeSubjectType = "extension"
-	SubjectModule       ScopeSubjectType = "module"
-	SubjectTool         ScopeSubjectType = "tool"
-	SubjectAgentSkill   ScopeSubjectType = "agent_skill"
-	SubjectWorkflow     ScopeSubjectType = "workflow"
-	SubjectMCPServer    ScopeSubjectType = "mcp_server"
-	SubjectMCPTool      ScopeSubjectType = "mcp_tool"
+	SubjectExtension      ScopeSubjectType = "extension"
+	SubjectModule         ScopeSubjectType = "module"
+	SubjectTool           ScopeSubjectType = "tool"
+	SubjectAgentSkill     ScopeSubjectType = "agent_skill"
+	SubjectWorkflow       ScopeSubjectType = "workflow"
+	SubjectMCPServer      ScopeSubjectType = "mcp_server"
+	SubjectMCPTool        ScopeSubjectType = "mcp_tool"
 	SubjectUIContribution ScopeSubjectType = "ui_contribution"
 	SubjectBackgroundTask ScopeSubjectType = "background_task"
 	SubjectSchedule       ScopeSubjectType = "schedule"
@@ -78,20 +78,21 @@ type ScopeBinding struct {
 }
 
 type ScopeSnapshot struct {
-	SnapshotID     string      `json:"snapshotId"`
-	InvocationID   string      `json:"invocationId"`
-	ResolvedScopes []ScopeRef  `json:"resolvedScopes"`
-	CharacterID    string      `json:"characterId"`
-	ConversationID string      `json:"conversationId"`
-	ExtensionID    string      `json:"extensionId"`
-	ModuleID       string      `json:"moduleId"`
-	CreatedAt      time.Time   `json:"createdAt"`
-	ExpiresAt      *time.Time  `json:"expiresAt,omitempty"`
+	SnapshotID     string     `json:"snapshotId"`
+	InvocationID   string     `json:"invocationId"`
+	ResolvedScopes []ScopeRef `json:"resolvedScopes"`
+	CharacterID    string     `json:"characterId"`
+	ConversationID string     `json:"conversationId"`
+	ExtensionID    string     `json:"extensionId"`
+	ModuleID       string     `json:"moduleId"`
+	Generation     int64      `json:"generation"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
 }
 
 type ScopeDecision struct {
-	Allowed bool          `json:"allowed"`
-	Reasons []ScopeReason `json:"reasons,omitempty"`
+	Allowed bool           `json:"allowed"`
+	Reasons []ScopeReason  `json:"reasons,omitempty"`
 	Matched []ScopeBinding `json:"matched,omitempty"`
 }
 

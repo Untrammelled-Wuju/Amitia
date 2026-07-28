@@ -13,6 +13,7 @@ type ScopeResolveRequest struct {
 	ExtensionID    string          `json:"extensionId,omitempty"`
 	ModuleID       string          `json:"moduleId,omitempty"`
 	InvocationID   string          `json:"invocationId,omitempty"`
+	Generation     int64           `json:"generation,omitempty"`
 }
 
 func ResolveScope(ctx context.Context, req ScopeResolveRequest) ([]ScopeRef, error) {
@@ -130,7 +131,11 @@ func resolvePlaceholder(ctx context.Context, ph ScopePlaceholder, req ScopeResol
 	}
 }
 
-func CreateSnapshot(invocationID string, scopes []ScopeRef, characterID, conversationID, extensionID, moduleID string) ScopeSnapshot {
+func CreateSnapshot(invocationID string, scopes []ScopeRef, characterID, conversationID, extensionID, moduleID string, generation ...int64) ScopeSnapshot {
+	var currentGeneration int64
+	if len(generation) > 0 {
+		currentGeneration = generation[0]
+	}
 	return ScopeSnapshot{
 		SnapshotID:     fmt.Sprintf("snap-%s-%d", invocationID, time.Now().UnixNano()),
 		InvocationID:   invocationID,
@@ -139,6 +144,7 @@ func CreateSnapshot(invocationID string, scopes []ScopeRef, characterID, convers
 		ConversationID: conversationID,
 		ExtensionID:    extensionID,
 		ModuleID:       moduleID,
+		Generation:     currentGeneration,
 		CreatedAt:      time.Now(),
 	}
 }

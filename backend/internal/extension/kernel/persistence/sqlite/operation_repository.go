@@ -21,16 +21,17 @@ type Operation struct {
 }
 
 type Invocation struct {
-	InvocationID      string    `json:"invocationId"`
-	OperationID       string    `json:"operationId"`
-	ContributionID    string    `json:"contributionId"`
-	RuntimeInstanceID string    `json:"runtimeInstanceId,omitempty"`
-	Status            string    `json:"status"`
-	InputHash         string    `json:"inputHash,omitempty"`
-	OutputHash        string    `json:"outputHash,omitempty"`
-	ErrorCode         string    `json:"errorCode,omitempty"`
-	StartedAt         time.Time `json:"startedAt"`
-	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
+	InvocationID       string     `json:"invocationId"`
+	ParentInvocationID string     `json:"parentInvocationId,omitempty"`
+	OperationID        string     `json:"operationId"`
+	ContributionID     string     `json:"contributionId"`
+	RuntimeInstanceID  string     `json:"runtimeInstanceId,omitempty"`
+	Status             string     `json:"status"`
+	InputHash          string     `json:"inputHash,omitempty"`
+	OutputHash         string     `json:"outputHash,omitempty"`
+	ErrorCode          string     `json:"errorCode,omitempty"`
+	StartedAt          time.Time  `json:"startedAt"`
+	FinishedAt         *time.Time `json:"finishedAt,omitempty"`
 }
 
 type OperationRepository interface {
@@ -229,9 +230,10 @@ func (r *SQLiteOperationRepository) PutInvocation(ctx context.Context, inv Invoc
 
 	ex := getExecutor(ctx, r.db)
 	_, err := ex.ExecContext(ctx, `
-		INSERT INTO extension_invocations (invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO extension_invocations (invocation_id, parent_invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(invocation_id) DO UPDATE SET
+			parent_invocation_id = excluded.parent_invocation_id,
 			operation_id = excluded.operation_id,
 			contribution_id = excluded.contribution_id,
 			runtime_instance_id = excluded.runtime_instance_id,
@@ -242,6 +244,7 @@ func (r *SQLiteOperationRepository) PutInvocation(ctx context.Context, inv Invoc
 			finished_at = excluded.finished_at
 	`,
 		inv.InvocationID,
+		inv.ParentInvocationID,
 		inv.OperationID,
 		inv.ContributionID,
 		inv.RuntimeInstanceID,
@@ -264,10 +267,11 @@ func (r *SQLiteOperationRepository) GetInvocation(ctx context.Context, invocatio
 	var finishedAt sql.NullTime
 
 	err := ex.QueryRowContext(ctx, `
-		SELECT invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at
+		SELECT invocation_id, parent_invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at
 		FROM extension_invocations WHERE invocation_id = ?
 	`, invocationID).Scan(
 		&inv.InvocationID,
+		&inv.ParentInvocationID,
 		&inv.OperationID,
 		&inv.ContributionID,
 		&inv.RuntimeInstanceID,
@@ -296,7 +300,7 @@ func (r *SQLiteOperationRepository) GetInvocation(ctx context.Context, invocatio
 func (r *SQLiteOperationRepository) ListInvocations(ctx context.Context, operationID string) ([]Invocation, error) {
 	ex := getExecutor(ctx, r.db)
 	rows, err := ex.QueryContext(ctx, `
-		SELECT invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at
+		SELECT invocation_id, parent_invocation_id, operation_id, contribution_id, runtime_instance_id, status, input_hash, output_hash, error_code, started_at, finished_at
 		FROM extension_invocations WHERE operation_id = ? ORDER BY started_at DESC
 	`, operationID)
 	if err != nil {
@@ -311,6 +315,7 @@ func (r *SQLiteOperationRepository) ListInvocations(ctx context.Context, operati
 
 		err := rows.Scan(
 			&inv.InvocationID,
+			&inv.ParentInvocationID,
 			&inv.OperationID,
 			&inv.ContributionID,
 			&inv.RuntimeInstanceID,

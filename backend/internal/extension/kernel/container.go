@@ -13,8 +13,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop_update"
-	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
@@ -31,12 +31,12 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
-	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
-	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
@@ -58,34 +58,35 @@ type Container struct {
 	PermissionRepository   sqlite.PermissionRepository
 	ResourceRepository     sqlite.ResourceRepository
 
-	PackageSecurity      *package_security.PackageSecurityService
-	LifecycleManager     *lifecycle_manager.Manager
-	ContributionRegistry *contribution.ContributionRegistry
-	ContributionInstaller *TypedContributionInstaller
-	DependencyResolver   dependency.Resolver
-	RuntimeSupervisor    runtime_supervisor.Supervisor
-	ExecutionKernel      *execution.ExecutionPipeline
-	HostAPIGateway       *host_api.DefaultGateway
-	PermissionBroker     permission.PermissionBroker
-	ScopeManager         scope.ScopeManager
-	AgentSkillCatalog    *agent_skill.AgentSkillCatalog
-	WorkflowRegistry     *workflow.WorkflowRegistry
-	WorkflowExecutor     *workflow.WorkflowExecutor
-	WorkflowDefRepo      *sqlite.WorkflowDefinitionRepository
-	WorkflowExecRepo     *sqlite.WorkflowExecutionRepository
-	EnablementService    *enablement.EnablementService
-	EnablementResolver   enablement.EffectiveStateResolver
+	PackageSecurity        *package_security.PackageSecurityService
+	LifecycleManager       *lifecycle_manager.Manager
+	ContributionRegistry   *contribution.ContributionRegistry
+	ContributionInstaller  *TypedContributionInstaller
+	DependencyResolver     dependency.Resolver
+	RuntimeSupervisor      runtime_supervisor.Supervisor
+	ExecutionKernel        *execution.ExecutionPipeline
+	HostAPIGateway         *host_api.DefaultGateway
+	PermissionBroker       permission.PermissionBroker
+	ScopeManager           scope.ScopeManager
+	AgentSkillCatalog      *agent_skill.AgentSkillCatalog
+	WorkflowRegistry       *workflow.WorkflowRegistry
+	WorkflowExecutor       *workflow.WorkflowExecutor
+	WorkflowTriggerManager *workflow.TriggerManager
+	WorkflowDefRepo        *sqlite.WorkflowDefinitionRepository
+	WorkflowExecRepo       *sqlite.WorkflowExecutionRepository
+	EnablementService      *enablement.EnablementService
+	EnablementResolver     enablement.EffectiveStateResolver
 
-	ToolRegistry      *capability.ToolRegistry
-	AdapterRegistry   *capability.RuntimeAdapterRegistry
-	ToolFacade        *ToolFacade
+	ToolRegistry    *capability.ToolRegistry
+	AdapterRegistry *capability.RuntimeAdapterRegistry
+	ToolFacade      *ToolFacade
 
-	TaskRepository    *sqlite.TaskRepository
+	TaskRepository     *sqlite.TaskRepository
 	TaskRuntimeService *task_runtime.TaskRuntimeService
-	TaskHandler       *task_runtime.TaskHandler
+	TaskHandler        *task_runtime.TaskHandler
 
-	ScheduleService     *schedule.ScheduleService
-	ScheduleRepository  *sqlite.ScheduleRepository
+	ScheduleService    *schedule.ScheduleService
+	ScheduleRepository *sqlite.ScheduleRepository
 
 	WASMRuntimeFactory *wasm_runtime.WASMRuntimeFactory
 	WASMModuleManager  *wasm_runtime.ModuleManager
@@ -102,35 +103,35 @@ type Container struct {
 	JSRuntimeFactory         *javascript_main.RuntimeFactory
 	EventDeliveryAdapter     *javascript_main.EventDeliveryAdapter
 
-	UIHost             *ui_contribution.UIHost
-	UIContributionRepo *sqlite.SQLiteUIContributionRepository
-	SlotRegistry       *extension_slots.SlotRegistry
-	PageHost           *extension_page_host.PageHost
-	SchemaValidator    *schema_ui.Validator
-	SchemaCompilerCache *schema_ui.CompilerCache
-	SchemaRegistry     *schema_ui.SchemaRegistry
-	SandboxHost        *sandbox_webui.Host
+	UIHost                *ui_contribution.UIHost
+	UIContributionRepo    *sqlite.SQLiteUIContributionRepository
+	SlotRegistry          *extension_slots.SlotRegistry
+	PageHost              *extension_page_host.PageHost
+	SchemaValidator       *schema_ui.Validator
+	SchemaCompilerCache   *schema_ui.CompilerCache
+	SchemaRegistry        *schema_ui.SchemaRegistry
+	SandboxHost           *sandbox_webui.Host
 	ChatExtensionRegistry *chat_ui_extension.ChatExtensionRegistry
-	OrderingEngine     *ui_ordering.OrderingEngine
-	ExtRoot            string
+	OrderingEngine        *ui_ordering.OrderingEngine
+	ExtRoot               string
 
-	DesktopHost     *desktop.DesktopHost
-	UpdateManager   *desktop_update.UpdateManager
-	UpdateAdapter   *UpdateManagerAdapter
-	DesktopAPI      *desktop.DesktopAPI
-	UpdateAPI       *desktop.UpdateAPI
+	DesktopHost         *desktop.DesktopHost
+	UpdateManager       *desktop_update.UpdateManager
+	UpdateAdapter       *UpdateManagerAdapter
+	DesktopAPI          *desktop.DesktopAPI
+	UpdateAPI           *desktop.UpdateAPI
 	DesktopActionBridge *DesktopActionBridge
 
-	DevConsoleService   *developer_console.ConsoleService
-	DevConsoleRepo      *developer_console.DiagnosticRepository
-	DevConsoleHandler   *developer_console.HTTPHandler
-	TrustService        *trust.TrustService
-	AmitiaxInstaller    *amitiax.Installer
-	DevModeRegistry     *dev_mode.WorkspaceRegistry
-	DevModePipeline     *dev_mode.RebuildPipeline
-	DevModeReloader     *dev_mode.RuntimeReloader
-	DevModeSessions     *dev_mode.SessionManager
-	DevModeStore        *dev_mode.SQLiteWorkspaceStore
+	DevConsoleService *developer_console.ConsoleService
+	DevConsoleRepo    *developer_console.DiagnosticRepository
+	DevConsoleHandler *developer_console.HTTPHandler
+	TrustService      *trust.TrustService
+	AmitiaxInstaller  *amitiax.Installer
+	DevModeRegistry   *dev_mode.WorkspaceRegistry
+	DevModePipeline   *dev_mode.RebuildPipeline
+	DevModeReloader   *dev_mode.RuntimeReloader
+	DevModeSessions   *dev_mode.SessionManager
+	DevModeStore      *dev_mode.SQLiteWorkspaceStore
 
 	UpdateRecoveryManager *update.RecoveryManager
 
@@ -142,23 +143,23 @@ type Container struct {
 	MigrationCheckpointMgr *migration.CheckpointManager
 	MigrationValidator     *migration.PreconditionValidator
 
-	RollbackRepository   *update.RollbackRepository
-	JournalManager       *update.JournalManager
-	RollbackExecutorV2   *update.RollbackExecutorV2
-	RollbackPlanner      *update.RollbackPlanner
-	RollbackPointStore   *update.RollbackPointStore
-	UpdateGenerationMgr  *update.GenerationManager
-	UpdateMigrationExec  *update.MigrationExecutor
+	RollbackRepository  *update.RollbackRepository
+	JournalManager      *update.JournalManager
+	RollbackExecutorV2  *update.RollbackExecutorV2
+	RollbackPlanner     *update.RollbackPlanner
+	RollbackPointStore  *update.RollbackPointStore
+	UpdateGenerationMgr *update.GenerationManager
+	UpdateMigrationExec *update.MigrationExecutor
 
-	CanaryRepository         *canary.CanaryRepository
-	CanaryStageManager       *canary.StageManager
-	CanaryGenerationRouter   *canary.GenerationRouter
-	CanaryHealthCollector    *canary.HealthMetricsCollector
-	CanaryHealthEvaluator    *canary.HealthEvaluator
-	CanaryCohortResolver     *canary.CohortResolver
-	CanaryDualWriteManager   *canary.DualWriteManager
-	CanaryShadowManager      *canary.ShadowManager
-	CanaryOwnershipResolver  *canary.BackgroundOwnershipResolver
+	CanaryRepository        *canary.CanaryRepository
+	CanaryStageManager      *canary.StageManager
+	CanaryGenerationRouter  *canary.GenerationRouter
+	CanaryHealthCollector   *canary.HealthMetricsCollector
+	CanaryHealthEvaluator   *canary.HealthEvaluator
+	CanaryCohortResolver    *canary.CohortResolver
+	CanaryDualWriteManager  *canary.DualWriteManager
+	CanaryShadowManager     *canary.ShadowManager
+	CanaryOwnershipResolver *canary.BackgroundOwnershipResolver
 }
 
 func (c *Container) Close() error {
@@ -166,6 +167,29 @@ func (c *Container) Close() error {
 		return nil
 	}
 	var firstErr error
+
+	if c.ScheduleService != nil {
+		c.ScheduleService.Shutdown(context.Background())
+	}
+
+	if c.EventService != nil {
+		c.EventService.Stop()
+	}
+
+	if c.HookService != nil {
+		if err := c.HookService.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	if c.PermissionBroker != nil {
+		if broker, ok := c.PermissionBroker.(*permission.DefaultPermissionBroker); ok {
+			if err := broker.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
 	if c.Store != nil {
 		if err := c.Store.Close(); err != nil && firstErr == nil {
 			firstErr = err
@@ -221,6 +245,30 @@ func (c *Container) Recover(ctx context.Context) error {
 				}
 				_ = c.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled)
 			}
+
+			if c.RuntimeSupervisor != nil {
+				for _, mod := range modules {
+					if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+						spec := runtime_supervisor.InstanceSpec{
+							DefinitionID: runtime_supervisor.DefinitionID(string(inst.ExtensionID)),
+							ExtensionID:  inst.ExtensionID,
+							ModuleID:     mod.ID,
+							RuntimeType:  mod.Runtime.Type,
+						}
+						c.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
+							DefinitionID: runtime_supervisor.DefinitionID(string(inst.ExtensionID)),
+							Desired:      runtime_supervisor.DesiredRunning,
+							Spec:         spec,
+						})
+					}
+				}
+			}
+
+		}
+	}
+	if c.WorkflowExecutor != nil {
+		if err := c.WorkflowExecutor.Recover(ctx, 100); err != nil {
+			return fmt.Errorf("kernel: recover workflow executions: %w", err)
 		}
 	}
 	return nil

@@ -23,10 +23,10 @@ func NewRetryService(store ScheduleStore, clock Clock, config ScheduleConfig) *R
 }
 
 type RetryDecision struct {
-	ShouldRetry   bool
-	Backoff       time.Duration
-	AvailableAt   time.Time
-	Reason        string
+	ShouldRetry        bool
+	Backoff            time.Duration
+	AvailableAt        time.Time
+	Reason             string
 	ManualIntervention bool
 }
 
@@ -48,6 +48,25 @@ func (r *RetryService) ShouldRetry(ctx context.Context, def *ScheduleContributio
 		return &RetryDecision{
 			ShouldRetry: false,
 			Reason:      "max_attempts_exceeded",
+		}, nil
+	}
+
+	permanentErrorCodes := map[string]bool{
+		ErrCodePermissionDenied:       true,
+		ErrCodeScopeDenied:            true,
+		ErrCodeDefinitionHashMismatch: true,
+		ErrCodeGenerationMismatch:     true,
+		ErrCodeQuarantined:            true,
+		ErrCodeInvalidStateTransition: true,
+		"permission_denied":           true,
+		"scope_denied":                true,
+		"invalid_input":               true,
+	}
+	if permanentErrorCodes[errorCode] {
+		return &RetryDecision{
+			ShouldRetry:        false,
+			Reason:             "permanent_error",
+			ManualIntervention: true,
 		}, nil
 	}
 
@@ -155,8 +174,8 @@ func (r *RetryService) ScheduleRetry(ctx context.Context, def *ScheduleContribut
 	}
 
 	updates := map[string]any{
-		"status":    RunStatusRetryWait,
-		"attempt":   trigger.Attempt + 1,
+		"status":        RunStatusRetryWait,
+		"attempt":       trigger.Attempt + 1,
 		"error_code":    errorCode,
 		"error_message": errorMessage,
 	}

@@ -1,4 +1,4 @@
-import { BrowserWindow, Tray } from "electron";
+import { BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { MenuHost } from "./menu-host";
 import { TrayHost } from "./tray-host";
 import { ShortcutHost } from "./shortcut-host";
@@ -20,10 +20,18 @@ export class DesktopHostManager {
   private readonly snapshotApplier: SnapshotApplier;
   private currentSnapshot: DesktopSnapshot | null = null;
 
-  constructor(mainWindow: BrowserWindow, tray: Tray) {
+  constructor(
+    mainWindow: BrowserWindow,
+    setExtensionTrayItems: (
+      items: MenuItemConstructorOptions[],
+    ) => Promise<void>,
+  ) {
     this.actionBridge = new DesktopActionBridge(mainWindow);
     this.menuHost = new MenuHost(mainWindow, this.actionBridge);
-    this.trayHost = new TrayHost(mainWindow, tray, this.actionBridge);
+    this.trayHost = new TrayHost(
+      this.actionBridge,
+      setExtensionTrayItems,
+    );
     this.shortcutHost = new ShortcutHost(mainWindow, this.actionBridge);
     this.globalShortcutHost = new GlobalShortcutHost(this.actionBridge);
     this.snapshotApplier = new SnapshotApplier(
@@ -34,11 +42,12 @@ export class DesktopHostManager {
     );
   }
 
-  applySnapshot(snapshot: DesktopSnapshot): void {
+  applySnapshot(snapshot: DesktopSnapshot): boolean {
     const ok = this.snapshotApplier.apply(snapshot);
     if (ok) {
       this.currentSnapshot = snapshot;
     }
+    return ok;
   }
 
   async invokeAction(

@@ -26,6 +26,7 @@ const (
 	ActualStarting    ActualState = "starting"
 	ActualReady       ActualState = "ready"
 	ActualDegraded    ActualState = "degraded"
+	ActualDraining    ActualState = "draining"
 	ActualStopping    ActualState = "stopping"
 	ActualStopped     ActualState = "stopped"
 	ActualCrashed     ActualState = "crashed"
@@ -53,16 +54,17 @@ const (
 type StopReason string
 
 const (
-	StopReasonManual       StopReason = "manual"
-	StopReasonDrain        StopReason = "drain"
-	StopReasonCrash        StopReason = "crash"
-	StopReasonUpdate       StopReason = "update"
-	StopReasonRollback     StopReason = "rollback"
-	StopReasonUninstall    StopReason = "uninstall"
-	StopReasonQuarantine   StopReason = "quarantine"
-	StopReasonDependency   StopReason = "dependency_lost"
-	StopReasonResource     StopReason = "resource_limit"
-	StopReasonCircuit      StopReason = "circuit_open"
+	StopReasonManual     StopReason = "manual"
+	StopReasonDrain      StopReason = "drain"
+	StopReasonCrash      StopReason = "crash"
+	StopReasonUpdate     StopReason = "update"
+	StopReasonRollback   StopReason = "rollback"
+	StopReasonDisable    StopReason = "disable"
+	StopReasonUninstall  StopReason = "uninstall"
+	StopReasonQuarantine StopReason = "quarantine"
+	StopReasonDependency StopReason = "dependency_lost"
+	StopReasonResource   StopReason = "resource_limit"
+	StopReasonCircuit    StopReason = "circuit_open"
 )
 
 type InstanceStrategy string
@@ -209,6 +211,7 @@ type Supervisor interface {
 	Reconcile(ctx context.Context, request ReconcileRequest) ReconcileResult
 	Invoke(ctx context.Context, request InvocationRequest) InvocationResult
 	Stop(ctx context.Context, instanceID string, reason StopReason) error
+	Drain(ctx context.Context, instanceID string, timeout time.Duration) error
 	Restart(ctx context.Context, instanceID string) error
 	Snapshot(ctx context.Context, defID DefinitionID) StateSnapshot
 	GetInstance(ctx context.Context, instanceID string) (InstanceSnapshot, error)
@@ -229,4 +232,5 @@ type instanceEntry struct {
 	generation  int64
 	lastError   string
 	consecFails int
+	activeCalls int32
 }

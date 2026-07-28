@@ -276,7 +276,11 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		}
 		result.Applied = append(result.Applied, "create_installation")
 		if e.installer != nil {
-			e.installer.InstallContributions(ctx, plan.CurrentState.Contributions)
+			if err := e.installer.InstallContributions(ctx, plan.CurrentState.Contributions, inst.Generation); err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
 			result.Applied = append(result.Applied, "install_contributions")
 		}
 
@@ -327,10 +331,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "repair_installation")
-		}
-		if e.installer != nil {
-			e.installer.RepairContributions(ctx, extID)
-			result.Applied = append(result.Applied, "repair_contributions")
+			if e.installer != nil {
+				e.installer.RepairContributions(ctx, extID, inst.Generation)
+				result.Applied = append(result.Applied, "repair_contributions")
+			}
 		}
 
 	case lifecycle_manager.CmdEnableModule:

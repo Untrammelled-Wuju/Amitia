@@ -16,10 +16,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
-	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
 
 func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (KernelInstallResult, error) {
@@ -118,8 +116,8 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 				Signature:       pkg.Signatures.Signature,
 			}
 			verResult := sigVerifier.Verify(ctx, package_security.SignatureVerificationInput{
-				Signature:            pkgSig,
-				PublicKey:            pubKey,
+				Signature:             pkgSig,
+				PublicKey:             pubKey,
 				ActualContentTreeHash: pkg.Tree.TreeHash,
 			})
 			if verResult.Status != package_security.SignatureValid {
@@ -218,16 +216,26 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 	}
 
 	now := time.Now().UTC()
+	generation := int64(1)
+	installationID := "inst-" + safeID + "-" + version
+	installedAt := now
+	enablementState := domain.EnablementDisabled
+	if current, currentErr := r.container.InstallationRepository.GetInstallation(ctx, def.ID); currentErr == nil {
+		generation = current.Generation + 1
+		installationID = current.InstallationID
+		installedAt = current.InstalledAt
+		enablementState = current.EnablementState
+	}
 	inst := domain.ExtensionInstallation{
-		InstallationID:    "inst-" + safeID + "-" + version,
+		InstallationID:    installationID,
 		ExtensionID:       def.ID,
 		InstalledVersion:  def.Version,
 		PackageID:         packageHashHex,
 		InstallationState: domain.InstallationStateInstalled,
-		EnablementState:   domain.EnablementDisabled,
-		InstalledAt:       now,
+		EnablementState:   enablementState,
+		InstalledAt:       installedAt,
 		UpdatedAt:         now,
-		Generation:        1,
+		Generation:        generation,
 	}
 
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
@@ -273,75 +281,8 @@ func (r *Runtime) ExecuteInstall(ctx context.Context, archivePath string) (Kerne
 		for _, mod := range def.Modules {
 			allContribs = append(allContribs, mod.Contributions...)
 		}
-		r.container.ContributionInstaller.InstallContributions(ctx, allContribs)
-	}
-
-	for _, mod := range def.Modules {
-		for _, contrib := range mod.Contributions {
-			if !isUIContributionKind(string(contrib.Kind)) {
-				continue
-			}
-			defData, mErr := json.Marshal(contrib.Definition)
-			if mErr != nil {
-				continue
-			}
-			var uiDef ui_contribution.UIContributionDefinition
-			if uErr := json.Unmarshal(defData, &uiDef); uErr != nil {
-				continue
-			}
-			if uiDef.ContributionID == "" {
-				uiDef.ContributionID = ui_contribution.ContributionID(contrib.ID)
-			}
-			if uiDef.ExtensionID == "" {
-				uiDef.ExtensionID = ui_contribution.ExtensionID(contrib.ExtensionID)
-			}
-			if uiDef.ModuleID == "" {
-				uiDef.ModuleID = ui_contribution.ModuleID(contrib.ModuleID)
-			}
-			_ = r.container.UIHost.RegisterContribution(&uiDef)
-			if r.container.UIContributionRepo != nil {
-				_ = r.container.UIContributionRepo.PutContribution(ctx, &uiDef)
-			}
-			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
-				entryKind := extension_page_host.PageKindWeb
-				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
-					entryKind = extension_page_host.PageKindSchema
-				}
-				perms := make([]string, 0, len(uiDef.Permissions))
-				for _, p := range uiDef.Permissions {
-					perms = append(perms, p.Name)
-				}
-				pageDef := extension_page_host.NewExtensionPageDefinition(extension_page_host.PageRegistrationInput{
-					PageID:          extension_page_host.PageID(uiDef.ContributionID),
-					ExtensionID:     extension_page_host.ExtensionID(uiDef.ExtensionID),
-					ModuleID:        string(uiDef.ModuleID),
-					ContributionID:  extension_page_host.ContributionID(uiDef.ContributionID),
-					Generation:      inst.Generation,
-					ContractVersion: uiDef.ContractVersion,
-					EntryKind:       entryKind,
-					EntryPath:       uiDef.Entry.Path,
-					SchemaPath:      uiDef.Entry.SchemaPath,
-					Title: extension_page_host.LocalizedText{
-						Default:      uiDef.Display.Title.Default,
-						Translations: uiDef.Display.Title.I18n,
-					},
-					Description: extension_page_host.LocalizedText{
-						Default:      uiDef.Display.Description.Default,
-						Translations: uiDef.Display.Description.I18n,
-					},
-					Icon:        uiDef.Display.Icon,
-					Permissions: perms,
-				})
-				_ = r.container.PageHost.RegisterPage(ctx, pageDef)
-			if entryKind == extension_page_host.PageKindSchema && uiDef.Entry.SchemaPath != "" && r.container.SchemaRegistry != nil {
-				_ = r.container.SchemaRegistry.LoadFromPath(
-					string(uiDef.ExtensionID),
-					string(uiDef.ContributionID),
-					installedDir,
-					uiDef.Entry.SchemaPath,
-				)
-			}
-			}
+		if err := r.container.ContributionInstaller.InstallContributions(ctx, allContribs, inst.Generation); err != nil {
+			return result, fmt.Errorf("kernel: install contributions: %w", err)
 		}
 	}
 

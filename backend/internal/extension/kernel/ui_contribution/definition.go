@@ -180,6 +180,14 @@ type UIDataContract struct {
 	MaxPayloadBytes  int64           `json:"max_payload_bytes,omitempty"`
 }
 
+type UIDataSourceDefinition struct {
+	SourceID      string          `json:"source_id"`
+	Title         LocalizedText   `json:"title"`
+	InputSchema   json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema  json.RawMessage `json:"output_schema,omitempty"`
+	RefreshPolicy string          `json:"refresh_policy,omitempty"`
+}
+
 type RiskLevel string
 
 const (
@@ -283,6 +291,7 @@ type UIContributionDefinition struct {
 	Visibility      UIVisibilityRule       `json:"visibility,omitempty"`
 	DataContract    UIDataContract         `json:"data_contract,omitempty"`
 	Actions         []UIActionDefinition   `json:"actions,omitempty"`
+	DataSources     []UIDataSourceDefinition `json:"data_sources,omitempty"`
 	Permissions     []PermissionRequirement `json:"permissions,omitempty"`
 	ScopeRule       ScopeRule              `json:"scope_rule,omitempty"`
 	Ordering        UIOrderingRule         `json:"ordering,omitempty"`

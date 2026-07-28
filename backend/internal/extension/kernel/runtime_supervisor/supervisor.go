@@ -22,6 +22,7 @@ var (
 	ErrGenerationMismatch   = errors.New("runtime_supervisor: generation mismatch")
 	ErrDependencyMissing    = errors.New("runtime_supervisor: dependency snapshot missing")
 	ErrMaxRestartsExceeded  = errors.New("runtime_supervisor: max restarts exceeded")
+	ErrInstanceDraining     = errors.New("runtime_supervisor: instance draining")
 )
 
 type DefaultSupervisor struct {
@@ -340,6 +341,13 @@ func (s *DefaultSupervisor) Invoke(ctx context.Context, request InvocationReques
 			Error:        ErrCircuitOpen,
 		}
 	}
+	if entry.actual == ActualDraining {
+		return InvocationResult{
+			InvocationID: request.InvocationID,
+			Status:       "rejected",
+			Error:        ErrInstanceDraining,
+		}
+	}
 	if entry.generation != request.Generation && request.Generation != 0 {
 		return InvocationResult{
 			InvocationID: request.InvocationID,
@@ -354,8 +362,15 @@ func (s *DefaultSupervisor) Invoke(ctx context.Context, request InvocationReques
 			Error:        fmt.Errorf("runtime_supervisor: instance not ready (state=%s)", entry.actual),
 		}
 	}
+	s.mu.Lock()
+	entry.activeCalls++
+	s.mu.Unlock()
 	result := entry.runtime.Invoke(ctx, request)
 	s.mu.Lock()
+	entry.activeCalls--
+	if entry.activeCalls < 0 {
+		entry.activeCalls = 0
+	}
 	if result.Error != nil {
 		entry.consecFails++
 		s.evaluateCircuitLocked(entry)
@@ -369,6 +384,41 @@ func (s *DefaultSupervisor) Invoke(ctx context.Context, request InvocationReques
 
 func (s *DefaultSupervisor) Stop(ctx context.Context, instanceID string, reason StopReason) error {
 	return s.stopLocked(ctx, instanceID, reason)
+}
+
+func (s *DefaultSupervisor) Drain(ctx context.Context, instanceID string, timeout time.Duration) error {
+	s.mu.Lock()
+	entry, ok := s.instances[instanceID]
+	if !ok {
+		s.mu.Unlock()
+		return ErrInstanceNotFound
+	}
+	entry.actual = ActualDraining
+	s.mu.Unlock()
+
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		s.mu.RLock()
+		active := entry.activeCalls
+		s.mu.RUnlock()
+		if active <= 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	return s.stopLocked(ctx, instanceID, StopReasonDrain)
 }
 
 func (s *DefaultSupervisor) stopLocked(ctx context.Context, instanceID string, reason StopReason) error {

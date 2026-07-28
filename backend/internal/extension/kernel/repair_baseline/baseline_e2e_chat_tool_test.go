@@ -33,7 +33,7 @@ func TestBaseline_E2E_ChatTool_ToolFacadeConstructs(t *testing.T) {
 		t.Fatalf("Container must have a non-nil ExecutionKernel for Chat Tool E2E")
 	}
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 	if toolFacade == nil {
 		t.Fatalf("NewToolFacade must return a non-nil facade (Phase 10 section 19.6.1)")
 	}
@@ -56,7 +56,7 @@ func TestBaseline_E2E_ChatTool_ModelToolsFromKernel(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	scope := kernel.LegacyScope{
 		UserID:         "test-user",
@@ -89,7 +89,7 @@ func TestBaseline_E2E_ChatTool_LegacyCounterZero(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	scope := kernel.LegacyScope{
 		UserID:         "test-user",
@@ -123,7 +123,7 @@ func TestBaseline_E2E_ChatTool_CountersAvailable(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 	counters := toolFacade.Counters()
 	if counters == nil {
 		t.Fatalf("ToolFacade.Counters must return a non-nil counter (Phase 10 section 19.6.1)")
@@ -151,7 +151,7 @@ func TestBaseline_E2E_ChatTool_NoLegacyDispatcherMeansNoLegacyFallback(t *testin
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	scope := kernel.LegacyScope{
 		UserID:         "test-user",

@@ -19,11 +19,11 @@ type JournalEntry struct {
 }
 
 const (
-	JournalStatusPending   = "pending"
+	JournalStatusPending    = "pending"
 	JournalStatusInProgress = "in_progress"
-	JournalStatusCompleted = "completed"
-	JournalStatusFailed    = "failed"
-	JournalStatusSkipped   = "skipped"
+	JournalStatusCompleted  = "completed"
+	JournalStatusFailed     = "failed"
+	JournalStatusSkipped    = "skipped"
 )
 
 type UpdateJournal struct {
@@ -167,4 +167,13 @@ func (j *UpdateJournal) Clear(operationID string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	delete(j.entries, operationID)
+}
+
+func (j *UpdateJournal) Restore(entries []JournalEntry) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.entries = make(map[string][]JournalEntry)
+	for _, entry := range entries {
+		j.entries[entry.OperationID] = append(j.entries[entry.OperationID], entry)
+	}
 }

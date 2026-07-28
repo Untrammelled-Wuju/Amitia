@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -24,7 +25,7 @@ func NewHostAPIToolExecutorAdapter(gateway host_api.Gateway) *HostAPIToolExecuto
 	return &HostAPIToolExecutorAdapter{Gateway: gateway}
 }
 
-func (a *HostAPIToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string) (*schedule.ToolExecutionResult, error) {
+func (a *HostAPIToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string, scheduleCtx schedule.ScheduleToolContext) (*schedule.ToolExecutionResult, error) {
 	if a == nil || a.Gateway == nil {
 		return &schedule.ToolExecutionResult{
 			ErrorCode:    schedule.ErrCodeTargetNotFound,
@@ -52,12 +53,27 @@ func (a *HostAPIToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID str
 		callID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
 	}
 
+	invocationID := operationID
+	if invocationID == "" {
+		invocationID = scheduleCtx.TraceID
+	}
+	if invocationID == "" {
+		invocationID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
+	}
+
 	result := a.Gateway.Call(ctx, host_api.CallRequest{
-		CallID:       callID,
-		Method:       host_api.MethodToolExecute,
-		Version:      1,
-		Input:        requestBody,
-		InvocationID: operationID,
+		CallID: callID,
+		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{
+			ExtensionID: domain.ExtensionID(scheduleCtx.ExtensionID),
+			ModuleID:    domain.ModuleID(scheduleCtx.ModuleID),
+			Generation:  scheduleCtx.Generation,
+		},
+		Method:          host_api.MethodToolExecute,
+		Version:         1,
+		Input:           requestBody,
+		ScopeSnapshotID: scheduleCtx.ScopeSnapshotID,
+		TraceID:         scheduleCtx.TraceID,
+		InvocationID:    invocationID,
 	})
 
 	if result.Error != nil {
@@ -80,7 +96,7 @@ func NewKernelToolExecutorAdapter(kernel *execution.ExecutionPipeline) *KernelTo
 	return &KernelToolExecutorAdapter{Kernel: kernel}
 }
 
-func (a *KernelToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string) (*schedule.ToolExecutionResult, error) {
+func (a *KernelToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string, scheduleCtx schedule.ScheduleToolContext) (*schedule.ToolExecutionResult, error) {
 	if a == nil || a.Kernel == nil {
 		return &schedule.ToolExecutionResult{
 			ErrorCode:    schedule.ErrCodeTargetNotFound,
@@ -95,13 +111,25 @@ func (a *KernelToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID stri
 
 	invocationID := operationID
 	if invocationID == "" {
+		invocationID = scheduleCtx.TraceID
+	}
+	if invocationID == "" {
 		invocationID = fmt.Sprintf("sched-tool-%s", uuid.NewString())
 	}
 
 	invocation := capability.ToolInvocationContext{
-		InvocationID: invocationID,
-		Source:       capability.InvocationSourceScheduledTask,
-		TraceID:      invocationID,
+		InvocationID:         invocationID,
+		Source:               capability.InvocationSourceScheduledTask,
+		TraceID:              scheduleCtx.TraceID,
+		ExtensionID:          scheduleCtx.ExtensionID,
+		ModuleID:             scheduleCtx.ModuleID,
+		Generation:           scheduleCtx.Generation,
+		IdempotencyKey:       scheduleCtx.IdempotencyKey,
+		ScheduleID:           scheduleCtx.ScheduleID,
+		TriggerID:            scheduleCtx.TriggerID,
+		OperationID:          operationID,
+		ScopeSnapshotID:      scheduleCtx.ScopeSnapshotID,
+		PermissionSnapshotID: scheduleCtx.PermissionSnapshotID,
 	}
 
 	req := execution.ToolExecutionRequest{
@@ -150,14 +178,19 @@ func (a *KernelToolExecutorAdapter) ExecuteTool(ctx context.Context, toolID stri
 }
 
 type KernelWorkflowFacadeAdapter struct {
-	executor *workflow.WorkflowExecutor
+	executor           *workflow.WorkflowExecutor
+	generationResolver func(context.Context, string) (int64, error)
 }
 
-func NewKernelWorkflowFacadeAdapter(executor *workflow.WorkflowExecutor) *KernelWorkflowFacadeAdapter {
-	return &KernelWorkflowFacadeAdapter{executor: executor}
+func NewKernelWorkflowFacadeAdapter(executor *workflow.WorkflowExecutor, generationResolver ...func(context.Context, string) (int64, error)) *KernelWorkflowFacadeAdapter {
+	adapter := &KernelWorkflowFacadeAdapter{executor: executor}
+	if len(generationResolver) > 0 {
+		adapter.generationResolver = generationResolver[0]
+	}
+	return adapter
 }
 
-func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workflowID string, input []byte, operationID string) (*schedule.WorkflowExecutionResult, error) {
+func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workflowID string, input []byte, scheduleContext schedule.WorkflowScheduleContext) (*schedule.WorkflowExecutionResult, error) {
 	if a == nil || a.executor == nil {
 		return &schedule.WorkflowExecutionResult{
 			ErrorCode:    "WORKFLOW_NOT_CONFIGURED",
@@ -170,24 +203,42 @@ func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workf
 		inputPayload = []byte(`{}`)
 	}
 
-	invocationID := operationID
+	invocationID := scheduleContext.InvocationID
 	if invocationID == "" {
 		invocationID = fmt.Sprintf("sched-wf-%s", uuid.NewString())
+	}
+	generation := scheduleContext.Generation
+	if a.generationResolver != nil && scheduleContext.ExtensionID != "" {
+		resolvedGeneration, resolveErr := a.generationResolver(ctx, scheduleContext.ExtensionID)
+		if resolveErr != nil {
+			return &schedule.WorkflowExecutionResult{OperationID: scheduleContext.OperationID, InvocationID: invocationID, ErrorCode: schedule.ErrCodeGenerationMismatch, ErrorMessage: resolveErr.Error()}, nil
+		}
+		generation = resolvedGeneration
 	}
 
 	req := workflow.ExecuteRequest{
 		WorkflowID: workflowID,
 		Input:      json.RawMessage(inputPayload),
 		Context: workflow.ExecutionContext{
-			OperationID:  operationID,
-			InvocationID: invocationID,
+			ExtensionID:      scheduleContext.ExtensionID,
+			ModuleID:         scheduleContext.ModuleID,
+			OperationID:      scheduleContext.OperationID,
+			InvocationID:     invocationID,
+			ScopeSnapshotID:  scheduleContext.ScopeSnapshotID,
+			PermissionSnapID: scheduleContext.PermissionSnapshotID,
+			Generation:       generation,
+			ScheduleID:       scheduleContext.ScheduleID,
+			TriggerID:        scheduleContext.TriggerID,
+			TraceID:          scheduleContext.TraceID,
+			IdempotencyKey:   scheduleContext.IdempotencyKey,
 		},
 	}
 
 	result, err := a.executor.Execute(ctx, req)
 	if err != nil {
 		return &schedule.WorkflowExecutionResult{
-			OperationID:  operationID,
+			OperationID:  scheduleContext.OperationID,
+			InvocationID: invocationID,
 			ErrorCode:    schedule.ErrCodeTargetExecutionFailed,
 			ErrorMessage: err.Error(),
 		}, nil
@@ -195,7 +246,8 @@ func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workf
 
 	if !result.Success {
 		return &schedule.WorkflowExecutionResult{
-			OperationID:  operationID,
+			OperationID:  scheduleContext.OperationID,
+			InvocationID: invocationID,
 			ErrorCode:    schedule.ErrCodeTargetExecutionFailed,
 			ErrorMessage: result.Error,
 		}, nil
@@ -207,8 +259,11 @@ func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workf
 	}
 
 	return &schedule.WorkflowExecutionResult{
-		OperationID: operationID,
-		ResultJSON: outputBytes,
+		OperationID:  scheduleContext.OperationID,
+		InvocationID: invocationID,
+		Status:       string(result.Status),
+		Accepted:     result.Accepted,
+		ResultJSON:   outputBytes,
 	}, nil
 }
 
@@ -242,22 +297,22 @@ func (a *TaskRuntimeEnqueueAdapter) Enqueue(ctx context.Context, def *schedule.S
 	}
 
 	taskDef := &task_runtime.TaskDefinition{
-		TaskID:        def.Target.TargetID,
-		ExtensionID:   def.ExtensionID,
-		ModuleID:      def.ModuleID,
+		TaskID:         def.Target.TargetID,
+		ExtensionID:    def.ExtensionID,
+		ModuleID:       def.ModuleID,
 		ContributionID: def.ContributionID,
-		RuntimeType:   "javascript",
-		Entry:         def.Target.TargetID,
+		RuntimeType:    "javascript",
+		Entry:          def.Target.TargetID,
 	}
 
 	enqueueReq := task_runtime.EnqueueTaskRequest{
-		TaskDefinitionID:    def.Target.TargetID,
-		ExtensionID:         def.ExtensionID,
-		ModuleID:            def.ModuleID,
-		Input:               input,
-		Priority:            0,
-		OperationID:         operationID,
-		ScopeSnapshotID:     trigger.ScopeSnapshotID,
+		TaskDefinitionID:     def.Target.TargetID,
+		ExtensionID:          def.ExtensionID,
+		ModuleID:             def.ModuleID,
+		Input:                input,
+		Priority:             0,
+		OperationID:          operationID,
+		ScopeSnapshotID:      trigger.ScopeSnapshotID,
 		PermissionSnapshotID: trigger.PermissionSnapshotID,
 	}
 

@@ -17,8 +17,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/data_migration"
-	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
@@ -99,12 +99,12 @@ type ReportSummary struct {
 }
 
 type SignOff struct {
-	ArchitectureApproved bool      `json:"architectureApproved"`
-	SecurityApproved     bool      `json:"securityApproved"`
-	StabilityApproved    bool      `json:"stabilityApproved"`
-	DevExperienceApproved bool     `json:"devExperienceApproved"`
-	ReleaseApproved      bool      `json:"releaseApproved"`
-	Timestamp            time.Time `json:"timestamp"`
+	ArchitectureApproved  bool      `json:"architectureApproved"`
+	SecurityApproved      bool      `json:"securityApproved"`
+	StabilityApproved     bool      `json:"stabilityApproved"`
+	DevExperienceApproved bool      `json:"devExperienceApproved"`
+	ReleaseApproved       bool      `json:"releaseApproved"`
+	Timestamp             time.Time `json:"timestamp"`
 }
 
 type ItemFn func(ctx context.Context) ([]string, error)
@@ -129,7 +129,7 @@ func (s *Suite) Register(item AcceptanceItem, fn ItemFn) {
 }
 
 var (
-	ErrNoItems       = errors.New("final_acceptance: no items registered")
+	ErrNoItems        = errors.New("final_acceptance: no items registered")
 	ErrRequiredFailed = errors.New("final_acceptance: required item failed")
 )
 
@@ -472,7 +472,7 @@ func verifySingleChain(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("ExecutionKernel must not be nil for single chain verification")
 	}
 
-	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 	if facade == nil {
 		return nil, fmt.Errorf("ToolFacade must be non-nil")
 	}
@@ -736,7 +736,7 @@ func verifyCutover(ctx context.Context) ([]string, error) {
 	}
 	defer container.Close()
 
-	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 	scope := kernel.LegacyScope{
 		UserID:    "cutover",
 		Channel:   "test",
@@ -940,9 +940,9 @@ func verifyBuiltinToolsMigration(ctx context.Context) ([]string, error) {
 func verifySkillsMCPWorkflowMigration(ctx context.Context) ([]string, error) {
 	skillReg := skill_migration.NewSkillMigrationRegistry()
 	skillSpec := &skill_migration.SkillContributionSpec{
-		SkillID:       "system/amitia-core/greet",
-		LegacySkillID: "greet",
-		Title:         "Greet",
+		SkillID:        "system/amitia-core/greet",
+		LegacySkillID:  "greet",
+		Title:          "Greet",
 		RuntimeBinding: "javascript",
 	}
 	if err := skillReg.Register(skillSpec); err != nil {
@@ -961,10 +961,10 @@ func verifySkillsMCPWorkflowMigration(ctx context.Context) ([]string, error) {
 
 	workflowReg := workflow_migration.NewWorkflowMigrationRegistry()
 	wfSpec := &workflow_migration.WorkflowContributionSpec{
-		WorkflowID:        "system/amitia-core/default-workflow",
-		LegacyWorkflowID:  "default-workflow",
-		DisplayName:       "Default Workflow",
-		RuntimeBinding:    "javascript",
+		WorkflowID:       "system/amitia-core/default-workflow",
+		LegacyWorkflowID: "default-workflow",
+		DisplayName:      "Default Workflow",
+		RuntimeBinding:   "javascript",
 	}
 	if err := workflowReg.Register(wfSpec); err != nil {
 		return nil, fmt.Errorf("workflow_migration.Register failed: %w", err)
@@ -1103,7 +1103,7 @@ func verifyEquivalence(ctx context.Context) ([]string, error) {
 	}
 	defer container.Close()
 
-	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 	scope := kernel.LegacyScope{UserID: "eq", Channel: "test", SessionID: "eq-verify"}
 
 	tools, err := facade.ModelTools(ctx, scope)
@@ -1142,7 +1142,7 @@ func verifyStability(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("iteration %d Build failed: %w", i, err)
 		}
-		facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+		facade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 		scope := kernel.LegacyScope{UserID: "stability", Channel: "test", SessionID: fmt.Sprintf("stab-%d", i)}
 		_, _ = facade.ModelTools(ctx, scope)
 		container.Close()
@@ -1167,12 +1167,12 @@ func verifyLegacyPluginDeprecated(ctx context.Context) ([]string, error) {
 	}
 
 	spec := &plugin_migration.PluginContributionSpec{
-		PluginID:         "system/amitia-core/deprecated-plugin",
-		LegacyPluginID:   "deprecated-plugin",
-		ExtensionID:      "system/amitia-core",
-		DisplayName:      "Deprecated Plugin",
-		Deprecated:       true,
-		DeprecationNote:  "migrated to kernel",
+		PluginID:        "system/amitia-core/deprecated-plugin",
+		LegacyPluginID:  "deprecated-plugin",
+		ExtensionID:     "system/amitia-core",
+		DisplayName:     "Deprecated Plugin",
+		Deprecated:      true,
+		DeprecationNote: "migrated to kernel",
 	}
 	if err := reg.Register(spec); err != nil {
 		return nil, fmt.Errorf("plugin_migration.Register failed: %w", err)
@@ -1197,10 +1197,10 @@ func verifyLegacySkillDeprecated(ctx context.Context) ([]string, error) {
 	}
 
 	spec := &skill_migration.SkillContributionSpec{
-		SkillID:        "system/amitia-core/deprecated-skill",
-		LegacySkillID:  "deprecated-skill",
-		Title:          "Deprecated Skill",
-		Deprecated:     true,
+		SkillID:         "system/amitia-core/deprecated-skill",
+		LegacySkillID:   "deprecated-skill",
+		Title:           "Deprecated Skill",
+		Deprecated:      true,
 		DeprecationNote: "migrated to kernel skill handler",
 	}
 	if err := reg.Register(spec); err != nil {

@@ -35,8 +35,8 @@ type realTimer struct {
 	t *time.Timer
 }
 
-func (t *realTimer) C() <-chan time.Time { return t.t.C }
-func (t *realTimer) Stop() bool          { return t.t.Stop() }
+func (t *realTimer) C() <-chan time.Time        { return t.t.C }
+func (t *realTimer) Stop() bool                 { return t.t.Stop() }
 func (t *realTimer) Reset(d time.Duration) bool { return t.t.Reset(d) }
 
 type FakeClock struct {

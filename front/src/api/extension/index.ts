@@ -27,7 +27,7 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     kind: def.kind,
     slotId: def.slot?.slot_id ?? "",
     contractVersion: def.contract_version,
-    generation: 0,
+    generation: def.integrity?.generation ?? 0,
     title: def.display?.title?.default ?? def.contribution_id,
     description: def.display?.description?.default,
     icon: def.display?.icon,

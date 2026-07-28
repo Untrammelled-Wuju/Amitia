@@ -1449,6 +1449,55 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_ckpts_exec_id ON extension_workflow_checkpoints(execution_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_ckpts_wf_id ON extension_workflow_checkpoints(workflow_id)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_legacy_package_migrations (
+		legacy_extension_id TEXT PRIMARY KEY,
+		legacy_version TEXT NOT NULL,
+		status TEXT NOT NULL,
+		reason TEXT NOT NULL DEFAULT '',
+		migrated_at DATETIME,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_legacy_package_migrations_status ON kernel_legacy_package_migrations(status)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_step_runs (
+		execution_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		status TEXT NOT NULL,
+		input_json TEXT,
+		output_json TEXT,
+		error_message TEXT,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		started_at DATETIME NOT NULL,
+		finished_at DATETIME,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (execution_id, node_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_step_runs_workflow ON extension_workflow_step_runs(workflow_id, execution_id)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_trigger_bindings (
+		binding_id TEXT PRIMARY KEY,
+		trigger_type TEXT NOT NULL,
+		event_type TEXT NOT NULL DEFAULT '',
+		schedule_id TEXT NOT NULL DEFAULT '',
+		workflow_id TEXT NOT NULL,
+		input_json TEXT NOT NULL DEFAULT '{}',
+		generation INTEGER NOT NULL DEFAULT 0,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_trigger_lookup ON extension_workflow_trigger_bindings(trigger_type, event_type, schedule_id, enabled)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_compensations (
+		execution_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		status TEXT NOT NULL,
+		error_message TEXT NOT NULL DEFAULT '',
+		executed_at DATETIME NOT NULL,
+		PRIMARY KEY (execution_id, node_id)
+	)`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -1474,6 +1523,9 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	if err := ensureSchemaColumns(ctx, db); err != nil {
 		return fmt.Errorf("sqlite: ensure schema columns: %w", err)
 	}
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_wf_exec_idempotency ON extension_workflow_executions(workflow_id, idempotency_key) WHERE idempotency_key <> ''`); err != nil {
+		return fmt.Errorf("sqlite: ensure workflow idempotency index: %w", err)
+	}
 
 	return nil
 }
@@ -1487,6 +1539,19 @@ type columnAddition struct {
 var schemaColumnAdditions = []columnAddition{
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"kernel_scope_snapshots", "generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_invocations", "parent_invocation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "invocation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "module_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "schedule_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "trigger_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "trace_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "idempotency_key", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "scope_snapshot_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "permission_snapshot_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_workflow_executions", "context_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_workflow_executions", "attempt", "INTEGER NOT NULL DEFAULT 1"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {

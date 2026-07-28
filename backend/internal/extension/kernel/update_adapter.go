@@ -10,15 +10,20 @@ import (
 )
 
 type UpdateManagerAdapter struct {
-	manager *desktop_update.UpdateManager
+	manager     *desktop_update.UpdateManager
+	desktopHost *desktop.DesktopHost
 }
 
-func NewUpdateManagerAdapter(manager *desktop_update.UpdateManager) *UpdateManagerAdapter {
-	return &UpdateManagerAdapter{manager: manager}
+func NewUpdateManagerAdapter(manager *desktop_update.UpdateManager, hosts ...*desktop.DesktopHost) *UpdateManagerAdapter {
+	adapter := &UpdateManagerAdapter{manager: manager}
+	if len(hosts) > 0 {
+		adapter.desktopHost = hosts[0]
+	}
+	return adapter
 }
 
 func (a *UpdateManagerAdapter) CheckForUpdates(ctx context.Context, extensionID string) ([]desktop.ExtensionUpdateMeta, error) {
-	metadatas, err := a.manager.CheckForUpdates(ctx, extensionID)
+	metadatas, err := a.manager.CheckForUpdatesDetailed(ctx, extensionID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +35,7 @@ func (a *UpdateManagerAdapter) CheckForUpdates(ctx context.Context, extensionID 
 }
 
 func (a *UpdateManagerAdapter) DownloadUpdate(ctx context.Context, extensionID, version string) (string, error) {
-	metadatas, err := a.manager.CheckForUpdates(ctx, extensionID)
+	metadatas, err := a.manager.CheckForUpdatesDetailed(ctx, extensionID)
 	if err != nil {
 		return "", err
 	}
@@ -55,7 +60,13 @@ func (a *UpdateManagerAdapter) DownloadUpdate(ctx context.Context, extensionID, 
 }
 
 func (a *UpdateManagerAdapter) InstallUpdate(ctx context.Context, operationID string) error {
-	return a.manager.RunFullUpdate(ctx, operationID)
+	if err := a.manager.RunFullUpdate(ctx, operationID); err != nil {
+		return err
+	}
+	if a.desktopHost != nil {
+		a.desktopHost.BuildSnapshot(desktop.SortContext{})
+	}
+	return nil
 }
 
 func (a *UpdateManagerAdapter) CancelUpdate(ctx context.Context, operationID string) error {
@@ -122,7 +133,7 @@ func convertMetadata(m desktop_update.ExtensionUpdateMetadata) desktop.Extension
 		MaximumHostVersion: m.MaximumHostVersion,
 		SupportedPlatforms: m.SupportedPlatforms,
 		SupportedArch:      m.SupportedArch,
-		PublishedAt:         m.PublishedAt,
-		ReleaseChannel:      m.ReleaseChannel,
+		PublishedAt:        m.PublishedAt,
+		ReleaseChannel:     m.ReleaseChannel,
 	}
 }

@@ -269,7 +269,20 @@ func stringSetDifference(left, right []string) []string {
 	return result
 }
 
-func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
+func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
+	}
+	if s.kernelProxy == nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 未接线", "", false, nil)
+	}
+	if err := s.kernelProxy.Rollback(ctx, extensionID, version); err != nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 回滚失败", err.Error(), false, err)
+	}
+	return PackageOperationResult{OperationID: uuid.NewString(), TraceID: uuid.NewString(), Operation: PackageOperationRollback, ExtensionID: extensionID, Version: version, Status: "succeeded"}, nil
+}
+
+func (s *PackageService) rollbackLegacyPackage(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
@@ -487,6 +500,19 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 }
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return PackageOperationResult{}, err
+	}
+	if s.kernelProxy == nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 未接线", "", false, nil)
+	}
+	if err := s.kernelProxy.NotifyUninstall(ctx, extensionID); err != nil {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)
+	}
+	return PackageOperationResult{OperationID: uuid.NewString(), TraceID: uuid.NewString(), Operation: PackageOperationUninstall, ExtensionID: extensionID, Status: "succeeded"}, nil
+}
+
+func (s *PackageService) uninstallLegacyPackage(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}

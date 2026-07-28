@@ -29,6 +29,8 @@ const error = ref<string | null>(null);
 const validationErrors = ref<string[]>([]);
 const sessionId = ref<string>("");
 const sessionReady = ref(false);
+const sessionOrigin = ref("");
+const sessionContractVersion = ref(0);
 const actionLoading = reactive<Record<string, boolean>>({});
 const capturedError = ref<string | null>(null);
 
@@ -153,41 +155,28 @@ async function loadSchema() {
 async function ensureSession(): Promise<string> {
   if (sessionId.value && sessionReady.value) return sessionId.value;
   const key = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
-  const existing = uiStore.sessions.get(key);
-  if (existing?.sessionId) {
-    sessionId.value = existing.sessionId;
-    sessionReady.value = true;
-    return sessionId.value;
-  }
-  try {
-    const res = await apiClient.post<{ sessionId?: string; session_id?: string }>("/api/extensions/ui/sessions", {
-      extensionId: props.contribution.extensionId,
-      contributionId: props.contribution.contributionId,
-      moduleId: props.contribution.moduleId,
-      slotId: props.slotId,
-      context: mergedContext.value,
-    });
-    const data = res.data;
-    const sid = data.sessionId ?? data.session_id ?? "";
-    if (!sid) throw new Error("session 创建响应缺少 sessionId");
-    sessionId.value = sid;
-    sessionReady.value = true;
-    uiStore.registerSession({
-      contributionId: key,
-      sessionId: sid,
-      createdAt: Date.now(),
-      lastActivity: Date.now(),
-    });
-    return sid;
-  } catch (e) {
-    const fallback = `${props.contribution.extensionId}:${props.contribution.contributionId}`;
-    sessionId.value = fallback;
-    sessionReady.value = false;
-    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
-      console.warn("[SchemaUIRenderer] session 创建失败，使用回退 sessionId:", e);
-    }
-    return fallback;
-  }
+  const res = await apiClient.post<{
+    sessionId?: string;
+    session_id?: string;
+    origin?: string;
+    contractVersion?: number;
+  }>("/api/extensions/ui/sessions", {
+    contributionId: props.contribution.contributionId,
+  });
+  const data = res.data;
+  const sid = data.sessionId ?? data.session_id ?? "";
+  if (!sid) throw new Error("session 创建响应缺少 sessionId");
+  sessionId.value = sid;
+  sessionOrigin.value = data.origin ?? "";
+  sessionContractVersion.value = data.contractVersion ?? props.contribution.contractVersion;
+  sessionReady.value = true;
+  uiStore.registerSession({
+    contributionId: key,
+    sessionId: sid,
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+  });
+  return sid;
 }
 
 async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType }) {
@@ -214,23 +203,34 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action_id: action.action_id,
-        target: action.target,
-        target_type: action.target_type,
-        input: {
-          ...(action.input ?? {}),
-          node_id: node.id,
-          form_state: { ...formState },
+        method: "ui.action.invoke",
+        contributionId: props.contribution.contributionId,
+        origin: sessionOrigin.value,
+        contractVersion: sessionContractVersion.value,
+        payload: {
+          action_id: action.action_id,
+          input: {
+            ...(action.input ?? {}),
+            node_id: node.id,
+            form_state: { ...formState },
+          },
         },
-        context: mergedContext.value,
-        form_state: { ...formState },
       }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`操作调用失败: ${res.status} ${text}`);
     }
-    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const envelope = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      result?: Record<string, unknown>;
+      error?: { message?: string } | string;
+    };
+    if (envelope.ok === false) {
+      const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
+      throw new Error(detail || "操作执行失败");
+    }
+    const data = envelope.result ?? {};
     if (data && typeof data === "object") {
       if (data.form_state && typeof data.form_state === "object") {
         const incoming = data.form_state as Record<string, unknown>;

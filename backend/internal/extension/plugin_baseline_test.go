@@ -3,7 +3,6 @@ package extension
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,44 +35,6 @@ func pluginBaselineRuntime(t *testing.T) (*Runtime, func()) {
 		_ = runtime.Close(ctx)
 	}
 	return runtime, cleanup
-}
-
-func TestLegacy_Plugin_BeforePromptContributionOrderAndTokenBudget(t *testing.T) {
-	runtime, cleanup := pluginBaselineRuntime(t)
-	defer cleanup()
-	scope := ExecutionScope{UserID: "user-1", CharacterID: "character-1", Trigger: TriggerManual}
-	if err := runtime.Service.EnablePlugin(context.Background(), scope, diagnosticPluginID); err != nil {
-		t.Fatal(err)
-	}
-	contributions := runtime.PluginManager.DispatchBeforePrompt(context.Background(), ExtensionSnapshot{User: SnapshotUser{ID: scope.UserID}, Character: SnapshotEntity{ID: scope.CharacterID}, Conversation: SnapshotEntity{ID: "conv-1"}})
-	if len(contributions) != 0 {
-		t.Logf("KNOWN_LEGACY_BEHAVIOR: diagnostic plugin returned %d before-prompt contributions", len(contributions))
-	}
-}
-
-func TestLegacy_Plugin_AfterReplyDispatchAndQueueBackpressure(t *testing.T) {
-	runtime, cleanup := pluginBaselineRuntime(t)
-	defer cleanup()
-	scope := ExecutionScope{UserID: "user-1", CharacterID: "character-1", Trigger: TriggerManual}
-	if err := runtime.Service.EnablePlugin(context.Background(), scope, diagnosticPluginID); err != nil {
-		t.Fatal(err)
-	}
-	enqueued := runtime.PluginManager.DispatchAfterReply(ExtensionSnapshot{User: SnapshotUser{ID: scope.UserID}, Character: SnapshotEntity{ID: scope.CharacterID}, Conversation: SnapshotEntity{ID: "conv-1"}}, ReplyView{Content: "hello"})
-	if !enqueued {
-		t.Fatal("after-reply dispatch was not enqueued")
-	}
-	time.Sleep(200 * time.Millisecond)
-	entry, err := runtime.PluginManager.entry(diagnosticPluginID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plugin := entry.instance.(*diagnosticPlugin)
-	plugin.mu.RLock()
-	replies := plugin.replies
-	plugin.mu.RUnlock()
-	if replies < 1 {
-		t.Fatal("after-reply not processed")
-	}
 }
 
 func TestLegacy_Plugin_RejectsEventWithExceededDepth(t *testing.T) {
@@ -270,71 +231,5 @@ func TestLegacy_Plugin_DisableIdempotentAndEnableReentrancy(t *testing.T) {
 	}
 	if err := runtime.Service.EnablePlugin(context.Background(), scope, diagnosticPluginID); err != nil {
 		t.Fatalf("enable after disable must succeed: %v", err)
-	}
-}
-
-func TestLegacy_Plugin_CircuitOpenRejectsHooksButAllowsRecovery(t *testing.T) {
-	runtime, cleanup := pluginBaselineRuntime(t)
-	defer cleanup()
-	scope := ExecutionScope{UserID: "user-1", CharacterID: "character-1", Trigger: TriggerManual}
-	if err := runtime.Service.EnablePlugin(context.Background(), scope, diagnosticPluginID); err != nil {
-		t.Fatal(err)
-	}
-	entry, err := runtime.PluginManager.entry(diagnosticPluginID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	circuit, ok := entry.circuits[HookBeforePrompt]
-	if !ok {
-		t.Skip("no circuit for before-prompt hook")
-		return
-	}
-	for i := 0; i < entry.registered.Manifest.Execution.FailureThreshold; i++ {
-		circuit.Failure(now)
-	}
-	view := circuit.View(now)
-	if view.State != CircuitOpen {
-		t.Fatalf("expected circuit open after threshold failures, got %s", view.State)
-	}
-	contributions := runtime.PluginManager.DispatchBeforePrompt(context.Background(), ExtensionSnapshot{User: SnapshotUser{ID: scope.UserID}, Character: SnapshotEntity{ID: scope.CharacterID}, Conversation: SnapshotEntity{ID: "conv-1"}})
-	if len(contributions) != 0 {
-		t.Fatal("contributions returned from plugin with open circuit")
-	}
-	circuit.Reset()
-	view = circuit.View(time.Now())
-	if view.State != CircuitClosed {
-		t.Fatalf("expected circuit closed after reset, got %s", view.State)
-	}
-}
-
-func TestLegacy_Plugin_ConcurrentHookSemaphoreIsolation(t *testing.T) {
-	runtime, cleanup := pluginBaselineRuntime(t)
-	defer cleanup()
-	scope := ExecutionScope{UserID: "user-1", CharacterID: "character-1", Trigger: TriggerManual}
-	if err := runtime.Service.EnablePlugin(context.Background(), scope, diagnosticPluginID); err != nil {
-		t.Fatal(err)
-	}
-	entry, err := runtime.PluginManager.entry(diagnosticPluginID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cap(entry.semaphore) != entry.registered.Manifest.Execution.MaxConcurrency {
-		t.Fatalf("semaphore capacity mismatch: %d != %d", cap(entry.semaphore), entry.registered.Manifest.Execution.MaxConcurrency)
-	}
-	var wg sync.WaitGroup
-	errs := make(chan error, entry.registered.Manifest.Execution.MaxConcurrency+1)
-	for i := 0; i < entry.registered.Manifest.Execution.MaxConcurrency+1; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			contributions := runtime.PluginManager.DispatchBeforePrompt(context.Background(), ExtensionSnapshot{User: SnapshotUser{ID: scope.UserID}, Character: SnapshotEntity{ID: scope.CharacterID}, Conversation: SnapshotEntity{ID: "conv-1"}})
-			_ = contributions
-		}()
-	}
-	wg.Wait()
-	close(errs)
-	for e := range errs {
-		t.Error(e)
 	}
 }

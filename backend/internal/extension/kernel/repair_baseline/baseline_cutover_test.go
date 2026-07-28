@@ -61,20 +61,14 @@ func TestBaseline_Cutover_PluginStartCounterWired(t *testing.T) {
 }
 
 func TestBaseline_Cutover_LegacyDispatcherCountersWired(t *testing.T) {
-	src := readToolFacadeWiringSource(t)
-	requiredCalls := []string{
-		"GlobalLegacyCallCounter().IncSkillExecute()",
-		"GlobalLegacyCallCounter().IncPluginDispatch()",
-		"GlobalLegacyCallCounter().IncToolExecute()",
+	wiringSrc := readToolFacadeWiringSource(t)
+	if strings.Contains(wiringSrc, "legacyDispatcherAdapter") {
+		t.Fatalf("tool_facade_wiring.go must not contain legacyDispatcherAdapter; legacyDispatcherAdapter has been removed")
 	}
-	missing := []string{}
-	for _, call := range requiredCalls {
-		if !strings.Contains(src, call) {
-			missing = append(missing, call)
-		}
-	}
-	if len(missing) > 0 {
-		t.Fatalf("tool_facade_wiring.go legacyDispatcherAdapter must increment LegacyCallCounter on every legacy dispatch; missing=%v", missing)
+
+	servicesSrc := readServicesSource(t)
+	if strings.Contains(servicesSrc, "legacyDispatcher") {
+		t.Fatalf("services.go must not reference legacyDispatcher; NewToolFacade must use 3 parameters without legacyDispatcher")
 	}
 }
 

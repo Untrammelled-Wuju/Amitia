@@ -46,6 +46,7 @@ func (a *DesktopAPIAdapter) RegisterRoutes(group *gin.RouterGroup) {
 	desktopGroup.POST("/conflicts/:conflictId/resolve", a.resolveConflict)
 	desktopGroup.GET("/snapshot", a.getSnapshot)
 	desktopGroup.POST("/snapshot/build", a.buildSnapshot)
+	desktopGroup.POST("/snapshot/apply-result", a.reportSnapshotApply)
 	desktopGroup.GET("/contracts", a.listContracts)
 	desktopGroup.GET("/permissions", a.listPermissions)
 	desktopGroup.GET("/resources", a.listResources)
@@ -62,6 +63,15 @@ func (a *DesktopAPIAdapter) RegisterRoutes(group *gin.RouterGroup) {
 	group.POST("/:id/updates/rollback", a.rollbackUpdate)
 	group.GET("/updates/operations/:operationId", a.getOperation)
 	group.GET("/updates/operations/:operationId/steps", a.getOperationSteps)
+}
+
+func (a *DesktopAPIAdapter) reportSnapshotApply(c *gin.Context) {
+	ctx := a.container()
+	if ctx == nil || ctx.desktopAPI == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "desktop host unavailable"})
+		return
+	}
+	ctx.desktopAPI.ReportSnapshotApply(c)
 }
 
 func (a *DesktopAPIAdapter) listAllContributions(c *gin.Context) {

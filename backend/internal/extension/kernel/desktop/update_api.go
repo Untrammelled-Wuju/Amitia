@@ -90,10 +90,14 @@ func (api *UpdateAPI) ListUpdates(c *gin.Context) {
 	}
 	updates, err := api.manager.CheckForUpdates(c.Request.Context(), extID)
 	if err != nil {
-		apiError(c, http.StatusInternalServerError, err.Error())
+		writeUpdateError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": updates, "total": len(updates)})
+	code := "ok"
+	if len(updates) == 0 {
+		code = "no_update"
+	}
+	c.JSON(http.StatusOK, gin.H{"code": code, "items": updates, "total": len(updates)})
 }
 
 func (api *UpdateAPI) CheckUpdates(c *gin.Context) {
@@ -107,10 +111,26 @@ func (api *UpdateAPI) CheckUpdates(c *gin.Context) {
 	}
 	updates, err := api.manager.CheckForUpdates(c.Request.Context(), extID)
 	if err != nil {
-		apiError(c, http.StatusInternalServerError, err.Error())
+		writeUpdateError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "items": updates, "total": len(updates)})
+	code := "ok"
+	if len(updates) == 0 {
+		code = "no_update"
+	}
+	c.JSON(http.StatusOK, gin.H{"code": code, "extensionId": extID, "items": updates, "total": len(updates)})
+}
+
+func writeUpdateError(c *gin.Context, err error) {
+	code := "network_error"
+	message := err.Error()
+	for _, candidate := range []string{"index_signature_invalid", "index_invalid", "publisher_mismatch", "compatibility_failed", "package_hash_mismatch"} {
+		if len(message) >= len(candidate) && message[:len(candidate)] == candidate {
+			code = candidate
+			break
+		}
+	}
+	c.JSON(http.StatusBadGateway, gin.H{"code": code, "message": message})
 }
 
 func (api *UpdateAPI) DownloadUpdate(c *gin.Context) {

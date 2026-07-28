@@ -337,6 +337,12 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration))
 		return
 	}
+	outbox, err := d.outboxStore.GetByEventID(ctx, delivery.EventID)
+	if err != nil {
+		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "outbox_not_found", err.Error())
+		return
+	}
+	envelope := outboxToEnvelope(outbox)
 	circuit := d.circuitRegistry.GetOrCreate(delivery.SubscriptionID)
 	allowed, state := circuit.Allow()
 	if !allowed {
@@ -348,6 +354,10 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "subscription_inactive", sub.Effective.DenyReason())
 		return
 	}
+	if envelope.ScopeSnapshotID == "" && !envelope.IsFromHost() {
+		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusSkipped, "scope_snapshot_missing", "envelope has no scope snapshot")
+		return
+	}
 	if delivery.PartitionKey != "" {
 		if !d.ordering.AcquireSlot(delivery.PartitionKey, delivery.DeliveryID) {
 			_ = d.deliveryStore.ReleaseDeliveryLease(ctx, delivery.DeliveryID)
@@ -355,12 +365,6 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 		}
 		defer d.ordering.ReleaseSlot(delivery.PartitionKey, delivery.DeliveryID)
 	}
-	outbox, err := d.outboxStore.GetByEventID(ctx, delivery.EventID)
-	if err != nil {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "outbox_not_found", err.Error())
-		return
-	}
-	envelope := outboxToEnvelope(outbox)
 	timeout := sub.Definition.Timeout
 	if timeout == 0 {
 		timeout = 5 * time.Second

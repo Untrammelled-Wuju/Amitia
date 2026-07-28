@@ -9,17 +9,18 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop_update"
-	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
@@ -36,12 +37,12 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
-	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
-	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
@@ -103,7 +104,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
-	scopeEvaluator := scope.NewScopeEvaluator(scopeStore, nil)
+	relationChecker := newRepositoryScopeRelationChecker(db, resourceRepo, opRepo)
+	scopeEvaluator := scope.NewScopeEvaluator(scopeStore, relationChecker)
 	scopeManager := scope.NewScopeManager(scopeStore, scopeEvaluator)
 
 	candidateProvider := newContainerCandidateProvider(instRepo, defRepo)
@@ -136,6 +138,49 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	workflowExecutor.SetCheckpointStore(sqlite.NewSQLiteCheckpointStore(db))
 	workflowExecutor.SetCompensationManager(workflow.NewCompensationManager())
 	workflowExecRepo := sqlite.NewWorkflowExecutionRepository(db)
+	workflowExecutor.SetRunStore(workflowExecRepo)
+	workflowTriggerManager := workflow.NewTriggerManager(workflowExecutor)
+	workflowTriggerManager.SetStore(workflowDefRepo)
+	workflowExecutor.SetStepGuard(&workflow.SecurityGuard{
+		PermissionCheck: func(ctx context.Context, extensionID, moduleID string, permissionsRequired []string, background bool) error {
+			subject := permission.SubjectForExtension(extensionID)
+			if moduleID != "" {
+				subject = permission.PermissionSubject{Type: permission.SubjectModule, ID: moduleID, ExtensionID: extensionID, ModuleID: moduleID}
+			}
+			requirements := make([]permission.PermissionRequirement, 0, len(permissionsRequired))
+			for _, permissionID := range permissionsRequired {
+				requirements = append(requirements, permission.PermissionRequirement{PermissionID: permissionID, Scope: permission.ScopeForExtension(extensionID)})
+			}
+			decision := permBroker.Evaluate(ctx, permission.PermissionEvaluationRequest{Subject: subject, Requirements: requirements, IsBackground: background})
+			if decision.Decision != permission.DecisionAllow && decision.Decision != permission.DecisionAllowPersistent && decision.Decision != permission.DecisionAllowOnce && decision.Decision != permission.DecisionAllowSession {
+				return fmt.Errorf("permission decision %s", decision.Decision)
+			}
+			return nil
+		},
+		ScopeCheck: func(ctx context.Context, extensionID, moduleID, scopeName string, executionContext workflow.ExecutionContext) error {
+			subjectType := scope.SubjectExtension
+			subjectID := extensionID
+			if moduleID != "" {
+				subjectType = scope.SubjectModule
+				subjectID = moduleID
+			}
+			decision := scopeManager.Evaluate(ctx, scope.ScopeEvaluationRequest{SubjectType: subjectType, SubjectID: subjectID, CharacterID: executionContext.CharacterID, ConversationID: executionContext.ConversationID, ExtensionID: extensionID, ModuleID: moduleID, InvocationID: executionContext.InvocationID, Generation: executionContext.Generation})
+			if !decision.Allowed {
+				return fmt.Errorf("scope %s denied", scopeName)
+			}
+			return nil
+		},
+		GenerationCheck: func(ctx context.Context, extensionID string, generation int64) error {
+			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
+			if err != nil {
+				return err
+			}
+			if installation.Generation != generation {
+				return fmt.Errorf("expected generation %d, got %d", installation.Generation, generation)
+			}
+			return nil
+		},
+	})
 
 	auditWriter := package_security.NewMemoryAuditWriter()
 	packageSec := package_security.NewPackageSecurityService(package_security.DefaultArchivePolicy(), auditWriter)
@@ -201,9 +246,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionChecker: schedule.NewBrokerPermissionChecker(permBroker, scheduleRepo),
 		ScopeChecker:      schedule.NewManagerScopeChecker(scopeManager, scheduleRepo, scopeStore),
 		DependencyChecker: schedule.NewResolverDependencyChecker(dependencyResolver),
-		WorkflowExecutor:  NewKernelWorkflowFacadeAdapter(workflowExecutor),
-		TaskEnqueueFn:     BuildScheduleTaskEnqueueFunc(taskRuntimeService),
-		RuntimeHandlerFn:  BuildScheduleRuntimeHandlerFn(supervisor),
+		WorkflowExecutor: NewKernelWorkflowFacadeAdapter(workflowExecutor, func(ctx context.Context, extensionID string) (int64, error) {
+			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
+			if err != nil {
+				return 0, err
+			}
+			return installation.Generation, nil
+		}),
+		TaskEnqueueFn:    BuildScheduleTaskEnqueueFunc(taskRuntimeService),
+		RuntimeHandlerFn: BuildScheduleRuntimeHandlerFn(supervisor),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: create schedule service: %w", err)
@@ -248,6 +299,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	extensionStateStore := sqlite.NewExtensionStateStore(db)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
+		CharacterReader:     NewDefaultCharacterReader(),
+		ConversationReader:  NewDefaultConversationReader(),
+		MemoryQueryService:  NewDefaultMemoryQueryService(),
+		UIHostNotifier:      NewDefaultUIHostNotifier(),
 		EventService:        eventSvc,
 		ScheduleService:     scheduleSvc,
 		ExecutionKernel:     executionKernel,
@@ -263,6 +318,27 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, b.resolveNodePath(), b.resolvePluginHostPath())
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
 
+	builtinDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+		execCtx := tool.ToolExecutionContext{
+			Context:        ctx,
+			ConversationID: invocation.ConversationID,
+			CharacterID:    invocation.CharacterID,
+			User:           invocation.UserID,
+			Path:           "kernel.builtin",
+			ToolCallID:     invocation.InvocationID,
+			IdempotencyKey: invocation.IdempotencyKey,
+		}
+		result, ok := tool.ExecuteWithContextAndCancel(ctx, execCtx, handlerName, string(input))
+		if !ok {
+			memResult, memOk := tool.ExecuteMemoryWithContextAndCancel(ctx, execCtx, handlerName, string(input))
+			if !memOk {
+				return nil, fmt.Errorf("builtin handler %s not found", handlerName)
+			}
+			return json.Marshal(memResult)
+		}
+		return json.Marshal(result)
+	}
+
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:   jsFactory,
 		WASMFactory:       wasmFactory,
@@ -270,28 +346,38 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		Supervisor:        supervisor,
 		TaskService:       taskRuntimeService,
 		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
-		BuiltinDispatcher: nil,
+		BuiltinDispatcher: builtinDispatcher,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
+	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
 
-	toolFacade := NewToolFacade(toolRegistry, executionKernel, nil, DefaultToolFacadeConfig())
+	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
+	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
 
 	uiHost := ui_contribution.NewUIHost()
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
-	for _, def := range savedContribs {
-		_ = uiHost.RegisterContribution(def)
-	}
 	slotRegistry := extension_slots.DefaultSlotRegistry()
 	pageRegistry := extension_page_host.NewPageRegistry()
 	pageSessionMgr := extension_page_host.NewSessionManager()
+	relationChecker.sessions = pageSessionMgr
 	uiPermValidator := permission.NewUIPermissionValidator()
 	pageHost := extension_page_host.NewPageHostWithValidator(pageRegistry, pageSessionMgr, uiPermValidator)
 	schemaValidator := schema_ui.NewValidator()
 	schemaCache := schema_ui.NewCompilerCache()
 	schemaRegistry := schema_ui.NewSchemaRegistry(schemaValidator, schemaCache)
+	for _, def := range savedContribs {
+		if def.Entry.SchemaPath != "" || def.Sandbox.Type == ui_contribution.SandboxSchemaRenderer {
+			basePath := resolveExtensionBundlePath(b.extRoot, string(def.ExtensionID))
+			if basePath == "" || schemaRegistry.LoadFromPathWithContext(string(def.ExtensionID), string(def.ContributionID), def.Integrity.Generation, "", "", basePath, def.Entry.SchemaPath) != nil {
+				continue
+			}
+		}
+		_ = uiHost.RegisterContribution(def)
+	}
 	sandboxHost := sandbox_webui.NewHost()
+	actionExecutor := NewUIActionExecutor(hostAPIGateway)
 	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
 		session, err := sandboxHost.GetSession(sessionID)
 		if err != nil {
@@ -300,31 +386,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if !session.IsActionAllowed(actionID) {
 			return nil, fmt.Errorf("sandbox: action %s not allowed for session %s", actionID, sessionID)
 		}
-		if hostAPIGateway == nil {
-			return nil, fmt.Errorf("sandbox: host api gateway not configured for action %s", actionID)
+		def, err := uiHost.GetContribution(ui_contribution.ContributionID(session.ContributionID))
+		if err != nil || def == nil {
+			return nil, fmt.Errorf("sandbox: contribution not found for session %s", sessionID)
 		}
-		identity := runtime_supervisor.RuntimeIdentity{
-			InstanceID:  sessionID,
-			ExtensionID: domain.ExtensionID(session.ExtensionID),
-			ModuleID:    domain.ModuleID(session.ModuleID),
+		action := findActionByID(def, actionID)
+		if action == nil {
+			return nil, fmt.Errorf("sandbox: action %s not declared in contribution", actionID)
 		}
-		toolInput, _ := json.Marshal(map[string]any{
-			"toolId": actionID,
-			"input":  json.RawMessage(input),
-		})
-		callReq := host_api.CallRequest{
-			CallID:          fmt.Sprintf("sandbox-%s-%s", sessionID, actionID),
-			RuntimeIdentity: identity,
-			Method:          host_api.MethodToolExecute,
-			Version:         1,
-			Input:           toolInput,
-		}
-		result := hostAPIGateway.Call(ctx, callReq)
-		if result.Error != nil {
-			return nil, fmt.Errorf("sandbox: action %s failed: %s", actionID, result.Error.Message)
-		}
-		return result.Output, nil
+		return actionExecutor.Execute(ctx, sessionID, session.ExtensionID, session.ModuleID, action, input)
 	})
+	dataSourceProvider := NewUIDataSourceProvider(hostAPIGateway)
 	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProviderWithHandler(func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
 		session, err := sandboxHost.GetSession(sessionID)
 		if err != nil {
@@ -333,30 +405,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if !session.IsDataSourceAllowed(sourceID) {
 			return nil, fmt.Errorf("sandbox: data source %s not allowed for session %s", sourceID, sessionID)
 		}
-		if hostAPIGateway == nil {
-			return nil, fmt.Errorf("sandbox: host api gateway not configured for data source %s", sourceID)
-		}
-		identity := runtime_supervisor.RuntimeIdentity{
-			InstanceID:  sessionID,
-			ExtensionID: domain.ExtensionID(session.ExtensionID),
-			ModuleID:    domain.ModuleID(session.ModuleID),
-		}
-		toolInput, _ := json.Marshal(map[string]any{
-			"toolId": sourceID,
-			"input":  json.RawMessage(params),
-		})
-		callReq := host_api.CallRequest{
-			CallID:          fmt.Sprintf("sandbox-ds-%s-%s", sessionID, sourceID),
-			RuntimeIdentity: identity,
-			Method:          host_api.MethodToolExecute,
-			Version:         1,
-			Input:           toolInput,
-		}
-		result := hostAPIGateway.Call(ctx, callReq)
-		if result.Error != nil {
-			return nil, fmt.Errorf("sandbox: data source %s failed: %s", sourceID, result.Error.Message)
-		}
-		return result.Output, nil
+		return dataSourceProvider.Query(ctx, sessionID, session.ExtensionID, session.ModuleID, sourceID, params)
 	})
 	sandboxNavigator := sandbox_webui.NewBridgeNavigator(func(ctx context.Context, sessionID, target string) error {
 		session, err := sandboxHost.GetSession(sessionID)
@@ -370,6 +419,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 	sandboxBridge := sandbox_webui.NewBridge(sandboxHost, sandboxDispatcher, sandboxDataProvider, sandboxNavigator)
 	sandboxHost.SetBridge(sandboxBridge)
+	uiHost.Bridge().SetHandlers(
+		func(ctx context.Context, session *ui_contribution.BridgeSession, action *ui_contribution.UIActionDefinition, input json.RawMessage) (json.RawMessage, error) {
+			return actionExecutor.Execute(ctx, session.SessionID, session.ExtensionID, session.ModuleID, action, input)
+		},
+		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {
+			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, params)
+		},
+	)
 	chatExtRegistry := chat_ui_extension.NewChatExtensionRegistry()
 	orderingEngine := ui_ordering.NewOrderingEngine()
 
@@ -379,7 +436,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		updateBaseDir = filepath.Join(os.TempDir(), "amitia-update-downloads")
 	}
 	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.1.8")
-	updateAdapter := NewUpdateManagerAdapter(updateManager)
+	updateAdapter := NewUpdateManagerAdapter(updateManager, desktopHost)
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)
 	desktopHost.SetScopeChecker(desktopActionBridge)
@@ -460,23 +517,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionRepository:   permRepo,
 		ResourceRepository:     resourceRepo,
 
-		PackageSecurity:      packageSec,
-		LifecycleManager:     lifecycleMgr,
-		ContributionRegistry: contribRegistry,
-		ContributionInstaller: typedInstaller,
-		DependencyResolver:   dependencyResolver,
-		RuntimeSupervisor:    supervisor,
-		ExecutionKernel:      executionKernel,
-		HostAPIGateway:       hostAPIGateway,
-		PermissionBroker:     permBroker,
-		ScopeManager:         scopeManager,
-		AgentSkillCatalog:    agentSkillCatalog,
-		WorkflowRegistry:     workflowRegistry,
-		WorkflowExecutor:     workflowExecutor,
-		WorkflowDefRepo:      workflowDefRepo,
-		WorkflowExecRepo:     workflowExecRepo,
-		EnablementService:    enablementService,
-		EnablementResolver:   enablementResolver,
+		PackageSecurity:        packageSec,
+		LifecycleManager:       lifecycleMgr,
+		ContributionRegistry:   contribRegistry,
+		ContributionInstaller:  typedInstaller,
+		DependencyResolver:     dependencyResolver,
+		RuntimeSupervisor:      supervisor,
+		ExecutionKernel:        executionKernel,
+		HostAPIGateway:         hostAPIGateway,
+		PermissionBroker:       permBroker,
+		ScopeManager:           scopeManager,
+		AgentSkillCatalog:      agentSkillCatalog,
+		WorkflowRegistry:       workflowRegistry,
+		WorkflowExecutor:       workflowExecutor,
+		WorkflowTriggerManager: workflowTriggerManager,
+		WorkflowDefRepo:        workflowDefRepo,
+		WorkflowExecRepo:       workflowExecRepo,
+		EnablementService:      enablementService,
+		EnablementResolver:     enablementResolver,
 
 		ToolRegistry:    toolRegistry,
 		AdapterRegistry: adapterRegistry,
@@ -504,35 +562,35 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		JSRuntimeFactory:         jsFactory,
 		EventDeliveryAdapter:     eventDeliveryAdapter,
 
-		UIHost:              uiHost,
-		UIContributionRepo:  uiContribRepo,
-		SlotRegistry:        slotRegistry,
-		PageHost:            pageHost,
-		SchemaValidator:     schemaValidator,
-		SchemaCompilerCache: schemaCache,
-		SchemaRegistry:     schemaRegistry,
-		SandboxHost:         sandboxHost,
+		UIHost:                uiHost,
+		UIContributionRepo:    uiContribRepo,
+		SlotRegistry:          slotRegistry,
+		PageHost:              pageHost,
+		SchemaValidator:       schemaValidator,
+		SchemaCompilerCache:   schemaCache,
+		SchemaRegistry:        schemaRegistry,
+		SandboxHost:           sandboxHost,
 		ChatExtensionRegistry: chatExtRegistry,
-		OrderingEngine:      orderingEngine,
-		ExtRoot:             b.extRoot,
+		OrderingEngine:        orderingEngine,
+		ExtRoot:               b.extRoot,
 
-		DesktopHost:     desktopHost,
-		UpdateManager:   updateManager,
-		UpdateAdapter:   updateAdapter,
-		DesktopAPI:      desktopAPI,
-		UpdateAPI:       updateAPI,
+		DesktopHost:         desktopHost,
+		UpdateManager:       updateManager,
+		UpdateAdapter:       updateAdapter,
+		DesktopAPI:          desktopAPI,
+		UpdateAPI:           updateAPI,
 		DesktopActionBridge: desktopActionBridge,
 
-		DevConsoleService:   devConsoleSvc,
-		DevConsoleRepo:      devConsoleRepo,
-		DevConsoleHandler:   devConsoleHandler,
-		TrustService:        trust.NewTrustService(trust.TrustServiceConfig{}),
-		AmitiaxInstaller:    amitiaxInstaller,
-		DevModeRegistry:     devModeRegistry,
-		DevModePipeline:     devModePipeline,
-		DevModeReloader:     devModeReloader,
-		DevModeSessions:     devModeSessions,
-		DevModeStore:        devModeStore,
+		DevConsoleService: devConsoleSvc,
+		DevConsoleRepo:    devConsoleRepo,
+		DevConsoleHandler: devConsoleHandler,
+		TrustService:      trust.NewTrustService(trust.TrustServiceConfig{}),
+		AmitiaxInstaller:  amitiaxInstaller,
+		DevModeRegistry:   devModeRegistry,
+		DevModePipeline:   devModePipeline,
+		DevModeReloader:   devModeReloader,
+		DevModeSessions:   devModeSessions,
+		DevModeStore:      devModeStore,
 
 		UpdateRecoveryManager: recoveryMgr,
 
@@ -544,13 +602,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		MigrationCheckpointMgr: migrationCheckpointMgr,
 		MigrationValidator:     migrationValidator,
 
-		RollbackRepository:   rollbackRepo,
-		JournalManager:       journalMgr,
-		RollbackExecutorV2:   rollbackExecutorV2,
-		RollbackPlanner:      rollbackPlanner,
-		RollbackPointStore:   rollbackPointStore,
-		UpdateGenerationMgr:  generationMgr,
-		UpdateMigrationExec:  updateMigrationExecutor,
+		RollbackRepository:  rollbackRepo,
+		JournalManager:      journalMgr,
+		RollbackExecutorV2:  rollbackExecutorV2,
+		RollbackPlanner:     rollbackPlanner,
+		RollbackPointStore:  rollbackPointStore,
+		UpdateGenerationMgr: generationMgr,
+		UpdateMigrationExec: updateMigrationExecutor,
 
 		CanaryRepository:        canaryRepo,
 		CanaryStageManager:      canaryStageMgr,

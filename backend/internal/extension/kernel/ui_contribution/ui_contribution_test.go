@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,7 +26,7 @@ func makeValidDefinition() *UIContributionDefinition {
 			Path:        "ui/settings.json",
 			ContentHash: "sha256:abc",
 		},
-		Sandbox: UISandboxPolicy{Type: SandboxSchemaRenderer},
+		Sandbox:   UISandboxPolicy{Type: SandboxSchemaRenderer},
 		Lifecycle: UILifecyclePolicy{Initial: string(UIStateRegistered)},
 		Integrity: ContributionIntegrity{DefinitionHash: "sha256:def", Generation: 1},
 	}
@@ -81,9 +82,9 @@ func TestValidateDefinitionMissingIntegrityHash(t *testing.T) {
 func TestValidateDefinitionInvalidRiskLevel(t *testing.T) {
 	def := makeValidDefinition()
 	def.Actions = []UIActionDefinition{{
-		ActionID: "act-1",
-		Title:    LocalizedText{Default: "Click"},
-		Target:   UIActionTarget{Type: ActionTargetHostCommand, Command: "save"},
+		ActionID:  "act-1",
+		Title:     LocalizedText{Default: "Click"},
+		Target:    UIActionTarget{Type: ActionTargetHostCommand, Command: "save"},
 		RiskLevel: "invalid",
 	}}
 	if err := ValidateDefinition(def); !errors.Is(err, ErrInvalidRiskLevel) {
@@ -154,11 +155,11 @@ func TestLocalizedTextResolve(t *testing.T) {
 func TestUIHostRegisterSlot(t *testing.T) {
 	h := NewUIHost()
 	slot := &UISlotContract{
-		SlotID:       "custom.slot",
-		Version:      1,
-		SupportedKinds: []UIContributionKind{UIContributionCard},
+		SlotID:           "custom.slot",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionCard},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
-		Multiplicity: MultiplicityMultiple,
+		Multiplicity:     MultiplicityMultiple,
 	}
 	if err := h.RegisterSlot(slot); err != nil {
 		t.Fatalf("register: %v", err)
@@ -206,11 +207,11 @@ func TestUIHostListBySlot(t *testing.T) {
 func TestUIHostSingleMultiplicityReject(t *testing.T) {
 	h := NewUIHost()
 	slot := &UISlotContract{
-		SlotID:       "exclusive.slot",
-		Version:      1,
-		SupportedKinds: []UIContributionKind{UIContributionPanel},
+		SlotID:           "exclusive.slot",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionPanel},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
-		Multiplicity: MultiplicitySingle,
+		Multiplicity:     MultiplicitySingle,
 	}
 	_ = h.RegisterSlot(slot)
 	def1 := makeValidDefinition()
@@ -265,7 +266,7 @@ func TestBridgeSession(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", []string{"read"}, []string{"tool.invoke"}, time.Hour)
+	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", []string{"read"}, []string{"tool.invoke"}, "web", "", "", time.Hour)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -281,7 +282,7 @@ func TestBridgeValidateSession(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 1); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -300,7 +301,7 @@ func TestBridgeValidateSessionExpired(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	h.Bridge().mu.Lock()
 	sess.ExpiresAt = time.Now().UTC().Add(-time.Hour)
 	h.Bridge().mu.Unlock()
@@ -314,7 +315,7 @@ func TestBridgeHandleReady(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          BridgeUIReady,
 		SessionID:       sess.SessionID,
@@ -331,7 +332,7 @@ func TestBridgeHandleLog(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	payload, _ := json.Marshal(map[string]any{"level": "info", "message": "hello"})
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          BridgeUILog,
@@ -350,7 +351,7 @@ func TestBridgeHandleActionInvokeUnknown(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	payload, _ := json.Marshal(map[string]any{"action_id": "missing"})
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          BridgeUIActionInvoke,
@@ -370,6 +371,9 @@ func TestBridgeHandleActionInvokeUnknown(t *testing.T) {
 
 func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 	h := NewUIHost()
+	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"saved":true}`), nil
+	}, nil)
 	def := makeValidDefinition()
 	def.Actions = []UIActionDefinition{{
 		ActionID:  "save",
@@ -378,7 +382,7 @@ func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 		RiskLevel: RiskLevelLow,
 	}}
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	payload, _ := json.Marshal(map[string]any{"action_id": "save"})
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          BridgeUIActionInvoke,
@@ -393,11 +397,33 @@ func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 	}
 }
 
+func TestBridgeHandleDataRequestUsesHandler(t *testing.T) {
+	h := NewUIHost()
+	h.Bridge().SetHandlers(nil, func(_ context.Context, _ *BridgeSession, sourceID string, _ json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(map[string]any{"source": sourceID, "value": "real"})
+	})
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", []string{"profile"}, nil, "web", "", "", time.Hour)
+	payload, _ := json.Marshal(map[string]any{"key": "profile"})
+	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
+		Method:          BridgeUIDataRequest,
+		SessionID:       sess.SessionID,
+		ContributionID:  "contrib-1",
+		Origin:          "amitia://ext-1",
+		ContractVersion: 1,
+		Payload:         payload,
+	})
+	if !resp.OK || !strings.Contains(string(resp.Result), `"value":"real"`) {
+		t.Fatalf("data request did not use handler: %+v", resp)
+	}
+}
+
 func TestBridgeHandleInvalidMethod(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          "unknown.method",
 		SessionID:       sess.SessionID,
@@ -431,7 +457,7 @@ func TestBridgeHandleNavigation(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	payload, _ := json.Marshal(map[string]any{"route_id": "extension.detail"})
 	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
 		Method:          BridgeUINavigationRequest,
@@ -450,7 +476,7 @@ func TestBridgeRevokeSession(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
-	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, time.Hour)
+	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
 	if h.Bridge().SessionCount() != 1 {
 		t.Fatalf("expected 1 session, got %d", h.Bridge().SessionCount())
 	}

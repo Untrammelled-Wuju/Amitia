@@ -226,16 +226,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	kernelProxy := extension.NewKernelLifecycleProxy(extensionRuntime.Kernel)
 	extensionRuntime.Packages.AttachKernelProxy(kernelProxy)
+	if err := extensionRuntime.Packages.MigrateLegacyPackages(context.Background()); err != nil {
+		log.Error("legacy extension package migration failed: ", err)
+		panic("failed to migrate legacy extension packages")
+	}
 	if extensionRuntime.Lifecycle != nil {
 		extensionRuntime.Lifecycle.AttachKernelProxy(kernelProxy)
 	}
-	legacyDispatcher := newLegacyDispatcherAdapter(extensionRuntime)
 	toolFacade := kernel.NewToolFacade(
 		kernelContainer.ToolRegistry,
 		kernelContainer.ExecutionKernel,
-		legacyDispatcher,
 		kernel.DefaultToolFacadeConfig(),
 	)
+	toolFacade.SetAgentSkillCatalog(kernelContainer.AgentSkillCatalog)
 	kernelContainer.ToolFacade = toolFacade
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	if kernelContainer.DevConsoleService != nil {
@@ -407,7 +410,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := connectionManager.Restore(context.Background()); err != nil {
 		log.Warn("MCP connection restore warning: ", err)
 	}
-	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(connectionManager), makeKernelMCPHealth(connectionManager))
+	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(connectionManager), makeKernelMCPHealth(connectionManager), newMCPPostProcessor(mcpRepository))
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetRegistry := desktoppet.NewProviderRegistry()
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)

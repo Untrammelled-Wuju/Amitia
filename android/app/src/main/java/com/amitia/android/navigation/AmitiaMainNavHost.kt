@@ -281,10 +281,11 @@ private fun NavGraphBuilder.addTodayRoutes(navController: NavHostController) {
 private fun NavGraphBuilder.addChatRoutes(navController: NavHostController) {
     composable(AmitiaRoutes.Main.CHAT) {
         val drawerState = LocalDrawerState.current
-        ChatScreen(
-            onOpenCharacter = { id ->
-                navController.navigate(AmitiaRoutes.Main.characterDetail(id))
+        ConversationListScreen(
+            onOpenConversation = { id ->
+                navController.navigate(AmitiaRoutes.Main.chatConversation(id))
             },
+            onNewConversation = { navController.navigate(AmitiaRoutes.Main.NEW_CONVERSATION) },
             onBack = { navController.popBackStack() },
             onMenu = { drawerState.open() }
         )

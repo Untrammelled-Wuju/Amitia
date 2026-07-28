@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 
@@ -18,6 +18,7 @@ const emit = defineEmits<{
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const sessionId = ref<string>("");
 const sessionNonce = ref<string>("");
+const sessionToken = ref<string>("");
 const sessionOrigin = ref<string>("");
 const sessionCSP = ref<string>("");
 const resourceUrl = ref<string>("");
@@ -25,6 +26,7 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const iframeLoaded = ref(false);
 const ready = ref(false);
+let bridgePort: MessagePort | null = null;
 
 async function createSession() {
   loading.value = true;
@@ -35,6 +37,7 @@ async function createSession() {
     const res = await apiClient.post<{
       sessionId: string;
       nonce: string;
+      token: string;
       origin: string;
       csp: string;
       resourceUrl?: string;
@@ -52,6 +55,7 @@ async function createSession() {
     const data = res.data;
     sessionId.value = data.sessionId;
     sessionNonce.value = data.nonce;
+    sessionToken.value = data.token;
     sessionOrigin.value = data.origin;
     sessionCSP.value = data.csp;
     resourceUrl.value = data.resourceUrl || data.entryUrl || "";
@@ -64,6 +68,8 @@ async function createSession() {
 }
 
 async function destroySession() {
+	bridgePort?.close();
+	bridgePort = null;
   if (!sessionId.value) return;
   try {
     await apiClient.delete(`/api/extension/webui/session/${sessionId.value}`);
@@ -71,17 +77,36 @@ async function destroySession() {
   }
   sessionId.value = "";
   sessionNonce.value = "";
+  sessionToken.value = "";
   ready.value = false;
 }
 
 function onMessage(event: MessageEvent) {
-  const expectedOrigin = window.location.origin;
-  if (event.origin !== expectedOrigin) return;
+  if (event.source !== iframeRef.value?.contentWindow) return;
   const data = event.data;
   if (!data || typeof data !== "object") return;
+  if (data.type !== "amitia.extension.ready") return;
   if (data.session !== sessionId.value) return;
-  if (data.nonce !== sessionNonce.value) return;
-  void handleBridgeMessage(data);
+  if (bridgePort) return;
+  const channel = new MessageChannel();
+  bridgePort = channel.port1;
+  bridgePort.onmessage = (portEvent) => {
+    const message = portEvent.data;
+    if (!message || typeof message !== "object") return;
+    void handleBridgeMessage(message as Record<string, unknown>);
+  };
+  bridgePort.start();
+  iframeRef.value?.contentWindow?.postMessage(
+    {
+      type: "amitia.extension.init",
+      session: sessionId.value,
+      nonce: sessionNonce.value,
+      token: sessionToken.value,
+      generation: props.contribution.generation,
+    },
+    "*",
+    [channel.port2],
+  );
 }
 
 async function handleBridgeMessage(msg: Record<string, unknown>) {
@@ -109,40 +134,16 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
 }
 
 function sendBridgeResponse(originalMsg: Record<string, unknown>, response: Record<string, unknown>) {
-  if (!iframeRef.value?.contentWindow) return;
-  iframeRef.value.contentWindow.postMessage(
-    {
-      type: "bridge.response",
-      method: originalMsg.method,
-      id: originalMsg.id,
-      ...response,
-    },
-    window.location.origin,
-  );
-}
-
-function sendHostWelcome() {
-  if (!iframeRef.value?.contentWindow) return;
-  iframeRef.value.contentWindow.postMessage(
-    {
-      type: "host.welcome",
-      hostOrigin: window.location.origin,
-      sessionId: sessionId.value,
-    },
-    window.location.origin,
-  );
+  bridgePort?.postMessage({
+    type: "bridge.response",
+    method: originalMsg.method,
+    id: originalMsg.id,
+    ...response,
+  });
 }
 
 function onIframeLoad() {
   iframeLoaded.value = true;
-  nextTick(() => {
-    sendHostWelcome();
-    setTimeout(() => {
-      if (!ready.value) {
-        sendHostWelcome();
-      }
-    }, 500);
-  });
 }
 
 onMounted(async () => {

@@ -40,6 +40,21 @@ func (s *extensionLifecycleService) setEnabled(ctx context.Context, extensionID 
 	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
 		return err
 	}
+	if s.kernelProxy == nil {
+		return NewExtensionError(ErrSkillExecutionFailed, "Extension Kernel 未接线", extensionID, false, nil)
+	}
+	if enabled {
+		return s.kernelProxy.NotifyEnable(ctx, extensionID)
+	}
+	return s.kernelProxy.NotifyDisable(ctx, extensionID)
+}
+
+func (s *extensionLifecycleService) setLegacyEnabled(ctx context.Context, extensionID string, scope ExecutionScope, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
+		return err
+	}
 	item, err := s.registry.GetScoped(ctx, extensionID, scope)
 	if err != nil {
 		return err

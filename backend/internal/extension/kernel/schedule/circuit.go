@@ -5,9 +5,9 @@ import (
 )
 
 type CircuitService struct {
-	store     ScheduleStore
-	clock     Clock
-	config    ScheduleConfig
+	store  ScheduleStore
+	clock  Clock
+	config ScheduleConfig
 }
 
 func NewCircuitService(store ScheduleStore, clock Clock, config ScheduleConfig) *CircuitService {

@@ -175,8 +175,8 @@ func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnaps
 		INSERT INTO kernel_scope_snapshots
 		(snapshot_id, invocation_id, resolved_scopes,
 		 character_id, conversation_id, extension_id, module_id,
-		 created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 generation, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(snapshot_id) DO UPDATE SET
 		 invocation_id = excluded.invocation_id,
 		 resolved_scopes = excluded.resolved_scopes,
@@ -184,12 +184,13 @@ func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnaps
 		 conversation_id = excluded.conversation_id,
 		 extension_id = excluded.extension_id,
 		 module_id = excluded.module_id,
+		 generation = excluded.generation,
 		 created_at = excluded.created_at,
 		 expires_at = excluded.expires_at
 	`,
 		snapshot.SnapshotID, snapshot.InvocationID, string(raw),
 		snapshot.CharacterID, snapshot.ConversationID, snapshot.ExtensionID, snapshot.ModuleID,
-		snapshot.CreatedAt, expiresAt,
+		snapshot.Generation, snapshot.CreatedAt, expiresAt,
 	)
 	return err
 }
@@ -198,7 +199,7 @@ func (s *SQLiteScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 	row := s.db.QueryRowContext(ctx, `
 		SELECT snapshot_id, invocation_id, resolved_scopes,
 		 COALESCE(character_id, ''), COALESCE(conversation_id, ''), COALESCE(extension_id, ''), COALESCE(module_id, ''),
-		 created_at, expires_at
+		 generation, created_at, expires_at
 		FROM kernel_scope_snapshots
 		WHERE snapshot_id = ?
 	`, snapshotID)
@@ -208,7 +209,7 @@ func (s *SQLiteScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 	err := row.Scan(
 		&snap.SnapshotID, &snap.InvocationID, &resolvedScopes,
 		&snap.CharacterID, &snap.ConversationID, &snap.ExtensionID, &snap.ModuleID,
-		&snap.CreatedAt, &expiresAt,
+		&snap.Generation, &snap.CreatedAt, &expiresAt,
 	)
 	if err != nil {
 		return snap, fmt.Errorf("%w: %v", ErrSnapshotNotFound, err)

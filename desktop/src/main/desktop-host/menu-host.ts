@@ -73,7 +73,7 @@ export class MenuHost {
     for (const root of ROOT_MENU_ORDER) {
       const hostItems = this.buildHostMenuItems(root);
       const extensionItems = this.buildExtensionMenuItems(
-        snapshot.menuTree[root] ?? [],
+        snapshot.menuTree[`app.menu.${root}.extensions`] ?? [],
       );
       template.push({
         label: this.rootLabel(root),

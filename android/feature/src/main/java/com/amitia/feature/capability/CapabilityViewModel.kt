@@ -1,18 +1,44 @@
 package com.amitia.feature.capability
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.amitia.core.database.dao.ExtensionInstallationDao
+import com.amitia.core.database.entity.ExtensionInstallationEntity
 import com.amitia.core.designsystem.component.AmitiaStatusType
+import com.amitia.runtime.extension.ExtensionApiClient
+import com.amitia.runtime.extension.ExtensionHost
+import com.amitia.runtime.extension.ExtensionHostEvent
+import com.amitia.runtime.extension.ExtensionHostEventType
+import com.amitia.runtime.extension.ExtensionState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+sealed class ImportState {
+    object Idle : ImportState()
+    data class Importing(val progress: Float, val message: String) : ImportState()
+    data class Success(val extensionId: String) : ImportState()
+    data class Error(val message: String) : ImportState()
+}
 
 @HiltViewModel
-class CapabilityViewModel @Inject constructor() : ViewModel() {
+class CapabilityViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val extensionHost: ExtensionHost,
+    private val installationDao: ExtensionInstallationDao,
+    private val apiClient: ExtensionApiClient
+) : ViewModel() {
 
     private val _overview = MutableStateFlow<CapabilityOverview?>(null)
     val overview: StateFlow<CapabilityOverview?> = _overview.asStateFlow()
@@ -38,130 +64,322 @@ class CapabilityViewModel @Inject constructor() : ViewModel() {
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
+    private val _importState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val importState: StateFlow<ImportState> = _importState.asStateFlow()
+
+    private val logBuffer = mutableListOf<ExtensionLogEntry>()
+    private var logCounter = 0L
+
     init {
-        loadAll()
+        viewModelScope.launch {
+            extensionHost.restoreFromDatabase()
+            collectEvents()
+            loadAll()
+        }
+    }
+
+    private suspend fun collectEvents() {
+        extensionHost.events.collect { event ->
+            val entry = mapEventToLog(event)
+            logBuffer.add(0, entry)
+            if (logBuffer.size > 100) {
+                logBuffer.removeAt(logBuffer.lastIndex)
+            }
+            _logs.value = logBuffer.toList()
+        }
+    }
+
+    private fun mapEventToLog(event: ExtensionHostEvent): ExtensionLogEntry {
+        val level = when (event.type) {
+            ExtensionHostEventType.LoadFailed,
+            ExtensionHostEventType.ToolFailed -> ExtensionLogLevel.Error
+            ExtensionHostEventType.LoadStarted -> ExtensionLogLevel.Debug
+            ExtensionHostEventType.LoadSucceeded,
+            ExtensionHostEventType.Activated,
+            ExtensionHostEventType.Deactivated,
+            ExtensionHostEventType.Unloaded,
+            ExtensionHostEventType.ToolExecuted,
+            ExtensionHostEventType.ContributionRegistered -> ExtensionLogLevel.Info
+        }
+        val source = when (event.type) {
+            ExtensionHostEventType.ToolExecuted,
+            ExtensionHostEventType.ToolFailed -> "Tool"
+            ExtensionHostEventType.ContributionRegistered -> "Contribution"
+            else -> "Extension"
+        }
+        logCounter++
+        return ExtensionLogEntry(
+            id = logCounter.toString(),
+            timestamp = formatTimestamp(event.timestamp),
+            level = level,
+            source = source,
+            message = event.message ?: event.type.name,
+            extensionName = event.extensionId
+        )
+    }
+
+    private fun formatTimestamp(ts: Long): String {
+        val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        return sdf.format(java.util.Date(ts))
     }
 
     fun loadAll() {
         viewModelScope.launch {
             _loading.value = true
-            _overview.value = CapabilityOverview(
-                skillCount = 8,
-                pluginCount = 12,
-                mcpCount = 3,
-                enabledCount = 18,
-                systemCapabilityCount = 5
-            )
-            _enabledCapabilities.value = sampleEnabledCapabilities()
-            _plugins.value = samplePlugins()
-            _skills.value = sampleSkills()
-            _mcpServers.value = sampleMcpServers()
-            _logs.value = sampleLogs()
-            _updates.value = sampleUpdates()
+            try {
+                val installations = installationDao.getAll()
+                val loadedExtensions = extensionHost.listExtensions()
+
+                loadPlugins(installations, loadedExtensions)
+                loadSkills(loadedExtensions)
+                loadMcpServers(loadedExtensions)
+                loadEnabledCapabilities(installations, loadedExtensions)
+                computeOverview(installations)
+
+                loadBackendUpdates()
+            } catch (e: Exception) {
+                _logs.value = logBuffer.toList()
+            }
             _loading.value = false
         }
     }
 
-    fun togglePlugin(pluginId: String, enabled: Boolean) {
-        _plugins.update { list ->
-            list.map { if (it.id == pluginId) it.copy(enabled = enabled) else it }
+    private fun loadPlugins(
+        installations: List<ExtensionInstallationEntity>,
+        loadedExtensions: List<com.amitia.runtime.extension.LoadedExtension>
+    ) {
+        val pluginList = installations.map { entity ->
+            val loaded = loadedExtensions.find { it.extensionId == entity.extensionId }
+            val isActive = loaded?.state == ExtensionState.Activated
+            PluginInfo(
+                id = entity.extensionId,
+                name = loaded?.displayName ?: entity.extensionId,
+                description = loaded?.manifest?.extension?.description?.default ?: "",
+                version = entity.version,
+                author = loaded?.manifest?.publisher?.displayName ?: "",
+                source = "已安装",
+                enabled = isActive,
+                isSystem = false,
+                canUninstall = true,
+                status = if (isActive) AmitiaStatusType.Running else AmitiaStatusType.Idle,
+                tools = loaded?.tools?.map { it.toolId } ?: emptyList(),
+                permissions = loaded?.manifest?.permissions?.map { perm ->
+                    PluginPermission(
+                        name = perm.id,
+                        description = perm.reason ?: "",
+                        granted = true,
+                        riskLevel = mapPermissionRisk(perm.scope),
+                        category = mapPermissionCategory(perm.id)
+                    )
+                } ?: emptyList(),
+                uiContributions = loaded?.contributions
+                    ?.filter { it.type == com.amitia.runtime.extension.ContributionType.Ui }
+                    ?.map { it.id } ?: emptyList(),
+                tasks = loaded?.contributions
+                    ?.filter { it.type == com.amitia.runtime.extension.ContributionType.BackgroundTask }
+                    ?.map { it.id } ?: emptyList()
+            )
         }
+        _plugins.value = pluginList
     }
 
-    fun toggleSkill(skillId: String) {
-        _skills.update { list -> list.map { if (it.id == skillId) it else it } }
+    private fun loadSkills(loadedExtensions: List<com.amitia.runtime.extension.LoadedExtension>) {
+        val skillList = loadedExtensions.flatMap { ext ->
+            ext.contributions.filter { it.type == com.amitia.runtime.extension.ContributionType.AgentSkill }.map { contrib ->
+                SkillInfo(
+                    id = contrib.id,
+                    name = ext.displayName,
+                    description = ext.manifest.extension.description?.default ?: "",
+                    source = SkillSource.User,
+                    version = ext.version,
+                    inputSchema = "object",
+                    outputSchema = "object",
+                    roles = emptyList()
+                )
+            }
+        }
+        _skills.value = skillList
     }
 
-    fun toggleMcp(serverId: String, enabled: Boolean) {
-        _mcpServers.update { list ->
-            list.map {
-                if (it.id == serverId) it.copy(
-                    status = if (enabled) AmitiaStatusType.Connected else AmitiaStatusType.Disconnected
-                ) else it
+    private fun loadMcpServers(loadedExtensions: List<com.amitia.runtime.extension.LoadedExtension>) {
+        val mcpList = loadedExtensions.flatMap { ext ->
+            ext.contributions.filter { it.type == com.amitia.runtime.extension.ContributionType.Mcp }.map { contrib ->
+                val isActive = ext.state == ExtensionState.Activated
+                McpServerInfo(
+                    id = contrib.id,
+                    name = ext.displayName,
+                    connectionType = "stdio",
+                    status = if (isActive) AmitiaStatusType.Connected else AmitiaStatusType.Disconnected,
+                    toolCount = ext.tools.size,
+                    sourceSkill = ext.extensionId,
+                    tools = ext.tools.map { com.amitia.feature.capability.McpTool(it.toolId, it.description) }
+                )
+            }
+        }
+        _mcpServers.value = mcpList
+    }
+
+    private fun loadEnabledCapabilities(
+        installations: List<ExtensionInstallationEntity>,
+        loadedExtensions: List<com.amitia.runtime.extension.LoadedExtension>
+    ) {
+        val capabilities = mutableListOf<EnabledCapability>()
+        loadedExtensions.forEach { ext ->
+            val isActive = ext.state == ExtensionState.Activated
+            ext.contributions.forEach { contrib ->
+                val type = when (contrib.type) {
+                    com.amitia.runtime.extension.ContributionType.Tool -> CapabilityType.Plugin
+                    com.amitia.runtime.extension.ContributionType.AgentSkill -> CapabilityType.Skill
+                    com.amitia.runtime.extension.ContributionType.Mcp -> CapabilityType.Mcp
+                    else -> CapabilityType.Plugin
+                }
+                capabilities.add(
+                    EnabledCapability(
+                        id = contrib.id,
+                        name = ext.displayName,
+                        description = contrib.id,
+                        type = type,
+                        status = if (isActive) AmitiaStatusType.Running else AmitiaStatusType.Idle
+                    )
+                )
+            }
+        }
+        _enabledCapabilities.value = capabilities
+    }
+
+    private fun computeOverview(installations: List<ExtensionInstallationEntity>) {
+        val plugins = _plugins.value
+        val skills = _skills.value
+        val mcps = _mcpServers.value
+        _overview.value = CapabilityOverview(
+            skillCount = skills.size,
+            pluginCount = plugins.size,
+            mcpCount = mcps.size,
+            enabledCount = plugins.count { it.enabled } + skills.size + mcps.size,
+            systemCapabilityCount = 0
+        )
+    }
+
+    private suspend fun loadBackendUpdates() {
+        val result = runCatching { apiClient.listPlugins() }.getOrNull()
+        if (result != null) {
+            val items = result["items"]?.jsonArray ?: result["plugins"]?.jsonArray
+            if (items != null) {
+                val updatesList = items.mapNotNull { item ->
+                    val obj = item.jsonObject
+                    val extId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val currentVersion = obj["version"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val updateVersion = obj["updateVersion"]?.jsonPrimitive?.contentOrNull
+                        ?: obj["latestVersion"]?.jsonPrimitive?.contentOrNull
+                        ?: return@mapNotNull null
+                    if (updateVersion != currentVersion) {
+                        ExtensionUpdateInfo(
+                            extensionId = extId,
+                            name = obj["name"]?.jsonPrimitive?.contentOrNull ?: extId,
+                            currentVersion = currentVersion,
+                            newVersion = updateVersion,
+                            changelog = obj["changelog"]?.jsonPrimitive?.contentOrNull ?: "",
+                            updateMethod = UpdateMethod.Manual
+                        )
+                    } else null
+                }
+                _updates.value = updatesList
             }
         }
     }
 
-    fun filterLogsByExtension(name: String) {
-        _logs.update { list -> if (name.isBlank()) sampleLogs() else sampleLogs().filter { it.extensionName == name } }
+    fun togglePlugin(pluginId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled) {
+                extensionHost.activate(pluginId)
+            } else {
+                extensionHost.deactivate(pluginId)
+            }
+            loadAll()
+        }
     }
 
-    private fun sampleEnabledCapabilities() = listOf(
-        EnabledCapability("1", "对话记忆", "长期记忆与上下文管理", CapabilityType.System, AmitiaStatusType.Running),
-        EnabledCapability("2", "天气查询", "实时天气信息查询插件", CapabilityType.Plugin, AmitiaStatusType.Running),
-        EnabledCapability("3", "文件搜索", "MCP 文件检索服务", CapabilityType.Mcp, AmitiaStatusType.Connected),
-        EnabledCapability("4", "意图识别", "对话意图分类 Skill", CapabilityType.Skill, AmitiaStatusType.Running)
-    )
+    fun toggleSkill(skillId: String) {
+        viewModelScope.launch {
+            val ext = extensionHost.listExtensions().find { it.extensionId == skillId }
+            if (ext != null) {
+                if (ext.state == ExtensionState.Activated) {
+                    extensionHost.deactivate(skillId)
+                } else {
+                    extensionHost.activate(skillId)
+                }
+                loadAll()
+            }
+        }
+    }
 
-    private fun samplePlugins() = listOf(
-        PluginInfo(
-            id = "sys-1", name = "对话记忆", description = "管理长期记忆与上下文窗口",
-            version = "1.0.0", author = "Amitia", source = "系统内置", enabled = true,
-            isSystem = true, canUninstall = false, status = AmitiaStatusType.Running,
-            tools = listOf("recall", "store"), events = listOf("onMessage"),
-            impactDescription = "禁用后角色将无法记忆对话内容"
-        ),
-        PluginInfo(
-            id = "sys-2", name = "渠道接入", description = "微信、QQ、Web 渠道连接",
-            version = "1.0.0", author = "Amitia", source = "系统内置", enabled = true,
-            isSystem = true, canUninstall = false, status = AmitiaStatusType.Running,
-            impactDescription = "禁用后所有渠道将断开"
-        ),
-        PluginInfo(
-            id = "pub-1", name = "天气查询", description = "提供实时天气信息查询",
-            version = "1.2.0", author = "社区", source = "公共插件", enabled = true,
-            isSystem = false, canUninstall = true, status = AmitiaStatusType.Running,
-            updateAvailable = true,
-            permissions = listOf(
-                PluginPermission("网络访问", "查询天气数据", true, PermissionRiskLevel.Low, PermissionCategory.Network)
-            )
-        ),
-        PluginInfo(
-            id = "pub-2", name = "图片生成", description = "基于文本生成图像",
-            version = "0.9.3", author = "社区", source = "公共插件", enabled = false,
-            isSystem = false, canUninstall = true, status = AmitiaStatusType.Idle,
-            permissions = listOf(
-                PluginPermission("网络访问", "调用图像生成接口", false, PermissionRiskLevel.Medium, PermissionCategory.Network),
-                PluginPermission("文件写入", "保存生成图片", false, PermissionRiskLevel.Medium, PermissionCategory.File)
-            )
-        )
-    )
+    fun toggleMcp(serverId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled) {
+                extensionHost.activate(serverId)
+            } else {
+                extensionHost.deactivate(serverId)
+            }
+            loadAll()
+        }
+    }
 
-    private fun sampleSkills() = listOf(
-        SkillInfo("s1", "意图识别", "识别用户对话意图", SkillSource.System, "1.0.0",
-            "text:string", "intent:string", roles = listOf("艾米")),
-        SkillInfo("s2", "情绪分析", "分析用户情绪倾向", SkillSource.User, "0.8.0",
-            "text:string", "emotion:string", declaredMcp = listOf("emotion-api"),
-            roles = listOf("艾米", "助手")),
-        SkillInfo("s3", "代码解释", "解释代码片段含义", SkillSource.Community, "2.1.0",
-            "code:string", "explanation:string", updateAvailable = true)
-    )
+    fun filterLogsByExtension(name: String) {
+        _logs.value = if (name.isBlank()) logBuffer.toList() else logBuffer.filter { it.extensionName == name }
+    }
 
-    private fun sampleMcpServers() = listOf(
-        McpServerInfo(
-            id = "m1", name = "文件搜索服务", connectionType = "stdio",
-            status = AmitiaStatusType.Connected, toolCount = 4, sourceSkill = "文件检索",
-            roles = listOf("艾米"),
-            tools = listOf(McpTool("search", "搜索文件"), McpTool("read", "读取文件内容")),
-            recentCalls = listOf(McpCallRecord("search", "14:30", true, "120ms"))
-        ),
-        McpServerInfo(
-            id = "m2", name = "数据库查询", connectionType = "sse",
-            status = AmitiaStatusType.Disconnected, toolCount = 2, sourceSkill = "数据助手",
-            errors = listOf("连接超时")
-        )
-    )
+    fun importExtension(uri: Uri) {
+        viewModelScope.launch {
+            _importState.value = ImportState.Importing(0.2f, "正在读取文件...")
+            try {
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream == null) {
+                    _importState.value = ImportState.Error("无法打开文件")
+                    return@launch
+                }
+                _importState.value = ImportState.Importing(0.5f, "正在上传到后端安装...")
+                val result = stream.use { extensionHost.loadPackage(it) }
+                result.onSuccess { ext ->
+                    _importState.value = ImportState.Importing(0.8f, "正在激活...")
+                    extensionHost.activate(ext.extensionId)
+                    _importState.value = ImportState.Success(ext.extensionId)
+                    loadAll()
+                }.onFailure { e ->
+                    _importState.value = ImportState.Error(e.message ?: "导入失败")
+                }
+            } catch (e: Exception) {
+                _importState.value = ImportState.Error(e.message ?: "导入失败")
+            }
+        }
+    }
 
-    private fun sampleLogs() = listOf(
-        ExtensionLogEntry("1", "14:30:01", ExtensionLogLevel.Info, "Plugin", "插件已启动", "天气查询"),
-        ExtensionLogEntry("2", "14:30:15", ExtensionLogLevel.Warning, "Hook", "Hook 执行耗时较长", "天气查询"),
-        ExtensionLogEntry("3", "14:31:00", ExtensionLogLevel.Error, "MCP", "连接超时", "数据库查询"),
-        ExtensionLogEntry("4", "14:32:10", ExtensionLogLevel.Debug, "Task", "任务调度检查", "对话记忆")
-    )
+    fun resetImportState() {
+        _importState.value = ImportState.Idle
+    }
 
-    private fun sampleUpdates() = listOf(
-        ExtensionUpdateInfo("pub-1", "天气查询", "1.2.0", "1.3.0",
-            permissionChanges = listOf("新增位置信息访问权限"),
-            changelog = "优化查询速度，新增降雨预警", updateMethod = UpdateMethod.Manual)
-    )
+    fun restoreExtensions() {
+        viewModelScope.launch {
+            extensionHost.restoreFromDatabase()
+            loadAll()
+        }
+    }
+
+    private fun mapPermissionRisk(scopes: List<String>): PermissionRiskLevel {
+        if (scopes.any { it.contains("critical", ignoreCase = true) }) return PermissionRiskLevel.Critical
+        if (scopes.any { it.contains("high", ignoreCase = true) || it.contains("network", ignoreCase = true) }) return PermissionRiskLevel.High
+        if (scopes.any { it.contains("file", ignoreCase = true) || it.contains("data", ignoreCase = true) }) return PermissionRiskLevel.Medium
+        return PermissionRiskLevel.Low
+    }
+
+    private fun mapPermissionCategory(permId: String): PermissionCategory {
+        return when {
+            permId.contains("network", ignoreCase = true) -> PermissionCategory.Network
+            permId.contains("file", ignoreCase = true) || permId.contains("fs", ignoreCase = true) -> PermissionCategory.File
+            permId.contains("data", ignoreCase = true) -> PermissionCategory.DataAccess
+            permId.contains("background", ignoreCase = true) || permId.contains("task", ignoreCase = true) -> PermissionCategory.BackgroundTask
+            permId.contains("ui", ignoreCase = true) -> PermissionCategory.UiContribution
+            permId.contains("system", ignoreCase = true) -> PermissionCategory.SystemControl
+            else -> PermissionCategory.DataAccess
+        }
+    }
 }

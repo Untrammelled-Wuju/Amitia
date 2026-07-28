@@ -142,7 +142,7 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	if !state.IsActive() {
 		return state
 	}
-	if !envelope.IsFromHost() && envelope.ProducerID == def.ExtensionID {
+	if !envelope.IsFromHost() {
 		if def.Generation > 0 && envelope.ProducerGeneration > 0 && def.Generation != envelope.ProducerGeneration {
 			state.ScopeValid = false
 			state.Reason = "stale_generation"
@@ -167,6 +167,11 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	} else {
 		state.ScopeValid = false
 		state.Reason = "scope_checker_missing"
+		return state
+	}
+	if !envelope.IsFromHost() && envelope.ProducerGeneration > 0 && def.Generation > 0 && envelope.ProducerGeneration != def.Generation {
+		state.ScopeValid = false
+		state.Reason = "stale_generation"
 		return state
 	}
 	return state

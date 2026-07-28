@@ -257,29 +257,15 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 		agentSkillContext = strings.Join(parts, "\n\n")
 		defer s.toolRuntime.EndAgentSkillRound(toolScope)
-	} else if s.skillRuntime != nil {
-		catalog, activated, activationErrors := s.skillRuntime.PrepareAgentSkillPrompt(ctx, skillScope, req.Message)
-		parts := []string{}
-		if catalog != "" {
-			parts = append(parts, catalog)
-			agentSkillCatalogIncluded = true
-		}
-		for _, item := range activated {
-			parts = append(parts, item.Prompt)
-			agentSkillTrace = append(agentSkillTrace, promptir.AgentSkillTrace{ActivationID: item.ActivationID, ExtensionID: item.Definition.ExtensionID, Name: item.Definition.Name, Source: string(item.Definition.Source), Scope: string(item.Definition.Scope), Trigger: "explicit", Explicit: true, CompatibilityStatus: string(item.Definition.CompatibilityStatus), BodyTokens: item.BodyTokens, ScriptsUsed: false, ToolMappings: item.Definition.ToolMappings, InstructionPosition: "after_character_rules", Status: "activated"})
-		}
-		if len(activationErrors) > 0 {
-			parts = append(parts, "<agent_skill_activation_errors>"+strings.Join(activationErrors, "; ")+"</agent_skill_activation_errors>")
-		}
-		agentSkillContext = strings.Join(parts, "\n\n")
-		defer s.skillRuntime.EndAgentSkillRound(skillScope)
+	} else {
+		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "agent skill prompt preparation skipped")
 	}
 	pluginContributions := []extension.ContextContribution{}
 	if s.toolRuntime != nil {
 		toolScope := toolScopeFromExtension(skillScope)
 		pluginContributions = contextContributionsToExtension(s.toolRuntime.BeforePrompt(ctx, toolScope))
-	} else if s.skillRuntime != nil {
-		pluginContributions = s.skillRuntime.BeforePrompt(ctx, skillScope)
+	} else {
+		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "plugin context contributions skipped")
 	}
 	pluginContext, pluginSources := renderPluginContributions(pluginContributions)
 	temporalContext := ""
@@ -335,16 +321,8 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		} else {
 			toolDefs = resolved
 		}
-	} else if s.skillRuntime != nil {
-		resolved, resolveErr := s.skillRuntime.ModelTools(ctx, skillScope)
-		if resolveErr != nil {
-			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")
-			toolDefs = nil
-		} else {
-			toolDefs = resolved
-		}
 	} else {
-		applog.TraceError(trace.WithStage("skill_runtime_unavailable"), nil, fmt.Errorf("skill runtime is not configured"), "skill tool definitions unavailable")
+		applog.TraceError(trace.WithStage("skill_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "skill tool definitions unavailable")
 	}
 	applog.TraceInfo(trace.WithStage("prompt_ready"), applog.Fields{
 		"history_count":               len(history),

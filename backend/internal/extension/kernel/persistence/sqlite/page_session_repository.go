@@ -8,13 +8,13 @@ import (
 )
 
 type PageSessionRecord struct {
-	SessionID      string
-	ExtensionID    string
-	PageID         string
-	State          string
-	CreatedAt      time.Time
-	LastActiveAt   time.Time
-	ScopeSnapshot  string
+	SessionID     string
+	ExtensionID   string
+	PageID        string
+	State         string
+	CreatedAt     time.Time
+	LastActiveAt  time.Time
+	ScopeSnapshot string
 }
 
 type SQLitePageSessionRepository struct {

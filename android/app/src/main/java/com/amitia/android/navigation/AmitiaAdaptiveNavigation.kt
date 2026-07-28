@@ -10,6 +10,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -82,7 +83,7 @@ fun AmitiaAdaptiveNavigationContainer(
     }
 
     CompositionLocalProvider(LocalDrawerState provides drawerState) {
-        Box(modifier.fillMaxSize()) {
+        Box(modifier = modifier.fillMaxSize().statusBarsPadding()) {
             content(PaddingValues(AmitiaSpacing.None))
 
             AmitiaAppDrawer(

@@ -50,12 +50,14 @@ func TestBridgeHandleReady(t *testing.T) {
 	result, err := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodReady),
-			Version: 1,
-			ID:      "msg-1",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
+			Method:     string(MethodReady),
+			Version:    1,
+			ID:         "msg-1",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
 		},
 	})
 	if err != nil {
@@ -72,12 +74,14 @@ func TestBridgeHandleContextGet(t *testing.T) {
 	result, err := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodContextGet),
-			Version: 1,
-			ID:      "msg-2",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
+			Method:     string(MethodContextGet),
+			Version:    1,
+			ID:         "msg-2",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
 		},
 	})
 	if err != nil {
@@ -94,12 +98,14 @@ func TestBridgeHandlePing(t *testing.T) {
 	result, err := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodSessionPing),
-			Version: 1,
-			ID:      "msg-3",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
+			Method:     string(MethodSessionPing),
+			Version:    1,
+			ID:         "msg-3",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
 		},
 	})
 	if err != nil {
@@ -121,13 +127,15 @@ func TestBridgeHandleActionInvoke(t *testing.T) {
 	result, err := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodActionInvoke),
-			Version: 1,
-			ID:      "msg-4",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
-			Input:   input,
+			Method:     string(MethodActionInvoke),
+			Version:    1,
+			ID:         "msg-4",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
+			Input:      input,
 		},
 	})
 	if err != nil {
@@ -149,13 +157,15 @@ func TestBridgeHandleResize(t *testing.T) {
 	result, err := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodResize),
-			Version: 1,
-			ID:      "msg-5",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
-			Input:   input,
+			Method:     string(MethodResize),
+			Version:    1,
+			ID:         "msg-5",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
+			Input:      input,
 		},
 	})
 	if err != nil {
@@ -177,13 +187,15 @@ func TestBridgeHandleInvalidResize(t *testing.T) {
 	result, _ := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodResize),
-			Version: 1,
-			ID:      "msg-6",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
-			Input:   input,
+			Method:     string(MethodResize),
+			Version:    1,
+			ID:         "msg-6",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
+			Input:      input,
 		},
 	})
 	if result.Error == "" {
@@ -198,12 +210,14 @@ func TestBridgeRateLimit(t *testing.T) {
 		bridge.HandleMessage(context.Background(), InvokeRequest{
 			SessionID: session.SessionID,
 			Message: BridgeMessage{
-				Method:  string(MethodLog),
-				Version: 1,
-				ID:      "msg-log",
-				Session: session.SessionID,
-				Origin:  session.Origin,
-				Nonce:   session.Nonce,
+				Method:     string(MethodLog),
+				Version:    1,
+				ID:         "msg-log",
+				Session:    session.SessionID,
+				Origin:     session.Origin,
+				Nonce:      session.Nonce,
+				Token:      session.Token,
+				Generation: session.Generation,
 			},
 		})
 	}
@@ -211,12 +225,14 @@ func TestBridgeRateLimit(t *testing.T) {
 	result, _ := bridge.HandleMessage(context.Background(), InvokeRequest{
 		SessionID: session.SessionID,
 		Message: BridgeMessage{
-			Method:  string(MethodLog),
-			Version: 1,
-			ID:      "msg-log-excess",
-			Session: session.SessionID,
-			Origin:  session.Origin,
-			Nonce:   session.Nonce,
+			Method:     string(MethodLog),
+			Version:    1,
+			ID:         "msg-log-excess",
+			Session:    session.SessionID,
+			Origin:     session.Origin,
+			Nonce:      session.Nonce,
+			Token:      session.Token,
+			Generation: session.Generation,
 		},
 	})
 	if result.Error == "" {
@@ -243,10 +259,12 @@ func TestValidateBridgeMessage(t *testing.T) {
 	session, _ := host.GetSession(result.SessionID)
 
 	msg := &BridgeMessage{
-		Method:  string(MethodReady),
-		Session: session.SessionID,
-		Origin:  session.Origin,
-		Nonce:   session.Nonce,
+		Method:     string(MethodReady),
+		Session:    session.SessionID,
+		Origin:     session.Origin,
+		Nonce:      session.Nonce,
+		Token:      session.Token,
+		Generation: session.Generation,
 	}
 	if err := ValidateBridgeMessage(msg, session); err != nil {
 		t.Errorf("valid message should pass: %v", err)

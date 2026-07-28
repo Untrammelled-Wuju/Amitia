@@ -91,6 +91,24 @@ func (r *TaskRepository) ListTaskDefinitions(ctx context.Context, extensionID st
 	return out, rows.Err()
 }
 
+func (r *TaskRepository) DeleteTaskDefinition(ctx context.Context, defID string) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `DELETE FROM extension_task_definitions WHERE task_id = ?`, defID)
+	if err != nil {
+		return fmt.Errorf("sqlite: delete task definition: %w", err)
+	}
+	return nil
+}
+
+func (r *TaskRepository) DeleteByExtension(ctx context.Context, extensionID string) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `DELETE FROM extension_task_definitions WHERE extension_id = ?`, extensionID)
+	if err != nil {
+		return fmt.Errorf("sqlite: delete task definitions by extension: %w", err)
+	}
+	return nil
+}
+
 func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskRun) error {
 	ex := getExecutor(ctx, r.db)
 	_, err := ex.ExecContext(ctx, `

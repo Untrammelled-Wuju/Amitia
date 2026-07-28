@@ -11,43 +11,43 @@ import (
 func makeMenuDef(id, extID string) DesktopContributionDefinition {
 	return DesktopContributionDefinition{
 		ContributionID:  id,
-		ExtensionID:    extID,
-		ModuleID:       "test-module",
-		DesktopType:    DesktopTypeMenuItem,
-		ContractID:     "app.menu.item",
+		ExtensionID:     extID,
+		ModuleID:        "test-module",
+		DesktopType:     DesktopTypeMenuItem,
+		ContractID:      "app.menu.item",
 		ContractVersion: 1,
-		Target:         "app.menu.file.extensions",
-		Label:          LocalizedText{Default: "Test Menu"},
-		Action:         DesktopActionBinding{ActionType: "host_action", TargetID: "action-" + id},
+		Target:          "app.menu.file.extensions",
+		Label:           LocalizedText{Default: "Test Menu"},
+		Action:          DesktopActionBinding{ActionType: "host_action", TargetID: "action-" + id},
 	}
 }
 
 func makeTrayDef(id, extID string) DesktopContributionDefinition {
 	return DesktopContributionDefinition{
 		ContributionID:  id,
-		ExtensionID:    extID,
-		ModuleID:       "test-module",
-		DesktopType:    DesktopTypeTrayItem,
-		ContractID:     "app.tray.item",
+		ExtensionID:     extID,
+		ModuleID:        "test-module",
+		DesktopType:     DesktopTypeTrayItem,
+		ContractID:      "app.tray.item",
 		ContractVersion: 1,
-		Target:         "tray.quick_actions",
-		Label:          LocalizedText{Default: "Test Tray"},
-		Action:         DesktopActionBinding{ActionType: "host_action", TargetID: "tray-" + id},
+		Target:          "tray.quick_actions",
+		Label:           LocalizedText{Default: "Test Tray"},
+		Action:          DesktopActionBinding{ActionType: "host_action", TargetID: "tray-" + id},
 	}
 }
 
 func makeShortcutDef(id, extID, accel string) DesktopContributionDefinition {
 	return DesktopContributionDefinition{
 		ContributionID:  id,
-		ExtensionID:    extID,
-		ModuleID:       "test-module",
-		DesktopType:    DesktopTypeAppShortcut,
-		ContractID:     "app.shortcut.application",
+		ExtensionID:     extID,
+		ModuleID:        "test-module",
+		DesktopType:     DesktopTypeAppShortcut,
+		ContractID:      "app.shortcut.application",
 		ContractVersion: 1,
-		Target:         "window.focused",
-		Label:          LocalizedText{Default: "Test Shortcut"},
-		Action:         DesktopActionBinding{ActionType: "host_action", TargetID: "sc-" + id},
-		Shortcut:       &DesktopShortcutDefinition{Accelerator: accel},
+		Target:          "window.focused",
+		Label:           LocalizedText{Default: "Test Shortcut"},
+		Action:          DesktopActionBinding{ActionType: "host_action", TargetID: "sc-" + id},
+		Shortcut:        &DesktopShortcutDefinition{Accelerator: accel},
 	}
 }
 
@@ -868,6 +868,38 @@ func TestDesktopHost_ResourcesNotTrackedForConflicted(t *testing.T) {
 	}
 }
 
+type deniedPermissionChecker struct{}
+
+func (deniedPermissionChecker) Check(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func TestDesktopHost_GlobalShortcutWaitsForPermission(t *testing.T) {
+	host := NewDesktopHost()
+	host.SetPermissionChecker(deniedPermissionChecker{})
+	definition := makeShortcutDef("global-permission", "ext-permission", "CmdOrCtrl+Alt+P")
+	definition.DesktopType = DesktopTypeGlobalShortcut
+	definition.ContractID = "app.shortcut.global"
+	definition.Target = "global"
+	definition.Shortcut.Global = true
+	resolved, err := host.RegisterContribution(context.Background(), definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Status != ContributionStatusPendingPermission {
+		t.Fatalf("expected pending_permission, got %s", resolved.Status)
+	}
+}
+
+func TestDesktopHostRecordsApplyResult(t *testing.T) {
+	host := NewDesktopHost()
+	host.RecordApplyReport(DesktopApplyReport{Generation: 7, Hash: "snapshot-hash", Success: true})
+	report, ok := host.GetApplyReport(7)
+	if !ok || !report.Success || report.AppliedAt.IsZero() {
+		t.Fatalf("unexpected report: %+v", report)
+	}
+}
+
 func TestDesktopContractRegistry_Builtins(t *testing.T) {
 	r := NewDesktopContractRegistry()
 	if !r.IsTargetAllowed("app.menu.item", 1, "app.menu.file.extensions") {
@@ -914,12 +946,12 @@ func TestDesktopContractRegistry_RegisterContract(t *testing.T) {
 	r := NewDesktopContractRegistry()
 	ctx := context.Background()
 	def := DesktopContractDefinition{
-		ContractID:      "custom.contract",
-		Version:         1,
-		DesktopType:     DesktopTypeMenuItem,
-		AllowedTargets:  []string{"custom.target"},
-		Status:          ContractStatusActive,
-		MaxItemsPerExt:  10,
+		ContractID:     "custom.contract",
+		Version:        1,
+		DesktopType:    DesktopTypeMenuItem,
+		AllowedTargets: []string{"custom.target"},
+		Status:         ContractStatusActive,
+		MaxItemsPerExt: 10,
 	}
 	if err := r.RegisterContract(ctx, def); err != nil {
 		t.Fatalf("RegisterContract error: %v", err)

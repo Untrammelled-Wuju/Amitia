@@ -142,6 +142,12 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess {
+		if result.Error != nil {
+			switch result.Error.Code {
+			case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied, capability.ErrorCodeInvalidInput:
+				return result
+			}
+		}
 		if shouldRetry, _ := p.RetryCtrl.ShouldRetry(ctx, tool, result); shouldRetry {
 			for attempt := 1; attempt <= tool.ExecutionPolicy.RetryPolicy.MaxRetries; attempt++ {
 				time.Sleep(p.RetryCtrl.Backoff(attempt))

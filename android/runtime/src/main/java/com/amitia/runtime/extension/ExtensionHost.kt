@@ -76,4 +76,8 @@ interface ExtensionHost {
     fun findContribution(contributionId: String): ExtensionContribution?
 
     suspend fun reload(extensionId: String): Result<LoadedExtension>
+
+    suspend fun restoreFromDatabase(): Result<List<LoadedExtension>>
+
+    fun getPermissionChecker(): ExtensionPermissionChecker
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/mcp/client"
 )
@@ -94,8 +95,7 @@ func (r *Runtime) RegisterAll(ctx context.Context) error {
 }
 
 func (r *Runtime) RegisterServer(ctx context.Context, serverID string) error {
-	server, err := r.repository.GetServer(ctx, serverID)
-	if err != nil {
+	if _, err := r.repository.GetServer(ctx, serverID); err != nil {
 		return err
 	}
 	tools, err := r.repository.ListTools(ctx, serverID, false)
@@ -115,23 +115,26 @@ func (r *Runtime) RegisterServer(ctx context.Context, serverID string) error {
 			_ = r.extensions.Registry.Unregister(ctx, current.Definition.ID)
 		}
 	}
-	for _, tool := range tools {
-		if _, getErr := r.extensions.Registry.Get(ctx, tool.SkillID); getErr == nil {
-			_ = r.extensions.Registry.Unregister(ctx, tool.SkillID)
-		}
-		definition, handler, buildErr := r.build(server, tool)
-		if buildErr != nil {
-			return buildErr
-		}
-		if err := r.extensions.Registry.Register(ctx, definition, handler); err != nil {
-			return err
-		}
-		if err := r.extensions.Registry.SetEnabled(ctx, definition.ID, tool.Enabled == 1); err != nil {
-			return err
+	if r.toolFacadeSyncer == nil {
+		return fmt.Errorf("toolFacadeSyncer is not configured")
+	}
+	_ = r.toolFacadeSyncer.SyncMCPTools(ctx, serverID, tools)
+	return nil
+}
+
+func (r *Runtime) UnregisterServer(ctx context.Context, serverID string) error {
+	registered, err := r.extensions.Registry.List(ctx, extension.SkillFilter{Source: extension.SkillSourceMCP, IncludeInternal: true})
+	if err != nil {
+		return err
+	}
+	prefix := "mcp." + skillSegment(serverID) + "."
+	for _, current := range registered {
+		if strings.HasPrefix(current.Definition.ID, prefix) {
+			_ = r.extensions.Registry.Unregister(ctx, current.Definition.ID)
 		}
 	}
 	if r.toolFacadeSyncer != nil {
-		_ = r.toolFacadeSyncer.SyncMCPTools(ctx, serverID, tools)
+		return r.toolFacadeSyncer.UnregisterMCPTools(ctx, serverID)
 	}
 	return nil
 }
@@ -155,6 +158,7 @@ func (r *Runtime) build(server mcp.Server, tool mcp.ToolDefinition) (extension.S
 	}
 	definition := extension.SkillDefinition{ID: tool.SkillID, ModelName: modelName(server.ID, tool.RemoteName), Name: name, Description: tool.Description, Version: "1.0.0", Source: extension.SkillSourceMCP, Entry: manifest.Entry, InputSchema: input, OutputSchema: output, ConfigSchema: manifest.ConfigSchema, DefaultConfig: manifest.DefaultConfig, Capabilities: capabilities, Triggers: triggers, Timeout: 30 * time.Second, TimeoutMS: 30000, HasSideEffects: sideEffects, Retryable: manifest.Execution.Retryable, Idempotent: idempotent, Enabled: tool.Enabled == 1, Compatible: true, Author: manifest.Metadata.Author, License: manifest.Metadata.License, Manifest: manifestRaw}
 	handler := func(ctx context.Context, request extension.ExecuteSkillRequest) (result extension.SkillResult, runErr error) {
+		kernel.GlobalLegacyCallCounter().IncMCPExecute()
 		started := time.Now()
 		defer func() {
 			status := "succeeded"

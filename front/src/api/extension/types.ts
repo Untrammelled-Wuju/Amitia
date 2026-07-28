@@ -57,6 +57,13 @@ export interface BackendPermissionRequirement {
   scope?: string;
 }
 
+export interface BackendContributionIntegrity {
+  definition_hash: string;
+  entry_hash?: string;
+  schema_hash?: string;
+  generation: number;
+}
+
 export interface BackendUIContributionDefinition {
   contribution_id: string;
   extension_id: string;
@@ -75,7 +82,7 @@ export interface BackendUIContributionDefinition {
   conflict_policy?: unknown;
   sandbox: BackendUISandboxPolicy;
   lifecycle?: unknown;
-  integrity?: unknown;
+  integrity?: BackendContributionIntegrity;
 }
 
 export interface BackendSlotSnapshotEntry {

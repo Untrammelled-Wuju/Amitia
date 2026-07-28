@@ -76,8 +76,8 @@ func (c *ManagerScopeChecker) Check(ctx context.Context, identity runtime_superv
 	if modID != "" && snap.ModuleID != "" && snap.ModuleID != modID {
 		return fmt.Errorf("%w: snapshot module %s does not match caller %s", ErrScopeDenied, snap.ModuleID, modID)
 	}
-	if identity.Generation > 0 && snap.CreatedAt.IsZero() {
-		return fmt.Errorf("%w: snapshot missing creation time for generation fence", ErrScopeDenied)
+	if identity.Generation > 0 && snap.Generation != identity.Generation {
+		return fmt.Errorf("%w: snapshot generation %d does not match caller generation %d", ErrScopeDenied, snap.Generation, identity.Generation)
 	}
 
 	if !isGlobalRoute(policy) {
@@ -92,6 +92,8 @@ func (c *ManagerScopeChecker) Check(ctx context.Context, identity runtime_superv
 			ConversationID: snap.ConversationID,
 			ExtensionID:    snap.ExtensionID,
 			ModuleID:       snap.ModuleID,
+			InvocationID:   snap.InvocationID,
+			Generation:     snap.Generation,
 			ParentSnapshot: snap,
 		})
 		if !decision.Allowed {

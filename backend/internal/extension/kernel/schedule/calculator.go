@@ -270,11 +270,11 @@ func GenerateDefinitionHash(def *ScheduleContributionDefinition) string {
 }
 
 type cronSchedule struct {
-	minutes    map[int]bool
-	hours      map[int]bool
+	minutes     map[int]bool
+	hours       map[int]bool
 	daysOfMonth map[int]bool
-	months     map[int]bool
-	daysOfWeek map[int]bool
+	months      map[int]bool
+	daysOfWeek  map[int]bool
 }
 
 func parseCron5(expr string) (*cronSchedule, error) {

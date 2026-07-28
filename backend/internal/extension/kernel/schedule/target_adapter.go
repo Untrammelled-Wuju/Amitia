@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -24,8 +25,20 @@ type ToolTargetAdapter struct {
 	executor ToolExecutor
 }
 
+type ScheduleToolContext struct {
+	ScheduleID           string
+	TriggerID            string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
+	ScopeSnapshotID      string
+	PermissionSnapshotID string
+	IdempotencyKey       string
+	TraceID              string
+}
+
 type ToolExecutor interface {
-	ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string) (*ToolExecutionResult, error)
+	ExecuteTool(ctx context.Context, toolID string, input []byte, operationID string, scheduleCtx ScheduleToolContext) (*ToolExecutionResult, error)
 }
 
 type ToolExecutionResult struct {
@@ -52,7 +65,22 @@ func (a *ToolTargetAdapter) Execute(ctx context.Context, def *ScheduleContributi
 	if trigger.OperationID != nil {
 		opID = *trigger.OperationID
 	}
-	result, err := a.executor.ExecuteTool(ctx, def.Target.TargetID, def.Target.InputTemplate, opID)
+	invocationID := ""
+	if trigger.InvocationID != nil {
+		invocationID = *trigger.InvocationID
+	}
+	scheduleCtx := ScheduleToolContext{
+		ScheduleID:           def.ScheduleID,
+		TriggerID:            trigger.TriggerID,
+		ExtensionID:          def.ExtensionID,
+		ModuleID:             def.ModuleID,
+		Generation:           trigger.Generation,
+		ScopeSnapshotID:      trigger.ScopeSnapshotID,
+		PermissionSnapshotID: trigger.PermissionSnapshotID,
+		IdempotencyKey:       trigger.IdempotencyKey,
+		TraceID:              invocationID,
+	}
+	result, err := a.executor.ExecuteTool(ctx, def.Target.TargetID, def.Target.InputTemplate, opID, scheduleCtx)
 	if err != nil {
 		return &TargetExecutionResult{
 			Success:      false,
@@ -74,11 +102,28 @@ type WorkflowTargetAdapter struct {
 }
 
 type WorkflowExecutor interface {
-	ExecuteWorkflow(ctx context.Context, workflowID string, input []byte, operationID string) (*WorkflowExecutionResult, error)
+	ExecuteWorkflow(ctx context.Context, workflowID string, input []byte, scheduleContext WorkflowScheduleContext) (*WorkflowExecutionResult, error)
+}
+
+type WorkflowScheduleContext struct {
+	ScheduleID           string
+	TriggerID            string
+	OperationID          string
+	InvocationID         string
+	ScopeSnapshotID      string
+	PermissionSnapshotID string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
+	TraceID              string
+	IdempotencyKey       string
 }
 
 type WorkflowExecutionResult struct {
 	OperationID  string
+	InvocationID string
+	Status       string
+	Accepted     bool
 	ResultJSON   []byte
 	ErrorCode    string
 	ErrorMessage string
@@ -102,7 +147,27 @@ func (a *WorkflowTargetAdapter) Execute(ctx context.Context, def *ScheduleContri
 	if trigger.OperationID != nil {
 		opID = *trigger.OperationID
 	}
-	result, err := a.executor.ExecuteWorkflow(ctx, def.Target.TargetID, def.Target.InputTemplate, opID)
+	invocationID := fmt.Sprintf("sched-wf-%s", trigger.TriggerID)
+	if trigger.InvocationID != nil && *trigger.InvocationID != "" {
+		invocationID = *trigger.InvocationID
+	}
+	traceID := opID
+	if traceID == "" {
+		traceID = trigger.TriggerID
+	}
+	result, err := a.executor.ExecuteWorkflow(ctx, def.Target.TargetID, def.Target.InputTemplate, WorkflowScheduleContext{
+		ScheduleID:           def.ScheduleID,
+		TriggerID:            trigger.TriggerID,
+		OperationID:          opID,
+		InvocationID:         invocationID,
+		ScopeSnapshotID:      trigger.ScopeSnapshotID,
+		PermissionSnapshotID: trigger.PermissionSnapshotID,
+		ExtensionID:          def.ExtensionID,
+		ModuleID:             def.ModuleID,
+		Generation:           trigger.Generation,
+		TraceID:              traceID,
+		IdempotencyKey:       trigger.IdempotencyKey,
+	})
 	if err != nil {
 		return &TargetExecutionResult{
 			Success:      false,
@@ -113,6 +178,7 @@ func (a *WorkflowTargetAdapter) Execute(ctx context.Context, def *ScheduleContri
 	return &TargetExecutionResult{
 		Success:      result.ErrorCode == "",
 		OperationID:  result.OperationID,
+		InvocationID: result.InvocationID,
 		ResultJSON:   result.ResultJSON,
 		ErrorCode:    result.ErrorCode,
 		ErrorMessage: result.ErrorMessage,
@@ -176,14 +242,14 @@ type RuntimeHandlerResult struct {
 }
 
 type ScheduleHandlerContext struct {
-	ScheduleID    string
-	TriggerID     string
-	ScheduledAt   time.Time
-	EffectiveAt   time.Time
-	Attempt       int
-	OperationID   string
-	InvocationID  string
-	ScopeSnapshotID string
+	ScheduleID           string
+	TriggerID            string
+	ScheduledAt          time.Time
+	EffectiveAt          time.Time
+	Attempt              int
+	OperationID          string
+	InvocationID         string
+	ScopeSnapshotID      string
 	PermissionSnapshotID string
 }
 

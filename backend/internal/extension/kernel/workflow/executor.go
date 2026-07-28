@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,6 +19,14 @@ type WorkflowExecutor struct {
 	checkpoint   CheckpointStore
 	compensation *CompensationManager
 	retryMax     int
+	runStore     RunStore
+	guard        StepGuard
+	activeMu     sync.Mutex
+	active       map[string]context.CancelFunc
+}
+
+type StepGuard interface {
+	Check(ctx context.Context, definition WorkflowDefinition, node WorkflowNode, execution ExecutionContext) error
 }
 
 type ExecuteRequest struct {
@@ -35,16 +44,26 @@ type ExecutionContext struct {
 	ScopeSnapshotID  string
 	PermissionSnapID string
 	Generation       int64
+	ModuleID         string
+	ScheduleID       string
+	TriggerID        string
+	TraceID          string
+	IdempotencyKey   string
+	Depth            int
+	Recovery         bool
 }
 
 type ExecuteResult struct {
-	WorkflowID           string
-	Output               json.RawMessage
-	Steps                []StepResult
-	Success              bool
-	Error                string
-	Duration             time.Duration
-	CompensationResults   []CompensationResult
+	ExecutionID         string
+	WorkflowID          string
+	Status              RunStatus
+	Accepted            bool
+	Output              json.RawMessage
+	Steps               []StepResult
+	Success             bool
+	Error               string
+	Duration            time.Duration
+	CompensationResults []CompensationResult
 }
 
 type StepResult struct {
@@ -61,6 +80,7 @@ func NewWorkflowExecutor(registry *WorkflowRegistry) *WorkflowExecutor {
 		registry: registry,
 		handlers: make(map[string]StepHandler),
 		retryMax: 3,
+		active:   make(map[string]context.CancelFunc),
 	}
 }
 
@@ -78,6 +98,46 @@ func (e *WorkflowExecutor) SetCompensationManager(cm *CompensationManager) {
 
 func (e *WorkflowExecutor) SetRetryMax(max int) {
 	e.retryMax = max
+}
+
+func (e *WorkflowExecutor) SetRunStore(store RunStore) {
+	e.runStore = store
+}
+
+func (e *WorkflowExecutor) SetStepGuard(guard StepGuard) {
+	e.guard = guard
+}
+
+func (e *WorkflowExecutor) Recover(ctx context.Context, limit int) error {
+	if e.runStore == nil {
+		return nil
+	}
+	runs, err := e.runStore.ListRecoverable(ctx, limit)
+	if err != nil {
+		return err
+	}
+	for _, run := range runs {
+		run.Context.Recovery = true
+		if _, err := e.Execute(ctx, ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: run.Context}); err != nil {
+			finishedAt := time.Now().UTC()
+			run.Status = RunStatusFailed
+			run.Error = err.Error()
+			run.FinishedAt = &finishedAt
+			run.UpdatedAt = finishedAt
+			_ = e.runStore.Finish(context.Background(), run)
+		}
+	}
+	return nil
+}
+
+func (e *WorkflowExecutor) Cancel(executionID string) bool {
+	e.activeMu.Lock()
+	cancel, ok := e.active[executionID]
+	e.activeMu.Unlock()
+	if ok {
+		cancel()
+	}
+	return ok
 }
 
 func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult, error) {
@@ -109,6 +169,18 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 	if wf.Limits.MaxSteps > 0 && totalNodes > wf.Limits.MaxSteps {
 		return nil, ErrMaxStepsExceeded
 	}
+	if wf.Limits.MaxInputBytes > 0 && int64(len(req.Input)) > wf.Limits.MaxInputBytes {
+		return nil, ErrOutputLimitExceeded
+	}
+	if req.Context.ExtensionID == "" {
+		req.Context.ExtensionID = wf.ExtensionID
+	}
+	if req.Context.ModuleID == "" {
+		req.Context.ModuleID = wf.ModuleID
+	}
+	if wf.Limits.MaxSkillCallDepth > 0 && req.Context.Depth > wf.Limits.MaxSkillCallDepth {
+		return nil, ErrDepthExceeded
+	}
 
 	execCtx := ctx
 	var execCancel context.CancelFunc
@@ -121,10 +193,94 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 	if executionID == "" {
 		executionID = fmt.Sprintf("%s-%d", req.WorkflowID, start.UnixNano())
 	}
+	execCtx, runCancel := context.WithCancel(execCtx)
+	e.activeMu.Lock()
+	if _, running := e.active[executionID]; running && !req.Context.Recovery {
+		e.activeMu.Unlock()
+		runCancel()
+		return &ExecuteResult{ExecutionID: executionID, WorkflowID: req.WorkflowID, Status: RunStatusRunning, Accepted: true, Success: true, Duration: time.Since(start)}, nil
+	}
+	e.active[executionID] = runCancel
+	e.activeMu.Unlock()
+	defer func() {
+		runCancel()
+		e.activeMu.Lock()
+		delete(e.active, executionID)
+		e.activeMu.Unlock()
+	}()
 
 	result := &ExecuteResult{
-		WorkflowID: req.WorkflowID,
-		Steps:      make([]StepResult, 0, totalNodes),
+		ExecutionID: executionID,
+		WorkflowID:  req.WorkflowID,
+		Status:      RunStatusRunning,
+		Steps:       make([]StepResult, 0, totalNodes),
+	}
+	defer func() {
+		if result.Accepted && result.Status == RunStatusRunning {
+			return
+		}
+		if result.Success {
+			result.Status = RunStatusSucceeded
+		} else if compensationSucceeded(result.CompensationResults) {
+			result.Status = RunStatusCompensated
+		} else if strings.Contains(strings.ToLower(result.Error), "canceled") {
+			result.Status = RunStatusCancelled
+		} else {
+			result.Status = RunStatusFailed
+		}
+	}()
+
+	startedAt := start.UTC()
+	if e.runStore != nil {
+		existing, created, startErr := e.runStore.Start(execCtx, WorkflowRun{
+			ExecutionID: executionID,
+			WorkflowID:  req.WorkflowID,
+			Status:      RunStatusRunning,
+			Input:       req.Input,
+			Context:     req.Context,
+			Attempt:     1,
+			StartedAt:   startedAt,
+			UpdatedAt:   startedAt,
+		})
+		if startErr != nil {
+			return nil, startErr
+		}
+		if !created && existing != nil {
+			if existing.Status == RunStatusSucceeded {
+				return &ExecuteResult{ExecutionID: existing.ExecutionID, WorkflowID: existing.WorkflowID, Status: existing.Status, Output: existing.Output, Steps: existing.Steps, Success: true, Duration: time.Since(start)}, nil
+			}
+			if existing.Status == RunStatusRunning && !req.Context.Recovery {
+				return &ExecuteResult{ExecutionID: existing.ExecutionID, WorkflowID: existing.WorkflowID, Status: existing.Status, Accepted: true, Success: true, Duration: time.Since(start)}, nil
+			}
+			startedAt = existing.StartedAt
+		}
+		defer func() {
+			finishedAt := time.Now().UTC()
+			status := result.Status
+			if result.Success {
+				status = RunStatusSucceeded
+			} else if compensationSucceeded(result.CompensationResults) {
+				status = RunStatusCompensated
+			} else if strings.Contains(strings.ToLower(result.Error), "canceled") {
+				status = RunStatusCancelled
+			} else {
+				status = RunStatusFailed
+			}
+			_ = e.runStore.Finish(context.Background(), WorkflowRun{
+				ExecutionID:         executionID,
+				WorkflowID:          req.WorkflowID,
+				Status:              status,
+				Input:               req.Input,
+				Output:              result.Output,
+				Error:               result.Error,
+				Context:             req.Context,
+				Steps:               result.Steps,
+				CompensationResults: result.CompensationResults,
+				StartedAt:           startedAt,
+				FinishedAt:          &finishedAt,
+				UpdatedAt:           finishedAt,
+			})
+		}()
 	}
 
 	outputs := make(map[string]json.RawMessage)
@@ -158,15 +314,23 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		type nodeExecResult struct {
 			nodeID string
 			step   StepResult
+			input  json.RawMessage
 		}
 
 		resultChan := make(chan nodeExecResult, len(level))
 		var wg sync.WaitGroup
 
+		maxConcurrency := wf.Limits.MaxConcurrency
+		if maxConcurrency <= 0 || maxConcurrency > len(level) {
+			maxConcurrency = len(level)
+		}
+		semaphore := make(chan struct{}, maxConcurrency)
 		for _, nodeID := range level {
 			wg.Add(1)
 			go func(nid string) {
 				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
 
 				node := nodeMap[nid]
 
@@ -221,6 +385,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 
 				handler, hOK := e.handlers[node.Type]
 				if !hOK {
+					handler, hOK = e.handlers[strings.ToLower(node.Type)]
+				}
+				if !hOK {
 					resultChan <- nodeExecResult{
 						nodeID: nid,
 						step: StepResult{
@@ -232,11 +399,19 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 					return
 				}
 
-				stepResult := e.executeStep(execCtx, handler, node, input, wf.Limits)
+				if e.guard != nil {
+					if guardErr := e.guard.Check(execCtx, wf, node, req.Context); guardErr != nil {
+						resultChan <- nodeExecResult{nodeID: nid, input: input, step: StepResult{NodeID: nid, Status: "failed", Error: guardErr.Error()}}
+						return
+					}
+				}
+
+				stepResult := e.executeStep(withExecutionContext(execCtx, req.Context), handler, node, input, wf.Limits)
 				stepResult.NodeID = nid
 				resultChan <- nodeExecResult{
 					nodeID: nid,
 					step:   stepResult,
+					input:  input,
 				}
 			}(nodeID)
 		}
@@ -246,6 +421,10 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 
 		for ner := range resultChan {
 			result.Steps = append(result.Steps, ner.step)
+			if e.runStore != nil {
+				finishedAt := time.Now().UTC()
+				_ = e.runStore.SaveStep(execCtx, StepRun{ExecutionID: executionID, WorkflowID: req.WorkflowID, NodeID: ner.nodeID, Status: ner.step.Status, Input: ner.input, Output: ner.step.Output, Error: ner.step.Error, Attempt: ner.step.Attempt, StartedAt: finishedAt.Add(-ner.step.Duration), FinishedAt: &finishedAt})
+			}
 
 			if ner.step.Status == "succeeded" {
 				outputsMu.Lock()
@@ -334,8 +513,32 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 
 	result.Output = lastOutput
 	result.Success = true
+	result.Status = RunStatusSucceeded
 	result.Duration = time.Since(start)
 	return result, nil
+}
+
+type executionContextKey struct{}
+
+func withExecutionContext(ctx context.Context, execution ExecutionContext) context.Context {
+	return context.WithValue(ctx, executionContextKey{}, execution)
+}
+
+func ExecutionContextFromContext(ctx context.Context) (ExecutionContext, bool) {
+	execution, ok := ctx.Value(executionContextKey{}).(ExecutionContext)
+	return execution, ok
+}
+
+func compensationSucceeded(results []CompensationResult) bool {
+	if len(results) == 0 {
+		return false
+	}
+	for _, result := range results {
+		if result.Status != "succeeded" {
+			return false
+		}
+	}
+	return true
 }
 
 func (e *WorkflowExecutor) executeStep(ctx context.Context, handler StepHandler, node WorkflowNode, input json.RawMessage, limits WorkflowLimits) StepResult {

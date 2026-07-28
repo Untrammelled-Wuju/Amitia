@@ -44,7 +44,7 @@ func NewFileWatcher(interval time.Duration) *FileWatcher {
 	return &FileWatcher{
 		interval: interval,
 		patterns: []string{".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".css", ".html"},
-		ignore:   []string{"node_modules", "dist", "package", ".git", "tmp", "cache"},
+		ignore:   []string{"node_modules", "dist", "package", ".git", "tmp", "cache", ".amitiax", "diagnostics"},
 		stopCh:   make(map[WorkspaceID]chan struct{}),
 		running:  make(map[WorkspaceID]bool),
 		snapshots: make(map[WorkspaceID]map[string]int64),

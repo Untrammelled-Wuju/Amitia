@@ -53,6 +53,11 @@ func (r *WorkflowRegistry) LoadFromStore(ctx context.Context) error {
 }
 
 func (r *WorkflowRegistry) Register(definition WorkflowDefinition) error {
+	computedHash := ComputeDefinitionHash(definition)
+	if definition.DefinitionHash != "" && definition.DefinitionHash != computedHash {
+		return fmt.Errorf("workflow %s definition hash mismatch", definition.ID)
+	}
+	definition.DefinitionHash = computedHash
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.items[definition.ID]; exists {

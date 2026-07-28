@@ -9,10 +9,11 @@ type ExtensionKernelReadiness struct {
 	EventServiceReady     bool
 	ScheduleServiceReady  bool
 	RuntimeSupervisorReady bool
+	LegacyCounterZero     bool
 }
 
 func (r ExtensionKernelReadiness) Ready() bool {
-	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady
+	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.LegacyCounterZero
 }
 
 func (r ExtensionKernelReadiness) FailedComponents() []string {
@@ -28,6 +29,9 @@ func (r ExtensionKernelReadiness) FailedComponents() []string {
 	}
 	if !r.RuntimeSupervisorReady {
 		failed = append(failed, "runtime_supervisor_ready")
+	}
+	if !r.LegacyCounterZero {
+		failed = append(failed, "legacy_counter_zero")
 	}
 	return failed
 }
@@ -45,5 +49,7 @@ func (c *Container) CheckExtensionKernelReadiness(_ context.Context) ExtensionKe
 		r.ScheduleServiceReady = c.ScheduleService.IsRunning()
 	}
 	r.RuntimeSupervisorReady = c.RuntimeSupervisor != nil
+	counter := GlobalLegacyCallCounter()
+	r.LegacyCounterZero = counter.LegacyFallbackTotal() == 0
 	return r
 }

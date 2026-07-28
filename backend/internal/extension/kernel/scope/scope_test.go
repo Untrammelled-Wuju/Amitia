@@ -2,6 +2,7 @@ package scope
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -158,15 +159,15 @@ func TestScopeResolution(t *testing.T) {
 			},
 		},
 		{
-			name: "resolve current character without id",
-			expr: WithPlaceholder(ScopeExpression{Operator: OpAND}, PHCurrentCharacter),
-			req:  ScopeResolveRequest{},
+			name:    "resolve current character without id",
+			expr:    WithPlaceholder(ScopeExpression{Operator: OpAND}, PHCurrentCharacter),
+			req:     ScopeResolveRequest{},
 			wantErr: true,
 		},
 		{
-			name:    "resolve global scope",
-			expr:    SingleScope(NewGlobalScope()),
-			req:     ScopeResolveRequest{},
+			name: "resolve global scope",
+			expr: SingleScope(NewGlobalScope()),
+			req:  ScopeResolveRequest{},
 			check: func(t *testing.T, scopes []ScopeRef) {
 				if len(scopes) != 1 || !scopes[0].IsGlobal() {
 					t.Error("expected global scope")
@@ -298,9 +299,9 @@ func TestScopeManager_Snapshot(t *testing.T) {
 	manager := NewScopeManager(store, evaluator)
 
 	snapshot, err := manager.Snapshot(ctx, ScopeResolveRequest{
-		Expression:     SingleScope(NewCharacterScope("char-1")),
-		CharacterID:    "char-1",
-		InvocationID:   "inv-1",
+		Expression:   SingleScope(NewCharacterScope("char-1")),
+		CharacterID:  "char-1",
+		InvocationID: "inv-1",
 	})
 	if err != nil {
 		t.Fatalf("Snapshot() error = %v", err)
@@ -408,6 +409,72 @@ func TestScopeManager_NoBinding(t *testing.T) {
 	})
 	if decision.Allowed {
 		t.Error("expected denied for nonexistent tool")
+	}
+}
+
+func TestScopeEvaluator_StrictContextRelations(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryScopeStore()
+	checker := &strictRelationChecker{
+		conversationOwned: true,
+		resourceOwned:     true,
+		invocationExists:  true,
+		invocationChild:   true,
+		sessionValid:      true,
+	}
+	evaluator := NewScopeEvaluator(store, checker)
+	manager := NewScopeManager(store, evaluator)
+	tests := []struct {
+		name    string
+		scope   ScopeRef
+		request ScopeEvaluationRequest
+		allowed bool
+	}{
+		{name: "resource missing id", scope: ScopeRef{Type: ScopeResource, ExtensionID: "ext-1", ResourceType: "file", ResourceID: "res-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1", ResourceType: "file"}},
+		{name: "resource exact", scope: ScopeRef{Type: ScopeResource, ExtensionID: "ext-1", ResourceType: "file", ResourceID: "res-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1", ResourceType: "file", ResourceID: "res-1"}, allowed: true},
+		{name: "invocation missing id", scope: ScopeRef{Type: ScopeInvocation, ExtensionID: "ext-1", InvocationID: "inv-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1"}},
+		{name: "invocation exact", scope: ScopeRef{Type: ScopeInvocation, ExtensionID: "ext-1", InvocationID: "inv-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1", InvocationID: "inv-1"}, allowed: true},
+		{name: "session missing id", scope: ScopeRef{Type: ScopeSession, ExtensionID: "ext-1", SessionID: "sess-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1", Generation: 2}},
+		{name: "session exact generation", scope: ScopeRef{Type: ScopeSession, ExtensionID: "ext-1", SessionID: "sess-1"}, request: ScopeEvaluationRequest{ExtensionID: "ext-1", SessionID: "sess-1", Generation: 2}, allowed: true},
+	}
+	for index, item := range tests {
+		subjectID := fmt.Sprintf("strict-%d", index)
+		if _, err := manager.Bind(ctx, ScopeBindRequest{SubjectType: SubjectTool, SubjectID: subjectID, Scope: item.scope, Source: SourceSystem}); err != nil {
+			t.Fatalf("bind %s: %v", item.name, err)
+		}
+		item.request.SubjectType = SubjectTool
+		item.request.SubjectID = subjectID
+		decision := manager.Evaluate(ctx, item.request)
+		if decision.Allowed != item.allowed {
+			t.Fatalf("%s allowed=%v reasons=%v", item.name, decision.Allowed, decision.Reasons)
+		}
+	}
+}
+
+func TestScopeEvaluator_RejectsInvalidRelationsAndAcceptsFutureExpiry(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryScopeStore()
+	checker := &strictRelationChecker{}
+	evaluator := NewScopeEvaluator(store, checker)
+	manager := NewScopeManager(store, evaluator)
+	binding, err := manager.Bind(ctx, ScopeBindRequest{SubjectType: SubjectTool, SubjectID: "conversation-tool", Scope: NewGlobalScope(), Source: SourceSystem})
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	binding.ExpiresAt = &future
+	if err := store.SaveBinding(ctx, binding); err != nil {
+		t.Fatal(err)
+	}
+	decision := manager.Evaluate(ctx, ScopeEvaluationRequest{SubjectType: SubjectTool, SubjectID: "conversation-tool", CharacterID: "char-1", ConversationID: "conv-1"})
+	if decision.Allowed {
+		t.Fatal("conversation outside character must be rejected")
+	}
+	checker.conversationOwned = true
+	manager.cache.Clear()
+	decision = manager.Evaluate(ctx, ScopeEvaluationRequest{SubjectType: SubjectTool, SubjectID: "conversation-tool", CharacterID: "char-1", ConversationID: "conv-1"})
+	if !decision.Allowed {
+		t.Fatalf("future expiry must remain active: %v", decision.Reasons)
 	}
 }
 
@@ -573,14 +640,51 @@ func TestScopeCache(t *testing.T) {
 
 type mockRelationChecker struct{}
 
-func (m *mockRelationChecker) ConversationBelongsToCharacter(conversationID, characterID string) bool {
+func (m *mockRelationChecker) ConversationBelongsToCharacter(context.Context, string, string) bool {
 	return true
 }
 
-func (m *mockRelationChecker) IsCharacterDeleted(characterID string) bool {
+func (m *mockRelationChecker) IsCharacterDeleted(context.Context, string) bool {
 	return false
 }
 
-func (m *mockRelationChecker) IsConversationDeleted(conversationID string) bool {
+func (m *mockRelationChecker) IsConversationDeleted(context.Context, string) bool {
 	return false
+}
+
+func (m *mockRelationChecker) ResourceOwnedBy(context.Context, string, string, string, string) bool {
+	return true
+}
+func (m *mockRelationChecker) InvocationOwnedBy(context.Context, string, string, string) bool {
+	return true
+}
+func (m *mockRelationChecker) InvocationIsChildOf(context.Context, string, string) bool { return true }
+func (m *mockRelationChecker) SessionValid(context.Context, string, string, string, int64) bool {
+	return true
+}
+
+type strictRelationChecker struct {
+	conversationOwned bool
+	resourceOwned     bool
+	invocationExists  bool
+	invocationChild   bool
+	sessionValid      bool
+}
+
+func (c *strictRelationChecker) ConversationBelongsToCharacter(context.Context, string, string) bool {
+	return c.conversationOwned
+}
+func (c *strictRelationChecker) IsCharacterDeleted(context.Context, string) bool    { return false }
+func (c *strictRelationChecker) IsConversationDeleted(context.Context, string) bool { return false }
+func (c *strictRelationChecker) ResourceOwnedBy(context.Context, string, string, string, string) bool {
+	return c.resourceOwned
+}
+func (c *strictRelationChecker) InvocationOwnedBy(context.Context, string, string, string) bool {
+	return c.invocationExists
+}
+func (c *strictRelationChecker) InvocationIsChildOf(context.Context, string, string) bool {
+	return c.invocationChild
+}
+func (c *strictRelationChecker) SessionValid(context.Context, string, string, string, int64) bool {
+	return c.sessionValid
 }

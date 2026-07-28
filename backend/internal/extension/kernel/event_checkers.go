@@ -65,10 +65,12 @@ func (a *EventScopeCheckerAdapter) CheckSubscriptionScope(ctx context.Context, d
 			return true, "", nil
 		}
 		req := scope.ScopeEvaluationRequest{
-			SubjectType: scope.SubjectExtension,
-			SubjectID:   def.ExtensionID,
-			ExtensionID: def.ExtensionID,
-			ModuleID:    def.ModuleID,
+			SubjectType:    scope.SubjectExtension,
+			SubjectID:      def.ExtensionID,
+			ExtensionID:    def.ExtensionID,
+			ModuleID:       def.ModuleID,
+			CharacterID:    envelope.CharacterID,
+			ConversationID: envelope.ConversationID,
 		}
 		decision := a.Manager.Evaluate(ctx, req)
 		if decision.Allowed {
@@ -85,10 +87,12 @@ func (a *EventScopeCheckerAdapter) CheckSubscriptionScope(ctx context.Context, d
 			return true, "", nil
 		}
 		req := scope.ScopeEvaluationRequest{
-			SubjectType: scope.SubjectExtension,
-			SubjectID:   def.ExtensionID,
-			ExtensionID: def.ExtensionID,
-			ModuleID:    def.ModuleID,
+			SubjectType:    scope.SubjectExtension,
+			SubjectID:      def.ExtensionID,
+			ExtensionID:    def.ExtensionID,
+			ModuleID:       def.ModuleID,
+			CharacterID:    envelope.CharacterID,
+			ConversationID: envelope.ConversationID,
 		}
 		decision := a.Manager.Evaluate(ctx, req)
 		if decision.Allowed {
@@ -101,12 +105,14 @@ func (a *EventScopeCheckerAdapter) CheckSubscriptionScope(ctx context.Context, d
 		return false, reason, nil
 	}
 	req := scope.ScopeEvaluationRequest{
-		SubjectType:  scope.SubjectExtension,
-		SubjectID:    def.ExtensionID,
-		ExtensionID:  def.ExtensionID,
-		ModuleID:     def.ModuleID,
-		ResourceType: "cross_extension_event",
-		ResourceID:   envelope.ProducerID,
+		SubjectType:    scope.SubjectExtension,
+		SubjectID:      def.ExtensionID,
+		ExtensionID:    def.ExtensionID,
+		ModuleID:       def.ModuleID,
+		CharacterID:    envelope.CharacterID,
+		ConversationID: envelope.ConversationID,
+		ResourceType:   "cross_extension_event",
+		ResourceID:     envelope.ProducerID,
 	}
 	decision := a.Manager.Evaluate(ctx, req)
 	if decision.Allowed {
@@ -132,7 +138,7 @@ func (a *EventDependencyCheckerAdapter) CheckSubscriptionDependencies(ctx contex
 		return true, "", nil
 	}
 	if a.Resolver == nil {
-		return true, "", nil
+		return false, "dependency_resolver_missing", nil
 	}
 	hasMissing := false
 	for _, dep := range def.DependencyRequirements {
@@ -188,15 +194,15 @@ func (a *EventRuntimeCheckerAdapter) CheckSubscriptionRuntime(ctx context.Contex
 		return true, "", nil
 	}
 	if a.Supervisor == nil {
-		return true, "", nil
+		return false, "runtime_supervisor_missing", nil
 	}
 	defID := runtime_supervisor.DefinitionID(fmt.Sprintf("%s/%s", def.ExtensionID, def.ModuleID))
 	snap := a.Supervisor.Snapshot(ctx, defID)
 	if len(snap.Instances) == 0 {
-		return true, "", nil
+		return false, "runtime_no_instance", nil
 	}
 	for _, inst := range snap.Instances {
-		if inst.Actual == runtime_supervisor.ActualReady || inst.Actual == runtime_supervisor.ActualStarting {
+		if inst.Actual == runtime_supervisor.ActualReady {
 			if inst.Health != runtime_supervisor.HealthUnhealthy {
 				return true, "", nil
 			}
@@ -205,7 +211,7 @@ func (a *EventRuntimeCheckerAdapter) CheckSubscriptionRuntime(ctx context.Contex
 			return false, "blocked_runtime", nil
 		}
 	}
-	return true, "", nil
+	return false, "runtime_not_ready", nil
 }
 
 type EventCircuitStateLookupAdapter struct {

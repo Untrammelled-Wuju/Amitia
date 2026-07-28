@@ -8,26 +8,26 @@ import (
 
 type ScopeBindRequest struct {
 	SubjectType ScopeSubjectType   `json:"subjectType"`
-	SubjectID   string            `json:"subjectId"`
-	Scope       ScopeRef          `json:"scope"`
+	SubjectID   string             `json:"subjectId"`
+	Scope       ScopeRef           `json:"scope"`
 	Source      ScopeBindingSource `json:"source"`
-	Metadata    map[string]any    `json:"metadata,omitempty"`
+	Metadata    map[string]any     `json:"metadata,omitempty"`
 }
 
 type ScopeBindingFilter struct {
-	SubjectType ScopeSubjectType `json:"subjectType,omitempty"`
-	SubjectID   string          `json:"subjectId,omitempty"`
-	ScopeType   ScopeType       `json:"scopeType,omitempty"`
+	SubjectType ScopeSubjectType  `json:"subjectType,omitempty"`
+	SubjectID   string            `json:"subjectId,omitempty"`
+	ScopeType   ScopeType         `json:"scopeType,omitempty"`
 	State       ScopeBindingState `json:"state,omitempty"`
 }
 
 type ScopeInvalidationFilter struct {
-	CharacterID    string `json:"characterId,omitempty"`
-	ConversationID string `json:"conversationId,omitempty"`
-	ExtensionID    string `json:"extensionId,omitempty"`
-	ModuleID       string `json:"moduleId,omitempty"`
+	CharacterID    string           `json:"characterId,omitempty"`
+	ConversationID string           `json:"conversationId,omitempty"`
+	ExtensionID    string           `json:"extensionId,omitempty"`
+	ModuleID       string           `json:"moduleId,omitempty"`
 	SubjectType    ScopeSubjectType `json:"subjectType,omitempty"`
-	SubjectID      string          `json:"subjectId,omitempty"`
+	SubjectID      string           `json:"subjectId,omitempty"`
 }
 
 type ScopeManager interface {
@@ -101,8 +101,8 @@ func (m *DefaultScopeManager) Unbind(ctx context.Context, bindingID string) erro
 }
 
 func (m *DefaultScopeManager) Evaluate(ctx context.Context, req ScopeEvaluationRequest) ScopeDecision {
-	if req.ParentSnapshot == nil {
-		key := cacheKey(req.SubjectType, req.SubjectID, req.CharacterID, req.ConversationID)
+	if cacheableEvaluation(req) {
+		key := cacheKey(req)
 		if cached, ok := m.cache.Get(key); ok {
 			return cached
 		}
@@ -114,12 +114,16 @@ func (m *DefaultScopeManager) Evaluate(ctx context.Context, req ScopeEvaluationR
 	return m.evaluator.Evaluate(ctx, req)
 }
 
+func cacheableEvaluation(req ScopeEvaluationRequest) bool {
+	return req.ParentSnapshot == nil && req.CharacterID == "" && req.ConversationID == "" && req.ResourceID == "" && req.InvocationID == "" && req.SessionID == ""
+}
+
 func (m *DefaultScopeManager) Snapshot(ctx context.Context, req ScopeResolveRequest) (ScopeSnapshot, error) {
 	scopes, err := ResolveScope(ctx, req)
 	if err != nil {
 		return ScopeSnapshot{}, fmt.Errorf("resolve scope: %w", err)
 	}
-	return CreateSnapshot(req.InvocationID, scopes, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID), nil
+	return CreateSnapshot(req.InvocationID, scopes, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID, req.Generation), nil
 }
 
 func (m *DefaultScopeManager) Invalidate(ctx context.Context, filter ScopeInvalidationFilter) error {
@@ -167,6 +171,6 @@ func (m *DefaultScopeManager) ListBindings(ctx context.Context, filter ScopeBind
 	return m.store.ListBindings(ctx, filter)
 }
 
-func cacheKey(subjectType ScopeSubjectType, subjectID, characterID, conversationID string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", subjectType, subjectID, characterID, conversationID)
+func cacheKey(req ScopeEvaluationRequest) string {
+	return fmt.Sprintf("%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%d", req.SubjectType, req.SubjectID, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID, req.ResourceType, req.ResourceID, req.InvocationID, req.SessionID, req.Generation)
 }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/episodic"
-	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -64,7 +63,6 @@ type Service interface {
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
-	SetSkillRuntime(*extension.Runtime)
 	SetToolRuntime(ModelToolRuntime)
 	SetHookInvoker(HookInvoker)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
@@ -116,7 +114,6 @@ type service struct {
 	llmWithTools       llmWithToolsFunc
 	outboxStore        OutboxStore
 	deliveryStore      DeliveryStore
-	skillRuntime       *extension.Runtime
 	toolRuntime        ModelToolRuntime
 	hookInvoker        HookInvoker
 	relTimeCoordinator *temporal.RelationshipTimeCoordinator
@@ -151,10 +148,6 @@ func (s *service) SetOutboxStore(store OutboxStore) {
 
 func (s *service) SetDeliveryStore(store DeliveryStore) {
 	s.deliveryStore = store
-}
-
-func (s *service) SetSkillRuntime(runtime *extension.Runtime) {
-	s.skillRuntime = runtime
 }
 
 func (s *service) SetToolRuntime(runtime ModelToolRuntime) {

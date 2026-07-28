@@ -18,7 +18,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
-	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
@@ -48,32 +47,6 @@ func (w *hostAPIAuditWriter) RecordCall(ctx context.Context, request host_api.Ca
 		request.CallID, request.Method, request.RuntimeIdentity.ExtensionID, result.Status)
 }
 
-type hostAPIPermissionChecker struct {
-	broker permissionCheckerAdapter
-}
-
-type permissionCheckerAdapter interface {
-	CheckHostAPIPermission(ctx context.Context, extID string, requirements []host_api.PermissionRequirement) error
-}
-
-func newHostAPIPermissionChecker() *hostAPIPermissionChecker {
-	return &hostAPIPermissionChecker{}
-}
-
-func (c *hostAPIPermissionChecker) Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, requirements []host_api.PermissionRequirement) error {
-	return nil
-}
-
-type hostAPIScopeChecker struct{}
-
-func newHostAPIScopeChecker() *hostAPIScopeChecker {
-	return &hostAPIScopeChecker{}
-}
-
-func (c *hostAPIScopeChecker) Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, scopeSnapshotID string, policy host_api.ScopePolicy) error {
-	return nil
-}
-
 type ExtensionStateStore interface {
 	Get(ctx context.Context, extensionID, moduleID, key string) (json.RawMessage, int64, bool, error)
 	Set(ctx context.Context, extensionID, moduleID, key string, value json.RawMessage) (int64, error)
@@ -94,6 +67,12 @@ type MemoryQueryService interface {
 	Query(ctx context.Context, extensionID string, query string, limit int) ([]json.RawMessage, error)
 }
 
+type UIHostNotifier interface {
+	Notify(ctx context.Context, extensionID string, title string, body string, severity string) error
+	Dialog(ctx context.Context, extensionID string, dialogID string, message string, buttons []string) (string, error)
+	Navigate(ctx context.Context, extensionID string, target string) error
+}
+
 type HostAPIRouteDeps struct {
 	StateStore          ExtensionStateStore
 	CharacterReader     CharacterReader
@@ -106,15 +85,20 @@ type HostAPIRouteDeps struct {
 	ToolRegistry        *capability.ToolRegistry
 	OperationRepository sqlite.OperationRepository
 	ExtensionRoot       string
+	UIHostNotifier      UIHostNotifier
 }
 
 type resourceHandle struct {
-	handleID string
-	realPath string
-	file     *os.File
-	readOnly bool
-	extensionID string
-	moduleID    string
+	handleID        string
+	realPath        string
+	file            *os.File
+	readOnly        bool
+	extensionID     string
+	moduleID        string
+	scopeSnapshotID string
+	generation      int64
+	owner           string
+	expiresAt       time.Time
 }
 
 type resourceHandleTable struct {
@@ -164,7 +148,22 @@ func (t *resourceHandleTable) closeAll(extensionID string) {
 	}
 }
 
+func (t *resourceHandleTable) cleanupExpired() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := time.Now().UTC()
+	for id, h := range t.handles {
+		if !h.expiresAt.IsZero() && now.After(h.expiresAt) {
+			if h.file != nil {
+				_ = h.file.Close()
+			}
+			delete(t.handles, id)
+		}
+	}
+}
+
 const maxToolExecutionDepth = 8
+const resourceHandleTTL = 30 * time.Minute
 
 func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRouteDeps) error {
 	handleTable := newResourceHandleTable()
@@ -384,18 +383,23 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				handleID := fmt.Sprintf("res-%s", uuid.NewString())
 				h := &resourceHandle{
-					handleID: handleID,
-					realPath: realPath,
-					file:     f,
-					readOnly: readOnly,
-					extensionID: extID,
-					moduleID:    string(req.RuntimeIdentity.ModuleID),
+					handleID:        handleID,
+					realPath:        realPath,
+					file:            f,
+					readOnly:        readOnly,
+					extensionID:     extID,
+					moduleID:        string(req.RuntimeIdentity.ModuleID),
+					scopeSnapshotID: req.ScopeSnapshotID,
+					generation:      req.RuntimeIdentity.Generation,
+					owner:           extID,
+					expiresAt:       time.Now().UTC().Add(resourceHandleTTL),
 				}
 				handleTable.put(h)
 				output, _ := json.Marshal(map[string]any{
 					"handleId": handleID,
 					"path":     p.Path,
 					"mode":     p.Mode,
+					"expiresAt": h.expiresAt.Format(time.RFC3339),
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
@@ -430,6 +434,16 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
 						Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "handle does not belong to caller"},
+					}, nil
+				}
+				if !h.expiresAt.IsZero() && time.Now().UTC().After(h.expiresAt) {
+					if h.file != nil {
+						_ = h.file.Close()
+					}
+					handleTable.remove(p.HandleID)
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "handle expired"},
 					}, nil
 				}
 				if p.Length <= 0 || p.Length > 1024*1024 {
@@ -615,13 +629,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				if deps.CharacterReader == nil {
-					output, _ := json.Marshal(map[string]any{
-						"characterId": p.CharacterID,
-						"available":   false,
-					})
 					return host_api.CallResult{
-						Status: host_api.StatusSuccess,
-						Output: output,
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "character reader not configured"},
 					}, nil
 				}
 				data, available, err := deps.CharacterReader.ReadCharacter(ctx, p.CharacterID)
@@ -660,13 +670,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				if deps.ConversationReader == nil {
-					output, _ := json.Marshal(map[string]any{
-						"messages": []any{},
-						"hasMore":  false,
-					})
 					return host_api.CallResult{
-						Status: host_api.StatusSuccess,
-						Output: output,
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation reader not configured"},
 					}, nil
 				}
 				if p.Limit <= 0 || p.Limit > 100 {
@@ -706,13 +712,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				if deps.MemoryQueryService == nil {
-					output, _ := json.Marshal(map[string]any{
-						"results": []any{},
-						"total":   0,
-					})
 					return host_api.CallResult{
-						Status: host_api.StatusSuccess,
-						Output: output,
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "memory query service not configured"},
 					}, nil
 				}
 				if p.Limit <= 0 || p.Limit > 50 {
@@ -827,7 +829,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					EventTypeID:    event.EventTypeID(p.EventType),
 					Entry:          p.Entry,
 					Enabled:        true,
-					Generation:     req.RuntimeIdentity.Generation,
+					Generation:      req.RuntimeIdentity.Generation,
 					CreatedAt:      time.Now().UTC(),
 					UpdatedAt:      time.Now().UTC(),
 				}
@@ -1051,6 +1053,16 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "toolId is required"},
 					}, nil
 				}
+				depth := 0
+				if req.ParentID != "" {
+					depth = extractDepth(req.ParentID) + 1
+				}
+				if depth >= maxToolExecutionDepth {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("tool execution depth limit (%d) exceeded", maxToolExecutionDepth)},
+					}, nil
+				}
 				invocation := capability.ToolInvocationContext{
 					InvocationID: req.InvocationID,
 					ParentID:     req.ParentID,
@@ -1058,6 +1070,12 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					ModuleID:     string(req.RuntimeIdentity.ModuleID),
 					Source:       capability.InvocationSourcePlugin,
 					TraceID:      req.TraceID,
+					Metadata: map[string]any{
+						"operationId":      fmt.Sprintf("op-%s", uuid.NewString()),
+						"runtimeInstanceId": req.RuntimeIdentity.InstanceID,
+						"generation":       req.RuntimeIdentity.Generation,
+						"depth":            depth,
+					},
 				}
 				if invocation.InvocationID == "" {
 					invocation.InvocationID = fmt.Sprintf("hostapi-%s", uuid.NewString())
@@ -1073,7 +1091,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					"status":       string(result.Status),
 					"content":      result.Content,
 					"structured":   json.RawMessage(result.Structured),
-					"error":       result.Error,
+					"error":        result.Error,
 				})
 				if result.Status != capability.ToolResultStatusSuccess {
 					return host_api.CallResult{
@@ -1097,9 +1115,40 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectNone,
 			timeout:         3 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.UIHostNotifier == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+					}, nil
+				}
+				var p struct {
+					Title    string `json:"title"`
+					Body     string `json:"body"`
+					Severity string `json:"severity"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if p.Title == "" {
+					p.Title = "Extension Notification"
+				}
+				if p.Severity == "" {
+					p.Severity = "info"
+				}
+				extID := string(req.RuntimeIdentity.ExtensionID)
+				if err := deps.UIHostNotifier.Notify(ctx, extID, p.Title, p.Body, p.Severity); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"ok": true})
 				return host_api.CallResult{
-					Status: host_api.StatusFailed,
-					Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host not available"},
+					Status: host_api.StatusSuccess,
+					Output: output,
 				}, nil
 			},
 		},
@@ -1109,9 +1158,50 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectNone,
 			timeout:         30 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.UIHostNotifier == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+					}, nil
+				}
+				var p struct {
+					DialogID string   `json:"dialogId"`
+					Message  string   `json:"message"`
+					Buttons  []string `json:"buttons"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if p.Message == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "message is required"},
+					}, nil
+				}
+				if p.DialogID == "" {
+					p.DialogID = fmt.Sprintf("dialog-%s", uuid.NewString())
+				}
+				if len(p.Buttons) == 0 {
+					p.Buttons = []string{"OK"}
+				}
+				extID := string(req.RuntimeIdentity.ExtensionID)
+				result, err := deps.UIHostNotifier.Dialog(ctx, extID, p.DialogID, p.Message, p.Buttons)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{
+					"dialogId": p.DialogID,
+					"result":   result,
+				})
 				return host_api.CallResult{
-					Status: host_api.StatusFailed,
-					Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host not available"},
+					Status: host_api.StatusSuccess,
+					Output: output,
 				}, nil
 			},
 		},
@@ -1121,9 +1211,38 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			sideEffectLevel: host_api.SideEffectNone,
 			timeout:         3 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.UIHostNotifier == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+					}, nil
+				}
+				var p struct {
+					Target string `json:"target"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if p.Target == "" {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "target is required"},
+					}, nil
+				}
+				extID := string(req.RuntimeIdentity.ExtensionID)
+				if err := deps.UIHostNotifier.Navigate(ctx, extID, p.Target); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"ok": true, "target": p.Target})
 				return host_api.CallResult{
-					Status: host_api.StatusFailed,
-					Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host not available"},
+					Status: host_api.StatusSuccess,
+					Output: output,
 				}, nil
 			},
 		},
@@ -1134,11 +1253,17 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 		if perm == nil {
 			return fmt.Errorf("host_api: no permission mapping for method %s, refusing to register", rd.method)
 		}
+		scopePolicy := host_api.RouteScopeForMethod(rd.method)
+		if host_api.IsDataRouteMethod(rd.method) {
+			if scopePolicy.Namespaced == false && len(scopePolicy.RequireRoles) == 0 {
+				return fmt.Errorf("host_api: empty scope policy for data route %s, refusing to register", rd.method)
+			}
+		}
 		route := host_api.Route{
 			Method:          rd.method,
 			Version:         1,
 			Permission:      perm,
-			ScopePolicy:     host_api.RouteScopeForMethod(rd.method),
+			ScopePolicy:     scopePolicy,
 			RiskLevel:       rd.riskLevel,
 			SideEffectLevel: rd.sideEffectLevel,
 			Timeout:         rd.timeout,
@@ -1169,4 +1294,23 @@ func isPathSafe(baseDir, targetPath string) bool {
 		return false
 	}
 	return true
+}
+
+func extractDepth(parentID string) int {
+	if parentID == "" {
+		return 0
+	}
+	parts := strings.Split(parentID, ":")
+	if len(parts) < 2 {
+		return 0
+	}
+	var d int
+	for _, c := range parts[len(parts)-1] {
+		if c >= '0' && c <= '9' {
+			d = d*10 + int(c-'0')
+		} else {
+			break
+		}
+	}
+	return d
 }

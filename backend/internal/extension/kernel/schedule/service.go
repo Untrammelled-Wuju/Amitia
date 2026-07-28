@@ -112,6 +112,9 @@ func (s *ScheduleService) Start(ctx context.Context) error {
 	s.running = true
 
 	if err := s.recovery.Recover(s.ctx); err != nil {
+		s.cancel()
+		s.running = false
+		return fmt.Errorf("schedule recovery: %w", err)
 	}
 
 	if err := s.scanner.Start(s.ctx); err != nil {
@@ -340,16 +343,16 @@ func (s *ScheduleService) SkipNext(ctx context.Context, scheduleID string) error
 	}
 	idempotencyKey := GenerateIdempotencyKey(scheduleID, skippedAt, state.Generation)
 	trigger := &ScheduleTriggerRecord{
-		TriggerID:      "trigger-skip-" + uuid.NewString(),
-		ScheduleID:     scheduleID,
-		ScheduledAt:    skippedAt.UTC(),
-		EffectiveAt:    skippedAt.UTC(),
-		IdempotencyKey: idempotencyKey,
-		Status:         RunStatusSkipped,
-		Generation:     state.Generation,
+		TriggerID:       "trigger-skip-" + uuid.NewString(),
+		ScheduleID:      scheduleID,
+		ScheduledAt:     skippedAt.UTC(),
+		EffectiveAt:     skippedAt.UTC(),
+		IdempotencyKey:  idempotencyKey,
+		Status:          RunStatusSkipped,
+		Generation:      state.Generation,
 		OverlapDecision: "skipped_by_user",
-		CreatedAt:      now.UTC(),
-		UpdatedAt:      now.UTC(),
+		CreatedAt:       now.UTC(),
+		UpdatedAt:       now.UTC(),
 	}
 	if err := s.store.PutTrigger(ctx, trigger); err != nil {
 		return err

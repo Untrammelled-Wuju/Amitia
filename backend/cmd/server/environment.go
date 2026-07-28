@@ -230,7 +230,7 @@ func (e *Environment) restartService(svc *Service) error {
 func (e *Environment) waitForHealthy(svc *Service) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 60; i++ {
 		time.Sleep(1 * time.Second)
 		resp, err := client.Get(svc.HealthURL)
 		if err == nil && resp.StatusCode == 200 {
@@ -241,7 +241,7 @@ func (e *Environment) waitForHealthy(svc *Service) error {
 			resp.Body.Close()
 		}
 	}
-	return fmt.Errorf("%s 在 30s 内未就绪", svc.Name)
+	return fmt.Errorf("%s 在 60s 内未就绪", svc.Name)
 }
 
 func (e *Environment) StopAll() {
@@ -342,12 +342,9 @@ func startEnvironment() *Environment {
 		}
 	}
 
-	sidecarCmd := "npx"
-	sidecarArgs := []string{"tsx", "src/index.ts"}
+	sidecarCmd := filepath.Join(env.workspace, "backend", "node.exe")
+	sidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
 	sidecarDir := "backend/sidecar"
-	if runtime.GOOS == "windows" {
-		sidecarCmd = "npx.cmd"
-	}
 	if useBundled {
 		sidecarCmd = bundledNodePath(bundledRoot)
 		sidecarArgs = []string{"launcher.mjs"}
@@ -355,8 +352,8 @@ func startEnvironment() *Environment {
 	}
 	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 19876, nil)
 
-	qqSidecarCmd := "npx.cmd"
-	qqSidecarArgs := []string{"tsx", "src/index.ts"}
+	qqSidecarCmd := filepath.Join(env.workspace, "backend", "node.exe")
+	qqSidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
 	qqSidecarDir := "backend/qq-sidecar"
 	if useBundled {
 		qqSidecarCmd = bundledNodePath(bundledRoot)

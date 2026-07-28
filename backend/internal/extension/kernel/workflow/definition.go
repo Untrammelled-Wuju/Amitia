@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"encoding/json"
+
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type WorkflowLimits struct {
@@ -21,12 +23,13 @@ type WorkflowLimits struct {
 	MaxEventsEmitted       int   `json:"maxEventsEmitted"`
 	MaxSchedulesCreated    int   `json:"maxSchedulesCreated"`
 	MaxSideEffects         int   `json:"maxSideEffects"`
+	MaxConcurrency         int   `json:"maxConcurrency"`
 }
 
 type WorkflowStepInput struct {
-	Input  json.RawMessage  `json:"input"`
-	When   *json.RawMessage `json:"when,omitempty"`
-	OnError WorkflowOnError `json:"onError,omitempty"`
+	Input   json.RawMessage  `json:"input"`
+	When    *json.RawMessage `json:"when,omitempty"`
+	OnError WorkflowOnError  `json:"onError,omitempty"`
 }
 
 type WorkflowOnError struct {
@@ -35,30 +38,35 @@ type WorkflowOnError struct {
 }
 
 type WorkflowNode struct {
-	ID        string            `json:"id"`
-	Type      string            `json:"type"`
-	DependsOn []string          `json:"dependsOn,omitempty"`
-	Step      WorkflowStepInput `json:"step"`
+	ID          string                    `json:"id"`
+	Type        string                    `json:"type"`
+	DependsOn   []string                  `json:"dependsOn,omitempty"`
+	TargetID    string                    `json:"targetId,omitempty"`
+	Runtime     capability.RuntimeBinding `json:"runtime,omitempty"`
+	Permissions []string                  `json:"permissions,omitempty"`
+	Scope       string                    `json:"scope,omitempty"`
+	Step        WorkflowStepInput         `json:"step"`
 }
 
 type WorkflowDefinition struct {
-	SchemaVersion    string            `json:"schemaVersion"`
-	ID               string            `json:"id"`
-	ExtensionID      string            `json:"extensionId,omitempty"`
-	ModuleID         string            `json:"moduleId,omitempty"`
-	Name             string            `json:"name"`
-	Description      string            `json:"description"`
-	InputSchema      json.RawMessage   `json:"inputSchema"`
-	OutputSchema     json.RawMessage   `json:"outputSchema"`
-	Nodes            []WorkflowNode    `json:"nodes"`
-	Permissions      []string          `json:"permissions,omitempty"`
-	Scope            string            `json:"scope,omitempty"`
-	CallableByAgent  bool              `json:"callableByAgent"`
-	Enabled          bool              `json:"enabled"`
-	HasSideEffects   bool              `json:"hasSideEffects,omitempty"`
-	Idempotent       bool              `json:"idempotent,omitempty"`
-	Limits           WorkflowLimits    `json:"limits,omitempty"`
-	Version          string            `json:"version,omitempty"`
-	Source           string            `json:"source,omitempty"`
-	Metadata         map[string]any    `json:"metadata,omitempty"`
+	SchemaVersion   string          `json:"schemaVersion"`
+	ID              string          `json:"id"`
+	ExtensionID     string          `json:"extensionId,omitempty"`
+	ModuleID        string          `json:"moduleId,omitempty"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	InputSchema     json.RawMessage `json:"inputSchema"`
+	OutputSchema    json.RawMessage `json:"outputSchema"`
+	Nodes           []WorkflowNode  `json:"nodes"`
+	Permissions     []string        `json:"permissions,omitempty"`
+	Scope           string          `json:"scope,omitempty"`
+	CallableByAgent bool            `json:"callableByAgent"`
+	Enabled         bool            `json:"enabled"`
+	HasSideEffects  bool            `json:"hasSideEffects,omitempty"`
+	Idempotent      bool            `json:"idempotent,omitempty"`
+	Limits          WorkflowLimits  `json:"limits,omitempty"`
+	Version         string          `json:"version,omitempty"`
+	Source          string          `json:"source,omitempty"`
+	Metadata        map[string]any  `json:"metadata,omitempty"`
+	DefinitionHash  string          `json:"definitionHash,omitempty"`
 }

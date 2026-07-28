@@ -65,6 +65,14 @@ func (s *TaskRuntimeService) PutTaskDefinition(ctx context.Context, def *TaskDef
 	return s.store.PutTaskDefinition(ctx, def)
 }
 
+func (s *TaskRuntimeService) DeleteTaskDefinition(ctx context.Context, defID string) error {
+	return s.store.DeleteTaskDefinition(ctx, defID)
+}
+
+func (s *TaskRuntimeService) DeleteByExtension(ctx context.Context, extensionID string) error {
+	return s.store.DeleteByExtension(ctx, extensionID)
+}
+
 func (s *TaskRuntimeService) ListTaskDefinitions(ctx context.Context, extensionID string) ([]*TaskDefinition, error) {
 	return s.store.ListTaskDefinitions(ctx, extensionID)
 }

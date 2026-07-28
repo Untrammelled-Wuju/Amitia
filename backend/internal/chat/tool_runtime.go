@@ -135,18 +135,3 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 	}
 	return out
 }
-
-func skillResultToOutcome(r extension.SkillResult, found bool) toolExecOutcome {
-	out := toolExecOutcome{
-		VisibleText: r.VisibleText,
-		Status:      string(r.Status),
-		ForceVoice:  r.ForceVoice,
-		Output:      r.Output,
-		Found:       found,
-	}
-	if r.Error != nil {
-		out.ErrorCode = r.Error.Code
-		out.HasError = true
-	}
-	return out
-}

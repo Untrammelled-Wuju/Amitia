@@ -25,6 +25,8 @@ func (g *ScopeGate) Evaluate(ctx context.Context, tool capability.ToolDefinition
 			ConversationID: inv.ConversationID,
 			ExtensionID:    inv.ExtensionID,
 			ModuleID:       inv.ModuleID,
+			InvocationID:   inv.InvocationID,
+			Generation:     inv.Generation,
 		})
 		if !decision.Allowed {
 			return fmt.Errorf("scope denied: %v", decision.Reasons)

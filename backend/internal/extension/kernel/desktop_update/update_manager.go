@@ -53,6 +53,7 @@ type UpdateManager struct {
 	genCounter      int64
 	currentVersions map[string]string
 	registryClients map[string]*RegistryClient
+	candidates      map[string][]ExtensionUpdateMetadata
 }
 
 func NewUpdateManager(dataDir, hostVersion string) *UpdateManager {
@@ -80,7 +81,9 @@ func NewUpdateManager(dataDir, hostVersion string) *UpdateManager {
 		genCounter:      0,
 		currentVersions: make(map[string]string),
 		registryClients: make(map[string]*RegistryClient),
+		candidates:      make(map[string][]ExtensionUpdateMetadata),
 	}
+	mgr.restoreState()
 
 	SetDownloadStateProvider(func(operationID string) (*DownloadState, bool) {
 		return mgr.downloads.GetDownloadState(operationID)
@@ -89,18 +92,19 @@ func NewUpdateManager(dataDir, hostVersion string) *UpdateManager {
 	return mgr
 }
 
-func (m *UpdateManager) Sources() *UpdateSourceRegistry  { return m.sources }
-func (m *UpdateManager) Downloads() *DownloadManager      { return m.downloads }
-func (m *UpdateManager) Journal() *UpdateJournal          { return m.journal }
-func (m *UpdateManager) Preflight() *PreflightChecker     { return m.preflight }
-func (m *UpdateManager) Health() *HealthChecker           { return m.health }
-func (m *UpdateManager) StateMachine() *StateMachine      { return m.stateMachine }
-func (m *UpdateManager) Recovery() *RecoveryService       { return m.recovery }
+func (m *UpdateManager) Sources() *UpdateSourceRegistry { return m.sources }
+func (m *UpdateManager) Downloads() *DownloadManager    { return m.downloads }
+func (m *UpdateManager) Journal() *UpdateJournal        { return m.journal }
+func (m *UpdateManager) Preflight() *PreflightChecker   { return m.preflight }
+func (m *UpdateManager) Health() *HealthChecker         { return m.health }
+func (m *UpdateManager) StateMachine() *StateMachine    { return m.stateMachine }
+func (m *UpdateManager) Recovery() *RecoveryService     { return m.recovery }
 
 func (m *UpdateManager) SetCurrentVersion(extensionID, version string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.currentVersions[extensionID] = version
+	m.mu.Unlock()
+	m.persistState()
 }
 
 func (m *UpdateManager) GetCurrentVersion(extensionID string) string {
@@ -114,6 +118,7 @@ func (m *UpdateManager) transitionState(op *UpdateOperation, target UpdateState)
 		return err
 	}
 	op.Status = target
+	m.persistState()
 	return nil
 }
 
@@ -131,6 +136,7 @@ func (m *UpdateManager) failOperation(op *UpdateOperation, errCode, errMsg strin
 	m.mu.Lock()
 	delete(m.activeByExt, op.ExtensionID)
 	m.mu.Unlock()
+	m.persistState()
 }
 
 func (m *UpdateManager) compensate(op *UpdateOperation, reason string) {
@@ -172,9 +178,18 @@ func (m *UpdateManager) compensate(op *UpdateOperation, reason string) {
 	m.mu.Lock()
 	delete(m.activeByExt, op.ExtensionID)
 	m.mu.Unlock()
+	m.persistState()
 }
 
 func (m *UpdateManager) CheckForUpdates(ctx context.Context, extensionID string) ([]ExtensionUpdateMetadata, error) {
+	return m.checkForUpdates(ctx, extensionID, false)
+}
+
+func (m *UpdateManager) CheckForUpdatesDetailed(ctx context.Context, extensionID string) ([]ExtensionUpdateMetadata, error) {
+	return m.checkForUpdates(ctx, extensionID, true)
+}
+
+func (m *UpdateManager) checkForUpdates(ctx context.Context, extensionID string, reportSourceErrors bool) ([]ExtensionUpdateMetadata, error) {
 	m.mu.RLock()
 	if activeOpID, ok := m.activeByExt[extensionID]; ok {
 		if op, exists := m.operations[activeOpID]; exists && !m.stateMachine.IsTerminal(op.Status) {
@@ -185,6 +200,7 @@ func (m *UpdateManager) CheckForUpdates(ctx context.Context, extensionID string)
 	m.mu.RUnlock()
 
 	var results []ExtensionUpdateMetadata
+	var queryErr error
 
 	for _, source := range m.sources.ListEnabled() {
 		if !source.IsTrusted() {
@@ -195,7 +211,11 @@ func (m *UpdateManager) CheckForUpdates(ctx context.Context, extensionID string)
 		case SourceTypeLocalFile:
 			continue
 		case SourceTypeOfficialRegistry, SourceTypePublisherRegistry, SourceTypeCustomRegistry:
-			meta := m.queryRegistry(ctx, source, extensionID)
+			meta, err := m.queryRegistry(ctx, source, extensionID)
+			if err != nil {
+				queryErr = err
+				continue
+			}
 			if meta != nil {
 				currentVersion := m.GetCurrentVersion(extensionID)
 				if currentVersion != "" {
@@ -211,7 +231,13 @@ func (m *UpdateManager) CheckForUpdates(ctx context.Context, extensionID string)
 			}
 		}
 	}
-
+	if reportSourceErrors && len(results) == 0 && queryErr != nil {
+		return nil, queryErr
+	}
+	m.mu.Lock()
+	m.candidates[extensionID] = append([]ExtensionUpdateMetadata(nil), results...)
+	m.mu.Unlock()
+	m.persistState()
 	return results, nil
 }
 
@@ -222,17 +248,20 @@ func (m *UpdateManager) getRegistryClient(source ExtensionUpdateSource) *Registr
 		return client
 	}
 	client := NewRegistryClient(source.BaseURL)
+	if encoded := os.Getenv("AMITIA_REGISTRY_PUBLIC_KEY"); encoded != "" {
+		_ = client.SetPublicKeyBase64(encoded)
+	}
 	m.registryClients[source.SourceID] = client
 	return client
 }
 
-func (m *UpdateManager) queryRegistry(ctx context.Context, source ExtensionUpdateSource, extensionID string) *ExtensionUpdateMetadata {
+func (m *UpdateManager) queryRegistry(ctx context.Context, source ExtensionUpdateSource, extensionID string) (*ExtensionUpdateMetadata, error) {
 	client := m.getRegistryClient(source)
 	meta, err := client.QueryExtension(ctx, extensionID)
-	if err != nil || meta == nil {
-		return nil
+	if err != nil {
+		return nil, err
 	}
-	return meta
+	return meta, nil
 }
 
 func (m *UpdateManager) CreateUpdateOperation(ctx context.Context, extensionID string, metadata ExtensionUpdateMetadata) (*UpdateOperation, error) {
@@ -287,6 +316,7 @@ func (m *UpdateManager) CreateUpdateOperation(ctx context.Context, extensionID s
 		StartedAt:   op.StartedAt,
 		FinishedAt:  &op.StartedAt,
 	})
+	m.persistState()
 
 	return op, nil
 }
@@ -892,11 +922,11 @@ func (m *UpdateManager) CancelUpdate(ctx context.Context, operationID string) er
 	m.mu.Unlock()
 
 	m.journal.Record(JournalEntry{
-		OperationID: operationID,
-		Step:        "cancel",
-		Status:      JournalStatusCompleted,
-		StartedAt:   now,
-		FinishedAt:  &now,
+		OperationID:  operationID,
+		Step:         "cancel",
+		Status:       JournalStatusCompleted,
+		StartedAt:    now,
+		FinishedAt:   &now,
 		Compensation: "operation cancelled by user",
 	})
 

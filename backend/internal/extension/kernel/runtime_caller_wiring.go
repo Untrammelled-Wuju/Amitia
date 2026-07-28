@@ -49,10 +49,13 @@ func makeWorkflowCallFunc(executor *workflow.WorkflowExecutor) capability.Workfl
 	}
 }
 
-func (c *Container) WireMCPAdapter(caller capability.MCPCallFunc, health capability.MCPHealthFunc) {
+func (c *Container) WireMCPAdapter(caller capability.MCPCallFunc, health capability.MCPHealthFunc, postProcessor capability.MCPPostProcessor) {
 	if c == nil || c.AdapterRegistry == nil {
 		return
 	}
 	mcpAdapter := capability.NewMCPRuntimeAdapter(caller, health)
+	if postProcessor != nil {
+		mcpAdapter.SetPostProcessor(postProcessor)
+	}
 	c.AdapterRegistry.Register(capability.RuntimeTypeMCP, mcpAdapter)
 }

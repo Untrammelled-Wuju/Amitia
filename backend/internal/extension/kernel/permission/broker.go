@@ -45,6 +45,14 @@ func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage 
 	}
 }
 
+func (b *DefaultPermissionBroker) Close() error {
+	if b == nil || b.cache == nil {
+		return nil
+	}
+	b.cache.Close()
+	return nil
+}
+
 func (b *DefaultPermissionBroker) SetTrustLevelChecker(checker TrustLevelChecker) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

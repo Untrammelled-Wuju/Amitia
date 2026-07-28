@@ -100,6 +100,24 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		r.container.ContributionInstaller.ActivateContributions(ctx, extID)
 	}
 
+	if r.container.RuntimeSupervisor != nil {
+		for _, mod := range modules {
+			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+				spec := runtime_supervisor.InstanceSpec{
+					DefinitionID: runtime_supervisor.DefinitionID(extensionID),
+					ExtensionID:  extID,
+					ModuleID:     mod.ID,
+					RuntimeType:  mod.Runtime.Type,
+				}
+				r.container.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
+					DefinitionID: runtime_supervisor.DefinitionID(extensionID),
+					Desired:      runtime_supervisor.DesiredRunning,
+					Spec:         spec,
+				})
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -143,6 +161,13 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		_ = r.container.EnablementStore.SetDesiredRuntime(ctx, modSubject, enablement.DesiredRuntimeStopped)
 	}
 
+	if r.container.RuntimeSupervisor != nil {
+		snap := r.container.RuntimeSupervisor.Snapshot(ctx, runtime_supervisor.DefinitionID(extensionID))
+		for _, instance := range snap.Instances {
+			_ = r.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonDisable)
+		}
+	}
+
 	r.container.UIHost.DisableExtension(ui_contribution.ExtensionID(extensionID))
 	r.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(extensionID))
 
@@ -177,6 +202,19 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 
 	if r.container.ContributionInstaller != nil {
 		r.container.ContributionInstaller.UninstallContributions(ctx, extID)
+	}
+
+	if r.container.HookService != nil && r.container.HookService.Lifecycle != nil {
+		_ = r.container.HookService.Lifecycle.UninstallByExtension(ctx, extensionID)
+	}
+	if r.container.EventService != nil {
+		_ = r.container.EventService.RemoveSubscriptionsByExtension(ctx, extensionID)
+	}
+	if r.container.ScheduleService != nil {
+		_ = r.container.ScheduleService.DeleteAllByExtension(ctx, extensionID)
+	}
+	if r.container.TaskRuntimeService != nil {
+		_ = r.container.TaskRuntimeService.DeleteByExtension(ctx, extensionID)
 	}
 
 	_ = r.container.ContributionRepository.DeleteContributions(ctx, extID)

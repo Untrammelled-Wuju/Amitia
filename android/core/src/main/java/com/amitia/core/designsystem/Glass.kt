@@ -4,18 +4,14 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.CompositionLocalProvider
@@ -101,26 +97,11 @@ fun AmitiaGlassSurface(
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val config = amitiaGlassConfig(level, isDark)
-    val context = LocalContext.current
-    val useRealBlur = remember(isBlurEnabled, enabled) {
-        GlassPerformancePolicy.shouldUseRealBlur(
-            sdkInt = Build.VERSION.SDK_INT,
-            isLowPowerMode = false,
-            isBlurEnabled = isBlurEnabled && enabled
-        )
-    }
     val finalShape = shape ?: RoundedCornerShape(config.cornerRadius)
 
     Box(
         modifier = modifier
             .clip(finalShape)
-            .then(
-                if (useRealBlur) {
-                    Modifier.blur(config.blurRadius)
-                } else {
-                    Modifier.graphicsLayer { alpha = 1f }
-                }
-            )
             .background(config.fillColor)
             .border(1.dp, config.borderColor, finalShape)
     ) {

@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.amitia.core.database.dao.CharacterDao
 import com.amitia.core.database.dao.ConversationDao
 import com.amitia.core.database.dao.DraftDao
+import com.amitia.core.database.dao.ExtensionInstallationDao
 import com.amitia.core.database.dao.MessageDao
 import com.amitia.core.database.dao.PendingRetryDao
 import com.amitia.core.database.dao.ProactiveDao
@@ -52,4 +53,8 @@ object DatabaseModule {
 
     @Provides
     fun providePendingRetryDao(db: AmitiaDatabase): PendingRetryDao = db.pendingRetryDao()
+
+    @Provides
+    fun provideExtensionInstallationDao(db: AmitiaDatabase): ExtensionInstallationDao =
+        db.extensionInstallationDao()
 }

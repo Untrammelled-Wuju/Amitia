@@ -3,17 +3,16 @@ package schedule
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 type RecoveryService struct {
-	store    ScheduleStore
-	clock    Clock
-	config   ScheduleConfig
-	calc     *ScheduleCalculator
-	misfire  *MisfireService
-	retry    *RetryService
-	circuit  *CircuitService
+	store   ScheduleStore
+	clock   Clock
+	config  ScheduleConfig
+	calc    *ScheduleCalculator
+	misfire *MisfireService
+	retry   *RetryService
+	circuit *CircuitService
 }
 
 func NewRecoveryService(
@@ -70,7 +69,12 @@ func (r *RecoveryService) Recover(ctx context.Context) error {
 		r.recoverPausedSchedule(ctx, state)
 	}
 
-	triggeringTriggers, _ := r.store.ListDueTriggers(ctx, now.Add(24*time.Hour), 100)
+	triggeringTriggers := make([]*ScheduleTriggerRecord, 0)
+	if recoverableStore, ok := r.store.(interface {
+		ListTriggersByStatuses(context.Context, []ScheduleRunStatus, int) ([]*ScheduleTriggerRecord, error)
+	}); ok {
+		triggeringTriggers, _ = recoverableStore.ListTriggersByStatuses(ctx, []ScheduleRunStatus{RunStatusLeased, RunStatusTriggering, RunStatusRunning, RunStatusRecoveryRequired}, 100)
+	}
 	for _, trigger := range triggeringTriggers {
 		if trigger == nil {
 			continue
@@ -137,22 +141,10 @@ func (r *RecoveryService) recoverPausedSchedule(ctx context.Context, state *Sche
 }
 
 func (r *RecoveryService) recoverStaleTrigger(ctx context.Context, trigger *ScheduleTriggerRecord) {
-	now := r.clock.Now()
-
-	if trigger.LeaseExpiresAt != nil && trigger.LeaseExpiresAt.Before(now) {
-		_ = r.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusWaiting, map[string]any{
-			"lease_owner":      nil,
-			"lease_expires_at": nil,
-			"status":           RunStatusWaiting,
-		})
-		return
-	}
-
-	if trigger.Status == RunStatusRunning || trigger.Status == RunStatusTriggering {
-		_ = r.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusRecoveryRequired, map[string]any{
-			"status":      RunStatusRecoveryRequired,
-			"error_code":  "RECOVERY_REQUIRED",
-			"error_message": "trigger was in active state during recovery",
-		})
-	}
+	_ = r.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusWaiting, map[string]any{
+		"lease_owner":      nil,
+		"lease_expires_at": nil,
+		"error_code":       nil,
+		"error_message":    nil,
+	})
 }

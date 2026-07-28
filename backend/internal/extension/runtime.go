@@ -126,31 +126,6 @@ func (r *Runtime) Close(ctx context.Context) error {
 	return r.PluginManager.Stop(ctx)
 }
 
-func (r *Runtime) BeforePrompt(ctx context.Context, scope ExecutionScope) []ContextContribution {
-	if r == nil || r.PluginManager == nil {
-		return nil
-	}
-	snapshot, err := r.pluginSnapshot(ctx, scope)
-	if err != nil {
-		return nil
-	}
-	return r.PluginManager.DispatchBeforePrompt(ctx, snapshot)
-}
-
-func (r *Runtime) AfterReply(scope ExecutionScope, reply ReplyView) bool {
-	if r == nil || r.PluginManager == nil {
-		return false
-	}
-	snapshot, err := r.pluginSnapshot(context.Background(), scope)
-	if err != nil {
-		return false
-	}
-	queued := r.PluginManager.DispatchAfterReply(snapshot, reply)
-	eventData, _ := json.Marshal(map[string]string{"messageId": reply.MessageID, "characterId": reply.CharacterID, "conversationId": reply.ConversationID, "channel": reply.Channel})
-	_ = r.PluginManager.EmitSystemEvent(context.Background(), ExtensionEvent{Source: "amitia://system/chat", Type: "dev.amitia.reply.completed.v1", Subject: "character/" + reply.CharacterID + "/conversation/" + reply.ConversationID, Data: eventData, TraceID: scope.TraceID, CorrelationID: scope.CorrelationID, CausationID: scope.CausationID})
-	return queued
-}
-
 func (r *Runtime) pluginSnapshot(ctx context.Context, scope ExecutionScope) (ExtensionSnapshot, error) {
 	if err := r.Repository.ValidateConversationScope(ctx, scope); err != nil {
 		return ExtensionSnapshot{}, err

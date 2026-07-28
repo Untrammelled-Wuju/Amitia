@@ -12,8 +12,8 @@ import (
 type WebCircuitState string
 
 const (
-	CircuitClosed WebCircuitState = "closed"
-	CircuitOpen   WebCircuitState = "open"
+	CircuitClosed   WebCircuitState = "closed"
+	CircuitOpen     WebCircuitState = "open"
 	CircuitHalfOpen WebCircuitState = "half_open"
 )
 
@@ -24,14 +24,14 @@ type CrashRecord struct {
 }
 
 type CircuitBreaker struct {
-	mu              sync.Mutex
-	state           WebCircuitState
-	failureCount    int
+	mu               sync.Mutex
+	state            WebCircuitState
+	failureCount     int
 	failureThreshold int
-	windowDuration  time.Duration
-	lastFailure     time.Time
-	cooldown        time.Duration
-	records         []CrashRecord
+	windowDuration   time.Duration
+	lastFailure      time.Time
+	cooldown         time.Duration
+	records          []CrashRecord
 }
 
 func NewCircuitBreaker(threshold int, window, cooldown time.Duration) *CircuitBreaker {
@@ -100,12 +100,12 @@ func (c *CircuitBreaker) State() WebCircuitState {
 }
 
 type LifecycleManager struct {
-	mu         sync.RWMutex
-	host       *Host
-	breakers   map[string]*CircuitBreaker
-	maxCrashes int
+	mu             sync.RWMutex
+	host           *Host
+	breakers       map[string]*CircuitBreaker
+	maxCrashes     int
 	windowDuration time.Duration
-	cooldown   time.Duration
+	cooldown       time.Duration
 }
 
 func NewLifecycleManager(host *Host) *LifecycleManager {
@@ -162,25 +162,25 @@ func (m *LifecycleManager) RecordSuccess(sessionID string) {
 }
 
 type PerformanceMonitor struct {
-	mu         sync.RWMutex
-	snapshots  map[string][]PerformanceSnapshot
+	mu            sync.RWMutex
+	snapshots     map[string][]PerformanceSnapshot
 	maxPerSession int
 }
 
 type PerformanceSnapshot struct {
-	Timestamp     time.Time
-	CPUPercent    float64
-	MemoryBytes   int64
-	DOMNodes      int
-	FrameRate     int
-	BundleBytes   int64
-	MessageRate   int
+	Timestamp      time.Time
+	CPUPercent     float64
+	MemoryBytes    int64
+	DOMNodes       int
+	FrameRate      int
+	BundleBytes    int64
+	MessageRate    int
 	BackendVisible bool
 }
 
 func NewPerformanceMonitor() *PerformanceMonitor {
 	return &PerformanceMonitor{
-		snapshots:    make(map[string][]PerformanceSnapshot),
+		snapshots:     make(map[string][]PerformanceSnapshot),
 		maxPerSession: 60,
 	}
 }
@@ -197,13 +197,13 @@ func (pm *PerformanceMonitor) Record(sessionID string, snapshot PerformanceSnaps
 }
 
 type PerformanceBudget struct {
-	MaxBundleBytes   int64
-	MaxMemoryBytes   int64
-	MaxCPUPercent    float64
-	MaxDOMNodes      int
-	MinFrameRate     int
-	MaxMessageRate   int
-	MaxHiddenPeriod  time.Duration
+	MaxBundleBytes  int64
+	MaxMemoryBytes  int64
+	MaxCPUPercent   float64
+	MaxDOMNodes     int
+	MinFrameRate    int
+	MaxMessageRate  int
+	MaxHiddenPeriod time.Duration
 }
 
 func DefaultPerformanceBudget() PerformanceBudget {
@@ -261,9 +261,10 @@ window.amitiaUI = (function() {
   const sessionId = "` + session.SessionID + `";
   const origin = "` + session.Origin + `";
   const nonce = "` + session.Nonce + `";
+  const token = "` + session.Token + `";
   const generation = ` + fmt.Sprintf("%d", session.Generation) + `;
   const allowedMethods = ["ready","context.get","action.invoke","data.query","data.subscribe","navigation.request","resize.request","dialog.request","resource.open","resource.read","artifact.create","log","session.ping","clipboard.read","clipboard.write","network.request","storage"];
-  let hostOrigin = null;
+  let port = null;
   let pendingMessages = [];
   let pendingCallbacks = new Map();
   let readyCallbacks = [];
@@ -276,9 +277,9 @@ window.amitiaUI = (function() {
   }
 
   function flushPending() {
-    if (hostOrigin) {
+    if (port) {
       for (const msg of pendingMessages) {
-        window.parent.postMessage(msg, hostOrigin);
+        port.postMessage(msg);
       }
       pendingMessages = [];
     }
@@ -293,6 +294,7 @@ window.amitiaUI = (function() {
       id: id,
       origin: origin,
       nonce: nonce,
+      token: token,
       generation: generation,
       session: sessionId,
       input: input || null,
@@ -301,8 +303,8 @@ window.amitiaUI = (function() {
     if (callback) {
       pendingCallbacks.set(id, callback);
     }
-    if (hostOrigin) {
-      window.parent.postMessage(msg, hostOrigin);
+    if (port) {
+      port.postMessage(msg);
     } else {
       pendingMessages.push(msg);
     }
@@ -318,14 +320,9 @@ window.amitiaUI = (function() {
     });
   }
 
-  window.addEventListener("message", function(event) {
+  function handlePortMessage(event) {
     if (!event.data || typeof event.data !== "object") return;
     var data = event.data;
-    if (data.type === "host.welcome" && data.hostOrigin) {
-      hostOrigin = data.hostOrigin;
-      flushPending();
-      return;
-    }
     if (data.type === "bridge.response") {
       var cb = pendingCallbacks.get(data.id);
       if (cb) {
@@ -335,7 +332,21 @@ window.amitiaUI = (function() {
       }
       return;
     }
-  });
+  }
+
+  function acceptPort(event) {
+    if (event.source !== window.parent || port || !event.data || event.data.type !== "amitia.extension.init") return;
+    if (event.data.session !== sessionId || event.data.nonce !== nonce || event.data.token !== token || event.data.generation !== generation) return;
+    if (!event.ports || event.ports.length !== 1) return;
+    port = event.ports[0];
+    port.onmessage = handlePortMessage;
+    port.start();
+    window.removeEventListener("message", acceptPort);
+    flushPending();
+  }
+
+  window.addEventListener("message", acceptPort);
+  window.parent.postMessage({type:"amitia.extension.ready",session:sessionId}, "*");
 
   var api = {
     ready: function() {
@@ -460,11 +471,11 @@ func (m *LifecycleManager) Resume(ctx context.Context, req ResumeRequest) error 
 }
 
 type FailureRecord struct {
-	SessionID string
-	Timestamp time.Time
-	Reason    string
+	SessionID    string
+	Timestamp    time.Time
+	Reason       string
 	CircuitState WebCircuitState
-	Recovered bool
+	Recovered    bool
 }
 
 type FailureStore struct {

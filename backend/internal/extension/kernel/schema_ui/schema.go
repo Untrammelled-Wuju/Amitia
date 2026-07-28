@@ -183,8 +183,12 @@ type SchemaUIDeclaredAction struct {
 }
 
 type SchemaLimits struct {
+	MaxFileBytes      int64
 	MaxNodes          int
 	MaxDepth          int
+	MaxExpressionLen  int
+	MaxActions        int
+	MaxDataSources    int
 	MaxGridColumns    int
 	MaxTableRows      int
 	MaxMarkdownKB     int
@@ -195,13 +199,17 @@ type SchemaLimits struct {
 
 func DefaultLimits() SchemaLimits {
 	return SchemaLimits{
-		MaxNodes:       500,
-		MaxDepth:       12,
-		MaxGridColumns: 12,
-		MaxTableRows:   200,
-		MaxMarkdownKB:  64,
-		MaxImageKB:     256,
-		MaxChildren:    64,
+		MaxFileBytes:     1024 * 1024,
+		MaxNodes:         500,
+		MaxDepth:         12,
+		MaxExpressionLen: 256,
+		MaxActions:       64,
+		MaxDataSources:   64,
+		MaxGridColumns:   12,
+		MaxTableRows:     200,
+		MaxMarkdownKB:    64,
+		MaxImageKB:       256,
+		MaxChildren:      64,
 	}
 }
 
@@ -270,10 +278,30 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		result.Errors = append(result.Errors, ErrEmptyDocument.Error())
 		return result
 	}
+	if len(doc.Actions) > v.limits.MaxActions {
+		result.Errors = append(result.Errors, fmt.Sprintf("too many actions: %d > %d", len(doc.Actions), v.limits.MaxActions))
+	}
+	if len(doc.DataSources) > v.limits.MaxDataSources {
+		result.Errors = append(result.Errors, fmt.Sprintf("too many data sources: %d > %d", len(doc.DataSources), v.limits.MaxDataSources))
+	}
 	for _, a := range doc.Actions {
+		if a.ActionID == "" || a.Target == "" {
+			result.Errors = append(result.Errors, "declared action requires actionId and target")
+			continue
+		}
+		if result.ActionIDs[a.ActionID] {
+			result.Errors = append(result.Errors, "duplicate action: "+a.ActionID)
+		}
 		result.ActionIDs[a.ActionID] = true
 	}
 	for _, ds := range doc.DataSources {
+		if ds.ID == "" {
+			result.Errors = append(result.Errors, "data source id required")
+			continue
+		}
+		if result.DataSourceIDs[ds.ID] {
+			result.Errors = append(result.Errors, "duplicate data source: "+ds.ID)
+		}
 		result.DataSourceIDs[ds.ID] = true
 		if !allowedBindingSources[ds.Type] {
 			result.Errors = append(result.Errors, fmt.Sprintf("data source %s invalid type %s", ds.ID, ds.Type))
@@ -322,13 +350,20 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		if !allowedBindingSources[b.Source] {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidBindingSource, b.Source))
 		}
-		if b.Path != "" && !exprAllowedPattern.MatchString(b.Path) {
+		if b.Path != "" && (len(b.Path) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(b.Path)) {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, b.Path))
 		}
 	}
 	for _, a := range node.Actions {
 		if a.ActionID == "" {
 			result.Errors = append(result.Errors, "node "+node.ID+": action_id empty")
+		} else if !result.ActionIDs[a.ActionID] {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrActionNotDeclared, a.ActionID))
+		}
+	}
+	for _, condition := range node.Visibility {
+		if condition.Field == "" || len(condition.Field) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(condition.Field) {
+			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, condition.Field))
 		}
 	}
 	if node.Type == NodeGrid {
@@ -346,7 +381,7 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		}
 		_ = json.Unmarshal(node.Props, &props)
 		if props.Rows > v.limits.MaxTableRows {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("table %s rows %d exceeds %d", node.ID, props.Rows, v.limits.MaxTableRows))
+			result.Errors = append(result.Errors, fmt.Sprintf("table %s rows %d exceeds %d", node.ID, props.Rows, v.limits.MaxTableRows))
 		}
 	}
 	if node.Type == NodeMarkdown {
@@ -358,7 +393,7 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 			result.Errors = append(result.Errors, "markdown "+node.ID+": contains forbidden HTML")
 		}
 		if len(props.Content) > v.limits.MaxMarkdownKB*1024 {
-			result.Warnings = append(result.Warnings, "markdown "+node.ID+": content too large")
+			result.Errors = append(result.Errors, "markdown "+node.ID+": content too large")
 		}
 	}
 	if node.Type == NodeImage {
@@ -619,7 +654,7 @@ func (d *ActionDispatcher) Dispatch(actionID string, input map[string]any) (map[
 		return nil, fmt.Errorf("%w: %s", ErrActionNotDeclared, actionID)
 	}
 	if d.handler == nil {
-		return map[string]any{"accepted": true}, nil
+		return nil, errors.New("schema_ui: action dispatcher unavailable")
 	}
 	return d.handler(actionID, input)
 }
@@ -666,6 +701,17 @@ type CompilerCache struct {
 	entries map[string]*CompiledDocument
 }
 
+type CompilerCacheKey struct {
+	DefinitionHash string
+	Generation     int64
+	Locale         string
+	Theme          string
+}
+
+func (k CompilerCacheKey) String() string {
+	return fmt.Sprintf("%s|%d|%s|%s", k.DefinitionHash, k.Generation, k.Locale, k.Theme)
+}
+
 func NewCompilerCache() *CompilerCache {
 	return &CompilerCache{entries: make(map[string]*CompiledDocument)}
 }
@@ -674,13 +720,26 @@ func (c *CompilerCache) Get(hash string) (*CompiledDocument, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	v, ok := c.entries[hash]
+	if !ok {
+		v, ok = c.entries[CompilerCacheKey{DefinitionHash: hash}.String()]
+	}
 	return v, ok
 }
 
 func (c *CompilerCache) Put(doc *CompiledDocument) {
+	c.PutWithKey(CompilerCacheKey{DefinitionHash: doc.Hash}, doc)
+}
+
+func (c *CompilerCache) PutWithKey(key CompilerCacheKey, doc *CompiledDocument) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[doc.Hash] = doc
+	c.entries[key.String()] = doc
+}
+
+func (c *CompilerCache) Delete(key CompilerCacheKey) {
+	c.mu.Lock()
+	delete(c.entries, key.String())
+	c.mu.Unlock()
 }
 
 func (c *CompilerCache) Size() int {
@@ -694,6 +753,7 @@ type SchemaRegistry struct {
 	validator *Validator
 	cache     *CompilerCache
 	schemas   map[string]*CompiledDocument
+	cacheKeys map[string]CompilerCacheKey
 }
 
 func NewSchemaRegistry(validator *Validator, cache *CompilerCache) *SchemaRegistry {
@@ -707,6 +767,7 @@ func NewSchemaRegistry(validator *Validator, cache *CompilerCache) *SchemaRegist
 		validator: validator,
 		cache:     cache,
 		schemas:   make(map[string]*CompiledDocument),
+		cacheKeys: make(map[string]CompilerCacheKey),
 	}
 }
 
@@ -715,6 +776,10 @@ func schemaKey(extensionID, pageID string) string {
 }
 
 func (r *SchemaRegistry) RegisterSchema(extensionID, pageID string, doc *SchemaUIDocument) error {
+	return r.RegisterSchemaWithContext(extensionID, pageID, 0, "", "", doc)
+}
+
+func (r *SchemaRegistry) RegisterSchemaWithContext(extensionID, pageID string, generation int64, locale, theme string, doc *SchemaUIDocument) error {
 	if extensionID == "" || pageID == "" {
 		return fmt.Errorf("schema_ui: extension id and page id required")
 	}
@@ -729,22 +794,39 @@ func (r *SchemaRegistry) RegisterSchema(extensionID, pageID string, doc *SchemaU
 	if err != nil {
 		return fmt.Errorf("schema_ui: compile failed for %s: %w", schemaKey(extensionID, pageID), err)
 	}
+	key := schemaKey(extensionID, pageID)
+	cacheKey := CompilerCacheKey{DefinitionHash: compiled.Hash, Generation: generation, Locale: locale, Theme: theme}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.schemas[schemaKey(extensionID, pageID)] = compiled
-	r.cache.Put(compiled)
+	if old, ok := r.cacheKeys[key]; ok {
+		r.cache.Delete(old)
+	}
+	r.schemas[key] = compiled
+	r.cacheKeys[key] = cacheKey
+	r.cache.PutWithKey(cacheKey, compiled)
+	r.mu.Unlock()
 	return nil
 }
 
 func (r *SchemaRegistry) LoadFromBytes(extensionID, pageID string, data []byte) error {
+	return r.LoadFromBytesWithContext(extensionID, pageID, 0, "", "", data)
+}
+
+func (r *SchemaRegistry) LoadFromBytesWithContext(extensionID, pageID string, generation int64, locale, theme string, data []byte) error {
+	if int64(len(data)) > r.validator.limits.MaxFileBytes {
+		return fmt.Errorf("schema_ui: schema file too large: %d > %d", len(data), r.validator.limits.MaxFileBytes)
+	}
 	var doc SchemaUIDocument
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return fmt.Errorf("schema_ui: unmarshal failed for %s: %w", schemaKey(extensionID, pageID), err)
 	}
-	return r.RegisterSchema(extensionID, pageID, &doc)
+	return r.RegisterSchemaWithContext(extensionID, pageID, generation, locale, theme, &doc)
 }
 
 func (r *SchemaRegistry) LoadFromPath(extensionID, pageID, basePath, schemaPath string) error {
+	return r.LoadFromPathWithContext(extensionID, pageID, 0, "", "", basePath, schemaPath)
+}
+
+func (r *SchemaRegistry) LoadFromPathWithContext(extensionID, pageID string, generation int64, locale, theme, basePath, schemaPath string) error {
 	cleanPath, err := safeSchemaPath(basePath, schemaPath)
 	if err != nil {
 		return err
@@ -753,10 +835,10 @@ func (r *SchemaRegistry) LoadFromPath(extensionID, pageID, basePath, schemaPath 
 	if err != nil {
 		return fmt.Errorf("schema_ui: read schema file %s: %w", cleanPath, err)
 	}
-	if int64(len(data)) > 10*1024*1024 {
+	if int64(len(data)) > r.validator.limits.MaxFileBytes {
 		return fmt.Errorf("schema_ui: schema file too large: %s", cleanPath)
 	}
-	return r.LoadFromBytes(extensionID, pageID, data)
+	return r.LoadFromBytesWithContext(extensionID, pageID, generation, locale, theme, data)
 }
 
 func (r *SchemaRegistry) Get(extensionID, pageID string) (*CompiledDocument, bool) {
@@ -772,11 +854,30 @@ func (r *SchemaRegistry) Unregister(extensionID string) int {
 	count := 0
 	for key := range r.schemas {
 		if strings.HasPrefix(key, extensionID+"/") {
+			if cacheKey, ok := r.cacheKeys[key]; ok {
+				r.cache.Delete(cacheKey)
+				delete(r.cacheKeys, key)
+			}
 			delete(r.schemas, key)
 			count++
 		}
 	}
 	return count
+}
+
+func (r *SchemaRegistry) UnregisterSchema(extensionID, pageID string) bool {
+	key := schemaKey(extensionID, pageID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.schemas[key]; !ok {
+		return false
+	}
+	if cacheKey, ok := r.cacheKeys[key]; ok {
+		r.cache.Delete(cacheKey)
+		delete(r.cacheKeys, key)
+	}
+	delete(r.schemas, key)
+	return true
 }
 
 func (r *SchemaRegistry) Validator() *Validator {

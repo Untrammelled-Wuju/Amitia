@@ -16,13 +16,18 @@ export function createAppTray(
   win: BrowserWindow,
   getConfig: () => DeploymentModeConfig,
   configStore: ConfigStore,
-): { tray: Tray; refreshMenu: () => Promise<void> } {
+): {
+  tray: Tray;
+  refreshMenu: () => Promise<void>;
+  setExtensionItems: (items: Electron.MenuItemConstructorOptions[]) => Promise<void>;
+} {
   const icon = getInitialBrandImage(
     nativeTheme.shouldUseDarkColors ? "dark" : "light",
     "tray",
   );
   const tray = new Tray(icon);
   tray.setToolTip("Amitia");
+  let extensionItems: Electron.MenuItemConstructorOptions[] = [];
 
   const updateMenu = async () => {
     const visible = win.isVisible();
@@ -49,11 +54,14 @@ export function createAppTray(
             win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next);
           },
         },
-       { type: "separator" },
-       {
+        { type: "separator" },
+        {
           label: "打开数据目录",
           click: () => void shell.openPath(getAmitiaDataDir()),
         },
+        ...(extensionItems.length > 0
+          ? [{ type: "separator" as const }, ...extensionItems]
+          : []),
         { type: "separator" },
         {
           label: "退出 Amitia",
@@ -75,7 +83,14 @@ export function createAppTray(
   });
   void updateMenu();
   latestUpdateMenu = updateMenu;
-  return { tray, refreshMenu: updateMenu };
+  return {
+    tray,
+    refreshMenu: updateMenu,
+    setExtensionItems: async (items) => {
+      extensionItems = items;
+      await updateMenu();
+    },
+  };
 }
 
 function showWindow(win: BrowserWindow): void {

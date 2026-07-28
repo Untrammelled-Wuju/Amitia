@@ -30,10 +30,16 @@ type ToolInvocationContext struct {
 	ConversationID string           `json:"conversationId,omitempty"`
 	ExtensionID    string           `json:"extensionId,omitempty"`
 	ModuleID       string           `json:"moduleId,omitempty"`
+	Generation     int64            `json:"generation,omitempty"`
 	Source         InvocationSource `json:"source"`
 	ApprovalMode   ApprovalMode     `json:"approvalMode,omitempty"`
 	ExpiresAt      time.Time        `json:"expiresAt,omitempty"`
 	IdempotencyKey string           `json:"idempotencyKey,omitempty"`
 	TraceID        string           `json:"traceId,omitempty"`
-	Metadata       map[string]any   `json:"metadata,omitempty"`
+	Metadata            map[string]any   `json:"metadata,omitempty"`
+	ScheduleID          string           `json:"scheduleId,omitempty"`
+	TriggerID           string           `json:"triggerId,omitempty"`
+	OperationID         string           `json:"operationId,omitempty"`
+	ScopeSnapshotID     string           `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID string          `json:"permissionSnapshotId,omitempty"`
 }

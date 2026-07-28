@@ -10,9 +10,9 @@ import (
 )
 
 type LeaseManager struct {
-	store   ScheduleStore
-	clock   Clock
-	config  ScheduleConfig
+	store  ScheduleStore
+	clock  Clock
+	config ScheduleConfig
 
 	mu      sync.Mutex
 	ctx     context.Context

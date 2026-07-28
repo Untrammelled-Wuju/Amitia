@@ -7,37 +7,44 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 )
 
 type ToolFacadeConfig struct {
-	PreferKernel bool
+	PreferKernel    bool
 	FallbackOnError bool
 }
 
 func DefaultToolFacadeConfig() ToolFacadeConfig {
 	return ToolFacadeConfig{
-		PreferKernel:   true,
+		PreferKernel:    true,
 		FallbackOnError: false,
 	}
 }
 
 type ToolFacade struct {
-	toolRegistry    *capability.ToolRegistry
-	executionKernel *execution.ExecutionPipeline
-	legacy          LegacyToolDispatcher
-	hookService     *hook.Service
-	counters        *ToolFacadeCounters
-	config          ToolFacadeConfig
+	toolRegistry      *capability.ToolRegistry
+	executionKernel   *execution.ExecutionPipeline
+	hookService       *hook.Service
+	agentSkillCatalog *agent_skill.AgentSkillCatalog
+	activationService *agent_skill.ActivationService
+	counters          *ToolFacadeCounters
+	config            ToolFacadeConfig
 }
 
-func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, legacy LegacyToolDispatcher, config ToolFacadeConfig) *ToolFacade {
+func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
+	config := DefaultToolFacadeConfig()
+	for _, arg := range args {
+		if value, ok := arg.(ToolFacadeConfig); ok {
+			config = value
+		}
+	}
 	return &ToolFacade{
 		toolRegistry:    toolRegistry,
 		executionKernel: executionKernel,
-		legacy:          legacy,
 		counters:        NewToolFacadeCounters(),
 		config:          config,
 	}
@@ -47,35 +54,27 @@ func (f *ToolFacade) Counters() *ToolFacadeCounters {
 	return f.counters
 }
 
-func (f *ToolFacade) SetLegacyDispatcher(dispatcher LegacyToolDispatcher) {
-	f.legacy = dispatcher
-}
-
 func (f *ToolFacade) SetHookService(svc *hook.Service) {
 	f.hookService = svc
 }
 
+func (f *ToolFacade) SetAgentSkillCatalog(catalog *agent_skill.AgentSkillCatalog) {
+	f.agentSkillCatalog = catalog
+	if catalog != nil {
+		f.activationService = agent_skill.NewActivationService(catalog)
+	}
+}
+
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
-	if f.hookService != nil {
+	if f.agentSkillCatalog == nil {
 		return "", nil, nil
 	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("prepare_agent_skill_prompt")
-		return f.legacy.PrepareAgentSkillPrompt(ctx, scope, message)
-	}
-	return "", nil, nil
+	return f.buildAgentSkillPrompt(ctx, scope, message)
 }
 
 func (f *ToolFacade) EndAgentSkillRound(scope LegacyScope) {
 	f.counters.IncEndAgentSkillRound()
-	if f.hookService != nil {
-		return
-	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("end_agent_skill_round")
-		f.legacy.EndAgentSkillRound(scope)
-	}
 }
 
 func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []LegacyContextContribution {
@@ -92,55 +91,31 @@ func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []Lega
 		}
 		return f.parseContextContributions(result)
 	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("before_prompt")
-		return f.legacy.BeforePrompt(ctx, scope)
-	}
 	return nil
 }
 
 func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.Tool, error) {
 	f.counters.IncModelTools()
-	if f.config.PreferKernel && f.toolRegistry != nil {
-		tools, err := f.buildKernelModelTools(ctx, scope)
-		if err == nil && len(tools) > 0 {
-			return tools, nil
-		}
-		if err != nil {
-			f.counters.IncPipelineFailure("model_tools_build")
-		}
-		if !f.config.FallbackOnError && err != nil {
-			return nil, err
-		}
+	if f.toolRegistry == nil {
+		return nil, nil
 	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("model_tools")
-		return f.legacy.ModelTools(ctx, scope)
-	}
-	return nil, nil
+	return f.buildKernelModelTools(ctx, scope)
 }
 
 func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string) (LegacyToolResult, bool) {
 	f.counters.IncExecuteModelTool()
-	if f.config.PreferKernel && f.toolRegistry != nil {
-		def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
-		if !ok {
-			def, ok = f.toolRegistry.Get(ctx, modelName)
-		}
-		if ok {
-			f.counters.IncPipelineExecution()
-			result := f.executeKernelTool(ctx, def, input, scope, idempotencyKey)
-			if result.Status == "success" || !f.config.FallbackOnError {
-				return result, true
-			}
-			f.counters.IncPipelineFailure("execute_kernel_tool")
-		}
+	if f.toolRegistry == nil {
+		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("execute_model_tool")
-		return f.legacy.ExecuteModelTool(ctx, modelName, input, scope, idempotencyKey)
+	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok {
+		def, ok = f.toolRegistry.Get(ctx, modelName)
 	}
-	return LegacyToolResult{Status: "FAILED", VisibleText: "tool runtime not configured", Error: &LegacyToolError{Code: "TOOL_RUNTIME_UNAVAILABLE"}}, false
+	if !ok {
+		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
+	}
+	f.counters.IncPipelineExecution()
+	return f.executeKernelTool(ctx, def, input, scope, idempotencyKey), true
 }
 
 func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
@@ -148,15 +123,11 @@ func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
 	if f.hookService != nil && f.hookService.Integrator != nil {
 		hookCtx := f.buildHookContext(scope)
 		payload := f.buildAfterReplyPayload(reply)
-		_, blocked, err := f.hookService.Integrator.InvokeModelAfterResponse(context.Background(), payload, hookCtx)
+		_, blocked, err := f.hookService.Integrator.InvokePromptAfterAssemble(context.Background(), payload, hookCtx)
 		if err != nil {
 			f.counters.IncPipelineFailure("after_reply_hook")
 		}
 		return !blocked
-	}
-	if f.legacy != nil {
-		f.counters.IncLegacyFallback("after_reply")
-		return f.legacy.AfterReply(scope, reply)
 	}
 	return false
 }

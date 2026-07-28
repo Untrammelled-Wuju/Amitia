@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 type CompensationAction struct {
@@ -11,8 +12,10 @@ type CompensationAction struct {
 }
 
 type CompensationResult struct {
-	NodeID string
-	Error  string
+	NodeID     string    `json:"nodeId"`
+	Status     string    `json:"status"`
+	Error      string    `json:"error,omitempty"`
+	ExecutedAt time.Time `json:"executedAt"`
 }
 
 type CompensationManager struct {
@@ -42,10 +45,14 @@ func (cm *CompensationManager) Compensate(ctx context.Context, completedSteps []
 		}
 		if err := action.Handler(ctx, step.Output); err != nil {
 			results = append(results, CompensationResult{
-				NodeID: step.NodeID,
-				Error:  err.Error(),
+				NodeID:     step.NodeID,
+				Status:     "failed",
+				Error:      err.Error(),
+				ExecutedAt: time.Now().UTC(),
 			})
+			continue
 		}
+		results = append(results, CompensationResult{NodeID: step.NodeID, Status: "succeeded", ExecutedAt: time.Now().UTC()})
 	}
 	return results
 }

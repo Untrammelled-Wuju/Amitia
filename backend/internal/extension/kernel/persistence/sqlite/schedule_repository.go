@@ -479,6 +479,45 @@ func (r *ScheduleRepository) ListDueTriggers(ctx context.Context, now time.Time,
 	return out, rows.Err()
 }
 
+func (r *ScheduleRepository) ListTriggersByStatuses(ctx context.Context, statuses []schedule.ScheduleRunStatus, limit int) ([]*schedule.ScheduleTriggerRecord, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	placeholders := make([]string, len(statuses))
+	args := make([]any, 0, len(statuses)+1)
+	for index, status := range statuses {
+		placeholders[index] = "?"
+		args = append(args, string(status))
+	}
+	args = append(args, limit)
+	query := `
+		SELECT trigger_id, schedule_id, scheduled_at, effective_at, triggered_at, idempotency_key,
+		       status, lease_owner, lease_expires_at, scope_snapshot_id, permission_snapshot_id,
+		       dependency_snapshot_id, operation_id, invocation_id, attempt, generation, manual,
+		       error_code, error_message, jitter_applied_ms, misfire_decision, overlap_decision,
+		       dst_decision, created_at, updated_at
+		FROM extension_schedule_triggers
+		WHERE status IN (` + strings.Join(placeholders, ",") + `)
+		ORDER BY updated_at LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: list schedule triggers by status: %w", err)
+	}
+	defer rows.Close()
+	result := make([]*schedule.ScheduleTriggerRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanScheduleTrigger(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	return result, rows.Err()
+}
+
 func (r *ScheduleRepository) UpdateTriggerStatus(ctx context.Context, triggerID string, status schedule.ScheduleRunStatus, updates map[string]any) error {
 	allowed := map[string]bool{
 		"triggered_at": true, "lease_owner": true, "lease_expires_at": true,

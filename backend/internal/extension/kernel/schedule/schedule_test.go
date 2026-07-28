@@ -25,10 +25,10 @@ func newMemStore() *memStore {
 		states:      map[string]*ScheduleState{},
 		triggers:    map[string]*ScheduleTriggerRecord{},
 		runs:        map[string]*ScheduleRunRecord{},
-		misfires:   map[string]*ScheduleMisfireRecord{},
-		circuits:   map[string]*ScheduleCircuitRecord{},
+		misfires:    map[string]*ScheduleMisfireRecord{},
+		circuits:    map[string]*ScheduleCircuitRecord{},
 		quarantines: map[string]*ScheduleQuarantineRecord{},
-		retries:    map[string]*ScheduleRetryRecord{},
+		retries:     map[string]*ScheduleRetryRecord{},
 	}
 }
 

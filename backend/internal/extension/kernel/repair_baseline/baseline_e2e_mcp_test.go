@@ -42,7 +42,7 @@ func TestBaseline_E2E_MCP_SyncRegistersTools(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("test-mcp-server", "echo", "Echo tool for MCP E2E"),
@@ -78,7 +78,7 @@ func TestBaseline_E2E_MCP_ToolsAppearOnceInModelList(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("model-list-server", "query", "Query tool for model list test"),
@@ -133,7 +133,7 @@ func TestBaseline_E2E_MCP_UnregisterRemovesTools(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("unregister-server", "action", "Action tool for unregister test"),
@@ -175,7 +175,7 @@ func TestBaseline_E2E_MCP_DisableRemovesFromModelList(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("disable-server", "run", "Run tool for disable test"),
@@ -242,7 +242,7 @@ func TestBaseline_E2E_MCP_NoDuplicateExposure(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("dup-server", "op", "Op tool for duplicate test"),
@@ -297,7 +297,7 @@ func TestBaseline_E2E_MCP_LegacyCounterZero(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	descriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("legacy-zero-server", "exec", "Exec tool for legacy counter test"),
@@ -343,7 +343,7 @@ func TestBaseline_E2E_MCP_MultipleServersIsolated(t *testing.T) {
 	}
 	defer container.Close()
 
-	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, nil, kernel.DefaultToolFacadeConfig())
+	toolFacade := kernel.NewToolFacade(container.ToolRegistry, container.ExecutionKernel, kernel.DefaultToolFacadeConfig())
 
 	serverADescriptors := []capability.MCPToolDescriptor{
 		makeMCPToolDescriptor("server-a", "tool_a", "Tool A from server A"),

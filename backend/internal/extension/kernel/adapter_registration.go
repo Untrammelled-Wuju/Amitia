@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -13,14 +14,14 @@ import (
 )
 
 type AdapterRegistrationDeps struct {
-	JSGlobalFactory  *javascript_main.RuntimeFactory
-	WASMFactory      *wasm_runtime.WASMRuntimeFactory
-	WASMModuleMgr    *wasm_runtime.ModuleManager
-	Supervisor       runtime_supervisor.Supervisor
-	TaskService      *task_runtime.TaskRuntimeService
-	MCPCaller        capability.MCPCallFunc
-	MCPHealth        capability.MCPHealthFunc
-	WorkflowCaller   capability.WorkflowCallFunc
+	JSGlobalFactory   *javascript_main.RuntimeFactory
+	WASMFactory       *wasm_runtime.WASMRuntimeFactory
+	WASMModuleMgr     *wasm_runtime.ModuleManager
+	Supervisor        runtime_supervisor.Supervisor
+	TaskService       *task_runtime.TaskRuntimeService
+	MCPCaller         capability.MCPCallFunc
+	MCPHealth         capability.MCPHealthFunc
+	WorkflowCaller    capability.WorkflowCallFunc
 	BuiltinDispatcher capability.DispatchFunc
 }
 
@@ -28,12 +29,33 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if registry == nil {
 		return fmt.Errorf("adapter registry is nil")
 	}
+	if deps.BuiltinDispatcher == nil {
+		return fmt.Errorf("builtin dispatcher must not be nil (no noop allowed)")
+	}
+	if deps.JSGlobalFactory == nil {
+		return fmt.Errorf("javascript runtime factory must not be nil")
+	}
+	if deps.WASMFactory == nil {
+		return fmt.Errorf("wasm runtime factory must not be nil")
+	}
+	if deps.WASMModuleMgr == nil {
+		return fmt.Errorf("wasm module manager must not be nil")
+	}
+	if deps.Supervisor == nil {
+		return fmt.Errorf("runtime supervisor must not be nil")
+	}
+	if deps.TaskService == nil {
+		return fmt.Errorf("task runtime service must not be nil")
+	}
+	if deps.WorkflowCaller == nil {
+		return fmt.Errorf("workflow caller must not be nil (no noop allowed)")
+	}
 
 	builtinAdapter := capability.NewBuiltinRuntimeAdapter(deps.BuiltinDispatcher)
 	registry.Register(capability.RuntimeTypeBuiltin, builtinAdapter)
 
 	jsAdapter := capability.NewJavaScriptRuntimeAdapter(
-		makeJSCallFunc(deps.JSGlobalFactory, deps.Supervisor),
+		makeJSCallFunc(deps.JSGlobalFactory),
 		makeJSHealthFunc(deps.JSGlobalFactory),
 	)
 	registry.Register(capability.RuntimeTypeJavaScript, jsAdapter)
@@ -61,26 +83,15 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.MCPCaller != nil {
 		mcpAdapter := capability.NewMCPRuntimeAdapter(deps.MCPCaller, deps.MCPHealth)
 		registry.Register(capability.RuntimeTypeMCP, mcpAdapter)
-	} else {
-		mcpAdapter := capability.NewMCPRuntimeAdapter(noopMCPCaller, nil)
-		registry.Register(capability.RuntimeTypeMCP, mcpAdapter)
 	}
 
-	if deps.WorkflowCaller != nil {
-		wfAdapter := capability.NewWorkflowRuntimeAdapter(deps.WorkflowCaller)
-		registry.Register(capability.RuntimeTypeWorkflow, wfAdapter)
-	} else {
-		wfAdapter := capability.NewWorkflowRuntimeAdapter(noopWorkflowCaller)
-		registry.Register(capability.RuntimeTypeWorkflow, wfAdapter)
-	}
-
-	internalAdapter := capability.NewInternalRuntimeAdapter(nil)
-	registry.Register(capability.RuntimeTypeInternal, internalAdapter)
+	wfAdapter := capability.NewWorkflowRuntimeAdapter(deps.WorkflowCaller)
+	registry.Register(capability.RuntimeTypeWorkflow, wfAdapter)
 
 	return nil
 }
 
-func makeJSCallFunc(factory *javascript_main.RuntimeFactory, supervisor runtime_supervisor.Supervisor) capability.JavaScriptCallFunc {
+func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScriptCallFunc {
 	return func(ctx context.Context, extensionID string, moduleID string, handlerName string, input json.RawMessage) (json.RawMessage, error) {
 		if factory == nil {
 			return nil, fmt.Errorf("javascript runtime factory not configured")
@@ -92,25 +103,15 @@ func makeJSCallFunc(factory *javascript_main.RuntimeFactory, supervisor runtime_
 		}
 
 		host, err := factory.Get(instanceID)
-		if err == nil && host != nil {
-			result, err := host.Invoke(ctx, handlerName, string(input))
-			if err != nil {
-				return nil, err
-			}
-			return json.Marshal(result)
+		if err != nil || host == nil {
+			return nil, fmt.Errorf("javascript runtime instance not found for %s/%s (no cross-extension search)", extensionID, moduleID)
 		}
 
-		if supervisor != nil {
-			instances := factory.List()
-			for _, h := range instances {
-				hResult, hErr := h.Invoke(ctx, handlerName, string(input))
-				if hErr == nil {
-					return json.Marshal(hResult)
-				}
-			}
+		result, err := host.Invoke(ctx, handlerName, string(input))
+		if err != nil {
+			return nil, err
 		}
-
-		return nil, fmt.Errorf("javascript runtime instance not found for %s/%s", extensionID, moduleID)
+		return json.Marshal(result)
 	}
 }
 
@@ -140,13 +141,25 @@ func makeWASMCallFunc(factory *wasm_runtime.WASMRuntimeFactory, mgr *wasm_runtim
 			return nil, fmt.Errorf("wasm module manager not configured")
 		}
 
-		module, ok := mgr.Get(moduleHash)
+		_, ok := mgr.Get(moduleHash)
 		if !ok {
 			return nil, fmt.Errorf("wasm module not found: %s", moduleHash)
 		}
 
-		_ = module
-		return nil, fmt.Errorf("wasm runtime execution not yet implemented for export %s", exportName)
+		result, err := factory.Invoke(ctx, moduleHash, input)
+		if err != nil {
+			return nil, fmt.Errorf("wasm invoke failed for export %s: %w", exportName, err)
+		}
+
+		if result == nil {
+			return nil, fmt.Errorf("wasm invoke returned nil result for export %s", exportName)
+		}
+
+		output, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("wasm result marshal failed: %w", err)
+		}
+		return output, nil
 	}
 }
 
@@ -173,7 +186,7 @@ func makeTrustedServiceCallFunc(supervisor runtime_supervisor.Supervisor) capabi
 			InstanceID:   serviceID,
 			Operation:    handlerName,
 			Input:        input,
-			InvocationID: fmt.Sprintf("ts-%s-%s", serviceID, handlerName),
+			InvocationID: fmt.Sprintf("ts-%s-%s", serviceID, uuid.NewString()),
 		}
 
 		result := supervisor.Invoke(ctx, req)
@@ -203,13 +216,17 @@ func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEn
 			return "", fmt.Errorf("task runtime service not configured")
 		}
 
+		def, err := svc.GetTaskDefinition(ctx, taskDefinitionID)
+		if err != nil {
+			return "", fmt.Errorf("task definition %s not found in repository: %w", taskDefinitionID, err)
+		}
+		if def == nil {
+			return "", fmt.Errorf("task definition %s returned nil from repository", taskDefinitionID)
+		}
+
 		req := task_runtime.EnqueueTaskRequest{
 			TaskDefinitionID: taskDefinitionID,
 			Input:            input,
-		}
-		def := &task_runtime.TaskDefinition{
-			TaskID:      taskDefinitionID,
-			RuntimeType: "task",
 		}
 
 		result, err := svc.Enqueue(ctx, req, def)
@@ -240,12 +257,4 @@ func makeTaskStatusFunc(svc *task_runtime.TaskRuntimeService) capability.TaskSta
 		}
 		return status, nil
 	}
-}
-
-func noopMCPCaller(ctx context.Context, serverID string, toolName string, input json.RawMessage) (json.RawMessage, error) {
-	return nil, fmt.Errorf("MCP caller not configured: server=%s tool=%s", serverID, toolName)
-}
-
-func noopWorkflowCaller(ctx context.Context, workflowID string, input json.RawMessage) (json.RawMessage, error) {
-	return nil, fmt.Errorf("workflow caller not configured: workflow=%s", workflowID)
 }

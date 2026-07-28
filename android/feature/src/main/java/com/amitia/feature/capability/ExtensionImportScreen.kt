@@ -1,5 +1,7 @@
 package com.amitia.feature.capability
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.amitia.core.designsystem.AmitiaIconSize
 import com.amitia.core.designsystem.AmitiaIcons
 import com.amitia.core.designsystem.AmitiaSpacing
@@ -47,16 +51,38 @@ fun ExtensionImportScreen(
     onBack: () -> Unit,
     onInstalled: () -> Unit
 ) {
-    var progress by remember { mutableStateOf(ImportProgress(ImportStep.SelectFile, 0f, "请选择扩展包")) }
+    val viewModel: CapabilityViewModel = hiltViewModel()
+    val importState by viewModel.importState.collectAsState()
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importExtension(uri)
+        }
+    }
+
+    val progress = when (val state = importState) {
+        ImportState.Idle -> ImportProgress(ImportStep.SelectFile, 0f, "请选择扩展包")
+        is ImportState.Importing -> ImportProgress(ImportStep.Install, state.progress, state.message)
+        is ImportState.Success -> ImportProgress(ImportStep.Done, 1f, "安装完成")
+        is ImportState.Error -> ImportProgress(ImportStep.SelectFile, 0f, state.message)
+    }
+
     ExtensionImportContent(
         progress = progress,
         onBack = onBack,
-        onSelectFile = { progress = ImportProgress(ImportStep.Verify, 0.2f, "校验中...") },
-        onVerify = { progress = ImportProgress(ImportStep.ShowPermissions, 0.4f, "校验通过", sampleImportPermissions()) },
-        onApprove = { progress = ImportProgress(ImportStep.Install, 0.7f, "安装中...") },
-        onInstall = { progress = ImportProgress(ImportStep.Done, 1f, "安装完成") },
-        onDone = onInstalled,
-        onCancel = { progress = ImportProgress(ImportStep.SelectFile, 0f, "请选择扩展包") }
+        onSelectFile = { launcher.launch("*/*") },
+        onVerify = {},
+        onApprove = {},
+        onInstall = {},
+        onDone = {
+            viewModel.resetImportState()
+            onInstalled()
+        },
+        onCancel = {
+            viewModel.resetImportState()
+        }
     )
 }
 
@@ -380,7 +406,7 @@ private fun PermissionReviewRow(permission: PluginPermission) {
     }
 }
 
-private fun sampleImportPermissions() = listOf(
+private fun previewImportPermissions() = listOf(
     PluginPermission("网络访问", "访问网络资源", true, PermissionRiskLevel.Low, PermissionCategory.Network),
     PluginPermission("文件读写", "读写本地文件", true, PermissionRiskLevel.Medium, PermissionCategory.File),
     PluginPermission("后台任务", "定时执行任务", false, PermissionRiskLevel.High, PermissionCategory.BackgroundTask)
@@ -391,7 +417,7 @@ private fun sampleImportPermissions() = listOf(
 private fun ExtensionImportLightPreview() {
     AmitiaTheme(darkTheme = false) {
         ExtensionImportContent(
-            progress = ImportProgress(ImportStep.ShowPermissions, 0.4f, "校验通过", sampleImportPermissions()),
+            progress = ImportProgress(ImportStep.ShowPermissions, 0.4f, "校验通过", previewImportPermissions()),
             onBack = {}, onSelectFile = {}, onVerify = {}, onApprove = {}, onInstall = {}, onDone = {}, onCancel = {}
         )
     }

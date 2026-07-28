@@ -1,9 +1,12 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,11 +30,26 @@ func (api *DesktopAPI) RegisterRoutes(group *gin.RouterGroup) {
 	group.POST("/extensions/desktop/conflicts/:conflictId/resolve", api.ResolveConflictByID)
 	group.GET("/extensions/desktop/snapshot", api.GetCurrentSnapshot)
 	group.POST("/extensions/desktop/snapshot/build", api.BuildNewSnapshot)
+	group.POST("/extensions/desktop/snapshot/apply-result", api.ReportSnapshotApply)
 	group.GET("/extensions/desktop/contracts", api.ListAllContracts)
 	group.GET("/extensions/desktop/permissions", api.ListAllPermissions)
 	group.GET("/extensions/desktop/resources", api.ListAllResources)
 	group.GET("/extensions/desktop/circuit/status", api.CircuitStatus)
 	group.POST("/extensions/desktop/circuit/reset", api.CircuitReset)
+}
+
+func (api *DesktopAPI) ReportSnapshotApply(c *gin.Context) {
+	if api.host == nil {
+		apiError(c, http.StatusServiceUnavailable, "desktop host unavailable")
+		return
+	}
+	var report DesktopApplyReport
+	if err := c.ShouldBindJSON(&report); err != nil || report.Generation < 0 || report.Hash == "" {
+		apiError(c, http.StatusBadRequest, "invalid snapshot apply report")
+		return
+	}
+	api.host.RecordApplyReport(report)
+	c.JSON(http.StatusOK, gin.H{"recorded": true})
 }
 
 func apiError(c *gin.Context, code int, message string) {
@@ -77,7 +95,7 @@ func (api *DesktopAPI) EnableContributionByID(c *gin.Context) {
 		return
 	}
 	contribID := c.Param("contributionId")
-	if err := api.host.EnableContribution(contribID); err != nil {
+	if err := api.host.EnableContribution(c.Request.Context(), contribID); err != nil {
 		apiError(c, http.StatusNotFound, err.Error())
 		return
 	}
@@ -229,7 +247,7 @@ func (api *DesktopAPI) BuildNewSnapshot(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	sortCtx := SortContext{
 		HostReservedIDs: req.HostReservedIDs,
-		UserPinnedOrder:  req.UserPinnedOrder,
+		UserPinnedOrder: req.UserPinnedOrder,
 	}
 	snapshot := api.host.BuildSnapshot(sortCtx)
 	c.JSON(http.StatusOK, snapshot)
@@ -281,7 +299,20 @@ func (api *DesktopAPI) CircuitReset(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"reset": true})
 }
 
-func (h *DesktopHost) EnableContribution(contributionID string) error {
+func (h *DesktopHost) EnableContribution(ctx context.Context, contributionID string) error {
+	h.mu.RLock()
+	current, exists := h.contributions[contributionID]
+	checker := h.permChecker
+	h.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrContributionNotFound, contributionID)
+	}
+	granted := true
+	if checker != nil {
+		permissionID := permissionForType(current.Definition.DesktopType, current.Definition.Shortcut != nil && current.Definition.Shortcut.Global)
+		ok, err := checker.Check(ctx, current.Definition.ExtensionID, permissionID)
+		granted = err == nil && ok
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	resolved, exists := h.contributions[contributionID]
@@ -289,7 +320,13 @@ func (h *DesktopHost) EnableContribution(contributionID string) error {
 		return fmt.Errorf("%w: %s", ErrContributionNotFound, contributionID)
 	}
 	if resolved.Status == ContributionStatusDisabled {
-		resolved.Status = ContributionStatusRegistered
+		if granted {
+			resolved.Status = ContributionStatusRegistered
+		} else {
+			resolved.Status = ContributionStatusPendingPermission
+		}
+		resolved.Generation = atomic.AddInt64(&h.generation, 1)
+		resolved.ResolvedAt = time.Now().UTC()
 	}
 	return nil
 }
@@ -302,6 +339,8 @@ func (h *DesktopHost) DisableContribution(contributionID string) error {
 		return fmt.Errorf("%w: %s", ErrContributionNotFound, contributionID)
 	}
 	resolved.Status = ContributionStatusDisabled
+	resolved.Generation = atomic.AddInt64(&h.generation, 1)
+	resolved.ResolvedAt = time.Now().UTC()
 	return nil
 }
 
@@ -332,6 +371,8 @@ func (h *DesktopHost) RebindShortcut(contributionID, accelerator string) error {
 	delete(h.shortcutsByAccel, oldNormalized)
 	resolved.Definition.Shortcut.Accelerator = accelerator
 	h.shortcutsByAccel[vr.Normalized] = contributionID
+	resolved.Generation = atomic.AddInt64(&h.generation, 1)
+	resolved.ResolvedAt = time.Now().UTC()
 	return nil
 }
 

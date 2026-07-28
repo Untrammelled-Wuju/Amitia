@@ -1,11 +1,13 @@
 package capability
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 var mcpIdentifierPattern = regexp.MustCompile(`[^a-z0-9_]+`)
@@ -263,4 +265,48 @@ func (b *MCPToolAdapterBatch) Diff(previous map[string]string) (added, updated, 
 	}
 
 	return added, updated, removed
+}
+
+var globalMCPToolAdapter *MCPToolAdapter
+var globalMCPToolAdapterMu sync.Mutex
+
+func GetGlobalMCPToolAdapter() *MCPToolAdapter {
+	globalMCPToolAdapterMu.Lock()
+	defer globalMCPToolAdapterMu.Unlock()
+	if globalMCPToolAdapter == nil {
+		globalMCPToolAdapter = NewMCPToolAdapter()
+	}
+	return globalMCPToolAdapter
+}
+
+type mcpServerRegistry struct {
+	mu      sync.Mutex
+	servers map[string]mcpServerEntry
+}
+
+type mcpServerEntry struct {
+	Definition  json.RawMessage
+	ExtensionID string
+	Tools       []MCPToolDescriptor
+}
+
+var globalMCPServers = &mcpServerRegistry{
+	servers: make(map[string]mcpServerEntry),
+}
+
+func (a *MCPToolAdapter) RegisterServerWithDefinition(ctx context.Context, serverID string, defData json.RawMessage, extensionID string) error {
+	globalMCPServers.mu.Lock()
+	defer globalMCPServers.mu.Unlock()
+	globalMCPServers.servers[serverID] = mcpServerEntry{
+		Definition:  defData,
+		ExtensionID: extensionID,
+	}
+	return nil
+}
+
+func (a *MCPToolAdapter) UnregisterServer(ctx context.Context, serverID string) error {
+	globalMCPServers.mu.Lock()
+	defer globalMCPServers.mu.Unlock()
+	delete(globalMCPServers.servers, serverID)
+	return nil
 }

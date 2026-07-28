@@ -15,33 +15,28 @@ import kotlinx.coroutines.launch
 
 enum class OnboardingFlowStep(val index: Int) {
     Welcome(0),
-    EnvCheck(1),
-    ModeSelection(2),
-    RuntimeInstall(3),
-    RemoteConfig(4),
-    AccountEntry(5),
-    Register(6),
-    Login(7),
-    Permissions(8),
-    ModelText(9),
-    ModelVision(10),
-    ModelVoice(11),
-    ModelVector(12),
-    CharacterAppearance(13),
-    CharacterName(14),
-    CharacterIdentity(15),
-    CharacterPersonality(16),
-    InitialMemory1(17),
-    InitialMemory2(18),
-    InitialMemory3(19),
-    SetupSummary(20),
-    CharacterComplete(21),
-    EnterAmitia(22),
-    DataImport(23);
+    ModeSelection(1),
+    Environment(2),
+    Account(3),
+    ModelConfig(4),
+    CharacterSetup(5),
+    UserInfo(6),
+    Complete(7);
 
     fun next(): OnboardingFlowStep? = entries.getOrNull(ordinal + 1)
     fun previous(): OnboardingFlowStep? = entries.getOrNull(ordinal - 1)
     val isEntry: Boolean get() = this == Welcome
+
+    val stepLabel: String?
+        get() = when (this) {
+            ModeSelection -> "1 / 6"
+            Environment -> "2 / 6"
+            Account -> "3 / 6"
+            ModelConfig -> "4 / 6"
+            CharacterSetup -> "5 / 6"
+            UserInfo -> "6 / 6"
+            else -> null
+        }
 }
 
 enum class OnboardingRunMode { Local, Remote }
@@ -74,13 +69,17 @@ data class CharacterSetupState(
     val name: String = "",
     val identity: String = "",
     val personality: String = "",
-    val customPersonality: String = ""
+    val customPersonality: String = "",
+    val description: String = "",
+    val prompt: String = ""
 )
 
 data class InitialMemoryState(
     val userNickname: String = "",
     val relationship: String = "",
-    val preferences: String = ""
+    val preferences: String = "",
+    val userRole: String = "",
+    val firstMemory: String = ""
 )
 
 data class OnboardingFlowUiState(
@@ -101,6 +100,7 @@ data class OnboardingFlowUiState(
     val accountEmail: String = "",
     val accountPassword: String = "",
     val accountConfirmPassword: String = "",
+    val accountLogin: Boolean = false,
     val registerError: String? = null,
     val loginError: String? = null,
     val permissionNotifications: Boolean = false,
@@ -118,6 +118,7 @@ data class OnboardingFlowUiState(
     val character: CharacterSetupState = CharacterSetupState(),
     val memory: InitialMemoryState = InitialMemoryState(),
     val enterAnimationPlaying: Boolean = false,
+    val preparingEntry: Boolean = false,
     val error: String? = null
 ) {
     val allEnvRequiredPassed: Boolean
@@ -156,41 +157,11 @@ class OnboardingFlowViewModel @Inject constructor(
     }
 
     fun next() {
-        val current = _state.value.currentStep
-        val mode = _state.value.mode
-        var nextStep = current.next()
-        while (nextStep != null) {
-            val skip = when {
-                mode == OnboardingRunMode.Local && nextStep == OnboardingFlowStep.RemoteConfig -> true
-                mode == OnboardingRunMode.Remote && nextStep == OnboardingFlowStep.RuntimeInstall -> true
-                else -> false
-            }
-            if (skip) {
-                nextStep = nextStep.next()
-            } else {
-                break
-            }
-        }
-        nextStep?.let { goToStep(it) }
+        _state.value.currentStep.next()?.let { goToStep(it) }
     }
 
     fun previous() {
-        val current = _state.value.currentStep
-        val mode = _state.value.mode
-        var prevStep = current.previous()
-        while (prevStep != null) {
-            val skip = when {
-                mode == OnboardingRunMode.Local && prevStep == OnboardingFlowStep.RemoteConfig -> true
-                mode == OnboardingRunMode.Remote && prevStep == OnboardingFlowStep.RuntimeInstall -> true
-                else -> false
-            }
-            if (skip) {
-                prevStep = prevStep.previous()
-            } else {
-                break
-            }
-        }
-        prevStep?.let { goToStep(it) }
+        _state.value.currentStep.previous()?.let { goToStep(it) }
     }
 
     fun selectMode(mode: OnboardingRunMode) {
@@ -201,16 +172,13 @@ class OnboardingFlowViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(envChecking = true, envItems = emptyList())
             val items = listOf(
-                EnvCheckItem("Android 版本", true, "Android 13+"),
-                EnvCheckItem("CPU 架构", true, "arm64-v8a"),
-                EnvCheckItem("可用存储", true, "剩余 4.2 GB"),
-                EnvCheckItem("内存", true, "6 GB"),
-                EnvCheckItem("通知能力", true, "支持"),
-                EnvCheckItem("麦克风能力", true, "可用"),
-                EnvCheckItem("本地运行时", false, "未安装", required = false)
+                EnvCheckItem("系统环境", true, "检查移动端基础能力"),
+                EnvCheckItem("数据目录", true, "准备角色和记忆空间"),
+                EnvCheckItem("核心服务", true, "建立本地或远程连接"),
+                EnvCheckItem("可用性检查", true, "确认消息和数据链路")
             )
             items.forEachIndexed { index, item ->
-                delay(260)
+                delay(650)
                 _state.value = _state.value.copy(
                     envItems = _state.value.envItems + items.subList(0, index + 1)
                 )
@@ -332,24 +300,37 @@ class OnboardingFlowViewModel @Inject constructor(
         }
     }
 
-    fun submitRegister(): Boolean {
+    fun toggleAccountLogin() {
+        _state.value = _state.value.copy(accountLogin = !_state.value.accountLogin)
+    }
+
+    fun submitAccount(): Boolean {
         val s = _state.value
-        when {
-            s.accountUsername.isBlank() -> {
-                _state.value = s.copy(registerError = "请输入用户名")
-                return false
+        if (s.accountLogin) {
+            when {
+                s.accountUsername.isBlank() -> {
+                    _state.value = s.copy(loginError = "请输入用户名")
+                    return false
+                }
+                s.accountPassword.isBlank() -> {
+                    _state.value = s.copy(loginError = "请输入密码")
+                    return false
+                }
             }
-            s.accountEmail.isBlank() -> {
-                _state.value = s.copy(registerError = "请输入邮箱")
-                return false
-            }
-            s.accountPassword.length < 6 -> {
-                _state.value = s.copy(registerError = "密码至少 6 位")
-                return false
-            }
-            s.accountPassword != s.accountConfirmPassword -> {
-                _state.value = s.copy(registerError = "两次密码不一致")
-                return false
+        } else {
+            when {
+                s.accountUsername.isBlank() -> {
+                    _state.value = s.copy(registerError = "请输入管理员名称")
+                    return false
+                }
+                s.accountPassword.length < 6 -> {
+                    _state.value = s.copy(registerError = "密码至少 6 位")
+                    return false
+                }
+                s.accountPassword != s.accountConfirmPassword -> {
+                    _state.value = s.copy(registerError = "两次密码不一致")
+                    return false
+                }
             }
         }
         return true
@@ -463,6 +444,8 @@ class OnboardingFlowViewModel @Inject constructor(
             "identity" -> _state.value.copy(character = _state.value.character.copy(identity = value))
             "personality" -> _state.value.copy(character = _state.value.character.copy(personality = value))
             "customPersonality" -> _state.value.copy(character = _state.value.character.copy(customPersonality = value))
+            "description" -> _state.value.copy(character = _state.value.character.copy(description = value))
+            "prompt" -> _state.value.copy(character = _state.value.character.copy(prompt = value))
             else -> _state.value
         }
     }
@@ -472,15 +455,17 @@ class OnboardingFlowViewModel @Inject constructor(
             "nickname" -> _state.value.copy(memory = _state.value.memory.copy(userNickname = value))
             "relationship" -> _state.value.copy(memory = _state.value.memory.copy(relationship = value))
             "preferences" -> _state.value.copy(memory = _state.value.memory.copy(preferences = value))
+            "userRole" -> _state.value.copy(memory = _state.value.memory.copy(userRole = value))
+            "firstMemory" -> _state.value.copy(memory = _state.value.memory.copy(firstMemory = value))
             else -> _state.value
         }
     }
 
     fun playEnterAnimation(onDone: () -> Unit) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(enterAnimationPlaying = true)
-            delay(1200)
-            _state.value = _state.value.copy(enterAnimationPlaying = false)
+            _state.value = _state.value.copy(preparingEntry = true, enterAnimationPlaying = true)
+            delay(1810)
+            _state.value = _state.value.copy(preparingEntry = false, enterAnimationPlaying = false)
             onDone()
         }
     }

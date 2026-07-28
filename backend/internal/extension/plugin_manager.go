@@ -32,11 +32,6 @@ type pluginRuntimeEntry struct {
 	circuits    map[PluginHook]*pluginCircuit
 }
 
-type afterReplyInvocation struct {
-	snapshot ExtensionSnapshot
-	reply    ReplyView
-}
-
 type pluginIdentityContextKey struct{}
 
 type PluginManager struct {
@@ -51,14 +46,13 @@ type PluginManager struct {
 	accepting    bool
 	ctx          context.Context
 	cancel       context.CancelFunc
-	afterReplyQ  chan afterReplyInvocation
 	eventWake    chan struct{}
 	eventIngress chan ExtensionEvent
 	wg           sync.WaitGroup
 }
 
 func NewPluginManager(registry *PluginRegistry, skills *Registry, executor *Executor, permissions *DefaultPermissionEvaluator, repository *Repository, validator *SchemaValidator) *PluginManager {
-	return &PluginManager{registry: registry, skills: skills, executor: executor, permissions: permissions, repository: repository, validator: validator, entries: map[string]*pluginRuntimeEntry{}, afterReplyQ: make(chan afterReplyInvocation, 128), eventWake: make(chan struct{}, 1), eventIngress: make(chan ExtensionEvent, 128)}
+	return &PluginManager{registry: registry, skills: skills, executor: executor, permissions: permissions, repository: repository, validator: validator, entries: map[string]*pluginRuntimeEntry{}, eventWake: make(chan struct{}, 1), eventIngress: make(chan ExtensionEvent, 128)}
 }
 
 func (m *PluginManager) Start(ctx context.Context) error {
@@ -79,8 +73,7 @@ func (m *PluginManager) Start(ctx context.Context) error {
 			applog.Warn("official plugin load failed", applog.Fields{"plugin_id": registered.Manifest.Metadata.ID, "error_code": asExtensionError(err).Code})
 		}
 	}
-	m.wg.Add(4)
-	go m.afterReplyWorker()
+	m.wg.Add(3)
 	go m.eventIngressWorker()
 	go m.eventWorker()
 	go m.scheduleWorker()
@@ -310,70 +303,6 @@ func (m *PluginManager) ResetCircuit(ctx context.Context, pluginID string) error
 	return nil
 }
 
-func (m *PluginManager) DispatchBeforePrompt(ctx context.Context, snapshot ExtensionSnapshot) []ContextContribution {
-	deadlineCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
-	defer cancel()
-	entries := m.sortedEntriesForHook(HookBeforePrompt)
-	contributions := make([]ContextContribution, 0)
-	for _, entry := range entries {
-		if deadlineCtx.Err() != nil {
-			break
-		}
-		hook := entry.instance.(BeforePromptHook)
-		var returned []ContextContribution
-		err := m.invoke(entry, HookBeforePrompt, scopeFromSnapshot(snapshot), false, func(callCtx context.Context) error {
-			var callErr error
-			returned, callErr = hook.BeforePrompt(callCtx, snapshot)
-			return callErr
-		})
-		if err != nil {
-			continue
-		}
-		for _, contribution := range returned {
-			validated, ok := validateContribution(entry.registered.Manifest.Metadata.ID, contribution)
-			if ok {
-				contributions = append(contributions, validated)
-			}
-		}
-	}
-	sort.SliceStable(contributions, func(i, j int) bool {
-		if contributions[i].Priority == contributions[j].Priority {
-			return contributions[i].Source < contributions[j].Source
-		}
-		return contributions[i].Priority > contributions[j].Priority
-	})
-	used := 0
-	filtered := contributions[:0]
-	for _, contribution := range contributions {
-		estimated := (len([]rune(contribution.Content)) + 3) / 4
-		if estimated > contribution.TokenLimit {
-			estimated = contribution.TokenLimit
-		}
-		if used+estimated > 1200 {
-			continue
-		}
-		used += estimated
-		filtered = append(filtered, contribution)
-	}
-	return filtered
-}
-
-func (m *PluginManager) DispatchAfterReply(snapshot ExtensionSnapshot, reply ReplyView) bool {
-	m.mu.RLock()
-	accepting := m.accepting
-	m.mu.RUnlock()
-	if !accepting {
-		return false
-	}
-	select {
-	case m.afterReplyQ <- afterReplyInvocation{snapshot: snapshot, reply: reply}:
-		return true
-	default:
-		applog.Warn("plugin after-reply queue full", applog.Fields{"conversation_id": snapshot.Conversation.ID})
-		return false
-	}
-}
-
 func (m *PluginManager) EmitSystemEvent(ctx context.Context, event ExtensionEvent) error {
 	if event.Source == "" {
 		event.Source = "amitia://system"
@@ -486,23 +415,6 @@ func (m *PluginManager) invoke(entry *pluginRuntimeEntry, hook PluginHook, scope
 	run := PluginRunView{RunID: uuid.NewString(), PluginID: manifest.Metadata.ID, PluginVersion: manifest.Metadata.Version, Hook: hook, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID, Channel: scope.Channel, Status: status, DurationMS: time.Since(started).Milliseconds(), ErrorCode: errorCode, TraceID: scope.TraceID, CircuitState: circuitState, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	_ = m.repository.CreatePluginRun(context.Background(), run)
 	return err
-}
-
-func (m *PluginManager) afterReplyWorker() {
-	defer m.wg.Done()
-	for {
-		select {
-		case invocation := <-m.afterReplyQ:
-			for _, entry := range m.sortedEntriesForHook(HookAfterReply) {
-				hook := entry.instance.(AfterReplyHook)
-				_ = m.invoke(entry, HookAfterReply, scopeFromSnapshot(invocation.snapshot), false, func(callCtx context.Context) error {
-					return hook.AfterReply(callCtx, invocation.snapshot, invocation.reply)
-				})
-			}
-		case <-m.ctx.Done():
-			return
-		}
-	}
 }
 
 func (m *PluginManager) eventWorker() {
