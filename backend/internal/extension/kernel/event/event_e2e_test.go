@@ -153,7 +153,7 @@ func setupTestService(t *testing.T, permGranted, scopeValid, depReady, runtimeAv
 	scopeChecker := &mockScopeChecker{valid: scopeValid}
 	depChecker := &mockDependencyChecker{ready: depReady}
 	runtimeChecker := &mockRuntimeChecker{available: runtimeAvailable}
-	resolver := NewDefaultEffectiveResolver(permChecker, scopeChecker, depChecker, runtimeChecker, &mockCircuitLookup{})
+	resolver := NewDefaultEffectiveResolver(permChecker, scopeChecker, depChecker, runtimeChecker, &mockCircuitLookup{}, nil)
 
 	cfg := DefaultServiceConfig().WithDB(db)
 	cfg.Dispatcher.PollInterval = 50 * time.Millisecond
@@ -288,6 +288,7 @@ func migrateTestDB(db *sql.DB) error {
 			projected_payload_hash TEXT,
 			subscription_generation INTEGER NOT NULL DEFAULT 0,
 			target_generation INTEGER NOT NULL DEFAULT 0,
+			producer_generation INTEGER NOT NULL DEFAULT 0,
 			started_at DATETIME,
 			finished_at DATETIME,
 			error_code TEXT,
@@ -709,10 +710,10 @@ func TestEventE2E_GenerationUpdate_OldDeliveryCancelled(t *testing.T) {
 		t.Fatalf("get delivery: %v", err)
 	}
 	if updated.Status != DeliveryStatusCancelled {
-		t.Errorf("expected cancelled_stale_generation, got status %s (code=%s)", updated.Status, updated.ErrorCode)
+		t.Errorf("expected cancel_stale_subscription, got status %s (code=%s)", updated.Status, updated.ErrorCode)
 	}
-	if updated.ErrorCode != "cancelled_stale_generation" {
-		t.Errorf("expected error code cancelled_stale_generation, got %s", updated.ErrorCode)
+	if updated.ErrorCode != "cancel_stale_subscription" {
+		t.Errorf("expected error code cancel_stale_subscription, got %s", updated.ErrorCode)
 	}
 }
 
@@ -730,7 +731,7 @@ func TestEventE2E_Restart_SubscriptionRecovered(t *testing.T) {
 	scopeChecker := &mockScopeChecker{valid: true}
 	depChecker := &mockDependencyChecker{ready: true}
 	runtimeChecker := &mockRuntimeChecker{available: true}
-	resolver := NewDefaultEffectiveResolver(permChecker, scopeChecker, depChecker, runtimeChecker, &mockCircuitLookup{})
+	resolver := NewDefaultEffectiveResolver(permChecker, scopeChecker, depChecker, runtimeChecker, &mockCircuitLookup{}, nil)
 
 	cfg := DefaultServiceConfig().WithDB(db)
 	cfg.Dispatcher.PollInterval = 50 * time.Millisecond

@@ -219,7 +219,17 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementEnabled)
 		result.Applied = append(result.Applied, "set_enablement")
 		if e.installer != nil {
-			e.installer.ActivateContributions(ctx, extID)
+			if err := e.installer.ActivateContributions(ctx, extID); err != nil {
+				if plan.CurrentState.Installation != nil {
+					recoveryInst := *plan.CurrentState.Installation
+					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
+					recoveryInst.UpdatedAt = time.Now().UTC()
+					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+				}
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
 			result.Applied = append(result.Applied, "activate_contributions")
 		}
 
@@ -238,14 +248,34 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
 		result.Applied = append(result.Applied, "set_enablement")
 		if e.installer != nil {
-			e.installer.DeactivateContributions(ctx, extID)
+			if err := e.installer.DeactivateContributions(ctx, extID); err != nil {
+				if plan.CurrentState.Installation != nil {
+					recoveryInst := *plan.CurrentState.Installation
+					recoveryInst.EnablementState = domain.EnablementPartiallyDisabled
+					recoveryInst.UpdatedAt = time.Now().UTC()
+					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+				}
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
 			result.Applied = append(result.Applied, "deactivate_contributions")
 		}
 
 	case lifecycle_manager.CmdUninstall:
 		if e.installer != nil {
 			e.installer.StopRuntimeInstances(ctx, extID)
-			e.installer.UninstallContributions(ctx, extID)
+			if err := e.installer.UninstallContributions(ctx, extID); err != nil {
+				if plan.CurrentState.Installation != nil {
+					recoveryInst := *plan.CurrentState.Installation
+					recoveryInst.InstallationState = domain.InstallationStateUninstallFailed
+					recoveryInst.UpdatedAt = time.Now().UTC()
+					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+				}
+				result.Status = "failed"
+				result.Error = err.Error()
+				return result, err
+			}
 			result.Applied = append(result.Applied, "uninstall_contributions")
 		}
 		_ = e.enablement.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
@@ -332,7 +362,11 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "repair_installation")
 			if e.installer != nil {
-				e.installer.RepairContributions(ctx, extID, inst.Generation)
+				if err := e.installer.RepairContributions(ctx, extID, inst.Generation); err != nil {
+					result.Status = "failed"
+					result.Error = err.Error()
+					return result, err
+				}
 				result.Applied = append(result.Applied, "repair_contributions")
 			}
 		}

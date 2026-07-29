@@ -271,6 +271,21 @@ func (api *ScheduleAPI) runNow(c *gin.Context) {
 		return
 	}
 	scheduleID := c.Param("scheduleId")
+	source := c.GetHeader("X-Schedule-Source")
+	if source == "android_worker" {
+		def, _, err := svc.GetSchedule(c.Request.Context(), scheduleID)
+		if err != nil {
+			writeScheduleError(c, err)
+			return
+		}
+		if def.ExecutionOwner == schedule.ExecutionOwnerBackend {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   schedule.ErrCodeExecutionOwnerDenied,
+				"message": "schedule execution owner is backend, android worker cannot trigger run-now",
+			})
+			return
+		}
+	}
 	trigger, err := svc.RunNow(c.Request.Context(), scheduleID)
 	if err != nil {
 		writeScheduleError(c, err)

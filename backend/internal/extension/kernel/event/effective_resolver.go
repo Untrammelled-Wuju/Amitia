@@ -20,17 +20,22 @@ type EventRuntimeChecker interface {
 	CheckSubscriptionRuntime(ctx context.Context, def EventSubscriptionDefinition) (available bool, reason string, err error)
 }
 
+type GenerationResolver interface {
+	CurrentGeneration(ctx context.Context, extensionID string) (int64, error)
+}
+
 type EffectiveResolver interface {
 	Resolve(ctx context.Context, def EventSubscriptionDefinition) SubscriptionEffectiveState
 	ResolveForDelivery(ctx context.Context, def EventSubscriptionDefinition, envelope EventEnvelope) SubscriptionEffectiveState
 }
 
 type DefaultEffectiveResolver struct {
-	permissionChecker EventPermissionChecker
-	scopeChecker      EventScopeChecker
-	dependencyChecker EventDependencyChecker
-	runtimeChecker    EventRuntimeChecker
-	circuitLookup     CircuitStateLookup
+	permissionChecker  EventPermissionChecker
+	scopeChecker       EventScopeChecker
+	dependencyChecker  EventDependencyChecker
+	runtimeChecker     EventRuntimeChecker
+	circuitLookup      CircuitStateLookup
+	generationResolver GenerationResolver
 }
 
 type CircuitStateLookup interface {
@@ -43,13 +48,15 @@ func NewDefaultEffectiveResolver(
 	dependencyChecker EventDependencyChecker,
 	runtimeChecker EventRuntimeChecker,
 	circuitLookup CircuitStateLookup,
+	generationResolver GenerationResolver,
 ) *DefaultEffectiveResolver {
 	return &DefaultEffectiveResolver{
-		permissionChecker: permissionChecker,
-		scopeChecker:      scopeChecker,
-		dependencyChecker: dependencyChecker,
-		runtimeChecker:    runtimeChecker,
-		circuitLookup:     circuitLookup,
+		permissionChecker:  permissionChecker,
+		scopeChecker:       scopeChecker,
+		dependencyChecker:  dependencyChecker,
+		runtimeChecker:     runtimeChecker,
+		circuitLookup:      circuitLookup,
+		generationResolver: generationResolver,
 	}
 }
 
@@ -142,10 +149,25 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	if !state.IsActive() {
 		return state
 	}
-	if !envelope.IsFromHost() {
-		if def.Generation > 0 && envelope.ProducerGeneration > 0 && def.Generation != envelope.ProducerGeneration {
+	if !envelope.IsFromHost() && envelope.ProducerGeneration > 0 && r.generationResolver != nil {
+		producerID := envelope.ProducerExtensionID
+		if producerID == "" {
+			producerID = envelope.ProducerID
+		}
+		if producerID != "" {
+			currentProducerGen, err := r.generationResolver.CurrentGeneration(ctx, producerID)
+			if err == nil && currentProducerGen > 0 && currentProducerGen > envelope.ProducerGeneration {
+				state.ScopeValid = false
+				state.Reason = "reject_stale_producer"
+				return state
+			}
+		}
+	}
+	if def.Generation > 0 && r.generationResolver != nil {
+		currentSubscriberGen, err := r.generationResolver.CurrentGeneration(ctx, def.ExtensionID)
+		if err == nil && currentSubscriberGen > 0 && currentSubscriberGen > def.Generation {
 			state.ScopeValid = false
-			state.Reason = "stale_generation"
+			state.Reason = "cancel_stale_subscription"
 			return state
 		}
 	}
@@ -167,11 +189,6 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	} else {
 		state.ScopeValid = false
 		state.Reason = "scope_checker_missing"
-		return state
-	}
-	if !envelope.IsFromHost() && envelope.ProducerGeneration > 0 && def.Generation > 0 && envelope.ProducerGeneration != def.Generation {
-		state.ScopeValid = false
-		state.Reason = "stale_generation"
 		return state
 	}
 	return state

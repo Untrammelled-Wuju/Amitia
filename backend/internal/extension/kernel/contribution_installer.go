@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -43,6 +44,51 @@ type installOp struct {
 	kind       domain.ContributionKind
 	doInstall  func(ctx context.Context) error
 	doRollback func(ctx context.Context)
+}
+
+type lifecycleAuditEntry struct {
+	ContributionID string
+	Kind           string
+	OperationID    string
+	Generation     int64
+	StartedAt      time.Time
+	FinishedAt     time.Time
+	Result         string
+	ErrorCode      string
+}
+
+const (
+	auditResultSucceeded = "succeeded"
+	auditResultFailed    = "failed"
+	auditResultRollback  = "rollback"
+	auditResultSkipped   = "skipped"
+)
+
+func newOperationID(prefix string) string {
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+}
+
+func (i *TypedContributionInstaller) logAudit(entry lifecycleAuditEntry) {
+	log.Printf("[lifecycle-audit] contributionID=%s kind=%s operationID=%s generation=%d startedAt=%s finishedAt=%s result=%s errorCode=%s",
+		entry.ContributionID, entry.Kind, entry.OperationID, entry.Generation,
+		entry.StartedAt.Format(time.RFC3339Nano), entry.FinishedAt.Format(time.RFC3339Nano),
+		entry.Result, entry.ErrorCode)
+}
+
+func (i *TypedContributionInstaller) recordAudit(contrib domain.ContributionDefinition, operationID string, generation int64, startedAt time.Time, result string, err error) {
+	entry := lifecycleAuditEntry{
+		ContributionID: string(contrib.ID),
+		Kind:           string(contrib.Kind),
+		OperationID:    operationID,
+		Generation:     generation,
+		StartedAt:      startedAt,
+		FinishedAt:     time.Now().UTC(),
+		Result:         result,
+	}
+	if err != nil {
+		entry.ErrorCode = err.Error()
+	}
+	i.logAudit(entry)
 }
 
 func (i *TypedContributionInstaller) InstallContributions(ctx context.Context, contribs []domain.ContributionDefinition, generation int64) error {
@@ -624,42 +670,70 @@ func (i *TypedContributionInstaller) buildRuntimeBinding(contrib domain.Contribu
 	return rb
 }
 
-func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, extID domain.ExtensionID) {
+func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, extID domain.ExtensionID) error {
 	if i.container == nil {
-		return
+		return fmt.Errorf("contribution-installer: container not attached")
 	}
 	contribs, err := i.container.ContributionRepository.ListContributions(ctx, extID)
 	if err != nil {
-		log.Printf("[contribution-installer] list contributions for activate %s: %v", extID, err)
-		return
+		return fmt.Errorf("contribution-installer: list contributions for activate %s: %w", extID, err)
 	}
+
+	operationID := newOperationID("activate")
+	generation := int64(0)
+	if inst, instErr := i.container.InstallationRepository.GetInstallation(ctx, extID); instErr == nil {
+		generation = inst.Generation
+	}
+
+	activated := make([]domain.ContributionDefinition, 0, len(contribs))
+	seen := make(map[domain.ContributionID]bool, len(contribs))
+
 	for _, contrib := range contribs {
-		i.activateSingle(ctx, contrib)
+		if seen[contrib.ID] {
+			continue
+		}
+		seen[contrib.ID] = true
+
+		startedAt := time.Now().UTC()
+		if err := i.activateSingle(ctx, contrib); err != nil {
+			i.recordAudit(contrib, operationID, generation, startedAt, "failed", err)
+			for j := len(activated) - 1; j >= 0; j-- {
+				rollbackStart := time.Now().UTC()
+				rollbackErr := i.deactivateSingle(ctx, activated[j])
+				i.recordAudit(activated[j], operationID, generation, rollbackStart, auditResultRollback, rollbackErr)
+			}
+			return fmt.Errorf("contribution-installer: activate %s (%s): %w", contrib.ID, contrib.Kind, err)
+		}
+		i.recordAudit(contrib, operationID, generation, startedAt, "succeeded", nil)
+		activated = append(activated, contrib)
 	}
+
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition) error {
 	switch contrib.Kind {
 	case domain.ContributionKindTool:
-		i.activateTool(ctx, contrib)
+		return i.activateTool(ctx, contrib)
 	case domain.ContributionKindEventSubscription:
-		i.activateEventSubscription(ctx, contrib)
+		return i.activateEventSubscription(ctx, contrib)
 	case domain.ContributionKindHook:
-		i.activateHook(ctx, contrib)
+		return i.activateHook(ctx, contrib)
 	case domain.ContributionKindSchedule:
-		i.activateSchedule(ctx, contrib)
+		return i.activateSchedule(ctx, contrib)
 	case domain.ContributionKindAgentSkill:
-		i.activateAgentSkill(ctx, contrib)
+		return i.activateAgentSkill(ctx, contrib)
 	case domain.ContributionKindWorkflow:
-		i.activateWorkflow(ctx, contrib)
+		return i.activateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		i.activateUI(ctx, contrib)
+		return i.activateUI(ctx, contrib)
 	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.ToolRegistry == nil {
-		return
+		return fmt.Errorf("tool registry not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def struct {
@@ -708,15 +782,16 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Runtime:      i.buildRuntimeBinding(contrib),
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
-		log.Printf("[contribution-installer] activate tool %s: %v", toolID, err)
+		return fmt.Errorf("activate tool %s: %w", toolID, err)
 	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateEventSubscription(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateEventSubscription(ctx context.Context, contrib domain.ContributionDefinition) error {
 	defData, _ := json.Marshal(contrib.Definition)
 	var def event.EventSubscriptionDefinition
 	if err := json.Unmarshal(defData, &def); err != nil {
-		return
+		return fmt.Errorf("unmarshal event subscription for activate: %w", err)
 	}
 	if def.ContributionID == "" {
 		def.ContributionID = string(contrib.ID)
@@ -728,65 +803,84 @@ func (i *TypedContributionInstaller) activateEventSubscription(ctx context.Conte
 		def.ModuleID = string(contrib.ModuleID)
 	}
 	def.Enabled = true
-	if i.container.EventService != nil {
-		_ = i.container.EventService.RegisterSubscription(ctx, def)
+	if i.container.EventService == nil {
+		return fmt.Errorf("event service not configured")
 	}
+	if err := i.container.EventService.RegisterSubscription(ctx, def); err != nil {
+		return fmt.Errorf("activate event subscription %s: %w", def.ContributionID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateHook(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateHook(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.HookService == nil || i.container.HookService.Lifecycle == nil {
-		return
+		return fmt.Errorf("hook service not configured")
 	}
-	_ = i.container.HookService.Lifecycle.EnableContribution(ctx, string(contrib.ID))
+	if err := i.container.HookService.Lifecycle.EnableContribution(ctx, string(contrib.ID)); err != nil {
+		return fmt.Errorf("activate hook %s: %w", contrib.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateSchedule(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateSchedule(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.ScheduleService == nil {
-		return
+		return fmt.Errorf("schedule service not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def schedule.ScheduleContributionDefinition
 	if err := json.Unmarshal(defData, &def); err != nil {
-		return
+		return fmt.Errorf("unmarshal schedule for activate: %w", err)
 	}
 	if def.ScheduleID == "" {
-		return
+		return fmt.Errorf("schedule contribution %s missing scheduleId", contrib.ID)
 	}
 	state, err := i.container.ScheduleService.GetScheduleState(ctx, def.ScheduleID)
-	if err != nil || state == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("get schedule state %s: %w", def.ScheduleID, err)
 	}
-	_ = i.container.ScheduleService.Enable(ctx, def.ScheduleID, state.Generation)
+	if state == nil {
+		return fmt.Errorf("schedule state %s is nil", def.ScheduleID)
+	}
+	if err := i.container.ScheduleService.Enable(ctx, def.ScheduleID, state.Generation); err != nil {
+		return fmt.Errorf("activate schedule %s: %w", def.ScheduleID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateAgentSkill(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateAgentSkill(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.AgentSkillCatalog == nil {
-		return
+		return fmt.Errorf("agent skill catalog not configured")
 	}
-	_ = i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), true)
+	if err := i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), true); err != nil {
+		return fmt.Errorf("activate agent skill %s: %w", contrib.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateWorkflow(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateWorkflow(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.WorkflowRegistry == nil {
-		return
+		return fmt.Errorf("workflow registry not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def workflow.WorkflowDefinition
 	if err := json.Unmarshal(defData, &def); err != nil {
-		return
+		return fmt.Errorf("unmarshal workflow for activate: %w", err)
 	}
 	if def.ID == "" {
 		def.ID = string(contrib.ID)
 	}
 	def.Enabled = true
-	_ = i.container.WorkflowRegistry.SetEnabled(def.ID, true)
+	if err := i.container.WorkflowRegistry.SetEnabled(def.ID, true); err != nil {
+		return fmt.Errorf("activate workflow %s: %w", def.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition) error {
 	defData, _ := json.Marshal(contrib.Definition)
 	var uiDef ui_contribution.UIContributionDefinition
 	if err := json.Unmarshal(defData, &uiDef); err != nil {
-		return
+		return fmt.Errorf("unmarshal ui contribution for activate: %w", err)
 	}
 	if uiDef.ContributionID == "" {
 		uiDef.ContributionID = ui_contribution.ContributionID(contrib.ID)
@@ -798,49 +892,76 @@ func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib dom
 		uiDef.ModuleID = ui_contribution.ModuleID(contrib.ModuleID)
 	}
 	if i.container.UIHost != nil {
-		_ = i.container.UIHost.Mount(uiDef.ContributionID)
+		if err := i.container.UIHost.Mount(uiDef.ContributionID); err != nil {
+			return fmt.Errorf("mount ui contribution %s: %w", uiDef.ContributionID, err)
+		}
 	}
 	if contrib.Kind == domain.ContributionKindUIDesktop && i.container.DesktopHost != nil {
 		i.container.DesktopHost.EnableExtension(ctx, string(contrib.ExtensionID))
 	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) DeactivateContributions(ctx context.Context, extID domain.ExtensionID) {
+func (i *TypedContributionInstaller) DeactivateContributions(ctx context.Context, extID domain.ExtensionID) error {
 	if i.container == nil {
-		return
+		return fmt.Errorf("contribution-installer: container not attached")
 	}
 	contribs, err := i.container.ContributionRepository.ListContributions(ctx, extID)
 	if err != nil {
-		log.Printf("[contribution-installer] list contributions for deactivate %s: %v", extID, err)
-		return
+		return fmt.Errorf("contribution-installer: list contributions for deactivate %s: %w", extID, err)
 	}
+
+	operationID := newOperationID("deactivate")
+	generation := int64(0)
+	if inst, instErr := i.container.InstallationRepository.GetInstallation(ctx, extID); instErr == nil {
+		generation = inst.Generation
+	}
+
+	seen := make(map[domain.ContributionID]bool, len(contribs))
+	var firstErr error
 	for _, contrib := range contribs {
-		i.deactivateSingle(ctx, contrib)
+		if seen[contrib.ID] {
+			continue
+		}
+		seen[contrib.ID] = true
+
+		startedAt := time.Now().UTC()
+		if err := i.deactivateSingle(ctx, contrib); err != nil {
+			i.recordAudit(contrib, operationID, generation, startedAt, auditResultFailed, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("contribution-installer: deactivate %s (%s): %w", contrib.ID, contrib.Kind, err)
+			}
+			continue
+		}
+		i.recordAudit(contrib, operationID, generation, startedAt, auditResultSucceeded, nil)
 	}
+
+	return firstErr
 }
 
-func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contrib domain.ContributionDefinition) error {
 	switch contrib.Kind {
 	case domain.ContributionKindTool:
-		i.deactivateTool(ctx, contrib)
+		return i.deactivateTool(ctx, contrib)
 	case domain.ContributionKindEventSubscription:
-		i.deactivateEventSubscription(ctx, contrib)
+		return i.deactivateEventSubscription(ctx, contrib)
 	case domain.ContributionKindHook:
-		i.deactivateHook(ctx, contrib)
+		return i.deactivateHook(ctx, contrib)
 	case domain.ContributionKindSchedule:
-		i.deactivateSchedule(ctx, contrib)
+		return i.deactivateSchedule(ctx, contrib)
 	case domain.ContributionKindAgentSkill:
-		i.deactivateAgentSkill(ctx, contrib)
+		return i.deactivateAgentSkill(ctx, contrib)
 	case domain.ContributionKindWorkflow:
-		i.deactivateWorkflow(ctx, contrib)
+		return i.deactivateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		i.deactivateUI(ctx, contrib)
+		return i.deactivateUI(ctx, contrib)
 	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.ToolRegistry == nil {
-		return
+		return fmt.Errorf("tool registry not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def struct {
@@ -851,65 +972,86 @@ func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib
 	if toolID == "" {
 		toolID = string(contrib.ID)
 	}
-	_ = i.container.ToolRegistry.Unregister(ctx, toolID)
+	if err := i.container.ToolRegistry.Unregister(ctx, toolID); err != nil {
+		return fmt.Errorf("deactivate tool %s: %w", toolID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateEventSubscription(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateEventSubscription(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.EventService == nil {
-		return
+		return fmt.Errorf("event service not configured")
 	}
-	_ = i.container.EventService.UnregisterSubscription(ctx, string(contrib.ID))
+	if err := i.container.EventService.UnregisterSubscription(ctx, string(contrib.ID)); err != nil {
+		return fmt.Errorf("deactivate event subscription %s: %w", contrib.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateHook(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateHook(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.HookService == nil || i.container.HookService.Lifecycle == nil {
-		return
+		return fmt.Errorf("hook service not configured")
 	}
-	_ = i.container.HookService.Lifecycle.DisableContribution(ctx, string(contrib.ID))
+	if err := i.container.HookService.Lifecycle.DisableContribution(ctx, string(contrib.ID)); err != nil {
+		return fmt.Errorf("deactivate hook %s: %w", contrib.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateSchedule(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateSchedule(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.ScheduleService == nil {
-		return
+		return fmt.Errorf("schedule service not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def schedule.ScheduleContributionDefinition
 	if err := json.Unmarshal(defData, &def); err != nil {
-		return
+		return fmt.Errorf("unmarshal schedule for deactivate: %w", err)
 	}
 	if def.ScheduleID == "" {
-		return
+		return fmt.Errorf("schedule contribution %s missing scheduleId", contrib.ID)
 	}
 	state, err := i.container.ScheduleService.GetScheduleState(ctx, def.ScheduleID)
-	if err != nil || state == nil {
-		return
+	if err != nil {
+		return fmt.Errorf("get schedule state %s: %w", def.ScheduleID, err)
 	}
-	_ = i.container.ScheduleService.Disable(ctx, def.ScheduleID, state.Generation)
+	if state == nil {
+		return fmt.Errorf("schedule state %s is nil", def.ScheduleID)
+	}
+	if err := i.container.ScheduleService.Disable(ctx, def.ScheduleID, state.Generation); err != nil {
+		return fmt.Errorf("deactivate schedule %s: %w", def.ScheduleID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateAgentSkill(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateAgentSkill(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.AgentSkillCatalog == nil {
-		return
+		return fmt.Errorf("agent skill catalog not configured")
 	}
-	_ = i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), false)
+	if err := i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), false); err != nil {
+		return fmt.Errorf("deactivate agent skill %s: %w", contrib.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateWorkflow(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateWorkflow(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.WorkflowRegistry == nil {
-		return
+		return fmt.Errorf("workflow registry not configured")
 	}
 	defData, _ := json.Marshal(contrib.Definition)
 	var def workflow.WorkflowDefinition
 	if err := json.Unmarshal(defData, &def); err != nil {
-		return
+		return fmt.Errorf("unmarshal workflow for deactivate: %w", err)
 	}
 	if def.ID == "" {
 		def.ID = string(contrib.ID)
 	}
-	_ = i.container.WorkflowRegistry.SetEnabled(def.ID, false)
+	if err := i.container.WorkflowRegistry.SetEnabled(def.ID, false); err != nil {
+		return fmt.Errorf("deactivate workflow %s: %w", def.ID, err)
+	}
+	return nil
 }
 
-func (i *TypedContributionInstaller) deactivateUI(ctx context.Context, contrib domain.ContributionDefinition) {
+func (i *TypedContributionInstaller) deactivateUI(ctx context.Context, contrib domain.ContributionDefinition) error {
 	if i.container.UIHost != nil {
 		i.container.UIHost.DisableExtension(ui_contribution.ExtensionID(contrib.ExtensionID))
 	}
@@ -919,6 +1061,7 @@ func (i *TypedContributionInstaller) deactivateUI(ctx context.Context, contrib d
 	if i.container.DesktopHost != nil {
 		i.container.DesktopHost.DisableExtension(ctx, string(contrib.ExtensionID))
 	}
+	return nil
 }
 
 func resolveExtensionBundlePath(extRoot, extensionID string) string {
@@ -953,24 +1096,44 @@ func resolveExtensionBundlePath(extRoot, extensionID string) string {
 	return ""
 }
 
-func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context, extID domain.ExtensionID) {
+func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context, extID domain.ExtensionID) error {
 	if i.container == nil {
-		return
+		return fmt.Errorf("contribution-installer: container not attached")
 	}
+
+	operationID := newOperationID("uninstall")
+	generation := int64(0)
+	if inst, instErr := i.container.InstallationRepository.GetInstallation(ctx, extID); instErr == nil {
+		generation = inst.Generation
+	}
+	startedAt := time.Now().UTC()
+
 	if i.container.EventService != nil {
-		_ = i.container.EventService.RemoveSubscriptionsByExtension(ctx, string(extID))
+		if err := i.container.EventService.RemoveSubscriptionsByExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "event_subscriptions", Kind: domain.ContributionKindEventSubscription, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall event subscriptions for %s: %w", extID, err)
+		}
 	}
 	if i.container.HookService != nil && i.container.HookService.Lifecycle != nil {
-		_ = i.container.HookService.Lifecycle.UninstallByExtension(ctx, string(extID))
+		if err := i.container.HookService.Lifecycle.UninstallByExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "hooks", Kind: domain.ContributionKindHook, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall hooks for %s: %w", extID, err)
+		}
 	}
 	if i.container.ScheduleService != nil {
-		_ = i.container.ScheduleService.DeleteAllByExtension(ctx, string(extID))
+		if err := i.container.ScheduleService.DeleteAllByExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "schedules", Kind: domain.ContributionKindSchedule, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall schedules for %s: %w", extID, err)
+		}
 	}
 	if i.container.ToolRegistry != nil {
 		i.container.ToolRegistry.UnregisterByOwner(ctx, string(extID))
 	}
 	if i.container.AgentSkillCatalog != nil {
-		_ = i.container.AgentSkillCatalog.Unregister(string(extID))
+		if err := i.container.AgentSkillCatalog.Unregister(string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "agent_skills", Kind: domain.ContributionKindAgentSkill, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall agent skills for %s: %w", extID, err)
+		}
 	}
 	if i.container.WorkflowRegistry != nil {
 		contribs, _ := i.container.ContributionRepository.ListContributions(ctx, extID)
@@ -985,22 +1148,34 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 				if wfID == "" {
 					wfID = string(contrib.ID)
 				}
-				_ = i.container.WorkflowRegistry.Unregister(wfID)
+				if err := i.container.WorkflowRegistry.Unregister(wfID); err != nil {
+					i.recordAudit(contrib, operationID, generation, startedAt, auditResultFailed, err)
+					return fmt.Errorf("uninstall workflow %s for %s: %w", wfID, extID, err)
+				}
 			}
 		}
 	}
 	if i.container.UIHost != nil {
 		for _, uiDef := range i.container.UIHost.ListAll() {
 			if string(uiDef.ExtensionID) == string(extID) {
-				_ = i.container.UIHost.UnregisterContribution(uiDef.ContributionID)
+				if err := i.container.UIHost.UnregisterContribution(uiDef.ContributionID); err != nil {
+					i.recordAudit(domain.ContributionDefinition{ID: domain.ContributionID(uiDef.ContributionID), Kind: domain.ContributionKindUIPage, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+					return fmt.Errorf("uninstall ui contribution %s for %s: %w", uiDef.ContributionID, extID, err)
+				}
 			}
 		}
 	}
 	if i.container.PageHost != nil {
-		_, _ = i.container.PageHost.HandleExtensionUninstalled(ctx, extension_page_host.ExtensionID(extID))
+		if _, err := i.container.PageHost.HandleExtensionUninstalled(ctx, extension_page_host.ExtensionID(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "pages", Kind: domain.ContributionKindUIPage, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall pages for %s: %w", extID, err)
+		}
 	}
 	if i.container.UIContributionRepo != nil {
-		_ = i.container.UIContributionRepo.DeleteByExtension(ctx, string(extID))
+		if err := i.container.UIContributionRepo.DeleteByExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "ui_contributions", Kind: domain.ContributionKindUIPage, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("delete ui contribution records for %s: %w", extID, err)
+		}
 	}
 	if i.container.SchemaRegistry != nil {
 		i.container.SchemaRegistry.Unregister(string(extID))
@@ -1009,40 +1184,96 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		i.container.DesktopHost.UninstallContributions(ctx, string(extID))
 	}
 	if i.container.TaskRuntimeService != nil {
-		_ = i.container.TaskRuntimeService.DeleteByExtension(ctx, string(extID))
+		if err := i.container.TaskRuntimeService.DeleteByExtension(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "background_tasks", Kind: domain.ContributionKindBackgroundService, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall background tasks for %s: %w", extID, err)
+		}
 	}
+
+	i.recordAudit(domain.ContributionDefinition{ID: "all", ExtensionID: extID}, operationID, generation, startedAt, auditResultSucceeded, nil)
+	return nil
 }
 
-func (i *TypedContributionInstaller) RepairContributions(ctx context.Context, extID domain.ExtensionID, generation int64) {
+func (i *TypedContributionInstaller) RepairContributions(ctx context.Context, extID domain.ExtensionID, generation int64) error {
 	if i.container == nil {
-		return
+		return fmt.Errorf("contribution-installer: container not attached")
 	}
 	contribs, err := i.container.ContributionRepository.ListContributions(ctx, extID)
 	if err != nil {
-		log.Printf("[contribution-installer] list contributions for repair %s: %v", extID, err)
-		return
+		return fmt.Errorf("contribution-installer: list contributions for repair %s: %w", extID, err)
 	}
-	i.UninstallContributions(ctx, extID)
+	if err := i.UninstallContributions(ctx, extID); err != nil {
+		return fmt.Errorf("contribution-installer: repair uninstall failed %s: %w", extID, err)
+	}
 	if err := i.InstallContributions(ctx, contribs, generation); err != nil {
-		log.Printf("[contribution-installer] repair install failed %s: %v", extID, err)
-		return
+		return fmt.Errorf("contribution-installer: repair install failed %s: %w", extID, err)
 	}
 	enabled := false
 	if inst, err := i.container.InstallationRepository.GetInstallation(ctx, extID); err == nil {
 		enabled = inst.EnablementState == domain.EnablementEnabled
 	}
 	if enabled {
-		i.ActivateContributions(ctx, extID)
+		if err := i.ActivateContributions(ctx, extID); err != nil {
+			return fmt.Errorf("contribution-installer: repair activate failed %s: %w", extID, err)
+		}
 	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) RecoverContributions(ctx context.Context, extID domain.ExtensionID) error {
+	if i.container == nil {
+		return fmt.Errorf("contribution-installer: container not attached")
+	}
+
+	inst, err := i.container.InstallationRepository.GetInstallation(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("contribution-installer: get installation for recover %s: %w", extID, err)
+	}
+
+	operationID := newOperationID("recover")
+	generation := inst.Generation
+	startedAt := time.Now().UTC()
+
+	switch inst.EnablementState {
+	case domain.EnablementEnabled:
+		if err := i.ActivateContributions(ctx, extID); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "recover_activate", ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("contribution-installer: recover activate failed %s: %w", extID, err)
+		}
+	case domain.EnablementDisabled, domain.EnablementPartiallyDisabled, domain.EnablementRequiresRecovery:
+		if err := i.DeactivateContributions(ctx, extID); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "recover_deactivate", ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("contribution-installer: recover deactivate failed %s: %w", extID, err)
+		}
+	}
+
+	i.recordAudit(domain.ContributionDefinition{ID: "recover", ExtensionID: extID}, operationID, generation, startedAt, auditResultSucceeded, nil)
+	return nil
 }
 
 func (i *TypedContributionInstaller) StopRuntimeInstances(ctx context.Context, extID domain.ExtensionID) {
 	if i.container == nil || i.container.RuntimeSupervisor == nil {
 		return
 	}
-	snap := i.container.RuntimeSupervisor.Snapshot(ctx, runtime_supervisor.DefinitionID(extID))
-	for _, instance := range snap.Instances {
-		_ = i.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonUninstall)
+	modules, err := i.container.ModuleRepository.ListModules(ctx, extID)
+	if err != nil {
+		return
+	}
+	for _, mod := range modules {
+		if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+			defID := runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(mod.ID), mod.Runtime.Type)
+			snap := i.container.RuntimeSupervisor.Snapshot(ctx, defID)
+			for _, instance := range snap.Instances {
+				if stopErr := i.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonUninstall); stopErr != nil {
+					i.container.recordReconcileFailure(ctx, extID, runtime_supervisor.ReconcileResult{
+						DefinitionID: defID,
+						Desired:      runtime_supervisor.DesiredStopped,
+						Actual:       runtime_supervisor.ActualFailed,
+						Error:        stopErr,
+					})
+				}
+			}
+		}
 	}
 }
 

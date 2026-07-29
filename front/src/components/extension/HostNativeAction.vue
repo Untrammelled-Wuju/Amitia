@@ -14,9 +14,23 @@ const icon = computed(() => props.contribution.icon ?? "");
 
 async function invokeAction(actionId: string) {
   try {
-    await apiClient.post(`/api/extensions/ui/action/${props.contribution.contributionId}/${actionId}`, {
+    const res = await apiClient.post(`/api/extensions/ui/action/${props.contribution.contributionId}/${actionId}`, {
       context: props.context ?? {},
     });
+    const result = res.data?.result ?? res.data;
+    if (result?.clientExecute === true && typeof result.text === "string") {
+      try {
+        if (window.amitiaDesktop?.writeClipboardText) {
+          await window.amitiaDesktop.writeClipboardText(result.text as string);
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(result.text as string);
+        } else {
+          console.error("Clipboard write failed: CLIPBOARD_HOST_UNAVAILABLE");
+        }
+      } catch (clipErr) {
+        console.error("Clipboard write failed:", clipErr);
+      }
+    }
   } catch (e) {
     console.error("Action invoke failed:", e);
   }

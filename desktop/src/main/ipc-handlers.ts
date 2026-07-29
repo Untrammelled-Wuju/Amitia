@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -247,5 +247,15 @@ export function registerIpcHandlers(
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
     const allWindows = BrowserWindow.getAllWindows();
     return senderWindow === allWindows[0] ? "main" : "child";
+  });
+
+  ipcMain.handle(IPC_CHANNELS.clipboardWriteText, async (_event, text: string) => {
+    if (typeof text !== "string" || text.length === 0) {
+      throw new Error("clipboard write failed: text is empty");
+    }
+    if (text.length > 1024 * 1024) {
+      throw new Error("clipboard write failed: text exceeds 1MB limit");
+    }
+    clipboard.writeText(text);
   });
 }

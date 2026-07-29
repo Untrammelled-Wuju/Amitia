@@ -181,9 +181,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		panic("failed to initialize extension kernel")
 	}
 	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
+	charRepo := character.NewRepository(ctx)
+	kernelCharReader := newKernelCharacterReader(charRepo)
+	kernelConvReader := newKernelConversationReader(chatSvc)
+	kernelMemQuerySvc := newKernelMemoryQueryService(memSvc)
 	kernelContainer, err := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
+		WithCharacterReader(kernelCharReader).
+		WithConversationReader(kernelConvReader).
+		WithMemoryQueryService(kernelMemQuerySvc).
 		Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
@@ -299,7 +306,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
-	charRepo := character.NewRepository(ctx)
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, temporalSvc)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
@@ -374,7 +380,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
 	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
 	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
-	skillRuntime := mcpskill.New(mcpRepository, connectionManager, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)))
+	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)))
 	featureService := mcpfeatures.New(mcpRepository, connectionManager)
 	interactionBroker := mcphost.NewBroker(chatSvc)
 	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)

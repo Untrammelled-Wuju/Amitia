@@ -219,14 +219,31 @@ const (
 	ActionTargetOpenResource     UIActionTargetType = "open_resource"
 )
 
+type WorkflowActionType string
+
+const (
+	WorkflowActionRun    WorkflowActionType = "run"
+	WorkflowActionCancel WorkflowActionType = "cancel"
+	WorkflowActionStatus WorkflowActionType = "status"
+)
+
+func (w WorkflowActionType) Valid() bool {
+	switch w {
+	case WorkflowActionRun, WorkflowActionCancel, WorkflowActionStatus:
+		return true
+	}
+	return false
+}
+
 type UIActionTarget struct {
-	Type       UIActionTargetType `json:"type"`
-	Command    string             `json:"command,omitempty"`
-	ToolID     string             `json:"tool_id,omitempty"`
-	WorkflowID string             `json:"workflow_id,omitempty"`
-	RouteID    string             `json:"route_id,omitempty"`
-	DialogID   string             `json:"dialog_id,omitempty"`
-	Resource   string             `json:"resource,omitempty"`
+	Type           UIActionTargetType `json:"type"`
+	Command        string             `json:"command,omitempty"`
+	ToolID         string             `json:"tool_id,omitempty"`
+	WorkflowID     string             `json:"workflow_id,omitempty"`
+	WorkflowAction WorkflowActionType `json:"workflow_action,omitempty"`
+	RouteID        string             `json:"route_id,omitempty"`
+	DialogID       string             `json:"dialog_id,omitempty"`
+	Resource       string             `json:"resource,omitempty"`
 }
 
 type UIActionDefinition struct {
@@ -388,6 +405,14 @@ func ValidateDefinition(def *UIContributionDefinition) error {
 		}
 		if a.Target.Type == "" {
 			return errors.New("ui_contribution: action target type empty")
+		}
+		if a.Target.Type == ActionTargetWorkflow {
+			if a.Target.WorkflowID == "" {
+				return errors.New("ui_contribution: workflow action requires workflow_id")
+			}
+			if a.Target.WorkflowAction != "" && !a.Target.WorkflowAction.Valid() {
+				return fmt.Errorf("ui_contribution: invalid workflow_action %s", a.Target.WorkflowAction)
+			}
 		}
 	}
 	return nil

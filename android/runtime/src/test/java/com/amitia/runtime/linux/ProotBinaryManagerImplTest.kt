@@ -34,6 +34,9 @@ class ProotBinaryManagerImplTest {
         integrityChecker = spyk(RootfsIntegrityChecker())
 
         every { context.filesDir } returns tempRoot
+        val appInfo = android.content.pm.ApplicationInfo()
+        appInfo.nativeLibraryDir = tempRoot.absolutePath
+        every { context.applicationInfo } returns appInfo
         every { stateMachine.emitLog(any(), any(), any()) } just Runs
         every { stateMachine.emitError(any(), any(), any(), any()) } just Runs
         every { context.assets.openFd(any()) } throws java.io.IOException("no fd in test")
@@ -57,6 +60,12 @@ class ProotBinaryManagerImplTest {
 
     private fun stubAssetMissing(name: String) {
         every { context.assets.open(name) } throws java.io.IOException("asset $name not found")
+    }
+
+    private fun stubNativeExecAvailable() {
+        val nativeExecFile = File(tempRoot, "libproot_exec.so")
+        nativeExecFile.writeBytes(byteArrayOf(0))
+        nativeExecFile.setExecutable(true, false)
     }
 
     private fun stubSha256Asset(sha256: String) {
@@ -187,6 +196,7 @@ class ProotBinaryManagerImplTest {
         stubAssetMissing(ProotBinaryManagerImpl.PROOT_SHA256_ASSET_NAME)
 
         collectInstall()
+        stubNativeExecAvailable()
 
         val result = manager.verify()
         assertThat(result.isSuccess).isTrue()
@@ -217,6 +227,7 @@ class ProotBinaryManagerImplTest {
         stubAssetMissing(ProotBinaryManagerImpl.PROOT_SHA256_ASSET_NAME)
 
         collectInstall()
+        stubNativeExecAvailable()
 
         assertThat(manager.unavailableReason()).isNull()
     }

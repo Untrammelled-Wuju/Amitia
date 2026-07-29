@@ -52,15 +52,33 @@ android {
     }
 }
 
+val asciiCacheDir = file("${System.getProperty("user.home")}/.gradle/u-ai-ascii-cache/runtime")
+
+val copyTestClassesToAscii by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.dir("intermediates/classes/debugUnitTest/transformDebugUnitTestClassesWithAsm/dirs"))
+    into("$asciiCacheDir/testClasses")
+    dependsOn("transformDebugUnitTestClassesWithAsm")
+}
+
+val packageAsciiClasses by tasks.registering(Jar::class) {
+    archiveBaseName = "ascii-all-classes"
+    destinationDirectory = file(asciiCacheDir)
+    from(layout.buildDirectory.dir("intermediates/classes/debug/transformDebugClassesWithAsm/dirs"))
+    from(project(":core").layout.buildDirectory.dir("intermediates/classes/debug/transformDebugClassesWithAsm/dirs"))
+    dependsOn("transformDebugClassesWithAsm", ":core:transformDebugClassesWithAsm")
+}
+
 afterEvaluate {
     tasks.named<Test>("testDebugUnitTest").configure {
-        jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8")
-        doFirst {
-            val reportFile = layout.buildDirectory.file("testClassesDirs-debug.txt").get().asFile
-            reportFile.writeText("testClassesDirs:\n")
-            testClassesDirs.files.forEach { reportFile.appendText("  ${it.absolutePath}\n") }
-            reportFile.appendText("\nclasspath:\n")
-            classpath.files.forEach { reportFile.appendText("  ${it.absolutePath}\n") }
+        dependsOn(copyTestClassesToAscii, packageAsciiClasses)
+        val asciiTestClassesDir = file("$asciiCacheDir/testClasses")
+        val fatJar = packageAsciiClasses.get().archiveFile.get().asFile
+        testClassesDirs = files(asciiTestClassesDir)
+        classpath = files(asciiTestClassesDir, fatJar) + classpath.filter {
+            val path = it.absolutePath
+            path.matches(Regex("^[\\x00-\\x7F]+$")) &&
+            !path.contains("transformDebugClassesWithAsm") &&
+            !path.contains("transformDebugUnitTestClassesWithAsm")
         }
     }
 }
@@ -85,6 +103,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.androidx.work.runtime.ktx)
+
+    implementation(libs.bouncycastle.provider)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 

@@ -27,6 +27,7 @@ type PackageService struct {
 	locks             sync.Map
 	metrics           sync.Map
 	kernelProxy       *KernelLifecycleProxy
+	readModel         *ExtensionReadModelService
 }
 
 func NewPackageService(repository *Repository, registry *Registry, validator *SchemaValidator, compiler *WorkflowCompiler, workflowInstaller *WorkshopInstaller, agentSkills *AgentSkillService) *PackageService {
@@ -39,6 +40,9 @@ func NewPackageService(repository *Repository, registry *Registry, validator *Sc
 
 func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) {
 	s.kernelProxy = proxy
+	if proxy != nil {
+		s.readModel = NewExtensionReadModelService(proxy, s.repository)
+	}
 }
 
 func (s *PackageService) Restore(ctx context.Context) error {

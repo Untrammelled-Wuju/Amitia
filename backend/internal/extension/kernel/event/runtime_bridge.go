@@ -46,6 +46,7 @@ func (b *RuntimeBridge) PublishFromRuntime(ctx context.Context, extensionID stri
 	}
 	opts.ProducerID = extensionID
 	opts.ProducerType = "extension"
+	opts.ProducerExtensionID = extensionID
 	result, err := b.service.Publish(ctx, typeID, version, payload, opts)
 	if err != nil {
 		return PublishResult{}, fmt.Errorf("event: publish from runtime: %w", err)

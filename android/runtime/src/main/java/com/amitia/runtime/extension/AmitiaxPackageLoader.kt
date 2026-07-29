@@ -1,9 +1,18 @@
 package com.amitia.runtime.extension
 
+import com.amitia.runtime.extension.security.ArchivePolicy
+import com.amitia.runtime.extension.security.ArchiveSecurityInspector
+import com.amitia.runtime.extension.security.IntegrityFilesDoc
+import com.amitia.runtime.extension.security.IntegrityMissingException
+import com.amitia.runtime.extension.security.IntegrityTreeDoc
+import com.amitia.runtime.extension.security.IntegrityVerifier
+import com.amitia.runtime.extension.security.PackageFileConstants
+import com.amitia.runtime.extension.security.PackageSignatureVerifier
+import com.amitia.runtime.extension.security.PublisherTrustStore
+import com.amitia.runtime.extension.security.RevocationList
+import com.amitia.runtime.extension.security.SignatureDoc
 import java.io.File
 import java.io.InputStream
-import java.security.MessageDigest
-import java.util.zip.ZipInputStream
 import kotlinx.serialization.json.Json
 
 data class AmitiaxPackage(
@@ -15,7 +24,12 @@ data class AmitiaxPackage(
     val signatures: Map<String, ByteArray>,
     val integrityFiles: String?,
     val integrityTree: String?,
-    val packageHash: String
+    val packageHash: String,
+    val treeHash: String = "",
+    val manifestHash: String = "",
+    val signatureDoc: SignatureDoc? = null,
+    val signatureVerified: Boolean = false,
+    val securityWarnings: List<String> = emptyList()
 ) {
     fun moduleEntry(moduleId: String): ByteArray? = modules[moduleId]
 
@@ -30,35 +44,94 @@ class AmitiaxPackageLoader(
         isLenient = true
         coerceInputValues = true
         explicitNulls = false
-    }
+    },
+    private val policy: ArchivePolicy = ArchivePolicy.default(),
+    private val trustStore: PublisherTrustStore? = null,
+    private val revocationList: RevocationList? = null,
+    private val requireSignature: Boolean = false
 ) {
+    private val inspector = ArchiveSecurityInspector(policy)
+    private val integrityVerifier = IntegrityVerifier()
+    private val signatureVerifier = PackageSignatureVerifier(trustStore, revocationList)
+
     fun loadFromFile(file: File): Result<AmitiaxPackage> = runCatching {
         file.inputStream().use { stream -> loadFromStream(stream) }
     }
 
     fun loadFromStream(stream: InputStream): AmitiaxPackage {
-        val entries = mutableMapOf<String, ByteArray>()
-        val manifestPath = "manifest.json"
+        val (entries, summary) = inspector.inspectAndExtract(stream)
 
-        ZipInputStream(stream).use { zis ->
-            var entry = zis.nextEntry
-            while (entry != null) {
-                if (!entry.isDirectory) {
-                    val data = zis.readBytes()
-                    entries[entry.name] = data
-                }
-                entry = zis.nextEntry
-            }
-        }
-
-        val manifestBytes = entries[manifestPath]
-            ?: entries.entries.firstOrNull { it.key.endsWith("/manifest.json") }?.value
+        val manifestBytes = entries[PackageFileConstants.MANIFEST_FILE]
             ?: throw AmitiaxLoadException("manifest.json not found in package")
 
         val manifestRaw = manifestBytes.toString(Charsets.UTF_8)
         val manifest = json.decodeFromString(ExtensionManifest.serializer(), manifestRaw)
 
         validateManifest(manifest)
+
+        val integrityFilesBytes = entries[PackageFileConstants.INTEGRITY_FILES]
+            ?: throw IntegrityMissingException("integrity/files.json missing in package")
+
+        val integrityTreeBytes = entries[PackageFileConstants.INTEGRITY_TREE]
+            ?: throw IntegrityMissingException("integrity/content-tree.json missing in package")
+
+        val integrityFilesDoc = json.decodeFromString(
+            IntegrityFilesDoc.serializer(),
+            integrityFilesBytes.toString(Charsets.UTF_8)
+        )
+
+        val integrityTreeDoc = json.decodeFromString(
+            IntegrityTreeDoc.serializer(),
+            integrityTreeBytes.toString(Charsets.UTF_8)
+        )
+
+        val skipPaths = setOf(
+            PackageFileConstants.MANIFEST_FILE,
+            PackageFileConstants.INTEGRITY_FILES,
+            PackageFileConstants.INTEGRITY_TREE,
+            PackageFileConstants.SIGNATURE_FILE,
+            PackageFileConstants.V2_SIGNATURE_FILE
+        )
+
+        integrityVerifier.verifyIntegrity(
+            packageFiles = entries,
+            integrityFiles = integrityFilesDoc,
+            integrityTree = integrityTreeDoc,
+            skipPaths = skipPaths
+        )
+
+        val treeHash = integrityTreeDoc.treeHash
+
+        val manifestHash = integrityVerifier.computeManifestHash(manifestRaw)
+
+        integrityVerifier.verifyManifestContentTreeHash(
+            manifestContentTreeHash = manifest.integrity?.contentTreeHash,
+            treeHash = treeHash
+        )
+
+        val signatureDocBytes = entries[PackageFileConstants.SIGNATURE_FILE]
+        val signatureDoc = if (signatureDocBytes != null) {
+            json.decodeFromString(SignatureDoc.serializer(), signatureDocBytes.toString(Charsets.UTF_8))
+        } else null
+
+        val signatureVerified = if (signatureDoc != null) {
+            val result = signatureVerifier.verify(
+                signature = signatureDoc,
+                treeHash = treeHash,
+                manifestHash = manifestHash
+            )
+            if (!result.verified && requireSignature) {
+                throw AmitiaxLoadException(
+                    "signature verification failed: ${result.error}"
+                )
+            }
+            result.verified
+        } else {
+            if (requireSignature) {
+                throw AmitiaxLoadException("signature required but not found in package")
+            }
+            false
+        }
 
         val modules = entries.filterKeys { it.startsWith("modules/") }
             .mapKeys { it.key.removePrefix("modules/") }
@@ -69,10 +142,16 @@ class AmitiaxPackageLoader(
         val signatures = entries.filterKeys { it.startsWith("signatures/") || it.startsWith("META-INF/") }
             .filterKeys { it.endsWith(".json") || it.endsWith(".sig") }
 
-        val integrityFiles = entries["integrity/files.json"]?.toString(Charsets.UTF_8)
-        val integrityTree = entries["integrity/content-tree.json"]?.toString(Charsets.UTF_8)
+        val packageHash = integrityVerifier.computePackageHash(entries)
 
-        val packageHash = computePackageHash(entries)
+        val warnings = summary.warnings.toMutableList()
+        if (signatureDoc == null) {
+            warnings.add("package has no signature")
+        } else if (!signatureVerified && trustStore != null) {
+            warnings.add("signature present but verification failed")
+        } else if (trustStore == null && signatureDoc != null) {
+            warnings.add("signature present but no trust store available for verification")
+        }
 
         return AmitiaxPackage(
             manifest = manifest,
@@ -81,9 +160,14 @@ class AmitiaxPackageLoader(
             resources = resources,
             assets = assets,
             signatures = signatures,
-            integrityFiles = integrityFiles,
-            integrityTree = integrityTree,
-            packageHash = packageHash
+            integrityFiles = integrityFilesBytes.toString(Charsets.UTF_8),
+            integrityTree = integrityTreeBytes.toString(Charsets.UTF_8),
+            packageHash = packageHash,
+            treeHash = treeHash,
+            manifestHash = manifestHash,
+            signatureDoc = signatureDoc,
+            signatureVerified = signatureVerified,
+            securityWarnings = warnings
         )
     }
 
@@ -111,17 +195,6 @@ class AmitiaxPackageLoader(
                 throw AmitiaxLoadException("module ${module.id} type must not be blank")
             }
         }
-    }
-
-    private fun computePackageHash(entries: Map<String, ByteArray>): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        entries.toSortedMap().forEach { (name, data) ->
-            digest.update(name.toByteArray(Charsets.UTF_8))
-            digest.update(0)
-            digest.update(data)
-            digest.update(0)
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
 

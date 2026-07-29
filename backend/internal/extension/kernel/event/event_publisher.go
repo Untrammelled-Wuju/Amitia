@@ -12,10 +12,12 @@ import (
 )
 
 type PublishOptions struct {
-	ProducerID        string
-	ProducerType      string
-	ProducerGeneration int64
-	AggregateType     string
+	ProducerID           string
+	ProducerType         string
+	ProducerGeneration   int64
+	ProducerExtensionID  string
+	ProducerModuleID     string
+	AggregateType        string
 	AggregateID       string
 	AggregateVersion  *int64
 	PartitionKey      string
@@ -73,6 +75,9 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 	}
 	envelope := NewEventEnvelope(typeID, version, opts.ProducerID, opts.ProducerType, payload)
 	envelope = envelope.WithProducer(opts.ProducerID, opts.ProducerType, opts.ProducerGeneration)
+	if opts.ProducerExtensionID != "" {
+		envelope = envelope.WithProducerDetail(opts.ProducerExtensionID, opts.ProducerModuleID, opts.ProducerGeneration)
+	}
 	if opts.AggregateType != "" || opts.AggregateID != "" {
 		envelope = envelope.WithAggregate(opts.AggregateType, opts.AggregateID, opts.AggregateVersion)
 	}
@@ -128,7 +133,7 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 		ScopeSnapshotID:      envelope.ScopeSnapshotID,
 		PermissionSnapshotID: envelope.PermissionSnapshotID,
 		TraceID:              envelope.TraceID,
-		OperationID:          envelope.OperationID,
+		OperationID:         envelope.OperationID,
 		ParentEventID:        envelope.ParentEventID,
 		Depth:                envelope.Depth,
 		OccurredAt:           envelope.OccurredAt,
@@ -165,6 +170,9 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 	}
 	envelope := NewEventEnvelope(typeID, version, opts.ProducerID, opts.ProducerType, payload)
 	envelope = envelope.WithProducer(opts.ProducerID, opts.ProducerType, opts.ProducerGeneration)
+	if opts.ProducerExtensionID != "" {
+		envelope = envelope.WithProducerDetail(opts.ProducerExtensionID, opts.ProducerModuleID, opts.ProducerGeneration)
+	}
 	if opts.AggregateType != "" || opts.AggregateID != "" {
 		envelope = envelope.WithAggregate(opts.AggregateType, opts.AggregateID, opts.AggregateVersion)
 	}
@@ -217,7 +225,7 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 		ScopeSnapshotID:      envelope.ScopeSnapshotID,
 		PermissionSnapshotID: envelope.PermissionSnapshotID,
 		TraceID:              envelope.TraceID,
-		OperationID:          envelope.OperationID,
+		OperationID:         envelope.OperationID,
 		ParentEventID:        envelope.ParentEventID,
 		Depth:                envelope.Depth,
 		OccurredAt:           envelope.OccurredAt,

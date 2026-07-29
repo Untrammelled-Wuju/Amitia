@@ -59,6 +59,7 @@ export interface AmitiaDesktopAPI {
   minimizeWindow(): Promise<void>;
   toggleMaximizeWindow(): Promise<boolean>;
   closeWindow(): Promise<void>;
+  writeClipboardText(text: string): Promise<void>;
   getAutoLaunch(): Promise<boolean>;
   setAutoLaunch(enabled: boolean): Promise<boolean>;
   onAutoLaunchChanged(callback: (enabled: boolean) => void): () => void;

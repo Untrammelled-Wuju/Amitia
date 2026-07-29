@@ -51,9 +51,12 @@ import (
 )
 
 type ContainerBuilder struct {
-	dbPath  string
-	extRoot string
-	db      *sql.DB
+	dbPath             string
+	extRoot            string
+	db                 *sql.DB
+	characterReader    CharacterReader
+	conversationReader ConversationReader
+	memoryQueryService MemoryQueryService
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -72,6 +75,21 @@ func (b *ContainerBuilder) WithExtensionRoot(root string) *ContainerBuilder {
 
 func (b *ContainerBuilder) WithDB(db *sql.DB) *ContainerBuilder {
 	b.db = db
+	return b
+}
+
+func (b *ContainerBuilder) WithCharacterReader(r CharacterReader) *ContainerBuilder {
+	b.characterReader = r
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationReader(r ConversationReader) *ContainerBuilder {
+	b.conversationReader = r
+	return b
+}
+
+func (b *ContainerBuilder) WithMemoryQueryService(s MemoryQueryService) *ContainerBuilder {
+	b.memoryQueryService = s
 	return b
 }
 
@@ -279,7 +297,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
 		return nil, fmt.Errorf("kernel: register default event types: %w", err)
 	}
-	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver)
+	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
 	eventSvc.SetEffectiveResolver(eventResolver)
 	eventBridge := event.NewRuntimeBridge(eventSvc)
 	eventBridge.Attach()
@@ -297,18 +315,32 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
 	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter())
 	extensionStateStore := sqlite.NewExtensionStateStore(db)
+	charReader := b.characterReader
+	if charReader == nil {
+		charReader = NewDefaultCharacterReader()
+	}
+	convReader := b.conversationReader
+	if convReader == nil {
+		convReader = NewDefaultConversationReader()
+	}
+	memQuerySvc := b.memoryQueryService
+	if memQuerySvc == nil {
+		memQuerySvc = NewDefaultMemoryQueryService()
+	}
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
-		CharacterReader:     NewDefaultCharacterReader(),
-		ConversationReader:  NewDefaultConversationReader(),
-		MemoryQueryService:  NewDefaultMemoryQueryService(),
+		CharacterReader:     charReader,
+		ConversationReader:  convReader,
+		MemoryQueryService:  memQuerySvc,
 		UIHostNotifier:      NewDefaultUIHostNotifier(),
+		ClipboardHost:       NewDefaultClipboardHost(),
 		EventService:        eventSvc,
 		ScheduleService:     scheduleSvc,
 		ExecutionKernel:     executionKernel,
 		ToolRegistry:        toolRegistry,
 		OperationRepository: opRepo,
 		ExtensionRoot:       b.extRoot,
+		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -377,7 +409,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		_ = uiHost.RegisterContribution(def)
 	}
 	sandboxHost := sandbox_webui.NewHost()
-	actionExecutor := NewUIActionExecutor(hostAPIGateway)
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo)
 	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
 		session, err := sandboxHost.GetSession(sessionID)
 		if err != nil {
@@ -394,7 +426,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if action == nil {
 			return nil, fmt.Errorf("sandbox: action %s not declared in contribution", actionID)
 		}
-		return actionExecutor.Execute(ctx, sessionID, session.ExtensionID, session.ModuleID, action, input)
+		return actionExecutor.Execute(ctx, UIActionExecContext{
+			SessionID:      sessionID,
+			ContributionID: session.ContributionID,
+			ExtensionID:    session.ExtensionID,
+			ModuleID:       session.ModuleID,
+			Generation:     session.Generation,
+		}, action, input)
 	})
 	dataSourceProvider := NewUIDataSourceProvider(hostAPIGateway)
 	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProviderWithHandler(func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
@@ -421,7 +459,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	sandboxHost.SetBridge(sandboxBridge)
 	uiHost.Bridge().SetHandlers(
 		func(ctx context.Context, session *ui_contribution.BridgeSession, action *ui_contribution.UIActionDefinition, input json.RawMessage) (json.RawMessage, error) {
-			return actionExecutor.Execute(ctx, session.SessionID, session.ExtensionID, session.ModuleID, action, input)
+			return actionExecutor.Execute(ctx, UIActionExecContext{
+				SessionID:            session.SessionID,
+				ContributionID:       session.ContributionID,
+				ExtensionID:          session.ExtensionID,
+				ModuleID:             session.ModuleID,
+				Generation:           session.Generation,
+				ScopeSnapshotID:      session.ScopeSnapshotID,
+				PermissionSnapshotID: session.PermissionSnapshotID,
+				CharacterID:          session.CharacterID,
+				ConversationID:       session.ConversationID,
+			}, action, input)
 		},
 		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {
 			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, params)
@@ -622,6 +670,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	typedInstaller.SetContainer(container)
+
+	candidateRunner := NewProductionCandidateRunner(
+		supervisor,
+		typedInstaller,
+		generationMgr,
+		b.extRoot,
+	)
+	devModeReloader.SetCandidateRunner(candidateRunner)
+	devModeReloader.SetSessionManager(devModeSessions)
 
 	return container, nil
 }

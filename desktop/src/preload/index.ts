@@ -63,6 +63,9 @@ const api = {
   closeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.closeWindow);
   },
+  writeClipboardText(text: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
+  },
   onRuntimeStatusChanged(
     callback: (status: RuntimeStatus) => void,
   ): () => void {

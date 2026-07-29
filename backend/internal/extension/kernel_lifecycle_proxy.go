@@ -27,6 +27,10 @@ func (p *KernelLifecycleProxy) container() *kernelruntime.Container {
 	return p.kernel.Container()
 }
 
+func (p *KernelLifecycleProxy) ReadContainer() *kernelruntime.Container {
+	return p.container()
+}
+
 func (p *KernelLifecycleProxy) extensionExists(ctx context.Context, extensionID string) bool {
 	c := p.container()
 	if c == nil {

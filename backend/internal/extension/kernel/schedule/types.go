@@ -13,6 +13,13 @@ const (
 	TriggerTypeOneShot  TriggerType = "one_shot"
 )
 
+type ExecutionOwner string
+
+const (
+	ExecutionOwnerBackend ExecutionOwner = "backend"
+	ExecutionOwnerAndroid ExecutionOwner = "android"
+)
+
 type TargetType string
 
 const (
@@ -234,6 +241,7 @@ type ScheduleContributionDefinition struct {
 	DependencyRequirements []DependencyRequirement   `json:"dependencyRequirements,omitempty"`
 	DSTSpringPolicy        DSTSpringPolicy           `json:"dstSpringPolicy,omitempty"`
 	DSTFallPolicy          DSTFallPolicy             `json:"dstFallPolicy,omitempty"`
+	ExecutionOwner         ExecutionOwner            `json:"executionOwner"`
 	DefinitionHash         string                    `json:"definitionHash"`
 	Version                string                    `json:"version"`
 }

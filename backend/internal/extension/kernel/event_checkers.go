@@ -2,9 +2,9 @@ package kernel
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -196,7 +196,7 @@ func (a *EventRuntimeCheckerAdapter) CheckSubscriptionRuntime(ctx context.Contex
 	if a.Supervisor == nil {
 		return false, "runtime_supervisor_missing", nil
 	}
-	defID := runtime_supervisor.DefinitionID(fmt.Sprintf("%s/%s", def.ExtensionID, def.ModuleID))
+	defID := runtime_supervisor.BuildRuntimeDefinitionID(def.ExtensionID, def.ModuleID, domain.RuntimeType(def.RuntimeBinding.RuntimeType))
 	snap := a.Supervisor.Snapshot(ctx, defID)
 	if len(snap.Instances) == 0 {
 		return false, "runtime_no_instance", nil
@@ -229,6 +229,25 @@ func (a *EventCircuitStateLookupAdapter) LookupCircuitState(subscriptionID strin
 	return a.Dispatcher.LookupCircuitState(subscriptionID)
 }
 
+type EventGenerationResolverAdapter struct {
+	InstRepo domain.InstallationRepository
+}
+
+func NewEventGenerationResolverAdapter(instRepo domain.InstallationRepository) *EventGenerationResolverAdapter {
+	return &EventGenerationResolverAdapter{InstRepo: instRepo}
+}
+
+func (a *EventGenerationResolverAdapter) CurrentGeneration(ctx context.Context, extensionID string) (int64, error) {
+	if a.InstRepo == nil {
+		return 0, nil
+	}
+	inst, err := a.InstRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return 0, nil
+	}
+	return inst.Generation, nil
+}
+
 func BuildEventEffectiveResolver(
 	broker permission.PermissionBroker,
 	scopeManager scope.ScopeManager,
@@ -236,6 +255,7 @@ func BuildEventEffectiveResolver(
 	supervisor runtime_supervisor.Supervisor,
 	dispatcher *event.Dispatcher,
 	enablementResolver enablement.EffectiveStateResolver,
+	instRepo domain.InstallationRepository,
 ) event.EffectiveResolver {
 	return event.NewDefaultEffectiveResolver(
 		NewEventPermissionCheckerAdapter(broker),
@@ -243,5 +263,6 @@ func BuildEventEffectiveResolver(
 		NewEventDependencyCheckerAdapter(depResolver),
 		NewEventRuntimeCheckerAdapter(supervisor, enablementResolver),
 		NewEventCircuitStateLookupAdapter(dispatcher),
+		NewEventGenerationResolverAdapter(instRepo),
 	)
 }

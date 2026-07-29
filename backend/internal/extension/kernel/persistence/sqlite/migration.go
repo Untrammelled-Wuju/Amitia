@@ -741,6 +741,7 @@ var schemaMigrations = []string{
 		dependency_requirements_json TEXT,
 		dst_spring_policy TEXT DEFAULT 'skip',
 		dst_fall_policy TEXT DEFAULT 'fire_once_first',
+		execution_owner TEXT NOT NULL DEFAULT 'backend',
 		definition_hash TEXT NOT NULL,
 		version TEXT NOT NULL,
 		created_at DATETIME NOT NULL,
@@ -1539,6 +1540,7 @@ type columnAddition struct {
 var schemaColumnAdditions = []columnAddition{
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_event_deliveries", "producer_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"kernel_scope_snapshots", "generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_invocations", "parent_invocation_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_workflow_executions", "invocation_id", "TEXT NOT NULL DEFAULT ''"},
@@ -1552,6 +1554,7 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_workflow_executions", "generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_workflow_executions", "context_json", "TEXT NOT NULL DEFAULT '{}'"},
 	{"extension_workflow_executions", "attempt", "INTEGER NOT NULL DEFAULT 1"},
+	{"extension_schedule_definitions", "execution_owner", "TEXT NOT NULL DEFAULT 'backend'"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {

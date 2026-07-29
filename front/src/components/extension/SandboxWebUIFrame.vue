@@ -28,6 +28,8 @@ const iframeLoaded = ref(false);
 const ready = ref(false);
 let bridgePort: MessagePort | null = null;
 
+const PROTOCOL_VERSION = "amitia-webui-bridge-v1";
+
 async function createSession() {
   loading.value = true;
   error.value = null;
@@ -86,7 +88,10 @@ function onMessage(event: MessageEvent) {
   const data = event.data;
   if (!data || typeof data !== "object") return;
   if (data.type !== "amitia.extension.ready") return;
+  if (data.protocolVersion !== PROTOCOL_VERSION) return;
   if (data.session !== sessionId.value) return;
+  if (data.nonce !== sessionNonce.value) return;
+  if (data.generation !== props.contribution.generation) return;
   if (bridgePort) return;
   const channel = new MessageChannel();
   bridgePort = channel.port1;
@@ -104,7 +109,7 @@ function onMessage(event: MessageEvent) {
       token: sessionToken.value,
       generation: props.contribution.generation,
     },
-    "*",
+    sessionOrigin.value || "*",
     [channel.port2],
   );
 }

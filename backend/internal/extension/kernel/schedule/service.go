@@ -180,6 +180,9 @@ func (s *ScheduleService) InstallDefinition(ctx context.Context, def *ScheduleCo
 	if def.DSTFallPolicy == "" {
 		def.DSTFallPolicy = DefaultDSTFallPolicy()
 	}
+	if def.ExecutionOwner == "" {
+		def.ExecutionOwner = ExecutionOwnerBackend
+	}
 	if def.Timezone == "" {
 		def.Timezone = s.config.DefaultTimezone
 	}

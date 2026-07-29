@@ -263,6 +263,8 @@ window.amitiaUI = (function() {
   const nonce = "` + session.Nonce + `";
   const token = "` + session.Token + `";
   const generation = ` + fmt.Sprintf("%d", session.Generation) + `;
+  const contributionId = "` + session.ContributionID + `";
+  const protocolVersion = "` + ProtocolVersion + `";
   const allowedMethods = ["ready","context.get","action.invoke","data.query","data.subscribe","navigation.request","resize.request","dialog.request","resource.open","resource.read","artifact.create","log","session.ping","clipboard.read","clipboard.write","network.request","storage"];
   let port = null;
   let pendingMessages = [];
@@ -346,7 +348,7 @@ window.amitiaUI = (function() {
   }
 
   window.addEventListener("message", acceptPort);
-  window.parent.postMessage({type:"amitia.extension.ready",session:sessionId}, "*");
+  window.parent.postMessage({type:"amitia.extension.ready",protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId}, "*");
 
   var api = {
     ready: function() {

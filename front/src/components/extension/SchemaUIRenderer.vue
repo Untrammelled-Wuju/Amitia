@@ -232,6 +232,21 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     }
     const data = envelope.result ?? {};
     if (data && typeof data === "object") {
+      if (data.clientExecute === true && typeof data.text === "string") {
+        try {
+          if (window.amitiaDesktop?.writeClipboardText) {
+            await window.amitiaDesktop.writeClipboardText(data.text as string);
+          } else if (navigator.clipboard) {
+            await navigator.clipboard.writeText(data.text as string);
+          } else {
+            throw new Error("CLIPBOARD_HOST_UNAVAILABLE");
+          }
+          ElMessage.success("已复制到剪贴板");
+        } catch (clipErr) {
+          const clipMsg = clipErr instanceof Error ? clipErr.message : String(clipErr);
+          throw new Error(`复制失败: ${clipMsg}`);
+        }
+      }
       if (data.form_state && typeof data.form_state === "object") {
         const incoming = data.form_state as Record<string, unknown>;
         for (const k of Object.keys(incoming)) formState[k] = incoming[k];

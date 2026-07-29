@@ -164,7 +164,7 @@ func (s *Service) UpdateExtensionGeneration(ctx context.Context, extensionID str
 	if err := s.subscriptionReg.UpdateGeneration(ctx, extensionID, generation, defs); err != nil {
 		return err
 	}
-	_, _ = s.deliveryStore.CancelPendingByExtension(ctx, extensionID, "cancelled_stale_generation")
+	_, _ = s.deliveryStore.CancelPendingByExtension(ctx, extensionID, "cancel_stale_subscription")
 	return nil
 }
 
@@ -244,6 +244,10 @@ func (s *Service) ReplayDeadLetter(ctx context.Context, req ReplayRequest) error
 		if sub != nil && !sub.Effective.IsActive() {
 			return fmt.Errorf("%w: subscription inactive: %s", ErrReplayDenied, sub.Effective.DenyReason())
 		}
+		var producerGen int64
+		if outboxRecord, err := s.outboxRepo.GetByEventID(ctx, record.EventID); err == nil {
+			producerGen = outboxRecord.ProducerGeneration
+		}
 		delivery := Delivery{
 			DeliveryID:             newDeliveryID(),
 			EventID:                record.EventID,
@@ -259,6 +263,7 @@ func (s *Service) ReplayDeadLetter(ctx context.Context, req ReplayRequest) error
 			PermissionSnapshotID:   record.PermissionSnapshotID,
 			SubscriptionGeneration: sub.Definition.Generation,
 			TargetGeneration:       sub.Definition.Generation,
+			ProducerGeneration:     producerGen,
 			CreatedAt:              time.Now().UTC(),
 			UpdatedAt:              time.Now().UTC(),
 		}

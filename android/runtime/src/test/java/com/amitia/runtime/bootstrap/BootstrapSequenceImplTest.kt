@@ -20,7 +20,6 @@ import com.google.common.truth.Truth.assertThat
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -279,7 +278,7 @@ class BootstrapSequenceImplTest {
         val result = bootstrap.start(noopStage)
 
         assertThat(result.isFailure).isTrue()
-        assertThat(result.exceptionOrNull()?.message).contains("健康检查超时")
+        assertThat(result.exceptionOrNull()?.message).contains("Go 后端启动超时")
         tempDir.deleteRecursively()
     }
 
@@ -291,7 +290,7 @@ class BootstrapSequenceImplTest {
         stubConfig(tempDir)
         coEvery { rootfsManager.isInstalled() } returns true
         coEvery { processManager.start(any(), any(), any(), any(), any(), any()) } returns Result.success(1234)
-        coEvery { processManager.start(name = "surrealdb", any(), any(), any(), any(), any()) } returns Result.failure(IllegalStateException("surrealdb failed"))
+        coEvery { healthChecker.waitForHealthy(name = "surrealdb", any(), any(), any()) } returns Result.failure(java.util.concurrent.TimeoutException("surrealdb unhealthy"))
         coEvery { healthChecker.waitForHealthy(name = "qdrant", any(), any(), any()) } returns Result.success(Unit)
         coEvery { healthChecker.waitForHealthy(name = "backend", any(), any(), any()) } returns Result.success(Unit)
         coEvery { stateMachine.transition(any()) } returns Result.success(RuntimeState.NotInstalled)
@@ -319,10 +318,8 @@ class BootstrapSequenceImplTest {
         val result = bootstrap.stop(noopStage)
 
         assertThat(result.isSuccess).isTrue()
-        coVerifyOrder {
+        coVerify {
             processManager.stop("amitia-backend", any())
-            processManager.stop("qdrant", any())
-            processManager.stop("surrealdb", any())
         }
         tempDir.deleteRecursively()
     }
@@ -413,7 +410,7 @@ class BootstrapSequenceImplTest {
     }
 
     @Test
-    fun start_sets_restart_policy_ALWAYS_for_surrealdb_and_qdrant() = runTest {
+    fun start_sets_restart_policy_ON_FAILURE_for_backend() = runTest {
         val tempDir = createTempDir(prefix = "bootstrap-policy")
         stubCommonDirs(tempDir)
         stubBinaries(tempDir)
@@ -424,20 +421,12 @@ class BootstrapSequenceImplTest {
 
         coVerify {
             processManager.start(
-                name = "surrealdb",
+                name = "amitia-backend",
                 command = any(),
                 env = any(),
                 workDir = any(),
-                restartPolicy = RestartPolicy.ALWAYS,
-                timeoutMs = any()
-            )
-            processManager.start(
-                name = "qdrant",
-                command = any(),
-                env = any(),
-                workDir = any(),
-                restartPolicy = RestartPolicy.ALWAYS,
-                timeoutMs = any()
+                restartPolicy = RestartPolicy.ON_FAILURE,
+                timeoutMs = null
             )
         }
         tempDir.deleteRecursively()

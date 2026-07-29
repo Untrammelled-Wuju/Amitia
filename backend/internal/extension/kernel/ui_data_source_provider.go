@@ -31,6 +31,8 @@ func (p *UIDataSourceProvider) Query(ctx context.Context, sessionID, extensionID
 		return p.queryHostAPI(ctx, identity, host_api.MethodCharacterRead, params)
 	case "conversation.summary":
 		return p.queryHostAPI(ctx, identity, host_api.MethodConversationRead, params)
+	case "memory.query":
+		return p.queryHostAPI(ctx, identity, host_api.MethodMemoryQuery, params)
 	case "extension.state":
 		return p.queryHostAPI(ctx, identity, host_api.MethodStateGet, params)
 	case "runtime.health":

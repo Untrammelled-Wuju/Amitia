@@ -2,8 +2,9 @@ package migration
 
 func PipelineCheckpointLocalTimeMigration() Migration {
 	return Migration{
-		Version: "202607260002",
-		Name:    "convert_pipeline_checkpoint_times_to_local",
+		Version:           "202607260002",
+		Name:              "convert_pipeline_checkpoint_times_to_local",
+		AcceptedChecksums: []string{"945a99577a235cd6c38ba8c5a55e52b27c221df35931606b31772041c768accc"},
 		Up: func(step *Step) error {
 			exists, err := step.TableExists("pipeline_checkpoints")
 			if err != nil || !exists {

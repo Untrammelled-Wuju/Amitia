@@ -2,18 +2,22 @@ package kernel
 
 import (
 	"context"
+
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
 type ExtensionKernelReadiness struct {
-	TaskRuntimeReady      bool
-	EventServiceReady     bool
-	ScheduleServiceReady  bool
+	TaskRuntimeReady       bool
+	EventServiceReady      bool
+	ScheduleServiceReady   bool
 	RuntimeSupervisorReady bool
-	LegacyCounterZero     bool
+	EnabledRuntimesReady   bool
+	LegacyCounterZero      bool
 }
 
 func (r ExtensionKernelReadiness) Ready() bool {
-	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.LegacyCounterZero
+	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.EnabledRuntimesReady && r.LegacyCounterZero
 }
 
 func (r ExtensionKernelReadiness) FailedComponents() []string {
@@ -30,13 +34,16 @@ func (r ExtensionKernelReadiness) FailedComponents() []string {
 	if !r.RuntimeSupervisorReady {
 		failed = append(failed, "runtime_supervisor_ready")
 	}
+	if !r.EnabledRuntimesReady {
+		failed = append(failed, "enabled_runtimes_ready")
+	}
 	if !r.LegacyCounterZero {
 		failed = append(failed, "legacy_counter_zero")
 	}
 	return failed
 }
 
-func (c *Container) CheckExtensionKernelReadiness(_ context.Context) ExtensionKernelReadiness {
+func (c *Container) CheckExtensionKernelReadiness(ctx context.Context) ExtensionKernelReadiness {
 	r := ExtensionKernelReadiness{}
 	if c == nil {
 		return r
@@ -49,7 +56,48 @@ func (c *Container) CheckExtensionKernelReadiness(_ context.Context) ExtensionKe
 		r.ScheduleServiceReady = c.ScheduleService.IsRunning()
 	}
 	r.RuntimeSupervisorReady = c.RuntimeSupervisor != nil
+	r.EnabledRuntimesReady = c.checkEnabledRuntimesReady(ctx)
 	counter := GlobalLegacyCallCounter()
 	r.LegacyCounterZero = counter.LegacyFallbackTotal() == 0
 	return r
+}
+
+func (c *Container) checkEnabledRuntimesReady(ctx context.Context) bool {
+	if c.RuntimeSupervisor == nil || c.InstallationRepository == nil || c.ModuleRepository == nil {
+		return true
+	}
+	insts, err := c.InstallationRepository.ListInstallations(ctx)
+	if err != nil {
+		return false
+	}
+	for _, inst := range insts {
+		if inst.InstallationState != domain.InstallationStateInstalled {
+			continue
+		}
+		if inst.EnablementState != domain.EnablementEnabled {
+			continue
+		}
+		modules, err := c.ModuleRepository.ListModules(ctx, inst.ExtensionID)
+		if err != nil {
+			return false
+		}
+		for _, mod := range modules {
+			if mod.Runtime == nil || mod.Runtime.Type == "" || mod.Runtime.Type == domain.RuntimeTypeBuiltin {
+				continue
+			}
+			defID := runtime_supervisor.BuildRuntimeDefinitionID(string(inst.ExtensionID), string(mod.ID), mod.Runtime.Type)
+			snap := c.RuntimeSupervisor.Snapshot(ctx, defID)
+			hasReady := false
+			for _, instance := range snap.Instances {
+				if instance.Actual == runtime_supervisor.ActualReady || instance.Actual == runtime_supervisor.ActualDegraded {
+					hasReady = true
+					break
+				}
+			}
+			if !hasReady {
+				return false
+			}
+		}
+	}
+	return true
 }

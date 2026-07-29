@@ -42,6 +42,7 @@ type Delivery struct {
 	ProjectedPayloadHash   string
 	SubscriptionGeneration int64
 	TargetGeneration       int64
+	ProducerGeneration     int64
 	StartedAt              *time.Time
 	FinishedAt             *time.Time
 	ErrorCode              string

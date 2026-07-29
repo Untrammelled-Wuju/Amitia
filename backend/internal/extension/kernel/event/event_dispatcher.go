@@ -102,9 +102,10 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 				MaxAttempts:    sub.Definition.RetryPolicy.MaxAttempts,
 				AvailableAt:    time.Now().UTC(),
 				ErrorCode:      "subscription_inactive",
-				ErrorMessage:   sub.Effective.DenyReason(),
-				SubscriptionGeneration: sub.Definition.Generation,
-				TargetGeneration:       sub.Definition.Generation,
+			ErrorMessage:   sub.Effective.DenyReason(),
+			SubscriptionGeneration: sub.Definition.Generation,
+			TargetGeneration:       sub.Definition.Generation,
+			ProducerGeneration:     envelope.ProducerGeneration,
 				CreatedAt:      time.Now().UTC(),
 				UpdatedAt:      time.Now().UTC(),
 			}
@@ -140,6 +141,7 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 			ProjectedPayloadHash:   projection.Hash,
 			SubscriptionGeneration: sub.Definition.Generation,
 			TargetGeneration:       sub.Definition.Generation,
+			ProducerGeneration:     envelope.ProducerGeneration,
 			CreatedAt:              time.Now().UTC(),
 			UpdatedAt:              time.Now().UTC(),
 		}
@@ -333,7 +335,7 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 		return
 	}
 	if sub.Definition.Generation != delivery.SubscriptionGeneration {
-		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancelled_stale_generation",
+		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_subscription",
 			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration))
 		return
 	}
@@ -385,11 +387,11 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 	circuit.RecordFailure(code)
 	d.traceRecorder.FinishInvocation(inv.InvocationID, "failed", code, err.Error())
 	delivery.Fail(code, err.Error(), sub.Definition.RetryPolicy)
-	_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, delivery.Status, delivery.ErrorCode, delivery.ErrorMessage)
 	if delivery.Status == DeliveryStatusDeadLetter {
 		dlRecord := NewDeadLetterRecord(delivery, envelope, sub.Definition, DeadLetterMaxAttempts)
 		_ = d.deadLetterStore.CreateDeadLetter(ctx, dlRecord)
 	}
+	_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, delivery.Status, delivery.ErrorCode, delivery.ErrorMessage)
 }
 
 func (d *Dispatcher) ResetCircuit(subscriptionID string) {

@@ -2,7 +2,10 @@ package com.amitia.runtime.extension
 
 import com.amitia.core.database.dao.ExtensionInstallationDao
 import com.amitia.core.database.entity.ExtensionInstallationEntity
+import com.amitia.runtime.extension.security.ArchivePolicy
+import com.amitia.runtime.extension.security.SizeLimitExceededException
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -32,7 +35,8 @@ class ExtensionHostImpl(
     private val apiClient: ExtensionApiClient,
     private val installationDao: ExtensionInstallationDao,
     private val permissionChecker: ExtensionPermissionChecker,
-    private val json: Json
+    private val json: Json,
+    private val maxPackageBytes: Long = ArchivePolicy.default().maxArchiveBytes
 ) : ExtensionHost {
 
     private val extensions = ConcurrentHashMap<String, LoadedExtension>()
@@ -51,6 +55,12 @@ class ExtensionHostImpl(
 
     override suspend fun loadPackage(file: File): Result<LoadedExtension> {
         return runCatching {
+            val fileSize = file.length()
+            if (fileSize > maxPackageBytes) {
+                throw SizeLimitExceededException(
+                    "package file size $fileSize exceeds limit $maxPackageBytes"
+                )
+            }
             val packageBytes = file.readBytes()
             val pkg = packageLoader.loadFromStream(ByteArrayInputStream(packageBytes))
             apiClient.installExtension(packageBytes, file.name)
@@ -70,7 +80,7 @@ class ExtensionHostImpl(
 
     override suspend fun loadPackage(stream: InputStream): Result<LoadedExtension> {
         return runCatching {
-            val packageBytes = stream.readBytes()
+            val packageBytes = readLimitedStream(stream, maxPackageBytes)
             val pkg = packageLoader.loadFromStream(ByteArrayInputStream(packageBytes))
             apiClient.installExtension(packageBytes)
             buildAndStoreExtension(pkg)
@@ -504,5 +514,27 @@ class ExtensionHostImpl(
         return fileName.removeSuffix(".amitiax")
             .substringBeforeLast('-')
             .ifBlank { fileName }
+    }
+
+    private fun readLimitedStream(stream: InputStream, maxBytes: Long): ByteArray {
+        val buffer = ByteArray(8192)
+        val output = ByteArrayOutputStream()
+        var totalRead = 0L
+        while (totalRead < maxBytes) {
+            val toRead = minOf(buffer.size.toLong(), maxBytes - totalRead).toInt()
+            val read = stream.read(buffer, 0, toRead)
+            if (read == -1) break
+            output.write(buffer, 0, read)
+            totalRead += read
+        }
+        if (totalRead >= maxBytes) {
+            val peek = stream.read()
+            if (peek != -1) {
+                throw SizeLimitExceededException(
+                    "stream exceeds max package size $maxBytes"
+                )
+            }
+        }
+        return output.toByteArray()
     }
 }

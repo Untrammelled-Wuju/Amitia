@@ -97,10 +97,12 @@ func TestPerformanceMonitor(t *testing.T) {
 
 func TestPreloadBuilder(t *testing.T) {
 	session := &WebSession{
-		SessionID:  "test-session",
-		Origin:     "amitia-extension://ext-1/mod-1",
-		Nonce:      "test-nonce-123",
-		Generation: 1,
+		SessionID:      "test-session",
+		ContributionID: "contrib-001",
+		Origin:         "amitia-extension://ext-1/mod-1",
+		Nonce:          "test-nonce-123",
+		Token:          "test-token-456",
+		Generation:     1,
 	}
 
 	pb := NewPreloadBuilder()
@@ -121,7 +123,23 @@ func TestPreloadBuilder(t *testing.T) {
 		t.Error("script should contain nonce")
 	}
 
+	if !strings.Contains(script, "test-token-456") {
+		t.Error("script should contain token")
+	}
+
+	if !strings.Contains(script, "contrib-001") {
+		t.Error("script should contain contributionId")
+	}
+
 	if !strings.Contains(script, "amitia-extension://ext-1/mod-1") {
 		t.Error("script should contain origin")
+	}
+
+	if !strings.Contains(script, ProtocolVersion) {
+		t.Error("script should contain protocol version")
+	}
+
+	if !strings.Contains(script, `protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId`) {
+		t.Error("Ready message must include all required fields: protocolVersion, session, nonce, generation, contributionId")
 	}
 }

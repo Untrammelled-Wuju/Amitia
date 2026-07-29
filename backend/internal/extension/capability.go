@@ -28,6 +28,7 @@ var capabilityCatalog = map[string]CapabilityDefinition{
 	"surface.render":             {Name: "surface.render", Risk: "medium", Description: "渲染宿主允许的界面表面"},
 	"event.own.emit":             {Name: "event.own.emit", Risk: "low", Description: "发送当前插件命名空间事件"},
 	"clipboard.read":             {Name: "clipboard.read", Risk: "high", Description: "读取系统剪贴板"},
+	"clipboard.write":            {Name: "clipboard.write", Risk: "medium", Description: "写入系统剪贴板"},
 	"system.foreground.read":     {Name: "system.foreground.read", Risk: "high", Description: "读取前台应用信息"},
 	"mcp.invoke":                 {Name: "mcp.invoke", Risk: "high", Description: "调用外部 MCP 工具"},
 	"network.remote":             {Name: "network.remote", Risk: "high", Description: "访问远程服务"},

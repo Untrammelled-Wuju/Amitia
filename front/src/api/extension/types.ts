@@ -44,11 +44,25 @@ export interface BackendUISandboxPolicy {
   max_memory_mb?: number;
 }
 
+export interface BackendUIActionTarget {
+  type: string;
+  command?: string;
+  tool_id?: string;
+  workflow_id?: string;
+  workflow_action?: string;
+  route_id?: string;
+  dialog_id?: string;
+  resource?: string;
+}
+
 export interface BackendUIActionDefinition {
   action_id: string;
   title?: BackendLocalizedText;
   icon?: string;
+  input_schema?: unknown;
+  target?: BackendUIActionTarget;
   risk_level?: string;
+  confirmation?: string;
 }
 
 export interface BackendPermissionRequirement {

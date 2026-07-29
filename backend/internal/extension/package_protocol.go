@@ -121,17 +121,30 @@ type PackageDependencyView struct {
 }
 
 type PackageUninstallPreview struct {
-	ExtensionID      string                  `json:"extensionId"`
-	CurrentVersion   string                  `json:"currentVersion"`
-	Enabled          bool                    `json:"enabled"`
-	Dependents       []PackageDependencyView `json:"dependents"`
-	ScheduleCount    int64                   `json:"scheduleCount"`
-	Grants           []string                `json:"grants"`
-	ConfigPresent    bool                    `json:"configPresent"`
-	HistoricalRuns   int64                   `json:"historicalRuns"`
-	ArtifactArchived bool                    `json:"artifactArchived"`
-	Cleanup          []string                `json:"cleanup"`
-	Preserved        []string                `json:"preserved"`
+	ExtensionID         string                  `json:"extensionId"`
+	CurrentVersion      string                  `json:"currentVersion"`
+	Enabled             bool                    `json:"enabled"`
+	Dependents          []PackageDependencyView `json:"dependents"`
+	ScheduleCount       int64                   `json:"scheduleCount"`
+	Grants              []string                `json:"grants"`
+	ConfigPresent       bool                    `json:"configPresent"`
+	HistoricalRuns      int64                   `json:"historicalRuns"`
+	ArtifactArchived    bool                    `json:"artifactArchived"`
+	Cleanup             []string                `json:"cleanup"`
+	Preserved           []string                `json:"preserved"`
+	ReadSource          string                  `json:"readSource"`
+	RuntimeImpacts      []PackageRuntimeImpact  `json:"runtimeImpacts,omitempty"`
+	ContributionSummary map[string]int          `json:"contributionSummary,omitempty"`
+	EventSubscriptions  []string                `json:"eventSubscriptions,omitempty"`
+}
+
+type PackageRuntimeImpact struct {
+	InstanceID  string `json:"instanceId"`
+	ModuleID    string `json:"moduleId"`
+	RuntimeType string `json:"runtimeType"`
+	Desired     string `json:"desired"`
+	Actual      string `json:"actual"`
+	Health      string `json:"health"`
 }
 
 type PackageImportPreview struct {

@@ -14,6 +14,10 @@ object ExtensionModule {
 
     @Provides
     @Singleton
+    fun provideBaseUrlProvider(provider: RuntimeBaseUrlProvider): BaseUrlProvider = provider
+
+    @Provides
+    @Singleton
     fun provideAmitiaxPackageLoader(): AmitiaxPackageLoader = AmitiaxPackageLoader()
 
     @Provides

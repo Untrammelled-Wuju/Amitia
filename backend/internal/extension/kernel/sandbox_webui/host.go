@@ -19,6 +19,7 @@ import (
 const (
 	ProtocolScheme         = "amitia-extension"
 	ResourceProtocolScheme = "amitia-resource"
+	ProtocolVersion        = "amitia-webui-bridge-v1"
 	DefaultCSP             = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
 	RestrictedCSP          = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
 	MaxBundleBytes         = 50 * 1024 * 1024

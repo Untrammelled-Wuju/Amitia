@@ -56,15 +56,15 @@ func (s *SQLiteDeliveryStore) createDeliveryWithExec(ctx context.Context, exec i
 		(delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, subscription_generation, target_generation,
+		 projected_payload_hash, subscription_generation, target_generation, producer_generation,
 		 started_at, finished_at, error_code, error_message, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(delivery_id) DO NOTHING
 	`,
 		delivery.DeliveryID, delivery.EventID, delivery.SubscriptionID, delivery.ExtensionID, delivery.ModuleID, string(delivery.Status),
 		delivery.PartitionKey, delivery.OrderingKey, delivery.Sequence, delivery.Attempt, delivery.MaxAttempts, delivery.AvailableAt,
 		delivery.LeaseOwner, leaseExpires, delivery.RuntimeInstanceID, delivery.ScopeSnapshotID, delivery.PermissionSnapshotID,
-		delivery.ProjectedPayloadHash, delivery.SubscriptionGeneration, delivery.TargetGeneration,
+		delivery.ProjectedPayloadHash, delivery.SubscriptionGeneration, delivery.TargetGeneration, delivery.ProducerGeneration,
 		startedAt, finishedAt, delivery.ErrorCode, delivery.ErrorMessage, delivery.CreatedAt, delivery.UpdatedAt,
 	)
 	return err
@@ -85,7 +85,7 @@ func (s *SQLiteDeliveryStore) ClaimNextDeliveries(ctx context.Context, owner str
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, subscription_generation, target_generation,
+		 projected_payload_hash, subscription_generation, target_generation, producer_generation,
 		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE status IN (?, ?) AND (lease_expires_at IS NULL OR lease_expires_at < ?)
@@ -193,7 +193,7 @@ func (s *SQLiteDeliveryStore) GetDelivery(ctx context.Context, deliveryID string
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, subscription_generation, target_generation,
+		 projected_payload_hash, subscription_generation, target_generation, producer_generation,
 		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE delivery_id = ?
@@ -209,7 +209,7 @@ func (s *SQLiteDeliveryStore) ListDeliveries(ctx context.Context, filter Deliver
 		SELECT delivery_id, event_id, subscription_id, extension_id, module_id, status,
 		 partition_key, ordering_key, sequence, attempt, max_attempts, available_at,
 		 lease_owner, lease_expires_at, runtime_instance_id, scope_snapshot_id, permission_snapshot_id,
-		 projected_payload_hash, subscription_generation, target_generation,
+		 projected_payload_hash, subscription_generation, target_generation, producer_generation,
 		 started_at, finished_at, error_code, error_message, created_at, updated_at
 		FROM extension_event_deliveries
 		WHERE 1=1
@@ -298,7 +298,7 @@ func scanDelivery(rows *sql.Rows) (Delivery, error) {
 		&d.DeliveryID, &d.EventID, &d.SubscriptionID, &d.ExtensionID, &d.ModuleID, &status,
 		&partitionKey, &orderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
 		&leaseOwner, &leaseExpires, &runtimeInstanceID, &scopeSnapshotID, &permissionSnapshotID,
-		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
+		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &d.ProducerGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return d, err
@@ -341,7 +341,7 @@ func scanDeliveryRow(row *sql.Row) (Delivery, error) {
 		&d.DeliveryID, &d.EventID, &d.SubscriptionID, &d.ExtensionID, &d.ModuleID, &status,
 		&partitionKey, &orderingKey, &d.Sequence, &d.Attempt, &d.MaxAttempts, &d.AvailableAt,
 		&leaseOwner, &leaseExpires, &runtimeInstanceID, &scopeSnapshotID, &permissionSnapshotID,
-		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
+		&projectedPayloadHash, &d.SubscriptionGeneration, &d.TargetGeneration, &d.ProducerGeneration, &startedAt, &finishedAt, &errorCode, &errorMessage, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return d, fmt.Errorf("%w: %v", ErrDeliveryNotFound, err)

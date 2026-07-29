@@ -154,8 +154,8 @@ data class LifecycleMeta(
 @Serializable
 data class IntegrityMeta(
     val algorithm: String = "sha256",
-    val contentTree: String? = null,
-    val filesManifest: String? = null
+    val contentTreeHash: String = "",
+    val fileHashes: Map<String, String> = emptyMap()
 )
 
 @Serializable

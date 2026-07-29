@@ -31,7 +31,17 @@ func TestRestrictedBridgeScriptUsesTransferredPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"event.source !== window.parent", "event.ports[0]", "port.postMessage", "window.parent.postMessage({type:\"amitia.extension.ready\""} {
+	for _, expected := range []string{
+		"event.source !== window.parent",
+		"event.ports[0]",
+		"port.postMessage",
+		`window.parent.postMessage({type:"amitia.extension.ready"`,
+		"protocolVersion:protocolVersion",
+		"nonce:nonce",
+		"generation:generation",
+		"contributionId:contributionId",
+		`"amitia-webui-bridge-v1"`,
+	} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("bridge script missing %q", expected)
 		}

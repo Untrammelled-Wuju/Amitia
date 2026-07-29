@@ -92,9 +92,9 @@ func (r *ScheduleRepository) PutDefinition(ctx context.Context, def *schedule.Sc
 			 start_at, end_at, misfire_policy, overlap_policy,
 			 retry_policy_json, jitter_policy_json, concurrency_policy_json,
 			 permission_requirements_json, scope_rule_json, dependency_requirements_json,
-			 dst_spring_policy, dst_fall_policy, definition_hash, version,
+			 dst_spring_policy, dst_fall_policy, execution_owner, definition_hash, version,
 			 created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(schedule_id) DO UPDATE SET
 			contribution_id = excluded.contribution_id,
 			extension_id = excluded.extension_id,
@@ -118,6 +118,7 @@ func (r *ScheduleRepository) PutDefinition(ctx context.Context, def *schedule.Sc
 			dependency_requirements_json = excluded.dependency_requirements_json,
 			dst_spring_policy = excluded.dst_spring_policy,
 			dst_fall_policy = excluded.dst_fall_policy,
+			execution_owner = excluded.execution_owner,
 			definition_hash = excluded.definition_hash,
 			version = excluded.version,
 			updated_at = excluded.updated_at
@@ -132,7 +133,7 @@ func (r *ScheduleRepository) PutDefinition(ctx context.Context, def *schedule.Sc
 		string(retryJSON), string(jitterJSON), string(concurrencyJSON),
 		permReqJSON, scopeRuleJSON, depReqJSON,
 		string(def.DSTSpringPolicy), string(def.DSTFallPolicy),
-		def.DefinitionHash, def.Version,
+		string(def.ExecutionOwner), def.DefinitionHash, def.Version,
 		now, now,
 	)
 	if err != nil {
@@ -149,7 +150,7 @@ func (r *ScheduleRepository) GetDefinition(ctx context.Context, scheduleID strin
 		       start_at, end_at, misfire_policy, overlap_policy,
 		       retry_policy_json, jitter_policy_json, concurrency_policy_json,
 		       permission_requirements_json, scope_rule_json, dependency_requirements_json,
-		       dst_spring_policy, dst_fall_policy, definition_hash, version,
+		       dst_spring_policy, dst_fall_policy, execution_owner, definition_hash, version,
 		       created_at, updated_at
 		FROM extension_schedule_definitions WHERE schedule_id = ?
 	`, scheduleID)
@@ -171,7 +172,7 @@ func (r *ScheduleRepository) ListDefinitions(ctx context.Context, extensionID st
 		       start_at, end_at, misfire_policy, overlap_policy,
 		       retry_policy_json, jitter_policy_json, concurrency_policy_json,
 		       permission_requirements_json, scope_rule_json, dependency_requirements_json,
-		       dst_spring_policy, dst_fall_policy, definition_hash, version,
+		       dst_spring_policy, dst_fall_policy, execution_owner, definition_hash, version,
 		       created_at, updated_at
 		FROM extension_schedule_definitions WHERE extension_id = ?
 		ORDER BY created_at DESC
@@ -199,7 +200,7 @@ func (r *ScheduleRepository) ListAllDefinitions(ctx context.Context) ([]*schedul
 		       start_at, end_at, misfire_policy, overlap_policy,
 		       retry_policy_json, jitter_policy_json, concurrency_policy_json,
 		       permission_requirements_json, scope_rule_json, dependency_requirements_json,
-		       dst_spring_policy, dst_fall_policy, definition_hash, version,
+		       dst_spring_policy, dst_fall_policy, execution_owner, definition_hash, version,
 		       created_at, updated_at
 		FROM extension_schedule_definitions ORDER BY created_at DESC
 	`)
@@ -1046,7 +1047,7 @@ func scanScheduleDefinition(s scanner) (*schedule.ScheduleContributionDefinition
 		&startAt, &endAt, &misfireJSON, &overlapJSON,
 		&retryJSON, &jitterJSON, &concurrencyJSON,
 		&permReqJSON, &scopeRuleJSON, &depReqJSON,
-		&def.DSTSpringPolicy, &def.DSTFallPolicy,
+		&def.DSTSpringPolicy, &def.DSTFallPolicy, &def.ExecutionOwner,
 		&def.DefinitionHash, &def.Version,
 		&createdAt, &updatedAt,
 	)

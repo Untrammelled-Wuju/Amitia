@@ -22,6 +22,9 @@ type packageConfigMigration struct {
 }
 
 func (s *PackageService) Install(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {
+	if s.kernelProxy == nil {
+		return s.installLegacyPackage(ctx, request)
+	}
 	if request.ScopeType == string(ScopeCharacter) {
 		if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); err != nil {
 			return PackageOperationResult{}, err
@@ -38,9 +41,6 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		}
 		_ = s.repository.FinishPackageImportSession(context.Background(), session.ID, status)
 	}()
-	if s.kernelProxy == nil {
-		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Extension Kernel 未接线", "", false, nil)
-	}
 	kernelResult, wasInstalled, err := s.kernelProxy.InstallPackage(ctx, session.PackageBlob, session.FileName, request.ExpectedExtensionID)
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Extension Kernel 安装失败", err.Error(), false, err)

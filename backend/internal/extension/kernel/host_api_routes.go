@@ -18,8 +18,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
-	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 )
 
 type hostAPIAuditWriter struct {
@@ -86,6 +86,8 @@ type HostAPIRouteDeps struct {
 	OperationRepository sqlite.OperationRepository
 	ExtensionRoot       string
 	UIHostNotifier      UIHostNotifier
+	ClipboardHost       ClipboardHost
+	ScopeSnapshotStore  host_api.ScopeSnapshotStore
 }
 
 type resourceHandle struct {
@@ -226,9 +228,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			timeout:         5 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				var p struct {
-					Key            string          `json:"key"`
-					ExpectedVersion int64          `json:"expectedVersion"`
-					NewValue       json.RawMessage `json:"newValue"`
+					Key             string          `json:"key"`
+					ExpectedVersion int64           `json:"expectedVersion"`
+					NewValue        json.RawMessage `json:"newValue"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -252,8 +254,8 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{
-					"swapped":   swapped,
-					"version":   newVersion,
+					"swapped": swapped,
+					"version": newVersion,
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
@@ -327,7 +329,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					})
 				}
 				output, _ := json.Marshal(map[string]any{
-					"keys": keys,
+					"keys":  keys,
 					"total": len(keys),
 				})
 				return host_api.CallResult{
@@ -396,9 +398,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				handleTable.put(h)
 				output, _ := json.Marshal(map[string]any{
-					"handleId": handleID,
-					"path":     p.Path,
-					"mode":     p.Mode,
+					"handleId":  handleID,
+					"path":      p.Path,
+					"mode":      p.Mode,
 					"expiresAt": h.expiresAt.Format(time.RFC3339),
 				})
 				return host_api.CallResult{
@@ -602,9 +604,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{
-					"path":  p.Path,
-					"size":  info.Size(),
-					"isDir": info.IsDir(),
+					"path":    p.Path,
+					"size":    info.Size(),
+					"isDir":   info.IsDir(),
 					"modTime": info.ModTime().UTC().Format(time.RFC3339),
 				})
 				return host_api.CallResult{
@@ -634,6 +636,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "character reader not configured"},
 					}, nil
 				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 				data, available, err := deps.CharacterReader.ReadCharacter(ctx, p.CharacterID)
 				if err != nil {
 					return host_api.CallResult{
@@ -678,6 +681,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if p.Limit <= 0 || p.Limit > 100 {
 					p.Limit = 50
 				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 				msgs, hasMore, err := deps.ConversationReader.ReadConversation(ctx, p.ConversationID, p.Limit, p.Offset)
 				if err != nil {
 					return host_api.CallResult{
@@ -721,6 +725,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					p.Limit = 10
 				}
 				extID := string(req.RuntimeIdentity.ExtensionID)
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 				results, err := deps.MemoryQueryService.Query(ctx, extID, p.Query, p.Limit)
 				if err != nil {
 					return host_api.CallResult{
@@ -781,9 +786,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{
-					"ok":       pubResult.Accepted,
+					"ok":        pubResult.Accepted,
 					"eventType": p.EventType,
-					"eventId":  pubResult.EventID,
+					"eventId":   pubResult.EventID,
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
@@ -829,7 +834,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					EventTypeID:    event.EventTypeID(p.EventType),
 					Entry:          p.Entry,
 					Enabled:        true,
-					Generation:      req.RuntimeIdentity.Generation,
+					Generation:     req.RuntimeIdentity.Generation,
 					CreatedAt:      time.Now().UTC(),
 					UpdatedAt:      time.Now().UTC(),
 				}
@@ -1071,10 +1076,10 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Source:       capability.InvocationSourcePlugin,
 					TraceID:      req.TraceID,
 					Metadata: map[string]any{
-						"operationId":      fmt.Sprintf("op-%s", uuid.NewString()),
+						"operationId":       fmt.Sprintf("op-%s", uuid.NewString()),
 						"runtimeInstanceId": req.RuntimeIdentity.InstanceID,
-						"generation":       req.RuntimeIdentity.Generation,
-						"depth":            depth,
+						"generation":        req.RuntimeIdentity.Generation,
+						"depth":             depth,
 					},
 				}
 				if invocation.InvocationID == "" {

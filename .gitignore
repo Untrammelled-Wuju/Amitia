@@ -91,3 +91,14 @@ android/app/src/main/assets/amitia-backend-arm64
 android/app/src/main/assets/proot_linux_aarch64
 android/app/src/main/assets/qdrant_linux_aarch64
 android/app/src/main/assets/surreal_linux_aarch64
+
+# Android UI reference (external assets)
+安卓端APPUI参考/
+
+# Backend compiled binaries
+backend/amitia-ext.exe
+backend/amitiax.exe
+backend/extension.test.exe
+
+# Test build artifacts
+backend/testdata/extensions/extension-kernel-repair/dev-hot-reload-*/dist-candidate-*/

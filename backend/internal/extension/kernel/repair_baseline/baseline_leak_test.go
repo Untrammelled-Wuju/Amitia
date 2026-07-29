@@ -257,7 +257,7 @@ func TestBaseline_Leak_InstallUninstallNoGoroutineGrowth(t *testing.T) {
 		t.Fatalf("tool-basic extension required: %v", err)
 	}
 
-	iterations := 20
+	iterations := 100
 	tempDir := t.TempDir()
 	extRoot := t.TempDir()
 	installer := amitiax.NewInstaller()
@@ -292,6 +292,7 @@ func TestBaseline_Leak_InstallUninstallNoGoroutineGrowth(t *testing.T) {
 		t.Fatalf("goroutine leak detected after %d install/uninstall cycles: %s (growth=%d, maxDelta=%d)",
 			iterations, baselineSnap.diff(finalSnap), goroutineGrowth, maxGoroutineDelta)
 	}
+	t.Logf("Leak: %d iterations completed, goroutine growth=%d (threshold=5)", iterations, goroutineGrowth)
 }
 
 func TestBaseline_Leak_InstallUninstallNoTempDirResidue(t *testing.T) {
@@ -304,7 +305,7 @@ func TestBaseline_Leak_InstallUninstallNoTempDirResidue(t *testing.T) {
 	extRoot := t.TempDir()
 	installer := amitiax.NewInstaller()
 
-	iterations := 20
+	iterations := 100
 	for i := 0; i < iterations; i++ {
 		archivePath := filepath.Join(tempDir, fmt.Sprintf("tool-basic-%d.amitiax", i))
 		buildArchiveFromExtension(t, toolBasicDir, archivePath)
@@ -338,6 +339,7 @@ func TestBaseline_Leak_InstallUninstallNoTempDirResidue(t *testing.T) {
 	if targetResidue > 0 {
 		t.Fatalf("extension root has %d target residues after %d cycles", targetResidue, iterations)
 	}
+	t.Logf("Leak: %d iterations completed, no temp dir or extension root residue", iterations)
 }
 
 func TestBaseline_Leak_LegacyCallCounterStaysZero(t *testing.T) {
@@ -350,7 +352,7 @@ func TestBaseline_Leak_LegacyCallCounterStaysZero(t *testing.T) {
 	extRoot := t.TempDir()
 	installer := amitiax.NewInstaller()
 
-	iterations := 20
+	iterations := 100
 	for i := 0; i < iterations; i++ {
 		archivePath := filepath.Join(tempDir, fmt.Sprintf("tool-basic-%d.amitiax", i))
 		buildArchiveFromExtension(t, toolBasicDir, archivePath)
@@ -370,37 +372,43 @@ func TestBaseline_Leak_LegacyCallCounterStaysZero(t *testing.T) {
 	if total != 0 {
 		t.Fatalf("legacy call counter must stay zero after %d install/uninstall cycles, got %d", iterations, total)
 	}
+	if !kernel.GlobalLegacyCallCounter().FinalGatePassed() {
+		t.Fatalf("final gate must pass after %d install/uninstall cycles", iterations)
+	}
+	t.Logf("Leak: %d iterations completed, legacy counter=0, final gate passed", iterations)
 }
 
 func TestBaseline_Leak_ResourceCategoriesDefined(t *testing.T) {
 	requiredCategories := []string{
+		"Runtime Process",
 		"Goroutine",
-		"Runtime Instance",
-		"Child Process",
-		"Event Subscription",
-		"Pending Delivery",
-		"Schedule Lease",
-		"Schedule Run",
-		"Task Lease",
-		"UI Session",
-		"Bridge",
-		"MCP Connection",
-		"Temporary Directory",
 		"File Handle",
+		"Task Lease",
+		"Event Delivery",
+		"Schedule Lease",
+		"MCP Connection",
+		"UI Session",
+		"MessagePort",
+		"WebContents",
+		"Menu",
+		"Tray",
+		"Shortcut",
+		"Temporary Directory",
 	}
 	sort.Strings(requiredCategories)
-	if len(requiredCategories) != 13 {
-		t.Fatalf("Phase 10 section 22 requires 13 leak detection categories, got %d", len(requiredCategories))
+	if len(requiredCategories) != 14 {
+		t.Fatalf("Problem 14 requires 14 leak detection categories, got %d", len(requiredCategories))
 	}
 	seen := map[string]bool{}
 	for _, c := range requiredCategories {
 		seen[c] = true
 	}
-	for _, c := range []string{"Goroutine", "Temporary Directory", "File Handle"} {
+	for _, c := range []string{"Goroutine", "Temporary Directory", "File Handle", "Runtime Process"} {
 		if !seen[c] {
 			t.Fatalf("required leak category missing: %s", c)
 		}
 	}
+	t.Logf("Leak: %d resource categories defined", len(requiredCategories))
 }
 
 func TestBaseline_Leak_CyclePhasesDefined(t *testing.T) {
@@ -448,4 +456,82 @@ func TestBaseline_Leak_RecorderAccumulatesSnapshots(t *testing.T) {
 	if rec.count() != 5 {
 		t.Fatalf("recorder must accumulate 5 snapshots, got %d", rec.count())
 	}
+}
+
+func TestBaseline_Leak_FullLifecycle100Iterations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 100-iteration full lifecycle leak test in short mode")
+	}
+	extensionsDir := testExtensionsDir(t)
+	toolBasicDir := filepath.Join(extensionsDir, "tool-basic")
+	if _, err := os.Stat(toolBasicDir); err != nil {
+		t.Fatalf("tool-basic extension required: %v", err)
+	}
+
+	iterations := 100
+	tempDir := t.TempDir()
+	extRoot := t.TempDir()
+
+	baselineSnap := captureSnapshot(t, tempDir, extRoot)
+	installer := amitiax.NewInstaller()
+
+	for i := 0; i < iterations; i++ {
+		archivePath := filepath.Join(tempDir, fmt.Sprintf("tool-basic-%d.amitiax", i))
+		buildArchiveFromExtension(t, toolBasicDir, archivePath)
+		targetDir := filepath.Join(extRoot, fmt.Sprintf("tool-basic-%d", i))
+
+		result := installer.Install(context.Background(), amitiax.InstallRequest{
+			ArchivePath: archivePath,
+			TargetDir:   targetDir,
+		})
+		if result.Status != amitiax.InstallSucceeded {
+			t.Fatalf("iteration %d install phase failed: %v", i, result.Errors)
+		}
+
+		_ = os.Remove(archivePath)
+		removeAllWithRetry(t, targetDir)
+
+		if i%10 == 0 {
+			runtime.GC()
+		}
+	}
+
+	finalSnap := captureSnapshot(t, tempDir, extRoot)
+	goroutineGrowth := finalSnap.goroutines - baselineSnap.goroutines
+	if goroutineGrowth > 5 {
+		t.Fatalf("goroutine leak after %d full lifecycle iterations: %s (growth=%d)",
+			iterations, baselineSnap.diff(finalSnap), goroutineGrowth)
+	}
+
+	archiveResidue := 0
+	if entries, err := os.ReadDir(tempDir); err == nil {
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".amitiax") {
+				archiveResidue++
+			}
+		}
+	}
+	if archiveResidue > 0 {
+		t.Fatalf("temp dir has %d archive residues after %d iterations", archiveResidue, iterations)
+	}
+
+	targetResidue := 0
+	if entries, err := os.ReadDir(extRoot); err == nil {
+		targetResidue = len(entries)
+	}
+	if targetResidue > 0 {
+		t.Fatalf("extension root has %d target residues after %d iterations", targetResidue, iterations)
+	}
+
+	total := kernel.GlobalLegacyCallCounter().Total()
+	if total != 0 {
+		t.Fatalf("legacy call counter must stay 0 after %d full lifecycle iterations, got %d", iterations, total)
+	}
+
+	if !kernel.GlobalLegacyCallCounter().FinalGatePassed() {
+		t.Fatalf("final gate must pass after %d full lifecycle iterations", iterations)
+	}
+
+	t.Logf("Leak: %d full lifecycle iterations completed, goroutine growth=%d, legacy=0, final gate passed",
+		iterations, goroutineGrowth)
 }

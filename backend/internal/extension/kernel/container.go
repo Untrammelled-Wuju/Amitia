@@ -249,17 +249,22 @@ func (c *Container) Recover(ctx context.Context) error {
 			if c.RuntimeSupervisor != nil {
 				for _, mod := range modules {
 					if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+						defID := runtime_supervisor.BuildRuntimeDefinitionID(string(inst.ExtensionID), string(mod.ID), mod.Runtime.Type)
 						spec := runtime_supervisor.InstanceSpec{
-							DefinitionID: runtime_supervisor.DefinitionID(string(inst.ExtensionID)),
+							DefinitionID: defID,
 							ExtensionID:  inst.ExtensionID,
 							ModuleID:     mod.ID,
 							RuntimeType:  mod.Runtime.Type,
+							Generation:   inst.Generation,
 						}
-						c.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-							DefinitionID: runtime_supervisor.DefinitionID(string(inst.ExtensionID)),
+						result := c.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
+							DefinitionID: defID,
 							Desired:      runtime_supervisor.DesiredRunning,
 							Spec:         spec,
 						})
+						if result.Error != nil || result.Actual != runtime_supervisor.ActualReady {
+							c.recordReconcileFailure(ctx, inst.ExtensionID, result)
+						}
 					}
 				}
 			}

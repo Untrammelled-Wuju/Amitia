@@ -36,3 +36,31 @@ func TestPipelineCheckpointLocalTimeMigration(t *testing.T) {
 		t.Fatalf("updated_at = %s, want %s", updatedAt, expected)
 	}
 }
+
+func TestPipelineCheckpointLocalTimeMigrationAcceptsPreLeaseChecksum(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.Exec("CREATE TABLE pipeline_checkpoints (conversation_id TEXT, pipeline_type TEXT, created_at TEXT, updated_at TEXT)").Error; err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	runner := Runner{DB: db, SkipBackup: true}
+	migration := PipelineCheckpointLocalTimeMigration()
+	if err := runner.Apply([]Migration{migration}); err != nil {
+		t.Fatalf("apply pre-lease migration: %v", err)
+	}
+	if err := db.Exec("ALTER TABLE pipeline_checkpoints ADD COLUMN lease_expires_at TEXT").Error; err != nil {
+		t.Fatalf("add lease column: %v", err)
+	}
+	if err := runner.Apply([]Migration{migration}); err != nil {
+		t.Fatalf("reapply migration: %v", err)
+	}
+	var record Record
+	if err := db.Where("version = ?", migration.Version).First(&record).Error; err != nil {
+		t.Fatalf("read migration record: %v", err)
+	}
+	if record.Checksum != "cbaaa05f039a706de25db7f3fdf48ba43ec2d6b84c240404b771975bcb749f40" {
+		t.Fatalf("checksum = %s", record.Checksum)
+	}
+}

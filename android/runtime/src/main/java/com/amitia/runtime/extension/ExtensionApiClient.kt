@@ -177,10 +177,12 @@ class ExtensionApiClient @Inject constructor(
         return executeRequest(request)
     }
 
-    suspend fun runScheduleNow(scheduleId: String): JsonObject {
-        val request = buildRequest("/api/extensions/schedules/$scheduleId/run-now")
-            .post(EMPTY_BODY)
-            .build()
+    suspend fun runScheduleNow(scheduleId: String, source: String? = null): JsonObject {
+        val builder = buildRequest("/api/extensions/schedules/$scheduleId/run-now")
+        if (source != null) {
+            builder.header("X-Schedule-Source", source)
+        }
+        val request = builder.post(EMPTY_BODY).build()
         return executeRequest(request)
     }
 

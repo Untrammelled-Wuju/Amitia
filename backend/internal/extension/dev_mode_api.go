@@ -26,13 +26,20 @@ type DevModeAPI struct {
 }
 
 func NewDevModeAPI(runtime *Runtime) *DevModeAPI {
-	return &DevModeAPI{
+	api := &DevModeAPI{
 		runtime:     runtime,
 		watcher:     dev_mode.NewFileWatcher(500 * time.Millisecond),
 		watchEvents: make(map[dev_mode.WorkspaceID]chan dev_mode.FileChangeEvent),
 		watchCancel: make(map[dev_mode.WorkspaceID]context.CancelFunc),
 		sseClients:  make(map[dev_mode.WorkspaceID]map[string]chan dev_mode.ReloadEvent),
 	}
+	if runtime != nil && runtime.Kernel != nil {
+		container := runtime.Kernel.Container()
+		if container != nil && container.DevModeReloader != nil {
+			container.DevModeReloader.SetFileWatcher(api.watcher)
+		}
+	}
+	return api
 }
 
 func (api *DevModeAPI) Stop() {
@@ -461,20 +468,21 @@ func (api *DevModeAPI) removeWorkspace(c *gin.Context) {
 		return
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
+	ctx := c.Request.Context()
+
 	api.watchMu.Lock()
-	if cancel, ok := api.watchCancel[id]; ok {
+	if cancel, exists := api.watchCancel[id]; exists {
 		cancel()
 		delete(api.watchCancel, id)
 	}
 	if ch, exists := api.watchEvents[id]; exists {
-		_ = api.watcher.Stop(id)
 		delete(api.watchEvents, id)
 		close(ch)
 	}
 	api.watchMu.Unlock()
-	container.DevModeReloader.Disable(id)
-	if err := container.DevModeRegistry.Remove(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+
+	if err := container.DevModeReloader.CloseDevMode(ctx, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "workspaceId": id, "removed": true})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"workspaceId": id, "removed": true})

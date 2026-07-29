@@ -26,10 +26,59 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
 
+	modules, err := r.container.ModuleRepository.ListModules(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: list modules: %w", err)
+	}
+
+	var startedInstanceIDs []string
+	if r.container.RuntimeSupervisor != nil {
+		for _, mod := range modules {
+			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
+				spec := runtime_supervisor.InstanceSpec{
+					DefinitionID: defID,
+					ExtensionID:  extID,
+					ModuleID:     mod.ID,
+					RuntimeType:  mod.Runtime.Type,
+					Generation:   inst.Generation + 1,
+				}
+				result := r.container.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
+					DefinitionID: defID,
+					Desired:      runtime_supervisor.DesiredRunning,
+					Spec:         spec,
+				})
+				if result.Error != nil || result.Actual != runtime_supervisor.ActualReady {
+					for _, sid := range startedInstanceIDs {
+						_ = r.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback)
+					}
+					rtErr := runtime_supervisor.ClassifyReconcileError(result)
+					if rtErr == nil {
+						rtErr = runtime_supervisor.NewRuntimeError(
+							runtime_supervisor.CodeRuntimeReconcileFailed,
+							fmt.Sprintf("extension=%s module=%s actual=%s", extensionID, mod.ID, result.Actual),
+							result.Error,
+						)
+					}
+					r.recordRuntimeOperation(ctx, extID, "enable", rtErr)
+					return fmt.Errorf("kernel: enable extension %s: runtime reconcile failed: %w", extensionID, rtErr)
+				}
+				if result.InstanceID != "" {
+					startedInstanceIDs = append(startedInstanceIDs, result.InstanceID)
+				}
+			}
+		}
+	}
+
 	inst.EnablementState = domain.EnablementEnabled
 	inst.UpdatedAt = time.Now().UTC()
 	inst.Generation++
 	if err := r.container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
+		if r.container.RuntimeSupervisor != nil {
+			for _, sid := range startedInstanceIDs {
+				_ = r.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback)
+			}
+		}
 		return fmt.Errorf("kernel: update installation: %w", err)
 	}
 
@@ -41,10 +90,6 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: set desired runtime: %w", err)
 	}
 
-	modules, err := r.container.ModuleRepository.ListModules(ctx, extID)
-	if err != nil {
-		return fmt.Errorf("kernel: list modules: %w", err)
-	}
 	for _, mod := range modules {
 		modSubject := enablement.StateSubject{
 			Kind:     enablement.SubjectModule,
@@ -97,24 +142,11 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 
 	if r.container.ContributionInstaller != nil {
-		r.container.ContributionInstaller.ActivateContributions(ctx, extID)
-	}
-
-	if r.container.RuntimeSupervisor != nil {
-		for _, mod := range modules {
-			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
-				spec := runtime_supervisor.InstanceSpec{
-					DefinitionID: runtime_supervisor.DefinitionID(extensionID),
-					ExtensionID:  extID,
-					ModuleID:     mod.ID,
-					RuntimeType:  mod.Runtime.Type,
-				}
-				r.container.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-					DefinitionID: runtime_supervisor.DefinitionID(extensionID),
-					Desired:      runtime_supervisor.DesiredRunning,
-					Spec:         spec,
-				})
-			}
+		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
+			inst.EnablementState = domain.EnablementRequiresRecovery
+			inst.UpdatedAt = time.Now().UTC()
+			_ = r.container.InstallationRepository.PutInstallation(ctx, inst)
+			return fmt.Errorf("kernel: activate contributions: %w", err)
 		}
 	}
 
@@ -162,9 +194,16 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	}
 
 	if r.container.RuntimeSupervisor != nil {
-		snap := r.container.RuntimeSupervisor.Snapshot(ctx, runtime_supervisor.DefinitionID(extensionID))
-		for _, instance := range snap.Instances {
-			_ = r.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonDisable)
+		for _, mod := range modules {
+			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
+				snap := r.container.RuntimeSupervisor.Snapshot(ctx, defID)
+				for _, instance := range snap.Instances {
+					if stopErr := r.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonDisable); stopErr != nil {
+						r.recordRuntimeStopFailure(ctx, extID, "disable", instance.InstanceID, stopErr)
+					}
+				}
+			}
 		}
 	}
 
@@ -172,7 +211,12 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	r.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(extensionID))
 
 	if r.container.ContributionInstaller != nil {
-		r.container.ContributionInstaller.DeactivateContributions(ctx, extID)
+		if err := r.container.ContributionInstaller.DeactivateContributions(ctx, extID); err != nil {
+			inst.EnablementState = domain.EnablementPartiallyDisabled
+			inst.UpdatedAt = time.Now().UTC()
+			_ = r.container.InstallationRepository.PutInstallation(ctx, inst)
+			return fmt.Errorf("kernel: deactivate contributions: %w", err)
+		}
 	}
 
 	return nil
@@ -190,9 +234,21 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		version = inst.InstalledVersion.String()
 	}
 
-	snap := r.container.RuntimeSupervisor.Snapshot(ctx, runtime_supervisor.DefinitionID(extensionID))
-	for _, instance := range snap.Instances {
-		_ = r.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonUninstall)
+	if r.container.RuntimeSupervisor != nil {
+		uninstallModules, modErr := r.container.ModuleRepository.ListModules(ctx, extID)
+		if modErr == nil {
+			for _, mod := range uninstallModules {
+				if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
+					defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
+					snap := r.container.RuntimeSupervisor.Snapshot(ctx, defID)
+					for _, instance := range snap.Instances {
+						if stopErr := r.container.RuntimeSupervisor.Stop(ctx, instance.InstanceID, runtime_supervisor.StopReasonUninstall); stopErr != nil {
+							r.recordRuntimeStopFailure(ctx, extID, "uninstall", instance.InstanceID, stopErr)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	contribs := r.container.ContributionRegistry.ListByExtension(extensionID)
@@ -201,7 +257,14 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	}
 
 	if r.container.ContributionInstaller != nil {
-		r.container.ContributionInstaller.UninstallContributions(ctx, extID)
+		if err := r.container.ContributionInstaller.UninstallContributions(ctx, extID); err != nil {
+			if inst.InstallationID != "" {
+				inst.InstallationState = domain.InstallationStateUninstallFailed
+				inst.UpdatedAt = time.Now().UTC()
+				_ = r.container.InstallationRepository.PutInstallation(ctx, inst)
+			}
+			return fmt.Errorf("kernel: uninstall contributions: %w", err)
+		}
 	}
 
 	if r.container.HookService != nil && r.container.HookService.Lifecycle != nil {

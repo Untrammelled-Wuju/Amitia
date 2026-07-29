@@ -35,13 +35,13 @@ func (s *extensionLifecycleService) Disable(ctx context.Context, extensionID str
 }
 
 func (s *extensionLifecycleService) setEnabled(ctx context.Context, extensionID string, scope ExecutionScope, enabled bool) error {
+	if s.kernelProxy == nil {
+		return s.setLegacyEnabled(ctx, extensionID, scope, enabled)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
 		return err
-	}
-	if s.kernelProxy == nil {
-		return NewExtensionError(ErrSkillExecutionFailed, "Extension Kernel 未接线", extensionID, false, nil)
 	}
 	if enabled {
 		return s.kernelProxy.NotifyEnable(ctx, extensionID)

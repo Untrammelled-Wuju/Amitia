@@ -50,6 +50,8 @@ var (
 	ErrPermanentDependencyMissing = errors.New("event: permanent dependency missing")
 	ErrTemporaryDependencyUnavailable = errors.New("event: temporary dependency unavailable")
 	ErrTemporaryHostError   = errors.New("event: temporary host error")
+	ErrStaleProducer       = errors.New("event: stale producer generation")
+	ErrStaleSubscription   = errors.New("event: stale subscription generation")
 )
 
 func IsRetryable(err error) bool {
@@ -132,6 +134,10 @@ func ErrorCode(err error) string {
 		return "circuit_open"
 	case errors.Is(err, ErrCancelled):
 		return "cancelled"
+	case errors.Is(err, ErrStaleProducer):
+		return "reject_stale_producer"
+	case errors.Is(err, ErrStaleSubscription):
+		return "cancel_stale_subscription"
 	default:
 		return fmt.Sprintf("unknown:%v", err)
 	}

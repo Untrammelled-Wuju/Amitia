@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 )
 
 func (s *PackageService) Export(ctx context.Context, request ExportPackageRequest) (ExportedPackage, error) {
@@ -270,11 +272,11 @@ func stringSetDifference(left, right []string) []string {
 }
 
 func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if s.kernelProxy == nil {
+		return s.rollbackLegacyPackage(ctx, extensionID, version, userID, scopeType, scopeID)
+	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
-	}
-	if s.kernelProxy == nil {
-		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 未接线", "", false, nil)
 	}
 	if err := s.kernelProxy.Rollback(ctx, extensionID, version); err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 回滚失败", err.Error(), false, err)
@@ -450,6 +452,18 @@ func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, 
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return nil, err
 	}
+	if s.readModel != nil {
+		if result, ok, err := s.readModel.TryDependencies(ctx, extensionID); err != nil {
+			return nil, err
+		} else if ok {
+			return result, nil
+		}
+	}
+	kernelruntime.GlobalLegacyReadCounter().IncDependencies()
+	return s.legacyDependencies(ctx, extensionID, userID, scopeType, scopeID)
+}
+
+func (s *PackageService) legacyDependencies(ctx context.Context, extensionID, userID, scopeType, scopeID string) (map[string]interface{}, error) {
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return nil, err
@@ -473,6 +487,18 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageUninstallPreview{}, err
 	}
+	if s.readModel != nil {
+		if preview, ok, err := s.readModel.TryPreviewUninstall(ctx, extensionID); err != nil {
+			return PackageUninstallPreview{}, err
+		} else if ok {
+			return preview, nil
+		}
+	}
+	kernelruntime.GlobalLegacyReadCounter().IncPreviewUninstall()
+	return s.legacyPreviewUninstall(ctx, extensionID, userID, scopeType, scopeID)
+}
+
+func (s *PackageService) legacyPreviewUninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageUninstallPreview, error) {
 	extension, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageUninstallPreview{}, err
@@ -481,7 +507,7 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	if err != nil {
 		return PackageUninstallPreview{}, err
 	}
-	preview := PackageUninstallPreview{ExtensionID: extensionID, CurrentVersion: extension.CurrentVersion, Enabled: extension.Enabled == 1, Dependents: dependents, Grants: []string{}, ArtifactArchived: true, Cleanup: []string{"运行时注册", "Agent Skill 索引", "自有定时任务", "Capability Grant", "当前配置与缓存"}, Preserved: []string{"版本历史", "安装与操作审计", "历史运行记录", "归档 Artifact"}}
+	preview := PackageUninstallPreview{ExtensionID: extensionID, CurrentVersion: extension.CurrentVersion, Enabled: extension.Enabled == 1, Dependents: dependents, Grants: []string{}, ArtifactArchived: true, Cleanup: []string{"运行时注册", "Agent Skill 索引", "自有定时任务", "Capability Grant", "当前配置与缓存"}, Preserved: []string{"版本历史", "安装与操作审计", "历史运行记录", "归档 Artifact"}, ReadSource: "legacy"}
 	if count, countErr := s.repository.CountOwnedResources(ctx, extensionID, scopeType, scopeID); countErr == nil {
 		preview.ScheduleCount = count
 	} else {
@@ -500,11 +526,11 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 }
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if s.kernelProxy == nil {
+		return s.uninstallLegacyPackage(ctx, extensionID, userID, scopeType, scopeID)
+	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
-	}
-	if s.kernelProxy == nil {
-		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 未接线", "", false, nil)
 	}
 	if err := s.kernelProxy.NotifyUninstall(ctx, extensionID); err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)

@@ -8,7 +8,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -32,13 +31,15 @@ class ExtensionScheduleWorker(
 
             items.forEach { item ->
                 val obj = item.jsonObject
+                val definition = obj["definition"]?.jsonObject
+                val executionOwner = definition?.get("executionOwner")?.jsonPrimitive?.contentOrNull
                 val state = obj["state"]?.jsonObject
                 val status = state?.get("status")?.jsonPrimitive?.contentOrNull
                 val scheduleId = state?.get("scheduleId")?.jsonPrimitive?.contentOrNull
-                    ?: obj["definition"]?.jsonObject?.get("scheduleId")?.jsonPrimitive?.contentOrNull
+                    ?: definition?.get("scheduleId")?.jsonPrimitive?.contentOrNull
 
-                if (scheduleId != null && status == "enabled") {
-                    runCatching { apiClient.runScheduleNow(scheduleId) }
+                if (scheduleId != null && status == "enabled" && executionOwner == "android") {
+                    runCatching { apiClient.runScheduleNow(scheduleId, "android_worker") }
                 }
             }
 

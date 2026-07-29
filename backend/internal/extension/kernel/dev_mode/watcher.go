@@ -44,7 +44,7 @@ func NewFileWatcher(interval time.Duration) *FileWatcher {
 	return &FileWatcher{
 		interval: interval,
 		patterns: []string{".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".css", ".html"},
-		ignore:   []string{"node_modules", "dist", "package", ".git", "tmp", "cache", ".amitiax", "diagnostics"},
+		ignore:   []string{"node_modules", "dist", "dist-candidate", "package", ".git", "tmp", "cache", ".amitiax", "diagnostics", "build", "release"},
 		stopCh:   make(map[WorkspaceID]chan struct{}),
 		running:  make(map[WorkspaceID]bool),
 		snapshots: make(map[WorkspaceID]map[string]int64),
@@ -117,7 +117,7 @@ func (w *FileWatcher) scan(id WorkspaceID, root string, events chan<- FileChange
 		if info.IsDir() {
 			rel, _ := filepath.Rel(root, path)
 			for _, ig := range w.ignore {
-				if rel == ig || strings.HasPrefix(rel, ig+string(filepath.Separator)) {
+				if rel == ig || strings.HasPrefix(rel, ig+string(filepath.Separator)) || strings.HasPrefix(rel, ig+"-") {
 					return filepath.SkipDir
 				}
 			}

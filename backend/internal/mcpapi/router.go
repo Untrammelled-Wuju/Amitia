@@ -173,6 +173,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 		if record.Enabled == 1 {
 			go h.services.Connections.Reconnect(context.Background(), record.ID)
 		} else {
+			_ = h.services.Skills.UnregisterServer(c, record.ID)
 			go h.services.Connections.Disconnect(context.Background(), record.ID)
 		}
 	}
@@ -182,6 +183,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 
 func (h *Handler) deleteServer(c *gin.Context) {
 	id := c.Param("id")
+	_ = h.services.Skills.UnregisterServer(c, id)
 	references, err := h.services.Repository.CredentialReferences(c, id)
 	if err == nil {
 		h.cancelServerTasks(c, id)

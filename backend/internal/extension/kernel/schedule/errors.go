@@ -36,6 +36,7 @@ var (
 	ErrGenerationMismatch         = errors.New("schedule: generation mismatch")
 	ErrSchedulerClosed            = errors.New("schedule: scheduler closed")
 	ErrInvalidDefinitionHash      = errors.New("schedule: invalid definition hash")
+	ErrExecutionOwnerDenied       = errors.New("schedule: execution owner denied")
 )
 
 type ScheduleError struct {
@@ -81,4 +82,5 @@ const (
 	ErrCodeQuarantined            = "SCHEDULE_QUARANTINED"
 	ErrCodeInvalidStateTransition = "SCHEDULE_INVALID_STATE_TRANSITION"
 	ErrCodeRuntimeHandlerMissing  = "SCHEDULE_RUNTIME_HANDLER_MISSING"
+	ErrCodeExecutionOwnerDenied   = "SCHEDULE_EXECUTION_OWNER_DENIED"
 )

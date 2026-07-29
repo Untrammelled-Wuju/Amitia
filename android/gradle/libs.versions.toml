@@ -38,6 +38,7 @@ androidxArchCoreTesting = "2.2.0"
 hiltAndroidTesting = "2.52"
 androidxComposeUiTestJunit = "1.7.3"
 truth = "1.4.4"
+bouncyCastle = "1.78.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -119,6 +120,7 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 truth = { group = "com.google.truth", name = "truth", version.ref = "truth" }
 androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+bouncycastle-provider = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncyCastle" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

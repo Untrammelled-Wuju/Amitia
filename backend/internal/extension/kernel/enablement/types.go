@@ -10,13 +10,14 @@ import (
 type InstallationState string
 
 const (
-	InstallationStateNotInstalled InstallationState = "not_installed"
-	InstallationStateInstalling   InstallationState = "installing"
-	InstallationStateInstalled    InstallationState = "installed"
-	InstallationStateUpdating     InstallationState = "updating"
-	InstallationStateRollingBack  InstallationState = "rolling_back"
-	InstallationStateUninstalling InstallationState = "uninstalling"
-	InstallationStateFailed       InstallationState = "failed"
+	InstallationStateNotInstalled     InstallationState = "not_installed"
+	InstallationStateInstalling       InstallationState = "installing"
+	InstallationStateInstalled        InstallationState = "installed"
+	InstallationStateUpdating         InstallationState = "updating"
+	InstallationStateRollingBack      InstallationState = "rolling_back"
+	InstallationStateUninstalling     InstallationState = "uninstalling"
+	InstallationStateFailed           InstallationState = "failed"
+	InstallationStateUninstallFailed  InstallationState = "uninstall_failed"
 )
 
 type DefinitionState string
@@ -33,8 +34,10 @@ const (
 type EnablementState string
 
 const (
-	EnablementEnabled  EnablementState = "enabled"
-	EnablementDisabled EnablementState = "disabled"
+	EnablementEnabled           EnablementState = "enabled"
+	EnablementDisabled          EnablementState = "disabled"
+	EnablementPartiallyDisabled EnablementState = "partially_disabled"
+	EnablementRequiresRecovery  EnablementState = "requires_recovery"
 )
 
 type ScopeState string

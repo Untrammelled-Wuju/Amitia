@@ -35,6 +35,7 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodUINotify:         {{PermissionID: "ui.notify", Resource: "ui"}},
 		MethodUIDialog:         {{PermissionID: "ui.dialog", Resource: "ui"}},
 		MethodUINavigate:       {{PermissionID: "ui.navigate", Resource: "ui"}},
+		MethodClipboardWrite:   {{PermissionID: "clipboard.write", Resource: "clipboard"}},
 	}
 }
 
@@ -73,6 +74,8 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 	case MethodToolExecute:
 		return ScopePolicy{RequireRoles: []string{"invocation", "tool"}}
 	case MethodUINotify, MethodUIDialog, MethodUINavigate:
+		return ScopePolicy{RequireRoles: []string{"session"}}
+	case MethodClipboardWrite:
 		return ScopePolicy{RequireRoles: []string{"session"}}
 	default:
 		return ScopePolicy{}
@@ -140,6 +143,7 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "ui.notify", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "ui.dialog", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "ui.navigate", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
+		{ID: "clipboard.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 	}
 	for _, d := range defs {
 		registry.Register(d)
