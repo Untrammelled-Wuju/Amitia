@@ -15,9 +15,9 @@ type ToolExecutor interface {
 }
 
 type DefaultToolExecutor struct {
-	Registry          *ToolRegistry
-	AvailabilityEval  AvailabilityEvaluator
-	AdapterRegistry   *RuntimeAdapterRegistry
+	Registry         *ToolRegistry
+	AvailabilityEval AvailabilityEvaluator
+	AdapterRegistry  *RuntimeAdapterRegistry
 }
 
 func (e *DefaultToolExecutor) Execute(

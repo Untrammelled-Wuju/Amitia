@@ -389,7 +389,7 @@ func TestToolDefinitionComputedState(t *testing.T) {
 
 func TestCapabilitySourceToToolSource(t *testing.T) {
 	cases := []struct {
-		capSrc CapabilitySource
+		capSrc  CapabilitySource
 		toolSrc ToolSource
 	}{
 		{CapabilitySourceBuiltin, ToolSourceBuiltin},

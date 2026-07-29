@@ -24,13 +24,13 @@ type Navigator interface {
 }
 
 type Bridge struct {
-	host       *Host
-	dispatcher ActionDispatcher
-	dataProvider DataSourceProvider
-	navigator  Navigator
-	mu         sync.RWMutex
+	host            *Host
+	dispatcher      ActionDispatcher
+	dataProvider    DataSourceProvider
+	navigator       Navigator
+	mu              sync.RWMutex
 	pendingRequests map[string]chan BridgeMessage
-	rateLimiter *RateLimiter
+	rateLimiter     *RateLimiter
 }
 
 func NewBridge(host *Host, dispatcher ActionDispatcher, provider DataSourceProvider, navigator Navigator) *Bridge {
@@ -155,14 +155,14 @@ func (b *Bridge) HandleMessage(ctx context.Context, req InvokeRequest) (*InvokeR
 func (b *Bridge) handleReady(ctx context.Context, session *WebSession) (json.RawMessage, error) {
 	session.SetState(SessionStateActive)
 	readyPayload := map[string]any{
-		"sessionId":  session.SessionID,
+		"sessionId":      session.SessionID,
 		"contributionId": session.ContributionID,
-		"slotId":     session.SlotID,
-		"theme":      session.Theme,
-		"locale":     session.Locale,
-		"actions":    session.AllowedActions,
-		"dataSources": session.AllowedDataSources,
-		"generation": session.Generation,
+		"slotId":         session.SlotID,
+		"theme":          session.Theme,
+		"locale":         session.Locale,
+		"actions":        session.AllowedActions,
+		"dataSources":    session.AllowedDataSources,
+		"generation":     session.Generation,
 	}
 	return json.Marshal(readyPayload)
 }
@@ -187,9 +187,9 @@ func (b *Bridge) handleSessionPing(ctx context.Context, session *WebSession) (js
 	session.LastActiveAt = time.Now().UTC()
 	session.mu.Unlock()
 	return json.Marshal(map[string]any{
-		"ok":         true,
-		"timestamp":  time.Now().UTC(),
-		"expiresAt":  session.ExpiresAt,
+		"ok":        true,
+		"timestamp": time.Now().UTC(),
+		"expiresAt": session.ExpiresAt,
 	})
 }
 
@@ -401,10 +401,10 @@ func (b *Bridge) handleClipboardWrite(ctx context.Context, session *WebSession, 
 }
 
 type networkInput struct {
-	URL    string            `json:"url"`
-	Method string            `json:"method"`
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
-	Body   json.RawMessage   `json:"body"`
+	Body    json.RawMessage   `json:"body"`
 }
 
 func (b *Bridge) handleNetwork(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
@@ -477,11 +477,11 @@ func isURLAllowed(rawURL string) bool {
 }
 
 var (
-	ErrDispatcherUnavailable     = errors.New("sandbox_webui: dispatcher unavailable")
-	ErrDataProviderUnavailable   = errors.New("sandbox_webui: data provider unavailable")
-	ErrNavigationDenied          = errors.New("sandbox_webui: navigation denied")
-	ErrInvalidResize             = errors.New("sandbox_webui: invalid resize dimensions")
-	ErrClipboardDenied           = errors.New("sandbox_webui: clipboard denied")
-	ErrNetworkDenied             = errors.New("sandbox_webui: network denied")
-	ErrStorageDenied             = errors.New("sandbox_webui: storage denied")
+	ErrDispatcherUnavailable   = errors.New("sandbox_webui: dispatcher unavailable")
+	ErrDataProviderUnavailable = errors.New("sandbox_webui: data provider unavailable")
+	ErrNavigationDenied        = errors.New("sandbox_webui: navigation denied")
+	ErrInvalidResize           = errors.New("sandbox_webui: invalid resize dimensions")
+	ErrClipboardDenied         = errors.New("sandbox_webui: clipboard denied")
+	ErrNetworkDenied           = errors.New("sandbox_webui: network denied")
+	ErrStorageDenied           = errors.New("sandbox_webui: storage denied")
 )

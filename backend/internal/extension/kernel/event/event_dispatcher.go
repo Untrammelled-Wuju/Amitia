@@ -53,11 +53,11 @@ type DeadLetterFilter struct {
 type DeliveryPlanner struct {
 	subscriptionRegistry *EventSubscriptionRegistry
 	schemaRegistry       EventTypeRegistry
-	deliveryStore       DeliveryStore
-	deadLetterStore     DeadLetterStore
-	outboxStore         OutboxStore
-	sequenceAllocator   *SequenceAllocator
-	traceRecorder       *EventTraceRecorder
+	deliveryStore        DeliveryStore
+	deadLetterStore      DeadLetterStore
+	outboxStore          OutboxStore
+	sequenceAllocator    *SequenceAllocator
+	traceRecorder        *EventTraceRecorder
 }
 
 func NewDeliveryPlanner(
@@ -71,11 +71,11 @@ func NewDeliveryPlanner(
 	return &DeliveryPlanner{
 		subscriptionRegistry: subscriptionRegistry,
 		schemaRegistry:       schemaRegistry,
-		deliveryStore:         deliveryStore,
-		deadLetterStore:       deadLetterStore,
-		outboxStore:           outboxStore,
-		sequenceAllocator:     NewSequenceAllocator(),
-		traceRecorder:         traceRecorder,
+		deliveryStore:        deliveryStore,
+		deadLetterStore:      deadLetterStore,
+		outboxStore:          outboxStore,
+		sequenceAllocator:    NewSequenceAllocator(),
+		traceRecorder:        traceRecorder,
 	}
 }
 
@@ -91,23 +91,23 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 	for _, sub := range subs {
 		if !sub.Effective.IsActive() {
 			delivery := Delivery{
-				DeliveryID:     newDeliveryID(),
-				EventID:        envelope.EventID,
-				SubscriptionID: sub.Definition.ContributionID,
-				ExtensionID:    sub.Definition.ExtensionID,
-				ModuleID:       sub.Definition.ModuleID,
-				Status:         DeliveryStatusSkipped,
-				PartitionKey:   envelope.PartitionKey,
-				OrderingKey:    envelope.OrderingKey,
-				MaxAttempts:    sub.Definition.RetryPolicy.MaxAttempts,
-				AvailableAt:    time.Now().UTC(),
-				ErrorCode:      "subscription_inactive",
-			ErrorMessage:   sub.Effective.DenyReason(),
-			SubscriptionGeneration: sub.Definition.Generation,
-			TargetGeneration:       sub.Definition.Generation,
-			ProducerGeneration:     envelope.ProducerGeneration,
-				CreatedAt:      time.Now().UTC(),
-				UpdatedAt:      time.Now().UTC(),
+				DeliveryID:             newDeliveryID(),
+				EventID:                envelope.EventID,
+				SubscriptionID:         sub.Definition.ContributionID,
+				ExtensionID:            sub.Definition.ExtensionID,
+				ModuleID:               sub.Definition.ModuleID,
+				Status:                 DeliveryStatusSkipped,
+				PartitionKey:           envelope.PartitionKey,
+				OrderingKey:            envelope.OrderingKey,
+				MaxAttempts:            sub.Definition.RetryPolicy.MaxAttempts,
+				AvailableAt:            time.Now().UTC(),
+				ErrorCode:              "subscription_inactive",
+				ErrorMessage:           sub.Effective.DenyReason(),
+				SubscriptionGeneration: sub.Definition.Generation,
+				TargetGeneration:       sub.Definition.Generation,
+				ProducerGeneration:     envelope.ProducerGeneration,
+				CreatedAt:              time.Now().UTC(),
+				UpdatedAt:              time.Now().UTC(),
 			}
 			now := time.Now().UTC()
 			delivery.FinishedAt = &now
@@ -163,7 +163,7 @@ func (p *DeliveryPlanner) extractGrantedPermissions(sub *ResolvedSubscription) m
 func outboxToEnvelope(record OutboxRecord) EventEnvelope {
 	return EventEnvelope{
 		EventID:              record.EventID,
-		EventTypeID:         record.EventTypeID,
+		EventTypeID:          record.EventTypeID,
 		EventVersion:         record.EventVersion,
 		ProducerID:           record.ProducerID,
 		ProducerType:         record.ProducerType,
@@ -177,7 +177,7 @@ func outboxToEnvelope(record OutboxRecord) EventEnvelope {
 		ScopeSnapshotID:      record.ScopeSnapshotID,
 		PermissionSnapshotID: record.PermissionSnapshotID,
 		TraceID:              record.TraceID,
-		OperationID:         record.OperationID,
+		OperationID:          record.OperationID,
 		ParentEventID:        record.ParentEventID,
 		Depth:                record.Depth,
 		OccurredAt:           record.OccurredAt,
@@ -189,45 +189,45 @@ func outboxToEnvelope(record OutboxRecord) EventEnvelope {
 }
 
 type DispatcherConfig struct {
-	BatchSize           int
-	LeaseTTL            time.Duration
-	PollInterval        time.Duration
-	GlobalConcurrency   int
+	BatchSize               int
+	LeaseTTL                time.Duration
+	PollInterval            time.Duration
+	GlobalConcurrency       int
 	PerExtensionConcurrency int
-	PerPartitionConcurrency  int
-	MaxQueueLength      int
+	PerPartitionConcurrency int
+	MaxQueueLength          int
 }
 
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
-		BatchSize:                100,
-		LeaseTTL:                 60 * time.Second,
-		PollInterval:             500 * time.Millisecond,
-		GlobalConcurrency:        32,
-		PerExtensionConcurrency:  8,
-		PerPartitionConcurrency:  1,
-		MaxQueueLength:           10000,
+		BatchSize:               100,
+		LeaseTTL:                60 * time.Second,
+		PollInterval:            500 * time.Millisecond,
+		GlobalConcurrency:       32,
+		PerExtensionConcurrency: 8,
+		PerPartitionConcurrency: 1,
+		MaxQueueLength:          10000,
 	}
 }
 
 type DeliveryHandler func(ctx context.Context, delivery Delivery, envelope EventEnvelope, sub *ResolvedSubscription) error
 
 type Dispatcher struct {
-	outboxStore         OutboxStore
-	deliveryStore       DeliveryStore
-	deadLetterStore     DeadLetterStore
+	outboxStore          OutboxStore
+	deliveryStore        DeliveryStore
+	deadLetterStore      DeadLetterStore
 	subscriptionRegistry *EventSubscriptionRegistry
-	schemaRegistry      EventTypeRegistry
-	ordering            *OrderingCoordinator
-	circuitRegistry     *CircuitBreakerRegistry
-	traceRecorder       *EventTraceRecorder
-	generationResolver  GenerationResolver
-	config              DispatcherConfig
-	handler             DeliveryHandler
-	mu                  sync.Mutex
-	stopCh              chan struct{}
-	stopped             bool
-	wg                  sync.WaitGroup
+	schemaRegistry       EventTypeRegistry
+	ordering             *OrderingCoordinator
+	circuitRegistry      *CircuitBreakerRegistry
+	traceRecorder        *EventTraceRecorder
+	generationResolver   GenerationResolver
+	config               DispatcherConfig
+	handler              DeliveryHandler
+	mu                   sync.Mutex
+	stopCh               chan struct{}
+	stopped              bool
+	wg                   sync.WaitGroup
 }
 
 func NewDispatcher(

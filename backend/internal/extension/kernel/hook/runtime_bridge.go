@@ -52,17 +52,17 @@ func (b *DirectRuntimeBridge) IsReady(_ context.Context, contrib HookContributio
 }
 
 type SupervisorRuntimeBridge struct {
-	Supervisor      runtime_supervisor.Supervisor
+	Supervisor       runtime_supervisor.Supervisor
 	InstanceResolver func(ctx context.Context, contrib HookContributionDefinition) (string, error)
-	mu              sync.RWMutex
-	instanceCache   map[string]string
+	mu               sync.RWMutex
+	instanceCache    map[string]string
 }
 
 func NewSupervisorRuntimeBridge(supervisor runtime_supervisor.Supervisor, resolver func(ctx context.Context, contrib HookContributionDefinition) (string, error)) *SupervisorRuntimeBridge {
 	return &SupervisorRuntimeBridge{
-		Supervisor:    supervisor,
+		Supervisor:       supervisor,
 		InstanceResolver: resolver,
-		instanceCache: make(map[string]string),
+		instanceCache:    make(map[string]string),
 	}
 }
 

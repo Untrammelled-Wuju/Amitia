@@ -410,11 +410,11 @@ func TestAuthorizeSessionScopeEvaluationWithoutRequiredScopes(t *testing.T) {
 
 func TestResolvePermScope(t *testing.T) {
 	cases := []struct {
-		scopeStr      string
-		characterID   string
+		scopeStr       string
+		characterID    string
 		conversationID string
-		extID         string
-		expectedType  ScopeType
+		extID          string
+		expectedType   ScopeType
 	}{
 		{"character", "char-1", "", "ext-1", ScopeCharacter},
 		{"Character", "char-1", "", "ext-1", ScopeCharacter},

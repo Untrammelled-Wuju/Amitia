@@ -6,8 +6,8 @@ import (
 )
 
 type ResourceService struct {
-	catalog *AgentSkillCatalog
-	resolver ResourcePathResolver
+	catalog      *AgentSkillCatalog
+	resolver     ResourcePathResolver
 	maxReadBytes int64
 }
 

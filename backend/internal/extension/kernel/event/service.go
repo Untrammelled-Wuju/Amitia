@@ -80,17 +80,17 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	subscriptionReg.SetRepository(subscriptionRepo)
 
 	svc := &Service{
-		config:          cfg,
-		db:              cfg.DB,
-		schemaRegistry:  schemaRegistry,
-		outboxRepo:      outboxRepo,
-		deliveryStore:   deliveryStore,
-		deadLetterStore: deadLetterStore,
+		config:           cfg,
+		db:               cfg.DB,
+		schemaRegistry:   schemaRegistry,
+		outboxRepo:       outboxRepo,
+		deliveryStore:    deliveryStore,
+		deadLetterStore:  deadLetterStore,
 		subscriptionRepo: subscriptionRepo,
-		loopGuard:       loopGuard,
-		traceRecorder:   traceRecorder,
-		subscriptionReg: subscriptionReg,
-		handler:         defaultDeliveryHandler,
+		loopGuard:        loopGuard,
+		traceRecorder:    traceRecorder,
+		subscriptionReg:  subscriptionReg,
+		handler:          defaultDeliveryHandler,
 	}
 
 	svc.publisher = NewEventPublisher(schemaRegistry, outboxRepo, cfg.DB, loopGuard, cfg.MaxDepth)
@@ -457,20 +457,20 @@ func (s *Service) Stats(ctx context.Context) (ServiceStats, error) {
 }
 
 type ServiceStats struct {
-	PendingOutbox         int                       `json:"pendingOutbox"`
-	DispatchingOutbox     int                       `json:"dispatchingOutbox"`
-	DispatchedOutbox      int                       `json:"dispatchedOutbox"`
-	DeadLetterOutbox      int                       `json:"deadLetterOutbox"`
-	PendingDeliveries     int                       `json:"pendingDeliveries"`
-	LeasedDeliveries      int                       `json:"leasedDeliveries"`
-	SucceededDeliveries   int                       `json:"succeededDeliveries"`
-	FailedDeliveries      int                       `json:"failedDeliveries"`
-	RetryWaitDeliveries   int                       `json:"retryWaitDeliveries"`
-	DeadLetterDeliveries  int                       `json:"deadLetterDeliveries"`
-	CancelledDeliveries   int                       `json:"cancelledDeliveries"`
-	SkippedDeliveries     int                       `json:"skippedDeliveries"`
-	ActiveSubscriptions   int                       `json:"activeSubscriptions"`
-	Circuits              map[string]CircuitStats   `json:"circuits"`
+	PendingOutbox        int                     `json:"pendingOutbox"`
+	DispatchingOutbox    int                     `json:"dispatchingOutbox"`
+	DispatchedOutbox     int                     `json:"dispatchedOutbox"`
+	DeadLetterOutbox     int                     `json:"deadLetterOutbox"`
+	PendingDeliveries    int                     `json:"pendingDeliveries"`
+	LeasedDeliveries     int                     `json:"leasedDeliveries"`
+	SucceededDeliveries  int                     `json:"succeededDeliveries"`
+	FailedDeliveries     int                     `json:"failedDeliveries"`
+	RetryWaitDeliveries  int                     `json:"retryWaitDeliveries"`
+	DeadLetterDeliveries int                     `json:"deadLetterDeliveries"`
+	CancelledDeliveries  int                     `json:"cancelledDeliveries"`
+	SkippedDeliveries    int                     `json:"skippedDeliveries"`
+	ActiveSubscriptions  int                     `json:"activeSubscriptions"`
+	Circuits             map[string]CircuitStats `json:"circuits"`
 }
 
 func (s *Service) CleanupOldRecords(ctx context.Context, maxAge time.Duration) error {

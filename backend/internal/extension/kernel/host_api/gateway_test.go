@@ -13,11 +13,11 @@ import (
 
 func makeIdentity() runtime_supervisor.RuntimeIdentity {
 	return runtime_supervisor.RuntimeIdentity{
-		InstanceID:         "inst-1",
+		InstanceID:          "inst-1",
 		RuntimeDefinitionID: "rt-1",
-		ExtensionID:        "com.example/test",
-		ModuleID:           "main",
-		Generation:         1,
+		ExtensionID:         "com.example/test",
+		ModuleID:            "main",
+		Generation:          1,
 	}
 }
 

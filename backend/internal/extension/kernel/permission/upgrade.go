@@ -5,12 +5,12 @@ import (
 )
 
 type PermissionUpgrade struct {
-	PermissionID string `json:"permissionId"`
-	Change       string `json:"change"`
-	OldScope     string `json:"oldScope,omitempty"`
-	NewScope     string `json:"newScope,omitempty"`
-	RiskChange   string `json:"riskChange,omitempty"`
-	RequiresReconfirmation bool `json:"requiresReconfirmation"`
+	PermissionID           string `json:"permissionId"`
+	Change                 string `json:"change"`
+	OldScope               string `json:"oldScope,omitempty"`
+	NewScope               string `json:"newScope,omitempty"`
+	RiskChange             string `json:"riskChange,omitempty"`
+	RequiresReconfirmation bool   `json:"requiresReconfirmation"`
 }
 
 type UpgradeDetector struct {

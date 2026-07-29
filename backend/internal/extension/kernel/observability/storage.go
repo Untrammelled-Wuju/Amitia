@@ -126,14 +126,14 @@ type AuditFilter struct {
 }
 
 type MemoryStore struct {
-	traces        map[string]Trace
-	operations    map[string]OperationRecord
-	invocations   map[string]InvocationRecord
-	attempts      map[string][]ExecutionAttempt
-	events        []RuntimeEventRecord
-	auditEvents   []AuditEvent
-	errorRecords  map[string][]ErrorRecord
-	mu            sync.RWMutex
+	traces       map[string]Trace
+	operations   map[string]OperationRecord
+	invocations  map[string]InvocationRecord
+	attempts     map[string][]ExecutionAttempt
+	events       []RuntimeEventRecord
+	auditEvents  []AuditEvent
+	errorRecords map[string][]ErrorRecord
+	mu           sync.RWMutex
 }
 
 func NewMemoryStore() *MemoryStore {

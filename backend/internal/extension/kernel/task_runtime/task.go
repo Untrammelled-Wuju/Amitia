@@ -10,17 +10,17 @@ import (
 type TaskState string
 
 const (
-	TaskStateCreated           TaskState = "created"
-	TaskStateQueued            TaskState = "queued"
-	TaskStateStarting          TaskState = "starting"
-	TaskStateRunning           TaskState = "running"
-	TaskStateCheckpointing     TaskState = "checkpointing"
-	TaskStatePaused            TaskState = "paused"
-	TaskStateSucceeded         TaskState = "succeeded"
-	TaskStateFailed            TaskState = "failed"
-	TaskStateCancelled         TaskState = "cancelled"
-	TaskStateTimedOut          TaskState = "timed_out"
-	TaskStateRecoveryRequired  TaskState = "recovery_required"
+	TaskStateCreated          TaskState = "created"
+	TaskStateQueued           TaskState = "queued"
+	TaskStateStarting         TaskState = "starting"
+	TaskStateRunning          TaskState = "running"
+	TaskStateCheckpointing    TaskState = "checkpointing"
+	TaskStatePaused           TaskState = "paused"
+	TaskStateSucceeded        TaskState = "succeeded"
+	TaskStateFailed           TaskState = "failed"
+	TaskStateCancelled        TaskState = "cancelled"
+	TaskStateTimedOut         TaskState = "timed_out"
+	TaskStateRecoveryRequired TaskState = "recovery_required"
 )
 
 func (s TaskState) IsTerminal() bool {
@@ -32,34 +32,34 @@ func (s TaskState) IsTerminal() bool {
 }
 
 type TaskDefinition struct {
-	TaskID                     string                   `json:"taskId"`
-	ExtensionID                string                   `json:"extensionId"`
-	ModuleID                   string                   `json:"moduleId"`
-	ContributionID             string                   `json:"contributionId,omitempty"`
-	RuntimeType                string                   `json:"runtimeType"`
-	Entry                      string                   `json:"entry"`
-	EntryHash                  string                   `json:"entryHash,omitempty"`
-	InputSchema                json.RawMessage          `json:"inputSchema,omitempty"`
-	OutputSchema               json.RawMessage          `json:"outputSchema,omitempty"`
-	CheckpointSchema           json.RawMessage          `json:"checkpointSchema,omitempty"`
-	Checkpoint                 bool                     `json:"checkpoint"`
-	Idempotent                 bool                     `json:"idempotent"`
-	Recoverable                bool                     `json:"recoverable"`
-	Idempotency                TaskIdempotency          `json:"idempotency,omitempty"`
-	Recoverability             TaskRecoverability       `json:"recoverability,omitempty"`
-	ResourceLimits             TaskResourceLimits       `json:"resourceLimits,omitempty"`
-	PermissionRequirements     []PermissionRequirement  `json:"permissionRequirements,omitempty"`
-	PermissionRequirementStrings []string               `json:"permissionRequirementStrings,omitempty"`
-	AllowedNamespaces          []string                 `json:"allowedNamespaces,omitempty"`
-	ScopeRule                  ScopeRule                `json:"scopeRule,omitempty"`
-	RetryPolicy                TaskRetryPolicy          `json:"retryPolicy,omitempty"`
-	TimeoutPolicy              TaskTimeoutPolicy        `json:"timeoutPolicy,omitempty"`
-	ResultPolicy               TaskResultPolicy         `json:"resultPolicy,omitempty"`
-	CleanupPolicy              TaskCleanupPolicy        `json:"cleanupPolicy,omitempty"`
-	DefinitionVersion          int                      `json:"definitionVersion,omitempty"`
-	DefinitionHash             string                   `json:"definitionHash,omitempty"`
-	Version                    string                   `json:"version,omitempty"`
-	MaxDuration                time.Duration            `json:"maxDuration,omitempty"`
+	TaskID                       string                  `json:"taskId"`
+	ExtensionID                  string                  `json:"extensionId"`
+	ModuleID                     string                  `json:"moduleId"`
+	ContributionID               string                  `json:"contributionId,omitempty"`
+	RuntimeType                  string                  `json:"runtimeType"`
+	Entry                        string                  `json:"entry"`
+	EntryHash                    string                  `json:"entryHash,omitempty"`
+	InputSchema                  json.RawMessage         `json:"inputSchema,omitempty"`
+	OutputSchema                 json.RawMessage         `json:"outputSchema,omitempty"`
+	CheckpointSchema             json.RawMessage         `json:"checkpointSchema,omitempty"`
+	Checkpoint                   bool                    `json:"checkpoint"`
+	Idempotent                   bool                    `json:"idempotent"`
+	Recoverable                  bool                    `json:"recoverable"`
+	Idempotency                  TaskIdempotency         `json:"idempotency,omitempty"`
+	Recoverability               TaskRecoverability      `json:"recoverability,omitempty"`
+	ResourceLimits               TaskResourceLimits      `json:"resourceLimits,omitempty"`
+	PermissionRequirements       []PermissionRequirement `json:"permissionRequirements,omitempty"`
+	PermissionRequirementStrings []string                `json:"permissionRequirementStrings,omitempty"`
+	AllowedNamespaces            []string                `json:"allowedNamespaces,omitempty"`
+	ScopeRule                    ScopeRule               `json:"scopeRule,omitempty"`
+	RetryPolicy                  TaskRetryPolicy         `json:"retryPolicy,omitempty"`
+	TimeoutPolicy                TaskTimeoutPolicy       `json:"timeoutPolicy,omitempty"`
+	ResultPolicy                 TaskResultPolicy        `json:"resultPolicy,omitempty"`
+	CleanupPolicy                TaskCleanupPolicy       `json:"cleanupPolicy,omitempty"`
+	DefinitionVersion            int                     `json:"definitionVersion,omitempty"`
+	DefinitionHash               string                  `json:"definitionHash,omitempty"`
+	Version                      string                  `json:"version,omitempty"`
+	MaxDuration                  time.Duration           `json:"maxDuration,omitempty"`
 }
 
 type TaskResourceLimits struct {
@@ -112,30 +112,30 @@ type Checkpoint struct {
 }
 
 type Progress struct {
-	Current int
-	Total   int
-	Message string
+	Current  int
+	Total    int
+	Message  string
 	Metadata map[string]interface{}
 }
 
 type Task struct {
-	mu              sync.RWMutex
-	definition      TaskDefinition
-	input           TaskInput
-	state           TaskState
-	progress        Progress
-	checkpoints     []Checkpoint
-	result          *TaskResult
-	startedAt       *time.Time
-	finishedAt      *time.Time
-	cancelSignal    *CancelSignal
-	workspacePath   string
-	operationID     string
-	priority        int
-	queueReason     string
-	scopeSnapshot   string
-	permissionSnap  []string
-	dependencySnap  string
+	mu             sync.RWMutex
+	definition     TaskDefinition
+	input          TaskInput
+	state          TaskState
+	progress       Progress
+	checkpoints    []Checkpoint
+	result         *TaskResult
+	startedAt      *time.Time
+	finishedAt     *time.Time
+	cancelSignal   *CancelSignal
+	workspacePath  string
+	operationID    string
+	priority       int
+	queueReason    string
+	scopeSnapshot  string
+	permissionSnap []string
+	dependencySnap string
 }
 
 type CancelSignal struct {
@@ -289,10 +289,10 @@ func (t *Task) Fail(err string) {
 	t.state = TaskStateFailed
 	t.finishedAt = &now
 	t.result = &TaskResult{
-		TaskID:     t.definition.TaskID,
-		Status:     TaskStateFailed,
-		Error:      err,
-		FinishedAt: &now,
+		TaskID:      t.definition.TaskID,
+		Status:      TaskStateFailed,
+		Error:       err,
+		FinishedAt:  &now,
 		Checkpoints: t.checkpoints,
 	}
 	if t.startedAt != nil {
@@ -308,10 +308,10 @@ func (t *Task) Cancelled(reason string) {
 	t.state = TaskStateCancelled
 	t.finishedAt = &now
 	t.result = &TaskResult{
-		TaskID:     t.definition.TaskID,
-		Status:     TaskStateCancelled,
-		Error:      reason,
-		FinishedAt: &now,
+		TaskID:      t.definition.TaskID,
+		Status:      TaskStateCancelled,
+		Error:       reason,
+		FinishedAt:  &now,
 		Checkpoints: t.checkpoints,
 	}
 	if t.startedAt != nil {
@@ -327,10 +327,10 @@ func (t *Task) TimedOut() {
 	t.state = TaskStateTimedOut
 	t.finishedAt = &now
 	t.result = &TaskResult{
-		TaskID:     t.definition.TaskID,
-		Status:     TaskStateTimedOut,
-		Error:      "task exceeded max duration",
-		FinishedAt: &now,
+		TaskID:      t.definition.TaskID,
+		Status:      TaskStateTimedOut,
+		Error:       "task exceeded max duration",
+		FinishedAt:  &now,
 		Checkpoints: t.checkpoints,
 	}
 	if t.startedAt != nil {

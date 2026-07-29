@@ -1587,6 +1587,144 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_ws_id ON kernel_reload_cleanup_failures(workspace_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_status ON kernel_reload_cleanup_failures(status)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_next_retry ON kernel_reload_cleanup_failures(next_retry_at)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_candidate_stable_snapshots (
+		snapshot_id TEXT PRIMARY KEY,
+		candidate_id TEXT NOT NULL,
+		extension_id TEXT NOT NULL,
+		contribution_id TEXT NOT NULL DEFAULT '',
+		contribution_kind TEXT NOT NULL DEFAULT '',
+		stable_generation INTEGER NOT NULL DEFAULT 0,
+		stable_definition_json TEXT NOT NULL DEFAULT '{}',
+		stable_definition_hash TEXT NOT NULL DEFAULT '',
+		stable_runtime_binding_json TEXT NOT NULL DEFAULT '{}',
+		stable_permission_json TEXT NOT NULL DEFAULT '[]',
+		stable_scope_json TEXT NOT NULL DEFAULT '{}',
+		enablement_state TEXT NOT NULL DEFAULT '',
+		generation_id TEXT NOT NULL DEFAULT '',
+		captured_at TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_cand_snap_cand_id ON kernel_candidate_stable_snapshots(candidate_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_cand_snap_ext_id ON kernel_candidate_stable_snapshots(extension_id)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_generation_states (
+		generation_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		version TEXT NOT NULL DEFAULT '',
+		generation_num INTEGER NOT NULL DEFAULT 0,
+		state TEXT NOT NULL DEFAULT 'preparing',
+		definition_hash TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		activated_at TEXT,
+		stopped_at TEXT,
+		invocations INTEGER NOT NULL DEFAULT 0
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_gen_states_ext_id ON kernel_generation_states(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_gen_states_state ON kernel_generation_states(state)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_runtime_cleanup_tasks (
+		cleanup_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		module_id TEXT NOT NULL DEFAULT '',
+		old_generation INTEGER NOT NULL DEFAULT 0,
+		runtime_definition_id TEXT NOT NULL DEFAULT '',
+		runtime_instance_id TEXT NOT NULL DEFAULT '',
+		runtime_type TEXT NOT NULL DEFAULT '',
+		process_id INTEGER NOT NULL DEFAULT 0,
+		cleanup_state TEXT NOT NULL DEFAULT 'pending',
+		attempt_count INTEGER NOT NULL DEFAULT 0,
+		last_error_code TEXT NOT NULL DEFAULT '',
+		last_error_message TEXT NOT NULL DEFAULT '',
+		next_retry_at TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_rt_cleanup_ext_id ON kernel_runtime_cleanup_tasks(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_rt_cleanup_state ON kernel_runtime_cleanup_tasks(cleanup_state)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_rt_cleanup_instance ON kernel_runtime_cleanup_tasks(runtime_instance_id)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_lifecycle_operations (
+		operation_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		operation_type TEXT NOT NULL,
+		from_state TEXT NOT NULL DEFAULT '',
+		target_state TEXT NOT NULL DEFAULT '',
+		stable_generation INTEGER NOT NULL DEFAULT 0,
+		candidate_generation INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		current_step TEXT NOT NULL DEFAULT '',
+		error_code TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_lc_ops_ext_id ON kernel_lifecycle_operations(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_lc_ops_status ON kernel_lifecycle_operations(status)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_lifecycle_steps (
+		step_id TEXT PRIMARY KEY,
+		operation_id TEXT NOT NULL,
+		step_name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		attempt_count INTEGER NOT NULL DEFAULT 0,
+		result_json TEXT NOT NULL DEFAULT '{}',
+		error_code TEXT NOT NULL DEFAULT '',
+		started_at TEXT,
+		finished_at TEXT
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_lc_steps_op_id ON kernel_lifecycle_steps(operation_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_lc_steps_status ON kernel_lifecycle_steps(status)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_lifecycle_compensations (
+		compensation_id TEXT PRIMARY KEY,
+		operation_id TEXT NOT NULL,
+		step_name TEXT NOT NULL,
+		compensation_name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		error_code TEXT NOT NULL DEFAULT '',
+		started_at TEXT,
+		finished_at TEXT
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_lc_comp_op_id ON kernel_lifecycle_compensations(operation_id)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_host_registry (
+		host_client_id TEXT PRIMARY KEY,
+		host_session_id TEXT NOT NULL,
+		user_id TEXT NOT NULL DEFAULT '',
+		platform TEXT NOT NULL DEFAULT '',
+		device_id TEXT NOT NULL DEFAULT '',
+		window_id TEXT NOT NULL DEFAULT '',
+		capabilities TEXT NOT NULL DEFAULT '[]',
+		authenticated_at TEXT NOT NULL,
+		last_heartbeat TEXT NOT NULL,
+		connection_state TEXT NOT NULL DEFAULT 'disconnected',
+		session_token TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		expires_at TEXT
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_user_id ON kernel_host_registry(user_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_session ON kernel_host_registry(host_session_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_state ON kernel_host_registry(connection_state)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_final_gate_metrics (
+		id TEXT PRIMARY KEY,
+		metric_name TEXT NOT NULL,
+		resource_id TEXT NOT NULL DEFAULT '',
+		extension_id TEXT NOT NULL DEFAULT '',
+		generation INTEGER NOT NULL DEFAULT 0,
+		detected_at TEXT NOT NULL,
+		resolved_at TEXT,
+		status TEXT NOT NULL DEFAULT 'open',
+		detail TEXT NOT NULL DEFAULT ''
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_fg_metrics_name ON kernel_final_gate_metrics(metric_name)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_fg_metrics_status ON kernel_final_gate_metrics(status)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_legacy_call_counters (
+		metric_name TEXT PRIMARY KEY,
+		count INTEGER NOT NULL DEFAULT 0,
+		updated_at TEXT NOT NULL
+	)`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -1716,6 +1854,11 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_schedule_definitions", "execution_owner", "TEXT NOT NULL DEFAULT 'backend'"},
 	{"kernel_candidate_contributions", "schedule_ids_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"kernel_candidate_contributions", "expected_stable_generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"kernel_candidate_contributions", "promote_started_at", "TEXT NOT NULL DEFAULT ''"},
+	{"kernel_candidate_contributions", "promote_committed_at", "TEXT NOT NULL DEFAULT ''"},
+	{"kernel_candidate_contributions", "rollback_started_at", "TEXT NOT NULL DEFAULT ''"},
+	{"kernel_candidate_contributions", "rollback_finished_at", "TEXT NOT NULL DEFAULT ''"},
+	{"kernel_candidate_contributions", "module_id", "TEXT NOT NULL DEFAULT ''"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {

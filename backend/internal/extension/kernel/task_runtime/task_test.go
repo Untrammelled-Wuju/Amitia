@@ -11,17 +11,17 @@ import (
 func makeTestTask(t *testing.T) *Task {
 	t.Helper()
 	def := TaskDefinition{
-		TaskID:         "task-1",
-		ExtensionID:    "com.example/weather",
-		ModuleID:       "main",
-		RuntimeType:    "task",
-		Entry:          "tasks/migrate.js",
-		EntryHash:      "sha256:entry",
-		Checkpoint:     true,
-		Recoverable:    true,
+		TaskID:            "task-1",
+		ExtensionID:       "com.example/weather",
+		ModuleID:          "main",
+		RuntimeType:       "task",
+		Entry:             "tasks/migrate.js",
+		EntryHash:         "sha256:entry",
+		Checkpoint:        true,
+		Recoverable:       true,
 		DefinitionVersion: 1,
-		MaxDuration:    10 * time.Second,
-		ResourceLimits: DefaultTaskResourceLimits(),
+		MaxDuration:       10 * time.Second,
+		ResourceLimits:    DefaultTaskResourceLimits(),
 	}
 	input := TaskInput{
 		TaskID:    "task-1",
@@ -157,11 +157,11 @@ func TestTaskValidateRecovery(t *testing.T) {
 
 func TestTaskRecoverableRequired(t *testing.T) {
 	def := TaskDefinition{
-		TaskID:       "task-1",
-		ExtensionID:  "com.example",
-		Entry:        "entry.js",
-		EntryHash:    "sha256:entry",
-		Recoverable:  false,
+		TaskID:      "task-1",
+		ExtensionID: "com.example",
+		Entry:       "entry.js",
+		EntryHash:   "sha256:entry",
+		Recoverable: false,
 	}
 	task1, _ := NewTask(def, TaskInput{TaskID: "task-1", InputHash: "h1"}, "op-1", 1)
 	task2, _ := NewTask(def, TaskInput{TaskID: "task-1", InputHash: "h1"}, "op-1", 1)

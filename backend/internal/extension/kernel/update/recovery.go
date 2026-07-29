@@ -6,19 +6,19 @@ import (
 )
 
 type RecoveryManager struct {
-	journal   *JournalManager
-	executor  *RollbackExecutorV2
-	planner   *RollbackPlanner
-	repo      *RollbackRepository
+	journal    *JournalManager
+	executor   *RollbackExecutorV2
+	planner    *RollbackPlanner
+	repo       *RollbackRepository
 	migrations *MigrationExecutor
 }
 
 func NewRecoveryManager(journal *JournalManager, executor *RollbackExecutorV2, planner *RollbackPlanner, repo *RollbackRepository) *RecoveryManager {
 	return &RecoveryManager{
-		journal:   journal,
-		executor:  executor,
-		planner:   planner,
-		repo:      repo,
+		journal:    journal,
+		executor:   executor,
+		planner:    planner,
+		repo:       repo,
 		migrations: executor.migrations,
 	}
 }

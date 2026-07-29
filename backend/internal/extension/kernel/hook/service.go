@@ -13,30 +13,30 @@ import (
 )
 
 type Service struct {
-	PointRegistry   *DefaultHookPointRegistry
-	ContribStore    ContributionStore
-	Pipeline        *Pipeline
-	RuntimeBridge   RuntimeBridge
-	Permission      PermissionChecker
-	Scope           ScopeChecker
-	Dependency      DependencyChecker
-	Trace           TraceRecorder
-	Circuit         *CircuitBreaker
-	DepthGuard      *DepthGuard
-	Validator       *PatchValidator
-	Integrator      *HostHookIntegrator
-	ReadModel       *HookReadModel
-	Lifecycle       *HookLifecycleManager
-	Supervisor      runtime_supervisor.Supervisor
+	PointRegistry *DefaultHookPointRegistry
+	ContribStore  ContributionStore
+	Pipeline      *Pipeline
+	RuntimeBridge RuntimeBridge
+	Permission    PermissionChecker
+	Scope         ScopeChecker
+	Dependency    DependencyChecker
+	Trace         TraceRecorder
+	Circuit       *CircuitBreaker
+	DepthGuard    *DepthGuard
+	Validator     *PatchValidator
+	Integrator    *HostHookIntegrator
+	ReadModel     *HookReadModel
+	Lifecycle     *HookLifecycleManager
+	Supervisor    runtime_supervisor.Supervisor
 }
 
 type ServiceConfig struct {
-	DB             *sql.DB
-	Supervisor     runtime_supervisor.Supervisor
-	PermissionBroker permission.PermissionBroker
-	ScopeManager    scope.ScopeManager
+	DB                 *sql.DB
+	Supervisor         runtime_supervisor.Supervisor
+	PermissionBroker   permission.PermissionBroker
+	ScopeManager       scope.ScopeManager
 	DependencyResolver dependency.Resolver
-	UseSQLite       bool
+	UseSQLite          bool
 }
 
 func NewService(cfg ServiceConfig) (*Service, error) {
@@ -112,21 +112,21 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	}
 
 	return &Service{
-		PointRegistry:  pointRegistry,
-		ContribStore:   contribStore,
-		Pipeline:       pipeline,
-		RuntimeBridge:  runtimeBridge,
-		Permission:     permChecker,
-		Scope:          scopeChecker,
-		Dependency:     depChecker,
-		Trace:          traceRecorder,
-		Circuit:        circuit,
-		DepthGuard:     depthGuard,
-		Validator:      validator,
-		Integrator:     integrator,
-		ReadModel:      readModel,
-		Lifecycle:      lifecycle,
-		Supervisor:     cfg.Supervisor,
+		PointRegistry: pointRegistry,
+		ContribStore:  contribStore,
+		Pipeline:      pipeline,
+		RuntimeBridge: runtimeBridge,
+		Permission:    permChecker,
+		Scope:         scopeChecker,
+		Dependency:    depChecker,
+		Trace:         traceRecorder,
+		Circuit:       circuit,
+		DepthGuard:    depthGuard,
+		Validator:     validator,
+		Integrator:    integrator,
+		ReadModel:     readModel,
+		Lifecycle:     lifecycle,
+		Supervisor:    cfg.Supervisor,
 	}, nil
 }
 

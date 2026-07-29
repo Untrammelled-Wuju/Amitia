@@ -9,13 +9,13 @@ import (
 )
 
 type memCleanupFailureStore struct {
-	mu       sync.Mutex
-	records  map[string]*CleanupFailureRecord
-	saveErr  error
-	listErr  error
-	delErr   error
-	updErr   error
-	cntErr   error
+	mu      sync.Mutex
+	records map[string]*CleanupFailureRecord
+	saveErr error
+	listErr error
+	delErr  error
+	updErr  error
+	cntErr  error
 }
 
 func newMemCleanupFailureStore() *memCleanupFailureStore {

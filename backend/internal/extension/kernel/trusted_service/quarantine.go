@@ -10,29 +10,29 @@ import (
 type QuarantineReason string
 
 const (
-	QuarantineSignatureFailure    QuarantineReason = "signature_failure"
-	QuarantineBinaryHashChanged   QuarantineReason = "binary_hash_changed"
-	QuarantinePublisherRevoked    QuarantineReason = "publisher_revoked"
+	QuarantineSignatureFailure      QuarantineReason = "signature_failure"
+	QuarantineBinaryHashChanged     QuarantineReason = "binary_hash_changed"
+	QuarantinePublisherRevoked      QuarantineReason = "publisher_revoked"
 	QuarantineProcessTreeUnkillable QuarantineReason = "process_tree_unkillable"
-	QuarantineUndeclaredChild     QuarantineReason = "undeclared_child_process"
-	QuarantineUndeclaredPort      QuarantineReason = "undeclared_public_port"
-	QuarantineProtocolMismatch    QuarantineReason = "protocol_identity_mismatch"
-	QuarantineHostAPIViolation    QuarantineReason = "host_api_violation"
-	QuarantineFrequentCrash       QuarantineReason = "frequent_crash"
-	QuarantineResourceExceeded    QuarantineReason = "resource_limit_exceeded"
-	QuarantinePackageTampered     QuarantineReason = "package_tampered"
+	QuarantineUndeclaredChild       QuarantineReason = "undeclared_child_process"
+	QuarantineUndeclaredPort        QuarantineReason = "undeclared_public_port"
+	QuarantineProtocolMismatch      QuarantineReason = "protocol_identity_mismatch"
+	QuarantineHostAPIViolation      QuarantineReason = "host_api_violation"
+	QuarantineFrequentCrash         QuarantineReason = "frequent_crash"
+	QuarantineResourceExceeded      QuarantineReason = "resource_limit_exceeded"
+	QuarantinePackageTampered       QuarantineReason = "package_tampered"
 )
 
 type QuarantineRecord struct {
-	ServiceID      string
-	InstanceID     string
-	Reason         QuarantineReason
-	Detail         string
-	Evidence       map[string]any
-	QuarantinedAt  time.Time
-	ReleasedAt     *time.Time
-	ReleasedBy     string
-	ReleaseReason  string
+	ServiceID     string
+	InstanceID    string
+	Reason        QuarantineReason
+	Detail        string
+	Evidence      map[string]any
+	QuarantinedAt time.Time
+	ReleasedAt    *time.Time
+	ReleasedBy    string
+	ReleaseReason string
 }
 
 func (r *QuarantineRecord) IsActive() bool {
@@ -40,9 +40,9 @@ func (r *QuarantineRecord) IsActive() bool {
 }
 
 type QuarantineManager struct {
-	mu        sync.RWMutex
-	records   map[string]*QuarantineRecord
-	history   []*QuarantineRecord
+	mu      sync.RWMutex
+	records map[string]*QuarantineRecord
+	history []*QuarantineRecord
 }
 
 func NewQuarantineManager() *QuarantineManager {

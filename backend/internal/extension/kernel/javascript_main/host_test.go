@@ -12,9 +12,9 @@ import (
 func makeTestHost(t *testing.T) *PluginHost {
 	t.Helper()
 	host, err := NewPluginHost(PluginHostConfig{
-		InstanceID:        "inst-1",
-		ExtensionID:       "com.example/weather",
-		ModuleID:          "main",
+		InstanceID:  "inst-1",
+		ExtensionID: "com.example/weather",
+		ModuleID:    "main",
 		BootstrapSpec: runtime.BootstrapSpec{
 			InstanceID:     "inst-1",
 			ExtensionID:    "com.example/weather",
@@ -61,12 +61,12 @@ func TestPluginHostStart(t *testing.T) {
 
 func TestPluginHostStartRejectsMissingSessionToken(t *testing.T) {
 	_, err := NewPluginHost(PluginHostConfig{
-		InstanceID:     "inst-1",
-		ExtensionID:    "com.example",
-		ModuleID:       "main",
-		BootstrapSpec:  runtime.BootstrapSpec{
-			InstanceID:  "inst-1",
-			Entry:       "entry.js",
+		InstanceID:  "inst-1",
+		ExtensionID: "com.example",
+		ModuleID:    "main",
+		BootstrapSpec: runtime.BootstrapSpec{
+			InstanceID: "inst-1",
+			Entry:      "entry.js",
 		},
 		DefinitionHash: "sha256:abc",
 		HostAPIVersion: "1",

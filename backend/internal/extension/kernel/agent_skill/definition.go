@@ -14,16 +14,16 @@ const (
 type ActivationMode string
 
 const (
-	ActivationManual  ActivationMode = "manual"
-	ActivationAuto    ActivationMode = "auto"
+	ActivationManual   ActivationMode = "manual"
+	ActivationAuto     ActivationMode = "auto"
 	ActivationExplicit ActivationMode = "explicit"
 )
 
 type ActivationRule struct {
-	Mode     ActivationMode `json:"mode"`
-	Keywords []string       `json:"keywords,omitempty"`
-	Priority int            `json:"priority,omitempty"`
-	MaxPerRound int         `json:"maxPerRound,omitempty"`
+	Mode        ActivationMode `json:"mode"`
+	Keywords    []string       `json:"keywords,omitempty"`
+	Priority    int            `json:"priority,omitempty"`
+	MaxPerRound int            `json:"maxPerRound,omitempty"`
 }
 
 type ToolReference struct {
@@ -33,26 +33,26 @@ type ToolReference struct {
 }
 
 type MCPReference struct {
-	ServerID     string `json:"serverId"`
+	ServerID       string `json:"serverId"`
 	DependencyName string `json:"dependencyName,omitempty"`
-	Optional      bool   `json:"optional"`
-	AutoInstall   bool   `json:"autoInstall,omitempty"`
+	Optional       bool   `json:"optional"`
+	AutoInstall    bool   `json:"autoInstall,omitempty"`
 }
 
 type SkillResourceKind string
 
 const (
-	KindReference  SkillResourceKind = "reference"
-	KindTemplate   SkillResourceKind = "template"
-	KindAsset      SkillResourceKind = "asset"
-	KindScript     SkillResourceKind = "script"
-	KindConfig     SkillResourceKind = "config"
-	KindData       SkillResourceKind = "data"
+	KindReference SkillResourceKind = "reference"
+	KindTemplate  SkillResourceKind = "template"
+	KindAsset     SkillResourceKind = "asset"
+	KindScript    SkillResourceKind = "script"
+	KindConfig    SkillResourceKind = "config"
+	KindData      SkillResourceKind = "data"
 )
 
 type SkillResourceDescriptor struct {
-	Path         string            `json:"path"`
-	Kind         SkillResourceKind `json:"kind"`
+	Path          string            `json:"path"`
+	Kind          SkillResourceKind `json:"kind"`
 	MIMEType      string            `json:"mimeType,omitempty"`
 	Size          int64             `json:"size"`
 	SHA256        string            `json:"sha256,omitempty"`
@@ -63,20 +63,20 @@ type SkillResourceDescriptor struct {
 }
 
 type SkillTokenPolicy struct {
-	MaxInstructionTokens    int `json:"maxInstructionTokens"`
-	MaxResourceTokensPerTurn int `json:"maxResourceTokensPerTurn,omitempty"`
-	MaxTotalResources        int `json:"maxTotalResources,omitempty"`
+	MaxInstructionTokens     int    `json:"maxInstructionTokens"`
+	MaxResourceTokensPerTurn int    `json:"maxResourceTokensPerTurn,omitempty"`
+	MaxTotalResources        int    `json:"maxTotalResources,omitempty"`
 	TruncationStrategy       string `json:"truncationStrategy,omitempty"`
 }
 
 type SkillCompatibility struct {
 	MinHostVersion string   `json:"minHostVersion,omitempty"`
-	MaxHostVersion  string   `json:"maxHostVersion,omitempty"`
-	Platforms       []string `json:"platforms,omitempty"`
-	FeatureFlags    []string `json:"featureFlags,omitempty"`
-	SchemaVersion   int      `json:"schemaVersion"`
-	Status          string   `json:"status"`
-	Messages        []string `json:"messages,omitempty"`
+	MaxHostVersion string   `json:"maxHostVersion,omitempty"`
+	Platforms      []string `json:"platforms,omitempty"`
+	FeatureFlags   []string `json:"featureFlags,omitempty"`
+	SchemaVersion  int      `json:"schemaVersion"`
+	Status         string   `json:"status"`
+	Messages       []string `json:"messages,omitempty"`
 }
 
 type SkillIntegrity struct {
@@ -88,56 +88,56 @@ type SkillIntegrity struct {
 }
 
 type SkillInstructionRef struct {
-	Text         string `json:"text"`
-	TokenCount   int    `json:"tokenCount"`
-	ContentHash  string `json:"contentHash"`
-	Truncated    bool   `json:"truncated,omitempty"`
+	Text        string `json:"text"`
+	TokenCount  int    `json:"tokenCount"`
+	ContentHash string `json:"contentHash"`
+	Truncated   bool   `json:"truncated,omitempty"`
 }
 
 type AgentSkillDefinition struct {
-	ID               string                    `json:"id"`
-	ExtensionID      string                    `json:"extensionId"`
-	ModuleID         string                    `json:"moduleId,omitempty"`
-	Name             string                    `json:"name"`
-	Description      string                    `json:"description"`
-	DisplayName      string                    `json:"displayName,omitempty"`
-	Version          string                    `json:"version"`
-	SchemaVersion    int                       `json:"schemaVersion"`
+	ID            string `json:"id"`
+	ExtensionID   string `json:"extensionId"`
+	ModuleID      string `json:"moduleId,omitempty"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	DisplayName   string `json:"displayName,omitempty"`
+	Version       string `json:"version"`
+	SchemaVersion int    `json:"schemaVersion"`
 
-	Instructions     SkillInstructionRef       `json:"instructions"`
-	Activation       ActivationRule            `json:"activation"`
-	Resources        []SkillResourceDescriptor `json:"resources,omitempty"`
-	RequiredTools    []ToolReference           `json:"requiredTools,omitempty"`
-	RequiredMCP      []MCPReference            `json:"requiredMCP,omitempty"`
-	TokenPolicy      SkillTokenPolicy          `json:"tokenPolicy,omitempty"`
-	Compatibility    SkillCompatibility        `json:"compatibility,omitempty"`
-	Integrity        SkillIntegrity            `json:"integrity,omitempty"`
+	Instructions  SkillInstructionRef       `json:"instructions"`
+	Activation    ActivationRule            `json:"activation"`
+	Resources     []SkillResourceDescriptor `json:"resources,omitempty"`
+	RequiredTools []ToolReference           `json:"requiredTools,omitempty"`
+	RequiredMCP   []MCPReference            `json:"requiredMCP,omitempty"`
+	TokenPolicy   SkillTokenPolicy          `json:"tokenPolicy,omitempty"`
+	Compatibility SkillCompatibility        `json:"compatibility,omitempty"`
+	Integrity     SkillIntegrity            `json:"integrity,omitempty"`
 
-	Scope            AgentSkillScope           `json:"scope"`
-	ScopeID          string                    `json:"scopeId,omitempty"`
-	Enabled          bool                      `json:"enabled"`
-	Compatible       bool                      `json:"compatible,omitempty"`
-	Source           string                    `json:"source"`
-	License          string                    `json:"license,omitempty"`
-	Author           string                    `json:"author,omitempty"`
+	Scope      AgentSkillScope `json:"scope"`
+	ScopeID    string          `json:"scopeId,omitempty"`
+	Enabled    bool            `json:"enabled"`
+	Compatible bool            `json:"compatible,omitempty"`
+	Source     string          `json:"source"`
+	License    string          `json:"license,omitempty"`
+	Author     string          `json:"author,omitempty"`
 
-	ToolMappings     []map[string]any          `json:"toolMappings,omitempty"`
-	Metadata         map[string]any            `json:"metadata,omitempty"`
+	ToolMappings []map[string]any `json:"toolMappings,omitempty"`
+	Metadata     map[string]any   `json:"metadata,omitempty"`
 }
 
 type AgentSkillCatalogEntry struct {
-	ExtensionID   string           `json:"extensionId"`
-	Name          string           `json:"name"`
-	Description   string           `json:"description"`
-	DisplayName   string           `json:"displayName,omitempty"`
-	Version       string           `json:"version,omitempty"`
-	Scope         AgentSkillScope  `json:"scope"`
-	Compatibility string           `json:"compatibility,omitempty"`
-	Source        string           `json:"source,omitempty"`
-	Enabled       bool             `json:"enabled"`
-	Keywords      []string         `json:"keywords,omitempty"`
-	ResourceCount int              `json:"resourceCount"`
-	TokenBudget   int              `json:"tokenBudget,omitempty"`
+	ExtensionID   string          `json:"extensionId"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	DisplayName   string          `json:"displayName,omitempty"`
+	Version       string          `json:"version,omitempty"`
+	Scope         AgentSkillScope `json:"scope"`
+	Compatibility string          `json:"compatibility,omitempty"`
+	Source        string          `json:"source,omitempty"`
+	Enabled       bool            `json:"enabled"`
+	Keywords      []string        `json:"keywords,omitempty"`
+	ResourceCount int             `json:"resourceCount"`
+	TokenBudget   int             `json:"tokenBudget,omitempty"`
 }
 
 func (d AgentSkillDefinition) ToCatalogEntry() AgentSkillCatalogEntry {

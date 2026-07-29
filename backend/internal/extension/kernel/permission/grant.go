@@ -86,19 +86,19 @@ type PermissionGrantRequest struct {
 }
 
 type PermissionGrantFilter struct {
-	Subject      *PermissionSubject `json:"subject,omitempty"`
-	PermissionID string             `json:"permissionId,omitempty"`
-	Scope        *PermissionScope   `json:"scope,omitempty"`
+	Subject      *PermissionSubject  `json:"subject,omitempty"`
+	PermissionID string              `json:"permissionId,omitempty"`
+	Scope        *PermissionScope    `json:"scope,omitempty"`
 	Decision     *PermissionDecision `json:"decision,omitempty"`
-	ActiveOnly   bool               `json:"activeOnly,omitempty"`
+	ActiveOnly   bool                `json:"activeOnly,omitempty"`
 }
 
 type PermissionExplanation struct {
-	Decision        PermissionDecision   `json:"decision"`
-	Reasons         []PermissionReason   `json:"reasons"`
-	MatchedGrants   []PermissionGrant    `json:"matchedGrants"`
-	RequiredAction  string               `json:"requiredAction,omitempty"`
-	AvailableScopes []ScopeType          `json:"availableScopes,omitempty"`
+	Decision        PermissionDecision `json:"decision"`
+	Reasons         []PermissionReason `json:"reasons"`
+	MatchedGrants   []PermissionGrant  `json:"matchedGrants"`
+	RequiredAction  string             `json:"requiredAction,omitempty"`
+	AvailableScopes []ScopeType        `json:"availableScopes,omitempty"`
 }
 
 type StoredGrant struct {

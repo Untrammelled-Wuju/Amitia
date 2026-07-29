@@ -114,41 +114,41 @@ func (r HookResult) ValidatePatchLimits(maxOps int, maxPathLen int) error {
 }
 
 type PipelineResult struct {
-	OperationID    string             `json:"operationId"`
-	HookPointID    string             `json:"hookPointId"`
-	Aborted        bool               `json:"aborted"`
-	AbortReason    string             `json:"abortReason,omitempty"`
-	Decision       HookDecision       `json:"decision"`
-	Transformed    bool               `json:"transformed"`
-	FinalPayload   json.RawMessage    `json:"finalPayload,omitempty"`
-	Executions     []HookExecution    `json:"executions"`
-	TotalDuration  int64              `json:"totalDurationMs"`
-	Depth          int                `json:"depth"`
+	OperationID   string          `json:"operationId"`
+	HookPointID   string          `json:"hookPointId"`
+	Aborted       bool            `json:"aborted"`
+	AbortReason   string          `json:"abortReason,omitempty"`
+	Decision      HookDecision    `json:"decision"`
+	Transformed   bool            `json:"transformed"`
+	FinalPayload  json.RawMessage `json:"finalPayload,omitempty"`
+	Executions    []HookExecution `json:"executions"`
+	TotalDuration int64           `json:"totalDurationMs"`
+	Depth         int             `json:"depth"`
 }
 
 type HookExecution struct {
-	ContributionID string        `json:"contributionId"`
-	ExtensionID    string        `json:"extensionId"`
-	Phase          HookPhase     `json:"phase"`
-	Sequence       int           `json:"sequence"`
-	Status         string        `json:"status"`
-	Decision       HookDecision  `json:"decision"`
-	Error          string        `json:"error,omitempty"`
-	ErrorCode      string        `json:"errorCode,omitempty"`
-	DurationMs     int64         `json:"durationMs"`
-	StartedAt      string        `json:"startedAt"`
-	InputHash      string        `json:"inputHash,omitempty"`
-	ResultHash     string        `json:"resultHash,omitempty"`
-	MutationCount  int           `json:"mutationCount"`
-	CircuitState   string        `json:"circuitState,omitempty"`
+	ContributionID string       `json:"contributionId"`
+	ExtensionID    string       `json:"extensionId"`
+	Phase          HookPhase    `json:"phase"`
+	Sequence       int          `json:"sequence"`
+	Status         string       `json:"status"`
+	Decision       HookDecision `json:"decision"`
+	Error          string       `json:"error,omitempty"`
+	ErrorCode      string       `json:"errorCode,omitempty"`
+	DurationMs     int64        `json:"durationMs"`
+	StartedAt      string       `json:"startedAt"`
+	InputHash      string       `json:"inputHash,omitempty"`
+	ResultHash     string       `json:"resultHash,omitempty"`
+	MutationCount  int          `json:"mutationCount"`
+	CircuitState   string       `json:"circuitState,omitempty"`
 }
 
 const (
-	StatusSuccess  = "success"
-	StatusFailed   = "failed"
-	StatusSkipped  = "skipped"
-	StatusTimeout  = "timeout"
-	StatusDenied   = "denied"
-	StatusCancelled = "cancelled"
+	StatusSuccess     = "success"
+	StatusFailed      = "failed"
+	StatusSkipped     = "skipped"
+	StatusTimeout     = "timeout"
+	StatusDenied      = "denied"
+	StatusCancelled   = "cancelled"
 	StatusCircuitOpen = "circuit_open"
 )

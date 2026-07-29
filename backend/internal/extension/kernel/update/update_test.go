@@ -8,12 +8,12 @@ import (
 
 func makeSnapshot(version string) DefinitionSnapshot {
 	return DefinitionSnapshot{
-		ExtensionID:    "com.example/weather",
-		Version:        version,
-		ManifestHash:   "sha256:manifest-" + version,
+		ExtensionID:     "com.example/weather",
+		Version:         version,
+		ManifestHash:    "sha256:manifest-" + version,
 		ContentTreeHash: "sha256:tree-" + version,
-		PackageHash:    "sha256:pkg-" + version,
-		PublisherID:    "com.example",
+		PackageHash:     "sha256:pkg-" + version,
+		PublisherID:     "com.example",
 		Modules: []ModuleSnapshot{
 			{ID: "main", Type: "runtime", EnabledDefault: true, RuntimeID: "rt-main"},
 		},
@@ -26,7 +26,7 @@ func makeSnapshot(version string) DefinitionSnapshot {
 		Permissions: []PermissionSnapshot{
 			{ID: "network.http.request", Reason: "weather API"},
 		},
-		Platforms:     []string{"windows", "linux"},
+		Platforms:      []string{"windows", "linux"},
 		SignatureKeyID: "k1",
 		TrustLevel:     "trusted",
 		GeneratedAt:    time.Now().UTC(),
@@ -332,12 +332,12 @@ func TestRollbackPointStoreSaveAndGet(t *testing.T) {
 	store := NewRollbackPointStore()
 	ctx := context.Background()
 	point := RollbackPoint{
-		PointID:       "rb-1",
-		ExtensionID:   "ext-1",
-		Version:       "1.0.0",
-		GenerationID:  "gen-1",
+		PointID:        "rb-1",
+		ExtensionID:    "ext-1",
+		Version:        "1.0.0",
+		GenerationID:   "gen-1",
 		DefinitionHash: "hash-1",
-		CreatedAt:     time.Now().UTC(),
+		CreatedAt:      time.Now().UTC(),
 	}
 	if err := store.Save(point); err != nil {
 		t.Fatalf("save: %v", err)
@@ -383,9 +383,9 @@ func TestRetentionPolicyKeepsLastN(t *testing.T) {
 		})
 	}
 	policy := RetentionPolicy{
-		KeepLastN: 2,
+		KeepLastN:   2,
 		KeepCurrent: true,
-		MaxPoints: 3,
+		MaxPoints:   3,
 	}
 	deleted := store.ApplyRetentionPolicy(ctx, "ext-1", policy)
 	if len(deleted) < 1 {
@@ -400,19 +400,19 @@ func TestRetentionPolicyKeepsLastN(t *testing.T) {
 func TestConflictRegistryDetectConflicts(t *testing.T) {
 	registry := NewConflictRegistry()
 	registry.RegisterAsset(UserAsset{
-		AssetID:    "asset-1",
+		AssetID:     "asset-1",
 		ExtensionID: "ext-1",
-		AssetType:  UserAssetForkWorkflow,
-		ResourceID: "workflow/daily",
-		Hash:       "sha256:old",
+		AssetType:   UserAssetForkWorkflow,
+		ResourceID:  "workflow/daily",
+		Hash:        "sha256:old",
 	})
 	newAssets := []UserAsset{
 		{
-			AssetID:    "asset-1-new",
+			AssetID:     "asset-1-new",
 			ExtensionID: "ext-1",
-			AssetType:  UserAssetForkWorkflow,
-			ResourceID: "workflow/daily",
-			Hash:       "sha256:new",
+			AssetType:   UserAssetForkWorkflow,
+			ResourceID:  "workflow/daily",
+			Hash:        "sha256:new",
 		},
 	}
 	conflicts := registry.DetectConflicts("ext-1", newAssets)

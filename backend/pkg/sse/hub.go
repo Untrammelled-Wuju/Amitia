@@ -64,6 +64,56 @@ func (h *Hub) ClientCount() int {
 	return len(h.clients)
 }
 
+func (h *Hub) SendToClient(clientID string, event string, data map[string]interface{}) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	c, ok := h.clients[clientID]
+	if !ok {
+		return false
+	}
+	msg := map[string]interface{}{"event": event, "data": data}
+	select {
+	case c.Events <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *Hub) SendToClients(clientIDs []string, event string, data map[string]interface{}) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	msg := map[string]interface{}{"event": event, "data": data}
+	delivered := 0
+	for _, id := range clientIDs {
+		if c, ok := h.clients[id]; ok {
+			select {
+			case c.Events <- msg:
+				delivered++
+			default:
+			}
+		}
+	}
+	return delivered
+}
+
+func (h *Hub) ClientExists(clientID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.clients[clientID]
+	return ok
+}
+
+func (h *Hub) ListClientIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	ids := make([]string, 0, len(h.clients))
+	for id := range h.clients {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func SSEHandler(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

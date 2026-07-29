@@ -83,7 +83,9 @@ func TestHostCommandRegistry_RegisterValidation(t *testing.T) {
 		{
 			name: "empty command ID",
 			def: HostCommandDefinition{
-				Handler:    func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil },
+				Handler: func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+					return nil, nil
+				},
 				Permission: "ui.navigate",
 			},
 			err: "command_id is required",
@@ -100,7 +102,9 @@ func TestHostCommandRegistry_RegisterValidation(t *testing.T) {
 			name: "empty permission",
 			def: HostCommandDefinition{
 				CommandID: "test.noperm",
-				Handler:   func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil },
+				Handler: func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+					return nil, nil
+				},
 			},
 			err: "permission is required",
 		},
@@ -122,7 +126,9 @@ func TestHostCommandRegistry_RegisterValidation(t *testing.T) {
 
 func TestHostCommandRegistry_DuplicateRegistration(t *testing.T) {
 	registry := NewHostCommandRegistry()
-	handler := func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil }
+	handler := func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+		return nil, nil
+	}
 
 	def := HostCommandDefinition{
 		CommandID:  "test.dup",
@@ -145,7 +151,9 @@ func TestHostCommandRegistry_DuplicateRegistration(t *testing.T) {
 
 func TestHostCommandRegistry_List(t *testing.T) {
 	registry := NewHostCommandRegistry()
-	handler := func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil }
+	handler := func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+		return nil, nil
+	}
 
 	cmds := []string{"cmd.a", "cmd.b", "cmd.c"}
 	for _, id := range cmds {
@@ -171,7 +179,9 @@ func TestHostCommandRegistry_Unregister(t *testing.T) {
 	_ = registry.Register(HostCommandDefinition{
 		CommandID:  "test.tmp",
 		Permission: "ui.navigate",
-		Handler:    func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil },
+		Handler: func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+			return nil, nil
+		},
 	})
 
 	if !registry.IsRegistered("test.tmp") {
@@ -198,7 +208,9 @@ func TestHostCommandRegistry_Get(t *testing.T) {
 		Permission:  "ui.navigate",
 		Scope:       HostCommandScopeGlobal,
 		Risk:        host_api.RiskLow,
-		Handler:     func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil },
+		Handler: func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+			return nil, nil
+		},
 	})
 
 	def, ok := registry.Get("test.get")
@@ -290,7 +302,9 @@ func TestHostCommandDoesNotEnterToolRegistry(t *testing.T) {
 	_ = hostCmdRegistry.Register(HostCommandDefinition{
 		CommandID:  "app.open.settings",
 		Permission: "ui.navigate",
-		Handler:    func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) { return nil, nil },
+		Handler: func(ctx context.Context, execCtx HostCommandExecContext, input []byte) ([]byte, error) {
+			return nil, nil
+		},
 	})
 
 	tools := toolRegistry.List(context.Background(), capability.ToolFilter{})

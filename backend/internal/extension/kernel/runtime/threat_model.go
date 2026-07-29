@@ -12,18 +12,18 @@ type Threat struct {
 type ThreatCategory string
 
 const (
-	ThreatCategoryProcessEscalation   ThreatCategory = "process_escalation"
-	ThreatCategoryIPCBackdoor         ThreatCategory = "ipc_backdoor"
-	ThreatCategoryModuleLoading       ThreatCategory = "module_loading"
-	ThreatCategoryNativeModule        ThreatCategory = "native_module"
-	ThreatCategoryFileSystemAccess    ThreatCategory = "filesystem_access"
-	ThreatCategoryNetworkAccess       ThreatCategory = "network_access"
-	ThreatCategorySecretLeak          ThreatCategory = "secret_leak"
-	ThreatCategoryElectronAccess      ThreatCategory = "electron_access"
-	ThreatCategoryDenialOfService     ThreatCategory = "denial_of_service"
-	ThreatCategorySupplyChain         ThreatCategory = "supply_chain"
-	ThreatCategoryRuntimeCrash        ThreatCategory = "runtime_crash"
-	ThreatCategorySideChannel         ThreatCategory = "side_channel"
+	ThreatCategoryProcessEscalation ThreatCategory = "process_escalation"
+	ThreatCategoryIPCBackdoor       ThreatCategory = "ipc_backdoor"
+	ThreatCategoryModuleLoading     ThreatCategory = "module_loading"
+	ThreatCategoryNativeModule      ThreatCategory = "native_module"
+	ThreatCategoryFileSystemAccess  ThreatCategory = "filesystem_access"
+	ThreatCategoryNetworkAccess     ThreatCategory = "network_access"
+	ThreatCategorySecretLeak        ThreatCategory = "secret_leak"
+	ThreatCategoryElectronAccess    ThreatCategory = "electron_access"
+	ThreatCategoryDenialOfService   ThreatCategory = "denial_of_service"
+	ThreatCategorySupplyChain       ThreatCategory = "supply_chain"
+	ThreatCategoryRuntimeCrash      ThreatCategory = "runtime_crash"
+	ThreatCategorySideChannel       ThreatCategory = "side_channel"
 )
 
 func ThreatModel() []Threat {
@@ -188,64 +188,64 @@ func SecurityBoundaries() []SecurityBoundary {
 }
 
 type DevProdDifference struct {
-	Category    string
-	DevMode     string
-	ProdMode    string
-	Rationale   string
+	Category  string
+	DevMode   string
+	ProdMode  string
+	Rationale string
 }
 
 func DevProdDifferences() []DevProdDifference {
 	return []DevProdDifference{
 		{
-			Category: "source_maps",
-			DevMode:  "加载 Source Map",
-			ProdMode: "不加载 Source Map",
+			Category:  "source_maps",
+			DevMode:   "加载 Source Map",
+			ProdMode:  "不加载 Source Map",
 			Rationale: "生产模式减小内存和加载时间",
 		},
 		{
-			Category: "hot_reload",
-			DevMode:  "支持热重载",
-			ProdMode: "禁止未签名热替换",
+			Category:  "hot_reload",
+			DevMode:   "支持热重载",
+			ProdMode:  "禁止未签名热替换",
 			Rationale: "生产模式需要完整性保证",
 		},
 		{
-			Category: "debug_port",
-			DevMode:  "受控 Debug Port",
-			ProdMode: "不开调试端口",
+			Category:  "debug_port",
+			DevMode:   "受控 Debug Port",
+			ProdMode:  "不开调试端口",
 			Rationale: "防止远程调试攻击",
 		},
 		{
-			Category: "log_level",
-			DevMode:  "详细调试日志",
-			ProdMode: "摘要化错误",
+			Category:  "log_level",
+			DevMode:   "详细调试日志",
+			ProdMode:  "摘要化错误",
 			Rationale: "生产模式避免日志泄露",
 		},
 		{
-			Category: "source_dir",
-			DevMode:  "读取 src 目录",
-			ProdMode: "只读 dist",
+			Category:  "source_dir",
+			DevMode:   "读取 src 目录",
+			ProdMode:  "只读 dist",
 			Rationale: "生产模式不暴露源码",
 		},
 		{
-			Category: "secret_display",
-			DevMode:  "可显示 Secret（开发信任）",
-			ProdMode: "Redact Secret",
+			Category:  "secret_display",
+			DevMode:   "可显示 Secret（开发信任）",
+			ProdMode:  "Redact Secret",
 			Rationale: "防止 Secret 泄露",
 		},
 		{
-			Category: "trust_level",
-			DevMode:  "Development Trust（仅本地工作区）",
-			ProdMode: "需要正式签名和信任",
+			Category:  "trust_level",
+			DevMode:   "Development Trust（仅本地工作区）",
+			ProdMode:  "需要正式签名和信任",
 			Rationale: "开发信任不能外溢为正式信任",
 		},
 	}
 }
 
 type PerformanceBaseline struct {
-	Category       string
-	Metric         string
-	Target         string
-	Measurement    string
+	Category    string
+	Metric      string
+	Target      string
+	Measurement string
 }
 
 func PerformanceBaselines() []PerformanceBaseline {

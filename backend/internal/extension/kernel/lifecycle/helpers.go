@@ -54,11 +54,11 @@ const (
 )
 
 type ActiveOperation struct {
-	ID           string
-	ComponentID  string
-	Kind         string
-	StartedAt    time.Time
-	Cancelable   bool
+	ID            string
+	ComponentID   string
+	Kind          string
+	StartedAt     time.Time
+	Cancelable    bool
 	RequiresFlush bool
-	Metadata     map[string]any
+	Metadata      map[string]any
 }

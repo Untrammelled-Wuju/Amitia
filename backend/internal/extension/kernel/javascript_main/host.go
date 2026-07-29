@@ -15,11 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
-	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 type HostState string
@@ -800,9 +800,9 @@ func (h *PluginHost) LastError() string {
 	return h.lastError
 }
 
-func (h *PluginHost) Handlers() *HandlerRegistry { return h.handlers }
+func (h *PluginHost) Handlers() *HandlerRegistry        { return h.handlers }
 func (h *PluginHost) Dispatcher() *InvocationDispatcher { return h.dispatcher }
-func (h *PluginHost) Watchdog() *Watchdog { return h.watchdog }
+func (h *PluginHost) Watchdog() *Watchdog               { return h.watchdog }
 func (h *PluginHost) Session() *RuntimeSession {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

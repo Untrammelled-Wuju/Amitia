@@ -9,9 +9,9 @@ import (
 type PartitionKey string
 
 type OrderingCoordinator struct {
-	mu           sync.Mutex
-	partitions   map[string]*partitionQueue
-	maxInFlight  int
+	mu          sync.Mutex
+	partitions  map[string]*partitionQueue
+	maxInFlight int
 }
 
 type partitionQueue struct {

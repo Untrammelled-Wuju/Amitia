@@ -202,9 +202,9 @@ func TestInstallRollbackOnFailure(t *testing.T) {
 	createTestArchive(t, archivePath)
 	targetDir := filepath.Join(tmp, "install")
 	result := installer.Install(nil, InstallRequest{
-		ArchivePath:  archivePath,
-		TargetDir:    targetDir,
-		ExtensionID:  "com.example/wrong",
+		ArchivePath: archivePath,
+		TargetDir:   targetDir,
+		ExtensionID: "com.example/wrong",
 	})
 	if result.Status != InstallFailed {
 		t.Errorf("expected failed, got %s", result.Status)

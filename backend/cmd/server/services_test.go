@@ -23,7 +23,10 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	t.Cleanup(func() {
 		sqlDB.Close()
 	})
-	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration()}); err != nil {
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline: %v", err)
+	}
+	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply(migration.DefaultMigrations()); err != nil {
 		t.Fatal(err)
 	}
 	services := NewAppServices(app.NewAppContext(db, nil), nil)

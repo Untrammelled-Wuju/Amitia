@@ -17,8 +17,8 @@ type ResourceOwnership struct {
 }
 
 type OwnershipRegistry struct {
-	mu          sync.RWMutex
-	ownerships  map[string]*ResourceOwnership
+	mu         sync.RWMutex
+	ownerships map[string]*ResourceOwnership
 }
 
 func NewOwnershipRegistry() *OwnershipRegistry {

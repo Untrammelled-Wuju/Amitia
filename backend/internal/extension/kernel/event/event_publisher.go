@@ -18,17 +18,17 @@ type PublishOptions struct {
 	ProducerExtensionID  string
 	ProducerModuleID     string
 	AggregateType        string
-	AggregateID       string
-	AggregateVersion  *int64
-	PartitionKey      string
-	OrderingKey       string
-	ScopeSnapshotID   string
+	AggregateID          string
+	AggregateVersion     *int64
+	PartitionKey         string
+	OrderingKey          string
+	ScopeSnapshotID      string
 	PermissionSnapshotID string
-	TraceID           string
-	OperationID       string
-	ParentEventID     string
-	ParentDepth       int
-	Metadata          json.RawMessage
+	TraceID              string
+	OperationID          string
+	ParentEventID        string
+	ParentDepth          int
+	Metadata             json.RawMessage
 }
 
 type PublishResult struct {
@@ -133,7 +133,7 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 		ScopeSnapshotID:      envelope.ScopeSnapshotID,
 		PermissionSnapshotID: envelope.PermissionSnapshotID,
 		TraceID:              envelope.TraceID,
-		OperationID:         envelope.OperationID,
+		OperationID:          envelope.OperationID,
 		ParentEventID:        envelope.ParentEventID,
 		Depth:                envelope.Depth,
 		OccurredAt:           envelope.OccurredAt,
@@ -225,7 +225,7 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 		ScopeSnapshotID:      envelope.ScopeSnapshotID,
 		PermissionSnapshotID: envelope.PermissionSnapshotID,
 		TraceID:              envelope.TraceID,
-		OperationID:         envelope.OperationID,
+		OperationID:          envelope.OperationID,
 		ParentEventID:        envelope.ParentEventID,
 		Depth:                envelope.Depth,
 		OccurredAt:           envelope.OccurredAt,

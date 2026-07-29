@@ -71,10 +71,10 @@ func (q *TaskQueue) GetEntry(ctx context.Context, taskRunID string) (*TaskQueueE
 }
 
 type ConcurrencyLimiter struct {
-	store             TaskStore
-	globalMax         int
-	perExtensionMax   int
-	perDefinitionMax  int
+	store            TaskStore
+	globalMax        int
+	perExtensionMax  int
+	perDefinitionMax int
 }
 
 func NewConcurrencyLimiter(store TaskStore, cfg TaskRuntimeConfig) *ConcurrencyLimiter {

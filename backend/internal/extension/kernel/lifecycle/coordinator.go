@@ -9,23 +9,23 @@ import (
 )
 
 type Coordinator struct {
-	mu             sync.Mutex
-	registry       *ComponentRegistry
-	planner        *Planner
-	journal        *Journal
-	store          JournalStore
-	recovery       *RecoveryScanner
-	reconciler     StateReconciler
-	readiness      *ReadinessService
-	shutdownCoord  *ShutdownCoordinator
-	drain          *DrainController
-	audit          LifecycleAuditWriter
+	mu            sync.Mutex
+	registry      *ComponentRegistry
+	planner       *Planner
+	journal       *Journal
+	store         JournalStore
+	recovery      *RecoveryScanner
+	reconciler    StateReconciler
+	readiness     *ReadinessService
+	shutdownCoord *ShutdownCoordinator
+	drain         *DrainController
+	audit         LifecycleAuditWriter
 
-	startupID    string
+	startupID     string
 	startupInProg bool
-	plan         *BootstrapPlan
-	bootstrapped bool
-	startedAt    time.Time
+	plan          *BootstrapPlan
+	bootstrapped  bool
+	startedAt     time.Time
 }
 
 func NewCoordinator(
@@ -41,15 +41,15 @@ func NewCoordinator(
 ) *Coordinator {
 	return &Coordinator{
 		registry:      registry,
-		planner:        NewPlanner(registry),
-		journal:        journal,
-		store:          store,
-		reconciler:     reconciler,
-		readiness:      readiness,
-		shutdownCoord:  shutdownCoord,
-		drain:          drain,
-		audit:          audit,
-		recovery:       recovery,
+		planner:       NewPlanner(registry),
+		journal:       journal,
+		store:         store,
+		reconciler:    reconciler,
+		readiness:     readiness,
+		shutdownCoord: shutdownCoord,
+		drain:         drain,
+		audit:         audit,
+		recovery:      recovery,
 	}
 }
 
@@ -80,7 +80,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context) (*BootstrapPlan, error) {
 			Status:    string(StartupStatusStarted),
 			Timestamp: now(),
 			Metadata: map[string]any{
-				"plan_hash": plan.PlanHash,
+				"plan_hash":  plan.PlanHash,
 				"components": len(plan.Components),
 			},
 		})
@@ -125,9 +125,9 @@ func (c *Coordinator) Startup(ctx context.Context, globalTimeout time.Duration) 
 			Status:    string(StartupStatusStarted),
 			Timestamp: now(),
 			Metadata: map[string]any{
-				"clean_shutdown":          recoveryReport.CleanShutdown,
-				"interrupted_components":  recoveryReport.InterruptedComponents,
-				"high_risk_items":         len(recoveryReport.HighRiskItems),
+				"clean_shutdown":         recoveryReport.CleanShutdown,
+				"interrupted_components": recoveryReport.InterruptedComponents,
+				"high_risk_items":        len(recoveryReport.HighRiskItems),
 			},
 		})
 	}

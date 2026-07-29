@@ -42,7 +42,7 @@ func TestDiscardCandidateContributions_PreservesStableTool(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:         "ext-a/tool-candidate",
+			ID:          "ext-a/tool-candidate",
 			ExtensionID: "ext-a",
 			Kind:        domain.ContributionKindTool,
 			Definition: map[string]any{
@@ -87,7 +87,7 @@ func TestDiscardCandidateContributions_Idempotent(t *testing.T) {
 
 	contribs := []domain.ContributionDefinition{
 		{
-			ID:         "ext-a/tool-1",
+			ID:          "ext-a/tool-1",
 			ExtensionID: "ext-a",
 			Kind:        domain.ContributionKindTool,
 			Definition: map[string]any{
@@ -140,7 +140,7 @@ func TestDiscardCandidateContributions_MultipleTypes(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:         "ext-b/candidate",
+			ID:          "ext-b/candidate",
 			ExtensionID: "ext-b",
 			Kind:        domain.ContributionKindTool,
 			Definition: map[string]any{
@@ -148,7 +148,7 @@ func TestDiscardCandidateContributions_MultipleTypes(t *testing.T) {
 			},
 		},
 		{
-			ID:         "ext-b/unknown-kind",
+			ID:          "ext-b/unknown-kind",
 			ExtensionID: "ext-b",
 			Kind:        domain.ContributionKind("unknown"),
 			Definition:  map[string]any{},
@@ -204,7 +204,7 @@ func TestDiscardSingleContribution_ToolUsesFallbackID(t *testing.T) {
 	}
 
 	contrib := domain.ContributionDefinition{
-		ID:         "ext-c/my-contrib",
+		ID:          "ext-c/my-contrib",
 		ExtensionID: "ext-c",
 		Kind:        domain.ContributionKindTool,
 		Definition:  map[string]any{},
@@ -240,7 +240,7 @@ func TestDiscardCandidateContributions_HookNilService(t *testing.T) {
 
 	candidateContribs := []domain.ContributionDefinition{
 		{
-			ID:         "ext-d/hook-candidate",
+			ID:          "ext-d/hook-candidate",
 			ExtensionID: "ext-d",
 			Kind:        domain.ContributionKindHook,
 			Definition: map[string]any{

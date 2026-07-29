@@ -19,10 +19,10 @@ const (
 )
 
 type ScopeExpression struct {
-	Operator     ScopeOperator     `json:"operator"`
-	Scopes       []ScopeRef        `json:"scopes,omitempty"`
+	Operator     ScopeOperator      `json:"operator"`
+	Scopes       []ScopeRef         `json:"scopes,omitempty"`
 	Placeholders []ScopePlaceholder `json:"placeholders,omitempty"`
-	Children     []ScopeExpression `json:"children,omitempty"`
+	Children     []ScopeExpression  `json:"children,omitempty"`
 }
 
 func SingleScope(scope ScopeRef) ScopeExpression {

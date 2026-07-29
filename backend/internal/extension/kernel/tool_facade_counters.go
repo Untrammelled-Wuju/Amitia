@@ -21,7 +21,7 @@ type ToolFacadeCounters struct {
 	legacyFallbacks   map[string]*atomic.Int64
 	legacyFallbacksMu sync.RWMutex
 
-	mcpToolSync        atomic.Int64
+	mcpToolSync          atomic.Int64
 	mcpDuplicateDetected atomic.Int64
 }
 

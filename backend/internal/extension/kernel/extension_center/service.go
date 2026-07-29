@@ -12,18 +12,18 @@ import (
 type ExtensionStatus string
 
 const (
-	ExtensionStatusNotInstalled   ExtensionStatus = "not_installed"
-	ExtensionStatusInstalling     ExtensionStatus = "installing"
-	ExtensionStatusInstalledEnabled ExtensionStatus = "installed_enabled"
+	ExtensionStatusNotInstalled      ExtensionStatus = "not_installed"
+	ExtensionStatusInstalling        ExtensionStatus = "installing"
+	ExtensionStatusInstalledEnabled  ExtensionStatus = "installed_enabled"
 	ExtensionStatusInstalledDisabled ExtensionStatus = "installed_disabled"
-	ExtensionStatusPartial        ExtensionStatus = "partial"
-	ExtensionStatusFailed         ExtensionStatus = "failed"
-	ExtensionStatusNeedsPermission ExtensionStatus = "needs_permission"
+	ExtensionStatusPartial           ExtensionStatus = "partial"
+	ExtensionStatusFailed            ExtensionStatus = "failed"
+	ExtensionStatusNeedsPermission   ExtensionStatus = "needs_permission"
 	ExtensionStatusMissingDependency ExtensionStatus = "missing_dependency"
-	ExtensionStatusIncompatible   ExtensionStatus = "incompatible"
-	ExtensionStatusQuarantined    ExtensionStatus = "quarantined"
-	ExtensionStatusDev            ExtensionStatus = "dev"
-	ExtensionStatusUpdating       ExtensionStatus = "updating"
+	ExtensionStatusIncompatible      ExtensionStatus = "incompatible"
+	ExtensionStatusQuarantined       ExtensionStatus = "quarantined"
+	ExtensionStatusDev               ExtensionStatus = "dev"
+	ExtensionStatusUpdating          ExtensionStatus = "updating"
 )
 
 type TrustLevel string
@@ -52,25 +52,25 @@ const (
 )
 
 type ExtensionCard struct {
-	ExtensionID       string             `json:"extensionId"`
-	Publisher         string             `json:"publisher"`
-	DisplayName       string             `json:"displayName"`
-	Description       string             `json:"description"`
-	Version           string             `json:"version"`
-	Icon              string             `json:"icon,omitempty"`
-	Trust             TrustLevel         `json:"trust"`
-	Status            ExtensionStatus    `json:"status"`
-	Enabled           bool               `json:"enabled"`
-	UpdateAvailable   bool               `json:"updateAvailable"`
-	ContributionTags  []ContributionTag  `json:"contributionTags"`
-	Platforms         []string           `json:"platforms"`
-	FailureCount      int                `json:"failureCount"`
-	PermissionRisk    string             `json:"permissionRisk,omitempty"`
-	DevMode           bool               `json:"devMode"`
-	UserModified      bool               `json:"userModified"`
-	Source            string             `json:"source"`
-	InstalledAt       *time.Time         `json:"installedAt,omitempty"`
-	UpdatedAt         *time.Time         `json:"updatedAt,omitempty"`
+	ExtensionID      string            `json:"extensionId"`
+	Publisher        string            `json:"publisher"`
+	DisplayName      string            `json:"displayName"`
+	Description      string            `json:"description"`
+	Version          string            `json:"version"`
+	Icon             string            `json:"icon,omitempty"`
+	Trust            TrustLevel        `json:"trust"`
+	Status           ExtensionStatus   `json:"status"`
+	Enabled          bool              `json:"enabled"`
+	UpdateAvailable  bool              `json:"updateAvailable"`
+	ContributionTags []ContributionTag `json:"contributionTags"`
+	Platforms        []string          `json:"platforms"`
+	FailureCount     int               `json:"failureCount"`
+	PermissionRisk   string            `json:"permissionRisk,omitempty"`
+	DevMode          bool              `json:"devMode"`
+	UserModified     bool              `json:"userModified"`
+	Source           string            `json:"source"`
+	InstalledAt      *time.Time        `json:"installedAt,omitempty"`
+	UpdatedAt        *time.Time        `json:"updatedAt,omitempty"`
 }
 
 type CenterFilter struct {
@@ -87,20 +87,20 @@ type CenterFilter struct {
 type CenterSortKey string
 
 const (
-	SortByName    CenterSortKey = "name"
-	SortByRecent  CenterSortKey = "recent"
-	SortByTrust   CenterSortKey = "trust"
-	SortByStatus  CenterSortKey = "status"
+	SortByName   CenterSortKey = "name"
+	SortByRecent CenterSortKey = "recent"
+	SortByTrust  CenterSortKey = "trust"
+	SortByStatus CenterSortKey = "status"
 )
 
 type CenterView struct {
-	Installed   []ExtensionCard `json:"installed"`
-	Discover    []ExtensionCard `json:"discover"`
+	Installed    []ExtensionCard `json:"installed"`
+	Discover     []ExtensionCard `json:"discover"`
 	LocalImports []ExtensionCard `json:"localImports"`
-	Dev         []ExtensionCard `json:"dev"`
-	Updates     []ExtensionCard `json:"updates"`
-	NeedsAction []ExtensionCard `json:"needsAction"`
-	GeneratedAt time.Time       `json:"generatedAt"`
+	Dev          []ExtensionCard `json:"dev"`
+	Updates      []ExtensionCard `json:"updates"`
+	NeedsAction  []ExtensionCard `json:"needsAction"`
+	GeneratedAt  time.Time       `json:"generatedAt"`
 }
 
 type CardProvider interface {
@@ -108,11 +108,11 @@ type CardProvider interface {
 }
 
 type CenterService struct {
-	mu        sync.RWMutex
-	provider  CardProvider
-	cache     []ExtensionCard
-	cacheAt   time.Time
-	cacheTTL  time.Duration
+	mu       sync.RWMutex
+	provider CardProvider
+	cache    []ExtensionCard
+	cacheAt  time.Time
+	cacheTTL time.Duration
 }
 
 func NewCenterService(provider CardProvider) *CenterService {

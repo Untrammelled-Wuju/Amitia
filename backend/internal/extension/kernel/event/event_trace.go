@@ -25,21 +25,21 @@ type EventInvocation struct {
 	EventID              string
 	DeliveryID           string
 	SubscriptionID       string
-	Attempt             int
+	Attempt              int
 	RuntimeInstanceID    string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
-	TraceID             string
-	FilterResult        string
-	ProjectionResult    string
-	OrderingResult      string
-	PermissionResult    string
-	ScopeResult         string
-	Status              string
-	StartedAt           time.Time
-	FinishedAt          *time.Time
-	ErrorCode           string
-	ErrorMessage        string
+	TraceID              string
+	FilterResult         string
+	ProjectionResult     string
+	OrderingResult       string
+	PermissionResult     string
+	ScopeResult          string
+	Status               string
+	StartedAt            time.Time
+	FinishedAt           *time.Time
+	ErrorCode            string
+	ErrorMessage         string
 }
 
 type EventSideEffect struct {
@@ -51,18 +51,18 @@ type EventSideEffect struct {
 }
 
 type EventAuditEntry struct {
-	OperationID    string
-	InvocationID   string
-	EventID        string
-	DeliveryID     string
-	Action         string
-	Actor          string
-	ExtensionID    string
-	Timestamp      time.Time
-	PayloadHash    string
-	ErrorCode      string
-	Success        bool
-	Detail         json.RawMessage
+	OperationID  string
+	InvocationID string
+	EventID      string
+	DeliveryID   string
+	Action       string
+	Actor        string
+	ExtensionID  string
+	Timestamp    time.Time
+	PayloadHash  string
+	ErrorCode    string
+	Success      bool
+	Detail       json.RawMessage
 }
 
 type EventTraceRecorder struct {

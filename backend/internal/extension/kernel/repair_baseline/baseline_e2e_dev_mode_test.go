@@ -32,12 +32,12 @@ func TestBaseline_E2E_DevMode_RegisterWorkspace(t *testing.T) {
 
 	registry := dev_mode.NewWorkspaceRegistry()
 	ws, err := registry.Register(ctx, dev_mode.RegisterWorkspaceInput{
-		WorkspaceID:  "ws-dev-e2e",
-		ExtensionID:  "com.amitia.repair/dev-hot-reload",
+		WorkspaceID:   "ws-dev-e2e",
+		ExtensionID:   "com.amitia.repair/dev-hot-reload",
 		PathReference: extDir,
-		ManifestPath: manifestPath,
-		WatchEnabled: true,
-		AutoReload:   true,
+		ManifestPath:  manifestPath,
+		WatchEnabled:  true,
+		AutoReload:    true,
 	})
 	if err != nil {
 		t.Fatalf("workspace Register must succeed (Phase 10 section 19.8.1): %v", err)

@@ -3,8 +3,8 @@ package permission
 import "encoding/json"
 
 type PermissionCondition struct {
-	Field    string         `json:"field"`
-	Operator string         `json:"operator"`
+	Field    string          `json:"field"`
+	Operator string          `json:"operator"`
 	Value    json.RawMessage `json:"value"`
 }
 
@@ -24,8 +24,8 @@ type UICondition struct {
 }
 
 type MessageCondition struct {
-	Channels      []string `json:"channels,omitempty"`
-	MaxPerHour    int      `json:"maxPerHour,omitempty"`
+	Channels   []string `json:"channels,omitempty"`
+	MaxPerHour int      `json:"maxPerHour,omitempty"`
 }
 
 func ParseNetworkCondition(data json.RawMessage) (NetworkCondition, error) {

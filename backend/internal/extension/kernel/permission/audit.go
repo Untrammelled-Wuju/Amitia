@@ -16,13 +16,13 @@ const (
 )
 
 type PermissionAuditEntry struct {
-	Action       AuditAction              `json:"action"`
-	Subject      PermissionSubject        `json:"subject"`
-	PermissionID string                   `json:"permissionId"`
-	Decision     PermissionDecision       `json:"decision"`
-	GrantID      string                   `json:"grantId,omitempty"`
-	Reasons      []PermissionReason       `json:"reasons,omitempty"`
-	Timestamp    time.Time                `json:"timestamp"`
+	Action       AuditAction        `json:"action"`
+	Subject      PermissionSubject  `json:"subject"`
+	PermissionID string             `json:"permissionId"`
+	Decision     PermissionDecision `json:"decision"`
+	GrantID      string             `json:"grantId,omitempty"`
+	Reasons      []PermissionReason `json:"reasons,omitempty"`
+	Timestamp    time.Time          `json:"timestamp"`
 }
 
 type PermissionAuditRecorder struct {

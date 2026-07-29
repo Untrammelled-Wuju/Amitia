@@ -10,20 +10,20 @@ import (
 type FilterOperator string
 
 const (
-	FilterOpEquals       FilterOperator = "equals"
-	FilterOpNotEquals    FilterOperator = "not_equals"
-	FilterOpIn           FilterOperator = "in"
-	FilterOpExists       FilterOperator = "exists"
-	FilterOpPrefix       FilterOperator = "prefix"
-	FilterOpSuffix       FilterOperator = "suffix"
-	FilterOpContains     FilterOperator = "contains"
-	FilterOpNumericGT    FilterOperator = "numeric_gt"
-	FilterOpNumericGTE   FilterOperator = "numeric_gte"
-	FilterOpNumericLT    FilterOperator = "numeric_lt"
-	FilterOpNumericLTE   FilterOperator = "numeric_lte"
-	FilterOpAnd          FilterOperator = "and"
-	FilterOpOr           FilterOperator = "or"
-	FilterOpNot          FilterOperator = "not"
+	FilterOpEquals     FilterOperator = "equals"
+	FilterOpNotEquals  FilterOperator = "not_equals"
+	FilterOpIn         FilterOperator = "in"
+	FilterOpExists     FilterOperator = "exists"
+	FilterOpPrefix     FilterOperator = "prefix"
+	FilterOpSuffix     FilterOperator = "suffix"
+	FilterOpContains   FilterOperator = "contains"
+	FilterOpNumericGT  FilterOperator = "numeric_gt"
+	FilterOpNumericGTE FilterOperator = "numeric_gte"
+	FilterOpNumericLT  FilterOperator = "numeric_lt"
+	FilterOpNumericLTE FilterOperator = "numeric_lte"
+	FilterOpAnd        FilterOperator = "and"
+	FilterOpOr         FilterOperator = "or"
+	FilterOpNot        FilterOperator = "not"
 )
 
 var allowedOperators = map[FilterOperator]bool{
@@ -44,20 +44,20 @@ var allowedOperators = map[FilterOperator]bool{
 }
 
 type FilterNode struct {
-	Operator  FilterOperator     `json:"op"`
-	Field     string             `json:"field,omitempty"`
-	Value     json.RawMessage    `json:"value,omitempty"`
-	Children  []FilterNode       `json:"children,omitempty"`
+	Operator FilterOperator  `json:"op"`
+	Field    string          `json:"field,omitempty"`
+	Value    json.RawMessage `json:"value,omitempty"`
+	Children []FilterNode    `json:"children,omitempty"`
 }
 
 type EventFilterDefinition struct {
-	Root     FilterNode `json:"root"`
-	Hash     string     `json:"hash"`
+	Root FilterNode `json:"root"`
+	Hash string     `json:"hash"`
 }
 
 type CompiledFilter struct {
-	def       EventFilterDefinition
-	root      filterMatcher
+	def           EventFilterDefinition
+	root          filterMatcher
 	allowedFields map[string]bool
 }
 
@@ -92,8 +92,8 @@ func (m notEqualsMatcher) match(fields map[string]any) bool {
 }
 
 type inMatcher struct {
-	field   string
-	values  []any
+	field  string
+	values []any
 }
 
 func (m inMatcher) match(fields map[string]any) bool {

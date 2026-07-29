@@ -49,20 +49,20 @@ const (
 )
 
 type MutationRule struct {
-	Path          string         `json:"path"`
-	Operations    []string       `json:"operations"`
-	ConflictMode  ConflictMode   `json:"conflictMode"`
-	ValueSchema   json.RawMessage `json:"valueSchema,omitempty"`
-	OwnerOnly     bool           `json:"ownerOnly,omitempty"`
+	Path         string          `json:"path"`
+	Operations   []string        `json:"operations"`
+	ConflictMode ConflictMode    `json:"conflictMode"`
+	ValueSchema  json.RawMessage `json:"valueSchema,omitempty"`
+	OwnerOnly    bool            `json:"ownerOnly,omitempty"`
 }
 
 type ConflictMode string
 
 const (
-	ConflictLastWriterWins ConflictMode = "last_writer_wins"
-	ConflictExclusive      ConflictMode = "exclusive"
+	ConflictLastWriterWins  ConflictMode = "last_writer_wins"
+	ConflictExclusive       ConflictMode = "exclusive"
 	ConflictFirstWriterWins ConflictMode = "first_writer_wins"
-	ConflictMerge          ConflictMode = "merge"
+	ConflictMerge           ConflictMode = "merge"
 )
 
 type HookFailurePolicy struct {
@@ -133,9 +133,9 @@ type HookExecutionPolicy struct {
 }
 
 const (
-	ExecModeSequential    = "sequential"
-	ApplyModeSequential   = "sequential_apply"
-	ApplyModeCollectThen  = "collect_then_apply"
+	ExecModeSequential   = "sequential"
+	ApplyModeSequential  = "sequential_apply"
+	ApplyModeCollectThen = "collect_then_apply"
 )
 
 func DefaultExecutionPolicy() HookExecutionPolicy {
@@ -149,24 +149,24 @@ func DefaultExecutionPolicy() HookExecutionPolicy {
 }
 
 type HookPointDefinition struct {
-	HookPointID      string                 `json:"hookPointId"`
-	ContractVersion  int                    `json:"contractVersion"`
-	Description      string                 `json:"description"`
-	SupportedPhases  []HookPhase            `json:"supportedPhases"`
-	InputSchema      json.RawMessage        `json:"inputSchema"`
-	ResultSchema     json.RawMessage        `json:"resultSchema"`
-	AllowedMutations []MutationRule         `json:"allowedMutations"`
-	FailurePolicy    HookFailurePolicy      `json:"failurePolicy"`
-	ExecutionPolicy  HookExecutionPolicy    `json:"executionPolicy"`
-	MaxHandlers      int                    `json:"maxHandlers"`
-	DefaultTimeout   time.Duration          `json:"defaultTimeout"`
-	MaxTimeout       time.Duration          `json:"maxTimeout"`
-	MaxPayloadBytes  int64                  `json:"maxPayloadBytes"`
-	MaxResultBytes   int64                  `json:"maxResultBytes"`
-	RiskLevel        RiskLevel              `json:"riskLevel"`
-	SensitiveFields  []string               `json:"sensitiveFields"`
-	RequiredContext  []string               `json:"requiredContext"`
-	ThirdPartyAllowed bool                  `json:"thirdPartyAllowed"`
+	HookPointID       string              `json:"hookPointId"`
+	ContractVersion   int                 `json:"contractVersion"`
+	Description       string              `json:"description"`
+	SupportedPhases   []HookPhase         `json:"supportedPhases"`
+	InputSchema       json.RawMessage     `json:"inputSchema"`
+	ResultSchema      json.RawMessage     `json:"resultSchema"`
+	AllowedMutations  []MutationRule      `json:"allowedMutations"`
+	FailurePolicy     HookFailurePolicy   `json:"failurePolicy"`
+	ExecutionPolicy   HookExecutionPolicy `json:"executionPolicy"`
+	MaxHandlers       int                 `json:"maxHandlers"`
+	DefaultTimeout    time.Duration       `json:"defaultTimeout"`
+	MaxTimeout        time.Duration       `json:"maxTimeout"`
+	MaxPayloadBytes   int64               `json:"maxPayloadBytes"`
+	MaxResultBytes    int64               `json:"maxResultBytes"`
+	RiskLevel         RiskLevel           `json:"riskLevel"`
+	SensitiveFields   []string            `json:"sensitiveFields"`
+	RequiredContext   []string            `json:"requiredContext"`
+	ThirdPartyAllowed bool                `json:"thirdPartyAllowed"`
 }
 
 func (d HookPointDefinition) SupportsPhase(phase HookPhase) bool {

@@ -210,8 +210,8 @@ func TestHookPipelineExecuteBefore(t *testing.T) {
 	p := NewDefaultPipeline()
 	var called bool
 	_ = p.Register(context.Background(), HookRegistration{
-		Point:   "host.tool.invoke",
-		Phase:   HookPhaseBefore,
+		Point: "host.tool.invoke",
+		Phase: HookPhaseBefore,
 		Handler: func(_ context.Context, _ *HookContext) error {
 			called = true
 			return nil
@@ -234,8 +234,8 @@ func TestHookPipelineExecuteBefore(t *testing.T) {
 func TestHookPipelineAbort(t *testing.T) {
 	p := NewDefaultPipeline()
 	_ = p.Register(context.Background(), HookRegistration{
-		Point:   "host.tool.invoke",
-		Phase:   HookPhaseBefore,
+		Point: "host.tool.invoke",
+		Phase: HookPhaseBefore,
 		Handler: func(_ context.Context, ctx *HookContext) error {
 			ctx.Abort("denied by policy")
 			return nil
@@ -243,8 +243,8 @@ func TestHookPipelineAbort(t *testing.T) {
 	})
 	var afterCalled bool
 	_ = p.Register(context.Background(), HookRegistration{
-		Point:   "host.tool.invoke",
-		Phase:   HookPhaseAfter,
+		Point: "host.tool.invoke",
+		Phase: HookPhaseAfter,
 		Handler: func(_ context.Context, _ *HookContext) error {
 			afterCalled = true
 			return nil
@@ -287,8 +287,8 @@ func TestHookPipelineFailureContinue(t *testing.T) {
 		Handler:       func(context.Context, *HookContext) error { return errors.New("ignore") },
 	})
 	_ = p.Register(context.Background(), HookRegistration{
-		Point:   "host.tool.invoke",
-		Phase:   HookPhaseAfter,
+		Point: "host.tool.invoke",
+		Phase: HookPhaseAfter,
 		Handler: func(_ context.Context, _ *HookContext) error {
 			nextCalled = true
 			return nil

@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	StreamStateOpen     = "open"
-	StreamStateClosing  = "closing"
-	StreamStateClosed   = "closed"
-	StreamStateErrored  = "errored"
+	StreamStateOpen    = "open"
+	StreamStateClosing = "closing"
+	StreamStateClosed  = "closed"
+	StreamStateErrored = "errored"
 )
 
 var (
@@ -27,12 +27,12 @@ var (
 type StreamID string
 
 type StreamOpenRequest struct {
-	StreamID   StreamID         `json:"stream_id"`
-	Method     string           `json:"method"`
-	Params     json.RawMessage  `json:"params,omitempty"`
-	InitialCredit int           `json:"initial_credit"`
-	ChunkMax   int              `json:"chunk_max"`
-	Direction  string           `json:"direction"`
+	StreamID      StreamID        `json:"stream_id"`
+	Method        string          `json:"method"`
+	Params        json.RawMessage `json:"params,omitempty"`
+	InitialCredit int             `json:"initial_credit"`
+	ChunkMax      int             `json:"chunk_max"`
+	Direction     string          `json:"direction"`
 }
 
 type StreamChunk struct {
@@ -48,9 +48,9 @@ type StreamClose struct {
 }
 
 type StreamError struct {
-	StreamID StreamID `json:"stream_id"`
+	StreamID StreamID  `json:"stream_id"`
 	Code     ErrorCode `json:"code"`
-	Message  string   `json:"message"`
+	Message  string    `json:"message"`
 }
 
 type StreamCredit struct {
@@ -59,24 +59,24 @@ type StreamCredit struct {
 }
 
 type Stream struct {
-	ID             StreamID
-	Method         string
-	Direction      string
-	ChunkMax       int
-	Credit         int64
-	Consumed       int64
-	Produced       int64
-	State          string
-	CreatedAt      time.Time
-	ClosedAt       *time.Time
-	mu             sync.Mutex
-	ch             chan []byte
-	errCh          chan *Error
-	doneCh         chan struct{}
-	onChunk        func(chunk StreamChunk) error
-	onClose        func(reason string)
-	creditCond     *sync.Cond
-	cancel         context.CancelFunc
+	ID         StreamID
+	Method     string
+	Direction  string
+	ChunkMax   int
+	Credit     int64
+	Consumed   int64
+	Produced   int64
+	State      string
+	CreatedAt  time.Time
+	ClosedAt   *time.Time
+	mu         sync.Mutex
+	ch         chan []byte
+	errCh      chan *Error
+	doneCh     chan struct{}
+	onChunk    func(chunk StreamChunk) error
+	onClose    func(reason string)
+	creditCond *sync.Cond
+	cancel     context.CancelFunc
 }
 
 func NewStream(id StreamID, method, direction string, chunkMax, initialCredit int, bufferSize int) *Stream {
@@ -323,12 +323,12 @@ func DefaultBackpressureConfig() BackpressureConfig {
 }
 
 type BackpressureMeter struct {
-	cfg          BackpressureConfig
-	mu           sync.Mutex
-	inflight     int64
-	totalSent    int64
-	totalRecv    int64
-	refills      int64
+	cfg       BackpressureConfig
+	mu        sync.Mutex
+	inflight  int64
+	totalSent int64
+	totalRecv int64
+	refills   int64
 }
 
 func NewBackpressureMeter(cfg BackpressureConfig) *BackpressureMeter {
@@ -359,9 +359,9 @@ func (m *BackpressureMeter) Release(size int) {
 	}
 }
 
-func (m *BackpressureMeter) RecordSent(bytes int)  { atomic.AddInt64(&m.totalSent, int64(bytes)) }
-func (m *BackpressureMeter) RecordRecv(bytes int)  { atomic.AddInt64(&m.totalRecv, int64(bytes)) }
-func (m *BackpressureMeter) RecordRefill()         { atomic.AddInt64(&m.refills, 1) }
+func (m *BackpressureMeter) RecordSent(bytes int) { atomic.AddInt64(&m.totalSent, int64(bytes)) }
+func (m *BackpressureMeter) RecordRecv(bytes int) { atomic.AddInt64(&m.totalRecv, int64(bytes)) }
+func (m *BackpressureMeter) RecordRefill()        { atomic.AddInt64(&m.refills, 1) }
 
 func (m *BackpressureMeter) Stats() (inflight, sent, recv, refills int64) {
 	return atomic.LoadInt64(&m.inflight), atomic.LoadInt64(&m.totalSent),

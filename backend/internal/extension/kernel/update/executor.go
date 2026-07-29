@@ -9,13 +9,13 @@ import (
 )
 
 type UpdateExecutor struct {
-	mu             sync.Mutex
-	generations    *GenerationManager
-	migrations     *MigrationExecutor
-	points         *RollbackPointStore
-	conflicts      *ConflictRegistry
-	plans          map[string]UpdatePlan
-	activeUpdates  map[string]string
+	mu            sync.Mutex
+	generations   *GenerationManager
+	migrations    *MigrationExecutor
+	points        *RollbackPointStore
+	conflicts     *ConflictRegistry
+	plans         map[string]UpdatePlan
+	activeUpdates map[string]string
 }
 
 func NewUpdateExecutor() *UpdateExecutor {
@@ -30,9 +30,9 @@ func NewUpdateExecutor() *UpdateExecutor {
 }
 
 func (e *UpdateExecutor) Generations() *GenerationManager { return e.generations }
-func (e *UpdateExecutor) Migrations() *MigrationExecutor { return e.migrations }
-func (e *UpdateExecutor) Points() *RollbackPointStore { return e.points }
-func (e *UpdateExecutor) Conflicts() *ConflictRegistry { return e.conflicts }
+func (e *UpdateExecutor) Migrations() *MigrationExecutor  { return e.migrations }
+func (e *UpdateExecutor) Points() *RollbackPointStore     { return e.points }
+func (e *UpdateExecutor) Conflicts() *ConflictRegistry    { return e.conflicts }
 
 func (e *UpdateExecutor) CreatePlan(ctx context.Context, planID string, old, new DefinitionSnapshot, migrations []MigrationSnapshot) UpdatePlan {
 	plan := BuildPlan(planID, old, new, migrations)
@@ -54,11 +54,11 @@ func (e *UpdateExecutor) GetPlan(ctx context.Context, planID string) (*UpdatePla
 }
 
 type ExecuteRequest struct {
-	PlanID         string
-	ExtensionID    string
-	UserConfirmed  bool
+	PlanID           string
+	ExtensionID      string
+	UserConfirmed    bool
 	MigrationHandler func(ctx context.Context, plan MigrationPlan) (string, error)
-	StorageData    map[string][]byte
+	StorageData      map[string][]byte
 }
 
 type ExecuteResult struct {
@@ -116,12 +116,12 @@ func (e *UpdateExecutor) Execute(ctx context.Context, req ExecuteRequest) Execut
 	var rollbackPointID string
 	if activeGen != nil {
 		point := RollbackPoint{
-			PointID:        fmt.Sprintf("rb-%s-%d", req.ExtensionID, time.Now().UnixNano()),
-			ExtensionID:    req.ExtensionID,
-			Version:        activeGen.Version,
-			GenerationID:   activeGen.GenerationID,
-			DefinitionHash: activeGen.DefinitionHash,
-			CreatedAt:      time.Now().UTC(),
+			PointID:         fmt.Sprintf("rb-%s-%d", req.ExtensionID, time.Now().UnixNano()),
+			ExtensionID:     req.ExtensionID,
+			Version:         activeGen.Version,
+			GenerationID:    activeGen.GenerationID,
+			DefinitionHash:  activeGen.DefinitionHash,
+			CreatedAt:       time.Now().UTC(),
 			ProtectionLevel: plan.RollbackLevel,
 		}
 		if plan.RollbackLevel == RollbackLevelDataSnapshotRequired && len(plan.Migrations) > 0 {

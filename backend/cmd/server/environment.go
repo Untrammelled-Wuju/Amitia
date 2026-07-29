@@ -342,7 +342,7 @@ func startEnvironment() *Environment {
 		}
 	}
 
-	sidecarCmd := filepath.Join(env.workspace, "backend", "node.exe")
+	sidecarCmd := filepath.Join(env.workspace, "backend", "node", "node.exe")
 	sidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
 	sidecarDir := "backend/sidecar"
 	if useBundled {
@@ -352,7 +352,7 @@ func startEnvironment() *Environment {
 	}
 	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 19876, nil)
 
-	qqSidecarCmd := filepath.Join(env.workspace, "backend", "node.exe")
+	qqSidecarCmd := filepath.Join(env.workspace, "backend", "node", "node.exe")
 	qqSidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
 	qqSidecarDir := "backend/qq-sidecar"
 	if useBundled {
@@ -407,9 +407,9 @@ func findWorkspace() string {
 
 func bundledNodePath(root string) string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(root, "node.exe")
+		return filepath.Join(root, "node", "node.exe")
 	}
-	return filepath.Join(root, "node")
+	return filepath.Join(root, "node", "node")
 }
 
 func ensureBundledNode(root string) error {
@@ -419,16 +419,17 @@ func ensureBundledNode(root string) error {
 		nodeExe = "node.exe"
 		zipName = "node.exe.zip"
 	}
-	nodePath := filepath.Join(root, nodeExe)
+	nodeDir := filepath.Join(root, "node")
+	nodePath := filepath.Join(nodeDir, nodeExe)
 	if _, err := os.Stat(nodePath); err == nil {
 		return nil
 	}
-	zipPath := filepath.Join(root, zipName)
+	zipPath := filepath.Join(nodeDir, zipName)
 	if _, err := os.Stat(zipPath); err != nil {
 		return fmt.Errorf("node压缩包不存在: %s", zipPath)
 	}
 	log.Printf("[Env] 正在解压Node运行时: %s", zipPath)
-	if err := util.UnzipFile(zipPath, root); err != nil {
+	if err := util.UnzipFile(zipPath, nodeDir); err != nil {
 		return fmt.Errorf("解压Node失败: %w", err)
 	}
 	if _, err := os.Stat(nodePath); err != nil {

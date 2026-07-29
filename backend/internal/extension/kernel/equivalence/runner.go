@@ -15,73 +15,73 @@ import (
 type EquivalenceResult string
 
 const (
-	ResultEquivalent          EquivalenceResult = "equivalent"
-	ResultImproved            EquivalenceResult = "improved"
+	ResultEquivalent           EquivalenceResult = "equivalent"
+	ResultImproved             EquivalenceResult = "improved"
 	ResultIntentionallyChanged EquivalenceResult = "intentionally_changed"
-	ResultMissing             EquivalenceResult = "missing"
-	ResultRegressed           EquivalenceResult = "regressed"
-	ResultNotApplicable       EquivalenceResult = "not_applicable"
-	ResultBlocked             EquivalenceResult = "blocked"
+	ResultMissing              EquivalenceResult = "missing"
+	ResultRegressed            EquivalenceResult = "regressed"
+	ResultNotApplicable        EquivalenceResult = "not_applicable"
+	ResultBlocked              EquivalenceResult = "blocked"
 )
 
 type Category string
 
 const (
-	CategoryBuiltinTools       Category = "builtin_tools"
-	CategoryAgentSkills        Category = "agent_skills"
-	CategoryMCP                Category = "mcp"
-	CategoryWorkflows          Category = "workflows"
-	CategoryPlugins            Category = "plugins"
-	CategoryLegacyAmitiax      Category = "legacy_amitiax"
-	CategoryInstallation       Category = "installation"
-	CategoryEnablement         Category = "enablement"
-	CategoryUpdate             Category = "update"
-	CategoryRollback           Category = "rollback"
-	CategoryUninstall          Category = "uninstall"
-	CategoryPermission         Category = "permission"
-	CategoryScope              Category = "scope"
-	CategoryStorage            Category = "storage"
-	CategorySecret             Category = "secret"
-	CategoryEvent              Category = "event"
-	CategoryHook               Category = "hook"
-	CategorySchedule           Category = "schedule"
-	CategoryBackgroundTask     Category = "background_task"
-	CategoryUIContribution     Category = "ui_contribution"
+	CategoryBuiltinTools        Category = "builtin_tools"
+	CategoryAgentSkills         Category = "agent_skills"
+	CategoryMCP                 Category = "mcp"
+	CategoryWorkflows           Category = "workflows"
+	CategoryPlugins             Category = "plugins"
+	CategoryLegacyAmitiax       Category = "legacy_amitiax"
+	CategoryInstallation        Category = "installation"
+	CategoryEnablement          Category = "enablement"
+	CategoryUpdate              Category = "update"
+	CategoryRollback            Category = "rollback"
+	CategoryUninstall           Category = "uninstall"
+	CategoryPermission          Category = "permission"
+	CategoryScope               Category = "scope"
+	CategoryStorage             Category = "storage"
+	CategorySecret              Category = "secret"
+	CategoryEvent               Category = "event"
+	CategoryHook                Category = "hook"
+	CategorySchedule            Category = "schedule"
+	CategoryBackgroundTask      Category = "background_task"
+	CategoryUIContribution      Category = "ui_contribution"
 	CategoryDesktopContribution Category = "desktop_contribution"
-	CategoryExtensionCenter    Category = "extension_center"
-	CategoryExtensionDetail    Category = "extension_detail"
-	CategoryDevMode            Category = "dev_mode"
-	CategoryMigrationData      Category = "migration_data"
-	CategoryRunHistory         Category = "run_history"
-	CategoryResourceCleanup    Category = "resource_cleanup"
-	CategoryLifecycle          Category = "lifecycle"
+	CategoryExtensionCenter     Category = "extension_center"
+	CategoryExtensionDetail     Category = "extension_detail"
+	CategoryDevMode             Category = "dev_mode"
+	CategoryMigrationData       Category = "migration_data"
+	CategoryRunHistory          Category = "run_history"
+	CategoryResourceCleanup     Category = "resource_cleanup"
+	CategoryLifecycle           Category = "lifecycle"
 )
 
 type CheckStatus string
 
 const (
-	CheckStatusPending  CheckStatus = "pending"
-	CheckStatusRunning  CheckStatus = "running"
-	CheckStatusPassed   CheckStatus = "passed"
-	CheckStatusFailed   CheckStatus = "failed"
-	CheckStatusSkipped  CheckStatus = "skipped"
-	CheckStatusBlocked  CheckStatus = "blocked"
+	CheckStatusPending CheckStatus = "pending"
+	CheckStatusRunning CheckStatus = "running"
+	CheckStatusPassed  CheckStatus = "passed"
+	CheckStatusFailed  CheckStatus = "failed"
+	CheckStatusSkipped CheckStatus = "skipped"
+	CheckStatusBlocked CheckStatus = "blocked"
 )
 
 type Check struct {
-	CheckID      string            `json:"checkId"`
-	Category     Category          `json:"category"`
-	Subject      string            `json:"subject"`
-	Description  string            `json:"description"`
-	Status       CheckStatus       `json:"status"`
-	Result       EquivalenceResult `json:"result,omitempty"`
-	Expected     string            `json:"expected,omitempty"`
-	Actual       string            `json:"actual,omitempty"`
-	Evidence     []Evidence        `json:"evidence,omitempty"`
-	DurationMs   int64             `json:"durationMs,omitempty"`
-	StartedAt    *time.Time        `json:"startedAt,omitempty"`
-	CompletedAt  *time.Time        `json:"completedAt,omitempty"`
-	Error        string            `json:"error,omitempty"`
+	CheckID     string            `json:"checkId"`
+	Category    Category          `json:"category"`
+	Subject     string            `json:"subject"`
+	Description string            `json:"description"`
+	Status      CheckStatus       `json:"status"`
+	Result      EquivalenceResult `json:"result,omitempty"`
+	Expected    string            `json:"expected,omitempty"`
+	Actual      string            `json:"actual,omitempty"`
+	Evidence    []Evidence        `json:"evidence,omitempty"`
+	DurationMs  int64             `json:"durationMs,omitempty"`
+	StartedAt   *time.Time        `json:"startedAt,omitempty"`
+	CompletedAt *time.Time        `json:"completedAt,omitempty"`
+	Error       string            `json:"error,omitempty"`
 }
 
 type Evidence struct {
@@ -91,28 +91,28 @@ type Evidence struct {
 }
 
 type Report struct {
-	ReportID    string         `json:"reportId"`
-	GeneratedAt time.Time      `json:"generatedAt"`
-	StartedAt   time.Time      `json:"startedAt"`
-	EndedAt     *time.Time     `json:"endedAt,omitempty"`
-	Checks      []Check        `json:"checks"`
-	Summary     ReportSummary  `json:"summary"`
-	Outcome     string         `json:"outcome"`
-	Notes       []string       `json:"notes,omitempty"`
+	ReportID    string        `json:"reportId"`
+	GeneratedAt time.Time     `json:"generatedAt"`
+	StartedAt   time.Time     `json:"startedAt"`
+	EndedAt     *time.Time    `json:"endedAt,omitempty"`
+	Checks      []Check       `json:"checks"`
+	Summary     ReportSummary `json:"summary"`
+	Outcome     string        `json:"outcome"`
+	Notes       []string      `json:"notes,omitempty"`
 }
 
 type ReportSummary struct {
-	Total     int `json:"total"`
-	Passed    int `json:"passed"`
-	Failed    int `json:"failed"`
-	Skipped   int `json:"skipped"`
-	Blocked   int `json:"blocked"`
-	Pending   int `json:"pending"`
-	Equivalent int `json:"equivalent"`
-	Improved  int `json:"improved"`
-	Changed   int `json:"intentionally_changed"`
-	Missing   int `json:"missing"`
-	Regressed int `json:"regressed"`
+	Total         int `json:"total"`
+	Passed        int `json:"passed"`
+	Failed        int `json:"failed"`
+	Skipped       int `json:"skipped"`
+	Blocked       int `json:"blocked"`
+	Pending       int `json:"pending"`
+	Equivalent    int `json:"equivalent"`
+	Improved      int `json:"improved"`
+	Changed       int `json:"intentionally_changed"`
+	Missing       int `json:"missing"`
+	Regressed     int `json:"regressed"`
 	NotApplicable int `json:"not_applicable"`
 }
 

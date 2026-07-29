@@ -65,8 +65,8 @@ func TestBinaryVerifierHashMismatch(t *testing.T) {
 	path, _ := makeTestExecutable(t, dir)
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path:    path,
-		Sha256:  "0000000000000000000000000000000000000000000000000000000000000000",
+		Path:      path,
+		Sha256:    "0000000000000000000000000000000000000000000000000000000000000000",
 		Signature: BinarySignature{Trusted: true, Value: "sig", Algorithm: "ed25519"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -80,8 +80,8 @@ func TestBinaryVerifierSuccess(t *testing.T) {
 	path, hash := makeTestExecutable(t, dir)
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path:    path,
-		Sha256:  hash,
+		Path:      path,
+		Sha256:    hash,
 		Signature: BinarySignature{Trusted: true, Value: "sig", Algorithm: "ed25519"},
 	}
 	if err := v.Verify(context.Background(), exe, ""); err != nil {
@@ -94,8 +94,8 @@ func TestBinaryVerifierMissingSignature(t *testing.T) {
 	path, hash := makeTestExecutable(t, dir)
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path:    path,
-		Sha256:  hash,
+		Path:      path,
+		Sha256:    hash,
 		Signature: BinarySignature{Trusted: true, Value: "", Algorithm: "ed25519"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -109,8 +109,8 @@ func TestBinaryVerifierUntrustedSignature(t *testing.T) {
 	path, hash := makeTestExecutable(t, dir)
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path:    path,
-		Sha256:  hash,
+		Path:      path,
+		Sha256:    hash,
 		Signature: BinarySignature{Trusted: false, Value: "sig", Algorithm: "ed25519"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -142,8 +142,8 @@ func TestEnvBuilderAllowedOnly(t *testing.T) {
 	b := NewEnvBuilder()
 	exe := &PlatformExecutable{
 		EnvTemplate: map[string]string{
-			"AMITIA_SESSION": "s1",
-			"PATH":          "/usr/bin",
+			"AMITIA_SESSION":  "s1",
+			"PATH":            "/usr/bin",
 			"AMITIA_HOST_API": "internal-rpc",
 		},
 	}

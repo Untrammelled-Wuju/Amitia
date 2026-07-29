@@ -132,11 +132,29 @@ func (i *TypedContributionInstaller) PromoteCandidateContributions(ctx context.C
 		}
 	}
 
-	i.candidateNS.Remove(candidateID)
-
-	log.Printf("[contribution-installer] promoted %d candidate contributions to production for %s (candidate=%s, generation=%d, newSchedules=%d)",
+	log.Printf("[contribution-installer] promoted %d candidate contributions to production for %s (candidate=%s, generation=%d, newSchedules=%d) - namespace preserved for deferred cleanup",
 		len(entry.Contribs), entry.ExtensionID, candidateID, entry.Generation, len(newScheduleIDs))
 	return newScheduleIDs, nil
+}
+
+func (i *TypedContributionInstaller) RemoveCandidateNamespaceAfterCommit(ctx context.Context, candidateID string) error {
+	if i == nil {
+		return fmt.Errorf("contribution-installer: not initialized")
+	}
+	if i.candidateNS == nil {
+		return nil
+	}
+
+	entry, ok := i.candidateNS.Load(candidateID)
+	if !ok {
+		return nil
+	}
+
+	i.candidateNS.Remove(candidateID)
+
+	log.Printf("[contribution-installer] removed candidate %s from namespace after commit (ext=%s, contribs=%d)",
+		candidateID, entry.ExtensionID, len(entry.Contribs))
+	return nil
 }
 
 func (i *TypedContributionInstaller) DiscardCandidateNamespace(ctx context.Context, candidateID string) error {

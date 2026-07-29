@@ -18,11 +18,11 @@ const (
 )
 
 type ExportOptions struct {
-	Format       ExportFormat
+	Format        ExportFormat
 	IncludeSecret bool
-	Since        *time.Time
-	Until        *time.Time
-	MaxRecords   int
+	Since         *time.Time
+	Until         *time.Time
+	MaxRecords    int
 }
 
 type AuditExporter struct {
@@ -35,8 +35,8 @@ func NewAuditExporter(store StorageBackend) *AuditExporter {
 
 func (e *AuditExporter) ExportAuditEvents(ctx context.Context, w io.Writer, opts ExportOptions) error {
 	filter := AuditFilter{
-		Since: opts.Since,
-		Until: opts.Until,
+		Since:       opts.Since,
+		Until:       opts.Until,
 		ListOptions: ListOptions{Limit: opts.MaxRecords},
 	}
 

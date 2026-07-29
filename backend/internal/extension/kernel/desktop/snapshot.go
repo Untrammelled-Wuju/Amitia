@@ -8,14 +8,14 @@ import (
 )
 
 type DesktopSnapshot struct {
-	Generation    int64                      `json:"generation"`
-	Contributions []ResolvedDesktopContribution `json:"contributions"`
-	Hash          string                     `json:"hash"`
-	CreatedAt     time.Time                  `json:"createdAt"`
+	Generation    int64                                    `json:"generation"`
+	Contributions []ResolvedDesktopContribution            `json:"contributions"`
+	Hash          string                                   `json:"hash"`
+	CreatedAt     time.Time                                `json:"createdAt"`
 	MenuTree      map[string][]ResolvedDesktopContribution `json:"menuTree"`
 	TrayTree      map[string][]ResolvedDesktopContribution `json:"trayTree"`
 	Shortcuts     []ResolvedDesktopContribution            `json:"shortcuts"`
-	Conflicts     []ConflictRecord            `json:"conflicts"`
+	Conflicts     []ConflictRecord                         `json:"conflicts"`
 }
 
 func (s *DesktopSnapshot) ComputeHash() string {
@@ -83,14 +83,14 @@ func (b *SnapshotBuilder) Build(
 }
 
 type SnapshotDiff struct {
-	AddedContributions    []string
-	RemovedContributions   []string
-	ChangedContributions   []string
-	AddedShortcuts        []string
-	RemovedShortcuts      []string
-	MenuTargetsChanged    []string
-	TrayTargetsChanged    []string
-	HashChanged           bool
+	AddedContributions   []string
+	RemovedContributions []string
+	ChangedContributions []string
+	AddedShortcuts       []string
+	RemovedShortcuts     []string
+	MenuTargetsChanged   []string
+	TrayTargetsChanged   []string
+	HashChanged          bool
 }
 
 func DiffSnapshots(old, new *DesktopSnapshot) *SnapshotDiff {

@@ -12,19 +12,19 @@ import (
 type UIContributionKind string
 
 const (
-	UIContributionSchemaPage      UIContributionKind = "schema_page"
-	UIContributionWebPage         UIContributionKind = "web_page"
-	UIContributionPanel           UIContributionKind = "panel"
-	UIContributionCard            UIContributionKind = "card"
-	UIContributionAction          UIContributionKind = "action"
-	UIContributionMenuItem        UIContributionKind = "menu_item"
-	UIContributionToolbarItem     UIContributionKind = "toolbar_item"
-	UIContributionStatusItem      UIContributionKind = "status_item"
-	UIContributionMessageAction   UIContributionKind = "message_action"
-	UIContributionMessageRenderer UIContributionKind = "message_renderer"
-	UIContributionComposerAction  UIContributionKind = "composer_action"
-	UIContributionSettingsSection UIContributionKind = "settings_section"
-	UIContributionDesktopCommand  UIContributionKind = "desktop_command"
+	UIContributionSchemaPage        UIContributionKind = "schema_page"
+	UIContributionWebPage           UIContributionKind = "web_page"
+	UIContributionPanel             UIContributionKind = "panel"
+	UIContributionCard              UIContributionKind = "card"
+	UIContributionAction            UIContributionKind = "action"
+	UIContributionMenuItem          UIContributionKind = "menu_item"
+	UIContributionToolbarItem       UIContributionKind = "toolbar_item"
+	UIContributionStatusItem        UIContributionKind = "status_item"
+	UIContributionMessageAction     UIContributionKind = "message_action"
+	UIContributionMessageRenderer   UIContributionKind = "message_renderer"
+	UIContributionComposerAction    UIContributionKind = "composer_action"
+	UIContributionSettingsSection   UIContributionKind = "settings_section"
+	UIContributionDesktopCommand    UIContributionKind = "desktop_command"
 	UIContributionDetailSectionKind UIContributionKind = "detail_section"
 	UIContributionChatSidebarKind   UIContributionKind = "chat_sidebar"
 )
@@ -83,11 +83,11 @@ func (s UISandboxType) Valid() bool {
 type SlotMultiplicity string
 
 const (
-	MultiplicitySingle           SlotMultiplicity = "single"
-	MultiplicityMultiple         SlotMultiplicity = "multiple"
-	MultiplicityOrderedMultiple  SlotMultiplicity = "ordered_multiple"
+	MultiplicitySingle            SlotMultiplicity = "single"
+	MultiplicityMultiple          SlotMultiplicity = "multiple"
+	MultiplicityOrderedMultiple   SlotMultiplicity = "ordered_multiple"
 	MultiplicityReplaceableSingle SlotMultiplicity = "replaceable_single"
-	MultiplicityExclusive        SlotMultiplicity = "exclusive"
+	MultiplicityExclusive         SlotMultiplicity = "exclusive"
 )
 
 func (m SlotMultiplicity) Valid() bool {
@@ -123,20 +123,20 @@ func (l LocalizedText) Resolve(locale string) string {
 }
 
 type UIBadgeDefinition struct {
-	Text      string `json:"text"`
-	Color     string `json:"color,omitempty"`
-	Count     int    `json:"count,omitempty"`
-	Max       int    `json:"max,omitempty"`
-	HideWhenZero bool `json:"hide_when_zero,omitempty"`
+	Text         string `json:"text"`
+	Color        string `json:"color,omitempty"`
+	Count        int    `json:"count,omitempty"`
+	Max          int    `json:"max,omitempty"`
+	HideWhenZero bool   `json:"hide_when_zero,omitempty"`
 }
 
 type UIDisplayMetadata struct {
-	Title       LocalizedText       `json:"title"`
-	Description LocalizedText       `json:"description,omitempty"`
-	Icon        string              `json:"icon,omitempty"`
-	Badge       *UIBadgeDefinition  `json:"badge,omitempty"`
-	Category    string              `json:"category,omitempty"`
-	Keywords    []string            `json:"keywords,omitempty"`
+	Title       LocalizedText      `json:"title"`
+	Description LocalizedText      `json:"description,omitempty"`
+	Icon        string             `json:"icon,omitempty"`
+	Badge       *UIBadgeDefinition `json:"badge,omitempty"`
+	Category    string             `json:"category,omitempty"`
+	Keywords    []string           `json:"keywords,omitempty"`
 }
 
 type UISandboxPolicy struct {
@@ -173,11 +173,11 @@ type UIVisibilityRule struct {
 }
 
 type UIDataContract struct {
-	InputSchema      json.RawMessage `json:"input_schema,omitempty"`
-	OutputSchema     json.RawMessage `json:"output_schema,omitempty"`
-	RefreshPolicy    string          `json:"refresh_policy,omitempty"`
-	SensitiveFields  []string        `json:"sensitive_fields,omitempty"`
-	MaxPayloadBytes  int64           `json:"max_payload_bytes,omitempty"`
+	InputSchema     json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema    json.RawMessage `json:"output_schema,omitempty"`
+	RefreshPolicy   string          `json:"refresh_policy,omitempty"`
+	SensitiveFields []string        `json:"sensitive_fields,omitempty"`
+	MaxPayloadBytes int64           `json:"max_payload_bytes,omitempty"`
 }
 
 type UIDataSourceDefinition struct {
@@ -191,10 +191,10 @@ type UIDataSourceDefinition struct {
 type RiskLevel string
 
 const (
-	RiskLevelNone    RiskLevel = "none"
-	RiskLevelLow     RiskLevel = "low"
-	RiskLevelMedium  RiskLevel = "medium"
-	RiskLevelHigh    RiskLevel = "high"
+	RiskLevelNone     RiskLevel = "none"
+	RiskLevelLow      RiskLevel = "low"
+	RiskLevelMedium   RiskLevel = "medium"
+	RiskLevelHigh     RiskLevel = "high"
 	RiskLevelCritical RiskLevel = "critical"
 )
 
@@ -264,29 +264,29 @@ type PermissionRequirement struct {
 }
 
 type ScopeRule struct {
-	RequiredScopes []string `json:"required_scopes,omitempty"`
+	RequiredScopes  []string `json:"required_scopes,omitempty"`
 	ForbiddenScopes []string `json:"forbidden_scopes,omitempty"`
 }
 
 type UIOrderingRule struct {
-	Priority    int    `json:"priority"`
-	Before      []string `json:"before,omitempty"`
-	After       []string `json:"after,omitempty"`
-	Category    string `json:"category,omitempty"`
-	SortKey     string `json:"sort_key,omitempty"`
+	Priority int      `json:"priority"`
+	Before   []string `json:"before,omitempty"`
+	After    []string `json:"after,omitempty"`
+	Category string   `json:"category,omitempty"`
+	SortKey  string   `json:"sort_key,omitempty"`
 }
 
 type UIConflictPolicy struct {
-	Strategy   string `json:"strategy"`
-	Fallback   string `json:"fallback,omitempty"`
-	Override   bool   `json:"override,omitempty"`
+	Strategy string `json:"strategy"`
+	Fallback string `json:"fallback,omitempty"`
+	Override bool   `json:"override,omitempty"`
 }
 
 type UILifecyclePolicy struct {
-	Initial     string        `json:"initial"`
-	AutoSuspend bool          `json:"auto_suspend,omitempty"`
+	Initial      string        `json:"initial"`
+	AutoSuspend  bool          `json:"auto_suspend,omitempty"`
 	SuspendAfter time.Duration `json:"suspend_after,omitempty"`
-	MaxRetries  int           `json:"max_retries,omitempty"`
+	MaxRetries   int           `json:"max_retries,omitempty"`
 }
 
 type ContributionIntegrity struct {
@@ -297,25 +297,25 @@ type ContributionIntegrity struct {
 }
 
 type UIContributionDefinition struct {
-	ContributionID  ContributionID         `json:"contribution_id"`
-	ExtensionID     ExtensionID            `json:"extension_id"`
-	ModuleID        ModuleID               `json:"module_id"`
-	Kind            UIContributionKind     `json:"kind"`
-	Slot            UISlotReference        `json:"slot"`
-	ContractVersion int                    `json:"contract_version"`
-	Display         UIDisplayMetadata      `json:"display"`
-	Entry           UIEntryDefinition      `json:"entry"`
-	Visibility      UIVisibilityRule       `json:"visibility,omitempty"`
-	DataContract    UIDataContract         `json:"data_contract,omitempty"`
-	Actions         []UIActionDefinition   `json:"actions,omitempty"`
+	ContributionID  ContributionID           `json:"contribution_id"`
+	ExtensionID     ExtensionID              `json:"extension_id"`
+	ModuleID        ModuleID                 `json:"module_id"`
+	Kind            UIContributionKind       `json:"kind"`
+	Slot            UISlotReference          `json:"slot"`
+	ContractVersion int                      `json:"contract_version"`
+	Display         UIDisplayMetadata        `json:"display"`
+	Entry           UIEntryDefinition        `json:"entry"`
+	Visibility      UIVisibilityRule         `json:"visibility,omitempty"`
+	DataContract    UIDataContract           `json:"data_contract,omitempty"`
+	Actions         []UIActionDefinition     `json:"actions,omitempty"`
 	DataSources     []UIDataSourceDefinition `json:"data_sources,omitempty"`
-	Permissions     []PermissionRequirement `json:"permissions,omitempty"`
-	ScopeRule       ScopeRule              `json:"scope_rule,omitempty"`
-	Ordering        UIOrderingRule         `json:"ordering,omitempty"`
-	ConflictPolicy  UIConflictPolicy       `json:"conflict_policy,omitempty"`
-	Sandbox         UISandboxPolicy        `json:"sandbox"`
-	Lifecycle       UILifecyclePolicy      `json:"lifecycle"`
-	Integrity       ContributionIntegrity   `json:"integrity"`
+	Permissions     []PermissionRequirement  `json:"permissions,omitempty"`
+	ScopeRule       ScopeRule                `json:"scope_rule,omitempty"`
+	Ordering        UIOrderingRule           `json:"ordering,omitempty"`
+	ConflictPolicy  UIConflictPolicy         `json:"conflict_policy,omitempty"`
+	Sandbox         UISandboxPolicy          `json:"sandbox"`
+	Lifecycle       UILifecyclePolicy        `json:"lifecycle"`
+	Integrity       ContributionIntegrity    `json:"integrity"`
 }
 
 type UIPerformanceBudget struct {
@@ -330,36 +330,36 @@ type UIPerformanceBudget struct {
 }
 
 type UISlotContract struct {
-	SlotID            string              `json:"slot_id"`
-	Version           int                 `json:"version"`
+	SlotID            string               `json:"slot_id"`
+	Version           int                  `json:"version"`
 	SupportedKinds    []UIContributionKind `json:"supported_kinds"`
-	InputSchema       json.RawMessage     `json:"input_schema,omitempty"`
-	OutputSchema      json.RawMessage     `json:"output_schema,omitempty"`
-	AllowedActions    []string            `json:"allowed_actions,omitempty"`
-	AllowedSandboxes  []UISandboxType     `json:"allowed_sandboxes"`
-	Multiplicity      SlotMultiplicity    `json:"multiplicity"`
-	OrderingPolicy    string              `json:"ordering_policy,omitempty"`
-	FailurePolicy     string              `json:"failure_policy,omitempty"`
-	PerformanceBudget UIPerformanceBudget `json:"performance_budget"`
+	InputSchema       json.RawMessage      `json:"input_schema,omitempty"`
+	OutputSchema      json.RawMessage      `json:"output_schema,omitempty"`
+	AllowedActions    []string             `json:"allowed_actions,omitempty"`
+	AllowedSandboxes  []UISandboxType      `json:"allowed_sandboxes"`
+	Multiplicity      SlotMultiplicity     `json:"multiplicity"`
+	OrderingPolicy    string               `json:"ordering_policy,omitempty"`
+	FailurePolicy     string               `json:"failure_policy,omitempty"`
+	PerformanceBudget UIPerformanceBudget  `json:"performance_budget"`
 }
 
 var (
-	ErrContributionIDEmpty   = errors.New("ui_contribution: contribution_id empty")
-	ErrExtensionIDEmpty      = errors.New("ui_contribution: extension_id empty")
-	ErrModuleIDEmpty         = errors.New("ui_contribution: module_id empty")
-	ErrInvalidKind           = errors.New("ui_contribution: invalid kind")
-	ErrInvalidSandbox        = errors.New("ui_contribution: invalid sandbox type")
-	ErrInvalidMultiplicity   = errors.New("ui_contribution: invalid multiplicity")
-	ErrInvalidRiskLevel      = errors.New("ui_contribution: invalid risk level")
-	ErrSlotIDEmpty           = errors.New("ui_contribution: slot_id empty")
-	ErrEntryPathEmpty        = errors.New("ui_contribution: entry path empty")
-	ErrEntryHashEmpty        = errors.New("ui_contribution: entry content_hash empty")
-	ErrIntegrityHashEmpty    = errors.New("ui_contribution: integrity definition_hash empty")
-	ErrContractVersionZero   = errors.New("ui_contribution: contract_version must be > 0")
-	ErrKindNotSupportedBySlot = errors.New("ui_contribution: kind not supported by slot")
+	ErrContributionIDEmpty     = errors.New("ui_contribution: contribution_id empty")
+	ErrExtensionIDEmpty        = errors.New("ui_contribution: extension_id empty")
+	ErrModuleIDEmpty           = errors.New("ui_contribution: module_id empty")
+	ErrInvalidKind             = errors.New("ui_contribution: invalid kind")
+	ErrInvalidSandbox          = errors.New("ui_contribution: invalid sandbox type")
+	ErrInvalidMultiplicity     = errors.New("ui_contribution: invalid multiplicity")
+	ErrInvalidRiskLevel        = errors.New("ui_contribution: invalid risk level")
+	ErrSlotIDEmpty             = errors.New("ui_contribution: slot_id empty")
+	ErrEntryPathEmpty          = errors.New("ui_contribution: entry path empty")
+	ErrEntryHashEmpty          = errors.New("ui_contribution: entry content_hash empty")
+	ErrIntegrityHashEmpty      = errors.New("ui_contribution: integrity definition_hash empty")
+	ErrContractVersionZero     = errors.New("ui_contribution: contract_version must be > 0")
+	ErrKindNotSupportedBySlot  = errors.New("ui_contribution: kind not supported by slot")
 	ErrSandboxNotAllowedBySlot = errors.New("ui_contribution: sandbox not allowed by slot")
-	ErrActionNotDeclared     = errors.New("ui_contribution: action not declared in slot")
-	ErrPayloadTooLarge       = errors.New("ui_contribution: payload exceeds max")
+	ErrActionNotDeclared       = errors.New("ui_contribution: action not declared in slot")
+	ErrPayloadTooLarge         = errors.New("ui_contribution: payload exceeds max")
 )
 
 func ValidateDefinition(def *UIContributionDefinition) error {
@@ -489,9 +489,9 @@ type UIContext struct {
 }
 
 type ThemeSnapshot struct {
-	Mode    string           `json:"mode"`
-	Density string           `json:"density"`
-	Tokens  map[string]any   `json:"tokens,omitempty"`
+	Mode    string         `json:"mode"`
+	Density string         `json:"density"`
+	Tokens  map[string]any `json:"tokens,omitempty"`
 }
 
 type ScopeSummary struct {
@@ -502,15 +502,15 @@ type ScopeSummary struct {
 type UIBridgeMethod string
 
 const (
-	BridgeUIReady            UIBridgeMethod = "ui.ready"
-	BridgeUIActionInvoke     UIBridgeMethod = "ui.action.invoke"
-	BridgeUIDataRequest      UIBridgeMethod = "ui.data.request"
-	BridgeUIDataSubscribe    UIBridgeMethod = "ui.data.subscribe"
-	BridgeUIResizeRequest    UIBridgeMethod = "ui.resize.request"
+	BridgeUIReady             UIBridgeMethod = "ui.ready"
+	BridgeUIActionInvoke      UIBridgeMethod = "ui.action.invoke"
+	BridgeUIDataRequest       UIBridgeMethod = "ui.data.request"
+	BridgeUIDataSubscribe     UIBridgeMethod = "ui.data.subscribe"
+	BridgeUIResizeRequest     UIBridgeMethod = "ui.resize.request"
 	BridgeUINavigationRequest UIBridgeMethod = "ui.navigation.request"
-	BridgeUIDialogRequest    UIBridgeMethod = "ui.dialog.request"
-	BridgeUIResourceOpen     UIBridgeMethod = "ui.resource.open"
-	BridgeUILog              UIBridgeMethod = "ui.log"
+	BridgeUIDialogRequest     UIBridgeMethod = "ui.dialog.request"
+	BridgeUIResourceOpen      UIBridgeMethod = "ui.resource.open"
+	BridgeUILog               UIBridgeMethod = "ui.log"
 )
 
 func (m UIBridgeMethod) Valid() bool {
@@ -573,8 +573,8 @@ const (
 )
 
 type UIError struct {
-	Code    UIErrorCode `json:"code"`
-	Message string      `json:"message"`
+	Code    UIErrorCode    `json:"code"`
+	Message string         `json:"message"`
 	Detail  map[string]any `json:"detail,omitempty"`
 }
 
@@ -622,13 +622,13 @@ type UIContributionChatSidebar struct {
 
 var DefaultSlots = map[string]*UISlotContract{
 	"extension.settings.page": {
-		SlotID:    "extension.settings.page",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionSchemaPage, UIContributionSettingsSection, UIContributionWebPage},
+		SlotID:           "extension.settings.page",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage, UIContributionSettingsSection, UIContributionWebPage},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity: MultiplicityMultiple,
-		OrderingPolicy: "category_priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityMultiple,
+		OrderingPolicy:   "category_priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 500, BundleSizeKB: 512, MemoryMB: 64,
 			EventRatePerSec: 50, UpdateRateHz: 4, RenderMs: 100,
@@ -636,13 +636,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"chat.sidebar.panel": {
-		SlotID:    "chat.sidebar.panel",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionPanel, UIContributionCard},
+		SlotID:           "chat.sidebar.panel",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionPanel, UIContributionCard},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity: MultiplicityOrderedMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityOrderedMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 300, BundleSizeKB: 256, MemoryMB: 32,
 			EventRatePerSec: 20, UpdateRateHz: 2, RenderMs: 50,
@@ -650,13 +650,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"chat.message.action": {
-		SlotID:    "chat.message.action",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionMessageAction, UIContributionAction},
+		SlotID:           "chat.message.action",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionMessageAction, UIContributionAction},
 		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity: MultiplicityMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 8,
 			EventRatePerSec: 5, UpdateRateHz: 1, RenderMs: 16,
@@ -664,13 +664,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"chat.message.renderer": {
-		SlotID:    "chat.message.renderer",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionMessageRenderer},
+		SlotID:           "chat.message.renderer",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionMessageRenderer},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity: MultiplicityReplaceableSingle,
-		OrderingPolicy: "priority",
-		FailurePolicy: "fallback_host",
+		Multiplicity:     MultiplicityReplaceableSingle,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "fallback_host",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 200, BundleSizeKB: 256, MemoryMB: 24,
 			EventRatePerSec: 10, UpdateRateHz: 2, RenderMs: 32,
@@ -678,13 +678,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"chat.composer.action": {
-		SlotID:    "chat.composer.action",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionComposerAction},
+		SlotID:           "chat.composer.action",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionComposerAction},
 		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity: MultiplicityMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 8,
 			EventRatePerSec: 5, UpdateRateHz: 1, RenderMs: 16,
@@ -692,13 +692,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"desktop.tray.item": {
-		SlotID:    "desktop.tray.item",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionMenuItem, UIContributionAction},
+		SlotID:           "desktop.tray.item",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionMenuItem, UIContributionAction},
 		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity: MultiplicityOrderedMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityOrderedMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 4,
 			EventRatePerSec: 2, UpdateRateHz: 1, RenderMs: 16,
@@ -706,13 +706,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"system.status.item": {
-		SlotID:    "system.status.item",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionStatusItem},
+		SlotID:           "system.status.item",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionStatusItem},
 		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity: MultiplicityOrderedMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityOrderedMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 80, BundleSizeKB: 0, MemoryMB: 4,
 			EventRatePerSec: 2, UpdateRateHz: 1, RenderMs: 16,
@@ -720,13 +720,13 @@ var DefaultSlots = map[string]*UISlotContract{
 		},
 	},
 	"extension.detail.tab": {
-		SlotID:    "extension.detail.tab",
-		Version:   1,
-		SupportedKinds: []UIContributionKind{UIContributionSchemaPage, UIContributionWebPage},
+		SlotID:           "extension.detail.tab",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage, UIContributionWebPage},
 		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity: MultiplicityOrderedMultiple,
-		OrderingPolicy: "priority",
-		FailurePolicy: "isolate",
+		Multiplicity:     MultiplicityOrderedMultiple,
+		OrderingPolicy:   "priority",
+		FailurePolicy:    "isolate",
 		PerformanceBudget: UIPerformanceBudget{
 			FirstPaintMs: 400, BundleSizeKB: 512, MemoryMB: 48,
 			EventRatePerSec: 30, UpdateRateHz: 4, RenderMs: 100,

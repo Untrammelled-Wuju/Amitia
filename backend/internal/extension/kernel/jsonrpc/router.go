@@ -14,10 +14,10 @@ type HandlerFunc func(ctx context.Context, params json.RawMessage) (any, error)
 type NotificationHandlerFunc func(ctx context.Context, params json.RawMessage) error
 
 type MethodRegistry struct {
-	mu              sync.RWMutex
-	methods         map[string]HandlerFunc
-	notifications   map[string]NotificationHandlerFunc
-	middlewares     []Middleware
+	mu            sync.RWMutex
+	methods       map[string]HandlerFunc
+	notifications map[string]NotificationHandlerFunc
+	middlewares   []Middleware
 }
 
 type Middleware func(ctx context.Context, params json.RawMessage, next HandlerFunc) (any, error)
@@ -112,10 +112,10 @@ func (r *MethodRegistry) Notifications() []string {
 }
 
 type RateLimiter struct {
-	mu          sync.Mutex
-	bucket      map[string][]time.Time
-	maxPerSec   int
-	window      time.Duration
+	mu        sync.Mutex
+	bucket    map[string][]time.Time
+	maxPerSec int
+	window    time.Duration
 }
 
 func NewRateLimiter(maxPerSec int) *RateLimiter {
@@ -258,20 +258,20 @@ type HealthRequest struct {
 }
 
 type HealthResponse struct {
-	Healthy       bool             `json:"healthy"`
-	InstanceID    string           `json:"instance_id"`
-	Generation    int64            `json:"generation"`
-	Now           time.Time        `json:"now"`
-	Uptime        time.Duration    `json:"uptime"`
-	ActiveCalls   int              `json:"active_calls"`
-	QueueDepth    int              `json:"queue_depth"`
-	MemoryMB      int64            `json:"memory_mb,omitempty"`
-	EventLoopLag  time.Duration    `json:"event_loop_lag,omitempty"`
-	Details       map[string]any   `json:"details,omitempty"`
+	Healthy      bool           `json:"healthy"`
+	InstanceID   string         `json:"instance_id"`
+	Generation   int64          `json:"generation"`
+	Now          time.Time      `json:"now"`
+	Uptime       time.Duration  `json:"uptime"`
+	ActiveCalls  int            `json:"active_calls"`
+	QueueDepth   int            `json:"queue_depth"`
+	MemoryMB     int64          `json:"memory_mb,omitempty"`
+	EventLoopLag time.Duration  `json:"event_loop_lag,omitempty"`
+	Details      map[string]any `json:"details,omitempty"`
 }
 
 type ShutdownRequest struct {
-	Reason string `json:"reason"`
+	Reason string        `json:"reason"`
 	Grace  time.Duration `json:"grace"`
 }
 

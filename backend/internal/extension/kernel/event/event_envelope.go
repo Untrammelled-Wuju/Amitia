@@ -12,34 +12,34 @@ import (
 )
 
 type EventEnvelope struct {
-	EventID             string
-	EventTypeID         EventTypeID
-	EventVersion        int
-	ProducerID          string
-	ProducerType        string
-	ProducerGeneration  int64
-	AggregateType       string
-	AggregateID         string
-	AggregateVersion    *int64
-	PartitionKey        string
-	OrderingKey         string
-	IdempotencyKey      string
-	ScopeSnapshotID     string
+	EventID              string
+	EventTypeID          EventTypeID
+	EventVersion         int
+	ProducerID           string
+	ProducerType         string
+	ProducerGeneration   int64
+	AggregateType        string
+	AggregateID          string
+	AggregateVersion     *int64
+	PartitionKey         string
+	OrderingKey          string
+	IdempotencyKey       string
+	ScopeSnapshotID      string
 	PermissionSnapshotID string
-	CharacterID         string
-	ConversationID      string
-	ProducerExtensionID string
-	ProducerModuleID    string
-	TraceID             string
-	OperationID         string
-	ParentEventID       *string
-	Depth               int
-	OccurredAt          time.Time
-	PublishedAt         time.Time
-	Payload             json.RawMessage
-	Metadata            json.RawMessage
-	PayloadHash         string
-	DefinitionHash      string
+	CharacterID          string
+	ConversationID       string
+	ProducerExtensionID  string
+	ProducerModuleID     string
+	TraceID              string
+	OperationID          string
+	ParentEventID        *string
+	Depth                int
+	OccurredAt           time.Time
+	PublishedAt          time.Time
+	Payload              json.RawMessage
+	Metadata             json.RawMessage
+	PayloadHash          string
+	DefinitionHash       string
 }
 
 func NewEventEnvelope(typeID EventTypeID, version int, producerID, producerType string, payload json.RawMessage) EventEnvelope {

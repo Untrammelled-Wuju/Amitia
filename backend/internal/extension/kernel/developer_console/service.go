@@ -21,50 +21,50 @@ type ConsoleSession struct {
 }
 
 type ConsoleFilters struct {
-	ExtensionID    string
-	ModuleID       string
-	Severity       string
-	Stage          string
-	Search         string
-	StartTime      *time.Time
-	EndTime        *time.Time
+	ExtensionID string
+	ModuleID    string
+	Severity    string
+	Stage       string
+	Search      string
+	StartTime   *time.Time
+	EndTime     *time.Time
 }
 
 type ConsoleOverview struct {
-	GeneratedAt         time.Time           `json:"generatedAt"`
-	Extensions          int                 `json:"extensions"`
-	Modules             int                 `json:"modules"`
-	Contributions       int                 `json:"contributions"`
-	Runtimes            int                 `json:"runtimes"`
-	ActiveInvocations   int                 `json:"activeInvocations"`
-	HostAPICalls        int                 `json:"hostApiCalls"`
-	EventsLast5Min      int                 `json:"eventsLast5Min"`
-	HookInvocations     int                 `json:"hookInvocations"`
-	ActiveTasks         int                 `json:"activeTasks"`
-	ActiveUISessions    int                 `json:"activeUiSessions"`
-	StorageEntries      int                 `json:"storageEntries"`
-	PermissionGrants    int                 `json:"permissionGrants"`
-	ActiveScopes        int                 `json:"activeScopes"`
-	Resources           int                 `json:"resources"`
-	Errors              int                 `json:"errors"`
-	Warnings            int                 `json:"warnings"`
-	LifecycleEvents     int                 `json:"lifecycleEvents"`
-	DevWorkspaces       int                 `json:"devWorkspaces"`
-	CompatibilityIssues int                 `json:"compatibilityIssues"`
-	TopExtensions       []ExtensionSummary  `json:"topExtensions"`
-	ToolFacadeCounters  map[string]int64    `json:"toolFacadeCounters"`
-	LegacyCallCounters  map[string]int64    `json:"legacyCallCounters"`
+	GeneratedAt         time.Time          `json:"generatedAt"`
+	Extensions          int                `json:"extensions"`
+	Modules             int                `json:"modules"`
+	Contributions       int                `json:"contributions"`
+	Runtimes            int                `json:"runtimes"`
+	ActiveInvocations   int                `json:"activeInvocations"`
+	HostAPICalls        int                `json:"hostApiCalls"`
+	EventsLast5Min      int                `json:"eventsLast5Min"`
+	HookInvocations     int                `json:"hookInvocations"`
+	ActiveTasks         int                `json:"activeTasks"`
+	ActiveUISessions    int                `json:"activeUiSessions"`
+	StorageEntries      int                `json:"storageEntries"`
+	PermissionGrants    int                `json:"permissionGrants"`
+	ActiveScopes        int                `json:"activeScopes"`
+	Resources           int                `json:"resources"`
+	Errors              int                `json:"errors"`
+	Warnings            int                `json:"warnings"`
+	LifecycleEvents     int                `json:"lifecycleEvents"`
+	DevWorkspaces       int                `json:"devWorkspaces"`
+	CompatibilityIssues int                `json:"compatibilityIssues"`
+	TopExtensions       []ExtensionSummary `json:"topExtensions"`
+	ToolFacadeCounters  map[string]int64   `json:"toolFacadeCounters"`
+	LegacyCallCounters  map[string]int64   `json:"legacyCallCounters"`
 }
 
 type ExtensionSummary struct {
-	ExtensionID    string `json:"extensionId"`
-	Publisher      string `json:"publisher"`
-	Version        string `json:"version"`
-	ModuleCount    int    `json:"moduleCount"`
-	Enabled        bool   `json:"enabled"`
-	Status         string `json:"status"`
-	ErrorCount     int    `json:"errorCount"`
-	InvocationCount int   `json:"invocationCount"`
+	ExtensionID     string `json:"extensionId"`
+	Publisher       string `json:"publisher"`
+	Version         string `json:"version"`
+	ModuleCount     int    `json:"moduleCount"`
+	Enabled         bool   `json:"enabled"`
+	Status          string `json:"status"`
+	ErrorCount      int    `json:"errorCount"`
+	InvocationCount int    `json:"invocationCount"`
 }
 
 type ConsoleService struct {

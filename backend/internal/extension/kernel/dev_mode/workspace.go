@@ -40,8 +40,8 @@ type DevelopmentWorkspace struct {
 }
 
 type WorkspaceRegistry struct {
-	mu         sync.RWMutex
-	workspaces map[WorkspaceID]*DevelopmentWorkspace
+	mu          sync.RWMutex
+	workspaces  map[WorkspaceID]*DevelopmentWorkspace
 	byExtension map[ExtensionID]WorkspaceID
 }
 
@@ -53,21 +53,21 @@ func NewWorkspaceRegistry() *WorkspaceRegistry {
 }
 
 var (
-	ErrWorkspaceNotFound      = errors.New("dev_mode: workspace not found")
-	ErrWorkspaceExists        = errors.New("dev_mode: workspace exists")
-	ErrWorkspaceConflict      = errors.New("dev_mode: extension already has a workspace")
-	ErrWorkspaceNotReady      = errors.New("dev_mode: workspace not ready")
-	ErrDevTrustNotGranted     = errors.New("dev_mode: developer trust not granted")
-	ErrInvalidWorkspaceInput  = errors.New("dev_mode: invalid workspace input")
+	ErrWorkspaceNotFound     = errors.New("dev_mode: workspace not found")
+	ErrWorkspaceExists       = errors.New("dev_mode: workspace exists")
+	ErrWorkspaceConflict     = errors.New("dev_mode: extension already has a workspace")
+	ErrWorkspaceNotReady     = errors.New("dev_mode: workspace not ready")
+	ErrDevTrustNotGranted    = errors.New("dev_mode: developer trust not granted")
+	ErrInvalidWorkspaceInput = errors.New("dev_mode: invalid workspace input")
 )
 
 type RegisterWorkspaceInput struct {
-	WorkspaceID  WorkspaceID
-	ExtensionID  ExtensionID
+	WorkspaceID   WorkspaceID
+	ExtensionID   ExtensionID
 	PathReference string
-	ManifestPath string
-	WatchEnabled bool
-	AutoReload   bool
+	ManifestPath  string
+	WatchEnabled  bool
+	AutoReload    bool
 }
 
 func (r *WorkspaceRegistry) Register(ctx context.Context, in RegisterWorkspaceInput) (*DevelopmentWorkspace, error) {

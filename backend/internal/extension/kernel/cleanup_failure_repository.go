@@ -155,12 +155,12 @@ func scanCleanupFailures(rows *sql.Rows) ([]*dev_mode.CleanupFailureRecord, erro
 	var records []*dev_mode.CleanupFailureRecord
 	for rows.Next() {
 		var (
-			record         dev_mode.CleanupFailureRecord
-			wsID           string
-			nextRetryStr   string
-			statusStr      string
-			createdAtStr   string
-			updatedAtStr   string
+			record       dev_mode.CleanupFailureRecord
+			wsID         string
+			nextRetryStr string
+			statusStr    string
+			createdAtStr string
+			updatedAtStr string
 		)
 		if err := rows.Scan(
 			&record.FailureID,

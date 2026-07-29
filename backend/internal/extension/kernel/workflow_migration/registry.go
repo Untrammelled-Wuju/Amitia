@@ -13,22 +13,22 @@ const SystemWorkflowExtensionID = "system/amitia-core"
 const WorkflowModuleID = "workflows"
 
 type WorkflowContributionSpec struct {
-	WorkflowID      string          `json:"workflowId"`
-	LegacyWorkflowID string         `json:"legacyWorkflowId"`
-	DisplayName     string          `json:"displayName"`
-	Description     string          `json:"description"`
-	Category        string          `json:"category"`
-	Steps           []WorkflowStep  `json:"steps"`
-	InputSchema     json.RawMessage `json:"inputSchema,omitempty"`
-	OutputSchema    json.RawMessage `json:"outputSchema,omitempty"`
-	RequiredTools   []string        `json:"requiredTools,omitempty"`
-	Permissions     []string        `json:"permissions,omitempty"`
-	RuntimeBinding  string          `json:"runtimeBinding"`
-	RiskLevel       string          `json:"riskLevel,omitempty"`
-	MaxConcurrency  int             `json:"maxConcurrency,omitempty"`
-	Timeout         time.Duration   `json:"timeout,omitempty"`
-	Deprecated      bool            `json:"deprecated,omitempty"`
-	DeprecationNote string          `json:"deprecationNote,omitempty"`
+	WorkflowID       string          `json:"workflowId"`
+	LegacyWorkflowID string          `json:"legacyWorkflowId"`
+	DisplayName      string          `json:"displayName"`
+	Description      string          `json:"description"`
+	Category         string          `json:"category"`
+	Steps            []WorkflowStep  `json:"steps"`
+	InputSchema      json.RawMessage `json:"inputSchema,omitempty"`
+	OutputSchema     json.RawMessage `json:"outputSchema,omitempty"`
+	RequiredTools    []string        `json:"requiredTools,omitempty"`
+	Permissions      []string        `json:"permissions,omitempty"`
+	RuntimeBinding   string          `json:"runtimeBinding"`
+	RiskLevel        string          `json:"riskLevel,omitempty"`
+	MaxConcurrency   int             `json:"maxConcurrency,omitempty"`
+	Timeout          time.Duration   `json:"timeout,omitempty"`
+	Deprecated       bool            `json:"deprecated,omitempty"`
+	DeprecationNote  string          `json:"deprecationNote,omitempty"`
 }
 
 type WorkflowStep struct {
@@ -119,13 +119,13 @@ func (a *LegacyWorkflowAdapter) TranslateLegacyWorkflowID(legacyID string) (stri
 }
 
 type WorkflowMigrationReport struct {
-	StartTime        time.Time              `json:"startTime"`
-	EndTime          time.Time              `json:"endTime"`
-	TotalLegacy      int                    `json:"totalLegacy"`
-	MigratedCount    int                    `json:"migratedCount"`
-	FailedEntries    []FailedWorkflowMigration `json:"failedEntries,omitempty"`
-	CategorySummary  map[string]int         `json:"categorySummary"`
-	Status           string                 `json:"status"`
+	StartTime       time.Time                 `json:"startTime"`
+	EndTime         time.Time                 `json:"endTime"`
+	TotalLegacy     int                       `json:"totalLegacy"`
+	MigratedCount   int                       `json:"migratedCount"`
+	FailedEntries   []FailedWorkflowMigration `json:"failedEntries,omitempty"`
+	CategorySummary map[string]int            `json:"categorySummary"`
+	Status          string                    `json:"status"`
 }
 
 type FailedWorkflowMigration struct {
@@ -171,8 +171,8 @@ func RunWorkflowMigration(ctx context.Context, registry *WorkflowMigrationRegist
 }
 
 var (
-	ErrInvalidSpec           = errors.New("workflow_migration: invalid spec")
-	ErrWorkflowExists        = errors.New("workflow_migration: workflow exists")
-	ErrWorkflowNotFound      = errors.New("workflow_migration: workflow not found")
+	ErrInvalidSpec            = errors.New("workflow_migration: invalid spec")
+	ErrWorkflowExists         = errors.New("workflow_migration: workflow exists")
+	ErrWorkflowNotFound       = errors.New("workflow_migration: workflow not found")
 	ErrLegacyWorkflowNotFound = errors.New("workflow_migration: legacy workflow not found")
 )

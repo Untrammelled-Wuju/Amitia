@@ -15,25 +15,25 @@ type SlotID string
 type SlotMultiplicity string
 
 const (
-	MultiplicitySingle          SlotMultiplicity = "single"
-	MultiplicityMultiple        SlotMultiplicity = "multiple"
-	MultiplicityOrderedMultiple SlotMultiplicity = "ordered_multiple"
+	MultiplicitySingle            SlotMultiplicity = "single"
+	MultiplicityMultiple          SlotMultiplicity = "multiple"
+	MultiplicityOrderedMultiple   SlotMultiplicity = "ordered_multiple"
 	MultiplicityReplaceableSingle SlotMultiplicity = "replaceable_single"
-	MultiplicityExclusive       SlotMultiplicity = "exclusive"
+	MultiplicityExclusive         SlotMultiplicity = "exclusive"
 )
 
 type SlotLayout string
 
 const (
-	LayoutInline   SlotLayout = "inline"
-	LayoutStack    SlotLayout = "stack"
-	LayoutRow      SlotLayout = "row"
-	LayoutGrid     SlotLayout = "grid"
-	LayoutTabs     SlotLayout = "tabs"
-	LayoutPanel    SlotLayout = "panel"
-	LayoutDrawer   SlotLayout = "drawer"
-	LayoutModal    SlotLayout = "modal"
-	LayoutHidden   SlotLayout = "hidden"
+	LayoutInline SlotLayout = "inline"
+	LayoutStack  SlotLayout = "stack"
+	LayoutRow    SlotLayout = "row"
+	LayoutGrid   SlotLayout = "grid"
+	LayoutTabs   SlotLayout = "tabs"
+	LayoutPanel  SlotLayout = "panel"
+	LayoutDrawer SlotLayout = "drawer"
+	LayoutModal  SlotLayout = "modal"
+	LayoutHidden SlotLayout = "hidden"
 )
 
 type FallbackPolicy string
@@ -46,25 +46,25 @@ const (
 )
 
 type SlotDefinition struct {
-	SlotID            SlotID              `json:"slotId"`
-	ContractVersion   int                 `json:"contractVersion"`
-	SupportedKinds    []string            `json:"supportedKinds"`
-	Multiplicity      SlotMultiplicity    `json:"multiplicity"`
-	Layout            SlotLayout          `json:"layout"`
-	ContextSchema     json.RawMessage     `json:"contextSchema,omitempty"`
-	PerformanceBudget PerformanceBudget   `json:"performanceBudget"`
-	FallbackPolicy    FallbackPolicy      `json:"fallbackPolicy"`
-	Description       string              `json:"description,omitempty"`
-	Platform          []string            `json:"platform,omitempty"`
-	OrderingPolicy    string              `json:"orderingPolicy,omitempty"`
-	FailurePolicy     string              `json:"failurePolicy,omitempty"`
+	SlotID            SlotID            `json:"slotId"`
+	ContractVersion   int               `json:"contractVersion"`
+	SupportedKinds    []string          `json:"supportedKinds"`
+	Multiplicity      SlotMultiplicity  `json:"multiplicity"`
+	Layout            SlotLayout        `json:"layout"`
+	ContextSchema     json.RawMessage   `json:"contextSchema,omitempty"`
+	PerformanceBudget PerformanceBudget `json:"performanceBudget"`
+	FallbackPolicy    FallbackPolicy    `json:"fallbackPolicy"`
+	Description       string            `json:"description,omitempty"`
+	Platform          []string          `json:"platform,omitempty"`
+	OrderingPolicy    string            `json:"orderingPolicy,omitempty"`
+	FailurePolicy     string            `json:"failurePolicy,omitempty"`
 }
 
 type PerformanceBudget struct {
-	FirstPaint    time.Duration `json:"firstPaint"`
-	BundleSize    int64         `json:"bundleSize"`
-	MemoryBytes   int64         `json:"memoryBytes"`
-	MessageRate   int           `json:"messageRate"`
+	FirstPaint      time.Duration `json:"firstPaint"`
+	BundleSize      int64         `json:"bundleSize"`
+	MemoryBytes     int64         `json:"memoryBytes"`
+	MessageRate     int           `json:"messageRate"`
 	UpdateFrequency time.Duration `json:"updateFrequency"`
 }
 
@@ -176,44 +176,44 @@ func DefaultSlots() []*SlotDefinition {
 }
 
 type ContributionSummary struct {
-	ContributionID    string          `json:"contributionId"`
-	ExtensionID       string          `json:"extensionId"`
-	ModuleID          string          `json:"moduleId"`
-	Kind              string          `json:"kind"`
-	SlotID            SlotID          `json:"slotId"`
-	ContractVersion   int             `json:"contractVersion"`
-	Generation        int64           `json:"generation"`
-	Title             string          `json:"title"`
-	Description       string          `json:"description,omitempty"`
-	Icon              string          `json:"icon,omitempty"`
-	Ordering          int             `json:"ordering"`
-	Visible           bool            `json:"visible"`
-	Effective         bool            `json:"effective"`
-	Enabled           bool            `json:"enabled"`
-	RuntimeReady      bool            `json:"runtimeReady"`
-	Permissions       []string        `json:"permissions,omitempty"`
-	Sandbox           string          `json:"sandbox,omitempty"`
-	EntryPath         string          `json:"entryPath,omitempty"`
-	SchemaPath        string          `json:"schemaPath,omitempty"`
-	Actions           []ActionSummary `json:"actions,omitempty"`
-	HiddenReason      string          `json:"hiddenReason,omitempty"`
+	ContributionID  string          `json:"contributionId"`
+	ExtensionID     string          `json:"extensionId"`
+	ModuleID        string          `json:"moduleId"`
+	Kind            string          `json:"kind"`
+	SlotID          SlotID          `json:"slotId"`
+	ContractVersion int             `json:"contractVersion"`
+	Generation      int64           `json:"generation"`
+	Title           string          `json:"title"`
+	Description     string          `json:"description,omitempty"`
+	Icon            string          `json:"icon,omitempty"`
+	Ordering        int             `json:"ordering"`
+	Visible         bool            `json:"visible"`
+	Effective       bool            `json:"effective"`
+	Enabled         bool            `json:"enabled"`
+	RuntimeReady    bool            `json:"runtimeReady"`
+	Permissions     []string        `json:"permissions,omitempty"`
+	Sandbox         string          `json:"sandbox,omitempty"`
+	EntryPath       string          `json:"entryPath,omitempty"`
+	SchemaPath      string          `json:"schemaPath,omitempty"`
+	Actions         []ActionSummary `json:"actions,omitempty"`
+	HiddenReason    string          `json:"hiddenReason,omitempty"`
 }
 
 type ActionSummary struct {
-	ActionID string `json:"actionId"`
-	Title    string `json:"title"`
-	Icon     string `json:"icon,omitempty"`
+	ActionID  string `json:"actionId"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon,omitempty"`
 	RiskLevel string `json:"riskLevel,omitempty"`
 }
 
 type SlotSnapshot struct {
-	SlotID         SlotID                 `json:"slotId"`
-	ContractVersion int                   `json:"contractVersion"`
-	Layout         SlotLayout             `json:"layout"`
-	Multiplicity   SlotMultiplicity       `json:"multiplicity"`
-	FallbackPolicy FallbackPolicy         `json:"fallbackPolicy"`
-	Contributions  []*ContributionSummary `json:"contributions"`
-	GeneratedAt    time.Time              `json:"generatedAt"`
+	SlotID          SlotID                 `json:"slotId"`
+	ContractVersion int                    `json:"contractVersion"`
+	Layout          SlotLayout             `json:"layout"`
+	Multiplicity    SlotMultiplicity       `json:"multiplicity"`
+	FallbackPolicy  FallbackPolicy         `json:"fallbackPolicy"`
+	Contributions   []*ContributionSummary `json:"contributions"`
+	GeneratedAt     time.Time              `json:"generatedAt"`
 }
 
 type UIContributionSnapshot struct {
@@ -227,12 +227,12 @@ type SnapshotProvider interface {
 }
 
 type SnapshotService struct {
-	registry   *SlotRegistry
-	resolver   SlotResolver
-	mu         sync.RWMutex
-	cache      *UIContributionSnapshot
-	cacheTTL   time.Duration
-	cacheTime  time.Time
+	registry  *SlotRegistry
+	resolver  SlotResolver
+	mu        sync.RWMutex
+	cache     *UIContributionSnapshot
+	cacheTTL  time.Duration
+	cacheTime time.Time
 }
 
 func NewSnapshotService(registry *SlotRegistry, resolver SlotResolver) *SnapshotService {
@@ -376,9 +376,9 @@ func (c *SlotCache) Clear() {
 }
 
 var (
-	ErrInvalidSlotDefinition = errors.New("extension_slots: invalid slot definition")
+	ErrInvalidSlotDefinition  = errors.New("extension_slots: invalid slot definition")
 	ErrInvalidContractVersion = errors.New("extension_slots: invalid contract version")
-	ErrNoSupportedKinds      = errors.New("extension_slots: no supported kinds")
-	ErrSlotExists            = errors.New("extension_slots: slot exists")
-	ErrSlotNotFound          = errors.New("extension_slots: slot not found")
+	ErrNoSupportedKinds       = errors.New("extension_slots: no supported kinds")
+	ErrSlotExists             = errors.New("extension_slots: slot exists")
+	ErrSlotNotFound           = errors.New("extension_slots: slot not found")
 )

@@ -12,9 +12,9 @@ import (
 type RevocationSource string
 
 const (
-	RevocationSourceOfficial   RevocationSource = "official"
-	RevocationSourceLocal      RevocationSource = "local"
-	RevocationSourceUser       RevocationSource = "user"
+	RevocationSourceOfficial    RevocationSource = "official"
+	RevocationSourceLocal       RevocationSource = "local"
+	RevocationSourceUser        RevocationSource = "user"
 	RevocationSourceCompromised RevocationSource = "compromised"
 )
 
@@ -28,19 +28,19 @@ const (
 )
 
 type RevocationEntry struct {
-	EntryID         string             `json:"entry_id"`
-	PublisherID     string             `json:"publisher_id,omitempty"`
-	KeyID           string             `json:"key_id,omitempty"`
-	PackageHash     string             `json:"package_hash,omitempty"`
-	ExtensionID     string             `json:"extension_id,omitempty"`
-	Version         string             `json:"version,omitempty"`
-	Source          RevocationSource   `json:"source"`
-	Severity        RevocationSeverity `json:"severity"`
-	Reason          string             `json:"reason"`
-	RevokedAt       time.Time          `json:"revoked_at"`
-	ExpiresAt       *time.Time         `json:"expires_at,omitempty"`
-	Superseded      bool               `json:"superseded"`
-	SupersededBy    string             `json:"superseded_by,omitempty"`
+	EntryID      string             `json:"entry_id"`
+	PublisherID  string             `json:"publisher_id,omitempty"`
+	KeyID        string             `json:"key_id,omitempty"`
+	PackageHash  string             `json:"package_hash,omitempty"`
+	ExtensionID  string             `json:"extension_id,omitempty"`
+	Version      string             `json:"version,omitempty"`
+	Source       RevocationSource   `json:"source"`
+	Severity     RevocationSeverity `json:"severity"`
+	Reason       string             `json:"reason"`
+	RevokedAt    time.Time          `json:"revoked_at"`
+	ExpiresAt    *time.Time         `json:"expires_at,omitempty"`
+	Superseded   bool               `json:"superseded"`
+	SupersededBy string             `json:"superseded_by,omitempty"`
 }
 
 func (e RevocationEntry) IsExpired() bool {
@@ -67,8 +67,8 @@ func (e RevocationEntry) AffectsPublisher() bool {
 }
 
 type RevocationList struct {
-	mu      sync.RWMutex
-	entries map[string]RevocationEntry
+	mu       sync.RWMutex
+	entries  map[string]RevocationEntry
 	lastSync time.Time
 	source   string
 }

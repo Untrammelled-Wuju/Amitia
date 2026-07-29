@@ -59,25 +59,25 @@ func NewTrustService(cfg TrustServiceConfig) *TrustService {
 	}
 }
 
-func (s *TrustService) Store() *PublisherStore { return s.store }
-func (s *TrustService) Verifier() *SignatureVerifier { return s.verifier }
-func (s *TrustService) Rotator() *KeyRotator { return s.rotator }
-func (s *TrustService) RotationLog() *RotationLog { return s.rotationLog }
-func (s *TrustService) RevocationList() *RevocationList { return s.revocationList }
-func (s *TrustService) Blocklist() *PackageBlocklist { return s.blocklist }
-func (s *TrustService) UserTrust() *UserTrustStore { return s.userTrust }
-func (s *TrustService) PolicyEngine() *LifecyclePolicyEngine { return s.policyEngine }
+func (s *TrustService) Store() *PublisherStore                      { return s.store }
+func (s *TrustService) Verifier() *SignatureVerifier                { return s.verifier }
+func (s *TrustService) Rotator() *KeyRotator                        { return s.rotator }
+func (s *TrustService) RotationLog() *RotationLog                   { return s.rotationLog }
+func (s *TrustService) RevocationList() *RevocationList             { return s.revocationList }
+func (s *TrustService) Blocklist() *PackageBlocklist                { return s.blocklist }
+func (s *TrustService) UserTrust() *UserTrustStore                  { return s.userTrust }
+func (s *TrustService) PolicyEngine() *LifecyclePolicyEngine        { return s.policyEngine }
 func (s *TrustService) ContinuityChecker() *UpdateContinuityChecker { return s.continuityChecker }
-func (s *TrustService) TransferLog() *OwnershipTransferLog { return s.transferLog }
-func (s *TrustService) Development() *DevelopmentTrustManager { return s.development }
-func (s *TrustService) Quarantine() *QuarantineManager { return s.quarantine }
+func (s *TrustService) TransferLog() *OwnershipTransferLog          { return s.transferLog }
+func (s *TrustService) Development() *DevelopmentTrustManager       { return s.development }
+func (s *TrustService) Quarantine() *QuarantineManager              { return s.quarantine }
 
 type VerifyRequest struct {
-	Document             SignatureDocument
-	Payload              SignaturePayload
-	ActualManifestHash   string
+	Document              SignatureDocument
+	Payload               SignaturePayload
+	ActualManifestHash    string
 	ActualContentTreeHash string
-	ActualPackageHash    string
+	ActualPackageHash     string
 }
 
 type VerifyResponse struct {
@@ -185,11 +185,11 @@ func (s *TrustService) CheckUpdateContinuity(ctx context.Context, input UpdateCo
 
 func (s *TrustService) Snapshot() TrustSnapshot {
 	return TrustSnapshot{
-		Publishers:      s.store.List(context.Background()),
-		Revocations:     s.revocationList.Snapshot(),
-		Blocklist:       s.blocklist.Snapshot(),
-		UserDecisions:   s.userTrust.Snapshot(),
-		Timestamp:       time.Now().UTC(),
+		Publishers:    s.store.List(context.Background()),
+		Revocations:   s.revocationList.Snapshot(),
+		Blocklist:     s.blocklist.Snapshot(),
+		UserDecisions: s.userTrust.Snapshot(),
+		Timestamp:     time.Now().UTC(),
 	}
 }
 

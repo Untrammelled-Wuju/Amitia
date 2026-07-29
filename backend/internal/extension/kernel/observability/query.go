@@ -17,16 +17,16 @@ type QueryService interface {
 }
 
 type InvocationNode struct {
-	Invocation InvocationRecord    `json:"invocation"`
-	Attempts   []ExecutionAttempt  `json:"attempts,omitempty"`
-	Children   []InvocationNode    `json:"children,omitempty"`
+	Invocation InvocationRecord   `json:"invocation"`
+	Attempts   []ExecutionAttempt `json:"attempts,omitempty"`
+	Children   []InvocationNode   `json:"children,omitempty"`
 }
 
 type TraceTimeline struct {
-	Trace       Trace                  `json:"trace"`
-	Operations  []OperationRecord      `json:"operations"`
-	Invocations []InvocationRecord     `json:"invocations"`
-	Events      []RuntimeEventRecord   `json:"events"`
+	Trace       Trace                `json:"trace"`
+	Operations  []OperationRecord    `json:"operations"`
+	Invocations []InvocationRecord   `json:"invocations"`
+	Events      []RuntimeEventRecord `json:"events"`
 }
 
 type DefaultQueryService struct {

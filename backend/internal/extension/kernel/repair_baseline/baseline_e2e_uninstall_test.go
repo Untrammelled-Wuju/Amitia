@@ -19,12 +19,12 @@ func registerTestEventType(t *testing.T, ctx context.Context, svc *event.Service
 	maxPayload := int64(256 * 1024)
 	maxMeta := int64(32 * 1024)
 	def := event.EventTypeDefinition{
-		EventTypeID:     event.EventTypeID("system.test"),
-		Version:         1,
-		Description:     "Test event type for E2E",
-		MaxPayloadBytes: maxPayload,
+		EventTypeID:      event.EventTypeID("system.test"),
+		Version:          1,
+		Description:      "Test event type for E2E",
+		MaxPayloadBytes:  maxPayload,
 		MaxMetadataBytes: maxMeta,
-		RiskLevel:       event.RiskLevelLow,
+		RiskLevel:        event.RiskLevelLow,
 		ProducerPolicy: event.EventProducerPolicy{
 			AllowedProducers:   []string{"host", "system", "test"},
 			MaxPayloadBytes:    maxPayload,
@@ -47,11 +47,11 @@ func registerTestEventType(t *testing.T, ctx context.Context, svc *event.Service
 		},
 		OrderingPolicy: event.OrderingNone,
 		RetentionPolicy: event.EventRetentionPolicy{
-			MaxAge:              24 * time.Hour,
-			MaxDeliveryCount:    5,
-			DeleteAfterSuccess:  true,
+			MaxAge:                24 * time.Hour,
+			MaxDeliveryCount:      5,
+			DeleteAfterSuccess:    true,
 			DeleteAfterDeadLetter: false,
-			ArchiveDeadLetters:  true,
+			ArchiveDeadLetters:    true,
 		},
 	}
 	if err := svc.RegisterEventType(ctx, def); err != nil {

@@ -140,8 +140,8 @@ func TestArchiveInspectorInspect(t *testing.T) {
 	inspector := NewArchiveInspector(policy)
 
 	files := map[string][]byte{
-		"manifest.json":   []byte(`{"name":"test"}`),
-		"modules/main.js": []byte(`console.log("hello")`),
+		"manifest.json":     []byte(`{"name":"test"}`),
+		"modules/main.js":   []byte(`console.log("hello")`),
 		"schemas/test.json": []byte(`{"type":"object"}`),
 	}
 
@@ -317,8 +317,8 @@ func TestSignatureVerifierValid(t *testing.T) {
 	sig.Signature = ed25519.Sign(priv, []byte(message))
 
 	result := v.Verify(context.Background(), SignatureVerificationInput{
-		Signature:            sig,
-		PublicKey:            pub,
+		Signature:             sig,
+		PublicKey:             pub,
 		ActualContentTreeHash: sig.ContentTreeHash,
 		ActualManifestHash:    sig.ManifestHash,
 	})
@@ -345,8 +345,8 @@ func TestSignatureVerifierContentMismatch(t *testing.T) {
 	sig.Signature = ed25519.Sign(priv, []byte(message))
 
 	result := v.Verify(context.Background(), SignatureVerificationInput{
-		Signature:            sig,
-		PublicKey:            pub,
+		Signature:             sig,
+		PublicKey:             pub,
 		ActualContentTreeHash: "sha256:different",
 	})
 

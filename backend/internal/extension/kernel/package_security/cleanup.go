@@ -9,13 +9,13 @@ import (
 type CleanupJobType string
 
 const (
-	CleanupJobStaging    CleanupJobType = "staging"
-	CleanupJobSnapshot   CleanupJobType = "snapshot"
-	CleanupJobExtract    CleanupJobType = "extract"
-	CleanupJobTemp       CleanupJobType = "temp"
-	CleanupJobDownload   CleanupJobType = "download"
-	CleanupJobLock       CleanupJobType = "lock"
-	CleanupJobOrphan     CleanupJobType = "orphan"
+	CleanupJobStaging  CleanupJobType = "staging"
+	CleanupJobSnapshot CleanupJobType = "snapshot"
+	CleanupJobExtract  CleanupJobType = "extract"
+	CleanupJobTemp     CleanupJobType = "temp"
+	CleanupJobDownload CleanupJobType = "download"
+	CleanupJobLock     CleanupJobType = "lock"
+	CleanupJobOrphan   CleanupJobType = "orphan"
 )
 
 type CleanupManager struct {

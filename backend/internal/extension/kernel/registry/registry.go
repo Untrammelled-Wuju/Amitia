@@ -14,43 +14,43 @@ import (
 type RegistrationState string
 
 const (
-	RegistrationStateRegistered  RegistrationState = "registered"
-	RegistrationStateActivating  RegistrationState = "activating"
-	RegistrationStateActive      RegistrationState = "active"
+	RegistrationStateRegistered   RegistrationState = "registered"
+	RegistrationStateActivating   RegistrationState = "activating"
+	RegistrationStateActive       RegistrationState = "active"
 	RegistrationStateDeactivating RegistrationState = "deactivating"
-	RegistrationStateInactive    RegistrationState = "inactive"
+	RegistrationStateInactive     RegistrationState = "inactive"
 	RegistrationStateUnregistered RegistrationState = "unregistered"
-	RegistrationStateFailed      RegistrationState = "failed"
-	RegistrationStateQuarantined RegistrationState = "quarantined"
+	RegistrationStateFailed       RegistrationState = "failed"
+	RegistrationStateQuarantined  RegistrationState = "quarantined"
 )
 
 type RegisteredContribution struct {
-	Definition      domain.ContributionDefinition
-	Generation      int64
-	RegisteredAt    time.Time
-	UpdatedAt       time.Time
+	Definition        domain.ContributionDefinition
+	Generation        int64
+	RegisteredAt      time.Time
+	UpdatedAt         time.Time
 	RegistrationState RegistrationState
-	ActivationState string
-	RuntimeBinding  *domain.RuntimeBinding
-	Source          string
-	Metadata        map[string]any
+	ActivationState   string
+	RuntimeBinding    *domain.RuntimeBinding
+	Source            string
+	Metadata          map[string]any
 }
 
 type ContributionRegistrationBatch struct {
-	ExtensionID  domain.ExtensionID
-	ModuleID     domain.ModuleID
-	Generation   int64
-	Contributions []domain.ContributionDefinition
+	ExtensionID     domain.ExtensionID
+	ModuleID        domain.ModuleID
+	Generation      int64
+	Contributions   []domain.ContributionDefinition
 	ReplaceExisting bool
-	Source       string
+	Source          string
 }
 
 type ContributionReplacementRequest struct {
-	ExtensionID    domain.ExtensionID
-	OldGeneration  int64
-	NewGeneration  int64
-	Contributions  []domain.ContributionDefinition
-	Source         string
+	ExtensionID   domain.ExtensionID
+	OldGeneration int64
+	NewGeneration int64
+	Contributions []domain.ContributionDefinition
+	Source        string
 }
 
 type ContributionUnregisterRequest struct {
@@ -61,10 +61,10 @@ type ContributionUnregisterRequest struct {
 }
 
 type ContributionRegistrationResult struct {
-	Registered []RegisteredContribution
+	Registered   []RegisteredContribution
 	Unregistered []RegisteredContribution
-	Errors      []ContributionError
-	Generation  int64
+	Errors       []ContributionError
+	Generation   int64
 }
 
 type ContributionError struct {
@@ -74,11 +74,11 @@ type ContributionError struct {
 }
 
 type ContributionFilter struct {
-	ExtensionID  domain.ExtensionID
-	ModuleID     domain.ModuleID
-	Kind         domain.ContributionKind
-	State        RegistrationState
-	ActiveOnly   bool
+	ExtensionID domain.ExtensionID
+	ModuleID    domain.ModuleID
+	Kind        domain.ContributionKind
+	State       RegistrationState
+	ActiveOnly  bool
 }
 
 type ContributionRegistry interface {
@@ -108,20 +108,20 @@ type Adapter interface {
 }
 
 var (
-	ErrContributionNotFound = errors.New("registry: contribution not found")
+	ErrContributionNotFound  = errors.New("registry: contribution not found")
 	ErrDuplicateContribution = errors.New("registry: duplicate contribution")
-	ErrInvalidBatch         = errors.New("registry: invalid batch")
-	ErrGenerationMismatch   = errors.New("registry: generation mismatch")
+	ErrInvalidBatch          = errors.New("registry: invalid batch")
+	ErrGenerationMismatch    = errors.New("registry: generation mismatch")
 )
 
 type DefaultRegistry struct {
-	mu          sync.RWMutex
-	entries     map[domain.ContributionID]RegisteredContribution
-	byExt       map[domain.ExtensionID][]domain.ContributionID
-	byModule    map[string][]domain.ContributionID
-	byKind      map[domain.ContributionKind][]domain.ContributionID
-	adapters    map[domain.ContributionKind]Adapter
-	snapshots   map[int64]map[domain.ContributionID]RegisteredContribution
+	mu        sync.RWMutex
+	entries   map[domain.ContributionID]RegisteredContribution
+	byExt     map[domain.ExtensionID][]domain.ContributionID
+	byModule  map[string][]domain.ContributionID
+	byKind    map[domain.ContributionKind][]domain.ContributionID
+	adapters  map[domain.ContributionKind]Adapter
+	snapshots map[int64]map[domain.ContributionID]RegisteredContribution
 }
 
 func NewDefaultRegistry() *DefaultRegistry {

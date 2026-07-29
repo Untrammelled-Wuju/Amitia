@@ -9,7 +9,7 @@ type OrderingInput struct {
 }
 
 type OrderingResult struct {
-	Ordered      []HookContributionDefinition
+	Ordered       []HookContributionDefinition
 	CycleDetected bool
 	CyclesRemoved int
 	Warnings      []string

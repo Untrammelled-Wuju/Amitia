@@ -261,9 +261,9 @@ func TestBaseline_E2E_MCP_NoDuplicateExposure(t *testing.T) {
 	}
 
 	scope := kernel.LegacyScope{
-		UserID:      "test-user",
-		Channel:     "test",
-		SessionID:   "test-session",
+		UserID:    "test-user",
+		Channel:   "test",
+		SessionID: "test-session",
 	}
 	tools, _ := toolFacade.ModelTools(ctx, scope)
 	mcpModelCount := 0
@@ -307,9 +307,9 @@ func TestBaseline_E2E_MCP_LegacyCounterZero(t *testing.T) {
 	}
 
 	scope := kernel.LegacyScope{
-		UserID:      "test-user",
-		Channel:     "test",
-		SessionID:   "test-session",
+		UserID:    "test-user",
+		Channel:   "test",
+		SessionID: "test-session",
 	}
 	_, _ = toolFacade.ModelTools(ctx, scope)
 	_ = toolFacade.UnregisterMCPTools(ctx, "legacy-zero-server")

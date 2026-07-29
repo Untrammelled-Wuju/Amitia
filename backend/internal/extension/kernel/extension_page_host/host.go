@@ -35,35 +35,35 @@ const (
 type PageState string
 
 const (
-	PageStateResolving        PageState = "resolving"
-	PageStatePermissionCheck  PageState = "permission_check"
-	PageStateRuntimeStarting  PageState = "runtime_starting"
-	PageStateLoading          PageState = "loading"
-	PageStateReady            PageState = "ready"
-	PageStateDegraded         PageState = "degraded"
-	PageStateFailed           PageState = "failed"
-	PageStateDisabled         PageState = "disabled"
-	PageStateNotInstalled     PageState = "not_installed"
-	PageStateIncompatible     PageState = "incompatible"
-	PageStateSuspended        PageState = "suspended"
+	PageStateResolving       PageState = "resolving"
+	PageStatePermissionCheck PageState = "permission_check"
+	PageStateRuntimeStarting PageState = "runtime_starting"
+	PageStateLoading         PageState = "loading"
+	PageStateReady           PageState = "ready"
+	PageStateDegraded        PageState = "degraded"
+	PageStateFailed          PageState = "failed"
+	PageStateDisabled        PageState = "disabled"
+	PageStateNotInstalled    PageState = "not_installed"
+	PageStateIncompatible    PageState = "incompatible"
+	PageStateSuspended       PageState = "suspended"
 )
 
 type PageStatePolicy string
 
 const (
-	StatePolicyEphemeral           PageStatePolicy = "ephemeral"
-	StatePolicySession             PageStatePolicy = "session"
+	StatePolicyEphemeral             PageStatePolicy = "ephemeral"
+	StatePolicySession               PageStatePolicy = "session"
 	StatePolicyPersistentPreferences PageStatePolicy = "persistent_preferences"
 )
 
 type DeepLinkPolicy struct {
-	Allowed   bool     `json:"allowed"`
-	Origins   []string `json:"origins,omitempty"`
-	RequireConfirmation bool `json:"requireConfirmation"`
+	Allowed             bool     `json:"allowed"`
+	Origins             []string `json:"origins,omitempty"`
+	RequireConfirmation bool     `json:"requireConfirmation"`
 }
 
 type LocalizedText struct {
-	Default string            `json:"default"`
+	Default      string            `json:"default"`
 	Translations map[string]string `json:"translations,omitempty"`
 }
 
@@ -82,20 +82,20 @@ type PageParameterDefinition struct {
 }
 
 type ExtensionPageSpec struct {
-	PageID         PageID             `json:"pageId"`
-	RouteKey       string             `json:"routeKey"`
-	Title          LocalizedText      `json:"title"`
-	Description    LocalizedText      `json:"description"`
-	Icon           string             `json:"icon,omitempty"`
-	Navigation     PageNavigationDefinition `json:"navigation"`
-	EntryKind      PageKind           `json:"entryKind"`
-	EntryPath      string             `json:"entryPath"`
-	SchemaPath     string             `json:"schemaPath,omitempty"`
-	Scope          PageScope          `json:"scope"`
-	Permissions    []string           `json:"permissions,omitempty"`
+	PageID         PageID                    `json:"pageId"`
+	RouteKey       string                    `json:"routeKey"`
+	Title          LocalizedText             `json:"title"`
+	Description    LocalizedText             `json:"description"`
+	Icon           string                    `json:"icon,omitempty"`
+	Navigation     PageNavigationDefinition  `json:"navigation"`
+	EntryKind      PageKind                  `json:"entryKind"`
+	EntryPath      string                    `json:"entryPath"`
+	SchemaPath     string                    `json:"schemaPath,omitempty"`
+	Scope          PageScope                 `json:"scope"`
+	Permissions    []string                  `json:"permissions,omitempty"`
 	Parameters     []PageParameterDefinition `json:"parameters,omitempty"`
-	DeepLinkPolicy DeepLinkPolicy     `json:"deepLinkPolicy"`
-	StatePolicy    PageStatePolicy    `json:"statePolicy"`
+	DeepLinkPolicy DeepLinkPolicy            `json:"deepLinkPolicy"`
+	StatePolicy    PageStatePolicy           `json:"statePolicy"`
 }
 
 type ExtensionPageDefinition struct {
@@ -114,42 +114,42 @@ type ExtensionPageDefinition struct {
 }
 
 type PageNavigationQuery struct {
-	ExtensionID ExtensionID `json:"extensionId,omitempty"`
-	Group       string      `json:"group,omitempty"`
-	IncludeHidden bool      `json:"includeHidden"`
-	ParentPage  string      `json:"parentPage,omitempty"`
+	ExtensionID   ExtensionID `json:"extensionId,omitempty"`
+	Group         string      `json:"group,omitempty"`
+	IncludeHidden bool        `json:"includeHidden"`
+	ParentPage    string      `json:"parentPage,omitempty"`
 }
 
 type PageNavigationItem struct {
-	PageID       PageID        `json:"pageId"`
-	ExtensionID  ExtensionID   `json:"extensionId"`
-	Title        string        `json:"title"`
-	Description  string        `json:"description,omitempty"`
-	Icon         string        `json:"icon,omitempty"`
-	Group        string        `json:"group,omitempty"`
-	Order        int           `json:"order"`
-	ParentPage   string        `json:"parentPage,omitempty"`
-	Hidden       bool          `json:"hidden"`
-	Kind         PageKind      `json:"kind"`
-	Effective    bool          `json:"effective"`
-	Disabled     bool          `json:"disabled"`
+	PageID      PageID      `json:"pageId"`
+	ExtensionID ExtensionID `json:"extensionId"`
+	Title       string      `json:"title"`
+	Description string      `json:"description,omitempty"`
+	Icon        string      `json:"icon,omitempty"`
+	Group       string      `json:"group,omitempty"`
+	Order       int         `json:"order"`
+	ParentPage  string      `json:"parentPage,omitempty"`
+	Hidden      bool        `json:"hidden"`
+	Kind        PageKind    `json:"kind"`
+	Effective   bool        `json:"effective"`
+	Disabled    bool        `json:"disabled"`
 }
 
 type ExtensionPageSession struct {
-	SessionID     PageSessionID    `json:"sessionId"`
-	ContributionID ContributionID  `json:"contributionId"`
-	ExtensionID   ExtensionID      `json:"extensionId"`
-	ModuleID      string           `json:"moduleId"`
-	PageID        PageID           `json:"pageId"`
-	Generation    int64            `json:"generation"`
-	ScopeSnapshot string           `json:"scopeSnapshot"`
-	Contract      int              `json:"contract"`
-	CreatedAt     time.Time        `json:"createdAt"`
-	LastActiveAt  time.Time        `json:"lastActiveAt"`
-	State         PageState        `json:"state"`
-	mu            sync.Mutex
-	subscriptions []string
-	expired       bool
+	SessionID      PageSessionID  `json:"sessionId"`
+	ContributionID ContributionID `json:"contributionId"`
+	ExtensionID    ExtensionID    `json:"extensionId"`
+	ModuleID       string         `json:"moduleId"`
+	PageID         PageID         `json:"pageId"`
+	Generation     int64          `json:"generation"`
+	ScopeSnapshot  string         `json:"scopeSnapshot"`
+	Contract       int            `json:"contract"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	LastActiveAt   time.Time      `json:"lastActiveAt"`
+	State          PageState      `json:"state"`
+	mu             sync.Mutex
+	subscriptions  []string
+	expired        bool
 }
 
 func (s *ExtensionPageSession) Touch() {
@@ -192,9 +192,9 @@ type PageRegistry interface {
 }
 
 type pageRegistry struct {
-	mu      sync.RWMutex
-	pages   map[string]*ExtensionPageDefinition
-	byExt   map[ExtensionID][]*ExtensionPageDefinition
+	mu    sync.RWMutex
+	pages map[string]*ExtensionPageDefinition
+	byExt map[ExtensionID][]*ExtensionPageDefinition
 }
 
 func NewPageRegistry() PageRegistry {
@@ -327,17 +327,17 @@ func (m *SessionManager) Create(req CreateSessionRequest) (*ExtensionPageSession
 	}
 	now := time.Now().UTC()
 	session := &ExtensionPageSession{
-		SessionID:     PageSessionID(newSessionID()),
+		SessionID:      PageSessionID(newSessionID()),
 		ContributionID: req.ContributionID,
-		ExtensionID:   req.ExtensionID,
-		ModuleID:      req.ModuleID,
-		PageID:        req.PageID,
-		Generation:    req.Generation,
-		ScopeSnapshot: req.ScopeSnapshot,
-		Contract:      req.Contract,
-		CreatedAt:     now,
-		LastActiveAt:  now,
-		State:         PageStateResolving,
+		ExtensionID:    req.ExtensionID,
+		ModuleID:       req.ModuleID,
+		PageID:         req.PageID,
+		Generation:     req.Generation,
+		ScopeSnapshot:  req.ScopeSnapshot,
+		Contract:       req.Contract,
+		CreatedAt:      now,
+		LastActiveAt:   now,
+		State:          PageStateResolving,
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -570,11 +570,11 @@ type OpenPageRequest struct {
 }
 
 type OpenPageResult struct {
-	SessionID    PageSessionID `json:"sessionId"`
-	State        PageState     `json:"state"`
+	SessionID    PageSessionID      `json:"sessionId"`
+	State        PageState          `json:"state"`
 	Definition   *ExtensionPageSpec `json:"definition"`
-	MissingPerms []string      `json:"missingPermissions,omitempty"`
-	Reason       string        `json:"reason,omitempty"`
+	MissingPerms []string           `json:"missingPermissions,omitempty"`
+	Reason       string             `json:"reason,omitempty"`
 }
 
 func (h *PageHost) OpenPage(ctx context.Context, req OpenPageRequest) (*OpenPageResult, error) {
@@ -720,13 +720,13 @@ func newSessionID() string {
 }
 
 var (
-	ErrInvalidPageDefinition = errors.New("page_host: invalid page definition")
-	ErrPageExists            = errors.New("page_host: page exists")
-	ErrPageNotFound          = errors.New("page_host: page not found")
-	ErrInvalidSessionRequest = errors.New("page_host: invalid session request")
-	ErrSessionNotFound       = errors.New("page_host: session not found")
-	ErrSessionExpired        = errors.New("page_host: session expired")
-	ErrInvalidRequest        = errors.New("page_host: invalid request")
-	ErrInvalidDeepLink       = errors.New("page_host: invalid deep link")
+	ErrInvalidPageDefinition     = errors.New("page_host: invalid page definition")
+	ErrPageExists                = errors.New("page_host: page exists")
+	ErrPageNotFound              = errors.New("page_host: page not found")
+	ErrInvalidSessionRequest     = errors.New("page_host: invalid session request")
+	ErrSessionNotFound           = errors.New("page_host: session not found")
+	ErrSessionExpired            = errors.New("page_host: session expired")
+	ErrInvalidRequest            = errors.New("page_host: invalid request")
+	ErrInvalidDeepLink           = errors.New("page_host: invalid deep link")
 	ErrSessionOwnershipViolation = errors.New("page_host: session ownership violation")
 )

@@ -10,15 +10,15 @@ import (
 type DeliveryStatus string
 
 const (
-	DeliveryStatusPending     DeliveryStatus = "pending"
-	DeliveryStatusLeased       DeliveryStatus = "leased"
-	DeliveryStatusDelivering    DeliveryStatus = "delivering"
-	DeliveryStatusSucceeded     DeliveryStatus = "succeeded"
-	DeliveryStatusRetryWait     DeliveryStatus = "retry_wait"
-	DeliveryStatusFailed        DeliveryStatus = "failed"
-	DeliveryStatusDeadLetter    DeliveryStatus = "dead_letter"
-	DeliveryStatusCancelled     DeliveryStatus = "cancelled"
-	DeliveryStatusSkipped       DeliveryStatus = "skipped"
+	DeliveryStatusPending    DeliveryStatus = "pending"
+	DeliveryStatusLeased     DeliveryStatus = "leased"
+	DeliveryStatusDelivering DeliveryStatus = "delivering"
+	DeliveryStatusSucceeded  DeliveryStatus = "succeeded"
+	DeliveryStatusRetryWait  DeliveryStatus = "retry_wait"
+	DeliveryStatusFailed     DeliveryStatus = "failed"
+	DeliveryStatusDeadLetter DeliveryStatus = "dead_letter"
+	DeliveryStatusCancelled  DeliveryStatus = "cancelled"
+	DeliveryStatusSkipped    DeliveryStatus = "skipped"
 )
 
 type Delivery struct {
@@ -205,13 +205,13 @@ func (d *Delivery) Elapsed() time.Duration {
 }
 
 type DeliveryAttempt struct {
-	AttemptID        string
-	DeliveryID       string
-	Attempt          int
-	StartedAt        time.Time
-	FinishedAt       *time.Time
-	ErrorCode        string
-	ErrorMessage     string
+	AttemptID         string
+	DeliveryID        string
+	Attempt           int
+	StartedAt         time.Time
+	FinishedAt        *time.Time
+	ErrorCode         string
+	ErrorMessage      string
 	RuntimeInstanceID string
-	Duration         time.Duration
+	Duration          time.Duration
 }

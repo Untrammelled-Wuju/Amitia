@@ -12,40 +12,49 @@ import (
 type GenerationState string
 
 const (
-	GenerationStatePreparing  GenerationState = "preparing"
-	GenerationStateValidated  GenerationState = "validated"
+	GenerationStatePreparing    GenerationState = "preparing"
+	GenerationStateValidated    GenerationState = "validated"
 	GenerationStateRuntimeReady GenerationState = "runtime_ready"
-	GenerationStateActive     GenerationState = "active"
-	GenerationStateDraining   GenerationState = "draining"
-	GenerationStateStopped    GenerationState = "stopped"
-	GenerationStateFailed     GenerationState = "failed"
+	GenerationStateActive       GenerationState = "active"
+	GenerationStateDraining     GenerationState = "draining"
+	GenerationStateStopped      GenerationState = "stopped"
+	GenerationStateFailed       GenerationState = "failed"
 )
 
 type Generation struct {
-	GenerationID    string
-	ExtensionID     string
-	Version         string
-	Generation      int
-	State           GenerationState
-	DefinitionHash  string
-	RuntimeHash     string
-	DependencyHash  string
-	CreatedAt       time.Time
-	ActivatedAt     *time.Time
-	StoppedAt       *time.Time
-	Invocations     int
+	GenerationID   string
+	ExtensionID    string
+	Version        string
+	Generation     int
+	State          GenerationState
+	DefinitionHash string
+	RuntimeHash    string
+	DependencyHash string
+	CreatedAt      time.Time
+	ActivatedAt    *time.Time
+	StoppedAt      *time.Time
+	Invocations    int
 }
 
 type GenerationManager struct {
 	mu          sync.RWMutex
 	generations map[string][]Generation
 	active      map[string]string
+	repo        *GenerationStateRepository
 }
 
 func NewGenerationManager() *GenerationManager {
 	return &GenerationManager{
 		generations: make(map[string][]Generation),
 		active:      make(map[string]string),
+	}
+}
+
+func NewGenerationManagerWithRepo(repo *GenerationStateRepository) *GenerationManager {
+	return &GenerationManager{
+		generations: make(map[string][]Generation),
+		active:      make(map[string]string),
+		repo:        repo,
 	}
 }
 
@@ -64,6 +73,9 @@ func (m *GenerationManager) Prepare(ctx context.Context, extensionID, version, d
 		CreatedAt:      time.Now().UTC(),
 	}
 	m.generations[extensionID] = append(gens, gen)
+	if m.repo != nil {
+		_ = m.repo.SaveGeneration(ctx, &gen)
+	}
 	return gen
 }
 
@@ -92,6 +104,13 @@ func (m *GenerationManager) Transition(ctx context.Context, extensionID, generat
 				gens[i].StoppedAt = &now
 			}
 			m.generations[extensionID] = gens
+			if m.repo != nil {
+				if target == GenerationStateActive {
+					_ = m.repo.SetActiveGeneration(ctx, extensionID, generationID)
+				} else {
+					_ = m.repo.UpdateGenerationState(ctx, generationID, string(target))
+				}
+			}
 			return nil
 		}
 	}
@@ -100,13 +119,13 @@ func (m *GenerationManager) Transition(ctx context.Context, extensionID, generat
 
 func isValidTransition(from, to GenerationState) bool {
 	transitions := map[GenerationState][]GenerationState{
-		GenerationStatePreparing:   {GenerationStateValidated, GenerationStateFailed},
-		GenerationStateValidated:   {GenerationStateRuntimeReady, GenerationStateFailed},
+		GenerationStatePreparing:    {GenerationStateValidated, GenerationStateFailed},
+		GenerationStateValidated:    {GenerationStateRuntimeReady, GenerationStateFailed},
 		GenerationStateRuntimeReady: {GenerationStateActive, GenerationStateFailed},
-		GenerationStateActive:      {GenerationStateDraining, GenerationStateFailed},
-		GenerationStateDraining:    {GenerationStateStopped, GenerationStateFailed},
-		GenerationStateStopped:     {},
-		GenerationStateFailed:      {},
+		GenerationStateActive:       {GenerationStateDraining, GenerationStateFailed},
+		GenerationStateDraining:     {GenerationStateStopped, GenerationStateFailed},
+		GenerationStateStopped:      {},
+		GenerationStateFailed:       {},
 	}
 	allowed, ok := transitions[from]
 	if !ok {
@@ -198,6 +217,9 @@ func (m *GenerationManager) IncrementInvocation(ctx context.Context, extensionID
 		if gens[i].GenerationID == activeID {
 			gens[i].Invocations++
 			m.generations[extensionID] = gens
+			if m.repo != nil {
+				_ = m.repo.UpdateInvocations(ctx, activeID, gens[i].Invocations)
+			}
 			return
 		}
 	}
@@ -252,6 +274,9 @@ func (m *GenerationManager) RemoveGeneration(ctx context.Context, extensionID, g
 			if m.active[extensionID] == generationID {
 				delete(m.active, extensionID)
 			}
+			if m.repo != nil {
+				_ = m.repo.DeleteGeneration(ctx, generationID)
+			}
 			return nil
 		}
 	}
@@ -297,6 +322,9 @@ func (m *GenerationManager) StopGeneration(ctx context.Context, extensionID, gen
 				delete(m.active, extensionID)
 			}
 			m.generations[extensionID] = gens
+			if m.repo != nil {
+				_ = m.repo.UpdateGenerationState(ctx, generationID, string(GenerationStateStopped))
+			}
 			return nil
 		}
 	}
@@ -315,4 +343,68 @@ func (m *GenerationManager) DrainingGenerations(ctx context.Context, extensionID
 		}
 	}
 	return out
+}
+
+func (m *GenerationManager) LoadFromStore(ctx context.Context) error {
+	if m == nil || m.repo == nil {
+		return nil
+	}
+	all, err := m.repo.LoadAll(ctx)
+	if err != nil {
+		return fmt.Errorf("update: load from store: %w", err)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.generations = make(map[string][]Generation)
+	m.active = make(map[string]string)
+	for _, gen := range all {
+		extID := gen.ExtensionID
+		m.generations[extID] = append(m.generations[extID], gen)
+		if gen.State == GenerationStateActive {
+			m.active[extID] = gen.GenerationID
+		}
+	}
+	return nil
+}
+
+func (m *GenerationManager) CASActive(ctx context.Context, extensionID, generationID string, expectedGeneration int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if expectedGeneration > 0 {
+		activeID, ok := m.active[extensionID]
+		if ok {
+			gens := m.generations[extensionID]
+			for _, g := range gens {
+				if g.GenerationID == activeID {
+					if g.Generation != expectedGeneration {
+						return fmt.Errorf("update: CAS failed for %s: expected generation %d, got %d", extensionID, expectedGeneration, g.Generation)
+					}
+					break
+				}
+			}
+		}
+	}
+	gens := m.generations[extensionID]
+	for i := range gens {
+		if gens[i].GenerationID == generationID {
+			if !isValidTransition(gens[i].State, GenerationStateActive) {
+				return fmt.Errorf("update: CAS invalid transition %s -> %s", gens[i].State, GenerationStateActive)
+			}
+			gens[i].State = GenerationStateActive
+			now := time.Now().UTC()
+			gens[i].ActivatedAt = &now
+			m.active[extensionID] = generationID
+			for j := range gens {
+				if i != j && gens[j].State == GenerationStateActive {
+					gens[j].State = GenerationStateDraining
+				}
+			}
+			m.generations[extensionID] = gens
+			if m.repo != nil {
+				_ = m.repo.SetActiveGeneration(ctx, extensionID, generationID)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("update: generation %s not found", generationID)
 }

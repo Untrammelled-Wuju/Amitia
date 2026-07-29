@@ -16,15 +16,15 @@ import (
 )
 
 type WASMRuntimeFactory struct {
-	mu         sync.RWMutex
-	engine     Engine
-	moduleMgr  *ModuleManager
+	mu          sync.RWMutex
+	engine      Engine
+	moduleMgr   *ModuleManager
 	hostGateway *HostGateway
-	runtime    *Runtime
-	defs       map[string]*WASMRuntimeDefinition
-	modules    map[string]*LoadedModule
-	instances  map[string]*WASMManagedRuntime
-	logger     func(level, msg string, fields map[string]any)
+	runtime     *Runtime
+	defs        map[string]*WASMRuntimeDefinition
+	modules     map[string]*LoadedModule
+	instances   map[string]*WASMManagedRuntime
+	logger      func(level, msg string, fields map[string]any)
 }
 
 func NewWASMRuntimeFactory(engine Engine, moduleMgr *ModuleManager) *WASMRuntimeFactory {
@@ -155,13 +155,13 @@ func (f *WASMRuntimeFactory) Create(ctx context.Context, spec runtime_supervisor
 		engine:     f.engine,
 		logger:     f.logger,
 		identity: runtime_supervisor.RuntimeIdentity{
-			InstanceID:         instanceID,
+			InstanceID:          instanceID,
 			RuntimeDefinitionID: runtime_supervisor.DefinitionID(spec.DefinitionID),
-			ExtensionID:        spec.ExtensionID,
-			ModuleID:           spec.ModuleID,
-			RuntimeType:        spec.RuntimeType,
-			Generation:         spec.Generation,
-			SessionNonce:       uuid.NewString(),
+			ExtensionID:         spec.ExtensionID,
+			ModuleID:            spec.ModuleID,
+			RuntimeType:         spec.RuntimeType,
+			Generation:          spec.Generation,
+			SessionNonce:        uuid.NewString(),
 		},
 		state: runtime_supervisor.ActualCreated,
 	}
@@ -174,15 +174,15 @@ func (f *WASMRuntimeFactory) Create(ctx context.Context, spec runtime_supervisor
 }
 
 type WASMManagedRuntime struct {
-	mu         sync.Mutex
-	instanceID string
-	def        *WASMRuntimeDefinition
-	module     *LoadedModule
-	runtime    *Runtime
-	engine     Engine
-	logger     func(level, msg string, fields map[string]any)
-	identity   runtime_supervisor.RuntimeIdentity
-	state      runtime_supervisor.ActualState
+	mu          sync.Mutex
+	instanceID  string
+	def         *WASMRuntimeDefinition
+	module      *LoadedModule
+	runtime     *Runtime
+	engine      Engine
+	logger      func(level, msg string, fields map[string]any)
+	identity    runtime_supervisor.RuntimeIdentity
+	state       runtime_supervisor.ActualState
 	invocations int64
 	traps       int64
 	timeouts    int64
@@ -249,21 +249,21 @@ func (w *WASMManagedRuntime) Invoke(ctx context.Context, request runtime_supervi
 	}
 
 	invCtx = WithInvocationContext(invCtx, &InvocationContext{
-		InvocationID:  request.InvocationID,
-		OperationID:   request.Operation,
-		ExtensionID:   string(w.identity.ExtensionID),
-		ModuleID:      string(w.identity.ModuleID),
-		Deadline:      request.Deadline,
-		MaxHostCalls:  w.def.MaxHostCalls,
-		AllowedImports: w.def.AllowedImports,
+		InvocationID:      request.InvocationID,
+		OperationID:       request.Operation,
+		ExtensionID:       string(w.identity.ExtensionID),
+		ModuleID:          string(w.identity.ModuleID),
+		Deadline:          request.Deadline,
+		MaxHostCalls:      w.def.MaxHostCalls,
+		AllowedImports:    w.def.AllowedImports,
 		DeterminismPolicy: NonDeterministicPolicy(),
-		Registry:      w.runtime.Registry(),
+		Registry:          w.runtime.Registry(),
 	})
 
 	result, err := w.runtime.Invoke(invCtx, InvokeRequest{
-		Definition:   w.def,
-		Input:        input,
-		ModuleBytes:  w.module.Bytes,
+		Definition:  w.def,
+		Input:       input,
+		ModuleBytes: w.module.Bytes,
 	})
 
 	w.mu.Lock()

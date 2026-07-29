@@ -13,26 +13,26 @@ import (
 )
 
 type HostGateway struct {
-	mu          sync.RWMutex
-	gateway     host_api.Gateway
-	sessions    map[string]*gatewaySession
-	hostFnSet   *HostFunctionSet
-	permCheck   host_api.PermissionChecker
-	scopeCheck  host_api.ScopeChecker
+	mu         sync.RWMutex
+	gateway    host_api.Gateway
+	sessions   map[string]*gatewaySession
+	hostFnSet  *HostFunctionSet
+	permCheck  host_api.PermissionChecker
+	scopeCheck host_api.ScopeChecker
 }
 
 type gatewaySession struct {
-	SessionID   string
-	Identity    runtime_supervisor.RuntimeIdentity
-	CreatedAt   time.Time
-	HostCalls   int
+	SessionID    string
+	Identity     runtime_supervisor.RuntimeIdentity
+	CreatedAt    time.Time
+	HostCalls    int
 	MaxHostCalls int
 }
 
 func NewHostGateway(gateway host_api.Gateway) *HostGateway {
 	return &HostGateway{
-		gateway:  gateway,
-		sessions: make(map[string]*gatewaySession),
+		gateway:   gateway,
+		sessions:  make(map[string]*gatewaySession),
 		hostFnSet: NewHostFunctionSet(HostFunctionConfig{}),
 	}
 }
@@ -60,11 +60,11 @@ func (g *HostGateway) OpenSession(ctx context.Context, identity runtime_supervis
 		return "", NewWASMError(ErrCodeHostCallFailed, "host gateway not configured", nil)
 	}
 	allowedVersions := map[host_api.Method]int{
-		host_api.MethodToolExecute:    1,
-		host_api.MethodStateGet:       1,
-		host_api.MethodStateCAS:       1,
-		host_api.MethodResourceRead:   1,
-		host_api.MethodEventEmit:      1,
+		host_api.MethodToolExecute:  1,
+		host_api.MethodStateGet:     1,
+		host_api.MethodStateCAS:     1,
+		host_api.MethodResourceRead: 1,
+		host_api.MethodEventEmit:    1,
 	}
 	session, err := g.gateway.OpenSession(ctx, identity, allowedVersions)
 	if err != nil {

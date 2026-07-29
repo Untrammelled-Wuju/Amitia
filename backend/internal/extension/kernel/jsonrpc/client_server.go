@@ -30,20 +30,20 @@ type Client struct {
 }
 
 type ClientConfig struct {
-	CallTimeout         time.Duration
-	MaxFrameBytes       int
-	NotificationRate    int
-	Backpressure        BackpressureConfig
-	Logger              func(level, msg string, fields map[string]any)
+	CallTimeout      time.Duration
+	MaxFrameBytes    int
+	NotificationRate int
+	Backpressure     BackpressureConfig
+	Logger           func(level, msg string, fields map[string]any)
 }
 
 func DefaultClientConfig() ClientConfig {
 	return ClientConfig{
-		CallTimeout:         30 * time.Second,
-		MaxFrameBytes:       DefaultMaxFrameBytes,
-		NotificationRate:    100,
-		Backpressure:        DefaultBackpressureConfig(),
-		Logger:              func(level, msg string, fields map[string]any) {},
+		CallTimeout:      30 * time.Second,
+		MaxFrameBytes:    DefaultMaxFrameBytes,
+		NotificationRate: 100,
+		Backpressure:     DefaultBackpressureConfig(),
+		Logger:           func(level, msg string, fields map[string]any) {},
 	}
 }
 
@@ -82,8 +82,8 @@ func (c *Client) Session() *Session {
 }
 
 func (c *Client) Registry() *MethodRegistry { return c.registry }
-func (c *Client) Streams() *StreamRegistry   { return c.streams }
-func (c *Client) Tracker() *RequestTracker   { return c.tracker }
+func (c *Client) Streams() *StreamRegistry  { return c.streams }
+func (c *Client) Tracker() *RequestTracker  { return c.tracker }
 
 func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	if c.isClosed() {
@@ -223,10 +223,10 @@ type Server struct {
 }
 
 type ServerConfig struct {
-	MaxFrameBytes       int
-	NotificationRate    int
-	Backpressure        BackpressureConfig
-	Logger              func(level, msg string, fields map[string]any)
+	MaxFrameBytes    int
+	NotificationRate int
+	Backpressure     BackpressureConfig
+	Logger           func(level, msg string, fields map[string]any)
 }
 
 func DefaultServerConfig() ServerConfig {
@@ -256,9 +256,9 @@ func NewServer(transport *ReadWriteCloser, cfg ServerConfig) *Server {
 	}
 }
 
-func (s *Server) Registry() *MethodRegistry      { return s.registry }
-func (s *Server) Streams() *StreamRegistry        { return s.streams }
-func (s *Server) Tracker() *RequestTracker        { return s.tracker }
+func (s *Server) Registry() *MethodRegistry { return s.registry }
+func (s *Server) Streams() *StreamRegistry  { return s.streams }
+func (s *Server) Tracker() *RequestTracker  { return s.tracker }
 func (s *Server) SetSession(session *Session) {
 	s.mu.Lock()
 	s.session = session

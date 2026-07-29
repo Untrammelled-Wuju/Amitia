@@ -7,26 +7,26 @@ import (
 type RollbackLevel string
 
 const (
-	RollbackLevelFull                RollbackLevel = "full"
-	RollbackLevelCodeOnly            RollbackLevel = "code_only"
+	RollbackLevelFull                 RollbackLevel = "full"
+	RollbackLevelCodeOnly             RollbackLevel = "code_only"
 	RollbackLevelDataSnapshotRequired RollbackLevel = "data_snapshot_required"
-	RollbackLevelManual              RollbackLevel = "manual"
-	RollbackLevelNotSupported        RollbackLevel = "not_supported"
-	RollbackLevelRuntimeOnly         RollbackLevel = "runtime_only"
-	RollbackLevelContributionOnly    RollbackLevel = "contribution_only"
-	RollbackLevelGeneration          RollbackLevel = "generation"
-	RollbackLevelDataAndGeneration   RollbackLevel = "data_and_generation"
-	RollbackLevelFullExtension       RollbackLevel = "full_extension"
-	RollbackLevelManualRecovery      RollbackLevel = "manual_recovery"
+	RollbackLevelManual               RollbackLevel = "manual"
+	RollbackLevelNotSupported         RollbackLevel = "not_supported"
+	RollbackLevelRuntimeOnly          RollbackLevel = "runtime_only"
+	RollbackLevelContributionOnly     RollbackLevel = "contribution_only"
+	RollbackLevelGeneration           RollbackLevel = "generation"
+	RollbackLevelDataAndGeneration    RollbackLevel = "data_and_generation"
+	RollbackLevelFullExtension        RollbackLevel = "full_extension"
+	RollbackLevelManualRecovery       RollbackLevel = "manual_recovery"
 )
 
 type SwitchStrategy string
 
 const (
-	SwitchStopThenStart SwitchStrategy = "stop_then_start"
+	SwitchStopThenStart   SwitchStrategy = "stop_then_start"
 	SwitchStartThenSwitch SwitchStrategy = "start_then_switch"
-	SwitchParallelCanary SwitchStrategy = "parallel_canary"
-	SwitchManual         SwitchStrategy = "manual"
+	SwitchParallelCanary  SwitchStrategy = "parallel_canary"
+	SwitchManual          SwitchStrategy = "manual"
 )
 
 type RiskLevel string
@@ -40,22 +40,22 @@ const (
 )
 
 type UpdateRisk struct {
-	Level       RiskLevel
-	Reasons     []string
-	BreakingChanges []BreakingChange
-	PermissionExpansion bool
-	ScopeExpansion      bool
+	Level                    RiskLevel
+	Reasons                  []string
+	BreakingChanges          []BreakingChange
+	PermissionExpansion      bool
+	ScopeExpansion           bool
 	HasIrreversibleMigration bool
-	HasOwnershipTransfer  bool
+	HasOwnershipTransfer     bool
 }
 
 func ClassifyRisk(diff DefinitionDiff) UpdateRisk {
 	risk := UpdateRisk{
-		BreakingChanges:           diff.BreakingChanges,
-		PermissionExpansion:       diff.PermissionExpanded,
-		ScopeExpansion:            diff.ScopeExpanded,
-		HasIrreversibleMigration:  diff.HasHighRiskMigration,
-		HasOwnershipTransfer:      diff.PublisherChanged,
+		BreakingChanges:          diff.BreakingChanges,
+		PermissionExpansion:      diff.PermissionExpanded,
+		ScopeExpansion:           diff.ScopeExpanded,
+		HasIrreversibleMigration: diff.HasHighRiskMigration,
+		HasOwnershipTransfer:     diff.PublisherChanged,
 	}
 
 	if diff.PublisherChanged {
@@ -136,34 +136,34 @@ func DetermineSwitchStrategy(diff DefinitionDiff, runtimeSupportsParallel bool) 
 }
 
 type UpdatePlan struct {
-	PlanID            string
-	ExtensionID       string
-	OldVersion        string
-	NewVersion        string
-	UpdateType        UpdateType
-	Diff              DefinitionDiff
-	Risk              UpdateRisk
-	SwitchStrategy    SwitchStrategy
-	RollbackLevel     RollbackLevel
-	Migrations        []MigrationPlan
-	Confirmations     []string
+	PlanID              string
+	ExtensionID         string
+	OldVersion          string
+	NewVersion          string
+	UpdateType          UpdateType
+	Diff                DefinitionDiff
+	Risk                UpdateRisk
+	SwitchStrategy      SwitchStrategy
+	RollbackLevel       RollbackLevel
+	Migrations          []MigrationPlan
+	Confirmations       []string
 	RequiresUserConfirm bool
-	AutoUpdateEligible bool
-	EstimatedDowntime time.Duration
+	AutoUpdateEligible  bool
+	EstimatedDowntime   time.Duration
 	RetainRollbackPoint bool
-	CreatedAt         time.Time
+	CreatedAt           time.Time
 }
 
 type MigrationPlan struct {
-	MigrationID   string
-	FromRange     string
-	ToRange       string
-	RuntimeType   string
-	Entry         string
-	Reversible    bool
-	Namespaces    []string
+	MigrationID      string
+	FromRange        string
+	ToRange          string
+	RuntimeType      string
+	Entry            string
+	Reversible       bool
+	Namespaces       []string
 	RequiresSnapshot bool
-	HighRisk      bool
+	HighRisk         bool
 }
 
 func BuildPlan(planID string, old, new DefinitionSnapshot, migrations []MigrationSnapshot) UpdatePlan {
@@ -173,16 +173,16 @@ func BuildPlan(planID string, old, new DefinitionSnapshot, migrations []Migratio
 	rollbackLevel := DetermineRollbackLevel(diff, migrations)
 
 	plan := UpdatePlan{
-		PlanID:            planID,
-		ExtensionID:       new.ExtensionID,
-		OldVersion:        old.Version,
-		NewVersion:        new.Version,
-		UpdateType:        diff.UpdateType,
-		Diff:              diff,
-		Risk:              risk,
-		SwitchStrategy:    strategy,
-		RollbackLevel:     rollbackLevel,
-		CreatedAt:         time.Now().UTC(),
+		PlanID:              planID,
+		ExtensionID:         new.ExtensionID,
+		OldVersion:          old.Version,
+		NewVersion:          new.Version,
+		UpdateType:          diff.UpdateType,
+		Diff:                diff,
+		Risk:                risk,
+		SwitchStrategy:      strategy,
+		RollbackLevel:       rollbackLevel,
+		CreatedAt:           time.Now().UTC(),
 		RetainRollbackPoint: true,
 	}
 

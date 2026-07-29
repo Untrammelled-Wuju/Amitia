@@ -21,20 +21,20 @@ const (
 )
 
 type CommitRequest struct {
-	StagingID    string
-	TargetPath   string
-	PackageID    string
-	Version      string
-	OperationID  string
+	StagingID   string
+	TargetPath  string
+	PackageID   string
+	Version     string
+	OperationID string
 }
 
 type CommitResult struct {
-	Success    bool
+	Success     bool
 	OperationID string
-	SnapshotID string
-	Errors     []string
-	StartedAt  time.Time
-	EndedAt    time.Time
+	SnapshotID  string
+	Errors      []string
+	StartedAt   time.Time
+	EndedAt     time.Time
 }
 
 type AtomicCommitter struct {

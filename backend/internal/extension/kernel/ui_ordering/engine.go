@@ -14,35 +14,35 @@ type ContributionID string
 type SlotID string
 
 type OrderingRule struct {
-	Group         string           `json:"group,omitempty"`
-	Priority      int              `json:"priority"`
-	Before        []ContributionID `json:"before,omitempty"`
-	After         []ContributionID `json:"after,omitempty"`
-	Placement     string           `json:"placement,omitempty"`
+	Group     string           `json:"group,omitempty"`
+	Priority  int              `json:"priority"`
+	Before    []ContributionID `json:"before,omitempty"`
+	After     []ContributionID `json:"after,omitempty"`
+	Placement string           `json:"placement,omitempty"`
 }
 
 type ContributionEntry struct {
-	ContributionID ContributionID
-	ExtensionID    string
-	SlotID         SlotID
-	Group          string
-	Priority       int
-	Before         []ContributionID
-	After          []ContributionID
-	HostReserved   bool
+	ContributionID   ContributionID
+	ExtensionID      string
+	SlotID           SlotID
+	Group            string
+	Priority         int
+	Before           []ContributionID
+	After            []ContributionID
+	HostReserved     bool
 	HostReservedRank int
-	Enabled        bool
-	Effective      bool
-	RuntimeReady   bool
-	Generation     int64
-	InstalledAt    time.Time
+	Enabled          bool
+	Effective        bool
+	RuntimeReady     bool
+	Generation       int64
+	InstalledAt      time.Time
 }
 
 type UserLayoutPreference struct {
-	UserPinned     map[ContributionID]int `json:"userPinned,omitempty"`
-	UserHidden     map[ContributionID]bool `json:"userHidden,omitempty"`
-	UserOrder      map[ContributionID]int `json:"userOrder,omitempty"`
-	Collapsed     bool                    `json:"collapsed,omitempty"`
+	UserPinned map[ContributionID]int  `json:"userPinned,omitempty"`
+	UserHidden map[ContributionID]bool `json:"userHidden,omitempty"`
+	UserOrder  map[ContributionID]int  `json:"userOrder,omitempty"`
+	Collapsed  bool                    `json:"collapsed,omitempty"`
 }
 
 type SlotCapacity struct {
@@ -53,10 +53,10 @@ type SlotCapacity struct {
 }
 
 const (
-	OverflowPolicyHide       = "hide"
-	OverflowPolicyMenu       = "menu"
-	OverflowPolicyScroll     = "scroll"
-	OverflowPolicyReplace    = "replace"
+	OverflowPolicyHide    = "hide"
+	OverflowPolicyMenu    = "menu"
+	OverflowPolicyScroll  = "scroll"
+	OverflowPolicyReplace = "replace"
 )
 
 type OrderingEngine struct {
@@ -384,20 +384,20 @@ type LayoutEngine struct {
 }
 
 type LayoutInput struct {
-	SlotID     SlotID
-	Entries    []*ContributionEntry
-	Layout     string
-	Capacity   *SlotCapacity
-	Width      int
-	Density    string
-	Platform   string
+	SlotID   SlotID
+	Entries  []*ContributionEntry
+	Layout   string
+	Capacity *SlotCapacity
+	Width    int
+	Density  string
+	Platform string
 }
 
 type LayoutOutput struct {
-	SlotID     SlotID
-	Rows       [][]*ContributionEntry
-	Overflow   []*ContributionEntry
-	Hidden     []*ContributionEntry
+	SlotID      SlotID
+	Rows        [][]*ContributionEntry
+	Overflow    []*ContributionEntry
+	Hidden      []*ContributionEntry
 	ColumnCount int
 	Wrapped     bool
 }
@@ -518,11 +518,11 @@ type DegradationPolicy struct {
 }
 
 type FailureTracker struct {
-	mu              sync.RWMutex
-	failureCount    map[ContributionID]int
-	lastFailure     map[ContributionID]time.Time
-	degraded        map[ContributionID]bool
-	policy          DegradationPolicy
+	mu           sync.RWMutex
+	failureCount map[ContributionID]int
+	lastFailure  map[ContributionID]time.Time
+	degraded     map[ContributionID]bool
+	policy       DegradationPolicy
 }
 
 func NewFailureTracker(policy DegradationPolicy) *FailureTracker {
@@ -600,7 +600,7 @@ func (f *FailureTracker) FilterDegraded(entries []*ContributionEntry) ([]*Contri
 }
 
 type LayoutPreferencesStore struct {
-	mu   sync.RWMutex
+	mu    sync.RWMutex
 	prefs map[SlotID]*UserLayoutPreference
 }
 

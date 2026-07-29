@@ -9,39 +9,39 @@ import (
 type ConflictType string
 
 const (
-	ConflictTypeShortcut      ConflictType = "shortcut"
-	ConflictTypeMenuID        ConflictType = "menu_id"
-	ConflictTypeActionID     ConflictType = "action_id"
-	ConflictTypeTrayID       ConflictType = "tray_id"
+	ConflictTypeShortcut ConflictType = "shortcut"
+	ConflictTypeMenuID   ConflictType = "menu_id"
+	ConflictTypeActionID ConflictType = "action_id"
+	ConflictTypeTrayID   ConflictType = "tray_id"
 )
 
 type ConflictSeverity string
 
 const (
-	ConflictSeverityBlock    ConflictSeverity = "block"
-	ConflictSeverityWarning  ConflictSeverity = "warning"
+	ConflictSeverityBlock   ConflictSeverity = "block"
+	ConflictSeverityWarning ConflictSeverity = "warning"
 )
 
 type ConflictRecord struct {
-	ConflictID      string           `json:"conflictId"`
-	Type            ConflictType     `json:"type"`
-	Severity        ConflictSeverity `json:"severity"`
-	Target          string           `json:"target"`
-	ExistingContribID string        `json:"existingContribId"`
-	ExistingExtID   string           `json:"existingExtId"`
-	NewContribID    string           `json:"newContribId"`
-	NewExtID        string           `json:"newExtId"`
-	Accelerator     string           `json:"accelerator,omitempty"`
-	Resolved        bool             `json:"resolved"`
-	Resolution      string           `json:"resolution,omitempty"`
-	CreatedAt       time.Time        `json:"createdAt"`
-	ResolvedAt      *time.Time      `json:"resolvedAt,omitempty"`
+	ConflictID        string           `json:"conflictId"`
+	Type              ConflictType     `json:"type"`
+	Severity          ConflictSeverity `json:"severity"`
+	Target            string           `json:"target"`
+	ExistingContribID string           `json:"existingContribId"`
+	ExistingExtID     string           `json:"existingExtId"`
+	NewContribID      string           `json:"newContribId"`
+	NewExtID          string           `json:"newExtId"`
+	Accelerator       string           `json:"accelerator,omitempty"`
+	Resolved          bool             `json:"resolved"`
+	Resolution        string           `json:"resolution,omitempty"`
+	CreatedAt         time.Time        `json:"createdAt"`
+	ResolvedAt        *time.Time       `json:"resolvedAt,omitempty"`
 }
 
 type ConflictResolver struct {
-	mu         sync.RWMutex
-	conflicts  map[string]*ConflictRecord
-	nextID     int
+	mu        sync.RWMutex
+	conflicts map[string]*ConflictRecord
+	nextID    int
 }
 
 func NewConflictResolver() *ConflictResolver {
@@ -82,16 +82,16 @@ func (cr *ConflictResolver) createConflict(ct ConflictType, sev ConflictSeverity
 	cr.nextID++
 	id := fmt.Sprintf("dc-%d-%d", time.Now().Unix(), cr.nextID)
 	record := &ConflictRecord{
-		ConflictID:       id,
-		Type:             ct,
-		Severity:         sev,
-		Target:           target,
+		ConflictID:        id,
+		Type:              ct,
+		Severity:          sev,
+		Target:            target,
 		ExistingContribID: existingID,
-		ExistingExtID:    existingExt,
-		NewContribID:     newID,
-		NewExtID:         newExt,
-		Accelerator:      accel,
-		CreatedAt:        time.Now().UTC(),
+		ExistingExtID:     existingExt,
+		NewContribID:      newID,
+		NewExtID:          newExt,
+		Accelerator:       accel,
+		CreatedAt:         time.Now().UTC(),
 	}
 	cr.conflicts[id] = record
 	return record

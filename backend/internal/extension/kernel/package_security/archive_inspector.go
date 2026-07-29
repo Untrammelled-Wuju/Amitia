@@ -11,8 +11,8 @@ import (
 )
 
 type ArchiveInspector struct {
-	policy        ArchivePolicy
-	pathResolver  *SafePathResolver
+	policy         ArchivePolicy
+	pathResolver   *SafePathResolver
 	entryValidator *EntryValidator
 }
 
@@ -52,9 +52,9 @@ func (i *ArchiveInspector) Inspect(ctx context.Context, raw []byte) (*ArchiveIns
 
 	if len(reader.File) > i.policy.MaxEntryCount {
 		return &ArchiveInspectionResult{
-			Passed:      false,
-			EntryCount:  len(reader.File),
-			Errors:      []string{"entry count exceeds limit"},
+			Passed:     false,
+			EntryCount: len(reader.File),
+			Errors:     []string{"entry count exceeds limit"},
 		}, ErrEntryCountExceeded
 	}
 

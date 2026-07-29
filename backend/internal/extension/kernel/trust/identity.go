@@ -89,18 +89,18 @@ const (
 )
 
 type PublisherKey struct {
-	KeyID         string       `json:"key_id"`
-	PublisherID   string       `json:"publisher_id"`
-	PublicKey     []byte       `json:"public_key"`
-	Algorithm     KeyAlgorithm `json:"algorithm"`
-	State         KeyState     `json:"state"`
-	CreatedAt     time.Time    `json:"created_at"`
-	ExpiresAt     *time.Time   `json:"expires_at,omitempty"`
-	RotatedAt     *time.Time   `json:"rotated_at,omitempty"`
-	RotatedFrom   string       `json:"rotated_from,omitempty"`
-	RevokedAt     *time.Time   `json:"revoked_at,omitempty"`
-	RevokedReason string       `json:"revoked_reason,omitempty"`
-	ContinuitySignedBy string  `json:"continuity_signed_by,omitempty"`
+	KeyID              string       `json:"key_id"`
+	PublisherID        string       `json:"publisher_id"`
+	PublicKey          []byte       `json:"public_key"`
+	Algorithm          KeyAlgorithm `json:"algorithm"`
+	State              KeyState     `json:"state"`
+	CreatedAt          time.Time    `json:"created_at"`
+	ExpiresAt          *time.Time   `json:"expires_at,omitempty"`
+	RotatedAt          *time.Time   `json:"rotated_at,omitempty"`
+	RotatedFrom        string       `json:"rotated_from,omitempty"`
+	RevokedAt          *time.Time   `json:"revoked_at,omitempty"`
+	RevokedReason      string       `json:"revoked_reason,omitempty"`
+	ContinuitySignedBy string       `json:"continuity_signed_by,omitempty"`
 }
 
 func (k *PublisherKey) Fingerprint() string {
@@ -156,15 +156,15 @@ func (a KeyAlgorithm) IsValid() bool {
 }
 
 type PublisherIdentity struct {
-	PublisherID    string         `json:"publisher_id"`
-	DisplayName    string         `json:"display_name"`
-	Contact        string         `json:"contact,omitempty"`
-	Keys           []PublisherKey `json:"keys"`
-	TrustLevel     TrustLevel     `json:"trust_level"`
-	Source         TrustSource    `json:"source"`
-	FirstSeenAt    time.Time      `json:"first_seen_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	OfficialRoot   bool           `json:"official_root"`
+	PublisherID  string         `json:"publisher_id"`
+	DisplayName  string         `json:"display_name"`
+	Contact      string         `json:"contact,omitempty"`
+	Keys         []PublisherKey `json:"keys"`
+	TrustLevel   TrustLevel     `json:"trust_level"`
+	Source       TrustSource    `json:"source"`
+	FirstSeenAt  time.Time      `json:"first_seen_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	OfficialRoot bool           `json:"official_root"`
 }
 
 type TrustSource string
@@ -248,13 +248,13 @@ func (p *PublisherIdentity) RotateKey(oldKeyID, newKeyID string, newPublicKey []
 	oldKey.State = KeyStateRotated
 	oldKey.RotatedAt = &now
 	newKey := PublisherKey{
-		KeyID:         newKeyID,
-		PublisherID:   p.PublisherID,
-		PublicKey:     newPublicKey,
-		Algorithm:     oldKey.Algorithm,
-		State:         KeyStateActive,
-		CreatedAt:     now,
-		RotatedFrom:   oldKeyID,
+		KeyID:              newKeyID,
+		PublisherID:        p.PublisherID,
+		PublicKey:          newPublicKey,
+		Algorithm:          oldKey.Algorithm,
+		State:              KeyStateActive,
+		CreatedAt:          now,
+		RotatedFrom:        oldKeyID,
 		ContinuitySignedBy: oldKeyID,
 	}
 	p.Keys = append(p.Keys, newKey)
@@ -263,16 +263,16 @@ func (p *PublisherIdentity) RotateKey(oldKeyID, newKeyID string, newPublicKey []
 }
 
 var (
-	ErrPublisherNotFound   = errors.New("trust: publisher not found")
-	ErrKeyNotFound         = errors.New("trust: key not found")
-	ErrKeyAlreadyExists    = errors.New("trust: key already exists")
-	ErrInvalidIdentity     = errors.New("trust: invalid identity")
-	ErrInvalidKey          = errors.New("trust: invalid key")
-	ErrKeyNotUsable        = errors.New("trust: key not usable")
-	ErrContinuityBroken    = errors.New("trust: key continuity broken")
-	ErrTrustBlocked        = errors.New("trust: trust blocked")
-	ErrRevoked             = errors.New("trust: revoked")
-	ErrPackageBlocked      = errors.New("trust: package blocked")
-	ErrOwnershipTransfer   = errors.New("trust: ownership transfer required")
+	ErrPublisherNotFound    = errors.New("trust: publisher not found")
+	ErrKeyNotFound          = errors.New("trust: key not found")
+	ErrKeyAlreadyExists     = errors.New("trust: key already exists")
+	ErrInvalidIdentity      = errors.New("trust: invalid identity")
+	ErrInvalidKey           = errors.New("trust: invalid key")
+	ErrKeyNotUsable         = errors.New("trust: key not usable")
+	ErrContinuityBroken     = errors.New("trust: key continuity broken")
+	ErrTrustBlocked         = errors.New("trust: trust blocked")
+	ErrRevoked              = errors.New("trust: revoked")
+	ErrPackageBlocked       = errors.New("trust: package blocked")
+	ErrOwnershipTransfer    = errors.New("trust: ownership transfer required")
 	ErrDevelopmentScopeOnly = errors.New("trust: development scope only")
 )

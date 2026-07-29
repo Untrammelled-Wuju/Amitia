@@ -11,7 +11,7 @@ type DesktopType string
 const (
 	DesktopTypeMenuItem       DesktopType = "app.menu.item"
 	DesktopTypeMenuSubmenu    DesktopType = "app.menu.submenu"
-	DesktopTypeTrayItem      DesktopType = "app.tray.item"
+	DesktopTypeTrayItem       DesktopType = "app.tray.item"
 	DesktopTypeTraySubmenu    DesktopType = "app.tray.submenu"
 	DesktopTypeAppShortcut    DesktopType = "app.shortcut.application"
 	DesktopTypeGlobalShortcut DesktopType = "app.shortcut.global"
@@ -20,25 +20,25 @@ const (
 type ContractStatus string
 
 const (
-	ContractStatusActive ContractStatus = "active"
-	ContractStatusFrozen ContractStatus = "frozen"
+	ContractStatusActive     ContractStatus = "active"
+	ContractStatusFrozen     ContractStatus = "frozen"
 	ContractStatusDeprecated ContractStatus = "deprecated"
 )
 
 type DesktopContractDefinition struct {
-	ContractID      string         `json:"contractId"`
-	Version         int            `json:"version"`
-	DesktopType     DesktopType    `json:"desktopType"`
-	AllowedTargets  []string       `json:"allowedTargets"`
-	Status          ContractStatus `json:"status"`
-	Description     string         `json:"description"`
-	MaxItemsPerExt  int            `json:"maxItemsPerExt"`
-	RequiresPermission bool       `json:"requiresPermission"`
+	ContractID         string         `json:"contractId"`
+	Version            int            `json:"version"`
+	DesktopType        DesktopType    `json:"desktopType"`
+	AllowedTargets     []string       `json:"allowedTargets"`
+	Status             ContractStatus `json:"status"`
+	Description        string         `json:"description"`
+	MaxItemsPerExt     int            `json:"maxItemsPerExt"`
+	RequiresPermission bool           `json:"requiresPermission"`
 }
 
 type DesktopContractRegistry struct {
-	mu         sync.RWMutex
-	contracts  map[string]map[int]DesktopContractDefinition
+	mu        sync.RWMutex
+	contracts map[string]map[int]DesktopContractDefinition
 }
 
 func NewDesktopContractRegistry() *DesktopContractRegistry {
@@ -77,27 +77,27 @@ func (r *DesktopContractRegistry) registerBuiltinContracts() {
 		},
 		{
 			ContractID: "app.tray.item", Version: 1,
-			DesktopType: DesktopTypeTrayItem,
+			DesktopType:    DesktopTypeTrayItem,
 			AllowedTargets: []string{"tray.quick_actions", "tray.extensions", "tray.status"},
-			Status: ContractStatusActive, MaxItemsPerExt: 5, RequiresPermission: true,
+			Status:         ContractStatusActive, MaxItemsPerExt: 5, RequiresPermission: true,
 		},
 		{
 			ContractID: "app.tray.submenu", Version: 1,
-			DesktopType: DesktopTypeTraySubmenu,
+			DesktopType:    DesktopTypeTraySubmenu,
 			AllowedTargets: []string{"tray.quick_actions", "tray.extensions"},
-			Status: ContractStatusActive, MaxItemsPerExt: 3, RequiresPermission: true,
+			Status:         ContractStatusActive, MaxItemsPerExt: 3, RequiresPermission: true,
 		},
 		{
 			ContractID: "app.shortcut.application", Version: 1,
-			DesktopType: DesktopTypeAppShortcut,
+			DesktopType:    DesktopTypeAppShortcut,
 			AllowedTargets: []string{"window.focused", "page.scope"},
-			Status: ContractStatusActive, MaxItemsPerExt: 10, RequiresPermission: true,
+			Status:         ContractStatusActive, MaxItemsPerExt: 10, RequiresPermission: true,
 		},
 		{
 			ContractID: "app.shortcut.global", Version: 1,
-			DesktopType: DesktopTypeGlobalShortcut,
+			DesktopType:    DesktopTypeGlobalShortcut,
 			AllowedTargets: []string{"global"},
-			Status: ContractStatusActive, MaxItemsPerExt: 3, RequiresPermission: true,
+			Status:         ContractStatusActive, MaxItemsPerExt: 3, RequiresPermission: true,
 		},
 	}
 	for _, c := range builtins {

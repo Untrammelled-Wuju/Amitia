@@ -10,14 +10,14 @@ import (
 type RangeOperator string
 
 const (
-	OpExact      RangeOperator = "="
-	OpGreaterEq  RangeOperator = ">="
-	OpLessEq     RangeOperator = "<="
-	OpGreater    RangeOperator = ">"
-	OpLess       RangeOperator = "<"
-	OpCaret      RangeOperator = "^"
-	OpTilde      RangeOperator = "~"
-	OpWildcard   RangeOperator = "x"
+	OpExact     RangeOperator = "="
+	OpGreaterEq RangeOperator = ">="
+	OpLessEq    RangeOperator = "<="
+	OpGreater   RangeOperator = ">"
+	OpLess      RangeOperator = "<"
+	OpCaret     RangeOperator = "^"
+	OpTilde     RangeOperator = "~"
+	OpWildcard  RangeOperator = "x"
 )
 
 type VersionConstraint struct {

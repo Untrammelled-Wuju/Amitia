@@ -306,9 +306,9 @@ func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *Servi
 
 	welcomeExpiry := time.Now().UTC().Add(30 * time.Minute)
 	if err := rpcSession.SendWelcome(req.SessionToken, map[string]any{
-		"max_memory_mb":       def.Limits.MaxMemoryMB,
-		"max_cpu_percent":     def.Limits.MaxCPUPercent,
-		"max_subprocesses":    def.Limits.MaxSubprocesses,
+		"max_memory_mb":        def.Limits.MaxMemoryMB,
+		"max_cpu_percent":      def.Limits.MaxCPUPercent,
+		"max_subprocesses":     def.Limits.MaxSubprocesses,
 		"max_file_descriptors": def.Limits.MaxFileDescriptors,
 	}, welcomeExpiry); err != nil {
 		s.killProcessTree(instance)

@@ -94,6 +94,10 @@ type CandidateRunner interface {
 	StopInstance(ctx context.Context, instanceID string) error
 }
 
+type CleanupTaskRecoverer interface {
+	RecoverCleanupTasks(ctx context.Context) int
+}
+
 type RuntimeReloader struct {
 	mu                sync.Mutex
 	registry          *WorkspaceRegistry
@@ -181,13 +185,13 @@ func (r *RuntimeReloader) PendingCleanupFailures(ctx context.Context) (int64, er
 }
 
 var (
-	ErrReloadDisabled         = errors.New("dev_mode: reload disabled")
-	ErrReloadInProgress       = errors.New("dev_mode: reload in progress")
-	ErrStateCaptureFailed     = errors.New("dev_mode: state capture failed")
-	ErrDrainTimeout           = errors.New("dev_mode: drain timeout")
-	ErrReloadValidationFailed = errors.New("dev_mode: reload validation failed")
-	ErrReloadLoadFailed       = errors.New("dev_mode: reload load failed")
-	ErrReloadActivateFailed   = errors.New("dev_mode: reload activate failed")
+	ErrReloadDisabled          = errors.New("dev_mode: reload disabled")
+	ErrReloadInProgress        = errors.New("dev_mode: reload in progress")
+	ErrStateCaptureFailed      = errors.New("dev_mode: state capture failed")
+	ErrDrainTimeout            = errors.New("dev_mode: drain timeout")
+	ErrReloadValidationFailed  = errors.New("dev_mode: reload validation failed")
+	ErrReloadLoadFailed        = errors.New("dev_mode: reload load failed")
+	ErrReloadActivateFailed    = errors.New("dev_mode: reload activate failed")
 	ErrReloadHealthCheckFailed = errors.New("dev_mode: reload health check failed")
 )
 
@@ -432,7 +436,8 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 			ev.Status = ReloadSucceededWithCleanupFailure
 			ev.Error = fmt.Sprintf("RUNTIME_STOP_FAILED: %v; requires_recovery", stopErr)
 			r.emit(id, ev)
-			if r.cleanupStore != nil {
+			_, hasCleanupTaskRecoverer := runner.(CleanupTaskRecoverer)
+			if r.cleanupStore != nil && !hasCleanupTaskRecoverer {
 				failureRecord := &CleanupFailureRecord{
 					WorkspaceID:   id,
 					ExtensionID:   string(ws.ExtensionID),
@@ -606,6 +611,13 @@ func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
 			if err := runner.StopInstance(ctx, instID); err == nil {
 				cleaned++
 			}
+		}
+	}
+
+	if runner != nil {
+		if recoverer, ok := runner.(CleanupTaskRecoverer); ok {
+			cleaned += recoverer.RecoverCleanupTasks(ctx)
+			return cleaned
 		}
 	}
 

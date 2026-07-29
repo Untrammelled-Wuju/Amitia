@@ -19,7 +19,7 @@ type RuntimeDiff struct {
 
 type ContributionDiff struct {
 	AddedDesktopContributions []string
-	AddedGlobalShortcuts       []string
+	AddedGlobalShortcuts      []string
 }
 
 type MigrationPlan struct {
@@ -47,10 +47,10 @@ type RollbackPlan struct {
 }
 
 const (
-	RollbackLevelNone           = "none"
-	RollbackLevelSoft           = "soft"
-	RollbackLevelDataSnapshot   = "data_snapshot"
-	RollbackLevelFullRestore    = "full_restore"
+	RollbackLevelNone         = "none"
+	RollbackLevelSoft         = "soft"
+	RollbackLevelDataSnapshot = "data_snapshot"
+	RollbackLevelFullRestore  = "full_restore"
 )
 
 type ExtensionUpdatePlan struct {

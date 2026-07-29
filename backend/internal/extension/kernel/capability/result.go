@@ -26,11 +26,11 @@ const (
 )
 
 type ToolContent struct {
-	Type     ToolContentType  `json:"type"`
-	Text     string           `json:"text,omitempty"`
-	MIMEType string           `json:"mimeType,omitempty"`
-	URI      string           `json:"uri,omitempty"`
-	Data     json.RawMessage  `json:"data,omitempty"`
+	Type     ToolContentType `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	MIMEType string          `json:"mimeType,omitempty"`
+	URI      string          `json:"uri,omitempty"`
+	Data     json.RawMessage `json:"data,omitempty"`
 }
 
 type ToolError struct {
@@ -51,20 +51,20 @@ func (e *ToolError) Unwrap() error {
 }
 
 const (
-	ErrorCodeInvalidInput        = "invalid_input"
-	ErrorCodePermissionDenied    = "permission_denied"
-	ErrorCodeScopeDenied         = "scope_denied"
-	ErrorCodeNotAvailable        = "not_available"
-	ErrorCodeRuntimeUnavailable  = "runtime_unavailable"
-	ErrorCodeTimeout             = "timeout"
-	ErrorCodeCancelled           = "cancelled"
-	ErrorCodeConflict            = "conflict"
-	ErrorCodeRateLimited         = "rate_limited"
-	ErrorCodeDependencyMissing   = "dependency_missing"
-	ErrorCodeConnectionLost      = "connection_lost"
-	ErrorCodeExecutionFailed     = "execution_failed"
-	ErrorCodeInvalidResult       = "invalid_result"
-	ErrorCodeInternalError       = "internal_error"
+	ErrorCodeInvalidInput       = "invalid_input"
+	ErrorCodePermissionDenied   = "permission_denied"
+	ErrorCodeScopeDenied        = "scope_denied"
+	ErrorCodeNotAvailable       = "not_available"
+	ErrorCodeRuntimeUnavailable = "runtime_unavailable"
+	ErrorCodeTimeout            = "timeout"
+	ErrorCodeCancelled          = "cancelled"
+	ErrorCodeConflict           = "conflict"
+	ErrorCodeRateLimited        = "rate_limited"
+	ErrorCodeDependencyMissing  = "dependency_missing"
+	ErrorCodeConnectionLost     = "connection_lost"
+	ErrorCodeExecutionFailed    = "execution_failed"
+	ErrorCodeInvalidResult      = "invalid_result"
+	ErrorCodeInternalError      = "internal_error"
 )
 
 type RecordedSideEffect struct {
@@ -76,11 +76,11 @@ type RecordedSideEffect struct {
 }
 
 type UnifiedToolResult struct {
-	InvocationID string             `json:"invocationId"`
-	Status       ToolResultStatus   `json:"status"`
-	Content      []ToolContent      `json:"content,omitempty"`
-	Structured   json.RawMessage    `json:"structured,omitempty"`
-	Error        *ToolError         `json:"error,omitempty"`
+	InvocationID string               `json:"invocationId"`
+	Status       ToolResultStatus     `json:"status"`
+	Content      []ToolContent        `json:"content,omitempty"`
+	Structured   json.RawMessage      `json:"structured,omitempty"`
+	Error        *ToolError           `json:"error,omitempty"`
 	SideEffects  []RecordedSideEffect `json:"sideEffects,omitempty"`
-	Metadata     map[string]any     `json:"metadata,omitempty"`
+	Metadata     map[string]any       `json:"metadata,omitempty"`
 }

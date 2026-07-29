@@ -27,8 +27,8 @@ import (
 )
 
 type TypedContributionInstaller struct {
-	container      *Container
-	candidateNS    *CandidateNamespace
+	container   *Container
+	candidateNS *CandidateNamespace
 }
 
 func NewTypedContributionInstaller(container *Container) *TypedContributionInstaller {

@@ -3,26 +3,26 @@ package resource
 import "time"
 
 type CleanupJob struct {
-	JobID      string     `json:"job_id"`
-	ResourceID string     `json:"resource_id"`
-	JobType    string     `json:"job_type"`
-	Priority   int        `json:"priority"`
-	Status     string     `json:"status"`
-	CreatedAt  time.Time  `json:"created_at"`
-	StartedAt  *time.Time `json:"started_at,omitempty"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	Error      string     `json:"error,omitempty"`
-	Retries    int        `json:"retries"`
-	MaxRetries int        `json:"max_retries"`
+	JobID      string         `json:"job_id"`
+	ResourceID string         `json:"resource_id"`
+	JobType    string         `json:"job_type"`
+	Priority   int            `json:"priority"`
+	Status     string         `json:"status"`
+	CreatedAt  time.Time      `json:"created_at"`
+	StartedAt  *time.Time     `json:"started_at,omitempty"`
+	FinishedAt *time.Time     `json:"finished_at,omitempty"`
+	Error      string         `json:"error,omitempty"`
+	Retries    int            `json:"retries"`
+	MaxRetries int            `json:"max_retries"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 const (
-	CleanupJobStatusPending    = "pending"
-	CleanupJobStatusRunning    = "running"
-	CleanupJobStatusCompleted  = "completed"
-	CleanupJobStatusFailed     = "failed"
-	CleanupJobStatusCancelled  = "cancelled"
+	CleanupJobStatusPending   = "pending"
+	CleanupJobStatusRunning   = "running"
+	CleanupJobStatusCompleted = "completed"
+	CleanupJobStatusFailed    = "failed"
+	CleanupJobStatusCancelled = "cancelled"
 )
 
 const (

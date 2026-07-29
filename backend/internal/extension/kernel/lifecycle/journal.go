@@ -8,29 +8,29 @@ import (
 )
 
 type StartupJournalEntry struct {
-	StartupID    string
+	StartupID   string
+	ComponentID string
+	Phase       StartupPhase
+	Status      StartupStatus
+	Attempt     int
+	StartedAt   time.Time
+	FinishedAt  *time.Time
+	ErrorCode   string
+	Error       string
+	Metadata    map[string]any
+}
+
+type ShutdownJournalEntry struct {
+	ShutdownID   string
 	ComponentID  string
-	Phase        StartupPhase
-	Status       StartupStatus
-	Attempt      int
+	Phase        ShutdownPhase
+	Status       ShutdownStatus
 	StartedAt    time.Time
 	FinishedAt   *time.Time
 	ErrorCode    string
 	Error        string
+	RecoveryHint string
 	Metadata     map[string]any
-}
-
-type ShutdownJournalEntry struct {
-	ShutdownID    string
-	ComponentID   string
-	Phase         ShutdownPhase
-	Status        ShutdownStatus
-	StartedAt     time.Time
-	FinishedAt    *time.Time
-	ErrorCode     string
-	Error         string
-	RecoveryHint  string
-	Metadata      map[string]any
 }
 
 type Journal struct {
@@ -131,11 +131,11 @@ type JournalStore interface {
 }
 
 type InMemoryJournalStore struct {
-	mu                sync.Mutex
-	startup           []StartupJournalEntry
-	shutdown          []ShutdownJournalEntry
-	cleanShutdown     bool
-	lastShutdownID    string
+	mu             sync.Mutex
+	startup        []StartupJournalEntry
+	shutdown       []ShutdownJournalEntry
+	cleanShutdown  bool
+	lastShutdownID string
 }
 
 func NewInMemoryJournalStore() *InMemoryJournalStore {

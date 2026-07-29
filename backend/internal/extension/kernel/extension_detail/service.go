@@ -10,52 +10,52 @@ import (
 )
 
 type ExtensionDetail struct {
-	ExtensionID       string                 `json:"extensionId"`
-	Publisher         string                 `json:"publisher"`
-	DisplayName       string                 `json:"displayName"`
-	Description       string                 `json:"description"`
-	Version           string                 `json:"version"`
-	Icon              string                 `json:"icon,omitempty"`
-	Trust             string                 `json:"trust"`
-	Source            string                 `json:"source"`
-	License           string                 `json:"license,omitempty"`
-	Homepage          string                 `json:"homepage,omitempty"`
-	Repository        string                 `json:"repository,omitempty"`
-	InstalledAt       *time.Time             `json:"installedAt,omitempty"`
-	UpdatedAt         *time.Time             `json:"updatedAt,omitempty"`
-	Enabled           bool                   `json:"enabled"`
-	EffectiveState    string                 `json:"effectiveState"`
-	FailureCount      int                    `json:"failureCount"`
-	UpdateAvailable   bool                   `json:"updateAvailable"`
-	Platforms         []string               `json:"platforms"`
-	PermissionRisk    string                 `json:"permissionRisk,omitempty"`
-	DevMode           bool                   `json:"devMode"`
-	UserModified      bool                   `json:"userModified"`
-	Modules           []ModuleDetail         `json:"modules"`
-	Contributions     []ContributionDetail   `json:"contributions"`
-	Permissions       []PermissionDetail     `json:"permissions"`
-	Scopes            []ScopeDetail          `json:"scopes"`
-	Runtimes          []RuntimeDetail        `json:"runtimes"`
+	ExtensionID       string                   `json:"extensionId"`
+	Publisher         string                   `json:"publisher"`
+	DisplayName       string                   `json:"displayName"`
+	Description       string                   `json:"description"`
+	Version           string                   `json:"version"`
+	Icon              string                   `json:"icon,omitempty"`
+	Trust             string                   `json:"trust"`
+	Source            string                   `json:"source"`
+	License           string                   `json:"license,omitempty"`
+	Homepage          string                   `json:"homepage,omitempty"`
+	Repository        string                   `json:"repository,omitempty"`
+	InstalledAt       *time.Time               `json:"installedAt,omitempty"`
+	UpdatedAt         *time.Time               `json:"updatedAt,omitempty"`
+	Enabled           bool                     `json:"enabled"`
+	EffectiveState    string                   `json:"effectiveState"`
+	FailureCount      int                      `json:"failureCount"`
+	UpdateAvailable   bool                     `json:"updateAvailable"`
+	Platforms         []string                 `json:"platforms"`
+	PermissionRisk    string                   `json:"permissionRisk,omitempty"`
+	DevMode           bool                     `json:"devMode"`
+	UserModified      bool                     `json:"userModified"`
+	Modules           []ModuleDetail           `json:"modules"`
+	Contributions     []ContributionDetail     `json:"contributions"`
+	Permissions       []PermissionDetail       `json:"permissions"`
+	Scopes            []ScopeDetail            `json:"scopes"`
+	Runtimes          []RuntimeDetail          `json:"runtimes"`
 	Storage           []StorageNamespaceDetail `json:"storage"`
-	Resources         []ResourceDetail       `json:"resources"`
-	UIContributions   []UIContributionDetail `json:"uiContributions"`
-	Versions          []VersionDetail        `json:"versions"`
-	RecentLogs        []LogEntry             `json:"recentLogs"`
-	RecentInvocations []InvocationDetail     `json:"recentInvocations"`
-	LifecycleEvents   []LifecycleDetail      `json:"lifecycleEvents"`
-	Actions           []ActionDescriptor     `json:"actions"`
+	Resources         []ResourceDetail         `json:"resources"`
+	UIContributions   []UIContributionDetail   `json:"uiContributions"`
+	Versions          []VersionDetail          `json:"versions"`
+	RecentLogs        []LogEntry               `json:"recentLogs"`
+	RecentInvocations []InvocationDetail       `json:"recentInvocations"`
+	LifecycleEvents   []LifecycleDetail        `json:"lifecycleEvents"`
+	Actions           []ActionDescriptor       `json:"actions"`
 }
 
 type ModuleDetail struct {
-	ModuleID       string    `json:"moduleId"`
-	Kind           string    `json:"kind"`
-	Entry          string    `json:"entry"`
-	Runtime        string    `json:"runtime,omitempty"`
-	DisplayName    string    `json:"displayName,omitempty"`
-	Description    string    `json:"description,omitempty"`
-	Enabled        bool      `json:"enabled"`
-	Status         string    `json:"status"`
-	LastActiveAt   *time.Time `json:"lastActiveAt,omitempty"`
+	ModuleID     string     `json:"moduleId"`
+	Kind         string     `json:"kind"`
+	Entry        string     `json:"entry"`
+	Runtime      string     `json:"runtime,omitempty"`
+	DisplayName  string     `json:"displayName,omitempty"`
+	Description  string     `json:"description,omitempty"`
+	Enabled      bool       `json:"enabled"`
+	Status       string     `json:"status"`
+	LastActiveAt *time.Time `json:"lastActiveAt,omitempty"`
 }
 
 type ContributionDetail struct {
@@ -118,17 +118,17 @@ type UIContributionDetail struct {
 }
 
 type VersionDetail struct {
-	Version     string     `json:"version"`
-	ReleasedAt  *time.Time `json:"releasedAt,omitempty"`
-	Changelog   string     `json:"changelog,omitempty"`
-	Current     bool       `json:"current"`
+	Version    string     `json:"version"`
+	ReleasedAt *time.Time `json:"releasedAt,omitempty"`
+	Changelog  string     `json:"changelog,omitempty"`
+	Current    bool       `json:"current"`
 }
 
 type LogEntry struct {
-	Level     string                 `json:"level"`
-	Message   string                 `json:"message"`
-	At        time.Time              `json:"at"`
-	Fields    map[string]interface{} `json:"fields,omitempty"`
+	Level   string                 `json:"level"`
+	Message string                 `json:"message"`
+	At      time.Time              `json:"at"`
+	Fields  map[string]interface{} `json:"fields,omitempty"`
 }
 
 type InvocationDetail struct {
@@ -140,10 +140,10 @@ type InvocationDetail struct {
 }
 
 type LifecycleDetail struct {
-	Stage     string    `json:"stage"`
-	At        time.Time `json:"at"`
-	Success   bool      `json:"success"`
-	Reason    string    `json:"reason,omitempty"`
+	Stage   string    `json:"stage"`
+	At      time.Time `json:"at"`
+	Success bool      `json:"success"`
+	Reason  string    `json:"reason,omitempty"`
 }
 
 type ActionDescriptor struct {

@@ -43,10 +43,11 @@ type ContributionStore interface {
 
 type NopTraceRecorder struct{}
 
-func (NopTraceRecorder) RecordInvocation(_ context.Context, _ HookExecution, _, _ string)                       {}
-func (NopTraceRecorder) RecordMutation(_ context.Context, _ string, _ MutationOperation, _, _ string, _, _ bool) {}
-func (NopTraceRecorder) RecordPipeline(_ context.Context, _ PipelineResult)                                    {}
-func (NopTraceRecorder) RecordCircuit(_ context.Context, _ string, _ CircuitStats)                             {}
+func (NopTraceRecorder) RecordInvocation(_ context.Context, _ HookExecution, _, _ string) {}
+func (NopTraceRecorder) RecordMutation(_ context.Context, _ string, _ MutationOperation, _, _ string, _, _ bool) {
+}
+func (NopTraceRecorder) RecordPipeline(_ context.Context, _ PipelineResult)        {}
+func (NopTraceRecorder) RecordCircuit(_ context.Context, _ string, _ CircuitStats) {}
 
 type NopPermissionChecker struct{}
 

@@ -20,11 +20,14 @@ import (
 
 type DialogResolver interface {
 	ResolveDialog(dialogID string, result string) bool
+	ResolveDialogWithHost(dialogID string, hostClientID string, hostSessionID string, result string) bool
 }
 
 type ClipboardResolver interface {
 	ResolveClipboardRequest(requestID string, text string) bool
 	FailClipboardRequest(requestID string, err error) bool
+	ResolveClipboardRequestWithHost(requestID string, hostClientID string, hostSessionID string, text string) bool
+	FailClipboardRequestWithHost(requestID string, hostClientID string, hostSessionID string, err error) bool
 }
 
 type HTTPHandler struct {
@@ -517,25 +520,25 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		}
 	}
 	sreq := sandbox_webui.CreateSessionRequest{
-		ContributionID:       string(def.ContributionID),
-		ExtensionID:          string(def.ExtensionID),
-		ModuleID:             string(def.ModuleID),
-		Generation:           def.Integrity.Generation,
-		SlotID:               def.Slot.SlotID,
-		Sandbox:              sandbox,
-		CSP:                  sandbox_webui.RestrictedCSP,
-		AllowedActions:       contributionActionIDs(def),
-		AllowedDataSources:   contributionDataSourceIDs(def),
-		Theme:                req.Theme,
-		Locale:               req.Locale,
-		BasePath:             basePath,
-		EntryPath:            def.Entry.Path,
-		Surface:              req.Surface,
-		CharacterID:          req.CharacterID,
-		ConversationID:       req.ConversationID,
-		GrantedPerms:         auth.GrantedPerms,
-		GrantedScopes:        auth.GrantedScopes,
-		ScopeSnapshotID:      scopeSnapshotID,
+		ContributionID:     string(def.ContributionID),
+		ExtensionID:        string(def.ExtensionID),
+		ModuleID:           string(def.ModuleID),
+		Generation:         def.Integrity.Generation,
+		SlotID:             def.Slot.SlotID,
+		Sandbox:            sandbox,
+		CSP:                sandbox_webui.RestrictedCSP,
+		AllowedActions:     contributionActionIDs(def),
+		AllowedDataSources: contributionDataSourceIDs(def),
+		Theme:              req.Theme,
+		Locale:             req.Locale,
+		BasePath:           basePath,
+		EntryPath:          def.Entry.Path,
+		Surface:            req.Surface,
+		CharacterID:        req.CharacterID,
+		ConversationID:     req.ConversationID,
+		GrantedPerms:       auth.GrantedPerms,
+		GrantedScopes:      auth.GrantedScopes,
+		ScopeSnapshotID:    scopeSnapshotID,
 	}
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
@@ -879,8 +882,10 @@ func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req struct {
-		DialogID string `json:"dialogId"`
-		Result   string `json:"result"`
+		DialogID      string `json:"dialogId"`
+		Result        string `json:"result"`
+		HostClientID  string `json:"hostClientId"`
+		HostSessionID string `json:"hostSessionId"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
@@ -893,7 +898,7 @@ func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Reques
 	if req.Result == "" {
 		req.Result = "ok"
 	}
-	if !h.dialogResolver.ResolveDialog(req.DialogID, req.Result) {
+	if !h.dialogResolver.ResolveDialogWithHost(req.DialogID, req.HostClientID, req.HostSessionID, req.Result) {
 		writeError(w, http.StatusNotFound, "dialog_not_found", "no pending dialog with id: "+req.DialogID)
 		return
 	}
@@ -910,9 +915,11 @@ func (h *HTTPHandler) handleClipboardResponse(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req struct {
-		RequestID string `json:"requestId"`
-		Text      string `json:"text"`
-		Error     string `json:"error"`
+		RequestID     string `json:"requestId"`
+		Text          string `json:"text"`
+		Error         string `json:"error"`
+		HostClientID  string `json:"hostClientId"`
+		HostSessionID string `json:"hostSessionId"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
@@ -923,12 +930,12 @@ func (h *HTTPHandler) handleClipboardResponse(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if req.Error != "" {
-		if !h.clipboardResolver.FailClipboardRequest(req.RequestID, errors.New(req.Error)) {
+		if !h.clipboardResolver.FailClipboardRequestWithHost(req.RequestID, req.HostClientID, req.HostSessionID, errors.New(req.Error)) {
 			writeError(w, http.StatusNotFound, "clipboard_request_not_found", "no pending clipboard request with id: "+req.RequestID)
 			return
 		}
 	} else {
-		if !h.clipboardResolver.ResolveClipboardRequest(req.RequestID, req.Text) {
+		if !h.clipboardResolver.ResolveClipboardRequestWithHost(req.RequestID, req.HostClientID, req.HostSessionID, req.Text) {
 			writeError(w, http.StatusNotFound, "clipboard_request_not_found", "no pending clipboard request with id: "+req.RequestID)
 			return
 		}

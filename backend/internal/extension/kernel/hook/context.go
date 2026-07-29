@@ -7,38 +7,38 @@ import (
 )
 
 type HookContextSnapshot struct {
-	TraceID              string     `json:"traceId"`
-	OperationID          string     `json:"operationId"`
-	InvocationID         string     `json:"invocationId"`
-	ExtensionID          string     `json:"extensionId"`
-	CharacterID          *string    `json:"characterId,omitempty"`
-	ConversationID       *string    `json:"conversationId,omitempty"`
-	MessageID            *string    `json:"messageId,omitempty"`
-	ScopeSnapshotID      string     `json:"scopeSnapshotId"`
-	PermissionSnapshotID string     `json:"permissionSnapshotId"`
-	Platform             string     `json:"platform"`
-	Timestamp            time.Time  `json:"timestamp"`
-	Depth                int        `json:"depth"`
-	ParentHookID         *string    `json:"parentHookId,omitempty"`
+	TraceID              string    `json:"traceId"`
+	OperationID          string    `json:"operationId"`
+	InvocationID         string    `json:"invocationId"`
+	ExtensionID          string    `json:"extensionId"`
+	CharacterID          *string   `json:"characterId,omitempty"`
+	ConversationID       *string   `json:"conversationId,omitempty"`
+	MessageID            *string   `json:"messageId,omitempty"`
+	ScopeSnapshotID      string    `json:"scopeSnapshotId"`
+	PermissionSnapshotID string    `json:"permissionSnapshotId"`
+	Platform             string    `json:"platform"`
+	Timestamp            time.Time `json:"timestamp"`
+	Depth                int       `json:"depth"`
+	ParentHookID         *string   `json:"parentHookId,omitempty"`
 }
 
 type HookInvocationInput struct {
-	HookPointID     string          `json:"hookPointId"`
-	ContractVersion int             `json:"contractVersion"`
-	Payload         json.RawMessage `json:"payload"`
+	HookPointID     string              `json:"hookPointId"`
+	ContractVersion int                 `json:"contractVersion"`
+	Payload         json.RawMessage     `json:"payload"`
 	Context         HookContextSnapshot `json:"context"`
 }
 
 type InvocationContext struct {
-	Input          HookInvocationInput
-	Point          HookPointDefinition
-	Contribution   HookContributionDefinition
-	Ctx            context.Context
-	Cancel         context.CancelFunc
-	Deadline       time.Time
-	Depth          int
-	ParentStack    []string
-	OriginContrib   string
+	Input         HookInvocationInput
+	Point         HookPointDefinition
+	Contribution  HookContributionDefinition
+	Ctx           context.Context
+	Cancel        context.CancelFunc
+	Deadline      time.Time
+	Depth         int
+	ParentStack   []string
+	OriginContrib string
 }
 
 func NewInvocationContext(parent context.Context, input HookInvocationInput, point HookPointDefinition, contrib HookContributionDefinition, depth int, parentStack []string) InvocationContext {
@@ -48,14 +48,14 @@ func NewInvocationContext(parent context.Context, input HookInvocationInput, poi
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	return InvocationContext{
-		Input:        input,
-		Point:        point,
-		Contribution: contrib,
-		Ctx:          ctx,
-		Cancel:       cancel,
-		Deadline:     time.Now().Add(timeout),
-		Depth:        depth,
-		ParentStack:  parentStack,
+		Input:         input,
+		Point:         point,
+		Contribution:  contrib,
+		Ctx:           ctx,
+		Cancel:        cancel,
+		Deadline:      time.Now().Add(timeout),
+		Depth:         depth,
+		ParentStack:   parentStack,
 		OriginContrib: contrib.ContributionID,
 	}
 }

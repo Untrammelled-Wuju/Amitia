@@ -86,12 +86,12 @@ func (m *CoreMethods) RegisterAll() {
 }
 
 type InvokeParams struct {
-	Entry           string          `json:"entry"`
-	Input           json.RawMessage `json:"input"`
-	IdempotencyKey  string          `json:"idempotency_key,omitempty"`
-	StreamID        string          `json:"stream_id,omitempty"`
-	Timeout         time.Duration   `json:"timeout,omitempty"`
-	Trace           map[string]string `json:"trace,omitempty"`
+	Entry          string            `json:"entry"`
+	Input          json.RawMessage   `json:"input"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	StreamID       string            `json:"stream_id,omitempty"`
+	Timeout        time.Duration     `json:"timeout,omitempty"`
+	Trace          map[string]string `json:"trace,omitempty"`
 }
 
 type InvokeResult struct {
@@ -272,10 +272,10 @@ type TaskEnqueueParams struct {
 }
 
 type TaskResult struct {
-	TaskID  string          `json:"task_id"`
-	Status  string          `json:"status"`
-	Output  json.RawMessage `json:"output,omitempty"`
-	Error   string          `json:"error,omitempty"`
+	TaskID string          `json:"task_id"`
+	Status string          `json:"status"`
+	Output json.RawMessage `json:"output,omitempty"`
+	Error  string          `json:"error,omitempty"`
 }
 
 func (m *CoreMethods) handleTaskEnqueue(ctx context.Context, params json.RawMessage) (any, error) {
@@ -319,11 +319,11 @@ func (m *CoreMethods) handlePing(ctx context.Context, params json.RawMessage) (a
 
 func (m *CoreMethods) handleStats(ctx context.Context, params json.RawMessage) (any, error) {
 	stats := map[string]any{
-		"streams":         m.streams.Count(),
-		"pending":         m.tracker.PendingCount(),
-		"instance_id":     m.session.InstanceID,
-		"generation":      m.session.Generation,
-		"uptime_seconds":  time.Since(m.uptime).Seconds(),
+		"streams":        m.streams.Count(),
+		"pending":        m.tracker.PendingCount(),
+		"instance_id":    m.session.InstanceID,
+		"generation":     m.session.Generation,
+		"uptime_seconds": time.Since(m.uptime).Seconds(),
 	}
 	if m.bp != nil {
 		inflight, sent, recv, refills := m.bp.Stats()
@@ -344,24 +344,24 @@ func (m *CoreMethods) handleLifecycleDeactivate(ctx context.Context, params json
 }
 
 type ProtocolSchema struct {
-	Version     string          `json:"version"`
-	Methods     []MethodSchema  `json:"methods"`
-	Errors      []ErrorSchema   `json:"errors"`
-	Features    []string        `json:"features"`
+	Version  string         `json:"version"`
+	Methods  []MethodSchema `json:"methods"`
+	Errors   []ErrorSchema  `json:"errors"`
+	Features []string       `json:"features"`
 }
 
 type MethodSchema struct {
-	Name       string `json:"name"`
-	Direction  string `json:"direction"`
-	Notify     bool   `json:"notify,omitempty"`
-	ParamsRef  string `json:"params_ref,omitempty"`
-	ResultRef  string `json:"result_ref,omitempty"`
+	Name      string `json:"name"`
+	Direction string `json:"direction"`
+	Notify    bool   `json:"notify,omitempty"`
+	ParamsRef string `json:"params_ref,omitempty"`
+	ResultRef string `json:"result_ref,omitempty"`
 }
 
 type ErrorSchema struct {
-	Code       string        `json:"code"`
-	Category   ErrorCategory `json:"category"`
-	Retryable  bool          `json:"retryable"`
+	Code      string        `json:"code"`
+	Category  ErrorCategory `json:"category"`
+	Retryable bool          `json:"retryable"`
 }
 
 func BuildProtocolSchema() ProtocolSchema {

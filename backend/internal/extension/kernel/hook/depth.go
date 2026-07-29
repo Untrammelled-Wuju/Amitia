@@ -9,9 +9,9 @@ import (
 const DefaultMaxDepth = 4
 
 type DepthGuard struct {
-	mu        sync.Mutex
-	maxDepth  int
-	stacks    map[string]*callStack
+	mu       sync.Mutex
+	maxDepth int
+	stacks   map[string]*callStack
 }
 
 type callStack struct {

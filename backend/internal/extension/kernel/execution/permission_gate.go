@@ -11,11 +11,11 @@ import (
 type PermissionDecision string
 
 const (
-	PermissionAllow            PermissionDecision = "allow"
-	PermissionDeny             PermissionDecision = "deny"
-	PermissionRequireApproval  PermissionDecision = "require_approval"
-	PermissionAllowOnce        PermissionDecision = "allow_once"
-	PermissionAllowPersistent  PermissionDecision = "allow_persistent"
+	PermissionAllow           PermissionDecision = "allow"
+	PermissionDeny            PermissionDecision = "deny"
+	PermissionRequireApproval PermissionDecision = "require_approval"
+	PermissionAllowOnce       PermissionDecision = "allow_once"
+	PermissionAllowPersistent PermissionDecision = "allow_persistent"
 )
 
 func NewPermissionGate() *PermissionGate {

@@ -15,11 +15,11 @@ type DrainResult struct {
 }
 
 type DrainController struct {
-	mu              sync.Mutex
-	reason          ShutdownReason
-	rejectNew       bool
-	active          map[string]ActiveOperation
-	cancelFuncs     map[string]context.CancelFunc
+	mu          sync.Mutex
+	reason      ShutdownReason
+	rejectNew   bool
+	active      map[string]ActiveOperation
+	cancelFuncs map[string]context.CancelFunc
 }
 
 func NewDrainController() *DrainController {
@@ -124,15 +124,15 @@ func (d *DrainController) CancelRemaining(ctx context.Context) DrainResult {
 }
 
 type ShutdownCoordinator struct {
-	registry       *ComponentRegistry
-	journal        *Journal
-	drain          *DrainController
-	audit          LifecycleAuditWriter
-	store          JournalStore
-	mu             sync.Mutex
-	inProgress     bool
-	shutdownID     string
-	reason         ShutdownReason
+	registry   *ComponentRegistry
+	journal    *Journal
+	drain      *DrainController
+	audit      LifecycleAuditWriter
+	store      JournalStore
+	mu         sync.Mutex
+	inProgress bool
+	shutdownID string
+	reason     ShutdownReason
 }
 
 func NewShutdownCoordinator(registry *ComponentRegistry, journal *Journal, drain *DrainController, audit LifecycleAuditWriter, store JournalStore) *ShutdownCoordinator {
@@ -185,11 +185,11 @@ func (s *ShutdownCoordinator) Shutdown(ctx context.Context, reason ShutdownReaso
 			continue
 		}
 		entry := ShutdownJournalEntry{
-			ShutdownID: s.shutdownID,
+			ShutdownID:  s.shutdownID,
 			ComponentID: meta.ID,
-			Phase:      ShutdownPhaseStopRuntimes,
-			Status:     ShutdownStatusStopping,
-			StartedAt:  now(),
+			Phase:       ShutdownPhaseStopRuntimes,
+			Status:      ShutdownStatusStopping,
+			StartedAt:   now(),
 		}
 		stopCtx, cancel := context.WithTimeout(ctx, effectiveStopTimeout(meta.StopTimeout, timeout))
 		err := component.Stop(stopCtx, reason)
@@ -209,13 +209,13 @@ func (s *ShutdownCoordinator) Shutdown(ctx context.Context, reason ShutdownReaso
 		}
 		if s.audit != nil {
 			s.audit.RecordShutdownEvent(ctx, ShutdownAuditEvent{
-				ShutdownID: s.shutdownID,
+				ShutdownID:  s.shutdownID,
 				ComponentID: meta.ID,
-				Phase:      ShutdownPhaseStopRuntimes,
-				Status:     string(entry.Status),
-				Reason:     string(reason),
-				Error:      entry.Error,
-				Timestamp:  finishedAt,
+				Phase:       ShutdownPhaseStopRuntimes,
+				Status:      string(entry.Status),
+				Reason:      string(reason),
+				Error:       entry.Error,
+				Timestamp:   finishedAt,
 			})
 		}
 	}

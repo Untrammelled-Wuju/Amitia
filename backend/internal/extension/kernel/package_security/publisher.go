@@ -10,13 +10,13 @@ import (
 type PublisherTrustLevel string
 
 const (
-	TrustOfficial     PublisherTrustLevel = "official"
-	TrustTrusted      PublisherTrustLevel = "trusted"
-	TrustUserTrusted  PublisherTrustLevel = "user_trusted"
-	TrustUnknown      PublisherTrustLevel = "unknown"
-	TrustBlocked      PublisherTrustLevel = "blocked"
-	TrustRevoked      PublisherTrustLevel = "revoked"
-	TrustDevelopment  PublisherTrustLevel = "development"
+	TrustOfficial    PublisherTrustLevel = "official"
+	TrustTrusted     PublisherTrustLevel = "trusted"
+	TrustUserTrusted PublisherTrustLevel = "user_trusted"
+	TrustUnknown     PublisherTrustLevel = "unknown"
+	TrustBlocked     PublisherTrustLevel = "blocked"
+	TrustRevoked     PublisherTrustLevel = "revoked"
+	TrustDevelopment PublisherTrustLevel = "development"
 )
 
 func (l PublisherTrustLevel) IsValid() bool {
@@ -29,14 +29,14 @@ func (l PublisherTrustLevel) IsValid() bool {
 }
 
 type PublisherKey struct {
-	KeyID       string    `json:"key_id"`
-	PublisherID string    `json:"publisher_id"`
-	PublicKey   []byte    `json:"public_key"`
-	Algorithm   string    `json:"algorithm"`
-	CreatedAt   time.Time `json:"created_at"`
+	KeyID       string     `json:"key_id"`
+	PublisherID string     `json:"publisher_id"`
+	PublicKey   []byte     `json:"public_key"`
+	Algorithm   string     `json:"algorithm"`
+	CreatedAt   time.Time  `json:"created_at"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
-	Revoked     bool      `json:"revoked"`
+	Revoked     bool       `json:"revoked"`
 }
 
 func (k *PublisherKey) IsExpired() bool {

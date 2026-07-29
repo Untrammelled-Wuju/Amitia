@@ -169,8 +169,8 @@ func (a *EventDependencyCheckerAdapter) CheckSubscriptionDependencies(ctx contex
 }
 
 type EventRuntimeCheckerAdapter struct {
-	Supervisor          runtime_supervisor.Supervisor
-	EnablementResolver  enablement.EffectiveStateResolver
+	Supervisor         runtime_supervisor.Supervisor
+	EnablementResolver enablement.EffectiveStateResolver
 }
 
 func NewEventRuntimeCheckerAdapter(supervisor runtime_supervisor.Supervisor, enablementResolver enablement.EffectiveStateResolver) *EventRuntimeCheckerAdapter {

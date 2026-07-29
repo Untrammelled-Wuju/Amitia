@@ -22,29 +22,29 @@ type UpdateContinuityCheck struct {
 }
 
 type UpdateContinuityResult struct {
-	IsValid              bool
-	IsOwnershipTransfer  bool
-	IsKeyRotation        bool
-	IsVersionRegression  bool
-	Warnings             []string
-	Reason               string
-	RequiredActions      []string
+	IsValid             bool
+	IsOwnershipTransfer bool
+	IsKeyRotation       bool
+	IsVersionRegression bool
+	Warnings            []string
+	Reason              string
+	RequiredActions     []string
 }
 
 type OwnershipTransferRequest struct {
-	ExtensionID       string
-	OldPublisherID    string
-	NewPublisherID    string
-	AuthorizationBy   string
-	AcceptanceBy      string
-	UserConfirmed     bool
-	Reason            string
+	ExtensionID     string
+	OldPublisherID  string
+	NewPublisherID  string
+	AuthorizationBy string
+	AcceptanceBy    string
+	UserConfirmed   bool
+	Reason          string
 }
 
 type OwnershipTransferResult struct {
-	Success      bool
-	Reason       string
-	TransferID   string
+	Success       bool
+	Reason        string
+	TransferID    string
 	TransferredAt time.Time
 }
 
@@ -54,14 +54,14 @@ type OwnershipTransferLog struct {
 }
 
 type OwnershipTransferRecord struct {
-	TransferID    string    `json:"transfer_id"`
-	ExtensionID   string    `json:"extension_id"`
-	OldPublisher  string    `json:"old_publisher"`
-	NewPublisher  string    `json:"new_publisher"`
-	AuthorizationBy string `json:"authorization_by"`
-	AcceptanceBy  string    `json:"acceptance_by"`
-	Reason        string    `json:"reason"`
-	TransferredAt time.Time `json:"transferred_at"`
+	TransferID      string    `json:"transfer_id"`
+	ExtensionID     string    `json:"extension_id"`
+	OldPublisher    string    `json:"old_publisher"`
+	NewPublisher    string    `json:"new_publisher"`
+	AuthorizationBy string    `json:"authorization_by"`
+	AcceptanceBy    string    `json:"acceptance_by"`
+	Reason          string    `json:"reason"`
+	TransferredAt   time.Time `json:"transferred_at"`
 }
 
 func NewOwnershipTransferLog() *OwnershipTransferLog {
@@ -105,8 +105,8 @@ func (l *OwnershipTransferLog) Last(extensionID string) *OwnershipTransferRecord
 }
 
 type UpdateContinuityChecker struct {
-	store           *PublisherStore
-	transferLog     *OwnershipTransferLog
+	store       *PublisherStore
+	transferLog *OwnershipTransferLog
 }
 
 func NewUpdateContinuityChecker(store *PublisherStore, transferLog *OwnershipTransferLog) *UpdateContinuityChecker {

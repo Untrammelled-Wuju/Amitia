@@ -13,14 +13,14 @@ import (
 type MigrationHandler func(ctx context.Context, step MigrationPathStep, def *MigrationDefinition, checkpoint *MigrationCheckpoint) (json.RawMessage, error)
 
 type MigrationExecutor struct {
-	mu          sync.Mutex
-	planner     *MigrationPlanner
-	snapshot    *SnapshotManager
-	checkpoint  *CheckpointManager
-	validator   *PreconditionValidator
-	repo        *MigrationRepository
-	resolver    *MigrationGraphResolver
-	inProgress  map[string]*MigrationOperation
+	mu         sync.Mutex
+	planner    *MigrationPlanner
+	snapshot   *SnapshotManager
+	checkpoint *CheckpointManager
+	validator  *PreconditionValidator
+	repo       *MigrationRepository
+	resolver   *MigrationGraphResolver
+	inProgress map[string]*MigrationOperation
 }
 
 func NewMigrationExecutor(
@@ -67,19 +67,19 @@ func (e *MigrationExecutor) PlanAndExecute(ctx context.Context, input MigrationP
 
 	operationID := fmt.Sprintf("mop-%s", uuid.New().String())
 	op := &MigrationOperation{
-		OperationID:        operationID,
-		ExtensionID:        input.ExtensionID,
-		FromVersion:        input.FromVersion,
-		ToVersion:          input.ToVersion,
-		FromDefinitionHash: input.FromDefinitionHash,
-		ToDefinitionHash:   input.ToDefinitionHash,
-		MigrationPath:      planOutput.Path,
-		Status:             OperationStatusCreated,
-		CurrentStep:        0,
-		StartedAt:          time.Now().UTC(),
-		Reversibility:      planOutput.Reversibility,
+		OperationID:         operationID,
+		ExtensionID:         input.ExtensionID,
+		FromVersion:         input.FromVersion,
+		ToVersion:           input.ToVersion,
+		FromDefinitionHash:  input.FromDefinitionHash,
+		ToDefinitionHash:    input.ToDefinitionHash,
+		MigrationPath:       planOutput.Path,
+		Status:              OperationStatusCreated,
+		CurrentStep:         0,
+		StartedAt:           time.Now().UTC(),
+		Reversibility:       planOutput.Reversibility,
 		RequiresUserConfirm: planOutput.RequiresUserConfirm,
-		UserConfirmed:      !planOutput.RequiresUserConfirm,
+		UserConfirmed:       !planOutput.RequiresUserConfirm,
 	}
 
 	if e.repo != nil {

@@ -68,12 +68,12 @@ func seedStableTool(t *testing.T, ctx context.Context, container *Container, ext
 	}
 
 	inst := domain.ExtensionInstallation{
-		InstallationID: "inst-" + extID,
-		ExtensionID:    domain.ExtensionID(extID),
+		InstallationID:   "inst-" + extID,
+		ExtensionID:      domain.ExtensionID(extID),
 		InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
-		Generation:     1,
-		EnablementState: domain.EnablementEnabled,
-		InstalledAt:     time.Now(),
+		Generation:       1,
+		EnablementState:  domain.EnablementEnabled,
+		InstalledAt:      time.Now(),
 	}
 	if err := container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
 		t.Fatalf("put installation: %v", err)
@@ -100,12 +100,12 @@ func buildCandidateToolContrib(extID string, toolID string, modelSuffix string) 
 func registerCandidateInManager(t *testing.T, ctx context.Context, mgr *CandidateContributionManager, extID string, generationID string, candidateGen int64, expectedStableGen int64, contribs []domain.ContributionDefinition) string {
 	t.Helper()
 	record := &CandidateRecord{
-		CandidateID:             "cand-1",
-		ExtensionID:             domain.ExtensionID(extID),
-		GenerationID:            generationID,
-		CandidateGeneration:     candidateGen,
+		CandidateID:              "cand-1",
+		ExtensionID:              domain.ExtensionID(extID),
+		GenerationID:             generationID,
+		CandidateGeneration:      candidateGen,
 		ExpectedStableGeneration: expectedStableGen,
-		Contribs:                contribs,
+		Contribs:                 contribs,
 		DefinitionHash:           "hash-1",
 	}
 	if err := mgr.RegisterCandidate(ctx, record); err != nil {
@@ -276,12 +276,12 @@ func TestSameID_PromoteTool_CASFailure(t *testing.T) {
 	mgr := NewCandidateContributionManager(installer, genMgr, nil, nil, ns)
 
 	record := &CandidateRecord{
-		CandidateID:             "cand-cas",
-		ExtensionID:             domain.ExtensionID(extID),
-		GenerationID:            candidateGen.GenerationID,
-		CandidateGeneration:     int64(candidateGen.Generation),
+		CandidateID:              "cand-cas",
+		ExtensionID:              domain.ExtensionID(extID),
+		GenerationID:             candidateGen.GenerationID,
+		CandidateGeneration:      int64(candidateGen.Generation),
 		ExpectedStableGeneration: int64(stableGen.Generation),
-		Contribs:                contribs,
+		Contribs:                 contribs,
 		DefinitionHash:           "hash-1",
 	}
 	if err := mgr.RegisterCandidate(ctx, record); err != nil {
@@ -451,7 +451,7 @@ func TestSameID_RestoreStableFromSnapshot(t *testing.T) {
 		t.Fatalf("expected candidate model name, got %s", tool.ModelName)
 	}
 
-	if err := mgr.restoreStableFromSnapshot(ctx, domain.ExtensionID(extID), snap); err != nil {
+	if err := mgr.restoreStableFromSnapshot(ctx, "", domain.ExtensionID(extID), snap); err != nil {
 		t.Fatalf("restore stable from snapshot: %v", err)
 	}
 
@@ -661,12 +661,12 @@ func TestSameID_PromoteTool_Success_ActivatesStable(t *testing.T) {
 	}
 
 	inst := domain.ExtensionInstallation{
-		InstallationID:  "inst-" + extID,
-		ExtensionID:     domain.ExtensionID(extID),
+		InstallationID:   "inst-" + extID,
+		ExtensionID:      domain.ExtensionID(extID),
 		InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
-		Generation:      1,
-		EnablementState: domain.EnablementEnabled,
-		InstalledAt:     time.Now(),
+		Generation:       1,
+		EnablementState:  domain.EnablementEnabled,
+		InstalledAt:      time.Now(),
 	}
 	if err := container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
 		t.Fatalf("put installation: %v", err)
@@ -802,12 +802,12 @@ func TestSameID_CAS_NoStableGeneration_SkipsCheck(t *testing.T) {
 	mgr := NewCandidateContributionManager(installer, genMgr, nil, nil, ns)
 
 	record := &CandidateRecord{
-		CandidateID:             "cand-no-stable",
-		ExtensionID:             domain.ExtensionID(extID),
-		GenerationID:            candidateGen.GenerationID,
-		CandidateGeneration:     int64(candidateGen.Generation),
+		CandidateID:              "cand-no-stable",
+		ExtensionID:              domain.ExtensionID(extID),
+		GenerationID:             candidateGen.GenerationID,
+		CandidateGeneration:      int64(candidateGen.Generation),
 		ExpectedStableGeneration: 0,
-		Contribs:                contribs,
+		Contribs:                 contribs,
 		DefinitionHash:           "hash-1",
 	}
 	if err := mgr.RegisterCandidate(ctx, record); err != nil {

@@ -220,9 +220,9 @@ type CancelRequest struct {
 }
 
 type CancellationRegistry struct {
-	mu       sync.RWMutex
-	signals  map[string]context.CancelFunc
-	reasons  map[string]string
+	mu      sync.RWMutex
+	signals map[string]context.CancelFunc
+	reasons map[string]string
 }
 
 func NewCancellationRegistry() *CancellationRegistry {

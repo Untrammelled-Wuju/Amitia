@@ -312,22 +312,22 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	}
 	now := time.Now().UTC()
 	sess := &BridgeSession{
-		SessionID:            newBridgeSessionID(),
-		ContributionID:       string(def.ContributionID),
-		ExtensionID:          string(def.ExtensionID),
-		ModuleID:             string(def.ModuleID),
-		Generation:           def.Integrity.Generation,
-		Origin:               origin,
-		ContractVersion:      def.ContractVersion,
-		GrantedScopes:        grantedScopes,
-		GrantedPerms:         grantedPerms,
-		CreatedAt:            now,
-		ExpiresAt:            now.Add(lifetime),
-		Surface:              surface,
-		CharacterID:          characterID,
-		ConversationID:       conversationID,
-		Token:                newBridgeToken(),
-		UsedNonces:           make(map[string]bool),
+		SessionID:       newBridgeSessionID(),
+		ContributionID:  string(def.ContributionID),
+		ExtensionID:     string(def.ExtensionID),
+		ModuleID:        string(def.ModuleID),
+		Generation:      def.Integrity.Generation,
+		Origin:          origin,
+		ContractVersion: def.ContractVersion,
+		GrantedScopes:   grantedScopes,
+		GrantedPerms:    grantedPerms,
+		CreatedAt:       now,
+		ExpiresAt:       now.Add(lifetime),
+		Surface:         surface,
+		CharacterID:     characterID,
+		ConversationID:  conversationID,
+		Token:           newBridgeToken(),
+		UsedNonces:      make(map[string]bool),
 	}
 
 	b.mu.RLock()

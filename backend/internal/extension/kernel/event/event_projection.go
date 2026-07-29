@@ -8,14 +8,14 @@ import (
 )
 
 type EventProjectionRequest struct {
-	IncludeFields []string `json:"include_fields,omitempty"`
-	ExcludeFields []string `json:"exclude_fields,omitempty"`
+	IncludeFields      []string `json:"include_fields,omitempty"`
+	ExcludeFields      []string `json:"exclude_fields,omitempty"`
 	RequirePermissions []string `json:"require_permissions,omitempty"`
 }
 
 type ProjectionResult struct {
-	Payload   json.RawMessage
-	Hash      string
+	Payload       json.RawMessage
+	Hash          string
 	OmittedFields []string
 	MaskedFields  []string
 }
@@ -90,9 +90,9 @@ func (p *PayloadProjector) Project(payload json.RawMessage, req EventProjectionR
 				continue
 			}
 			if v, ok := lookupPath(raw, rule.SourcePath); ok {
-			setPath(projected, rule.TargetPath, v)
+				setPath(projected, rule.TargetPath, v)
+			}
 		}
-	}
 	}
 	out, err := json.Marshal(projected)
 	if err != nil {

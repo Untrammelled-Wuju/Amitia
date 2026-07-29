@@ -18,7 +18,7 @@ const (
 
 func NewCircuitBreakerCoordinator() *CircuitBreakerCoordinator {
 	return &CircuitBreakerCoordinator{
-		circuits:  make(map[string]*CircuitBreaker),
+		circuits:      make(map[string]*CircuitBreaker),
 		FailThreshold: 5,
 		ResetTimeout:  30 * time.Second,
 	}

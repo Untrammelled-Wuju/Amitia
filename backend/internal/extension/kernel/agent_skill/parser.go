@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	frontmatterPattern = regexp.MustCompile(`^---\s*\n([\s\S]*?)\n---`)
+	frontmatterPattern  = regexp.MustCompile(`^---\s*\n([\s\S]*?)\n---`)
 	maxFrontmatterSize  = 64 * 1024
 	maxInstructionSize  = 128 * 1024
 	maxYAMLDocumentSize = 64 * 1024

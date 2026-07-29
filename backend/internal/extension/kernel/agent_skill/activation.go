@@ -7,7 +7,7 @@ import (
 )
 
 type ActivationService struct {
-	catalog *AgentSkillCatalog
+	catalog                 *AgentSkillCatalog
 	maxAutoActivatePerRound int
 }
 
@@ -44,7 +44,7 @@ func (s *ActivationService) EvaluateAuto(ctx context.Context, userInput string, 
 			candidates = append(candidates, ActivationCandidate{
 				Definition: def,
 				Score:      score,
-				MatchType:   matchType,
+				MatchType:  matchType,
 			})
 		}
 	}
@@ -154,10 +154,10 @@ func NewTokenBudgeter(poolSize int) *TokenBudgeter {
 
 type BudgetAllocation struct {
 	SkillID      string `json:"skillId"`
-	Instructions  int    `json:"instructions"`
-	Resources     int    `json:"resources"`
-	Total         int    `json:"total"`
-	Truncated     bool   `json:"truncated,omitempty"`
+	Instructions int    `json:"instructions"`
+	Resources    int    `json:"resources"`
+	Total        int    `json:"total"`
+	Truncated    bool   `json:"truncated,omitempty"`
 }
 
 type BudgetPlan struct {
@@ -172,7 +172,7 @@ func (b *TokenBudgeter) Allocate(candidates []ActivationCandidate) BudgetPlan {
 	for _, candidate := range candidates {
 		def := candidate.Definition
 		alloc := BudgetAllocation{
-			SkillID:     def.ExtensionID,
+			SkillID:      def.ExtensionID,
 			Instructions: def.Instructions.TokenCount,
 		}
 

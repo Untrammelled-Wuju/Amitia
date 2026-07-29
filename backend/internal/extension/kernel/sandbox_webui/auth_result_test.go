@@ -66,15 +66,15 @@ func TestGetSessionInfoReturnsGrantedPermsAndScopes(t *testing.T) {
 	grantedScopes := []string{"scope-y"}
 
 	result, _ := host.CreateSession(CreateSessionRequest{
-		ExtensionID:    "ext-1",
-		ModuleID:       "mod-1",
-		Generation:     1,
-		SlotID:         "slot-1",
-		Sandbox:        SandboxWebRestricted,
-		EntryPath:      "index.html",
-		BasePath:       tmpDir,
-		GrantedPerms:   grantedPerms,
-		GrantedScopes:  grantedScopes,
+		ExtensionID:   "ext-1",
+		ModuleID:      "mod-1",
+		Generation:    1,
+		SlotID:        "slot-1",
+		Sandbox:       SandboxWebRestricted,
+		EntryPath:     "index.html",
+		BasePath:      tmpDir,
+		GrantedPerms:  grantedPerms,
+		GrantedScopes: grantedScopes,
 	})
 
 	info, err := host.GetSessionInfo(result.SessionID)
@@ -246,15 +246,15 @@ func TestRevokeSessionsByContextReleasesSnapshots(t *testing.T) {
 	})
 
 	req := CreateSessionRequest{
-		ExtensionID:    "ext-1",
-		ModuleID:       "mod-1",
-		Generation:     1,
-		SlotID:         "slot-1",
-		Sandbox:        SandboxWebRestricted,
-		EntryPath:      "index.html",
-		BasePath:       tmpDir,
-		CharacterID:    "char-snap-1",
-		GrantedPerms:   []string{"tool.invoke"},
+		ExtensionID:  "ext-1",
+		ModuleID:     "mod-1",
+		Generation:   1,
+		SlotID:       "slot-1",
+		Sandbox:      SandboxWebRestricted,
+		EntryPath:    "index.html",
+		BasePath:     tmpDir,
+		CharacterID:  "char-snap-1",
+		GrantedPerms: []string{"tool.invoke"},
 	}
 
 	_, err := host.CreateSession(req)

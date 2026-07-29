@@ -160,7 +160,7 @@ func TestBaseline_Fault_InstallWithSignatureRequiredFails(t *testing.T) {
 }
 
 type faultInjector struct {
-	name    string
+	name     string
 	injected bool
 }
 

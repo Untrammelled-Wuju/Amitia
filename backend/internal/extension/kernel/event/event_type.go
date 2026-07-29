@@ -28,16 +28,16 @@ type EventProducerPolicy struct {
 	RequireNamespaceMatch bool
 	MaxPayloadBytes       int64
 	MaxMetadataBytes      int64
-	RateLimitPerSecond     int
+	RateLimitPerSecond    int
 }
 
 type EventSubscriberPolicy struct {
-	AllowThirdParty      bool
-	MaxSubscribers       int
-	RequireApproval      bool
-	AllowedFilterFields  []string
-	RequiredPermissions  []string
-	RequiredScope        string
+	AllowThirdParty     bool
+	MaxSubscribers      int
+	RequireApproval     bool
+	AllowedFilterFields []string
+	RequiredPermissions []string
+	RequiredScope       string
 }
 
 type EventDeliveryPolicy struct {
@@ -46,7 +46,7 @@ type EventDeliveryPolicy struct {
 	InitialBackoff         time.Duration
 	MaxBackoff             time.Duration
 	BackoffMultiplier      float64
-	JitterFactor            float64
+	JitterFactor           float64
 	OrderingRequirement    EventOrderingRequirement
 	MaxInFlight            int
 	RetryableErrorCodes    []string
@@ -56,17 +56,17 @@ type EventDeliveryPolicy struct {
 type EventOrderingRequirement string
 
 const (
-	OrderingNone           EventOrderingRequirement = "none"
-	OrderingPerPartition   EventOrderingRequirement = "per_partition"
-	OrderingPerAggregate   EventOrderingRequirement = "per_aggregate"
+	OrderingNone         EventOrderingRequirement = "none"
+	OrderingPerPartition EventOrderingRequirement = "per_partition"
+	OrderingPerAggregate EventOrderingRequirement = "per_aggregate"
 )
 
 type EventRetentionPolicy struct {
-	MaxAge              time.Duration
-	MaxDeliveryCount    int
-	DeleteAfterSuccess  bool
+	MaxAge                time.Duration
+	MaxDeliveryCount      int
+	DeleteAfterSuccess    bool
 	DeleteAfterDeadLetter bool
-	ArchiveDeadLetters  bool
+	ArchiveDeadLetters    bool
 }
 
 type SensitiveFieldRule struct {
@@ -79,18 +79,18 @@ type SensitiveFieldRule struct {
 type SensitiveAction string
 
 const (
-	SensitiveOmit              SensitiveAction = "omit"
-	SensitiveMask              SensitiveAction = "mask"
-	SensitiveHash              SensitiveAction = "hash"
-	SensitiveSummary           SensitiveAction = "summary"
+	SensitiveOmit                SensitiveAction = "omit"
+	SensitiveMask                SensitiveAction = "mask"
+	SensitiveHash                SensitiveAction = "hash"
+	SensitiveSummary             SensitiveAction = "summary"
 	SensitiveAllowWithPermission SensitiveAction = "allow_with_permission"
 )
 
 type EventProjectionRule struct {
-	SourcePath string
-	TargetPath string
+	SourcePath         string
+	TargetPath         string
 	RequiredPermission string
-	RequiresScope       string
+	RequiresScope      string
 }
 
 type PermissionRequirement struct {
@@ -100,22 +100,22 @@ type PermissionRequirement struct {
 }
 
 type EventTypeDefinition struct {
-	EventTypeID     EventTypeID
-	Version         int
-	Description     string
-	PayloadSchema   json.RawMessage
-	MetadataSchema  json.RawMessage
-	ProducerPolicy      EventProducerPolicy
-	SubscriberPolicy    EventSubscriberPolicy
-	DeliveryPolicy      EventDeliveryPolicy
-	OrderingPolicy      EventOrderingRequirement
-	RetentionPolicy     EventRetentionPolicy
-	SensitiveFields     []SensitiveFieldRule
-	ProjectionRules     []EventProjectionRule
-	MaxPayloadBytes     int64
-	MaxMetadataBytes    int64
-	RiskLevel           RiskLevel
-	DefinitionHash      string
+	EventTypeID      EventTypeID
+	Version          int
+	Description      string
+	PayloadSchema    json.RawMessage
+	MetadataSchema   json.RawMessage
+	ProducerPolicy   EventProducerPolicy
+	SubscriberPolicy EventSubscriberPolicy
+	DeliveryPolicy   EventDeliveryPolicy
+	OrderingPolicy   EventOrderingRequirement
+	RetentionPolicy  EventRetentionPolicy
+	SensitiveFields  []SensitiveFieldRule
+	ProjectionRules  []EventProjectionRule
+	MaxPayloadBytes  int64
+	MaxMetadataBytes int64
+	RiskLevel        RiskLevel
+	DefinitionHash   string
 }
 
 func (d EventTypeDefinition) Hash() string {

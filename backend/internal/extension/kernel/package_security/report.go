@@ -20,24 +20,24 @@ type SecurityIssue struct {
 }
 
 type PackageSecurityReport struct {
-	ReportID          string                       `json:"report_id"`
-	SourceType        string                       `json:"source_type"`
-	ArchiveHash       string                       `json:"archive_hash"`
-	ContentTreeHash   string                       `json:"content_tree_hash"`
-	EntryCount        int                          `json:"entry_count"`
-	TotalCompressed   int64                        `json:"total_compressed"`
-	TotalUncompressed int64                        `json:"total_uncompressed"`
-	CompressionRatio  float64                      `json:"compression_ratio"`
-	SignatureResult   SignatureVerificationResult  `json:"signature_result"`
-	PublisherTrust    PublisherTrustResult         `json:"publisher_trust"`
-	PathIssues        []SecurityIssue              `json:"path_issues"`
-	TypeIssues        []SecurityIssue              `json:"type_issues"`
-	SizeIssues        []SecurityIssue              `json:"size_issues"`
-	PlatformIssues    []SecurityIssue              `json:"platform_issues"`
-	Warnings          []SecurityIssue              `json:"warnings"`
-	BlockingIssues    []SecurityIssue              `json:"blocking_issues"`
-	Passed            bool                         `json:"passed"`
-	CreatedAt         time.Time                    `json:"created_at"`
+	ReportID          string                      `json:"report_id"`
+	SourceType        string                      `json:"source_type"`
+	ArchiveHash       string                      `json:"archive_hash"`
+	ContentTreeHash   string                      `json:"content_tree_hash"`
+	EntryCount        int                         `json:"entry_count"`
+	TotalCompressed   int64                       `json:"total_compressed"`
+	TotalUncompressed int64                       `json:"total_uncompressed"`
+	CompressionRatio  float64                     `json:"compression_ratio"`
+	SignatureResult   SignatureVerificationResult `json:"signature_result"`
+	PublisherTrust    PublisherTrustResult        `json:"publisher_trust"`
+	PathIssues        []SecurityIssue             `json:"path_issues"`
+	TypeIssues        []SecurityIssue             `json:"type_issues"`
+	SizeIssues        []SecurityIssue             `json:"size_issues"`
+	PlatformIssues    []SecurityIssue             `json:"platform_issues"`
+	Warnings          []SecurityIssue             `json:"warnings"`
+	BlockingIssues    []SecurityIssue             `json:"blocking_issues"`
+	Passed            bool                        `json:"passed"`
+	CreatedAt         time.Time                   `json:"created_at"`
 }
 
 func (r *PackageSecurityReport) IsBlocked() bool {

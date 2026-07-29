@@ -45,19 +45,19 @@ func (a *EventDeliveryAdapter) HandleDelivery(ctx context.Context, delivery even
 	}
 
 	input := EventDeliveryInput{
-		EventID:       string(envelope.EventID),
-		EventTypeID:   string(envelope.EventTypeID),
-		EventVersion:  envelope.EventVersion,
-		Payload:       envelope.Payload,
-		Metadata:      envelope.Metadata,
-		TraceID:       envelope.TraceID,
-		OperationID:   envelope.OperationID,
-		ParentEventID: "",
-		Depth:         envelope.Depth,
-		OccurredAt:    envelope.OccurredAt,
-		DeliveryID:    delivery.DeliveryID,
+		EventID:        string(envelope.EventID),
+		EventTypeID:    string(envelope.EventTypeID),
+		EventVersion:   envelope.EventVersion,
+		Payload:        envelope.Payload,
+		Metadata:       envelope.Metadata,
+		TraceID:        envelope.TraceID,
+		OperationID:    envelope.OperationID,
+		ParentEventID:  "",
+		Depth:          envelope.Depth,
+		OccurredAt:     envelope.OccurredAt,
+		DeliveryID:     delivery.DeliveryID,
 		SubscriptionID: delivery.SubscriptionID,
-		Attempt:       delivery.Attempt,
+		Attempt:        delivery.Attempt,
 	}
 	if envelope.ParentEventID != nil {
 		input.ParentEventID = *envelope.ParentEventID

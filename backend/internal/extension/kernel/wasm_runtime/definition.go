@@ -36,14 +36,14 @@ const (
 type HostImportName string
 
 const (
-	ImportLog           HostImportName = "amitia.log"
-	ImportTime          HostImportName = "amitia.time"
-	ImportRandom        HostImportName = "amitia.random"
-	ImportStorageGet    HostImportName = "amitia.storage_get"
-	ImportStorageCAS    HostImportName = "amitia.storage_cas"
-	ImportResourceRead  HostImportName = "amitia.resource_read"
-	ImportArtifactWrite HostImportName = "amitia.artifact_write"
-	ImportToolInvoke    HostImportName = "amitia.tool_invoke"
+	ImportLog            HostImportName = "amitia.log"
+	ImportTime           HostImportName = "amitia.time"
+	ImportRandom         HostImportName = "amitia.random"
+	ImportStorageGet     HostImportName = "amitia.storage_get"
+	ImportStorageCAS     HostImportName = "amitia.storage_cas"
+	ImportResourceRead   HostImportName = "amitia.resource_read"
+	ImportArtifactWrite  HostImportName = "amitia.artifact_write"
+	ImportToolInvoke     HostImportName = "amitia.tool_invoke"
 	ImportResultSetError HostImportName = "amitia.result_set_error"
 )
 
@@ -80,7 +80,7 @@ var ForbiddenHostFunctions = map[string]bool{
 }
 
 type WasmEntryDefinition struct {
-	ExportName  string `json:"export_name"`
+	ExportName   string          `json:"export_name"`
 	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 }
@@ -103,46 +103,46 @@ type WasmExportDefinition struct {
 }
 
 type WASMRuntimeDefinition struct {
-	RuntimeDefinitionID string                  `json:"runtime_definition_id"`
-	ModuleID            string                  `json:"module_id"`
-	ExtensionID         string                  `json:"extension_id"`
-	ModulePath          string                  `json:"module_path"`
-	ModuleHash          string                  `json:"module_hash"`
-	ModuleSHA256        string                  `json:"module_sha256"`
-	InterfacePath       string                  `json:"interface_path,omitempty"`
-	InterfaceHash       string                  `json:"interface_hash,omitempty"`
+	RuntimeDefinitionID string `json:"runtime_definition_id"`
+	ModuleID            string `json:"module_id"`
+	ExtensionID         string `json:"extension_id"`
+	ModulePath          string `json:"module_path"`
+	ModuleHash          string `json:"module_hash"`
+	ModuleSHA256        string `json:"module_sha256"`
+	InterfacePath       string `json:"interface_path,omitempty"`
+	InterfaceHash       string `json:"interface_hash,omitempty"`
 
-	EngineType          string                  `json:"engine_type"`
-	Entry               WasmEntryDefinition     `json:"entry"`
+	EngineType string              `json:"engine_type"`
+	Entry      WasmEntryDefinition `json:"entry"`
 
-	ABI                 ABIKind                 `json:"abi"`
-	ABIDef              WasmABIDefinition       `json:"abi_def,omitempty"`
-	WASIVersion         WASIVersion             `json:"wasi_version"`
-	Imports             []WasmImportRequirement  `json:"imports,omitempty"`
-	Exports             []WasmExportDefinition   `json:"exports,omitempty"`
-	AllowedImports      []HostImportName        `json:"allowed_imports"`
+	ABI            ABIKind                 `json:"abi"`
+	ABIDef         WasmABIDefinition       `json:"abi_def,omitempty"`
+	WASIVersion    WASIVersion             `json:"wasi_version"`
+	Imports        []WasmImportRequirement `json:"imports,omitempty"`
+	Exports        []WasmExportDefinition  `json:"exports,omitempty"`
+	AllowedImports []HostImportName        `json:"allowed_imports"`
 
-	Limits              WasmResourceLimits      `json:"limits"`
-	MemoryLimitBytes    int64                   `json:"memory_limit_bytes"`
-	FuelLimit           uint64                  `json:"fuel_limit"`
-	InstancePolicy      InstancePolicy          `json:"instance_policy"`
-	DeterminismPolicy   WasmDeterminismPolicy   `json:"determinism_policy"`
-	Deterministic       bool                    `json:"deterministic"`
+	Limits            WasmResourceLimits    `json:"limits"`
+	MemoryLimitBytes  int64                 `json:"memory_limit_bytes"`
+	FuelLimit         uint64                `json:"fuel_limit"`
+	InstancePolicy    InstancePolicy        `json:"instance_policy"`
+	DeterminismPolicy WasmDeterminismPolicy `json:"determinism_policy"`
+	Deterministic     bool                  `json:"deterministic"`
 
-	EntryExport         string                  `json:"entry_export"`
-	InputSchema         json.RawMessage         `json:"input_schema,omitempty"`
-	OutputSchema        json.RawMessage         `json:"output_schema,omitempty"`
-	MaxOutputBytes      int64                   `json:"max_output_bytes"`
-	MaxHostCalls        int                     `json:"max_host_calls"`
-	CallTimeout         time.Duration           `json:"call_timeout"`
+	EntryExport    string          `json:"entry_export"`
+	InputSchema    json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema   json.RawMessage `json:"output_schema,omitempty"`
+	MaxOutputBytes int64           `json:"max_output_bytes"`
+	MaxHostCalls   int             `json:"max_host_calls"`
+	CallTimeout    time.Duration   `json:"call_timeout"`
 
-	PermissionRequirements []string             `json:"permission_requirements,omitempty"`
-	ScopeRule              string               `json:"scope_rule,omitempty"`
+	PermissionRequirements []string `json:"permission_requirements,omitempty"`
+	ScopeRule              string   `json:"scope_rule,omitempty"`
 
-	DefinitionHash      string                  `json:"definition_hash"`
-	DefinitionVersion   int                     `json:"definition_version"`
-	Version             string                  `json:"version"`
-	Generation          int64                   `json:"generation"`
+	DefinitionHash    string `json:"definition_hash"`
+	DefinitionVersion int    `json:"definition_version"`
+	Version           string `json:"version"`
+	Generation        int64  `json:"generation"`
 }
 
 type InvocationResult struct {
@@ -156,26 +156,26 @@ type InvocationResult struct {
 }
 
 type InstanceStats struct {
-	InstanceID    string
-	ModuleID      string
-	State         string
-	Invocations   int64
-	Traps         int64
-	Timeouts      int64
-	LastError     string
-	LastUsedAt    *time.Time
-	MemoryUsed    int64
-	FuelUsed      uint64
+	InstanceID  string
+	ModuleID    string
+	State       string
+	Invocations int64
+	Traps       int64
+	Timeouts    int64
+	LastError   string
+	LastUsedAt  *time.Time
+	MemoryUsed  int64
+	FuelUsed    uint64
 }
 
 type InstanceState string
 
 const (
-	InstanceStateCreated   InstanceState = "created"
-	InstanceStateReady     InstanceState = "ready"
-	InstanceStateRunning   InstanceState = "running"
-	InstanceStateTrapped   InstanceState = "trapped"
-	InstanceStateDisposed  InstanceState = "disposed"
+	InstanceStateCreated  InstanceState = "created"
+	InstanceStateReady    InstanceState = "ready"
+	InstanceStateRunning  InstanceState = "running"
+	InstanceStateTrapped  InstanceState = "trapped"
+	InstanceStateDisposed InstanceState = "disposed"
 )
 
 type WASMError struct {
@@ -196,31 +196,31 @@ func (e *WASMError) Unwrap() error { return e.Cause }
 type WASMErrorCode string
 
 const (
-	ErrCodeModuleInvalid     WASMErrorCode = "wasm_module_invalid"
-	ErrCodeModuleMissing     WASMErrorCode = "wasm_module_missing"
-	ErrCodeIntegrityFailed   WASMErrorCode = "wasm_module_integrity_failed"
+	ErrCodeModuleInvalid      WASMErrorCode = "wasm_module_invalid"
+	ErrCodeModuleMissing      WASMErrorCode = "wasm_module_missing"
+	ErrCodeIntegrityFailed    WASMErrorCode = "wasm_module_integrity_failed"
 	ErrCodeFeatureUnsupported WASMErrorCode = "wasm_feature_unsupported"
-	ErrCodeImportNotAllowed  WASMErrorCode = "wasm_import_not_allowed"
-	ErrCodeExportMissing     WASMErrorCode = "wasm_export_missing"
-	ErrCodeABIMismatch       WASMErrorCode = "wasm_abi_incompatible"
-	ErrCodeCompileFailed     WASMErrorCode = "wasm_compile_failed"
-	ErrCodeInstantiateFailed WASMErrorCode = "wasm_instantiate_failed"
-	ErrCodeMemoryLimit       WASMErrorCode = "wasm_memory_limit_exceeded"
-	ErrCodeMemoryAccess      WASMErrorCode = "wasm_memory_access_invalid"
-	ErrCodeFuelExhausted     WASMErrorCode = "wasm_fuel_exhausted"
-	ErrCodeTimeout           WASMErrorCode = "wasm_execution_timeout"
-	ErrCodeCancelled         WASMErrorCode = "wasm_execution_cancelled"
-	ErrCodeTrap              WASMErrorCode = "wasm_trap"
-	ErrCodeOutputInvalid     WASMErrorCode = "wasm_output_invalid"
-	ErrCodeOutputTooLarge    WASMErrorCode = "wasm_output_too_large"
-	ErrCodeHostCallLimit     WASMErrorCode = "wasm_host_call_limit_exceeded"
+	ErrCodeImportNotAllowed   WASMErrorCode = "wasm_import_not_allowed"
+	ErrCodeExportMissing      WASMErrorCode = "wasm_export_missing"
+	ErrCodeABIMismatch        WASMErrorCode = "wasm_abi_incompatible"
+	ErrCodeCompileFailed      WASMErrorCode = "wasm_compile_failed"
+	ErrCodeInstantiateFailed  WASMErrorCode = "wasm_instantiate_failed"
+	ErrCodeMemoryLimit        WASMErrorCode = "wasm_memory_limit_exceeded"
+	ErrCodeMemoryAccess       WASMErrorCode = "wasm_memory_access_invalid"
+	ErrCodeFuelExhausted      WASMErrorCode = "wasm_fuel_exhausted"
+	ErrCodeTimeout            WASMErrorCode = "wasm_execution_timeout"
+	ErrCodeCancelled          WASMErrorCode = "wasm_execution_cancelled"
+	ErrCodeTrap               WASMErrorCode = "wasm_trap"
+	ErrCodeOutputInvalid      WASMErrorCode = "wasm_output_invalid"
+	ErrCodeOutputTooLarge     WASMErrorCode = "wasm_output_too_large"
+	ErrCodeHostCallLimit      WASMErrorCode = "wasm_host_call_limit_exceeded"
 	ErrCodeHostFunctionDenied WASMErrorCode = "wasm_host_function_denied"
-	ErrCodePermissionDenied  WASMErrorCode = "wasm_permission_denied"
-	ErrCodeScopeDenied       WASMErrorCode = "wasm_scope_denied"
-	ErrCodeRecursionDetected WASMErrorCode = "wasm_recursion_detected"
-	ErrCodeDepthExceeded     WASMErrorCode = "wasm_depth_exceeded"
-	ErrCodeCircuitOpen       WASMErrorCode = "wasm_runtime_circuit_open"
-	ErrCodeQuarantined       WASMErrorCode = "wasm_runtime_quarantined"
+	ErrCodePermissionDenied   WASMErrorCode = "wasm_permission_denied"
+	ErrCodeScopeDenied        WASMErrorCode = "wasm_scope_denied"
+	ErrCodeRecursionDetected  WASMErrorCode = "wasm_recursion_detected"
+	ErrCodeDepthExceeded      WASMErrorCode = "wasm_depth_exceeded"
+	ErrCodeCircuitOpen        WASMErrorCode = "wasm_runtime_circuit_open"
+	ErrCodeQuarantined        WASMErrorCode = "wasm_runtime_quarantined"
 
 	ErrCodeHostCallFailed   WASMErrorCode = "wasm_host_call_failed"
 	ErrCodeInstanceDisposed WASMErrorCode = "instance_disposed"
@@ -434,10 +434,10 @@ type CompiledModule interface {
 }
 
 type InstantiateOptions struct {
-	MemoryLimit int64
-	FuelLimit   uint64
+	MemoryLimit    int64
+	FuelLimit      uint64
 	AllowedImports []HostImportName
-	HostImports *HostImportRegistry
+	HostImports    *HostImportRegistry
 }
 
 type Instance interface {

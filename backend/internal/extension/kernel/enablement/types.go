@@ -10,14 +10,14 @@ import (
 type InstallationState string
 
 const (
-	InstallationStateNotInstalled     InstallationState = "not_installed"
-	InstallationStateInstalling       InstallationState = "installing"
-	InstallationStateInstalled        InstallationState = "installed"
-	InstallationStateUpdating         InstallationState = "updating"
-	InstallationStateRollingBack      InstallationState = "rolling_back"
-	InstallationStateUninstalling     InstallationState = "uninstalling"
-	InstallationStateFailed           InstallationState = "failed"
-	InstallationStateUninstallFailed  InstallationState = "uninstall_failed"
+	InstallationStateNotInstalled    InstallationState = "not_installed"
+	InstallationStateInstalling      InstallationState = "installing"
+	InstallationStateInstalled       InstallationState = "installed"
+	InstallationStateUpdating        InstallationState = "updating"
+	InstallationStateRollingBack     InstallationState = "rolling_back"
+	InstallationStateUninstalling    InstallationState = "uninstalling"
+	InstallationStateFailed          InstallationState = "failed"
+	InstallationStateUninstallFailed InstallationState = "uninstall_failed"
 )
 
 type DefinitionState string
@@ -62,9 +62,9 @@ const (
 type DesiredRuntimeState string
 
 const (
-	DesiredRuntimeStarted  DesiredRuntimeState = "started"
-	DesiredRuntimeStopped  DesiredRuntimeState = "stopped"
-	DesiredRuntimePaused   DesiredRuntimeState = "paused"
+	DesiredRuntimeStarted    DesiredRuntimeState = "started"
+	DesiredRuntimeStopped    DesiredRuntimeState = "stopped"
+	DesiredRuntimePaused     DesiredRuntimeState = "paused"
 	DesiredRuntimeQuarantine DesiredRuntimeState = "quarantine"
 )
 
@@ -108,8 +108,8 @@ const (
 type ExposureState string
 
 const (
-	ExposureVisible   ExposureState = "visible"
-	ExposureHidden    ExposureState = "hidden"
+	ExposureVisible ExposureState = "visible"
+	ExposureHidden  ExposureState = "hidden"
 )
 
 type ExecutionState string
@@ -145,13 +145,13 @@ type StateSubject struct {
 }
 
 type StateRuntimeContext struct {
-	Scope         string
-	CharacterID   string
+	Scope          string
+	CharacterID    string
 	ConversationID string
-	UserID        string
-	Platform      string
-	Now           time.Time
-	Metadata      map[string]any
+	UserID         string
+	Platform       string
+	Now            time.Time
+	Metadata       map[string]any
 }
 
 type StateReason struct {
@@ -162,49 +162,49 @@ type StateReason struct {
 }
 
 type EffectiveState struct {
-	Subject            StateSubject
-	Installed          bool
-	DefinitionValid    bool
-	Enabled            bool
-	ScopeAllowed       bool
-	PermissionAllowed  bool
-	DesiredReady       bool
-	RuntimeReady       bool
-	DependencyReady    bool
-	Healthy            bool
-	CircuitAllows      bool
-	Visible            bool
-	Executable         bool
-	Availability       AvailabilityState
-	Exposure           ExposureState
-	Execution          ExecutionState
-	Reasons            []StateReason
-	EvaluatedAt        time.Time
+	Subject           StateSubject
+	Installed         bool
+	DefinitionValid   bool
+	Enabled           bool
+	ScopeAllowed      bool
+	PermissionAllowed bool
+	DesiredReady      bool
+	RuntimeReady      bool
+	DependencyReady   bool
+	Healthy           bool
+	CircuitAllows     bool
+	Visible           bool
+	Executable        bool
+	Availability      AvailabilityState
+	Exposure          ExposureState
+	Execution         ExecutionState
+	Reasons           []StateReason
+	EvaluatedAt       time.Time
 }
 
 var (
-	ErrSubjectNotFound    = errors.New("enablement: subject not found")
-	ErrAmbiguousState     = errors.New("enablement: ambiguous state")
-	ErrInvalidSubject     = errors.New("enablement: invalid subject")
-	ErrNoWriteAllowed     = errors.New("enablement: write to deprecated field")
+	ErrSubjectNotFound = errors.New("enablement: subject not found")
+	ErrAmbiguousState  = errors.New("enablement: ambiguous state")
+	ErrInvalidSubject  = errors.New("enablement: invalid subject")
+	ErrNoWriteAllowed  = errors.New("enablement: write to deprecated field")
 )
 
 type SubjectState struct {
-	Subject            StateSubject
-	Installation       InstallationState
-	Definition         DefinitionState
-	Enablement         EnablementState
-	DesiredRuntime     DesiredRuntimeState
-	ActualRuntime      ActualRuntimeState
-	Health             HealthState
-	Circuit            CircuitState
-	Scope              ScopeState
-	Permission         PermissionState
-	DependencyReady    bool
-	PlatformSupported  bool
-	MigrationRequired  bool
-	ParentEnabled      *bool
-	UpdatedAt          time.Time
+	Subject           StateSubject
+	Installation      InstallationState
+	Definition        DefinitionState
+	Enablement        EnablementState
+	DesiredRuntime    DesiredRuntimeState
+	ActualRuntime     ActualRuntimeState
+	Health            HealthState
+	Circuit           CircuitState
+	Scope             ScopeState
+	Permission        PermissionState
+	DependencyReady   bool
+	PlatformSupported bool
+	MigrationRequired bool
+	ParentEnabled     *bool
+	UpdatedAt         time.Time
 }
 
 type StateStore interface {

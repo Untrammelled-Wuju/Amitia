@@ -16,13 +16,13 @@ const (
 )
 
 type PermissionScope struct {
-	Type         ScopeType `json:"type"`
-	ID           string    `json:"id,omitempty"`
-	CharacterID  string    `json:"characterId,omitempty"`
-	ConversationID string  `json:"conversationId,omitempty"`
-	ExtensionID  string    `json:"extensionId,omitempty"`
-	ToolID       string    `json:"toolId,omitempty"`
-	ResourceID   string    `json:"resourceId,omitempty"`
+	Type           ScopeType `json:"type"`
+	ID             string    `json:"id,omitempty"`
+	CharacterID    string    `json:"characterId,omitempty"`
+	ConversationID string    `json:"conversationId,omitempty"`
+	ExtensionID    string    `json:"extensionId,omitempty"`
+	ToolID         string    `json:"toolId,omitempty"`
+	ResourceID     string    `json:"resourceId,omitempty"`
 }
 
 func ScopeForCharacter(charID string) PermissionScope {

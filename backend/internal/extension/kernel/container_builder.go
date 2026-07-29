@@ -664,16 +664,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionRepository:   permRepo,
 		ResourceRepository:     resourceRepo,
 
-		PackageSecurity:        packageSec,
-		LifecycleManager:       lifecycleMgr,
-		ContributionRegistry:   contribRegistry,
-		ContributionInstaller:  typedInstaller,
-		DependencyResolver:     dependencyResolver,
-		RuntimeSupervisor:      supervisor,
-		ExecutionKernel:        executionKernel,
-		HostAPIGateway:         hostAPIGateway,
-		PermissionBroker:       permBroker,
-		ScopeManager:           scopeManager,
+		PackageSecurity:       packageSec,
+		LifecycleManager:      lifecycleMgr,
+		ContributionRegistry:  contribRegistry,
+		ContributionInstaller: typedInstaller,
+		DependencyResolver:    dependencyResolver,
+		RuntimeSupervisor:     supervisor,
+		ExecutionKernel:       executionKernel,
+		HostAPIGateway:        hostAPIGateway,
+		PermissionBroker:      permBroker,
+		ScopeManager:          scopeManager,
 		ScopeSnapshotCreator: func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
 			invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
 			scopes := []scope.ScopeRef{
@@ -809,7 +809,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		generationMgr,
 		candidateMgr,
 		b.extRoot,
-	)
+	).WithCleanupRepo(NewRuntimeCleanupRepository(db))
 	devModeReloader.SetCandidateRunner(candidateRunner)
 	devModeReloader.SetSessionManager(devModeSessions)
 	devModeReloader.SetCleanupFailureStore(NewSQLiteCleanupFailureStore(db))
@@ -837,8 +837,8 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 
 func (b *ContainerBuilder) resolveNodePath() string {
 	candidates := []string{
+		filepath.Join("backend", "node", "node.exe"),
 		"node.exe",
-		filepath.Join("backend", "node.exe"),
 	}
 	for _, c := range candidates {
 		absPath, err := filepath.Abs(c)

@@ -10,41 +10,41 @@ import (
 )
 
 type DataMigrationTable struct {
-	TableName        string `json:"tableName"`
-	LegacySchema     string `json:"legacySchema"`
-	NewSchema        string `json:"newSchema"`
-	Transformation   string `json:"transformation,omitempty"`
-	RequiresBackup   bool   `json:"requiresBackup"`
-	Destructive      bool   `json:"destructive"`
-	BatchSize        int    `json:"batchSize"`
+	TableName      string `json:"tableName"`
+	LegacySchema   string `json:"legacySchema"`
+	NewSchema      string `json:"newSchema"`
+	Transformation string `json:"transformation,omitempty"`
+	RequiresBackup bool   `json:"requiresBackup"`
+	Destructive    bool   `json:"destructive"`
+	BatchSize      int    `json:"batchSize"`
 }
 
 type DataMigrationSpec struct {
-	MigrationID    string             `json:"migrationId"`
-	SourceSystem   string             `json:"sourceSystem"`
-	TargetSystem   string             `json:"targetSystem"`
-	Version        string             `json:"version"`
-	Tables         []DataMigrationTable `json:"tables"`
-	PreChecks      []string           `json:"preChecks,omitempty"`
-	PostChecks     []string           `json:"postChecks,omitempty"`
-	Rollbackable   bool               `json:"rollbackable"`
-	DryRunOnly     bool               `json:"dryRunOnly"`
+	MigrationID  string               `json:"migrationId"`
+	SourceSystem string               `json:"sourceSystem"`
+	TargetSystem string               `json:"targetSystem"`
+	Version      string               `json:"version"`
+	Tables       []DataMigrationTable `json:"tables"`
+	PreChecks    []string             `json:"preChecks,omitempty"`
+	PostChecks   []string             `json:"postChecks,omitempty"`
+	Rollbackable bool                 `json:"rollbackable"`
+	DryRunOnly   bool                 `json:"dryRunOnly"`
 }
 
 type DataMigrationRegistry struct {
-	mu        sync.RWMutex
-	specs     map[string]*DataMigrationSpec
-	executed  map[string]*MigrationExecution
+	mu       sync.RWMutex
+	specs    map[string]*DataMigrationSpec
+	executed map[string]*MigrationExecution
 }
 
 type MigrationExecution struct {
-	MigrationID string    `json:"migrationId"`
-	StartedAt   time.Time `json:"startedAt"`
-	CompletedAt time.Time `json:"completedAt,omitempty"`
-	Status      string    `json:"status"`
-	RecordsMigrated int   `json:"recordsMigrated"`
-	Errors      []string  `json:"errors,omitempty"`
-	IsDryRun    bool      `json:"isDryRun"`
+	MigrationID     string    `json:"migrationId"`
+	StartedAt       time.Time `json:"startedAt"`
+	CompletedAt     time.Time `json:"completedAt,omitempty"`
+	Status          string    `json:"status"`
+	RecordsMigrated int       `json:"recordsMigrated"`
+	Errors          []string  `json:"errors,omitempty"`
+	IsDryRun        bool      `json:"isDryRun"`
 }
 
 func NewDataMigrationRegistry() *DataMigrationRegistry {
@@ -109,15 +109,15 @@ func (r *DataMigrationRegistry) GetExecution(migrationID string) (*MigrationExec
 }
 
 type DataMigrationReport struct {
-	StartTime         time.Time                `json:"startTime"`
-	EndTime           time.Time                `json:"endTime"`
-	TotalMigrations   int                      `json:"totalMigrations"`
-	CompletedCount    int                      `json:"completedCount"`
-	FailedCount       int                      `json:"failedCount"`
-	SkippedCount      int                      `json:"skippedCount"`
-	RecordsMigrated   int                      `json:"recordsMigrated"`
-	FailedMigrations  []FailedDataMigration    `json:"failedMigrations,omitempty"`
-	Status            string                   `json:"status"`
+	StartTime        time.Time             `json:"startTime"`
+	EndTime          time.Time             `json:"endTime"`
+	TotalMigrations  int                   `json:"totalMigrations"`
+	CompletedCount   int                   `json:"completedCount"`
+	FailedCount      int                   `json:"failedCount"`
+	SkippedCount     int                   `json:"skippedCount"`
+	RecordsMigrated  int                   `json:"recordsMigrated"`
+	FailedMigrations []FailedDataMigration `json:"failedMigrations,omitempty"`
+	Status           string                `json:"status"`
 }
 
 type FailedDataMigration struct {
@@ -173,10 +173,10 @@ func RunDataMigration(ctx context.Context, registry *DataMigrationRegistry, migr
 }
 
 type CutoverPlan struct {
-	PlanID          string    `json:"planId"`
-	StartTime       time.Time `json:"startTime"`
-	Steps           []CutoverStep `json:"steps"`
-	RequiresDowntime bool     `json:"requiresDowntime"`
+	PlanID            string        `json:"planId"`
+	StartTime         time.Time     `json:"startTime"`
+	Steps             []CutoverStep `json:"steps"`
+	RequiresDowntime  bool          `json:"requiresDowntime"`
 	EstimatedDuration time.Duration `json:"estimatedDuration"`
 }
 
@@ -201,7 +201,7 @@ func NewCutoverPlan() *CutoverPlan {
 			{StepID: "verify_runtime", Name: "验证运行时", Type: "verify", Required: true},
 			{StepID: "cleanup_legacy", Name: "清理旧系统", Type: "cleanup", Required: false},
 		},
-		RequiresDowntime: true,
+		RequiresDowntime:  true,
 		EstimatedDuration: 30 * time.Minute,
 	}
 }

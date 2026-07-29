@@ -16,14 +16,14 @@ func NewLifecycleEventEmitter(emitter HostEventEmitter) *LifecycleEventEmitter {
 }
 
 type ExtensionLifecyclePayload struct {
-	ExtensionID    string `json:"extensionId"`
-	Version        string `json:"version"`
-	OperationID    string `json:"operationId"`
-	Timestamp      string `json:"timestamp"`
-	Reason         string `json:"reason,omitempty"`
-	PreviousState  string `json:"previousState,omitempty"`
-	NewState       string `json:"newState,omitempty"`
-	ModuleID       string `json:"moduleId,omitempty"`
+	ExtensionID   string `json:"extensionId"`
+	Version       string `json:"version"`
+	OperationID   string `json:"operationId"`
+	Timestamp     string `json:"timestamp"`
+	Reason        string `json:"reason,omitempty"`
+	PreviousState string `json:"previousState,omitempty"`
+	NewState      string `json:"newState,omitempty"`
+	ModuleID      string `json:"moduleId,omitempty"`
 }
 
 func (l *LifecycleEventEmitter) EmitExtensionInstalled(ctx context.Context, extensionID, version, operationID string) error {

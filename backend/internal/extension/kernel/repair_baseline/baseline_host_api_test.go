@@ -85,11 +85,11 @@ func TestBaseline_HostAPI_ScopeDeniedMustReject(t *testing.T) {
 	}))
 
 	res := gw.Call(context.Background(), host_api.CallRequest{
-		CallID:           "call-baseline-3",
-		RuntimeIdentity:  identity(),
-		Method:           host_api.MethodStateGet,
-		Version:          1,
-		ScopeSnapshotID:  "snap-missing",
+		CallID:          "call-baseline-3",
+		RuntimeIdentity: identity(),
+		Method:          host_api.MethodStateGet,
+		Version:         1,
+		ScopeSnapshotID: "snap-missing",
 	})
 
 	if res.Status != host_api.StatusRejected || res.Error == nil || res.Error.Code != host_api.ErrorCodeScopeDenied {

@@ -5,9 +5,9 @@ import (
 )
 
 type ContributionFilter struct {
-	Type         ContributionType
-	ExtensionID  string
-	Enabled      *bool
+	Type        ContributionType
+	ExtensionID string
+	Enabled     *bool
 }
 
 type ContributionRegistry struct {

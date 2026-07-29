@@ -5,16 +5,16 @@ import "time"
 type ReferenceType string
 
 const (
-	RefDependsOn       ReferenceType = "depends_on"
-	RefContains        ReferenceType = "contains"
-	RefUses            ReferenceType = "uses"
-	RefGeneratedFrom   ReferenceType = "generated_from"
-	RefInstalledBy     ReferenceType = "installed_by"
-	RefOwnedBy         ReferenceType = "owned_by"
-	RefScopedBy        ReferenceType = "scoped_by"
-	RefSecuredBy       ReferenceType = "secured_by"
-	RefScheduledBy     ReferenceType = "scheduled_by"
-	RefRenderedBy      ReferenceType = "rendered_by"
+	RefDependsOn        ReferenceType = "depends_on"
+	RefContains         ReferenceType = "contains"
+	RefUses             ReferenceType = "uses"
+	RefGeneratedFrom    ReferenceType = "generated_from"
+	RefInstalledBy      ReferenceType = "installed_by"
+	RefOwnedBy          ReferenceType = "owned_by"
+	RefScopedBy         ReferenceType = "scoped_by"
+	RefSecuredBy        ReferenceType = "secured_by"
+	RefScheduledBy      ReferenceType = "scheduled_by"
+	RefRenderedBy       ReferenceType = "rendered_by"
 	RefRuntimeManagedBy ReferenceType = "runtime_managed_by"
 )
 
@@ -31,12 +31,12 @@ func (rt ReferenceType) IsValid() bool {
 type OwnershipEffect string
 
 const (
-	EffectNone         OwnershipEffect = "none"
-	EffectRetainTarget OwnershipEffect = "retain_target"
-	EffectBlockDelete  OwnershipEffect = "block_delete"
-	EffectCascadeDelete OwnershipEffect = "cascade_delete"
+	EffectNone             OwnershipEffect = "none"
+	EffectRetainTarget     OwnershipEffect = "retain_target"
+	EffectBlockDelete      OwnershipEffect = "block_delete"
+	EffectCascadeDelete    OwnershipEffect = "cascade_delete"
 	EffectTransferOnDelete OwnershipEffect = "transfer_on_delete"
-	EffectPromptUser   OwnershipEffect = "prompt_user"
+	EffectPromptUser       OwnershipEffect = "prompt_user"
 )
 
 func (oe OwnershipEffect) IsValid() bool {
@@ -51,11 +51,11 @@ func (oe OwnershipEffect) IsValid() bool {
 type DeleteStrategy string
 
 const (
-	StrategyCascade    DeleteStrategy = "cascade"
-	StrategyRetain     DeleteStrategy = "retain"
-	StrategyTransfer   DeleteStrategy = "transfer"
-	StrategyPrompt     DeleteStrategy = "prompt"
-	StrategyBlock      DeleteStrategy = "block"
+	StrategyCascade     DeleteStrategy = "cascade"
+	StrategyRetain      DeleteStrategy = "retain"
+	StrategyTransfer    DeleteStrategy = "transfer"
+	StrategyPrompt      DeleteStrategy = "prompt"
+	StrategyBlock       DeleteStrategy = "block"
 	StrategyRebuildable DeleteStrategy = "rebuildable"
 )
 

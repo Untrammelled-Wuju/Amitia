@@ -24,20 +24,21 @@ type moduleEnablementSnapshot struct {
 }
 
 type enableTransaction struct {
-	runtime               *Runtime
-	extID                 domain.ExtensionID
-	extensionID           string
-	operationID           string
-	prevInst              domain.ExtensionInstallation
-	prevExtEnablement     enablement.EnablementState
-	prevExtDesired        enablement.DesiredRuntimeState
-	moduleSnapshots       []moduleEnablementSnapshot
-	startedInstanceIDs    []string
-	instCommitted         bool
+	runtime                *Runtime
+	extID                  domain.ExtensionID
+	extensionID            string
+	operationID            string
+	sagaRepo               *LifecycleSagaRepository
+	prevInst               domain.ExtensionInstallation
+	prevExtEnablement      enablement.EnablementState
+	prevExtDesired         enablement.DesiredRuntimeState
+	moduleSnapshots        []moduleEnablementSnapshot
+	startedInstanceIDs     []string
+	instCommitted          bool
 	extEnablementCommitted bool
-	modulesCommitted      int
+	modulesCommitted       int
 	contributionsActivated bool
-	uiRegistered          bool
+	uiRegistered           bool
 }
 
 func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
@@ -91,10 +92,32 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		extID:             extID,
 		extensionID:       extensionID,
 		operationID:       operationID,
+		sagaRepo:          r.sagaRepo,
 		prevInst:          prevInst,
 		prevExtEnablement: prevExtEnablement,
 		prevExtDesired:    prevExtDesired,
 		moduleSnapshots:   moduleSnapshots,
+	}
+
+	if r.sagaRepo != nil {
+		now := time.Now().UTC()
+		op := &LifecycleOperation{
+			OperationID:         operationID,
+			ExtensionID:         extensionID,
+			OperationType:       "enable",
+			FromState:           string(prevInst.EnablementState),
+			TargetState:         string(domain.EnablementEnabled),
+			StableGeneration:    inst.Generation,
+			CandidateGeneration: candidateGeneration,
+			Status:              LifecycleOperationRunning,
+			CurrentStep:         "acquire_lock",
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}
+		if err := r.sagaRepo.CreateOperation(ctx, op); err != nil {
+			log.Printf("[enable-tx] failed to persist lifecycle operation %s: %v", operationID, err)
+		}
+		r.persistLifecycleStep(ctx, operationID, "acquire_lock", LifecycleStepSucceeded, nil)
 	}
 
 	var startedInstanceIDs []string
@@ -129,6 +152,8 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 					}
 					r.recordRuntimeOperation(ctx, extID, "enable", rtErr)
 					r.logEnableStep(operationID, extensionID, "start_runtime", "failed", rtErr)
+					r.persistLifecycleStep(ctx, operationID, "start_runtime", LifecycleStepFailed, rtErr)
+					r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "start_runtime", rtErr)
 					return fmt.Errorf("kernel: enable extension %s: runtime reconcile failed: %w", extensionID, rtErr)
 				}
 				if result.InstanceID != "" {
@@ -139,6 +164,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 	tx.startedInstanceIDs = startedInstanceIDs
 	r.logEnableStep(operationID, extensionID, "start_runtime", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "start_runtime", LifecycleStepSucceeded, nil)
 
 	if r.container.RuntimeSupervisor != nil {
 		for _, sid := range startedInstanceIDs {
@@ -146,17 +172,22 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 			if hcErr != nil {
 				tx.rollback(ctx)
 				r.logEnableStep(operationID, extensionID, "health_check", "failed", hcErr)
+				r.persistLifecycleStep(ctx, operationID, "health_check", LifecycleStepFailed, hcErr)
+				r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "health_check", hcErr)
 				return fmt.Errorf("kernel: health check instance %s: %w", sid, hcErr)
 			}
 			if snap.Health != runtime_supervisor.HealthHealthy && snap.Health != runtime_supervisor.HealthDegraded {
 				tx.rollback(ctx)
 				hErr := fmt.Errorf("kernel: instance %s unhealthy: %s", sid, snap.Health)
 				r.logEnableStep(operationID, extensionID, "health_check", "failed", hErr)
+				r.persistLifecycleStep(ctx, operationID, "health_check", LifecycleStepFailed, hErr)
+				r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "health_check", hErr)
 				return hErr
 			}
 		}
 	}
 	r.logEnableStep(operationID, extensionID, "health_check", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "health_check", LifecycleStepSucceeded, nil)
 
 	inst.EnablementState = domain.EnablementEnabled
 	inst.UpdatedAt = time.Now().UTC()
@@ -164,10 +195,13 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	if err := r.container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
 		tx.rollback(ctx)
 		r.logEnableStep(operationID, extensionID, "commit_installation", "failed", err)
+		r.persistLifecycleStep(ctx, operationID, "commit_installation", LifecycleStepFailed, err)
+		r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "commit_installation", err)
 		return fmt.Errorf("kernel: commit installation enabled: %w", err)
 	}
 	tx.instCommitted = true
 	r.logEnableStep(operationID, extensionID, "commit_installation", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "commit_installation", LifecycleStepSucceeded, nil)
 
 	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extensionID}
 	if err := r.container.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementEnabled); err != nil {
@@ -204,17 +238,22 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		tx.modulesCommitted = i + 1
 	}
 	r.logEnableStep(operationID, extensionID, "commit_enablement", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "commit_enablement", LifecycleStepSucceeded, nil)
 	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "promote_generation", LifecycleStepSucceeded, nil)
 
 	if r.container.ContributionInstaller != nil {
 		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
 			tx.rollback(ctx)
 			r.logEnableStep(operationID, extensionID, "activate_contributions", "failed", err)
+			r.persistLifecycleStep(ctx, operationID, "activate_contributions", LifecycleStepFailed, err)
+			r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "activate_contributions", err)
 			return fmt.Errorf("kernel: activate contributions: %w", err)
 		}
 		tx.contributionsActivated = true
 	}
 	r.logEnableStep(operationID, extensionID, "activate_contributions", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "activate_contributions", LifecycleStepSucceeded, nil)
 
 	if r.container.UIContributionRepo != nil {
 		uiDefs, uiErr := r.container.UIContributionRepo.ListByExtension(ctx, extensionID)
@@ -241,10 +280,10 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 				}
 				pageDef := extension_page_host.NewExtensionPageDefinition(extension_page_host.PageRegistrationInput{
 					PageID:          extension_page_host.PageID(uiDef.ContributionID),
-					ExtensionID:    extension_page_host.ExtensionID(uiDef.ExtensionID),
-					ModuleID:       string(uiDef.ModuleID),
-					ContributionID: extension_page_host.ContributionID(uiDef.ContributionID),
-					Generation:     candidateGeneration,
+					ExtensionID:     extension_page_host.ExtensionID(uiDef.ExtensionID),
+					ModuleID:        string(uiDef.ModuleID),
+					ContributionID:  extension_page_host.ContributionID(uiDef.ContributionID),
+					Generation:      candidateGeneration,
 					ContractVersion: uiDef.ContractVersion,
 					EntryKind:       entryKind,
 					EntryPath:       uiDef.Entry.Path,
@@ -269,12 +308,18 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		}
 	}
 	r.logEnableStep(operationID, extensionID, "register_ui", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "register_ui", LifecycleStepSucceeded, nil)
+	r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompleted, "register_ui", nil)
 
 	return nil
 }
 
 func (tx *enableTransaction) rollback(ctx context.Context) {
 	var rollbackErrs []error
+
+	if tx.sagaRepo != nil {
+		_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationCompensating, "rollback", "")
+	}
 
 	if tx.uiRegistered {
 		if tx.runtime.container.UIHost != nil {
@@ -283,11 +328,15 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 		if tx.runtime.container.PageHost != nil {
 			tx.runtime.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(tx.extID))
 		}
+		tx.saveCompensation(ctx, "register_ui", "unregister_ui")
 	}
 
 	if tx.contributionsActivated && tx.runtime.container.ContributionInstaller != nil {
 		if err := tx.runtime.container.ContributionInstaller.DeactivateContributions(ctx, tx.extID); err != nil {
 			rollbackErrs = append(rollbackErrs, fmt.Errorf("deactivate contributions: %w", err))
+			tx.saveCompensationWithError(ctx, "activate_contributions", "deactivate_contributions", err)
+		} else {
+			tx.saveCompensation(ctx, "activate_contributions", "deactivate_contributions")
 		}
 	}
 
@@ -330,8 +379,14 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 		tx.runtime.markRequiresRecovery(ctx, tx.extID, tx.prevInst)
 		tx.runtime.recordLifecycleOperation(ctx, tx.extID, tx.operationID, "enable_rollback_failed", rollbackErrs)
 		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "failed", fmt.Errorf("%d errors: %v", len(rollbackErrs), rollbackErrs))
+		if tx.sagaRepo != nil {
+			_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationRequiresRecovery, "rollback", fmt.Sprintf("%d errors", len(rollbackErrs)))
+		}
 	} else {
 		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "succeeded", nil)
+		if tx.sagaRepo != nil {
+			_ = tx.sagaRepo.UpdateOperationStatus(ctx, tx.operationID, LifecycleOperationFailed, "rollback", "")
+		}
 	}
 }
 
@@ -374,6 +429,140 @@ func (r *Runtime) logEnableStep(operationID, extensionID, step, status string, e
 	}
 	log.Printf("[enable-tx] operationID=%s extensionID=%s step=%s status=%s error=%s",
 		operationID, extensionID, step, status, errStr)
+}
+
+func (r *Runtime) persistLifecycleStep(ctx context.Context, operationID, stepName string, status LifecycleStepStatus, err error) {
+	if r == nil || r.sagaRepo == nil {
+		return
+	}
+	stepID := fmt.Sprintf("%s-%s", operationID, stepName)
+	step := &LifecycleStep{
+		StepID:      stepID,
+		OperationID: operationID,
+		StepName:    stepName,
+		Status:      status,
+	}
+	now := time.Now().UTC()
+	if status == LifecycleStepRunning {
+		step.StartedAt = &now
+	} else if status == LifecycleStepSucceeded || status == LifecycleStepFailed || status == LifecycleStepSkipped {
+		step.StartedAt = &now
+		step.FinishedAt = &now
+	}
+	if err != nil {
+		step.ErrorCode = err.Error()
+	}
+	if saveErr := r.sagaRepo.SaveStep(ctx, step); saveErr != nil {
+		log.Printf("[enable-tx] failed to persist step %s: %v", stepID, saveErr)
+	}
+}
+
+func (r *Runtime) updateLifecycleOperationStatus(ctx context.Context, operationID string, status LifecycleOperationStatus, currentStep string, err error) {
+	if r == nil || r.sagaRepo == nil {
+		return
+	}
+	errorCode := ""
+	if err != nil {
+		errorCode = err.Error()
+	}
+	if updateErr := r.sagaRepo.UpdateOperationStatus(ctx, operationID, status, currentStep, errorCode); updateErr != nil {
+		log.Printf("[enable-tx] failed to update operation status %s: %v", operationID, updateErr)
+	}
+}
+
+func (tx *enableTransaction) saveCompensation(ctx context.Context, stepName, compensationName string) {
+	if tx.sagaRepo == nil {
+		return
+	}
+	compID := fmt.Sprintf("%s-comp-%s", tx.operationID, stepName)
+	comp := &LifecycleCompensation{
+		CompensationID:   compID,
+		OperationID:      tx.operationID,
+		StepName:         stepName,
+		CompensationName: compensationName,
+		Status:           LifecycleCompensationSucceeded,
+	}
+	now := time.Now().UTC()
+	comp.StartedAt = &now
+	comp.FinishedAt = &now
+	if err := tx.sagaRepo.SaveCompensation(ctx, comp); err != nil {
+		log.Printf("[enable-tx] failed to persist compensation %s: %v", compID, err)
+	}
+}
+
+func (tx *enableTransaction) saveCompensationWithError(ctx context.Context, stepName, compensationName string, err error) {
+	if tx.sagaRepo == nil {
+		return
+	}
+	compID := fmt.Sprintf("%s-comp-%s", tx.operationID, stepName)
+	comp := &LifecycleCompensation{
+		CompensationID:   compID,
+		OperationID:      tx.operationID,
+		StepName:         stepName,
+		CompensationName: compensationName,
+		Status:           LifecycleCompensationFailed,
+	}
+	now := time.Now().UTC()
+	comp.StartedAt = &now
+	comp.FinishedAt = &now
+	if err != nil {
+		comp.ErrorCode = err.Error()
+	}
+	if saveErr := tx.sagaRepo.SaveCompensation(ctx, comp); saveErr != nil {
+		log.Printf("[enable-tx] failed to persist compensation %s: %v", compID, saveErr)
+	}
+}
+
+func (r *Runtime) RecoverLifecycleOperations(ctx context.Context) error {
+	if r == nil || r.sagaRepo == nil {
+		return nil
+	}
+	pendingOps, err := r.sagaRepo.ListPendingOperations(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: list pending lifecycle operations: %w", err)
+	}
+	for _, op := range pendingOps {
+		steps, stepErr := r.sagaRepo.ListStepsByOperation(ctx, op.OperationID)
+		if stepErr != nil {
+			log.Printf("[lifecycle-recovery] failed to list steps for operation %s: %v", op.OperationID, stepErr)
+			continue
+		}
+		lastCompletedStep := ""
+		for _, step := range steps {
+			if step.Status == LifecycleStepSucceeded {
+				lastCompletedStep = step.StepName
+			}
+		}
+		log.Printf("[lifecycle-recovery] operation %s (type=%s, status=%s, lastStep=%s) - attempting recovery",
+			op.OperationID, op.OperationType, op.Status, lastCompletedStep)
+
+		switch op.Status {
+		case LifecycleOperationRunning:
+			if op.OperationType == "enable" {
+				if lastCompletedStep == "register_ui" {
+					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, "register_ui", "")
+					continue
+				}
+				extInst, instErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(op.ExtensionID))
+				if instErr != nil {
+					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, instErr.Error())
+					continue
+				}
+				if extInst.EnablementState == domain.EnablementEnabled {
+					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationCompleted, lastCompletedStep, "")
+				} else {
+					_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, "extension not enabled after recovery")
+				}
+			}
+		case LifecycleOperationCompensating, LifecycleOperationRequiresRecovery:
+			r.markRequiresRecovery(ctx, domain.ExtensionID(op.ExtensionID), domain.ExtensionInstallation{
+				ExtensionID:     domain.ExtensionID(op.ExtensionID),
+				EnablementState: domain.EnablementRequiresRecovery,
+			})
+			_ = r.sagaRepo.UpdateOperationStatus(ctx, op.OperationID, LifecycleOperationRequiresRecovery, lastCompletedStep, "")
+		}
+	}
+	return nil
 }
 
 func (r *Runtime) Disable(ctx context.Context, extensionID string) error {

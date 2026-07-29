@@ -14,8 +14,8 @@ extraResources:
     to: core
     filter:
       - "AmitiaCore.exe"
-      - "node.exe.zip"
-      - "node.zip"
+      - "node/node.exe.zip"
+      - "node/node.zip"
       - "sidecar/bundle.mjs"
       - "sidecar/launcher.mjs"
       - "qq-sidecar/bundle.mjs"

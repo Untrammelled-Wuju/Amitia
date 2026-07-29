@@ -7,10 +7,10 @@ import (
 )
 
 type MemoryContributionStore struct {
-	mu       sync.RWMutex
-	items    map[string]HookContributionDefinition
-	byPoint  map[string][]string
-	byExt    map[string][]string
+	mu      sync.RWMutex
+	items   map[string]HookContributionDefinition
+	byPoint map[string][]string
+	byExt   map[string][]string
 }
 
 func NewMemoryContributionStore() *MemoryContributionStore {

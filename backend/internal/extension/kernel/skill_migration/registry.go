@@ -128,13 +128,13 @@ func (a *LegacySkillAdapter) TranslateLegacySkillID(legacyID string) (string, er
 }
 
 type SkillMigrationReport struct {
-	StartTime        time.Time             `json:"startTime"`
-	EndTime          time.Time             `json:"endTime"`
-	TotalLegacy      int                   `json:"totalLegacy"`
-	MigratedCount    int                   `json:"migratedCount"`
-	FailedEntries    []FailedSkillMigration `json:"failedEntries,omitempty"`
-	CategorySummary  map[string]int        `json:"categorySummary"`
-	Status           string                `json:"status"`
+	StartTime       time.Time              `json:"startTime"`
+	EndTime         time.Time              `json:"endTime"`
+	TotalLegacy     int                    `json:"totalLegacy"`
+	MigratedCount   int                    `json:"migratedCount"`
+	FailedEntries   []FailedSkillMigration `json:"failedEntries,omitempty"`
+	CategorySummary map[string]int         `json:"categorySummary"`
+	Status          string                 `json:"status"`
 }
 
 type FailedSkillMigration struct {
@@ -180,8 +180,8 @@ func RunSkillMigration(ctx context.Context, registry *SkillMigrationRegistry, le
 }
 
 var (
-	ErrInvalidSpec        = errors.New("skill_migration: invalid spec")
-	ErrSkillExists        = errors.New("skill_migration: skill exists")
-	ErrSkillNotFound      = errors.New("skill_migration: skill not found")
+	ErrInvalidSpec         = errors.New("skill_migration: invalid spec")
+	ErrSkillExists         = errors.New("skill_migration: skill exists")
+	ErrSkillNotFound       = errors.New("skill_migration: skill not found")
 	ErrLegacySkillNotFound = errors.New("skill_migration: legacy skill not found")
 )

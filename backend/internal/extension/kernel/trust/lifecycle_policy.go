@@ -10,27 +10,27 @@ import (
 type LifecycleAction string
 
 const (
-	LifecycleActionAllow               LifecycleAction = "allow"
-	LifecycleActionAllowWithConfirm    LifecycleAction = "allow_with_confirmation"
-	LifecycleActionInstallDisabled     LifecycleAction = "install_disabled"
-	LifecycleActionDeny                LifecycleAction = "deny"
-	LifecycleActionQuarantine          LifecycleAction = "quarantine"
+	LifecycleActionAllow            LifecycleAction = "allow"
+	LifecycleActionAllowWithConfirm LifecycleAction = "allow_with_confirmation"
+	LifecycleActionInstallDisabled  LifecycleAction = "install_disabled"
+	LifecycleActionDeny             LifecycleAction = "deny"
+	LifecycleActionQuarantine       LifecycleAction = "quarantine"
 )
 
 type RuntimeTypeRisk string
 
 const (
-	RuntimeRiskNone       RuntimeTypeRisk = "none"
-	RuntimeRiskLow        RuntimeTypeRisk = "low"
-	RuntimeRiskMedium     RuntimeTypeRisk = "medium"
-	RuntimeRiskHigh       RuntimeTypeRisk = "high"
-	RuntimeRiskCritical   RuntimeTypeRisk = "critical"
+	RuntimeRiskNone     RuntimeTypeRisk = "none"
+	RuntimeRiskLow      RuntimeTypeRisk = "low"
+	RuntimeRiskMedium   RuntimeTypeRisk = "medium"
+	RuntimeRiskHigh     RuntimeTypeRisk = "high"
+	RuntimeRiskCritical RuntimeTypeRisk = "critical"
 )
 
 type PermissionRiskSummary struct {
-	HighRiskCount   int
-	MediumRiskCount int
-	LowRiskCount    int
+	HighRiskCount    int
+	MediumRiskCount  int
+	LowRiskCount     int
 	HasNetworkAccess bool
 	HasFileAccess    bool
 	HasSecretAccess  bool
@@ -38,29 +38,29 @@ type PermissionRiskSummary struct {
 }
 
 type PolicyInput struct {
-	PublisherID         string
-	KeyID               string
-	PackageHash         string
-	ExtensionID         string
-	Version             string
-	SignatureResult     SignatureVerificationResult
-	RuntimeTypeRisk     RuntimeTypeRisk
-	PermissionRisk      PermissionRiskSummary
-	HasPlatformBinary   bool
-	IsUpdate            bool
-	PreviousPublisherID string
-	PermissionExpanded  bool
+	PublisherID          string
+	KeyID                string
+	PackageHash          string
+	ExtensionID          string
+	Version              string
+	SignatureResult      SignatureVerificationResult
+	RuntimeTypeRisk      RuntimeTypeRisk
+	PermissionRisk       PermissionRiskSummary
+	HasPlatformBinary    bool
+	IsUpdate             bool
+	PreviousPublisherID  string
+	PermissionExpanded   bool
 	HasHighRiskMigration bool
-	WorkspacePath       string
-	UserSettings        UserPolicySettings
+	WorkspacePath        string
+	UserSettings         UserPolicySettings
 }
 
 type UserPolicySettings struct {
-	AllowUnknownPublisher        bool
-	AllowAutoUpdateUnknown       bool
-	RequireConfirmationForBinary bool
+	AllowUnknownPublisher                    bool
+	AllowAutoUpdateUnknown                   bool
+	RequireConfirmationForBinary             bool
 	RequireConfirmationForHighRiskPermission bool
-	BlockAllNonOfficial         bool
+	BlockAllNonOfficial                      bool
 }
 
 type PolicyResult struct {

@@ -101,11 +101,11 @@ func (e *WazeroEngine) Compile(ctx context.Context, moduleBytes []byte) (Compile
 		imports = append(imports, fmt.Sprintf("%s.%s", def.ModuleName(), def.Name()))
 	}
 	return &wazeroCompiledModule{
-		hash:      hash,
-		exports:   exports,
-		imports:   imports,
-		compiled:  compiled,
-		bytes:     moduleBytes,
+		hash:     hash,
+		exports:  exports,
+		imports:  imports,
+		compiled: compiled,
+		bytes:    moduleBytes,
 	}, nil
 }
 

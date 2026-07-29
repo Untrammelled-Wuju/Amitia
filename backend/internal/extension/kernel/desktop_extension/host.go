@@ -26,18 +26,18 @@ const (
 )
 
 type LocalizedText struct {
-	Default       string            `json:"default"`
-	Translations  map[string]string `json:"translations,omitempty"`
+	Default      string            `json:"default"`
+	Translations map[string]string `json:"translations,omitempty"`
 }
 
 type DesktopCommandSpec struct {
-	CommandID    string          `json:"commandId"`
-	Title        LocalizedText   `json:"title"`
-	Description  LocalizedText   `json:"description"`
-	Icon         string          `json:"icon,omitempty"`
-	Action       UIActionTarget  `json:"action"`
+	CommandID    string           `json:"commandId"`
+	Title        LocalizedText    `json:"title"`
+	Description  LocalizedText    `json:"description"`
+	Icon         string           `json:"icon,omitempty"`
+	Action       UIActionTarget   `json:"action"`
 	Availability UIVisibilityRule `json:"availability"`
-	RiskLevel    string          `json:"riskLevel,omitempty"`
+	RiskLevel    string           `json:"riskLevel,omitempty"`
 }
 
 type UIActionTarget struct {
@@ -52,34 +52,34 @@ type UIVisibilityRule struct {
 }
 
 type DesktopMenuItemSpec struct {
-	MenuID      string   `json:"menuId"`
-	ParentSlot  string   `json:"parentSlot"`
-	CommandID   string   `json:"commandId"`
-	Group       string   `json:"group,omitempty"`
-	Order       int      `json:"order"`
-	Platforms   []string `json:"platforms,omitempty"`
-	Separator   string   `json:"separator,omitempty"`
+	MenuID     string   `json:"menuId"`
+	ParentSlot string   `json:"parentSlot"`
+	CommandID  string   `json:"commandId"`
+	Group      string   `json:"group,omitempty"`
+	Order      int      `json:"order"`
+	Platforms  []string `json:"platforms,omitempty"`
+	Separator  string   `json:"separator,omitempty"`
 }
 
 type DesktopTrayItemSpec struct {
-	TrayID       string        `json:"trayId"`
-	CommandID    string        `json:"commandId"`
-	Title        LocalizedText `json:"title"`
-	Icon         string        `json:"icon,omitempty"`
-	Group        string        `json:"group,omitempty"`
-	Order        int           `json:"order"`
-	StatusText   string        `json:"statusText,omitempty"`
-	UpdateRate   int           `json:"updateRatePerMinute,omitempty"`
+	TrayID     string        `json:"trayId"`
+	CommandID  string        `json:"commandId"`
+	Title      LocalizedText `json:"title"`
+	Icon       string        `json:"icon,omitempty"`
+	Group      string        `json:"group,omitempty"`
+	Order      int           `json:"order"`
+	StatusText string        `json:"statusText,omitempty"`
+	UpdateRate int           `json:"updateRatePerMinute,omitempty"`
 }
 
 type DesktopShortcutSpec struct {
-	ShortcutID   string `json:"shortcutId"`
-	CommandID    string `json:"commandId"`
-	Accelerator  string `json:"accelerator"`
-	Scope        string `json:"scope"`
-	Global       bool   `json:"global"`
-	Description  string `json:"description,omitempty"`
-	Platforms    []string `json:"platforms,omitempty"`
+	ShortcutID  string   `json:"shortcutId"`
+	CommandID   string   `json:"commandId"`
+	Accelerator string   `json:"accelerator"`
+	Scope       string   `json:"scope"`
+	Global      bool     `json:"global"`
+	Description string   `json:"description,omitempty"`
+	Platforms   []string `json:"platforms,omitempty"`
 }
 
 type DesktopNotificationSpec struct {
@@ -116,42 +116,42 @@ type DesktopProtocolHandlerSpec struct {
 }
 
 type DesktopFileOpenSpec struct {
-	ActionID    string   `json:"actionId"`
-	FileTypes   []string `json:"fileTypes"`
-	MaxSizeBytes int64   `json:"maxSizeBytes"`
-	CommandID   string   `json:"commandId"`
+	ActionID     string   `json:"actionId"`
+	FileTypes    []string `json:"fileTypes"`
+	MaxSizeBytes int64    `json:"maxSizeBytes"`
+	CommandID    string   `json:"commandId"`
 }
 
 type DesktopContributionDefinition struct {
-	ExtensionID      string
-	ModuleID         string
-	Generation       int64
-	Command          *DesktopCommandSpec
-	MenuItem         *DesktopMenuItemSpec
-	TrayItem         *DesktopTrayItemSpec
-	Shortcut         *DesktopShortcutSpec
-	Notification     *DesktopNotificationSpec
-	WindowPage       *DesktopWindowPageSpec
-	ProtocolHandler  *DesktopProtocolHandlerSpec
-	FileOpen         *DesktopFileOpenSpec
+	ExtensionID     string
+	ModuleID        string
+	Generation      int64
+	Command         *DesktopCommandSpec
+	MenuItem        *DesktopMenuItemSpec
+	TrayItem        *DesktopTrayItemSpec
+	Shortcut        *DesktopShortcutSpec
+	Notification    *DesktopNotificationSpec
+	WindowPage      *DesktopWindowPageSpec
+	ProtocolHandler *DesktopProtocolHandlerSpec
+	FileOpen        *DesktopFileOpenSpec
 }
 
 type DesktopExtensionHost struct {
-	mu              sync.RWMutex
-	commands        map[string]*DesktopCommandSpec
-	commandsByExt   map[string][]string
-	menuItems       map[string]*DesktopMenuItemSpec
-	trayItems       map[string]*DesktopTrayItemSpec
-	shortcuts       map[string]*DesktopShortcutSpec
-	notifications   map[string]*DesktopNotificationSpec
-	windowPages     map[string]*DesktopWindowPageSpec
-	protocolHandlers map[string]*DesktopProtocolHandlerSpec
-	fileOpenActions map[string]*DesktopFileOpenSpec
-	resolver        CommandResolver
-	permission      PermissionChecker
+	mu                     sync.RWMutex
+	commands               map[string]*DesktopCommandSpec
+	commandsByExt          map[string][]string
+	menuItems              map[string]*DesktopMenuItemSpec
+	trayItems              map[string]*DesktopTrayItemSpec
+	shortcuts              map[string]*DesktopShortcutSpec
+	notifications          map[string]*DesktopNotificationSpec
+	windowPages            map[string]*DesktopWindowPageSpec
+	protocolHandlers       map[string]*DesktopProtocolHandlerSpec
+	fileOpenActions        map[string]*DesktopFileOpenSpec
+	resolver               CommandResolver
+	permission             PermissionChecker
 	shortcutsByAccelerator map[string]string
-	trayCountByExt  map[string]int
-	maxTrayPerExt   int
+	trayCountByExt         map[string]int
+	maxTrayPerExt          int
 }
 
 type CommandResolver interface {
@@ -159,9 +159,9 @@ type CommandResolver interface {
 }
 
 type ResolveResult struct {
-	Success    bool
-	Result     json.RawMessage
-	Error      string
+	Success bool
+	Result  json.RawMessage
+	Error   string
 }
 
 type PermissionChecker interface {
@@ -171,17 +171,17 @@ type PermissionChecker interface {
 func NewDesktopExtensionHost() *DesktopExtensionHost {
 	return &DesktopExtensionHost{
 		commands:               make(map[string]*DesktopCommandSpec),
-		commandsByExt:         make(map[string][]string),
-		menuItems:             make(map[string]*DesktopMenuItemSpec),
-		trayItems:             make(map[string]*DesktopTrayItemSpec),
-		shortcuts:             make(map[string]*DesktopShortcutSpec),
-		notifications:         make(map[string]*DesktopNotificationSpec),
-		windowPages:           make(map[string]*DesktopWindowPageSpec),
-		protocolHandlers:      make(map[string]*DesktopProtocolHandlerSpec),
-		fileOpenActions:       make(map[string]*DesktopFileOpenSpec),
+		commandsByExt:          make(map[string][]string),
+		menuItems:              make(map[string]*DesktopMenuItemSpec),
+		trayItems:              make(map[string]*DesktopTrayItemSpec),
+		shortcuts:              make(map[string]*DesktopShortcutSpec),
+		notifications:          make(map[string]*DesktopNotificationSpec),
+		windowPages:            make(map[string]*DesktopWindowPageSpec),
+		protocolHandlers:       make(map[string]*DesktopProtocolHandlerSpec),
+		fileOpenActions:        make(map[string]*DesktopFileOpenSpec),
 		shortcutsByAccelerator: make(map[string]string),
-		trayCountByExt:        make(map[string]int),
-		maxTrayPerExt:         5,
+		trayCountByExt:         make(map[string]int),
+		maxTrayPerExt:          5,
 	}
 }
 
@@ -384,11 +384,11 @@ func (h *DesktopExtensionHost) registerFileOpen(extID string, spec *DesktopFileO
 }
 
 type TriggerCommandRequest struct {
-	CommandID    string          `json:"commandId"`
-	ExtensionID  string          `json:"extensionId"`
-	Scope        string          `json:"scope,omitempty"`
-	Input        json.RawMessage `json:"input,omitempty"`
-	Context      map[string]any  `json:"context,omitempty"`
+	CommandID   string          `json:"commandId"`
+	ExtensionID string          `json:"extensionId"`
+	Scope       string          `json:"scope,omitempty"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	Context     map[string]any  `json:"context,omitempty"`
 }
 
 func (h *DesktopExtensionHost) TriggerCommand(ctx context.Context, req TriggerCommandRequest) (*ResolveResult, error) {
@@ -444,7 +444,7 @@ func (h *DesktopExtensionHost) UnregisterByExtension(extensionID string) (int, e
 }
 
 type WindowOpenRequest struct {
-	PageID    string `json:"pageId"`
+	PageID      string `json:"pageId"`
 	ExtensionID string `json:"extensionId"`
 }
 
@@ -497,32 +497,32 @@ func isValidMenuSlot(slot string) bool {
 }
 
 var (
-	ErrInvalidDefinition        = errors.New("desktop_extension: invalid definition")
-	ErrInvalidCommand           = errors.New("desktop_extension: invalid command")
-	ErrCommandExists            = errors.New("desktop_extension: command exists")
-	ErrCommandNotFound          = errors.New("desktop_extension: command not found")
-	ErrInvalidMenuItem          = errors.New("desktop_extension: invalid menu item")
-	ErrInvalidMenuSlot          = errors.New("desktop_extension: invalid menu slot")
-	ErrMenuItemExists           = errors.New("desktop_extension: menu item exists")
-	ErrInvalidTrayItem          = errors.New("desktop_extension: invalid tray item")
-	ErrTooManyTrayItems         = errors.New("desktop_extension: too many tray items")
-	ErrTrayItemExists           = errors.New("desktop_extension: tray item exists")
-	ErrInvalidShortcut          = errors.New("desktop_extension: invalid shortcut")
-	ErrInvalidAccelerator       = errors.New("desktop_extension: invalid accelerator")
-	ErrReservedShortcut         = errors.New("desktop_extension: reserved shortcut")
-	ErrShortcutConflict         = errors.New("desktop_extension: shortcut conflict")
-	ErrShortcutExists           = errors.New("desktop_extension: shortcut exists")
-	ErrInvalidNotification      = errors.New("desktop_extension: invalid notification")
-	ErrNotificationExists       = errors.New("desktop_extension: notification exists")
-	ErrInvalidWindowPage        = errors.New("desktop_extension: invalid window page")
-	ErrAlwaysOnTopDenied        = errors.New("desktop_extension: always-on-top denied")
-	ErrWindowPageExists         = errors.New("desktop_extension: window page exists")
-	ErrWindowPageNotFound       = errors.New("desktop_extension: window page not found")
-	ErrInvalidProtocolHandler   = errors.New("desktop_extension: invalid protocol handler")
-	ErrInvalidPathPrefix        = errors.New("desktop_extension: invalid path prefix")
-	ErrProtocolHandlerExists    = errors.New("desktop_extension: protocol handler exists")
-	ErrInvalidFileOpen          = errors.New("desktop_extension: invalid file open action")
-	ErrNoFileTypes              = errors.New("desktop_extension: no file types")
-	ErrFileOpenExists           = errors.New("desktop_extension: file open action exists")
-	ErrResolverUnavailable      = errors.New("desktop_extension: resolver unavailable")
+	ErrInvalidDefinition      = errors.New("desktop_extension: invalid definition")
+	ErrInvalidCommand         = errors.New("desktop_extension: invalid command")
+	ErrCommandExists          = errors.New("desktop_extension: command exists")
+	ErrCommandNotFound        = errors.New("desktop_extension: command not found")
+	ErrInvalidMenuItem        = errors.New("desktop_extension: invalid menu item")
+	ErrInvalidMenuSlot        = errors.New("desktop_extension: invalid menu slot")
+	ErrMenuItemExists         = errors.New("desktop_extension: menu item exists")
+	ErrInvalidTrayItem        = errors.New("desktop_extension: invalid tray item")
+	ErrTooManyTrayItems       = errors.New("desktop_extension: too many tray items")
+	ErrTrayItemExists         = errors.New("desktop_extension: tray item exists")
+	ErrInvalidShortcut        = errors.New("desktop_extension: invalid shortcut")
+	ErrInvalidAccelerator     = errors.New("desktop_extension: invalid accelerator")
+	ErrReservedShortcut       = errors.New("desktop_extension: reserved shortcut")
+	ErrShortcutConflict       = errors.New("desktop_extension: shortcut conflict")
+	ErrShortcutExists         = errors.New("desktop_extension: shortcut exists")
+	ErrInvalidNotification    = errors.New("desktop_extension: invalid notification")
+	ErrNotificationExists     = errors.New("desktop_extension: notification exists")
+	ErrInvalidWindowPage      = errors.New("desktop_extension: invalid window page")
+	ErrAlwaysOnTopDenied      = errors.New("desktop_extension: always-on-top denied")
+	ErrWindowPageExists       = errors.New("desktop_extension: window page exists")
+	ErrWindowPageNotFound     = errors.New("desktop_extension: window page not found")
+	ErrInvalidProtocolHandler = errors.New("desktop_extension: invalid protocol handler")
+	ErrInvalidPathPrefix      = errors.New("desktop_extension: invalid path prefix")
+	ErrProtocolHandlerExists  = errors.New("desktop_extension: protocol handler exists")
+	ErrInvalidFileOpen        = errors.New("desktop_extension: invalid file open action")
+	ErrNoFileTypes            = errors.New("desktop_extension: no file types")
+	ErrFileOpenExists         = errors.New("desktop_extension: file open action exists")
+	ErrResolverUnavailable    = errors.New("desktop_extension: resolver unavailable")
 )

@@ -396,7 +396,7 @@ func makeTestSubscriptionDef(contributionID, extensionID, eventTypeID string) Ev
 		Timeout:           5 * time.Second,
 		MaxInFlight:       4,
 		DeliveryPolicy: SubscriptionDeliveryPolicy{
-			Timeout:    5 * time.Second,
+			Timeout:     5 * time.Second,
 			MaxInFlight: 4,
 		},
 		RetryPolicy: RetryPolicy{
@@ -412,12 +412,12 @@ func testEventTypeDefinition() EventTypeDefinition {
 	maxPayload := int64(256 * 1024)
 	maxMeta := int64(32 * 1024)
 	return EventTypeDefinition{
-		EventTypeID:     EventTypeID("system.test"),
-		Version:         1,
-		Description:     "Test event type for E2E",
-		MaxPayloadBytes: maxPayload,
+		EventTypeID:      EventTypeID("system.test"),
+		Version:          1,
+		Description:      "Test event type for E2E",
+		MaxPayloadBytes:  maxPayload,
 		MaxMetadataBytes: maxMeta,
-		RiskLevel:       RiskLevelLow,
+		RiskLevel:        RiskLevelLow,
 		ProducerPolicy: EventProducerPolicy{
 			AllowedProducers:   []string{"host", "system", "test"},
 			MaxPayloadBytes:    maxPayload,
@@ -440,11 +440,11 @@ func testEventTypeDefinition() EventTypeDefinition {
 		},
 		OrderingPolicy: OrderingNone,
 		RetentionPolicy: EventRetentionPolicy{
-			MaxAge:              24 * time.Hour,
-			MaxDeliveryCount:    5,
-			DeleteAfterSuccess:  true,
+			MaxAge:                24 * time.Hour,
+			MaxDeliveryCount:      5,
+			DeleteAfterSuccess:    true,
 			DeleteAfterDeadLetter: false,
-			ArchiveDeadLetters:  true,
+			ArchiveDeadLetters:    true,
 		},
 	}
 }

@@ -10,8 +10,8 @@ import (
 )
 
 type ScopeRule struct {
-	RequiredScope string
-	CharacterBinding bool
+	RequiredScope       string
+	CharacterBinding    bool
 	ConversationBinding bool
 }
 
@@ -22,16 +22,16 @@ type DependencyRequirement struct {
 }
 
 type RuntimeBinding struct {
-	RuntimeType  string
+	RuntimeType string
 	Entry       string
 	Timeout     time.Duration
 	MaxInFlight int
 }
 
 type SubscriptionDeliveryPolicy struct {
-	Timeout    time.Duration
+	Timeout     time.Duration
 	MaxInFlight int
-	Ordering   EventOrderingRequirement
+	Ordering    EventOrderingRequirement
 }
 
 type EventSubscriptionDefinition struct {
@@ -44,19 +44,19 @@ type EventSubscriptionDefinition struct {
 	Filter                 EventFilterDefinition
 	Projection             EventProjectionRequest
 	DeliveryPolicy         SubscriptionDeliveryPolicy
-	RetryPolicy             RetryPolicy
+	RetryPolicy            RetryPolicy
 	OrderingRequirement    EventOrderingRequirement
-	Timeout               time.Duration
+	Timeout                time.Duration
 	MaxInFlight            int
 	PermissionRequirements []PermissionRequirement
-	ScopeRule             ScopeRule
+	ScopeRule              ScopeRule
 	DependencyRequirements []DependencyRequirement
 	RuntimeBinding         RuntimeBinding
-	DefinitionHash        string
-	Generation            int64
-	Enabled               bool
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	DefinitionHash         string
+	Generation             int64
+	Enabled                bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func (d EventSubscriptionDefinition) Hash() string {
@@ -144,21 +144,21 @@ func (d EventSubscriptionDefinition) MatchesVersion(version int) bool {
 }
 
 type ResolvedSubscription struct {
-	Definition      EventSubscriptionDefinition
-	CompiledFilter  *CompiledFilter
-	Projector       *PayloadProjector
-	Effective       SubscriptionEffectiveState
+	Definition     EventSubscriptionDefinition
+	CompiledFilter *CompiledFilter
+	Projector      *PayloadProjector
+	Effective      SubscriptionEffectiveState
 }
 
 type SubscriptionEffectiveState struct {
-	Enabled          bool
-	Generation       int64
+	Enabled           bool
+	Generation        int64
 	PermissionGranted bool
-	ScopeValid       bool
+	ScopeValid        bool
 	DependenciesReady bool
 	RuntimeAvailable  bool
-	CircuitState     CircuitState
-	Reason           string
+	CircuitState      CircuitState
+	Reason            string
 }
 
 func (s SubscriptionEffectiveState) IsActive() bool {

@@ -162,12 +162,12 @@ func TestMemoryStore_RegisterAndGet(t *testing.T) {
 	ctx := context.Background()
 
 	contrib := HookContributionDefinition{
-		ContributionID: "contrib-store-1",
-		ExtensionID:    "ext-1",
-		HookPointID:    "message.before_send/1",
+		ContributionID:  "contrib-store-1",
+		ExtensionID:     "ext-1",
+		HookPointID:     "message.before_send/1",
 		ContractVersion: 1,
-		Phase:          PhaseBefore,
-		Priority:       100,
+		Phase:           PhaseBefore,
+		Priority:        100,
 		RuntimeBinding: RuntimeBinding{
 			RuntimeType: "wasm",
 			ModuleID:    "mod-1",
@@ -198,28 +198,28 @@ func TestMemoryStore_ListByHookPoint(t *testing.T) {
 
 	contribs := []HookContributionDefinition{
 		{
-			ContributionID: "contrib-1",
-			ExtensionID:    "ext-1",
-			HookPointID:    "message.before_send/1",
+			ContributionID:  "contrib-1",
+			ExtensionID:     "ext-1",
+			HookPointID:     "message.before_send/1",
 			ContractVersion: 1,
-			Phase:          PhaseBefore,
-			RuntimeBinding: RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
+			Phase:           PhaseBefore,
+			RuntimeBinding:  RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
 		},
 		{
-			ContributionID: "contrib-2",
-			ExtensionID:    "ext-2",
-			HookPointID:    "message.before_send/1",
+			ContributionID:  "contrib-2",
+			ExtensionID:     "ext-2",
+			HookPointID:     "message.before_send/1",
 			ContractVersion: 1,
-			Phase:          PhaseAfter,
-			RuntimeBinding: RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-2", Entry: "handler"},
+			Phase:           PhaseAfter,
+			RuntimeBinding:  RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-2", Entry: "handler"},
 		},
 		{
-			ContributionID: "contrib-3",
-			ExtensionID:    "ext-3",
-			HookPointID:    "model.before_request/1",
+			ContributionID:  "contrib-3",
+			ExtensionID:     "ext-3",
+			HookPointID:     "model.before_request/1",
 			ContractVersion: 1,
-			Phase:          PhaseBefore,
-			RuntimeBinding: RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-3", Entry: "handler"},
+			Phase:           PhaseBefore,
+			RuntimeBinding:  RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-3", Entry: "handler"},
 		},
 	}
 
@@ -244,12 +244,12 @@ func TestMemoryStore_SetEnabled(t *testing.T) {
 	ctx := context.Background()
 
 	contrib := HookContributionDefinition{
-		ContributionID: "contrib-enable-1",
-		ExtensionID:    "ext-1",
-		HookPointID:    "message.before_send/1",
+		ContributionID:  "contrib-enable-1",
+		ExtensionID:     "ext-1",
+		HookPointID:     "message.before_send/1",
 		ContractVersion: 1,
-		Phase:          PhaseBefore,
-		RuntimeBinding: RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
+		Phase:           PhaseBefore,
+		RuntimeBinding:  RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
 	}
 
 	if err := store.Register(ctx, contrib); err != nil {
@@ -278,7 +278,7 @@ func TestMemoryStore_SetEnabled(t *testing.T) {
 func TestPatchValidator_ValidPatch(t *testing.T) {
 	validator := NewPatchValidator()
 	point := HookPointDefinition{
-		HookPointID:    "message.before_send/1",
+		HookPointID:     "message.before_send/1",
 		MaxPayloadBytes: 1024 * 1024,
 		MaxResultBytes:  128 * 1024,
 		AllowedMutations: []MutationRule{
@@ -313,7 +313,7 @@ func TestPatchValidator_ValidPatch(t *testing.T) {
 func TestPatchValidator_UnauthorizedPath(t *testing.T) {
 	validator := NewPatchValidator()
 	point := HookPointDefinition{
-		HookPointID:    "message.before_send/1",
+		HookPointID:     "message.before_send/1",
 		MaxPayloadBytes: 1024 * 1024,
 		MaxResultBytes:  128 * 1024,
 		AllowedMutations: []MutationRule{

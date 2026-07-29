@@ -7,17 +7,17 @@ import (
 )
 
 type RollbackResult struct {
-	Success     bool
-	SnapshotID  string
-	Errors      []string
-	RestoredAt  time.Time
+	Success    bool
+	SnapshotID string
+	Errors     []string
+	RestoredAt time.Time
 }
 
 type RollbackPrepareRequest struct {
-	PackageID string
-	Version   string
+	PackageID  string
+	Version    string
 	TargetPath string
-	OwnerID   string
+	OwnerID    string
 }
 
 type RollbackCoordinator struct {

@@ -12,19 +12,19 @@ import (
 )
 
 type MockEngine struct {
-	mu          sync.Mutex
-	name        string
-	version     string
-	instances   map[string]*MockInstance
-	compileErr  error
+	mu           sync.Mutex
+	name         string
+	version      string
+	instances    map[string]*MockInstance
+	compileErr   error
 	allowCompile bool
 }
 
 func NewMockEngine(name, version string) *MockEngine {
 	return &MockEngine{
-		name:        name,
-		version:     version,
-		instances:   make(map[string]*MockInstance),
+		name:         name,
+		version:      version,
+		instances:    make(map[string]*MockInstance),
 		allowCompile: true,
 	}
 }

@@ -20,10 +20,10 @@ type DeveloperSession struct {
 }
 
 type SessionManager struct {
-	mu       sync.RWMutex
-	sessions map[string]*DeveloperSession
+	mu          sync.RWMutex
+	sessions    map[string]*DeveloperSession
 	byWorkspace map[WorkspaceID]string
-	ttl      time.Duration
+	ttl         time.Duration
 }
 
 func NewSessionManager(ttl time.Duration) *SessionManager {

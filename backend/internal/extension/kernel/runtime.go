@@ -34,6 +34,7 @@ type Runtime struct {
 	installed   map[string]InstalledExtension
 	container   *Container
 	enableLocks sync.Map
+	sagaRepo    *LifecycleSagaRepository
 }
 
 func NewRuntime(root string) (*Runtime, error) {
@@ -57,6 +58,12 @@ func (r *Runtime) Root() string {
 func (r *Runtime) SetContainer(c *Container) {
 	r.mu.Lock()
 	r.container = c
+	r.mu.Unlock()
+}
+
+func (r *Runtime) SetSagaRepo(repo *LifecycleSagaRepository) {
+	r.mu.Lock()
+	r.sagaRepo = repo
 	r.mu.Unlock()
 }
 

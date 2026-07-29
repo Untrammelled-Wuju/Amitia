@@ -20,12 +20,12 @@ import (
 type DownloadStatus string
 
 const (
-	DownloadStatusPending   DownloadStatus = "pending"
+	DownloadStatusPending     DownloadStatus = "pending"
 	DownloadStatusDownloading DownloadStatus = "downloading"
-	DownloadStatusPaused    DownloadStatus = "paused"
-	DownloadStatusCompleted DownloadStatus = "completed"
-	DownloadStatusFailed    DownloadStatus = "failed"
-	DownloadStatusCancelled DownloadStatus = "cancelled"
+	DownloadStatusPaused      DownloadStatus = "paused"
+	DownloadStatusCompleted   DownloadStatus = "completed"
+	DownloadStatusFailed      DownloadStatus = "failed"
+	DownloadStatusCancelled   DownloadStatus = "cancelled"
 )
 
 type DownloadState struct {

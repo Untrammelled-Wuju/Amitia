@@ -62,9 +62,9 @@ func NewDefaultEffectiveResolver(
 
 func (r *DefaultEffectiveResolver) Resolve(ctx context.Context, def EventSubscriptionDefinition) SubscriptionEffectiveState {
 	state := SubscriptionEffectiveState{
-		Enabled:          def.Enabled,
-		Generation:       def.Generation,
-		CircuitState:     CircuitClosed,
+		Enabled:      def.Enabled,
+		Generation:   def.Generation,
+		CircuitState: CircuitClosed,
 	}
 	if !def.Enabled {
 		state.Reason = "subscription_disabled"

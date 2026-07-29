@@ -57,31 +57,31 @@ const (
 type ConflictKind string
 
 const (
-	ConflictVersion             ConflictKind = "version_conflict"
-	ConflictMissing             ConflictKind = "missing_dependency"
-	ConflictCycle               ConflictKind = "dependency_cycle"
-	ConflictPlatform            ConflictKind = "platform_conflict"
-	ConflictArchitecture        ConflictKind = "architecture_conflict"
-	ConflictHostFeatureMissing  ConflictKind = "host_feature_missing"
-	ConflictExclusiveProvider   ConflictKind = "exclusive_provider_conflict"
-	ConflictRuntime             ConflictKind = "runtime_conflict"
-	ConflictOwner               ConflictKind = "owner_conflict"
-	ConflictScopeIncompatible   ConflictKind = "scope_incompatible"
-	ConflictDuplicateCapability ConflictKind = "duplicate_capability"
-	ConflictDependencyDisabled  ConflictKind = "dependency_disabled"
+	ConflictVersion              ConflictKind = "version_conflict"
+	ConflictMissing              ConflictKind = "missing_dependency"
+	ConflictCycle                ConflictKind = "dependency_cycle"
+	ConflictPlatform             ConflictKind = "platform_conflict"
+	ConflictArchitecture         ConflictKind = "architecture_conflict"
+	ConflictHostFeatureMissing   ConflictKind = "host_feature_missing"
+	ConflictExclusiveProvider    ConflictKind = "exclusive_provider_conflict"
+	ConflictRuntime              ConflictKind = "runtime_conflict"
+	ConflictOwner                ConflictKind = "owner_conflict"
+	ConflictScopeIncompatible    ConflictKind = "scope_incompatible"
+	ConflictDuplicateCapability  ConflictKind = "duplicate_capability"
+	ConflictDependencyDisabled   ConflictKind = "dependency_disabled"
 	ConflictDependencyQuarantine ConflictKind = "dependency_quarantined"
 )
 
 type Request struct {
-	SourceID    string
-	Phase       Phase
-	Type        TargetType
-	Target      string
+	SourceID     string
+	Phase        Phase
+	Type         TargetType
+	Target       string
 	VersionRange string
-	Required    bool
-	Scope       DependencyScope
-	Policy      ResolutionPolicy
-	Reason      string
+	Required     bool
+	Scope        DependencyScope
+	Policy       ResolutionPolicy
+	Reason       string
 }
 
 type Candidate struct {
@@ -121,11 +121,11 @@ type Resolution struct {
 type ResolutionStatus string
 
 const (
-	StatusResolved  ResolutionStatus = "resolved"
-	StatusMissing   ResolutionStatus = "missing"
-	StatusConflict  ResolutionStatus = "conflict"
+	StatusResolved   ResolutionStatus = "resolved"
+	StatusMissing    ResolutionStatus = "missing"
+	StatusConflict   ResolutionStatus = "conflict"
 	StatusDowngraded ResolutionStatus = "downgraded"
-	StatusPending   ResolutionStatus = "pending"
+	StatusPending    ResolutionStatus = "pending"
 )
 
 type Edge struct {

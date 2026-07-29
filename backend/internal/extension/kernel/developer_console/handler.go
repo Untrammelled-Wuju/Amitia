@@ -10,8 +10,8 @@ import (
 )
 
 type HTTPHandler struct {
-	service          *ConsoleService
-	repository       *DiagnosticRepository
+	service           *ConsoleService
+	repository        *DiagnosticRepository
 	hostAPIAuditQuery HostAPIAuditQuery
 }
 
@@ -303,7 +303,7 @@ func (h *HTTPHandler) handleExportDiagnostics(w http.ResponseWriter, r *http.Req
 		w.Header().Set("Content-Disposition", `attachment; filename="amitia-diagnostics.json"`)
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"overview":  overview,
+			"overview":    overview,
 			"diagnostics": export,
 		})
 		return

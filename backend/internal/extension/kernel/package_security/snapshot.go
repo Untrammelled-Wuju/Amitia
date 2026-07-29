@@ -23,16 +23,16 @@ const (
 )
 
 type RollbackSnapshot struct {
-	SnapshotID     string         `json:"snapshot_id"`
-	PackageID      string         `json:"package_id"`
-	Version        string         `json:"version"`
-	Status         SnapshotStatus `json:"status"`
-	ArtifactPath   string         `json:"artifact_path"`
-	ContentHash    string         `json:"content_hash"`
-	ManifestHash   string         `json:"manifest_hash,omitempty"`
-	OwnerID        string         `json:"owner_id"`
-	CreatedAt      time.Time      `json:"created_at"`
-	ExpiresAt      *time.Time     `json:"expires_at,omitempty"`
+	SnapshotID   string         `json:"snapshot_id"`
+	PackageID    string         `json:"package_id"`
+	Version      string         `json:"version"`
+	Status       SnapshotStatus `json:"status"`
+	ArtifactPath string         `json:"artifact_path"`
+	ContentHash  string         `json:"content_hash"`
+	ManifestHash string         `json:"manifest_hash,omitempty"`
+	OwnerID      string         `json:"owner_id"`
+	CreatedAt    time.Time      `json:"created_at"`
+	ExpiresAt    *time.Time     `json:"expires_at,omitempty"`
 }
 
 type SnapshotManager struct {

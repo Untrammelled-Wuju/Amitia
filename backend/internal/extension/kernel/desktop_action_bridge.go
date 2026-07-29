@@ -42,7 +42,7 @@ func (b *DesktopActionBridge) Check(ctx context.Context, extensionID, permission
 		ID:   extensionID,
 	}
 	req := permission.PermissionEvaluationRequest{
-		Subject:      subject,
+		Subject: subject,
 		Requirements: []permission.PermissionRequirement{
 			{PermissionID: permissionID},
 		},
@@ -278,7 +278,7 @@ func (r *DesktopAuditRecorder) RecordActionExecution(extensionID, actionType, ta
 		ActionType:  actionType,
 		TargetID:    targetID,
 		Success:     success,
-		Duration:     duration.String(),
+		Duration:    duration.String(),
 	})
 	r.trim()
 }

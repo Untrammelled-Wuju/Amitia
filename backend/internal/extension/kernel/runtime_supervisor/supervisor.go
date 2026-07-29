@@ -12,17 +12,17 @@ import (
 )
 
 var (
-	ErrFactoryExists        = errors.New("runtime_supervisor: factory already registered")
-	ErrFactoryNotFound      = errors.New("runtime_supervisor: factory not found for type")
-	ErrInstanceNotFound     = errors.New("runtime_supervisor: instance not found")
-	ErrInstanceExists       = errors.New("runtime_supervisor: instance already exists")
-	ErrInvalidSpec          = errors.New("runtime_supervisor: invalid spec")
-	ErrCircuitOpen          = errors.New("runtime_supervisor: circuit open")
-	ErrQueueFull            = errors.New("runtime_supervisor: queue full")
-	ErrGenerationMismatch   = errors.New("runtime_supervisor: generation mismatch")
-	ErrDependencyMissing    = errors.New("runtime_supervisor: dependency snapshot missing")
-	ErrMaxRestartsExceeded  = errors.New("runtime_supervisor: max restarts exceeded")
-	ErrInstanceDraining     = errors.New("runtime_supervisor: instance draining")
+	ErrFactoryExists       = errors.New("runtime_supervisor: factory already registered")
+	ErrFactoryNotFound     = errors.New("runtime_supervisor: factory not found for type")
+	ErrInstanceNotFound    = errors.New("runtime_supervisor: instance not found")
+	ErrInstanceExists      = errors.New("runtime_supervisor: instance already exists")
+	ErrInvalidSpec         = errors.New("runtime_supervisor: invalid spec")
+	ErrCircuitOpen         = errors.New("runtime_supervisor: circuit open")
+	ErrQueueFull           = errors.New("runtime_supervisor: queue full")
+	ErrGenerationMismatch  = errors.New("runtime_supervisor: generation mismatch")
+	ErrDependencyMissing   = errors.New("runtime_supervisor: dependency snapshot missing")
+	ErrMaxRestartsExceeded = errors.New("runtime_supervisor: max restarts exceeded")
+	ErrInstanceDraining    = errors.New("runtime_supervisor: instance draining")
 )
 
 type DefaultSupervisor struct {
@@ -41,9 +41,9 @@ type CircuitConfig struct {
 
 func NewDefaultSupervisor() *DefaultSupervisor {
 	return &DefaultSupervisor{
-		factories:     make(map[domain.RuntimeType]RuntimeFactory),
-		instances:     make(map[string]*instanceEntry),
-		byDefinition:  make(map[DefinitionID][]string),
+		factories:    make(map[domain.RuntimeType]RuntimeFactory),
+		instances:    make(map[string]*instanceEntry),
+		byDefinition: make(map[DefinitionID][]string),
 		circuitConfig: CircuitConfig{
 			FailureThreshold: 5,
 			RecoveryAfter:    30 * time.Second,
@@ -145,13 +145,13 @@ func (s *DefaultSupervisor) startInstance(ctx context.Context, factory RuntimeFa
 	instanceID := newInstanceID(request.Spec)
 	now := time.Now().UTC()
 	identity := RuntimeIdentity{
-		InstanceID:         instanceID,
+		InstanceID:          instanceID,
 		RuntimeDefinitionID: request.DefinitionID,
-		ExtensionID:        request.Spec.ExtensionID,
-		ModuleID:           request.Spec.ModuleID,
-		RuntimeType:        request.Spec.RuntimeType,
-		Generation:         request.Spec.Generation,
-		SessionNonce:       uuid.NewString(),
+		ExtensionID:         request.Spec.ExtensionID,
+		ModuleID:            request.Spec.ModuleID,
+		RuntimeType:         request.Spec.RuntimeType,
+		Generation:          request.Spec.Generation,
+		SessionNonce:        uuid.NewString(),
 	}
 	entry := &instanceEntry{
 		identity:   identity,
@@ -170,13 +170,13 @@ func (s *DefaultSupervisor) startInstance(ctx context.Context, factory RuntimeFa
 	s.byDefinition[request.DefinitionID] = append(s.byDefinition[request.DefinitionID], instanceID)
 	s.mu.Unlock()
 	return ReconcileResult{
-		InstanceID:  instanceID,
+		InstanceID:   instanceID,
 		DefinitionID: request.DefinitionID,
-		Desired:     request.Desired,
-		Actual:      ActualReady,
-		Health:      HealthHealthy,
-		Circuit:     CircuitClosed,
-		Action:      "started",
+		Desired:      request.Desired,
+		Actual:       ActualReady,
+		Health:       HealthHealthy,
+		Circuit:      CircuitClosed,
+		Action:       "started",
 	}
 }
 
@@ -190,11 +190,11 @@ func (s *DefaultSupervisor) verifyRunning(ctx context.Context, instanceID string
 	if entry.generation != request.Spec.Generation {
 		if err := s.stopLocked(ctx, instanceID, StopReasonUpdate); err != nil {
 			return ReconcileResult{
-				InstanceID:  instanceID,
+				InstanceID:   instanceID,
 				DefinitionID: request.DefinitionID,
-				Desired:     request.Desired,
-				Actual:      entry.actual,
-				Error:       err,
+				Desired:      request.Desired,
+				Actual:       entry.actual,
+				Error:        err,
 			}
 		}
 		return s.startInstance(ctx, mustFactory(s, request.Spec.RuntimeType), request)
@@ -203,32 +203,32 @@ func (s *DefaultSupervisor) verifyRunning(ctx context.Context, instanceID string
 		return s.restartInstance(ctx, instanceID, request)
 	}
 	return ReconcileResult{
-		InstanceID:  instanceID,
+		InstanceID:   instanceID,
 		DefinitionID: request.DefinitionID,
-		Desired:     request.Desired,
-		Actual:      entry.actual,
-		Health:      entry.health,
-		Circuit:     entry.circuit,
-		Action:      "noop",
+		Desired:      request.Desired,
+		Actual:       entry.actual,
+		Health:       entry.health,
+		Circuit:      entry.circuit,
+		Action:       "noop",
 	}
 }
 
 func (s *DefaultSupervisor) stopReconcile(ctx context.Context, instanceID string, request ReconcileRequest) ReconcileResult {
 	if err := s.stopLocked(ctx, instanceID, StopReasonManual); err != nil {
 		return ReconcileResult{
-			InstanceID:  instanceID,
+			InstanceID:   instanceID,
 			DefinitionID: request.DefinitionID,
-			Desired:     request.Desired,
-			Actual:      ActualFailed,
-			Error:       err,
+			Desired:      request.Desired,
+			Actual:       ActualFailed,
+			Error:        err,
 		}
 	}
 	return ReconcileResult{
-		InstanceID:  instanceID,
+		InstanceID:   instanceID,
 		DefinitionID: request.DefinitionID,
-		Desired:     request.Desired,
-		Actual:      ActualStopped,
-		Action:      "stopped",
+		Desired:      request.Desired,
+		Actual:       ActualStopped,
+		Action:       "stopped",
 	}
 }
 
@@ -248,12 +248,12 @@ func (s *DefaultSupervisor) pauseInstance(ctx context.Context, instanceID string
 	entry.actual = ActualDegraded
 	s.mu.Unlock()
 	return ReconcileResult{
-		InstanceID:  instanceID,
+		InstanceID:   instanceID,
 		DefinitionID: request.DefinitionID,
-		Desired:     DesiredPaused,
-		Actual:      ActualDegraded,
-		Health:      HealthDegraded,
-		Action:      "paused",
+		Desired:      DesiredPaused,
+		Actual:       ActualDegraded,
+		Health:       HealthDegraded,
+		Action:       "paused",
 	}
 }
 
@@ -274,12 +274,12 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 		entry.health = HealthUnhealthy
 		s.mu.Unlock()
 		return ReconcileResult{
-			InstanceID:  instanceID,
+			InstanceID:   instanceID,
 			DefinitionID: request.DefinitionID,
-			Desired:     request.Desired,
-			Actual:      ActualQuarantined,
-			Health:      HealthUnhealthy,
-			Error:       ErrMaxRestartsExceeded,
+			Desired:      request.Desired,
+			Actual:       ActualQuarantined,
+			Health:       HealthUnhealthy,
+			Error:        ErrMaxRestartsExceeded,
 		}
 	}
 	entry.restarts++
@@ -296,12 +296,12 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 		s.evaluateCircuitLocked(entry)
 		s.mu.Unlock()
 		return ReconcileResult{
-			InstanceID:  instanceID,
+			InstanceID:   instanceID,
 			DefinitionID: request.DefinitionID,
-			Desired:     request.Desired,
-			Actual:      ActualCrashed,
-			Health:      HealthUnhealthy,
-			Error:       err,
+			Desired:      request.Desired,
+			Actual:       ActualCrashed,
+			Health:       HealthUnhealthy,
+			Error:        err,
 		}
 	}
 	s.mu.Lock()
@@ -313,13 +313,13 @@ func (s *DefaultSupervisor) restartInstance(ctx context.Context, instanceID stri
 	entry.startedAt = &now
 	s.mu.Unlock()
 	return ReconcileResult{
-		InstanceID:  instanceID,
+		InstanceID:   instanceID,
 		DefinitionID: request.DefinitionID,
-		Desired:     request.Desired,
-		Actual:      ActualReady,
-		Health:      HealthHealthy,
-		Circuit:     CircuitClosed,
-		Action:      "restarted",
+		Desired:      request.Desired,
+		Actual:       ActualReady,
+		Health:       HealthHealthy,
+		Circuit:      CircuitClosed,
+		Action:       "restarted",
 	}
 }
 

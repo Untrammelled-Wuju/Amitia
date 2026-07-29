@@ -44,10 +44,10 @@ func (f *TaskSupervisorFactory) Create(_ context.Context, spec runtime_superviso
 		return nil, err
 	}
 	return &managedTaskRuntime{
-		service:     f.service,
-		spec:        spec,
-		started:     false,
-		instanceID:  fmt.Sprintf("task-%s-%s-%d", spec.ExtensionID, spec.ModuleID, spec.Generation),
+		service:    f.service,
+		spec:       spec,
+		started:    false,
+		instanceID: fmt.Sprintf("task-%s-%s-%d", spec.ExtensionID, spec.ModuleID, spec.Generation),
 	}, nil
 }
 

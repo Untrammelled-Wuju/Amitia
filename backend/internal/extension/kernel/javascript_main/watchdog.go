@@ -7,27 +7,27 @@ import (
 )
 
 type WatchdogReport struct {
-	Healthy            bool
-	EventLoopLag       time.Duration
-	ActiveInvocations  int
-	LastResponseAt     time.Time
-	QueueDepth         int
-	MemoryUsageMB      int
-	LogsDropped        int
-	Reason             string
+	Healthy           bool
+	EventLoopLag      time.Duration
+	ActiveInvocations int
+	LastResponseAt    time.Time
+	QueueDepth        int
+	MemoryUsageMB     int
+	LogsDropped       int
+	Reason            string
 }
 
 type Watchdog struct {
-	mu             sync.RWMutex
-	instanceID     string
-	running        bool
-	stopCh         chan struct{}
-	report         WatchdogReport
-	lastReportAt   time.Time
-	checkInterval  time.Duration
-	maxLag         time.Duration
+	mu                  sync.RWMutex
+	instanceID          string
+	running             bool
+	stopCh              chan struct{}
+	report              WatchdogReport
+	lastReportAt        time.Time
+	checkInterval       time.Duration
+	maxLag              time.Duration
 	consecutiveFailures int
-	maxFailures    int
+	maxFailures         int
 }
 
 func NewWatchdog(instanceID string) *Watchdog {
@@ -129,17 +129,17 @@ func (w *Watchdog) ConsecutiveFailures() int {
 }
 
 type ShutdownCoordinator struct {
-	mu                  sync.Mutex
-	started             bool
-	completed           bool
-	rejectNewDone       bool
-	queueCancelled      bool
-	deactivateCalled    bool
-	sessionClosed       bool
-	stoppedSent         bool
-	forceStopped        bool
-	startedAt           time.Time
-	completedAt         *time.Time
+	mu               sync.Mutex
+	started          bool
+	completed        bool
+	rejectNewDone    bool
+	queueCancelled   bool
+	deactivateCalled bool
+	sessionClosed    bool
+	stoppedSent      bool
+	forceStopped     bool
+	startedAt        time.Time
+	completedAt      *time.Time
 }
 
 func NewShutdownCoordinator() *ShutdownCoordinator {

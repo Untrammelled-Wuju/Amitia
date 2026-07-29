@@ -87,9 +87,9 @@ func (h *HostFunctionSet) handleLog(ctx context.Context, hctx HostCallContext, p
 func (h *HostFunctionSet) handleTime(ctx context.Context, hctx HostCallContext, params json.RawMessage) (json.RawMessage, error) {
 	now := time.Now().UTC()
 	return json.Marshal(map[string]any{
-		"unix":       now.Unix(),
-		"unix_nano":  now.UnixNano(),
-		"iso8601":    now.Format(time.RFC3339Nano),
+		"unix":      now.Unix(),
+		"unix_nano": now.UnixNano(),
+		"iso8601":   now.Format(time.RFC3339Nano),
 	})
 }
 

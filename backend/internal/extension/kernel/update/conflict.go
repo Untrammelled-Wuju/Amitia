@@ -11,22 +11,22 @@ import (
 type UserAssetType string
 
 const (
-	UserAssetForkWorkflow   UserAssetType = "fork_workflow"
-	UserAssetModifiedSkill  UserAssetType = "modified_skill"
-	UserAssetUserMCP        UserAssetType = "user_mcp"
-	UserAssetUserStorage    UserAssetType = "user_storage"
-	UserAssetUserSecret     UserAssetType = "user_secret"
-	UserAssetUISetting      UserAssetType = "ui_setting"
+	UserAssetForkWorkflow  UserAssetType = "fork_workflow"
+	UserAssetModifiedSkill UserAssetType = "modified_skill"
+	UserAssetUserMCP       UserAssetType = "user_mcp"
+	UserAssetUserStorage   UserAssetType = "user_storage"
+	UserAssetUserSecret    UserAssetType = "user_secret"
+	UserAssetUISetting     UserAssetType = "ui_setting"
 )
 
 type UserAsset struct {
-	AssetID    string
+	AssetID     string
 	ExtensionID string
-	AssetType  UserAssetType
-	ResourceID string
-	Owner      string
-	Hash       string
-	ModifiedAt time.Time
+	AssetType   UserAssetType
+	ResourceID  string
+	Owner       string
+	Hash        string
+	ModifiedAt  time.Time
 }
 
 type AssetConflict struct {

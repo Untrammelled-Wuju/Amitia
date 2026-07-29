@@ -10,10 +10,10 @@ import (
 )
 
 type PublisherStore struct {
-	mu              sync.RWMutex
-	publishers      map[string]*PublisherIdentity
-	builtinRoots    map[string]bool
-	officialFeeds   map[string]bool
+	mu            sync.RWMutex
+	publishers    map[string]*PublisherIdentity
+	builtinRoots  map[string]bool
+	officialFeeds map[string]bool
 }
 
 func NewPublisherStore() *PublisherStore {
@@ -93,13 +93,13 @@ func (s *PublisherStore) RegisterDevelopment(publisherID string, key PublisherKe
 	}
 	now := time.Now().UTC()
 	identity := &PublisherIdentity{
-		PublisherID:  publisherID,
-		DisplayName:  publisherID,
-		Keys:         []PublisherKey{key},
-		TrustLevel:   TrustLevelDevelopment,
-		Source:       TrustSourceDevelopment,
-		FirstSeenAt:  now,
-		UpdatedAt:    now,
+		PublisherID: publisherID,
+		DisplayName: publisherID,
+		Keys:        []PublisherKey{key},
+		TrustLevel:  TrustLevelDevelopment,
+		Source:      TrustSourceDevelopment,
+		FirstSeenAt: now,
+		UpdatedAt:   now,
 	}
 	s.publishers[publisherID] = identity
 	return nil

@@ -77,10 +77,10 @@ var validKeys = map[string]bool{
 }
 
 type ShortcutValidationResult struct {
-	Valid       bool
-	Normalized  string
-	Reason      string
-	IsReserved  bool
+	Valid          bool
+	Normalized     string
+	Reason         string
+	IsReserved     bool
 	IsModifierOnly bool
 }
 
@@ -130,7 +130,7 @@ func ValidateAccelerator(accelerator string) ShortcutValidationResult {
 	parts := strings.Split(normalized, "+")
 	if len(parts) < 2 {
 		return ShortcutValidationResult{
-			Reason:      "accelerator must have at least one modifier and one key",
+			Reason:         "accelerator must have at least one modifier and one key",
 			IsModifierOnly: isAllModifiers(parts),
 		}
 	}
@@ -150,13 +150,13 @@ func ValidateAccelerator(accelerator string) ShortcutValidationResult {
 	}
 	if !hasModifier {
 		return ShortcutValidationResult{
-			Reason:      "accelerator must contain at least one modifier",
+			Reason:         "accelerator must contain at least one modifier",
 			IsModifierOnly: true,
 		}
 	}
 	if !hasKey {
 		return ShortcutValidationResult{
-			Reason:      "accelerator must contain at least one non-modifier key",
+			Reason:         "accelerator must contain at least one non-modifier key",
 			IsModifierOnly: true,
 		}
 	}
@@ -236,7 +236,7 @@ type PlatformAccelerators struct {
 }
 
 type LogicalShortcut struct {
-	LogicalAccelerator string             `json:"logicalAccelerator"`
+	LogicalAccelerator   string               `json:"logicalAccelerator"`
 	PlatformAccelerators PlatformAccelerators `json:"platformAccelerators,omitempty"`
 }
 

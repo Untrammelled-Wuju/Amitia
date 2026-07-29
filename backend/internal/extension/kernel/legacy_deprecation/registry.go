@@ -22,17 +22,17 @@ const (
 )
 
 type LegacyFile struct {
-	FilePath         string           `json:"filePath"`
-	Package          string           `json:"package"`
-	Step             int              `json:"step"`
-	Reason           string           `json:"reason"`
-	Replacement      string           `json:"replacement"`
+	FilePath         string            `json:"filePath"`
+	Package          string            `json:"package"`
+	Step             int               `json:"step"`
+	Reason           string            `json:"reason"`
+	Replacement      string            `json:"replacement"`
 	Status           DeprecationStatus `json:"status"`
-	MarkedAt         time.Time        `json:"markedAt"`
-	ProductionRefs   []string         `json:"productionRefs"`
-	TestRefs         []string         `json:"testRefs"`
-	BlockingDeletion bool             `json:"blockingDeletion"`
-	Remediation      string           `json:"remediation"`
+	MarkedAt         time.Time         `json:"markedAt"`
+	ProductionRefs   []string          `json:"productionRefs"`
+	TestRefs         []string          `json:"testRefs"`
+	BlockingDeletion bool              `json:"blockingDeletion"`
+	Remediation      string            `json:"remediation"`
 }
 
 type DeprecationRegistry struct {
@@ -250,7 +250,7 @@ func DefaultRegistry() *DeprecationRegistry {
 				"package_manager_test.go",
 				"package_baseline_test.go",
 			},
-			Remediation:      "package_handler.go 改为调用 extension/kernel/amitiax 的 Install，旧 Install 保留为 internal 包装但不再新增逻辑",
+			Remediation: "package_handler.go 改为调用 extension/kernel/amitiax 的 Install，旧 Install 保留为 internal 包装但不再新增逻辑",
 		},
 	}
 	for _, f := range step68Files {

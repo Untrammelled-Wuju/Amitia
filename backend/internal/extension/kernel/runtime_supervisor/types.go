@@ -101,44 +101,44 @@ type ResourceLimits struct {
 }
 
 type RuntimeIdentity struct {
-	InstanceID         string
+	InstanceID          string
 	RuntimeDefinitionID DefinitionID
-	ExtensionID        domain.ExtensionID
-	ModuleID           domain.ModuleID
-	RuntimeType        domain.RuntimeType
-	Generation         int64
-	SessionNonce       string
+	ExtensionID         domain.ExtensionID
+	ModuleID            domain.ModuleID
+	RuntimeType         domain.RuntimeType
+	Generation          int64
+	SessionNonce        string
 }
 
 type InstanceSpec struct {
-	DefinitionID    DefinitionID
-	ExtensionID     domain.ExtensionID
-	ModuleID        domain.ModuleID
-	RuntimeType     domain.RuntimeType
-	Generation      int64
-	Strategy        InstanceStrategy
-	Limits          ResourceLimits
-	DefinitionHash  string
+	DefinitionID     DefinitionID
+	ExtensionID      domain.ExtensionID
+	ModuleID         domain.ModuleID
+	RuntimeType      domain.RuntimeType
+	Generation       int64
+	Strategy         InstanceStrategy
+	Limits           ResourceLimits
+	DefinitionHash   string
 	DependencySnapID string
-	EntryPoint      string
-	WorkerCount     int
-	Env             map[string]string
-	Permissions     []string
-	Capabilities    map[string]bool
-	Restart         RestartPolicy
-	MaxRestarts     int
-	RestartWindow   time.Duration
+	EntryPoint       string
+	WorkerCount      int
+	Env              map[string]string
+	Permissions      []string
+	Capabilities     map[string]bool
+	Restart          RestartPolicy
+	MaxRestarts      int
+	RestartWindow    time.Duration
 }
 
 type InvocationRequest struct {
-	InstanceID    string
-	TraceID       string
-	InvocationID  string
-	ParentID      string
-	Deadline      time.Time
-	Operation     string
-	Input         []byte
-	Generation    int64
+	InstanceID   string
+	TraceID      string
+	InvocationID string
+	ParentID     string
+	Deadline     time.Time
+	Operation    string
+	Input        []byte
+	Generation   int64
 }
 
 type InvocationResult struct {
@@ -163,14 +163,14 @@ type ReconcileRequest struct {
 }
 
 type ReconcileResult struct {
-	InstanceID  string
+	InstanceID   string
 	DefinitionID DefinitionID
-	Desired     DesiredState
-	Actual      ActualState
-	Health      HealthStatus
-	Circuit     CircuitState
-	Action      string
-	Error       error
+	Desired      DesiredState
+	Actual       ActualState
+	Health       HealthStatus
+	Circuit      CircuitState
+	Action       string
+	Error        error
 }
 
 type StateSnapshot struct {
@@ -181,16 +181,16 @@ type StateSnapshot struct {
 }
 
 type InstanceSnapshot struct {
-	InstanceID  string
-	Identity    RuntimeIdentity
-	Desired     DesiredState
-	Actual      ActualState
-	Health      HealthStatus
-	Circuit     CircuitState
-	StartedAt   *time.Time
-	StoppedAt   *time.Time
-	Restarts    int
-	Limits      ResourceLimits
+	InstanceID string
+	Identity   RuntimeIdentity
+	Desired    DesiredState
+	Actual     ActualState
+	Health     HealthStatus
+	Circuit    CircuitState
+	StartedAt  *time.Time
+	StoppedAt  *time.Time
+	Restarts   int
+	Limits     ResourceLimits
 }
 
 type RuntimeHealthSnapshot struct {

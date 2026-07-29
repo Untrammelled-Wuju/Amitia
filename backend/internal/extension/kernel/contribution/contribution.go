@@ -24,18 +24,18 @@ type Contribution interface {
 }
 
 type BaseContribution struct {
-	ID          string           `json:"id"`
-	Type        ContributionType `json:"type"`
-	Extension   string           `json:"extensionId"`
-	Module      string           `json:"moduleId,omitempty"`
-	Enabled     bool             `json:"enabled"`
-	Metadata    map[string]any   `json:"metadata,omitempty"`
+	ID        string           `json:"id"`
+	Type      ContributionType `json:"type"`
+	Extension string           `json:"extensionId"`
+	Module    string           `json:"moduleId,omitempty"`
+	Enabled   bool             `json:"enabled"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
 }
 
-func (c *BaseContribution) ContributionID() string     { return c.ID }
+func (c *BaseContribution) ContributionID() string             { return c.ID }
 func (c *BaseContribution) ContributionType() ContributionType { return c.Type }
-func (c *BaseContribution) ExtensionID() string        { return c.Extension }
-func (c *BaseContribution) ModuleID() string            { return c.Module }
+func (c *BaseContribution) ExtensionID() string                { return c.Extension }
+func (c *BaseContribution) ModuleID() string                   { return c.Module }
 
 type ToolContribution struct {
 	BaseContribution
@@ -54,8 +54,8 @@ type WorkflowContribution struct {
 
 type MCPContribution struct {
 	BaseContribution
-	ServerID    string `json:"serverId"`
-	Descriptor  map[string]any `json:"descriptor,omitempty"`
+	ServerID   string         `json:"serverId"`
+	Descriptor map[string]any `json:"descriptor,omitempty"`
 }
 
 type UIContribution struct {
@@ -65,16 +65,16 @@ type UIContribution struct {
 
 type HookContribution struct {
 	BaseContribution
-	Event  string `json:"event"`
+	Event   string `json:"event"`
 	Handler string `json:"handler"`
 }
 
 type EventSubscriptionContribution struct {
 	BaseContribution
-	EventType  string   `json:"eventType"`
-	Filter     string   `json:"filter,omitempty"`
-	Handler    string   `json:"handler"`
-	SourceIDs  []string `json:"sourceIds,omitempty"`
+	EventType string   `json:"eventType"`
+	Filter    string   `json:"filter,omitempty"`
+	Handler   string   `json:"handler"`
+	SourceIDs []string `json:"sourceIds,omitempty"`
 }
 
 type ProviderContribution struct {

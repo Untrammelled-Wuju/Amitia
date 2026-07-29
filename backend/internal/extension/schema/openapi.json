@@ -1,117 +1,5872 @@
 {
-  "openapi": "3.1.0",
-  "info": {"title": "Amitia Extension Runtime API", "version": "3.0.0"},
-  "servers": [{"url": "/api"}],
   "components": {
-    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}},
     "schemas": {
-      "Problem": {"type": "object", "required": ["type", "title", "status", "detail", "instance", "code", "traceId"], "properties": {"type": {"type": "string", "format": "uri"}, "title": {"type": "string"}, "status": {"type": "integer"}, "detail": {"type": "string"}, "instance": {"type": "string"}, "code": {"type": "string"}, "traceId": {"type": "string"}}},
-      "ExecuteRequest": {"type": "object", "required": ["characterId", "input"], "properties": {"characterId": {"type": "string"}, "conversationId": {"type": "string"}, "channel": {"type": "string"}, "sessionId": {"type": "string"}, "idempotencyKey": {"type": "string"}, "input": {}}},
-      "PermissionGrant": {"type": "object", "required": ["capability", "decision", "scopeType", "scopeId"], "properties": {"capability": {"type": "string"}, "decision": {"enum": ["deny", "allow_once", "allow_session", "allow_character", "allow_always"]}, "scopeType": {"enum": ["global", "character", "conversation", "channel", "session"]}, "scopeId": {"type": "string"}, "expiresAt": {"type": "string", "format": "date-time"}}},
-      "PluginManifest": {"type": "object", "required": ["$schema", "apiVersion", "kind", "metadata", "compatibility", "entry", "capabilities", "hooks", "subscriptions", "registeredSkills", "execution", "state", "enabled"], "properties": {"$schema": {"const": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json"}, "apiVersion": {"const": "extensions.amitia.dev/v1alpha1"}, "kind": {"const": "Plugin"}, "metadata": {"type": "object"}, "compatibility": {"type": "object"}, "entry": {"type": "object"}, "capabilities": {"type": "array", "items": {"type": "string"}}, "hooks": {"type": "array", "items": {"type": "string"}}, "subscriptions": {"type": "array", "items": {"type": "string"}}, "registeredSkills": {"type": "array", "items": {"type": "string"}}, "execution": {"type": "object"}, "state": {"type": "object"}, "enabled": {"type": "boolean"}}},
-      "PluginView": {"type": "object", "required": ["manifest", "source", "lifecycle", "health", "compatible", "enabled", "currentCircuits"], "properties": {"manifest": {"$ref": "#/components/schemas/PluginManifest"}, "source": {"const": "builtin"}, "lifecycle": {"enum": ["registered", "loaded", "enabled", "disabled", "error", "circuit_open", "unloading", "unloaded"]}, "health": {"type": "string"}, "compatible": {"type": "boolean"}, "enabled": {"type": "boolean"}, "currentCircuits": {"type": "integer"}}},
-      "SurfaceActionRequest": {"type": "object", "required": ["characterId", "input"], "properties": {"characterId": {"type": "string"}, "conversationId": {"type": "string"}, "channel": {"type": "string"}, "sessionId": {"type": "string"}, "input": {}}},
-      "WorkshopSession": {"type": "object", "required": ["id", "userId", "status", "requirement", "currentRevision", "createdAt", "updatedAt"], "properties": {"id": {"type": "string"}, "userId": {"type": "string"}, "characterId": {"type": "string"}, "status": {"enum": ["draft", "generating", "generated", "validating", "validation_failed", "validated", "awaiting_permission_confirmation", "testing", "test_failed", "test_passed", "installing", "installed", "enabled", "disabled", "archived", "error"]}, "requirement": {"type": "string"}, "currentRevision": {"type": "integer"}, "installedSkillId": {"type": "string"}, "installedVersion": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}},
-      "WorkshopPlan": {"type": "object", "required": ["goal", "inputs", "outputs", "configs", "steps", "dependencies", "capabilities", "sideEffects", "risks", "missingDetails", "assumptions"], "properties": {"goal": {"type": "string"}, "inputs": {"type": "array", "items": {"type": "object"}}, "outputs": {"type": "array", "items": {"type": "object"}}, "configs": {"type": "array", "items": {"type": "object"}}, "steps": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "type", "purpose"], "properties": {"id": {"type": "string"}, "type": {"enum": ["http", "condition", "transform", "template", "call_skill", "schedule", "notification", "memory_candidate", "context_contribution"]}, "purpose": {"type": "string"}}}}, "dependencies": {"type": "array", "items": {"type": "string"}}, "capabilities": {"type": "array", "items": {"type": "string"}}, "sideEffects": {"type": "array", "items": {"type": "string"}}, "risks": {"type": "array", "items": {"type": "string"}}, "missingDetails": {"type": "array", "items": {"type": "string"}}, "assumptions": {"type": "array", "items": {"type": "string"}}}},
-      "WorkshopRevision": {"type": "object", "required": ["id", "sessionId", "revision", "plan", "draft", "normalizedDraft", "workflowChecksum", "createdAt"], "properties": {"id": {"type": "string"}, "sessionId": {"type": "string"}, "revision": {"type": "integer"}, "plan": {"$ref": "#/components/schemas/WorkshopPlan"}, "draft": {"type": "object"}, "normalizedDraft": {"type": "object"}, "workflowChecksum": {"type": "string"}, "validation": {"type": "object"}, "modelProvider": {"type": "string"}, "modelName": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}},
-      "WorkshopGenerateRequest": {"type": "object", "properties": {"requirement": {"type": "string", "maxLength": 20000}, "draft": {"type": "object"}}},
-      "WorkshopPermissionConfirmation": {"type": "object", "required": ["workflowChecksum", "capabilities", "confirmedHighRisk", "production"], "properties": {"workflowChecksum": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "confirmedHighRisk": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "production": {"type": "boolean"}}},
-      "WorkshopTestRequest": {"type": "object", "required": ["mode"], "properties": {"mode": {"enum": ["dry_run", "mocked", "controlled_live"]}, "testCaseIds": {"type": "array", "items": {"type": "string"}}, "testCases": {"type": "array", "items": {"type": "object"}}, "controlledLiveConfirmed": {"type": "boolean"}}},
-      "AgentSkillResource": {"type": "object", "required": ["path", "kind", "mimeType", "size", "sha256", "textReadable", "executable", "supported"], "properties": {"path": {"type": "string"}, "kind": {"enum": ["skill", "reference", "asset", "script", "agent_metadata", "other"]}, "mimeType": {"type": "string"}, "size": {"type": "integer"}, "sha256": {"type": "string"}, "textReadable": {"type": "boolean"}, "executable": {"const": false}, "supported": {"type": "boolean"}}},
-      "AgentSkill": {"type": "object", "required": ["extensionId", "name", "description", "source", "scope", "contentHash", "resources", "toolMappings", "compatibilityStatus", "enabled"], "properties": {"extensionId": {"type": "string"}, "name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}, "description": {"type": "string"}, "source": {"enum": ["bundled", "local-directory", "local-zip", "workshop"]}, "scope": {"enum": ["global", "character"]}, "contentHash": {"type": "string"}, "resources": {"type": "array", "items": {"$ref": "#/components/schemas/AgentSkillResource"}}, "toolMappings": {"type": "array", "items": {"type": "object"}}, "compatibilityStatus": {"enum": ["compatible", "compatible_with_warnings", "partially_compatible", "blocked"]}, "enabled": {"type": "boolean"}}},
-      "AgentSkillInstallRequest": {"type": "object", "required": ["previewId", "scope"], "properties": {"previewId": {"type": "string"}, "scope": {"enum": ["global", "character"]}, "characterId": {"type": "string"}, "enable": {"type": "boolean", "default": false}}},
-      "PackageImportPreview": {"type": "object", "required": ["sessionId", "format", "skillType", "id", "name", "version", "packageHash", "checksum", "signature", "files", "risks", "warnings", "errors", "conflict", "availableActions", "expiresAt"], "properties": {"sessionId": {"type": "string"}, "format": {"enum": ["amitiax", "agentskills-zip", "agentskills-directory"]}, "skillType": {"enum": ["workflow", "instructions"]}, "id": {"type": "string"}, "name": {"type": "string"}, "version": {"type": "string"}, "packageHash": {"type": "string"}, "checksum": {"type": "object"}, "signature": {"type": "object"}, "files": {"type": "array", "items": {"type": "object"}}, "risks": {"type": "array", "items": {"type": "object"}}, "warnings": {"type": "array", "items": {"type": "string"}}, "errors": {"type": "array", "items": {"type": "string"}}, "conflict": {"type": "string"}, "availableActions": {"type": "array", "items": {"type": "string"}}, "expiresAt": {"type": "string", "format": "date-time"}}},
-      "PackageInstallRequest": {"type": "object", "required": ["sessionId", "scopeType"], "properties": {"sessionId": {"type": "string"}, "scopeType": {"enum": ["global", "character"]}, "scopeId": {"type": "string"}, "confirmUnsigned": {"type": "boolean"}, "confirmScripts": {"type": "boolean"}, "confirmVersionChange": {"type": "boolean"}, "confirmSignerChange": {"type": "boolean"}, "confirmConfigMigration": {"type": "boolean"}, "confirmedCapabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}}}
+      "AgentSkill": {
+        "properties": {
+          "compatibilityStatus": {
+            "enum": [
+              "compatible",
+              "compatible_with_warnings",
+              "partially_compatible",
+              "blocked"
+            ]
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "extensionId": {
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSkillResource"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "global",
+              "character"
+            ]
+          },
+          "source": {
+            "enum": [
+              "bundled",
+              "local-directory",
+              "local-zip",
+              "workshop"
+            ]
+          },
+          "toolMappings": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "extensionId",
+          "name",
+          "description",
+          "source",
+          "scope",
+          "contentHash",
+          "resources",
+          "toolMappings",
+          "compatibilityStatus",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "AgentSkillInstallRequest": {
+        "properties": {
+          "characterId": {
+            "type": "string"
+          },
+          "enable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "previewId": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "global",
+              "character"
+            ]
+          }
+        },
+        "required": [
+          "previewId",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "AgentSkillResource": {
+        "properties": {
+          "executable": {
+            "const": false
+          },
+          "kind": {
+            "enum": [
+              "skill",
+              "reference",
+              "asset",
+              "script",
+              "agent_metadata",
+              "other"
+            ]
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "textReadable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "mimeType",
+          "size",
+          "sha256",
+          "textReadable",
+          "executable",
+          "supported"
+        ],
+        "type": "object"
+      },
+      "ExecuteRequest": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "characterId": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "input": {},
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characterId",
+          "input"
+        ],
+        "type": "object"
+      },
+      "PackageImportPreview": {
+        "properties": {
+          "availableActions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "checksum": {
+            "type": "object"
+          },
+          "conflict": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "format": {
+            "enum": [
+              "amitiax",
+              "agentskills-zip",
+              "agentskills-directory"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "packageHash": {
+            "type": "string"
+          },
+          "risks": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "object"
+          },
+          "skillType": {
+            "enum": [
+              "workflow",
+              "instructions"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessionId",
+          "format",
+          "skillType",
+          "id",
+          "name",
+          "version",
+          "packageHash",
+          "checksum",
+          "signature",
+          "files",
+          "risks",
+          "warnings",
+          "errors",
+          "conflict",
+          "availableActions",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "PackageInstallRequest": {
+        "properties": {
+          "confirmConfigMigration": {
+            "type": "boolean"
+          },
+          "confirmScripts": {
+            "type": "boolean"
+          },
+          "confirmSignerChange": {
+            "type": "boolean"
+          },
+          "confirmUnsigned": {
+            "type": "boolean"
+          },
+          "confirmVersionChange": {
+            "type": "boolean"
+          },
+          "confirmedCapabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "scopeId": {
+            "type": "string"
+          },
+          "scopeType": {
+            "enum": [
+              "global",
+              "character"
+            ]
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "scopeType"
+        ],
+        "type": "object"
+      },
+      "PermissionGrant": {
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "deny",
+              "allow_once",
+              "allow_session",
+              "allow_character",
+              "allow_always"
+            ]
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "scopeId": {
+            "type": "string"
+          },
+          "scopeType": {
+            "enum": [
+              "global",
+              "character",
+              "conversation",
+              "channel",
+              "session"
+            ]
+          }
+        },
+        "required": [
+          "capability",
+          "decision",
+          "scopeType",
+          "scopeId"
+        ],
+        "type": "object"
+      },
+      "PluginManifest": {
+        "properties": {
+          "$schema": {
+            "const": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json"
+          },
+          "apiVersion": {
+            "const": "extensions.amitia.dev/v1alpha1"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "compatibility": {
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "entry": {
+            "type": "object"
+          },
+          "execution": {
+            "type": "object"
+          },
+          "hooks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "Plugin"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "registeredSkills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "type": "object"
+          },
+          "subscriptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "$schema",
+          "apiVersion",
+          "kind",
+          "metadata",
+          "compatibility",
+          "entry",
+          "capabilities",
+          "hooks",
+          "subscriptions",
+          "registeredSkills",
+          "execution",
+          "state",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "PluginView": {
+        "properties": {
+          "compatible": {
+            "type": "boolean"
+          },
+          "currentCircuits": {
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "health": {
+            "type": "string"
+          },
+          "lifecycle": {
+            "enum": [
+              "registered",
+              "loaded",
+              "enabled",
+              "disabled",
+              "error",
+              "circuit_open",
+              "unloading",
+              "unloaded"
+            ]
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/PluginManifest"
+          },
+          "source": {
+            "const": "builtin"
+          }
+        },
+        "required": [
+          "manifest",
+          "source",
+          "lifecycle",
+          "health",
+          "compatible",
+          "enabled",
+          "currentCircuits"
+        ],
+        "type": "object"
+      },
+      "Problem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "type": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "code",
+          "traceId"
+        ],
+        "type": "object"
+      },
+      "SurfaceActionRequest": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "characterId": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "input": {},
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characterId",
+          "input"
+        ],
+        "type": "object"
+      },
+      "WorkshopGenerateRequest": {
+        "properties": {
+          "draft": {
+            "type": "object"
+          },
+          "requirement": {
+            "maxLength": 20000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WorkshopPermissionConfirmation": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "confirmedHighRisk": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "production": {
+            "type": "boolean"
+          },
+          "workflowChecksum": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowChecksum",
+          "capabilities",
+          "confirmedHighRisk",
+          "production"
+        ],
+        "type": "object"
+      },
+      "WorkshopPlan": {
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "configs": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "missingDetails": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outputs": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sideEffects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "http",
+                    "condition",
+                    "transform",
+                    "template",
+                    "call_skill",
+                    "schedule",
+                    "notification",
+                    "memory_candidate",
+                    "context_contribution"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "purpose"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal",
+          "inputs",
+          "outputs",
+          "configs",
+          "steps",
+          "dependencies",
+          "capabilities",
+          "sideEffects",
+          "risks",
+          "missingDetails",
+          "assumptions"
+        ],
+        "type": "object"
+      },
+      "WorkshopRevision": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "draft": {
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "modelProvider": {
+            "type": "string"
+          },
+          "normalizedDraft": {
+            "type": "object"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/WorkshopPlan"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "object"
+          },
+          "workflowChecksum": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "revision",
+          "plan",
+          "draft",
+          "normalizedDraft",
+          "workflowChecksum",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "WorkshopSession": {
+        "properties": {
+          "characterId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currentRevision": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "installedSkillId": {
+            "type": "string"
+          },
+          "installedVersion": {
+            "type": "string"
+          },
+          "requirement": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "generating",
+              "generated",
+              "validating",
+              "validation_failed",
+              "validated",
+              "awaiting_permission_confirmation",
+              "testing",
+              "test_failed",
+              "test_passed",
+              "installing",
+              "installed",
+              "enabled",
+              "disabled",
+              "archived",
+              "error"
+            ]
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "status",
+          "requirement",
+          "currentRevision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "WorkshopTestRequest": {
+        "properties": {
+          "controlledLiveConfirmed": {
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "dry_run",
+              "mocked",
+              "controlled_live"
+            ]
+          },
+          "testCaseIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "testCases": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
-  "security": [{"bearerAuth": []}],
+  "info": {
+    "title": "Amitia Extension Runtime API",
+    "version": "3.0.0"
+  },
+  "openapi": "3.1.0",
   "paths": {
-    "/extensions/packages/status": {"get": {"summary": "Get extension package service status", "responses": {"200": {"description": "Extension package status"}, "401": {"description": "Unauthorized"}}}},
-    "/extensions/packages": {"get": {"summary": "List installed extension packages", "responses": {"200": {"description": "Installed extension package list"}, "401": {"description": "Unauthorized"}}}},
-    "/extensions/packages/install": {"post": {"summary": "Validate and atomically install an Amitiax package", "requestBody": {"required": true, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["package"], "properties": {"package": {"type": "string", "format": "binary"}}}}}}, "responses": {"201": {"description": "Installed"}, "401": {"description": "Unauthorized"}, "422": {"description": "Invalid package"}}}},
-    "/extensions/capabilities": {"get": {"summary": "List capability definitions", "responses": {"200": {"description": "Capability definitions"}, "401": {"description": "Unauthorized", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/packages/import/preview": {"post": {"summary": "Detect, securely validate and preview a local Amitia or AgentSkills package", "requestBody": {"required": true, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file", "scopeType"], "properties": {"file": {"type": "string", "format": "binary"}, "scopeType": {"enum": ["global", "character"]}, "scopeId": {"type": "string"}}}}, "application/json": {"schema": {"type": "object"}}}}, "responses": {"200": {"description": "Server-validated package preview", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PackageImportPreview"}}}}, "422": {"description": "Unsafe or invalid package"}}}},
-    "/extensions/packages/import/install": {"post": {"summary": "Atomically install a one-time validated import session disabled by default", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PackageInstallRequest"}}}}, "responses": {"200": {"description": "Installed"}, "410": {"description": "Session expired or consumed"}}}},
-    "/extensions/packages/metrics": {"get": {"summary": "Get local package lifecycle counters", "responses": {"200": {"description": "Package metrics"}}}},
-    "/extensions/{id}/export": {"post": {"summary": "Export a workflow as .amitiax or instructions as .amitiax/AgentSkills ZIP", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Expiring controlled export"}}}},
-    "/extensions/{id}/exports/{exportId}": {"get": {"summary": "Download an authorized expiring export", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "exportId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Package bytes"}}}},
-    "/extensions/{id}/upgrade/preview": {"post": {"summary": "Preview a manual local package upgrade", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Upgrade preview"}}}},
-    "/extensions/{id}/upgrade": {"post": {"summary": "Atomically apply a confirmed local upgrade", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Upgrade result"}}}},
-    "/extensions/{id}/versions": {"get": {"summary": "List immutable package versions", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Version history"}}}},
-    "/extensions/{id}/versions/compare": {"get": {"summary": "Compare manifests, schemas, workflow/instructions, capabilities and signatures", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "from", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "to", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Structured version diff"}}}},
-    "/extensions/{id}/versions/{version}/rollback": {"post": {"summary": "Atomically rollback without restoring revoked grants", "responses": {"200": {"description": "Rollback result"}}}},
-    "/extensions/{id}/dependencies": {"get": {"summary": "List direct and reverse package dependencies", "responses": {"200": {"description": "Dependencies"}}}},
-    "/extensions/{id}/uninstall/preview": {"get": {"summary": "Preview uninstall cleanup, retained audit data and dependency blockers", "responses": {"200": {"description": "Uninstall preview"}, "409": {"description": "Dependency in use"}}}},
-    "/extensions/{id}": {"delete": {"summary": "Uninstall a local Skill while preserving audits and runs", "responses": {"200": {"description": "Uninstall result"}, "409": {"description": "Dependency in use"}}}},
-    "/extensions/package-operations": {"get": {"summary": "List package operation audit history", "responses": {"200": {"description": "Operation history"}}}},
-    "/extensions/package-operations/{operationId}": {"get": {"summary": "Get a package operation audit record", "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Operation detail"}, "404": {"description": "Operation not found"}}}},
-    "/extensions/signers": {"get": {"summary": "List local package signers and trust state", "responses": {"200": {"description": "Signer list"}}}},
-    "/extensions/signers/{fingerprint}/trust": {"post": {"summary": "Trust a local Ed25519 signer without granting capabilities", "responses": {"200": {"description": "Trusted"}}}},
-    "/extensions/signers/{fingerprint}/untrust": {"post": {"summary": "Revoke local signer trust", "responses": {"200": {"description": "Untrusted"}}}},
-    "/extensions/skills": {"get": {"summary": "List skills", "parameters": [{"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "enabled", "schema": {"type": "boolean"}}, {"in": "query", "name": "trigger", "schema": {"enum": ["llm", "manual", "schedule", "system_event"]}}, {"in": "query", "name": "source", "schema": {"enum": ["builtin", "legacy_tool", "workflow", "instructions"]}}], "responses": {"200": {"description": "Skill list"}, "401": {"description": "Unauthorized", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/agent-skills/import/preview": {"post": {"summary": "Validate and preview a ZIP or directory Agent Skill import", "requestBody": {"required": true, "content": {"multipart/form-data": {"schema": {"type": "object", "properties": {"source": {"enum": ["zip", "directory"]}, "file": {"type": "string", "format": "binary"}, "files": {"type": "array", "items": {"type": "string", "format": "binary"}}, "paths": {"type": "string"}, "rootName": {"type": "string"}}}}}}, "responses": {"200": {"description": "Server-validated import preview"}, "400": {"description": "Invalid or unsafe import", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/agent-skills/import/install": {"post": {"summary": "Install a previously validated Agent Skill preview", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AgentSkillInstallRequest"}}}}, "responses": {"201": {"description": "Installed, disabled by default"}}}},
-    "/extensions/agent-skills": {"get": {"summary": "List visible Agent Skills", "parameters": [{"in": "query", "name": "characterId", "schema": {"type": "string"}}, {"in": "query", "name": "query", "schema": {"type": "string"}}, {"in": "query", "name": "scope", "schema": {"enum": ["global", "character"]}}, {"in": "query", "name": "status", "schema": {"enum": ["compatible", "compatible_with_warnings", "partially_compatible", "blocked"]}}], "responses": {"200": {"description": "Agent Skill page"}}}},
-    "/extensions/agent-skills/metrics": {"get": {"summary": "Get Agent Skill runtime counters and token totals", "responses": {"200": {"description": "Agent Skill metrics"}}}},
-    "/extensions/agent-skills/{id}": {"get": {"summary": "Get Agent Skill details, compatibility and activation trace", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Agent Skill detail"}}}, "delete": {"summary": "Disable and remove an Agent Skill", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"204": {"description": "Removed"}}}},
-    "/extensions/agent-skills/{id}/enable": {"post": {"summary": "Enable a non-blocked Agent Skill", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Enabled"}}}},
-    "/extensions/agent-skills/{id}/disable": {"post": {"summary": "Disable an Agent Skill and evict prompt cache", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Disabled"}}}},
-    "/extensions/agent-skills/{id}/compatibility": {"get": {"summary": "Get Agent Skill compatibility report", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Compatibility report"}}}},
-    "/extensions/agent-skills/{id}/resources": {"get": {"summary": "List Agent Skill resource metadata", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "kind", "schema": {"type": "string"}}], "responses": {"200": {"description": "Resource index"}}}},
-    "/extensions/agent-skills/{id}/resources/content": {"get": {"summary": "Read or download a controlled Agent Skill text resource", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Resource content"}}}},
-    "/extensions/agent-skills/{id}/assets/content": {"get": {"summary": "Download a controlled non-executable Agent Skill asset", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "path", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Sandboxed asset content"}, "403": {"description": "Unsafe or out-of-scope asset"}}}},
-    "/extensions/agent-skills/{id}/activations": {"get": {"summary": "List redacted Agent Skill activation traces", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Activation history"}}}},
-    "/extensions/workshop/metrics": {"get": {"summary": "Get workshop runtime counters", "responses": {"200": {"description": "Required workshop counters", "content": {"application/json": {"schema": {"type": "object", "required": ["counters"], "properties": {"counters": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}}}}}}}}},
-    "/extensions/workshop/instructions/generate": {"post": {"summary": "Generate and server-validate a no-code Agent Skill instruction preview", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["requirement"], "properties": {"requirement": {"type": "string", "maxLength": 20000}}}}}}, "responses": {"200": {"description": "Validated Agent Skill import preview"}, "400": {"description": "Invalid, unsafe, or executable model output"}}}},
-    "/extensions/workshop/sessions": {"get": {"summary": "List owned workshop sessions", "parameters": [{"in": "query", "name": "characterId", "schema": {"type": "string"}}, {"in": "query", "name": "page", "schema": {"type": "integer", "minimum": 1}}, {"in": "query", "name": "pageSize", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}], "responses": {"200": {"description": "Workshop session page"}}}, "post": {"summary": "Create workshop session", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["requirement"], "properties": {"requirement": {"type": "string", "maxLength": 20000}, "characterId": {"type": "string"}}}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopSession"}}}}}}},
-    "/extensions/workshop/sessions/{id}": {"get": {"summary": "Get owned workshop session", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Session detail"}, "403": {"description": "Forbidden", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/workshop/sessions/{id}/archive": {"post": {"summary": "Archive workshop session", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"204": {"description": "Archived"}}}},
-    "/extensions/workshop/sessions/{id}/revisions": {"get": {"summary": "List immutable revisions", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Revision list"}}}},
-    "/extensions/workshop/sessions/{id}/revisions/{revision}": {"get": {"summary": "Get immutable revision", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "revision", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Revision", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopRevision"}}}}}}},
-    "/extensions/workshop/sessions/{id}/generate": {"post": {"summary": "Plan requirements and generate or save a structured draft revision", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopGenerateRequest"}}}}, "responses": {"200": {"description": "Generated revision", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopRevision"}}}}, "400": {"description": "Invalid model output", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/validate": {"post": {"summary": "Compile and statically validate revision", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "revision", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Validation result"}}}},
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/permissions/confirm": {"post": {"summary": "Confirm revision-bound capabilities", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "revision", "required": true, "schema": {"type": "integer"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopPermissionConfirmation"}}}}, "responses": {"204": {"description": "Confirmed"}}}},
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/test": {"post": {"summary": "Run declarative workflow sandbox test", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "revision", "required": true, "schema": {"type": "integer"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkshopTestRequest"}}}}, "responses": {"200": {"description": "Structured test report"}}}},
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/install": {"post": {"summary": "Atomically install validated and tested workflow Skill", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "revision", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Installed disabled Skill"}, "409": {"description": "Revision or version conflict", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/workshop/sessions/{id}/tests": {"get": {"summary": "List revision-bound test reports", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Test reports"}}}},
-    "/extensions/workshop/sessions/{id}/artifact": {"get": {"summary": "Get installed workshop artifact", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Artifact metadata and redacted declarative files"}, "404": {"description": "Artifact not found"}}}},
-    "/extensions/workshop/sessions/{id}/export": {"post": {"summary": "Export deterministic workflow artifact ZIP", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Artifact ZIP", "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}}}}}},
-    "/extensions/workshop/tests/{testRunId}": {"get": {"summary": "Get owned redacted test report", "parameters": [{"in": "path", "name": "testRunId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Test report"}, "403": {"description": "Forbidden", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/skills/{id}/workshop/fork": {"post": {"summary": "Create a new workshop revision session from an installed workflow Skill", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"201": {"description": "Forked workshop session"}, "409": {"description": "Only workflow Skills can be forked"}}}},
-    "/extensions/skills/{id}/versions/{version}/rollback": {"post": {"summary": "Atomically rollback a workflow Skill version", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "version", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Rollback result"}}}},
-    "/extensions/skills/{id}": {"get": {"summary": "Get skill details", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Skill details"}, "404": {"description": "Not found", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/skills/{id}/enable": {"post": {"summary": "Enable skill for a character", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Enabled"}}}},
-    "/extensions/skills/{id}/disable": {"post": {"summary": "Disable skill for a character", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Disabled"}}}},
-    "/extensions/skills/{id}/permissions": {
-      "get": {"summary": "Get character-scoped skill permissions", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Permission grants"}}},
-      "put": {"summary": "Replace character-scoped skill permissions", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["grants", "characterId"], "properties": {"grants": {"type": "array", "items": {"$ref": "#/components/schemas/PermissionGrant"}}, "characterId": {"type": "string"}, "conversationId": {"type": "string"}, "channel": {"type": "string"}, "sessionId": {"type": "string"}}}}}}, "responses": {"200": {"description": "Updated"}, "403": {"description": "Denied", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}
+    "/extensions/agent-skills": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "enum": [
+                "global",
+                "character"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "compatible",
+                "compatible_with_warnings",
+                "partially_compatible",
+                "blocked"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent Skill page"
+          }
+        },
+        "summary": "List visible Agent Skills"
+      }
+    },
+    "/extensions/agent-skills/import/install": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSkillInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Installed, disabled by default"
+          }
+        },
+        "summary": "Install a previously validated Agent Skill preview"
+      }
+    },
+    "/extensions/agent-skills/import/preview": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "files": {
+                    "items": {
+                      "format": "binary",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "paths": {
+                    "type": "string"
+                  },
+                  "rootName": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "enum": [
+                      "zip",
+                      "directory"
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-validated import preview"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid or unsafe import"
+          }
+        },
+        "summary": "Validate and preview a ZIP or directory Agent Skill import"
+      }
+    },
+    "/extensions/agent-skills/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Agent Skill metrics"
+          }
+        },
+        "summary": "Get Agent Skill runtime counters and token totals"
+      }
+    },
+    "/extensions/agent-skills/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          }
+        },
+        "summary": "Disable and remove an Agent Skill"
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent Skill detail"
+          }
+        },
+        "summary": "Get Agent Skill details, compatibility and activation trace"
+      }
+    },
+    "/extensions/agent-skills/{id}/activations": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activation history"
+          }
+        },
+        "summary": "List redacted Agent Skill activation traces"
+      }
+    },
+    "/extensions/agent-skills/{id}/assets/content": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sandboxed asset content"
+          },
+          "403": {
+            "description": "Unsafe or out-of-scope asset"
+          }
+        },
+        "summary": "Download a controlled non-executable Agent Skill asset"
+      }
+    },
+    "/extensions/agent-skills/{id}/compatibility": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compatibility report"
+          }
+        },
+        "summary": "Get Agent Skill compatibility report"
+      }
+    },
+    "/extensions/agent-skills/{id}/disable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disabled"
+          }
+        },
+        "summary": "Disable an Agent Skill and evict prompt cache"
+      }
+    },
+    "/extensions/agent-skills/{id}/enable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enabled"
+          }
+        },
+        "summary": "Enable a non-blocked Agent Skill"
+      }
+    },
+    "/extensions/agent-skills/{id}/resources": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resource index"
+          }
+        },
+        "summary": "List Agent Skill resource metadata"
+      }
+    },
+    "/extensions/agent-skills/{id}/resources/content": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resource content"
+          }
+        },
+        "summary": "Read or download a controlled Agent Skill text resource"
+      }
+    },
+    "/extensions/canary/health/{extensionId}": {
+      "get": {
+        "description": "Get canary health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get canary health",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/metrics": {
+      "get": {
+        "description": "List canary metrics",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List canary metrics",
+        "tags": [
+          "Canary"
+        ]
+      },
+      "post": {
+        "description": "Record canary metric",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Record canary metric",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/policies": {
+      "get": {
+        "description": "List canary policies",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List canary policies",
+        "tags": [
+          "Canary"
+        ]
+      },
+      "post": {
+        "description": "Create canary policy",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Create canary policy",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/policies/{policyId}": {
+      "get": {
+        "description": "Get canary policy",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get canary policy",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/routes/{extensionId}": {
+      "get": {
+        "description": "Get canary route",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get canary route",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states": {
+      "get": {
+        "description": "List canary states",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List canary states",
+        "tags": [
+          "Canary"
+        ]
+      },
+      "post": {
+        "description": "Create canary state",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Create canary state",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}": {
+      "get": {
+        "description": "Get canary state",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get canary state",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}/abort": {
+      "post": {
+        "description": "Abort canary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Abort canary",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}/advance": {
+      "post": {
+        "description": "Advance canary stage",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Advance canary stage",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}/commit": {
+      "post": {
+        "description": "Commit canary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Commit canary",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}/pause": {
+      "post": {
+        "description": "Pause canary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Pause canary",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/canary/states/{canaryId}/resume": {
+      "post": {
+        "description": "Resume canary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Resume canary",
+        "tags": [
+          "Canary"
+        ]
+      }
+    },
+    "/extensions/capabilities": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Capability definitions"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List capability definitions"
+      }
+    },
+    "/extensions/desktop/audit": {
+      "get": {
+        "description": "List desktop audit entries",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop audit entries",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/circuit/reset": {
+      "post": {
+        "description": "Reset desktop circuit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reset desktop circuit",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/circuit/status": {
+      "get": {
+        "description": "Get desktop circuit status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get desktop circuit status",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/conflicts": {
+      "get": {
+        "description": "List desktop conflicts",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop conflicts",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/conflicts/{conflictId}/resolve": {
+      "post": {
+        "description": "Resolve desktop conflict",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Resolve desktop conflict",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contracts": {
+      "get": {
+        "description": "List desktop contracts",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop contracts",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contributions": {
+      "get": {
+        "description": "List desktop contributions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop contributions",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contributions/{contributionId}": {
+      "get": {
+        "description": "Get desktop contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get desktop contribution",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contributions/{contributionId}/disable": {
+      "post": {
+        "description": "Disable desktop contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Disable desktop contribution",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contributions/{contributionId}/enable": {
+      "post": {
+        "description": "Enable desktop contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Enable desktop contribution",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/contributions/{contributionId}/invoke": {
+      "post": {
+        "description": "Invoke desktop contribution action",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Invoke desktop contribution action",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/permissions": {
+      "get": {
+        "description": "List desktop permissions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop permissions",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/resources": {
+      "get": {
+        "description": "List desktop resources",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List desktop resources",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/shortcuts/{contributionId}/rebind": {
+      "post": {
+        "description": "Rebind desktop shortcut",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Rebind desktop shortcut",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/snapshot": {
+      "get": {
+        "description": "Get current desktop snapshot",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get current desktop snapshot",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/snapshot/apply-result": {
+      "post": {
+        "description": "Report snapshot apply result",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Report snapshot apply result",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/desktop/snapshot/build": {
+      "post": {
+        "description": "Build new desktop snapshot",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Build new desktop snapshot",
+        "tags": [
+          "Desktop"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces": {
+      "get": {
+        "description": "List dev-mode workspaces",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List dev-mode workspaces",
+        "tags": [
+          "DevMode"
+        ]
+      },
+      "post": {
+        "description": "Register dev-mode workspace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Register dev-mode workspace",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}": {
+      "delete": {
+        "description": "Remove dev-mode workspace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Remove dev-mode workspace",
+        "tags": [
+          "DevMode"
+        ]
+      },
+      "get": {
+        "description": "Get dev-mode workspace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get dev-mode workspace",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/build": {
+      "post": {
+        "description": "Build dev-mode workspace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Build dev-mode workspace",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/events": {
+      "get": {
+        "description": "Stream workspace events",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Stream workspace events",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/reload": {
+      "post": {
+        "description": "Reload dev-mode workspace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reload dev-mode workspace",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/revisions": {
+      "get": {
+        "description": "List workspace revisions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List workspace revisions",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/sessions": {
+      "delete": {
+        "description": "Close dev-mode session",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Close dev-mode session",
+        "tags": [
+          "DevMode"
+        ]
+      },
+      "post": {
+        "description": "Open dev-mode session",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Open dev-mode session",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/trust": {
+      "delete": {
+        "description": "Revoke workspace trust",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Revoke workspace trust",
+        "tags": [
+          "DevMode"
+        ]
+      },
+      "post": {
+        "description": "Grant workspace trust",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Grant workspace trust",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/watch/start": {
+      "post": {
+        "description": "Start workspace file watch",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Start workspace file watch",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/dev-mode/workspaces/{id}/watch/stop": {
+      "post": {
+        "description": "Stop workspace file watch",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Stop workspace file watch",
+        "tags": [
+          "DevMode"
+        ]
+      }
+    },
+    "/extensions/events/audit": {
+      "get": {
+        "description": "List event audit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List event audit",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/circuits/{subscriptionId}/reset": {
+      "post": {
+        "description": "Reset event subscription circuit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reset event subscription circuit",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/dead-letters": {
+      "get": {
+        "description": "List dead letters",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List dead letters",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/dead-letters/{deadLetterId}": {
+      "get": {
+        "description": "Get dead letter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get dead letter",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/dead-letters/{deadLetterId}/discard": {
+      "post": {
+        "description": "Discard dead letter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Discard dead letter",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/dead-letters/{deadLetterId}/replay": {
+      "post": {
+        "description": "Replay dead letter",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Replay dead letter",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/deliveries": {
+      "get": {
+        "description": "List event deliveries",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List event deliveries",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/deliveries/{deliveryId}": {
+      "get": {
+        "description": "Get event delivery",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get event delivery",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/outbox": {
+      "get": {
+        "description": "List event outbox",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List event outbox",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/publish": {
+      "post": {
+        "description": "Publish event",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Publish event",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/publish-tx": {
+      "post": {
+        "description": "Publish transactional event",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Publish transactional event",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/stats": {
+      "get": {
+        "description": "Get event stats",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get event stats",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/subscriptions": {
+      "get": {
+        "description": "List event subscriptions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List event subscriptions",
+        "tags": [
+          "Events"
+        ]
+      },
+      "post": {
+        "description": "Register event subscription",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Register event subscription",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/subscriptions/{contributionId}": {
+      "delete": {
+        "description": "Unregister event subscription",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Unregister event subscription",
+        "tags": [
+          "Events"
+        ]
+      },
+      "get": {
+        "description": "Get event subscription",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get event subscription",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/types": {
+      "get": {
+        "description": "List event types",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List event types",
+        "tags": [
+          "Events"
+        ]
+      },
+      "post": {
+        "description": "Register event type",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Register event type",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/events/types/{typeId}/{version}": {
+      "get": {
+        "description": "Get event type version",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get event type version",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions": {
+      "get": {
+        "description": "List hook contributions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List hook contributions",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions/{id}": {
+      "get": {
+        "description": "Get hook contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get hook contribution",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions/{id}/circuit": {
+      "get": {
+        "description": "Get hook contribution circuit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get hook contribution circuit",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions/{id}/circuit/reset": {
+      "post": {
+        "description": "Reset hook contribution circuit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reset hook contribution circuit",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions/{id}/disable": {
+      "post": {
+        "description": "Disable hook contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Disable hook contribution",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/contributions/{id}/enable": {
+      "post": {
+        "description": "Enable hook contribution",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Enable hook contribution",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/points": {
+      "get": {
+        "description": "List hook points",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List hook points",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/hooks/points/{pointId}/contributions": {
+      "get": {
+        "description": "List hook contributions by point",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List hook contributions by point",
+        "tags": [
+          "Hooks"
+        ]
+      }
+    },
+    "/extensions/journal/{operationId}": {
+      "get": {
+        "description": "List journal entries for operation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List journal entries for operation",
+        "tags": [
+          "Journal"
+        ]
+      }
+    },
+    "/extensions/kernel/extension": {
+      "get": {
+        "description": "Get kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions": {
+      "get": {
+        "description": "List kernel extensions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List kernel extensions",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/disable": {
+      "post": {
+        "description": "Disable kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Disable kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/enable": {
+      "post": {
+        "description": "Enable kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Enable kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/install": {
+      "post": {
+        "description": "Install kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Install kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/pause": {
+      "post": {
+        "description": "Pause kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Pause kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/preview": {
+      "post": {
+        "description": "Preview kernel extension install",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Preview kernel extension install",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/resume-uninstall": {
+      "post": {
+        "description": "Resume kernel extension uninstall",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Resume kernel extension uninstall",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/rollback": {
+      "post": {
+        "description": "Rollback kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Rollback kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/extensions/uninstall": {
+      "post": {
+        "description": "Uninstall kernel extension",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Uninstall kernel extension",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/kernel/status": {
+      "get": {
+        "description": "Get kernel status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get kernel status",
+        "tags": [
+          "Kernel"
+        ]
+      }
+    },
+    "/extensions/migrations": {
+      "get": {
+        "description": "List migrations",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List migrations",
+        "tags": [
+          "Migrations"
+        ]
+      }
+    },
+    "/extensions/migrations/execute": {
+      "post": {
+        "description": "Execute migration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Execute migration",
+        "tags": [
+          "Migrations"
+        ]
+      }
+    },
+    "/extensions/migrations/operations/{operationId}": {
+      "get": {
+        "description": "Get migration operation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get migration operation",
+        "tags": [
+          "Migrations"
+        ]
+      }
+    },
+    "/extensions/migrations/plan": {
+      "post": {
+        "description": "Plan migration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Plan migration",
+        "tags": [
+          "Migrations"
+        ]
+      }
+    },
+    "/extensions/migrations/{migrationId}": {
+      "get": {
+        "description": "Get migration",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get migration",
+        "tags": [
+          "Migrations"
+        ]
+      }
+    },
+    "/extensions/package-operations": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operation history"
+          }
+        },
+        "summary": "List package operation audit history"
+      }
+    },
+    "/extensions/package-operations/{operationId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation detail"
+          },
+          "404": {
+            "description": "Operation not found"
+          }
+        },
+        "summary": "Get a package operation audit record"
+      }
+    },
+    "/extensions/packages": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Installed extension package list"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List installed extension packages"
+      }
+    },
+    "/extensions/packages/import/install": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackageInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Installed"
+          },
+          "410": {
+            "description": "Session expired or consumed"
+          }
+        },
+        "summary": "Atomically install a one-time validated import session disabled by default"
+      }
+    },
+    "/extensions/packages/import/preview": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "scopeId": {
+                    "type": "string"
+                  },
+                  "scopeType": {
+                    "enum": [
+                      "global",
+                      "character"
+                    ]
+                  }
+                },
+                "required": [
+                  "file",
+                  "scopeType"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageImportPreview"
+                }
+              }
+            },
+            "description": "Server-validated package preview"
+          },
+          "422": {
+            "description": "Unsafe or invalid package"
+          }
+        },
+        "summary": "Detect, securely validate and preview a local Amitia or AgentSkills package"
+      }
+    },
+    "/extensions/packages/install": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "package": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "package"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Installed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "422": {
+            "description": "Invalid package"
+          }
+        },
+        "summary": "Validate and atomically install an Amitiax package"
+      }
+    },
+    "/extensions/packages/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Package metrics"
+          }
+        },
+        "summary": "Get local package lifecycle counters"
+      }
+    },
+    "/extensions/packages/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Extension package status"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get extension package service status"
+      }
+    },
+    "/extensions/plugins": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin page"
+          }
+        },
+        "summary": "List registered plugins"
+      }
+    },
+    "/extensions/plugins/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin details"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get plugin details"
+      }
+    },
+    "/extensions/plugins/{id}/circuit/reset": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reset"
+          }
+        },
+        "summary": "Reset all plugin hook circuits"
+      }
+    },
+    "/extensions/plugins/{id}/config": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redacted config"
+          }
+        },
+        "summary": "Get redacted plugin config"
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid config"
+          }
+        },
+        "summary": "Validate, encrypt and update plugin config"
+      }
+    },
+    "/extensions/plugins/{id}/config/reset": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reset"
+          }
+        },
+        "summary": "Reset plugin config"
+      }
+    },
+    "/extensions/plugins/{id}/disable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disabled"
+          }
+        },
+        "summary": "Disable plugin and its registered skills"
+      }
+    },
+    "/extensions/plugins/{id}/enable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enabled"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Incompatible or lifecycle failure"
+          }
+        },
+        "summary": "Enable plugin and its registered skills"
+      }
+    },
+    "/extensions/plugins/{id}/events": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "pending",
+                "failed",
+                "completed",
+                "dead_letter"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "maximum": 100,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event delivery page"
+          }
+        },
+        "summary": "List role-isolated plugin event deliveries"
+      }
+    },
+    "/extensions/plugins/{id}/events/dead-letter": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dead-letter page"
+          }
+        },
+        "summary": "List plugin dead letters"
+      }
+    },
+    "/extensions/plugins/{id}/events/{eventId}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queued"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Character scope mismatch"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not retryable"
+          }
+        },
+        "summary": "Retry owned dead-letter event"
+      }
+    },
+    "/extensions/plugins/{id}/health": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin health"
+          }
+        },
+        "summary": "Get plugin lifecycle and per-hook circuit state"
+      }
+    },
+    "/extensions/plugins/{id}/permissions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Permission grants"
+          }
+        },
+        "summary": "Get role-isolated plugin capability grants"
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "characterId": {
+                    "type": "string"
+                  },
+                  "grants": {
+                    "items": {
+                      "$ref": "#/components/schemas/PermissionGrant"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "grants"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Denied"
+          }
+        },
+        "summary": "Replace plugin capability grants"
+      }
+    },
+    "/extensions/plugins/{id}/reload": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reloaded"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Reload failed"
+          }
+        },
+        "summary": "Reload plugin with rollback on failure"
+      }
+    },
+    "/extensions/plugins/{id}/schedules": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedules"
+          }
+        },
+        "summary": "List role-isolated plugin schedules"
+      }
+    },
+    "/extensions/plugins/{id}/schedules/{scheduleId}/pause": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheduleId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paused"
+          }
+        },
+        "summary": "Pause owned plugin schedule"
+      }
+    },
+    "/extensions/plugins/{id}/schedules/{scheduleId}/resume": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheduleId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumed"
+          }
+        },
+        "summary": "Resume owned plugin schedule"
+      }
+    },
+    "/extensions/plugins/{id}/state": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin states"
+          }
+        },
+        "summary": "List role-isolated encrypted plugin state"
+      }
+    },
+    "/extensions/plugins/{id}/surface": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Surface document"
+          }
+        },
+        "summary": "Get validated declarative Schema Surface"
+      }
+    },
+    "/extensions/plugins/{id}/surface/actions/{actionId}": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "actionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SurfaceActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Skill result"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Action not declared or denied"
+          }
+        },
+        "summary": "Execute a declared surface action through Skill Runtime"
+      }
+    },
+    "/extensions/recovery/execute": {
+      "post": {
+        "description": "Execute recovery action",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Execute recovery action",
+        "tags": [
+          "Recovery"
+        ]
+      }
+    },
+    "/extensions/recovery/scan": {
+      "get": {
+        "description": "Scan for recovery actions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Scan for recovery actions",
+        "tags": [
+          "Recovery"
+        ]
+      }
+    },
+    "/extensions/rollbacks": {
+      "get": {
+        "description": "List rollback plans",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List rollback plans",
+        "tags": [
+          "Rollbacks"
+        ]
+      }
+    },
+    "/extensions/rollbacks/{rollbackId}": {
+      "get": {
+        "description": "Get rollback plan",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get rollback plan",
+        "tags": [
+          "Rollbacks"
+        ]
+      }
+    },
+    "/extensions/rollbacks/{rollbackId}/execute": {
+      "post": {
+        "description": "Execute rollback",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Execute rollback",
+        "tags": [
+          "Rollbacks"
+        ]
+      }
+    },
+    "/extensions/rollbacks/{rollbackId}/recover": {
+      "post": {
+        "description": "Recover rollback",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Recover rollback",
+        "tags": [
+          "Rollbacks"
+        ]
+      }
+    },
+    "/extensions/rollbacks/{rollbackId}/steps": {
+      "get": {
+        "description": "List rollback steps",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List rollback steps",
+        "tags": [
+          "Rollbacks"
+        ]
+      }
+    },
+    "/extensions/runs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skillId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run page"
+          }
+        },
+        "summary": "List skill runs"
+      }
+    },
+    "/extensions/runs/{runId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run details"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get skill run"
+      }
+    },
+    "/extensions/schedules": {
+      "get": {
+        "description": "List schedules",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List schedules",
+        "tags": [
+          "Schedules"
+        ]
+      },
+      "post": {
+        "description": "Install schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Install schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/quarantines": {
+      "get": {
+        "description": "List quarantined schedules",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List quarantined schedules",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}": {
+      "delete": {
+        "description": "Uninstall schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Uninstall schedule",
+        "tags": [
+          "Schedules"
+        ]
+      },
+      "get": {
+        "description": "Get schedule detail",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get schedule detail",
+        "tags": [
+          "Schedules"
+        ]
+      },
+      "put": {
+        "description": "Update schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Update schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/circuit": {
+      "get": {
+        "description": "Get schedule circuit state",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get schedule circuit state",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/circuit/reset": {
+      "post": {
+        "description": "Reset schedule circuit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Reset schedule circuit",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/disable": {
+      "post": {
+        "description": "Disable schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Disable schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/enable": {
+      "post": {
+        "description": "Enable schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Enable schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/misfires": {
+      "get": {
+        "description": "List schedule misfires",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List schedule misfires",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/pause": {
+      "post": {
+        "description": "Pause schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Pause schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/recalculate": {
+      "post": {
+        "description": "Recalculate schedule next fire",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Recalculate schedule next fire",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/resume": {
+      "post": {
+        "description": "Resume schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Resume schedule",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/run-now": {
+      "post": {
+        "description": "Trigger immediate schedule run",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Trigger immediate schedule run",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/runs": {
+      "get": {
+        "description": "List schedule runs",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List schedule runs",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/skip-next": {
+      "post": {
+        "description": "Skip next schedule fire",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Skip next schedule fire",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/schedules/{scheduleId}/triggers": {
+      "get": {
+        "description": "List schedule triggers",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List schedule triggers",
+        "tags": [
+          "Schedules"
+        ]
+      }
+    },
+    "/extensions/services": {
+      "get": {
+        "description": "List trusted services",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List trusted services",
+        "tags": [
+          "TrustedServices"
+        ]
+      },
+      "post": {
+        "description": "Register trusted service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Register trusted service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/quarantine/list": {
+      "get": {
+        "description": "List quarantined services",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List quarantined services",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/quarantine/{serviceId}/release": {
+      "post": {
+        "description": "Release quarantined service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Release quarantined service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}": {
+      "delete": {
+        "description": "Unregister trusted service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Unregister trusted service",
+        "tags": [
+          "TrustedServices"
+        ]
+      },
+      "get": {
+        "description": "Get trusted service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get trusted service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}/health": {
+      "get": {
+        "description": "Health check service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Health check service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}/invoke": {
+      "post": {
+        "description": "Invoke service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Invoke service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}/start": {
+      "post": {
+        "description": "Start service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Start service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}/status": {
+      "get": {
+        "description": "Get service status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get service status",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/{serviceId}/stop": {
+      "post": {
+        "description": "Stop service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Stop service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/signers": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Signer list"
+          }
+        },
+        "summary": "List local package signers and trust state"
+      }
+    },
+    "/extensions/signers/{fingerprint}/trust": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Trusted"
+          }
+        },
+        "summary": "Trust a local Ed25519 signer without granting capabilities"
+      }
+    },
+    "/extensions/signers/{fingerprint}/untrust": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Untrusted"
+          }
+        },
+        "summary": "Revoke local signer trust"
+      }
+    },
+    "/extensions/skills": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enabled",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "schema": {
+              "enum": [
+                "llm",
+                "manual",
+                "schedule",
+                "system_event"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "schema": {
+              "enum": [
+                "builtin",
+                "legacy_tool",
+                "workflow",
+                "instructions"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill list"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List skills"
+      }
+    },
+    "/extensions/skills/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill details"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get skill details"
+      }
     },
     "/extensions/skills/{id}/config": {
-      "get": {"summary": "Get character-scoped skill config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Config"}}},
-      "put": {"summary": "Update character-scoped skill config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object"}}}}, "responses": {"200": {"description": "Updated"}, "400": {"description": "Invalid config", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Config"
+          }
+        },
+        "summary": "Get character-scoped skill config"
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid config"
+          }
+        },
+        "summary": "Update character-scoped skill config"
+      }
     },
-    "/extensions/skills/{id}/config/reset": {"post": {"summary": "Reset character-scoped skill config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Reset"}}}},
-    "/extensions/skills/{id}/execute": {"post": {"summary": "Manually execute skill", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ExecuteRequest"}}}}, "responses": {"200": {"description": "Skill result"}, "403": {"description": "Permission denied", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins": {"get": {"summary": "List registered plugins", "parameters": [{"in": "query", "name": "page", "schema": {"type": "integer", "minimum": 1}}, {"in": "query", "name": "pageSize", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}], "responses": {"200": {"description": "Plugin page"}}}},
-    "/extensions/plugins/{id}": {"get": {"summary": "Get plugin details", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Plugin details"}, "404": {"description": "Not found", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/enable": {"post": {"summary": "Enable plugin and its registered skills", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Enabled"}, "409": {"description": "Incompatible or lifecycle failure", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/disable": {"post": {"summary": "Disable plugin and its registered skills", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Disabled"}}}},
-    "/extensions/plugins/{id}/reload": {"post": {"summary": "Reload plugin with rollback on failure", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Reloaded"}, "409": {"description": "Reload failed", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/config": {"get": {"summary": "Get redacted plugin config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Redacted config"}}}, "put": {"summary": "Validate, encrypt and update plugin config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object"}}}}, "responses": {"200": {"description": "Updated"}, "400": {"description": "Invalid config", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/config/reset": {"post": {"summary": "Reset plugin config", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "schema": {"type": "string"}}], "responses": {"200": {"description": "Reset"}}}},
-    "/extensions/plugins/{id}/permissions": {"get": {"summary": "Get role-isolated plugin capability grants", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Permission grants"}}}, "put": {"summary": "Replace plugin capability grants", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["grants"], "properties": {"characterId": {"type": "string"}, "grants": {"type": "array", "items": {"$ref": "#/components/schemas/PermissionGrant"}}}}}}}, "responses": {"200": {"description": "Updated"}, "403": {"description": "Denied", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/health": {"get": {"summary": "Get plugin lifecycle and per-hook circuit state", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Plugin health"}}}},
-    "/extensions/plugins/{id}/circuit/reset": {"post": {"summary": "Reset all plugin hook circuits", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Reset"}}}},
-    "/extensions/plugins/{id}/state": {"get": {"summary": "List role-isolated encrypted plugin state", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Plugin states"}}}},
-    "/extensions/plugins/{id}/surface": {"get": {"summary": "Get validated declarative Schema Surface", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Surface document"}}}},
-    "/extensions/plugins/{id}/surface/actions/{actionId}": {"post": {"summary": "Execute a declared surface action through Skill Runtime", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "actionId", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SurfaceActionRequest"}}}}, "responses": {"200": {"description": "Skill result"}, "403": {"description": "Action not declared or denied", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/plugins/{id}/schedules": {"get": {"summary": "List role-isolated plugin schedules", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Schedules"}}}},
-    "/extensions/plugins/{id}/schedules/{scheduleId}/pause": {"post": {"summary": "Pause owned plugin schedule", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "scheduleId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Paused"}}}},
-    "/extensions/plugins/{id}/schedules/{scheduleId}/resume": {"post": {"summary": "Resume owned plugin schedule", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "scheduleId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Resumed"}}}},
-    "/extensions/plugins/{id}/events": {"get": {"summary": "List role-isolated plugin event deliveries", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "status", "schema": {"enum": ["pending", "failed", "completed", "dead_letter"]}}, {"in": "query", "name": "page", "schema": {"type": "integer"}}, {"in": "query", "name": "pageSize", "schema": {"type": "integer", "maximum": 100}}], "responses": {"200": {"description": "Event delivery page"}}}},
-    "/extensions/plugins/{id}/events/dead-letter": {"get": {"summary": "List plugin dead letters", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Dead-letter page"}}}},
-    "/extensions/plugins/{id}/events/{eventId}/retry": {"post": {"summary": "Retry owned dead-letter event", "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "string"}}, {"in": "path", "name": "eventId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Queued"}, "403": {"description": "Character scope mismatch", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}, "409": {"description": "Not retryable", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}},
-    "/extensions/runs": {"get": {"summary": "List skill runs", "parameters": [{"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "skillId", "schema": {"type": "string"}}, {"in": "query", "name": "status", "schema": {"type": "string"}}, {"in": "query", "name": "trigger", "schema": {"type": "string"}}, {"in": "query", "name": "channel", "schema": {"type": "string"}}, {"in": "query", "name": "from", "schema": {"type": "string", "format": "date-time"}}, {"in": "query", "name": "to", "schema": {"type": "string", "format": "date-time"}}, {"in": "query", "name": "page", "schema": {"type": "integer", "minimum": 1}}, {"in": "query", "name": "pageSize", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}], "responses": {"200": {"description": "Run page"}}}},
-    "/extensions/runs/{runId}": {"get": {"summary": "Get skill run", "parameters": [{"in": "path", "name": "runId", "required": true, "schema": {"type": "string"}}, {"in": "query", "name": "characterId", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Run details"}, "404": {"description": "Not found", "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}}}}}}
-  }
+    "/extensions/skills/{id}/config/reset": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reset"
+          }
+        },
+        "summary": "Reset character-scoped skill config"
+      }
+    },
+    "/extensions/skills/{id}/disable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disabled"
+          }
+        },
+        "summary": "Disable skill for a character"
+      }
+    },
+    "/extensions/skills/{id}/enable": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enabled"
+          }
+        },
+        "summary": "Enable skill for a character"
+      }
+    },
+    "/extensions/skills/{id}/execute": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Skill result"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Permission denied"
+          }
+        },
+        "summary": "Manually execute skill"
+      }
+    },
+    "/extensions/skills/{id}/permissions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Permission grants"
+          }
+        },
+        "summary": "Get character-scoped skill permissions"
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "channel": {
+                    "type": "string"
+                  },
+                  "characterId": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "grants": {
+                    "items": {
+                      "$ref": "#/components/schemas/PermissionGrant"
+                    },
+                    "type": "array"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "grants",
+                  "characterId"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Denied"
+          }
+        },
+        "summary": "Replace character-scoped skill permissions"
+      }
+    },
+    "/extensions/skills/{id}/versions/{version}/rollback": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rollback result"
+          }
+        },
+        "summary": "Atomically rollback a workflow Skill version"
+      }
+    },
+    "/extensions/skills/{id}/workshop/fork": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Forked workshop session"
+          },
+          "409": {
+            "description": "Only workflow Skills can be forked"
+          }
+        },
+        "summary": "Create a new workshop revision session from an installed workflow Skill"
+      }
+    },
+    "/extensions/task-definitions": {
+      "get": {
+        "description": "List task definitions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List task definitions",
+        "tags": [
+          "TaskDefinitions"
+        ]
+      },
+      "post": {
+        "description": "Create task definition",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Create task definition",
+        "tags": [
+          "TaskDefinitions"
+        ]
+      }
+    },
+    "/extensions/task-definitions/{defId}": {
+      "get": {
+        "description": "Get task definition",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get task definition",
+        "tags": [
+          "TaskDefinitions"
+        ]
+      }
+    },
+    "/extensions/tasks": {
+      "get": {
+        "description": "List tasks",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List tasks",
+        "tags": [
+          "Tasks"
+        ]
+      },
+      "post": {
+        "description": "Enqueue task",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Enqueue task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}": {
+      "get": {
+        "description": "Get task run",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get task run",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/cancel": {
+      "post": {
+        "description": "Cancel task",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Cancel task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/checkpoint": {
+      "get": {
+        "description": "Get task checkpoint",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get task checkpoint",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/progress": {
+      "get": {
+        "description": "Get task progress",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get task progress",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/recover": {
+      "post": {
+        "description": "Recover task",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Recover task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/result": {
+      "get": {
+        "description": "Get task result",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get task result",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/retry": {
+      "post": {
+        "description": "Retry task",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Retry task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/updates/operations/{operationId}": {
+      "get": {
+        "description": "Get update operation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get update operation",
+        "tags": [
+          "Updates"
+        ]
+      }
+    },
+    "/extensions/updates/operations/{operationId}/steps": {
+      "get": {
+        "description": "List update operation steps",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List update operation steps",
+        "tags": [
+          "Updates"
+        ]
+      }
+    },
+    "/extensions/workshop/instructions/generate": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "requirement": {
+                    "maxLength": 20000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requirement"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Validated Agent Skill import preview"
+          },
+          "400": {
+            "description": "Invalid, unsafe, or executable model output"
+          }
+        },
+        "summary": "Generate and server-validate a no-code Agent Skill instruction preview"
+      }
+    },
+    "/extensions/workshop/metrics": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "counters": {
+                      "additionalProperties": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "counters"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Required workshop counters"
+          }
+        },
+        "summary": "Get workshop runtime counters"
+      }
+    },
+    "/extensions/workshop/sessions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "characterId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workshop session page"
+          }
+        },
+        "summary": "List owned workshop sessions"
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "characterId": {
+                    "type": "string"
+                  },
+                  "requirement": {
+                    "maxLength": 20000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requirement"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopSession"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "summary": "Create workshop session"
+      }
+    },
+    "/extensions/workshop/sessions/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session detail"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Get owned workshop session"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/archive": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Archived"
+          }
+        },
+        "summary": "Archive workshop session"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/artifact": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artifact metadata and redacted declarative files"
+          },
+          "404": {
+            "description": "Artifact not found"
+          }
+        },
+        "summary": "Get installed workshop artifact"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/export": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Artifact ZIP"
+          }
+        },
+        "summary": "Export deterministic workflow artifact ZIP"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/generate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopRevision"
+                }
+              }
+            },
+            "description": "Generated revision"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid model output"
+          }
+        },
+        "summary": "Plan requirements and generate or save a structured draft revision"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revision list"
+          }
+        },
+        "summary": "List immutable revisions"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions/{revision}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkshopRevision"
+                }
+              }
+            },
+            "description": "Revision"
+          }
+        },
+        "summary": "Get immutable revision"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions/{revision}/install": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installed disabled Skill"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Revision or version conflict"
+          }
+        },
+        "summary": "Atomically install validated and tested workflow Skill"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions/{revision}/permissions/confirm": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopPermissionConfirmation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Confirmed"
+          }
+        },
+        "summary": "Confirm revision-bound capabilities"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions/{revision}/test": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Structured test report"
+          }
+        },
+        "summary": "Run declarative workflow sandbox test"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/revisions/{revision}/validate": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation result"
+          }
+        },
+        "summary": "Compile and statically validate revision"
+      }
+    },
+    "/extensions/workshop/sessions/{id}/tests": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test reports"
+          }
+        },
+        "summary": "List revision-bound test reports"
+      }
+    },
+    "/extensions/workshop/tests/{testRunId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "testRunId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test report"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Get owned redacted test report"
+      }
+    },
+    "/extensions/{id}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Uninstall result"
+          },
+          "409": {
+            "description": "Dependency in use"
+          }
+        },
+        "summary": "Uninstall a local Skill while preserving audits and runs"
+      }
+    },
+    "/extensions/{id}/dependencies": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Dependencies"
+          }
+        },
+        "summary": "List direct and reverse package dependencies"
+      }
+    },
+    "/extensions/{id}/export": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Expiring controlled export"
+          }
+        },
+        "summary": "Export a workflow as .amitiax or instructions as .amitiax/AgentSkills ZIP"
+      }
+    },
+    "/extensions/{id}/exports/{exportId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "exportId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package bytes"
+          }
+        },
+        "summary": "Download an authorized expiring export"
+      }
+    },
+    "/extensions/{id}/uninstall/preview": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Uninstall preview"
+          },
+          "409": {
+            "description": "Dependency in use"
+          }
+        },
+        "summary": "Preview uninstall cleanup, retained audit data and dependency blockers"
+      }
+    },
+    "/extensions/{id}/updates": {
+      "get": {
+        "description": "List extension updates",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List extension updates",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/cancel": {
+      "post": {
+        "description": "Cancel extension update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Cancel extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/check": {
+      "post": {
+        "description": "Check extension updates",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Check extension updates",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/download": {
+      "post": {
+        "description": "Download extension update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Download extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/install": {
+      "post": {
+        "description": "Install extension update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Install extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/retry": {
+      "post": {
+        "description": "Retry extension update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Retry extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/updates/rollback": {
+      "post": {
+        "description": "Rollback extension update",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Rollback extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/{id}/upgrade": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upgrade result"
+          }
+        },
+        "summary": "Atomically apply a confirmed local upgrade"
+      }
+    },
+    "/extensions/{id}/upgrade/preview": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upgrade preview"
+          }
+        },
+        "summary": "Preview a manual local package upgrade"
+      }
+    },
+    "/extensions/{id}/versions": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version history"
+          }
+        },
+        "summary": "List immutable package versions"
+      }
+    },
+    "/extensions/{id}/versions/compare": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Structured version diff"
+          }
+        },
+        "summary": "Compare manifests, schemas, workflow/instructions, capabilities and signatures"
+      }
+    },
+    "/extensions/{id}/versions/{version}/rollback": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Rollback result"
+          }
+        },
+        "summary": "Atomically rollback without restoring revoked grants"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ]
 }

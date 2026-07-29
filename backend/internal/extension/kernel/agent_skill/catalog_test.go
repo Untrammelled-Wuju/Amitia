@@ -8,12 +8,12 @@ func TestAgentSkillCatalogRegister(t *testing.T) {
 	cat := NewAgentSkillCatalog()
 
 	def := AgentSkillDefinition{
-		ID:          "ext-001",
-		ExtensionID: "ext-001",
-		Name:        "test-skill",
-		Description: "Test",
-		Scope:       AgentSkillScopeGlobal,
-		Enabled:     true,
+		ID:           "ext-001",
+		ExtensionID:  "ext-001",
+		Name:         "test-skill",
+		Description:  "Test",
+		Scope:        AgentSkillScopeGlobal,
+		Enabled:      true,
 		Instructions: SkillInstructionRef{Text: "You are a test."},
 	}
 

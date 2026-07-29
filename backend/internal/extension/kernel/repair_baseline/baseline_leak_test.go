@@ -35,9 +35,9 @@ func captureSnapshot(t *testing.T, tempDir, extRoot string) resourceSnapshot {
 	runtime.GC()
 	runtime.ReadMemStats(&memStats)
 	snap := resourceSnapshot{
-		goroutines:     runtime.NumGoroutine(),
-		heapAlloc:      memStats.HeapAlloc,
-		capturedAt:     time.Now().UTC(),
+		goroutines:      runtime.NumGoroutine(),
+		heapAlloc:       memStats.HeapAlloc,
+		capturedAt:      time.Now().UTC(),
 		legacyCallTotal: kernel.GlobalLegacyCallCounter().Total(),
 	}
 	if tempDir != "" {
@@ -106,9 +106,9 @@ func buildArchiveFromExtension(t *testing.T, extDir, archivePath string) {
 		Hash string `json:"hash"`
 	}
 	filesDoc := struct {
-		Algorithm string              `json:"algorithm"`
-		Files     map[string]fileEntry `json:"files"`
-		GeneratedAt time.Time         `json:"generatedAt"`
+		Algorithm   string               `json:"algorithm"`
+		Files       map[string]fileEntry `json:"files"`
+		GeneratedAt time.Time            `json:"generatedAt"`
 	}{
 		Algorithm:   "sha256",
 		Files:       make(map[string]fileEntry),
@@ -430,8 +430,8 @@ func TestBaseline_Leak_CyclePhasesDefined(t *testing.T) {
 }
 
 type leakRecorder struct {
-	mu       sync.Mutex
-	records  []resourceSnapshot
+	mu      sync.Mutex
+	records []resourceSnapshot
 }
 
 func (r *leakRecorder) record(snap resourceSnapshot) {

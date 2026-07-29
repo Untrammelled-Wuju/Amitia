@@ -46,24 +46,24 @@ type Subscription struct {
 type Handler func(ctx context.Context, event Event) error
 
 type Delivery struct {
-	DeliveryID    string
-	EventID       string
+	DeliveryID     string
+	EventID        string
 	SubscriptionID string
-	Status        DeliveryStatus
-	Attempts      int
-	LastError     string
-	StartedAt     time.Time
-	FinishedAt    *time.Time
-	NextAttemptAt *time.Time
+	Status         DeliveryStatus
+	Attempts       int
+	LastError      string
+	StartedAt      time.Time
+	FinishedAt     *time.Time
+	NextAttemptAt  *time.Time
 }
 
 type DeliveryStatus string
 
 const (
-	DeliveryPending   DeliveryStatus = "pending"
+	DeliveryPending    DeliveryStatus = "pending"
 	DeliveryDelivering DeliveryStatus = "delivering"
-	DeliverySucceeded DeliveryStatus = "succeeded"
-	DeliveryFailed    DeliveryStatus = "failed"
+	DeliverySucceeded  DeliveryStatus = "succeeded"
+	DeliveryFailed     DeliveryStatus = "failed"
 	DeliveryDeadLetter DeliveryStatus = "dead_letter"
 )
 
@@ -75,10 +75,10 @@ type Schema struct {
 }
 
 type PublishResult struct {
-	EventID    string
+	EventID     string
 	AcceptCount int
 	RejectCount int
-	Deliveries []Delivery
+	Deliveries  []Delivery
 }
 
 type Bus interface {
@@ -91,13 +91,13 @@ type Bus interface {
 }
 
 var (
-	ErrSchemaNotFound      = errors.New("event_bus: schema not found")
-	ErrSchemaConflict      = errors.New("event_bus: schema conflict")
+	ErrSchemaNotFound       = errors.New("event_bus: schema not found")
+	ErrSchemaConflict       = errors.New("event_bus: schema conflict")
 	ErrSubscriptionNotFound = errors.New("event_bus: subscription not found")
-	ErrInvalidEvent        = errors.New("event_bus: invalid event")
-	ErrNoSubscribers       = errors.New("event_bus: no subscribers")
-	ErrDeliveryFailed      = errors.New("event_bus: delivery failed")
-	ErrDeadLetter          = errors.New("event_bus: dead letter")
+	ErrInvalidEvent         = errors.New("event_bus: invalid event")
+	ErrNoSubscribers        = errors.New("event_bus: no subscribers")
+	ErrDeliveryFailed       = errors.New("event_bus: delivery failed")
+	ErrDeadLetter           = errors.New("event_bus: dead letter")
 )
 
 type DefaultBus struct {
@@ -273,11 +273,11 @@ func (b *DefaultBus) Redrive(ctx context.Context, deliveryID string) error {
 func (b *DefaultBus) deliver(ctx context.Context, event Event, sub *Subscription) Delivery {
 	deliveryID := fmt.Sprintf("del-%s-%s", event.EventID, sub.SubscriptionID)
 	delivery := Delivery{
-		DeliveryID:    deliveryID,
-		EventID:       event.EventID,
+		DeliveryID:     deliveryID,
+		EventID:        event.EventID,
 		SubscriptionID: sub.SubscriptionID,
-		Status:        DeliveryDelivering,
-		StartedAt:     time.Now().UTC(),
+		Status:         DeliveryDelivering,
+		StartedAt:      time.Now().UTC(),
 	}
 	var lastErr error
 	for attempt := 1; attempt <= sub.RetryLimit+1; attempt++ {

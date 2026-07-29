@@ -157,7 +157,7 @@ func TestUnregisterBatch(t *testing.T) {
 	}
 	r.RegisterBatch(context.Background(), batch)
 	result := r.UnregisterBatch(context.Background(), ContributionUnregisterRequest{
-		ExtensionID: "com.example/test",
+		ExtensionID:   "com.example/test",
 		Contributions: []domain.ContributionID{"tool1"},
 	})
 	if len(result.Unregistered) != 1 {
@@ -180,7 +180,7 @@ func TestReplaceGeneration(t *testing.T) {
 		},
 	})
 	result := r.ReplaceGeneration(context.Background(), ContributionReplacementRequest{
-		ExtensionID: "com.example/test",
+		ExtensionID:   "com.example/test",
 		OldGeneration: 1,
 		NewGeneration: 2,
 		Contributions: []domain.ContributionDefinition{
@@ -270,9 +270,9 @@ func TestRegisterAdapter(t *testing.T) {
 }
 
 type fakeAdapter struct {
-	kind           domain.ContributionKind
-	registerCount  int
-	activateCount  int
+	kind            domain.ContributionKind
+	registerCount   int
+	activateCount   int
 	deactivateCount int
 	unregisterCount int
 }

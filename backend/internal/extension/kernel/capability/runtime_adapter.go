@@ -8,17 +8,17 @@ import (
 type RuntimeType string
 
 const (
-	RuntimeTypeBuiltin       RuntimeType = "builtin"
-	RuntimeTypePluginJS      RuntimeType = "plugin_js"
-	RuntimeTypePluginService RuntimeType = "plugin_service"
-	RuntimeTypeMCP           RuntimeType = "mcp"
-	RuntimeTypeWorkflow      RuntimeType = "workflow"
-	RuntimeTypeInternal      RuntimeType = "internal"
-	RuntimeTypeLegacy        RuntimeType = "legacy"
-	RuntimeTypeJavaScript    RuntimeType = "javascript"
-	RuntimeTypeWASM          RuntimeType = "wasm"
+	RuntimeTypeBuiltin        RuntimeType = "builtin"
+	RuntimeTypePluginJS       RuntimeType = "plugin_js"
+	RuntimeTypePluginService  RuntimeType = "plugin_service"
+	RuntimeTypeMCP            RuntimeType = "mcp"
+	RuntimeTypeWorkflow       RuntimeType = "workflow"
+	RuntimeTypeInternal       RuntimeType = "internal"
+	RuntimeTypeLegacy         RuntimeType = "legacy"
+	RuntimeTypeJavaScript     RuntimeType = "javascript"
+	RuntimeTypeWASM           RuntimeType = "wasm"
 	RuntimeTypeTrustedService RuntimeType = "trusted_service"
-	RuntimeTypeTask          RuntimeType = "task"
+	RuntimeTypeTask           RuntimeType = "task"
 )
 
 type RuntimeBinding struct {

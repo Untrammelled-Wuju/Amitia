@@ -9,10 +9,10 @@ import (
 type SourceType string
 
 const (
-	SourceTypeLocalFile        SourceType = "local_file"
-	SourceTypeOfficialRegistry SourceType = "official_registry"
+	SourceTypeLocalFile         SourceType = "local_file"
+	SourceTypeOfficialRegistry  SourceType = "official_registry"
 	SourceTypePublisherRegistry SourceType = "publisher_registry"
-	SourceTypeCustomRegistry   SourceType = "custom_registry"
+	SourceTypeCustomRegistry    SourceType = "custom_registry"
 )
 
 const (

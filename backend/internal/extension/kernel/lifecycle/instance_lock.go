@@ -14,18 +14,18 @@ import (
 )
 
 type InstanceLock struct {
-	mu       sync.Mutex
-	path     string
-	id       string
-	pid      int
+	mu        sync.Mutex
+	path      string
+	id        string
+	pid       int
 	startedAt time.Time
-	dataDir  string
-	host     string
-	released bool
+	dataDir   string
+	host      string
+	released  bool
 }
 
 var (
-	ErrInstanceLockHeld = errors.New("lifecycle: instance lock already held")
+	ErrInstanceLockHeld  = errors.New("lifecycle: instance lock already held")
 	ErrInstanceLockStale = errors.New("lifecycle: instance lock stale")
 )
 

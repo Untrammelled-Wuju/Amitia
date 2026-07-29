@@ -44,13 +44,13 @@ func (v *CompatibilityValidator) Validate(fields map[string]any, hostVersion str
 	}
 
 	return SkillCompatibility{
-		MinHostVersion:  minVersion,
-		MaxHostVersion:  maxVersion,
-		Platforms:       platforms,
-		FeatureFlags:    getStringArrayField(fields, "compatibility.featureFlags"),
-		SchemaVersion:   schemaVersion,
-		Status:          status,
-		Messages:        messages,
+		MinHostVersion: minVersion,
+		MaxHostVersion: maxVersion,
+		Platforms:      platforms,
+		FeatureFlags:   getStringArrayField(fields, "compatibility.featureFlags"),
+		SchemaVersion:  schemaVersion,
+		Status:         status,
+		Messages:       messages,
 	}
 }
 
@@ -209,15 +209,15 @@ func NewChangeDetector() *ChangeDetector {
 }
 
 type SkillChangeReport struct {
-	HasChanges        bool                                `json:"hasChanges"`
-	InstructionChanged bool                               `json:"instructionChanged"`
-	ResourcesAdded      []SkillResourceDescriptor          `json:"resourcesAdded,omitempty"`
-	ResourcesRemoved    []SkillResourceDescriptor          `json:"resourcesRemoved,omitempty"`
-	ResourcesModified   []SkillResourceDescriptor          `json:"resourcesModified,omitempty"`
-	ToolsAdded          []string                           `json:"toolsAdded,omitempty"`
-	ToolsRemoved        []string                           `json:"toolsRemoved,omitempty"`
-	MCPAdded            []string                           `json:"mcpAdded,omitempty"`
-	MCPRemoved          []string                           `json:"mcpRemoved,omitempty"`
+	HasChanges         bool                      `json:"hasChanges"`
+	InstructionChanged bool                      `json:"instructionChanged"`
+	ResourcesAdded     []SkillResourceDescriptor `json:"resourcesAdded,omitempty"`
+	ResourcesRemoved   []SkillResourceDescriptor `json:"resourcesRemoved,omitempty"`
+	ResourcesModified  []SkillResourceDescriptor `json:"resourcesModified,omitempty"`
+	ToolsAdded         []string                  `json:"toolsAdded,omitempty"`
+	ToolsRemoved       []string                  `json:"toolsRemoved,omitempty"`
+	MCPAdded           []string                  `json:"mcpAdded,omitempty"`
+	MCPRemoved         []string                  `json:"mcpRemoved,omitempty"`
 }
 
 func (d *ChangeDetector) Detect(old, new AgentSkillDefinition, indexer *ResourceIndexer) SkillChangeReport {

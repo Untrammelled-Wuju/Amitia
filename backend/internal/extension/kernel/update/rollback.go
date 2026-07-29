@@ -10,23 +10,23 @@ import (
 )
 
 type RollbackPoint struct {
-	PointID         string
-	ExtensionID     string
-	Version         string
-	GenerationID    string
-	DefinitionHash  string
-	PackageHash     string
-	ArtifactPath    string
+	PointID           string
+	ExtensionID       string
+	Version           string
+	GenerationID      string
+	DefinitionHash    string
+	PackageHash       string
+	ArtifactPath      string
 	StorageSnapshotID string
-	ResourceGraph   ResourceGraph
-	Permissions     []PermissionSnapshot
-	ScopeReferences []ScopeReference
-	SignatureKeyID  string
-	PublisherID     string
-	CreatedAt       time.Time
-	ExpiresAt       *time.Time
-	UserPinned      bool
-	ProtectionLevel RollbackLevel
+	ResourceGraph     ResourceGraph
+	Permissions       []PermissionSnapshot
+	ScopeReferences   []ScopeReference
+	SignatureKeyID    string
+	PublisherID       string
+	CreatedAt         time.Time
+	ExpiresAt         *time.Time
+	UserPinned        bool
+	ProtectionLevel   RollbackLevel
 }
 
 type ResourceGraph struct {
@@ -35,10 +35,10 @@ type ResourceGraph struct {
 }
 
 type ResourceGraphNode struct {
-	ID       string
-	Type     string
-	Owner    string
-	Hash     string
+	ID    string
+	Type  string
+	Owner string
+	Hash  string
 }
 
 type ResourceGraphEdge struct {
@@ -54,9 +54,9 @@ type ScopeReference struct {
 }
 
 type RollbackPointStore struct {
-	mu      sync.RWMutex
-	points  map[string]RollbackPoint
-	byExt   map[string][]string
+	mu     sync.RWMutex
+	points map[string]RollbackPoint
+	byExt  map[string][]string
 }
 
 func NewRollbackPointStore() *RollbackPointStore {
@@ -161,11 +161,11 @@ func (s *RollbackPointStore) Delete(ctx context.Context, pointID string) error {
 }
 
 type RetentionPolicy struct {
-	MaxPoints       int
-	MaxAge          time.Duration
-	MaxDiskBytes    int64
-	KeepCurrent     bool
-	KeepLastN       int
+	MaxPoints        int
+	MaxAge           time.Duration
+	MaxDiskBytes     int64
+	KeepCurrent      bool
+	KeepLastN        int
 	KeepIrreversible bool
 }
 
@@ -239,15 +239,15 @@ func (s *RollbackPointStore) ApplyRetentionPolicy(ctx context.Context, extension
 }
 
 type RollbackExecutor struct {
-	points    *RollbackPointStore
-	migrations *MigrationExecutor
+	points      *RollbackPointStore
+	migrations  *MigrationExecutor
 	generations *GenerationManager
 }
 
 func NewRollbackExecutor(points *RollbackPointStore, migrations *MigrationExecutor, generations *GenerationManager) *RollbackExecutor {
 	return &RollbackExecutor{
-		points:     points,
-		migrations: migrations,
+		points:      points,
+		migrations:  migrations,
 		generations: generations,
 	}
 }
@@ -269,9 +269,9 @@ type RollbackResult struct {
 }
 
 type RollbackStep struct {
-	Name      string
-	Status    string
-	Error     string
+	Name   string
+	Status string
+	Error  string
 }
 
 func (e *RollbackExecutor) Execute(ctx context.Context, req RollbackRequest) RollbackResult {

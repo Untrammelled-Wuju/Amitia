@@ -48,8 +48,8 @@ func (s *ResourceScanner) ScanPaths(paths []string) ([]SkillResourceDescriptor, 
 
 		kind := classifyResourceKind(normalized)
 		resources = append(resources, SkillResourceDescriptor{
-			Path:        normalized,
-			Kind:        kind,
+			Path:         normalized,
+			Kind:         kind,
 			TextReadable: isTextReadable(normalized),
 		})
 	}
@@ -119,10 +119,10 @@ func NewResourceIndexer() *ResourceIndexer {
 
 type ResourceIndex struct {
 	Resources     []SkillResourceDescriptor `json:"resources"`
-	TotalSize     int64                      `json:"totalSize"`
-	TotalTokens   int                        `json:"totalTokens"`
-	Hash          string                     `json:"hash"`
-	ResourceCount int                        `json:"resourceCount"`
+	TotalSize     int64                     `json:"totalSize"`
+	TotalTokens   int                       `json:"totalTokens"`
+	Hash          string                    `json:"hash"`
+	ResourceCount int                       `json:"resourceCount"`
 }
 
 func (idx *ResourceIndexer) BuildIndex(resources []SkillResourceDescriptor) ResourceIndex {

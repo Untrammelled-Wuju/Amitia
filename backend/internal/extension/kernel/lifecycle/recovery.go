@@ -8,18 +8,18 @@ import (
 )
 
 type RecoveryReport struct {
-	StartupID              string
-	ScannedAt              time.Time
-	CleanShutdown          bool
-	PendingPackageOps      []string
-	PendingRuntimeStates   []string
-	PendingWorkflowStates  []string
-	PendingMCPStates       []string
-	PendingSchedules       []string
-	OrphanResources        []string
-	InterruptedComponents  []string
-	HighRiskItems          []RecoveryItem
-	Items                  []RecoveryItem
+	StartupID             string
+	ScannedAt             time.Time
+	CleanShutdown         bool
+	PendingPackageOps     []string
+	PendingRuntimeStates  []string
+	PendingWorkflowStates []string
+	PendingMCPStates      []string
+	PendingSchedules      []string
+	OrphanResources       []string
+	InterruptedComponents []string
+	HighRiskItems         []RecoveryItem
+	Items                 []RecoveryItem
 }
 
 type RecoveryItem struct {
@@ -107,18 +107,18 @@ func severityRank(s string) int {
 }
 
 type ReconciliationReport struct {
-	Conflicts []ReconciliationConflict
+	Conflicts   []ReconciliationConflict
 	GeneratedAt time.Time
 }
 
 type ReconciliationConflict struct {
-	Type        string
-	ComponentID string
-	Subject     string
-	Severity    string
-	Detail      string
+	Type              string
+	ComponentID       string
+	Subject           string
+	Severity          string
+	Detail            string
 	RecommendedAction string
-	Metadata    map[string]any
+	Metadata          map[string]any
 }
 
 type ReconciliationPlan struct {

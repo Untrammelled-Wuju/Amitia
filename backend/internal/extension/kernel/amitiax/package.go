@@ -20,18 +20,18 @@ import (
 )
 
 const (
-	ManifestFile   = "manifest.json"
-	IntegrityDir   = "integrity/"
-	IntegrityFiles = "integrity/files.json"
-	IntegrityTree  = "integrity/content-tree.json"
-	ModulesDir     = "modules/"
-	ResourcesDir   = "resources/"
-	AssetsDir      = "assets/"
-	MigrationsDir  = "migrations/"
-	LicensesDir    = "licenses/"
-	DocsDir        = "docs/"
-	SignaturesDir  = "signatures/"
-	SignatureFile  = "signatures/signature.json"
+	ManifestFile    = "manifest.json"
+	IntegrityDir    = "integrity/"
+	IntegrityFiles  = "integrity/files.json"
+	IntegrityTree   = "integrity/content-tree.json"
+	ModulesDir      = "modules/"
+	ResourcesDir    = "resources/"
+	AssetsDir       = "assets/"
+	MigrationsDir   = "migrations/"
+	LicensesDir     = "licenses/"
+	DocsDir         = "docs/"
+	SignaturesDir   = "signatures/"
+	SignatureFile   = "signatures/signature.json"
 	V2SignatureFile = "META-INF/amitia-signature.json"
 )
 
@@ -92,13 +92,13 @@ type SignatureDoc struct {
 }
 
 type Package struct {
-	Manifest     manifest_v2.Manifest
-	Layout       PackageLayout
-	Files        []FileEntry
-	Integrity    IntegrityFilesDoc
-	Tree         IntegrityTreeDoc
-	Signatures   *SignatureDoc
-	V2Signature  json.RawMessage
+	Manifest    manifest_v2.Manifest
+	Layout      PackageLayout
+	Files       []FileEntry
+	Integrity   IntegrityFilesDoc
+	Tree        IntegrityTreeDoc
+	Signatures  *SignatureDoc
+	V2Signature json.RawMessage
 }
 
 var (

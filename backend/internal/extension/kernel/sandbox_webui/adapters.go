@@ -101,21 +101,21 @@ func newSubscriptionID() string {
 }
 
 type SessionInfo struct {
-	SessionID      string                 `json:"sessionId"`
-	ExtensionID    string                 `json:"extensionId"`
-	ModuleID       string                 `json:"moduleId"`
-	Generation     int64                  `json:"generation"`
-	State          SessionState           `json:"state"`
-	Origin         string                 `json:"origin"`
-	SlotID         string                 `json:"slotId"`
-	CreatedAt      time.Time              `json:"createdAt"`
-	ExpiresAt      time.Time              `json:"expiresAt"`
-	LastActiveAt   time.Time              `json:"lastActiveAt"`
-	Sandbox        SandboxType            `json:"sandbox"`
-	AllowedActions []string               `json:"allowedActions"`
-	AllowedDataSources []string           `json:"allowedDataSources"`
-	GrantedPerms   []string               `json:"grantedPerms"`
-	GrantedScopes  []string               `json:"grantedScopes"`
+	SessionID          string       `json:"sessionId"`
+	ExtensionID        string       `json:"extensionId"`
+	ModuleID           string       `json:"moduleId"`
+	Generation         int64        `json:"generation"`
+	State              SessionState `json:"state"`
+	Origin             string       `json:"origin"`
+	SlotID             string       `json:"slotId"`
+	CreatedAt          time.Time    `json:"createdAt"`
+	ExpiresAt          time.Time    `json:"expiresAt"`
+	LastActiveAt       time.Time    `json:"lastActiveAt"`
+	Sandbox            SandboxType  `json:"sandbox"`
+	AllowedActions     []string     `json:"allowedActions"`
+	AllowedDataSources []string     `json:"allowedDataSources"`
+	GrantedPerms       []string     `json:"grantedPerms"`
+	GrantedScopes      []string     `json:"grantedScopes"`
 }
 
 func (h *Host) GetSessionInfo(sessionID string) (*SessionInfo, error) {
@@ -126,21 +126,21 @@ func (h *Host) GetSessionInfo(sessionID string) (*SessionInfo, error) {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	return &SessionInfo{
-		SessionID:      session.SessionID,
-		ExtensionID:    session.ExtensionID,
-		ModuleID:       session.ModuleID,
-		Generation:     session.Generation,
-		State:          session.State,
-		Origin:         session.Origin,
-		SlotID:         session.SlotID,
-		CreatedAt:      session.CreatedAt,
-		ExpiresAt:      session.ExpiresAt,
-		LastActiveAt:   session.LastActiveAt,
-		Sandbox:        session.Sandbox,
-		AllowedActions: session.AllowedActions,
+		SessionID:          session.SessionID,
+		ExtensionID:        session.ExtensionID,
+		ModuleID:           session.ModuleID,
+		Generation:         session.Generation,
+		State:              session.State,
+		Origin:             session.Origin,
+		SlotID:             session.SlotID,
+		CreatedAt:          session.CreatedAt,
+		ExpiresAt:          session.ExpiresAt,
+		LastActiveAt:       session.LastActiveAt,
+		Sandbox:            session.Sandbox,
+		AllowedActions:     session.AllowedActions,
 		AllowedDataSources: session.AllowedDataSources,
-		GrantedPerms:   session.GrantedPerms,
-		GrantedScopes:  session.GrantedScopes,
+		GrantedPerms:       session.GrantedPerms,
+		GrantedScopes:      session.GrantedScopes,
 	}, nil
 }
 
@@ -151,21 +151,21 @@ func (h *Host) ListSessions() []*SessionInfo {
 	for _, session := range h.sessions {
 		session.mu.Lock()
 		result = append(result, &SessionInfo{
-			SessionID:      session.SessionID,
-			ExtensionID:    session.ExtensionID,
-			ModuleID:       session.ModuleID,
-			Generation:     session.Generation,
-			State:          session.State,
-			Origin:         session.Origin,
-			SlotID:         session.SlotID,
-			CreatedAt:      session.CreatedAt,
-			ExpiresAt:      session.ExpiresAt,
-			LastActiveAt:   session.LastActiveAt,
-			Sandbox:        session.Sandbox,
-			AllowedActions: session.AllowedActions,
+			SessionID:          session.SessionID,
+			ExtensionID:        session.ExtensionID,
+			ModuleID:           session.ModuleID,
+			Generation:         session.Generation,
+			State:              session.State,
+			Origin:             session.Origin,
+			SlotID:             session.SlotID,
+			CreatedAt:          session.CreatedAt,
+			ExpiresAt:          session.ExpiresAt,
+			LastActiveAt:       session.LastActiveAt,
+			Sandbox:            session.Sandbox,
+			AllowedActions:     session.AllowedActions,
 			AllowedDataSources: session.AllowedDataSources,
-			GrantedPerms:   session.GrantedPerms,
-			GrantedScopes:  session.GrantedScopes,
+			GrantedPerms:       session.GrantedPerms,
+			GrantedScopes:      session.GrantedScopes,
 		})
 		session.mu.Unlock()
 	}
@@ -244,11 +244,11 @@ func (h *Host) CleanupExpiredSessions() int {
 }
 
 type SessionStats struct {
-	Total     int `json:"total"`
-	Active    int `json:"active"`
-	Suspended int `json:"suspended"`
-	Closed    int `json:"closed"`
-	Failed    int `json:"failed"`
+	Total       int `json:"total"`
+	Active      int `json:"active"`
+	Suspended   int `json:"suspended"`
+	Closed      int `json:"closed"`
+	Failed      int `json:"failed"`
 	Quarantined int `json:"quarantined"`
 }
 

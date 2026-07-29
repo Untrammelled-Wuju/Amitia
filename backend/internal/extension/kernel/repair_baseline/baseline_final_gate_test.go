@@ -284,6 +284,12 @@ func TestBaseline_FinalGateProbe_MetricNames(t *testing.T) {
 		"failed_cleanup_resources",
 		"legacy_package_read_calls",
 		"legacy_package_write_calls",
+		"legacy_tool_execute_calls",
+		"legacy_mcp_execute_calls",
+		"duplicate_contribution_registrations",
+		"orphan_sandbox_sessions",
+		"audit_incomplete_operations",
+		"lifecycle_requires_recovery",
 	}
 	if len(names) != len(required) {
 		t.Fatalf("expected %d metric names, got %d", len(required), len(names))
@@ -316,6 +322,8 @@ func TestBaseline_FinalGateProbe_AllMetricsZeroOnFreshContainer(t *testing.T) {
 		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
 	}
 	defer container.Close()
+
+	container.MCPDuplicateProvider = &mockMCPDuplicateProvider{count: 0, details: nil}
 
 	report := container.EvaluateFinalGate(ctx)
 	if !report.Passed {

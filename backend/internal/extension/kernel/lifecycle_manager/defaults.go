@@ -97,10 +97,10 @@ func (c *DefaultPreflightChecker) Check(_ context.Context, cmd LifecycleCommand,
 var _ PreflightChecker = (*DefaultPreflightChecker)(nil)
 
 type DefaultExecutor struct {
-	mu        sync.Mutex
-	instRepo  domain.InstallationRepository
-	defRepo   domain.DefinitionRepository
-	rtRepo    domain.RuntimeRepository
+	mu       sync.Mutex
+	instRepo domain.InstallationRepository
+	defRepo  domain.DefinitionRepository
+	rtRepo   domain.RuntimeRepository
 }
 
 func NewDefaultExecutor(instRepo domain.InstallationRepository, defRepo domain.DefinitionRepository, rtRepo domain.RuntimeRepository) *DefaultExecutor {

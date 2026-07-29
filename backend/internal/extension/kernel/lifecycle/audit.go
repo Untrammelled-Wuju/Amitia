@@ -33,11 +33,11 @@ type ShutdownAuditEvent struct {
 }
 
 type ReadinessAuditEvent struct {
-	Ready       bool
-	StartupID   string
-	Components  map[string]string
-	Timestamp   time.Time
-	Reason      string
+	Ready      bool
+	StartupID  string
+	Components map[string]string
+	Timestamp  time.Time
+	Reason     string
 }
 
 type LifecycleAuditWriter interface {
@@ -97,8 +97,8 @@ var _ LifecycleAuditWriter = (*InMemoryAuditWriter)(nil)
 
 type NoopAuditWriter struct{}
 
-func (NoopAuditWriter) RecordStartupEvent(context.Context, StartupAuditEvent)   {}
-func (NoopAuditWriter) RecordShutdownEvent(context.Context, ShutdownAuditEvent) {}
+func (NoopAuditWriter) RecordStartupEvent(context.Context, StartupAuditEvent)     {}
+func (NoopAuditWriter) RecordShutdownEvent(context.Context, ShutdownAuditEvent)   {}
 func (NoopAuditWriter) RecordReadinessEvent(context.Context, ReadinessAuditEvent) {}
 
 func newID(prefix string) string {

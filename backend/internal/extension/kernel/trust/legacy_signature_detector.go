@@ -10,9 +10,9 @@ import (
 type LegacySignatureFormat string
 
 const (
-	LegacyFormatNone           LegacySignatureFormat = "none"
-	LegacyFormatPublisherTree  LegacySignatureFormat = "publisher_tree_hash"
-	LegacyFormatContentTree    LegacySignatureFormat = "content_tree_manifest_hash"
+	LegacyFormatNone          LegacySignatureFormat = "none"
+	LegacyFormatPublisherTree LegacySignatureFormat = "publisher_tree_hash"
+	LegacyFormatContentTree   LegacySignatureFormat = "content_tree_manifest_hash"
 )
 
 type LegacySignatureInfo struct {

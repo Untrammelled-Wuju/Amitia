@@ -72,7 +72,7 @@ func (m *RetentionManager) runCleanup(ctx context.Context) {
 
 func (m *RetentionManager) cleanupInvocations(ctx context.Context, cutoff time.Time, policy RetentionPolicy) {
 	filter := InvocationFilter{
-		Until: &cutoff,
+		Until:       &cutoff,
 		ListOptions: ListOptions{Limit: policy.CleanupBatchSize},
 	}
 
@@ -90,7 +90,7 @@ func (m *RetentionManager) cleanupInvocations(ctx context.Context, cutoff time.T
 
 func (m *RetentionManager) cleanupRuntimeEvents(ctx context.Context, cutoff time.Time, policy RetentionPolicy) {
 	filter := EventFilter{
-		Until: &cutoff,
+		Until:       &cutoff,
 		ListOptions: ListOptions{Limit: policy.CleanupBatchSize},
 	}
 

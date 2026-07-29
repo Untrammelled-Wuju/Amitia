@@ -8,21 +8,21 @@ import (
 type FailureAction string
 
 const (
-	FailureActionAbort      FailureAction = "abort"
-	FailureActionContinue   FailureAction = "continue"
-	FailureActionSkip       FailureAction = "skip"
-	FailureActionDisable    FailureAction = "disable_contribution"
+	FailureActionAbort       FailureAction = "abort"
+	FailureActionContinue    FailureAction = "continue"
+	FailureActionSkip        FailureAction = "skip"
+	FailureActionDisable     FailureAction = "disable_contribution"
 	FailureActionOpenCircuit FailureAction = "open_circuit"
 )
 
 type FailureContext struct {
-	Err          error
-	ErrCode      HookErrorCode
-	Policy       HookFailurePolicy
-	Point        HookPointDefinition
-	Contrib      HookContributionDefinition
-	Phase        HookPhase
-	IsFilter     bool
+	Err      error
+	ErrCode  HookErrorCode
+	Policy   HookFailurePolicy
+	Point    HookPointDefinition
+	Contrib  HookContributionDefinition
+	Phase    HookPhase
+	IsFilter bool
 }
 
 func ResolveFailureAction(fctx FailureContext) FailureAction {
@@ -70,18 +70,18 @@ func ResolveFailureAction(fctx FailureContext) FailureAction {
 }
 
 type FailureOutcome struct {
-	Action       FailureAction
-	AbortPipeline bool
+	Action         FailureAction
+	AbortPipeline  bool
 	DisableContrib bool
 	RecordCircuit  bool
-	SkipRemaining bool
-	Message       string
+	SkipRemaining  bool
+	Message        string
 }
 
 func ProcessFailure(fctx FailureContext) FailureOutcome {
 	action := ResolveFailureAction(fctx)
 	outcome := FailureOutcome{
-		Action: action,
+		Action:  action,
 		Message: fmt.Sprintf("hook %s failed: %s (code: %s)", fctx.Contrib.ContributionID, fctx.Err.Error(), fctx.ErrCode),
 	}
 

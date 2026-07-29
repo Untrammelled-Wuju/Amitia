@@ -39,8 +39,8 @@ func EmptyID() RequestID {
 	return RequestID{isSet: false}
 }
 
-func (r RequestID) IsSet() bool   { return r.isSet }
-func (r RequestID) IsNull() bool  { return r.isSet && r.value == nil }
+func (r RequestID) IsSet() bool  { return r.isSet }
+func (r RequestID) IsNull() bool { return r.isSet && r.value == nil }
 func (r RequestID) String() string {
 	if !r.isSet {
 		return ""
@@ -110,24 +110,24 @@ func (e *Error) Error() string {
 type ErrorCode string
 
 const (
-	ErrCodeParseError          ErrorCode = "parse_error"
-	ErrCodeInvalidRequest      ErrorCode = "invalid_request"
-	ErrCodeMethodNotFound      ErrorCode = "method_not_found"
-	ErrCodeInvalidParams       ErrorCode = "invalid_params"
-	ErrCodeInternal            ErrorCode = "internal"
-	ErrCodePermissionDenied    ErrorCode = "permission_denied"
-	ErrCodeResourceExhausted   ErrorCode = "resource_exhausted"
-	ErrCodeTimeout             ErrorCode = "timeout"
-	ErrCodeCancelled           ErrorCode = "cancelled"
-	ErrCodeProtocol            ErrorCode = "protocol"
-	ErrCodeHandshakeFailed     ErrorCode = "handshake_failed"
-	ErrCodeVersionMismatch     ErrorCode = "version_mismatch"
-	ErrCodeStreamClosed        ErrorCode = "stream_closed"
-	ErrCodeStreamBackpressure  ErrorCode = "stream_backpressure"
-	ErrCodeFrameTooLarge       ErrorCode = "frame_too_large"
-	ErrCodeSessionExpired      ErrorCode = "session_expired"
-	ErrCodeUnauthorized        ErrorCode = "unauthorized"
-	ErrCodeRequestNotFound     ErrorCode = "request_not_found"
+	ErrCodeParseError         ErrorCode = "parse_error"
+	ErrCodeInvalidRequest     ErrorCode = "invalid_request"
+	ErrCodeMethodNotFound     ErrorCode = "method_not_found"
+	ErrCodeInvalidParams      ErrorCode = "invalid_params"
+	ErrCodeInternal           ErrorCode = "internal"
+	ErrCodePermissionDenied   ErrorCode = "permission_denied"
+	ErrCodeResourceExhausted  ErrorCode = "resource_exhausted"
+	ErrCodeTimeout            ErrorCode = "timeout"
+	ErrCodeCancelled          ErrorCode = "cancelled"
+	ErrCodeProtocol           ErrorCode = "protocol"
+	ErrCodeHandshakeFailed    ErrorCode = "handshake_failed"
+	ErrCodeVersionMismatch    ErrorCode = "version_mismatch"
+	ErrCodeStreamClosed       ErrorCode = "stream_closed"
+	ErrCodeStreamBackpressure ErrorCode = "stream_backpressure"
+	ErrCodeFrameTooLarge      ErrorCode = "frame_too_large"
+	ErrCodeSessionExpired     ErrorCode = "session_expired"
+	ErrCodeUnauthorized       ErrorCode = "unauthorized"
+	ErrCodeRequestNotFound    ErrorCode = "request_not_found"
 )
 
 type ErrorCategory string
@@ -200,9 +200,9 @@ func FrameTooLargeError(actual, limit int) *Error {
 }
 
 type Envelope struct {
-	Kind    MessageKind
-	Request *Request
-	Response *Response
+	Kind         MessageKind
+	Request      *Request
+	Response     *Response
 	Notification *Notification
 }
 
@@ -251,12 +251,12 @@ func DecodeEnvelope(data []byte) (*Envelope, error) {
 		return nil, errors.New("jsonrpc: empty payload")
 	}
 	var probe struct {
-		JSONRPC string          `json:"jsonrpc"`
+		JSONRPC string           `json:"jsonrpc"`
 		ID      *json.RawMessage `json:"id"`
-		Method  string          `json:"method"`
-		Result  json.RawMessage `json:"result,omitempty"`
-		Error   json.RawMessage `json:"error,omitempty"`
-		Params  json.RawMessage `json:"params,omitempty"`
+		Method  string           `json:"method"`
+		Result  json.RawMessage  `json:"result,omitempty"`
+		Error   json.RawMessage  `json:"error,omitempty"`
+		Params  json.RawMessage  `json:"params,omitempty"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("jsonrpc: decode: %w", err)

@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	ABIVersion1  = "amitia_wasm_abi_v1"
-	ABICurrent   = ABIVersion1
+	ABIVersion1 = "amitia_wasm_abi_v1"
+	ABICurrent  = ABIVersion1
 
 	ExportAmitiaAlloc   = "amitia_alloc"
 	ExportAmitiaDealloc = "amitia_dealloc"
@@ -29,14 +29,14 @@ var AllowedHostModules = map[string]bool{
 }
 
 type ABIDescriptor struct {
-	Version           string
-	AllocExport       string
-	DeallocExport     string
-	InvokeExport      string
-	ResultEncoding    string
-	InputEncoding     string
-	MaxInputBytes     int64
-	MaxOutputBytes    int64
+	Version        string
+	AllocExport    string
+	DeallocExport  string
+	InvokeExport   string
+	ResultEncoding string
+	InputEncoding  string
+	MaxInputBytes  int64
+	MaxOutputBytes int64
 }
 
 func DefaultABIDescriptor() ABIDescriptor {

@@ -55,12 +55,12 @@ const (
 type StartupFailureMode string
 
 const (
-	FailureModeFailFast        StartupFailureMode = "fail_fast"
-	FailureModeDegrade         StartupFailureMode = "degrade"
-	FailureModeSkip            StartupFailureMode = "skip"
-	FailureModeRetry           StartupFailureMode = "retry"
-	FailureModeQuarantine      StartupFailureMode = "quarantine"
-	FailureModeManualRecovery  StartupFailureMode = "manual_recovery"
+	FailureModeFailFast       StartupFailureMode = "fail_fast"
+	FailureModeDegrade        StartupFailureMode = "degrade"
+	FailureModeSkip           StartupFailureMode = "skip"
+	FailureModeRetry          StartupFailureMode = "retry"
+	FailureModeQuarantine     StartupFailureMode = "quarantine"
+	FailureModeManualRecovery StartupFailureMode = "manual_recovery"
 )
 
 type ComponentHealth struct {
@@ -75,25 +75,25 @@ type ComponentHealth struct {
 type ComponentState string
 
 const (
-	ComponentStatePending      ComponentState = "pending"
-	ComponentStateStarting     ComponentState = "starting"
-	ComponentStateStarted      ComponentState = "started"
-	ComponentStateReady        ComponentState = "ready"
-	ComponentStateDegraded     ComponentState = "degraded"
-	ComponentStateFailed       ComponentState = "failed"
-	ComponentStateSkipped      ComponentState = "skipped"
-	ComponentStateRolledBack   ComponentState = "rolled_back"
-	ComponentStateStopping     ComponentState = "stopping"
-	ComponentStateStopped      ComponentState = "stopped"
-	ComponentStateQuarantined  ComponentState = "quarantined"
+	ComponentStatePending     ComponentState = "pending"
+	ComponentStateStarting    ComponentState = "starting"
+	ComponentStateStarted     ComponentState = "started"
+	ComponentStateReady       ComponentState = "ready"
+	ComponentStateDegraded    ComponentState = "degraded"
+	ComponentStateFailed      ComponentState = "failed"
+	ComponentStateSkipped     ComponentState = "skipped"
+	ComponentStateRolledBack  ComponentState = "rolled_back"
+	ComponentStateStopping    ComponentState = "stopping"
+	ComponentStateStopped     ComponentState = "stopped"
+	ComponentStateQuarantined ComponentState = "quarantined"
 )
 
 type RetryPolicy struct {
-	MaxAttempts int
-	InitialDelay time.Duration
-	MaxDelay time.Duration
+	MaxAttempts   int
+	InitialDelay  time.Duration
+	MaxDelay      time.Duration
 	BackoffFactor float64
-	Jitter bool
+	Jitter        bool
 }
 
 type BootstrapComponent struct {
@@ -118,25 +118,25 @@ type BootstrapPlan struct {
 }
 
 type RecoveryContext struct {
-	StartupID         string
-	CleanShutdown     bool
-	LastShutdownID    string
+	StartupID             string
+	CleanShutdown         bool
+	LastShutdownID        string
 	InterruptedComponents []string
-	PendingRecovery   []string
-	ScannedAt         time.Time
+	PendingRecovery       []string
+	ScannedAt             time.Time
 }
 
 var (
-	ErrComponentNotFound      = errors.New("lifecycle: component not found")
-	ErrCircularDependency     = errors.New("lifecycle: circular dependency detected")
-	ErrMissingDependency      = errors.New("lifecycle: missing dependency")
-	ErrDuplicateComponent     = errors.New("lifecycle: duplicate component id")
-	ErrIllegalCrossPhase      = errors.New("lifecycle: illegal cross-phase dependency")
-	ErrStartupInProgress      = errors.New("lifecycle: startup already in progress")
-	ErrShutdownInProgress     = errors.New("lifecycle: shutdown already in progress")
-	ErrNotReady               = errors.New("lifecycle: not ready")
-	ErrCoreComponentFailed    = errors.New("lifecycle: core component failed")
-	ErrTimeout                = errors.New("lifecycle: operation timed out")
+	ErrComponentNotFound   = errors.New("lifecycle: component not found")
+	ErrCircularDependency  = errors.New("lifecycle: circular dependency detected")
+	ErrMissingDependency   = errors.New("lifecycle: missing dependency")
+	ErrDuplicateComponent  = errors.New("lifecycle: duplicate component id")
+	ErrIllegalCrossPhase   = errors.New("lifecycle: illegal cross-phase dependency")
+	ErrStartupInProgress   = errors.New("lifecycle: startup already in progress")
+	ErrShutdownInProgress  = errors.New("lifecycle: shutdown already in progress")
+	ErrNotReady            = errors.New("lifecycle: not ready")
+	ErrCoreComponentFailed = errors.New("lifecycle: core component failed")
+	ErrTimeout             = errors.New("lifecycle: operation timed out")
 )
 
 type LifecycleError struct {
@@ -162,37 +162,61 @@ func wrapLifecycleError(componentID, phase, code string, cause error) *Lifecycle
 
 func phaseOrder(p StartupPhase) int {
 	switch p {
-	case StartupPhaseCore: return 0
-	case StartupPhaseStorage: return 1
-	case StartupPhaseMigration: return 2
-	case StartupPhaseSecurityRecovery: return 3
-	case StartupPhaseKernel: return 4
-	case StartupPhaseDefinitions: return 5
-	case StartupPhaseRegistries: return 6
-	case StartupPhaseReconciliation: return 7
-	case StartupPhaseRuntimes: return 8
-	case StartupPhaseContributions: return 9
-	case StartupPhaseSchedulers: return 10
-	case StartupPhaseReady: return 11
-	default: return 100
+	case StartupPhaseCore:
+		return 0
+	case StartupPhaseStorage:
+		return 1
+	case StartupPhaseMigration:
+		return 2
+	case StartupPhaseSecurityRecovery:
+		return 3
+	case StartupPhaseKernel:
+		return 4
+	case StartupPhaseDefinitions:
+		return 5
+	case StartupPhaseRegistries:
+		return 6
+	case StartupPhaseReconciliation:
+		return 7
+	case StartupPhaseRuntimes:
+		return 8
+	case StartupPhaseContributions:
+		return 9
+	case StartupPhaseSchedulers:
+		return 10
+	case StartupPhaseReady:
+		return 11
+	default:
+		return 100
 	}
 }
 
 func shutdownPhaseOrder(p ShutdownPhase) int {
 	switch p {
-	case ShutdownPhaseRequested: return 0
-	case ShutdownPhaseStopNewWork: return 1
-	case ShutdownPhaseDrain: return 2
-	case ShutdownPhasePauseSched: return 3
+	case ShutdownPhaseRequested:
+		return 0
+	case ShutdownPhaseStopNewWork:
+		return 1
+	case ShutdownPhaseDrain:
+		return 2
+	case ShutdownPhasePauseSched:
+		return 3
 	case ShutdownPhaseStopRuntimes:
 		return 4
-	case ShutdownPhaseCloseConn: return 5
-	case ShutdownPhaseReleaseRes: return 6
-	case ShutdownPhaseFlush: return 7
-	case ShutdownPhasePersistState: return 8
-	case ShutdownPhaseCloseStorage: return 9
-	case ShutdownPhaseExit: return 10
-	default: return 100
+	case ShutdownPhaseCloseConn:
+		return 5
+	case ShutdownPhaseReleaseRes:
+		return 6
+	case ShutdownPhaseFlush:
+		return 7
+	case ShutdownPhasePersistState:
+		return 8
+	case ShutdownPhaseCloseStorage:
+		return 9
+	case ShutdownPhaseExit:
+		return 10
+	default:
+		return 100
 	}
 }
 

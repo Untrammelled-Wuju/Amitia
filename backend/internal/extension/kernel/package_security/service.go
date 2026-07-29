@@ -8,20 +8,20 @@ import (
 )
 
 type PackageSecurityService struct {
-	inspector        *ArchiveInspector
-	extractor        *SecureExtractor
-	hasher           *ContentHasher
-	integrity        *ManifestBindingVerifier
-	signature        *SignatureVerifier
-	publisher        *PublisherTrustService
-	staging          *StagingManager
-	committer        *AtomicCommitter
-	snapshot         *SnapshotManager
-	rollback         *RollbackCoordinator
-	recovery         *RecoveryJournal
-	cleanup          *CleanupManager
-	audit            AuditWriter
-	policy           ArchivePolicy
+	inspector *ArchiveInspector
+	extractor *SecureExtractor
+	hasher    *ContentHasher
+	integrity *ManifestBindingVerifier
+	signature *SignatureVerifier
+	publisher *PublisherTrustService
+	staging   *StagingManager
+	committer *AtomicCommitter
+	snapshot  *SnapshotManager
+	rollback  *RollbackCoordinator
+	recovery  *RecoveryJournal
+	cleanup   *CleanupManager
+	audit     AuditWriter
+	policy    ArchivePolicy
 }
 
 func NewPackageSecurityService(policy ArchivePolicy, auditWriter AuditWriter) *PackageSecurityService {

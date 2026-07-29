@@ -13,26 +13,26 @@ import (
 type ChatSlotID string
 
 const (
-	SlotChatHeaderAction        ChatSlotID = "chat.header.action"
-	SlotChatSidebarPanel        ChatSlotID = "chat.sidebar.panel"
-	SlotChatMessageAction       ChatSlotID = "chat.message.action"
-	SlotChatMessageBadge        ChatSlotID = "chat.message.badge"
-	SlotChatMessageAttachment   ChatSlotID = "chat.message.attachment_renderer"
-	SlotChatMessageCustom       ChatSlotID = "chat.message.custom_renderer"
-	SlotChatComposerAction      ChatSlotID = "chat.composer.action"
-	SlotChatComposerAttachment  ChatSlotID = "chat.composer.attachment"
-	SlotChatComposerHint        ChatSlotID = "chat.composer.hint"
-	SlotChatEmptyStateCard      ChatSlotID = "chat.empty_state.card"
-	SlotChatStatusItem          ChatSlotID = "chat.status.item"
+	SlotChatHeaderAction       ChatSlotID = "chat.header.action"
+	SlotChatSidebarPanel       ChatSlotID = "chat.sidebar.panel"
+	SlotChatMessageAction      ChatSlotID = "chat.message.action"
+	SlotChatMessageBadge       ChatSlotID = "chat.message.badge"
+	SlotChatMessageAttachment  ChatSlotID = "chat.message.attachment_renderer"
+	SlotChatMessageCustom      ChatSlotID = "chat.message.custom_renderer"
+	SlotChatComposerAction     ChatSlotID = "chat.composer.action"
+	SlotChatComposerAttachment ChatSlotID = "chat.composer.attachment"
+	SlotChatComposerHint       ChatSlotID = "chat.composer.hint"
+	SlotChatEmptyStateCard     ChatSlotID = "chat.empty_state.card"
+	SlotChatStatusItem         ChatSlotID = "chat.status.item"
 )
 
 type ChatUIContext struct {
-	CharacterID      string   `json:"characterId"`
-	ConversationID   string   `json:"conversationId"`
-	Channel          string   `json:"channel"`
-	Platform         string   `json:"platform"`
-	ConversationState string  `json:"conversationState"`
-	Capabilities     []string `json:"capabilities"`
+	CharacterID       string   `json:"characterId"`
+	ConversationID    string   `json:"conversationId"`
+	Channel           string   `json:"channel"`
+	Platform          string   `json:"platform"`
+	ConversationState string   `json:"conversationState"`
+	Capabilities      []string `json:"capabilities"`
 }
 
 type MessageDirection string
@@ -65,17 +65,17 @@ type MessageSummary struct {
 }
 
 type MessageContent struct {
-	MessageID string `json:"messageId"`
-	Text      string `json:"text,omitempty"`
-	Truncated bool   `json:"truncated,omitempty"`
+	MessageID   string              `json:"messageId"`
+	Text        string              `json:"text,omitempty"`
+	Truncated   bool                `json:"truncated,omitempty"`
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 }
 
 type MessageAttachment struct {
-	AttachmentID string `json:"attachmentId"`
-	MIME         string `json:"mime"`
-	Size         int64  `json:"size"`
-	Name         string `json:"name"`
+	AttachmentID   string `json:"attachmentId"`
+	MIME           string `json:"mime"`
+	Size           int64  `json:"size"`
+	Name           string `json:"name"`
 	ResourceHandle string `json:"resourceHandle,omitempty"`
 }
 
@@ -109,24 +109,24 @@ type CustomMessageType struct {
 }
 
 type ChatExtensionRegistry struct {
-	mu                 sync.RWMutex
-	messageActions     map[string]*ChatMessageActionSpec
-	customMessageTypes map[string]*CustomMessageType
+	mu                  sync.RWMutex
+	messageActions      map[string]*ChatMessageActionSpec
+	customMessageTypes  map[string]*CustomMessageType
 	attachmentRenderers map[string]*AttachmentRenderer
 }
 
 type AttachmentRenderer struct {
-	RendererID    string
+	RendererID     string
 	OwnerExtension string
-	MIMEPattern   string
-	Priority      int
-	Kind          string
+	MIMEPattern    string
+	Priority       int
+	Kind           string
 }
 
 func NewChatExtensionRegistry() *ChatExtensionRegistry {
 	return &ChatExtensionRegistry{
-		messageActions:     make(map[string]*ChatMessageActionSpec),
-		customMessageTypes: make(map[string]*CustomMessageType),
+		messageActions:      make(map[string]*ChatMessageActionSpec),
+		customMessageTypes:  make(map[string]*CustomMessageType),
 		attachmentRenderers: make(map[string]*AttachmentRenderer),
 	}
 }
@@ -220,7 +220,7 @@ func (r *ChatExtensionRegistry) UnregisterByExtension(extensionID string) {
 }
 
 type MessageDataRequest struct {
-	MessageID string `json:"messageId"`
+	MessageID string   `json:"messageId"`
 	Fields    []string `json:"fields,omitempty"`
 }
 
@@ -230,16 +230,16 @@ type MessageQueryService interface {
 }
 
 type ComposerDraftCommand struct {
-	Type     string          `json:"type"`
-	Payload  json.RawMessage `json:"payload,omitempty"`
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 const (
-	DraftCommandInsertText         = "insert_text"
-	DraftCommandReplaceSelection   = "replace_selection"
-	DraftCommandAttachResource     = "attach_resource"
-	DraftCommandSetExtMetadata    = "set_extension_metadata"
-	DraftCommandOpenDialog         = "open_dialog"
+	DraftCommandInsertText       = "insert_text"
+	DraftCommandReplaceSelection = "replace_selection"
+	DraftCommandAttachResource   = "attach_resource"
+	DraftCommandSetExtMetadata   = "set_extension_metadata"
+	DraftCommandOpenDialog       = "open_dialog"
 )
 
 func ValidateDraftCommand(cmd *ComposerDraftCommand) error {
@@ -256,12 +256,12 @@ func ValidateDraftCommand(cmd *ComposerDraftCommand) error {
 }
 
 type MessageSendRequest struct {
-	CharacterID   string            `json:"characterId"`
-	ConversationID string           `json:"conversationId"`
-	Text          string            `json:"text"`
-	Attachments   []MessageAttachment `json:"attachments,omitempty"`
+	CharacterID       string                     `json:"characterId"`
+	ConversationID    string                     `json:"conversationId"`
+	Text              string                     `json:"text"`
+	Attachments       []MessageAttachment        `json:"attachments,omitempty"`
 	ExtensionMetadata map[string]json.RawMessage `json:"extensionMetadata,omitempty"`
-	ChannelRules  map[string]string `json:"channelRules,omitempty"`
+	ChannelRules      map[string]string          `json:"channelRules,omitempty"`
 }
 
 func ValidateSendRequest(req *MessageSendRequest, capabilities []string) error {
@@ -290,12 +290,12 @@ func ValidateSendRequest(req *MessageSendRequest, capabilities []string) error {
 }
 
 type MessageAnnotation struct {
-	AnnotationID string          `json:"annotationId"`
-	MessageID    string          `json:"messageId"`
-	OwnerExtension string        `json:"ownerExtension"`
-	Key          string          `json:"key"`
-	Value        json.RawMessage `json:"value"`
-	CreatedAt    time.Time       `json:"createdAt"`
+	AnnotationID   string          `json:"annotationId"`
+	MessageID      string          `json:"messageId"`
+	OwnerExtension string          `json:"ownerExtension"`
+	Key            string          `json:"key"`
+	Value          json.RawMessage `json:"value"`
+	CreatedAt      time.Time       `json:"createdAt"`
 }
 
 func (a *MessageAnnotation) Validate() error {
@@ -345,19 +345,19 @@ func hasAttachmentType(attachments []MessageAttachment, prefix string) bool {
 }
 
 var (
-	ErrInvalidActionSpec       = errors.New("chat_ui_extension: invalid action spec")
-	ErrActionExists            = errors.New("chat_ui_extension: action exists")
-	ErrInvalidCustomType       = errors.New("chat_ui_extension: invalid custom type")
-	ErrCustomTypeExists        = errors.New("chat_ui_extension: custom type exists")
-	ErrCustomTypeNotFound      = errors.New("chat_ui_extension: custom type not found")
-	ErrInvalidRenderer         = errors.New("chat_ui_extension: invalid renderer")
-	ErrInvalidDraftCommand     = errors.New("chat_ui_extension: invalid draft command")
-	ErrUnknownDraftCommand     = errors.New("chat_ui_extension: unknown draft command")
-	ErrInvalidSendRequest      = errors.New("chat_ui_extension: invalid send request")
-	ErrEmptyMessage            = errors.New("chat_ui_extension: empty message")
-	ErrMessageTooLarge         = errors.New("chat_ui_extension: message too large")
-	ErrCapabilityMissing       = errors.New("chat_ui_extension: capability missing")
-	ErrInvalidAnnotation       = errors.New("chat_ui_extension: invalid annotation")
-	ErrReservedAnnotationKey   = errors.New("chat_ui_extension: reserved annotation key")
-	ErrAnnotationTooLarge      = errors.New("chat_ui_extension: annotation too large")
+	ErrInvalidActionSpec     = errors.New("chat_ui_extension: invalid action spec")
+	ErrActionExists          = errors.New("chat_ui_extension: action exists")
+	ErrInvalidCustomType     = errors.New("chat_ui_extension: invalid custom type")
+	ErrCustomTypeExists      = errors.New("chat_ui_extension: custom type exists")
+	ErrCustomTypeNotFound    = errors.New("chat_ui_extension: custom type not found")
+	ErrInvalidRenderer       = errors.New("chat_ui_extension: invalid renderer")
+	ErrInvalidDraftCommand   = errors.New("chat_ui_extension: invalid draft command")
+	ErrUnknownDraftCommand   = errors.New("chat_ui_extension: unknown draft command")
+	ErrInvalidSendRequest    = errors.New("chat_ui_extension: invalid send request")
+	ErrEmptyMessage          = errors.New("chat_ui_extension: empty message")
+	ErrMessageTooLarge       = errors.New("chat_ui_extension: message too large")
+	ErrCapabilityMissing     = errors.New("chat_ui_extension: capability missing")
+	ErrInvalidAnnotation     = errors.New("chat_ui_extension: invalid annotation")
+	ErrReservedAnnotationKey = errors.New("chat_ui_extension: reserved annotation key")
+	ErrAnnotationTooLarge    = errors.New("chat_ui_extension: annotation too large")
 )

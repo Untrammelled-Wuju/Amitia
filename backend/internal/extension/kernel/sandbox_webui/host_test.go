@@ -407,14 +407,14 @@ func TestRevokeSessionsByContextNoMatch(t *testing.T) {
 
 	host := NewHost()
 	req := CreateSessionRequest{
-		ExtensionID: "ext-1",
-		ModuleID:    "mod-1",
-		Generation:  1,
-		SlotID:      "slot-1",
-		Sandbox:     SandboxWebRestricted,
-		EntryPath:   "index.html",
-		BasePath:    tmpDir,
-		CharacterID: "char-1",
+		ExtensionID:    "ext-1",
+		ModuleID:       "mod-1",
+		Generation:     1,
+		SlotID:         "slot-1",
+		Sandbox:        SandboxWebRestricted,
+		EntryPath:      "index.html",
+		BasePath:       tmpDir,
+		CharacterID:    "char-1",
 		ConversationID: "conv-1",
 	}
 	host.CreateSession(req)

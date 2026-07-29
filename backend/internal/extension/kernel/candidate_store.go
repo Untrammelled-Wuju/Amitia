@@ -27,26 +27,32 @@ func (k CandidateKey) String() string {
 type CandidateStatus string
 
 const (
-	CandidateStatusRegistered CandidateStatus = "registered"
-	CandidateStatusPromoting  CandidateStatus = "promoting"
-	CandidateStatusPromoted   CandidateStatus = "promoted"
-	CandidateStatusFailed     CandidateStatus = "failed"
+	CandidateStatusRegistered       CandidateStatus = "registered"
+	CandidateStatusPromoting        CandidateStatus = "promoting"
+	CandidateStatusPromoted         CandidateStatus = "promoted"
+	CandidateStatusFailed           CandidateStatus = "failed"
+	CandidateStatusRequiresRecovery CandidateStatus = "requires_recovery"
 )
 
 type CandidateRecord struct {
-	CandidateID             string
-	ExtensionID             domain.ExtensionID
-	InstanceIDs             []string
-	GenerationID            string
-	CandidateGeneration     int64
+	CandidateID              string
+	ExtensionID              domain.ExtensionID
+	ModuleID                 string
+	InstanceIDs              []string
+	GenerationID             string
+	CandidateGeneration      int64
 	ExpectedStableGeneration int64
-	Contribs                []domain.ContributionDefinition
-	ScheduleIDs             []string
-	ArtifactPath            string
+	Contribs                 []domain.ContributionDefinition
+	ScheduleIDs              []string
+	ArtifactPath             string
 	DefinitionHash           string
-	Status                  CandidateStatus
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	Status                   CandidateStatus
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+	PromoteStartedAt         time.Time
+	PromoteCommittedAt       time.Time
+	RollbackStartedAt        time.Time
+	RollbackFinishedAt       time.Time
 }
 
 type StableSnapshot struct {
@@ -78,6 +84,7 @@ type CandidateContributionManager struct {
 	supervisor    runtime_supervisor.Supervisor
 	repo          *CandidateRepository
 	namespace     *CandidateNamespace
+	snapshotRepo  *StableSnapshotRepository
 
 	mu              sync.RWMutex
 	candidates      map[string]*CandidateRecord
@@ -105,6 +112,19 @@ func NewCandidateContributionManager(
 		promotedRecords: make(map[string]*CandidateRecord),
 		snapshots:       make(map[string]*StableSnapshot),
 	}
+}
+
+func NewCandidateContributionManagerWithSnapshotRepo(
+	installer *TypedContributionInstaller,
+	generationMgr *update.GenerationManager,
+	supervisor runtime_supervisor.Supervisor,
+	repo *CandidateRepository,
+	namespace *CandidateNamespace,
+	snapshotRepo *StableSnapshotRepository,
+) *CandidateContributionManager {
+	mgr := NewCandidateContributionManager(installer, generationMgr, supervisor, repo, namespace)
+	mgr.snapshotRepo = snapshotRepo
+	return mgr
 }
 
 func (m *CandidateContributionManager) RegisterCandidate(ctx context.Context, record *CandidateRecord) error {
@@ -216,10 +236,12 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 
 	record.Status = CandidateStatusPromoting
 	record.UpdatedAt = time.Now().UTC()
+	record.PromoteStartedAt = record.UpdatedAt
 	m.mu.Unlock()
 
 	if m.repo != nil {
 		_ = m.repo.UpdateStatus(ctx, candidateID, CandidateStatusPromoting)
+		_ = m.repo.UpdatePromoteStarted(ctx, candidateID, record.PromoteStartedAt)
 	}
 
 	stableSnap := m.captureStableSnapshot(ctx, record.ExtensionID)
@@ -227,9 +249,15 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 	m.snapshots[candidateID] = stableSnap
 	m.mu.Unlock()
 
+	if m.snapshotRepo != nil && stableSnap != nil {
+		if err := m.snapshotRepo.SaveSnapshot(ctx, candidateID, record.ExtensionID, stableSnap); err != nil {
+			log.Printf("[candidate-manager] failed to persist stable snapshot for %s: %v", candidateID, err)
+		}
+	}
+
 	newScheduleIDs, err := m.installer.PromoteCandidateContributions(ctx, candidateID)
 	if err != nil {
-		if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, stableSnap); restoreErr != nil {
+		if restoreErr := m.restoreStableFromSnapshot(ctx, candidateID, record.ExtensionID, stableSnap); restoreErr != nil {
 			m.markRequiresRecovery(ctx, record.ExtensionID)
 			log.Printf("[candidate-manager] stable restore failed for %s: %v (marked requires_recovery)", candidateID, restoreErr)
 		}
@@ -237,6 +265,9 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 		m.mu.Lock()
 		delete(m.snapshots, candidateID)
 		m.mu.Unlock()
+		if m.snapshotRepo != nil {
+			_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, candidateID)
+		}
 		return fmt.Errorf("candidate-manager: promote candidate contributions: %w", err)
 	}
 
@@ -246,10 +277,9 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 		_ = m.repo.Save(ctx, record)
 	}
 
-	if err := m.generationMgr.Transition(ctx, string(record.ExtensionID), record.GenerationID, update.GenerationStateActive); err != nil {
+	if err := m.generationMgr.CASActive(ctx, string(record.ExtensionID), record.GenerationID, int(record.ExpectedStableGeneration)); err != nil {
 		_ = m.installer.DiscardCandidateContributions(ctx, record.ExtensionID, record.CandidateGeneration, record.Contribs, record.ScheduleIDs)
-		_ = m.installer.DiscardCandidateNamespace(ctx, candidateID)
-		if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, stableSnap); restoreErr != nil {
+		if restoreErr := m.restoreStableFromSnapshot(ctx, candidateID, record.ExtensionID, stableSnap); restoreErr != nil {
 			m.markRequiresRecovery(ctx, record.ExtensionID)
 			log.Printf("[candidate-manager] stable restore failed for %s: %v (marked requires_recovery)", candidateID, restoreErr)
 		}
@@ -257,19 +287,30 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 		m.mu.Lock()
 		delete(m.snapshots, candidateID)
 		m.mu.Unlock()
+		if m.snapshotRepo != nil {
+			_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, candidateID)
+		}
 		return fmt.Errorf("candidate-manager: promote generation: %w", err)
 	}
+
+	_ = m.installer.RemoveCandidateNamespaceAfterCommit(ctx, candidateID)
 
 	m.mu.Lock()
 	record.Status = CandidateStatusPromoted
 	record.UpdatedAt = time.Now().UTC()
+	record.PromoteCommittedAt = record.UpdatedAt
 	m.promotedRecords[candidateID] = record
 	delete(m.candidates, candidateID)
 	delete(m.snapshots, candidateID)
 	m.mu.Unlock()
 
 	if m.repo != nil {
+		_ = m.repo.UpdatePromoteCommitted(ctx, candidateID, record.PromoteCommittedAt)
 		_ = m.repo.Delete(ctx, candidateID)
+	}
+
+	if m.snapshotRepo != nil {
+		_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, candidateID)
 	}
 
 	log.Printf("[candidate-manager] promoted candidate %s for extension %s (generation=%d) - atomic namespace switch complete",
@@ -347,16 +388,34 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 			_ = m.generationMgr.Transition(ctx, string(record.ExtensionID), record.GenerationID, update.GenerationStateFailed)
 			_ = m.generationMgr.RemoveGeneration(ctx, string(record.ExtensionID), record.GenerationID)
 			_ = m.repo.Delete(ctx, record.CandidateID)
+			if m.snapshotRepo != nil {
+				_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+			}
 			cleaned = append(cleaned, record.CandidateID)
 			log.Printf("[candidate-manager] recovered orphan candidate %s (status=registered, not promoted, namespace cleaned)", record.CandidateID)
 
 		case CandidateStatusPromoting:
 			_ = m.installer.DiscardCandidateContributions(ctx, record.ExtensionID, record.CandidateGeneration, record.Contribs, record.ScheduleIDs)
-			restoreSnap := m.captureStableSnapshot(ctx, record.ExtensionID)
-			if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, restoreSnap); restoreErr != nil {
+			var restoreSnap *StableSnapshot
+			if m.snapshotRepo != nil {
+				persistedSnap, err := m.snapshotRepo.ListSnapshotsByCandidate(ctx, record.CandidateID)
+				if err != nil {
+					log.Printf("[candidate-manager] failed to load persisted snapshot for orphan %s: %v", record.CandidateID, err)
+				}
+				if persistedSnap != nil {
+					restoreSnap = persistedSnap
+				}
+			}
+			if restoreSnap == nil {
+				restoreSnap = m.captureStableSnapshot(ctx, record.ExtensionID)
+			}
+			if restoreErr := m.restoreStableFromSnapshot(ctx, record.CandidateID, record.ExtensionID, restoreSnap); restoreErr != nil {
 				m.markRequiresRecovery(ctx, record.ExtensionID)
 				log.Printf("[candidate-manager] stable restore failed for orphan %s: %v (marked requires_recovery, skipping generation cleanup)", record.CandidateID, restoreErr)
 				_ = m.repo.Delete(ctx, record.CandidateID)
+				if m.snapshotRepo != nil {
+					_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+				}
 				cleaned = append(cleaned, record.CandidateID)
 				continue
 			}
@@ -366,18 +425,36 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 			_ = m.generationMgr.Transition(ctx, string(record.ExtensionID), record.GenerationID, update.GenerationStateFailed)
 			_ = m.generationMgr.RemoveGeneration(ctx, string(record.ExtensionID), record.GenerationID)
 			_ = m.repo.Delete(ctx, record.CandidateID)
+			if m.snapshotRepo != nil {
+				_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+			}
 			cleaned = append(cleaned, record.CandidateID)
 			log.Printf("[candidate-manager] recovered orphan candidate %s (status=promoting, repaired production, namespace cleaned)", record.CandidateID)
 
 		case CandidateStatusPromoted:
 			_ = m.repo.Delete(ctx, record.CandidateID)
+			if m.snapshotRepo != nil {
+				_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+			}
 			cleaned = append(cleaned, record.CandidateID)
 			log.Printf("[candidate-manager] recovered orphan candidate %s (status=promoted, already live)", record.CandidateID)
 
 		case CandidateStatusFailed:
 			_ = m.repo.Delete(ctx, record.CandidateID)
+			if m.snapshotRepo != nil {
+				_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+			}
 			cleaned = append(cleaned, record.CandidateID)
 			log.Printf("[candidate-manager] recovered orphan candidate %s (status=failed, namespace cleaned)", record.CandidateID)
+
+		case CandidateStatusRequiresRecovery:
+			m.markRequiresRecovery(ctx, record.ExtensionID)
+			_ = m.repo.Delete(ctx, record.CandidateID)
+			if m.snapshotRepo != nil {
+				_ = m.snapshotRepo.DeleteSnapshotsByCandidate(ctx, record.CandidateID)
+			}
+			cleaned = append(cleaned, record.CandidateID)
+			log.Printf("[candidate-manager] recovered orphan candidate %s (status=requires_recovery, marked extension for recovery)", record.CandidateID)
 		}
 	}
 
@@ -438,9 +515,12 @@ func (m *CandidateContributionManager) LoadFromStore(ctx context.Context) error 
 }
 
 func (m *CandidateContributionManager) markFailed(ctx context.Context, candidateID string, record *CandidateRecord) {
+	now := time.Now().UTC()
 	m.mu.Lock()
 	record.Status = CandidateStatusFailed
-	record.UpdatedAt = time.Now().UTC()
+	record.UpdatedAt = now
+	record.RollbackStartedAt = now
+	record.RollbackFinishedAt = now
 	m.mu.Unlock()
 
 	if m.repo != nil {
@@ -478,8 +558,20 @@ func (m *CandidateContributionManager) captureStableSnapshot(ctx context.Context
 	return snap
 }
 
-func (m *CandidateContributionManager) restoreStableFromSnapshot(ctx context.Context, extID domain.ExtensionID, snap *StableSnapshot) error {
-	if m == nil || snap == nil || len(snap.Contributions) == 0 {
+func (m *CandidateContributionManager) restoreStableFromSnapshot(ctx context.Context, candidateID string, extID domain.ExtensionID, snap *StableSnapshot) error {
+	if m == nil {
+		return nil
+	}
+	if snap == nil && m.snapshotRepo != nil && candidateID != "" {
+		persistedSnap, err := m.snapshotRepo.ListSnapshotsByCandidate(ctx, candidateID)
+		if err != nil {
+			log.Printf("[candidate-manager] failed to load persisted snapshot for %s: %v", candidateID, err)
+		}
+		if persistedSnap != nil {
+			snap = persistedSnap
+		}
+	}
+	if snap == nil || len(snap.Contributions) == 0 {
 		return nil
 	}
 	if err := m.installer.InstallContributions(ctx, snap.Contributions, snap.Generation); err != nil {

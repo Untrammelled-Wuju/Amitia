@@ -7,24 +7,24 @@ import (
 )
 
 type ReadinessReport struct {
-	Ready            bool
-	StartupID        string
-	Reason           string
-	ComponentStates  map[string]string
-	FailedComponents []string
-	MissingComponents []string
+	Ready              bool
+	StartupID          string
+	Reason             string
+	ComponentStates    map[string]string
+	FailedComponents   []string
+	MissingComponents  []string
 	DegradedComponents []string
-	CheckedAt        time.Time
+	CheckedAt          time.Time
 }
 
 type ReadinessService struct {
-	mu              sync.RWMutex
-	registry        *ComponentRegistry
-	requiredCore    map[string]struct{}
-	ready           bool
-	startupID       string
-	currentReport   ReadinessReport
-	audit           LifecycleAuditWriter
+	mu            sync.RWMutex
+	registry      *ComponentRegistry
+	requiredCore  map[string]struct{}
+	ready         bool
+	startupID     string
+	currentReport ReadinessReport
+	audit         LifecycleAuditWriter
 }
 
 func NewReadinessService(registry *ComponentRegistry, audit LifecycleAuditWriter) *ReadinessService {
@@ -59,10 +59,10 @@ func (r *ReadinessService) SetReady(startupID string, ready bool, reason string)
 	r.mu.Unlock()
 	if audit != nil {
 		audit.RecordReadinessEvent(context.Background(), ReadinessAuditEvent{
-			Ready:      ready,
-			StartupID:  startupID,
-			Reason:     reason,
-			Timestamp:  now(),
+			Ready:     ready,
+			StartupID: startupID,
+			Reason:    reason,
+			Timestamp: now(),
 		})
 	}
 }
@@ -113,10 +113,10 @@ func (r *ReadinessService) Check(ctx context.Context) ReadinessReport {
 	r.ready = report.Ready
 	if r.audit != nil {
 		r.audit.RecordReadinessEvent(ctx, ReadinessAuditEvent{
-			Ready:      report.Ready,
-			StartupID:  report.StartupID,
-			Reason:     report.Reason,
-			Timestamp:  report.CheckedAt,
+			Ready:     report.Ready,
+			StartupID: report.StartupID,
+			Reason:    report.Reason,
+			Timestamp: report.CheckedAt,
 		})
 	}
 	return report

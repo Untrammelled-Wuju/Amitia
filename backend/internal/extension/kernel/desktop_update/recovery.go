@@ -195,11 +195,11 @@ func (r *RecoveryService) determineRecoveryAction(op *UpdateOperation) RecoveryA
 func (r *RecoveryService) applyResumeAction(op *UpdateOperation) {
 	now := time.Now().UTC()
 	r.journal.Record(JournalEntry{
-		OperationID: op.OperationID,
-		Step:        "recovery_resume",
-		Status:      JournalStatusCompleted,
-		StartedAt:   now,
-		FinishedAt:  &now,
+		OperationID:  op.OperationID,
+		Step:         "recovery_resume",
+		Status:       JournalStatusCompleted,
+		StartedAt:    now,
+		FinishedAt:   &now,
 		Compensation: "operation will be resumed by update manager",
 	})
 }
@@ -212,10 +212,10 @@ func (r *RecoveryService) applyRollbackAction(op *UpdateOperation) {
 		op.Status = StateRollbackPending
 	}
 	r.journal.Record(JournalEntry{
-		OperationID: op.OperationID,
-		Step:        "recovery_rollback",
-		Status:      JournalStatusInProgress,
-		StartedAt:   now,
+		OperationID:  op.OperationID,
+		Step:         "recovery_rollback",
+		Status:       JournalStatusInProgress,
+		StartedAt:    now,
 		Compensation: "rollback initiated by recovery service",
 	})
 }
@@ -225,11 +225,11 @@ func (r *RecoveryService) applyMarkFailedAction(op *UpdateOperation) {
 	op.Status = StateFailed
 	op.FinishedAt = &now
 	r.journal.Record(JournalEntry{
-		OperationID: op.OperationID,
-		Step:        "recovery_mark_failed",
-		Status:      JournalStatusCompleted,
-		StartedAt:   now,
-		FinishedAt:  &now,
+		OperationID:  op.OperationID,
+		Step:         "recovery_mark_failed",
+		Status:       JournalStatusCompleted,
+		StartedAt:    now,
+		FinishedAt:   &now,
 		Compensation: "operation marked as failed by recovery service",
 	})
 }
@@ -239,11 +239,11 @@ func (r *RecoveryService) applyManualInterventionAction(op *UpdateOperation) {
 	op.Status = StateManualIntervention
 	op.FinishedAt = &now
 	r.journal.Record(JournalEntry{
-		OperationID: op.OperationID,
-		Step:        "recovery_manual_intervention",
-		Status:      JournalStatusCompleted,
-		StartedAt:   now,
-		FinishedAt:  &now,
+		OperationID:  op.OperationID,
+		Step:         "recovery_manual_intervention",
+		Status:       JournalStatusCompleted,
+		StartedAt:    now,
+		FinishedAt:   &now,
 		Compensation: "operation requires manual intervention",
 	})
 }

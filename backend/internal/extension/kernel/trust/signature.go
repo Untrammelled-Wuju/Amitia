@@ -26,14 +26,14 @@ const (
 )
 
 type SignatureDocument struct {
-	Format      SignatureFormat     `json:"format"`
-	Algorithm   SignatureAlgorithm  `json:"algorithm"`
-	PublisherID string              `json:"publisherId"`
-	KeyID       string              `json:"keyId"`
-	PayloadHash string              `json:"payloadHash"`
-	Signature   string              `json:"signature"`
-	CreatedAt   time.Time           `json:"createdAt"`
-	Channel     string              `json:"channel,omitempty"`
+	Format      SignatureFormat    `json:"format"`
+	Algorithm   SignatureAlgorithm `json:"algorithm"`
+	PublisherID string             `json:"publisherId"`
+	KeyID       string             `json:"keyId"`
+	PayloadHash string             `json:"payloadHash"`
+	Signature   string             `json:"signature"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	Channel     string             `json:"channel,omitempty"`
 }
 
 type SignaturePayload struct {
@@ -97,16 +97,16 @@ func (p SignaturePayload) PayloadHash() string {
 }
 
 type SignatureVerificationResult struct {
-	Valid              bool
-	Status             SignatureStatus
-	PublisherID        string
-	KeyID              string
-	KeyFingerprint     string
-	Algorithm          SignatureAlgorithm
-	SignatureDocument  SignatureDocument
-	Payload            SignaturePayload
-	Warnings           []string
-	Reason             string
+	Valid             bool
+	Status            SignatureStatus
+	PublisherID       string
+	KeyID             string
+	KeyFingerprint    string
+	Algorithm         SignatureAlgorithm
+	SignatureDocument SignatureDocument
+	Payload           SignaturePayload
+	Warnings          []string
+	Reason            string
 }
 
 type SignatureStatus string
@@ -133,11 +133,11 @@ func NewSignatureVerifier(store *PublisherStore) *SignatureVerifier {
 }
 
 type VerifyInput struct {
-	Document          SignatureDocument
-	ActualPayload     SignaturePayload
+	Document              SignatureDocument
+	ActualPayload         SignaturePayload
 	ActualManifestHash    string
 	ActualContentTreeHash string
-	ActualPackageHash      string
+	ActualPackageHash     string
 }
 
 func (v *SignatureVerifier) Verify(ctx context.Context, input VerifyInput) SignatureVerificationResult {

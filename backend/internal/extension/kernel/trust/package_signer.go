@@ -204,26 +204,26 @@ func ParseSignaturePayload(data []byte) (SignaturePayload, error) {
 }
 
 type PackageVerificationInput struct {
-	Document             SignatureDocument
-	ActualExtensionID    string
-	ActualVersion        string
+	Document              SignatureDocument
+	ActualExtensionID     string
+	ActualVersion         string
 	ActualManifestVersion int
-	ActualManifestHash   string
+	ActualManifestHash    string
 	ActualContentTreeHash string
-	ActualArtifactHash   string
+	ActualArtifactHash    string
 }
 
 func (v *SignatureVerifier) VerifyPackage(ctx context.Context, input PackageVerificationInput) SignatureVerificationResult {
 	actualPayload := SignaturePayload{
-		ExtensionID:       input.ActualExtensionID,
-		Version:           input.ActualVersion,
-		ManifestVersion:   input.ActualManifestVersion,
-		ManifestHash:      input.ActualManifestHash,
-		ContentTreeHash:   input.ActualContentTreeHash,
-		PackageHash:       input.ActualArtifactHash,
-		PublisherID:       input.Document.PublisherID,
-		KeyID:             input.Document.KeyID,
-		CreatedAt:         input.Document.CreatedAt,
+		ExtensionID:     input.ActualExtensionID,
+		Version:         input.ActualVersion,
+		ManifestVersion: input.ActualManifestVersion,
+		ManifestHash:    input.ActualManifestHash,
+		ContentTreeHash: input.ActualContentTreeHash,
+		PackageHash:     input.ActualArtifactHash,
+		PublisherID:     input.Document.PublisherID,
+		KeyID:           input.Document.KeyID,
+		CreatedAt:       input.Document.CreatedAt,
 	}
 	return v.Verify(ctx, VerifyInput{
 		Document:              input.Document,

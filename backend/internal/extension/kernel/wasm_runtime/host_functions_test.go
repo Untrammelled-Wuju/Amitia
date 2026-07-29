@@ -12,12 +12,12 @@ import (
 )
 
 type mockHostGateway struct {
-	mu           sync.Mutex
-	sessions     map[string]*host_api.Session
-	callCount    int
-	callOutput   json.RawMessage
-	callError    *host_api.Error
-	routes       map[host_api.Method]host_api.Route
+	mu         sync.Mutex
+	sessions   map[string]*host_api.Session
+	callCount  int
+	callOutput json.RawMessage
+	callError  *host_api.Error
+	routes     map[host_api.Method]host_api.Route
 }
 
 func newMockHostGateway() *mockHostGateway {

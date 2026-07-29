@@ -16,10 +16,10 @@ const (
 type TaskRecoverability string
 
 const (
-	NotRecoverable          TaskRecoverability = "not_recoverable"
-	CheckpointRecoverable   TaskRecoverability = "checkpoint_recoverable"
+	NotRecoverable           TaskRecoverability = "not_recoverable"
+	CheckpointRecoverable    TaskRecoverability = "checkpoint_recoverable"
 	RestartableFromBeginning TaskRecoverability = "restartable_from_beginning"
-	ManualRecovery          TaskRecoverability = "manual_recovery"
+	ManualRecovery           TaskRecoverability = "manual_recovery"
 )
 
 type TaskResultPolicy string
@@ -53,17 +53,17 @@ type PermissionRequirement struct {
 }
 
 type ScopeRule struct {
-	ScopeType   string   `json:"scopeType"`
-	ScopeIDs    []string `json:"scopeIds,omitempty"`
-	Namespaces  []string `json:"namespaces,omitempty"`
+	ScopeType  string   `json:"scopeType"`
+	ScopeIDs   []string `json:"scopeIds,omitempty"`
+	Namespaces []string `json:"namespaces,omitempty"`
 }
 
 type TaskRetryPolicy struct {
-	MaxAttempts        int           `json:"maxAttempts"`
-	InitialBackoff     time.Duration `json:"initialBackoff"`
-	MaxBackoff         time.Duration `json:"maxBackoff"`
-	Multiplier         float64       `json:"multiplier"`
-	RetryableErrorCodes []string     `json:"retryableErrorCodes,omitempty"`
+	MaxAttempts         int           `json:"maxAttempts"`
+	InitialBackoff      time.Duration `json:"initialBackoff"`
+	MaxBackoff          time.Duration `json:"maxBackoff"`
+	Multiplier          float64       `json:"multiplier"`
+	RetryableErrorCodes []string      `json:"retryableErrorCodes,omitempty"`
 }
 
 func DefaultRetryPolicy() TaskRetryPolicy {
@@ -92,11 +92,11 @@ func DefaultTimeoutPolicy() TaskTimeoutPolicy {
 type TaskRunStatus string
 
 const (
-	RunStatusCreated             TaskRunStatus = "created"
-	RunStatusQueued              TaskRunStatus = "queued"
-	RunStatusStarting            TaskRunStatus = "starting"
-	RunStatusRunning             TaskRunStatus = "running"
-	RunStatusCheckpointing       TaskRunStatus = "checkpointing"
+	RunStatusCreated            TaskRunStatus = "created"
+	RunStatusQueued             TaskRunStatus = "queued"
+	RunStatusStarting           TaskRunStatus = "starting"
+	RunStatusRunning            TaskRunStatus = "running"
+	RunStatusCheckpointing      TaskRunStatus = "checkpointing"
 	RunStatusPausing            TaskRunStatus = "pausing"
 	RunStatusPaused             TaskRunStatus = "paused"
 	RunStatusResuming           TaskRunStatus = "resuming"
@@ -129,15 +129,15 @@ func (s TaskRunStatus) IsActive() bool {
 }
 
 var validTransitions = map[TaskRunStatus][]TaskRunStatus{
-	RunStatusCreated:       {RunStatusQueued, RunStatusCancelled},
-	RunStatusQueued:        {RunStatusStarting, RunStatusCancelled},
-	RunStatusStarting:      {RunStatusRunning, RunStatusFailed, RunStatusCancelled, RunStatusRecoveryRequired},
-	RunStatusRunning:       {RunStatusCheckpointing, RunStatusPausing, RunStatusCancelling, RunStatusSucceeded, RunStatusFailed, RunStatusTimedOut, RunStatusRecoveryRequired},
-	RunStatusCheckpointing: {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
-	RunStatusPausing:       {RunStatusPaused, RunStatusRunning},
-	RunStatusPaused:        {RunStatusResuming, RunStatusCancelling, RunStatusRecoveryRequired},
-	RunStatusResuming:      {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
-	RunStatusCancelling:    {RunStatusCancelled, RunStatusFailed},
+	RunStatusCreated:          {RunStatusQueued, RunStatusCancelled},
+	RunStatusQueued:           {RunStatusStarting, RunStatusCancelled},
+	RunStatusStarting:         {RunStatusRunning, RunStatusFailed, RunStatusCancelled, RunStatusRecoveryRequired},
+	RunStatusRunning:          {RunStatusCheckpointing, RunStatusPausing, RunStatusCancelling, RunStatusSucceeded, RunStatusFailed, RunStatusTimedOut, RunStatusRecoveryRequired},
+	RunStatusCheckpointing:    {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
+	RunStatusPausing:          {RunStatusPaused, RunStatusRunning},
+	RunStatusPaused:           {RunStatusResuming, RunStatusCancelling, RunStatusRecoveryRequired},
+	RunStatusResuming:         {RunStatusRunning, RunStatusFailed, RunStatusRecoveryRequired},
+	RunStatusCancelling:       {RunStatusCancelled, RunStatusFailed},
 	RunStatusRecoveryRequired: {RunStatusStarting, RunStatusManualIntervention, RunStatusCancelled},
 }
 
@@ -166,34 +166,34 @@ func MustTransition(from, to TaskRunStatus) error {
 }
 
 type TaskRun struct {
-	TaskRunID        string          `json:"taskRunId"`
-	OperationID      string          `json:"operationId"`
-	InvocationID     string          `json:"invocationId"`
-	TaskDefinitionID string          `json:"taskDefinitionId"`
-	ExtensionID      string          `json:"extensionId"`
-	ModuleID         string          `json:"moduleId"`
-	Status           TaskRunStatus   `json:"status"`
-	Priority         int             `json:"priority"`
-	Input            json.RawMessage `json:"input"`
-	InputHash        string          `json:"inputHash"`
-	InputArtifactID  *string         `json:"inputArtifactId,omitempty"`
-	ScopeSnapshotID      string  `json:"scopeSnapshotId,omitempty"`
-	PermissionSnapshotID string  `json:"permissionSnapshotId,omitempty"`
-	DependencySnapshotID string  `json:"dependencySnapshotId,omitempty"`
-	RuntimeInstanceID *string `json:"runtimeInstanceId,omitempty"`
-	CheckpointID      *string `json:"checkpointId,omitempty"`
-	ResultArtifactID  *string `json:"resultArtifactId,omitempty"`
-	Attempt      int    `json:"attempt"`
-	MaxAttempts  int    `json:"maxAttempts"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	QueuedAt     *time.Time `json:"queuedAt,omitempty"`
-	StartedAt    *time.Time `json:"startedAt,omitempty"`
-	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
-	DeadlineAt   *time.Time `json:"deadlineAt,omitempty"`
-	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
-	ErrorCode    *string `json:"errorCode,omitempty"`
-	ErrorMessage *string `json:"errorMessage,omitempty"`
-	Generation   int64   `json:"generation"`
+	TaskRunID            string          `json:"taskRunId"`
+	OperationID          string          `json:"operationId"`
+	InvocationID         string          `json:"invocationId"`
+	TaskDefinitionID     string          `json:"taskDefinitionId"`
+	ExtensionID          string          `json:"extensionId"`
+	ModuleID             string          `json:"moduleId"`
+	Status               TaskRunStatus   `json:"status"`
+	Priority             int             `json:"priority"`
+	Input                json.RawMessage `json:"input"`
+	InputHash            string          `json:"inputHash"`
+	InputArtifactID      *string         `json:"inputArtifactId,omitempty"`
+	ScopeSnapshotID      string          `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID string          `json:"permissionSnapshotId,omitempty"`
+	DependencySnapshotID string          `json:"dependencySnapshotId,omitempty"`
+	RuntimeInstanceID    *string         `json:"runtimeInstanceId,omitempty"`
+	CheckpointID         *string         `json:"checkpointId,omitempty"`
+	ResultArtifactID     *string         `json:"resultArtifactId,omitempty"`
+	Attempt              int             `json:"attempt"`
+	MaxAttempts          int             `json:"maxAttempts"`
+	CreatedAt            time.Time       `json:"createdAt"`
+	QueuedAt             *time.Time      `json:"queuedAt,omitempty"`
+	StartedAt            *time.Time      `json:"startedAt,omitempty"`
+	FinishedAt           *time.Time      `json:"finishedAt,omitempty"`
+	DeadlineAt           *time.Time      `json:"deadlineAt,omitempty"`
+	CancelRequestedAt    *time.Time      `json:"cancelRequestedAt,omitempty"`
+	ErrorCode            *string         `json:"errorCode,omitempty"`
+	ErrorMessage         *string         `json:"errorMessage,omitempty"`
+	Generation           int64           `json:"generation"`
 }
 
 type TaskRunProgress struct {
@@ -220,73 +220,73 @@ type TaskCheckpoint struct {
 }
 
 type TaskRunResult struct {
-	TaskRunID    string          `json:"taskRunId"`
-	ResultType   TaskResultPolicy `json:"resultType"`
-	ResultJSON   json.RawMessage `json:"resultJson,omitempty"`
-	ArtifactID   string          `json:"artifactId,omitempty"`
-	ResultHash   string          `json:"resultHash,omitempty"`
-	CreatedAt    time.Time       `json:"createdAt"`
+	TaskRunID  string           `json:"taskRunId"`
+	ResultType TaskResultPolicy `json:"resultType"`
+	ResultJSON json.RawMessage  `json:"resultJson,omitempty"`
+	ArtifactID string           `json:"artifactId,omitempty"`
+	ResultHash string           `json:"resultHash,omitempty"`
+	CreatedAt  time.Time        `json:"createdAt"`
 }
 
 type TaskQueueEntry struct {
-	TaskRunID       string    `json:"taskRunId"`
-	Priority        int       `json:"priority"`
-	AvailableAt     time.Time `json:"availableAt"`
-	LeaseOwner      string    `json:"leaseOwner,omitempty"`
-	LeaseExpiresAt  *time.Time `json:"leaseExpiresAt,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	TaskRunID      string     `json:"taskRunId"`
+	Priority       int        `json:"priority"`
+	AvailableAt    time.Time  `json:"availableAt"`
+	LeaseOwner     string     `json:"leaseOwner,omitempty"`
+	LeaseExpiresAt *time.Time `json:"leaseExpiresAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 type TaskRuntimeConfig struct {
-	GlobalMaxConcurrent      int
-	PerExtensionMaxConcurrent int
+	GlobalMaxConcurrent        int
+	PerExtensionMaxConcurrent  int
 	PerDefinitionMaxConcurrent int
-	DefaultTimeout           time.Duration
-	MaxProgressPerSecond     int
-	MaxCheckpointBytes       int
-	MaxInlineResultBytes     int
-	MaxRetryAttempts         int
-	WorkspaceRoot            string
-	NodePath                 string
-	TaskHostPath             string
-	LeaseDuration            time.Duration
-	CancelGracePeriod        time.Duration
+	DefaultTimeout             time.Duration
+	MaxProgressPerSecond       int
+	MaxCheckpointBytes         int
+	MaxInlineResultBytes       int
+	MaxRetryAttempts           int
+	WorkspaceRoot              string
+	NodePath                   string
+	TaskHostPath               string
+	LeaseDuration              time.Duration
+	CancelGracePeriod          time.Duration
 }
 
 func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 	return TaskRuntimeConfig{
-		GlobalMaxConcurrent:       4,
-		PerExtensionMaxConcurrent: 2,
+		GlobalMaxConcurrent:        4,
+		PerExtensionMaxConcurrent:  2,
 		PerDefinitionMaxConcurrent: 1,
-		DefaultTimeout:            30 * time.Minute,
-		MaxProgressPerSecond:      5,
-		MaxCheckpointBytes:        1 << 20,
-		MaxInlineResultBytes:      256 << 10,
-		MaxRetryAttempts:          3,
-		WorkspaceRoot:             "",
-		NodePath:                  "",
-		TaskHostPath:              "",
-		LeaseDuration:             2 * time.Minute,
-		CancelGracePeriod:         10 * time.Second,
+		DefaultTimeout:             30 * time.Minute,
+		MaxProgressPerSecond:       5,
+		MaxCheckpointBytes:         1 << 20,
+		MaxInlineResultBytes:       256 << 10,
+		MaxRetryAttempts:           3,
+		WorkspaceRoot:              "",
+		NodePath:                   "",
+		TaskHostPath:               "",
+		LeaseDuration:              2 * time.Minute,
+		CancelGracePeriod:          10 * time.Second,
 	}
 }
 
 type EnqueueTaskRequest struct {
-	TaskDefinitionID string          `json:"taskDefinitionId"`
-	ExtensionID      string          `json:"extensionId"`
-	ModuleID         string          `json:"moduleId"`
-	Input            json.RawMessage `json:"input"`
-	Priority         int             `json:"priority"`
-	OperationID      string          `json:"operationId"`
-	ScopeSnapshotID  string          `json:"scopeSnapshotId"`
-	PermissionSnapshotID string      `json:"permissionSnapshotId"`
+	TaskDefinitionID     string          `json:"taskDefinitionId"`
+	ExtensionID          string          `json:"extensionId"`
+	ModuleID             string          `json:"moduleId"`
+	Input                json.RawMessage `json:"input"`
+	Priority             int             `json:"priority"`
+	OperationID          string          `json:"operationId"`
+	ScopeSnapshotID      string          `json:"scopeSnapshotId"`
+	PermissionSnapshotID string          `json:"permissionSnapshotId"`
 }
 
 type EnqueueTaskResult struct {
-	TaskRunID  string `json:"taskRunId"`
-	Status     TaskRunStatus `json:"status"`
-	Queued     bool   `json:"queued"`
-	Position   int    `json:"position,omitempty"`
+	TaskRunID string        `json:"taskRunId"`
+	Status    TaskRunStatus `json:"status"`
+	Queued    bool          `json:"queued"`
+	Position  int           `json:"position,omitempty"`
 }
 
 type ListTasksFilter struct {

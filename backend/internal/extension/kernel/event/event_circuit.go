@@ -9,8 +9,8 @@ type CircuitState string
 
 const (
 	CircuitClosed   CircuitState = "closed"
-	CircuitOpen      CircuitState = "open"
-	CircuitHalfOpen  CircuitState = "half_open"
+	CircuitOpen     CircuitState = "open"
+	CircuitHalfOpen CircuitState = "half_open"
 )
 
 type CircuitBreakerConfig struct {
@@ -39,16 +39,16 @@ func DefaultCircuitConfig() CircuitBreakerConfig {
 }
 
 type CircuitBreaker struct {
-	mu              sync.Mutex
-	state           CircuitState
-	consecutiveFails int
+	mu                 sync.Mutex
+	state              CircuitState
+	consecutiveFails   int
 	consecutiveSuccess int
-	totalFails      int64
-	totalSuccess    int64
-	lastFailCode    string
-	lastFailTime    time.Time
-	openedAt        time.Time
-	config          CircuitBreakerConfig
+	totalFails         int64
+	totalSuccess       int64
+	lastFailCode       string
+	lastFailTime       time.Time
+	openedAt           time.Time
+	config             CircuitBreakerConfig
 }
 
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {

@@ -13,14 +13,14 @@ import (
 type SignatureStatus string
 
 const (
-	SignatureUnsigned           SignatureStatus = "unsigned"
-	SignatureValid              SignatureStatus = "valid"
-	SignatureInvalid            SignatureStatus = "invalid"
-	SignatureUnknownKey         SignatureStatus = "unknown_key"
-	SignatureRevokedKey         SignatureStatus = "revoked_key"
-	SignatureExpiredKey         SignatureStatus = "expired_key"
-	SignaturePublisherMismatch  SignatureStatus = "publisher_mismatch"
-	SignatureContentMismatch    SignatureStatus = "content_mismatch"
+	SignatureUnsigned             SignatureStatus = "unsigned"
+	SignatureValid                SignatureStatus = "valid"
+	SignatureInvalid              SignatureStatus = "invalid"
+	SignatureUnknownKey           SignatureStatus = "unknown_key"
+	SignatureRevokedKey           SignatureStatus = "revoked_key"
+	SignatureExpiredKey           SignatureStatus = "expired_key"
+	SignaturePublisherMismatch    SignatureStatus = "publisher_mismatch"
+	SignatureContentMismatch      SignatureStatus = "content_mismatch"
 	SignatureUnsupportedAlgorithm SignatureStatus = "unsupported_algorithm"
 )
 
@@ -35,17 +35,17 @@ type PackageSignature struct {
 }
 
 type SignatureVerificationInput struct {
-	Signature       PackageSignature
-	PublicKey       []byte
+	Signature             PackageSignature
+	PublicKey             []byte
 	ActualManifestHash    string
 	ActualContentTreeHash string
 }
 
 type SignatureVerificationResult struct {
-	Status    SignatureStatus
-	KeyID     string
+	Status      SignatureStatus
+	KeyID       string
 	Fingerprint string
-	Algorithm string
+	Algorithm   string
 }
 
 type SignatureVerifier struct {

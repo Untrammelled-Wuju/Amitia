@@ -10,17 +10,17 @@ import (
 )
 
 type Pipeline struct {
-	PointRegistry  HookPointRegistry
-	ContribStore   ContributionStore
-	RuntimeBridge  RuntimeBridge
-	Permission     PermissionChecker
-	Scope          ScopeChecker
-	Dependency     DependencyChecker
-	Trace          TraceRecorder
-	Circuit        *CircuitBreaker
-	DepthGuard     *DepthGuard
-	Validator      *PatchValidator
-	MaxDepth       int
+	PointRegistry   HookPointRegistry
+	ContribStore    ContributionStore
+	RuntimeBridge   RuntimeBridge
+	Permission      PermissionChecker
+	Scope           ScopeChecker
+	Dependency      DependencyChecker
+	Trace           TraceRecorder
+	Circuit         *CircuitBreaker
+	DepthGuard      *DepthGuard
+	Validator       *PatchValidator
+	MaxDepth        int
 	PipelineTimeout time.Duration
 }
 
@@ -408,12 +408,12 @@ func (p *Pipeline) handleFailure(ctx context.Context, contrib HookContributionDe
 	}
 
 	fctx := FailureContext{
-		Err:     err,
-		ErrCode: code,
-		Policy:  contrib.EffectiveFailurePolicy(point),
-		Point:   point,
-		Contrib: contrib,
-		Phase:   contrib.Phase,
+		Err:      err,
+		ErrCode:  code,
+		Policy:   contrib.EffectiveFailurePolicy(point),
+		Point:    point,
+		Contrib:  contrib,
+		Phase:    contrib.Phase,
 		IsFilter: contrib.Phase == PhaseFilter,
 	}
 	outcome := ProcessFailure(fctx)

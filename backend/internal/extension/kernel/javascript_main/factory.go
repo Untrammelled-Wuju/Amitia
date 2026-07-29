@@ -12,10 +12,10 @@ import (
 )
 
 type RuntimeFactory struct {
-	mu       sync.Mutex
-	hosts    map[string]*PluginHost
-	history  []*PluginHost
-	hostAPI  host_api.Gateway
+	mu      sync.Mutex
+	hosts   map[string]*PluginHost
+	history []*PluginHost
+	hostAPI host_api.Gateway
 }
 
 func NewRuntimeFactory() *RuntimeFactory {
@@ -32,15 +32,15 @@ func (f *RuntimeFactory) SetHostAPI(gateway host_api.Gateway) {
 }
 
 type CreateHostRequest struct {
-	ExtensionID    string
-	ModuleID       string
-	Entry          string
-	DefinitionHash string
-	HostAPIVersion string
-	SessionToken   string
-	Generation     int
+	ExtensionID          string
+	ModuleID             string
+	Entry                string
+	DefinitionHash       string
+	HostAPIVersion       string
+	SessionToken         string
+	Generation           int
 	AllowedContributions []AllowedContribution
-	ResourceLimits runtime.ResourceLimits
+	ResourceLimits       runtime.ResourceLimits
 }
 
 func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*PluginHost, error) {
@@ -64,15 +64,15 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 	f.mu.Unlock()
 
 	spec := runtime.BootstrapSpec{
-		InstanceID:         instanceID,
-		ExtensionID:        req.ExtensionID,
-		ModuleID:           req.ModuleID,
-		DefinitionHash:     req.DefinitionHash,
-		Generation:         req.Generation,
-		Entry:              req.Entry,
-		HostAPIVersion:     req.HostAPIVersion,
-		ResourceLimits:     req.ResourceLimits,
-		SessionToken:       req.SessionToken,
+		InstanceID:           instanceID,
+		ExtensionID:          req.ExtensionID,
+		ModuleID:             req.ModuleID,
+		DefinitionHash:       req.DefinitionHash,
+		Generation:           req.Generation,
+		Entry:                req.Entry,
+		HostAPIVersion:       req.HostAPIVersion,
+		ResourceLimits:       req.ResourceLimits,
+		SessionToken:         req.SessionToken,
 		AllowedContributions: nil,
 	}
 

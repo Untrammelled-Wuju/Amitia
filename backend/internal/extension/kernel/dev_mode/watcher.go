@@ -28,13 +28,13 @@ const (
 )
 
 type FileWatcher struct {
-	mu          sync.Mutex
-	interval    time.Duration
-	patterns    []string
-	ignore      []string
-	stopCh      map[WorkspaceID]chan struct{}
-	running     map[WorkspaceID]bool
-	snapshots   map[WorkspaceID]map[string]int64
+	mu        sync.Mutex
+	interval  time.Duration
+	patterns  []string
+	ignore    []string
+	stopCh    map[WorkspaceID]chan struct{}
+	running   map[WorkspaceID]bool
+	snapshots map[WorkspaceID]map[string]int64
 }
 
 func NewFileWatcher(interval time.Duration) *FileWatcher {
@@ -42,17 +42,17 @@ func NewFileWatcher(interval time.Duration) *FileWatcher {
 		interval = 500 * time.Millisecond
 	}
 	return &FileWatcher{
-		interval: interval,
-		patterns: []string{".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".css", ".html"},
-		ignore:   []string{"node_modules", "dist", "dist-candidate", "package", ".git", "tmp", "cache", ".amitiax", "diagnostics", "build", "release"},
-		stopCh:   make(map[WorkspaceID]chan struct{}),
-		running:  make(map[WorkspaceID]bool),
+		interval:  interval,
+		patterns:  []string{".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".css", ".html"},
+		ignore:    []string{"node_modules", "dist", "dist-candidate", "package", ".git", "tmp", "cache", ".amitiax", "diagnostics", "build", "release"},
+		stopCh:    make(map[WorkspaceID]chan struct{}),
+		running:   make(map[WorkspaceID]bool),
 		snapshots: make(map[WorkspaceID]map[string]int64),
 	}
 }
 
 var (
-	ErrWatcherNotRunning = errors.New("dev_mode: watcher not running")
+	ErrWatcherNotRunning     = errors.New("dev_mode: watcher not running")
 	ErrWatcherAlreadyRunning = errors.New("dev_mode: watcher already running")
 )
 

@@ -32,17 +32,17 @@ type rpcError struct {
 }
 
 type HelloMessage struct {
-	Nonce          string `json:"nonce"`
-	InstanceID     string `json:"instance_id"`
+	Nonce           string `json:"nonce"`
+	InstanceID      string `json:"instance_id"`
 	ProtocolVersion string `json:"protocol_version"`
-	ExtensionID    string `json:"extension_id,omitempty"`
-	ModuleID       string `json:"module_id,omitempty"`
+	ExtensionID     string `json:"extension_id,omitempty"`
+	ModuleID        string `json:"module_id,omitempty"`
 }
 
 type WelcomeMessage struct {
-	SessionToken string        `json:"session_token"`
+	SessionToken string         `json:"session_token"`
 	Limits       map[string]any `json:"limits,omitempty"`
-	ExpiresAt    time.Time     `json:"expires_at,omitempty"`
+	ExpiresAt    time.Time      `json:"expires_at,omitempty"`
 }
 
 type InitializeRequest struct {
@@ -61,35 +61,35 @@ type InvokeResult struct {
 }
 
 type HealthResult struct {
-	Status  string          `json:"status"`
-	Details map[string]any  `json:"details,omitempty"`
+	Status  string         `json:"status"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 type RPCSession struct {
-	mu            sync.Mutex
-	stdin         io.WriteCloser
-	stdout        io.Reader
-	stderr        io.Reader
-	instanceID    string
-	extensionID   string
-	moduleID      string
-	sessionToken  string
-	nonce         string
-	ready         bool
-	nextID        int64
-	pending       map[int64]chan *rpcMessage
-	stopCh        chan struct{}
-	done          chan struct{}
-	onLog         func(level, msg string)
+	mu             sync.Mutex
+	stdin          io.WriteCloser
+	stdout         io.Reader
+	stderr         io.Reader
+	instanceID     string
+	extensionID    string
+	moduleID       string
+	sessionToken   string
+	nonce          string
+	ready          bool
+	nextID         int64
+	pending        map[int64]chan *rpcMessage
+	stopCh         chan struct{}
+	done           chan struct{}
+	onLog          func(level, msg string)
 	onNotification func(method string, params json.RawMessage)
 }
 
 type RPCSessionConfig struct {
-	InstanceID    string
-	ExtensionID   string
-	ModuleID      string
-	Nonce         string
-	OnLog         func(level, msg string)
+	InstanceID     string
+	ExtensionID    string
+	ModuleID       string
+	Nonce          string
+	OnLog          func(level, msg string)
 	OnNotification func(method string, params json.RawMessage)
 }
 

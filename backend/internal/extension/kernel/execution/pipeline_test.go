@@ -13,17 +13,17 @@ import (
 
 func newTestTool(id string) capability.ToolDefinition {
 	return capability.ToolDefinition{
-		ID:        id,
-		ModelName: "test_tool",
-		Source:    capability.ToolSourceBuiltin,
-		Name:      "Test Tool",
-		InputSchema: json.RawMessage(`{"type":"object"}`),
+		ID:           id,
+		ModelName:    "test_tool",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Test Tool",
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
 		OutputSchema: json.RawMessage(`{"type":"object"}`),
-		Enabled:    true,
-		Compatible: true,
-		Retryable:  false,
-		TimeoutMS:  5000,
-		ToolVersion: capability.ToolVersion{SchemaVersion: 1, Revision: "1"},
+		Enabled:      true,
+		Compatible:   true,
+		Retryable:    false,
+		TimeoutMS:    5000,
+		ToolVersion:  capability.ToolVersion{SchemaVersion: 1, Revision: "1"},
 		State: capability.ToolState{
 			Installed:         true,
 			ModuleEnabled:     true,
@@ -45,10 +45,10 @@ func newTestTool(id string) capability.ToolDefinition {
 				MaxRetries:  3,
 				BackoffBase: 100 * time.Millisecond,
 			},
-			Idempotent:      false,
+			Idempotent:       false,
 			ApprovalRequired: false,
-			AllowBackground: true,
-			MaxDepth:        10,
+			AllowBackground:  true,
+			MaxDepth:         10,
 		},
 		Runtime: capability.RuntimeBinding{
 			RuntimeType: capability.RuntimeTypeBuiltin,
@@ -878,7 +878,7 @@ func TestSanitizerNested(t *testing.T) {
 	result := capability.UnifiedToolResult{
 		InvocationID: "inv-001",
 		Status:       capability.ToolResultStatusSuccess,
-		Structured: json.RawMessage(`{"nested":{"secret":"hidden","safe":"visible"},"password":"abc"}`),
+		Structured:   json.RawMessage(`{"nested":{"secret":"hidden","safe":"visible"},"password":"abc"}`),
 	}
 
 	sanitized := s.Sanitize(ctx, result)

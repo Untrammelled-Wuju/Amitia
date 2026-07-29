@@ -8,15 +8,15 @@ import (
 type AuditEventType string
 
 const (
-	AuditResourceCreated    AuditEventType = "resource.created"
-	AuditResourceUpdated    AuditEventType = "resource.updated"
-	AuditResourceDeleted    AuditEventType = "resource.deleted"
+	AuditResourceCreated     AuditEventType = "resource.created"
+	AuditResourceUpdated     AuditEventType = "resource.updated"
+	AuditResourceDeleted     AuditEventType = "resource.deleted"
 	AuditResourceTransferred AuditEventType = "resource.transferred"
-	AuditResourceReleased   AuditEventType = "resource.released"
-	AuditResourceOrphaned   AuditEventType = "resource.orphaned"
-	AuditCleanupStarted     AuditEventType = "cleanup.started"
-	AuditCleanupCompleted   AuditEventType = "cleanup.completed"
-	AuditCleanupFailed      AuditEventType = "cleanup.failed"
+	AuditResourceReleased    AuditEventType = "resource.released"
+	AuditResourceOrphaned    AuditEventType = "resource.orphaned"
+	AuditCleanupStarted      AuditEventType = "cleanup.started"
+	AuditCleanupCompleted    AuditEventType = "cleanup.completed"
+	AuditCleanupFailed       AuditEventType = "cleanup.failed"
 )
 
 type ResourceAuditEvent struct {

@@ -23,11 +23,11 @@ func (r *PreflightResult) AddWarning(msg string) {
 }
 
 type PreflightChecker struct {
-	hostVersion    string
-	platform       string
-	arch           string
+	hostVersion       string
+	platform          string
+	arch              string
 	trustedPublishers map[string]bool
-	minDiskSpace   int64
+	minDiskSpace      int64
 	runningExtensions map[string]bool
 }
 

@@ -20,14 +20,14 @@ import (
 type ProcessHostState string
 
 const (
-	ProcessStateCreated   ProcessHostState = "created"
-	ProcessStateStarting  ProcessHostState = "starting"
-	ProcessStateReady     ProcessHostState = "ready"
-	ProcessStateRunning   ProcessHostState = "running"
-	ProcessStateStopping  ProcessHostState = "stopping"
-	ProcessStateStopped   ProcessHostState = "stopped"
-	ProcessStateCrashed   ProcessHostState = "crashed"
-	ProcessStateTimedOut  ProcessHostState = "timed_out"
+	ProcessStateCreated  ProcessHostState = "created"
+	ProcessStateStarting ProcessHostState = "starting"
+	ProcessStateReady    ProcessHostState = "ready"
+	ProcessStateRunning  ProcessHostState = "running"
+	ProcessStateStopping ProcessHostState = "stopping"
+	ProcessStateStopped  ProcessHostState = "stopped"
+	ProcessStateCrashed  ProcessHostState = "crashed"
+	ProcessStateTimedOut ProcessHostState = "timed_out"
 )
 
 type rpcMessage struct {
@@ -45,18 +45,18 @@ type rpcError struct {
 }
 
 type TaskProcessHost struct {
-	mu           sync.Mutex
-	state        ProcessHostState
-	instanceID   string
-	taskRunID    string
-	extensionID  string
-	moduleID     string
-	defHash      string
-	nonce        string
-	nodePath     string
-	hostPath     string
-	workDir      string
-	entryPath    string
+	mu          sync.Mutex
+	state       ProcessHostState
+	instanceID  string
+	taskRunID   string
+	extensionID string
+	moduleID    string
+	defHash     string
+	nonce       string
+	nodePath    string
+	hostPath    string
+	workDir     string
+	entryPath   string
 
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
@@ -74,11 +74,11 @@ type TaskProcessHost struct {
 	notifiers   map[string]func(json.RawMessage)
 	notifiersMu sync.RWMutex
 
-	exitCh     chan int
-	exitErr    error
-	closeOnce  sync.Once
-	done       chan struct{}
-	exitCode   int
+	exitCh    chan int
+	exitErr   error
+	closeOnce sync.Once
+	done      chan struct{}
+	exitCode  int
 }
 
 type ProcessHostConfig struct {
@@ -146,13 +146,13 @@ func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, chec
 	h.notifiersMu.Lock()
 	h.notifiers["task.progress"] = func(params json.RawMessage) {
 		var p struct {
-			TaskRunID  string           `json:"task_run_id"`
-			Sequence   int64            `json:"sequence"`
-			Current    *float64         `json:"current"`
-			Total      *float64         `json:"total"`
-			Percentage *float64         `json:"percentage"`
-			Stage      string           `json:"stage"`
-			Message    string           `json:"message"`
+			TaskRunID  string   `json:"task_run_id"`
+			Sequence   int64    `json:"sequence"`
+			Current    *float64 `json:"current"`
+			Total      *float64 `json:"total"`
+			Percentage *float64 `json:"percentage"`
+			Stage      string   `json:"stage"`
+			Message    string   `json:"message"`
 		}
 		if json.Unmarshal(params, &p) == nil && callbacks.OnProgress != nil {
 			callbacks.OnProgress(p.Sequence, p.Current, p.Total, p.Percentage, p.Stage, p.Message)
@@ -181,12 +181,12 @@ func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, chec
 	}
 	h.notifiers["task.finished"] = func(params json.RawMessage) {
 		var p struct {
-			TaskRunID  string          `json:"task_run_id"`
-			Status     string          `json:"status"`
-			Result     json.RawMessage `json:"result"`
-			ArtifactID string          `json:"artifact_id"`
-			ErrorCode  string          `json:"error_code"`
-			ErrorMessage string        `json:"error_message"`
+			TaskRunID    string          `json:"task_run_id"`
+			Status       string          `json:"status"`
+			Result       json.RawMessage `json:"result"`
+			ArtifactID   string          `json:"artifact_id"`
+			ErrorCode    string          `json:"error_code"`
+			ErrorMessage string          `json:"error_message"`
 		}
 		if json.Unmarshal(params, &p) == nil && callbacks.OnFinished != nil {
 			callbacks.OnFinished(p.Status, p.Result, p.ArtifactID, p.ErrorCode, p.ErrorMessage)
@@ -335,11 +335,11 @@ func (h *TaskProcessHost) handshake(ctx context.Context) error {
 
 func (h *TaskProcessHost) executeTask(ctx context.Context, input json.RawMessage, checkpoint json.RawMessage, deadline *time.Time, attempt, maxAttempts int) error {
 	params := map[string]interface{}{
-		"task_run_id":   h.taskRunID,
-		"entry":         h.entryPath,
-		"input":         json.RawMessage(input),
-		"attempt":       attempt,
-		"max_attempts":  maxAttempts,
+		"task_run_id":  h.taskRunID,
+		"entry":        h.entryPath,
+		"input":        json.RawMessage(input),
+		"attempt":      attempt,
+		"max_attempts": maxAttempts,
 	}
 	if checkpoint != nil {
 		params["checkpoint"] = json.RawMessage(checkpoint)

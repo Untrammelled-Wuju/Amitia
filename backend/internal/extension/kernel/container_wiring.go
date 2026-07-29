@@ -186,7 +186,7 @@ func newContainerPlanExecutor(
 ) *containerPlanExecutor {
 	return &containerPlanExecutor{
 		instRepo:    instRepo,
-		defRepo:      defRepo,
+		defRepo:     defRepo,
 		moduleRepo:  moduleRepo,
 		contribRepo: contribRepo,
 		enablement:  enablementStore,

@@ -14,29 +14,29 @@ func NewFileTypeDetector() *FileTypeDetector {
 }
 
 type FileTypeResult struct {
-	Extension   string
-	MIMEType    string
-	MagicNumber string
-	IsArchive   bool
+	Extension    string
+	MIMEType     string
+	MagicNumber  string
+	IsArchive    bool
 	IsExecutable bool
-	IsText      bool
-	Warnings    []string
+	IsText       bool
+	Warnings     []string
 }
 
 var (
 	archiveMagicNumbers = map[string]string{
-		"PK\x03\x04":    "ZIP",
-		"PK\x05\x06":    "ZIP(empty)",
-		"\x1f\x8b":      "GZIP",
-		"BZh":           "BZIP2",
-		"\xFD7zXZ\x00":  "XZ",
-		"Rar!\x1a\x07":  "RAR",
+		"PK\x03\x04":           "ZIP",
+		"PK\x05\x06":           "ZIP(empty)",
+		"\x1f\x8b":             "GZIP",
+		"BZh":                  "BZIP2",
+		"\xFD7zXZ\x00":         "XZ",
+		"Rar!\x1a\x07":         "RAR",
 		"\x75\x73\x74\x61\x72": "TAR",
 	}
 
 	executableMagicNumbers = map[string]string{
-		"MZ":            "PE",
-		"\x7fELF":       "ELF",
+		"MZ":               "PE",
+		"\x7fELF":          "ELF",
 		"\xca\xfe\xba\xbe": "Mach-O Universal",
 		"\xcf\xfa\xed\xfe": "Mach-O 64-bit",
 		"\xce\xfa\xed\xfe": "Mach-O 32-bit",

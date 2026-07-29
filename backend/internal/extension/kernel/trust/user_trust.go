@@ -12,11 +12,11 @@ import (
 type TrustScope string
 
 const (
-	TrustScopePackage    TrustScope = "package"
-	TrustScopeKey        TrustScope = "key"
-	TrustScopePublisher  TrustScope = "publisher"
-	TrustScopeVersion    TrustScope = "version"
-	TrustScopeWorkspace  TrustScope = "workspace"
+	TrustScopePackage   TrustScope = "package"
+	TrustScopeKey       TrustScope = "key"
+	TrustScopePublisher TrustScope = "publisher"
+	TrustScopeVersion   TrustScope = "version"
+	TrustScopeWorkspace TrustScope = "workspace"
 )
 
 type UserTrustDecision struct {

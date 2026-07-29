@@ -9,20 +9,20 @@ import (
 )
 
 type RotationRequest struct {
-	PublisherID       string
-	OldKeyID          string
-	NewKeyID          string
-	NewPublicKey      []byte
+	PublisherID         string
+	OldKeyID            string
+	NewKeyID            string
+	NewPublicKey        []byte
 	ContinuitySignature []byte
-	Reason            string
+	Reason              string
 }
 
 type RotationResult struct {
-	Success    bool
-	OldKey     PublisherKey
-	NewKey     PublisherKey
-	Warnings   []string
-	Reason     string
+	Success  bool
+	OldKey   PublisherKey
+	NewKey   PublisherKey
+	Warnings []string
+	Reason   string
 }
 
 type KeyRotator struct {
@@ -110,12 +110,12 @@ func verifyContinuitySignature(oldKey *PublisherKey, newPublicKey []byte, signat
 }
 
 type RotationRecord struct {
-	PublisherID       string    `json:"publisher_id"`
-	OldKeyID          string    `json:"old_key_id"`
-	NewKeyID          string    `json:"new_key_id"`
-	RotatedAt         time.Time `json:"rotated_at"`
-	Reason            string    `json:"reason,omitempty"`
-	ContinuityVerified bool     `json:"continuity_verified"`
+	PublisherID        string    `json:"publisher_id"`
+	OldKeyID           string    `json:"old_key_id"`
+	NewKeyID           string    `json:"new_key_id"`
+	RotatedAt          time.Time `json:"rotated_at"`
+	Reason             string    `json:"reason,omitempty"`
+	ContinuityVerified bool      `json:"continuity_verified"`
 }
 
 type RotationLog struct {

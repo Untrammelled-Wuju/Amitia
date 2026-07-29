@@ -23,11 +23,11 @@ type DependencyRequirement struct {
 }
 
 type ScopeRule struct {
-	ScopeType       string `json:"scopeType"`
-	CharacterID     string `json:"characterId,omitempty"`
-	ConversationID  string `json:"conversationId,omitempty"`
-	ExtensionID     string `json:"extensionId,omitempty"`
-	ModuleID        string `json:"moduleId,omitempty"`
+	ScopeType      string `json:"scopeType"`
+	CharacterID    string `json:"characterId,omitempty"`
+	ConversationID string `json:"conversationId,omitempty"`
+	ExtensionID    string `json:"extensionId,omitempty"`
+	ModuleID       string `json:"moduleId,omitempty"`
 }
 
 type PermissionRequirement struct {

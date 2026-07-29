@@ -9,19 +9,19 @@ import (
 )
 
 type fakeComponent struct {
-	id          string
-	deps        []string
-	startErr    error
-	readyErr    error
-	stopErr     error
-	state       ComponentState
-	startCount  int32
-	readyCount  int32
-	stopCount   int32
-	healthErr   error
+	id         string
+	deps       []string
+	startErr   error
+	readyErr   error
+	stopErr    error
+	state      ComponentState
+	startCount int32
+	readyCount int32
+	stopCount  int32
+	healthErr  error
 }
 
-func (f *fakeComponent) ID() string { return f.id }
+func (f *fakeComponent) ID() string             { return f.id }
 func (f *fakeComponent) Dependencies() []string { return f.deps }
 func (f *fakeComponent) Start(ctx context.Context) error {
 	atomic.AddInt32(&f.startCount, 1)

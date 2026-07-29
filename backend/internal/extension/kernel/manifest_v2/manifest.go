@@ -29,17 +29,17 @@ type Manifest struct {
 }
 
 type ExtensionMeta struct {
-	ID         string                 `json:"id"`
-	Name       LocalizedText          `json:"name"`
-	Description LocalizedText         `json:"description"`
-	Version    string                 `json:"version"`
-	License    string                 `json:"license,omitempty"`
-	Homepage   string                 `json:"homepage,omitempty"`
-	Repository string                 `json:"repository,omitempty"`
-	Categories []string               `json:"categories,omitempty"`
-	Keywords   []string               `json:"keywords,omitempty"`
-	Icon       string                 `json:"icon,omitempty"`
-	Metadata   map[string]any         `json:"metadata,omitempty"`
+	ID          string         `json:"id"`
+	Name        LocalizedText  `json:"name"`
+	Description LocalizedText  `json:"description"`
+	Version     string         `json:"version"`
+	License     string         `json:"license,omitempty"`
+	Homepage    string         `json:"homepage,omitempty"`
+	Repository  string         `json:"repository,omitempty"`
+	Categories  []string       `json:"categories,omitempty"`
+	Keywords    []string       `json:"keywords,omitempty"`
+	Icon        string         `json:"icon,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type PublisherMeta struct {
@@ -58,16 +58,16 @@ type Compatibility struct {
 }
 
 type ModuleMeta struct {
-	ID            string                  `json:"id"`
-	Name          LocalizedText           `json:"name"`
-	Description   LocalizedText           `json:"description,omitempty"`
-	Type          string                  `json:"type"`
-	Version       string                  `json:"version,omitempty"`
-	Runtime       *RuntimeMeta            `json:"runtime,omitempty"`
-	Contributions []ContributionMeta      `json:"contributions,omitempty"`
-	Dependencies  []Dependency            `json:"dependencies,omitempty"`
-	Compatibility *ModuleCompatibility    `json:"compatibility,omitempty"`
-	Policies      *ModulePolicies         `json:"policies,omitempty"`
+	ID            string               `json:"id"`
+	Name          LocalizedText        `json:"name"`
+	Description   LocalizedText        `json:"description,omitempty"`
+	Type          string               `json:"type"`
+	Version       string               `json:"version,omitempty"`
+	Runtime       *RuntimeMeta         `json:"runtime,omitempty"`
+	Contributions []ContributionMeta   `json:"contributions,omitempty"`
+	Dependencies  []Dependency         `json:"dependencies,omitempty"`
+	Compatibility *ModuleCompatibility `json:"compatibility,omitempty"`
+	Policies      *ModulePolicies      `json:"policies,omitempty"`
 }
 
 type ModuleCompatibility struct {
@@ -82,34 +82,34 @@ type ModulePolicies struct {
 }
 
 type RuntimeMeta struct {
-	Type        string            `json:"type"`
-	EntryPoint  string            `json:"entryPoint,omitempty"`
-	WorkerCount int               `json:"workerCount,omitempty"`
-	Timeout     string            `json:"timeout,omitempty"`
-	Memory      int64             `json:"memory,omitempty"`
-	Permissions []string          `json:"permissions,omitempty"`
-	Capabilities map[string]bool  `json:"capabilities,omitempty"`
-	Env         map[string]string `json:"env,omitempty"`
+	Type         string            `json:"type"`
+	EntryPoint   string            `json:"entryPoint,omitempty"`
+	WorkerCount  int               `json:"workerCount,omitempty"`
+	Timeout      string            `json:"timeout,omitempty"`
+	Memory       int64             `json:"memory,omitempty"`
+	Permissions  []string          `json:"permissions,omitempty"`
+	Capabilities map[string]bool   `json:"capabilities,omitempty"`
+	Env          map[string]string `json:"env,omitempty"`
 }
 
 type ContributionMeta struct {
-	ID          string                 `json:"id"`
-	Kind        string                 `json:"kind"`
-	Name        LocalizedText          `json:"name"`
-	Description LocalizedText          `json:"description,omitempty"`
-	Version     string                 `json:"version,omitempty"`
-	Spec        map[string]any         `json:"spec,omitempty"`
-	RequiredPermissions []string       `json:"requiredPermissions,omitempty"`
-	RequiredScope []string             `json:"requiredScope,omitempty"`
-	Exposure    *ExposureMeta          `json:"exposure,omitempty"`
-	RuntimeBinding *RuntimeBindingMeta `json:"runtimeBinding,omitempty"`
-	Dependencies []Dependency          `json:"dependencies,omitempty"`
+	ID                  string              `json:"id"`
+	Kind                string              `json:"kind"`
+	Name                LocalizedText       `json:"name"`
+	Description         LocalizedText       `json:"description,omitempty"`
+	Version             string              `json:"version,omitempty"`
+	Spec                map[string]any      `json:"spec,omitempty"`
+	RequiredPermissions []string            `json:"requiredPermissions,omitempty"`
+	RequiredScope       []string            `json:"requiredScope,omitempty"`
+	Exposure            *ExposureMeta       `json:"exposure,omitempty"`
+	RuntimeBinding      *RuntimeBindingMeta `json:"runtimeBinding,omitempty"`
+	Dependencies        []Dependency        `json:"dependencies,omitempty"`
 }
 
 type ExposureMeta struct {
-	VisibleByDefault   bool     `json:"visibleByDefault,omitempty"`
-	HiddenFromDiscovery bool    `json:"hiddenFromDiscovery,omitempty"`
-	RequiredRoles      []string `json:"requiredRoles,omitempty"`
+	VisibleByDefault    bool     `json:"visibleByDefault,omitempty"`
+	HiddenFromDiscovery bool     `json:"hiddenFromDiscovery,omitempty"`
+	RequiredRoles       []string `json:"requiredRoles,omitempty"`
 }
 
 type RuntimeBindingMeta struct {
@@ -126,10 +126,10 @@ type Dependency struct {
 }
 
 type PermissionReq struct {
-	Name      string `json:"name"`
-	Reason    string `json:"reason,omitempty"`
-	Required  bool   `json:"required,omitempty"`
-	Scope     string `json:"scope,omitempty"`
+	Name     string `json:"name"`
+	Reason   string `json:"reason,omitempty"`
+	Required bool   `json:"required,omitempty"`
+	Scope    string `json:"scope,omitempty"`
 }
 
 type ResourceMeta struct {
@@ -137,15 +137,15 @@ type ResourceMeta struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	Hash string `json:"hash,omitempty"`
-	Size int64 `json:"size,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 type LifecycleMeta struct {
-	AutoUpdate      bool `json:"autoUpdate,omitempty"`
-	BackgroundTasks bool `json:"backgroundTasks,omitempty"`
-	NetworkAccess   bool `json:"networkAccess,omitempty"`
+	AutoUpdate      bool   `json:"autoUpdate,omitempty"`
+	BackgroundTasks bool   `json:"backgroundTasks,omitempty"`
+	NetworkAccess   bool   `json:"networkAccess,omitempty"`
 	Isolation       string `json:"isolation,omitempty"`
-	Sandbox         bool `json:"sandbox,omitempty"`
+	Sandbox         bool   `json:"sandbox,omitempty"`
 }
 
 type IntegrityMeta struct {
@@ -163,7 +163,7 @@ type DevelopmentMeta struct {
 }
 
 type LocalizedText struct {
-	Default    string            `json:"default"`
+	Default      string            `json:"default"`
 	Translations map[string]string `json:"translations,omitempty"`
 }
 
@@ -230,14 +230,14 @@ func (r *ValidationReport) AttachFile(file string) {
 }
 
 var (
-	ErrInvalidManifest      = errors.New("manifest_v2: invalid manifest")
-	ErrUnsupportedVersion   = errors.New("manifest_v2: unsupported manifest version")
-	ErrMissingField         = errors.New("manifest_v2: missing required field")
-	ErrInvalidExtensionID   = errors.New("manifest_v2: invalid extension id")
-	ErrInvalidVersion       = errors.New("manifest_v2: invalid version")
-	ErrDuplicateModule      = errors.New("manifest_v2: duplicate module id")
-	ErrDuplicateContribution = errors.New("manifest_v2: duplicate contribution id")
-	ErrUnknownModuleType    = errors.New("manifest_v2: unknown module type")
+	ErrInvalidManifest         = errors.New("manifest_v2: invalid manifest")
+	ErrUnsupportedVersion      = errors.New("manifest_v2: unsupported manifest version")
+	ErrMissingField            = errors.New("manifest_v2: missing required field")
+	ErrInvalidExtensionID      = errors.New("manifest_v2: invalid extension id")
+	ErrInvalidVersion          = errors.New("manifest_v2: invalid version")
+	ErrDuplicateModule         = errors.New("manifest_v2: duplicate module id")
+	ErrDuplicateContribution   = errors.New("manifest_v2: duplicate contribution id")
+	ErrUnknownModuleType       = errors.New("manifest_v2: unknown module type")
 	ErrUnknownContributionKind = errors.New("manifest_v2: unknown contribution kind")
 )
 
@@ -286,7 +286,7 @@ func (m Manifest) Validate() ValidationReport {
 	contributionKinds := map[string]bool{
 		"tool": true, "agent_skill": true, "workflow": true,
 		"mcp_server": true,
-		"provider": true, "hook": true, "event_subscription": true,
+		"provider":   true, "hook": true, "event_subscription": true,
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "resource": true,
@@ -366,11 +366,11 @@ func (m Manifest) Validate() ValidationReport {
 func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 	report := m.Validate()
 	if report.HasErrors() {
-	 msgs := make([]string, len(report.Errors))
-	 for i, e := range report.Errors {
-		msgs[i] = fmt.Sprintf("%s: %s", e.Path, e.Message)
-	 }
-	 return domain.ExtensionDefinition{}, fmt.Errorf("%w: %s", ErrInvalidManifest, strings.Join(msgs, "; "))
+		msgs := make([]string, len(report.Errors))
+		for i, e := range report.Errors {
+			msgs[i] = fmt.Sprintf("%s: %s", e.Path, e.Message)
+		}
+		return domain.ExtensionDefinition{}, fmt.Errorf("%w: %s", ErrInvalidManifest, strings.Join(msgs, "; "))
 	}
 	version, _ := domain.ParseVersion(m.Extension.Version)
 	def := domain.ExtensionDefinition{
@@ -427,14 +427,14 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 	if m.Runtime != nil {
 		timeout, _ := time.ParseDuration(m.Runtime.Timeout)
 		rd := domain.RuntimeDefinition{
-			Type:        domain.RuntimeType(m.Runtime.Type),
-			EntryPoint:  m.Runtime.EntryPoint,
-			WorkerCount: m.Runtime.WorkerCount,
-			Timeout:     timeout,
-			Memory:      m.Runtime.Memory,
-			Permissions: m.Runtime.Permissions,
+			Type:         domain.RuntimeType(m.Runtime.Type),
+			EntryPoint:   m.Runtime.EntryPoint,
+			WorkerCount:  m.Runtime.WorkerCount,
+			Timeout:      timeout,
+			Memory:       m.Runtime.Memory,
+			Permissions:  m.Runtime.Permissions,
 			Capabilities: m.Runtime.Capabilities,
-			Env:         m.Runtime.Env,
+			Env:          m.Runtime.Env,
 		}
 		runtime = &rd
 	}
@@ -456,15 +456,15 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 		policies = &p
 	}
 	mod := domain.ModuleDefinition{
-		ID:           domain.ModuleID(m.ID),
-		ExtensionID:  extID,
-		Name:         m.Name.ToDomain(),
-		Description:  m.Description.ToDomain(),
-		Type:         domain.ModuleType(m.Type),
-		Version:      m.Version,
-		Runtime:      runtime,
+		ID:            domain.ModuleID(m.ID),
+		ExtensionID:   extID,
+		Name:          m.Name.ToDomain(),
+		Description:   m.Description.ToDomain(),
+		Type:          domain.ModuleType(m.Type),
+		Version:       m.Version,
+		Runtime:       runtime,
 		Compatibility: deref(compat),
-		Policies:     deref(policies),
+		Policies:      deref(policies),
 	}
 	for _, c := range m.Contributions {
 		cd, err := c.ToDomain(extID, domain.ModuleID(m.ID))
@@ -487,22 +487,22 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 
 func (c ContributionMeta) ToDomain(extID domain.ExtensionID, modID domain.ModuleID) (domain.ContributionDefinition, error) {
 	cd := domain.ContributionDefinition{
-		ID:                domain.ContributionID(c.ID),
-		ModuleID:          modID,
-		ExtensionID:       extID,
-		Kind:              domain.ContributionKind(c.Kind),
-		Name:              c.Name.ToDomain(),
-		Description:       c.Description.ToDomain(),
-		Version:           c.Version,
-		Definition:        c.Spec,
+		ID:                  domain.ContributionID(c.ID),
+		ModuleID:            modID,
+		ExtensionID:         extID,
+		Kind:                domain.ContributionKind(c.Kind),
+		Name:                c.Name.ToDomain(),
+		Description:         c.Description.ToDomain(),
+		Version:             c.Version,
+		Definition:          c.Spec,
 		RequiredPermissions: c.RequiredPermissions,
-		RequiredScope:     c.RequiredScope,
+		RequiredScope:       c.RequiredScope,
 	}
 	if c.Exposure != nil {
 		cd.Exposure = domain.Exposure{
-			VisibleByDefault:   c.Exposure.VisibleByDefault,
+			VisibleByDefault:    c.Exposure.VisibleByDefault,
 			HiddenFromDiscovery: c.Exposure.HiddenFromDiscovery,
-			RequiredRoles:      c.Exposure.RequiredRoles,
+			RequiredRoles:       c.Exposure.RequiredRoles,
 		}
 	}
 	if c.RuntimeBinding != nil {

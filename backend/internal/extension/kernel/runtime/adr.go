@@ -1,15 +1,15 @@
 package runtime
 
 type RuntimeADR struct {
-	DecisionID    string
-	Title         string
-	Status        string
-	DecidedAt     string
-	PrimaryRoute  PrimaryRoute
+	DecisionID          string
+	Title               string
+	Status              string
+	DecidedAt           string
+	PrimaryRoute        PrimaryRoute
 	SupplementaryRoutes []SupplementaryRoute
-	RejectedRoutes []RejectedRoute
-	Rationale     []string
-	Constraints   []string
+	RejectedRoutes      []RejectedRoute
+	Rationale           []string
+	Constraints         []string
 }
 
 type PrimaryRoute struct {
@@ -25,8 +25,8 @@ type SupplementaryRoute struct {
 }
 
 type RejectedRoute struct {
-	Name        string
-	Reason      string
+	Name   string
+	Reason string
 }
 
 var ADR = RuntimeADR{
@@ -140,22 +140,22 @@ type ProcessBoundary struct {
 }
 
 type ResourceLimits struct {
-	MaxMemoryMB         int
-	MaxConcurrentCalls  int
-	MaxQueueDepth       int
-	SingleCallTimeout   string
-	LogRatePerSecond    int
-	HostAPIRatePerSec   int
-	MaxOpenHandles      int
-	MaxMessageSizeKB    int
+	MaxMemoryMB        int
+	MaxConcurrentCalls int
+	MaxQueueDepth      int
+	SingleCallTimeout  string
+	LogRatePerSecond   int
+	HostAPIRatePerSec  int
+	MaxOpenHandles     int
+	MaxMessageSizeKB   int
 }
 
 type IsolationLevel string
 
 const (
-	IsolationProcess     IsolationLevel = "process"
+	IsolationProcess      IsolationLevel = "process"
 	IsolationProcessGroup IsolationLevel = "process_group"
-	IsolationContainer   IsolationLevel = "container"
+	IsolationContainer    IsolationLevel = "container"
 )
 
 type StdioConfig struct {
@@ -165,12 +165,12 @@ type StdioConfig struct {
 }
 
 type HostBinary struct {
-	Name           string
-	Version        string
-	Path           string
-	Platform       string
-	Architecture   string
-	SupportedAPIs  []string
+	Name                 string
+	Version              string
+	Path                 string
+	Platform             string
+	Architecture         string
+	SupportedAPIs        []string
 	CompatibilityVersion int
 }
 

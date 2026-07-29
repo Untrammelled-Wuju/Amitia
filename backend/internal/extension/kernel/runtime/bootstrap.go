@@ -1,28 +1,28 @@
 package runtime
 
 type BootstrapSpec struct {
-	InstanceID         string
-	ExtensionID        string
-	ModuleID           string
-	DefinitionHash     string
-	Generation         int
-	Entry              string
-	HostAPIVersion     string
-	ResourceLimits     ResourceLimits
-	LogPolicy          LogPolicy
-	DevelopmentMode    bool
-	SessionToken       string
-	SessionTokenTTL    string
+	InstanceID           string
+	ExtensionID          string
+	ModuleID             string
+	DefinitionHash       string
+	Generation           int
+	Entry                string
+	HostAPIVersion       string
+	ResourceLimits       ResourceLimits
+	LogPolicy            LogPolicy
+	DevelopmentMode      bool
+	SessionToken         string
+	SessionTokenTTL      string
 	AllowedContributions []string
-	AllowedNamespaces []string
+	AllowedNamespaces    []string
 }
 
 type LogPolicy struct {
-	Level       string
-	Structured  bool
+	Level         string
+	Structured    bool
 	RedactSecrets bool
 	MaxRatePerSec int
-	Destination string
+	Destination   string
 }
 
 type BootstrapSequence struct {
@@ -52,38 +52,38 @@ func DefaultBootstrapSequence() BootstrapSequence {
 }
 
 type BootstrapResult struct {
-	InstanceID    string
-	Success       bool
-	FailedStep    string
-	Reason        string
-	StartedAt     string
-	ReadyAt       string
-	Duration      string
+	InstanceID string
+	Success    bool
+	FailedStep string
+	Reason     string
+	StartedAt  string
+	ReadyAt    string
+	Duration   string
 }
 
 type RuntimeSession struct {
-	InstanceID         string
-	ExtensionID        string
-	ModuleID           string
-	Generation         int
-	SessionToken       string
-	DefinitionHash     string
-	State              SessionState
-	StartedAt          string
-	Ready              bool
+	InstanceID     string
+	ExtensionID    string
+	ModuleID       string
+	Generation     int
+	SessionToken   string
+	DefinitionHash string
+	State          SessionState
+	StartedAt      string
+	Ready          bool
 }
 
 type SessionState string
 
 const (
-	SessionStateStarting   SessionState = "starting"
+	SessionStateStarting       SessionState = "starting"
 	SessionStateAuthenticating SessionState = "authenticating"
-	SessionStateLoading    SessionState = "loading"
-	SessionStateActivating SessionState = "activating"
-	SessionStateReady      SessionState = "ready"
-	SessionStateStopping   SessionState = "stopping"
-	SessionStateStopped    SessionState = "stopped"
-	SessionStateCrashed    SessionState = "crashed"
+	SessionStateLoading        SessionState = "loading"
+	SessionStateActivating     SessionState = "activating"
+	SessionStateReady          SessionState = "ready"
+	SessionStateStopping       SessionState = "stopping"
+	SessionStateStopped        SessionState = "stopped"
+	SessionStateCrashed        SessionState = "crashed"
 )
 
 type ModuleLoaderPolicy struct {
@@ -139,48 +139,48 @@ func DefaultModuleLoaderPolicy() ModuleLoaderPolicy {
 }
 
 type HostAPIReplacement struct {
-	Category    string
-	APIPath     string
-	Description string
+	Category     string
+	APIPath      string
+	Description  string
 	DeniedNative []string
 }
 
 func HostAPIReplacements() []HostAPIReplacement {
 	return []HostAPIReplacement{
 		{
-			Category: "network",
-			APIPath:  "host.network.request",
-			Description: "HTTP/HTTPS 请求由宿主代理，执行域名约束、方法、Header、Secret、代理、TLS、响应大小、审计和取消",
+			Category:     "network",
+			APIPath:      "host.network.request",
+			Description:  "HTTP/HTTPS 请求由宿主代理，执行域名约束、方法、Header、Secret、代理、TLS、响应大小、审计和取消",
 			DeniedNative: []string{"http", "https", "net", "dns"},
 		},
 		{
-			Category: "file",
-			APIPath:  "host.resource.*",
-			Description: "包内只读资源由 Runtime Loader 提供受控读取",
+			Category:     "file",
+			APIPath:      "host.resource.*",
+			Description:  "包内只读资源由 Runtime Loader 提供受控读取",
 			DeniedNative: []string{"fs"},
 		},
 		{
-			Category: "storage",
-			APIPath:  "host.storage.*",
-			Description: "结构化存储通过 StorageBroker 命名空间隔离",
+			Category:     "storage",
+			APIPath:      "host.storage.*",
+			Description:  "结构化存储通过 StorageBroker 命名空间隔离",
 			DeniedNative: []string{"fs"},
 		},
 		{
-			Category: "secret",
-			APIPath:  "host.secret.*",
-			Description: "Secret 通过 SecretBroker 加密读取",
+			Category:     "secret",
+			APIPath:      "host.secret.*",
+			Description:  "Secret 通过 SecretBroker 加密读取",
 			DeniedNative: []string{"fs", "process"},
 		},
 		{
-			Category: "process",
-			APIPath:  "host.process.*",
-			Description: "进程操作由宿主审批",
+			Category:     "process",
+			APIPath:      "host.process.*",
+			Description:  "进程操作由宿主审批",
 			DeniedNative: []string{"child_process"},
 		},
 		{
-			Category: "schedule",
-			APIPath:  "host.schedule.*",
-			Description: "计划任务由宿主执行",
+			Category:     "schedule",
+			APIPath:      "host.schedule.*",
+			Description:  "计划任务由宿主执行",
 			DeniedNative: []string{"timers"},
 		},
 	}

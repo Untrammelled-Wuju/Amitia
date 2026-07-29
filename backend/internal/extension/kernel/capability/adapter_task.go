@@ -67,9 +67,9 @@ func (a *TaskRuntimeAdapter) Execute(
 	}
 
 	acceptedOutput, _ := json.Marshal(map[string]any{
-		"accepted":   true,
-		"taskRunId":  taskRunID,
-		"taskDefId":  taskDefID,
+		"accepted":     true,
+		"taskRunId":    taskRunID,
+		"taskDefId":    taskDefID,
 		"invocationId": invocation.InvocationID,
 	})
 

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	WASMMagic = "\x00asm"
+	WASMMagic    = "\x00asm"
 	WASMVersion1 = 1
 )
 
@@ -27,16 +27,16 @@ func NewModuleValidator() *ModuleValidator {
 }
 
 type ValidationReport struct {
-	Valid          bool
-	ModuleHash     string
-	Version        uint32
-	Exports        []string
-	Imports        []string
-	MemoryMin      int64
-	MemoryMax      int64
-	HasStart       bool
-	Errors         []string
-	SizeBytes      int64
+	Valid                bool
+	ModuleHash           string
+	Version              uint32
+	Exports              []string
+	Imports              []string
+	MemoryMin            int64
+	MemoryMax            int64
+	HasStart             bool
+	Errors               []string
+	SizeBytes            int64
 	EstimatedCompileCost int64
 }
 
@@ -93,8 +93,8 @@ type ModuleCacheKey struct {
 }
 
 type CompiledModuleEntry struct {
-	Module CompiledModule
-	Key    ModuleCacheKey
+	Module   CompiledModule
+	Key      ModuleCacheKey
 	CachedAt time.Time
 }
 
@@ -241,8 +241,8 @@ func (r *Runtime) Registry() *HostImportRegistry { return r.registry }
 func (r *Runtime) Cache() *ModuleCache           { return r.cache }
 
 type InvokeRequest struct {
-	Definition *WASMRuntimeDefinition
-	Input      json.RawMessage
+	Definition  *WASMRuntimeDefinition
+	Input       json.RawMessage
 	ModuleBytes []byte
 	EngineName  string
 }

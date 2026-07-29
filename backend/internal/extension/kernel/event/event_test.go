@@ -72,9 +72,9 @@ func TestEventTypeID_ExtensionNamespace(t *testing.T) {
 
 func TestEventTypeDefinition_Validate(t *testing.T) {
 	valid := EventTypeDefinition{
-		EventTypeID:     "system.test",
-		Version:         1,
-		MaxPayloadBytes: 1024,
+		EventTypeID:      "system.test",
+		Version:          1,
+		MaxPayloadBytes:  1024,
 		MaxMetadataBytes: 256,
 	}
 	if err := valid.Validate(); err != nil {
@@ -111,11 +111,11 @@ func TestEventTypeDefinition_Validate(t *testing.T) {
 
 func TestEventTypeDefinition_Hash(t *testing.T) {
 	base := EventTypeDefinition{
-		EventTypeID:     "extension.abc.created",
-		Version:         1,
-		MaxPayloadBytes: 1024,
+		EventTypeID:      "extension.abc.created",
+		Version:          1,
+		MaxPayloadBytes:  1024,
 		MaxMetadataBytes: 256,
-		RiskLevel:       RiskLevelLow,
+		RiskLevel:        RiskLevelLow,
 	}
 	h1 := base.Hash()
 	h2 := base.Hash()
@@ -158,9 +158,9 @@ func TestEventTypeDefinition_Hash(t *testing.T) {
 
 func TestEventEnvelope_Validate(t *testing.T) {
 	def := EventTypeDefinition{
-		EventTypeID:     "system.test",
-		Version:         1,
-		MaxPayloadBytes: 1024,
+		EventTypeID:      "system.test",
+		Version:          1,
+		MaxPayloadBytes:  1024,
 		MaxMetadataBytes: 256,
 	}
 	payload := json.RawMessage(`{"hello":"world"}`)

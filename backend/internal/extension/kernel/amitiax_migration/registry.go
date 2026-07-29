@@ -10,35 +10,35 @@ import (
 )
 
 type AmitiaxMigrationSpec struct {
-	LegacyPackageID    string                 `json:"legacyPackageId"`
-	NewExtensionID     string                 `json:"newExtensionId"`
-	NewModuleID        string                 `json:"newModuleId"`
-	DisplayName        string                 `json:"displayName"`
-	Publisher          string                 `json:"publisher"`
-	Version            string                 `json:"version"`
-	ManifestVersion    string                 `json:"manifestVersion"`
-	Modules            []ModuleMigrationSpec  `json:"modules"`
-	Permissions        []string               `json:"permissions,omitempty"`
-	TrustLevel         string                 `json:"trustLevel"`
-	RequiresReapproval bool                   `json:"requiresReapproval"`
-	Deprecated         bool                   `json:"deprecated,omitempty"`
-	DeprecationNote    string                 `json:"deprecationNote,omitempty"`
+	LegacyPackageID    string                `json:"legacyPackageId"`
+	NewExtensionID     string                `json:"newExtensionId"`
+	NewModuleID        string                `json:"newModuleId"`
+	DisplayName        string                `json:"displayName"`
+	Publisher          string                `json:"publisher"`
+	Version            string                `json:"version"`
+	ManifestVersion    string                `json:"manifestVersion"`
+	Modules            []ModuleMigrationSpec `json:"modules"`
+	Permissions        []string              `json:"permissions,omitempty"`
+	TrustLevel         string                `json:"trustLevel"`
+	RequiresReapproval bool                  `json:"requiresReapproval"`
+	Deprecated         bool                  `json:"deprecated,omitempty"`
+	DeprecationNote    string                `json:"deprecationNote,omitempty"`
 }
 
 type ModuleMigrationSpec struct {
-	LegacyModuleID string   `json:"legacyModuleId"`
-	NewModuleID    string   `json:"newModuleId"`
-	Type           string   `json:"type"`
-	Entry          string   `json:"entry"`
-	Tools          []string `json:"tools,omitempty"`
-	Skills         []string `json:"skills,omitempty"`
-	Workflows      []string `json:"workflows,omitempty"`
-	MCPServers     []string `json:"mcpServers,omitempty"`
+	LegacyModuleID  string   `json:"legacyModuleId"`
+	NewModuleID     string   `json:"newModuleId"`
+	Type            string   `json:"type"`
+	Entry           string   `json:"entry"`
+	Tools           []string `json:"tools,omitempty"`
+	Skills          []string `json:"skills,omitempty"`
+	Workflows       []string `json:"workflows,omitempty"`
+	MCPServers      []string `json:"mcpServers,omitempty"`
 	UIContributions []string `json:"uiContributions,omitempty"`
 }
 
 type AmitiaxMigrationRegistry struct {
-	mu   sync.RWMutex
+	mu    sync.RWMutex
 	specs map[string]*AmitiaxMigrationSpec
 }
 
@@ -88,13 +88,13 @@ func (r *AmitiaxMigrationRegistry) List() []*AmitiaxMigrationSpec {
 }
 
 type AmitiaxMigrationReport struct {
-	StartTime       time.Time               `json:"startTime"`
-	EndTime         time.Time               `json:"endTime"`
-	TotalLegacy     int                     `json:"totalLegacy"`
-	MigratedCount   int                     `json:"migratedCount"`
-	FailedEntries   []FailedPackageMigration `json:"failedEntries,omitempty"`
-	TrustBreakdown  map[string]int          `json:"trustBreakdown"`
-	Status          string                  `json:"status"`
+	StartTime      time.Time                `json:"startTime"`
+	EndTime        time.Time                `json:"endTime"`
+	TotalLegacy    int                      `json:"totalLegacy"`
+	MigratedCount  int                      `json:"migratedCount"`
+	FailedEntries  []FailedPackageMigration `json:"failedEntries,omitempty"`
+	TrustBreakdown map[string]int           `json:"trustBreakdown"`
+	Status         string                   `json:"status"`
 }
 
 type FailedPackageMigration struct {

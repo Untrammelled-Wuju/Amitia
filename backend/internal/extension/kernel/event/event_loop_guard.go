@@ -8,12 +8,12 @@ import (
 )
 
 type LoopGuard struct {
-	mu              sync.Mutex
-	chains          map[string]*callChain
-	maxDepth        int
-	maxChainLength  int
-	shortWindow     time.Duration
-	maxPerWindow    int
+	mu             sync.Mutex
+	chains         map[string]*callChain
+	maxDepth       int
+	maxChainLength int
+	shortWindow    time.Duration
+	maxPerWindow   int
 }
 
 type callChain struct {

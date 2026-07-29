@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type ProductionCandidateRunner struct {
 	generationMgr    *update.GenerationManager
 	candidateMgr     *CandidateContributionManager
 	extRoot          string
+	cleanupRepo      *RuntimeCleanupRepository
 }
 
 func NewProductionCandidateRunner(
@@ -38,6 +40,13 @@ func NewProductionCandidateRunner(
 		candidateMgr:     candidateMgr,
 		extRoot:          extRoot,
 	}
+}
+
+func (r *ProductionCandidateRunner) WithCleanupRepo(repo *RuntimeCleanupRepository) *ProductionCandidateRunner {
+	if r != nil {
+		r.cleanupRepo = repo
+	}
+	return r
 }
 
 func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_mode.WorkspaceID, rev *dev_mode.Revision) (string, error) {
@@ -121,14 +130,14 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 		expectedStableGen = int64(activeGen.Generation)
 	}
 	record := &CandidateRecord{
-		CandidateID:             candidateID,
-		ExtensionID:             extID,
-		InstanceIDs:             instanceIDs,
-		GenerationID:            gen.GenerationID,
-		CandidateGeneration:     int64(gen.Generation),
+		CandidateID:              candidateID,
+		ExtensionID:              extID,
+		InstanceIDs:              instanceIDs,
+		GenerationID:             gen.GenerationID,
+		CandidateGeneration:      int64(gen.Generation),
 		ExpectedStableGeneration: expectedStableGen,
-		Contribs:                allContribs,
-		ArtifactPath:            rev.ArtifactPath,
+		Contribs:                 allContribs,
+		ArtifactPath:             rev.ArtifactPath,
 		DefinitionHash:           defHash,
 	}
 
@@ -147,6 +156,12 @@ func (r *ProductionCandidateRunner) HealthCheck(ctx context.Context, instanceID 
 
 	if err := r.candidateMgr.HealthCandidate(ctx, instanceID); err != nil {
 		return err
+	}
+
+	if r.cleanupRepo != nil {
+		if err := r.createCleanupTasksForCandidate(ctx, instanceID); err != nil {
+			return fmt.Errorf("candidate_runner: create cleanup tasks: %w", err)
+		}
 	}
 
 	if err := r.candidateMgr.PromoteCandidate(ctx, instanceID); err != nil {
@@ -184,6 +199,14 @@ func (r *ProductionCandidateRunner) StopInstance(ctx context.Context, instanceID
 		return fmt.Errorf("candidate_runner: runner not initialized")
 	}
 
+	if r.cleanupRepo != nil {
+		return r.stopInstanceWithCleanupRepo(ctx, instanceID)
+	}
+
+	return r.stopInstanceLegacy(ctx, instanceID)
+}
+
+func (r *ProductionCandidateRunner) stopInstanceLegacy(ctx context.Context, instanceID string) error {
 	record, ok := r.candidateMgr.GetCandidate(instanceID)
 	if !ok {
 		return nil
@@ -221,6 +244,161 @@ func (r *ProductionCandidateRunner) StopInstance(ctx context.Context, instanceID
 	return firstErr
 }
 
+func (r *ProductionCandidateRunner) stopInstanceWithCleanupRepo(ctx context.Context, candidateID string) error {
+	record, ok := r.candidateMgr.GetCandidate(candidateID)
+	if ok {
+		if record.Status != CandidateStatusPromoted {
+			return r.candidateMgr.DiscardCandidate(ctx, candidateID)
+		}
+		return r.stopPromotedCandidateWithVerification(ctx, candidateID, record)
+	}
+
+	tasks, err := r.cleanupRepo.ListByCleanupIDPrefix(ctx, candidateID+":")
+	if err != nil {
+		return fmt.Errorf("candidate_runner: list cleanup tasks for %s: %w", candidateID, err)
+	}
+
+	if len(tasks) == 0 {
+		task, lookupErr := r.cleanupRepo.ListByRuntimeInstanceID(ctx, candidateID)
+		if lookupErr != nil {
+			return fmt.Errorf("candidate_runner: lookup cleanup task by instance %s: %w", candidateID, lookupErr)
+		}
+		if task != nil {
+			tasks = []*RuntimeCleanupTask{task}
+		}
+	}
+
+	if len(tasks) == 0 {
+		stopErr := r.stopAndVerify(ctx, candidateID)
+		if stopErr != nil {
+			_ = r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
+				CleanupID:         candidateID + ":" + candidateID,
+				RuntimeInstanceID: candidateID,
+				CleanupState:      CleanupStateStopFailed,
+				LastErrorCode:     "STOP_FAILED",
+				LastErrorMessage:  stopErr.Error(),
+				NextRetryAt:       time.Now().UTC().Add(30 * time.Second),
+			})
+			return stopErr
+		}
+		return nil
+	}
+
+	var firstErr error
+	for _, task := range tasks {
+		if task.CleanupState == CleanupStateCompleted || task.CleanupState == CleanupStateVerified {
+			continue
+		}
+		if stopErr := r.stopAndVerify(ctx, task.RuntimeInstanceID); stopErr != nil {
+			if firstErr == nil {
+				firstErr = stopErr
+			}
+			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error())
+			retryAt := time.Now().UTC().Add(30 * time.Second)
+			_ = r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, task.AttemptCount+1, retryAt, CleanupStateStopFailed)
+		} else {
+			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", "")
+			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+		}
+	}
+	return firstErr
+}
+
+func (r *ProductionCandidateRunner) stopPromotedCandidateWithVerification(ctx context.Context, candidateID string, record *CandidateRecord) error {
+	var firstErr error
+
+	for _, instID := range record.InstanceIDs {
+		if stopErr := r.stopAndVerify(ctx, instID); stopErr != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("candidate_runner: stop instance %s: %w", instID, stopErr)
+			}
+		}
+	}
+
+	extID := string(record.ExtensionID)
+	genID := record.GenerationID
+
+	if r.cleanupRepo != nil {
+		prefix := candidateID + ":"
+		existingTasks, _ := r.cleanupRepo.ListByCleanupIDPrefix(ctx, prefix)
+		existingMap := make(map[string]*RuntimeCleanupTask, len(existingTasks))
+		for _, t := range existingTasks {
+			existingMap[t.RuntimeInstanceID] = t
+		}
+
+		for _, instID := range record.InstanceIDs {
+			cleanupID := candidateID + ":" + instID
+			if _, exists := existingMap[instID]; exists {
+				if firstErr != nil {
+					_ = r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateStopFailed, "STOP_FAILED", firstErr.Error())
+					retryAt := time.Now().UTC().Add(30 * time.Second)
+					_ = r.cleanupRepo.UpdateRetry(ctx, cleanupID, existingMap[instID].AttemptCount+1, retryAt, CleanupStateStopFailed)
+				} else {
+					_ = r.cleanupRepo.UpdateState(ctx, cleanupID, CleanupStateCompleted, "", "")
+					_ = r.cleanupRepo.DeleteTask(ctx, cleanupID)
+				}
+			} else {
+				if firstErr != nil {
+					_ = r.cleanupRepo.SaveTask(ctx, &RuntimeCleanupTask{
+						CleanupID:         cleanupID,
+						ExtensionID:       extID,
+						RuntimeInstanceID: instID,
+						CleanupState:      CleanupStateStopFailed,
+						LastErrorCode:     "STOP_FAILED",
+						LastErrorMessage:  firstErr.Error(),
+						NextRetryAt:       time.Now().UTC().Add(30 * time.Second),
+					})
+				}
+			}
+		}
+	}
+
+	if gen, _ := r.generationMgr.Get(ctx, extID, genID); gen != nil {
+		if gen.State == update.GenerationStateActive {
+			_ = r.generationMgr.DrainGeneration(ctx, extID, genID)
+		}
+		if firstErr != nil {
+			_ = r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed)
+		} else {
+			_ = r.generationMgr.StopGeneration(ctx, extID, genID)
+		}
+	}
+	_ = r.generationMgr.RemoveGeneration(ctx, extID, genID)
+	r.candidateMgr.RemovePromotedRecord(candidateID)
+	return firstErr
+}
+
+func (r *ProductionCandidateRunner) stopAndVerify(ctx context.Context, runtimeInstanceID string) error {
+	if runtimeInstanceID == "" {
+		return nil
+	}
+
+	stopErr := r.supervisor.Stop(ctx, runtimeInstanceID, runtime_supervisor.StopReasonRollback)
+	if stopErr != nil {
+		if errors.Is(stopErr, runtime_supervisor.ErrInstanceNotFound) {
+			return nil
+		}
+		return stopErr
+	}
+
+	verifyCtx, verifyCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer verifyCancel()
+
+	snap, verifyErr := r.supervisor.GetInstance(verifyCtx, runtimeInstanceID)
+	if verifyErr != nil {
+		if errors.Is(verifyErr, runtime_supervisor.ErrInstanceNotFound) {
+			return nil
+		}
+		return nil
+	}
+
+	if snap.Actual == runtime_supervisor.ActualStopped || snap.Actual == runtime_supervisor.ActualFailed {
+		return nil
+	}
+
+	return fmt.Errorf("candidate_runner: instance %s not stopped after verification (state=%s)", runtimeInstanceID, snap.Actual)
+}
+
 func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID domain.ExtensionID, instanceIDs []string, generationID string, _ string) {
 	for _, instID := range instanceIDs {
 		_ = r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback)
@@ -231,20 +409,20 @@ func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID
 
 func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v2.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
 	spec := runtime_supervisor.InstanceSpec{
-		DefinitionID:    runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
-		ExtensionID:     extID,
-		ModuleID:        modID,
-		RuntimeType:     domain.RuntimeType(mod.Runtime.Type),
-		Generation:      int64(genNum),
-		Strategy:        runtime_supervisor.StrategySingletonPerModule,
-		EntryPoint:      mod.Runtime.EntryPoint,
-		WorkerCount:     mod.Runtime.WorkerCount,
-		Env:             mod.Runtime.Env,
-		Permissions:     mod.Runtime.Permissions,
-		Capabilities:    mod.Runtime.Capabilities,
-		Restart:         runtime_supervisor.RestartOnCrash,
-		MaxRestarts:     3,
-		RestartWindow:   60 * time.Second,
+		DefinitionID:  runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
+		ExtensionID:   extID,
+		ModuleID:      modID,
+		RuntimeType:   domain.RuntimeType(mod.Runtime.Type),
+		Generation:    int64(genNum),
+		Strategy:      runtime_supervisor.StrategySingletonPerModule,
+		EntryPoint:    mod.Runtime.EntryPoint,
+		WorkerCount:   mod.Runtime.WorkerCount,
+		Env:           mod.Runtime.Env,
+		Permissions:   mod.Runtime.Permissions,
+		Capabilities:  mod.Runtime.Capabilities,
+		Restart:       runtime_supervisor.RestartOnCrash,
+		MaxRestarts:   3,
+		RestartWindow: 60 * time.Second,
 		Limits: runtime_supervisor.ResourceLimits{
 			MaxMemoryBytes:     mod.Runtime.Memory,
 			MaxExecutionTime:   0,
@@ -279,6 +457,102 @@ func (r *ProductionCandidateRunner) RecoverOrphans(ctx context.Context) ([]strin
 		return nil, nil
 	}
 	return r.candidateMgr.RecoverOrphanCandidates(ctx)
+}
+
+func (r *ProductionCandidateRunner) createCleanupTasksForCandidate(ctx context.Context, candidateID string) error {
+	if r == nil || r.cleanupRepo == nil {
+		return nil
+	}
+	record, ok := r.candidateMgr.GetCandidate(candidateID)
+	if !ok {
+		return nil
+	}
+
+	extID := string(record.ExtensionID)
+	oldGen := record.CandidateGeneration
+	if activeGen := r.generationMgr.Active(ctx, extID); activeGen != nil {
+		oldGen = int64(activeGen.Generation)
+	}
+
+	for _, instID := range record.InstanceIDs {
+		snap, err := r.supervisor.GetInstance(ctx, instID)
+		if err != nil {
+			continue
+		}
+
+		var processID int
+		defID := string(snap.Identity.RuntimeDefinitionID)
+		modID := string(snap.Identity.ModuleID)
+		rtType := string(snap.Identity.RuntimeType)
+
+		r.CreateCleanupTask(ctx, candidateID, extID, modID, oldGen, defID, instID, rtType, processID)
+	}
+
+	return nil
+}
+
+func (r *ProductionCandidateRunner) CreateCleanupTask(ctx context.Context, candidateID string, extID string, moduleID string, oldGen int64, defID string, instanceID string, rtType string, processID int) error {
+	if r == nil || r.cleanupRepo == nil {
+		return nil
+	}
+	cleanupID := candidateID + ":" + instanceID
+	task := &RuntimeCleanupTask{
+		CleanupID:           cleanupID,
+		ExtensionID:         extID,
+		ModuleID:            moduleID,
+		OldGeneration:       oldGen,
+		RuntimeDefinitionID: defID,
+		RuntimeInstanceID:   instanceID,
+		RuntimeType:         rtType,
+		ProcessID:           processID,
+		CleanupState:        CleanupStatePending,
+	}
+	if err := r.cleanupRepo.SaveTask(ctx, task); err != nil {
+		return fmt.Errorf("candidate_runner: save cleanup task %s: %w", cleanupID, err)
+	}
+	return nil
+}
+
+func (r *ProductionCandidateRunner) RecoverCleanupTasks(ctx context.Context) int {
+	if r == nil || r.cleanupRepo == nil {
+		return 0
+	}
+
+	tasks, err := r.cleanupRepo.ListPending(ctx)
+	if err != nil {
+		return 0
+	}
+
+	cleaned := 0
+	for _, task := range tasks {
+		if !task.NextRetryAt.IsZero() && time.Now().UTC().Before(task.NextRetryAt) {
+			continue
+		}
+
+		if task.RuntimeInstanceID == "" {
+			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+			cleaned++
+			continue
+		}
+
+		stopErr := r.stopAndVerify(ctx, task.RuntimeInstanceID)
+		if stopErr == nil {
+			_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateCompleted, "", "")
+			_ = r.cleanupRepo.DeleteTask(ctx, task.CleanupID)
+			cleaned++
+		} else {
+			newAttempt := task.AttemptCount + 1
+			if newAttempt >= 5 {
+				_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateRequiresManualRecovery, "MAX_RETRIES_EXCEEDED", stopErr.Error())
+			} else {
+				backoff := time.Duration(30*(newAttempt+1)) * time.Second
+				_ = r.cleanupRepo.UpdateRetry(ctx, task.CleanupID, newAttempt, time.Now().UTC().Add(backoff), CleanupStateStopFailed)
+				_ = r.cleanupRepo.UpdateState(ctx, task.CleanupID, CleanupStateStopFailed, "STOP_FAILED", stopErr.Error())
+			}
+		}
+	}
+
+	return cleaned
 }
 
 var _ dev_mode.CandidateRunner = (*ProductionCandidateRunner)(nil)

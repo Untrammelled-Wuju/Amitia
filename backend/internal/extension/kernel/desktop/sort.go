@@ -6,7 +6,7 @@ import (
 
 type SortContext struct {
 	HostReservedIDs map[string]bool
-	UserPinnedOrder  map[string]int
+	UserPinnedOrder map[string]int
 }
 
 func sortContributions(contributions []ResolvedDesktopContribution, ctx SortContext) []ResolvedDesktopContribution {

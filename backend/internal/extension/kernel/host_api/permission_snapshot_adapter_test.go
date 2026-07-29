@@ -41,8 +41,8 @@ func makeTestValidator() *permission.PermissionIDValidator {
 func makeTestIdentity() runtime_supervisor.RuntimeIdentity {
 	return runtime_supervisor.RuntimeIdentity{
 		ExtensionID: domain.ExtensionID("ext-1"),
-		ModuleID:   domain.ModuleID("mod-1"),
-		Generation: 1,
+		ModuleID:    domain.ModuleID("mod-1"),
+		Generation:  1,
 	}
 }
 

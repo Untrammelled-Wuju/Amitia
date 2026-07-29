@@ -250,12 +250,12 @@ func TestKeyRotatorWithContinuity(t *testing.T) {
 	continuitySig := ed25519.Sign(priv1, pub2)
 	rotator := NewKeyRotator(store)
 	result := rotator.Rotate(context.Background(), RotationRequest{
-		PublisherID:        "com.example",
-		OldKeyID:           "k-old",
-		NewKeyID:           "k-new",
-		NewPublicKey:       pub2,
+		PublisherID:         "com.example",
+		OldKeyID:            "k-old",
+		NewKeyID:            "k-new",
+		NewPublicKey:        pub2,
 		ContinuitySignature: continuitySig,
-		Reason:             "routine rotation",
+		Reason:              "routine rotation",
 	})
 	if !result.Success {
 		t.Fatalf("expected success, got %s", result.Reason)
@@ -321,10 +321,10 @@ func TestKeyRotatorRejectsBrokenContinuity(t *testing.T) {
 	badSig := ed25519.Sign(priv3, pub2)
 	rotator := NewKeyRotator(store)
 	result := rotator.Rotate(context.Background(), RotationRequest{
-		PublisherID:        "com.example",
-		OldKeyID:           "k-old",
-		NewKeyID:           "k-new",
-		NewPublicKey:       pub2,
+		PublisherID:         "com.example",
+		OldKeyID:            "k-old",
+		NewKeyID:            "k-new",
+		NewPublicKey:        pub2,
 		ContinuitySignature: badSig,
 	})
 	if result.Success {

@@ -16,11 +16,11 @@ type HookPoint string
 type HookPhase string
 
 const (
-	HookPhaseBefore   HookPhase = "before"
-	HookPhaseFilter   HookPhase = "filter"
+	HookPhaseBefore    HookPhase = "before"
+	HookPhaseFilter    HookPhase = "filter"
 	HookPhaseTransform HookPhase = "transform"
-	HookPhaseAfter    HookPhase = "after"
-	HookPhaseObserve  HookPhase = "observe"
+	HookPhaseAfter     HookPhase = "after"
+	HookPhaseObserve   HookPhase = "observe"
 )
 
 type FailurePolicy string
@@ -33,20 +33,20 @@ const (
 )
 
 type HookContext struct {
-	Operation     string
-	OperationID   string
-	Subject       string
-	Actor         string
-	Phase         HookPhase
-	Input         map[string]any
-	Output        map[string]any
-	TraceID       string
-	ScopeID       string
-	Deadline      time.Time
-	Metadata      map[string]any
-	abort         bool
-	abortReason   string
-	transformed   bool
+	Operation   string
+	OperationID string
+	Subject     string
+	Actor       string
+	Phase       HookPhase
+	Input       map[string]any
+	Output      map[string]any
+	TraceID     string
+	ScopeID     string
+	Deadline    time.Time
+	Metadata    map[string]any
+	abort       bool
+	abortReason string
+	transformed bool
 }
 
 func (c *HookContext) Abort(reason string) {
@@ -71,54 +71,54 @@ func (c *HookContext) IsTransformed() bool {
 }
 
 type Hook struct {
-	HookID        string
-	Point         HookPoint
-	Phase         HookPhase
-	Owner         string
+	HookID         string
+	Point          HookPoint
+	Phase          HookPhase
+	Owner          string
 	OwnerExtension string
-	Priority      int
-	Handler       HookHandler
-	FailurePolicy FailurePolicy
-	Timeout       time.Duration
-	MaxDepth      int
-	Required      bool
-	Active        bool
-	CreatedAt     time.Time
+	Priority       int
+	Handler        HookHandler
+	FailurePolicy  FailurePolicy
+	Timeout        time.Duration
+	MaxDepth       int
+	Required       bool
+	Active         bool
+	CreatedAt      time.Time
 }
 
 type HookHandler func(ctx context.Context, hookCtx *HookContext) error
 
 type HookRegistration struct {
-	HookID        string
-	Point         HookPoint
-	Phase         HookPhase
-	Owner         string
+	HookID         string
+	Point          HookPoint
+	Phase          HookPhase
+	Owner          string
 	OwnerExtension string
-	Priority      int
-	Handler       HookHandler
-	FailurePolicy FailurePolicy
-	Timeout       time.Duration
-	Required      bool
-	MaxDepth      int
+	Priority       int
+	Handler        HookHandler
+	FailurePolicy  FailurePolicy
+	Timeout        time.Duration
+	Required       bool
+	MaxDepth       int
 }
 
 type PipelineResult struct {
-	OperationID    string
-	Point          HookPoint
-	Aborted        bool
-	AbortReason    string
-	Transformed    bool
-	ExecutedHooks  []HookExecution
-	TotalDuration  time.Duration
+	OperationID   string
+	Point         HookPoint
+	Aborted       bool
+	AbortReason   string
+	Transformed   bool
+	ExecutedHooks []HookExecution
+	TotalDuration time.Duration
 }
 
 type HookExecution struct {
-	HookID      string
-	Phase       HookPhase
-	Status      string
-	Error       string
-	Duration    time.Duration
-	StartedAt   time.Time
+	HookID    string
+	Phase     HookPhase
+	Status    string
+	Error     string
+	Duration  time.Duration
+	StartedAt time.Time
 }
 
 type Pipeline interface {
@@ -129,11 +129,11 @@ type Pipeline interface {
 }
 
 var (
-	ErrHookExists        = errors.New("hook: already registered")
-	ErrHookNotFound      = errors.New("hook: not found")
-	ErrHookAbort         = errors.New("hook: abort")
-	ErrHookTimeout       = errors.New("hook: timeout")
-	ErrHookRequiredFail  = errors.New("hook: required hook failed")
+	ErrHookExists       = errors.New("hook: already registered")
+	ErrHookNotFound     = errors.New("hook: not found")
+	ErrHookAbort        = errors.New("hook: abort")
+	ErrHookTimeout      = errors.New("hook: timeout")
+	ErrHookRequiredFail = errors.New("hook: required hook failed")
 )
 
 const (
@@ -145,8 +145,8 @@ const (
 )
 
 type DefaultPipeline struct {
-	mu     sync.RWMutex
-	hooks  map[string]*Hook
+	mu      sync.RWMutex
+	hooks   map[string]*Hook
 	byPoint map[HookPoint][]string
 }
 

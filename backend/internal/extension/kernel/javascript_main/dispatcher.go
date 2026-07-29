@@ -12,14 +12,14 @@ import (
 )
 
 type InvocationContext struct {
-	InvocationID    string
-	TraceID         string
-	Deadline        time.Time
-	CancelSignal    *CancelSignal
-	ScopeSummary    string
-	IdempotencyKey  string
-	EntryType       string
-	EntryName       string
+	InvocationID   string
+	TraceID        string
+	Deadline       time.Time
+	CancelSignal   *CancelSignal
+	ScopeSummary   string
+	IdempotencyKey string
+	EntryType      string
+	EntryName      string
 }
 
 type CancelSignal struct {
@@ -65,12 +65,12 @@ func (c *CancelSignal) IsAborted() bool {
 type InvocationStatus string
 
 const (
-	InvocationStatusQueued   InvocationStatus = "queued"
-	InvocationStatusRunning  InvocationStatus = "running"
+	InvocationStatusQueued    InvocationStatus = "queued"
+	InvocationStatusRunning   InvocationStatus = "running"
 	InvocationStatusSucceeded InvocationStatus = "succeeded"
-	InvocationStatusFailed   InvocationStatus = "failed"
+	InvocationStatusFailed    InvocationStatus = "failed"
 	InvocationStatusCancelled InvocationStatus = "cancelled"
-	InvocationStatusTimedOut InvocationStatus = "timed_out"
+	InvocationStatusTimedOut  InvocationStatus = "timed_out"
 )
 
 type Invocation struct {
@@ -95,13 +95,13 @@ type InvocationResult struct {
 }
 
 type InvocationDispatcher struct {
-	mu               sync.RWMutex
-	limits           runtime.ResourceLimits
-	invocations      map[string]*Invocation
-	activeCount      int32
-	queuedCount      int32
-	rejectNew        bool
-	completedSignal  chan struct{}
+	mu              sync.RWMutex
+	limits          runtime.ResourceLimits
+	invocations     map[string]*Invocation
+	activeCount     int32
+	queuedCount     int32
+	rejectNew       bool
+	completedSignal chan struct{}
 }
 
 func NewInvocationDispatcher(limits runtime.ResourceLimits) *InvocationDispatcher {

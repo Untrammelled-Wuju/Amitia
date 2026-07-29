@@ -24,11 +24,11 @@ func NewEventSubscriptionRegistry(schemaRegistry EventTypeRegistry, maxSubscribe
 		maxSubscribers = 64
 	}
 	return &EventSubscriptionRegistry{
-		subscriptions:     make(map[string]*ResolvedSubscription),
-		byType:            make(map[EventTypeID][]string),
-		byExtension:       make(map[string][]string),
-		schemaRegistry:    schemaRegistry,
-		maxSubscribers:    maxSubscribers,
+		subscriptions:  make(map[string]*ResolvedSubscription),
+		byType:         make(map[EventTypeID][]string),
+		byExtension:    make(map[string][]string),
+		schemaRegistry: schemaRegistry,
+		maxSubscribers: maxSubscribers,
 	}
 }
 

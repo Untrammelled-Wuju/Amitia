@@ -63,10 +63,10 @@ type SecretLeaseRequest struct {
 }
 
 type SecretLeaseAuditEntry struct {
-	LeaseID    string
-	Action     string
-	Timestamp  time.Time
-	Detail     string
+	LeaseID   string
+	Action    string
+	Timestamp time.Time
+	Detail    string
 }
 
 type SecretLeaseManager struct {

@@ -8,19 +8,19 @@ import (
 )
 
 type PermissionSnapshot struct {
-	SnapshotID     string      `json:"snapshotId"`
-	SessionID      string      `json:"sessionId"`
-	ExtensionID    string      `json:"extensionId"`
-	ModuleID       string      `json:"moduleId"`
-	Generation     int64       `json:"generation"`
-	CharacterID    string      `json:"characterId"`
-	ConversationID string      `json:"conversationId"`
-	ResourceIDs    []string    `json:"resourceIds,omitempty"`
-	GrantedPerms   []string    `json:"grantedPerms,omitempty"`
-	GrantedScopes  []string    `json:"grantedScopes,omitempty"`
-	CreatedAt      time.Time   `json:"createdAt"`
-	ExpiresAt      *time.Time  `json:"expiresAt,omitempty"`
-	RevokedAt      *time.Time  `json:"revokedAt,omitempty"`
+	SnapshotID     string     `json:"snapshotId"`
+	SessionID      string     `json:"sessionId"`
+	ExtensionID    string     `json:"extensionId"`
+	ModuleID       string     `json:"moduleId"`
+	Generation     int64      `json:"generation"`
+	CharacterID    string     `json:"characterId"`
+	ConversationID string     `json:"conversationId"`
+	ResourceIDs    []string   `json:"resourceIds,omitempty"`
+	GrantedPerms   []string   `json:"grantedPerms,omitempty"`
+	GrantedScopes  []string   `json:"grantedScopes,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
+	RevokedAt      *time.Time `json:"revokedAt,omitempty"`
 }
 
 type PermissionIDValidator struct {

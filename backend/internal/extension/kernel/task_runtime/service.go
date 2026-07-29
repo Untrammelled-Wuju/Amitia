@@ -43,13 +43,13 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 	queue := NewTaskQueue(store, "amitia-task-runtime", config.LeaseDuration)
 	limiter := NewConcurrencyLimiter(store, config)
 	return &TaskRuntimeService{
-		store:         store,
-		queue:         queue,
-		limiter:       limiter,
-		config:        config,
-		activeHosts:   make(map[string]*TaskProcessHost),
-		progressSeq:   make(map[string]*int64),
-		progressLast:  make(map[string]time.Time),
+		store:        store,
+		queue:        queue,
+		limiter:      limiter,
+		config:       config,
+		activeHosts:  make(map[string]*TaskProcessHost),
+		progressSeq:  make(map[string]*int64),
+		progressLast: make(map[string]time.Time),
 	}
 }
 
@@ -134,23 +134,23 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	}
 
 	run := &TaskRun{
-		TaskRunID:             runID,
-		OperationID:           req.OperationID,
-		TaskDefinitionID:      def.TaskID,
-		ExtensionID:           req.ExtensionID,
-		ModuleID:              req.ModuleID,
-		Status:                RunStatusQueued,
-		Priority:              req.Priority,
-		Input:                 req.Input,
-		InputHash:             inputHash,
-		ScopeSnapshotID:       req.ScopeSnapshotID,
-		PermissionSnapshotID:  req.PermissionSnapshotID,
-		Attempt:               1,
-		MaxAttempts:           maxAttempts,
-		CreatedAt:             now,
-		QueuedAt:              &now,
-		DeadlineAt:            &deadline,
-		Generation:            1,
+		TaskRunID:            runID,
+		OperationID:          req.OperationID,
+		TaskDefinitionID:     def.TaskID,
+		ExtensionID:          req.ExtensionID,
+		ModuleID:             req.ModuleID,
+		Status:               RunStatusQueued,
+		Priority:             req.Priority,
+		Input:                req.Input,
+		InputHash:            inputHash,
+		ScopeSnapshotID:      req.ScopeSnapshotID,
+		PermissionSnapshotID: req.PermissionSnapshotID,
+		Attempt:              1,
+		MaxAttempts:          maxAttempts,
+		CreatedAt:            now,
+		QueuedAt:             &now,
+		DeadlineAt:           &deadline,
+		Generation:           1,
 	}
 
 	if err := s.store.PutTaskRun(ctx, run); err != nil {

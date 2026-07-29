@@ -6,12 +6,12 @@ import (
 )
 
 type RetryPolicy struct {
-	MaxAttempts          int
-	InitialBackoff       time.Duration
-	MaxBackoff           time.Duration
-	Multiplier           float64
-	Jitter               float64
-	RetryableErrorCodes  []string
+	MaxAttempts         int
+	InitialBackoff      time.Duration
+	MaxBackoff          time.Duration
+	Multiplier          float64
+	Jitter              float64
+	RetryableErrorCodes []string
 }
 
 func DefaultRetryPolicy() RetryPolicy {

@@ -5,23 +5,23 @@ import "github.com/u-ai/backend/internal/extension/kernel/capability"
 type PermissionCategory string
 
 const (
-	CategoryHostData      PermissionCategory = "host_data"
-	CategoryFilesystem    PermissionCategory = "filesystem"
-	CategoryNetwork       PermissionCategory = "network"
-	CategoryDesktop       PermissionCategory = "desktop"
-	CategoryExtension     PermissionCategory = "extension"
-	CategoryMCP           PermissionCategory = "mcp"
-	CategoryWorkflow      PermissionCategory = "workflow"
-	CategoryProvider      PermissionCategory = "provider"
-	CategoryService       PermissionCategory = "service"
+	CategoryHostData   PermissionCategory = "host_data"
+	CategoryFilesystem PermissionCategory = "filesystem"
+	CategoryNetwork    PermissionCategory = "network"
+	CategoryDesktop    PermissionCategory = "desktop"
+	CategoryExtension  PermissionCategory = "extension"
+	CategoryMCP        PermissionCategory = "mcp"
+	CategoryWorkflow   PermissionCategory = "workflow"
+	CategoryProvider   PermissionCategory = "provider"
+	CategoryService    PermissionCategory = "service"
 )
 
 type ApprovalMode string
 
 const (
-	ApprovalAuto     ApprovalMode = "auto"
-	ApprovalManual   ApprovalMode = "manual"
-	ApprovalDeny     ApprovalMode = "deny"
+	ApprovalAuto        ApprovalMode = "auto"
+	ApprovalManual      ApprovalMode = "manual"
+	ApprovalDeny        ApprovalMode = "deny"
 	ApprovalFullControl ApprovalMode = "full_control"
 )
 
@@ -34,18 +34,18 @@ const (
 )
 
 type PermissionDefinition struct {
-	ID                   string               `json:"id"`
-	Name                 string               `json:"name"`
-	Description          string               `json:"description"`
-	Category             PermissionCategory   `json:"category"`
-	RiskLevel            capability.RiskLevel  `json:"riskLevel"`
-	AllowedScopes        []ScopeType           `json:"allowedScopes"`
-	PersistentGrantable  bool                  `json:"persistentGrantable"`
-	RequiresPerUse       bool                  `json:"requiresPerUse"`
-	BackgroundAllowed    bool                  `json:"backgroundAllowed"`
-	ChildInvocation      ChildInvocationPolicy `json:"childInvocation"`
-	TrustedOnly          bool                  `json:"trustedOnly"`
-	DefaultApproval      ApprovalMode          `json:"defaultApproval"`
+	ID                  string                `json:"id"`
+	Name                string                `json:"name"`
+	Description         string                `json:"description"`
+	Category            PermissionCategory    `json:"category"`
+	RiskLevel           capability.RiskLevel  `json:"riskLevel"`
+	AllowedScopes       []ScopeType           `json:"allowedScopes"`
+	PersistentGrantable bool                  `json:"persistentGrantable"`
+	RequiresPerUse      bool                  `json:"requiresPerUse"`
+	BackgroundAllowed   bool                  `json:"backgroundAllowed"`
+	ChildInvocation     ChildInvocationPolicy `json:"childInvocation"`
+	TrustedOnly         bool                  `json:"trustedOnly"`
+	DefaultApproval     ApprovalMode          `json:"defaultApproval"`
 }
 
 type PermissionDefinitionRegistry struct {

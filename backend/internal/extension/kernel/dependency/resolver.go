@@ -21,15 +21,15 @@ var (
 )
 
 type DefaultResolver struct {
-	mu              sync.RWMutex
-	candidate       CandidateProvider
-	graphCache      map[string]Graph
-	snapshotCache   map[string]Snapshot
-	affectedIndex   map[string][]AffectedSubject
-	platform        string
-	hostVersion     domain.SemanticVersion
-	hostFeatures    map[string]bool
-	dependencyGens  map[string]int64
+	mu             sync.RWMutex
+	candidate      CandidateProvider
+	graphCache     map[string]Graph
+	snapshotCache  map[string]Snapshot
+	affectedIndex  map[string][]AffectedSubject
+	platform       string
+	hostVersion    domain.SemanticVersion
+	hostFeatures   map[string]bool
+	dependencyGens map[string]int64
 }
 
 func NewDefaultResolver(candidate CandidateProvider) *DefaultResolver {

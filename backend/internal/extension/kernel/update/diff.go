@@ -20,46 +20,46 @@ const (
 )
 
 type DefinitionSnapshot struct {
-	ExtensionID    string
-	Version        string
-	ManifestHash   string
+	ExtensionID     string
+	Version         string
+	ManifestHash    string
 	ContentTreeHash string
-	PackageHash    string
-	PublisherID    string
-	Modules        []ModuleSnapshot
-	Contributions  []ContributionSnapshot
-	Runtimes       []RuntimeSnapshot
-	Dependencies   []DependencySnapshot
-	Permissions    []PermissionSnapshot
-	Resources      []ResourceSnapshot
-	StorageSchemas []StorageSchemaSnapshot
-	Migrations     []MigrationSnapshot
-	Platforms      []string
-	Architectures  []string
-	SignatureKeyID string
-	TrustLevel     string
-	GeneratedAt    time.Time
+	PackageHash     string
+	PublisherID     string
+	Modules         []ModuleSnapshot
+	Contributions   []ContributionSnapshot
+	Runtimes        []RuntimeSnapshot
+	Dependencies    []DependencySnapshot
+	Permissions     []PermissionSnapshot
+	Resources       []ResourceSnapshot
+	StorageSchemas  []StorageSchemaSnapshot
+	Migrations      []MigrationSnapshot
+	Platforms       []string
+	Architectures   []string
+	SignatureKeyID  string
+	TrustLevel      string
+	GeneratedAt     time.Time
 }
 
 type ModuleSnapshot struct {
-	ID            string
-	Type          string
-	Version       string
+	ID             string
+	Type           string
+	Version        string
 	EnabledDefault bool
-	RuntimeID     string
-	Contributions []string
+	RuntimeID      string
+	Contributions  []string
 }
 
 type ContributionSnapshot struct {
-	ID            string
-	Type          string
-	RuntimeID     string
-	EntryType     string
-	EntryName     string
-	InputSchema   string
-	OutputSchema  string
-	RiskLevel     string
-	SideEffect    string
+	ID           string
+	Type         string
+	RuntimeID    string
+	EntryType    string
+	EntryName    string
+	InputSchema  string
+	OutputSchema string
+	RiskLevel    string
+	SideEffect   string
 }
 
 type RuntimeSnapshot struct {
@@ -81,16 +81,16 @@ type DependencySnapshot struct {
 }
 
 type PermissionSnapshot struct {
-	ID         string
-	Reason     string
+	ID          string
+	Reason      string
 	Constraints string
 }
 
 type ResourceSnapshot struct {
-	ID       string
-	Type     string
-	Path     string
-	Mime     string
+	ID   string
+	Type string
+	Path string
+	Mime string
 }
 
 type StorageSchemaSnapshot struct {
@@ -100,49 +100,49 @@ type StorageSchemaSnapshot struct {
 }
 
 type MigrationSnapshot struct {
-	ID         string
-	FromRange  string
-	ToRange    string
+	ID          string
+	FromRange   string
+	ToRange     string
 	RuntimeType string
-	Entry      string
-	Reversible bool
+	Entry       string
+	Reversible  bool
 }
 
 type DefinitionDiff struct {
-	ExtensionID         string
-	OldVersion          string
-	NewVersion          string
-	UpdateType          UpdateType
-	ModulesAdded        []ModuleSnapshot
-	ModulesRemoved      []ModuleSnapshot
-	ModulesChanged      []ModuleChange
-	ContributionsAdded  []ContributionSnapshot
+	ExtensionID          string
+	OldVersion           string
+	NewVersion           string
+	UpdateType           UpdateType
+	ModulesAdded         []ModuleSnapshot
+	ModulesRemoved       []ModuleSnapshot
+	ModulesChanged       []ModuleChange
+	ContributionsAdded   []ContributionSnapshot
 	ContributionsRemoved []ContributionSnapshot
 	ContributionsChanged []ContributionChange
-	RuntimesAdded       []RuntimeSnapshot
-	RuntimesRemoved     []RuntimeSnapshot
-	RuntimesChanged     []RuntimeChange
-	DependenciesAdded   []DependencySnapshot
-	DependenciesRemoved []DependencySnapshot
-	PermissionsAdded    []PermissionSnapshot
-	PermissionsRemoved  []PermissionSnapshot
-	ResourcesAdded      []ResourceSnapshot
-	ResourcesRemoved    []ResourceSnapshot
+	RuntimesAdded        []RuntimeSnapshot
+	RuntimesRemoved      []RuntimeSnapshot
+	RuntimesChanged      []RuntimeChange
+	DependenciesAdded    []DependencySnapshot
+	DependenciesRemoved  []DependencySnapshot
+	PermissionsAdded     []PermissionSnapshot
+	PermissionsRemoved   []PermissionSnapshot
+	ResourcesAdded       []ResourceSnapshot
+	ResourcesRemoved     []ResourceSnapshot
 	StorageSchemaChanged []StorageSchemaChange
-	MigrationsAdded     []MigrationSnapshot
-	MigrationsRemoved   []MigrationSnapshot
-	PublisherChanged    bool
-	OldPublisherID      string
-	NewPublisherID      string
-	SignatureKeyChanged bool
-	OldKeyID            string
-	NewKeyID            string
-	PlatformAdded       []string
-	PlatformRemoved     []string
-	BreakingChanges     []BreakingChange
-	PermissionExpanded  bool
-	ScopeExpanded       bool
-	HasBreakingChanges  bool
+	MigrationsAdded      []MigrationSnapshot
+	MigrationsRemoved    []MigrationSnapshot
+	PublisherChanged     bool
+	OldPublisherID       string
+	NewPublisherID       string
+	SignatureKeyChanged  bool
+	OldKeyID             string
+	NewKeyID             string
+	PlatformAdded        []string
+	PlatformRemoved      []string
+	BreakingChanges      []BreakingChange
+	PermissionExpanded   bool
+	ScopeExpanded        bool
+	HasBreakingChanges   bool
 	HasHighRiskMigration bool
 }
 

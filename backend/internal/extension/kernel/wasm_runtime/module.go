@@ -19,14 +19,14 @@ type ModuleManager struct {
 }
 
 type LoadedModule struct {
-	ModuleID    string
-	Path        string
-	Hash        string
-	SHA256      string
-	Bytes       []byte
-	Report      *ValidationReport
-	Size        int64
-	LoadedAt    int64
+	ModuleID string
+	Path     string
+	Hash     string
+	SHA256   string
+	Bytes    []byte
+	Report   *ValidationReport
+	Size     int64
+	LoadedAt int64
 }
 
 func NewModuleManager(basePath string) *ModuleManager {

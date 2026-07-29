@@ -50,7 +50,7 @@ func (NoopCleanupFailureStore) ListPending(context.Context) ([]*CleanupFailureRe
 func (NoopCleanupFailureStore) ListAll(context.Context) ([]*CleanupFailureRecord, error) {
 	return nil, nil
 }
-func (NoopCleanupFailureStore) Delete(context.Context, string) error                  { return nil }
+func (NoopCleanupFailureStore) Delete(context.Context, string) error { return nil }
 func (NoopCleanupFailureStore) UpdateRetry(context.Context, string, int, time.Time, CleanupFailureStatus) error {
 	return nil
 }

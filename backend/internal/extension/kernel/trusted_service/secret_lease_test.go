@@ -231,7 +231,7 @@ func TestSecretLease_IssueValidation(t *testing.T) {
 	}
 
 	_, err = m.Issue(SecretLeaseRequest{
-		SecretName: "key",
+		SecretName:      "key",
 		RuntimeInstance: "inst-1",
 	})
 	if err == nil {

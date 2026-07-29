@@ -8,8 +8,8 @@ import (
 )
 
 type InMemoryStateStore struct {
-	mu      sync.RWMutex
-	states  map[string]SubjectState
+	mu     sync.RWMutex
+	states map[string]SubjectState
 }
 
 func NewInMemoryStateStore() *InMemoryStateStore {

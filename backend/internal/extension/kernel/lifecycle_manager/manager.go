@@ -13,56 +13,56 @@ import (
 type CommandKind string
 
 const (
-	CmdInstall             CommandKind = "install"
-	CmdEnable              CommandKind = "enable"
-	CmdDisable             CommandKind = "disable"
-	CmdUpdate              CommandKind = "update"
-	CmdRollback            CommandKind = "rollback"
-	CmdUninstall           CommandKind = "uninstall"
-	CmdRepair              CommandKind = "repair"
-	CmdEnableModule        CommandKind = "enable_module"
-	CmdDisableModule       CommandKind = "disable_module"
+	CmdInstall                 CommandKind = "install"
+	CmdEnable                  CommandKind = "enable"
+	CmdDisable                 CommandKind = "disable"
+	CmdUpdate                  CommandKind = "update"
+	CmdRollback                CommandKind = "rollback"
+	CmdUninstall               CommandKind = "uninstall"
+	CmdRepair                  CommandKind = "repair"
+	CmdEnableModule            CommandKind = "enable_module"
+	CmdDisableModule           CommandKind = "disable_module"
 	CmdSetContributionOverride CommandKind = "set_contribution_override"
 )
 
 type LifecycleCommand struct {
-	Kind            CommandKind
-	ExtensionID     domain.ExtensionID
-	ModuleID        domain.ModuleID
-	ContributionID  domain.ContributionID
-	TargetVersion   domain.SemanticVersion
-	PackageID       string
-	SnapshotID      string
-	Reason          string
-	DryRun          bool
-	Force           bool
-	UserID          string
-	RequestID       string
-	Metadata        map[string]any
+	Kind           CommandKind
+	ExtensionID    domain.ExtensionID
+	ModuleID       domain.ModuleID
+	ContributionID domain.ContributionID
+	TargetVersion  domain.SemanticVersion
+	PackageID      string
+	SnapshotID     string
+	Reason         string
+	DryRun         bool
+	Force          bool
+	UserID         string
+	RequestID      string
+	Metadata       map[string]any
 }
 
 type LifecyclePlan struct {
-	Command         LifecycleCommand
-	CurrentState    LifecycleStateSnapshot
-	TargetState     LifecycleStateSnapshot
-	Steps           []LifecycleStep
-	Risks           []string
-	BlockingIssues  []string
-	Compensations   []CompensationAction
-	AuditSummary    string
+	Command           LifecycleCommand
+	CurrentState      LifecycleStateSnapshot
+	TargetState       LifecycleStateSnapshot
+	Steps             []LifecycleStep
+	Risks             []string
+	BlockingIssues    []string
+	Compensations     []CompensationAction
+	AuditSummary      string
 	EstimatedDuration time.Duration
-	GeneratedAt     time.Time
+	GeneratedAt       time.Time
 }
 
 type LifecycleStateSnapshot struct {
-	ExtensionID    domain.ExtensionID
-	Installation   *domain.ExtensionInstallation
-	Definition     *domain.ExtensionDefinition
-	Modules        []domain.ModuleDefinition
-	Contributions  []domain.ContributionDefinition
-	Runtime        []domain.RuntimeInstance
-	Enablement     domain.EnablementState
-	Dependencies   []domain.DependencyDefinition
+	ExtensionID   domain.ExtensionID
+	Installation  *domain.ExtensionInstallation
+	Definition    *domain.ExtensionDefinition
+	Modules       []domain.ModuleDefinition
+	Contributions []domain.ContributionDefinition
+	Runtime       []domain.RuntimeInstance
+	Enablement    domain.EnablementState
+	Dependencies  []domain.DependencyDefinition
 }
 
 type LifecycleStep struct {
@@ -74,22 +74,22 @@ type LifecycleStep struct {
 }
 
 type CompensationAction struct {
-	StepID   string
-	Action   string
-	Reason   string
+	StepID string
+	Action string
+	Reason string
 }
 
 type LifecycleResult struct {
-	Command       LifecycleCommand
-	Status        string
-	StartedAt     time.Time
-	CompletedAt   *time.Time
-	Applied       []string
-	Failed        []string
-	Skipped       []string
-	FinalState    LifecycleStateSnapshot
-	Error         string
-	OperationID   string
+	Command     LifecycleCommand
+	Status      string
+	StartedAt   time.Time
+	CompletedAt *time.Time
+	Applied     []string
+	Failed      []string
+	Skipped     []string
+	FinalState  LifecycleStateSnapshot
+	Error       string
+	OperationID string
 }
 
 type CommandValidator interface {
@@ -123,13 +123,13 @@ type LifecycleAuditEvent struct {
 }
 
 type Manager struct {
-	mu          sync.Mutex
-	inProgress  map[domain.ExtensionID]string
-	validators  []CommandValidator
-	loader      StateLoader
-	preflight   PreflightChecker
-	executor    PlanExecutor
-	audit       AuditWriter
+	mu         sync.Mutex
+	inProgress map[domain.ExtensionID]string
+	validators []CommandValidator
+	loader     StateLoader
+	preflight  PreflightChecker
+	executor   PlanExecutor
+	audit      AuditWriter
 }
 
 func NewManager(loader StateLoader, preflight PreflightChecker, executor PlanExecutor, audit AuditWriter) *Manager {

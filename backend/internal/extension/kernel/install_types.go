@@ -55,23 +55,23 @@ type PreviewScope struct {
 }
 
 type InstallPreview struct {
-	ExtensionID         string                                 `json:"extensionId"`
-	Name                string                                 `json:"name"`
-	Version             string                                 `json:"version"`
-	Publisher           string                                 `json:"publisher"`
-	Installable         bool                                   `json:"installable"`
-	Category            PreviewCategory                        `json:"category"`
-	ArchiveHash         string                                 `json:"archiveHash"`
-	ContentTreeHash     string                                 `json:"contentTreeHash"`
-	SecurityPassed      bool                                   `json:"securityPassed"`
+	ExtensionID         string                                  `json:"extensionId"`
+	Name                string                                  `json:"name"`
+	Version             string                                  `json:"version"`
+	Publisher           string                                  `json:"publisher"`
+	Installable         bool                                    `json:"installable"`
+	Category            PreviewCategory                         `json:"category"`
+	ArchiveHash         string                                  `json:"archiveHash"`
+	ContentTreeHash     string                                  `json:"contentTreeHash"`
+	SecurityPassed      bool                                    `json:"securityPassed"`
 	SecurityReport      *package_security.PackageSecurityReport `json:"securityReport,omitempty"`
-	Manifest            manifest_v2.Manifest                   `json:"manifest"`
-	ValidationReport    manifest_v2.ValidationReport           `json:"validationReport"`
-	Issues              []PreviewIssue                         `json:"issues"`
-	Modules             []PreviewModule                        `json:"modules"`
-	MissingDependencies []PreviewDependency                    `json:"missingDependencies"`
-	RequiredPermissions []PreviewPermission                    `json:"requiredPermissions"`
-	RequiredScopes      []PreviewScope                         `json:"requiredScopes"`
+	Manifest            manifest_v2.Manifest                    `json:"manifest"`
+	ValidationReport    manifest_v2.ValidationReport            `json:"validationReport"`
+	Issues              []PreviewIssue                          `json:"issues"`
+	Modules             []PreviewModule                         `json:"modules"`
+	MissingDependencies []PreviewDependency                     `json:"missingDependencies"`
+	RequiredPermissions []PreviewPermission                     `json:"requiredPermissions"`
+	RequiredScopes      []PreviewScope                          `json:"requiredScopes"`
 }
 
 type KernelInstallResult struct {

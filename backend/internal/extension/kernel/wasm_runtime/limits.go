@@ -142,11 +142,11 @@ func (p WasmDeterminismPolicy) AllowsImport(name HostImportName) bool {
 }
 
 type EngineCapabilityReport struct {
-	InstructionFuel  bool
-	DeadlineCancel   bool
-	MemoryLimit      bool
-	TrapCapture      bool
-	HostFunction     bool
-	WasiDisabled     bool
+	InstructionFuel   bool
+	DeadlineCancel    bool
+	MemoryLimit       bool
+	TrapCapture       bool
+	HostFunction      bool
+	WasiDisabled      bool
 	InstanceIsolation bool
 }

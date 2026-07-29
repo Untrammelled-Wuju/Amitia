@@ -30,17 +30,17 @@ const (
 )
 
 type Check struct {
-	CheckID      string         `json:"checkId"`
-	Category     string         `json:"category"`
-	Title        string         `json:"title"`
-	Description  string         `json:"description"`
-	Severity     Severity       `json:"severity"`
-	Status       SecurityStatus `json:"status"`
-	StartedAt    *time.Time     `json:"startedAt,omitempty"`
-	CompletedAt  *time.Time     `json:"completedAt,omitempty"`
-	Error        string         `json:"error,omitempty"`
-	Evidence     []string       `json:"evidence,omitempty"`
-	Remediation  string         `json:"remediation,omitempty"`
+	CheckID     string         `json:"checkId"`
+	Category    string         `json:"category"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Severity    Severity       `json:"severity"`
+	Status      SecurityStatus `json:"status"`
+	StartedAt   *time.Time     `json:"startedAt,omitempty"`
+	CompletedAt *time.Time     `json:"completedAt,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Evidence    []string       `json:"evidence,omitempty"`
+	Remediation string         `json:"remediation,omitempty"`
 }
 
 type SecurityReport struct {

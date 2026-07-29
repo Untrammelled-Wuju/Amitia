@@ -31,9 +31,9 @@ func (e ValidationError) Error() string {
 }
 
 type ValidationContext struct {
-	Point       HookPointDefinition
-	Contrib     HookContributionDefinition
-	CurrentObj  map[string]any
+	Point        HookPointDefinition
+	Contrib      HookContributionDefinition
+	CurrentObj   map[string]any
 	WrittenPaths map[string]string
 }
 

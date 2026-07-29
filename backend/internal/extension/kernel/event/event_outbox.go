@@ -13,12 +13,12 @@ import (
 type OutboxStatus string
 
 const (
-	OutboxStatusPending      OutboxStatus = "pending"
+	OutboxStatusPending     OutboxStatus = "pending"
 	OutboxStatusDispatching OutboxStatus = "dispatching"
-	OutboxStatusDispatched   OutboxStatus = "dispatched"
-	OutboxStatusFailed       OutboxStatus = "failed"
-	OutboxStatusDeadLetter   OutboxStatus = "dead_letter"
-	OutboxStatusCancelled    OutboxStatus = "cancelled"
+	OutboxStatusDispatched  OutboxStatus = "dispatched"
+	OutboxStatusFailed      OutboxStatus = "failed"
+	OutboxStatusDeadLetter  OutboxStatus = "dead_letter"
+	OutboxStatusCancelled   OutboxStatus = "cancelled"
 )
 
 type OutboxRecord struct {
@@ -55,7 +55,7 @@ type OutboxRecord struct {
 	ErrorMessage         string
 	LeaseOwner           string
 	LeaseExpiresAt       *time.Time
-	DispatchedAt        *time.Time
+	DispatchedAt         *time.Time
 }
 
 type OutboxStore interface {

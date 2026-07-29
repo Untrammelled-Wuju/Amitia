@@ -30,8 +30,8 @@ func (a *PermissionSnapshotStoreAdapter) Get(ctx context.Context, snapshotID str
 
 type BrokerPermissionSnapshotChecker struct {
 	SnapshotStore PermissionSnapshotStore
-	Validator    *permission.PermissionIDValidator
-	Now          func() time.Time
+	Validator     *permission.PermissionIDValidator
+	Now           func() time.Time
 }
 
 func NewBrokerPermissionSnapshotChecker(store PermissionSnapshotStore) *BrokerPermissionSnapshotChecker {

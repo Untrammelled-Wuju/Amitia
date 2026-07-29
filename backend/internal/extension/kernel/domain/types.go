@@ -17,7 +17,7 @@ type ContributionID string
 type RuntimeID string
 
 type LocalizedText struct {
-	Default    string            `json:"default"`
+	Default      string            `json:"default"`
 	Translations map[string]string `json:"translations,omitempty"`
 }
 
@@ -129,14 +129,14 @@ func cmpInt(a, b int) int {
 type InstallationState string
 
 const (
-	InstallationStateNotInstalled     InstallationState = "not_installed"
-	InstallationStateInstalling       InstallationState = "installing"
-	InstallationStateInstalled        InstallationState = "installed"
-	InstallationStateUpdating         InstallationState = "updating"
-	InstallationStateRollingBack      InstallationState = "rolling_back"
-	InstallationStateUninstalling     InstallationState = "uninstalling"
-	InstallationStateFailed           InstallationState = "failed"
-	InstallationStateUninstallFailed  InstallationState = "uninstall_failed"
+	InstallationStateNotInstalled    InstallationState = "not_installed"
+	InstallationStateInstalling      InstallationState = "installing"
+	InstallationStateInstalled       InstallationState = "installed"
+	InstallationStateUpdating        InstallationState = "updating"
+	InstallationStateRollingBack     InstallationState = "rolling_back"
+	InstallationStateUninstalling    InstallationState = "uninstalling"
+	InstallationStateFailed          InstallationState = "failed"
+	InstallationStateUninstallFailed InstallationState = "uninstall_failed"
 )
 
 type EnablementState string
@@ -155,11 +155,11 @@ type PublisherReference struct {
 }
 
 type SignatureReference struct {
-	Algorithm       string `json:"algorithm,omitempty"`
-	KeyID           string `json:"keyId,omitempty"`
-	SignedAt        *time.Time `json:"signedAt,omitempty"`
-	VerifiedAt      *time.Time `json:"verifiedAt,omitempty"`
-	Status          string `json:"status,omitempty"`
+	Algorithm  string     `json:"algorithm,omitempty"`
+	KeyID      string     `json:"keyId,omitempty"`
+	SignedAt   *time.Time `json:"signedAt,omitempty"`
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+	Status     string     `json:"status,omitempty"`
 }
 
 type PackageReference struct {
@@ -185,11 +185,11 @@ type ExtensionIntegrity struct {
 }
 
 type ExtensionPolicies struct {
-	AutoUpdate      bool `json:"autoUpdate,omitempty"`
-	BackgroundTasks bool `json:"backgroundTasks,omitempty"`
-	NetworkAccess   bool `json:"networkAccess,omitempty"`
+	AutoUpdate      bool   `json:"autoUpdate,omitempty"`
+	BackgroundTasks bool   `json:"backgroundTasks,omitempty"`
+	NetworkAccess   bool   `json:"networkAccess,omitempty"`
 	Isolation       string `json:"isolation,omitempty"`
-	Sandbox         bool `json:"sandbox,omitempty"`
+	Sandbox         bool   `json:"sandbox,omitempty"`
 }
 
 type RollbackPointReference struct {
@@ -200,53 +200,53 @@ type RollbackPointReference struct {
 }
 
 type ExtensionDefinition struct {
-	ID              ExtensionID           `json:"id"`
-	Name            LocalizedText         `json:"name"`
-	Description     LocalizedText         `json:"description"`
-	Version         SemanticVersion       `json:"version"`
-	ManifestVersion int                   `json:"manifestVersion"`
+	ID              ExtensionID     `json:"id"`
+	Name            LocalizedText   `json:"name"`
+	Description     LocalizedText   `json:"description"`
+	Version         SemanticVersion `json:"version"`
+	ManifestVersion int             `json:"manifestVersion"`
 
-	Publisher       PublisherReference   `json:"publisher"`
-	Package         PackageReference     `json:"package"`
+	Publisher PublisherReference `json:"publisher"`
+	Package   PackageReference   `json:"package"`
 
-	Modules         []ModuleDefinition   `json:"modules"`
-	Dependencies    []DependencyDefinition `json:"dependencies,omitempty"`
-	Compatibility   ExtensionCompatibility `json:"compatibility"`
-	Integrity       ExtensionIntegrity   `json:"integrity"`
-	Policies        ExtensionPolicies    `json:"policies"`
+	Modules       []ModuleDefinition     `json:"modules"`
+	Dependencies  []DependencyDefinition `json:"dependencies,omitempty"`
+	Compatibility ExtensionCompatibility `json:"compatibility"`
+	Integrity     ExtensionIntegrity     `json:"integrity"`
+	Policies      ExtensionPolicies      `json:"policies"`
 
-	Metadata        map[string]any       `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type ExtensionPackage struct {
-	PackageID       string            `json:"packageId"`
-	ExtensionID     ExtensionID       `json:"extensionId"`
-	Version         SemanticVersion   `json:"version"`
-	ArtifactID      string            `json:"artifactId"`
-	ManifestVersion int               `json:"manifestVersion"`
-	ArchiveHash     string            `json:"archiveHash"`
-	ContentTreeHash string            `json:"contentTreeHash"`
+	PackageID       string             `json:"packageId"`
+	ExtensionID     ExtensionID        `json:"extensionId"`
+	Version         SemanticVersion    `json:"version"`
+	ArtifactID      string             `json:"artifactId"`
+	ManifestVersion int                `json:"manifestVersion"`
+	ArchiveHash     string             `json:"archiveHash"`
+	ContentTreeHash string             `json:"contentTreeHash"`
 	Signature       SignatureReference `json:"signature"`
 	Publisher       PublisherReference `json:"publisher"`
-	CreatedAt       time.Time         `json:"createdAt"`
+	CreatedAt       time.Time          `json:"createdAt"`
 }
 
 type ExtensionInstallation struct {
-	InstallationID    string             `json:"installationId"`
-	ExtensionID       ExtensionID        `json:"extensionId"`
-	InstalledVersion  SemanticVersion    `json:"installedVersion"`
-	PackageID         string             `json:"packageId"`
+	InstallationID   string          `json:"installationId"`
+	ExtensionID      ExtensionID     `json:"extensionId"`
+	InstalledVersion SemanticVersion `json:"installedVersion"`
+	PackageID        string          `json:"packageId"`
 
 	InstallationState InstallationState `json:"installationState"`
 	EnablementState   EnablementState   `json:"enablementState"`
 
-	InstalledAt       time.Time         `json:"installedAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
-	Generation        int64             `json:"generation"`
+	InstalledAt time.Time `json:"installedAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Generation  int64     `json:"generation"`
 
-	ActiveSnapshotID  string                  `json:"activeSnapshotId,omitempty"`
-	RollbackPoints    []RollbackPointReference `json:"rollbackPoints,omitempty"`
-	Metadata          map[string]any           `json:"metadata,omitempty"`
+	ActiveSnapshotID string                   `json:"activeSnapshotId,omitempty"`
+	RollbackPoints   []RollbackPointReference `json:"rollbackPoints,omitempty"`
+	Metadata         map[string]any           `json:"metadata,omitempty"`
 }
 
 func (e *ExtensionDefinition) Validate() error {
@@ -301,12 +301,12 @@ func (e *ExtensionDefinition) AllContributions() []ContributionDefinition {
 type ModuleType string
 
 const (
-	ModuleTypeBuiltin   ModuleType = "builtin"
-	ModuleTypeNative    ModuleType = "native"
+	ModuleTypeBuiltin    ModuleType = "builtin"
+	ModuleTypeNative     ModuleType = "native"
 	ModuleTypeJavaScript ModuleType = "javascript"
-	ModuleTypeWASM      ModuleType = "wasm"
-	ModuleTypeService   ModuleType = "service"
-	ModuleTypeDataOnly  ModuleType = "data_only"
+	ModuleTypeWASM       ModuleType = "wasm"
+	ModuleTypeService    ModuleType = "service"
+	ModuleTypeDataOnly   ModuleType = "data_only"
 )
 
 type ModuleCompatibility struct {
@@ -315,18 +315,18 @@ type ModuleCompatibility struct {
 }
 
 type ModulePolicies struct {
-	Isolation       string `json:"isolation,omitempty"`
-	NetworkAccess   bool   `json:"networkAccess,omitempty"`
-	FileSystemAccess bool  `json:"fileSystemAccess,omitempty"`
+	Isolation        string `json:"isolation,omitempty"`
+	NetworkAccess    bool   `json:"networkAccess,omitempty"`
+	FileSystemAccess bool   `json:"fileSystemAccess,omitempty"`
 }
 
 type ModuleDefinition struct {
-	ID            ModuleID           `json:"id"`
-	ExtensionID   ExtensionID       `json:"extensionId"`
-	Name          LocalizedText     `json:"name"`
-	Description   LocalizedText     `json:"description"`
-	Type          ModuleType        `json:"type"`
-	Version       string            `json:"version,omitempty"`
+	ID          ModuleID      `json:"id"`
+	ExtensionID ExtensionID   `json:"extensionId"`
+	Name        LocalizedText `json:"name"`
+	Description LocalizedText `json:"description"`
+	Type        ModuleType    `json:"type"`
+	Version     string        `json:"version,omitempty"`
 
 	Runtime       *RuntimeDefinition       `json:"runtime,omitempty"`
 	Contributions []ContributionDefinition `json:"contributions"`
@@ -357,38 +357,38 @@ func (m *ModuleDefinition) Validate() error {
 type ContributionKind string
 
 const (
-	ContributionKindTool         ContributionKind = "tool"
-	ContributionKindAgentSkill   ContributionKind = "agent_skill"
-	ContributionKindWorkflow     ContributionKind = "workflow"
-	ContributionKindMCPServer    ContributionKind = "mcp_server"
-	ContributionKindHook         ContributionKind = "hook"
+	ContributionKindTool              ContributionKind = "tool"
+	ContributionKindAgentSkill        ContributionKind = "agent_skill"
+	ContributionKindWorkflow          ContributionKind = "workflow"
+	ContributionKindMCPServer         ContributionKind = "mcp_server"
+	ContributionKindHook              ContributionKind = "hook"
 	ContributionKindEventSubscription ContributionKind = "event_subscription"
-	ContributionKindSchedule     ContributionKind = "schedule"
-	ContributionKindUIPage       ContributionKind = "ui_page"
-	ContributionKindUIPanel      ContributionKind = "ui_panel"
-	ContributionKindUIChat       ContributionKind = "ui_chat"
-	ContributionKindUIContextAction ContributionKind = "ui_context_action"
-	ContributionKindUIDesktop    ContributionKind = "ui_desktop"
+	ContributionKindSchedule          ContributionKind = "schedule"
+	ContributionKindUIPage            ContributionKind = "ui_page"
+	ContributionKindUIPanel           ContributionKind = "ui_panel"
+	ContributionKindUIChat            ContributionKind = "ui_chat"
+	ContributionKindUIContextAction   ContributionKind = "ui_context_action"
+	ContributionKindUIDesktop         ContributionKind = "ui_desktop"
 	ContributionKindBackgroundService ContributionKind = "background_service"
-	ContributionKindProvider     ContributionKind = "provider"
+	ContributionKindProvider          ContributionKind = "provider"
 )
 
 type ContributionDefinition struct {
-	ID           ContributionID     `json:"id"`
-	ModuleID     ModuleID           `json:"moduleId"`
-	ExtensionID  ExtensionID        `json:"extensionId"`
-	Kind         ContributionKind   `json:"kind"`
-	Name         LocalizedText      `json:"name"`
-	Description  LocalizedText      `json:"description,omitempty"`
-	Version      string             `json:"version,omitempty"`
+	ID          ContributionID   `json:"id"`
+	ModuleID    ModuleID         `json:"moduleId"`
+	ExtensionID ExtensionID      `json:"extensionId"`
+	Kind        ContributionKind `json:"kind"`
+	Name        LocalizedText    `json:"name"`
+	Description LocalizedText    `json:"description,omitempty"`
+	Version     string           `json:"version,omitempty"`
 
-	Definition   map[string]any     `json:"definition"`
-	RequiredPermissions []string    `json:"requiredPermissions,omitempty"`
-	RequiredScope      []string     `json:"requiredScope,omitempty"`
-	RuntimeBinding     *RuntimeBinding `json:"runtimeBinding,omitempty"`
-	Exposure           Exposure     `json:"exposure,omitempty"`
+	Definition          map[string]any  `json:"definition"`
+	RequiredPermissions []string        `json:"requiredPermissions,omitempty"`
+	RequiredScope       []string        `json:"requiredScope,omitempty"`
+	RuntimeBinding      *RuntimeBinding `json:"runtimeBinding,omitempty"`
+	Exposure            Exposure        `json:"exposure,omitempty"`
 
-	Metadata      map[string]any    `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 func (c *ContributionDefinition) Validate() error {
@@ -405,9 +405,9 @@ func (c *ContributionDefinition) Validate() error {
 }
 
 type Exposure struct {
-	VisibleByDefault bool     `json:"visibleByDefault,omitempty"`
-	HiddenFromDiscovery bool  `json:"hiddenFromDiscovery,omitempty"`
-	RequiredRoles     []string `json:"requiredRoles,omitempty"`
+	VisibleByDefault    bool     `json:"visibleByDefault,omitempty"`
+	HiddenFromDiscovery bool     `json:"hiddenFromDiscovery,omitempty"`
+	RequiredRoles       []string `json:"requiredRoles,omitempty"`
 }
 
 type RuntimeType string
@@ -423,39 +423,39 @@ const (
 )
 
 type RuntimeDefinition struct {
-	Type         RuntimeType           `json:"type"`
-	EntryPoint   string                `json:"entryPoint,omitempty"`
-	WorkerCount  int                   `json:"workerCount,omitempty"`
-	Timeout      time.Duration         `json:"timeout,omitempty"`
-	Memory       int64                 `json:"memory,omitempty"`
-	Permissions  []string              `json:"permissions,omitempty"`
-	Capabilities map[string]bool       `json:"capabilities,omitempty"`
-	Env          map[string]string     `json:"env,omitempty"`
+	Type         RuntimeType       `json:"type"`
+	EntryPoint   string            `json:"entryPoint,omitempty"`
+	WorkerCount  int               `json:"workerCount,omitempty"`
+	Timeout      time.Duration     `json:"timeout,omitempty"`
+	Memory       int64             `json:"memory,omitempty"`
+	Permissions  []string          `json:"permissions,omitempty"`
+	Capabilities map[string]bool   `json:"capabilities,omitempty"`
+	Env          map[string]string `json:"env,omitempty"`
 }
 
 type RuntimeBinding struct {
-	RuntimeID    RuntimeID    `json:"runtimeId"`
-	RuntimeType  RuntimeType  `json:"runtimeType"`
-	Generation   int64        `json:"generation"`
-	InstanceID   string       `json:"instanceId,omitempty"`
+	RuntimeID   RuntimeID   `json:"runtimeId"`
+	RuntimeType RuntimeType `json:"runtimeType"`
+	Generation  int64       `json:"generation"`
+	InstanceID  string      `json:"instanceId,omitempty"`
 }
 
 type RuntimeInstance struct {
-	InstanceID   string            `json:"instanceId"`
-	RuntimeID    RuntimeID         `json:"runtimeId"`
-	ModuleID     ModuleID          `json:"moduleId"`
-	ExtensionID  ExtensionID       `json:"extensionId"`
-	RuntimeType  RuntimeType       `json:"runtimeType"`
-	Generation   int64             `json:"generation"`
+	InstanceID  string      `json:"instanceId"`
+	RuntimeID   RuntimeID   `json:"runtimeId"`
+	ModuleID    ModuleID    `json:"moduleId"`
+	ExtensionID ExtensionID `json:"extensionId"`
+	RuntimeType RuntimeType `json:"runtimeType"`
+	Generation  int64       `json:"generation"`
 
-	DesiredState string            `json:"desiredState"`
-	ActualState  string            `json:"actualState"`
-	Health       string            `json:"health"`
-	Circuit      string            `json:"circuit"`
+	DesiredState string `json:"desiredState"`
+	ActualState  string `json:"actualState"`
+	Health       string `json:"health"`
+	Circuit      string `json:"circuit"`
 
-	StartedAt    *time.Time        `json:"startedAt,omitempty"`
-	StoppedAt    *time.Time        `json:"stoppedAt,omitempty"`
-	Metadata     map[string]any    `json:"metadata,omitempty"`
+	StartedAt *time.Time     `json:"startedAt,omitempty"`
+	StoppedAt *time.Time     `json:"stoppedAt,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type DependencyType string
@@ -469,16 +469,16 @@ const (
 )
 
 type DependencyDefinition struct {
-	Type     DependencyType  `json:"type"`
-	ID       string          `json:"id"`
-	Version  string          `json:"version,omitempty"`
-	Optional bool            `json:"optional,omitempty"`
-	Reason   string          `json:"reason,omitempty"`
+	Type     DependencyType `json:"type"`
+	ID       string         `json:"id"`
+	Version  string         `json:"version,omitempty"`
+	Optional bool           `json:"optional,omitempty"`
+	Reason   string         `json:"reason,omitempty"`
 }
 
 type DependencyNode struct {
-	ExtensionID ExtensionID
-	ModuleID    ModuleID
+	ExtensionID  ExtensionID
+	ModuleID     ModuleID
 	Dependencies []DependencyDefinition
 }
 
@@ -639,26 +639,26 @@ func (g *DependencyGraph) TopologicalSort() ([]string, error) {
 }
 
 type Artifact struct {
-	ArtifactID    string            `json:"artifactId"`
-	ExtensionID   ExtensionID       `json:"extensionId"`
-	Version       SemanticVersion   `json:"version"`
-	Path          string            `json:"path"`
-	Size          int64             `json:"size"`
-	Hash          string            `json:"hash"`
-	ManifestHash  string            `json:"manifestHash,omitempty"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	Metadata      map[string]any    `json:"metadata,omitempty"`
+	ArtifactID   string          `json:"artifactId"`
+	ExtensionID  ExtensionID     `json:"extensionId"`
+	Version      SemanticVersion `json:"version"`
+	Path         string          `json:"path"`
+	Size         int64           `json:"size"`
+	Hash         string          `json:"hash"`
+	ManifestHash string          `json:"manifestHash,omitempty"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	Metadata     map[string]any  `json:"metadata,omitempty"`
 }
 
 type ResourceOwnership struct {
-	ResourceID   string            `json:"resourceId"`
-	OwnerType    string            `json:"ownerType"`
-	OwnerID      string            `json:"ownerId"`
-	ResourceType string            `json:"resourceType"`
-	Reference    string            `json:"reference"`
-	AcquiredAt   time.Time         `json:"acquiredAt"`
-	ExpiresAt    *time.Time        `json:"expiresAt,omitempty"`
-	Metadata     map[string]any    `json:"metadata,omitempty"`
+	ResourceID   string         `json:"resourceId"`
+	OwnerType    string         `json:"ownerType"`
+	OwnerID      string         `json:"ownerId"`
+	ResourceType string         `json:"resourceType"`
+	Reference    string         `json:"reference"`
+	AcquiredAt   time.Time      `json:"acquiredAt"`
+	ExpiresAt    *time.Time     `json:"expiresAt,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 type DefinitionRepository interface {

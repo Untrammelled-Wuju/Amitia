@@ -10,23 +10,23 @@ import (
 )
 
 type DiagnosticRepository struct {
-	mu         sync.RWMutex
-	extensions []ExtensionSummary
+	mu          sync.RWMutex
+	extensions  []ExtensionSummary
 	invocations []InvocationRecord
-	events     []EventRecord
-	hooks      []HookRecord
-	tasks      []TaskRecord
-	sessions   []UISessionRecord
-	storage    []StorageEntryRecord
+	events      []EventRecord
+	hooks       []HookRecord
+	tasks       []TaskRecord
+	sessions    []UISessionRecord
+	storage     []StorageEntryRecord
 	permissions []PermissionGrantRecord
-	scopes     []ScopeRecord
-	resources  []ResourceRecord
-	lifecycle  []LifecycleEventRecord
-	logs       []LogEntry
+	scopes      []ScopeRecord
+	resources   []ResourceRecord
+	lifecycle   []LifecycleEventRecord
+	logs        []LogEntry
 	performance []PerformanceRecord
-	migration  []MigrationRecord
-	compat     []CompatibilityRecord
-	maxItems   int
+	migration   []MigrationRecord
+	compat      []CompatibilityRecord
+	maxItems    int
 }
 
 func NewDiagnosticRepository(maxItems int) *DiagnosticRepository {
@@ -37,29 +37,29 @@ func NewDiagnosticRepository(maxItems int) *DiagnosticRepository {
 }
 
 type InvocationRecord struct {
-	ID           string                 `json:"id"`
-	ExtensionID  string                 `json:"extensionId"`
-	ModuleID     string                 `json:"moduleId"`
-	ToolID       string                 `json:"toolId"`
-	StartedAt    time.Time              `json:"startedAt"`
-	CompletedAt  *time.Time             `json:"completedAt,omitempty"`
-	Status       string                 `json:"status"`
-	DurationMs   int64                  `json:"durationMs"`
-	Input        map[string]interface{} `json:"input,omitempty"`
-	Output       map[string]interface{} `json:"output,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	IdempotencyKey string               `json:"idempotencyKey,omitempty"`
-	Trace        string                 `json:"trace,omitempty"`
+	ID             string                 `json:"id"`
+	ExtensionID    string                 `json:"extensionId"`
+	ModuleID       string                 `json:"moduleId"`
+	ToolID         string                 `json:"toolId"`
+	StartedAt      time.Time              `json:"startedAt"`
+	CompletedAt    *time.Time             `json:"completedAt,omitempty"`
+	Status         string                 `json:"status"`
+	DurationMs     int64                  `json:"durationMs"`
+	Input          map[string]interface{} `json:"input,omitempty"`
+	Output         map[string]interface{} `json:"output,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	IdempotencyKey string                 `json:"idempotencyKey,omitempty"`
+	Trace          string                 `json:"trace,omitempty"`
 }
 
 type EventRecord struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Source     string                 `json:"source"`
-	EmittedAt  time.Time              `json:"emittedAt"`
-	Consumed   bool                   `json:"consumed"`
-	Consumer   string                 `json:"consumer,omitempty"`
-	Payload    map[string]interface{} `json:"payload,omitempty"`
+	ID        string                 `json:"id"`
+	Type      string                 `json:"type"`
+	Source    string                 `json:"source"`
+	EmittedAt time.Time              `json:"emittedAt"`
+	Consumed  bool                   `json:"consumed"`
+	Consumer  string                 `json:"consumer,omitempty"`
+	Payload   map[string]interface{} `json:"payload,omitempty"`
 }
 
 type HookRecord struct {
@@ -74,24 +74,24 @@ type HookRecord struct {
 }
 
 type TaskRecord struct {
-	ID         string    `json:"id"`
-	TaskID     string    `json:"taskId"`
-	Extension  string    `json:"extension"`
-	StartedAt  time.Time `json:"startedAt"`
+	ID          string     `json:"id"`
+	TaskID      string     `json:"taskId"`
+	Extension   string     `json:"extension"`
+	StartedAt   time.Time  `json:"startedAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
-	Status     string    `json:"status"`
-	Progress   float64   `json:"progress"`
-	Attempt    int       `json:"attempt"`
+	Status      string     `json:"status"`
+	Progress    float64    `json:"progress"`
+	Attempt     int        `json:"attempt"`
 }
 
 type UISessionRecord struct {
-	ID         string    `json:"id"`
-	Extension  string    `json:"extension"`
-	Contribution string  `json:"contribution"`
-	StartedAt  time.Time `json:"startedAt"`
-	LastActive time.Time `json:"lastActive"`
-	Origin     string    `json:"origin"`
-	CSPViolations int    `json:"cspViolations"`
+	ID            string    `json:"id"`
+	Extension     string    `json:"extension"`
+	Contribution  string    `json:"contribution"`
+	StartedAt     time.Time `json:"startedAt"`
+	LastActive    time.Time `json:"lastActive"`
+	Origin        string    `json:"origin"`
+	CSPViolations int       `json:"cspViolations"`
 }
 
 type StorageEntryRecord struct {
@@ -144,17 +144,17 @@ type LogEntry struct {
 }
 
 type PerformanceRecord struct {
-	Extension string  `json:"extension"`
-	Metric    string  `json:"metric"`
-	Value     float64 `json:"value"`
+	Extension string    `json:"extension"`
+	Metric    string    `json:"metric"`
+	Value     float64   `json:"value"`
 	At        time.Time `json:"at"`
 }
 
 type MigrationRecord struct {
-	Stage     string    `json:"stage"`
-	Status    string    `json:"status"`
-	At        time.Time `json:"at"`
-	Details   string    `json:"details,omitempty"`
+	Stage   string    `json:"stage"`
+	Status  string    `json:"status"`
+	At      time.Time `json:"at"`
+	Details string    `json:"details,omitempty"`
 }
 
 type CompatibilityRecord struct {

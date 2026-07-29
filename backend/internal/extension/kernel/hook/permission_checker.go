@@ -27,9 +27,9 @@ func (c *PermissionBrokerChecker) Check(ctx context.Context, extensionID string,
 			Type: permission.SubjectExtension,
 			ID:   extensionID,
 		},
-		Requirements:  requirements,
+		Requirements: requirements,
 		InvocationID: invocationID,
-		IsBackground:  false,
+		IsBackground: false,
 	}
 
 	result := c.Broker.Evaluate(ctx, req)

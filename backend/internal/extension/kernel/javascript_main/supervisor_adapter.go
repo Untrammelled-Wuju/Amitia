@@ -149,9 +149,9 @@ func (m *managedPluginHost) Health(_ context.Context) runtime_supervisor.HealthR
 	}
 
 	metrics := map[string]any{
-		"crashCount":          h.CrashCount,
-		"activeInvocations":   h.ActiveInvocations,
-		"queuedInvocations":  h.QueuedInvocations,
+		"crashCount":        h.CrashCount,
+		"activeInvocations": h.ActiveInvocations,
+		"queuedInvocations": h.QueuedInvocations,
 	}
 
 	return runtime_supervisor.HealthReport{

@@ -10,9 +10,9 @@ import (
 type HandlerType string
 
 const (
-	HandlerTypeTool    HandlerType = "tool"
-	HandlerTypeEvent   HandlerType = "event"
-	HandlerTypeHook    HandlerType = "hook"
+	HandlerTypeTool     HandlerType = "tool"
+	HandlerTypeEvent    HandlerType = "event"
+	HandlerTypeHook     HandlerType = "hook"
 	HandlerTypeProvider HandlerType = "provider"
 	HandlerTypeSchedule HandlerType = "schedule"
 )
@@ -26,10 +26,10 @@ type HandlerBinding struct {
 type HandlerFunc func(input interface{}, ctx InvocationContext) (interface{}, error)
 
 type HandlerRegistry struct {
-	mu           sync.RWMutex
-	allowed      map[string]AllowedContribution
-	bound        map[string]HandlerBinding
-	handlers     map[string]HandlerFunc
+	mu       sync.RWMutex
+	allowed  map[string]AllowedContribution
+	bound    map[string]HandlerBinding
+	handlers map[string]HandlerFunc
 }
 
 func NewHandlerRegistry(allowed []AllowedContribution) *HandlerRegistry {

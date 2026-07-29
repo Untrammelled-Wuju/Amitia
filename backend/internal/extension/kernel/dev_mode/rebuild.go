@@ -96,9 +96,9 @@ func (p *RebuildPipeline) SetTscPath(path string) {
 }
 
 var (
-	ErrBuildInProgress   = errors.New("dev_mode: build already in progress")
-	ErrBuildFailed       = errors.New("dev_mode: build failed")
-	ErrNoSourceFiles     = errors.New("dev_mode: no source files found")
+	ErrBuildInProgress       = errors.New("dev_mode: build already in progress")
+	ErrBuildFailed           = errors.New("dev_mode: build failed")
+	ErrNoSourceFiles         = errors.New("dev_mode: no source files found")
 	ErrRegistryNotConfigured = errors.New("dev_mode: registry not configured")
 )
 

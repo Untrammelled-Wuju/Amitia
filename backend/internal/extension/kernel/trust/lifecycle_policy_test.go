@@ -182,7 +182,7 @@ func TestPolicyOwnershipTransferRequiresConfirmation(t *testing.T) {
 func TestPolicyHighRiskRuntimeRequiresTrusted(t *testing.T) {
 	engine, _, _, _, _ := setupPolicyEngine(t)
 	result := engine.Evaluate(context.Background(), PolicyInput{
-		PublisherID: "com.unknown",
+		PublisherID:     "com.unknown",
 		RuntimeTypeRisk: RuntimeRiskCritical,
 		SignatureResult: SignatureVerificationResult{
 			Valid:  false,
@@ -312,12 +312,12 @@ func TestUpdateContinuityKeyRotation(t *testing.T) {
 				State:       KeyStateRotated,
 			},
 			{
-				KeyID:             "k-new",
-				PublisherID:       "com.example",
-				PublicKey:         pub2,
-				Algorithm:         AlgorithmEd25519,
-				State:             KeyStateActive,
-				RotatedFrom:       "k-old",
+				KeyID:              "k-new",
+				PublisherID:        "com.example",
+				PublicKey:          pub2,
+				Algorithm:          AlgorithmEd25519,
+				State:              KeyStateActive,
+				RotatedFrom:        "k-old",
 				ContinuitySignedBy: "k-old",
 			},
 		},

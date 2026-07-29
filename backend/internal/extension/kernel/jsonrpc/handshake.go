@@ -42,16 +42,16 @@ type HelloMessage struct {
 }
 
 type WelcomeMessage struct {
-	ProtocolVersion string            `json:"protocol_version"`
-	SessionID       string            `json:"session_id"`
-	SessionToken    string            `json:"session_token"`
-	HostAPIVersion  string            `json:"host_api_version"`
-	Features        map[string]bool   `json:"features"`
-	Limits          SessionLimits     `json:"limits"`
-	ClockOffset     int64             `json:"clock_offset_ms"`
-	ExpiresAt       time.Time         `json:"expires_at"`
-	InstanceID      string            `json:"instance_id"`
-	Generation      int64             `json:"generation"`
+	ProtocolVersion string          `json:"protocol_version"`
+	SessionID       string          `json:"session_id"`
+	SessionToken    string          `json:"session_token"`
+	HostAPIVersion  string          `json:"host_api_version"`
+	Features        map[string]bool `json:"features"`
+	Limits          SessionLimits   `json:"limits"`
+	ClockOffset     int64           `json:"clock_offset_ms"`
+	ExpiresAt       time.Time       `json:"expires_at"`
+	InstanceID      string          `json:"instance_id"`
+	Generation      int64           `json:"generation"`
 }
 
 type SessionLimits struct {
@@ -67,19 +67,19 @@ type SessionLimits struct {
 }
 
 type Session struct {
-	ID           string
-	Token        string
-	InstanceID   string
-	Generation   int64
-	RuntimeType  RuntimeType
+	ID             string
+	Token          string
+	InstanceID     string
+	Generation     int64
+	RuntimeType    RuntimeType
 	DefinitionHash string
-	Features     map[string]bool
-	Limits       SessionLimits
-	CreatedAt    time.Time
-	ExpiresAt    time.Time
-	LastActivity time.Time
-	mu           sync.RWMutex
-	closed       bool
+	Features       map[string]bool
+	Limits         SessionLimits
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	LastActivity   time.Time
+	mu             sync.RWMutex
+	closed         bool
 }
 
 func (s *Session) IsExpired() bool {
@@ -339,14 +339,14 @@ func (h *Handshaker) validateHello(hello HelloMessage) error {
 
 func defaultHostFeatures() map[string]bool {
 	return map[string]bool{
-		"streaming":      true,
-		"cancellation":   true,
-		"backpressure":   true,
-		"diagnostics":    true,
-		"watchdog":       true,
-		"hot_reload":     false,
-		"event_inbox":    true,
-		"checkpoint":     true,
+		"streaming":    true,
+		"cancellation": true,
+		"backpressure": true,
+		"diagnostics":  true,
+		"watchdog":     true,
+		"hot_reload":   false,
+		"event_inbox":  true,
+		"checkpoint":   true,
 	}
 }
 

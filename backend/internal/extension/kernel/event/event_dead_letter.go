@@ -11,15 +11,15 @@ import (
 type DeadLetterReason string
 
 const (
-	DeadLetterMaxAttempts          DeadLetterReason = "max_attempts_exceeded"
-	DeadLetterPermanentError       DeadLetterReason = "permanent_error"
-	DeadLetterHandlerNotFound      DeadLetterReason = "handler_not_found"
-	DeadLetterSubscriptionInvalid  DeadLetterReason = "subscription_invalid"
-	DeadLetterPermissionRevoked    DeadLetterReason = "permission_revoked"
-	DeadLetterScopeInvalid         DeadLetterReason = "scope_invalid"
-	DeadLetterExtensionDisabled    DeadLetterReason = "extension_disabled"
-	DeadLetterCircuitOpen          DeadLetterReason = "circuit_open"
-	DeadLetterManualDiscard        DeadLetterReason = "manual_discard"
+	DeadLetterMaxAttempts         DeadLetterReason = "max_attempts_exceeded"
+	DeadLetterPermanentError      DeadLetterReason = "permanent_error"
+	DeadLetterHandlerNotFound     DeadLetterReason = "handler_not_found"
+	DeadLetterSubscriptionInvalid DeadLetterReason = "subscription_invalid"
+	DeadLetterPermissionRevoked   DeadLetterReason = "permission_revoked"
+	DeadLetterScopeInvalid        DeadLetterReason = "scope_invalid"
+	DeadLetterExtensionDisabled   DeadLetterReason = "extension_disabled"
+	DeadLetterCircuitOpen         DeadLetterReason = "circuit_open"
+	DeadLetterManualDiscard       DeadLetterReason = "manual_discard"
 )
 
 type DeadLetterRecord struct {
@@ -57,7 +57,7 @@ type DeadLetterStatus string
 
 const (
 	DeadLetterStatusPending   DeadLetterStatus = "pending"
-	DeadLetterStatusReplayed DeadLetterStatus = "replayed"
+	DeadLetterStatusReplayed  DeadLetterStatus = "replayed"
 	DeadLetterStatusDiscarded DeadLetterStatus = "discarded"
 )
 
@@ -107,20 +107,20 @@ func (r *DeadLetterRecord) MarkDiscarded() {
 }
 
 type ReplayRequest struct {
-	DeadLetterID       string
-	Strategy           ReplayStrategy
-	NewSubscriptionID  string
-	RequestedBy        string
-	Reason             string
+	DeadLetterID      string
+	Strategy          ReplayStrategy
+	NewSubscriptionID string
+	RequestedBy       string
+	Reason            string
 }
 
 type ReplayStrategy string
 
 const (
-	ReplaySameSubscription   ReplayStrategy = "replay_same_subscription"
-	ReplayAfterRepair        ReplayStrategy = "replay_after_repair"
-	ReplayToNewGeneration    ReplayStrategy = "replay_to_new_generation"
-	ReplayDiscard           ReplayStrategy = "discard"
+	ReplaySameSubscription ReplayStrategy = "replay_same_subscription"
+	ReplayAfterRepair      ReplayStrategy = "replay_after_repair"
+	ReplayToNewGeneration  ReplayStrategy = "replay_to_new_generation"
+	ReplayDiscard          ReplayStrategy = "discard"
 )
 
 func (r ReplayRequest) Validate() error {

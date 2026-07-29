@@ -13,24 +13,24 @@ const SystemMCPExtensionID = "system/amitia-core"
 const MCPModuleID = "mcp-servers"
 
 type MCPContributionSpec struct {
-	ServerID        string          `json:"serverId"`
-	LegacyServerID  string          `json:"legacyServerId"`
-	DisplayName     string          `json:"displayName"`
-	Description     string          `json:"description"`
-	Transport       string          `json:"transport"`
-	Endpoint        string          `json:"endpoint,omitempty"`
-	Command         string          `json:"command,omitempty"`
-	Args            []string        `json:"args,omitempty"`
+	ServerID        string            `json:"serverId"`
+	LegacyServerID  string            `json:"legacyServerId"`
+	DisplayName     string            `json:"displayName"`
+	Description     string            `json:"description"`
+	Transport       string            `json:"transport"`
+	Endpoint        string            `json:"endpoint,omitempty"`
+	Command         string            `json:"command,omitempty"`
+	Args            []string          `json:"args,omitempty"`
 	Env             map[string]string `json:"env,omitempty"`
-	Tools           []string        `json:"tools,omitempty"`
-	Resources       []string        `json:"resources,omitempty"`
-	Prompts         []string        `json:"prompts,omitempty"`
-	Permissions     []string        `json:"permissions,omitempty"`
-	RuntimeBinding  string          `json:"runtimeBinding"`
-	Scope           string          `json:"scope"`
-	AutoStart       bool            `json:"autoStart"`
-	Deprecated      bool            `json:"deprecated,omitempty"`
-	DeprecationNote string          `json:"deprecationNote,omitempty"`
+	Tools           []string          `json:"tools,omitempty"`
+	Resources       []string          `json:"resources,omitempty"`
+	Prompts         []string          `json:"prompts,omitempty"`
+	Permissions     []string          `json:"permissions,omitempty"`
+	RuntimeBinding  string            `json:"runtimeBinding"`
+	Scope           string            `json:"scope"`
+	AutoStart       bool              `json:"autoStart"`
+	Deprecated      bool              `json:"deprecated,omitempty"`
+	DeprecationNote string            `json:"deprecationNote,omitempty"`
 }
 
 type MCPMigrationRegistry struct {
@@ -116,13 +116,13 @@ func (a *LegacyMCPAdapter) TranslateLegacyServerID(legacyID string) (string, err
 }
 
 type MCPMigrationReport struct {
-	StartTime      time.Time          `json:"startTime"`
-	EndTime        time.Time          `json:"endTime"`
-	TotalLegacy    int                `json:"totalLegacy"`
-	MigratedCount  int                `json:"migratedCount"`
-	FailedEntries  []FailedMCPMigration `json:"failedEntries,omitempty"`
-	TransportBreakdown map[string]int `json:"transportBreakdown"`
-	Status         string             `json:"status"`
+	StartTime          time.Time            `json:"startTime"`
+	EndTime            time.Time            `json:"endTime"`
+	TotalLegacy        int                  `json:"totalLegacy"`
+	MigratedCount      int                  `json:"migratedCount"`
+	FailedEntries      []FailedMCPMigration `json:"failedEntries,omitempty"`
+	TransportBreakdown map[string]int       `json:"transportBreakdown"`
+	Status             string               `json:"status"`
 }
 
 type FailedMCPMigration struct {
@@ -168,9 +168,9 @@ func RunMCPMigration(ctx context.Context, registry *MCPMigrationRegistry, legacy
 }
 
 var (
-	ErrInvalidSpec         = errors.New("mcp_migration: invalid spec")
-	ErrServerExists        = errors.New("mcp_migration: server exists")
-	ErrServerNotFound      = errors.New("mcp_migration: server not found")
+	ErrInvalidSpec          = errors.New("mcp_migration: invalid spec")
+	ErrServerExists         = errors.New("mcp_migration: server exists")
+	ErrServerNotFound       = errors.New("mcp_migration: server not found")
 	ErrLegacyServerNotFound = errors.New("mcp_migration: legacy server not found")
 )
 

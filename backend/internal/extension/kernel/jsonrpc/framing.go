@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	DefaultMaxFrameBytes     = 1 << 20
-	DefaultMaxStreamChunk    = 64 * 1024
-	DefaultMaxPendingBytes   = 8 * 1024 * 1024
-	FrameHeaderSize          = 8
-	MaxFrameAbsolute         = 64 * 1024 * 1024
+	DefaultMaxFrameBytes   = 1 << 20
+	DefaultMaxStreamChunk  = 64 * 1024
+	DefaultMaxPendingBytes = 8 * 1024 * 1024
+	FrameHeaderSize        = 8
+	MaxFrameAbsolute       = 64 * 1024 * 1024
 )
 
 var (
@@ -172,8 +172,8 @@ func NewTransport(r io.Reader, w io.Writer) *ReadWriteCloser {
 	return &ReadWriteCloser{framer: framer}
 }
 
-func (t *ReadWriteCloser) Framer() *Framer        { return t.framer }
-func (t *ReadWriteCloser) Write(msg any) error    { return (&MessageWriter{framer: t.framer}).Write(msg) }
+func (t *ReadWriteCloser) Framer() *Framer     { return t.framer }
+func (t *ReadWriteCloser) Write(msg any) error { return (&MessageWriter{framer: t.framer}).Write(msg) }
 func (t *ReadWriteCloser) Read() (*Envelope, error) {
 	return (&MessageReader{framer: t.framer}).Read()
 }

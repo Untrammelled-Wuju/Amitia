@@ -21,7 +21,7 @@ func makeTestInstallerWithNamespace(t *testing.T) (*TypedContributionInstaller, 
 
 func makeToolContrib(id, extID string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:         domain.ContributionID(id),
+		ID:          domain.ContributionID(id),
 		ExtensionID: domain.ExtensionID(extID),
 		ModuleID:    "mod-1",
 		Kind:        domain.ContributionKindTool,
@@ -149,8 +149,11 @@ func TestCandidateNamespace_PromoteAtomicallySwitches(t *testing.T) {
 		t.Fatal("candidate tool-2 should be in production after promote")
 	}
 
+	if err := installer.RemoveCandidateNamespaceAfterCommit(ctx, "cand-1"); err != nil {
+		t.Fatalf("RemoveCandidateNamespaceAfterCommit: %v", err)
+	}
 	if ns.HasCandidate("cand-1") {
-		t.Fatal("candidate should be removed from namespace after successful promote")
+		t.Fatal("candidate should be removed from namespace after commit")
 	}
 }
 
@@ -325,8 +328,11 @@ func TestCandidateNamespace_StableGenerationPreservedOnPromoteFailure(t *testing
 	if !candidateExists {
 		t.Fatal("candidate tool should exist in production after successful promote")
 	}
+	if err := installer.RemoveCandidateNamespaceAfterCommit(ctx, "cand-1"); err != nil {
+		t.Fatalf("RemoveCandidateNamespaceAfterCommit: %v", err)
+	}
 	if ns.HasCandidate("cand-1") {
-		t.Fatal("candidate should be removed from namespace after promote")
+		t.Fatal("candidate should be removed from namespace after commit")
 	}
 }
 

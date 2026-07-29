@@ -10,26 +10,26 @@ import (
 )
 
 type PluginContributionSpec struct {
-	PluginID        string          `json:"pluginId"`
-	LegacyPluginID  string          `json:"legacyPluginId"`
-	ExtensionID     string          `json:"extensionId"`
-	ModuleID        string          `json:"moduleId"`
-	DisplayName     string          `json:"displayName"`
-	Description     string          `json:"description"`
-	Version         string          `json:"version"`
-	Category        string          `json:"category"`
-	EntryKind       string          `json:"entryKind"`
-	EntryPath       string          `json:"entryPath"`
-	SchemaPath      string          `json:"schemaPath,omitempty"`
-	Tools           []string        `json:"tools,omitempty"`
-	Skills          []string        `json:"skills,omitempty"`
-	Workflows       []string        `json:"workflows,omitempty"`
-	Permissions     []string        `json:"permissions,omitempty"`
-	RuntimeBinding  string          `json:"runtimeBinding"`
-	TrustLevel      string          `json:"trustLevel"`
-	Publisher       string          `json:"publisher"`
-	Deprecated      bool            `json:"deprecated,omitempty"`
-	DeprecationNote string          `json:"deprecationNote,omitempty"`
+	PluginID        string   `json:"pluginId"`
+	LegacyPluginID  string   `json:"legacyPluginId"`
+	ExtensionID     string   `json:"extensionId"`
+	ModuleID        string   `json:"moduleId"`
+	DisplayName     string   `json:"displayName"`
+	Description     string   `json:"description"`
+	Version         string   `json:"version"`
+	Category        string   `json:"category"`
+	EntryKind       string   `json:"entryKind"`
+	EntryPath       string   `json:"entryPath"`
+	SchemaPath      string   `json:"schemaPath,omitempty"`
+	Tools           []string `json:"tools,omitempty"`
+	Skills          []string `json:"skills,omitempty"`
+	Workflows       []string `json:"workflows,omitempty"`
+	Permissions     []string `json:"permissions,omitempty"`
+	RuntimeBinding  string   `json:"runtimeBinding"`
+	TrustLevel      string   `json:"trustLevel"`
+	Publisher       string   `json:"publisher"`
+	Deprecated      bool     `json:"deprecated,omitempty"`
+	DeprecationNote string   `json:"deprecationNote,omitempty"`
 }
 
 type PluginMigrationRegistry struct {
@@ -107,14 +107,14 @@ func (a *LegacyPluginAdapter) TranslateLegacyPluginID(legacyID string) (string, 
 }
 
 type PluginMigrationReport struct {
-	StartTime       time.Time              `json:"startTime"`
-	EndTime         time.Time              `json:"endTime"`
-	TotalLegacy     int                    `json:"totalLegacy"`
-	MigratedCount   int                    `json:"migratedCount"`
+	StartTime       time.Time               `json:"startTime"`
+	EndTime         time.Time               `json:"endTime"`
+	TotalLegacy     int                     `json:"totalLegacy"`
+	MigratedCount   int                     `json:"migratedCount"`
 	FailedEntries   []FailedPluginMigration `json:"failedEntries,omitempty"`
-	CategorySummary map[string]int         `json:"categorySummary"`
-	TrustBreakdown  map[string]int         `json:"trustBreakdown"`
-	Status          string                 `json:"status"`
+	CategorySummary map[string]int          `json:"categorySummary"`
+	TrustBreakdown  map[string]int          `json:"trustBreakdown"`
+	Status          string                  `json:"status"`
 }
 
 type FailedPluginMigration struct {

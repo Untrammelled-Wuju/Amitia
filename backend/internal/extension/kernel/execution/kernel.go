@@ -25,8 +25,8 @@ const (
 )
 
 type ToolExecutionRequest struct {
-	ToolID     capability.CapabilityID        `json:"toolId"`
-	Input      json.RawMessage                `json:"input"`
+	ToolID     capability.CapabilityID          `json:"toolId"`
+	Input      json.RawMessage                  `json:"input"`
 	Invocation capability.ToolInvocationContext `json:"invocation"`
 }
 

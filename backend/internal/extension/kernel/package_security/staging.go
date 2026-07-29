@@ -23,15 +23,15 @@ const (
 )
 
 type StagingArea struct {
-	ID           string        `json:"id"`
-	Path         string        `json:"path"`
-	Owner        string        `json:"owner"`
-	Source       string        `json:"source"`
-	Status       StagingStatus `json:"status"`
-	ContentHash  string        `json:"content_hash"`
-	CreatedAt    time.Time     `json:"created_at"`
-	ExpiresAt    time.Time     `json:"expires_at"`
-	SealedAt     *time.Time    `json:"sealed_at,omitempty"`
+	ID          string        `json:"id"`
+	Path        string        `json:"path"`
+	Owner       string        `json:"owner"`
+	Source      string        `json:"source"`
+	Status      StagingStatus `json:"status"`
+	ContentHash string        `json:"content_hash"`
+	CreatedAt   time.Time     `json:"created_at"`
+	ExpiresAt   time.Time     `json:"expires_at"`
+	SealedAt    *time.Time    `json:"sealed_at,omitempty"`
 }
 
 type StagingManager struct {

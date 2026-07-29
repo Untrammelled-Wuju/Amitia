@@ -37,10 +37,10 @@ type MigrationRun struct {
 }
 
 type MigrationExecutor struct {
-	mu       sync.RWMutex
-	runs     map[string][]MigrationRun
+	mu        sync.RWMutex
+	runs      map[string][]MigrationRun
 	snapshots map[string]StorageSnapshot
-	locks    map[string]bool
+	locks     map[string]bool
 }
 
 func NewMigrationExecutor() *MigrationExecutor {
@@ -52,12 +52,12 @@ func NewMigrationExecutor() *MigrationExecutor {
 }
 
 type StorageSnapshot struct {
-	SnapshotID   string
-	ExtensionID  string
-	Namespaces   []string
-	DataHash     string
-	TakenAt      time.Time
-	Data         map[string][]byte
+	SnapshotID  string
+	ExtensionID string
+	Namespaces  []string
+	DataHash    string
+	TakenAt     time.Time
+	Data        map[string][]byte
 }
 
 func (e *MigrationExecutor) SnapshotNamespaces(ctx context.Context, extensionID string, namespaces []string, data map[string][]byte) StorageSnapshot {

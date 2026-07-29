@@ -22,10 +22,10 @@ const (
 type AcceptanceStatus string
 
 const (
-	StatusPassed   AcceptanceStatus = "passed"
-	StatusFailed   AcceptanceStatus = "failed"
-	StatusSkipped  AcceptanceStatus = "skipped"
-	StatusBlocked  AcceptanceStatus = "blocked"
+	StatusPassed  AcceptanceStatus = "passed"
+	StatusFailed  AcceptanceStatus = "failed"
+	StatusSkipped AcceptanceStatus = "skipped"
+	StatusBlocked AcceptanceStatus = "blocked"
 )
 
 type Scenario struct {

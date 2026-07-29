@@ -75,8 +75,8 @@ type HookCircuitSummary struct {
 }
 
 type HookReadModel struct {
-	Pipeline  *Pipeline
-	Registry  HookPointRegistry
+	Pipeline *Pipeline
+	Registry HookPointRegistry
 }
 
 func effectiveContributionState(enabled bool, circuitState CircuitState) string {
