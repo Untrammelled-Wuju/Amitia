@@ -50,6 +50,7 @@ import SideNav from "./SideNav.vue";
 import MobileNav from "./MobileNav.vue";
 import { useTheme } from "../composables/useTheme";
 import { useUIHostSSE } from "../composables/useUIHostSSE";
+import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import {
   apiClient,
   getToken,
@@ -61,6 +62,7 @@ import { useAppStore } from "@/stores/app";
 
 const router = useRouter();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
+let electronNavCleanup: (() => void) | null = null;
 const {
   state: theme,
   resolvedMode: resolvedTheme,
@@ -183,7 +185,19 @@ onMounted(() => {
   if (isLoggedIn()) {
     fetchActiveCharacter();
     fetchUserInfo();
+    const token = getToken();
+    if (token && window.amitiaDesktop?.setAuthToken) {
+      void window.amitiaDesktop.setAuthToken(token);
+    }
     connectUIHost();
+  }
+
+  if (window.amitiaDesktop?.onUINavigate) {
+    electronNavCleanup = window.amitiaDesktop.onUINavigate((target: string) => {
+      if (target && isNavigationAllowed(target)) {
+        router.push(target).catch(() => {});
+      }
+    });
   }
 
   const interval = setInterval(() => {
@@ -193,6 +207,10 @@ onMounted(() => {
   onUnmounted(() => {
     clearInterval(interval);
     disconnectUIHost();
+    if (electronNavCleanup) {
+      electronNavCleanup();
+      electronNavCleanup = null;
+    }
   });
 });
 </script>

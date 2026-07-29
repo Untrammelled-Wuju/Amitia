@@ -66,6 +66,18 @@ const api = {
   writeClipboardText(text: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
   },
+  setAuthToken(token: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.setAuthToken, token);
+  },
+  onUINavigate(callback: (target: string) => void): () => void {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      target: string,
+    ) => callback(target);
+    ipcRenderer.on(IPC_CHANNELS.uiNavigate, listener);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.uiNavigate, listener);
+  },
   onRuntimeStatusChanged(
     callback: (status: RuntimeStatus) => void,
   ): () => void {

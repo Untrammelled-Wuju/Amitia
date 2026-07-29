@@ -16,6 +16,8 @@ export const IPC_CHANNELS = {
   setAutoLaunch: "amitia:auto-launch:set",
   autoLaunchChanged: "amitia:auto-launch:changed",
   clipboardWriteText: "amitia:clipboard:write-text",
+  setAuthToken: "amitia:auth:set-token",
+  uiNavigate: "amitia:ui:navigate",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

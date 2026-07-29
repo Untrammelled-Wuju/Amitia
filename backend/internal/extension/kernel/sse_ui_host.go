@@ -36,13 +36,13 @@ func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, titl
 	if n.hub == nil || !n.hub.HasClients() {
 		return ErrUIHostUnavailable
 	}
-	n.hub.Broadcast("ui_notify", map[string]interface{}{
-		"extensionId": extensionID,
-		"title":       title,
-		"body":        body,
-		"severity":    severity,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-	})
+	payload := map[string]interface{}{
+		"title":    title,
+		"body":     body,
+		"severity": severity,
+	}
+	envelope := NewEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
+	n.hub.Broadcast("ui_notify", envelope.ToMap())
 	return nil
 }
 
@@ -67,13 +67,15 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 		n.mu.Unlock()
 	}()
 
-	n.hub.Broadcast("ui_dialog", map[string]interface{}{
-		"dialogId":    dialogID,
-		"extensionId": extensionID,
-		"message":     message,
-		"buttons":     buttons,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-	})
+	n.hub.Broadcast("ui_dialog", func() map[string]interface{} {
+		payload := map[string]interface{}{
+			"dialogId": dialogID,
+			"message":  message,
+			"buttons":  buttons,
+		}
+		envelope := NewEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
+		return envelope.ToMap()
+	}())
 
 	select {
 	case result := <-pd.resultCh:
@@ -91,11 +93,11 @@ func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, ta
 	if n.hub == nil || !n.hub.HasClients() {
 		return ErrNavigationHostUnavailable
 	}
-	n.hub.Broadcast("ui_navigate", map[string]interface{}{
-		"extensionId": extensionID,
-		"target":      target,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
-	})
+	payload := map[string]interface{}{
+		"target": target,
+	}
+	envelope := NewEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
+	n.hub.Broadcast("ui_navigate", envelope.ToMap())
 	return nil
 }
 

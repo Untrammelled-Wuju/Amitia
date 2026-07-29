@@ -30,11 +30,17 @@ func (a *PermissionSnapshotStoreAdapter) Get(ctx context.Context, snapshotID str
 
 type BrokerPermissionSnapshotChecker struct {
 	SnapshotStore PermissionSnapshotStore
+	Validator    *permission.PermissionIDValidator
 	Now          func() time.Time
 }
 
 func NewBrokerPermissionSnapshotChecker(store PermissionSnapshotStore) *BrokerPermissionSnapshotChecker {
 	return &BrokerPermissionSnapshotChecker{SnapshotStore: store, Now: time.Now}
+}
+
+func (c *BrokerPermissionSnapshotChecker) WithValidator(v *permission.PermissionIDValidator) *BrokerPermissionSnapshotChecker {
+	c.Validator = v
+	return c
 }
 
 func (c *BrokerPermissionSnapshotChecker) Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, permissionSnapshotID string, reqs []PermissionRequirement) error {
@@ -66,7 +72,14 @@ func (c *BrokerPermissionSnapshotChecker) Check(ctx context.Context, identity ru
 		return fmt.Errorf("%w: %v", ErrPermissionDenied, err)
 	}
 
-	if len(reqs) > 0 && len(snap.GrantedPerms) > 0 {
+	if c.Validator != nil && snap.HasActionIDs(c.Validator) {
+		return fmt.Errorf("%w: permission snapshot %s contains action IDs instead of permission IDs", ErrPermissionDenied, permissionSnapshotID)
+	}
+
+	if len(reqs) > 0 {
+		if len(snap.GrantedPerms) == 0 {
+			return fmt.Errorf("%w: permission snapshot %s has no granted permissions but %d required", ErrPermissionDenied, permissionSnapshotID, len(reqs))
+		}
 		permSet := make(map[string]bool, len(snap.GrantedPerms))
 		for _, p := range snap.GrantedPerms {
 			permSet[p] = true

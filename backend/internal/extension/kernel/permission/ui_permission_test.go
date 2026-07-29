@@ -539,3 +539,59 @@ func TestAuthorizeSessionClientFakePermissionsIgnored(t *testing.T) {
 		t.Fatal("expected denial even though client might have faked permissions")
 	}
 }
+
+func TestAuthorizeSessionReturnsExtensionIdentity(t *testing.T) {
+	broker := &mockPermissionBroker{
+		evalResult: PermissionEvaluationResult{Decision: DecisionAllow},
+	}
+	scopeMgr := &mockScopeManager{
+		evalResult: scope.ScopeDecision{Allowed: true},
+	}
+	auth := NewUISessionAuthorizer(broker, scopeMgr)
+	def := makeAuthTestDefinition()
+	def.Permissions = []ui_contribution.PermissionRequirement{
+		{Name: "tool.invoke", Required: true},
+	}
+
+	result, err := auth.AuthorizeSession(context.Background(), def, "", "")
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result.ExtensionID != "ext-auth-1" {
+		t.Fatalf("expected ExtensionID=ext-auth-1, got %s", result.ExtensionID)
+	}
+	if result.ModuleID != "mod-auth-1" {
+		t.Fatalf("expected ModuleID=mod-auth-1, got %s", result.ModuleID)
+	}
+	if result.Generation != 1 {
+		t.Fatalf("expected Generation=1, got %d", result.Generation)
+	}
+}
+
+func TestAuthorizeSessionIdentityMatchesDefinition(t *testing.T) {
+	broker := &mockPermissionBroker{
+		evalResult: PermissionEvaluationResult{Decision: DecisionAllow},
+	}
+	scopeMgr := &mockScopeManager{
+		evalResult: scope.ScopeDecision{Allowed: true},
+	}
+	auth := NewUISessionAuthorizer(broker, scopeMgr)
+	def := makeAuthTestDefinition()
+	def.ExtensionID = "ext-verify-xyz"
+	def.ModuleID = "mod-verify-abc"
+	def.Integrity.Generation = 42
+
+	result, err := auth.AuthorizeSession(context.Background(), def, "char-1", "conv-1")
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if result.ExtensionID != string(def.ExtensionID) {
+		t.Fatalf("ExtensionID mismatch: auth=%s, def=%s", result.ExtensionID, def.ExtensionID)
+	}
+	if result.ModuleID != string(def.ModuleID) {
+		t.Fatalf("ModuleID mismatch: auth=%s, def=%s", result.ModuleID, def.ModuleID)
+	}
+	if result.Generation != def.Integrity.Generation {
+		t.Fatalf("Generation mismatch: auth=%d, def=%d", result.Generation, def.Integrity.Generation)
+	}
+}

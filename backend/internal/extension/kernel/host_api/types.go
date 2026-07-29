@@ -35,6 +35,7 @@ const (
 	MethodUIDialog        Method = "host.ui.dialog"
 	MethodUINavigate      Method = "host.ui.navigate"
 	MethodClipboardWrite  Method = "host.clipboard.write"
+	MethodClipboardRead   Method = "host.clipboard.read"
 	MethodCharacterRead   Method = "host.character.read"
 	MethodConversationRead Method = "host.conversation.read"
 	MethodMemoryQuery    Method = "host.memory.query"

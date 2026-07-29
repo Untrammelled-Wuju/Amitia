@@ -116,15 +116,20 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 	}
 
 	candidateID := "candidate-" + uuid.NewString()
+	var expectedStableGen int64
+	if activeGen := r.generationMgr.Active(ctx, string(extID)); activeGen != nil {
+		expectedStableGen = int64(activeGen.Generation)
+	}
 	record := &CandidateRecord{
-		CandidateID:         candidateID,
-		ExtensionID:         extID,
-		InstanceIDs:         instanceIDs,
-		GenerationID:        gen.GenerationID,
-		CandidateGeneration: int64(gen.Generation),
-		Contribs:            allContribs,
-		ArtifactPath:        rev.ArtifactPath,
-		DefinitionHash:      defHash,
+		CandidateID:             candidateID,
+		ExtensionID:             extID,
+		InstanceIDs:             instanceIDs,
+		GenerationID:            gen.GenerationID,
+		CandidateGeneration:     int64(gen.Generation),
+		ExpectedStableGeneration: expectedStableGen,
+		Contribs:                allContribs,
+		ArtifactPath:            rev.ArtifactPath,
+		DefinitionHash:           defHash,
 	}
 
 	if err := r.candidateMgr.RegisterCandidate(ctx, record); err != nil {

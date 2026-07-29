@@ -114,6 +114,8 @@ type SessionInfo struct {
 	Sandbox        SandboxType            `json:"sandbox"`
 	AllowedActions []string               `json:"allowedActions"`
 	AllowedDataSources []string           `json:"allowedDataSources"`
+	GrantedPerms   []string               `json:"grantedPerms"`
+	GrantedScopes  []string               `json:"grantedScopes"`
 }
 
 func (h *Host) GetSessionInfo(sessionID string) (*SessionInfo, error) {
@@ -137,6 +139,8 @@ func (h *Host) GetSessionInfo(sessionID string) (*SessionInfo, error) {
 		Sandbox:        session.Sandbox,
 		AllowedActions: session.AllowedActions,
 		AllowedDataSources: session.AllowedDataSources,
+		GrantedPerms:   session.GrantedPerms,
+		GrantedScopes:  session.GrantedScopes,
 	}, nil
 }
 
@@ -160,6 +164,8 @@ func (h *Host) ListSessions() []*SessionInfo {
 			Sandbox:        session.Sandbox,
 			AllowedActions: session.AllowedActions,
 			AllowedDataSources: session.AllowedDataSources,
+			GrantedPerms:   session.GrantedPerms,
+			GrantedScopes:  session.GrantedScopes,
 		})
 		session.mu.Unlock()
 	}

@@ -14,11 +14,12 @@ type ExtensionKernelReadiness struct {
 	RuntimeSupervisorReady bool
 	EnabledRuntimesReady   bool
 	LegacyCounterZero      bool
+	NoOrphanRuntimes       bool
 	MCPDuplicateDetails    []MCPDuplicateDetail
 }
 
 func (r ExtensionKernelReadiness) Ready() bool {
-	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.EnabledRuntimesReady && r.LegacyCounterZero
+	return r.TaskRuntimeReady && r.EventServiceReady && r.ScheduleServiceReady && r.RuntimeSupervisorReady && r.EnabledRuntimesReady && r.LegacyCounterZero && r.NoOrphanRuntimes
 }
 
 func (r ExtensionKernelReadiness) FailedComponents() []string {
@@ -41,6 +42,9 @@ func (r ExtensionKernelReadiness) FailedComponents() []string {
 	if !r.LegacyCounterZero {
 		failed = append(failed, "legacy_counter_zero")
 	}
+	if !r.NoOrphanRuntimes {
+		failed = append(failed, "orphan_runtimes_not_cleaned")
+	}
 	return failed
 }
 
@@ -58,24 +62,23 @@ func (c *Container) CheckExtensionKernelReadiness(ctx context.Context) Extension
 	}
 	r.RuntimeSupervisorReady = c.RuntimeSupervisor != nil
 	r.EnabledRuntimesReady = c.checkEnabledRuntimesReady(ctx)
-	counter := GlobalLegacyCallCounter()
-	if c.MCPDuplicateProvider != nil {
-		if count, err := c.MCPDuplicateProvider.CountUnresolved(ctx); err == nil {
-			counter.SetDuplicateMCPFromRegistry(count)
+
+	gateReport := c.EvaluateFinalGate(ctx)
+	r.LegacyCounterZero = gateReport.Passed
+
+	r.NoOrphanRuntimes = true
+	if c.DevModeReloader != nil {
+		if orphanCount, err := c.DevModeReloader.PendingCleanupFailures(ctx); err == nil && orphanCount > 0 {
+			r.NoOrphanRuntimes = false
+			GlobalLegacyCallCounter().SetOrphanRuntimeInstances(orphanCount)
 		}
+	}
+
+	if c.MCPDuplicateProvider != nil {
 		if details, err := c.MCPDuplicateProvider.ListUnresolved(ctx); err == nil {
 			r.MCPDuplicateDetails = details
 		}
 	}
-	metrics := counter.FinalGateMetrics()
-	allZero := true
-	for _, v := range metrics {
-		if v != 0 {
-			allZero = false
-			break
-		}
-	}
-	r.LegacyCounterZero = allZero
 	return r
 }
 

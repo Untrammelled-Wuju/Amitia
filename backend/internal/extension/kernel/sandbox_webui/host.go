@@ -134,6 +134,8 @@ type WebSession struct {
 	Surface              string
 	CharacterID          string
 	ConversationID       string
+	GrantedPerms         []string
+	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
 	mu                   sync.Mutex
@@ -328,6 +330,8 @@ type CreateSessionRequest struct {
 	Surface              string
 	CharacterID          string
 	ConversationID       string
+	GrantedPerms         []string
+	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
 }
@@ -406,7 +410,7 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	}
 
 	if permFactory != nil && permissionSnapshotID == "" {
-		pid, err := permFactory(sessionID, req.ExtensionID, req.ModuleID, req.Generation, req.CharacterID, req.ConversationID, req.AllowedActions, expiresAt)
+		pid, err := permFactory(sessionID, req.ExtensionID, req.ModuleID, req.Generation, req.CharacterID, req.ConversationID, req.GrantedPerms, expiresAt)
 		if err != nil {
 			if scopeSnapshotID != "" && releaser != nil {
 				_ = releaser(scopeSnapshotID, "")
@@ -439,6 +443,8 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		Surface:              req.Surface,
 		CharacterID:          req.CharacterID,
 		ConversationID:       req.ConversationID,
+		GrantedPerms:         req.GrantedPerms,
+		GrantedScopes:        req.GrantedScopes,
 		ScopeSnapshotID:      scopeSnapshotID,
 		PermissionSnapshotID: permissionSnapshotID,
 		subscriptions:        make(map[string]*DataSubscription),

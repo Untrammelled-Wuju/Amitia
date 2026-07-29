@@ -309,6 +309,8 @@ func (t *resourceHandleTable) cleanupExpired() {
 
 const maxToolExecutionDepth = 8
 const resourceHandleTTL = 30 * time.Minute
+const clipboardRouteTimeout = 12 * time.Second
+const maxClipboardPayloadSize = 1 * 1024 * 1024
 
 func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRouteDeps) error {
 	handleTable := newResourceHandleTable()
@@ -1410,7 +1412,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			method:          host_api.MethodClipboardWrite,
 			riskLevel:       host_api.RiskMedium,
 			sideEffectLevel: host_api.SideEffectWrite,
-			timeout:         3 * time.Second,
+			timeout:         clipboardRouteTimeout,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				if deps.ClipboardHost == nil {
 					return host_api.CallResult{
@@ -1427,13 +1429,58 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
 					}, nil
 				}
-				if err := deps.ClipboardHost.WriteText(ctx, p.Text); err != nil {
+				if len(p.Text) > maxClipboardPayloadSize {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: err.Error()},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "clipboard text exceeds maximum size"},
+					}, nil
+				}
+				if err := deps.ClipboardHost.WriteText(ctx, p.Text); err != nil {
+					code := host_api.ErrorCodeHostUnavailable
+					if errors.Is(err, ErrClipboardTextTooLarge) {
+						code = host_api.ErrorCodeInputInvalid
+					} else if errors.Is(err, ErrClipboardHostTimeout) {
+						code = host_api.ErrorCodeTimeout
+					}
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: code, Message: err.Error()},
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{"ok": true})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodClipboardRead,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         clipboardRouteTimeout,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.ClipboardHost == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "clipboard host not configured"},
+					}, nil
+				}
+				text, err := deps.ClipboardHost.ReadText(ctx)
+				if err != nil {
+					code := host_api.ErrorCodeHostUnavailable
+					if errors.Is(err, ErrClipboardHostTimeout) {
+						code = host_api.ErrorCodeTimeout
+					}
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: code, Message: err.Error()},
+					}, nil
+				}
+				if len(text) > maxClipboardPayloadSize {
+					text = text[:maxClipboardPayloadSize]
+				}
+				output, _ := json.Marshal(map[string]any{"text": text})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
 					Output: output,

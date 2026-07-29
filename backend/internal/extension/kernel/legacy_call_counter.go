@@ -89,6 +89,10 @@ func (c *LegacyCallCounter) IncOrphanRuntimeInstance() {
 	c.orphanRuntimeInstances.Add(1)
 }
 
+func (c *LegacyCallCounter) SetOrphanRuntimeInstances(n int64) {
+	c.orphanRuntimeInstances.Store(n)
+}
+
 func (c *LegacyCallCounter) IncOrphanUISession() {
 	c.orphanUISessions.Add(1)
 }

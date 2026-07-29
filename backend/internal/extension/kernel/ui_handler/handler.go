@@ -22,6 +22,11 @@ type DialogResolver interface {
 	ResolveDialog(dialogID string, result string) bool
 }
 
+type ClipboardResolver interface {
+	ResolveClipboardRequest(requestID string, text string) bool
+	FailClipboardRequest(requestID string, err error) bool
+}
+
 type HTTPHandler struct {
 	uiHost               *ui_contribution.UIHost
 	slotRegistry         *extension_slots.SlotRegistry
@@ -32,6 +37,7 @@ type HTTPHandler struct {
 	schemaLookup         func(extensionID, contributionID string) (json.RawMessage, bool)
 	scopeSnapshotCreator func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
 	dialogResolver       DialogResolver
+	clipboardResolver    ClipboardResolver
 	extRoot              string
 }
 
@@ -71,6 +77,10 @@ func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
 	h.dialogResolver = r
 }
 
+func (h *HTTPHandler) SetClipboardResolver(r ClipboardResolver) {
+	h.clipboardResolver = r
+}
+
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/slots", h.handleSlots)
 	mux.HandleFunc("/api/extensions/ui/contributions", h.handleContributions)
@@ -92,6 +102,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
 	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
+	mux.HandleFunc("/api/extensions/ui/clipboard-response", h.handleClipboardResponse)
 }
 
 func (h *HTTPHandler) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -481,9 +492,13 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
 		return
 	}
-	_, err = h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
+	auth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
+		return
+	}
+	if auth.ExtensionID != string(def.ExtensionID) || auth.ModuleID != string(def.ModuleID) || auth.Generation != def.Integrity.Generation {
+		writeError(w, http.StatusInternalServerError, "auth_identity_mismatch", "authorizer identity does not match contribution")
 		return
 	}
 	sandbox := sandbox_webui.SandboxType(def.Sandbox.Type)
@@ -518,6 +533,8 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Surface:              req.Surface,
 		CharacterID:          req.CharacterID,
 		ConversationID:       req.ConversationID,
+		GrantedPerms:         auth.GrantedPerms,
+		GrantedScopes:        auth.GrantedScopes,
 		ScopeSnapshotID:      scopeSnapshotID,
 	}
 	result, err := h.sandboxHost.CreateSession(sreq)
@@ -881,6 +898,42 @@ func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "dialogId": req.DialogID})
+}
+
+func (h *HTTPHandler) handleClipboardResponse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.clipboardResolver == nil {
+		writeError(w, http.StatusServiceUnavailable, "clipboard_resolver_unavailable", "clipboard resolver not configured")
+		return
+	}
+	var req struct {
+		RequestID string `json:"requestId"`
+		Text      string `json:"text"`
+		Error     string `json:"error"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	if req.RequestID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "requestId is required")
+		return
+	}
+	if req.Error != "" {
+		if !h.clipboardResolver.FailClipboardRequest(req.RequestID, errors.New(req.Error)) {
+			writeError(w, http.StatusNotFound, "clipboard_request_not_found", "no pending clipboard request with id: "+req.RequestID)
+			return
+		}
+	} else {
+		if !h.clipboardResolver.ResolveClipboardRequest(req.RequestID, req.Text) {
+			writeError(w, http.StatusNotFound, "clipboard_request_not_found", "no pending clipboard request with id: "+req.RequestID)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "requestId": req.RequestID})
 }
 
 func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID string, ctxMap map[string]any, input json.RawMessage) ui_contribution.BridgeResponse {

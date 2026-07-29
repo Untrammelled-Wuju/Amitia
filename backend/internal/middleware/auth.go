@@ -47,14 +47,19 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		tokenStr := ""
 		auth := c.GetHeader("Authorization")
-		if len(auth) <= 7 || auth[:7] != "Bearer " {
+		if len(auth) > 7 && auth[:7] == "Bearer " {
+			tokenStr = auth[7:]
+		} else if qToken := c.Query("token"); qToken != "" {
+			tokenStr = qToken
+		}
+
+		if tokenStr == "" {
 			util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
 			c.Abort()
 			return
 		}
-
-		tokenStr := auth[7:]
 		token, err := jwt.ParseWithClaims(tokenStr, &JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])

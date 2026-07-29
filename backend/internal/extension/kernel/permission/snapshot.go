@@ -23,6 +23,32 @@ type PermissionSnapshot struct {
 	RevokedAt      *time.Time  `json:"revokedAt,omitempty"`
 }
 
+type PermissionIDValidator struct {
+	registry *PermissionDefinitionRegistry
+}
+
+func NewPermissionIDValidator(registry *PermissionDefinitionRegistry) *PermissionIDValidator {
+	return &PermissionIDValidator{registry: registry}
+}
+
+func (v *PermissionIDValidator) IsValidPermissionID(id string) bool {
+	if v == nil || v.registry == nil {
+		return false
+	}
+	_, ok := v.registry.Get(id)
+	return ok
+}
+
+func (v *PermissionIDValidator) ValidateAll(ids []string) []string {
+	invalid := make([]string, 0)
+	for _, id := range ids {
+		if !v.IsValidPermissionID(id) {
+			invalid = append(invalid, id)
+		}
+	}
+	return invalid
+}
+
 type PermissionSnapshotRequest struct {
 	SessionID      string
 	ExtensionID    string
@@ -91,6 +117,31 @@ func (s PermissionSnapshot) VerifyIdentity(extID, modID string, generation int64
 	}
 	if generation > 0 && s.Generation != generation {
 		return fmt.Errorf("permission snapshot generation %d does not match caller generation %d", s.Generation, generation)
+	}
+	return nil
+}
+
+func (s PermissionSnapshot) ValidateGrantedPerms(validator *PermissionIDValidator) error {
+	if validator == nil {
+		return fmt.Errorf("permission snapshot: validator not configured")
+	}
+	invalid := validator.ValidateAll(s.GrantedPerms)
+	if len(invalid) > 0 {
+		return fmt.Errorf("permission snapshot %s contains invalid permission IDs (likely action IDs): %v", s.SnapshotID, invalid)
+	}
+	return nil
+}
+
+func (s PermissionSnapshot) HasActionIDs(validator *PermissionIDValidator) bool {
+	if validator == nil {
+		return false
+	}
+	return len(validator.ValidateAll(s.GrantedPerms)) > 0
+}
+
+func (s PermissionSnapshot) VerifySession(sessionID string) error {
+	if s.SessionID != "" && s.SessionID != sessionID {
+		return fmt.Errorf("permission snapshot session %s does not match caller session %s", s.SessionID, sessionID)
 	}
 	return nil
 }

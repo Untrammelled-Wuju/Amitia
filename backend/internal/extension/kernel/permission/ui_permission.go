@@ -64,6 +64,9 @@ func (c *UIPermissionChecker) ValidateSessionRequest(def *ui_contribution.UICont
 }
 
 type SessionAuthorization struct {
+	ExtensionID   string
+	ModuleID      string
+	Generation    int64
 	GrantedPerms  []string
 	GrantedScopes []string
 	ScopeSnapshot *scope.ScopeSnapshot
@@ -161,6 +164,9 @@ func (a *UISessionAuthorizer) AuthorizeSession(
 	}
 
 	auth := &SessionAuthorization{
+		ExtensionID:   extID,
+		ModuleID:      modID,
+		Generation:    def.Integrity.Generation,
 		GrantedPerms:  grantedPerms,
 		GrantedScopes: grantedScopes,
 	}

@@ -145,4 +145,31 @@ func (s *SQLitePermissionSnapshotStore) DeleteBySession(ctx context.Context, ses
 	return nil
 }
 
+func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Context, validator *PermissionIDValidator) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT snapshot_id, granted_perms FROM kernel_permission_snapshots
+		WHERE revoked_at IS NULL
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("sqlite: list active snapshots for validation: %w", err)
+	}
+	defer rows.Close()
+
+	revoked := 0
+	for rows.Next() {
+		var snapshotID, grantedPermsJSON string
+		if err := rows.Scan(&snapshotID, &grantedPermsJSON); err != nil {
+			return revoked, fmt.Errorf("sqlite: scan snapshot row: %w", err)
+		}
+		perms := unmarshalStringList(grantedPermsJSON)
+		if validator != nil && len(validator.ValidateAll(perms)) > 0 {
+			if err := s.RevokeSnapshot(ctx, snapshotID); err != nil {
+				continue
+			}
+			revoked++
+		}
+	}
+	return revoked, nil
+}
+
 var _ PermissionSnapshotStore = (*SQLitePermissionSnapshotStore)(nil)

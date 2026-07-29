@@ -26,6 +26,8 @@ import { ChatStateSubscriber } from "./pet/chat-state-subscriber";
 import { CharacterWatcher } from "./pet/character-watcher";
 import { registerPetIpcHandlers } from "./pet-ipc";
 import { DesktopHostManager, DesktopSnapshotSync } from "./desktop-host";
+import { UIHostSSE } from "./ui-host-sse";
+import { ClipboardBridge } from "./clipboard-bridge";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -38,6 +40,8 @@ let chatStateSubscriber: ChatStateSubscriber | null = null;
 let characterWatcher: CharacterWatcher | null = null;
 let desktopHostManager: DesktopHostManager | null = null;
 let desktopSnapshotSync: DesktopSnapshotSync | null = null;
+let uiHostSSE: UIHostSSE | null = null;
+let clipboardBridge: ClipboardBridge | null = null;
 
 function syncSystemBrandTheme() {
   applyBrandTheme(
@@ -179,6 +183,8 @@ async function enterMainApp(): Promise<void> {
   );
   desktopSnapshotSync = new DesktopSnapshotSync(mainWindow, desktopHostManager);
   desktopSnapshotSync.start();
+  clipboardBridge = new ClipboardBridge(mainWindow);
+  clipboardBridge.start();
   syncSystemBrandTheme();
 
   const autoLaunch = await configStore.getAutoLaunch();
@@ -213,6 +219,13 @@ async function enterMainApp(): Promise<void> {
   });
   registerPetIpcHandlers(desktopPetManager);
 
+  uiHostSSE = new UIHostSSE({
+    coreHost: "127.0.0.1",
+    corePort: 18899,
+    mainWindow: () => mainWindow,
+  });
+  uiHostSSE.start();
+
   void desktopPetManager.initialize().catch((err) => {
     console.warn("[AmitiaDesktop] DesktopPetManager 初始化失败:", err);
   });
@@ -241,8 +254,12 @@ async function enterMainApp(): Promise<void> {
         });
         chatStateSubscriber?.stop();
         characterWatcher?.stop();
+        uiHostSSE?.stop();
+        uiHostSSE = null;
         desktopSnapshotSync?.stop();
         desktopSnapshotSync = null;
+        clipboardBridge?.stop();
+        clipboardBridge = null;
         desktopHostManager?.cleanup();
         desktopHostManager = null;
         void stopCore().finally(() => {

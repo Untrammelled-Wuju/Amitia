@@ -21,7 +21,7 @@ func (s *PackageService) Export(ctx context.Context, request ExportPackageReques
 	versionName := request.Version
 	if s.readModel != nil && (request.Format == "" || request.Format == "amitiax") {
 		if exported, ok, err := s.readModel.TryExport(ctx, request.ExtensionID, versionName); err != nil {
-			return ExportedPackage{}, err
+			return ExportedPackage{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", request.ExtensionID, true, err)
 		} else if ok {
 			if err := s.repository.SavePackageExport(ctx, request.UserID, exported, request.ExtensionID); err != nil {
 				return ExportedPackage{}, err
@@ -187,7 +187,7 @@ func (s *PackageService) ListVersions(ctx context.Context, extensionID, userID, 
 	}
 	if s.readModel != nil {
 		if result, ok, err := s.readModel.TryListVersions(ctx, extensionID); err != nil {
-			return nil, err
+			return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
 		} else if ok {
 			return result, nil
 		}
@@ -203,7 +203,7 @@ func (s *PackageService) CompareVersions(ctx context.Context, extensionID, userI
 	}
 	if s.readModel != nil {
 		if result, ok, err := s.readModel.TryCompareVersions(ctx, extensionID, fromVersion, toVersion); err != nil {
-			return PackageVersionDiff{}, err
+			return PackageVersionDiff{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
 		} else if ok {
 			return result, nil
 		}
@@ -486,7 +486,7 @@ func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, 
 	}
 	if s.readModel != nil {
 		if result, ok, err := s.readModel.TryDependencies(ctx, extensionID); err != nil {
-			return nil, err
+			return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
 		} else if ok {
 			return result, nil
 		}
@@ -522,7 +522,7 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	}
 	if s.readModel != nil {
 		if preview, ok, err := s.readModel.TryPreviewUninstall(ctx, extensionID); err != nil {
-			return PackageUninstallPreview{}, err
+			return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
 		} else if ok {
 			return preview, nil
 		}

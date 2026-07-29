@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -249,4 +250,221 @@ func TestBaseline_FinalGate_GateMetricsSnapshot(t *testing.T) {
 	}
 
 	t.Logf("FinalGate: %d gate metrics all present in FinalGateMetrics() and Snapshot()", len(expectedMetrics))
+}
+
+type mockMCPDuplicateProvider struct {
+	count    int64
+	countErr error
+	details  []kernel.MCPDuplicateDetail
+	listErr  error
+}
+
+func (m *mockMCPDuplicateProvider) CountUnresolved(ctx context.Context) (int64, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.count, nil
+}
+
+func (m *mockMCPDuplicateProvider) ListUnresolved(ctx context.Context) ([]kernel.MCPDuplicateDetail, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.details, nil
+}
+
+func TestBaseline_FinalGateProbe_MetricNames(t *testing.T) {
+	names := kernel.FinalGateMetricNames()
+	required := []string{
+		"duplicate_mcp_tool_registrations",
+		"orphan_candidate_contributions",
+		"orphan_runtime_instances",
+		"orphan_ui_sessions",
+		"duplicate_schedule_runs",
+		"failed_cleanup_resources",
+		"legacy_package_read_calls",
+		"legacy_package_write_calls",
+	}
+	if len(names) != len(required) {
+		t.Fatalf("expected %d metric names, got %d", len(required), len(names))
+	}
+	nameSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		nameSet[n] = true
+	}
+	for _, r := range required {
+		if !nameSet[r] {
+			t.Fatalf("required metric %s not in FinalGateMetricNames()", r)
+		}
+	}
+	t.Logf("FinalGateProbe: %d metric names verified", len(required))
+}
+
+func TestBaseline_FinalGateProbe_AllMetricsZeroOnFreshContainer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping final gate probe test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	container, err := kernel.NewContainerBuilder().
+		WithDBPath(filepath.Join(tempDir, "gate-probe.db")).
+		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
+	}
+	defer container.Close()
+
+	report := container.EvaluateFinalGate(ctx)
+	if !report.Passed {
+		t.Fatalf("fresh container must pass final gate, errors=%v metrics=%v", report.Errors, report.Metrics)
+	}
+	for _, name := range kernel.FinalGateMetricNames() {
+		val, ok := report.Metrics[name]
+		if !ok {
+			t.Fatalf("metric %s must be present in report", name)
+		}
+		if val != 0 {
+			t.Fatalf("metric %s must be 0 on fresh container, got %d", name, val)
+		}
+	}
+	t.Logf("FinalGateProbe: fresh container passed, all %d metrics are 0", len(report.Metrics))
+}
+
+func TestBaseline_FinalGateProbe_DetectsMCPDuplicateWithoutReadiness(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping final gate probe test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	container, err := kernel.NewContainerBuilder().
+		WithDBPath(filepath.Join(tempDir, "gate-mcp.db")).
+		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
+	}
+	defer container.Close()
+
+	container.MCPDuplicateProvider = &mockMCPDuplicateProvider{
+		count: 2,
+		details: []kernel.MCPDuplicateDetail{
+			{ToolID: "tool-1", ServerID: "srv-1", Owner: "ext-1", Generation: 1, DetectedAt: "2026-01-01T00:00:00Z"},
+			{ToolID: "tool-2", ServerID: "srv-2", Owner: "ext-2", Generation: 1, DetectedAt: "2026-01-01T00:00:00Z"},
+		},
+	}
+
+	report := container.EvaluateFinalGate(ctx)
+	if report.Passed {
+		t.Fatalf("gate must NOT pass when MCP duplicates exist")
+	}
+	if report.Metrics["duplicate_mcp_tool_registrations"] != 2 {
+		t.Fatalf("expected duplicate_mcp_tool_registrations=2, got %d", report.Metrics["duplicate_mcp_tool_registrations"])
+	}
+	if len(report.Details) < 2 {
+		t.Fatalf("expected at least 2 detail entries, got %d", len(report.Details))
+	}
+
+	container.MCPDuplicateProvider = &mockMCPDuplicateProvider{count: 0, details: nil}
+	report2 := container.EvaluateFinalGate(ctx)
+	if report2.Metrics["duplicate_mcp_tool_registrations"] != 0 {
+		t.Fatalf("expected duplicate_mcp_tool_registrations=0 after cleanup, got %d", report2.Metrics["duplicate_mcp_tool_registrations"])
+	}
+
+	t.Logf("FinalGateProbe: detected %d MCP duplicates without Readiness, passed after cleanup", 2)
+}
+
+func TestBaseline_FinalGateProbe_FailClosedOnQueryError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping final gate probe test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	container, err := kernel.NewContainerBuilder().
+		WithDBPath(filepath.Join(tempDir, "gate-fail.db")).
+		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
+	}
+	defer container.Close()
+
+	container.MCPDuplicateProvider = &mockMCPDuplicateProvider{
+		countErr: fmt.Errorf("database connection lost"),
+	}
+
+	report := container.EvaluateFinalGate(ctx)
+	if report.Passed {
+		t.Fatalf("gate must Fail Closed when query errors occur")
+	}
+	if len(report.Errors) == 0 {
+		t.Fatalf("report must contain query errors")
+	}
+	foundMCPError := false
+	for _, e := range report.Errors {
+		if strings.Contains(e, "duplicate_mcp_tool_registrations") {
+			foundMCPError = true
+			break
+		}
+	}
+	if !foundMCPError {
+		t.Fatalf("report must contain MCP duplicate query error, got: %v", report.Errors)
+	}
+
+	t.Logf("FinalGateProbe: Fail Closed on query error, %d errors reported", len(report.Errors))
+}
+
+func TestBaseline_FinalGateProbe_DetectsOrphanCandidate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping final gate probe test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tempDir := t.TempDir()
+	container, err := kernel.NewContainerBuilder().
+		WithDBPath(filepath.Join(tempDir, "gate-cand.db")).
+		WithExtensionRoot(filepath.Join(tempDir, "extensions")).
+		Build(ctx)
+	if err != nil {
+		t.Fatalf("ContainerBuilder.Build must succeed: %v", err)
+	}
+	defer container.Close()
+
+	orphanRecord := &kernel.CandidateRecord{
+		CandidateID:         "orphan-cand-1",
+		ExtensionID:         "ext-orphan",
+		GenerationID:        "gen-1",
+		CandidateGeneration: 1,
+		Status:              kernel.CandidateStatusRegistered,
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
+	}
+	if err := container.CandidateRepository.Save(ctx, orphanRecord); err != nil {
+		t.Fatalf("save orphan candidate must succeed: %v", err)
+	}
+
+	report := container.EvaluateFinalGate(ctx)
+	if report.Passed {
+		t.Fatalf("gate must NOT pass when orphan candidates exist")
+	}
+	if report.Metrics["orphan_candidate_contributions"] != 1 {
+		t.Fatalf("expected orphan_candidate_contributions=1, got %d", report.Metrics["orphan_candidate_contributions"])
+	}
+
+	if err := container.CandidateRepository.Delete(ctx, "orphan-cand-1"); err != nil {
+		t.Fatalf("delete orphan candidate must succeed: %v", err)
+	}
+	report2 := container.EvaluateFinalGate(ctx)
+	if report2.Metrics["orphan_candidate_contributions"] != 0 {
+		t.Fatalf("expected orphan_candidate_contributions=0 after cleanup, got %d", report2.Metrics["orphan_candidate_contributions"])
+	}
+
+	t.Logf("FinalGateProbe: detected orphan candidate, passed after cleanup")
 }

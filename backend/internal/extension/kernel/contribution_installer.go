@@ -27,7 +27,8 @@ import (
 )
 
 type TypedContributionInstaller struct {
-	container *Container
+	container      *Container
+	candidateNS    *CandidateNamespace
 }
 
 func NewTypedContributionInstaller(container *Container) *TypedContributionInstaller {
@@ -39,6 +40,13 @@ func (i *TypedContributionInstaller) SetContainer(container *Container) {
 		return
 	}
 	i.container = container
+}
+
+func (i *TypedContributionInstaller) SetCandidateNamespace(ns *CandidateNamespace) {
+	if i == nil {
+		return
+	}
+	i.candidateNS = ns
 }
 
 type installOp struct {

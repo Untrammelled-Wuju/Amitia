@@ -7,6 +7,7 @@ import type { DeploymentModeConfig } from "../shared/types";
 import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
+import { setAuthToken } from "./auth-token-store";
 
 export function registerIpcHandlers(
   configStore: ConfigStore,
@@ -257,5 +258,9 @@ export function registerIpcHandlers(
       throw new Error("clipboard write failed: text exceeds 1MB limit");
     }
     clipboard.writeText(text);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.setAuthToken, async (_event, token: string) => {
+    setAuthToken(token || null);
   });
 }

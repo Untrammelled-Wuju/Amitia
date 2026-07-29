@@ -11,15 +11,26 @@ import (
 	"time"
 )
 
+type ReloadStatus string
+
+const (
+	ReloadSucceeded                   ReloadStatus = "reload_succeeded"
+	ReloadSucceededWithCleanupFailure ReloadStatus = "reload_succeeded_with_cleanup_failure"
+	ReloadFailed                      ReloadStatus = "reload_failed"
+	ReloadRequiresRecovery            ReloadStatus = "requires_recovery"
+)
+
 type ReloadEvent struct {
-	WorkspaceID WorkspaceID
-	RevisionID  RevisionID
-	Stage       ReloadStage
-	Reason      string
-	StartedAt   time.Time
-	CompletedAt time.Time
-	Success     bool
-	Error       string
+	WorkspaceID   WorkspaceID
+	RevisionID    RevisionID
+	Stage         ReloadStage
+	Reason        string
+	StartedAt     time.Time
+	CompletedAt   time.Time
+	Success       bool
+	Status        ReloadStatus
+	CleanupFailed bool
+	Error         string
 }
 
 type ReloadStage string
@@ -92,11 +103,13 @@ type RuntimeReloader struct {
 	enabled           map[WorkspaceID]bool
 	activeReloads     map[WorkspaceID]bool
 	drainTimeout      time.Duration
+	stopTimeout       time.Duration
 	invMu             sync.Mutex
 	activeInvocations map[WorkspaceID]int32
 	runner            CandidateRunner
 	watcher           *FileWatcher
 	sessions          *SessionManager
+	cleanupStore      CleanupFailureStore
 	instanceMu        sync.Mutex
 	currentInstance   map[WorkspaceID]string
 	oldInstance       map[WorkspaceID]string
@@ -111,9 +124,11 @@ func NewRuntimeReloader(registry *WorkspaceRegistry, pipeline *RebuildPipeline, 
 		enabled:           make(map[WorkspaceID]bool),
 		activeReloads:     make(map[WorkspaceID]bool),
 		drainTimeout:      30 * time.Second,
+		stopTimeout:       15 * time.Second,
 		activeInvocations: make(map[WorkspaceID]int32),
 		currentInstance:   make(map[WorkspaceID]string),
 		oldInstance:       make(map[WorkspaceID]string),
+		cleanupStore:      NoopCleanupFailureStore{},
 	}
 }
 
@@ -136,6 +151,33 @@ func (r *RuntimeReloader) SetSessionManager(m *SessionManager) *RuntimeReloader 
 	defer r.mu.Unlock()
 	r.sessions = m
 	return r
+}
+
+func (r *RuntimeReloader) SetCleanupFailureStore(store CleanupFailureStore) *RuntimeReloader {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if store != nil {
+		r.cleanupStore = store
+	}
+	return r
+}
+
+func (r *RuntimeReloader) SetStopTimeout(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if d > 0 {
+		r.stopTimeout = d
+	}
+}
+
+func (r *RuntimeReloader) PendingCleanupFailures(ctx context.Context) (int64, error) {
+	r.mu.Lock()
+	store := r.cleanupStore
+	r.mu.Unlock()
+	if store == nil {
+		return 0, nil
+	}
+	return store.Count(ctx)
 }
 
 var (
@@ -273,6 +315,7 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 		Stage:       ReloadStageStatePreserve,
 		Reason:      reason,
 		StartedAt:   time.Now().UTC(),
+		Status:      ReloadFailed,
 	}
 
 	if stateProvider != nil {
@@ -371,19 +414,48 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 	ev.Stage = ReloadStageUnload
 	r.emit(id, ev)
 	_ = r.drain(ctx, id)
+	cleanupFailed := false
 	if oldInstanceID != "" && runner != nil {
 		if drainErr := runner.DrainInstance(ctx, oldInstanceID, drainTimeout); drainErr != nil {
 			ev.Error = fmt.Sprintf("drain warning: %v", drainErr)
 			r.emit(id, ev)
 		}
-		if stopErr := runner.StopInstance(ctx, oldInstanceID); stopErr != nil {
+		stopTimeout := r.stopTimeout
+		if stopTimeout <= 0 {
+			stopTimeout = 15 * time.Second
+		}
+		stopCtx, stopCancel := context.WithTimeout(ctx, stopTimeout)
+		if stopErr := runner.StopInstance(stopCtx, oldInstanceID); stopErr != nil {
+			stopCancel()
+			cleanupFailed = true
+			ev.CleanupFailed = true
+			ev.Status = ReloadSucceededWithCleanupFailure
 			ev.Error = fmt.Sprintf("RUNTIME_STOP_FAILED: %v; requires_recovery", stopErr)
 			r.emit(id, ev)
+			if r.cleanupStore != nil {
+				failureRecord := &CleanupFailureRecord{
+					WorkspaceID:   id,
+					ExtensionID:   string(ws.ExtensionID),
+					OldInstanceID: oldInstanceID,
+					NewInstanceID: candidateInstanceID,
+					ErrorCode:     "RUNTIME_STOP_FAILED",
+					ErrorMessage:  stopErr.Error(),
+					NextRetryAt:   time.Now().UTC().Add(30 * time.Second),
+					Status:        CleanupFailurePending,
+				}
+				_ = r.cleanupStore.Save(ctx, failureRecord)
+			}
+		} else {
+			stopCancel()
+			r.instanceMu.Lock()
+			delete(r.oldInstance, id)
+			r.instanceMu.Unlock()
 		}
+	} else {
+		r.instanceMu.Lock()
+		delete(r.oldInstance, id)
+		r.instanceMu.Unlock()
 	}
-	r.instanceMu.Lock()
-	delete(r.oldInstance, id)
-	r.instanceMu.Unlock()
 
 	if snap, ok := r.preserver.Restore(id); ok {
 		ev.Stage = ReloadStageStatePreserve
@@ -393,6 +465,9 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 
 	ev.Stage = ReloadStageUIRefresh
 	ev.Success = true
+	if !cleanupFailed {
+		ev.Status = ReloadSucceeded
+	}
 	ev.CompletedAt = time.Now().UTC()
 	r.emit(id, ev)
 	return &ev, nil
@@ -506,6 +581,8 @@ func (r *RuntimeReloader) CloseDevMode(ctx context.Context, workspaceID Workspac
 }
 
 func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
+	cleaned := 0
+
 	r.instanceMu.Lock()
 	stale := make(map[WorkspaceID]string, len(r.oldInstance))
 	for id, instID := range r.oldInstance {
@@ -515,21 +592,66 @@ func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
 		delete(r.oldInstance, id)
 	}
 	runner := r.runner
+	stopTimeout := r.stopTimeout
+	if stopTimeout <= 0 {
+		stopTimeout = 15 * time.Second
+	}
 	r.instanceMu.Unlock()
 
-	if runner == nil {
-		return 0
+	if runner != nil {
+		for _, instID := range stale {
+			if instID == "" {
+				continue
+			}
+			if err := runner.StopInstance(ctx, instID); err == nil {
+				cleaned++
+			}
+		}
 	}
 
-	cleaned := 0
-	for _, instID := range stale {
-		if instID == "" {
+	r.mu.Lock()
+	store := r.cleanupStore
+	r.mu.Unlock()
+	if store == nil {
+		return cleaned
+	}
+
+	failures, err := store.ListPending(ctx)
+	if err != nil {
+		return cleaned
+	}
+
+	for _, failure := range failures {
+		if failure.Status == CleanupFailureExhausted {
 			continue
 		}
-		if err := runner.StopInstance(ctx, instID); err == nil {
+		if time.Now().UTC().Before(failure.NextRetryAt) {
+			continue
+		}
+
+		newRetryCount := failure.RetryCount + 1
+		if newRetryCount > failure.MaxRetries {
+			_ = store.UpdateRetry(ctx, failure.FailureID, failure.RetryCount, time.Now().UTC().Add(1*time.Hour), CleanupFailureExhausted)
+			continue
+		}
+
+		if runner != nil && failure.OldInstanceID != "" {
+			stopCtx, stopCancel := context.WithTimeout(ctx, stopTimeout)
+			stopErr := runner.StopInstance(stopCtx, failure.OldInstanceID)
+			stopCancel()
+			if stopErr == nil {
+				_ = store.Delete(ctx, failure.FailureID)
+				cleaned++
+			} else {
+				backoff := time.Duration(30*(newRetryCount+1)) * time.Second
+				_ = store.UpdateRetry(ctx, failure.FailureID, newRetryCount, time.Now().UTC().Add(backoff), CleanupFailureRetrying)
+			}
+		} else {
+			_ = store.Delete(ctx, failure.FailureID)
 			cleaned++
 		}
 	}
+
 	return cleaned
 }
 

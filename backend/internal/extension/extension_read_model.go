@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,7 +46,10 @@ func (s *ExtensionReadModelService) TryPreviewUninstall(ctx context.Context, ext
 	container := s.proxy.ReadContainer()
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return PackageUninstallPreview{}, false, nil
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return PackageUninstallPreview{}, false, nil
+		}
+		return PackageUninstallPreview{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
 	preview := PackageUninstallPreview{
 		ExtensionID:      extensionID,
@@ -57,14 +62,30 @@ func (s *ExtensionReadModelService) TryPreviewUninstall(ctx context.Context, ext
 		ArtifactArchived: true,
 		ReadSource:       "kernel",
 	}
-	preview.Dependents = s.readReverseDependencies(ctx, container, extensionID)
-	contribSummary, eventSubs := s.readContributions(ctx, container, extensionID)
-	preview.ContributionSummary = contribSummary
-	preview.EventSubscriptions = eventSubs
-	preview.RuntimeImpacts = s.readRuntimeImpacts(ctx, container, extensionID)
-	preview.ScheduleCount = s.readScheduleCount(ctx, container, extensionID)
-	preview.Grants = s.readGrants(ctx, container, extensionID)
-	preview.ConfigPresent = s.readConfigPresent(ctx, container, extensionID)
+	preview.Dependents, err = s.readReverseDependencies(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
+	preview.ContributionSummary, preview.EventSubscriptions, err = s.readContributions(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
+	preview.RuntimeImpacts, err = s.readRuntimeImpacts(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
+	preview.ScheduleCount, err = s.readScheduleCount(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
+	preview.Grants, err = s.readGrants(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
+	preview.ConfigPresent, err = s.readConfigPresent(ctx, container, extensionID)
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
 	preview.Cleanup = s.buildCleanupList(preview.ContributionSummary, preview.RuntimeImpacts, preview.Grants)
 	preview.Preserved = s.buildPreservedList()
 	return preview, true, nil
@@ -76,10 +97,19 @@ func (s *ExtensionReadModelService) TryDependencies(ctx context.Context, extensi
 	}
 	container := s.proxy.ReadContainer()
 	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
-		return nil, false, nil
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
-	direct := s.readDirectDependencies(ctx, container, extensionID)
-	reverse := s.readReverseDependencies(ctx, container, extensionID)
+	direct, err := s.readDirectDependencies(ctx, container, extensionID)
+	if err != nil {
+		return nil, false, err
+	}
+	reverse, err := s.readReverseDependencies(ctx, container, extensionID)
+	if err != nil {
+		return nil, false, err
+	}
 	return map[string]interface{}{"dependencies": direct, "dependents": reverse}, true, nil
 }
 
@@ -90,11 +120,14 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 	container := s.proxy.ReadContainer()
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return nil, false, nil
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
 	definitions, err := container.DefinitionRepository.ListExtensions(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	views := make([]PackageVersionView, 0)
 	for _, def := range definitions {
@@ -120,7 +153,10 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 	}
 	container := s.proxy.ReadContainer()
 	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
-		return PackageVersionDiff{}, false, nil
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return PackageVersionDiff{}, false, nil
+		}
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
 	fromVer, err := domain.ParseVersion(fromVersion)
 	if err != nil {
@@ -132,11 +168,11 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 	}
 	fromDef, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), fromVer)
 	if err != nil {
-		return PackageVersionDiff{}, false, err
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	toDef, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), toVer)
 	if err != nil {
-		return PackageVersionDiff{}, false, err
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	diff := s.buildVersionDiff(extensionID, fromDef, toDef)
 	return diff, true, nil
@@ -148,7 +184,10 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 	}
 	container := s.proxy.ReadContainer()
 	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
-		return ExportedPackage{}, false, nil
+		if errors.Is(err, domain.ErrInvalidExtensionID) {
+			return ExportedPackage{}, false, nil
+		}
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
 	ver, err := domain.ParseVersion(version)
 	if err != nil {
@@ -198,13 +237,13 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 	return exported, true, nil
 }
 
-func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) []PackageDependencyView {
+func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageDependencyView, error) {
 	if container.DependencyResolver == nil {
-		return []PackageDependencyView{}
+		return []PackageDependencyView{}, nil
 	}
 	subjects, err := container.DependencyResolver.AffectedBy(ctx, extensionID)
 	if err != nil {
-		return []PackageDependencyView{}
+		return nil, fmt.Errorf("readmodel: query reverse dependencies: %w", err)
 	}
 	result := make([]PackageDependencyView, 0, len(subjects))
 	for _, subject := range subjects {
@@ -215,19 +254,21 @@ func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context,
 		if inst, instErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(subject.SubjectID)); instErr == nil {
 			view.Installed = true
 			view.Version = inst.InstalledVersion.String()
+		} else if !errors.Is(instErr, domain.ErrInvalidExtensionID) {
+			return nil, fmt.Errorf("readmodel: query dependent installation: %w", instErr)
 		}
 		result = append(result, view)
 	}
-	return result
+	return result, nil
 }
 
-func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) []PackageDependencyView {
+func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageDependencyView, error) {
 	if container.ModuleRepository == nil {
-		return []PackageDependencyView{}
+		return []PackageDependencyView{}, nil
 	}
 	modules, err := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return []PackageDependencyView{}
+		return nil, fmt.Errorf("readmodel: query modules: %w", err)
 	}
 	seen := map[string]bool{}
 	result := []PackageDependencyView{}
@@ -246,6 +287,8 @@ func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, 
 				if inst, instErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(dep.ID)); instErr == nil {
 					view.Installed = true
 					view.Version = inst.InstalledVersion.String()
+				} else if !errors.Is(instErr, domain.ErrInvalidExtensionID) {
+					return nil, fmt.Errorf("readmodel: query dependency installation: %w", instErr)
 				}
 			} else {
 				view.Installed = true
@@ -254,18 +297,18 @@ func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, 
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
-	return result
+	return result, nil
 }
 
-func (s *ExtensionReadModelService) readContributions(ctx context.Context, container *kernelruntime.Container, extensionID string) (map[string]int, []string) {
+func (s *ExtensionReadModelService) readContributions(ctx context.Context, container *kernelruntime.Container, extensionID string) (map[string]int, []string, error) {
 	summary := map[string]int{}
 	eventSubs := []string{}
 	if container.ContributionRepository == nil {
-		return summary, eventSubs
+		return summary, eventSubs, nil
 	}
 	contributions, err := container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return summary, eventSubs
+		return nil, nil, fmt.Errorf("readmodel: query contributions: %w", err)
 	}
 	for _, contrib := range contributions {
 		category := contributionCategory(contrib.Kind)
@@ -275,16 +318,16 @@ func (s *ExtensionReadModelService) readContributions(ctx context.Context, conta
 		}
 	}
 	sort.Strings(eventSubs)
-	return summary, eventSubs
+	return summary, eventSubs, nil
 }
 
-func (s *ExtensionReadModelService) readRuntimeImpacts(ctx context.Context, container *kernelruntime.Container, extensionID string) []PackageRuntimeImpact {
+func (s *ExtensionReadModelService) readRuntimeImpacts(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageRuntimeImpact, error) {
 	if container.ModuleRepository == nil || container.RuntimeSupervisor == nil {
-		return []PackageRuntimeImpact{}
+		return []PackageRuntimeImpact{}, nil
 	}
 	modules, err := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return []PackageRuntimeImpact{}
+		return nil, fmt.Errorf("readmodel: query modules for runtime: %w", err)
 	}
 	result := []PackageRuntimeImpact{}
 	for _, mod := range modules {
@@ -304,46 +347,46 @@ func (s *ExtensionReadModelService) readRuntimeImpacts(ctx context.Context, cont
 			})
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (s *ExtensionReadModelService) readScheduleCount(ctx context.Context, container *kernelruntime.Container, extensionID string) int64 {
+func (s *ExtensionReadModelService) readScheduleCount(ctx context.Context, container *kernelruntime.Container, extensionID string) (int64, error) {
 	if container.ScheduleRepository == nil {
-		return 0
+		return 0, nil
 	}
 	defs, err := container.ScheduleRepository.ListDefinitions(ctx, extensionID)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("readmodel: query schedules: %w", err)
 	}
-	return int64(len(defs))
+	return int64(len(defs)), nil
 }
 
-func (s *ExtensionReadModelService) readGrants(ctx context.Context, container *kernelruntime.Container, extensionID string) []string {
+func (s *ExtensionReadModelService) readGrants(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]string, error) {
 	if container.PermissionBroker == nil {
-		return []string{}
+		return []string{}, nil
 	}
 	subject := permission.SubjectForExtension(extensionID)
 	grants, err := container.PermissionBroker.ListGrants(ctx, permission.PermissionGrantFilter{Subject: &subject, ActiveOnly: true})
 	if err != nil {
-		return []string{}
+		return nil, fmt.Errorf("readmodel: query grants: %w", err)
 	}
 	result := make([]string, 0, len(grants))
 	for _, grant := range grants {
 		result = append(result, grant.PermissionID+":"+string(grant.Decision))
 	}
 	sort.Strings(result)
-	return result
+	return result, nil
 }
 
-func (s *ExtensionReadModelService) readConfigPresent(ctx context.Context, container *kernelruntime.Container, extensionID string) bool {
+func (s *ExtensionReadModelService) readConfigPresent(ctx context.Context, container *kernelruntime.Container, extensionID string) (bool, error) {
 	if container.ScopeRepository == nil {
-		return false
+		return false, nil
 	}
 	bindings, err := container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return false
+		return false, fmt.Errorf("readmodel: query scope bindings: %w", err)
 	}
-	return len(bindings) > 0
+	return len(bindings) > 0, nil
 }
 
 func (s *ExtensionReadModelService) buildCleanupList(summary map[string]int, runtimes []PackageRuntimeImpact, grants []string) []string {

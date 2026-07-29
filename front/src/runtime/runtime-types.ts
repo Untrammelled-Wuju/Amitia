@@ -90,6 +90,8 @@ export interface AmitiaDesktopAPI {
     callback: (event: unknown, data: unknown) => void,
   ): () => void;
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
+  setAuthToken(token: string): Promise<void>;
+  onUINavigate(callback: (target: string) => void): () => void;
 }
 
 export interface RuntimeConnection {

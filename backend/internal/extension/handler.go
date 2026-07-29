@@ -324,6 +324,8 @@ func problemStatus(code string) int {
 			return http.StatusRequestEntityTooLarge
 		case ErrPackageHighRiskConfirmationRequired, ErrPackageConfigMigrationRequired:
 			return http.StatusPreconditionRequired
+		case ErrPackageRepositoryUnavailable:
+			return http.StatusServiceUnavailable
 		default:
 			return http.StatusUnprocessableEntity
 		}

@@ -122,6 +122,7 @@ type Container struct {
 
 	UIHost                *ui_contribution.UIHost
 	UIHostNotifier        *SSEUIHostNotifier
+	ClipboardHostBridge   *BridgeClipboardHost
 	UIContributionRepo    *sqlite.SQLiteUIContributionRepository
 	SlotRegistry          *extension_slots.SlotRegistry
 	PageHost              *extension_page_host.PageHost
@@ -180,8 +181,12 @@ type Container struct {
 	CanaryOwnershipResolver *canary.BackgroundOwnershipResolver
 
 	CandidateMgr *CandidateContributionManager
+	CandidateNS  *CandidateNamespace
 
 	MCPDuplicateProvider MCPDuplicateMetricProvider
+
+	PageSessionRepository *sqlite.SQLitePageSessionRepository
+	CandidateRepository   *CandidateRepository
 }
 
 func (c *Container) Close() error {
@@ -224,6 +229,12 @@ func (c *Container) Recover(ctx context.Context) error {
 	if c.CandidateMgr != nil {
 		if _, err := c.CandidateMgr.RecoverOrphanCandidates(ctx); err != nil {
 			fmt.Printf("kernel: recover orphan candidates warning: %v\n", err)
+		}
+	}
+
+	if c.DevModeReloader != nil {
+		if cleaned := c.DevModeReloader.RecoverStaleInstances(ctx); cleaned > 0 {
+			fmt.Printf("kernel: recovered %d stale runtime instances from cleanup failures\n", cleaned)
 		}
 	}
 

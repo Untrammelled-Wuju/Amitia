@@ -180,6 +180,12 @@ func TestReloadStopFailureRecordsError(t *testing.T) {
 	if ev2.Error == "" {
 		t.Fatal("expected error message in event for stop failure")
 	}
+	if !ev2.CleanupFailed {
+		t.Fatal("expected CleanupFailed to be true when stop fails")
+	}
+	if ev2.Status != ReloadSucceededWithCleanupFailure {
+		t.Fatalf("expected status reload_succeeded_with_cleanup_failure, got %s", ev2.Status)
+	}
 }
 
 func TestRecoverStaleInstances(t *testing.T) {

@@ -2,27 +2,15 @@ import { ref, onUnmounted, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElNotification, ElMessageBox } from "element-plus";
 import { resolveApiUrl, createAuthorizedRequestInit } from "../runtime/runtime-adapter";
+import { isNavigationAllowed } from "../navigation/nav-whitelist";
 
-interface UINotifyPayload {
+interface SSEEventEnvelope {
+  eventType: string;
+  requestId: string;
+  sessionId: string;
   extensionId: string;
-  title: string;
-  body: string;
-  severity: string;
-  timestamp: string;
-}
-
-interface UIDialogPayload {
-  dialogId: string;
-  extensionId: string;
-  title?: string;
-  message: string;
-  buttons: string[];
-  timestamp: string;
-}
-
-interface UINavigatePayload {
-  extensionId: string;
-  target: string;
+  payload: Record<string, unknown>;
+  expiresAt?: string;
   timestamp: string;
 }
 
@@ -34,11 +22,38 @@ const severityMap: Record<string, "success" | "warning" | "info" | "error"> = {
   critical: "error",
 };
 
+const MAX_RETRIES = 10;
+const BASE_RECONNECT_MS = 2000;
+const MAX_RECONNECT_MS = 30000;
+const DEDUP_MAX_SIZE = 200;
+
 export function useUIHostSSE(connected?: Ref<boolean>) {
   const router = useRouter();
   let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempts = 0;
+  let dedupCleanupTimer: ReturnType<typeof setInterval> | null = null;
+  const processedRequestIds = new Set<string>();
   const isConnected = connected ?? ref(false);
+
+  function isExpired(expiresAt?: string): boolean {
+    if (!expiresAt) return false;
+    try {
+      return new Date(expiresAt).getTime() < Date.now();
+    } catch {
+      return false;
+    }
+  }
+
+  function trackRequestId(requestId: string): boolean {
+    if (processedRequestIds.has(requestId)) return false;
+    processedRequestIds.add(requestId);
+    if (processedRequestIds.size > DEDUP_MAX_SIZE) {
+      const first = processedRequestIds.values().next().value;
+      if (first) processedRequestIds.delete(first);
+    }
+    return true;
+  }
 
   async function sendDialogResponse(dialogId: string, result: string): Promise<void> {
     try {
@@ -54,84 +69,122 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     }
   }
 
-  function handleNotify(event: MessageEvent) {
+  function parseEnvelope(event: MessageEvent): SSEEventEnvelope | null {
     try {
-      const payload: UINotifyPayload = JSON.parse(event.data);
-      const type = severityMap[payload.severity] || "info";
-      ElNotification({
-        title: payload.title || "通知",
-        message: payload.body || "",
-        type,
-        duration: 5000,
-      });
+      return JSON.parse(event.data) as SSEEventEnvelope;
     } catch {
-      // ignore
+      return null;
     }
   }
 
+  function shouldProcess(envelope: SSEEventEnvelope): boolean {
+    if (!envelope.requestId) return false;
+    if (isExpired(envelope.expiresAt)) return false;
+    return trackRequestId(envelope.requestId);
+  }
+
+  function handleNotify(event: MessageEvent) {
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload) return;
+    if (!shouldProcess(envelope)) return;
+    const payload = envelope.payload;
+    const type = severityMap[payload.severity as string] || "info";
+    ElNotification({
+      title: (payload.title as string) || "通知",
+      message: (payload.body as string) || "",
+      type,
+      duration: 5000,
+    });
+  }
+
   function handleNavigate(event: MessageEvent) {
-    try {
-      const payload: UINavigatePayload = JSON.parse(event.data);
-      if (payload.target) {
-        router.push(payload.target).catch(() => {
-          // ignore navigation errors
-        });
-      }
-    } catch {
-      // ignore
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload) return;
+    if (!shouldProcess(envelope)) return;
+    const target = envelope.payload.target as string;
+    if (target && isNavigationAllowed(target)) {
+      router.push(target).catch(() => {
+        // ignore navigation errors
+      });
     }
   }
 
   function handleDialog(event: MessageEvent) {
-    try {
-      const payload: UIDialogPayload = JSON.parse(event.data);
-      const buttons = payload.buttons && payload.buttons.length > 0
-        ? payload.buttons
-        : ["确定"];
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload) return;
+    if (!shouldProcess(envelope)) return;
+    const payload = envelope.payload;
+    const dialogId = payload.dialogId as string;
+    const buttons = payload.buttons && (payload.buttons as string[]).length > 0
+      ? (payload.buttons as string[])
+      : ["确定"];
 
-      ElMessageBox.confirm(payload.message || "", payload.title || "对话框", {
-        confirmButtonText: buttons[0],
-        cancelButtonText: buttons.length > 1 ? buttons[1] : "取消",
-        distinguishCancelAndClose: true,
-        type: "info",
+    ElMessageBox.confirm((payload.message as string) || "", "对话框", {
+      confirmButtonText: buttons[0],
+      cancelButtonText: buttons.length > 1 ? buttons[1] : "取消",
+      distinguishCancelAndClose: true,
+      type: "info",
+    })
+      .then(() => {
+        void sendDialogResponse(dialogId, buttons[0]);
       })
-        .then(() => {
-          void sendDialogResponse(payload.dialogId, buttons[0]);
-        })
-        .catch((action: string) => {
-          if (action === "cancel" && buttons.length > 1) {
-            void sendDialogResponse(payload.dialogId, buttons[1]);
-          } else {
-            void sendDialogResponse(payload.dialogId, "closed");
-          }
-        });
-    } catch {
-      // ignore
+      .catch((action: string) => {
+        if (action === "cancel" && buttons.length > 1) {
+          void sendDialogResponse(dialogId, buttons[1]);
+        } else {
+          void sendDialogResponse(dialogId, "closed");
+        }
+      });
+  }
+
+  function getReconnectDelay(): number {
+    const delay = Math.min(
+      BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts),
+      MAX_RECONNECT_MS,
+    );
+    return delay + Math.random() * 500;
+  }
+
+  function scheduleReconnect() {
+    if (reconnectAttempts >= MAX_RETRIES) {
+      reconnectAttempts = 0;
+      reconnectTimer = setTimeout(() => {
+        void connect();
+      }, MAX_RECONNECT_MS);
+      return;
     }
+    const delay = getReconnectDelay();
+    reconnectAttempts++;
+    reconnectTimer = setTimeout(() => {
+      void connect();
+    }, delay);
   }
 
   async function connect() {
     disconnect();
     try {
-      const url = await resolveApiUrl("/api/proactive-sse?clientId=ui-host");
+      const token = localStorage.getItem("ai-companion-token") || "";
+      const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host&token=${encodeURIComponent(token)}`);
       eventSource = new EventSource(url);
       eventSource.addEventListener("ui_notify", handleNotify);
       eventSource.addEventListener("ui_navigate", handleNavigate);
       eventSource.addEventListener("ui_dialog", handleDialog);
       eventSource.onopen = () => {
         isConnected.value = true;
+        reconnectAttempts = 0;
       };
       eventSource.onerror = () => {
         isConnected.value = false;
-        disconnect();
-        reconnectTimer = setTimeout(() => {
-          void connect();
-        }, 5000);
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+          disconnect();
+          scheduleReconnect();
+        } else {
+          disconnect();
+          scheduleReconnect();
+        }
       };
     } catch {
-      reconnectTimer = setTimeout(() => {
-        void connect();
-      }, 5000);
+      scheduleReconnect();
     }
   }
 
@@ -147,8 +200,22 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     isConnected.value = false;
   }
 
+  function resetDedup() {
+    processedRequestIds.clear();
+  }
+
+  dedupCleanupTimer = setInterval(() => {
+    if (processedRequestIds.size > DEDUP_MAX_SIZE / 2) {
+      resetDedup();
+    }
+  }, 60000);
+
   onUnmounted(() => {
     disconnect();
+    if (dedupCleanupTimer) {
+      clearInterval(dedupCleanupTimer);
+      dedupCleanupTimer = null;
+    }
   });
 
   return {

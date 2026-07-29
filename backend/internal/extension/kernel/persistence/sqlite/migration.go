@@ -1510,6 +1510,7 @@ var schemaMigrations = []string{
 		instance_ids_json TEXT NOT NULL DEFAULT '[]',
 		generation_id TEXT NOT NULL,
 		candidate_generation INTEGER NOT NULL,
+		expected_stable_generation INTEGER NOT NULL DEFAULT 0,
 		contribs_json TEXT NOT NULL DEFAULT '[]',
 		schedule_ids_json TEXT NOT NULL DEFAULT '[]',
 		artifact_path TEXT NOT NULL DEFAULT '',
@@ -1565,6 +1566,27 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_result ON host_api_audit_logs(result)`,
 	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_trace_id ON host_api_audit_logs(trace_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_started_at ON host_api_audit_logs(started_at)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_reload_cleanup_failures (
+		failure_id TEXT PRIMARY KEY,
+		workspace_id TEXT NOT NULL,
+		extension_id TEXT NOT NULL DEFAULT '',
+		old_instance_id TEXT NOT NULL,
+		old_generation INTEGER NOT NULL DEFAULT 0,
+		new_instance_id TEXT NOT NULL DEFAULT '',
+		new_generation INTEGER NOT NULL DEFAULT 0,
+		error_code TEXT NOT NULL DEFAULT '',
+		error_message TEXT NOT NULL DEFAULT '',
+		retry_count INTEGER NOT NULL DEFAULT 0,
+		max_retries INTEGER NOT NULL DEFAULT 5,
+		next_retry_at TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_ws_id ON kernel_reload_cleanup_failures(workspace_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_status ON kernel_reload_cleanup_failures(status)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_reload_cleanup_next_retry ON kernel_reload_cleanup_failures(next_retry_at)`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -1693,6 +1715,7 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_workflow_executions", "attempt", "INTEGER NOT NULL DEFAULT 1"},
 	{"extension_schedule_definitions", "execution_owner", "TEXT NOT NULL DEFAULT 'backend'"},
 	{"kernel_candidate_contributions", "schedule_ids_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"kernel_candidate_contributions", "expected_stable_generation", "INTEGER NOT NULL DEFAULT 0"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {

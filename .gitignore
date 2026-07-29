@@ -105,3 +105,6 @@ backend/testdata/extensions/extension-kernel-repair/dev-hot-reload-*/dist-candid
 
 # FTP publish config (contains credentials)
 desktop/scripts/.publish-config.json
+
+# Backend large zip archives
+backend/pkg.zip

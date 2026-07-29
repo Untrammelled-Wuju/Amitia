@@ -318,9 +318,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	hostAPIGateway := host_api.NewDefaultGateway()
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
+	permIDValidator := permission.NewPermissionIDValidator(permDefRegistry)
+	if permSnapshotStore != nil {
+		_, _ = permSnapshotStore.RevokeInvalidSnapshots(ctx, permIDValidator)
+	}
 	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
-	hostAPIGateway.SetPermissionSnapshotChecker(host_api.NewBrokerPermissionSnapshotChecker(host_api.NewPermissionSnapshotStoreAdapter(permSnapshotStore)))
+	hostAPIGateway.SetPermissionSnapshotChecker(host_api.NewBrokerPermissionSnapshotChecker(host_api.NewPermissionSnapshotStoreAdapter(permSnapshotStore)).WithValidator(permIDValidator))
 	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter(sqlite.NewHostAPIAuditRepository(db)))
 	extensionStateStore := sqlite.NewExtensionStateStore(db)
 	charReader := b.characterReader
@@ -336,13 +340,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		memQuerySvc = NewDefaultMemoryQueryService()
 	}
 	uiHostNotifier := NewSSEUIHostNotifier(sse.Global)
+	bridgeClipboardHost := NewBridgeClipboardHost(sse.Global)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
 		CharacterReader:     charReader,
 		ConversationReader:  convReader,
 		MemoryQueryService:  memQuerySvc,
 		UIHostNotifier:      uiHostNotifier,
-		ClipboardHost:       NewDefaultClipboardHost(),
+		ClipboardHost:       bridgeClipboardHost,
 		RuntimeSupervisor:   supervisor,
 		EventService:        eventSvc,
 		ScheduleService:     scheduleSvc,
@@ -428,6 +433,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			GrantedPerms:   grantedPerms,
 			Lifetime:       time.Until(expiresAt),
 		})
+		if err := snap.ValidateGrantedPerms(permIDValidator); err != nil {
+			return "", err
+		}
 		if err := permSnapshotStore.SaveSnapshot(context.Background(), snap); err != nil {
 			return "", err
 		}
@@ -494,6 +502,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			GrantedPerms:   grantedPerms,
 			Lifetime:       time.Until(expiresAt),
 		})
+		if err := snap.ValidateGrantedPerms(permIDValidator); err != nil {
+			return "", err
+		}
 		if err := permSnapshotStore.SaveSnapshot(context.Background(), snap); err != nil {
 			return "", err
 		}
@@ -514,29 +525,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
 	}
 	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo)
-	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
-		session, err := sandboxHost.GetSession(sessionID)
-		if err != nil {
-			return nil, fmt.Errorf("sandbox: session not found: %w", err)
-		}
-		if !session.IsActionAllowed(actionID) {
-			return nil, fmt.Errorf("sandbox: action %s not allowed for session %s", actionID, sessionID)
-		}
-		def, err := uiHost.GetContribution(ui_contribution.ContributionID(session.ContributionID))
-		if err != nil || def == nil {
-			return nil, fmt.Errorf("sandbox: contribution not found for session %s", sessionID)
-		}
-		action := findActionByID(def, actionID)
-		if action == nil {
-			return nil, fmt.Errorf("sandbox: action %s not declared in contribution", actionID)
-		}
-		return actionExecutor.Execute(ctx, UIActionExecContext{
-			SessionID:      sessionID,
-			ContributionID: session.ContributionID,
-			ExtensionID:    session.ExtensionID,
-			ModuleID:       session.ModuleID,
-			Generation:     session.Generation,
-		}, action, input)
+	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
+		getSession: sandboxHost.GetSession,
+		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {
+			return uiHost.GetContribution(ui_contribution.ContributionID(contributionID))
+		},
+		executeAction: actionExecutor.Execute,
 	})
 	dataSourceProvider := NewUIDataSourceProvider(hostAPIGateway)
 	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProviderWithHandler(func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
@@ -738,6 +732,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		UIHost:                uiHost,
 		UIHostNotifier:        uiHostNotifier,
+		ClipboardHostBridge:   bridgeClipboardHost,
 		UIContributionRepo:    uiContribRepo,
 		SlotRegistry:          slotRegistry,
 		PageHost:              pageHost,
@@ -798,9 +793,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	typedInstaller.SetContainer(container)
 
+	candidateNS := NewCandidateNamespace()
+	typedInstaller.SetCandidateNamespace(candidateNS)
+
 	candidateRepo := NewCandidateRepository(store.DB())
-	candidateMgr := NewCandidateContributionManager(typedInstaller, generationMgr, supervisor, candidateRepo)
+	candidateMgr := NewCandidateContributionManager(typedInstaller, generationMgr, supervisor, candidateRepo, candidateNS)
 	container.CandidateMgr = candidateMgr
+	container.CandidateNS = candidateNS
+	container.CandidateRepository = candidateRepo
+	container.PageSessionRepository = sqlite.NewSQLitePageSessionRepository(store.DB())
 
 	candidateRunner := NewProductionCandidateRunner(
 		supervisor,
@@ -811,6 +812,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	)
 	devModeReloader.SetCandidateRunner(candidateRunner)
 	devModeReloader.SetSessionManager(devModeSessions)
+	devModeReloader.SetCleanupFailureStore(NewSQLiteCleanupFailureStore(db))
 
 	return container, nil
 }

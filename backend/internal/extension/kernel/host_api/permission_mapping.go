@@ -36,6 +36,7 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodUIDialog:         {{PermissionID: "ui.dialog", Resource: "ui"}},
 		MethodUINavigate:       {{PermissionID: "ui.navigate", Resource: "ui"}},
 		MethodClipboardWrite:   {{PermissionID: "clipboard.write", Resource: "clipboard"}},
+		MethodClipboardRead:    {{PermissionID: "clipboard.read", Resource: "clipboard"}},
 		MethodRuntimeHealth:    {{PermissionID: "runtime.health.read", Resource: "runtime"}},
 	}
 }
@@ -76,7 +77,7 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{RequireRoles: []string{"invocation", "tool"}}
 	case MethodUINotify, MethodUIDialog, MethodUINavigate:
 		return ScopePolicy{RequireRoles: []string{"session"}}
-	case MethodClipboardWrite:
+	case MethodClipboardWrite, MethodClipboardRead:
 		return ScopePolicy{RequireRoles: []string{"session"}}
 	case MethodRuntimeHealth:
 		return ScopePolicy{Namespaced: true}
@@ -147,6 +148,7 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "ui.dialog", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "ui.navigate", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "clipboard.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
+		{ID: "clipboard.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "runtime.health.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
 	}
 	for _, d := range defs {

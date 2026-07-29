@@ -70,6 +70,7 @@ const (
 	ErrPackageOperationInProgress          = "PACKAGE_OPERATION_IN_PROGRESS"
 	ErrPackageArtifactInvalid              = "PACKAGE_ARTIFACT_INVALID"
 	ErrPackageExportNotAllowed             = "PACKAGE_EXPORT_NOT_ALLOWED"
+	ErrPackageRepositoryUnavailable        = "PACKAGE_REPOSITORY_UNAVAILABLE"
 )
 
 type PackageLimits struct {

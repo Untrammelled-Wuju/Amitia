@@ -34,18 +34,28 @@ const (
 )
 
 type CandidateRecord struct {
-	CandidateID         string
-	ExtensionID         domain.ExtensionID
-	InstanceIDs         []string
-	GenerationID        string
-	CandidateGeneration int64
-	Contribs            []domain.ContributionDefinition
-	ScheduleIDs         []string
-	ArtifactPath        string
-	DefinitionHash      string
-	Status              CandidateStatus
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	CandidateID             string
+	ExtensionID             domain.ExtensionID
+	InstanceIDs             []string
+	GenerationID            string
+	CandidateGeneration     int64
+	ExpectedStableGeneration int64
+	Contribs                []domain.ContributionDefinition
+	ScheduleIDs             []string
+	ArtifactPath            string
+	DefinitionHash           string
+	Status                  CandidateStatus
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+}
+
+type StableSnapshot struct {
+	Contributions   []domain.ContributionDefinition
+	GenerationID    string
+	Generation      int64
+	DefinitionHash  string
+	EnablementState domain.EnablementState
+	CapturedAt      time.Time
 }
 
 func (r *CandidateRecord) CandidateKeys() []CandidateKey {
@@ -67,10 +77,12 @@ type CandidateContributionManager struct {
 	generationMgr *update.GenerationManager
 	supervisor    runtime_supervisor.Supervisor
 	repo          *CandidateRepository
+	namespace     *CandidateNamespace
 
-	mu               sync.RWMutex
-	candidates       map[string]*CandidateRecord
-	promotedRecords  map[string]*CandidateRecord
+	mu              sync.RWMutex
+	candidates      map[string]*CandidateRecord
+	promotedRecords map[string]*CandidateRecord
+	snapshots       map[string]*StableSnapshot
 }
 
 func NewCandidateContributionManager(
@@ -78,14 +90,20 @@ func NewCandidateContributionManager(
 	generationMgr *update.GenerationManager,
 	supervisor runtime_supervisor.Supervisor,
 	repo *CandidateRepository,
+	namespace *CandidateNamespace,
 ) *CandidateContributionManager {
+	if namespace == nil {
+		namespace = NewCandidateNamespace()
+	}
 	return &CandidateContributionManager{
-		installer:      installer,
-		generationMgr:  generationMgr,
-		supervisor:     supervisor,
-		repo:           repo,
-		candidates:     make(map[string]*CandidateRecord),
+		installer:       installer,
+		generationMgr:   generationMgr,
+		supervisor:      supervisor,
+		repo:            repo,
+		namespace:       namespace,
+		candidates:      make(map[string]*CandidateRecord),
 		promotedRecords: make(map[string]*CandidateRecord),
+		snapshots:       make(map[string]*StableSnapshot),
 	}
 }
 
@@ -101,8 +119,23 @@ func (m *CandidateContributionManager) RegisterCandidate(ctx context.Context, re
 	record.CreatedAt = now
 	record.UpdatedAt = now
 
+	if err := m.installer.RegisterCandidateContributions(
+		ctx,
+		record.CandidateID,
+		record.ExtensionID,
+		record.InstanceIDs,
+		record.GenerationID,
+		record.CandidateGeneration,
+		record.Contribs,
+		record.DefinitionHash,
+		record.ArtifactPath,
+	); err != nil {
+		return fmt.Errorf("candidate-manager: register candidate contributions in namespace: %w", err)
+	}
+
 	if m.repo != nil {
 		if err := m.repo.Save(ctx, record); err != nil {
+			m.namespace.Remove(record.CandidateID)
 			return fmt.Errorf("candidate-manager: persist candidate %s: %w", record.CandidateID, err)
 		}
 	}
@@ -111,7 +144,7 @@ func (m *CandidateContributionManager) RegisterCandidate(ctx context.Context, re
 	m.candidates[record.CandidateID] = record
 	m.mu.Unlock()
 
-	log.Printf("[candidate-manager] registered candidate %s for extension %s (generation=%d, contribs=%d)",
+	log.Printf("[candidate-manager] registered candidate %s for extension %s (generation=%d, contribs=%d) in isolated namespace",
 		record.CandidateID, record.ExtensionID, record.CandidateGeneration, len(record.Contribs))
 	return nil
 }
@@ -121,11 +154,19 @@ func (m *CandidateContributionManager) HealthCandidate(ctx context.Context, cand
 		return fmt.Errorf("candidate-manager: not initialized")
 	}
 
+	if err := m.installer.ValidateCandidateContributions(ctx, candidateID); err != nil {
+		return fmt.Errorf("candidate-manager: validate candidate contributions in namespace: %w", err)
+	}
+
 	m.mu.RLock()
 	record, ok := m.candidates[candidateID]
 	m.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("candidate-manager: candidate %s not found", candidateID)
+		if promoted, pok := m.promotedRecords[candidateID]; pok {
+			record = promoted
+		} else {
+			return fmt.Errorf("candidate-manager: candidate %s not found", candidateID)
+		}
 	}
 
 	for _, instID := range record.InstanceIDs {
@@ -163,6 +204,16 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 		m.mu.Unlock()
 		return fmt.Errorf("candidate-manager: candidate %s is already being promoted", candidateID)
 	}
+
+	if record.ExpectedStableGeneration > 0 {
+		activeGen := m.generationMgr.Active(ctx, string(record.ExtensionID))
+		if activeGen == nil || int64(activeGen.Generation) != record.ExpectedStableGeneration {
+			m.mu.Unlock()
+			return fmt.Errorf("candidate-manager: CAS check failed for candidate %s: expected stable generation %d, got %v",
+				candidateID, record.ExpectedStableGeneration, activeGen)
+		}
+	}
+
 	record.Status = CandidateStatusPromoting
 	record.UpdatedAt = time.Now().UTC()
 	m.mu.Unlock()
@@ -171,23 +222,25 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 		_ = m.repo.UpdateStatus(ctx, candidateID, CandidateStatusPromoting)
 	}
 
-	beforeScheduleIDs, _ := m.installer.ListScheduleIDs(ctx, record.ExtensionID)
+	stableSnap := m.captureStableSnapshot(ctx, record.ExtensionID)
+	m.mu.Lock()
+	m.snapshots[candidateID] = stableSnap
+	m.mu.Unlock()
 
-	if err := m.installer.InstallContributions(ctx, record.Contribs, record.CandidateGeneration); err != nil {
-		m.markFailed(ctx, candidateID, record)
-		return fmt.Errorf("candidate-manager: install contributions for promote: %w", err)
-	}
-
-	afterScheduleIDs, _ := m.installer.ListScheduleIDs(ctx, record.ExtensionID)
-	beforeSet := make(map[string]bool, len(beforeScheduleIDs))
-	for _, id := range beforeScheduleIDs {
-		beforeSet[id] = true
-	}
-	for _, id := range afterScheduleIDs {
-		if !beforeSet[id] {
-			record.ScheduleIDs = append(record.ScheduleIDs, id)
+	newScheduleIDs, err := m.installer.PromoteCandidateContributions(ctx, candidateID)
+	if err != nil {
+		if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, stableSnap); restoreErr != nil {
+			m.markRequiresRecovery(ctx, record.ExtensionID)
+			log.Printf("[candidate-manager] stable restore failed for %s: %v (marked requires_recovery)", candidateID, restoreErr)
 		}
+		m.markFailed(ctx, candidateID, record)
+		m.mu.Lock()
+		delete(m.snapshots, candidateID)
+		m.mu.Unlock()
+		return fmt.Errorf("candidate-manager: promote candidate contributions: %w", err)
 	}
+
+	record.ScheduleIDs = append(record.ScheduleIDs, newScheduleIDs...)
 
 	if m.repo != nil && len(record.ScheduleIDs) > 0 {
 		_ = m.repo.Save(ctx, record)
@@ -195,7 +248,15 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 
 	if err := m.generationMgr.Transition(ctx, string(record.ExtensionID), record.GenerationID, update.GenerationStateActive); err != nil {
 		_ = m.installer.DiscardCandidateContributions(ctx, record.ExtensionID, record.CandidateGeneration, record.Contribs, record.ScheduleIDs)
+		_ = m.installer.DiscardCandidateNamespace(ctx, candidateID)
+		if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, stableSnap); restoreErr != nil {
+			m.markRequiresRecovery(ctx, record.ExtensionID)
+			log.Printf("[candidate-manager] stable restore failed for %s: %v (marked requires_recovery)", candidateID, restoreErr)
+		}
 		m.markFailed(ctx, candidateID, record)
+		m.mu.Lock()
+		delete(m.snapshots, candidateID)
+		m.mu.Unlock()
 		return fmt.Errorf("candidate-manager: promote generation: %w", err)
 	}
 
@@ -204,13 +265,14 @@ func (m *CandidateContributionManager) PromoteCandidate(ctx context.Context, can
 	record.UpdatedAt = time.Now().UTC()
 	m.promotedRecords[candidateID] = record
 	delete(m.candidates, candidateID)
+	delete(m.snapshots, candidateID)
 	m.mu.Unlock()
 
 	if m.repo != nil {
 		_ = m.repo.Delete(ctx, candidateID)
 	}
 
-	log.Printf("[candidate-manager] promoted candidate %s for extension %s (generation=%d)",
+	log.Printf("[candidate-manager] promoted candidate %s for extension %s (generation=%d) - atomic namespace switch complete",
 		candidateID, record.ExtensionID, record.CandidateGeneration)
 	return nil
 }
@@ -224,6 +286,7 @@ func (m *CandidateContributionManager) DiscardCandidate(ctx context.Context, can
 	record, ok := m.candidates[candidateID]
 	m.mu.Unlock()
 	if !ok {
+		_ = m.installer.DiscardCandidateNamespace(ctx, candidateID)
 		return nil
 	}
 
@@ -237,6 +300,8 @@ func (m *CandidateContributionManager) DiscardCandidate(ctx context.Context, can
 			_ = m.installer.DiscardCandidateContributions(ctx, record.ExtensionID, record.CandidateGeneration, record.Contribs, record.ScheduleIDs)
 		}
 	}
+
+	_ = m.installer.DiscardCandidateNamespace(ctx, candidateID)
 
 	for _, instID := range record.InstanceIDs {
 		_ = m.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback)
@@ -252,7 +317,7 @@ func (m *CandidateContributionManager) DiscardCandidate(ctx context.Context, can
 	delete(m.candidates, candidateID)
 	m.mu.Unlock()
 
-	log.Printf("[candidate-manager] discarded candidate %s for extension %s (status=%s)",
+	log.Printf("[candidate-manager] discarded candidate %s for extension %s (status=%s) - namespace and production cleaned",
 		candidateID, record.ExtensionID, record.Status)
 	return nil
 }
@@ -273,6 +338,7 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 
 	var cleaned []string
 	for _, record := range records {
+		_ = m.installer.DiscardCandidateNamespace(ctx, record.CandidateID)
 		switch record.Status {
 		case CandidateStatusRegistered:
 			for _, instID := range record.InstanceIDs {
@@ -282,21 +348,17 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 			_ = m.generationMgr.RemoveGeneration(ctx, string(record.ExtensionID), record.GenerationID)
 			_ = m.repo.Delete(ctx, record.CandidateID)
 			cleaned = append(cleaned, record.CandidateID)
-			log.Printf("[candidate-manager] recovered orphan candidate %s (status=registered, not promoted)", record.CandidateID)
+			log.Printf("[candidate-manager] recovered orphan candidate %s (status=registered, not promoted, namespace cleaned)", record.CandidateID)
 
 		case CandidateStatusPromoting:
 			_ = m.installer.DiscardCandidateContributions(ctx, record.ExtensionID, record.CandidateGeneration, record.Contribs, record.ScheduleIDs)
-			if m.installer != nil && m.installer.container != nil {
-				inst, err := m.installer.container.InstallationRepository.GetInstallation(ctx, record.ExtensionID)
-				if err == nil {
-					stableContribs, listErr := m.installer.container.ContributionRepository.ListContributions(ctx, record.ExtensionID)
-					if listErr == nil && len(stableContribs) > 0 {
-						_ = m.installer.InstallContributions(ctx, stableContribs, inst.Generation)
-						if inst.EnablementState == domain.EnablementEnabled {
-							_ = m.installer.ActivateContributions(ctx, record.ExtensionID)
-						}
-					}
-				}
+			restoreSnap := m.captureStableSnapshot(ctx, record.ExtensionID)
+			if restoreErr := m.restoreStableFromSnapshot(ctx, record.ExtensionID, restoreSnap); restoreErr != nil {
+				m.markRequiresRecovery(ctx, record.ExtensionID)
+				log.Printf("[candidate-manager] stable restore failed for orphan %s: %v (marked requires_recovery, skipping generation cleanup)", record.CandidateID, restoreErr)
+				_ = m.repo.Delete(ctx, record.CandidateID)
+				cleaned = append(cleaned, record.CandidateID)
+				continue
 			}
 			for _, instID := range record.InstanceIDs {
 				_ = m.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback)
@@ -305,7 +367,7 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 			_ = m.generationMgr.RemoveGeneration(ctx, string(record.ExtensionID), record.GenerationID)
 			_ = m.repo.Delete(ctx, record.CandidateID)
 			cleaned = append(cleaned, record.CandidateID)
-			log.Printf("[candidate-manager] recovered orphan candidate %s (status=promoting, repaired production)", record.CandidateID)
+			log.Printf("[candidate-manager] recovered orphan candidate %s (status=promoting, repaired production, namespace cleaned)", record.CandidateID)
 
 		case CandidateStatusPromoted:
 			_ = m.repo.Delete(ctx, record.CandidateID)
@@ -315,7 +377,7 @@ func (m *CandidateContributionManager) RecoverOrphanCandidates(ctx context.Conte
 		case CandidateStatusFailed:
 			_ = m.repo.Delete(ctx, record.CandidateID)
 			cleaned = append(cleaned, record.CandidateID)
-			log.Printf("[candidate-manager] recovered orphan candidate %s (status=failed)", record.CandidateID)
+			log.Printf("[candidate-manager] recovered orphan candidate %s (status=failed, namespace cleaned)", record.CandidateID)
 		}
 	}
 
@@ -357,6 +419,19 @@ func (m *CandidateContributionManager) LoadFromStore(ctx context.Context) error 
 	m.mu.Lock()
 	for _, record := range records {
 		m.candidates[record.CandidateID] = record
+		if record.Status == CandidateStatusRegistered {
+			_ = m.installer.RegisterCandidateContributions(
+				ctx,
+				record.CandidateID,
+				record.ExtensionID,
+				record.InstanceIDs,
+				record.GenerationID,
+				record.CandidateGeneration,
+				record.Contribs,
+				record.DefinitionHash,
+				record.ArtifactPath,
+			)
+		}
 	}
 	m.mu.Unlock()
 	return nil
@@ -372,4 +447,68 @@ func (m *CandidateContributionManager) markFailed(ctx context.Context, candidate
 		_ = m.repo.UpdateStatus(ctx, candidateID, CandidateStatusFailed)
 	}
 	log.Printf("[candidate-manager] candidate %s marked as failed", candidateID)
+}
+
+func (m *CandidateContributionManager) captureStableSnapshot(ctx context.Context, extID domain.ExtensionID) *StableSnapshot {
+	if m == nil || m.installer == nil || m.installer.container == nil {
+		return nil
+	}
+	container := m.installer.container
+	snap := &StableSnapshot{
+		CapturedAt: time.Now().UTC(),
+	}
+	if activeGen := m.generationMgr.Active(ctx, string(extID)); activeGen != nil {
+		snap.GenerationID = activeGen.GenerationID
+		snap.Generation = int64(activeGen.Generation)
+		snap.DefinitionHash = activeGen.DefinitionHash
+	}
+	if container.InstallationRepository != nil {
+		if inst, err := container.InstallationRepository.GetInstallation(ctx, extID); err == nil {
+			snap.EnablementState = inst.EnablementState
+			if snap.Generation == 0 {
+				snap.Generation = inst.Generation
+			}
+		}
+	}
+	if container.ContributionRepository != nil {
+		if contribs, err := container.ContributionRepository.ListContributions(ctx, extID); err == nil {
+			snap.Contributions = contribs
+		}
+	}
+	return snap
+}
+
+func (m *CandidateContributionManager) restoreStableFromSnapshot(ctx context.Context, extID domain.ExtensionID, snap *StableSnapshot) error {
+	if m == nil || snap == nil || len(snap.Contributions) == 0 {
+		return nil
+	}
+	if err := m.installer.InstallContributions(ctx, snap.Contributions, snap.Generation); err != nil {
+		return fmt.Errorf("candidate-manager: restore stable contributions: %w", err)
+	}
+	if snap.EnablementState == domain.EnablementEnabled {
+		if err := m.installer.ActivateContributions(ctx, extID); err != nil {
+			return fmt.Errorf("candidate-manager: activate restored stable contributions: %w", err)
+		}
+	}
+	log.Printf("[candidate-manager] restored stable contributions for %s (generation=%d, contribs=%d)",
+		extID, snap.Generation, len(snap.Contributions))
+	return nil
+}
+
+func (m *CandidateContributionManager) markRequiresRecovery(ctx context.Context, extID domain.ExtensionID) {
+	if m == nil || m.installer == nil || m.installer.container == nil {
+		return
+	}
+	container := m.installer.container
+	if container.InstallationRepository == nil {
+		return
+	}
+	inst, err := container.InstallationRepository.GetInstallation(ctx, extID)
+	if err != nil {
+		return
+	}
+	inst.EnablementState = domain.EnablementRequiresRecovery
+	inst.UpdatedAt = time.Now().UTC()
+	_ = container.InstallationRepository.PutInstallation(ctx, inst)
+	log.Printf("[candidate-manager] extension %s marked as requires_recovery", extID)
 }

@@ -12,9 +12,33 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
+
+type moduleEnablementSnapshot struct {
+	subject        enablement.StateSubject
+	prevEnablement enablement.EnablementState
+	prevDesired    enablement.DesiredRuntimeState
+}
+
+type enableTransaction struct {
+	runtime               *Runtime
+	extID                 domain.ExtensionID
+	extensionID           string
+	operationID           string
+	prevInst              domain.ExtensionInstallation
+	prevExtEnablement     enablement.EnablementState
+	prevExtDesired        enablement.DesiredRuntimeState
+	moduleSnapshots       []moduleEnablementSnapshot
+	startedInstanceIDs    []string
+	instCommitted         bool
+	extEnablementCommitted bool
+	modulesCommitted      int
+	contributionsActivated bool
+	uiRegistered          bool
+}
 
 func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	if r.container == nil {
@@ -31,11 +55,11 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
 	prevInst := inst
-	prevEnablement := enablement.EnablementDisabled
-	prevDesiredRuntime := enablement.DesiredRuntimeStopped
+	prevExtEnablement := enablement.EnablementDisabled
+	prevExtDesired := enablement.DesiredRuntimeStopped
 	if inst.EnablementState == domain.EnablementEnabled {
-		prevEnablement = enablement.EnablementEnabled
-		prevDesiredRuntime = enablement.DesiredRuntimeStarted
+		prevExtEnablement = enablement.EnablementEnabled
+		prevExtDesired = enablement.DesiredRuntimeStarted
 	}
 
 	modules, err := r.container.ModuleRepository.ListModules(ctx, extID)
@@ -43,9 +67,35 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: list modules: %w", err)
 	}
 
+	moduleSnapshots := make([]moduleEnablementSnapshot, 0, len(modules))
+	for _, mod := range modules {
+		modSubject := enablement.StateSubject{
+			Kind:     enablement.SubjectModule,
+			ID:       string(mod.ID),
+			ParentID: extensionID,
+		}
+		prevModState, _ := r.container.EnablementStore.Get(ctx, modSubject)
+		moduleSnapshots = append(moduleSnapshots, moduleEnablementSnapshot{
+			subject:        modSubject,
+			prevEnablement: prevModState.Enablement,
+			prevDesired:    prevModState.DesiredRuntime,
+		})
+	}
+
 	candidateGeneration := inst.Generation + 1
 	operationID := fmt.Sprintf("enable-%s-%d", extensionID, time.Now().UnixNano())
 	r.logEnableStep(operationID, extensionID, "acquire_lock", "succeeded", nil)
+
+	tx := &enableTransaction{
+		runtime:           r,
+		extID:             extID,
+		extensionID:       extensionID,
+		operationID:       operationID,
+		prevInst:          prevInst,
+		prevExtEnablement: prevExtEnablement,
+		prevExtDesired:    prevExtDesired,
+		moduleSnapshots:   moduleSnapshots,
+	}
 
 	var startedInstanceIDs []string
 	if r.container.RuntimeSupervisor != nil {
@@ -65,7 +115,10 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 					Spec:         spec,
 				})
 				if result.Error != nil || result.Actual != runtime_supervisor.ActualReady {
-					r.stopInstances(ctx, startedInstanceIDs)
+					if stopErr := r.stopInstances(ctx, startedInstanceIDs); stopErr != nil {
+						r.markRequiresRecovery(ctx, extID, prevInst)
+						r.logEnableStep(operationID, extensionID, "stop_runtime_on_failure", "failed", stopErr)
+					}
 					rtErr := runtime_supervisor.ClassifyReconcileError(result)
 					if rtErr == nil {
 						rtErr = runtime_supervisor.NewRuntimeError(
@@ -84,43 +137,99 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 			}
 		}
 	}
+	tx.startedInstanceIDs = startedInstanceIDs
 	r.logEnableStep(operationID, extensionID, "start_runtime", "succeeded", nil)
 
-	var contributionsActivated bool
+	if r.container.RuntimeSupervisor != nil {
+		for _, sid := range startedInstanceIDs {
+			snap, hcErr := r.container.RuntimeSupervisor.GetInstance(ctx, sid)
+			if hcErr != nil {
+				tx.rollback(ctx)
+				r.logEnableStep(operationID, extensionID, "health_check", "failed", hcErr)
+				return fmt.Errorf("kernel: health check instance %s: %w", sid, hcErr)
+			}
+			if snap.Health != runtime_supervisor.HealthHealthy && snap.Health != runtime_supervisor.HealthDegraded {
+				tx.rollback(ctx)
+				hErr := fmt.Errorf("kernel: instance %s unhealthy: %s", sid, snap.Health)
+				r.logEnableStep(operationID, extensionID, "health_check", "failed", hErr)
+				return hErr
+			}
+		}
+	}
+	r.logEnableStep(operationID, extensionID, "health_check", "succeeded", nil)
+
+	inst.EnablementState = domain.EnablementEnabled
+	inst.UpdatedAt = time.Now().UTC()
+	inst.Generation = candidateGeneration
+	if err := r.container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
+		tx.rollback(ctx)
+		r.logEnableStep(operationID, extensionID, "commit_installation", "failed", err)
+		return fmt.Errorf("kernel: commit installation enabled: %w", err)
+	}
+	tx.instCommitted = true
+	r.logEnableStep(operationID, extensionID, "commit_installation", "succeeded", nil)
+
+	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extensionID}
+	if err := r.container.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementEnabled); err != nil {
+		tx.rollback(ctx)
+		r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
+		return fmt.Errorf("kernel: set extension enablement: %w", err)
+	}
+	if err := r.container.EnablementStore.SetDesiredRuntime(ctx, extSubject, enablement.DesiredRuntimeStarted); err != nil {
+		tx.extEnablementCommitted = true
+		tx.rollback(ctx)
+		r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
+		return fmt.Errorf("kernel: set desired runtime: %w", err)
+	}
+	tx.extEnablementCommitted = true
+	r.logEnableStep(operationID, extensionID, "commit_enablement", "succeeded", nil)
+
+	for i, mod := range modules {
+		modSubject := enablement.StateSubject{
+			Kind:     enablement.SubjectModule,
+			ID:       string(mod.ID),
+			ParentID: extensionID,
+		}
+		if err := r.container.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled); err != nil {
+			tx.rollback(ctx)
+			r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
+			return fmt.Errorf("kernel: set module %s enablement: %w", mod.ID, err)
+		}
+		if err := r.container.EnablementStore.SetDesiredRuntime(ctx, modSubject, enablement.DesiredRuntimeStarted); err != nil {
+			tx.modulesCommitted = i + 1
+			tx.rollback(ctx)
+			r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
+			return fmt.Errorf("kernel: set module %s desired runtime: %w", mod.ID, err)
+		}
+		tx.modulesCommitted = i + 1
+	}
+	r.logEnableStep(operationID, extensionID, "commit_enablement", "succeeded", nil)
+	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
+
 	if r.container.ContributionInstaller != nil {
 		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
-			rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, false)
-			if rbErr != nil {
-				r.markRequiresRecovery(ctx, extID, prevInst)
-			}
+			tx.rollback(ctx)
 			r.logEnableStep(operationID, extensionID, "activate_contributions", "failed", err)
 			return fmt.Errorf("kernel: activate contributions: %w", err)
 		}
-		contributionsActivated = true
+		tx.contributionsActivated = true
 	}
 	r.logEnableStep(operationID, extensionID, "activate_contributions", "succeeded", nil)
 
-	var uiRegistered bool
 	if r.container.UIContributionRepo != nil {
 		uiDefs, uiErr := r.container.UIContributionRepo.ListByExtension(ctx, extensionID)
 		if uiErr != nil {
-			rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-			if rbErr != nil {
-				r.markRequiresRecovery(ctx, extID, prevInst)
-			}
+			tx.rollback(ctx)
 			r.logEnableStep(operationID, extensionID, "register_ui", "failed", uiErr)
 			return fmt.Errorf("kernel: list ui contributions: %w", uiErr)
 		}
 		for _, uiDef := range uiDefs {
 			if err := r.container.UIHost.RegisterContribution(uiDef); err != nil {
-				rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-				if rbErr != nil {
-					r.markRequiresRecovery(ctx, extID, prevInst)
-				}
+				tx.rollback(ctx)
 				r.logEnableStep(operationID, extensionID, "register_ui", "failed", err)
 				return fmt.Errorf("kernel: register ui contribution %s: %w", uiDef.ContributionID, err)
 			}
-			uiRegistered = true
+			tx.uiRegistered = true
 			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
@@ -152,10 +261,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 					Permissions: perms,
 				})
 				if err := r.container.PageHost.RegisterPage(ctx, pageDef); err != nil {
-					rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-					if rbErr != nil {
-						r.markRequiresRecovery(ctx, extID, prevInst)
-					}
+					tx.rollback(ctx)
 					r.logEnableStep(operationID, extensionID, "register_page", "failed", err)
 					return fmt.Errorf("kernel: register page %s: %w", uiDef.ContributionID, err)
 				}
@@ -164,121 +270,93 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 	r.logEnableStep(operationID, extensionID, "register_ui", "succeeded", nil)
 
-	if r.container.RuntimeSupervisor != nil {
-		for _, sid := range startedInstanceIDs {
-			snap, hcErr := r.container.RuntimeSupervisor.GetInstance(ctx, sid)
-			if hcErr != nil {
-				rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-				if rbErr != nil {
-					r.markRequiresRecovery(ctx, extID, prevInst)
-				}
-				r.logEnableStep(operationID, extensionID, "health_check", "failed", hcErr)
-				return fmt.Errorf("kernel: health check instance %s: %w", sid, hcErr)
-			}
-			if snap.Health != runtime_supervisor.HealthHealthy && snap.Health != runtime_supervisor.HealthDegraded {
-				rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-				if rbErr != nil {
-					r.markRequiresRecovery(ctx, extID, prevInst)
-				}
-				hErr := fmt.Errorf("kernel: instance %s unhealthy: %s", sid, snap.Health)
-				r.logEnableStep(operationID, extensionID, "health_check", "failed", hErr)
-				return hErr
-			}
-		}
-	}
-	r.logEnableStep(operationID, extensionID, "health_check", "succeeded", nil)
-
-	inst.EnablementState = domain.EnablementEnabled
-	inst.UpdatedAt = time.Now().UTC()
-	inst.Generation = candidateGeneration
-	if err := r.container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
-		rbErr := r.rollbackEnableCandidate(ctx, extID, startedInstanceIDs, contributionsActivated, uiRegistered)
-		if rbErr != nil {
-			r.markRequiresRecovery(ctx, extID, prevInst)
-		}
-		r.logEnableStep(operationID, extensionID, "commit_installation", "failed", err)
-		return fmt.Errorf("kernel: commit installation enabled: %w", err)
-	}
-	r.logEnableStep(operationID, extensionID, "commit_installation", "succeeded", nil)
-
-	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extensionID}
-	if err := r.container.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementEnabled); err != nil {
-		r.rollbackEnableAfterCommit(ctx, extID, prevInst, prevEnablement, prevDesiredRuntime, startedInstanceIDs, contributionsActivated, uiRegistered)
-		r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
-		return fmt.Errorf("kernel: set extension enablement: %w", err)
-	}
-	if err := r.container.EnablementStore.SetDesiredRuntime(ctx, extSubject, enablement.DesiredRuntimeStarted); err != nil {
-		r.rollbackEnableAfterCommit(ctx, extID, prevInst, prevEnablement, prevDesiredRuntime, startedInstanceIDs, contributionsActivated, uiRegistered)
-		r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
-		return fmt.Errorf("kernel: set desired runtime: %w", err)
-	}
-	for _, mod := range modules {
-		modSubject := enablement.StateSubject{
-			Kind:     enablement.SubjectModule,
-			ID:       string(mod.ID),
-			ParentID: extensionID,
-		}
-		if err := r.container.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled); err != nil {
-			r.rollbackEnableAfterCommit(ctx, extID, prevInst, prevEnablement, prevDesiredRuntime, startedInstanceIDs, contributionsActivated, uiRegistered)
-			r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
-			return fmt.Errorf("kernel: set module %s enablement: %w", mod.ID, err)
-		}
-		if err := r.container.EnablementStore.SetDesiredRuntime(ctx, modSubject, enablement.DesiredRuntimeStarted); err != nil {
-			r.rollbackEnableAfterCommit(ctx, extID, prevInst, prevEnablement, prevDesiredRuntime, startedInstanceIDs, contributionsActivated, uiRegistered)
-			r.logEnableStep(operationID, extensionID, "commit_enablement", "failed", err)
-			return fmt.Errorf("kernel: set module %s desired runtime: %w", mod.ID, err)
-		}
-	}
-	r.logEnableStep(operationID, extensionID, "commit_enablement", "succeeded", nil)
-	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
-
 	return nil
 }
 
-func (r *Runtime) rollbackEnableCandidate(ctx context.Context, extID domain.ExtensionID, instanceIDs []string, contributionsActivated, uiRegistered bool) error {
+func (tx *enableTransaction) rollback(ctx context.Context) {
 	var rollbackErrs []error
 
-	if uiRegistered {
-		if r.container.UIHost != nil {
-			r.container.UIHost.DisableExtension(ui_contribution.ExtensionID(extID))
+	if tx.uiRegistered {
+		if tx.runtime.container.UIHost != nil {
+			tx.runtime.container.UIHost.DisableExtension(ui_contribution.ExtensionID(tx.extID))
 		}
-		if r.container.PageHost != nil {
-			r.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(extID))
+		if tx.runtime.container.PageHost != nil {
+			tx.runtime.container.PageHost.HandleExtensionDisabled(ctx, extension_page_host.ExtensionID(tx.extID))
 		}
 	}
 
-	if contributionsActivated && r.container.ContributionInstaller != nil {
-		if err := r.container.ContributionInstaller.DeactivateContributions(ctx, extID); err != nil {
+	if tx.contributionsActivated && tx.runtime.container.ContributionInstaller != nil {
+		if err := tx.runtime.container.ContributionInstaller.DeactivateContributions(ctx, tx.extID); err != nil {
 			rollbackErrs = append(rollbackErrs, fmt.Errorf("deactivate contributions: %w", err))
 		}
 	}
 
-	r.stopInstances(ctx, instanceIDs)
+	for i := tx.modulesCommitted - 1; i >= 0; i-- {
+		snap := tx.moduleSnapshots[i]
+		if err := tx.runtime.container.EnablementStore.SetEnablement(ctx, snap.subject, snap.prevEnablement); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore module %s enablement: %w", snap.subject.ID, err))
+		}
+		if err := tx.runtime.container.EnablementStore.SetDesiredRuntime(ctx, snap.subject, snap.prevDesired); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore module %s desired runtime: %w", snap.subject.ID, err))
+		}
+	}
+
+	if tx.extEnablementCommitted {
+		extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: tx.extensionID}
+		if err := tx.runtime.container.EnablementStore.SetEnablement(ctx, extSubject, tx.prevExtEnablement); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore extension enablement: %w", err))
+		}
+		if err := tx.runtime.container.EnablementStore.SetDesiredRuntime(ctx, extSubject, tx.prevExtDesired); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore extension desired runtime: %w", err))
+		}
+	}
+
+	if tx.instCommitted {
+		tx.prevInst.UpdatedAt = time.Now().UTC()
+		if err := tx.runtime.container.InstallationRepository.PutInstallation(ctx, tx.prevInst); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore installation: %w", err))
+		}
+	}
+
+	if tx.runtime.container.RuntimeSupervisor != nil {
+		for _, sid := range tx.startedInstanceIDs {
+			if err := tx.runtime.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback); err != nil {
+				rollbackErrs = append(rollbackErrs, fmt.Errorf("stop runtime instance %s: %w", sid, err))
+			}
+		}
+	}
 
 	if len(rollbackErrs) > 0 {
-		return fmt.Errorf("rollback failed with %d errors: %v", len(rollbackErrs), rollbackErrs)
+		tx.runtime.markRequiresRecovery(ctx, tx.extID, tx.prevInst)
+		tx.runtime.recordLifecycleOperation(ctx, tx.extID, tx.operationID, "enable_rollback_failed", rollbackErrs)
+		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "failed", fmt.Errorf("%d errors: %v", len(rollbackErrs), rollbackErrs))
+	} else {
+		tx.runtime.logEnableStep(tx.operationID, tx.extensionID, "rollback", "succeeded", nil)
 	}
-	return nil
 }
 
-func (r *Runtime) rollbackEnableAfterCommit(ctx context.Context, extID domain.ExtensionID, prevInst domain.ExtensionInstallation, prevEnablement enablement.EnablementState, prevDesiredRuntime enablement.DesiredRuntimeState, instanceIDs []string, contributionsActivated, uiRegistered bool) {
-	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: string(extID)}
-	if err := r.container.EnablementStore.SetEnablement(ctx, extSubject, prevEnablement); err != nil {
-		log.Printf("[enable-tx] failed to restore enablement for %s: %v", extID, err)
+func (r *Runtime) recordLifecycleOperation(ctx context.Context, extID domain.ExtensionID, operationID, opType string, errs []error) {
+	if r.container == nil || r.container.OperationRepository == nil {
+		return
 	}
-	if err := r.container.EnablementStore.SetDesiredRuntime(ctx, extSubject, prevDesiredRuntime); err != nil {
-		log.Printf("[enable-tx] failed to restore desired runtime for %s: %v", extID, err)
+	now := time.Now().UTC()
+	errMsg := ""
+	if len(errs) > 0 {
+		parts := make([]string, 0, len(errs))
+		for _, e := range errs {
+			parts = append(parts, e.Error())
+		}
+		errMsg = fmt.Sprintf("%v", parts)
 	}
-
-	prevInst.UpdatedAt = time.Now().UTC()
-	if err := r.container.InstallationRepository.PutInstallation(ctx, prevInst); err != nil {
-		log.Printf("[enable-tx] failed to restore installation for %s: %v", extID, err)
-	}
-
-	rbErr := r.rollbackEnableCandidate(ctx, extID, instanceIDs, contributionsActivated, uiRegistered)
-	if rbErr != nil {
-		r.markRequiresRecovery(ctx, extID, prevInst)
-	}
+	_ = r.container.OperationRepository.PutOperation(ctx, sqlite.Operation{
+		OperationID:   operationID,
+		OperationType: opType,
+		ExtensionID:   extID,
+		Status:        "failed",
+		ErrorMessage:  errMsg,
+		StartedAt:     now,
+		FinishedAt:    &now,
+	})
 }
 
 func (r *Runtime) markRequiresRecovery(ctx context.Context, extID domain.ExtensionID, inst domain.ExtensionInstallation) {
@@ -546,11 +624,18 @@ func (r *Runtime) ResumeUninstall(ctx context.Context, extensionID string) error
 	return r.Uninstall(ctx, extensionID)
 }
 
-func (r *Runtime) stopInstances(ctx context.Context, instanceIDs []string) {
+func (r *Runtime) stopInstances(ctx context.Context, instanceIDs []string) error {
 	if r.container == nil || r.container.RuntimeSupervisor == nil {
-		return
+		return nil
 	}
+	var errs []error
 	for _, sid := range instanceIDs {
-		_ = r.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback)
+		if err := r.container.RuntimeSupervisor.Stop(ctx, sid, runtime_supervisor.StopReasonRollback); err != nil {
+			errs = append(errs, fmt.Errorf("stop instance %s: %w", sid, err))
+		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("stop instances failed with %d errors: %v", len(errs), errs)
+	}
+	return nil
 }

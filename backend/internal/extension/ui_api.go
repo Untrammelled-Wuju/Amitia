@@ -42,6 +42,10 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		handler.SetDialogResolver(container.UIHostNotifier)
 	}
 
+	if container.ClipboardHostBridge != nil {
+		handler.SetClipboardResolver(container.ClipboardHostBridge)
+	}
+
 	if container.PermissionBroker != nil && container.ScopeManager != nil {
 		handler.SetAuthorizer(permission.NewUISessionAuthorizer(container.PermissionBroker, container.ScopeManager))
 	}

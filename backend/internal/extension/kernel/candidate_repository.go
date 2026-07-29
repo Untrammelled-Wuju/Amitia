@@ -37,13 +37,15 @@ func (r *CandidateRepository) Save(ctx context.Context, record *CandidateRecord)
 	_, err = r.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO kernel_candidate_contributions
 		(candidate_id, extension_id, instance_ids_json, generation_id, candidate_generation,
+		 expected_stable_generation,
 		 contribs_json, schedule_ids_json, artifact_path, definition_hash, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.CandidateID,
 		string(record.ExtensionID),
 		string(instanceIDsJSON),
 		record.GenerationID,
 		record.CandidateGeneration,
+		record.ExpectedStableGeneration,
 		string(contribsJSON),
 		string(scheduleIDsJSON),
 		record.ArtifactPath,
@@ -93,6 +95,7 @@ func (r *CandidateRepository) ListAll(ctx context.Context) ([]*CandidateRecord, 
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT candidate_id, extension_id, instance_ids_json, generation_id, candidate_generation,
+		       expected_stable_generation,
 		       contribs_json, schedule_ids_json, artifact_path, definition_hash, status, created_at, updated_at
 		FROM kernel_candidate_contributions`)
 	if err != nil {
@@ -117,6 +120,7 @@ func (r *CandidateRepository) Get(ctx context.Context, candidateID string) (*Can
 	}
 	row := r.db.QueryRowContext(ctx, `
 		SELECT candidate_id, extension_id, instance_ids_json, generation_id, candidate_generation,
+		       expected_stable_generation,
 		       contribs_json, schedule_ids_json, artifact_path, definition_hash, status, created_at, updated_at
 		FROM kernel_candidate_contributions
 		WHERE candidate_id = ?`, candidateID)
@@ -140,6 +144,7 @@ func scanCandidateRecord(rows *sql.Rows) (*CandidateRecord, error) {
 		&instanceIDsStr,
 		&record.GenerationID,
 		&record.CandidateGeneration,
+		&record.ExpectedStableGeneration,
 		&contribsStr,
 		&scheduleIDsStr,
 		&record.ArtifactPath,
@@ -191,6 +196,7 @@ func scanCandidateRow(row *sql.Row) (*CandidateRecord, error) {
 		&instanceIDsStr,
 		&record.GenerationID,
 		&record.CandidateGeneration,
+		&record.ExpectedStableGeneration,
 		&contribsStr,
 		&scheduleIDsStr,
 		&record.ArtifactPath,
