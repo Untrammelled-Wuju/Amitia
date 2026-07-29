@@ -72,6 +72,7 @@ class CapabilityViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            extensionHost.initialize()
             extensionHost.restoreFromDatabase()
             collectEvents()
             loadAll()

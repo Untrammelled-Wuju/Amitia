@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,35 +20,23 @@ type ProductionCandidateRunner struct {
 	supervisor       runtime_supervisor.Supervisor
 	contribInstaller *TypedContributionInstaller
 	generationMgr    *update.GenerationManager
+	candidateMgr     *CandidateContributionManager
 	extRoot          string
-
-	mu         sync.Mutex
-	candidates map[string]*candidateState
-}
-
-type candidateState struct {
-	candidateID  string
-	extensionID  domain.ExtensionID
-	instanceIDs  []string
-	generationID string
-	generation   int64
-	contribs     []domain.ContributionDefinition
-	artifactPath string
-	promoted     bool
 }
 
 func NewProductionCandidateRunner(
 	supervisor runtime_supervisor.Supervisor,
 	contribInstaller *TypedContributionInstaller,
 	generationMgr *update.GenerationManager,
+	candidateMgr *CandidateContributionManager,
 	extRoot string,
 ) *ProductionCandidateRunner {
 	return &ProductionCandidateRunner{
 		supervisor:       supervisor,
 		contribInstaller: contribInstaller,
 		generationMgr:    generationMgr,
+		candidateMgr:     candidateMgr,
 		extRoot:          extRoot,
-		candidates:       make(map[string]*candidateState),
 	}
 }
 
@@ -99,7 +85,7 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 		if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != "static" {
 			spec := r.buildInstanceSpec(extID, modID, mod, gen.Generation)
 			result := r.supervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-				DefinitionID: runtime_supervisor.DefinitionID(string(extID)),
+				DefinitionID: runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
 				Desired:      runtime_supervisor.DesiredRunning,
 				Spec:         spec,
 			})
@@ -124,31 +110,27 @@ func (r *ProductionCandidateRunner) StartCandidate(ctx context.Context, id dev_m
 		}
 	}
 
-	if err := r.contribInstaller.InstallContributions(ctx, allContribs, int64(gen.Generation)); err != nil {
-		r.rollbackCandidate(ctx, extID, instanceIDs, gen.GenerationID, "")
-		return "", fmt.Errorf("candidate_runner: install contributions: %w", err)
-	}
-
 	if err := r.generationMgr.Transition(ctx, string(extID), gen.GenerationID, update.GenerationStateRuntimeReady); err != nil {
 		r.rollbackCandidate(ctx, extID, instanceIDs, gen.GenerationID, "")
 		return "", fmt.Errorf("candidate_runner: transition to runtime_ready: %w", err)
 	}
 
 	candidateID := "candidate-" + uuid.NewString()
-	state := &candidateState{
-		candidateID:  candidateID,
-		extensionID:  extID,
-		instanceIDs:  instanceIDs,
-		generationID: gen.GenerationID,
-		generation:   int64(gen.Generation),
-		contribs:     allContribs,
-		artifactPath: rev.ArtifactPath,
-		promoted:     false,
+	record := &CandidateRecord{
+		CandidateID:         candidateID,
+		ExtensionID:         extID,
+		InstanceIDs:         instanceIDs,
+		GenerationID:        gen.GenerationID,
+		CandidateGeneration: int64(gen.Generation),
+		Contribs:            allContribs,
+		ArtifactPath:        rev.ArtifactPath,
+		DefinitionHash:      defHash,
 	}
 
-	r.mu.Lock()
-	r.candidates[candidateID] = state
-	r.mu.Unlock()
+	if err := r.candidateMgr.RegisterCandidate(ctx, record); err != nil {
+		r.rollbackCandidate(ctx, extID, instanceIDs, gen.GenerationID, "")
+		return "", fmt.Errorf("candidate_runner: register candidate: %w", err)
+	}
 
 	return candidateID, nil
 }
@@ -158,33 +140,12 @@ func (r *ProductionCandidateRunner) HealthCheck(ctx context.Context, instanceID 
 		return fmt.Errorf("candidate_runner: runner not initialized")
 	}
 
-	r.mu.Lock()
-	state, ok := r.candidates[instanceID]
-	r.mu.Unlock()
-	if !ok {
-		return fmt.Errorf("candidate_runner: candidate %s not found", instanceID)
+	if err := r.candidateMgr.HealthCandidate(ctx, instanceID); err != nil {
+		return err
 	}
 
-	for _, instID := range state.instanceIDs {
-		snap, err := r.supervisor.GetInstance(ctx, instID)
-		if err != nil {
-			return fmt.Errorf("candidate_runner: get instance %s: %w", instID, err)
-		}
-		if snap.Health != runtime_supervisor.HealthHealthy && snap.Health != runtime_supervisor.HealthDegraded {
-			return fmt.Errorf("candidate_runner: instance %s unhealthy (status=%s)", instID, snap.Health)
-		}
-		if snap.Actual != runtime_supervisor.ActualReady && snap.Actual != runtime_supervisor.ActualDegraded {
-			return fmt.Errorf("candidate_runner: instance %s not ready (state=%s)", instID, snap.Actual)
-		}
-	}
-
-	if !state.promoted {
-		if err := r.generationMgr.Transition(ctx, string(state.extensionID), state.generationID, update.GenerationStateActive); err != nil {
-			return fmt.Errorf("candidate_runner: promote generation: %w", err)
-		}
-		r.mu.Lock()
-		state.promoted = true
-		r.mu.Unlock()
+	if err := r.candidateMgr.PromoteCandidate(ctx, instanceID); err != nil {
+		return fmt.Errorf("candidate_runner: promote candidate: %w", err)
 	}
 
 	return nil
@@ -195,18 +156,16 @@ func (r *ProductionCandidateRunner) DrainInstance(ctx context.Context, instanceI
 		return fmt.Errorf("candidate_runner: runner not initialized")
 	}
 
-	r.mu.Lock()
-	state, ok := r.candidates[instanceID]
-	r.mu.Unlock()
+	record, ok := r.candidateMgr.GetCandidate(instanceID)
 	if !ok {
 		return fmt.Errorf("candidate_runner: candidate %s not found", instanceID)
 	}
 
-	if err := r.generationMgr.Drain(ctx, string(state.extensionID)); err != nil {
+	if err := r.generationMgr.DrainGeneration(ctx, string(record.ExtensionID), record.GenerationID); err != nil {
 		return fmt.Errorf("candidate_runner: drain generation: %w", err)
 	}
 
-	for _, instID := range state.instanceIDs {
+	for _, instID := range record.InstanceIDs {
 		if err := r.supervisor.Drain(ctx, instID, timeout); err != nil {
 			return fmt.Errorf("candidate_runner: drain instance %s: %w", instID, err)
 		}
@@ -220,34 +179,39 @@ func (r *ProductionCandidateRunner) StopInstance(ctx context.Context, instanceID
 		return fmt.Errorf("candidate_runner: runner not initialized")
 	}
 
-	r.mu.Lock()
-	state, ok := r.candidates[instanceID]
-	r.mu.Unlock()
+	record, ok := r.candidateMgr.GetCandidate(instanceID)
 	if !ok {
-		return fmt.Errorf("candidate_runner: candidate %s not found", instanceID)
+		return nil
 	}
 
 	var firstErr error
-	for _, instID := range state.instanceIDs {
-		if err := r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("candidate_runner: stop instance %s: %w", instID, err)
+
+	if record.Status == CandidateStatusPromoted {
+		for _, instID := range record.InstanceIDs {
+			if err := r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("candidate_runner: stop instance %s: %w", instID, err)
+			}
 		}
+		extID := string(record.ExtensionID)
+		genID := record.GenerationID
+		if gen, _ := r.generationMgr.Get(ctx, extID, genID); gen != nil {
+			if gen.State == update.GenerationStateActive {
+				_ = r.generationMgr.DrainGeneration(ctx, extID, genID)
+			}
+			if firstErr != nil {
+				_ = r.generationMgr.Transition(ctx, extID, genID, update.GenerationStateFailed)
+			} else {
+				_ = r.generationMgr.StopGeneration(ctx, extID, genID)
+			}
+		}
+		_ = r.generationMgr.RemoveGeneration(ctx, extID, genID)
+		r.candidateMgr.RemovePromotedRecord(instanceID)
+		return firstErr
 	}
 
-	if err := r.contribInstaller.UninstallContributions(ctx, state.extensionID); err != nil && firstErr == nil {
-		firstErr = fmt.Errorf("candidate_runner: uninstall contributions: %w", err)
+	if err := r.candidateMgr.DiscardCandidate(ctx, instanceID); err != nil && firstErr == nil {
+		firstErr = err
 	}
-
-	targetState := update.GenerationStateStopped
-	if firstErr != nil {
-		targetState = update.GenerationStateFailed
-	}
-	_ = r.generationMgr.Transition(ctx, string(state.extensionID), state.generationID, targetState)
-	_ = r.generationMgr.RemoveGeneration(ctx, string(state.extensionID), state.generationID)
-
-	r.mu.Lock()
-	delete(r.candidates, instanceID)
-	r.mu.Unlock()
 
 	return firstErr
 }
@@ -256,16 +220,13 @@ func (r *ProductionCandidateRunner) rollbackCandidate(ctx context.Context, extID
 	for _, instID := range instanceIDs {
 		_ = r.supervisor.Stop(ctx, instID, runtime_supervisor.StopReasonRollback)
 	}
-	if err := r.contribInstaller.UninstallContributions(ctx, extID); err != nil {
-		log.Printf("[candidate_runner] uninstall contributions for rollback %s: %v", extID, err)
-	}
 	_ = r.generationMgr.Transition(ctx, string(extID), generationID, update.GenerationStateFailed)
 	_ = r.generationMgr.RemoveGeneration(ctx, string(extID), generationID)
 }
 
 func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, mod manifest_v2.ModuleMeta, genNum int) runtime_supervisor.InstanceSpec {
 	spec := runtime_supervisor.InstanceSpec{
-		DefinitionID:    runtime_supervisor.DefinitionID(string(extID)),
+		DefinitionID:    runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(modID), domain.RuntimeType(mod.Runtime.Type)),
 		ExtensionID:     extID,
 		ModuleID:        modID,
 		RuntimeType:     domain.RuntimeType(mod.Runtime.Type),
@@ -290,6 +251,29 @@ func (r *ProductionCandidateRunner) buildInstanceSpec(extID domain.ExtensionID, 
 		spec.WorkerCount = 1
 	}
 	return spec
+}
+
+func (r *ProductionCandidateRunner) CleanupDrainingGenerations(ctx context.Context) int {
+	if r == nil {
+		return 0
+	}
+	all := r.generationMgr.ListAll(ctx)
+	cleaned := 0
+	for _, gen := range all {
+		if gen.State == update.GenerationStateDraining {
+			_ = r.generationMgr.Transition(ctx, gen.ExtensionID, gen.GenerationID, update.GenerationStateStopped)
+			_ = r.generationMgr.RemoveGeneration(ctx, gen.ExtensionID, gen.GenerationID)
+			cleaned++
+		}
+	}
+	return cleaned
+}
+
+func (r *ProductionCandidateRunner) RecoverOrphans(ctx context.Context) ([]string, error) {
+	if r == nil || r.candidateMgr == nil {
+		return nil, nil
+	}
+	return r.candidateMgr.RecoverOrphanCandidates(ctx)
 }
 
 var _ dev_mode.CandidateRunner = (*ProductionCandidateRunner)(nil)

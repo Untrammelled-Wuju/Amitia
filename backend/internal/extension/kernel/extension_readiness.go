@@ -14,6 +14,7 @@ type ExtensionKernelReadiness struct {
 	RuntimeSupervisorReady bool
 	EnabledRuntimesReady   bool
 	LegacyCounterZero      bool
+	MCPDuplicateDetails    []MCPDuplicateDetail
 }
 
 func (r ExtensionKernelReadiness) Ready() bool {
@@ -58,7 +59,23 @@ func (c *Container) CheckExtensionKernelReadiness(ctx context.Context) Extension
 	r.RuntimeSupervisorReady = c.RuntimeSupervisor != nil
 	r.EnabledRuntimesReady = c.checkEnabledRuntimesReady(ctx)
 	counter := GlobalLegacyCallCounter()
-	r.LegacyCounterZero = counter.LegacyFallbackTotal() == 0
+	if c.MCPDuplicateProvider != nil {
+		if count, err := c.MCPDuplicateProvider.CountUnresolved(ctx); err == nil {
+			counter.SetDuplicateMCPFromRegistry(count)
+		}
+		if details, err := c.MCPDuplicateProvider.ListUnresolved(ctx); err == nil {
+			r.MCPDuplicateDetails = details
+		}
+	}
+	metrics := counter.FinalGateMetrics()
+	allZero := true
+	for _, v := range metrics {
+		if v != 0 {
+			allZero = false
+			break
+		}
+	}
+	r.LegacyCounterZero = allZero
 	return r
 }
 

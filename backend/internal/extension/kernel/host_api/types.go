@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
@@ -38,6 +39,7 @@ const (
 	MethodConversationRead Method = "host.conversation.read"
 	MethodMemoryQuery    Method = "host.memory.query"
 	MethodProviderInvoke Method = "host.provider.invoke"
+	MethodRuntimeHealth  Method = "host.runtime.health"
 )
 
 type RiskLevel string
@@ -76,16 +78,17 @@ type PermissionRequirement struct {
 }
 
 type CallRequest struct {
-	CallID          string
-	RuntimeIdentity runtime_supervisor.RuntimeIdentity
-	Method          Method
-	Version         int
-	Input           json.RawMessage
-	ScopeSnapshotID string
-	TraceID         string
-	InvocationID    string
-	ParentID        string
-	Deadline        time.Time
+	CallID               string
+	RuntimeIdentity      runtime_supervisor.RuntimeIdentity
+	Method               Method
+	Version              int
+	Input                json.RawMessage
+	ScopeSnapshotID      string
+	PermissionSnapshotID string
+	TraceID              string
+	InvocationID         string
+	ParentID             string
+	Deadline             time.Time
 }
 
 type CallResult struct {
@@ -195,7 +198,10 @@ const (
 	ErrorCodeCancelled          = "cancelled"
 	ErrorCodeResourceNotFound   = "resource_not_found"
 	ErrorCodeStateConflict      = "state_conflict"
-	ErrorCodeHostUnavailable    = "host_unavailable"
+	ErrorCodeHostUnavailable         = "host_unavailable"
+	ErrorCodeUIHostUnavailable       = "ui_host_unavailable"
+	ErrorCodeDialogHostUnavailable   = "dialog_host_unavailable"
+	ErrorCodeNavigationHostUnavailable = "navigation_host_unavailable"
 	ErrorCodeInternal           = "internal_error"
 )
 
@@ -203,16 +209,30 @@ type PermissionChecker interface {
 	Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, requirements []PermissionRequirement) error
 }
 
+type PermissionSnapshotStore interface {
+	Get(ctx context.Context, snapshotID string) (*permission.PermissionSnapshot, error)
+}
+
+type PermissionSnapshotReader interface {
+	GetSnapshot(ctx context.Context, snapshotID string) (permission.PermissionSnapshot, error)
+}
+
+type PermissionSnapshotChecker interface {
+	Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, permissionSnapshotID string, requirements []PermissionRequirement) error
+}
+
 type ScopeChecker interface {
 	Check(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, scopeSnapshotID string, policy ScopePolicy) error
 }
 
 type AuditWriter interface {
+	RecordCallStart(ctx context.Context, request CallRequest) error
 	RecordCall(ctx context.Context, request CallRequest, result CallResult)
 }
 
 type PermissionCheckerFunc func(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, requirements []PermissionRequirement) error
 type ScopeCheckerFunc func(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, scopeSnapshotID string, policy ScopePolicy) error
+type PermissionSnapshotCheckerFunc func(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, permissionSnapshotID string, requirements []PermissionRequirement) error
 
 func (f PermissionCheckerFunc) Check(ctx context.Context, id runtime_supervisor.RuntimeIdentity, req []PermissionRequirement) error {
 	return f(ctx, id, req)
@@ -220,6 +240,10 @@ func (f PermissionCheckerFunc) Check(ctx context.Context, id runtime_supervisor.
 
 func (f ScopeCheckerFunc) Check(ctx context.Context, id runtime_supervisor.RuntimeIdentity, sid string, p ScopePolicy) error {
 	return f(ctx, id, sid, p)
+}
+
+func (f PermissionSnapshotCheckerFunc) Check(ctx context.Context, id runtime_supervisor.RuntimeIdentity, sid string, req []PermissionRequirement) error {
+	return f(ctx, id, sid, req)
 }
 
 var _ domain.ExtensionID

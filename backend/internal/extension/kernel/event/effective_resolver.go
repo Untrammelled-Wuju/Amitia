@@ -156,7 +156,12 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 		}
 		if producerID != "" {
 			currentProducerGen, err := r.generationResolver.CurrentGeneration(ctx, producerID)
-			if err == nil && currentProducerGen > 0 && currentProducerGen > envelope.ProducerGeneration {
+			if err != nil {
+				state.ScopeValid = false
+				state.Reason = "generation_check_error"
+				return state
+			}
+			if currentProducerGen > 0 && currentProducerGen > envelope.ProducerGeneration {
 				state.ScopeValid = false
 				state.Reason = "reject_stale_producer"
 				return state
@@ -165,7 +170,12 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 	}
 	if def.Generation > 0 && r.generationResolver != nil {
 		currentSubscriberGen, err := r.generationResolver.CurrentGeneration(ctx, def.ExtensionID)
-		if err == nil && currentSubscriberGen > 0 && currentSubscriberGen > def.Generation {
+		if err != nil {
+			state.ScopeValid = false
+			state.Reason = "generation_check_error"
+			return state
+		}
+		if currentSubscriberGen > 0 && currentSubscriberGen > def.Generation {
 			state.ScopeValid = false
 			state.Reason = "cancel_stale_subscription"
 			return state

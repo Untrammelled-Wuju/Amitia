@@ -128,6 +128,13 @@ class ExtensionApiClient @Inject constructor(
         return executeRequest(request)
     }
 
+    suspend fun fetchTrustedPublishers(): JsonObject {
+        val request = buildRequest("/api/extensions/trust/publishers")
+            .get()
+            .build()
+        return executeRequest(request)
+    }
+
     suspend fun getPluginPermissions(pluginId: String): JsonObject {
         val request = buildRequest("/api/extensions/plugins/$pluginId/permissions")
             .get()

@@ -51,6 +51,8 @@ interface ExtensionHost {
 
     val loadedExtensions: Map<String, LoadedExtension>
 
+    suspend fun initialize()
+
     suspend fun loadPackage(file: File): Result<LoadedExtension>
 
     suspend fun loadPackage(stream: InputStream): Result<LoadedExtension>

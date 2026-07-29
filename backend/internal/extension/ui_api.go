@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_handler"
 )
 
@@ -36,6 +37,18 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.ChatExtensionRegistry,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
+
+	if container.UIHostNotifier != nil {
+		handler.SetDialogResolver(container.UIHostNotifier)
+	}
+
+	if container.PermissionBroker != nil && container.ScopeManager != nil {
+		handler.SetAuthorizer(permission.NewUISessionAuthorizer(container.PermissionBroker, container.ScopeManager))
+	}
+
+	if container.ScopeSnapshotCreator != nil {
+		handler.SetScopeSnapshotCreator(container.ScopeSnapshotCreator)
+	}
 
 	if container.SchemaRegistry != nil {
 		handler.SetSchemaLookup(func(extensionID, contributionID string) (json.RawMessage, bool) {

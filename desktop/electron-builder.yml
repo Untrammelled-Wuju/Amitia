@@ -67,6 +67,5 @@ releaseInfo:
   releaseNotesFile: release-notes.md
 
 publish:
-  - provider: github
-    owner: Untrammelled-Wuju
-    repo: Amitia
+  - provider: generic
+    url: https://amitia.untrammelled.top/amitia

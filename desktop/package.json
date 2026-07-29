@@ -11,7 +11,8 @@
     "dist:win:dir": "electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "pnpm run build && node scripts/build-release.mjs"
+    "package": "pnpm run build && node scripts/build-release.mjs",
+    "upload": "node scripts/publish-release.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.7",

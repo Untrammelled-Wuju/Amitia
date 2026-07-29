@@ -256,7 +256,7 @@ func TestToolRegistryUnregisterByOwner(t *testing.T) {
 		t.Fatalf("unexpected Register error: %v", err)
 	}
 
-	ids := reg.UnregisterByOwner(context.Background(), "extension:com.test.owner")
+	ids, _ := reg.UnregisterByOwner(context.Background(), "extension:com.test.owner")
 	if len(ids) != 1 {
 		t.Fatalf("expected 1 removed id, got %d", len(ids))
 	}

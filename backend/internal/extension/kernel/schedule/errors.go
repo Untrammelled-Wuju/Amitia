@@ -83,4 +83,5 @@ const (
 	ErrCodeInvalidStateTransition = "SCHEDULE_INVALID_STATE_TRANSITION"
 	ErrCodeRuntimeHandlerMissing  = "SCHEDULE_RUNTIME_HANDLER_MISSING"
 	ErrCodeExecutionOwnerDenied   = "SCHEDULE_EXECUTION_OWNER_DENIED"
+	ErrCodeDualScheduler          = "SCHEDULE_DUAL_SCHEDULER"
 )

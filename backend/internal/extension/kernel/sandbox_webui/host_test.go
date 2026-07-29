@@ -292,3 +292,140 @@ func TestComputeHash(t *testing.T) {
 		t.Errorf("expected ErrIntegrityMismatch, got %v", err)
 	}
 }
+
+func TestRevokeSessionsByContext(t *testing.T) {
+	tmpDir := t.TempDir()
+	entryFile := filepath.Join(tmpDir, "index.html")
+	os.WriteFile(entryFile, []byte("<html></html>"), 0644)
+
+	host := NewHost()
+	baseReq := CreateSessionRequest{
+		ExtensionID: "ext-1",
+		ModuleID:    "mod-1",
+		Generation:  1,
+		SlotID:      "slot-1",
+		Sandbox:     SandboxWebRestricted,
+		EntryPath:   "index.html",
+		BasePath:    tmpDir,
+	}
+
+	req1 := baseReq
+	req1.CharacterID = "char-1"
+	req1.ConversationID = "conv-1"
+	r1, _ := host.CreateSession(req1)
+
+	req2 := baseReq
+	req2.CharacterID = "char-1"
+	req2.ConversationID = "conv-2"
+	r2, _ := host.CreateSession(req2)
+
+	req3 := baseReq
+	req3.CharacterID = "char-2"
+	req3.ConversationID = "conv-3"
+	r3, _ := host.CreateSession(req3)
+
+	stats := host.GetStats()
+	if stats.Total != 3 {
+		t.Fatalf("expected 3 sessions, got %d", stats.Total)
+	}
+
+	count := host.RevokeSessionsByContext("char-1", "")
+	if count != 2 {
+		t.Fatalf("expected 2 sessions revoked for char-1, got %d", count)
+	}
+
+	stats = host.GetStats()
+	if stats.Total != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", stats.Total)
+	}
+
+	_, err := host.GetSession(r1.SessionID)
+	if err != ErrSessionNotFound {
+		t.Errorf("expected r1 to be revoked, got err=%v", err)
+	}
+	_, err = host.GetSession(r2.SessionID)
+	if err != ErrSessionNotFound {
+		t.Errorf("expected r2 to be revoked, got err=%v", err)
+	}
+	_, err = host.GetSession(r3.SessionID)
+	if err != nil {
+		t.Errorf("expected r3 to still exist, got err=%v", err)
+	}
+}
+
+func TestRevokeSessionsByConversationID(t *testing.T) {
+	tmpDir := t.TempDir()
+	entryFile := filepath.Join(tmpDir, "index.html")
+	os.WriteFile(entryFile, []byte("<html></html>"), 0644)
+
+	host := NewHost()
+	baseReq := CreateSessionRequest{
+		ExtensionID: "ext-1",
+		ModuleID:    "mod-1",
+		Generation:  1,
+		SlotID:      "slot-1",
+		Sandbox:     SandboxWebRestricted,
+		EntryPath:   "index.html",
+		BasePath:    tmpDir,
+	}
+
+	req1 := baseReq
+	req1.CharacterID = "char-1"
+	req1.ConversationID = "conv-1"
+	host.CreateSession(req1)
+
+	req2 := baseReq
+	req2.CharacterID = "char-2"
+	req2.ConversationID = "conv-1"
+	host.CreateSession(req2)
+
+	req3 := baseReq
+	req3.CharacterID = "char-3"
+	req3.ConversationID = "conv-2"
+	r3, _ := host.CreateSession(req3)
+
+	count := host.RevokeSessionsByContext("", "conv-1")
+	if count != 2 {
+		t.Fatalf("expected 2 sessions revoked for conv-1, got %d", count)
+	}
+
+	stats := host.GetStats()
+	if stats.Total != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", stats.Total)
+	}
+
+	_, err := host.GetSession(r3.SessionID)
+	if err != nil {
+		t.Errorf("expected r3 to still exist, got err=%v", err)
+	}
+}
+
+func TestRevokeSessionsByContextNoMatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	entryFile := filepath.Join(tmpDir, "index.html")
+	os.WriteFile(entryFile, []byte("<html></html>"), 0644)
+
+	host := NewHost()
+	req := CreateSessionRequest{
+		ExtensionID: "ext-1",
+		ModuleID:    "mod-1",
+		Generation:  1,
+		SlotID:      "slot-1",
+		Sandbox:     SandboxWebRestricted,
+		EntryPath:   "index.html",
+		BasePath:    tmpDir,
+		CharacterID: "char-1",
+		ConversationID: "conv-1",
+	}
+	host.CreateSession(req)
+
+	count := host.RevokeSessionsByContext("char-999", "conv-999")
+	if count != 0 {
+		t.Fatalf("expected 0 sessions revoked, got %d", count)
+	}
+
+	stats := host.GetStats()
+	if stats.Total != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", stats.Total)
+	}
+}

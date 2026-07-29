@@ -64,10 +64,11 @@ class PackageSignatureVerifierTest {
         publisherId: String,
         keyId: String,
         treeHash: String,
+        manifestHash: String,
         privateKey: ByteArray,
         algorithm: String = "ed25519"
     ): SignatureDoc {
-        val message = PackageSignatureVerifier.buildSignatureMessage(publisherId, treeHash)
+        val message = PackageSignatureVerifier.buildSignatureMessage(publisherId, treeHash, manifestHash)
             .toByteArray(Charsets.UTF_8)
         val signature = sign(privateKey, message)
         return SignatureDoc(
@@ -84,15 +85,16 @@ class PackageSignatureVerifierTest {
         val publisherId = "test-publisher"
         val keyId = PackageSignatureVerifier.computeKeyId(km.publicKey)
         val treeHash = "dummy-tree-hash"
+        val manifestHash = "dummy-manifest-hash"
 
         val trustStore = InMemoryPublisherTrustStore()
         val key = buildKey(publisherId, km.publicKey, keyId)
         trustStore.registerPublisher(buildIdentity(publisherId, key))
 
         val verifier = PackageSignatureVerifier(trustStore = trustStore)
-        val sigDoc = buildSignedDoc(publisherId, keyId, treeHash, km.privateKey)
+        val sigDoc = buildSignedDoc(publisherId, keyId, treeHash, manifestHash, km.privateKey)
 
-        val result = verifier.verify(sigDoc, treeHash)
+        val result = verifier.verify(sigDoc, treeHash, manifestHash)
 
         assertTrue(result.verified)
         assertEquals(publisherId, result.publisherId)
@@ -112,13 +114,14 @@ class PackageSignatureVerifierTest {
         val key = buildKey(publisherId, km.publicKey, keyId)
         trustStore.registerPublisher(buildIdentity(publisherId, key))
 
-        val sigDoc = buildSignedDoc(publisherId, keyId, treeHash, km.privateKey)
+        val manifestHash = "dummy-manifest-hash"
+        val sigDoc = buildSignedDoc(publisherId, keyId, treeHash, manifestHash, km.privateKey)
         val tampered = sigDoc.signature.copyOf()
         tampered[0] = (tampered[0].toInt() xor 0xFF).toByte()
         val tamperedDoc = sigDoc.copy(signature = tampered)
 
         val verifier = PackageSignatureVerifier(trustStore = trustStore)
-        val result = verifier.verify(tamperedDoc, treeHash)
+        val result = verifier.verify(tamperedDoc, treeHash, manifestHash)
 
         assertFalse(result.verified)
         assertEquals("signature verification failed", result.error)
@@ -127,7 +130,7 @@ class PackageSignatureVerifierTest {
     @Test
     fun verify_nullSignature_returnsFalse() {
         val verifier = PackageSignatureVerifier(trustStore = InMemoryPublisherTrustStore())
-        val result = verifier.verify(null, "tree-hash")
+        val result = verifier.verify(null, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("signature missing", result.error)
     }
@@ -141,7 +144,7 @@ class PackageSignatureVerifierTest {
             publisherId = "publisher-1"
         )
         val verifier = PackageSignatureVerifier(trustStore = InMemoryPublisherTrustStore())
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertTrue(result.error!!.contains("unsupported signature algorithm"))
     }
@@ -155,7 +158,7 @@ class PackageSignatureVerifierTest {
             publisherId = "publisher-1"
         )
         val verifier = PackageSignatureVerifier(trustStore = InMemoryPublisherTrustStore())
-        val result = verifier.verify(sigDoc, "")
+        val result = verifier.verify(sigDoc, "", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("content tree hash empty", result.error)
     }
@@ -169,7 +172,7 @@ class PackageSignatureVerifierTest {
             publisherId = null
         )
         val verifier = PackageSignatureVerifier(trustStore = InMemoryPublisherTrustStore())
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("publisher ID missing in signature", result.error)
     }
@@ -183,7 +186,7 @@ class PackageSignatureVerifierTest {
             publisherId = "publisher-1"
         )
         val verifier = PackageSignatureVerifier(trustStore = InMemoryPublisherTrustStore())
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("key ID missing in signature", result.error)
     }
@@ -197,7 +200,7 @@ class PackageSignatureVerifierTest {
             publisherId = "publisher-1"
         )
         val verifier = PackageSignatureVerifier()
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("no trust store available", result.error)
     }
@@ -217,7 +220,7 @@ class PackageSignatureVerifierTest {
             publisherId = publisherId
         )
 
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertTrue(result.error!!.contains("unknown publisher"))
     }
@@ -240,7 +243,7 @@ class PackageSignatureVerifierTest {
             publisherId = publisherId
         )
 
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertTrue(result.error!!.contains("publisher blocked"))
     }
@@ -276,7 +279,7 @@ class PackageSignatureVerifierTest {
             publisherId = publisherId
         )
 
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertTrue(result.error!!.contains("key revoked"))
     }
@@ -308,7 +311,7 @@ class PackageSignatureVerifierTest {
             publisherId = publisherId
         )
 
-        val result = verifier.verify(sigDoc, "tree-hash")
+        val result = verifier.verify(sigDoc, "tree-hash", "manifest-hash")
         assertFalse(result.verified)
         assertEquals("key expired", result.error)
     }
@@ -318,11 +321,12 @@ class PackageSignatureVerifierTest {
         val km = generateKeyPair()
         val publisherId = "test-publisher"
         val treeHash = "dummy-tree-hash"
+        val manifestHash = "dummy-manifest-hash"
 
-        val sigDoc = buildSignedDoc(publisherId, "any-key", treeHash, km.privateKey)
+        val sigDoc = buildSignedDoc(publisherId, "any-key", treeHash, manifestHash, km.privateKey)
 
         val verifier = PackageSignatureVerifier()
-        val result = verifier.verifyWithPublicKey(sigDoc, treeHash, km.publicKey)
+        val result = verifier.verifyWithPublicKey(sigDoc, treeHash, manifestHash, km.publicKey)
         assertTrue(result)
     }
 
@@ -340,7 +344,7 @@ class PackageSignatureVerifierTest {
         )
 
         val verifier = PackageSignatureVerifier()
-        val result = verifier.verifyWithPublicKey(sigDoc, treeHash, km.publicKey)
+        val result = verifier.verifyWithPublicKey(sigDoc, treeHash, "manifest-hash", km.publicKey)
         assertFalse(result)
     }
 

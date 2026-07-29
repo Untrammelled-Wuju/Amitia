@@ -72,10 +72,12 @@ func TestBaseline_FinalGate_AllMetricsZero(t *testing.T) {
 		"legacy_tool_execute_calls",
 		"legacy_mcp_execute_calls",
 		"legacy_package_write_calls",
+		"legacy_package_read_calls",
 		"duplicate_contribution_registrations",
 		"orphan_runtime_instances",
 		"orphan_ui_sessions",
 		"failed_cleanup_resources",
+		"duplicate_mcp_tool_registrations",
 	}
 
 	if len(gateMetrics) != len(requiredZeroMetrics) {
@@ -199,7 +201,18 @@ func TestBaseline_FinalGate_NoFalsePassed(t *testing.T) {
 		t.Fatalf("counter with legacy_mcp_execute_calls=1 must NOT pass final gate")
 	}
 
-	t.Logf("FinalGate: all 7 metrics correctly block final gate when non-zero")
+	counter8 := kernel.NewLegacyCallCounter()
+	counter8.SetDuplicateMCPFromRegistry(1)
+	if counter8.FinalGatePassed() {
+		t.Fatalf("counter with duplicate_mcp_tool_registrations=1 must NOT pass final gate")
+	}
+
+	counter8.SetDuplicateMCPFromRegistry(0)
+	if !counter8.FinalGatePassed() {
+		t.Fatalf("counter with duplicate_mcp_tool_registrations=0 must pass final gate after cleanup")
+	}
+
+	t.Logf("FinalGate: all 8 metrics correctly block final gate when non-zero")
 }
 
 func TestBaseline_FinalGate_GateMetricsSnapshot(t *testing.T) {
@@ -210,10 +223,12 @@ func TestBaseline_FinalGate_GateMetricsSnapshot(t *testing.T) {
 		"legacy_tool_execute_calls",
 		"legacy_mcp_execute_calls",
 		"legacy_package_write_calls",
+		"legacy_package_read_calls",
 		"duplicate_contribution_registrations",
 		"orphan_runtime_instances",
 		"orphan_ui_sessions",
 		"failed_cleanup_resources",
+		"duplicate_mcp_tool_registrations",
 	}
 
 	if len(metrics) != len(expectedMetrics) {

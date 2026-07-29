@@ -3,12 +3,13 @@ package kernel
 import "sync/atomic"
 
 type LegacyReadCounter struct {
-	previewUninstall atomic.Int64
-	dependencies     atomic.Int64
-	listVersions     atomic.Int64
-	compareVersions  atomic.Int64
-	export           atomic.Int64
-	dependenciesList atomic.Int64
+	previewUninstall  atomic.Int64
+	dependencies      atomic.Int64
+	listVersions      atomic.Int64
+	compareVersions   atomic.Int64
+	export            atomic.Int64
+	dependenciesList  atomic.Int64
+	packageReadCalls  atomic.Int64
 }
 
 func NewLegacyReadCounter() *LegacyReadCounter {
@@ -39,6 +40,10 @@ func (c *LegacyReadCounter) IncDependenciesList() {
 	c.dependenciesList.Add(1)
 }
 
+func (c *LegacyReadCounter) IncPackageReadCalls() {
+	c.packageReadCalls.Add(1)
+}
+
 func (c *LegacyReadCounter) PreviewUninstallFallbacks() int64 {
 	return c.previewUninstall.Load()
 }
@@ -63,13 +68,18 @@ func (c *LegacyReadCounter) DependenciesListFallbacks() int64 {
 	return c.dependenciesList.Load()
 }
 
+func (c *LegacyReadCounter) PackageReadCallsFallbacks() int64 {
+	return c.packageReadCalls.Load()
+}
+
 func (c *LegacyReadCounter) Total() int64 {
 	return c.previewUninstall.Load() +
 		c.dependencies.Load() +
 		c.listVersions.Load() +
 		c.compareVersions.Load() +
 		c.export.Load() +
-		c.dependenciesList.Load()
+		c.dependenciesList.Load() +
+		c.packageReadCalls.Load()
 }
 
 func (c *LegacyReadCounter) Snapshot() map[string]int64 {
@@ -80,6 +90,7 @@ func (c *LegacyReadCounter) Snapshot() map[string]int64 {
 		"legacy_read_compare_versions":  c.compareVersions.Load(),
 		"legacy_read_export":            c.export.Load(),
 		"legacy_read_dependencies_list": c.dependenciesList.Load(),
+		"legacy_package_read_calls":     c.packageReadCalls.Load(),
 		"legacy_read_total":             c.Total(),
 	}
 }

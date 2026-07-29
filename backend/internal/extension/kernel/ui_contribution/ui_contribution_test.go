@@ -283,16 +283,16 @@ func TestBridgeValidateSession(t *testing.T) {
 	def := makeValidDefinition()
 	_ = h.RegisterContribution(def)
 	sess, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
-	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 1); err != nil {
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 1, sess.Token, sess.Generation, "nonce-1"); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if _, err := h.Bridge().ValidateSession(sess.SessionID, "wrong", "amitia://ext-1", 1); err == nil {
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, "wrong", "amitia://ext-1", 1, sess.Token, sess.Generation, "nonce-2"); err == nil {
 		t.Fatalf("expected contribution mismatch")
 	}
-	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "wrong-origin", 1); err == nil {
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "wrong-origin", 1, sess.Token, sess.Generation, "nonce-3"); err == nil {
 		t.Fatalf("expected origin mismatch")
 	}
-	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 2); err == nil {
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 2, sess.Token, sess.Generation, "nonce-4"); err == nil {
 		t.Fatalf("expected version mismatch")
 	}
 }
@@ -305,7 +305,7 @@ func TestBridgeValidateSessionExpired(t *testing.T) {
 	h.Bridge().mu.Lock()
 	sess.ExpiresAt = time.Now().UTC().Add(-time.Hour)
 	h.Bridge().mu.Unlock()
-	_, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 1)
+	_, err := h.Bridge().ValidateSession(sess.SessionID, "contrib-1", "amitia://ext-1", 1, sess.Token, sess.Generation, "nonce-expired")
 	if err == nil {
 		t.Fatalf("expected expired")
 	}
@@ -322,6 +322,9 @@ func TestBridgeHandleReady(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-ready",
 	})
 	if !resp.OK {
 		t.Fatalf("ready failed: %v", resp.Error)
@@ -340,6 +343,9 @@ func TestBridgeHandleLog(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-log",
 		Payload:         payload,
 	})
 	if !resp.OK {
@@ -359,6 +365,9 @@ func TestBridgeHandleActionInvokeUnknown(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-action-unknown",
 		Payload:         payload,
 	})
 	if resp.OK {
@@ -390,6 +399,9 @@ func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-action-declared",
 		Payload:         payload,
 	})
 	if !resp.OK {
@@ -412,6 +424,9 @@ func TestBridgeHandleDataRequestUsesHandler(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-data-request",
 		Payload:         payload,
 	})
 	if !resp.OK || !strings.Contains(string(resp.Result), `"value":"real"`) {
@@ -430,6 +445,9 @@ func TestBridgeHandleInvalidMethod(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-invalid-method",
 	})
 	if resp.OK {
 		t.Fatalf("expected invalid method")
@@ -465,6 +483,9 @@ func TestBridgeHandleNavigation(t *testing.T) {
 		ContributionID:  "contrib-1",
 		Origin:          "amitia://ext-1",
 		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-navigation",
 		Payload:         payload,
 	})
 	if !resp.OK {
@@ -542,5 +563,124 @@ func TestUIHostUnregister(t *testing.T) {
 	}
 	if _, err := h.GetContribution(def.ContributionID); err == nil {
 		t.Fatalf("expected not found after unregister")
+	}
+}
+
+func TestRevokeSessionsByCharacterID(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+
+	sess1, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	sess2, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-2", time.Hour)
+	sess3, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-2", "conv-3", time.Hour)
+
+	if h.Bridge().SessionCount() != 3 {
+		t.Fatalf("expected 3 sessions, got %d", h.Bridge().SessionCount())
+	}
+
+	count := h.Bridge().RevokeSessionsByContext("char-1", "")
+	if count != 2 {
+		t.Fatalf("expected 2 sessions revoked for char-1, got %d", count)
+	}
+	if h.Bridge().SessionCount() != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", h.Bridge().SessionCount())
+	}
+
+	_, err := h.Bridge().ValidateSession(sess1.SessionID, "contrib-1", "amitia://ext-1", 1, sess1.Token, sess1.Generation, "nonce-rev-1")
+	if err == nil {
+		t.Fatal("expected sess1 to be revoked")
+	}
+	_, err = h.Bridge().ValidateSession(sess2.SessionID, "contrib-1", "amitia://ext-1", 1, sess2.Token, sess2.Generation, "nonce-rev-2")
+	if err == nil {
+		t.Fatal("expected sess2 to be revoked")
+	}
+	_, err = h.Bridge().ValidateSession(sess3.SessionID, "contrib-1", "amitia://ext-1", 1, sess3.Token, sess3.Generation, "nonce-rev-3")
+	if err != nil {
+		t.Fatalf("expected sess3 to still be valid: %v", err)
+	}
+}
+
+func TestRevokeSessionsByConversationID(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-2", "conv-1", time.Hour)
+	sess3, _ := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-3", "conv-2", time.Hour)
+
+	if h.Bridge().SessionCount() != 3 {
+		t.Fatalf("expected 3 sessions, got %d", h.Bridge().SessionCount())
+	}
+
+	count := h.Bridge().RevokeSessionsByContext("", "conv-1")
+	if count != 2 {
+		t.Fatalf("expected 2 sessions revoked for conv-1, got %d", count)
+	}
+	if h.Bridge().SessionCount() != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", h.Bridge().SessionCount())
+	}
+
+	_, err := h.Bridge().ValidateSession(sess3.SessionID, "contrib-1", "amitia://ext-1", 1, sess3.Token, sess3.Generation, "nonce-rev-conv-3")
+	if err != nil {
+		t.Fatalf("expected sess3 to still be valid: %v", err)
+	}
+}
+
+func TestRevokeSessionsByBothContext(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-2", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-2", "conv-1", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-2", "conv-2", time.Hour)
+
+	if h.Bridge().SessionCount() != 4 {
+		t.Fatalf("expected 4 sessions, got %d", h.Bridge().SessionCount())
+	}
+
+	count := h.Bridge().RevokeSessionsByContext("char-1", "conv-1")
+	if count != 3 {
+		t.Fatalf("expected 3 sessions revoked (char-1 OR conv-1), got %d", count)
+	}
+	if h.Bridge().SessionCount() != 1 {
+		t.Fatalf("expected 1 remaining session, got %d", h.Bridge().SessionCount())
+	}
+}
+
+func TestRevokeSessionsNoMatch(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-2", "conv-2", time.Hour)
+
+	count := h.Bridge().RevokeSessionsByContext("char-999", "conv-999")
+	if count != 0 {
+		t.Fatalf("expected 0 sessions revoked, got %d", count)
+	}
+	if h.Bridge().SessionCount() != 2 {
+		t.Fatalf("expected 2 remaining sessions, got %d", h.Bridge().SessionCount())
+	}
+}
+
+func TestRevokeSessionsEmptyContext(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	_, _ = h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
+
+	count := h.Bridge().RevokeSessionsByContext("", "")
+	if count != 0 {
+		t.Fatalf("expected 0 sessions revoked with empty context, got %d", count)
+	}
+	if h.Bridge().SessionCount() != 2 {
+		t.Fatalf("expected 2 remaining sessions, got %d", h.Bridge().SessionCount())
 	}
 }

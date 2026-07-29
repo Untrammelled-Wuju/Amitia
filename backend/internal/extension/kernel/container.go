@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
@@ -44,6 +45,19 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
+type MCPDuplicateDetail struct {
+	ToolID     string `json:"toolId"`
+	ServerID   string `json:"serverId"`
+	Owner      string `json:"owner"`
+	Generation int64  `json:"generation"`
+	DetectedAt string `json:"detectedAt"`
+}
+
+type MCPDuplicateMetricProvider interface {
+	CountUnresolved(ctx context.Context) (int64, error)
+	ListUnresolved(ctx context.Context) ([]MCPDuplicateDetail, error)
+}
+
 type Container struct {
 	Store                  *sqlite.Store
 	TransactionManager     *sqlite.TransactionManager
@@ -68,6 +82,7 @@ type Container struct {
 	HostAPIGateway         *host_api.DefaultGateway
 	PermissionBroker       permission.PermissionBroker
 	ScopeManager           scope.ScopeManager
+	ScopeSnapshotCreator   func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
 	AgentSkillCatalog      *agent_skill.AgentSkillCatalog
 	WorkflowRegistry       *workflow.WorkflowRegistry
 	WorkflowExecutor       *workflow.WorkflowExecutor
@@ -80,6 +95,8 @@ type Container struct {
 	ToolRegistry    *capability.ToolRegistry
 	AdapterRegistry *capability.RuntimeAdapterRegistry
 	ToolFacade      *ToolFacade
+
+	HostCommandRegistry *HostCommandRegistry
 
 	TaskRepository     *sqlite.TaskRepository
 	TaskRuntimeService *task_runtime.TaskRuntimeService
@@ -104,6 +121,7 @@ type Container struct {
 	EventDeliveryAdapter     *javascript_main.EventDeliveryAdapter
 
 	UIHost                *ui_contribution.UIHost
+	UIHostNotifier        *SSEUIHostNotifier
 	UIContributionRepo    *sqlite.SQLiteUIContributionRepository
 	SlotRegistry          *extension_slots.SlotRegistry
 	PageHost              *extension_page_host.PageHost
@@ -160,6 +178,10 @@ type Container struct {
 	CanaryDualWriteManager  *canary.DualWriteManager
 	CanaryShadowManager     *canary.ShadowManager
 	CanaryOwnershipResolver *canary.BackgroundOwnershipResolver
+
+	CandidateMgr *CandidateContributionManager
+
+	MCPDuplicateProvider MCPDuplicateMetricProvider
 }
 
 func (c *Container) Close() error {
@@ -199,16 +221,25 @@ func (c *Container) Close() error {
 }
 
 func (c *Container) Recover(ctx context.Context) error {
+	if c.CandidateMgr != nil {
+		if _, err := c.CandidateMgr.RecoverOrphanCandidates(ctx); err != nil {
+			fmt.Printf("kernel: recover orphan candidates warning: %v\n", err)
+		}
+	}
+
 	insts, err := c.InstallationRepository.ListInstallations(ctx)
 	if err != nil {
 		return fmt.Errorf("kernel: recover installations: %w", err)
 	}
+	var recoverErrs []error
 	for _, inst := range insts {
 		if inst.InstallationState != domain.InstallationStateInstalled {
 			continue
 		}
 		contribs, err := c.ContributionRepository.ListContributions(ctx, inst.ExtensionID)
 		if err != nil {
+			recoverErrs = append(recoverErrs, fmt.Errorf("kernel: list contributions for %s: %w", inst.ExtensionID, err))
+			c.markRequiresRecovery(ctx, inst)
 			continue
 		}
 		for _, cd := range contribs {
@@ -235,6 +266,8 @@ func (c *Container) Recover(ctx context.Context) error {
 		if inst.EnablementState == domain.EnablementEnabled {
 			modules, err := c.ModuleRepository.ListModules(ctx, inst.ExtensionID)
 			if err != nil {
+				recoverErrs = append(recoverErrs, fmt.Errorf("kernel: list modules for %s: %w", inst.ExtensionID, err))
+				c.markRequiresRecovery(ctx, inst)
 				continue
 			}
 			for _, mod := range modules {
@@ -246,6 +279,7 @@ func (c *Container) Recover(ctx context.Context) error {
 				_ = c.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled)
 			}
 
+			runtimeFailed := false
 			if c.RuntimeSupervisor != nil {
 				for _, mod := range modules {
 					if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
@@ -264,11 +298,24 @@ func (c *Container) Recover(ctx context.Context) error {
 						})
 						if result.Error != nil || result.Actual != runtime_supervisor.ActualReady {
 							c.recordReconcileFailure(ctx, inst.ExtensionID, result)
+							recoverErrs = append(recoverErrs, fmt.Errorf("kernel: runtime reconcile failed for %s module %s: actual=%s", inst.ExtensionID, mod.ID, result.Actual))
+							runtimeFailed = true
 						}
 					}
 				}
 			}
 
+			if runtimeFailed {
+				c.markRequiresRecovery(ctx, inst)
+				continue
+			}
+
+			if c.ContributionInstaller != nil {
+				if err := c.ContributionInstaller.RecoverContributions(ctx, inst.ExtensionID); err != nil {
+					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: recover typed contributions for %s: %w", inst.ExtensionID, err))
+					c.markRequiresRecovery(ctx, inst)
+				}
+			}
 		}
 	}
 	if c.WorkflowExecutor != nil {
@@ -276,5 +323,17 @@ func (c *Container) Recover(ctx context.Context) error {
 			return fmt.Errorf("kernel: recover workflow executions: %w", err)
 		}
 	}
+	if len(recoverErrs) > 0 {
+		return fmt.Errorf("kernel: recover encountered %d error(s): %v", len(recoverErrs), recoverErrs)
+	}
 	return nil
+}
+
+func (c *Container) markRequiresRecovery(ctx context.Context, inst domain.ExtensionInstallation) {
+	if c == nil || c.InstallationRepository == nil {
+		return
+	}
+	inst.EnablementState = domain.EnablementRequiresRecovery
+	inst.UpdatedAt = time.Now().UTC()
+	_ = c.InstallationRepository.PutInstallation(ctx, inst)
 }

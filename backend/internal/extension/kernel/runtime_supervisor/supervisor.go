@@ -430,17 +430,24 @@ func (s *DefaultSupervisor) stopLocked(ctx context.Context, instanceID string, r
 	}
 	runtime := entry.runtime
 	s.mu.Unlock()
+	var stopErr error
 	if runtime != nil {
-		_ = runtime.Stop(ctx, reason)
+		stopErr = runtime.Stop(ctx, reason)
 	}
 	s.mu.Lock()
 	now := time.Now().UTC()
 	entry.stoppedAt = &now
-	entry.actual = ActualStopped
 	entry.desired = DesiredStopped
-	entry.health = HealthUnknown
+	if stopErr != nil {
+		entry.actual = ActualFailed
+		entry.health = HealthUnhealthy
+		entry.lastError = stopErr.Error()
+	} else {
+		entry.actual = ActualStopped
+		entry.health = HealthUnknown
+	}
 	s.mu.Unlock()
-	return nil
+	return stopErr
 }
 
 func (s *DefaultSupervisor) Restart(ctx context.Context, instanceID string) error {
@@ -517,6 +524,29 @@ func (s *DefaultSupervisor) GetInstance(_ context.Context, instanceID string) (I
 		Restarts:   entry.restarts,
 		Limits:     entry.limits,
 	}, nil
+}
+
+func (s *DefaultSupervisor) SnapshotByExtension(_ context.Context, extensionID string, moduleID string) []RuntimeHealthSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var results []RuntimeHealthSnapshot
+	for _, entry := range s.instances {
+		if string(entry.identity.ExtensionID) != extensionID {
+			continue
+		}
+		if moduleID != "" && string(entry.identity.ModuleID) != moduleID {
+			continue
+		}
+		results = append(results, RuntimeHealthSnapshot{
+			InstanceID:  entry.identity.InstanceID,
+			Generation:  entry.generation,
+			Health:      entry.health,
+			Circuit:     entry.circuit,
+			Actual:      entry.actual,
+			Quarantined: entry.actual == ActualQuarantined,
+		})
+	}
+	return results
 }
 
 func (s *DefaultSupervisor) findInstance(defID DefinitionID, strategy InstanceStrategy, generation int64) string {

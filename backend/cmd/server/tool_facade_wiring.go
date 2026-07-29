@@ -163,3 +163,31 @@ func (a *mcpToolFacadeSyncerAdapter) UnregisterMCPTools(ctx context.Context, ser
 	a.facade.UnregisterMCPTools(ctx, serverID)
 	return nil
 }
+
+type mcpDuplicateMetricAdapter struct {
+	store *mcp.DuplicateStore
+}
+
+var _ kernel.MCPDuplicateMetricProvider = (*mcpDuplicateMetricAdapter)(nil)
+
+func (a *mcpDuplicateMetricAdapter) CountUnresolved(ctx context.Context) (int64, error) {
+	return a.store.CountUnresolved(ctx)
+}
+
+func (a *mcpDuplicateMetricAdapter) ListUnresolved(ctx context.Context) ([]kernel.MCPDuplicateDetail, error) {
+	records, err := a.store.ListUnresolved(ctx)
+	if err != nil {
+		return nil, err
+	}
+	details := make([]kernel.MCPDuplicateDetail, len(records))
+	for i, r := range records {
+		details[i] = kernel.MCPDuplicateDetail{
+			ToolID:     r.ToolID,
+			ServerID:   r.ServerID,
+			Owner:      r.Owner,
+			Generation: r.Generation,
+			DetectedAt: r.DetectedAt,
+		}
+	}
+	return details, nil
+}

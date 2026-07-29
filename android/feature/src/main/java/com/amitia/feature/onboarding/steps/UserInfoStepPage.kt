@@ -24,38 +24,35 @@ fun UserInfoStepPage(
         ) {
             RevealContent(delayMs = 0) {
                 StepLabel(text = "6 / 6")
-                OnboardingTitle(text = "你的称呼")
-                OnboardingDescription(text = "让 Amitia 知道如何称呼你，以及一些基本偏好。")
+                OnboardingTitle(text = "我应该怎么称呼你？")
+                OnboardingDescription(text = "只填写角色从一开始就需要知道的信息。")
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             SoftField(
-                label = "你的昵称",
+                label = "对你的称呼",
                 value = state.memory.userNickname,
                 onValueChange = { onFieldChange("nickname", it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "你希望TA怎么叫你？"
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             SoftField(
-                label = "你们的关系",
-                value = state.memory.relationship,
-                onValueChange = { onFieldChange("relationship", it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "如：朋友、师生、伴侣"
+                label = "你的身份",
+                value = state.memory.userRole,
+                onValueChange = { onFieldChange("userRole", it) },
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             SoftField(
-                label = "你的偏好",
-                value = state.memory.preferences,
-                onValueChange = { onFieldChange("preferences", it) },
+                label = "希望从一开始记住的事",
+                value = state.memory.firstMemory,
+                onValueChange = { onFieldChange("firstMemory", it) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "如：喜欢科幻、偏好简洁回复",
                 singleLine = false
             )
         }
@@ -64,10 +61,9 @@ fun UserInfoStepPage(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             PrimaryGlassButton(
-                text = "完成设置",
+                text = "继续",
                 onClick = onNext,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = state.memory.userNickname.isNotBlank()
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

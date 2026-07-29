@@ -58,6 +58,7 @@ func (f *WASMRuntimeFactory) SetHostGateway(gw *HostGateway) {
 }
 
 func (f *WASMRuntimeFactory) RegisterDefinition(def *WASMRuntimeDefinition) error {
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		return err
 	}

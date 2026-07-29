@@ -167,6 +167,7 @@ func (m *ModuleManager) Validator() *ModuleValidator {
 }
 
 func (m *ModuleManager) ValidateDefinition(def *WASMRuntimeDefinition) error {
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		return err
 	}

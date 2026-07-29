@@ -680,7 +680,7 @@ func TestDesktopHost_UnregisterByExtension(t *testing.T) {
 	h.RegisterContribution(ctx, makeMenuDef("m-1", "ext-1"))
 	h.RegisterContribution(ctx, makeMenuDef("m-2", "ext-1"))
 	h.RegisterContribution(ctx, makeMenuDef("m-3", "ext-2"))
-	count := h.UnregisterByExtension("ext-1")
+	count, _ := h.UnregisterByExtension("ext-1")
 	if count != 2 {
 		t.Errorf("count = %d, want 2", count)
 	}

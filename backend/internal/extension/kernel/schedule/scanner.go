@@ -96,6 +96,9 @@ func (s *ScheduleScanner) processDueState(state *ScheduleState) {
 	if err != nil || def == nil {
 		return
 	}
+	if def.ExecutionOwner != ExecutionOwnerBackend {
+		return
+	}
 	if def.EndAt != nil && s.clock.Now().After(*def.EndAt) {
 		s.handleExpired(state)
 		return

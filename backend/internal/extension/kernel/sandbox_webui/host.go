@@ -220,17 +220,24 @@ var allowedMethods = map[BridgeMethod]bool{
 	MethodNetwork: true, MethodStorage: true,
 }
 
+type ScopeSnapshotFactory func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+type PermissionSnapshotFactory func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error)
+type SnapshotReleaser func(scopeSnapshotID, permissionSnapshotID string) error
+
 type Host struct {
-	mu          sync.RWMutex
-	sessions    map[string]*WebSession
-	protocol    *ProtocolHandler
-	verifier    *BundleVerifier
-	bridge      *Bridge
-	lifecycle   *LifecycleManager
-	perfMonitor *PerformanceMonitor
-	auditLog    func(entry AuditEntry)
-	cspReporter func(sessionID, violation string)
-	closed      bool
+	mu                        sync.RWMutex
+	sessions                  map[string]*WebSession
+	protocol                  *ProtocolHandler
+	verifier                  *BundleVerifier
+	bridge                    *Bridge
+	lifecycle                 *LifecycleManager
+	perfMonitor               *PerformanceMonitor
+	auditLog                  func(entry AuditEntry)
+	cspReporter               func(sessionID, violation string)
+	scopeSnapshotFactory      ScopeSnapshotFactory
+	permissionSnapshotFactory PermissionSnapshotFactory
+	snapshotReleaser          SnapshotReleaser
+	closed                    bool
 }
 
 type AuditEntry struct {
@@ -285,24 +292,44 @@ func (h *Host) SetCSPReporter(fn func(sessionID, violation string)) {
 	h.cspReporter = fn
 }
 
+func (h *Host) SetScopeSnapshotFactory(fn ScopeSnapshotFactory) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.scopeSnapshotFactory = fn
+}
+
+func (h *Host) SetPermissionSnapshotFactory(fn PermissionSnapshotFactory) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.permissionSnapshotFactory = fn
+}
+
+func (h *Host) SetSnapshotReleaser(fn SnapshotReleaser) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.snapshotReleaser = fn
+}
+
 type CreateSessionRequest struct {
-	ContributionID     string
-	ExtensionID        string
-	ModuleID           string
-	Generation         int64
-	SlotID             string
-	Sandbox            SandboxType
-	CSP                string
-	AllowedActions     []string
-	AllowedDataSources []string
-	Theme              ThemeSnapshot
-	Locale             string
-	BasePath           string
-	EntryPath          string
-	ExpectedHash       string
-	Surface            string
-	CharacterID        string
-	ConversationID     string
+	ContributionID       string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
+	SlotID               string
+	Sandbox              SandboxType
+	CSP                  string
+	AllowedActions       []string
+	AllowedDataSources   []string
+	Theme                ThemeSnapshot
+	Locale               string
+	BasePath             string
+	EntryPath            string
+	ExpectedHash         string
+	Surface              string
+	CharacterID          string
+	ConversationID       string
+	ScopeSnapshotID      string
+	PermissionSnapshotID string
 }
 
 type CreateSessionResult struct {
@@ -360,6 +387,35 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	nonce := newNonce()
 	token := newNonce()
 
+	expiresAt := time.Now().UTC().Add(MaxSessionDuration)
+	scopeSnapshotID := req.ScopeSnapshotID
+	permissionSnapshotID := req.PermissionSnapshotID
+
+	h.mu.RLock()
+	scopeFactory := h.scopeSnapshotFactory
+	permFactory := h.permissionSnapshotFactory
+	releaser := h.snapshotReleaser
+	h.mu.RUnlock()
+
+	if scopeFactory != nil && scopeSnapshotID == "" {
+		sid, err := scopeFactory(req.ExtensionID, req.ModuleID, req.Generation, req.CharacterID, req.ConversationID)
+		if err != nil {
+			return nil, fmt.Errorf("sandbox_webui: create scope snapshot: %w", err)
+		}
+		scopeSnapshotID = sid
+	}
+
+	if permFactory != nil && permissionSnapshotID == "" {
+		pid, err := permFactory(sessionID, req.ExtensionID, req.ModuleID, req.Generation, req.CharacterID, req.ConversationID, req.AllowedActions, expiresAt)
+		if err != nil {
+			if scopeSnapshotID != "" && releaser != nil {
+				_ = releaser(scopeSnapshotID, "")
+			}
+			return nil, fmt.Errorf("sandbox_webui: create permission snapshot: %w", err)
+		}
+		permissionSnapshotID = pid
+	}
+
 	session := &WebSession{
 		SessionID:            sessionID,
 		ContributionID:       req.ContributionID,
@@ -383,6 +439,8 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		Surface:              req.Surface,
 		CharacterID:          req.CharacterID,
 		ConversationID:       req.ConversationID,
+		ScopeSnapshotID:      scopeSnapshotID,
+		PermissionSnapshotID: permissionSnapshotID,
 		subscriptions:        make(map[string]*DataSubscription),
 		resourceHandles:      make(map[string]*ResourceHandle),
 		resizeCount:          make(map[time.Time]int),
@@ -467,8 +525,16 @@ func (h *Host) CloseSession(sessionID, reason string) error {
 		h.mu.Unlock()
 		return ErrSessionNotFound
 	}
+	scopeSnapID := session.ScopeSnapshotID
+	permSnapID := session.PermissionSnapshotID
+	releaser := h.snapshotReleaser
 	delete(h.sessions, sessionID)
 	h.mu.Unlock()
+
+	if releaser != nil && (scopeSnapID != "" || permSnapID != "") {
+		_ = releaser(scopeSnapID, permSnapID)
+	}
+
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	for _, sub := range session.subscriptions {
@@ -490,6 +556,35 @@ func (h *Host) CloseSession(sessionID, reason string) error {
 	return nil
 }
 
+func (h *Host) RevokeSessionsByContext(characterID, conversationID string) int {
+	h.mu.Lock()
+	releaser := h.snapshotReleaser
+	type snapPair struct{ scope, perm string }
+	pairs := make([]snapPair, 0)
+	count := 0
+	for id, sess := range h.sessions {
+		if (characterID != "" && sess.CharacterID == characterID) ||
+			(conversationID != "" && sess.ConversationID == conversationID) {
+			pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+			sess.mu.Lock()
+			sess.bridgeClosed = true
+			sess.State = SessionStateClosed
+			sess.mu.Unlock()
+			delete(h.sessions, id)
+			count++
+		}
+	}
+	h.mu.Unlock()
+	if releaser != nil {
+		for _, p := range pairs {
+			if p.scope != "" || p.perm != "" {
+				_ = releaser(p.scope, p.perm)
+			}
+		}
+	}
+	return count
+}
+
 func (h *Host) IsClosed() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -498,14 +593,26 @@ func (h *Host) IsClosed() bool {
 
 func (h *Host) Shutdown() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.closed = true
+	releaser := h.snapshotReleaser
+	type snapPair struct{ scope, perm string }
+	pairs := make([]snapPair, 0, len(h.sessions))
 	for sid, session := range h.sessions {
 		session.mu.Lock()
 		session.State = SessionStateClosed
 		session.bridgeClosed = true
 		session.mu.Unlock()
+		pairs = append(pairs, snapPair{scope: session.ScopeSnapshotID, perm: session.PermissionSnapshotID})
 		_ = sid
+	}
+	h.mu.Unlock()
+
+	if releaser != nil {
+		for _, p := range pairs {
+			if p.scope != "" || p.perm != "" {
+				_ = releaser(p.scope, p.perm)
+			}
+		}
 	}
 }
 

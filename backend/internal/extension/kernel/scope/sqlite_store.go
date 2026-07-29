@@ -224,6 +224,15 @@ func (s *SQLiteScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 	return snap, nil
 }
 
+func (s *SQLiteScopeStore) DeleteSnapshot(ctx context.Context, snapshotID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM kernel_scope_snapshots WHERE snapshot_id = ?`, snapshotID)
+	return err
+}
+
+func (s *SQLiteScopeStore) DeleteSnapshotsBySession(ctx context.Context, _ string) error {
+	return nil
+}
+
 func scanBinding(rows *sql.Rows) (ScopeBinding, error) {
 	var b ScopeBinding
 	var subjectType, scopeType, scopeID, state, source, metadata string

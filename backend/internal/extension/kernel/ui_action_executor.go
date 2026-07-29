@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
@@ -27,16 +29,20 @@ type UIActionExecContext struct {
 }
 
 type UIActionExecutor struct {
-	hostAPIGateway   *host_api.DefaultGateway
-	workflowExecutor *workflow.WorkflowExecutor
-	runStore         workflow.RunStore
+	hostAPIGateway      *host_api.DefaultGateway
+	workflowExecutor    *workflow.WorkflowExecutor
+	runStore            workflow.RunStore
+	hostCommandRegistry *HostCommandRegistry
+	operationRepo       sqlite.OperationRepository
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore) *UIActionExecutor {
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository) *UIActionExecutor {
 	return &UIActionExecutor{
-		hostAPIGateway:   gateway,
-		workflowExecutor: wfExecutor,
-		runStore:         runStore,
+		hostAPIGateway:      gateway,
+		workflowExecutor:    wfExecutor,
+		runStore:            runStore,
+		hostCommandRegistry: hostCmdRegistry,
+		operationRepo:       opRepo,
 	}
 }
 
@@ -78,11 +84,13 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 		"input":  json.RawMessage(input),
 	})
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodToolExecute,
-		Version:         1,
-		Input:           toolInput,
+		CallID:               fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               host_api.MethodToolExecute,
+		Version:              1,
+		Input:                toolInput,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
@@ -244,11 +252,13 @@ func (e *UIActionExecutor) executeNavigation(ctx context.Context, execCtx UIActi
 		"target": target,
 	})
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-nav-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodUINavigate,
-		Version:         1,
-		Input:           navInput,
+		CallID:               fmt.Sprintf("ui-action-nav-%s-%s", execCtx.SessionID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               host_api.MethodUINavigate,
+		Version:              1,
+		Input:                navInput,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
@@ -280,11 +290,13 @@ func (e *UIActionExecutor) executeDialog(ctx context.Context, execCtx UIActionEx
 		"buttons":  in.Buttons,
 	})
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-dialog-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodUIDialog,
-		Version:         1,
-		Input:           dialogInput,
+		CallID:               fmt.Sprintf("ui-action-dialog-%s-%s", execCtx.SessionID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               host_api.MethodUIDialog,
+		Version:              1,
+		Input:                dialogInput,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
@@ -307,11 +319,13 @@ func (e *UIActionExecutor) executeClipboardWrite(ctx context.Context, execCtx UI
 		"text": p.Text,
 	})
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-clip-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodClipboardWrite,
-		Version:         1,
-		Input:           clipInput,
+		CallID:               fmt.Sprintf("ui-action-clip-%s-%s", execCtx.SessionID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               host_api.MethodClipboardWrite,
+		Version:              1,
+		Input:                clipInput,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
@@ -325,22 +339,79 @@ func (e *UIActionExecutor) executeHostCommand(ctx context.Context, execCtx UIAct
 	if command == "" {
 		command = action.ActionID
 	}
-	toolInput, _ := json.Marshal(map[string]any{
-		"toolId": command,
-		"input":  json.RawMessage(input),
-	})
-	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-cmd-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodToolExecute,
-		Version:         1,
-		Input:           toolInput,
+	if e.hostCommandRegistry == nil {
+		return nil, fmt.Errorf("host command registry not configured")
 	}
-	result := e.hostAPIGateway.Call(ctx, callReq)
-	if result.Error != nil {
-		return nil, fmt.Errorf("host command action %s failed: %s", action.ActionID, result.Error.Message)
+
+	hostCmdExecCtx := HostCommandExecContext{
+		ExtensionID:          execCtx.ExtensionID,
+		ModuleID:             execCtx.ModuleID,
+		Generation:           execCtx.Generation,
+		SessionID:            execCtx.SessionID,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
-	return result.Output, nil
+
+	operationID := fmt.Sprintf("host-cmd-%s", uuid.NewString())
+	invocationID := fmt.Sprintf("host-cmd-inv-%s", uuid.NewString())
+	now := time.Now().UTC()
+
+	if e.operationRepo != nil {
+		op := sqlite.Operation{
+			OperationID:   operationID,
+			OperationType: "host_command",
+			ExtensionID:   domain.ExtensionID(execCtx.ExtensionID),
+			Status:        "running",
+			StartedAt:     now,
+		}
+		_ = e.operationRepo.PutOperation(ctx, op)
+	}
+
+	result, err := e.hostCommandRegistry.Execute(ctx, command, hostCmdExecCtx, input)
+
+	finishedAt := time.Now().UTC()
+	if e.operationRepo != nil {
+		op := sqlite.Operation{
+			OperationID:   operationID,
+			OperationType: "host_command",
+			ExtensionID:   domain.ExtensionID(execCtx.ExtensionID),
+			FinishedAt:    &finishedAt,
+		}
+		inv := sqlite.Invocation{
+			InvocationID:   invocationID,
+			OperationID:    operationID,
+			ContributionID: execCtx.ContributionID,
+			StartedAt:      now,
+			FinishedAt:     &finishedAt,
+		}
+		if err != nil {
+			op.Status = "failed"
+			inv.Status = "failed"
+			var hcErr *HostCommandError
+			if AsHostCommandError(err, &hcErr) {
+				op.ErrorCode = hcErr.Code
+				op.ErrorMessage = hcErr.Message
+				inv.ErrorCode = hcErr.Code
+			} else {
+				op.ErrorMessage = err.Error()
+				inv.ErrorCode = "HOST_COMMAND_EXECUTION_FAILED"
+			}
+		} else {
+			op.Status = "succeeded"
+			inv.Status = "succeeded"
+		}
+		_ = e.operationRepo.PutOperation(ctx, op)
+		_ = e.operationRepo.PutInvocation(ctx, inv)
+	}
+
+	if err != nil {
+		var hcErr *HostCommandError
+		if AsHostCommandError(err, &hcErr) {
+			return nil, fmt.Errorf("host command action %s failed: %s: %s", action.ActionID, hcErr.Code, hcErr.Message)
+		}
+		return nil, fmt.Errorf("host command action %s failed: %w", action.ActionID, err)
+	}
+	return result, nil
 }
 
 func (e *UIActionExecutor) executeOpenResource(ctx context.Context, execCtx UIActionExecContext, action *ui_contribution.UIActionDefinition, input json.RawMessage, identity runtime_supervisor.RuntimeIdentity) (json.RawMessage, error) {
@@ -353,11 +424,13 @@ func (e *UIActionExecutor) executeOpenResource(ctx context.Context, execCtx UIAc
 		"mode": "r",
 	})
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-action-res-%s-%s", execCtx.SessionID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          host_api.MethodResourceOpen,
-		Version:         1,
-		Input:           resInput,
+		CallID:               fmt.Sprintf("ui-action-res-%s-%s", execCtx.SessionID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               host_api.MethodResourceOpen,
+		Version:              1,
+		Input:                resInput,
+		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
+		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {

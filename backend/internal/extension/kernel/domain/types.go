@@ -163,11 +163,12 @@ type SignatureReference struct {
 }
 
 type PackageReference struct {
-	PackageID       string `json:"packageId"`
-	ManifestVersion int    `json:"manifestVersion"`
-	ArchiveHash     string `json:"archiveHash,omitempty"`
-	ContentTreeHash string `json:"contentTreeHash,omitempty"`
-	ArtifactID      string `json:"artifactId,omitempty"`
+	PackageID       string             `json:"packageId"`
+	ManifestVersion int                `json:"manifestVersion"`
+	ArchiveHash     string             `json:"archiveHash,omitempty"`
+	ContentTreeHash string             `json:"contentTreeHash,omitempty"`
+	ArtifactID      string             `json:"artifactId,omitempty"`
+	Signature       SignatureReference `json:"signature,omitempty"`
 }
 
 type ExtensionCompatibility struct {

@@ -18,11 +18,24 @@ func (s *PackageService) Export(ctx context.Context, request ExportPackageReques
 	if err := s.validatePackageScope(ctx, request.UserID, request.ScopeType, request.ScopeID); err != nil {
 		return ExportedPackage{}, err
 	}
+	versionName := request.Version
+	if s.readModel != nil && (request.Format == "" || request.Format == "amitiax") {
+		if exported, ok, err := s.readModel.TryExport(ctx, request.ExtensionID, versionName); err != nil {
+			return ExportedPackage{}, err
+		} else if ok {
+			if err := s.repository.SavePackageExport(ctx, request.UserID, exported, request.ExtensionID); err != nil {
+				return ExportedPackage{}, err
+			}
+			s.metric("extension_package_export_total")
+			return exported, nil
+		}
+	}
+	kernelruntime.GlobalLegacyReadCounter().IncExport()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	extension, err := s.repository.GetPackageExtension(ctx, request.ExtensionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "扩展不可导出", request.ExtensionID, false, err)
 	}
-	versionName := request.Version
 	if versionName == "" {
 		versionName = extension.CurrentVersion
 	}
@@ -172,6 +185,15 @@ func (s *PackageService) ListVersions(ctx context.Context, extensionID, userID, 
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return nil, err
 	}
+	if s.readModel != nil {
+		if result, ok, err := s.readModel.TryListVersions(ctx, extensionID); err != nil {
+			return nil, err
+		} else if ok {
+			return result, nil
+		}
+	}
+	kernelruntime.GlobalLegacyReadCounter().IncListVersions()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.repository.ListPackageVersions(ctx, extensionID, userID, scopeType, scopeID)
 }
 
@@ -179,6 +201,15 @@ func (s *PackageService) CompareVersions(ctx context.Context, extensionID, userI
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageVersionDiff{}, err
 	}
+	if s.readModel != nil {
+		if result, ok, err := s.readModel.TryCompareVersions(ctx, extensionID, fromVersion, toVersion); err != nil {
+			return PackageVersionDiff{}, err
+		} else if ok {
+			return result, nil
+		}
+	}
+	kernelruntime.GlobalLegacyReadCounter().IncCompareVersions()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	if _, err := s.repository.GetPackageExtension(ctx, extensionID, userID, scopeType, scopeID); err != nil {
 		return PackageVersionDiff{}, err
 	}
@@ -273,6 +304,7 @@ func stringSetDifference(left, right []string) []string {
 
 func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
 	if s.kernelProxy == nil {
+		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
 		return s.rollbackLegacyPackage(ctx, extensionID, version, userID, scopeType, scopeID)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
@@ -460,6 +492,7 @@ func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, 
 		}
 	}
 	kernelruntime.GlobalLegacyReadCounter().IncDependencies()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.legacyDependencies(ctx, extensionID, userID, scopeType, scopeID)
 }
 
@@ -495,6 +528,7 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 		}
 	}
 	kernelruntime.GlobalLegacyReadCounter().IncPreviewUninstall()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.legacyPreviewUninstall(ctx, extensionID, userID, scopeType, scopeID)
 }
 
@@ -527,6 +561,7 @@ func (s *PackageService) legacyPreviewUninstall(ctx context.Context, extensionID
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
 	if s.kernelProxy == nil {
+		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
 		return s.uninstallLegacyPackage(ctx, extensionID, userID, scopeType, scopeID)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
@@ -634,10 +669,13 @@ func (s *PackageService) validatePackageScope(ctx context.Context, userID, scope
 }
 
 func (s *PackageService) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationView, error) {
+	kernelruntime.GlobalLegacyReadCounter().IncDependenciesList()
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.repository.ListPackageOperations(ctx, userID, limit)
 }
 
 func (s *PackageService) GetOperation(ctx context.Context, userID, id string) (PackageOperationView, error) {
+	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.repository.GetPackageOperation(ctx, userID, id)
 }
 

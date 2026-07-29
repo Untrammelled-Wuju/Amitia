@@ -286,12 +286,14 @@ func (r *ScheduleRepository) GetState(ctx context.Context, scheduleID string) (*
 func (r *ScheduleRepository) ListDueStates(ctx context.Context, now time.Time, limit int) ([]*schedule.ScheduleState, error) {
 	ex := getExecutor(ctx, r.db)
 	rows, err := ex.QueryContext(ctx, `
-		SELECT schedule_id, enabled, paused, status, last_scheduled_at, last_triggered_at,
-		       last_finished_at, next_scheduled_at, next_effective_at, last_result,
-		       failure_count, generation, updated_at
-		FROM extension_schedule_states
-		WHERE enabled = 1 AND paused = 0 AND status = 'enabled' AND next_effective_at <= ?
-		ORDER BY next_effective_at
+		SELECT s.schedule_id, s.enabled, s.paused, s.status, s.last_scheduled_at, s.last_triggered_at,
+		       s.last_finished_at, s.next_scheduled_at, s.next_effective_at, s.last_result,
+		       s.failure_count, s.generation, s.updated_at
+		FROM extension_schedule_states s
+		INNER JOIN extension_schedule_definitions d ON s.schedule_id = d.schedule_id
+		WHERE s.enabled = 1 AND s.paused = 0 AND s.status = 'enabled' AND s.next_effective_at <= ?
+		AND d.execution_owner = 'backend'
+		ORDER BY s.next_effective_at
 		LIMIT ?
 	`, now.UTC(), limit)
 	if err != nil {
@@ -456,14 +458,15 @@ func (r *ScheduleRepository) ListTriggersBySchedule(ctx context.Context, schedul
 func (r *ScheduleRepository) ListDueTriggers(ctx context.Context, now time.Time, limit int) ([]*schedule.ScheduleTriggerRecord, error) {
 	ex := getExecutor(ctx, r.db)
 	rows, err := ex.QueryContext(ctx, `
-		SELECT trigger_id, schedule_id, scheduled_at, effective_at, triggered_at, idempotency_key,
-		       status, lease_owner, lease_expires_at, scope_snapshot_id, permission_snapshot_id,
-		       dependency_snapshot_id, operation_id, invocation_id, attempt, generation, manual,
-		       error_code, error_message, jitter_applied_ms, misfire_decision, overlap_decision,
-		       dst_decision, created_at, updated_at
-		FROM extension_schedule_triggers
-		WHERE status IN ('waiting', 'due') AND effective_at <= ?
-		ORDER BY effective_at LIMIT ?
+		SELECT t.trigger_id, t.schedule_id, t.scheduled_at, t.effective_at, t.triggered_at, t.idempotency_key,
+		       t.status, t.lease_owner, t.lease_expires_at, t.scope_snapshot_id, t.permission_snapshot_id,
+		       t.dependency_snapshot_id, t.operation_id, t.invocation_id, t.attempt, t.generation, t.manual,
+		       t.error_code, t.error_message, t.jitter_applied_ms, t.misfire_decision, t.overlap_decision,
+		       t.dst_decision, t.created_at, t.updated_at
+		FROM extension_schedule_triggers t
+		INNER JOIN extension_schedule_definitions d ON t.schedule_id = d.schedule_id
+		WHERE t.status IN ('waiting', 'due') AND t.effective_at <= ? AND d.execution_owner = 'backend'
+		ORDER BY t.effective_at LIMIT ?
 	`, now.UTC(), limit)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: list due schedule triggers: %w", err)

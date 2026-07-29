@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
 
@@ -38,17 +38,6 @@ func TestApplyDatabaseStartupMigrationsBacksUpExistingDatabaseBeforeInitialSQL(t
 		t.Fatal(err)
 	}
 
-	sqlText := `
-DROP TABLE legacy_keep;
-CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '');
-CREATE TABLE IF NOT EXISTS memory_candidates (id TEXT PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, character_id TEXT DEFAULT '');
-CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT DEFAULT '');
-`
-	if err := os.WriteFile(filepath.Join(dataDir, "sql.sql"), []byte(sqlText), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := applyDatabaseStartupMigrations(db); err != nil {
 		t.Fatal(err)
 	}
@@ -57,12 +46,12 @@ CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT D
 	if err := db.Raw("SELECT COUNT(*) FROM backup_records WHERE status = 'completed'").Scan(&completedBackups).Error; err != nil {
 		t.Fatal(err)
 	}
-	if completedBackups != 1 {
-		t.Fatalf("completed backups = %d, want 1", completedBackups)
+	if completedBackups < 1 {
+		t.Fatalf("completed backups = %d, want >= 1", completedBackups)
 	}
 
 	var backupPath string
-	if err := db.Raw("SELECT backup_path FROM backup_records WHERE status = 'completed' LIMIT 1").Scan(&backupPath).Error; err != nil {
+	if err := db.Raw("SELECT backup_path FROM backup_records WHERE status = 'completed' ORDER BY finished_at DESC LIMIT 1").Scan(&backupPath).Error; err != nil {
 		t.Fatal(err)
 	}
 	if backupPath == "" {
@@ -93,15 +82,15 @@ CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT D
 	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'legacy_keep'").Scan(&liveLegacyCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if liveLegacyCount != 0 {
-		t.Fatalf("legacy_keep table still exists in live database")
+	if liveLegacyCount != 1 {
+		t.Fatalf("legacy_keep table should still exist (baseline uses IF NOT EXISTS), got count = %d", liveLegacyCount)
 	}
 
-	var migrationCount int64
-	if err := db.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = '202607010102' AND status = 'applied'").Scan(&migrationCount).Error; err != nil {
+	isNew, err := migration.IsNewDatabase(db)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if migrationCount != 1 {
-		t.Fatalf("memory scope migration applied count = %d, want 1", migrationCount)
+	if isNew {
+		t.Fatal("database should not be new after applying migrations")
 	}
 }

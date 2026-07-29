@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
 func openWorkflowTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", filepath.Join(t.TempDir(), "workflow.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "workflow.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

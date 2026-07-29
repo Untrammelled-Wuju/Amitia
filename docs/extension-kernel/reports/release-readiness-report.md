@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1785268410161948600 |
-| 生成时间 | 2026-07-28T19:55:46Z |
-| 开始时间 | 2026-07-28T19:53:30Z |
-| 结束时间 | 2026-07-28T19:55:46Z |
+| Report ID | final-acceptance-1785308246179145300 |
+| 生成时间 | 2026-07-29T06:58:26Z |
+| 开始时间 | 2026-07-29T06:57:26Z |
+| 结束时间 | 2026-07-29T06:58:26Z |
 | 总项 | 27 |
 | 通过 | 25 |
 | 失败 | 0 |
@@ -33,7 +33,7 @@
 
 | Item ID | Stage | Title | Required | Status | Evidence |
 |---------|-------|-------|----------|--------|----------|
-| stage1.freeze_audit | freeze_audit | 旧系统冻结与审计 | true | passed | GlobalLegacyCallCounter 实例化成功; 初始 Total()=0,跟踪指标数量=19; 旧系统调用计数器就绪 (冻结审计完成) |
+| stage1.freeze_audit | freeze_audit | 旧系统冻结与审计 | true | passed | GlobalLegacyCallCounter 实例化成功; 初始 Total()=0,跟踪指标数量=20; 旧系统调用计数器就绪 (冻结审计完成) |
 | stage1.base_extraction | freeze_audit | 基础设施抽取 | true | passed | amitiax.Installer 实例化成功; tool_migration.Registry 实例化成功; skill_migration.Registry 实例化成功; mcp_migration.Registry 实例化并验证注册/查询成功; workflow_migration.Registry 实例化成功; plugin_migration.Registry 实例化成功 |
 | stage2.kernel_core | kernel_core | ExtensionKernel 领域模型 | true | passed | HostAPIGateway 实例化成功; AmitiaxInstaller 实例化成功; ToolRegistry 实例化成功; ExecutionKernel 实例化成功; Container.Recover 成功 |
 | stage3.amitiax_manifest | amitiax_runtime | AmitiaxManifestV2 | true | passed | amitiax.Installer 实例化成功; 空归档安装正确失败 (Fail Closed); 错误数量=1,包含 missing_archive 错误码 |

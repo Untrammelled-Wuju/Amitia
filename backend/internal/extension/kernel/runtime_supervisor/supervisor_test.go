@@ -310,3 +310,132 @@ func TestConcurrentInvoke(t *testing.T) {
 		t.Errorf("expected 10 invokes, got %d", rt.invokeCount)
 	}
 }
+
+func TestStopPropagatesRuntimeError(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	rt.SetStopErr(ErrFakeStop)
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 1)
+	startResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	if startResult.Error != nil {
+		t.Fatalf("start: %v", startResult.Error)
+	}
+	err := s.Stop(context.Background(), startResult.InstanceID, StopReasonUninstall)
+	if !errors.Is(err, ErrFakeStop) {
+		t.Fatalf("expected ErrFakeStop from Stop, got %v", err)
+	}
+	snap := s.Snapshot(context.Background(), "rt-def-1")
+	if len(snap.Instances) != 1 {
+		t.Fatalf("expected 1 instance, got %d", len(snap.Instances))
+	}
+	if snap.Instances[0].Actual != ActualFailed {
+		t.Errorf("expected ActualFailed after stop error, got %s", snap.Instances[0].Actual)
+	}
+}
+
+func TestStopReconcilePropagatesRuntimeError(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 1)
+	startResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	if startResult.Error != nil {
+		t.Fatalf("start: %v", startResult.Error)
+	}
+	rt.SetStopErr(ErrFakeStop)
+	stopResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredStopped, Spec: spec,
+	})
+	if stopResult.Error == nil {
+		t.Fatalf("expected error from stop reconcile")
+	}
+	if !errors.Is(stopResult.Error, ErrFakeStop) {
+		t.Errorf("expected ErrFakeStop, got %v", stopResult.Error)
+	}
+	if stopResult.Actual != ActualFailed {
+		t.Errorf("expected ActualFailed, got %s", stopResult.Actual)
+	}
+}
+
+func TestSnapshotByExtension(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 1)
+	startResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	if startResult.Error != nil {
+		t.Fatalf("start: %v", startResult.Error)
+	}
+	snapshots := s.SnapshotByExtension(context.Background(), "com.example/test", "main")
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(snapshots))
+	}
+	snap := snapshots[0]
+	if snap.InstanceID != startResult.InstanceID {
+		t.Errorf("expected instanceID %s, got %s", startResult.InstanceID, snap.InstanceID)
+	}
+	if snap.Health != HealthHealthy {
+		t.Errorf("expected healthy, got %s", snap.Health)
+	}
+	if snap.Circuit != CircuitClosed {
+		t.Errorf("expected circuit closed, got %s", snap.Circuit)
+	}
+	if snap.Actual != ActualReady {
+		t.Errorf("expected ready, got %s", snap.Actual)
+	}
+	if snap.Quarantined {
+		t.Errorf("expected not quarantined")
+	}
+	if snap.Generation != 1 {
+		t.Errorf("expected generation 1, got %d", snap.Generation)
+	}
+}
+
+func TestSnapshotByExtensionWrongExtension(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 1)
+	_ = s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	snapshots := s.SnapshotByExtension(context.Background(), "com.other/extension", "main")
+	if len(snapshots) != 0 {
+		t.Errorf("expected 0 snapshots for wrong extension, got %d", len(snapshots))
+	}
+}
+
+func TestSnapshotByExtensionQuarantined(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeBuiltin, rt))
+	spec := makeSpec(domain.RuntimeTypeBuiltin, 1)
+	spec.MaxRestarts = 1
+	startResult := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1", Desired: DesiredRunning, Spec: spec,
+	})
+	s.mu.Lock()
+	entry := s.instances[startResult.InstanceID]
+	if entry != nil {
+		entry.actual = ActualQuarantined
+		entry.health = HealthUnhealthy
+	}
+	s.mu.Unlock()
+	snapshots := s.SnapshotByExtension(context.Background(), "com.example/test", "main")
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(snapshots))
+	}
+	if !snapshots[0].Quarantined {
+		t.Errorf("expected quarantined=true")
+	}
+	if snapshots[0].Health != HealthUnhealthy {
+		t.Errorf("expected unhealthy, got %s", snapshots[0].Health)
+	}
+}

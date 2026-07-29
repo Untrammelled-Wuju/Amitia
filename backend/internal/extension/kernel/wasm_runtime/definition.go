@@ -254,6 +254,41 @@ var (
 	ErrEngineNotFound     = errors.New("wasm_runtime: engine not found")
 )
 
+func NormalizeDefinition(def *WASMRuntimeDefinition) {
+	if def == nil {
+		return
+	}
+	if def.ModuleSHA256 == "" {
+		def.ModuleSHA256 = def.ModuleHash
+	}
+	if def.MemoryLimitBytes <= 0 && def.Limits.MaxMemoryPages > 0 {
+		def.MemoryLimitBytes = int64(def.Limits.MaxMemoryPages) * WasmPageSize
+	}
+	if def.FuelLimit == 0 {
+		def.FuelLimit = def.Limits.Fuel
+	}
+	if def.EntryExport == "" {
+		def.EntryExport = def.Entry.ExportName
+	}
+	if def.MaxOutputBytes <= 0 && def.Limits.MaxOutputBytes > 0 {
+		def.MaxOutputBytes = def.Limits.MaxOutputBytes
+	}
+	if def.MaxHostCalls <= 0 {
+		if def.Limits.MaxHostCalls > 0 {
+			def.MaxHostCalls = def.Limits.MaxHostCalls
+		} else {
+			def.MaxHostCalls = 128
+		}
+	}
+	if def.CallTimeout <= 0 {
+		if def.Limits.MaxExecutionDuration > 0 {
+			def.CallTimeout = def.Limits.MaxExecutionDuration
+		} else {
+			def.CallTimeout = 5 * time.Second
+		}
+	}
+}
+
 func ValidateDefinition(def *WASMRuntimeDefinition) error {
 	if def == nil {
 		return ErrDefinitionRequired
@@ -270,54 +305,39 @@ func ValidateDefinition(def *WASMRuntimeDefinition) error {
 	if def.ModuleHash == "" && def.ModuleSHA256 == "" {
 		return NewWASMError(ErrCodeModuleInvalid, "missing module hash", nil)
 	}
-	if def.ModuleSHA256 == "" {
-		def.ModuleSHA256 = def.ModuleHash
+	memLimit := def.MemoryLimitBytes
+	if memLimit <= 0 && def.Limits.MaxMemoryPages > 0 {
+		memLimit = int64(def.Limits.MaxMemoryPages) * WasmPageSize
 	}
-	if def.MemoryLimitBytes <= 0 {
-		if def.Limits.MaxMemoryPages > 0 {
-			def.MemoryLimitBytes = int64(def.Limits.MaxMemoryPages) * WasmPageSize
-		} else {
-			return NewWASMError(ErrCodeMemoryLimit, "memory limit must be > 0", nil)
-		}
+	if memLimit <= 0 {
+		return NewWASMError(ErrCodeMemoryLimit, "memory limit must be > 0", nil)
 	}
-	if def.MemoryLimitBytes > 1<<30 {
+	if memLimit > 1<<30 {
 		return NewWASMError(ErrCodeMemoryLimit, "memory limit exceeds 1GB", nil)
 	}
-	if def.FuelLimit == 0 && def.Limits.Fuel == 0 {
+	fuel := def.FuelLimit
+	if fuel == 0 {
+		fuel = def.Limits.Fuel
+	}
+	if fuel == 0 {
 		return NewWASMError(ErrCodeFuelExhausted, "fuel limit must be > 0", nil)
 	}
-	if def.FuelLimit == 0 {
-		def.FuelLimit = def.Limits.Fuel
+	entryExport := def.EntryExport
+	if entryExport == "" {
+		entryExport = def.Entry.ExportName
 	}
-	if def.EntryExport == "" && def.Entry.ExportName == "" {
+	if entryExport == "" {
 		return NewWASMError(ErrCodeABIMismatch, "entry export required", nil)
-	}
-	if def.EntryExport == "" {
-		def.EntryExport = def.Entry.ExportName
 	}
 	if def.ABI == "" {
 		return NewWASMError(ErrCodeABIMismatch, "abi kind required", nil)
 	}
-	if def.MaxOutputBytes <= 0 {
-		if def.Limits.MaxOutputBytes > 0 {
-			def.MaxOutputBytes = def.Limits.MaxOutputBytes
-		} else {
-			return NewWASMError(ErrCodeOutputTooLarge, "max output bytes must be > 0", nil)
-		}
+	maxOutput := def.MaxOutputBytes
+	if maxOutput <= 0 {
+		maxOutput = def.Limits.MaxOutputBytes
 	}
-	if def.MaxHostCalls <= 0 {
-		if def.Limits.MaxHostCalls > 0 {
-			def.MaxHostCalls = def.Limits.MaxHostCalls
-		} else {
-			def.MaxHostCalls = 128
-		}
-	}
-	if def.CallTimeout <= 0 {
-		if def.Limits.MaxExecutionDuration > 0 {
-			def.CallTimeout = def.Limits.MaxExecutionDuration
-		} else {
-			def.CallTimeout = 5 * time.Second
-		}
+	if maxOutput <= 0 {
+		return NewWASMError(ErrCodeOutputTooLarge, "max output bytes must be > 0", nil)
 	}
 	if def.WASIVersion != WASINone && def.WASIVersion != WASIV1 {
 		return NewWASMError(ErrCodeFeatureUnsupported, "unsupported wasi version", nil)

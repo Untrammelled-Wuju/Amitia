@@ -3,6 +3,7 @@ package com.amitia.runtime.extension
 import com.amitia.core.database.dao.ExtensionInstallationDao
 import com.amitia.core.database.entity.ExtensionInstallationEntity
 import com.amitia.runtime.extension.security.ArchivePolicy
+import com.amitia.runtime.extension.security.PublisherTrustStore
 import com.amitia.runtime.extension.security.SizeLimitExceededException
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -35,6 +36,7 @@ class ExtensionHostImpl(
     private val apiClient: ExtensionApiClient,
     private val installationDao: ExtensionInstallationDao,
     private val permissionChecker: ExtensionPermissionChecker,
+    private val trustStore: PublisherTrustStore,
     private val json: Json,
     private val maxPackageBytes: Long = ArchivePolicy.default().maxArchiveBytes
 ) : ExtensionHost {
@@ -52,6 +54,10 @@ class ExtensionHostImpl(
 
     override val loadedExtensions: Map<String, LoadedExtension>
         get() = extensions.toMap()
+
+    override suspend fun initialize() {
+        trustStore.syncFromBackend()
+    }
 
     override suspend fun loadPackage(file: File): Result<LoadedExtension> {
         return runCatching {

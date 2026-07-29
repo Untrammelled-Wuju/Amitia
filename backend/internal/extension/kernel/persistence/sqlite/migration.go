@@ -2,8 +2,11 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"strings"
 )
 
 var schemaMigrations = []string{
@@ -372,7 +375,8 @@ var schemaMigrations = []string{
 
 	`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,
-		applied_at DATETIME NOT NULL
+		applied_at DATETIME NOT NULL,
+		checksum TEXT NOT NULL DEFAULT ''
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_hook_points (
@@ -1499,25 +1503,135 @@ var schemaMigrations = []string{
 		executed_at DATETIME NOT NULL,
 		PRIMARY KEY (execution_id, node_id)
 	)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_candidate_contributions (
+		candidate_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		instance_ids_json TEXT NOT NULL DEFAULT '[]',
+		generation_id TEXT NOT NULL,
+		candidate_generation INTEGER NOT NULL,
+		contribs_json TEXT NOT NULL DEFAULT '[]',
+		schedule_ids_json TEXT NOT NULL DEFAULT '[]',
+		artifact_path TEXT NOT NULL DEFAULT '',
+		definition_hash TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'registered',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_candidate_ext_id ON kernel_candidate_contributions(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_candidate_status ON kernel_candidate_contributions(status)`,
+
+	`CREATE TABLE IF NOT EXISTS kernel_permission_snapshots (
+		snapshot_id TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL DEFAULT '',
+		extension_id TEXT NOT NULL DEFAULT '',
+		module_id TEXT NOT NULL DEFAULT '',
+		generation INTEGER NOT NULL DEFAULT 0,
+		character_id TEXT,
+		conversation_id TEXT,
+		resource_ids TEXT NOT NULL DEFAULT '[]',
+		granted_perms TEXT NOT NULL DEFAULT '[]',
+		granted_scopes TEXT NOT NULL DEFAULT '[]',
+		created_at DATETIME NOT NULL,
+		expires_at DATETIME,
+		revoked_at DATETIME
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_perm_snaps_session ON kernel_permission_snapshots(session_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_perm_snaps_ext_id ON kernel_permission_snapshots(extension_id)`,
+
+	`CREATE TABLE IF NOT EXISTS host_api_audit_logs (
+		call_id TEXT PRIMARY KEY,
+		trace_id TEXT NOT NULL DEFAULT '',
+		operation_id TEXT NOT NULL DEFAULT '',
+		invocation_id TEXT NOT NULL DEFAULT '',
+		attempt_id TEXT NOT NULL DEFAULT '',
+		extension_id TEXT NOT NULL DEFAULT '',
+		module_id TEXT NOT NULL DEFAULT '',
+		method TEXT NOT NULL DEFAULT '',
+		generation INTEGER NOT NULL DEFAULT 0,
+		permission_snapshot_id TEXT NOT NULL DEFAULT '',
+		scope_snapshot_id TEXT NOT NULL DEFAULT '',
+		started_at DATETIME NOT NULL,
+		finished_at DATETIME,
+		result TEXT NOT NULL DEFAULT '',
+		error_code TEXT NOT NULL DEFAULT '',
+		error_message TEXT NOT NULL DEFAULT '',
+		side_effect TEXT NOT NULL DEFAULT '',
+		input_masked TEXT NOT NULL DEFAULT '',
+		phase TEXT NOT NULL DEFAULT 'end'
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_ext_id ON host_api_audit_logs(extension_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_method ON host_api_audit_logs(method)`,
+	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_result ON host_api_audit_logs(result)`,
+	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_trace_id ON host_api_audit_logs(trace_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_host_api_audit_started_at ON host_api_audit_logs(started_at)`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL)`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at DATETIME NOT NULL, checksum TEXT NOT NULL DEFAULT '')`); err != nil {
 		return fmt.Errorf("sqlite: create schema_migrations table: %w", err)
 	}
 
-	var current int
-	row := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`)
-	if err := row.Scan(&current); err != nil {
-		return fmt.Errorf("sqlite: query schema version: %w", err)
+	hasChecksum, err := columnExists(ctx, db, "schema_migrations", "checksum")
+	if err != nil {
+		return fmt.Errorf("sqlite: check schema_migrations checksum column: %w", err)
+	}
+	if !hasChecksum {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("sqlite: add checksum column to schema_migrations: %w", err)
+		}
 	}
 
-	for i := current; i < len(schemaMigrations); i++ {
-		if _, err := db.ExecContext(ctx, schemaMigrations[i]); err != nil {
-			return fmt.Errorf("sqlite: apply migration %d: %w", i+1, err)
+	rows, err := db.QueryContext(ctx, `SELECT version, checksum FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("sqlite: query schema migrations: %w", err)
+	}
+	appliedChecksums := make(map[int]string)
+	for rows.Next() {
+		var version int
+		var checksum string
+		if err := rows.Scan(&version, &checksum); err != nil {
+			rows.Close()
+			return fmt.Errorf("sqlite: scan migration row: %w", err)
 		}
-		if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`, i+1); err != nil {
-			return fmt.Errorf("sqlite: record migration %d: %w", i+1, err)
+		appliedChecksums[version] = checksum
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("sqlite: close migration rows: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("sqlite: iterate migration rows: %w", err)
+	}
+
+	for i, ddl := range schemaMigrations {
+		version := i + 1
+		checksum := computeChecksum(ddl)
+		if existing, ok := appliedChecksums[version]; ok {
+			if existing == "" {
+				if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
+					return fmt.Errorf("sqlite: backfill checksum for migration %d: %w", version, err)
+				}
+				continue
+			}
+			if existing != checksum {
+				if isIdempotentDDL(ddl) {
+					if _, err := db.ExecContext(ctx, ddl); err != nil {
+						return fmt.Errorf("sqlite: re-verify migration %d (checksum mismatch): %w", version, err)
+					}
+					if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
+						return fmt.Errorf("sqlite: normalize checksum for migration %d: %w", version, err)
+					}
+					continue
+				}
+				return fmt.Errorf("sqlite: checksum mismatch for migration %d: expected %s, got %s", version, checksum, existing)
+			}
+			continue
+		}
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			return fmt.Errorf("sqlite: apply migration %d: %w", version, err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, datetime('now'), ?)`, version, checksum); err != nil {
+			return fmt.Errorf("sqlite: record migration %d: %w", version, err)
 		}
 	}
 
@@ -1529,6 +1643,29 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func computeChecksum(ddl string) string {
+	normalized := normalizeDDL(ddl)
+	h := sha256.New()
+	h.Write([]byte(normalized))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func normalizeDDL(ddl string) string {
+	lines := strings.Split(ddl, "\n")
+	trimmed := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed = append(trimmed, strings.TrimSpace(line))
+	}
+	return strings.Join(trimmed, "\n")
+}
+
+func isIdempotentDDL(ddl string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(ddl))
+	return strings.HasPrefix(upper, "CREATE TABLE IF NOT EXISTS") ||
+		strings.HasPrefix(upper, "CREATE INDEX IF NOT EXISTS") ||
+		strings.HasPrefix(upper, "CREATE UNIQUE INDEX IF NOT EXISTS")
 }
 
 type columnAddition struct {
@@ -1555,6 +1692,7 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_workflow_executions", "context_json", "TEXT NOT NULL DEFAULT '{}'"},
 	{"extension_workflow_executions", "attempt", "INTEGER NOT NULL DEFAULT 1"},
 	{"extension_schedule_definitions", "execution_owner", "TEXT NOT NULL DEFAULT 'backend'"},
+	{"kernel_candidate_contributions", "schedule_ids_json", "TEXT NOT NULL DEFAULT '[]'"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {

@@ -264,11 +264,23 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 
 	case lifecycle_manager.CmdUninstall:
 		if e.installer != nil {
-			e.installer.StopRuntimeInstances(ctx, extID)
+			if stopErr := e.installer.StopRuntimeInstances(ctx, extID); stopErr != nil {
+				if plan.CurrentState.Installation != nil {
+					recoveryInst := *plan.CurrentState.Installation
+					recoveryInst.InstallationState = domain.InstallationStateUninstallFailed
+					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
+					recoveryInst.UpdatedAt = time.Now().UTC()
+					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
+				}
+				result.Status = "failed"
+				result.Error = stopErr.Error()
+				return result, stopErr
+			}
 			if err := e.installer.UninstallContributions(ctx, extID); err != nil {
 				if plan.CurrentState.Installation != nil {
 					recoveryInst := *plan.CurrentState.Installation
 					recoveryInst.InstallationState = domain.InstallationStateUninstallFailed
+					recoveryInst.EnablementState = domain.EnablementRequiresRecovery
 					recoveryInst.UpdatedAt = time.Now().UTC()
 					_ = e.instRepo.PutInstallation(ctx, recoveryInst)
 				}
@@ -590,4 +602,61 @@ func (p *containerLifecycleSummaryProvider) Events(ctx context.Context, since ti
 		return 0, err
 	}
 	return len(recs), nil
+}
+
+type containerHostAPIAuditQuery struct {
+	repo sqlite.HostAPIAuditRepository
+}
+
+func newContainerHostAPIAuditQuery(repo sqlite.HostAPIAuditRepository) *containerHostAPIAuditQuery {
+	return &containerHostAPIAuditQuery{repo: repo}
+}
+
+func (q *containerHostAPIAuditQuery) ListAuditLogs(ctx context.Context, extensionID, method, result, traceID string, limit, offset int) ([]developer_console.HostAPIAuditEntry, error) {
+	filter := sqlite.HostAPIAuditFilter{
+		ExtensionID: extensionID,
+		Method:      method,
+		Result:      result,
+		TraceID:     traceID,
+		Limit:       limit,
+		Offset:      offset,
+	}
+	logs, err := q.repo.ListAuditLogs(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]developer_console.HostAPIAuditEntry, 0, len(logs))
+	for _, log := range logs {
+		entries = append(entries, developer_console.HostAPIAuditEntry{
+			CallID:               log.CallID,
+			TraceID:              log.TraceID,
+			OperationID:          log.OperationID,
+			InvocationID:         log.InvocationID,
+			ExtensionID:          log.ExtensionID,
+			ModuleID:             log.ModuleID,
+			Method:               log.Method,
+			Generation:           log.Generation,
+			PermissionSnapshotID: log.PermissionSnapshotID,
+			ScopeSnapshotID:      log.ScopeSnapshotID,
+			StartedAt:            log.StartedAt,
+			FinishedAt:           log.FinishedAt,
+			Result:               log.Result,
+			ErrorCode:            log.ErrorCode,
+			ErrorMessage:         log.ErrorMessage,
+			SideEffect:           log.SideEffect,
+			InputMasked:          log.InputMasked,
+			Phase:                log.Phase,
+		})
+	}
+	return entries, nil
+}
+
+func (q *containerHostAPIAuditQuery) CountAuditLogs(ctx context.Context, extensionID, method, result, traceID string) (int64, error) {
+	filter := sqlite.HostAPIAuditFilter{
+		ExtensionID: extensionID,
+		Method:      method,
+		Result:      result,
+		TraceID:     traceID,
+	}
+	return q.repo.CountAuditLogs(ctx, filter)
 }

@@ -1,6 +1,14 @@
 package com.amitia.runtime.extension.security
 
+import com.amitia.runtime.extension.ExtensionApiClient
 import java.time.Instant
+import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 enum class TrustLevel {
     OFFICIAL,
@@ -11,7 +19,11 @@ enum class TrustLevel {
     REVOKED,
     DEVELOPMENT;
 
-    fun allowsInstallation(): Boolean = this in setOf(OFFICIAL, TRUSTED, USER_TRUSTED, UNKNOWN, DEVELOPMENT)
+    fun allowsInstallation(isDebug: Boolean = false): Boolean = when (this) {
+        OFFICIAL, TRUSTED, USER_TRUSTED -> true
+        DEVELOPMENT -> isDebug
+        else -> false
+    }
 
     fun allowsAutoUpdate(): Boolean = this in setOf(OFFICIAL, TRUSTED, USER_TRUSTED)
 
@@ -125,6 +137,8 @@ interface PublisherTrustStore {
         val key = getKey(publisherId, keyId) ?: return false
         return key.isExpired()
     }
+
+    suspend fun syncFromBackend() {}
 }
 
 class InMemoryPublisherTrustStore : PublisherTrustStore {
@@ -208,5 +222,70 @@ class RevocationList {
 
     fun clear() {
         entries.clear()
+    }
+}
+
+class RemotePublisherTrustStore(
+    private val apiClient: ExtensionApiClient
+) : PublisherTrustStore {
+    private val publishers = ConcurrentHashMap<String, PublisherIdentity>()
+
+    override suspend fun syncFromBackend() {
+        try {
+            val response = apiClient.fetchTrustedPublishers()
+            val arr = response["publishers"]?.jsonArray ?: return
+            val updated = mutableMapOf<String, PublisherIdentity>()
+            for (elem in arr) {
+                val obj = elem.jsonObject
+                val publisherId = obj.string("publisherId") ?: continue
+                val keys = (obj["keys"]?.jsonArray ?: emptyList()).mapNotNull { keyElem ->
+                    parseKey(keyElem.jsonObject, publisherId)
+                }
+                updated[publisherId] = PublisherIdentity(
+                    publisherId = publisherId,
+                    displayName = obj.string("displayName") ?: publisherId,
+                    keys = keys,
+                    trustLevel = TrustLevel.fromString(obj.string("trustLevel")),
+                    contact = obj.string("contact"),
+                    website = obj.string("website")
+                )
+            }
+            publishers.clear()
+            publishers.putAll(updated)
+        } catch (e: Exception) {
+            android.util.Log.e("RemotePublisherTrustStore", "syncFromBackend failed", e)
+        }
+    }
+
+    private fun parseKey(obj: JsonObject, publisherId: String): PublisherKey? {
+        return try {
+            val publicKeyBase64 = obj.string("publicKey") ?: return null
+            PublisherKey(
+                keyId = obj.string("keyId") ?: "",
+                publisherId = publisherId,
+                publicKey = Base64.getDecoder().decode(publicKeyBase64),
+                algorithm = obj.string("algorithm") ?: "ed25519",
+                createdAt = Instant.parse(obj.string("createdAt") ?: Instant.now().toString()),
+                expiresAt = obj.string("expiresAt")?.let { Instant.parse(it) },
+                state = runCatching { KeyState.valueOf(obj.string("state") ?: "ACTIVE") }.getOrDefault(KeyState.ACTIVE)
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun JsonObject.string(key: String): String? =
+        this[key]?.let { (it as? JsonPrimitive)?.content }
+
+    fun registerPublisher(identity: PublisherIdentity) {
+        publishers[identity.publisherId] = identity
+    }
+
+    fun clear() {
+        publishers.clear()
+    }
+
+    override fun getPublisher(publisherId: String): PublisherIdentity? {
+        return publishers[publisherId]
     }
 }

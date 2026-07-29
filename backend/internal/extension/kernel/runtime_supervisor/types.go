@@ -193,6 +193,15 @@ type InstanceSnapshot struct {
 	Limits      ResourceLimits
 }
 
+type RuntimeHealthSnapshot struct {
+	InstanceID  string
+	Generation  int64
+	Health      HealthStatus
+	Circuit     CircuitState
+	Actual      ActualState
+	Quarantined bool
+}
+
 type ManagedRuntime interface {
 	Start(ctx context.Context) error
 	Invoke(ctx context.Context, request InvocationRequest) InvocationResult

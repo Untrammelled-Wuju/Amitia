@@ -2,6 +2,8 @@ package ui_contribution
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -235,34 +237,60 @@ func (h *UIHost) DisableExtension(extensionID ExtensionID) {
 }
 
 type BridgeSession struct {
-	SessionID           string
-	ContributionID      string
-	ExtensionID         string
-	ModuleID            string
-	Generation          int64
-	Origin              string
-	ContractVersion     int
-	GrantedScopes       []string
-	GrantedPerms        []string
-	CreatedAt           time.Time
-	ExpiresAt           time.Time
-	Surface             string
-	CharacterID         string
-	ConversationID      string
-	ScopeSnapshotID     string
+	SessionID            string
+	ContributionID       string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
+	Origin               string
+	ContractVersion      int
+	GrantedScopes        []string
+	GrantedPerms         []string
+	CreatedAt            time.Time
+	ExpiresAt            time.Time
+	Surface              string
+	CharacterID          string
+	ConversationID       string
+	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	Token                string
+	UsedNonces           map[string]bool
 }
 
+type PermissionSnapshotFactory func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error)
+type SnapshotReleaser func(scopeSnapshotID, permissionSnapshotID string) error
+
 type UIBridge struct {
-	host          *UIHost
-	mu            sync.RWMutex
-	sessions      map[string]*BridgeSession
-	actionHandler func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error)
-	dataHandler   func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error)
+	host                      *UIHost
+	mu                        sync.RWMutex
+	sessions                  map[string]*BridgeSession
+	scopeSnapshotFactory      func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	permissionSnapshotFactory PermissionSnapshotFactory
+	snapshotReleaser          SnapshotReleaser
+	actionHandler             func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error)
+	dataHandler               func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error)
 }
 
 func NewUIBridge(host *UIHost) *UIBridge {
 	return &UIBridge{host: host, sessions: make(map[string]*BridgeSession)}
+}
+
+func (b *UIBridge) SetPermissionSnapshotFactory(fn PermissionSnapshotFactory) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.permissionSnapshotFactory = fn
+}
+
+func (b *UIBridge) SetSnapshotReleaser(fn SnapshotReleaser) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.snapshotReleaser = fn
+}
+
+func (b *UIBridge) SetScopeSnapshotFactory(fn func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.scopeSnapshotFactory = fn
 }
 
 func (b *UIBridge) SetHandlers(
@@ -279,41 +307,69 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	if def == nil {
 		return nil, errors.New("ui_contribution: nil definition")
 	}
-	if err := validateSessionPermissions(def, grantedScopes, grantedPerms); err != nil {
-		return nil, err
-	}
 	if lifetime <= 0 {
 		lifetime = time.Hour
 	}
 	now := time.Now().UTC()
 	sess := &BridgeSession{
-		SessionID:           newBridgeSessionID(),
-		ContributionID:      string(def.ContributionID),
-		ExtensionID:         string(def.ExtensionID),
-		ModuleID:            string(def.ModuleID),
-		Generation:          def.Integrity.Generation,
-		Origin:              origin,
-		ContractVersion:     def.ContractVersion,
-		GrantedScopes:       grantedScopes,
-		GrantedPerms:        grantedPerms,
-		CreatedAt:           now,
-		ExpiresAt:           now.Add(lifetime),
-		Surface:             surface,
-		CharacterID:         characterID,
-		ConversationID:      conversationID,
+		SessionID:            newBridgeSessionID(),
+		ContributionID:       string(def.ContributionID),
+		ExtensionID:          string(def.ExtensionID),
+		ModuleID:             string(def.ModuleID),
+		Generation:           def.Integrity.Generation,
+		Origin:               origin,
+		ContractVersion:      def.ContractVersion,
+		GrantedScopes:        grantedScopes,
+		GrantedPerms:         grantedPerms,
+		CreatedAt:            now,
+		ExpiresAt:            now.Add(lifetime),
+		Surface:              surface,
+		CharacterID:          characterID,
+		ConversationID:       conversationID,
+		Token:                newBridgeToken(),
+		UsedNonces:           make(map[string]bool),
 	}
+
+	b.mu.RLock()
+	scopeFactory := b.scopeSnapshotFactory
+	permFactory := b.permissionSnapshotFactory
+	releaser := b.snapshotReleaser
+	b.mu.RUnlock()
+
+	if scopeFactory != nil {
+		scopeSnapID, err := scopeFactory(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, characterID, conversationID)
+		if err != nil {
+			return nil, fmt.Errorf("ui_contribution: create scope snapshot: %w", err)
+		}
+		sess.ScopeSnapshotID = scopeSnapID
+	}
+
+	if permFactory != nil {
+		permSnapID, err := permFactory(sess.SessionID, sess.ExtensionID, sess.ModuleID, sess.Generation, characterID, conversationID, grantedPerms, sess.ExpiresAt)
+		if err != nil {
+			if scopeFactory != nil && releaser != nil {
+				_ = releaser(sess.ScopeSnapshotID, "")
+			}
+			return nil, fmt.Errorf("ui_contribution: create permission snapshot: %w", err)
+		}
+		sess.PermissionSnapshotID = permSnapID
+	}
+
 	b.mu.Lock()
 	b.sessions[sess.SessionID] = sess
 	b.mu.Unlock()
 	return sess, nil
 }
 
-func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, contractVersion int) (*BridgeSession, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, contractVersion int, token string, generation int64, nonce string) (*BridgeSession, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	sess, ok := b.sessions[sessionID]
 	if !ok {
 		return nil, NewUIError(UIErrBridgeAuth, "session not found", nil)
+	}
+	if time.Now().UTC().After(sess.ExpiresAt) {
+		return nil, NewUIError(UIErrBridgeAuth, "session expired", nil)
 	}
 	if sess.ContributionID != contributionID {
 		return nil, NewUIError(UIErrBridgeAuth, "contribution mismatch", nil)
@@ -324,16 +380,58 @@ func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, con
 	if sess.ContractVersion != contractVersion {
 		return nil, NewUIError(UIErrBridgeAuth, "contract version mismatch", nil)
 	}
-	if time.Now().UTC().After(sess.ExpiresAt) {
-		return nil, NewUIError(UIErrBridgeAuth, "session expired", nil)
+	if sess.Token != token {
+		return nil, NewUIError(UIErrBridgeAuth, "token mismatch", nil)
 	}
+	if sess.Generation != generation {
+		return nil, NewUIError(UIErrBridgeAuth, "generation mismatch", nil)
+	}
+	if nonce == "" {
+		return nil, NewUIError(UIErrBridgeAuth, "nonce required", nil)
+	}
+	if sess.UsedNonces[nonce] {
+		return nil, NewUIError(UIErrBridgeAuth, "nonce replay detected", nil)
+	}
+	sess.UsedNonces[nonce] = true
 	return sess, nil
 }
 
 func (b *UIBridge) RevokeSession(sessionID string) {
 	b.mu.Lock()
-	delete(b.sessions, sessionID)
+	sess, ok := b.sessions[sessionID]
+	if ok {
+		delete(b.sessions, sessionID)
+	}
+	releaser := b.snapshotReleaser
 	b.mu.Unlock()
+	if ok && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
+		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
+	}
+}
+
+func (b *UIBridge) RevokeSessionsByContext(characterID, conversationID string) int {
+	b.mu.Lock()
+	releaser := b.snapshotReleaser
+	type snapPair struct{ scope, perm string }
+	pairs := make([]snapPair, 0)
+	count := 0
+	for id, sess := range b.sessions {
+		if (characterID != "" && sess.CharacterID == characterID) ||
+			(conversationID != "" && sess.ConversationID == conversationID) {
+			pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+			delete(b.sessions, id)
+			count++
+		}
+	}
+	b.mu.Unlock()
+	if releaser != nil {
+		for _, p := range pairs {
+			if p.scope != "" || p.perm != "" {
+				_ = releaser(p.scope, p.perm)
+			}
+		}
+	}
+	return count
 }
 
 func (b *UIBridge) SessionCount() int {
@@ -348,6 +446,9 @@ type BridgeMessage struct {
 	ContributionID  string          `json:"contribution_id"`
 	Origin          string          `json:"origin"`
 	ContractVersion int             `json:"contract_version"`
+	Nonce           string          `json:"nonce,omitempty"`
+	Token           string          `json:"token,omitempty"`
+	Generation      int64           `json:"generation"`
 	Payload         json.RawMessage `json:"payload,omitempty"`
 }
 
@@ -361,7 +462,7 @@ func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse
 	if !msg.Method.Valid() {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, "invalid method", nil)}
 	}
-	sess, err := b.ValidateSession(msg.SessionID, msg.ContributionID, msg.Origin, msg.ContractVersion)
+	sess, err := b.ValidateSession(msg.SessionID, msg.ContributionID, msg.Origin, msg.ContractVersion, msg.Token, msg.Generation, msg.Nonce)
 	if err != nil {
 		return BridgeResponse{OK: false, Error: err.(*UIError)}
 	}
@@ -564,28 +665,14 @@ func mustMarshal(v any) json.RawMessage {
 	return b
 }
 
-func validateSessionPermissions(def *UIContributionDefinition, grantedScopes, grantedPerms []string) error {
-	grantedPermSet := make(map[string]bool, len(grantedPerms))
-	for _, p := range grantedPerms {
-		grantedPermSet[p] = true
-	}
-	for _, req := range def.Permissions {
-		if req.Required && !grantedPermSet[req.Name] {
-			return NewUIError(UIErrPermissionDenied, "missing required permission: "+req.Name, nil)
-		}
-	}
-	grantedScopeSet := make(map[string]bool, len(grantedScopes))
-	for _, s := range grantedScopes {
-		grantedScopeSet[s] = true
-	}
-	for _, scope := range def.ScopeRule.RequiredScopes {
-		if !grantedScopeSet[scope] {
-			return NewUIError(UIErrScopeDenied, "missing required scope: "+scope, nil)
-		}
-	}
-	return nil
+func newBridgeSessionID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
-func newBridgeSessionID() string {
-	return fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
+func newBridgeToken() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

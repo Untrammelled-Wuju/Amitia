@@ -26,6 +26,7 @@ func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel.POST("/extensions/enable", api.enable)
 	kernel.POST("/extensions/disable", api.disable)
 	kernel.POST("/extensions/uninstall", api.uninstall)
+	kernel.POST("/extensions/resume-uninstall", api.resumeUninstall)
 	kernel.POST("/extensions/pause", api.pause)
 	kernel.POST("/extensions/rollback", api.rollback)
 	kernel.GET("/status", api.status)
@@ -287,6 +288,31 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 		return
 	}
 	if err := api.runtime.Kernel.Uninstall(c.Request.Context(), extID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "uninstalled": true})
+}
+
+func (api *KernelAPI) resumeUninstall(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	extID := c.Query("id")
+	if extID == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
+			extID = body.ID
+		}
+	}
+	if extID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	if err := api.runtime.Kernel.ResumeUninstall(c.Request.Context(), extID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

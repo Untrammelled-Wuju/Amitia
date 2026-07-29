@@ -48,6 +48,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/pkg/sse"
 )
 
 type ContainerBuilder struct {
@@ -119,6 +120,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	permDefRegistry := permission.NewPermissionDefinitionRegistry()
 	permStorage := permission.NewSQLitePermissionStorage(db)
+	permSnapshotStore := permission.NewSQLitePermissionSnapshotStore(db)
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
@@ -298,7 +300,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: register default event types: %w", err)
 	}
 	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
-	eventSvc.SetEffectiveResolver(eventResolver)
+	if err := eventSvc.SetEffectiveResolver(eventResolver); err != nil {
+		return nil, fmt.Errorf("kernel: set event effective resolver: %w", err)
+	}
+	genResolver := NewEventGenerationResolverAdapter(instRepo)
+	eventSvc.SetGenerationResolver(genResolver)
+	eventSvc.GetDispatcher().SetGenerationResolver(genResolver)
 	eventBridge := event.NewRuntimeBridge(eventSvc)
 	eventBridge.Attach()
 	hostEmitter := event.NewHostEventEmitter(eventSvc)
@@ -313,7 +320,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
 	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
-	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter())
+	hostAPIGateway.SetPermissionSnapshotChecker(host_api.NewBrokerPermissionSnapshotChecker(host_api.NewPermissionSnapshotStoreAdapter(permSnapshotStore)))
+	hostAPIGateway.SetAuditWriter(newHostAPIAuditWriter(sqlite.NewHostAPIAuditRepository(db)))
 	extensionStateStore := sqlite.NewExtensionStateStore(db)
 	charReader := b.characterReader
 	if charReader == nil {
@@ -327,13 +335,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if memQuerySvc == nil {
 		memQuerySvc = NewDefaultMemoryQueryService()
 	}
+	uiHostNotifier := NewSSEUIHostNotifier(sse.Global)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
 		CharacterReader:     charReader,
 		ConversationReader:  convReader,
 		MemoryQueryService:  memQuerySvc,
-		UIHostNotifier:      NewDefaultUIHostNotifier(),
+		UIHostNotifier:      uiHostNotifier,
 		ClipboardHost:       NewDefaultClipboardHost(),
+		RuntimeSupervisor:   supervisor,
 		EventService:        eventSvc,
 		ScheduleService:     scheduleSvc,
 		ExecutionKernel:     executionKernel,
@@ -388,6 +398,51 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
 
 	uiHost := ui_contribution.NewUIHost()
+	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
+		invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
+		scopes := []scope.ScopeRef{
+			scope.NewExtensionScope(extensionID),
+			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewSessionScope(invocationID),
+		}
+		if characterID != "" {
+			scopes = append(scopes, scope.NewCharacterScope(characterID))
+		}
+		if conversationID != "" {
+			scopes = append(scopes, scope.NewConversationScope(conversationID))
+		}
+		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
+			return "", err
+		}
+		return snapshot.SnapshotID, nil
+	})
+	uiHost.Bridge().SetPermissionSnapshotFactory(func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error) {
+		snap := permission.NewPermissionSnapshot(permission.PermissionSnapshotRequest{
+			SessionID:      sessionID,
+			ExtensionID:    extensionID,
+			ModuleID:       moduleID,
+			Generation:     generation,
+			CharacterID:    characterID,
+			ConversationID: conversationID,
+			GrantedPerms:   grantedPerms,
+			Lifetime:       time.Until(expiresAt),
+		})
+		if err := permSnapshotStore.SaveSnapshot(context.Background(), snap); err != nil {
+			return "", err
+		}
+		return snap.SnapshotID, nil
+	})
+	uiHost.Bridge().SetSnapshotReleaser(func(scopeSnapshotID, permissionSnapshotID string) error {
+		ctx := context.Background()
+		if scopeSnapshotID != "" {
+			_ = scopeStore.DeleteSnapshot(ctx, scopeSnapshotID)
+		}
+		if permissionSnapshotID != "" {
+			_ = permSnapshotStore.DeleteSnapshot(ctx, permissionSnapshotID)
+		}
+		return nil
+	})
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
 	slotRegistry := extension_slots.DefaultSlotRegistry()
@@ -409,7 +464,56 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		_ = uiHost.RegisterContribution(def)
 	}
 	sandboxHost := sandbox_webui.NewHost()
-	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo)
+	sandboxHost.SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
+		invocationID := fmt.Sprintf("sandbox-sess-%d", time.Now().UnixNano())
+		scopes := []scope.ScopeRef{
+			scope.NewExtensionScope(extensionID),
+			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewSessionScope(invocationID),
+		}
+		if characterID != "" {
+			scopes = append(scopes, scope.NewCharacterScope(characterID))
+		}
+		if conversationID != "" {
+			scopes = append(scopes, scope.NewConversationScope(conversationID))
+		}
+		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
+			return "", err
+		}
+		return snapshot.SnapshotID, nil
+	})
+	sandboxHost.SetPermissionSnapshotFactory(func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error) {
+		snap := permission.NewPermissionSnapshot(permission.PermissionSnapshotRequest{
+			SessionID:      sessionID,
+			ExtensionID:    extensionID,
+			ModuleID:       moduleID,
+			Generation:     generation,
+			CharacterID:    characterID,
+			ConversationID: conversationID,
+			GrantedPerms:   grantedPerms,
+			Lifetime:       time.Until(expiresAt),
+		})
+		if err := permSnapshotStore.SaveSnapshot(context.Background(), snap); err != nil {
+			return "", err
+		}
+		return snap.SnapshotID, nil
+	})
+	sandboxHost.SetSnapshotReleaser(func(scopeSnapshotID, permissionSnapshotID string) error {
+		ctx := context.Background()
+		if scopeSnapshotID != "" {
+			_ = scopeStore.DeleteSnapshot(ctx, scopeSnapshotID)
+		}
+		if permissionSnapshotID != "" {
+			_ = permSnapshotStore.DeleteSnapshot(ctx, permissionSnapshotID)
+		}
+		return nil
+	})
+	hostCmdRegistry := NewHostCommandRegistry()
+	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
+		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
+	}
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo)
 	sandboxDispatcher := sandbox_webui.NewBridgeActionDispatcher(func(ctx context.Context, sessionID, actionID string, input json.RawMessage) (json.RawMessage, error) {
 		session, err := sandboxHost.GetSession(sessionID)
 		if err != nil {
@@ -443,7 +547,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if !session.IsDataSourceAllowed(sourceID) {
 			return nil, fmt.Errorf("sandbox: data source %s not allowed for session %s", sourceID, sessionID)
 		}
-		return dataSourceProvider.Query(ctx, sessionID, session.ExtensionID, session.ModuleID, sourceID, params)
+		return dataSourceProvider.Query(ctx, sessionID, session.ExtensionID, session.ModuleID, sourceID, session.ScopeSnapshotID, session.PermissionSnapshotID, params)
 	})
 	sandboxNavigator := sandbox_webui.NewBridgeNavigator(func(ctx context.Context, sessionID, target string) error {
 		session, err := sandboxHost.GetSession(sessionID)
@@ -472,7 +576,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			}, action, input)
 		},
 		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {
-			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, params)
+			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, session.ScopeSnapshotID, session.PermissionSnapshotID, params)
 		},
 	)
 	chatExtRegistry := chat_ui_extension.NewChatExtensionRegistry()
@@ -512,6 +616,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	devConsoleSvc := developer_console.NewConsoleService(aggregators)
 	devConsoleHandler := developer_console.NewHTTPHandler(devConsoleSvc, devConsoleRepo)
+	devConsoleHandler.SetHostAPIAuditQuery(newContainerHostAPIAuditQuery(sqlite.NewHostAPIAuditRepository(db)))
 
 	rollbackRepo := update.NewRollbackRepository(db)
 	journalMgr := update.NewJournalManager(rollbackRepo)
@@ -575,6 +680,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		HostAPIGateway:         hostAPIGateway,
 		PermissionBroker:       permBroker,
 		ScopeManager:           scopeManager,
+		ScopeSnapshotCreator: func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
+			invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
+			scopes := []scope.ScopeRef{
+				scope.NewExtensionScope(extensionID),
+				scope.NewModuleScope(extensionID, moduleID),
+				scope.NewSessionScope(invocationID),
+			}
+			if characterID != "" {
+				scopes = append(scopes, scope.NewCharacterScope(characterID))
+			}
+			if conversationID != "" {
+				scopes = append(scopes, scope.NewConversationScope(conversationID))
+			}
+			snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+			if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
+				return "", err
+			}
+			return snapshot.SnapshotID, nil
+		},
 		AgentSkillCatalog:      agentSkillCatalog,
 		WorkflowRegistry:       workflowRegistry,
 		WorkflowExecutor:       workflowExecutor,
@@ -587,6 +711,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ToolRegistry:    toolRegistry,
 		AdapterRegistry: adapterRegistry,
 		ToolFacade:      toolFacade,
+
+		HostCommandRegistry: hostCmdRegistry,
 
 		TaskRepository:     taskRepo,
 		TaskRuntimeService: taskRuntimeService,
@@ -611,6 +737,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EventDeliveryAdapter:     eventDeliveryAdapter,
 
 		UIHost:                uiHost,
+		UIHostNotifier:        uiHostNotifier,
 		UIContributionRepo:    uiContribRepo,
 		SlotRegistry:          slotRegistry,
 		PageHost:              pageHost,
@@ -671,10 +798,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	typedInstaller.SetContainer(container)
 
+	candidateRepo := NewCandidateRepository(store.DB())
+	candidateMgr := NewCandidateContributionManager(typedInstaller, generationMgr, supervisor, candidateRepo)
+	container.CandidateMgr = candidateMgr
+
 	candidateRunner := NewProductionCandidateRunner(
 		supervisor,
 		typedInstaller,
 		generationMgr,
+		candidateMgr,
 		b.extRoot,
 	)
 	devModeReloader.SetCandidateRunner(candidateRunner)

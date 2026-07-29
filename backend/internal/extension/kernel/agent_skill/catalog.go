@@ -35,9 +35,6 @@ func (c *AgentSkillCatalog) Register(definition AgentSkillDefinition) error {
 func (c *AgentSkillCatalog) Unregister(extensionID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.items[extensionID]; !ok {
-		return fmt.Errorf("agent skill %s not found", extensionID)
-	}
 	delete(c.items, extensionID)
 	return nil
 }

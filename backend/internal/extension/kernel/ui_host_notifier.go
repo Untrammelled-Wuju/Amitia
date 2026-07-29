@@ -2,8 +2,32 @@ package kernel
 
 import (
 	"context"
-	"log"
+	"errors"
 )
+
+var (
+	ErrUIHostUnavailable         = errors.New("ui_host: notification host unavailable")
+	ErrDialogHostUnavailable     = errors.New("ui_host: dialog host unavailable")
+	ErrNavigationHostUnavailable = errors.New("ui_host: navigation host unavailable")
+)
+
+type NotificationHost interface {
+	Notify(ctx context.Context, extensionID string, title string, body string, severity string) error
+}
+
+type DialogHost interface {
+	Dialog(ctx context.Context, extensionID string, dialogID string, message string, buttons []string) (string, error)
+}
+
+type NavigationHost interface {
+	Navigate(ctx context.Context, extensionID string, target string) error
+}
+
+type UIHostNotifier interface {
+	NotificationHost
+	DialogHost
+	NavigationHost
+}
 
 type DefaultUIHostNotifier struct{}
 
@@ -12,16 +36,13 @@ func NewDefaultUIHostNotifier() *DefaultUIHostNotifier {
 }
 
 func (n *DefaultUIHostNotifier) Notify(ctx context.Context, extensionID string, title string, body string, severity string) error {
-	log.Printf("[UI Notify] ext=%s title=%s severity=%s body=%s", extensionID, title, severity, body)
-	return nil
+	return ErrUIHostUnavailable
 }
 
 func (n *DefaultUIHostNotifier) Dialog(ctx context.Context, extensionID string, dialogID string, message string, buttons []string) (string, error) {
-	log.Printf("[UI Dialog] ext=%s dialog=%s message=%s buttons=%v", extensionID, dialogID, message, buttons)
-	return "ok", nil
+	return "", ErrDialogHostUnavailable
 }
 
 func (n *DefaultUIHostNotifier) Navigate(ctx context.Context, extensionID string, target string) error {
-	log.Printf("[UI Navigate] ext=%s target=%s", extensionID, target)
-	return nil
+	return ErrNavigationHostUnavailable
 }

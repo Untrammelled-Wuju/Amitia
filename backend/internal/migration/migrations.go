@@ -95,5 +95,9 @@ func DefaultMigrations() []Migration {
 		DesktopPetPackagesMigration(),
 		DesktopPetInstallationsMigration(),
 		DesktopPetRuntimeSettingsMigration(),
+		ConsolidationAutoMigrateMigration(),
+		QdrantMigration(),
+		SurrealMigration(),
+		MCPDuplicateRegistrationsMigration(),
 	}
 }

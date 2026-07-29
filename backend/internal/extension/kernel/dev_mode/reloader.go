@@ -372,7 +372,14 @@ func (r *RuntimeReloader) Reload(ctx context.Context, id WorkspaceID, reason str
 	r.emit(id, ev)
 	_ = r.drain(ctx, id)
 	if oldInstanceID != "" && runner != nil {
-		_ = runner.DrainInstance(ctx, oldInstanceID, drainTimeout)
+		if drainErr := runner.DrainInstance(ctx, oldInstanceID, drainTimeout); drainErr != nil {
+			ev.Error = fmt.Sprintf("drain warning: %v", drainErr)
+			r.emit(id, ev)
+		}
+		if stopErr := runner.StopInstance(ctx, oldInstanceID); stopErr != nil {
+			ev.Error = fmt.Sprintf("RUNTIME_STOP_FAILED: %v; requires_recovery", stopErr)
+			r.emit(id, ev)
+		}
 	}
 	r.instanceMu.Lock()
 	delete(r.oldInstance, id)
@@ -496,6 +503,34 @@ func (r *RuntimeReloader) CloseDevMode(ctx context.Context, workspaceID Workspac
 		firstErr = err
 	}
 	return firstErr
+}
+
+func (r *RuntimeReloader) RecoverStaleInstances(ctx context.Context) int {
+	r.instanceMu.Lock()
+	stale := make(map[WorkspaceID]string, len(r.oldInstance))
+	for id, instID := range r.oldInstance {
+		stale[id] = instID
+	}
+	for id := range stale {
+		delete(r.oldInstance, id)
+	}
+	runner := r.runner
+	r.instanceMu.Unlock()
+
+	if runner == nil {
+		return 0
+	}
+
+	cleaned := 0
+	for _, instID := range stale {
+		if instID == "" {
+			continue
+		}
+		if err := runner.StopInstance(ctx, instID); err == nil {
+			cleaned++
+		}
+	}
+	return cleaned
 }
 
 func (r *RuntimeReloader) emit(id WorkspaceID, ev ReloadEvent) {

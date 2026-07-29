@@ -52,6 +52,18 @@ func (h *Hub) Broadcast(event string, data map[string]interface{}) {
 	}
 }
 
+func (h *Hub) HasClients() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients) > 0
+}
+
+func (h *Hub) ClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
 func SSEHandler(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

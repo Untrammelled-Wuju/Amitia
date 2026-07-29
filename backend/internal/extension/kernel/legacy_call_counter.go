@@ -22,6 +22,7 @@ type LegacyCallCounter struct {
 	orphanRuntimeInstances        atomic.Int64
 	orphanUISessions              atomic.Int64
 	failedCleanupResources        atomic.Int64
+	duplicateMCPFromRegistry      atomic.Int64
 }
 
 func NewLegacyCallCounter() *LegacyCallCounter {
@@ -136,15 +137,25 @@ func (c *LegacyCallCounter) FailedCleanupResources() int64 {
 	return c.failedCleanupResources.Load()
 }
 
+func (c *LegacyCallCounter) SetDuplicateMCPFromRegistry(n int64) {
+	c.duplicateMCPFromRegistry.Store(n)
+}
+
+func (c *LegacyCallCounter) DuplicateMCPFromRegistry() int64 {
+	return c.duplicateMCPFromRegistry.Load()
+}
+
 func (c *LegacyCallCounter) FinalGateMetrics() map[string]int64 {
 	return map[string]int64{
 		"legacy_tool_execute_calls":             c.toolExecuteCalls.Load(),
 		"legacy_mcp_execute_calls":              c.mcpExecuteCalls.Load(),
 		"legacy_package_write_calls":            c.packageWriteCalls.Load(),
+		"legacy_package_read_calls":             globalLegacyReadCounter.PackageReadCallsFallbacks(),
 		"duplicate_contribution_registrations":  c.duplicateContributionRegistrations.Load(),
 		"orphan_runtime_instances":              c.orphanRuntimeInstances.Load(),
 		"orphan_ui_sessions":                    c.orphanUISessions.Load(),
 		"failed_cleanup_resources":              c.failedCleanupResources.Load(),
+		"duplicate_mcp_tool_registrations":      c.duplicateMCPFromRegistry.Load(),
 	}
 }
 
@@ -198,6 +209,7 @@ func (c *LegacyCallCounter) Snapshot() map[string]int64 {
 		"legacy_mcp_execute_calls":             c.mcpExecuteCalls.Load(),
 		"duplicate_mcp_tool_registrations":      c.duplicateMCPToolRegistrations.Load(),
 		"legacy_package_write_calls":           c.packageWriteCalls.Load(),
+		"legacy_package_read_calls":            globalLegacyReadCounter.PackageReadCallsFallbacks(),
 		"duplicate_contribution_registrations": c.duplicateContributionRegistrations.Load(),
 		"orphan_runtime_instances":             c.orphanRuntimeInstances.Load(),
 		"orphan_ui_sessions":                   c.orphanUISessions.Load(),

@@ -323,6 +323,12 @@ type PackageVersionDiff struct {
 	FromVersion  string                 `json:"fromVersion"`
 	ToVersion    string                 `json:"toVersion"`
 	Manifest     map[string]interface{} `json:"manifest"`
+	Module       map[string]interface{} `json:"module"`
+	Contribution map[string]interface{} `json:"contribution"`
+	Permission   map[string]interface{} `json:"permission"`
+	Scope        map[string]interface{} `json:"scope"`
+	Runtime      map[string]interface{} `json:"runtime"`
+	Migration    map[string]interface{} `json:"migration"`
 	Schemas      map[string]interface{} `json:"schemas"`
 	Workflow     map[string]interface{} `json:"workflow"`
 	Instructions map[string]interface{} `json:"instructions"`

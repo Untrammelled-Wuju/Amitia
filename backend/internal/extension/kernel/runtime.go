@@ -28,11 +28,12 @@ type InstalledExtension struct {
 }
 
 type Runtime struct {
-	mu        sync.RWMutex
-	root      string
-	installer *amitiax.Installer
-	installed map[string]InstalledExtension
-	container *Container
+	mu          sync.RWMutex
+	root        string
+	installer   *amitiax.Installer
+	installed   map[string]InstalledExtension
+	container   *Container
+	enableLocks sync.Map
 }
 
 func NewRuntime(root string) (*Runtime, error) {
@@ -63,6 +64,11 @@ func (r *Runtime) Container() *Container {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.container
+}
+
+func (r *Runtime) getEnableLock(extensionID string) *sync.Mutex {
+	actual, _ := r.enableLocks.LoadOrStore(extensionID, &sync.Mutex{})
+	return actual.(*sync.Mutex)
 }
 
 func (r *Runtime) Recover() error {

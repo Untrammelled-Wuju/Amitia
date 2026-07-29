@@ -6,7 +6,8 @@ import java.security.MessageDigest
 
 class PackageSignatureVerifier(
     private val trustStore: PublisherTrustStore? = null,
-    private val revocationList: RevocationList? = null
+    private val revocationList: RevocationList? = null,
+    private val isDebug: Boolean = false
 ) {
     data class SignatureVerificationResult(
         val verified: Boolean,
@@ -19,7 +20,7 @@ class PackageSignatureVerifier(
     fun verify(
         signature: SignatureDoc?,
         treeHash: String,
-        manifestHash: String? = null
+        manifestHash: String
     ): SignatureVerificationResult {
         if (signature == null) {
             return SignatureVerificationResult(
@@ -131,7 +132,7 @@ class PackageSignatureVerifier(
             )
         }
 
-        if (!publisher.trustLevel.allowsInstallation()) {
+        if (!publisher.trustLevel.allowsInstallation(isDebug)) {
             return SignatureVerificationResult(
                 verified = false,
                 publisherId = publisherId,
@@ -192,7 +193,7 @@ class PackageSignatureVerifier(
             )
         }
 
-        val message = buildSignatureMessage(publisherId, treeHash)
+        val message = buildSignatureMessage(publisherId, treeHash, manifestHash)
         val isValid = verifyEd25519(
             publicKey = key.publicKey,
             message = message.toByteArray(Charsets.UTF_8),
@@ -221,6 +222,7 @@ class PackageSignatureVerifier(
     fun verifyWithPublicKey(
         signature: SignatureDoc?,
         treeHash: String,
+        manifestHash: String,
         publicKey: ByteArray
     ): Boolean {
         if (signature == null) return false
@@ -229,7 +231,7 @@ class PackageSignatureVerifier(
         if (publicKey.size != ED25519_PUBLIC_KEY_SIZE) return false
 
         val publisherId = signature.publisherId ?: return false
-        val message = buildSignatureMessage(publisherId, treeHash)
+        val message = buildSignatureMessage(publisherId, treeHash, manifestHash)
         return verifyEd25519(
             publicKey = publicKey,
             message = message.toByteArray(Charsets.UTF_8),
@@ -257,8 +259,8 @@ class PackageSignatureVerifier(
         const val ED25519_PUBLIC_KEY_SIZE = 32
         const val ED25519_SIGNATURE_SIZE = 64
 
-        fun buildSignatureMessage(publisherId: String, treeHash: String): String {
-            return "$publisherId:$treeHash"
+        fun buildSignatureMessage(publisherId: String, treeHash: String, manifestHash: String): String {
+            return "$publisherId:$treeHash:$manifestHash"
         }
 
         fun computeKeyId(publicKey: ByteArray): String {

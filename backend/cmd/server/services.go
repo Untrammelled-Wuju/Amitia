@@ -372,6 +372,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
 	mcpRepository := mcp.NewRepository(ctx.DB)
+	mcpDuplicateStore := mcp.NewDuplicateStore(ctx.DB)
+	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
 	mcpStorageDir := mcpDataDirectory(ctx)
 	secretStore, err := mcpauth.NewEncryptedFileStore(filepath.Join(mcpStorageDir, "mcp-secrets.json"), filepath.Join(mcpStorageDir, "mcp-secrets.key"))
 	if err != nil {
@@ -380,7 +382,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
 	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
 	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
-	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)))
+	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)), mcpskill.WithDuplicateRecorder(mcpDuplicateStore))
 	featureService := mcpfeatures.New(mcpRepository, connectionManager)
 	interactionBroker := mcphost.NewBroker(chatSvc)
 	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)

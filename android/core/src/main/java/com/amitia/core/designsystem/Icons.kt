@@ -256,6 +256,7 @@ object AmitiaIcons {
     val EmailOutlined: ImageVector = Icons.Outlined.Email
     val PhoneAndroid: ImageVector = Icons.Filled.PhoneAndroid
     val Smartphone: ImageVector = Icons.Filled.Smartphone
+    val DesktopWindows: ImageVector = Icons.Filled.DesktopWindows
     val Tablet: ImageVector = Icons.Filled.Tablet
     val TabletAndroid: ImageVector = Icons.Filled.TabletAndroid
     val Devices: ImageVector = Icons.Filled.Devices

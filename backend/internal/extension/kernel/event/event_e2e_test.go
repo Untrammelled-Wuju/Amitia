@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/sqlite"
 )
 
 type mockPermissionChecker struct {
@@ -141,7 +141,7 @@ func (m *mockDeliveryHandler) count() int {
 func setupTestService(t *testing.T, permGranted, scopeValid, depReady, runtimeAvailable bool) (*Service, *mockPermissionChecker, *mockScopeChecker, *mockDeliveryHandler, func()) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), fmt.Sprintf("event_test_%d.db", time.Now().UnixNano()))
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -163,7 +163,9 @@ func setupTestService(t *testing.T, permGranted, scopeValid, depReady, runtimeAv
 	if err != nil {
 		t.Fatalf("create service: %v", err)
 	}
-	svc.SetEffectiveResolver(resolver)
+	if err := svc.SetEffectiveResolver(resolver); err != nil {
+		t.Fatalf("set effective resolver: %v", err)
+	}
 
 	handler := &mockDeliveryHandler{}
 	svc.SetDeliveryHandler(handler.handle)
@@ -719,7 +721,7 @@ func TestEventE2E_GenerationUpdate_OldDeliveryCancelled(t *testing.T) {
 
 func TestEventE2E_Restart_SubscriptionRecovered(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), fmt.Sprintf("event_restart_%d.db", time.Now().UnixNano()))
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -739,7 +741,9 @@ func TestEventE2E_Restart_SubscriptionRecovered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create service 1: %v", err)
 	}
-	svc1.SetEffectiveResolver(resolver)
+	if err := svc1.SetEffectiveResolver(resolver); err != nil {
+		t.Fatalf("set effective resolver: %v", err)
+	}
 	handler := &mockDeliveryHandler{}
 	svc1.SetDeliveryHandler(handler.handle)
 	if err := svc1.RegisterDefaultEventTypes(context.Background()); err != nil {
@@ -762,7 +766,9 @@ func TestEventE2E_Restart_SubscriptionRecovered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create service 2: %v", err)
 	}
-	svc2.SetEffectiveResolver(resolver)
+	if err := svc2.SetEffectiveResolver(resolver); err != nil {
+		t.Fatalf("set effective resolver svc2: %v", err)
+	}
 	svc2.SetDeliveryHandler(handler.handle)
 	if err := svc2.RegisterDefaultEventTypes(context.Background()); err != nil {
 		t.Fatalf("register event types svc2: %v", err)

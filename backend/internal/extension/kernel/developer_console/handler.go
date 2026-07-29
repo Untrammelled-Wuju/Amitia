@@ -3,18 +3,24 @@ package developer_console
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 )
 
 type HTTPHandler struct {
-	service    *ConsoleService
-	repository *DiagnosticRepository
+	service          *ConsoleService
+	repository       *DiagnosticRepository
+	hostAPIAuditQuery HostAPIAuditQuery
 }
 
 func NewHTTPHandler(service *ConsoleService, repository *DiagnosticRepository) *HTTPHandler {
 	return &HTTPHandler{service: service, repository: repository}
+}
+
+func (h *HTTPHandler) SetHostAPIAuditQuery(q HostAPIAuditQuery) {
+	h.hostAPIAuditQuery = q
 }
 
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
@@ -34,6 +40,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/dev-console/performance", h.handlePerformance)
 	mux.HandleFunc("/api/dev-console/migration", h.handleMigration)
 	mux.HandleFunc("/api/dev-console/compatibility", h.handleCompatibility)
+	mux.HandleFunc("/api/dev-console/host-api-audits", h.handleHostAPIAudits)
 	mux.HandleFunc("/api/dev-console/stream", h.handleStream)
 	mux.HandleFunc("/api/dev-console/export-diagnostics", h.handleExportDiagnostics)
 }
@@ -206,6 +213,44 @@ func (h *HTTPHandler) handleCompatibility(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, recs)
+}
+
+func (h *HTTPHandler) handleHostAPIAudits(w http.ResponseWriter, r *http.Request) {
+	if h.hostAPIAuditQuery == nil {
+		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("host api audit query not configured"))
+		return
+	}
+	q := r.URL.Query()
+	extensionID := q.Get("extension")
+	method := q.Get("method")
+	result := q.Get("result")
+	traceID := q.Get("traceId")
+	limit := 200
+	offset := 0
+	if l, err := strconv.Atoi(q.Get("limit")); err == nil && l > 0 && l <= 1000 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(q.Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	entries, err := h.hostAPIAuditQuery.ListAuditLogs(ctx, extensionID, method, result, traceID, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	total, err := h.hostAPIAuditQuery.CountAuditLogs(ctx, extensionID, method, result, traceID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"entries": entries,
+		"total":   total,
+		"limit":   limit,
+		"offset":  offset,
+	})
 }
 
 func (h *HTTPHandler) handleStream(w http.ResponseWriter, r *http.Request) {

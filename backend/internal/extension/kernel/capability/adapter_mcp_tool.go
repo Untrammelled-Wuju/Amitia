@@ -22,6 +22,8 @@ type MCPToolDescriptor struct {
 	OutputSchema json.RawMessage
 	Annotations  map[string]any
 	RevisionHash string
+	ExtensionID  string
+	ModuleID     string
 }
 
 type MCPResourceDescriptor struct {
@@ -149,14 +151,18 @@ func (a *MCPToolAdapter) AdaptTool(descriptor MCPToolDescriptor) ToolDefinition 
 				"mcpServerName": descriptor.ServerName,
 			},
 		},
-		ExtensionID: "",
-		ModuleID:    "",
+		ExtensionID: descriptor.ExtensionID,
+		ModuleID:    descriptor.ModuleID,
 	}
 }
 
 func BuildMCPCapabilityID(serverID, toolName string) CapabilityID {
 	cap := "mcp/" + normalizeMCPSegment(serverID) + "/" + normalizeMCPSegment(toolName)
 	return CapabilityID(cap)
+}
+
+func BuildMCPUniqueKey(serverID, toolName, extensionID, moduleID string) string {
+	return serverID + "|" + toolName + "|" + extensionID + "|" + moduleID
 }
 
 func normalizeMCPSegment(value string) string {

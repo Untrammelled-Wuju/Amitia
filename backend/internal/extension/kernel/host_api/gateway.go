@@ -12,12 +12,13 @@ import (
 )
 
 type DefaultGateway struct {
-	mu         sync.RWMutex
-	routes     map[Method]map[int]Route
-	sessions   map[string]*Session
-	permCheck  PermissionChecker
-	scopeCheck ScopeChecker
-	audit      AuditWriter
+	mu                sync.RWMutex
+	routes            map[Method]map[int]Route
+	sessions          map[string]*Session
+	permCheck         PermissionChecker
+	permSnapshotCheck PermissionSnapshotChecker
+	scopeCheck        ScopeChecker
+	audit             AuditWriter
 }
 
 func NewDefaultGateway() *DefaultGateway {
@@ -31,6 +32,12 @@ func (g *DefaultGateway) SetPermissionChecker(c PermissionChecker) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.permCheck = c
+}
+
+func (g *DefaultGateway) SetPermissionSnapshotChecker(c PermissionSnapshotChecker) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.permSnapshotCheck = c
 }
 
 func (g *DefaultGateway) SetScopeChecker(c ScopeChecker) {
@@ -118,6 +125,19 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		g.recordAudit(ctx, request, result)
 		return result
 	}
+	if err := g.recordCallStart(ctx, request); err != nil {
+		if route.SideEffectLevel == SideEffectWrite || route.SideEffectLevel == SideEffectExternal {
+			result := CallResult{
+				Status: StatusRejected,
+				Error: &Error{
+					Code:    ErrorCodeHostUnavailable,
+					Message: "host_api: audit write failed (fail closed for side-effect route)",
+				},
+			}
+			g.recordAudit(ctx, request, result)
+			return result
+		}
+	}
 	if g.permCheck == nil {
 		result := CallResult{
 			Status: StatusRejected,
@@ -139,6 +159,22 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 		}
 		g.recordAudit(ctx, request, result)
 		return result
+	}
+	g.mu.RLock()
+	permSnapCheck := g.permSnapshotCheck
+	g.mu.RUnlock()
+	if permSnapCheck != nil && request.PermissionSnapshotID != "" {
+		if err := permSnapCheck.Check(ctx, request.RuntimeIdentity, request.PermissionSnapshotID, route.Permission); err != nil {
+			result := CallResult{
+				Status: StatusRejected,
+				Error: &Error{
+					Code:    ErrorCodePermissionDenied,
+					Message: err.Error(),
+				},
+			}
+			g.recordAudit(ctx, request, result)
+			return result
+		}
 	}
 	if g.scopeCheck == nil {
 		result := CallResult{
@@ -257,6 +293,16 @@ func (g *DefaultGateway) checkDeadline(request CallRequest) error {
 		return ErrTimeout
 	}
 	return nil
+}
+
+func (g *DefaultGateway) recordCallStart(ctx context.Context, request CallRequest) error {
+	g.mu.RLock()
+	w := g.audit
+	g.mu.RUnlock()
+	if w == nil {
+		return nil
+	}
+	return w.RecordCallStart(ctx, request)
 }
 
 func (g *DefaultGateway) recordAudit(ctx context.Context, request CallRequest, result CallResult) {

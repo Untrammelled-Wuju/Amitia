@@ -18,15 +18,21 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
 
+type DialogResolver interface {
+	ResolveDialog(dialogID string, result string) bool
+}
+
 type HTTPHandler struct {
-	uiHost       *ui_contribution.UIHost
-	slotRegistry *extension_slots.SlotRegistry
-	pageHost     *extension_page_host.PageHost
-	sandboxHost  *sandbox_webui.Host
-	chatRegistry *chat_ui_extension.ChatExtensionRegistry
-	permChecker  *permission.UIPermissionChecker
-	schemaLookup func(extensionID, contributionID string) (json.RawMessage, bool)
-	extRoot      string
+	uiHost               *ui_contribution.UIHost
+	slotRegistry         *extension_slots.SlotRegistry
+	pageHost             *extension_page_host.PageHost
+	sandboxHost          *sandbox_webui.Host
+	chatRegistry         *chat_ui_extension.ChatExtensionRegistry
+	authorizer           *permission.UISessionAuthorizer
+	schemaLookup         func(extensionID, contributionID string) (json.RawMessage, bool)
+	scopeSnapshotCreator func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	dialogResolver       DialogResolver
+	extRoot              string
 }
 
 func NewHTTPHandler(
@@ -42,8 +48,11 @@ func NewHTTPHandler(
 		pageHost:     pageHost,
 		sandboxHost:  sandboxHost,
 		chatRegistry: chatRegistry,
-		permChecker:  permission.NewUIPermissionChecker(),
 	}
+}
+
+func (h *HTTPHandler) SetAuthorizer(a *permission.UISessionAuthorizer) {
+	h.authorizer = a
 }
 
 func (h *HTTPHandler) SetExtensionRoot(root string) {
@@ -52,6 +61,14 @@ func (h *HTTPHandler) SetExtensionRoot(root string) {
 
 func (h *HTTPHandler) SetSchemaLookup(fn func(extensionID, contributionID string) (json.RawMessage, bool)) {
 	h.schemaLookup = fn
+}
+
+func (h *HTTPHandler) SetScopeSnapshotCreator(fn func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)) {
+	h.scopeSnapshotCreator = fn
+}
+
+func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
+	h.dialogResolver = r
 }
 
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
@@ -74,6 +91,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/webui/stats", h.handleWebUIStats)
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
+	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
 }
 
 func (h *HTTPHandler) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -124,14 +142,10 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var req struct {
-		ContributionID  string   `json:"contributionId"`
-		Origin          string   `json:"origin"`
-		GrantedScopes   []string `json:"grantedScopes"`
-		GrantedPerms    []string `json:"grantedPerms"`
-		LifetimeSeconds int64    `json:"lifetimeSeconds"`
-		Surface         string   `json:"surface"`
-		CharacterID     string   `json:"characterId"`
-		ConversationID  string   `json:"conversationId"`
+		ContributionID string `json:"contributionId"`
+		Surface        string `json:"surface"`
+		CharacterID    string `json:"characterId"`
+		ConversationID string `json:"conversationId"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
@@ -145,17 +159,18 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 	if req.Surface == "" {
 		req.Surface = "web"
 	}
-	if h.permChecker != nil {
-		if err := h.permChecker.ValidateSessionRequest(def, req.GrantedScopes, req.GrantedPerms); err != nil {
-			writeError(w, http.StatusForbidden, "permission_denied", err.Error())
-			return
-		}
+	if h.authorizer == nil {
+		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
+		return
 	}
+	auth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
+		return
+	}
+	origin := fmt.Sprintf("amitia-extension://%s/%s", def.ExtensionID, def.ModuleID)
 	lifetime := time.Hour
-	if req.LifetimeSeconds > 0 {
-		lifetime = time.Duration(req.LifetimeSeconds) * time.Second
-	}
-	sess, err := h.uiHost.Bridge().CreateSession(def, req.Origin, req.GrantedScopes, req.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
+	sess, err := h.uiHost.Bridge().CreateSession(def, origin, auth.GrantedScopes, auth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_create_failed", err.Error())
 		return
@@ -439,24 +454,12 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		return
 	}
 	var req struct {
-		ContributionID     string                      `json:"contributionId"`
-		ExtensionID        string                      `json:"extensionId"`
-		ModuleID           string                      `json:"moduleId"`
-		Generation         int64                       `json:"generation"`
-		SlotID             string                      `json:"slotId"`
-		Sandbox            string                      `json:"sandbox"`
-		CSP                string                      `json:"csp"`
-		AllowedActions     []string                    `json:"allowedActions"`
-		AllowedDataSources []string                    `json:"allowedDataSources"`
-		Theme              sandbox_webui.ThemeSnapshot `json:"theme"`
-		Locale             string                      `json:"locale"`
-		BasePath           string                      `json:"basePath"`
-		EntryPath          string                      `json:"entryPath"`
-		GrantedScopes      []string                    `json:"grantedScopes"`
-		GrantedPerms       []string                    `json:"grantedPerms"`
-		Surface            string                      `json:"surface"`
-		CharacterID        string                      `json:"characterId"`
-		ConversationID     string                      `json:"conversationId"`
+		ContributionID string                      `json:"contributionId"`
+		Surface        string                      `json:"surface"`
+		CharacterID    string                      `json:"characterId"`
+		ConversationID string                      `json:"conversationId"`
+		Theme          sandbox_webui.ThemeSnapshot `json:"theme"`
+		Locale         string                      `json:"locale"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
@@ -471,42 +474,51 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "sandbox_invalid", "contribution is not a web ui")
 		return
 	}
-	if req.ExtensionID != string(def.ExtensionID) || req.ModuleID != string(def.ModuleID) || req.SlotID != def.Slot.SlotID || req.Generation != def.Integrity.Generation {
-		writeError(w, http.StatusForbidden, "session_identity_mismatch", "session request does not match contribution")
-		return
-	}
 	if req.Surface == "" {
 		req.Surface = "web"
 	}
-	if h.permChecker != nil {
-		if err := h.permChecker.ValidateSessionRequest(def, req.GrantedScopes, req.GrantedPerms); err != nil {
-			writeError(w, http.StatusForbidden, "permission_denied", err.Error())
-			return
-		}
+	if h.authorizer == nil {
+		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
+		return
+	}
+	_, err = h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
+		return
 	}
 	sandbox := sandbox_webui.SandboxType(def.Sandbox.Type)
-	basePath := h.resolveExtensionBasePath(req.ExtensionID)
+	basePath := h.resolveExtensionBasePath(string(def.ExtensionID))
 	if basePath == "" {
 		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
 		return
 	}
+	var scopeSnapshotID string
+	if h.scopeSnapshotCreator != nil {
+		var err error
+		scopeSnapshotID, err = h.scopeSnapshotCreator(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, req.CharacterID, req.ConversationID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "scope_snapshot_failed", err.Error())
+			return
+		}
+	}
 	sreq := sandbox_webui.CreateSessionRequest{
-		ContributionID:     req.ContributionID,
-		ExtensionID:        req.ExtensionID,
-		ModuleID:           req.ModuleID,
-		Generation:         req.Generation,
-		SlotID:             req.SlotID,
-		Sandbox:            sandbox,
-		CSP:                sandbox_webui.RestrictedCSP,
-		AllowedActions:     contributionActionIDs(def),
-		AllowedDataSources: contributionDataSourceIDs(def),
-		Theme:              req.Theme,
-		Locale:             req.Locale,
-		BasePath:           basePath,
-		EntryPath:          def.Entry.Path,
-		Surface:            req.Surface,
-		CharacterID:        req.CharacterID,
-		ConversationID:     req.ConversationID,
+		ContributionID:       string(def.ContributionID),
+		ExtensionID:          string(def.ExtensionID),
+		ModuleID:             string(def.ModuleID),
+		Generation:           def.Integrity.Generation,
+		SlotID:               def.Slot.SlotID,
+		Sandbox:              sandbox,
+		CSP:                  sandbox_webui.RestrictedCSP,
+		AllowedActions:       contributionActionIDs(def),
+		AllowedDataSources:   contributionDataSourceIDs(def),
+		Theme:                req.Theme,
+		Locale:               req.Locale,
+		BasePath:             basePath,
+		EntryPath:            def.Entry.Path,
+		Surface:              req.Surface,
+		CharacterID:          req.CharacterID,
+		ConversationID:       req.ConversationID,
+		ScopeSnapshotID:      scopeSnapshotID,
 	}
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
@@ -838,6 +850,37 @@ func (h *HTTPHandler) handleComposerAction(w http.ResponseWriter, r *http.Reques
 	}
 	resp := h.invokeAction(r, contributionID, actionID, req.Context, req.Input)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.dialogResolver == nil {
+		writeError(w, http.StatusServiceUnavailable, "dialog_resolver_unavailable", "dialog resolver not configured")
+		return
+	}
+	var req struct {
+		DialogID string `json:"dialogId"`
+		Result   string `json:"result"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	if req.DialogID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "dialogId is required")
+		return
+	}
+	if req.Result == "" {
+		req.Result = "ok"
+	}
+	if !h.dialogResolver.ResolveDialog(req.DialogID, req.Result) {
+		writeError(w, http.StatusNotFound, "dialog_not_found", "no pending dialog with id: "+req.DialogID)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "dialogId": req.DialogID})
 }
 
 func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID string, ctxMap map[string]any, input json.RawMessage) ui_contribution.BridgeResponse {

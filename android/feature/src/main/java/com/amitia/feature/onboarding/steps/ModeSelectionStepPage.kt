@@ -25,25 +25,25 @@ fun ModeSelectionStepPage(
             RevealContent(delayMs = 0) {
                 StepLabel(text = "1 / 6")
                 OnboardingTitle(text = "选择运行方式")
-                OnboardingDescription(text = "你可以稍后在设置中切换，现在请选择一种启动方式。")
+                OnboardingDescription(text = "手机既可以独立运行，也可以连接桌面端或已有服务。")
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             ChoicePill(
-                title = "本地运行",
-                description = "数据优先保存在本机，需要更多存储和运行资源。",
-                icon = AmitiaIcons.Storage,
+                title = "本机运行",
+                description = "在手机内启动运行环境，数据默认保存在当前设备。",
+                icon = AmitiaIcons.Smartphone,
                 selected = selectedMode == OnboardingRunMode.Local,
                 onSelect = { onSelect(OnboardingRunMode.Local) }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             ChoicePill(
-                title = "远程连接",
-                description = "连接已有 Amitia 服务端，需要服务地址或账号授权。",
-                icon = AmitiaIcons.CloudDone,
+                title = "连接已有服务",
+                description = "连接桌面端或服务器，手机作为移动使用端。",
+                icon = AmitiaIcons.DesktopWindows,
                 selected = selectedMode == OnboardingRunMode.Remote,
                 onSelect = { onSelect(OnboardingRunMode.Remote) }
             )
@@ -53,7 +53,7 @@ fun ModeSelectionStepPage(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             PrimaryGlassButton(
-                text = "下一步",
+                text = "继续",
                 onClick = onNext,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = selectedMode != null

@@ -47,7 +47,7 @@ CREATE TABL broken_statement (id TEXT PRIMARY KEY);
 	}
 }
 
-func TestApplyInitialSQLAllowsDuplicateColumns(t *testing.T) {
+func TestApplyInitialSQLSkipsExistingColumns(t *testing.T) {
 	db := openInitialSQLTestDB(t)
 	err := ApplyInitialSQL(db, `
 CREATE TABLE profiles (id TEXT PRIMARY KEY);
@@ -71,6 +71,76 @@ ALTER TABLE profiles ADD COLUMN display_name TEXT DEFAULT '';
 	}
 	if found != 1 {
 		t.Fatalf("display_name column count = %d, want 1", found)
+	}
+}
+
+func TestApplyInitialSQLRepeatedExecutionNoError(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	sql := `
+CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY);
+ALTER TABLE items ADD COLUMN label TEXT DEFAULT '';
+ALTER TABLE items ADD COLUMN priority INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_items_label ON items(label);
+`
+	if err := ApplyInitialSQL(db, sql); err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if err := ApplyInitialSQL(db, sql); err != nil {
+		t.Fatalf("second apply should be idempotent without error, got: %v", err)
+	}
+	var colCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('items') WHERE name = 'label'").Scan(&colCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if colCount != 1 {
+		t.Fatalf("label column count = %d, want 1 after repeated execution", colCount)
+	}
+}
+
+func TestApplyInitialSQLSkipsAddColumnWhenTableMissing(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	err := ApplyInitialSQL(db, `
+ALTER TABLE nonexistent_table ADD COLUMN extra TEXT DEFAULT '';
+`)
+	if err != nil {
+		t.Fatalf("should skip ALTER TABLE on missing table without error, got: %v", err)
+	}
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'nonexistent_table'").Scan(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("nonexistent_table should not be created, got count = %d", count)
+	}
+}
+
+func TestApplyInitialSQLRealSQLErrorBlocksExecution(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	err := ApplyInitialSQL(db, `
+CREATE TABLE valid_table (id TEXT PRIMARY KEY);
+INSERT INTO valid_table (id, nonexistent_col) VALUES ('x', 'y');
+`)
+	if err == nil {
+		t.Fatal("expected real SQL error to block execution")
+	}
+	if !strings.Contains(err.Error(), "statement 2") {
+		t.Fatalf("error = %q, want statement number", err.Error())
+	}
+}
+
+func TestApplyInitialSQLSkipsExistingIndexWithoutIfNotExists(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	if err := db.Exec("CREATE TABLE t1 (id TEXT PRIMARY KEY, name TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("CREATE INDEX idx_t1_name ON t1(name)").Error; err != nil {
+		t.Fatal(err)
+	}
+	err := ApplyInitialSQL(db, `
+CREATE INDEX idx_t1_name ON t1(name);
+`)
+	if err != nil {
+		t.Fatalf("should skip existing index without IF NOT EXISTS, got: %v", err)
 	}
 }
 
@@ -164,5 +234,57 @@ func TestApplyInitialSQLAcceptsCurrentDataScript(t *testing.T) {
 	}
 	if err := ApplyInitialSQL(db, string(data)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestApplyInitialSQLCurrentDataScriptRepeatedNoError(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	data, err := os.ReadFile(filepath.Join("..", "..", "data", "sql.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyInitialSQL(db, string(data)); err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if err := ApplyInitialSQL(db, string(data)); err != nil {
+		t.Fatalf("second apply should be idempotent without error, got: %v", err)
+	}
+}
+
+func TestApplyBaselineOnEmptyDatabase(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	if err := ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline on empty database failed: %v", err)
+	}
+	var tableCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&tableCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if tableCount < 10 {
+		t.Fatalf("table count = %d, want >= 10 after baseline", tableCount)
+	}
+}
+
+func TestApplyBaselineAfterLegacyScript(t *testing.T) {
+	db := openInitialSQLTestDB(t)
+	data, err := os.ReadFile(filepath.Join("..", "..", "data", "sql.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyInitialSQL(db, string(data)); err != nil {
+		t.Fatalf("apply legacy sql.sql failed: %v", err)
+	}
+	if err := ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline after legacy script failed: %v", err)
+	}
+	var colCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name = 'sequence'").Scan(&colCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if colCount != 1 {
+		t.Fatalf("messages.sequence column count = %d, want 1", colCount)
+	}
+	if err := ApplyBaseline(db); err != nil {
+		t.Fatalf("second baseline apply should be idempotent without error, got: %v", err)
 	}
 }

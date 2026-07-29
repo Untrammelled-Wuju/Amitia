@@ -11,6 +11,8 @@ type ScopeStore interface {
 	ListBindings(ctx context.Context, filter ScopeBindingFilter) ([]ScopeBinding, error)
 	SaveSnapshot(ctx context.Context, snapshot ScopeSnapshot) error
 	GetSnapshot(ctx context.Context, snapshotID string) (ScopeSnapshot, error)
+	DeleteSnapshot(ctx context.Context, snapshotID string) error
+	DeleteSnapshotsBySession(ctx context.Context, sessionID string) error
 }
 
 type MemoryScopeStore struct {
@@ -72,4 +74,13 @@ func (s *MemoryScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 		return snap, nil
 	}
 	return ScopeSnapshot{}, ErrSnapshotNotFound
+}
+
+func (s *MemoryScopeStore) DeleteSnapshot(_ context.Context, snapshotID string) error {
+	delete(s.snapshots, snapshotID)
+	return nil
+}
+
+func (s *MemoryScopeStore) DeleteSnapshotsBySession(_ context.Context, _ string) error {
+	return nil
 }

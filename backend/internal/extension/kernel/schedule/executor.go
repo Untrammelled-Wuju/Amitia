@@ -73,7 +73,7 @@ func NewScheduleExecutor(
 		scopeChecker:      scopeChecker,
 		dependencyChecker: dependencyChecker,
 		targetAdapters:    map[TargetType]TargetAdapter{},
-		leaseOwner:        "amitia-schedule-executor",
+		leaseOwner:        "amitia-schedule-executor-backend",
 	}
 }
 
@@ -145,6 +145,10 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		return e.failTrigger(ctx, trigger, ErrCodeTargetNotFound, "schedule definition not found")
 	}
 
+	if def.ExecutionOwner != ExecutionOwnerBackend {
+		return e.blockTrigger(ctx, trigger, ErrCodeExecutionOwnerDenied, "execution owner is not backend")
+	}
+
 	isOpen, err := e.circuit.IsOpen(ctx, def.ScheduleID)
 	if err == nil && isOpen {
 		return e.blockTrigger(ctx, trigger, ErrCodeCircuitOpen, "circuit breaker open")
@@ -162,8 +166,22 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		return e.blockTrigger(ctx, trigger, ErrCodeGenerationMismatch, "generation mismatch")
 	}
 
-	acquired, err := e.leaseManager.AcquireLease(ctx, trigger.TriggerID, e.leaseOwner)
+	leaseOwner := fmt.Sprintf("amitia-schedule-executor-%s", string(def.ExecutionOwner))
+	if trigger.LeaseOwner != nil && *trigger.LeaseOwner != leaseOwner &&
+		trigger.LeaseExpiresAt != nil && trigger.LeaseExpiresAt.After(e.clock.Now().UTC()) {
+		return e.quarantineTrigger(ctx, trigger, def, QuarantineDualScheduler,
+			fmt.Sprintf("trigger leased by %s", *trigger.LeaseOwner))
+	}
+
+	acquired, err := e.leaseManager.AcquireLease(ctx, trigger.TriggerID, leaseOwner)
 	if err != nil || !acquired {
+		freshTrigger, getErr := e.store.GetTrigger(ctx, trigger.TriggerID)
+		if getErr == nil && freshTrigger != nil && freshTrigger.LeaseOwner != nil &&
+			*freshTrigger.LeaseOwner != leaseOwner &&
+			freshTrigger.LeaseExpiresAt != nil && freshTrigger.LeaseExpiresAt.After(e.clock.Now().UTC()) {
+			return e.quarantineTrigger(ctx, trigger, def, QuarantineDualScheduler,
+				fmt.Sprintf("trigger leased by %s", *freshTrigger.LeaseOwner))
+		}
 		return &ExecuteResult{
 			TriggerID:    trigger.TriggerID,
 			Status:       trigger.Status,
@@ -344,6 +362,30 @@ func (e *ScheduleExecutor) markManualIntervention(ctx context.Context, trigger *
 		Status:       RunStatusQuarantined,
 		ErrorCode:    errorCode,
 		ErrorMessage: errorMessage,
+	}, nil
+}
+
+func (e *ScheduleExecutor) quarantineTrigger(ctx context.Context, trigger *ScheduleTriggerRecord, def *ScheduleContributionDefinition, reason QuarantineReason, detail string) (*ExecuteResult, error) {
+	now := e.clock.Now()
+	trigger.Status = RunStatusQuarantined
+	trigger.ErrorCode = strPtr(ErrCodeDualScheduler)
+	trigger.ErrorMessage = strPtr(detail)
+	trigger.UpdatedAt = now.UTC()
+	_ = e.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusQuarantined, map[string]any{
+		"error_code":    ErrCodeDualScheduler,
+		"error_message": detail,
+	})
+	_ = e.store.PutQuarantine(ctx, &ScheduleQuarantineRecord{
+		ScheduleID:    def.ScheduleID,
+		Reason:        reason,
+		Detail:        detail,
+		QuarantinedAt: now.UTC(),
+	})
+	return &ExecuteResult{
+		TriggerID:    trigger.TriggerID,
+		Status:       RunStatusQuarantined,
+		ErrorCode:    ErrCodeDualScheduler,
+		ErrorMessage: detail,
 	}, nil
 }
 

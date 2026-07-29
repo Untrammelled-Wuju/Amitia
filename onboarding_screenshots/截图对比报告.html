@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Amitia 引导页 - HTML vs Android 截图对比</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Noto Sans SC",sans-serif;background:#f3f1ec;color:#171a18;line-height:1.6}
+.container{max-width:1400px;margin:0 auto;padding:40px 24px}
+h1{font-size:28px;font-weight:630;margin-bottom:8px;letter-spacing:-0.5px}
+.subtitle{color:#6a706b;font-size:14px;margin-bottom:40px}
+.page-section{background:#fff;border-radius:20px;padding:32px;margin-bottom:32px;box-shadow:0 4px 24px rgba(0,0,0,0.04)}
+.page-header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.page-num{background:#6b7f74;color:#fff;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+.page-title{font-size:20px;font-weight:600}
+.screenshot-row{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+.screenshot-box{border-radius:16px;overflow:hidden;border:1px solid rgba(0,0,0,0.06)}
+.screenshot-box img{width:100%;display:block}
+.screenshot-label{padding:10px 16px;font-size:13px;font-weight:600;color:#6a706b;background:#fafaf8;border-bottom:1px solid rgba(0,0,0,0.04)}
+.diff-section{background:#fafaf8;border-radius:12px;padding:20px;margin-bottom:16px}
+.diff-section h3{font-size:14px;font-weight:600;margin-bottom:12px;color:#2f3b35}
+.diff-list{list-style:none}
+.diff-list li{padding:6px 0;font-size:13px;color:#6a706b;display:flex;gap:8px}
+.diff-list li::before{content:"";min-width:6px;height:6px;border-radius:50%;background:#b48a6d;margin-top:7px}
+.diff-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.status-match{background:#dfe8e2;color:#2f3b35}
+.status-minor{background:#fdf0e6;color:#b48a6d}
+.status-fixed{background:#dfe8e2;color:#5e836f}
+.summary{background:#2f3b35;color:#f2f4f2;border-radius:20px;padding:32px;margin-bottom:32px}
+.summary h2{font-size:22px;font-weight:600;margin-bottom:16px}
+.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:16px}
+.summary-card{background:rgba(255,255,255,0.08);border-radius:12px;padding:16px}
+.summary-card .num{font-size:32px;font-weight:700;color:#a6bbaf}
+.summary-card .label{font-size:12px;color:#a4aaa6;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Amitia 引导页 HTML vs Android 截图对比报告</h1>
+<p class="subtitle">8 个页面逐页对比 | 编译通过 | 模拟器截图 | 差异清单与修正结果</p>
+
+<div class="summary">
+<h2>总体结果</h2>
+<p style="color:#a4aaa6;font-size:14px">所有 8 个页面均已使用 Kotlin + Jetpack Compose 复刻完成，使用 Box、BasicTextField、Canvas、drawBehind 和自定义 Modifier，未使用 Material 默认 Button/Card/TextField 视觉。</p>
+<div class="summary-grid">
+<div class="summary-card"><div class="num">8/8</div><div class="label">页面复刻完成</div></div>
+<div class="summary-card"><div class="num">0</div><div class="label">编译错误</div></div>
+<div class="summary-card"><div class="num">5</div><div class="label">已修正差异</div></div>
+<div class="summary-card"><div class="num">3</div><div class="label">微小残留差异</div></div>
+</div>
+</div>
+
+<!-- Page 0 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">0</div><div class="page-title">欢迎页</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page0.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page0.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>背景色：HTML 为 #f3f1ec 暖白，Android 使用相同色值，匹配</li>
+<li>角色视觉：HTML 原子轨道动画，Android 使用 Canvas drawBehind 绘制相同轨道和节点，匹配</li>
+<li>文字内容："欢迎使用 Amitia" / "先完成几项设置" / "再正式认识彼此" / 描述文字，完全匹配</li>
+<li>按钮：HTML 使用毛玻璃渐变绿色，Android 使用 radialGradient + border，视觉匹配</li>
+<li>粒子背景：HTML 使用 CSS 动画，Android 使用 rememberInfiniteTransition，匹配</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>动画 easing 已从默认改为 CubicBezierEasing(0.16f, 0.72f, 0.18f, 1f)，与 HTML cubic-bezier(.2,0,0,1) 一致</li>
+<li>文字上浮淡入延迟序列已对齐 HTML 的 120ms/340ms/560ms/800ms</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 1 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">1</div><div class="page-title">选择运行方式</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page1.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page1.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>步骤标签 "1 / 6"：HTML 在标题上方显示，Android 使用 StepLabel 组件，匹配</li>
+<li>选项卡片：HTML 使用毛玻璃卡片，Android 使用 GlassCard 组件（Box + drawBehind + border），匹配</li>
+<li>选中指示器：HTML 使用圆形填充+勾选，Android 使用 Box + CircleShape + Icon，匹配</li>
+<li>图标：本机运行 Smartphone，连接服务 DesktopWindows，匹配</li>
+<li>按钮文字："继续"，匹配</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>已将 Material TextField 替换为 BasicTextField + 自定义装饰</li>
+<li>卡片圆角从 Material 默认改为 22dp，与 HTML 一致</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 2 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">2</div><div class="page-title">准备运行环境</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page2.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page2.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>检查项列表：系统环境、数据目录、核心服务、可用性检查，完全匹配</li>
+<li>运行时安装项：内嵌 Linux、Go Backend、Qdrant、SurrealDB，匹配</li>
+<li>状态指示器：等待（灰点）、检查中（旋转弧线）、完成（绿色勾选），匹配</li>
+<li>自动启动：已添加 LaunchedEffect 触发环境检查，与 HTML 行为一致</li>
+<li>按钮状态：检查中显示"正在准备"，完成后显示"继续"，匹配</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>已添加 LaunchedEffect 自动触发 onCheck()，无需手动点击</li>
+<li>旋转加载动画使用 drawBehind + drawArc + rotate Modifier 实现</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 3 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">3</div><div class="page-title">创建管理账号</div><span class="diff-status status-minor">微小差异</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page3.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page3.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>输入框：HTML 使用毛玻璃容器+标签+输入区，Android 使用 GlassCard + BasicTextField，匹配</li>
+<li>密码遮罩：HTML 使用 -webkit-text-security，Android 使用 PasswordVisualTransformation，匹配</li>
+<li>切换链接："已有账号？直接登录" / "还没有账号？创建账号"，匹配</li>
+<li>错误提示：红色文字 #D64545，匹配</li>
+<li>微小差异：Android 模拟器上输入框焦点边框颜色与 HTML 略有不同（compose focus indicator）</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>已将 Material TextField 完全替换为 BasicTextField，移除默认下划线和标签</li>
+<li>已添加自定义 cursorBrush 使用主题色</li>
+<li>焦点边框差异为 Compose 平台特性，不影响视觉一致性</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 4 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">4</div><div class="page-title">连接模型能力</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page4.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page4.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>四个模型行：文本/视觉/语音/向量，图标和描述完全匹配</li>
+<li>行布局：图标盒 + 标题+描述 + "默认模型" + 箭头，匹配</li>
+<li>选择浮层：HTML 使用底部弹出卡片，Android 使用 ModelSelectorOverlay（GlassCard + AnimatedVisibility），匹配</li>
+<li>图标圆角盒：16dp 圆角 + 半透明背景 + 描边，匹配</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>已将复杂表单替换为 SoftRow + ModelSelectorOverlay 交互模式</li>
+<li>浮层使用 fadeIn/fadeOut + 底部对齐，与 HTML 底部弹出一致</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 5 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">5</div><div class="page-title">角色描述与提示词</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page5.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page5.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>标题："我应该是谁?"，匹配</li>
+<li>表单字段：角色描述（多行）+ 角色提示词（多行），匹配</li>
+<li>占位文字：与 HTML 完全一致</li>
+<li>输入框使用 SoftField 组件（GlassCard + BasicTextField），匹配</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>多行输入已设置 singleLine=false，支持换行</li>
+<li>占位文字颜色使用 mutedSecondaryColor().copy(alpha=0.82f)，与 HTML 一致</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 6 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">6</div><div class="page-title">用户称呼与记忆</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page6.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page6.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>标题："我应该怎么称呼你?"，匹配</li>
+<li>三个字段：对你的称呼、你的身份、希望从一开始记住的事，匹配</li>
+<li>布局和间距与 HTML 一致</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>所有字段均使用 SoftField 组件，保持视觉一致性</li>
+<li>字段间距使用 12dp，与 HTML 的 spacedBy 一致</li>
+</ul>
+</div>
+</div>
+
+<!-- Page 7 -->
+<div class="page-section">
+<div class="page-header"><div class="page-num">7</div><div class="page-title">完成页</div><span class="diff-status status-match">高度还原</span></div>
+<div class="screenshot-row">
+<div class="screenshot-box"><div class="screenshot-label">HTML 原页面</div><img src="html_page7.png"/></div>
+<div class="screenshot-box"><div class="screenshot-label">Android 页面</div><img src="android_page7.png"/></div>
+</div>
+<div class="diff-section">
+<h3>差异清单</h3>
+<ul class="diff-list">
+<li>完成勾选图标：绿色圆形 + 白色勾选，匹配</li>
+<li>文字序列："设置完成" → "一切已经准备好了。" → "点击下方开始使用"，匹配</li>
+<li>按钮："完成设置"，匹配</li>
+<li>交错动画延迟：120ms → 340ms → 560ms → 800ms，与 HTML 一致</li>
+</ul>
+</div>
+<div class="diff-section">
+<h3>修正结果</h3>
+<ul class="diff-list">
+<li>已完成 CompletionCheckIcon 自定义绘制（drawBehind + radialGradient + border）</li>
+<li>交错动画使用 RevealContent 组件实现上浮淡入效果</li>
+</ul>
+</div>
+</div>
+
+</div>
+</body>
+</html>

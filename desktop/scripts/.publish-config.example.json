@@ -1,0 +1,9 @@
+{
+  "host": "你的服务器IP",
+  "port": 21,
+  "user": "宝塔FTP用户名",
+  "password": "宝塔FTP密码",
+  "secure": false,
+  "remotePath": "/amitia",
+  "url": "https://amitia.untrammelled.top/amitia"
+}

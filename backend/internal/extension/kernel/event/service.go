@@ -48,6 +48,7 @@ type Service struct {
 	subscriptionReg    *EventSubscriptionRegistry
 	publisher          *EventPublisher
 	dispatcher         *Dispatcher
+	generationResolver GenerationResolver
 	handler            DeliveryHandler
 	started            bool
 	stopCancel         context.CancelFunc
@@ -244,9 +245,31 @@ func (s *Service) ReplayDeadLetter(ctx context.Context, req ReplayRequest) error
 		if sub != nil && !sub.Effective.IsActive() {
 			return fmt.Errorf("%w: subscription inactive: %s", ErrReplayDenied, sub.Effective.DenyReason())
 		}
-		var producerGen int64
-		if outboxRecord, err := s.outboxRepo.GetByEventID(ctx, record.EventID); err == nil {
-			producerGen = outboxRecord.ProducerGeneration
+		outboxRecord, err := s.outboxRepo.GetByEventID(ctx, record.EventID)
+		if err != nil {
+			return fmt.Errorf("%w: replay outbox lookup failed: %v", ErrReplayDenied, err)
+		}
+		producerGen := outboxRecord.ProducerGeneration
+		s.mu.RLock()
+		genResolver := s.generationResolver
+		s.mu.RUnlock()
+		if genResolver != nil && producerGen > 0 && outboxRecord.ProducerID != "" {
+			currentProducerGen, genErr := genResolver.CurrentGeneration(ctx, outboxRecord.ProducerID)
+			if genErr != nil {
+				return fmt.Errorf("%w: replay generation check error: %v", ErrReplayDenied, genErr)
+			}
+			if currentProducerGen > 0 && currentProducerGen > producerGen {
+				return fmt.Errorf("%w: replay rejected stale producer: current %d > envelope %d", ErrReplayDenied, currentProducerGen, producerGen)
+			}
+		}
+		if sub != nil && sub.Definition.Generation > 0 && genResolver != nil {
+			currentSubscriberGen, genErr := genResolver.CurrentGeneration(ctx, sub.Definition.ExtensionID)
+			if genErr != nil {
+				return fmt.Errorf("%w: replay subscriber generation check error: %v", ErrReplayDenied, genErr)
+			}
+			if currentSubscriberGen > 0 && currentSubscriberGen > sub.Definition.Generation {
+				return fmt.Errorf("%w: replay cancelled stale subscription: current %d > subscription %d", ErrReplayDenied, currentSubscriberGen, sub.Definition.Generation)
+			}
 		}
 		delivery := Delivery{
 			DeliveryID:             newDeliveryID(),
@@ -315,8 +338,18 @@ func (s *Service) SetDeliveryHandler(handler DeliveryHandler) {
 	s.dispatcher.SetHandler(handler)
 }
 
-func (s *Service) SetEffectiveResolver(resolver EffectiveResolver) {
+func (s *Service) SetEffectiveResolver(resolver EffectiveResolver) error {
+	if _, ok := resolver.(*NoopEffectiveResolver); ok {
+		return fmt.Errorf("event: NoopEffectiveResolver must not be used in production configuration")
+	}
 	s.subscriptionReg.SetEffectiveResolver(resolver)
+	return nil
+}
+
+func (s *Service) SetGenerationResolver(resolver GenerationResolver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.generationResolver = resolver
 }
 
 func (s *Service) GetSubscriptionRepository() *SQLiteSubscriptionRepository {

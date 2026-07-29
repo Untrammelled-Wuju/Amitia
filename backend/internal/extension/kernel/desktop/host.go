@@ -249,7 +249,7 @@ func (h *DesktopHost) UnregisterContribution(contributionID string) error {
 	return nil
 }
 
-func (h *DesktopHost) UnregisterByExtension(extensionID string) int {
+func (h *DesktopHost) UnregisterByExtension(extensionID string) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ids := h.contribsByExt[extensionID]
@@ -270,7 +270,7 @@ func (h *DesktopHost) UnregisterByExtension(extensionID string) int {
 	if count > 0 {
 		atomic.AddInt64(&h.generation, 1)
 	}
-	return count
+	return count, nil
 }
 
 func (h *DesktopHost) GetContribution(contributionID string) (*ResolvedDesktopContribution, bool) {
@@ -481,6 +481,7 @@ func (h *DesktopHost) DisableExtension(ctx context.Context, extensionID string) 
 	}
 }
 
-func (h *DesktopHost) UninstallContributions(ctx context.Context, extensionID string) {
-	h.UnregisterByExtension(extensionID)
+func (h *DesktopHost) UninstallContributions(ctx context.Context, extensionID string) error {
+	_, err := h.UnregisterByExtension(extensionID)
+	return err
 }

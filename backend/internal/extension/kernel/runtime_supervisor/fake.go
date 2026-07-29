@@ -84,8 +84,33 @@ func (f *FakeRuntime) Stop(_ context.Context, _ StopReason) error {
 }
 
 func (f *FakeRuntime) SetStartErr(err error)  { f.startErr = err }
+func (f *FakeRuntime) SetStopErr(err error)   { f.stopErr = err }
 func (f *FakeRuntime) SetInvokeErr(err error) { f.invokeErr = err }
 func (f *FakeRuntime) SetHealth(h HealthReport) { f.health = h }
+
+func (f *FakeRuntime) StartCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.startCount
+}
+
+func (f *FakeRuntime) StopCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stopCount
+}
+
+func (f *FakeRuntime) InvokeCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.invokeCount
+}
+
+func (f *FakeRuntime) IsStarted() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.started
+}
 
 type FakeFactory struct {
 	mu         sync.Mutex
@@ -121,6 +146,7 @@ func (f *FakeFactory) SetValidateErr(err error) { f.validateErr = err }
 
 var (
 	ErrFakeStart   = errors.New("fake start error")
+	ErrFakeStop    = errors.New("fake stop error")
 	ErrFakeInvoke  = errors.New("fake invoke error")
 	ErrFakeCreate  = errors.New("fake create error")
 )

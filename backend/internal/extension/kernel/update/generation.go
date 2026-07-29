@@ -103,8 +103,8 @@ func isValidTransition(from, to GenerationState) bool {
 		GenerationStatePreparing:   {GenerationStateValidated, GenerationStateFailed},
 		GenerationStateValidated:   {GenerationStateRuntimeReady, GenerationStateFailed},
 		GenerationStateRuntimeReady: {GenerationStateActive, GenerationStateFailed},
-		GenerationStateActive:      {GenerationStateDraining},
-		GenerationStateDraining:    {GenerationStateStopped},
+		GenerationStateActive:      {GenerationStateDraining, GenerationStateFailed},
+		GenerationStateDraining:    {GenerationStateStopped, GenerationStateFailed},
 		GenerationStateStopped:     {},
 		GenerationStateFailed:      {},
 	}
@@ -157,6 +157,22 @@ func (m *GenerationManager) List(ctx context.Context, extensionID string) []Gene
 	out := make([]Generation, len(gens))
 	copy(out, gens)
 	sort.Slice(out, func(i, j int) bool {
+		return out[i].Generation < out[j].Generation
+	})
+	return out
+}
+
+func (m *GenerationManager) ListAll(ctx context.Context) []Generation {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []Generation
+	for _, gens := range m.generations {
+		out = append(out, gens...)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ExtensionID != out[j].ExtensionID {
+			return out[i].ExtensionID < out[j].ExtensionID
+		}
 		return out[i].Generation < out[j].Generation
 	})
 	return out
@@ -240,4 +256,63 @@ func (m *GenerationManager) RemoveGeneration(ctx context.Context, extensionID, g
 		}
 	}
 	return fmt.Errorf("update: generation %s not found", generationID)
+}
+
+func (m *GenerationManager) DrainGeneration(ctx context.Context, extensionID, generationID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	gens := m.generations[extensionID]
+	for i := range gens {
+		if gens[i].GenerationID == generationID {
+			if gens[i].State == GenerationStateDraining || gens[i].State == GenerationStateStopped {
+				return nil
+			}
+			if !isValidTransition(gens[i].State, GenerationStateDraining) {
+				return fmt.Errorf("update: cannot drain generation %s in state %s", generationID, gens[i].State)
+			}
+			gens[i].State = GenerationStateDraining
+			m.generations[extensionID] = gens
+			return nil
+		}
+	}
+	return fmt.Errorf("update: generation %s not found", generationID)
+}
+
+func (m *GenerationManager) StopGeneration(ctx context.Context, extensionID, generationID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	gens := m.generations[extensionID]
+	for i := range gens {
+		if gens[i].GenerationID == generationID {
+			if gens[i].State == GenerationStateStopped {
+				return nil
+			}
+			if !isValidTransition(gens[i].State, GenerationStateStopped) {
+				return fmt.Errorf("update: cannot stop generation %s in state %s", generationID, gens[i].State)
+			}
+			gens[i].State = GenerationStateStopped
+			now := time.Now().UTC()
+			gens[i].StoppedAt = &now
+			if m.active[extensionID] == generationID {
+				delete(m.active, extensionID)
+			}
+			m.generations[extensionID] = gens
+			return nil
+		}
+	}
+	return fmt.Errorf("update: generation %s not found", generationID)
+}
+
+func (m *GenerationManager) DrainingGenerations(ctx context.Context, extensionID string) []Generation {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	gens := m.generations[extensionID]
+	var out []Generation
+	for _, g := range gens {
+		if g.State == GenerationStateDraining {
+			result := g
+			out = append(out, result)
+		}
+	}
+	return out
 }

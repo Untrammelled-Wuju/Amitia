@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
@@ -25,7 +26,14 @@ func (f *ToolFacade) SyncMCPTools(ctx context.Context, serverID string, descript
 	}
 	adapter := capability.NewMCPToolAdapter()
 	previous := f.previousMCPRevisions(ctx, serverID)
+	seen := map[string]bool{}
 	for _, descriptor := range descriptors {
+		uniqueKey := capability.BuildMCPUniqueKey(descriptor.ServerID, descriptor.Name, descriptor.ExtensionID, descriptor.ModuleID)
+		if seen[uniqueKey] {
+			f.counters.IncMCPDuplicateDetected()
+			continue
+		}
+		seen[uniqueKey] = true
 		def := adapter.AdaptTool(descriptor)
 		def.Enabled = true
 		if _, exists := previous[def.ID]; exists {
@@ -34,16 +42,16 @@ func (f *ToolFacade) SyncMCPTools(ctx context.Context, serverID string, descript
 			result.Registered++
 		}
 		if err := f.toolRegistry.Replace(ctx, def); err != nil {
-			continue
+			return result, fmt.Errorf("failed to register MCP tool %s: %w", def.ID, err)
 		}
 		f.counters.IncMCPToolSync()
 	}
-	for toolID, prevRevision := range previous {
+	for toolID := range previous {
 		if !stillExists(descriptors, toolID) {
-			_ = prevRevision
-			if err := f.toolRegistry.Unregister(ctx, toolID); err == nil {
-				result.Removed++
+			if err := f.toolRegistry.Unregister(ctx, toolID); err != nil {
+				return result, fmt.Errorf("failed to unregister stale MCP tool %s: %w", toolID, err)
 			}
+			result.Removed++
 		}
 	}
 	return result, nil

@@ -271,45 +271,34 @@ func main() {
 }
 
 func applyDatabaseStartupMigrations(db *gorm.DB) error {
-	existingDatabase, err := hasExistingDatabaseTables(db)
+	isNew, err := migration.IsNewDatabase(db)
 	if err != nil {
 		return fmt.Errorf("check existing database: %w", err)
 	}
-	migRunner := migration.Runner{DB: db, SkipBackup: existingDatabase}
-	if existingDatabase {
-		if err := migRunner.CreatePreMigrationBackup(); err != nil {
-			return fmt.Errorf("预迁移备份失败: %w", err)
+	migrations := migration.DefaultMigrations()
+	migRunner := migration.Runner{DB: db, SkipBackup: !isNew}
+	if isNew {
+		log.Info("检测到新数据库，执行基线快通道...")
+		if err := migration.ApplyBaseline(db); err != nil {
+			return fmt.Errorf("apply baseline: %w", err)
 		}
+		log.Info("基线建表完成，标记所有迁移为已应用")
+		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {
+			return fmt.Errorf("mark all migrations applied: %w", err)
+		}
+		log.Info("所有迁移已标记为已应用，跳过增量迁移执行")
+		return nil
 	}
-	if err := initDatabase(db); err != nil {
-		return fmt.Errorf("apply initial sql: %w", err)
+	if err := migRunner.CreatePreMigrationBackup(); err != nil {
+		return fmt.Errorf("预迁移备份失败: %w", err)
 	}
-	if err := migRunner.Apply(migration.DefaultMigrations()); err != nil {
+	if err := migration.ApplyBaseline(db); err != nil {
+		return fmt.Errorf("apply baseline: %w", err)
+	}
+	log.Info("基线建表完成")
+	if err := migRunner.Apply(migrations); err != nil {
 		return fmt.Errorf("apply versioned migrations: %w", err)
 	}
-	return nil
-}
-
-func hasExistingDatabaseTables(db *gorm.DB) (bool, error) {
-	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&count).Error; err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
-func initDatabase(db *gorm.DB) error {
-	sqlPath := filepath.Join(config.AppCfg.Storage.DataDir, "sql.sql")
-	if _, err := os.Stat(sqlPath); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		return fmt.Errorf("sql.sql未找到: %w", err)
-	}
-	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
-		return err
-	}
-	log.Info("sql.sql建表完成")
 	return nil
 }
 

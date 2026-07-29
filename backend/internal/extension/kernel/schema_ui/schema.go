@@ -848,7 +848,7 @@ func (r *SchemaRegistry) Get(extensionID, pageID string) (*CompiledDocument, boo
 	return compiled, ok
 }
 
-func (r *SchemaRegistry) Unregister(extensionID string) int {
+func (r *SchemaRegistry) Unregister(extensionID string) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	count := 0
@@ -862,7 +862,7 @@ func (r *SchemaRegistry) Unregister(extensionID string) int {
 			count++
 		}
 	}
-	return count
+	return count, nil
 }
 
 func (r *SchemaRegistry) UnregisterSchema(extensionID, pageID string) bool {

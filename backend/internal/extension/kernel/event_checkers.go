@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -239,11 +240,11 @@ func NewEventGenerationResolverAdapter(instRepo domain.InstallationRepository) *
 
 func (a *EventGenerationResolverAdapter) CurrentGeneration(ctx context.Context, extensionID string) (int64, error) {
 	if a.InstRepo == nil {
-		return 0, nil
+		return 0, fmt.Errorf("event: generation resolver installation repository missing for %s", extensionID)
 	}
 	inst, err := a.InstRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
-		return 0, nil
+		return 0, fmt.Errorf("event: query generation for %s: %w", extensionID, err)
 	}
 	return inst.Generation, nil
 }

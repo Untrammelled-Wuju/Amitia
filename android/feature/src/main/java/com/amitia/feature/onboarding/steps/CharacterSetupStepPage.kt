@@ -24,48 +24,28 @@ fun CharacterSetupStepPage(
         ) {
             RevealContent(delayMs = 0) {
                 StepLabel(text = "5 / 6")
-                OnboardingTitle(text = "角色描述")
-                OnboardingDescription(text = "为你的 AI 伙伴设定身份和性格。")
+                OnboardingTitle(text = "我应该是谁？")
+                OnboardingDescription(text = "确定名字、身份和最基础的表达倾向。")
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             SoftField(
-                label = "角色名称",
-                value = state.character.name,
-                onValueChange = { onFieldChange("name", it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "给TA起个名字"
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            SoftField(
-                label = "身份设定",
-                value = state.character.identity,
-                onValueChange = { onFieldChange("identity", it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "如：学妹、助手、朋友"
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            SoftField(
-                label = "性格特点",
-                value = state.character.personality,
-                onValueChange = { onFieldChange("personality", it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = "如：温柔、活泼、理性"
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            SoftField(
-                label = "详细描述",
+                label = "角色描述",
                 value = state.character.description,
                 onValueChange = { onFieldChange("description", it) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "描述角色的外貌、背景等",
+                placeholder = "简要描述角色的身份、背景或与你的关系"
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SoftField(
+                label = "角色提示词",
+                value = state.character.prompt,
+                onValueChange = { onFieldChange("prompt", it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = "输入角色的表达方式、行为规则、边界和需要长期遵循的要求",
                 singleLine = false
             )
         }
@@ -74,10 +54,9 @@ fun CharacterSetupStepPage(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             PrimaryGlassButton(
-                text = "下一步",
+                text = "继续",
                 onClick = onNext,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = state.character.name.isNotBlank()
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

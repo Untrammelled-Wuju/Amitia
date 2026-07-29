@@ -49,6 +49,7 @@ import StatusBar from "./StatusBar.vue";
 import SideNav from "./SideNav.vue";
 import MobileNav from "./MobileNav.vue";
 import { useTheme } from "../composables/useTheme";
+import { useUIHostSSE } from "../composables/useUIHostSSE";
 import {
   apiClient,
   getToken,
@@ -59,6 +60,7 @@ import { getPageTitle } from "@/navigation/app-nav";
 import { useAppStore } from "@/stores/app";
 
 const router = useRouter();
+const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
 const {
   state: theme,
   resolvedMode: resolvedTheme,
@@ -181,13 +183,17 @@ onMounted(() => {
   if (isLoggedIn()) {
     fetchActiveCharacter();
     fetchUserInfo();
+    connectUIHost();
   }
 
   const interval = setInterval(() => {
     fetchHealth();
     fetchQQStatus();
   }, 30000);
-  onUnmounted(() => clearInterval(interval));
+  onUnmounted(() => {
+    clearInterval(interval);
+    disconnectUIHost();
+  });
 });
 </script>
 

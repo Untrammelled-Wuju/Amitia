@@ -116,7 +116,7 @@ func (r *ToolRegistry) Unregister(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *ToolRegistry) UnregisterByOwner(ctx context.Context, ownerKey string) []string {
+func (r *ToolRegistry) UnregisterByOwner(ctx context.Context, ownerKey string) ([]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -128,7 +128,7 @@ func (r *ToolRegistry) UnregisterByOwner(ctx context.Context, ownerKey string) [
 	}
 
 	delete(r.byOwner, ownerKey)
-	return ids
+	return ids, nil
 }
 
 func (r *ToolRegistry) Get(ctx context.Context, id string) (ToolDefinition, bool) {

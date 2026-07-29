@@ -19,10 +19,16 @@ type ToolFacadeSyncer interface {
 	UnregisterMCPTools(ctx context.Context, serverID string) error
 }
 
+type DuplicateRecorder interface {
+	RecordDuplicate(ctx context.Context, toolID, serverID, owner string, generation int64) error
+	ResolveByToolID(ctx context.Context, toolID string) error
+}
+
 type Runtime struct {
-	repository       *mcp.Repository
-	extensions       *extension.Runtime
-	toolFacadeSyncer ToolFacadeSyncer
+	repository        *mcp.Repository
+	extensions        *extension.Runtime
+	toolFacadeSyncer  ToolFacadeSyncer
+	duplicateRecorder DuplicateRecorder
 }
 
 type Option func(*Runtime)
@@ -30,6 +36,12 @@ type Option func(*Runtime)
 func WithToolFacadeSyncer(syncer ToolFacadeSyncer) Option {
 	return func(r *Runtime) {
 		r.toolFacadeSyncer = syncer
+	}
+}
+
+func WithDuplicateRecorder(recorder DuplicateRecorder) Option {
+	return func(r *Runtime) {
+		r.duplicateRecorder = recorder
 	}
 }
 
@@ -43,6 +55,10 @@ func New(repository *mcp.Repository, extensions *extension.Runtime, opts ...Opti
 
 func (r *Runtime) SetToolFacadeSyncer(syncer ToolFacadeSyncer) {
 	r.toolFacadeSyncer = syncer
+}
+
+func (r *Runtime) SetDuplicateRecorder(recorder DuplicateRecorder) {
+	r.duplicateRecorder = recorder
 }
 
 func (r *Runtime) RegisterAll(ctx context.Context) error {
@@ -70,23 +86,24 @@ func (r *Runtime) RegisterServer(ctx context.Context, serverID string) error {
 	if err != nil {
 		return err
 	}
-	desired := map[string]bool{}
-	for _, tool := range tools {
-		desired[tool.SkillID] = true
-	}
 	for _, current := range registered {
 		if strings.HasPrefix(current.Definition.ID, "mcp."+skillSegment(serverID)+".") {
 			kernel.GlobalLegacyCallCounter().IncDuplicateMCPToolRegistration()
-			if !desired[current.Definition.ID] {
-				_ = r.extensions.Registry.Unregister(ctx, current.Definition.ID)
+			if r.duplicateRecorder != nil {
+				_ = r.duplicateRecorder.RecordDuplicate(ctx, current.Definition.ID, serverID, current.Definition.Entry.Name, 0)
+			}
+			if err := r.extensions.Registry.Unregister(ctx, current.Definition.ID); err != nil {
+				return fmt.Errorf("failed to unregister legacy MCP tool %s: %w", current.Definition.ID, err)
+			}
+			if r.duplicateRecorder != nil {
+				_ = r.duplicateRecorder.ResolveByToolID(ctx, current.Definition.ID)
 			}
 		}
 	}
 	if r.toolFacadeSyncer == nil {
 		return fmt.Errorf("toolFacadeSyncer is not configured")
 	}
-	_ = r.toolFacadeSyncer.SyncMCPTools(ctx, serverID, tools)
-	return nil
+	return r.toolFacadeSyncer.SyncMCPTools(ctx, serverID, tools)
 }
 
 func (r *Runtime) UnregisterServer(ctx context.Context, serverID string) error {
@@ -97,7 +114,9 @@ func (r *Runtime) UnregisterServer(ctx context.Context, serverID string) error {
 	prefix := "mcp." + skillSegment(serverID) + "."
 	for _, current := range registered {
 		if strings.HasPrefix(current.Definition.ID, prefix) {
-			_ = r.extensions.Registry.Unregister(ctx, current.Definition.ID)
+			if err := r.extensions.Registry.Unregister(ctx, current.Definition.ID); err != nil {
+				return fmt.Errorf("failed to unregister legacy MCP tool %s: %w", current.Definition.ID, err)
+			}
 		}
 	}
 	if r.toolFacadeSyncer != nil {

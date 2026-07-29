@@ -1,16 +1,16 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
 
-func TestInitDatabaseMarksLegacyRetrievalLogs(t *testing.T) {
+func TestApplyDatabaseStartupMigrationsCreatesRetrievalLogsWithAllColumns(t *testing.T) {
 	dataDir := t.TempDir()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(dataDir, "app.db")), &gorm.Config{})
 	if err != nil {
@@ -24,32 +24,6 @@ func TestInitDatabaseMarksLegacyRetrievalLogs(t *testing.T) {
 		_ = sqlDB.Close()
 	})
 
-	sqlText := `
-CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY
-);
-CREATE TABLE IF NOT EXISTS retrieval_logs (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT NOT NULL DEFAULT '',
-    query_text TEXT NOT NULL DEFAULT '',
-    retrieved_memory_ids TEXT DEFAULT '[]',
-    scoring_details TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT (datetime('now'))
-);
-ALTER TABLE retrieval_logs ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE retrieval_logs ADD COLUMN request_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE retrieval_logs ADD COLUMN channel TEXT NOT NULL DEFAULT '';
-ALTER TABLE retrieval_logs ADD COLUMN retrieval_version TEXT NOT NULL DEFAULT '';
-ALTER TABLE retrieval_logs ADD COLUMN legacy INTEGER NOT NULL DEFAULT 0;
-UPDATE retrieval_logs
-SET legacy = 1
-WHERE conversation_id = ''
-   OR conversation_id NOT IN (SELECT id FROM conversations);
-`
-	if err := os.WriteFile(filepath.Join(dataDir, "sql.sql"), []byte(sqlText), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	originalCfg := config.AppCfg
 	config.AppCfg = &config.Config{}
 	config.AppCfg.Storage.DataDir = dataDir
@@ -57,57 +31,60 @@ WHERE conversation_id = ''
 		config.AppCfg = originalCfg
 	})
 
-	if err := db.Exec("CREATE TABLE conversations (id TEXT PRIMARY KEY)").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("CREATE TABLE retrieval_logs (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL DEFAULT '', query_text TEXT NOT NULL DEFAULT '', retrieved_memory_ids TEXT DEFAULT '[]', scoring_details TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')))").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("INSERT INTO conversations (id) VALUES ('conv-real')").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("INSERT INTO retrieval_logs (id, conversation_id, query_text) VALUES ('row-1', 'conv-real', 'ok'), ('row-2', 'char-as-conv', 'bad'), ('row-3', '', 'empty')").Error; err != nil {
+	if err := applyDatabaseStartupMigrations(db); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := initDatabase(db); err != nil {
+	type columnRow struct {
+		Name string `gorm:"column:name"`
+	}
+	var columns []columnRow
+	if err := db.Raw("PRAGMA table_info(retrieval_logs)").Scan(&columns).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	var realLegacy int
-	if err := db.Raw("SELECT legacy FROM retrieval_logs WHERE id = 'row-1'").Scan(&realLegacy).Error; err != nil {
-		t.Fatal(err)
+	expectedColumns := map[string]bool{
+		"id":                  false,
+		"conversation_id":     false,
+		"character_id":        false,
+		"request_id":          false,
+		"channel":             false,
+		"retrieval_version":   false,
+		"legacy":              false,
+		"query_text":          false,
+		"retrieved_memory_ids": false,
+		"scoring_details":     false,
+		"created_at":          false,
 	}
-	if realLegacy != 0 {
-		t.Fatalf("row-1 legacy = %d, want 0", realLegacy)
+	for _, col := range columns {
+		if _, ok := expectedColumns[col.Name]; ok {
+			expectedColumns[col.Name] = true
+		}
+	}
+	for col, found := range expectedColumns {
+		if !found {
+			t.Fatalf("retrieval_logs missing column: %s", col)
+		}
 	}
 
-	var badLegacy int
-	if err := db.Raw("SELECT legacy FROM retrieval_logs WHERE id = 'row-2'").Scan(&badLegacy).Error; err != nil {
+	isNew, err := migration.IsNewDatabase(db)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if badLegacy != 1 {
-		t.Fatalf("row-2 legacy = %d, want 1", badLegacy)
+	if isNew {
+		t.Fatal("database should not be new after applying migrations")
 	}
 
-	var emptyLegacy int
-	if err := db.Raw("SELECT legacy FROM retrieval_logs WHERE id = 'row-3'").Scan(&emptyLegacy).Error; err != nil {
+	var migrationCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM schema_migrations WHERE status = 'applied'").Scan(&migrationCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if emptyLegacy != 1 {
-		t.Fatalf("row-3 legacy = %d, want 1", emptyLegacy)
-	}
-
-	var requestID string
-	if err := db.Raw("SELECT request_id FROM retrieval_logs WHERE id = 'row-1'").Scan(&requestID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if requestID != "" {
-		t.Fatalf("request_id = %q, want empty default", requestID)
+	if migrationCount == 0 {
+		t.Fatal("expected applied migrations in schema_migrations table")
 	}
 }
 
-func TestInitDatabaseAddsConversationScopeIndexes(t *testing.T) {
+func TestApplyDatabaseStartupMigrationsCreatesConversationScopeIndexes(t *testing.T) {
 	dataDir := t.TempDir()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(dataDir, "app.db")), &gorm.Config{})
 	if err != nil {
@@ -121,25 +98,6 @@ func TestInitDatabaseAddsConversationScopeIndexes(t *testing.T) {
 		_ = sqlDB.Close()
 	})
 
-	sqlText := `
-CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
-    character_id TEXT DEFAULT '',
-    title TEXT DEFAULT '',
-    channel TEXT DEFAULT 'web',
-    source TEXT DEFAULT 'manual',
-    peer_id TEXT DEFAULT '',
-    message_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
-CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conversations(character_id, channel, updated_at);
-`
-	if err := os.WriteFile(filepath.Join(dataDir, "sql.sql"), []byte(sqlText), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	originalCfg := config.AppCfg
 	config.AppCfg = &config.Config{}
 	config.AppCfg.Storage.DataDir = dataDir
@@ -147,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conver
 		config.AppCfg = originalCfg
 	})
 
-	if err := initDatabase(db); err != nil {
+	if err := applyDatabaseStartupMigrations(db); err != nil {
 		t.Fatal(err)
 	}
 

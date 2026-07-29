@@ -221,6 +221,7 @@ type Dispatcher struct {
 	ordering            *OrderingCoordinator
 	circuitRegistry     *CircuitBreakerRegistry
 	traceRecorder       *EventTraceRecorder
+	generationResolver  GenerationResolver
 	config              DispatcherConfig
 	handler             DeliveryHandler
 	mu                  sync.Mutex
@@ -339,12 +340,37 @@ func (d *Dispatcher) executeDelivery(ctx context.Context, delivery Delivery) {
 			fmt.Sprintf("subscription generation %d != delivery generation %d", sub.Definition.Generation, delivery.SubscriptionGeneration))
 		return
 	}
+	if delivery.TargetGeneration != 0 && sub.Definition.Generation != delivery.TargetGeneration {
+		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_target",
+			fmt.Sprintf("target generation %d != delivery target generation %d", sub.Definition.Generation, delivery.TargetGeneration))
+		return
+	}
 	outbox, err := d.outboxStore.GetByEventID(ctx, delivery.EventID)
 	if err != nil {
 		_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "outbox_not_found", err.Error())
 		return
 	}
 	envelope := outboxToEnvelope(outbox)
+	if delivery.ProducerGeneration != 0 && d.generationResolver != nil {
+		producerID := envelope.ProducerExtensionID
+		if producerID == "" {
+			producerID = envelope.ProducerID
+		}
+		if producerID != "" {
+			currentProducerGen, genErr := d.generationResolver.CurrentGeneration(ctx, producerID)
+			if genErr != nil {
+				inv := d.traceRecorder.StartInvocation(envelope.OperationID, delivery.EventID, delivery.DeliveryID, delivery.SubscriptionID, delivery.Attempt)
+				d.traceRecorder.FinishInvocation(inv.InvocationID, "failed", "generation_check_error", genErr.Error())
+				_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusRetryWait, "generation_check_error", genErr.Error())
+				return
+			}
+			if currentProducerGen > 0 && currentProducerGen != delivery.ProducerGeneration {
+				_ = d.deliveryStore.UpdateDeliveryStatus(ctx, delivery.DeliveryID, DeliveryStatusCancelled, "cancel_stale_producer",
+					fmt.Sprintf("producer generation %d != delivery producer generation %d", currentProducerGen, delivery.ProducerGeneration))
+				return
+			}
+		}
+	}
 	circuit := d.circuitRegistry.GetOrCreate(delivery.SubscriptionID)
 	allowed, state := circuit.Allow()
 	if !allowed {
@@ -403,6 +429,12 @@ func (d *Dispatcher) SetHandler(handler DeliveryHandler) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.handler = handler
+}
+
+func (d *Dispatcher) SetGenerationResolver(resolver GenerationResolver) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.generationResolver = resolver
 }
 
 func (d *Dispatcher) LookupCircuitState(subscriptionID string) CircuitState {

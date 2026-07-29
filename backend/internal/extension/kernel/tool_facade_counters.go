@@ -21,7 +21,8 @@ type ToolFacadeCounters struct {
 	legacyFallbacks   map[string]*atomic.Int64
 	legacyFallbacksMu sync.RWMutex
 
-	mcpToolSync atomic.Int64
+	mcpToolSync        atomic.Int64
+	mcpDuplicateDetected atomic.Int64
 }
 
 func NewToolFacadeCounters() *ToolFacadeCounters {
@@ -82,6 +83,10 @@ func (c *ToolFacadeCounters) IncMCPToolSync() {
 	c.mcpToolSync.Add(1)
 }
 
+func (c *ToolFacadeCounters) IncMCPDuplicateDetected() {
+	c.mcpDuplicateDetected.Add(1)
+}
+
 func (c *ToolFacadeCounters) Snapshot() map[string]int64 {
 	c.legacyFallbacksMu.RLock()
 	defer c.legacyFallbacksMu.RUnlock()
@@ -95,6 +100,7 @@ func (c *ToolFacadeCounters) Snapshot() map[string]int64 {
 		"pipeline_executions":        c.pipelineExecutions.Load(),
 		"pipeline_failures":          c.pipelineFailures.Load(),
 		"mcp_tool_sync":              c.mcpToolSync.Load(),
+		"mcp_duplicate_detected":     c.mcpDuplicateDetected.Load(),
 	}
 	for stage, counter := range c.legacyFallbacks {
 		result["legacy_fallback_"+stage] = counter.Load()

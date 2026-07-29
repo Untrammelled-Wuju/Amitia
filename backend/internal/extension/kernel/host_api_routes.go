@@ -19,32 +19,176 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 )
 
 type hostAPIAuditWriter struct {
-	opRepo hostAPIOperationPutter
+	auditRepo hostAPIAuditPutter
 }
 
-type hostAPIOperationPutter interface {
-	PutOperation(ctx context.Context, op hostAPIOperationRecord) error
+type hostAPIAuditPutter interface {
+	PutAuditLog(ctx context.Context, entry sqlite.HostAPIAuditLog) error
 }
 
-type hostAPIOperationRecord struct {
-	OperationID   string
-	OperationType string
-	ExtensionID   string
-	Status        string
-	ErrorMessage  string
+func newHostAPIAuditWriter(auditRepo hostAPIAuditPutter) *hostAPIAuditWriter {
+	return &hostAPIAuditWriter{auditRepo: auditRepo}
 }
 
-func newHostAPIAuditWriter() *hostAPIAuditWriter {
-	return &hostAPIAuditWriter{}
+var sensitiveKeyPatterns = []string{
+	"password", "passwd", "token", "secret", "credential", "apikey", "api_key",
+	"auth", "authorization", "bearer", "privatekey", "private_key",
+	"accesstoken", "access_token", "refreshtoken", "refresh_token",
+	"session", "cookie", "otp", "code", "pin",
+}
+
+const maxMaskedInputSize = 8192
+
+func maskSensitiveInput(method host_api.Method, input json.RawMessage) string {
+	if len(input) == 0 {
+		return ""
+	}
+	var parsed interface{}
+	if err := json.Unmarshal(input, &parsed); err != nil {
+		truncated := string(input)
+		if len(truncated) > maxMaskedInputSize {
+			truncated = truncated[:maxMaskedInputSize] + "...[truncated]"
+		}
+		return truncated
+	}
+	masked := maskSensitiveValue(parsed)
+	out, err := json.Marshal(masked)
+	if err != nil {
+		return "{}"
+	}
+	result := string(out)
+	if len(result) > maxMaskedInputSize {
+		result = result[:maxMaskedInputSize] + "...[truncated]"
+	}
+	return result
+}
+
+func maskSensitiveValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		masked := make(map[string]interface{}, len(val))
+		for k, vv := range val {
+			lk := strings.ToLower(k)
+			if isSensitiveKey(lk) {
+				masked[k] = "***REDACTED***"
+			} else {
+				masked[k] = maskSensitiveValue(vv)
+			}
+		}
+		return masked
+	case []interface{}:
+		masked := make([]interface{}, len(val))
+		for i, vv := range val {
+			masked[i] = maskSensitiveValue(vv)
+		}
+		return masked
+	default:
+		return v
+	}
+}
+
+func isSensitiveKey(lowerKey string) bool {
+	for _, p := range sensitiveKeyPatterns {
+		if strings.Contains(lowerKey, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *hostAPIAuditWriter) RecordCallStart(ctx context.Context, request host_api.CallRequest) error {
+	callID := request.CallID
+	if callID == "" {
+		callID = fmt.Sprintf("audit-%s", uuid.NewString())
+	}
+	now := time.Now().UTC()
+	entry := sqlite.HostAPIAuditLog{
+		CallID:               callID,
+		TraceID:              request.TraceID,
+		OperationID:          callID,
+		InvocationID:         request.InvocationID,
+		ExtensionID:          string(request.RuntimeIdentity.ExtensionID),
+		ModuleID:             string(request.RuntimeIdentity.ModuleID),
+		Method:               string(request.Method),
+		Generation:           request.RuntimeIdentity.Generation,
+		PermissionSnapshotID: request.PermissionSnapshotID,
+		ScopeSnapshotID:      request.ScopeSnapshotID,
+		StartedAt:            now,
+		Result:               "started",
+		Phase:                "start",
+		InputMasked:          maskSensitiveInput(request.Method, request.Input),
+	}
+	if w.auditRepo == nil {
+		log.Printf("[host-api-audit] START call=%s method=%s ext=%s (no repository, log only)", callID, request.Method, request.RuntimeIdentity.ExtensionID)
+		return nil
+	}
+	if err := w.auditRepo.PutAuditLog(ctx, entry); err != nil {
+		log.Printf("[host-api-audit] FAILED to persist start record: call=%s method=%s err=%v", callID, request.Method, err)
+		return err
+	}
+	log.Printf("[host-api-audit] START call=%s method=%s ext=%s", callID, request.Method, request.RuntimeIdentity.ExtensionID)
+	return nil
 }
 
 func (w *hostAPIAuditWriter) RecordCall(ctx context.Context, request host_api.CallRequest, result host_api.CallResult) {
-	log.Printf("[host-api-audit] call=%s method=%s ext=%s status=%s",
-		request.CallID, request.Method, request.RuntimeIdentity.ExtensionID, result.Status)
+	callID := request.CallID
+	if callID == "" {
+		callID = fmt.Sprintf("audit-%s", uuid.NewString())
+	}
+	now := time.Now().UTC()
+	errorCode := ""
+	errorMessage := ""
+	if result.Error != nil {
+		errorCode = result.Error.Code
+		errorMessage = result.Error.Message
+		if len(errorMessage) > 1024 {
+			errorMessage = errorMessage[:1024] + "...[truncated]"
+		}
+	}
+	sideEffect := ""
+	if len(result.SideEffects) > 0 {
+		parts := make([]string, 0, len(result.SideEffects))
+		for _, se := range result.SideEffects {
+			parts = append(parts, fmt.Sprintf("%s:%s:%s", se.Kind, se.Target, se.Detail))
+		}
+		sideEffect = strings.Join(parts, "; ")
+		if len(sideEffect) > 2048 {
+			sideEffect = sideEffect[:2048] + "...[truncated]"
+		}
+	}
+	entry := sqlite.HostAPIAuditLog{
+		CallID:               callID,
+		TraceID:              request.TraceID,
+		OperationID:          callID,
+		InvocationID:         request.InvocationID,
+		ExtensionID:          string(request.RuntimeIdentity.ExtensionID),
+		ModuleID:             string(request.RuntimeIdentity.ModuleID),
+		Method:               string(request.Method),
+		Generation:           request.RuntimeIdentity.Generation,
+		PermissionSnapshotID: request.PermissionSnapshotID,
+		ScopeSnapshotID:      request.ScopeSnapshotID,
+		StartedAt:            now,
+		FinishedAt:           &now,
+		Result:               result.Status,
+		ErrorCode:            errorCode,
+		ErrorMessage:         errorMessage,
+		SideEffect:           sideEffect,
+		Phase:                "end",
+		InputMasked:          maskSensitiveInput(request.Method, request.Input),
+	}
+	log.Printf("[host-api-audit] END call=%s method=%s ext=%s status=%s",
+		callID, request.Method, request.RuntimeIdentity.ExtensionID, result.Status)
+	if w.auditRepo == nil {
+		return
+	}
+	if err := w.auditRepo.PutAuditLog(ctx, entry); err != nil {
+		log.Printf("[host-api-audit] FAILED to persist end record: call=%s method=%s err=%v", callID, request.Method, err)
+	}
 }
 
 type ExtensionStateStore interface {
@@ -67,10 +211,8 @@ type MemoryQueryService interface {
 	Query(ctx context.Context, extensionID string, query string, limit int) ([]json.RawMessage, error)
 }
 
-type UIHostNotifier interface {
-	Notify(ctx context.Context, extensionID string, title string, body string, severity string) error
-	Dialog(ctx context.Context, extensionID string, dialogID string, message string, buttons []string) (string, error)
-	Navigate(ctx context.Context, extensionID string, target string) error
+type RuntimeHealthReader interface {
+	SnapshotByExtension(ctx context.Context, extensionID string, moduleID string) []runtime_supervisor.RuntimeHealthSnapshot
 }
 
 type HostAPIRouteDeps struct {
@@ -87,6 +229,7 @@ type HostAPIRouteDeps struct {
 	ExtensionRoot       string
 	UIHostNotifier      UIHostNotifier
 	ClipboardHost       ClipboardHost
+	RuntimeSupervisor   RuntimeHealthReader
 	ScopeSnapshotStore  host_api.ScopeSnapshotStore
 }
 
@@ -1123,7 +1266,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if deps.UIHostNotifier == nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeUIHostUnavailable, Message: "ui host notifier not configured"},
 					}, nil
 				}
 				var p struct {
@@ -1145,9 +1288,13 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				extID := string(req.RuntimeIdentity.ExtensionID)
 				if err := deps.UIHostNotifier.Notify(ctx, extID, p.Title, p.Body, p.Severity); err != nil {
+					code := host_api.ErrorCodeInternal
+					if errors.Is(err, ErrUIHostUnavailable) {
+						code = host_api.ErrorCodeUIHostUnavailable
+					}
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+						Error:  &host_api.Error{Code: code, Message: err.Error()},
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{"ok": true})
@@ -1166,7 +1313,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if deps.UIHostNotifier == nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeDialogHostUnavailable, Message: "dialog host notifier not configured"},
 					}, nil
 				}
 				var p struct {
@@ -1195,9 +1342,13 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				extID := string(req.RuntimeIdentity.ExtensionID)
 				result, err := deps.UIHostNotifier.Dialog(ctx, extID, p.DialogID, p.Message, p.Buttons)
 				if err != nil {
+					code := host_api.ErrorCodeInternal
+					if errors.Is(err, ErrDialogHostUnavailable) {
+						code = host_api.ErrorCodeDialogHostUnavailable
+					}
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+						Error:  &host_api.Error{Code: code, Message: err.Error()},
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{
@@ -1219,7 +1370,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if deps.UIHostNotifier == nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "ui host notifier not configured"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeNavigationHostUnavailable, Message: "navigation host notifier not configured"},
 					}, nil
 				}
 				var p struct {
@@ -1239,12 +1390,94 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				extID := string(req.RuntimeIdentity.ExtensionID)
 				if err := deps.UIHostNotifier.Navigate(ctx, extID, p.Target); err != nil {
+					code := host_api.ErrorCodeInternal
+					if errors.Is(err, ErrNavigationHostUnavailable) {
+						code = host_api.ErrorCodeNavigationHostUnavailable
+					}
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+						Error:  &host_api.Error{Code: code, Message: err.Error()},
 					}, nil
 				}
 				output, _ := json.Marshal(map[string]any{"ok": true, "target": p.Target})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodClipboardWrite,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         3 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.ClipboardHost == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "clipboard host not configured"},
+					}, nil
+				}
+				var p struct {
+					Text string `json:"text"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if err := deps.ClipboardHost.WriteText(ctx, p.Text); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"ok": true})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodRuntimeHealth,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.RuntimeSupervisor == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "runtime supervisor not configured"},
+					}, nil
+				}
+				extID := string(req.RuntimeIdentity.ExtensionID)
+				modID := string(req.RuntimeIdentity.ModuleID)
+				snapshots := deps.RuntimeSupervisor.SnapshotByExtension(ctx, extID, modID)
+				if len(snapshots) == 0 {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "no runtime instances found for extension"},
+					}, nil
+				}
+				instances := make([]map[string]any, 0, len(snapshots))
+				for _, snap := range snapshots {
+					instances = append(instances, map[string]any{
+						"instanceId":  snap.InstanceID,
+						"generation":  snap.Generation,
+						"health":      string(snap.Health),
+						"circuit":     string(snap.Circuit),
+						"actual":      string(snap.Actual),
+						"quarantined": snap.Quarantined,
+					})
+				}
+				output, _ := json.Marshal(map[string]any{
+					"extensionId": extID,
+					"moduleId":    modID,
+					"instances":   instances,
+					"total":       len(instances),
+				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
 					Output: output,

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -23,6 +24,8 @@ type packageConfigMigration struct {
 
 func (s *PackageService) Install(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {
 	if s.kernelProxy == nil {
+		kernelruntime.GlobalLegacyCallCounter().IncPackageInstall()
+		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
 		return s.installLegacyPackage(ctx, request)
 	}
 	if request.ScopeType == string(ScopeCharacter) {

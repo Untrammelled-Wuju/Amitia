@@ -33,6 +33,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -576,29 +580,84 @@ fun PrimaryGlassButton(
 ) {
     val isDark = LocalIsDarkTheme.current
     val interactionSource = remember { MutableInteractionSource() }
-    val bgColor = if (isDark) {
-        Brush.verticalGradient(
-            listOf(
-                primaryColor().copy(alpha = 0.80f),
-                primaryColor().copy(alpha = 0.92f)
-            )
-        )
-    } else {
-        Brush.radialGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.12f),
-                primarySoftColor().copy(alpha = 0.17f),
-                primaryColor().copy(alpha = 0.12f),
-                primaryColor().copy(alpha = 0.60f)
-            ),
-            radius = Float.MAX_VALUE
-        )
-    }
+    val pColor = primaryColor()
+    val psColor = primarySoftColor()
 
-    Surface(
+    val buttonShape = RoundedCornerShape(18.dp)
+
+    Box(
         modifier = modifier
             .height(56.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .then(
+                if (enabled && !isDark) Modifier.shadow(
+                    elevation = 8.dp,
+                    shape = buttonShape,
+                    ambientColor = pColor.copy(alpha = 0.14f),
+                    spotColor = pColor.copy(alpha = 0.08f)
+                ) else Modifier
+            )
+            .clip(buttonShape)
+            .drawBehind {
+                if (isDark) {
+                    drawRect(
+                        Brush.verticalGradient(
+                            listOf(
+                                pColor.copy(alpha = 0.80f),
+                                pColor.copy(alpha = 0.92f)
+                            )
+                        )
+                    )
+                } else {
+                    drawRect(pColor.copy(alpha = 0.60f))
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.12f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.16f, size.height * 0.24f),
+                            radius = size.maxDimension * 0.38f
+                        )
+                    )
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                psColor.copy(alpha = 0.17f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.78f, size.height * 0.70f),
+                            radius = size.maxDimension * 0.48f
+                        )
+                    )
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                pColor.copy(alpha = 0.12f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width * 0.52f, size.height * 0.46f),
+                            radius = size.maxDimension * 0.64f
+                        )
+                    )
+
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.12f),
+                        start = Offset(1.dp.toPx(), 0.5f),
+                        end = Offset(size.width - 1.dp.toPx(), 0.5f),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+            .then(
+                if (!isDark) Modifier.border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.12f),
+                    shape = buttonShape
+                ) else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -606,30 +665,15 @@ fun PrimaryGlassButton(
                 role = Role.Button,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.Transparent
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(bgColor)
-                .then(
-                    if (!isDark) Modifier.border(
-                        width = 1.dp,
-                        color = Color.White.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(18.dp)
-                    ) else Modifier
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                color = if (isDark) DarkText else Color(0xFFFDFEFD),
-                fontSize = 15.sp,
-                fontWeight = FontWeight(680),
-                modifier = if (!enabled) Modifier.alpha(0.38f) else Modifier
-            )
-        }
+        Text(
+            text = text,
+            color = if (isDark) DarkText else Color(0xFFFDFEFD),
+            fontSize = 15.sp,
+            fontWeight = FontWeight(680),
+            modifier = if (!enabled) Modifier.alpha(0.38f) else Modifier
+        )
     }
 }
 
@@ -729,14 +773,15 @@ fun RevealContent(
         offsetYState.floatValue = 0f
     }
 
+    val welcomeEasing = remember { androidx.compose.animation.core.CubicBezierEasing(0.16f, 0.72f, 0.18f, 1f) }
     val alpha by animateFloatAsState(
         targetValue = alphaState.floatValue,
-        animationSpec = tween(1050, delayMs, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        animationSpec = tween(1050, delayMs, easing = welcomeEasing),
         label = "revealAlpha"
     )
     val offsetY by animateFloatAsState(
         targetValue = offsetYState.floatValue,
-        animationSpec = tween(1050, delayMs, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        animationSpec = tween(1050, delayMs, easing = welcomeEasing),
         label = "revealY"
     )
 
@@ -973,7 +1018,6 @@ fun SoftField(
     singleLine: Boolean = true
 ) {
     val isDark = LocalIsDarkTheme.current
-    val focused = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     GlassCard(
         modifier = modifier
@@ -991,12 +1035,12 @@ fun SoftField(
                 color = mutedColor(),
                 fontSize = 11.sp
             )
-            androidx.compose.material3.TextField(
+            BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 2.dp),
+                    .padding(top = 4.dp),
                 textStyle = androidx.compose.ui.text.TextStyle(
                     color = textColor(),
                     fontSize = 16.sp
@@ -1004,18 +1048,21 @@ fun SoftField(
                 singleLine = singleLine,
                 visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation()
                 else androidx.compose.ui.text.input.VisualTransformation.None,
-                placeholder = if (placeholder.isNotBlank()) {
-                    { Text(text = placeholder, color = mutedSecondaryColor().copy(alpha = 0.82f), fontSize = 16.sp) }
-                } else null,
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    cursorColor = primaryColor(),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                )
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(primaryColor()),
+                decorationBox = { innerTextField ->
+                    if (value.isEmpty() && placeholder.isNotBlank()) {
+                        androidx.compose.foundation.layout.Box {
+                            Text(
+                                text = placeholder,
+                                color = mutedSecondaryColor().copy(alpha = 0.82f),
+                                fontSize = 16.sp
+                            )
+                            innerTextField()
+                        }
+                    } else {
+                        innerTextField()
+                    }
+                }
             )
         }
     }
@@ -1182,6 +1229,146 @@ fun Toast(
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun CompletionCheckIcon(
+    modifier: Modifier = Modifier
+) {
+    val sColor = successColor()
+    Box(
+        modifier = modifier
+            .size(58.dp)
+            .clip(CircleShape)
+            .drawBehind {
+                drawRect(sColor.copy(alpha = 0.72f))
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.16f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.3f, size.height * 0.24f),
+                        radius = size.minDimension * 0.5f
+                    )
+                )
+            }
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.14f),
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = AmitiaIcons.Check,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(27.dp)
+        )
+    }
+}
+
+@Composable
+fun ModelSelectorOverlay(
+    title: String,
+    options: List<String>,
+    selectedValue: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val isDark = LocalIsDarkTheme.current
+    val pColor = primaryColor()
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier.fillMaxSize()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    drawRect(Color(0x0F131714))
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp)
+                    .padding(bottom = 18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 22.dp, start = 22.dp, end = 22.dp, bottom = 12.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = textColor(),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight(630)
+                    )
+                    Text(
+                        text = "选择当前能力默认使用的模型。",
+                        color = mutedColor(),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    options.forEach { option ->
+                        val isSelected = option == selectedValue
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 58.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .then(
+                                    if (isSelected) Modifier.background(
+                                        if (isDark) Color(0xA8422D24) else Color(0x38FFFFFF)
+                                    ) else Modifier
+                                )
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    role = Role.Button,
+                                    onClick = { onSelect(option) }
+                                )
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = option,
+                                    color = textColor(),
+                                    fontSize = 15.sp
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = AmitiaIcons.Check,
+                                        contentDescription = null,
+                                        tint = pColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

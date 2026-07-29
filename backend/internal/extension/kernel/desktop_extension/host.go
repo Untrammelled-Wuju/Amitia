@@ -417,7 +417,7 @@ func (h *DesktopExtensionHost) TriggerCommand(ctx context.Context, req TriggerCo
 	return resolver.ResolveCommand(ctx, req.CommandID, req.Scope)
 }
 
-func (h *DesktopExtensionHost) UnregisterByExtension(extensionID string) int {
+func (h *DesktopExtensionHost) UnregisterByExtension(extensionID string) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	count := 0
@@ -440,7 +440,7 @@ func (h *DesktopExtensionHost) UnregisterByExtension(extensionID string) int {
 	}
 	h.shortcutsByAccelerator = make(map[string]string)
 	delete(h.trayCountByExt, extensionID)
-	return count
+	return count, nil
 }
 
 type WindowOpenRequest struct {

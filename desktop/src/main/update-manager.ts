@@ -9,8 +9,7 @@ let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
 let pendingUpdateInfo: UpdateInfo | null = null;
 
-const GITEE_RELEASES_URL =
-  "https://gitee.com/Untrammelled-Wuju/Amitia/releases";
+const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
 
 export function registerUpdateManager(win: BrowserWindow): void {
   mainWindow = win;
@@ -137,7 +136,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   });
 
   ipcMain.handle("update:open-gitee-release", () => {
-    return shell.openExternal(GITEE_RELEASES_URL);
+    return shell.openExternal(RELEASES_URL);
   });
 
   ipcMain.handle("update:check-now", async () => {

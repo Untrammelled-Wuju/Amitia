@@ -71,6 +71,7 @@ func TestValidateDefinition_MemoryLimitFromPages(t *testing.T) {
 	def := makeValidDefinition(t)
 	def.MemoryLimitBytes = 0
 	def.Limits.MaxMemoryPages = 256
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		t.Fatalf("expected valid with pages fallback: %v", err)
 	}
@@ -101,6 +102,7 @@ func TestValidateDefinition_FuelFromLimits(t *testing.T) {
 	def := makeValidDefinition(t)
 	def.FuelLimit = 0
 	def.Limits.Fuel = 500000
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		t.Fatalf("expected valid with fuel fallback: %v", err)
 	}
@@ -130,6 +132,7 @@ func TestValidateDefinition_EntryExportFromEntry(t *testing.T) {
 	def := makeValidDefinition(t)
 	def.EntryExport = ""
 	def.Entry.ExportName = "custom_invoke"
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		t.Fatalf("expected valid: %v", err)
 	}
@@ -151,6 +154,7 @@ func TestValidateDefinition_MaxOutputFromLimits(t *testing.T) {
 	def := makeValidDefinition(t)
 	def.MaxOutputBytes = 0
 	def.Limits.MaxOutputBytes = 512 * 1024
+	NormalizeDefinition(def)
 	if err := ValidateDefinition(def); err != nil {
 		t.Fatalf("expected valid: %v", err)
 	}

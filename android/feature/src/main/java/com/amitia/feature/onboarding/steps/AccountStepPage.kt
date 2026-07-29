@@ -29,54 +29,35 @@ fun AccountStepPage(
             RevealContent(delayMs = 0) {
                 StepLabel(text = "3 / 6")
                 OnboardingTitle(
-                    text = if (state.accountLogin) "登录" else "创建管理账号"
+                    text = if (state.accountLogin) "登录管理账号" else "创建管理账号"
                 )
                 OnboardingDescription(
-                    text = if (state.accountLogin) "填写以下信息继续。"
-                    else "创建你的管理员账号以管理 Amitia。"
+                    text = "用于保护角色配置、聊天记录和记忆数据。"
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            if (state.accountLogin) {
-                SoftField(
-                    label = "账号",
-                    value = state.accountEmail,
-                    onValueChange = { onFieldChange("email", it) },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            SoftField(
+                label = "管理员名称",
+                value = state.accountUsername,
+                onValueChange = { onFieldChange("username", it) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SoftField(
+                label = "管理密码",
+                value = state.accountPassword,
+                onValueChange = { onFieldChange("password", it) },
+                modifier = Modifier.fillMaxWidth(),
+                isPassword = true
+            )
+
+            if (!state.accountLogin) {
                 Spacer(modifier = Modifier.height(12.dp))
-                SoftField(
-                    label = "密码",
-                    value = state.accountPassword,
-                    onValueChange = { onFieldChange("password", it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    isPassword = true
-                )
-            } else {
-                SoftField(
-                    label = "用户名",
-                    value = state.accountUsername,
-                    onValueChange = { onFieldChange("username", it) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SoftField(
-                    label = "邮箱",
-                    value = state.accountEmail,
-                    onValueChange = { onFieldChange("email", it) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SoftField(
-                    label = "密码",
-                    value = state.accountPassword,
-                    onValueChange = { onFieldChange("password", it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    isPassword = true
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+
                 SoftField(
                     label = "确认密码",
                     value = state.accountConfirmPassword,
@@ -89,7 +70,7 @@ fun AccountStepPage(
             Spacer(modifier = Modifier.height(16.dp))
 
             InlineLink(
-                text = if (state.accountLogin) "没有账号？注册" else "已有账号？登录",
+                text = if (state.accountLogin) "还没有账号？创建账号" else "已有账号？直接登录",
                 onClick = onToggleLogin
             )
 
@@ -108,7 +89,7 @@ fun AccountStepPage(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             PrimaryGlassButton(
-                text = if (state.accountLogin) "登录" else "创建账号",
+                text = if (state.accountLogin) "登录并继续" else "注册并继续",
                 onClick = { if (onSubmit()) onNext() },
                 modifier = Modifier.fillMaxWidth()
             )

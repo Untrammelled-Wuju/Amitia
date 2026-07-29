@@ -102,3 +102,6 @@ backend/extension.test.exe
 
 # Test build artifacts
 backend/testdata/extensions/extension-kernel-repair/dev-hot-reload-*/dist-candidate-*/
+
+# FTP publish config (contains credentials)
+desktop/scripts/.publish-config.json

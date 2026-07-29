@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -299,7 +300,7 @@ func (i *TypedContributionInstaller) buildHookOp(ctx context.Context, contrib do
 			return nil
 		},
 		doRollback: func(ctx context.Context) {
-			_ = i.container.HookService.Lifecycle.UninstallByExtension(ctx, string(contrib.ExtensionID))
+			_ = i.container.HookService.Lifecycle.UninstallContribution(ctx, def.ContributionID)
 		},
 	}, nil
 }
@@ -331,7 +332,7 @@ func (i *TypedContributionInstaller) buildScheduleOp(ctx context.Context, contri
 		},
 		doRollback: func(ctx context.Context) {
 			if def.ScheduleID != "" {
-				_ = i.container.ScheduleService.DeleteAllByExtension(ctx, string(contrib.ExtensionID))
+				_ = i.container.ScheduleService.Uninstall(ctx, def.ScheduleID)
 			}
 		},
 	}, nil
@@ -556,10 +557,10 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 			}
 			_ = i.container.UIHost.UnregisterContribution(uiDef.ContributionID)
 			if i.container.UIContributionRepo != nil {
-				_ = i.container.UIContributionRepo.DeleteByExtension(ctx, string(contrib.ExtensionID))
+				_ = i.container.UIContributionRepo.DeleteContribution(ctx, string(uiDef.ContributionID))
 			}
 			if hasPage && i.container.PageHost != nil {
-				_, _ = i.container.PageHost.HandleExtensionUninstalled(ctx, extension_page_host.ExtensionID(contrib.ExtensionID))
+				_ = i.container.PageHost.UnregisterPage(ctx, extension_page_host.ContributionID(uiDef.ContributionID))
 			}
 		},
 	}, nil
@@ -586,7 +587,6 @@ func (i *TypedContributionInstaller) buildDesktopContributionOp(ctx context.Cont
 		desktopDef.Version = contrib.Version
 	}
 
-	extID := desktopDef.ExtensionID
 	contributionID := desktopDef.ContributionID
 
 	return installOp{
@@ -607,7 +607,7 @@ func (i *TypedContributionInstaller) buildDesktopContributionOp(ctx context.Cont
 		doRollback: func(ctx context.Context) {
 			_ = i.container.UIHost.UnregisterContribution(uiDef.ContributionID)
 			if i.container.UIContributionRepo != nil {
-				_ = i.container.UIContributionRepo.DeleteByExtension(ctx, extID)
+				_ = i.container.UIContributionRepo.DeleteContribution(ctx, contributionID)
 			}
 			if i.container.DesktopHost != nil {
 				_ = i.container.DesktopHost.UnregisterContribution(contributionID)
@@ -1127,7 +1127,10 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		}
 	}
 	if i.container.ToolRegistry != nil {
-		i.container.ToolRegistry.UnregisterByOwner(ctx, string(extID))
+		if _, err := i.container.ToolRegistry.UnregisterByOwner(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "tools", Kind: domain.ContributionKindTool, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall tools for %s: %w", extID, err)
+		}
 	}
 	if i.container.AgentSkillCatalog != nil {
 		if err := i.container.AgentSkillCatalog.Unregister(string(extID)); err != nil {
@@ -1178,10 +1181,16 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		}
 	}
 	if i.container.SchemaRegistry != nil {
-		i.container.SchemaRegistry.Unregister(string(extID))
+		if _, err := i.container.SchemaRegistry.Unregister(string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "schemas", Kind: domain.ContributionKindUIPage, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall schemas for %s: %w", extID, err)
+		}
 	}
 	if i.container.DesktopHost != nil {
-		i.container.DesktopHost.UninstallContributions(ctx, string(extID))
+		if err := i.container.DesktopHost.UninstallContributions(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "desktop", Kind: domain.ContributionKindUIDesktop, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall desktop contributions for %s: %w", extID, err)
+		}
 	}
 	if i.container.TaskRuntimeService != nil {
 		if err := i.container.TaskRuntimeService.DeleteByExtension(ctx, string(extID)); err != nil {
@@ -1234,6 +1243,11 @@ func (i *TypedContributionInstaller) RecoverContributions(ctx context.Context, e
 	generation := inst.Generation
 	startedAt := time.Now().UTC()
 
+	if err := i.recoverInMemoryRegistrations(ctx, extID, generation); err != nil {
+		i.recordAudit(domain.ContributionDefinition{ID: "recover_register", ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+		return fmt.Errorf("contribution-installer: recover in-memory registrations failed %s: %w", extID, err)
+	}
+
 	switch inst.EnablementState {
 	case domain.EnablementEnabled:
 		if err := i.ActivateContributions(ctx, extID); err != nil {
@@ -1251,14 +1265,113 @@ func (i *TypedContributionInstaller) RecoverContributions(ctx context.Context, e
 	return nil
 }
 
-func (i *TypedContributionInstaller) StopRuntimeInstances(ctx context.Context, extID domain.ExtensionID) {
+func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Context, extID domain.ExtensionID, generation int64) error {
+	if i.container.UIContributionRepo != nil && i.container.UIHost != nil {
+		uiDefs, err := i.container.UIContributionRepo.ListByExtension(ctx, string(extID))
+		if err != nil {
+			return fmt.Errorf("list ui contributions for recover: %w", err)
+		}
+		for _, uiDef := range uiDefs {
+			_ = i.container.UIHost.RegisterContribution(uiDef)
+			if i.container.PageHost != nil && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
+				entryKind := extension_page_host.PageKindWeb
+				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
+					entryKind = extension_page_host.PageKindSchema
+				}
+				perms := make([]string, 0, len(uiDef.Permissions))
+				for _, p := range uiDef.Permissions {
+					perms = append(perms, p.Name)
+				}
+				pageDef := extension_page_host.NewExtensionPageDefinition(extension_page_host.PageRegistrationInput{
+					PageID:          extension_page_host.PageID(uiDef.ContributionID),
+					ExtensionID:     extension_page_host.ExtensionID(uiDef.ExtensionID),
+					ModuleID:        string(uiDef.ModuleID),
+					ContributionID:  extension_page_host.ContributionID(uiDef.ContributionID),
+					Generation:      generation,
+					ContractVersion: uiDef.ContractVersion,
+					EntryKind:       entryKind,
+					EntryPath:       uiDef.Entry.Path,
+					SchemaPath:      uiDef.Entry.SchemaPath,
+					Title: extension_page_host.LocalizedText{
+						Default:      uiDef.Display.Title.Default,
+						Translations: uiDef.Display.Title.I18n,
+					},
+					Description: extension_page_host.LocalizedText{
+						Default:      uiDef.Display.Description.Default,
+						Translations: uiDef.Display.Description.I18n,
+					},
+					Icon:        uiDef.Display.Icon,
+					Permissions: perms,
+				})
+				_ = i.container.PageHost.RegisterPage(ctx, pageDef)
+			}
+			if i.container.SchemaRegistry != nil && uiDef.Entry.SchemaPath != "" {
+				basePath := resolveExtensionBundlePath(i.container.ExtRoot, string(extID))
+				if basePath != "" {
+					_ = i.container.SchemaRegistry.LoadFromPathWithContext(string(uiDef.ExtensionID), string(uiDef.ContributionID), generation, "", "", basePath, uiDef.Entry.SchemaPath)
+				}
+			}
+		}
+	}
+
+	contribs, err := i.container.ContributionRepository.ListContributions(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("list contributions for recover: %w", err)
+	}
+	for _, contrib := range contribs {
+		switch contrib.Kind {
+		case domain.ContributionKindAgentSkill:
+			if i.container.AgentSkillCatalog != nil {
+				defData, _ := json.Marshal(contrib.Definition)
+				var def agent_skill.AgentSkillDefinition
+				if err := json.Unmarshal(defData, &def); err == nil {
+					if def.ID == "" {
+						def.ID = string(contrib.ID)
+					}
+					if def.ExtensionID == "" {
+						def.ExtensionID = string(contrib.ExtensionID)
+					}
+					if def.ModuleID == "" {
+						def.ModuleID = string(contrib.ModuleID)
+					}
+					_ = i.container.AgentSkillCatalog.Register(def)
+				}
+			}
+		case domain.ContributionKindUIDesktop:
+			if i.container.DesktopHost != nil {
+				defData, _ := json.Marshal(contrib.Definition)
+				var desktopDef desktop.DesktopContributionDefinition
+				if err := json.Unmarshal(defData, &desktopDef); err == nil {
+					if desktopDef.ContributionID == "" {
+						desktopDef.ContributionID = string(contrib.ID)
+					}
+					if desktopDef.ExtensionID == "" {
+						desktopDef.ExtensionID = string(contrib.ExtensionID)
+					}
+					if desktopDef.ModuleID == "" {
+						desktopDef.ModuleID = string(contrib.ModuleID)
+					}
+					if desktopDef.Version == "" {
+						desktopDef.Version = contrib.Version
+					}
+					_, _ = i.container.DesktopHost.RegisterContribution(ctx, desktopDef)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (i *TypedContributionInstaller) StopRuntimeInstances(ctx context.Context, extID domain.ExtensionID) error {
 	if i.container == nil || i.container.RuntimeSupervisor == nil {
-		return
+		return nil
 	}
 	modules, err := i.container.ModuleRepository.ListModules(ctx, extID)
 	if err != nil {
-		return
+		return fmt.Errorf("list modules for stop runtime: %w", err)
 	}
+	var stopErrs []error
 	for _, mod := range modules {
 		if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
 			defID := runtime_supervisor.BuildRuntimeDefinitionID(string(extID), string(mod.ID), mod.Runtime.Type)
@@ -1271,10 +1384,274 @@ func (i *TypedContributionInstaller) StopRuntimeInstances(ctx context.Context, e
 						Actual:       runtime_supervisor.ActualFailed,
 						Error:        stopErr,
 					})
+					stopErrs = append(stopErrs, fmt.Errorf("stop runtime instance %s: %w", instance.InstanceID, stopErr))
 				}
 			}
 		}
 	}
+	if len(stopErrs) > 0 {
+		return fmt.Errorf("stop runtime instances for %s failed with %d error(s): %v", extID, len(stopErrs), stopErrs)
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) ListScheduleIDs(ctx context.Context, extID domain.ExtensionID) ([]string, error) {
+	if i.container == nil || i.container.ScheduleService == nil {
+		return nil, nil
+	}
+	schedules, err := i.container.ScheduleService.ListSchedules(ctx, string(extID))
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(schedules))
+	for _, s := range schedules {
+		ids = append(ids, s.ScheduleID)
+	}
+	return ids, nil
+}
+
+func (i *TypedContributionInstaller) DiscardCandidateContributions(ctx context.Context, extID domain.ExtensionID, generation int64, contribs []domain.ContributionDefinition, scheduleIDs []string) error {
+	if i.container == nil {
+		return fmt.Errorf("contribution-installer: container not attached")
+	}
+
+	operationID := newOperationID("discard-candidate")
+	startedAt := time.Now().UTC()
+	var firstErr error
+
+	scheduleIDSet := make(map[string]bool, len(scheduleIDs))
+	for _, id := range scheduleIDs {
+		scheduleIDSet[id] = true
+	}
+
+	for _, contrib := range contribs {
+		if err := i.discardSingleContribution(ctx, contrib, scheduleIDSet); err != nil {
+			i.recordAudit(contrib, operationID, generation, startedAt, auditResultFailed, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("discard candidate contribution %s: %w", contrib.ID, err)
+			}
+		}
+	}
+
+	if i.container.OperationRepository != nil {
+		now := time.Now().UTC()
+		op := sqlite.Operation{
+			OperationID:   operationID,
+			OperationType: "discard_candidate",
+			ExtensionID:   extID,
+			Status:        "succeeded",
+			StartedAt:     startedAt,
+			FinishedAt:    &now,
+		}
+		if firstErr != nil {
+			op.Status = "failed"
+			op.ErrorMessage = firstErr.Error()
+		}
+		_ = i.container.OperationRepository.PutOperation(ctx, op)
+	}
+
+	result := auditResultSucceeded
+	if firstErr != nil {
+		result = auditResultFailed
+	}
+	i.recordAudit(domain.ContributionDefinition{ID: "candidate_discard", ExtensionID: extID}, operationID, generation, startedAt, result, firstErr)
+	return firstErr
+}
+
+func (i *TypedContributionInstaller) discardSingleContribution(ctx context.Context, contrib domain.ContributionDefinition, scheduleIDSet map[string]bool) error {
+	if i.container == nil {
+		return nil
+	}
+
+	defData, err := json.Marshal(contrib.Definition)
+	if err != nil {
+		return fmt.Errorf("marshal definition: %w", err)
+	}
+
+	switch contrib.Kind {
+	case domain.ContributionKindTool:
+		return i.discardTool(ctx, contrib, defData)
+	case domain.ContributionKindEventSubscription:
+		return i.discardEventSubscription(ctx, contrib, defData)
+	case domain.ContributionKindHook:
+		return i.discardHook(ctx, contrib, defData)
+	case domain.ContributionKindSchedule:
+		return i.discardSchedule(ctx, contrib, defData, scheduleIDSet)
+	case domain.ContributionKindAgentSkill:
+		return nil
+	case domain.ContributionKindWorkflow:
+		return i.discardWorkflow(ctx, contrib, defData)
+	case domain.ContributionKindBackgroundService:
+		return i.discardTaskDefinition(ctx, contrib, defData)
+	case domain.ContributionKindMCPServer:
+		return i.discardMCPServer(ctx, contrib, defData)
+	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction:
+		return i.discardUIContribution(ctx, contrib, defData)
+	case domain.ContributionKindUIDesktop:
+		return i.discardDesktopContribution(ctx, contrib, defData)
+	default:
+		return nil
+	}
+}
+
+func (i *TypedContributionInstaller) discardTool(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.ToolRegistry == nil {
+		return nil
+	}
+	var def struct {
+		ToolID string `json:"toolId"`
+	}
+	_ = json.Unmarshal(defData, &def)
+	toolID := def.ToolID
+	if toolID == "" {
+		toolID = string(contrib.ID)
+	}
+	_ = i.container.ToolRegistry.Unregister(ctx, toolID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardEventSubscription(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.EventService == nil {
+		return nil
+	}
+	var def event.EventSubscriptionDefinition
+	_ = json.Unmarshal(defData, &def)
+	contributionID := def.ContributionID
+	if contributionID == "" {
+		contributionID = string(contrib.ID)
+	}
+	_ = i.container.EventService.UnregisterSubscription(ctx, contributionID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardHook(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.HookService == nil || i.container.HookService.Lifecycle == nil {
+		return nil
+	}
+	var def hook.HookContributionDefinition
+	_ = json.Unmarshal(defData, &def)
+	contributionID := def.ContributionID
+	if contributionID == "" {
+		contributionID = string(contrib.ID)
+	}
+	_ = i.container.HookService.Lifecycle.UninstallContribution(ctx, contributionID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardSchedule(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, scheduleIDSet map[string]bool) error {
+	if i.container.ScheduleService == nil {
+		return nil
+	}
+	var def schedule.ScheduleContributionDefinition
+	_ = json.Unmarshal(defData, &def)
+	if def.ScheduleID != "" {
+		_ = i.container.ScheduleService.Uninstall(ctx, def.ScheduleID)
+		return nil
+	}
+	schedules, err := i.container.ScheduleService.ListSchedules(ctx, string(contrib.ExtensionID))
+	if err != nil {
+		return nil
+	}
+	contributionID := def.ContributionID
+	if contributionID == "" {
+		contributionID = string(contrib.ID)
+	}
+	for _, s := range schedules {
+		if s.ContributionID != contributionID {
+			continue
+		}
+		if len(scheduleIDSet) > 0 && !scheduleIDSet[s.ScheduleID] {
+			continue
+		}
+		_ = i.container.ScheduleService.Uninstall(ctx, s.ScheduleID)
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardWorkflow(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.WorkflowRegistry == nil {
+		return nil
+	}
+	var def workflow.WorkflowDefinition
+	_ = json.Unmarshal(defData, &def)
+	wfID := def.ID
+	if wfID == "" {
+		wfID = string(contrib.ID)
+	}
+	_ = i.container.WorkflowRegistry.Unregister(wfID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardTaskDefinition(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.TaskRuntimeService == nil {
+		return nil
+	}
+	var def task_runtime.TaskDefinition
+	_ = json.Unmarshal(defData, &def)
+	taskID := def.TaskID
+	if taskID == "" {
+		taskID = string(contrib.ID)
+	}
+	_ = i.container.TaskRuntimeService.DeleteTaskDefinition(ctx, taskID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardMCPServer(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	mcpToolAdapter := capability.GetGlobalMCPToolAdapter()
+	if mcpToolAdapter == nil {
+		return nil
+	}
+	var def struct {
+		ServerName string `json:"serverName"`
+	}
+	_ = json.Unmarshal(defData, &def)
+	serverID := def.ServerName
+	if serverID == "" {
+		serverID = string(contrib.ID)
+	}
+	_ = mcpToolAdapter.UnregisterServer(ctx, serverID)
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardUIContribution(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	var uiDef ui_contribution.UIContributionDefinition
+	_ = json.Unmarshal(defData, &uiDef)
+	contributionID := string(uiDef.ContributionID)
+	if contributionID == "" {
+		contributionID = string(contrib.ID)
+	}
+	if i.container.SchemaRegistry != nil {
+		i.container.SchemaRegistry.UnregisterSchema(string(contrib.ExtensionID), contributionID)
+	}
+	if i.container.UIHost != nil {
+		_ = i.container.UIHost.UnregisterContribution(ui_contribution.ContributionID(contributionID))
+	}
+	if i.container.UIContributionRepo != nil {
+		_ = i.container.UIContributionRepo.DeleteContribution(ctx, contributionID)
+	}
+	if i.container.PageHost != nil {
+		_ = i.container.PageHost.UnregisterPage(ctx, extension_page_host.ContributionID(contributionID))
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) discardDesktopContribution(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	var def desktop.DesktopContributionDefinition
+	_ = json.Unmarshal(defData, &def)
+	contributionID := def.ContributionID
+	if contributionID == "" {
+		contributionID = string(contrib.ID)
+	}
+	if i.container.UIHost != nil {
+		_ = i.container.UIHost.UnregisterContribution(ui_contribution.ContributionID(contributionID))
+	}
+	if i.container.UIContributionRepo != nil {
+		_ = i.container.UIContributionRepo.DeleteContribution(ctx, contributionID)
+	}
+	if i.container.DesktopHost != nil {
+		_ = i.container.DesktopHost.UnregisterContribution(contributionID)
+	}
+	return nil
 }
 
 func (i *TypedContributionInstaller) String() string {

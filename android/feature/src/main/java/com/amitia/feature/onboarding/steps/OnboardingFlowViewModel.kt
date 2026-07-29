@@ -170,17 +170,19 @@ class OnboardingFlowViewModel @Inject constructor(
 
     fun checkEnvironment() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(envChecking = true, envItems = emptyList())
             val items = listOf(
-                EnvCheckItem("系统环境", true, "检查移动端基础能力"),
-                EnvCheckItem("数据目录", true, "准备角色和记忆空间"),
-                EnvCheckItem("核心服务", true, "建立本地或远程连接"),
-                EnvCheckItem("可用性检查", true, "确认消息和数据链路")
+                EnvCheckItem("系统环境", false, "检查移动端基础能力"),
+                EnvCheckItem("数据目录", false, "准备角色和记忆空间"),
+                EnvCheckItem("核心服务", false, "建立本地或远程连接"),
+                EnvCheckItem("可用性检查", false, "确认消息和数据链路")
             )
-            items.forEachIndexed { index, item ->
+            _state.value = _state.value.copy(envChecking = true, envItems = items)
+            items.forEachIndexed { index, _ ->
                 delay(650)
                 _state.value = _state.value.copy(
-                    envItems = _state.value.envItems + items.subList(0, index + 1)
+                    envItems = _state.value.envItems.mapIndexed { i, item ->
+                        if (i <= index) item.copy(passed = true) else item
+                    }
                 )
             }
             _state.value = _state.value.copy(envChecking = false)

@@ -19,7 +19,7 @@ func NewUIDataSourceProvider(gateway *host_api.DefaultGateway) *UIDataSourceProv
 	return &UIDataSourceProvider{hostAPIGateway: gateway}
 }
 
-func (p *UIDataSourceProvider) Query(ctx context.Context, sessionID, extensionID, moduleID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
+func (p *UIDataSourceProvider) Query(ctx context.Context, sessionID, extensionID, moduleID, sourceID string, scopeSnapshotID, permissionSnapshotID string, params json.RawMessage) (json.RawMessage, error) {
 	identity := runtime_supervisor.RuntimeIdentity{
 		InstanceID:  sessionID,
 		ExtensionID: domain.ExtensionID(extensionID),
@@ -28,31 +28,29 @@ func (p *UIDataSourceProvider) Query(ctx context.Context, sessionID, extensionID
 
 	switch sourceID {
 	case "character.summary":
-		return p.queryHostAPI(ctx, identity, host_api.MethodCharacterRead, params)
+		return p.queryHostAPI(ctx, identity, host_api.MethodCharacterRead, scopeSnapshotID, permissionSnapshotID, params)
 	case "conversation.summary":
-		return p.queryHostAPI(ctx, identity, host_api.MethodConversationRead, params)
+		return p.queryHostAPI(ctx, identity, host_api.MethodConversationRead, scopeSnapshotID, permissionSnapshotID, params)
 	case "memory.query":
-		return p.queryHostAPI(ctx, identity, host_api.MethodMemoryQuery, params)
+		return p.queryHostAPI(ctx, identity, host_api.MethodMemoryQuery, scopeSnapshotID, permissionSnapshotID, params)
 	case "extension.state":
-		return p.queryHostAPI(ctx, identity, host_api.MethodStateGet, params)
+		return p.queryHostAPI(ctx, identity, host_api.MethodStateGet, scopeSnapshotID, permissionSnapshotID, params)
 	case "runtime.health":
-		return p.queryHostAPI(ctx, identity, host_api.MethodStateGet, params)
+		return p.queryHostAPI(ctx, identity, host_api.MethodRuntimeHealth, scopeSnapshotID, permissionSnapshotID, params)
 	default:
-		combinedInput, _ := json.Marshal(map[string]any{
-			"toolId": sourceID,
-			"input":  json.RawMessage(params),
-		})
-		return p.queryHostAPI(ctx, identity, host_api.MethodToolExecute, combinedInput)
+		return nil, fmt.Errorf("data source not found: %s", sourceID)
 	}
 }
 
-func (p *UIDataSourceProvider) queryHostAPI(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, method host_api.Method, input json.RawMessage) (json.RawMessage, error) {
+func (p *UIDataSourceProvider) queryHostAPI(ctx context.Context, identity runtime_supervisor.RuntimeIdentity, method host_api.Method, scopeSnapshotID, permissionSnapshotID string, input json.RawMessage) (json.RawMessage, error) {
 	callReq := host_api.CallRequest{
-		CallID:          fmt.Sprintf("ui-data-%s-%s", identity.InstanceID, uuid.NewString()),
-		RuntimeIdentity: identity,
-		Method:          method,
-		Version:         1,
-		Input:           input,
+		CallID:               fmt.Sprintf("ui-data-%s-%s", identity.InstanceID, uuid.NewString()),
+		RuntimeIdentity:      identity,
+		Method:               method,
+		Version:              1,
+		Input:                input,
+		ScopeSnapshotID:      scopeSnapshotID,
+		PermissionSnapshotID: permissionSnapshotID,
 	}
 	result := p.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {

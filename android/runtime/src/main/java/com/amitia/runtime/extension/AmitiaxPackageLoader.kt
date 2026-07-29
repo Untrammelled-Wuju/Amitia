@@ -48,11 +48,42 @@ class AmitiaxPackageLoader(
     private val policy: ArchivePolicy = ArchivePolicy.default(),
     private val trustStore: PublisherTrustStore? = null,
     private val revocationList: RevocationList? = null,
-    private val requireSignature: Boolean = false
+    private val requireSignature: Boolean = false,
+    private val isDebug: Boolean = false
 ) {
     private val inspector = ArchiveSecurityInspector(policy)
     private val integrityVerifier = IntegrityVerifier()
-    private val signatureVerifier = PackageSignatureVerifier(trustStore, revocationList)
+    private val signatureVerifier = PackageSignatureVerifier(trustStore, revocationList, isDebug)
+
+    init {
+        if (requireSignature && trustStore == null) {
+            throw AmitiaxLoadException("requireSignature is enabled but trustStore is null")
+        }
+    }
+
+    companion object {
+        fun forProduction(
+            trustStore: PublisherTrustStore,
+            revocationList: RevocationList? = null,
+            isDebug: Boolean = false,
+            json: Json = Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                coerceInputValues = true
+                explicitNulls = false
+            },
+            policy: ArchivePolicy = ArchivePolicy.default()
+        ): AmitiaxPackageLoader {
+            return AmitiaxPackageLoader(
+                json = json,
+                policy = policy,
+                trustStore = trustStore,
+                revocationList = revocationList,
+                requireSignature = true,
+                isDebug = isDebug
+            )
+        }
+    }
 
     fun loadFromFile(file: File): Result<AmitiaxPackage> = runCatching {
         file.inputStream().use { stream -> loadFromStream(stream) }

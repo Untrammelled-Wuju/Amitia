@@ -258,6 +258,9 @@ func TestAuditWriter(t *testing.T) {
 		return CallResult{Status: StatusSuccess}, nil
 	}})
 	g.Call(context.Background(), makeRequest(MethodStateGet, 1, map[string]any{}))
+	if aw.starts != 1 {
+		t.Errorf("expected 1 audit start, got %d", aw.starts)
+	}
 	if aw.calls != 1 {
 		t.Errorf("expected 1 audit call, got %d", aw.calls)
 	}
@@ -288,8 +291,16 @@ func TestConcurrentCalls(t *testing.T) {
 }
 
 type fakeAudit struct {
-	calls int
-	mu    sync.Mutex
+	starts int
+	calls  int
+	mu     sync.Mutex
+}
+
+func (a *fakeAudit) RecordCallStart(_ context.Context, _ CallRequest) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.starts++
+	return nil
 }
 
 func (a *fakeAudit) RecordCall(_ context.Context, _ CallRequest, _ CallResult) {
