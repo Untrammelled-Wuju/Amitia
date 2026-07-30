@@ -20,13 +20,24 @@ func (f *fakeProvider) RemoveBackground(ctx context.Context, input ImageInput) (
 	return nil, errors.New("not implemented")
 }
 
+func fakeCaps(name string, modes []BackgroundMode) BackgroundRemovalCapabilities {
+	return BackgroundRemovalCapabilities{
+		ProviderName:   name,
+		SupportedModes: modes,
+	}
+}
+
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	r := NewRegistry()
 	p1 := &fakeProvider{name: "p1", modes: []BackgroundMode{ModeKeepAlpha}}
 	p2 := &fakeProvider{name: "p2", modes: []BackgroundMode{ModeRemoveBackground, ModeUseExistingAlpha}}
 
-	r.Register(p1)
-	r.Register(p2)
+	if err := r.Register(p1, fakeCaps("p1", p1.modes)); err != nil {
+		t.Fatalf("Register(p1) error: %v", err)
+	}
+	if err := r.Register(p2, fakeCaps("p2", p2.modes)); err != nil {
+		t.Fatalf("Register(p2) error: %v", err)
+	}
 
 	got, err := r.Get(ModeKeepAlpha)
 	if err != nil {
@@ -78,9 +89,15 @@ func TestRegistry_List(t *testing.T) {
 	p2 := &fakeProvider{name: "alpha", modes: []BackgroundMode{ModeRemoveBackground}}
 	p3 := &fakeProvider{name: "mid", modes: []BackgroundMode{ModeUseExistingAlpha}}
 
-	r.Register(p1)
-	r.Register(p2)
-	r.Register(p3)
+	if err := r.Register(p1, fakeCaps("zeta", p1.modes)); err != nil {
+		t.Fatalf("Register(p1) error: %v", err)
+	}
+	if err := r.Register(p2, fakeCaps("alpha", p2.modes)); err != nil {
+		t.Fatalf("Register(p2) error: %v", err)
+	}
+	if err := r.Register(p3, fakeCaps("mid", p3.modes)); err != nil {
+		t.Fatalf("Register(p3) error: %v", err)
+	}
 
 	list := r.List()
 	if len(list) != 3 {
@@ -89,8 +106,8 @@ func TestRegistry_List(t *testing.T) {
 
 	expected := []string{"alpha", "mid", "zeta"}
 	for i, p := range list {
-		if p.Name() != expected[i] {
-			t.Errorf("List()[%d].Name() = %s, want %s", i, p.Name(), expected[i])
+		if p.Name != expected[i] {
+			t.Errorf("List()[%d].Name = %s, want %s", i, p.Name, expected[i])
 		}
 	}
 }
@@ -108,15 +125,28 @@ func TestRegistry_Register_Duplicate(t *testing.T) {
 	p1 := &fakeProvider{name: "p1", modes: []BackgroundMode{ModeKeepAlpha}}
 	p2 := &fakeProvider{name: "p1", modes: []BackgroundMode{ModeRemoveBackground}}
 
-	r.Register(p1)
-	r.Register(p2)
+	if err := r.Register(p1, fakeCaps("p1", p1.modes)); err != nil {
+		t.Fatalf("Register(p1) error: %v", err)
+	}
+	err := r.Register(p2, fakeCaps("p1", p2.modes))
+	if err == nil {
+		t.Fatal("Register(p2) expected error for duplicate name, got nil")
+	}
+
+	var pe *ProviderError
+	if !errors.As(err, &pe) {
+		t.Fatalf("error is not *ProviderError: %T", err)
+	}
+	if pe.Code != ErrCodeProviderAlreadyRegistered {
+		t.Errorf("Code = %s, want %s", pe.Code, ErrCodeProviderAlreadyRegistered)
+	}
 
 	list := r.List()
 	if len(list) != 1 {
 		t.Fatalf("List() length = %d, want 1", len(list))
 	}
 
-	_, err := r.Get(ModeRemoveBackground)
+	_, err = r.Get(ModeRemoveBackground)
 	if err == nil {
 		t.Error("Get(ModeRemoveBackground) expected error, got provider")
 	}
@@ -124,7 +154,10 @@ func TestRegistry_Register_Duplicate(t *testing.T) {
 
 func TestRegistry_Register_Nil(t *testing.T) {
 	r := NewRegistry()
-	r.Register(nil)
+	err := r.Register(nil, BackgroundRemovalCapabilities{})
+	if err == nil {
+		t.Fatal("Register(nil) expected error, got nil")
+	}
 
 	list := r.List()
 	if len(list) != 0 {
@@ -137,8 +170,12 @@ func TestRegistry_FirstProviderWinsForMode(t *testing.T) {
 	p1 := &fakeProvider{name: "p1", modes: []BackgroundMode{ModeKeepAlpha}}
 	p2 := &fakeProvider{name: "p2", modes: []BackgroundMode{ModeKeepAlpha}}
 
-	r.Register(p1)
-	r.Register(p2)
+	if err := r.Register(p1, fakeCaps("p1", p1.modes)); err != nil {
+		t.Fatalf("Register(p1) error: %v", err)
+	}
+	if err := r.Register(p2, fakeCaps("p2", p2.modes)); err != nil {
+		t.Fatalf("Register(p2) error: %v", err)
+	}
 
 	got, err := r.Get(ModeKeepAlpha)
 	if err != nil {
@@ -161,7 +198,16 @@ func TestDefaultRegistry_Singleton(t *testing.T) {
 func TestDefaultRegistry_CanRegister(t *testing.T) {
 	r := DefaultRegistry()
 	p := &fakeProvider{name: "default-test", modes: []BackgroundMode{ModeKeepAlpha}}
-	r.Register(p)
+	err := r.Register(p, fakeCaps("default-test", p.modes))
+	if err != nil {
+		var pe *ProviderError
+		if !errors.As(err, &pe) {
+			t.Fatalf("Register error is not *ProviderError: %T", err)
+		}
+		if pe.Code != ErrCodeProviderAlreadyRegistered {
+			t.Fatalf("Register error: %v", err)
+		}
+	}
 
 	got, err := r.Get(ModeKeepAlpha)
 	if err != nil {

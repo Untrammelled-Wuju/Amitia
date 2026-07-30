@@ -28,7 +28,7 @@ var uninstallerProtectedSubDirs = []string{
 }
 
 type Uninstaller interface {
-	Uninstall(installationId string) error
+	Uninstall(userId, installationId string) error
 	PurgeGenerationData(userId, generationTaskId string, confirmed bool) error
 }
 
@@ -44,7 +44,10 @@ func NewUninstaller(repo Repository, dataDir string) Uninstaller {
 	}
 }
 
-func (u *uninstaller) Uninstall(installationId string) error {
+func (u *uninstaller) Uninstall(userId, installationId string) error {
+	if userId == "" {
+		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 为空", ErrInstallationInvalid)
+	}
 	if installationId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装 ID 为空", ErrInstallationInvalid)
 	}
@@ -59,6 +62,10 @@ func (u *uninstaller) Uninstall(installationId string) error {
 			return NewInstallationError(ErrCodeInstallationNotFound, "安装记录不存在", ErrInstallationNotFound)
 		}
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
+	}
+
+	if inst.UserID != userId {
+		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 
 	if inst.InstallPath == "" {

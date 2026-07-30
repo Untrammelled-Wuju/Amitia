@@ -1875,6 +1875,133 @@ var schemaMigrations = []string{
 		created_at TEXT NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_exports_owner ON extension_package_exports(user_id, extension_id, expires_at)`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN reference_count INTEGER NOT NULL DEFAULT 0 CHECK(reference_count >= 0)`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN retention_state TEXT NOT NULL DEFAULT 'active'`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN retention_until TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN last_verified_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'pending'`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN gc_error TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN gc_attempted_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''`,
+	`CREATE TABLE IF NOT EXISTS extension_package_artifact_references (
+		reference_id TEXT PRIMARY KEY,
+		artifact_id TEXT NOT NULL,
+		reference_type TEXT NOT NULL,
+		reference_owner_id TEXT NOT NULL,
+		expires_at TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		released_at TEXT NOT NULL DEFAULT '',
+		UNIQUE(artifact_id, reference_type, reference_owner_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_artifact_refs_active ON extension_package_artifact_references(artifact_id, released_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_artifact_refs_expiry ON extension_package_artifact_references(expires_at, released_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_artifact_gc ON extension_package_artifacts(retention_state, reference_count, retention_until, created_at)`,
+	`ALTER TABLE extension_package_operations ADD COLUMN stable_generation TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN target_generation TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN current_pointer_json TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN stable_generation TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN target_generation TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN current_pointer_json TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN request_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN from_version TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN recovery_required INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE extension_package_operations ADD COLUMN cancel_requested_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN lease_owner TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_pkg_operations_idempotency ON extension_package_operations(user_id, idempotency_key) WHERE idempotency_key <> ''`,
+	`CREATE TABLE IF NOT EXISTS extension_package_operation_leases (
+		extension_id TEXT PRIMARY KEY,
+		operation_id TEXT NOT NULL,
+		lease_owner TEXT NOT NULL,
+		lease_expires_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		cas_version INTEGER NOT NULL DEFAULT 1
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_operation_leases_expiry ON extension_package_operation_leases(lease_expires_at)`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN input_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN error_detail TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN compensation_name TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN compensation_status TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN side_effect_evidence TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operation_steps ADD COLUMN cas_version INTEGER NOT NULL DEFAULT 1`,
+	`CREATE TABLE IF NOT EXISTS package_confirmation_keys (
+		key_id TEXT PRIMARY KEY,
+		secret_reference TEXT NOT NULL,
+		algorithm TEXT NOT NULL,
+		state TEXT NOT NULL,
+		active_from INTEGER NOT NULL,
+		expires_at INTEGER,
+		created_at INTEGER NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS package_versions (
+		version_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL,
+		version TEXT NOT NULL,
+		artifact_id TEXT NOT NULL,
+		generation_id TEXT NOT NULL,
+		manifest_hash TEXT NOT NULL,
+		content_tree_hash TEXT NOT NULL,
+		publisher_id TEXT,
+		signing_key_id TEXT,
+		version_state TEXT NOT NULL,
+		installed_at INTEGER,
+		retained_until INTEGER,
+		created_at INTEGER NOT NULL,
+		UNIQUE(extension_id, version)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_package_versions_ext ON package_versions(extension_id)`,
+	`ALTER TABLE extension_package_operation_leases ADD COLUMN fencing_token INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE extension_package_operations ADD COLUMN fencing_token INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE extension_package_operations ADD COLUMN owner_instance_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN blocklisted_at TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_artifacts ADD COLUMN blocklist_reason TEXT NOT NULL DEFAULT ''`,
+	`CREATE TABLE IF NOT EXISTS package_consistency_findings (
+		finding_id TEXT PRIMARY KEY,
+		metric TEXT NOT NULL,
+		count INTEGER NOT NULL DEFAULT 0,
+		resource_ids_json TEXT NOT NULL DEFAULT '[]',
+		error_detail TEXT NOT NULL DEFAULT '',
+		recommended_action TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		resolved_at TEXT NOT NULL DEFAULT ''
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_pkg_consistency_findings_metric ON package_consistency_findings(metric) WHERE resolved_at = ''`,
+	`CREATE TABLE IF NOT EXISTS package_quarantine_metadata (
+		quarantine_id TEXT PRIMARY KEY,
+		operation_id TEXT NOT NULL,
+		extension_id TEXT NOT NULL,
+		generation_quarantine_path TEXT NOT NULL DEFAULT '',
+		current_quarantine_path TEXT NOT NULL DEFAULT '',
+		original_generation_path TEXT NOT NULL DEFAULT '',
+		original_current_path TEXT NOT NULL DEFAULT '',
+		tree_hash TEXT NOT NULL DEFAULT '',
+		artifact_id TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL DEFAULT 'active',
+		created_at TEXT NOT NULL,
+		released_at TEXT NOT NULL DEFAULT ''
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_pkg_quarantine_ext ON package_quarantine_metadata(extension_id) WHERE state = 'active'`,
+	`CREATE INDEX IF NOT EXISTS idx_pkg_quarantine_op ON package_quarantine_metadata(operation_id)`,
+	`ALTER TABLE extension_package_rollback_points ADD COLUMN forward_recovery_operation_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_rollback_points ADD COLUMN forward_recovery_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_rollback_points ADD COLUMN migration_set_diff_json TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN install_operation_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN uninstall_operation_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN installed_path TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN installed_tree_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN archive_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE package_versions ADD COLUMN version_state TEXT NOT NULL DEFAULT 'pending'`,
+	`ALTER TABLE package_versions ADD COLUMN retained_until TEXT`,
+	`UPDATE package_versions SET version_state = 'current' WHERE version_state = 'active'`,
+	`UPDATE package_versions SET version_state = 'retained' WHERE version_state = 'inactive'`,
+}
+
+type dbExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -1892,7 +2019,13 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	rows, err := db.QueryContext(ctx, `SELECT version, checksum FROM schema_migrations`)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin migration transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `SELECT version, checksum FROM schema_migrations`)
 	if err != nil {
 		return fmt.Errorf("sqlite: query schema migrations: %w", err)
 	}
@@ -1918,17 +2051,17 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		checksum := computeChecksum(ddl)
 		if existing, ok := appliedChecksums[version]; ok {
 			if existing == "" {
-				if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
 					return fmt.Errorf("sqlite: backfill checksum for migration %d: %w", version, err)
 				}
 				continue
 			}
 			if existing != checksum {
 				if isIdempotentDDL(ddl) {
-					if _, err := db.ExecContext(ctx, ddl); err != nil {
+					if _, err := tx.ExecContext(ctx, ddl); err != nil {
 						return fmt.Errorf("sqlite: re-verify migration %d (checksum mismatch): %w", version, err)
 					}
-					if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
+					if _, err := tx.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
 						return fmt.Errorf("sqlite: normalize checksum for migration %d: %w", version, err)
 					}
 					continue
@@ -1937,21 +2070,28 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			}
 			continue
 		}
-		if _, err := db.ExecContext(ctx, ddl); err != nil {
-			return fmt.Errorf("sqlite: apply migration %d: %w", version, err)
+		if _, err := tx.ExecContext(ctx, ddl); err != nil {
+			if isAlterTableAddColumn(ddl) && isDuplicateColumnError(err) {
+				// pass
+			} else {
+				return fmt.Errorf("sqlite: apply migration %d: %w", version, err)
+			}
 		}
-		if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, datetime('now'), ?)`, version, checksum); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, datetime('now'), ?)`, version, checksum); err != nil {
 			return fmt.Errorf("sqlite: record migration %d: %w", version, err)
 		}
 	}
 
-	if err := ensureSchemaColumns(ctx, db); err != nil {
+	if err := ensureSchemaColumns(ctx, tx); err != nil {
 		return fmt.Errorf("sqlite: ensure schema columns: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_wf_exec_idempotency ON extension_workflow_executions(workflow_id, idempotency_key) WHERE idempotency_key <> ''`); err != nil {
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_wf_exec_idempotency ON extension_workflow_executions(workflow_id, idempotency_key) WHERE idempotency_key <> ''`); err != nil {
 		return fmt.Errorf("sqlite: ensure workflow idempotency index: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit migration transaction: %w", err)
+	}
 	return nil
 }
 
@@ -1976,6 +2116,19 @@ func isIdempotentDDL(ddl string) bool {
 	return strings.HasPrefix(upper, "CREATE TABLE IF NOT EXISTS") ||
 		strings.HasPrefix(upper, "CREATE INDEX IF NOT EXISTS") ||
 		strings.HasPrefix(upper, "CREATE UNIQUE INDEX IF NOT EXISTS")
+}
+
+func isAlterTableAddColumn(ddl string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(ddl))
+	return strings.HasPrefix(upper, "ALTER TABLE ") && strings.Contains(upper, "ADD COLUMN")
+}
+
+func isDuplicateColumnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate column name")
 }
 
 type columnAddition struct {
@@ -2009,9 +2162,42 @@ var schemaColumnAdditions = []columnAddition{
 	{"kernel_candidate_contributions", "rollback_started_at", "TEXT NOT NULL DEFAULT ''"},
 	{"kernel_candidate_contributions", "rollback_finished_at", "TEXT NOT NULL DEFAULT ''"},
 	{"kernel_candidate_contributions", "module_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "config_snapshot_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_package_rollback_points", "secret_refs_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"extension_package_rollback_points", "resource_snapshot_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_package_rollback_points", "migration_state_snapshot_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_package_rollback_points", "user_data_migration_state_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_package_rollback_points", "snapshot_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "retention_state", "TEXT NOT NULL DEFAULT 'active'"},
+	{"extension_package_rollback_points", "retention_until", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "source_operation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_preview_sessions", "security_policy_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_operation_leases", "lease_token", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_installations", "last_operation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_installations", "current_generation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_installations", "current_artifact_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_installations", "current_version_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_installations", "last_verified_at", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_installations", "recovery_state", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "install_operation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "uninstall_operation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "uninstalled_at", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "installed_path", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "installed_tree_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "archive_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"package_versions", "version_state", "TEXT NOT NULL DEFAULT 'pending'"},
+	{"package_versions", "retained_until", "TEXT"},
+	{"extension_package_operation_leases", "fencing_token", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_package_operations", "fencing_token", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_package_operations", "owner_instance_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_artifacts", "blocklisted_at", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_artifacts", "blocklist_reason", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "forward_recovery_operation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "forward_recovery_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "migration_set_diff_json", "TEXT NOT NULL DEFAULT ''"},
 }
 
-func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {
+func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {
 	for _, a := range schemaColumnAdditions {
 		exists, err := columnExists(ctx, db, a.table, a.column)
 		if err != nil {
@@ -2028,7 +2214,7 @@ func ensureSchemaColumns(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func columnExists(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+func columnExists(ctx context.Context, db dbExecutor, table, column string) (bool, error) {
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
 		return false, err

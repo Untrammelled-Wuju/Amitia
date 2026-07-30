@@ -64,6 +64,15 @@ func FinalGateMetricNames() []string {
 		"installation_without_files",
 		"files_without_installation",
 		"active_contribution_for_disabled_installation",
+		"unresolved_package_operations",
+		"orphan_artifacts",
+		"orphan_installation_generations",
+		"installation_read_model_mismatches",
+		"unsigned_production_packages",
+		"untrusted_installed_packages",
+		"corrupted_artifacts",
+		"failed_uninstall_restores",
+		"ambiguous_recovery_operations",
 	}
 }
 
@@ -143,20 +152,35 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 }
 
 func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *FinalGateReport) {
-	names := []string{"orphan_staging_directories", "orphan_installed_directories", "missing_artifact_rows", "artifact_hash_mismatch", "incomplete_package_operations", "requires_recovery_operations", "installation_without_files", "files_without_installation", "active_contribution_for_disabled_installation"}
-	if p.container == nil || p.container.Store == nil || p.container.PackageRepository == nil || p.container.PackageArtifactStore == nil || p.container.InstallationRepository == nil {
-		for _, name := range names {
-			report.Metrics[name] = -1
-		}
+	names := []string{
+		"orphan_staging_directories", "orphan_installed_directories", "missing_artifact_rows", "artifact_hash_mismatch",
+		"incomplete_package_operations", "requires_recovery_operations", "installation_without_files", "files_without_installation",
+		"active_contribution_for_disabled_installation", "unresolved_package_operations", "orphan_artifacts",
+		"orphan_installation_generations", "installation_read_model_mismatches", "unsigned_production_packages",
+		"untrusted_installed_packages", "corrupted_artifacts", "failed_uninstall_restores", "ambiguous_recovery_operations",
+		"legacy_package_write_calls",
+	}
+	for _, name := range names {
+		report.Metrics[name] = -1
+	}
+	if p.container == nil || p.container.Store == nil || p.container.PackageRepository == nil || p.container.PackageArtifactStore == nil || p.container.PackageGenerationStore == nil || p.container.InstallationRepository == nil {
 		report.Errors = append(report.Errors, "package_release_gate: dependency not injected")
 		return
 	}
 	db := p.container.Store.DB()
 	queries := map[string]string{
-		"incomplete_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status IN ('created', 'in_progress')`,
+		"incomplete_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')`,
+		"legacy_package_write_calls":                    `SELECT COALESCE((SELECT count FROM kernel_legacy_call_counters WHERE metric_name = 'legacy_package_write_calls'), 0)`,
 		"requires_recovery_operations":                  `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery'`,
+		"unresolved_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')`,
 		"missing_artifact_rows":                         `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE COALESCE(json_extract(i.installation_json, '$.packageId'), '') <> '' AND a.artifact_id IS NULL`,
 		"active_contribution_for_disabled_installation": `SELECT COUNT(*) FROM extension_contributions c JOIN extension_installations i ON i.extension_id = c.extension_id WHERE c.registered = 1 AND i.enabled = 0`,
+		"orphan_artifacts":                              `SELECT COUNT(*) FROM extension_package_artifacts a WHERE a.deleted_at = '' AND a.quarantined_at = '' AND a.reference_count = 0 AND a.retention_state NOT IN ('retained', 'deleted') AND NOT EXISTS (SELECT 1 FROM extension_package_artifact_references r WHERE r.artifact_id = a.artifact_id AND r.released_at = '')`,
+		"installation_read_model_mismatches":            `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_definitions d ON d.extension_id = i.extension_id AND d.version = i.version LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND (d.id IS NULL OR a.artifact_id IS NULL OR a.extension_id <> i.extension_id OR a.version <> i.version OR COALESCE(json_extract(i.installation_json, '$.installedVersion'), '') <> i.version)`,
+		"unsigned_production_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.signature_status <> 'valid' AND COALESCE(json_extract(i.installation_json, '$.metadata.devOnly'), 0) NOT IN (1, 'true')`,
+		"untrusted_installed_packages":                  `SELECT COUNT(*) FROM extension_installations i JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE i.installed = 1 AND a.trust_decision NOT IN ('official', 'trusted', 'user_trusted', 'development')`,
+		"failed_uninstall_restores":                     `SELECT COUNT(*) FROM extension_package_operations WHERE operation_type = 'uninstall' AND status = 'requires_recovery' AND (current_step = 'restore_quarantine' OR error_detail LIKE '%restore quarantined installation%')`,
+		"ambiguous_recovery_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery' AND (current_step = 'recovery_manual' OR error_detail LIKE '%ambiguous%' OR error_detail LIKE '%could not be proven%')`,
 	}
 	for name, query := range queries {
 		var count int64
@@ -169,14 +193,18 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	}
 	installations, err := p.container.InstallationRepository.ListInstallations(ctx)
 	if err != nil {
+		report.Metrics["installation_without_files"] = -1
+		report.Metrics["orphan_installation_generations"] = -1
 		report.Errors = append(report.Errors, fmt.Sprintf("package_release_gate: installations query failed: %v", err))
 		return
 	}
 	installedPaths := make(map[string]bool)
 	var installationWithoutFiles int64
+	var generationReadModelMismatches int64
 	for _, installation := range installations {
 		path, _ := installation.Metadata["installedPath"].(string)
 		if path == "" {
+			installationWithoutFiles++
 			continue
 		}
 		absolute, absErr := filepath.Abs(path)
@@ -187,6 +215,17 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 		installedPaths[filepath.Clean(absolute)] = true
 		if info, statErr := os.Stat(absolute); statErr != nil || !info.IsDir() {
 			installationWithoutFiles++
+		}
+		generationID, _ := installation.Metadata["generationId"].(string)
+		if generationID == "" {
+			generationReadModelMismatches++
+			continue
+		}
+		current, currentErr := p.container.PackageGenerationStore.ReadCurrent(string(installation.ExtensionID))
+		treeHash, _ := installation.Metadata["installedTreeHash"].(string)
+		artifactID, _ := installation.Metadata["artifactId"].(string)
+		if currentErr != nil || current.GenerationID != generationID || current.TreeHash != treeHash || current.ArtifactID != artifactID || p.container.PackageGenerationStore.VerifyGeneration(ctx, current) != nil {
+			generationReadModelMismatches++
 		}
 	}
 	rollbackRows, rollbackErr := db.QueryContext(ctx, `SELECT installed_path FROM extension_package_rollback_points WHERE installed_path <> ''`)
@@ -212,34 +251,40 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	}
 	rollbackRows.Close()
 	report.Metrics["installation_without_files"] = installationWithoutFiles
-	stagingRoot := filepath.Join(p.container.PackageArtifactStore.root, "staging")
-	entries, readErr := os.ReadDir(stagingRoot)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		report.Metrics["orphan_staging_directories"] = -1
-		report.Errors = append(report.Errors, fmt.Sprintf("orphan_staging_directories: scan failed: %v", readErr))
-	} else {
-		var count int64
-		for _, entry := range entries {
-			if entry.IsDir() {
-				count++
-			}
-		}
-		report.Metrics["orphan_staging_directories"] = count
+	if report.Metrics["installation_read_model_mismatches"] >= 0 && generationReadModelMismatches > report.Metrics["installation_read_model_mismatches"] {
+		report.Metrics["installation_read_model_mismatches"] = generationReadModelMismatches
 	}
-	installedRoot := filepath.Join(p.container.PackageArtifactStore.root, "installed")
-	var filesWithoutInstallation int64
-	walkErr := filepath.WalkDir(installedRoot, func(path string, entry os.DirEntry, walkErr error) error {
+	installationsRoot := filepath.Join(p.container.PackageArtifactStore.root, "installations")
+	var orphanStaging int64
+	stagingWalkErr := filepath.WalkDir(installationsRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || entry.Name() != amitiax.ManifestFile {
+		if !entry.IsDir() || filepath.Base(filepath.Dir(path)) != "staging" {
 			return nil
 		}
-		parent, absErr := filepath.Abs(filepath.Dir(path))
+		orphanStaging++
+		return filepath.SkipDir
+	})
+	if stagingWalkErr != nil && !os.IsNotExist(stagingWalkErr) {
+		report.Metrics["orphan_staging_directories"] = -1
+		report.Errors = append(report.Errors, fmt.Sprintf("orphan_staging_directories: scan failed: %v", stagingWalkErr))
+	} else {
+		report.Metrics["orphan_staging_directories"] = orphanStaging
+	}
+	var filesWithoutInstallation int64
+	walkErr := filepath.WalkDir(installationsRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() || filepath.Base(filepath.Dir(path)) != "generations" {
+			return nil
+		}
+		parent, absErr := filepath.Abs(path)
 		if absErr != nil || !installedPaths[filepath.Clean(parent)] {
 			filesWithoutInstallation++
 		}
-		return nil
+		return filepath.SkipDir
 	})
 	if walkErr != nil && !os.IsNotExist(walkErr) {
 		report.Metrics["files_without_installation"] = -1
@@ -247,9 +292,18 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 		report.Errors = append(report.Errors, fmt.Sprintf("files_without_installation: scan failed: %v", walkErr))
 	} else {
 		report.Metrics["files_without_installation"] = filesWithoutInstallation
-		report.Metrics["orphan_installed_directories"] = filesWithoutInstallation
+		legacyInstalledRoot := filepath.Join(p.container.PackageArtifactStore.root, "installed")
+		var legacyInstalled int64
+		_ = filepath.WalkDir(legacyInstalledRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr == nil && !entry.IsDir() && entry.Name() == amitiax.ManifestFile {
+				legacyInstalled++
+			}
+			return walkErr
+		})
+		report.Metrics["orphan_installed_directories"] = legacyInstalled
+		report.Metrics["orphan_installation_generations"] = filesWithoutInstallation
 	}
-	rows, queryErr := db.QueryContext(ctx, `SELECT artifact_id FROM extension_package_artifacts WHERE quarantined_at = ''`)
+	rows, queryErr := db.QueryContext(ctx, `SELECT artifact_id FROM extension_package_artifacts WHERE deleted_at = ''`)
 	if queryErr != nil {
 		report.Metrics["artifact_hash_mismatch"] = -1
 		report.Errors = append(report.Errors, fmt.Sprintf("artifact_hash_mismatch: query failed: %v", queryErr))
@@ -272,13 +326,24 @@ func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *Fi
 	}
 	rows.Close()
 	var mismatch int64
+	corrupted := make(map[string]bool)
 	for _, artifactID := range artifactIDs {
 		artifact, getErr := p.container.PackageRepository.GetArtifact(ctx, artifactID)
-		if getErr != nil || p.container.PackageArtifactStore.VerifyArchive(artifact) != nil {
+		if getErr != nil {
 			mismatch++
+			corrupted[artifactID] = true
+			continue
+		}
+		if artifact.VerificationStatus == "corrupted" {
+			corrupted[artifactID] = true
+		}
+		if p.container.PackageArtifactStore.VerifyArchive(artifact) != nil {
+			mismatch++
+			corrupted[artifactID] = true
 		}
 	}
 	report.Metrics["artifact_hash_mismatch"] = mismatch
+	report.Metrics["corrupted_artifacts"] = int64(len(corrupted))
 }
 
 func (p *FinalGateProbe) ProbePackageReleaseGate(ctx context.Context, report *FinalGateReport) {

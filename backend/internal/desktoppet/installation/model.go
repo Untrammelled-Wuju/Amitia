@@ -23,6 +23,16 @@ type Installation struct {
 	LastDisabledAt   string `gorm:"column:last_disabled_at;type:text" json:"lastDisabledAt"`
 	CreatedAt        string `gorm:"column:created_at;type:text" json:"createdAt"`
 	UpdatedAt        string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	PetID            string `gorm:"column:pet_id;type:text;default:''" json:"petId"`
+	CurrentReleaseID string `gorm:"column:current_release_id;type:text;default:''" json:"currentReleaseId"`
+	LifecycleState   string `gorm:"column:lifecycle_state;type:text;default:'installed'" json:"lifecycleState"`
+	DesiredState     string `gorm:"column:desired_state;type:text;default:'disabled'" json:"desiredState"`
+	RuntimeSyncState string `gorm:"column:runtime_sync_state;type:text;default:'pending'" json:"runtimeSyncState"`
+	StateRevision    int    `gorm:"column:state_revision;type:integer;default:0" json:"stateRevision"`
+	InstallStorageKey string `gorm:"column:install_storage_key;type:text;default:''" json:"installStorageKey"`
+	IntegrityRoot    string `gorm:"column:integrity_root;type:text;default:''" json:"integrityRoot"`
+	LastErrorCode    string `gorm:"column:last_error_code;type:text;default:''" json:"lastErrorCode"`
+	LastErrorMessage string `gorm:"column:last_error_message;type:text;default:''" json:"lastErrorMessage"`
 }
 
 func (Installation) TableName() string { return "desktop_pet_installations" }
@@ -41,6 +51,15 @@ type RuntimeSettings struct {
 	IdleIntervalMaxSeconds int     `gorm:"column:idle_interval_max_seconds;type:integer" json:"idleIntervalMaxSeconds"`
 	ClickThroughMode       string  `gorm:"column:click_through_mode;type:text" json:"clickThroughMode"`
 	SoundEnabled           int     `gorm:"column:sound_enabled;type:integer" json:"soundEnabled"`
+	SettingsRevision       int     `gorm:"column:settings_revision;type:integer" json:"settingsRevision"`
+	RestoreOnAppStart      int     `gorm:"column:restore_on_app_start;type:integer" json:"restoreOnAppStart"`
+	PositionMode           string  `gorm:"column:position_mode;type:text" json:"positionMode"`
+	DisplayFingerprint     string  `gorm:"column:display_fingerprint;type:text" json:"displayFingerprint"`
+	RelativeX              float64 `gorm:"column:relative_x;type:real" json:"relativeX"`
+	RelativeY              float64 `gorm:"column:relative_y;type:real" json:"relativeY"`
+	LastWindowWidth        int     `gorm:"column:last_window_width;type:integer" json:"lastWindowWidth"`
+	LastWindowHeight       int     `gorm:"column:last_window_height;type:integer" json:"lastWindowHeight"`
+	PositionUpdatedAt      string  `gorm:"column:position_updated_at;type:text" json:"positionUpdatedAt"`
 	CreatedAt              string  `gorm:"column:created_at;type:text" json:"createdAt"`
 	UpdatedAt              string  `gorm:"column:updated_at;type:text" json:"updatedAt"`
 }
@@ -55,6 +74,24 @@ const (
 	StatusInvalid      = "invalid"
 	StatusUninstalling = "uninstalling"
 	StatusUninstalled  = "uninstalled"
+
+	LifecyclePreparing    = "preparing"
+	LifecycleStaging      = "staging"
+	LifecycleVerifying    = "verifying"
+	LifecycleInstalled    = "installed"
+	LifecycleUpgrading    = "upgrading"
+	LifecycleUninstalling = "uninstalling"
+	LifecycleUninstalled  = "uninstalled"
+	LifecycleInvalid      = "invalid"
+	LifecycleRecoveryReq  = "recovery_required"
+
+	DesiredEnabled  = "enabled"
+	DesiredDisabled = "disabled"
+
+	SyncPending   = "pending"
+	SyncConfirmed = "confirmed"
+	SyncFailed    = "failed"
+	SyncOffline   = "offline"
 )
 
 func (i *Installation) IsActivated() bool {
@@ -62,20 +99,32 @@ func (i *Installation) IsActivated() bool {
 }
 
 func (i *Installation) IsEnabled() bool {
-	return i != nil && i.Status == StatusEnabled
+	if i == nil {
+		return false
+	}
+	return i.Status == StatusEnabled || i.DesiredState == DesiredEnabled
 }
 
 func (i *Installation) IsInstalled() bool {
-	return i != nil && i.Status == StatusInstalled
+	if i == nil {
+		return false
+	}
+	return i.Status == StatusInstalled || i.LifecycleState == LifecycleInstalled
 }
 
 func (i *Installation) IsUninstalled() bool {
-	return i != nil && i.Status == StatusUninstalled
+	if i == nil {
+		return false
+	}
+	return i.Status == StatusUninstalled || i.LifecycleState == LifecycleUninstalled
 }
 
 func (i *Installation) CanEnable() bool {
 	if i == nil {
 		return false
+	}
+	if i.LifecycleState != "" {
+		return i.LifecycleState == LifecycleInstalled || i.DesiredState == DesiredDisabled
 	}
 	return i.Status == StatusInstalled || i.Status == StatusDisabled
 }
@@ -90,4 +139,8 @@ func (i *Installation) CanUninstall() bool {
 	default:
 		return false
 	}
+}
+
+func (i *Installation) HasReleaseBinding() bool {
+	return i != nil && i.CurrentReleaseID != ""
 }

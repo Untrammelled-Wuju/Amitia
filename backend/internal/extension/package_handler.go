@@ -255,6 +255,24 @@ func (h *PackageHandler) PreviewUninstall(c *gin.Context) {
 	success(c, result)
 }
 
+func (h *PackageHandler) PreviewRollback(c *gin.Context) {
+	result, err := h.service.PreviewRollback(c.Request.Context(), c.Param("id"), c.Param("version"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId"))
+	if err != nil {
+		h.problems.problem(c, err)
+		return
+	}
+	success(c, result)
+}
+
+func (h *PackageHandler) VerifyFinalGate(c *gin.Context) {
+	result, err := h.service.VerifyOperationFinalGate(c.Request.Context(), c.Param("operationId"))
+	if err != nil {
+		h.problems.problem(c, err)
+		return
+	}
+	success(c, result)
+}
+
 func (h *PackageHandler) Operations(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	items, err := h.service.ListOperations(c.Request.Context(), fmt.Sprint(c.GetInt(authenticatedUserKey)), limit)

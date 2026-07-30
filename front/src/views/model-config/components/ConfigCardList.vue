@@ -42,11 +42,11 @@ SPDX-License-Identifier: AGPL-3.0-only
             <span class="dl">API Key</span>
             <span class="dv">{{ cfg.hasApiKey ? "已设置" : "未设置" }}</span>
           </div>
-          <div class="detail-row">
+          <div class="detail-row" v-if="cfg.temperature != null">
             <span class="dl">温度</span>
             <span class="dv">{{ cfg.temperature ?? 0.7 }}</span>
           </div>
-          <div class="detail-row">
+          <div class="detail-row" v-if="cfg.maxTokens != null">
             <span class="dl">最大 Token</span>
             <span class="dv">{{ cfg.maxTokens ?? 4096 }}</span>
           </div>

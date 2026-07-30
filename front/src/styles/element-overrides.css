@@ -258,9 +258,9 @@
 .el-popper {
   background: var(--tp-glass-bg-strong);
   border-color: var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   box-shadow: var(--tp-shadow-float);
 }
 

@@ -308,25 +308,24 @@ func TestServiceRetryProcessingAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProcessingActions 失败: %v", err)
 	}
-	if len(actions) != 2 {
-		t.Fatalf("重试后动作数 = %d, 期望 2 (保留历史)", len(actions))
+	if len(actions) != 1 {
+		t.Fatalf("重试后动作数 = %d, 期望 1 (重新排队)", len(actions))
 	}
 
-	var newAction *ProcessingAction
-	for i := range actions {
-		if actions[i].Status == "pending" {
-			newAction = &actions[i]
-			break
-		}
+	retryAction := &actions[0]
+	if retryAction.Status != "queued" {
+		t.Fatalf("重试动作 Status = %s, 期望 queued", retryAction.Status)
 	}
-	if newAction == nil {
-		t.Fatal("未找到 pending 状态的新动作")
+	if retryAction.ActionKey != "idle_normal" {
+		t.Fatalf("重试动作 ActionKey = %s, 期望 idle_normal", retryAction.ActionKey)
 	}
-	if newAction.ActionKey != "idle_normal" {
-		t.Fatalf("新动作 ActionKey = %s, 期望 idle_normal", newAction.ActionKey)
+
+	attempts, err := svc.repo.ListProcessingActionAttempts(retryAction.ID)
+	if err != nil {
+		t.Fatalf("ListProcessingActionAttempts 失败: %v", err)
 	}
-	if newAction.Progress != 0 {
-		t.Fatalf("新动作 Progress = %d, 期望 0", newAction.Progress)
+	if len(attempts) < 1 {
+		t.Fatalf("重试应创建新的尝试记录, 实际 %d", len(attempts))
 	}
 }
 
@@ -464,6 +463,9 @@ func TestServiceSwitchAttempt(t *testing.T) {
 
 	seedProcessingTaskRow(t, db, "pt-switch", taskID, 1, "succeeded")
 	pa := seedProcessingActionRow(t, db, "pa-switch", "pt-switch", genAction.ID, "idle_normal", "succeeded", 0)
+
+	seedValidatorFrame(t, db, "gf-switch-a2-1", taskID, genAction.ID, "frame-a2-1.png", "hash-a2-1", 0, 2, "succeeded")
+	seedValidatorFrame(t, db, "gf-switch-a2-2", taskID, genAction.ID, "frame-a2-2.png", "hash-a2-2", 1, 2, "succeeded")
 
 	if pa.SourceAttemptNumber != 1 {
 		t.Fatalf("初始 SourceAttemptNumber = %d, 期望 1", pa.SourceAttemptNumber)

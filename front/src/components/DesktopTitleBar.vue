@@ -106,9 +106,9 @@ async function handleClose() {
 :global(html[data-theme="dark"]) #WindowControlButtons {
   background: var(--tp-glass-bg-strong);
   border-bottom-color: var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 #WindowControlButtons .window-actions {
   height: 100%;

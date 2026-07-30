@@ -1,13 +1,64 @@
 import { resolve } from "node:path"
+import { copyFileSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs"
 import vue from "@vitejs/plugin-vue"
 import { defineConfig } from "vitest/config"
 import electron from "vite-plugin-electron/simple"
+
+function copyPetHtmlPlugin() {
+  function copyPetFiles() {
+    const srcHtml = resolve(__dirname, "src/renderer/pet.html")
+    const destDir = resolve(__dirname, "dist/renderer")
+    const destHtml = resolve(destDir, "pet.html")
+    if (existsSync(srcHtml)) {
+      if (!existsSync(destDir)) {
+        mkdirSync(destDir, { recursive: true })
+      }
+      copyFileSync(srcHtml, destHtml)
+    }
+
+    const frontDir = resolve(__dirname, "../front")
+    const frontPetHtml = resolve(frontDir, "pet.html")
+    if (existsSync(srcHtml)) {
+      let htmlContent = readFileSync(srcHtml, "utf8")
+      htmlContent = htmlContent.replace(
+        '<script type="module" src="./pet-main.ts"></script>',
+        '<script type="module" src="/@fs' + resolve(__dirname, "src/renderer/pet-main.ts") + '"></script>',
+      )
+      writeFileSync(frontPetHtml, htmlContent, "utf8")
+    }
+  }
+
+  return {
+    name: "copy-pet-html",
+    configureServer() {
+      copyPetFiles()
+    },
+    configurePreviewServer() {
+      const src = resolve(__dirname, "src/renderer/pet.html")
+      const destDir = resolve(__dirname, "dist/renderer")
+      const dest = resolve(destDir, "pet.html")
+      if (existsSync(src)) {
+        if (!existsSync(destDir)) {
+          mkdirSync(destDir, { recursive: true })
+        }
+        copyFileSync(src, dest)
+      }
+    },
+  }
+}
 
 export default defineConfig({
   root: resolve(__dirname, "../front"),
   publicDir: false,
   server: {
     port: 5178,
+    fs: {
+      allow: [
+        resolve(__dirname, "../front"),
+        resolve(__dirname, "."),
+        resolve(__dirname, ".."),
+      ],
+    },
     proxy: {
       "/api": {
         target: "http://127.0.0.1:18899",
@@ -49,7 +100,10 @@ export default defineConfig({
     emptyOutDir: true,
     outDir: resolve(__dirname, "dist/renderer"),
     rollupOptions: {
-      input: resolve(__dirname, "../front/index.html"),
+      input: {
+        main: resolve(__dirname, "../front/index.html"),
+        pet: resolve(__dirname, "src/renderer/pet.html"),
+      },
     },
   },
   test: {
@@ -60,6 +114,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
+    copyPetHtmlPlugin(),
     electron({
       main: {
         entry: resolve(__dirname, "src/main/index.ts"),
@@ -73,14 +128,21 @@ export default defineConfig({
         },
       },
       preload: {
-        input: resolve(__dirname, "src/preload/index.ts"),
+        input: {
+          index: resolve(__dirname, "src/preload/index.ts"),
+          "pet-preload": resolve(__dirname, "src/preload/pet-preload.ts"),
+          "pet-combined-preload": resolve(__dirname, "src/preload/pet-combined-preload.ts"),
+          "animation-preload": resolve(__dirname, "src/preload/animation-preload.ts"),
+        },
         vite: {
           build: {
             outDir: resolve(__dirname, "dist/preload"),
             rollupOptions: {
               external: ["electron"],
               output: {
-                entryFileNames: "index.cjs",
+                entryFileNames: "[name].cjs",
+                chunkFileNames: "[name].cjs",
+                codeSplitting: true,
               },
             },
           },

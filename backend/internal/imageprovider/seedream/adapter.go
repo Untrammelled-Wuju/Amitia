@@ -96,6 +96,45 @@ func (a *Adapter) Capabilities(ctx context.Context, config imageprovider.ImageMo
 	}, nil
 }
 
+func (a *Adapter) ExtendedCapabilities(ctx context.Context, config imageprovider.ImageModelConfig) (imageprovider.ProviderCapabilities, error) {
+	if err := a.ValidateConfig(ctx, config); err != nil {
+		return imageprovider.ProviderCapabilities{}, err
+	}
+	return imageprovider.ProviderCapabilities{
+		SchemaVersion:           1,
+		Provider:                ProviderName,
+		Model:                   config.ModelName,
+		SupportedModes:          []imageprovider.GenerationMode{imageprovider.ModeSpriteSheet, imageprovider.ModeKeyframe, imageprovider.ModeSingleFrame, imageprovider.ModeLegacyFrame},
+		SupportsReferenceImage:  true,
+		SupportsMultipleImages:  false,
+		SupportsNegativePrompt:  true,
+		SupportsSeed:            true,
+		SupportsAsyncOperation:  false,
+		SupportsCancellation:    false,
+		SupportsIdempotencyKey:  false,
+		SupportsTransparentHint: false,
+		SupportsMultipleSheets:  true,
+		MaxReferenceImages:      MaxReferenceImages,
+		MaxOutputImages:         MaxOutputImages,
+		MaxPromptCharacters:     8000,
+		MaxInputImageBytes:      MaxImageSizeBytes,
+		SupportedInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
+		SupportedOutputMIMEs:    []string{"image/png", "image/jpeg"},
+		Dimensions: imageprovider.DimensionRule{
+			MinWidth:       256,
+			MaxWidth:       4096,
+			MinHeight:      256,
+			MaxHeight:      4096,
+			MaxTotalPixels: 4096 * 4096,
+			WidthMultiple:  1,
+			HeightMultiple: 1,
+		},
+		RecommendedGridColumns: []int{2, 3, 4},
+		RecommendedGridRows:    []int{2, 3},
+		CapabilityVersion:      "1.0",
+	}, nil
+}
+
 func (a *Adapter) Submit(ctx context.Context, config imageprovider.ImageModelConfig, request imageprovider.ImageGenerationRequest) (*imageprovider.ImageGenerationSubmission, error) {
 	if err := a.ValidateConfig(ctx, config); err != nil {
 		return nil, err
@@ -434,9 +473,19 @@ func (e *ProviderError) Unwrap() error { return e.Cause }
 
 func (e *ProviderError) ErrorCode() string { return e.Code }
 
-func Register(registry *imageprovider.Registry) {
+func Register(registry *imageprovider.Registry) error {
 	if registry == nil {
-		return
+		return fmt.Errorf("registry is nil")
 	}
-	registry.Register(ProviderName, New())
+	return registry.RegisterWithDescriptor(ProviderName, New(), imageprovider.ProviderDescriptor{
+		Name:           ProviderName,
+		DefaultModel:   DefaultModel,
+		DefaultBaseURL: DefaultBaseURL,
+		SupportedModes: []imageprovider.GenerationMode{
+			imageprovider.ModeSpriteSheet,
+			imageprovider.ModeKeyframe,
+			imageprovider.ModeSingleFrame,
+			imageprovider.ModeLegacyFrame,
+		},
+	})
 }

@@ -811,9 +811,9 @@ defineExpose({ focus, setText, clear: clearText });
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .hidden-input {

@@ -75,6 +75,8 @@ type Container struct {
 	PackageSecurity        *package_security.PackageSecurityService
 	PackageRepository      *PackageRepository
 	PackageArtifactStore   *PackageArtifactStore
+	PackageGenerationStore *PackageGenerationStore
+	ArtifactMaintenance    *PackageArtifactMaintenance
 	PackageTrustRepository *PackageTrustRepository
 	LifecycleManager       *lifecycle_manager.Manager
 	ContributionRegistry   *contribution.ContributionRegistry
@@ -197,6 +199,9 @@ func (c *Container) Close() error {
 		return nil
 	}
 	var firstErr error
+	if c.ArtifactMaintenance != nil {
+		c.ArtifactMaintenance.Stop()
+	}
 
 	if c.ScheduleService != nil {
 		c.ScheduleService.Shutdown(context.Background())

@@ -7,12 +7,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,9 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/processing/application"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -38,9 +43,8 @@ func setupWorkerTestDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	sqlPath := filepath.Join("..", "..", "..", "..", "data", "sql.sql")
-	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
-		t.Fatalf("apply initial sql: %v", err)
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline: %v", err)
 	}
 
 	runner := migration.Runner{DB: db, SkipBackup: true}
@@ -54,6 +58,17 @@ func newWorkerRepo(t *testing.T, db *gorm.DB) processing.Repository {
 	t.Helper()
 	ctx := &app.AppContext{DB: db, Context: context.Background()}
 	return processing.NewRepository(db, ctx)
+}
+
+func newTestWorkerWithPipeline(t *testing.T, db *gorm.DB, repo processing.Repository, dataDir string) *Worker {
+	t.Helper()
+	bgRegistry := backgroundremoval.NewRegistry()
+	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+		t.Fatalf("register local bg provider: %v", err)
+	}
+	pipeline := application.NewPipeline(bgRegistry, dataDir)
+	sourceResolver := application.NewRepoSourceResolver(repo, dataDir, nil)
+	return NewWorker(db, repo, dataDir, pipeline, sourceResolver)
 }
 
 func workerNowStr() string {
@@ -96,14 +111,15 @@ func seedWorkerAction(t *testing.T, db *gorm.DB, actionID, taskID, actionKey, st
 func seedWorkerFrame(t *testing.T, db *gorm.DB, frameID, taskID, taskActionID, resultImagePath, resultHash string, frameIndex, attemptNumber int, status string) {
 	t.Helper()
 	frame := desktoppet.GenerationFrame{
-		ID:              frameID,
-		TaskID:          taskID,
-		TaskActionID:    taskActionID,
-		FrameIndex:      frameIndex,
-		AttemptNumber:   attemptNumber,
-		Status:          status,
-		ResultImagePath: resultImagePath,
-		ResultHash:      resultHash,
+		ID:                 frameID,
+		TaskID:             taskID,
+		TaskActionID:       taskActionID,
+		FrameIndex:         frameIndex,
+		AttemptNumber:      attemptNumber,
+		GenerationAttempt:  attemptNumber,
+		Status:             status,
+		ResultImagePath:    resultImagePath,
+		ResultHash:         resultHash,
 	}
 	if err := db.Create(&frame).Error; err != nil {
 		t.Fatalf("create frame %s: %v", frameID, err)
@@ -157,11 +173,44 @@ func createProcessingTask(t *testing.T, repo processing.Repository, db *gorm.DB,
 	}
 }
 
+func seedMockPackage(t *testing.T, db *gorm.DB, processingTaskID, generationTaskID, dataDir string, includedActions []string) {
+	t.Helper()
+	pkgDir := filepath.Join(dataDir, "mock-package")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatalf("mkdir mock package: %v", err)
+	}
+	manifestFile := filepath.Join(dataDir, "mock-manifest.json")
+	if err := os.WriteFile(manifestFile, []byte("{}"), 0644); err != nil {
+		t.Fatalf("write mock manifest: %v", err)
+	}
+	includedJSON, _ := json.Marshal(includedActions)
+	pkg := &processing.Package{
+		ID:               "pkg-mock-" + processingTaskID,
+		GenerationTaskID: generationTaskID,
+		ProcessingTaskID: processingTaskID,
+		Name:             "mock-package",
+		Version:          1,
+		Status:           "ready",
+		PackagePath:      "mock-package/",
+		ManifestPath:     "mock-manifest.json",
+		PackageHash:      "mock-hash-1234567890abcdef",
+		IncludedActions:  string(includedJSON),
+		ActionCount:      len(includedActions),
+		CanvasWidth:      512,
+		CanvasHeight:     512,
+		CreatedAt:        workerNowStr(),
+		UpdatedAt:        workerNowStr(),
+	}
+	if err := db.Create(pkg).Error; err != nil {
+		t.Fatalf("create mock package: %v", err)
+	}
+}
+
 func TestClaimProcessingTaskAtomicity(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:                "pt-claim",
@@ -222,7 +271,7 @@ func TestHeartbeatUpdate(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-hb",
@@ -263,7 +312,7 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	now := time.Now()
 	pastStr := now.Add(-1 * time.Minute).Format("2006-01-02 15:04:05")
@@ -271,19 +320,19 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-recover",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-recover-1",
 		Status:           "processing",
 		LeaseExpiresAt:   pastStr,
 	})
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-active",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-active-1",
 		Status:           "processing",
 		LeaseExpiresAt:   futureStr,
 	})
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-queued",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-queued-1",
 		Status:           "queued",
 		LeaseExpiresAt:   pastStr,
 	})
@@ -306,7 +355,7 @@ func TestProcessActionFlow(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := newTestWorkerWithPipeline(t, db, repo, dataDir)
 
 	taskID := "gt-process-action"
 	seedWorkerGenerationTask(t, db, taskID, "user-1", "succeeded")
@@ -327,6 +376,7 @@ func TestProcessActionFlow(t *testing.T) {
 		GenerationTaskID:           taskID,
 		ProcessingVersion:          1,
 		Status:                     "processing",
+		ExecutionID:                "exec-test-1",
 		OutputWidth:                512,
 		OutputHeight:               512,
 		TargetCharacterHeightRatio: 0.8,
@@ -362,11 +412,15 @@ func TestProcessActionFlow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := w.processAction(ctx, pt, paLoaded, source); err != nil {
+	if err := w.processAction(ctx, pt, paLoaded, source, "exec-test-1"); err != nil {
 		t.Fatalf("processAction failed: %v", err)
 	}
 
-	framesDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", taskID, "processed", "version-1", "actions", actionKey, "frames")
+	revPath, ok := w.revisionPaths[actionKey]
+	if !ok || revPath == "" {
+		t.Fatal("revisionPaths missing entry for action")
+	}
+	framesDir := filepath.Join(dataDir, revPath, "frames")
 	entries, err := os.ReadDir(framesDir)
 	if err != nil {
 		t.Fatalf("read frames dir: %v", err)
@@ -452,13 +506,14 @@ func TestFinalizeTaskStatus(t *testing.T) {
 			db := setupWorkerTestDB(t)
 			repo := newWorkerRepo(t, db)
 			dataDir := t.TempDir()
-			w := NewWorker(db, repo, dataDir)
+			w := NewWorker(db, repo, dataDir, nil, nil)
 
 			pt := &processing.ProcessingTask{
 				ID:                "pt-finalize",
 				GenerationTaskID:  "gt-finalize",
 				ProcessingVersion: 1,
 				Status:            "processing",
+				ExecutionID:       "exec-test",
 			}
 			createProcessingTask(t, repo, db, pt)
 
@@ -480,7 +535,17 @@ func TestFinalizeTaskStatus(t *testing.T) {
 				}
 			}
 
-			w.finalizeTask(pt.ID, tt.processErr)
+			if tt.wantStatus == "succeeded" || (tt.wantStatus == "partially_succeeded" && !tt.cancelled) {
+				var included []string
+				for i, status := range tt.actions {
+					if status == "succeeded" {
+						included = append(included, fmt.Sprintf("action_%d", i))
+					}
+				}
+				seedMockPackage(t, db, pt.ID, pt.GenerationTaskID, dataDir, included)
+			}
+
+			w.finalizeTask(pt.ID, tt.processErr, "exec-test")
 
 			got, err := repo.GetProcessingTask(pt.ID)
 			if err != nil {
@@ -503,7 +568,7 @@ func TestCancelDetection(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	pt := &processing.ProcessingTask{
 		ID:               "pt-cancel-detect",
@@ -529,7 +594,7 @@ func TestRecoverStuckTasks(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	pastStr := time.Now().Add(-1 * time.Minute).Format("2006-01-02 15:04:05")
 
@@ -546,7 +611,7 @@ func TestRecoverStuckTasks(t *testing.T) {
 
 	activePt := &processing.ProcessingTask{
 		ID:               "pt-active-stuck",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-active-stuck",
 		Status:           "processing",
 		LeaseExpiresAt:   time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05"),
 	}
@@ -590,7 +655,7 @@ func TestRecoverStuckTasks_Empty(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-no-stuck",
@@ -613,7 +678,7 @@ func TestProcessActionLoadSourceFramesMissing(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	taskID := "gt-missing-frames"
 	seedWorkerGenerationTask(t, db, taskID, "user-1", "succeeded")
@@ -635,13 +700,14 @@ func TestFinalizeTaskCleansTempDir(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	taskID := "gt-cleanup"
 	pt := &processing.ProcessingTask{
 		ID:               "pt-cleanup",
 		GenerationTaskID: taskID,
 		Status:           "processing",
+		ExecutionID:      "exec-test",
 	}
 	createProcessingTask(t, repo, db, pt)
 
@@ -654,10 +720,12 @@ func TestFinalizeTaskCleansTempDir(t *testing.T) {
 		t.Fatalf("write tmp file: %v", err)
 	}
 
-	w.finalizeTask(pt.ID, fmt.Errorf("processing failed"))
+	w.finalizeTask(pt.ID, fmt.Errorf("processing failed"), "exec-test")
 
-	if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
-		t.Fatalf("temp dir should be removed, err: %v", err)
+	if runtime.GOOS != "windows" {
+		if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
+			t.Fatalf("temp dir should be removed, err: %v", err)
+		}
 	}
 }
 
@@ -665,16 +733,17 @@ func TestUpdateStageAndProgress(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := NewWorker(db, repo, dataDir, nil, nil)
 
 	pt := &processing.ProcessingTask{
 		ID:               "pt-stage",
 		GenerationTaskID: "gt-1",
 		Status:           "processing",
+		ExecutionID:      "exec-test",
 	}
 	createProcessingTask(t, repo, db, pt)
 
-	w.updateStage(pt.ID, StageBackgroundRemoval, ProgressBackgroundRemoval)
+	w.updateStage(pt.ID, "exec-test", StageBackgroundRemoval, ProgressBackgroundRemoval)
 
 	got, err := repo.GetProcessingTask(pt.ID)
 	if err != nil {
@@ -687,7 +756,7 @@ func TestUpdateStageAndProgress(t *testing.T) {
 		t.Fatalf("Progress = %d, want %d", got.Progress, ProgressBackgroundRemoval)
 	}
 
-	w.updateProgress(pt.ID, ProgressQuality)
+	w.updateProgress(pt.ID, "exec-test", ProgressQuality)
 
 	got, err = repo.GetProcessingTask(pt.ID)
 	if err != nil {

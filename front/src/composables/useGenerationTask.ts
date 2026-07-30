@@ -7,6 +7,7 @@ export type GenerationTaskStatus =
   | "pending"
   | "queued"
   | "processing"
+  | "cancelling"
   | "succeeded"
   | "partially_succeeded"
   | "failed"

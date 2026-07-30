@@ -178,9 +178,9 @@ function dismissLater() {
   max-width: 420px;
   width: 100%;
   box-shadow: var(--tp-shadow-float);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   overflow: hidden;
   animation: slideUp 0.3s ease-out;
 }

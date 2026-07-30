@@ -133,9 +133,9 @@ body {
 .glass-surface {
   background: var(--tp-glass-bg);
   border: 1px solid var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .glass-surface--strong {

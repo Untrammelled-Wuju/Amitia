@@ -30,7 +30,7 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 	if computeManifestHash(pkg) != artifact.ManifestHash || pkg.Tree.TreeHash != artifact.ContentTreeHash || computeArtifactHashFromPackage(pkg) != artifact.ArtifactHash {
 		return nil, fmt.Errorf("stored package identity mismatch")
 	}
-	if reason := r.packageTrustBlockReason(pkg, artifact.ArchiveHash); reason != "" {
+	if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
 		return nil, fmt.Errorf("package trust policy rejected artifact: %s", reason)
 	}
 	if len(pkg.V2Signature) > 0 {
@@ -43,21 +43,21 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 			ActualManifestVersion: pkg.Manifest.ManifestVersion, ActualManifestHash: artifact.ManifestHash,
 			ActualContentTreeHash: artifact.ContentTreeHash, ActualArtifactHash: artifact.ArtifactHash,
 		})
-		if trust.IsBlockingSignatureStatus(verification.Status) || artifact.SignatureStatus == string(trust.SignatureStatusValid) && verification.Status != trust.SignatureStatusValid {
+		if verification.Status != trust.SignatureStatusValid || artifact.SignatureStatus != string(trust.SignatureStatusValid) {
 			return nil, fmt.Errorf("stored package signature rejected: %s", verification.Status)
 		}
+		identity, identityErr := r.container.TrustService.Store().Get(ctx, document.PublisherID)
+		if identityErr != nil || identity.TrustLevel != trust.TrustLevelOfficial && identity.TrustLevel != trust.TrustLevelTrusted && identity.TrustLevel != trust.TrustLevelUserTrusted {
+			return nil, fmt.Errorf("stored package publisher is not trusted")
+		}
+	} else if artifact.TrustDecision != string(trust.TrustLevelDevelopment) || artifact.SignatureStatus != "unsigned" {
+		return nil, fmt.Errorf("stored package signature required")
 	}
 	return pkg, nil
 }
 
-func (r *Runtime) packageTrustBlockReason(pkg *amitiax.Package, packageHash string) string {
+func (r *Runtime) packageTrustBlockReason(ctx context.Context, pkg *amitiax.Package, packageHash string) string {
 	service := r.container.TrustService
-	if blocked := service.Blocklist().Check(packageHash); blocked != nil {
-		return blocked.Details
-	}
-	if revoked := service.RevocationList().CheckPackage(packageHash); revoked != nil {
-		return revoked.Reason
-	}
 	publisherID := pkg.Manifest.Publisher.ID
 	keyID := ""
 	if len(pkg.V2Signature) > 0 {
@@ -65,6 +65,22 @@ func (r *Runtime) packageTrustBlockReason(pkg *amitiax.Package, packageHash stri
 			publisherID = document.PublisherID
 			keyID = document.KeyID
 		}
+	}
+	if r.container.PackageTrustRepository == nil {
+		return "trust policy repository unavailable"
+	}
+	pendingReason, err := r.container.PackageTrustRepository.PendingRestrictionReason(ctx, publisherID, "", packageHash)
+	if err != nil {
+		return "trust policy repository read failed"
+	}
+	if pendingReason != "" {
+		return pendingReason
+	}
+	if blocked := service.Blocklist().Check(packageHash); blocked != nil {
+		return blocked.Details
+	}
+	if revoked := service.RevocationList().CheckPackage(packageHash); revoked != nil {
+		return revoked.Reason
 	}
 	if revoked := service.RevocationList().CheckKey(publisherID, keyID); revoked != nil {
 		return revoked.Reason

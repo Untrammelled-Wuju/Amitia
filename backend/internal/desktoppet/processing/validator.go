@@ -168,7 +168,7 @@ func (v *Validator) ResolveActiveAttempt(action desktoppet.GenerationTaskAction)
 
 	hasSucceeded := false
 	for _, frame := range frames {
-		if frame.AttemptNumber == attempt && frame.Status == "succeeded" {
+		if frame.GenerationAttempt == attempt && frame.Status == "succeeded" {
 			hasSucceeded = true
 			break
 		}
@@ -199,7 +199,7 @@ func (v *Validator) ValidateFrames(action desktoppet.GenerationTaskAction, attem
 
 	var frames []desktoppet.GenerationFrame
 	for _, frame := range allFrames {
-		if frame.AttemptNumber == attemptNumber && frame.Status == "succeeded" {
+		if frame.GenerationAttempt == attemptNumber && frame.Status == "succeeded" {
 			frames = append(frames, frame)
 		}
 	}

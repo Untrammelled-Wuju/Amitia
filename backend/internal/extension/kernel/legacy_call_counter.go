@@ -2,7 +2,9 @@ package kernel
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
+	"time"
 )
 
 type LegacyCallCounter struct {
@@ -276,12 +278,22 @@ func (c *LegacyCallCounter) FinalGatePassed() bool {
 }
 
 func (c *LegacyCallCounter) LegacyFallbackTotal() int64 {
+	if c.store != nil {
+		return c.storeGet("legacy_tool_execute_calls") + c.storeGet("legacy_model_tools_calls") + c.storeGet("legacy_prompt_hook_calls")
+	}
 	return c.toolExecuteCalls.Load() +
 		c.modelToolsCalls.Load() +
 		c.promptHookCalls.Load()
 }
 
 func (c *LegacyCallCounter) Total() int64 {
+	if c.store != nil {
+		total := int64(0)
+		for _, name := range []string{"legacy_plugin_start", "legacy_plugin_dispatch", "legacy_tool_execute", "legacy_package_install", "legacy_skill_execute", "legacy_mcp_tool_register", "legacy_schedule_tick", "legacy_tool_execute_calls", "legacy_model_tools_calls", "legacy_prompt_hook_calls", "legacy_mcp_execute_calls", "duplicate_mcp_tool_registrations", "legacy_package_write_calls", "duplicate_contribution_registrations", "orphan_runtime_instances", "orphan_ui_sessions", "failed_cleanup_resources"} {
+			total += c.storeGet(name)
+		}
+		return total
+	}
 	return c.pluginStart.Load() +
 		c.pluginDispatch.Load() +
 		c.toolExecute.Load() +
@@ -299,6 +311,20 @@ func (c *LegacyCallCounter) Total() int64 {
 		c.orphanRuntimeInstances.Load() +
 		c.orphanUISessions.Load() +
 		c.failedCleanupResources.Load()
+}
+
+func (c *LegacyCallCounter) BeginZeroWindow(ctx context.Context) error {
+	if c == nil || c.store == nil {
+		return fmt.Errorf("legacy call counter persistence unavailable")
+	}
+	return c.store.BeginZeroWindow(ctx)
+}
+
+func (c *LegacyCallCounter) ZeroWindowProof(ctx context.Context, minimum time.Duration) (LegacyZeroWindowProof, error) {
+	if c == nil || c.store == nil {
+		return LegacyZeroWindowProof{}, fmt.Errorf("legacy call counter persistence unavailable")
+	}
+	return c.store.ZeroWindowProof(ctx, minimum)
 }
 
 func (c *LegacyCallCounter) Snapshot() map[string]int64 {

@@ -34,9 +34,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	sqlPath := filepath.Join("..", "..", "data", "sql.sql")
-	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
-		t.Fatalf("apply initial sql: %v", err)
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline: %v", err)
 	}
 
 	runner := migration.Runner{DB: db, SkipBackup: true}

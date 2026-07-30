@@ -2,11 +2,15 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +24,23 @@ import (
 )
 
 const packagePolicyVersion = "2026-07-30-v1"
+
+func CurrentPackagePolicyVersion() string {
+	return packagePolicyVersion
+}
+
+func computeSecurityPolicyHash() string {
+	policy := package_security.DefaultArchivePolicy()
+	canonical := fmt.Sprintf(`{"version":%q,"maxArchiveBytes":%d,"maxSingleEntryBytes":%d,"allowSymlink":%v,"maxDirectoryDepth":%d}`,
+		packagePolicyVersion, policy.MaxArchiveBytes, policy.MaxSingleEntryBytes, policy.AllowSymlink, policy.MaxDirectoryDepth)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+func packageDevelopmentModeEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DEV_MODE")))
+	return err == nil && enabled
+}
 
 func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequest, reader io.Reader) (InstallPreview, error) {
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil {
@@ -77,13 +98,16 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 			preview.TrustDecision = "rejected"
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: string(verification.Status), Message: verification.Reason})
 		} else if verification.Status == trust.SignatureStatusUnknownKey {
-			preview.TrustDecision = "unknown_key"
-			preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.signer_unknown")
+			preview.TrustDecision = "rejected"
+			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_publisher_untrusted", Message: verification.Reason})
 		} else {
 			identity, identityErr := r.container.TrustService.Store().Get(ctx, doc.PublisherID)
 			if identityErr != nil {
-				preview.TrustDecision = "unknown_key"
-				preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.signer_unknown")
+				preview.TrustDecision = "rejected"
+				preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_publisher_untrusted", Message: "publisher is not trusted"})
+			} else if identity.TrustLevel != trust.TrustLevelOfficial && identity.TrustLevel != trust.TrustLevelTrusted && identity.TrustLevel != trust.TrustLevelUserTrusted {
+				preview.TrustDecision = "rejected"
+				preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_publisher_untrusted", Message: "publisher trust level does not allow production installation"})
 			} else {
 				preview.TrustDecision = string(identity.TrustLevel)
 			}
@@ -91,18 +115,27 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	} else if pkg.Signatures != nil {
 		preview.SignatureStatus = "legacy_signature"
 		preview.SignerKeyID = pkg.Signatures.KeyID
-		preview.TrustDecision = "legacy_signature"
-		preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.signer_unknown")
+		preview.TrustDecision = "rejected"
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v2 signature is required"})
 	} else {
-		preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.unsigned")
-		preview.RiskFlags = append(preview.RiskFlags, "unsigned")
+		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
+			preview.DevOnly = true
+			preview.DeveloperSessionID = request.DeveloperSessionID
+			preview.TrustDecision = string(trust.TrustLevelDevelopment)
+			preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.unsigned_dev")
+			preview.RiskFlags = append(preview.RiskFlags, "unsigned_dev", "dev_only")
+		} else {
+			preview.TrustDecision = "rejected"
+			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "signed package required in production"})
+		}
 	}
-	if reason := r.packageTrustBlockReason(pkg, artifact.ArchiveHash); reason != "" {
+	if reason := r.packageTrustBlockReason(ctx, pkg, artifact.ArchiveHash); reason != "" {
 		preview.TrustDecision = "rejected"
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "trust_policy_rejected", Message: reason})
 	}
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &preview)
 	r.evaluatePackageUpdateRisks(ctx, &preview)
+	r.evaluatePackageMigrationPreflight(ctx, pkg.Manifest, &preview)
 	for _, file := range pkg.Files {
 		lower := strings.ToLower(file.Path)
 		if strings.Contains(lower, "/scripts/") || strings.HasPrefix(lower, "scripts/") {
@@ -145,7 +178,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	if err != nil {
 		return InstallPreview{}, err
 	}
-	verificationJSON, _ := json.Marshal(map[string]any{"security": securityReport, "signatureStatus": preview.SignatureStatus, "trustDecision": preview.TrustDecision, "policyVersion": packagePolicyVersion})
+	verificationJSON, _ := json.Marshal(map[string]any{"security": securityReport, "signatureStatus": preview.SignatureStatus, "trustDecision": preview.TrustDecision, "policyVersion": packagePolicyVersion, "migrationPreview": preview.MigrationPreview, "migrationPlanHash": preview.MigrationPlanHash})
 	artifact.VerificationReportJSON = string(verificationJSON)
 	if err := r.container.PackageRepository.PutArtifact(ctx, artifact); err != nil {
 		return InstallPreview{}, err
@@ -170,12 +203,93 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		ContentTreeHash: preview.ContentTreeHash, RiskFlagsJSON: string(riskJSON),
 		RequiredConfirmationsJSON: string(confirmationJSON), DependencyResultJSON: string(dependencyJSON),
 		PreviewResultJSON: string(previewJSON), VerificationReportJSON: string(verificationJSON),
-		PolicyVersion: packagePolicyVersion, VerifiedAt: artifact.VerifiedAt,
-		ExpiresAt: preview.ExpiresAt.Format(time.RFC3339Nano), CreatedAt: artifact.CreatedAt}
+		PolicyVersion: packagePolicyVersion, SecurityPolicyHash: computeSecurityPolicyHash(),
+		VerifiedAt: artifact.VerifiedAt,
+		ExpiresAt:  preview.ExpiresAt.Format(time.RFC3339Nano), CreatedAt: artifact.CreatedAt}
 	if err := r.container.PackageRepository.PutPreview(ctx, session); err != nil {
 		return InstallPreview{}, err
 	}
 	return preview, nil
+}
+
+func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v2.Manifest, preview *InstallPreview) {
+	if preview == nil || !packageManifestHasMigrations(manifest) {
+		return
+	}
+	preview.RiskFlags = append(preview.RiskFlags, "data_migration")
+	if r.container == nil || r.container.MigrationRepository == nil || r.container.InstallationRepository == nil {
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_unavailable", Message: "migration preflight is unavailable"})
+		return
+	}
+	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(manifest.Extension.ID))
+	if err != nil {
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_source_version_required", Message: "migration package requires an installed source version"})
+		return
+	}
+	preflight, err := NewPackageMigrationGuard(r.container.MigrationRepository).PreflightManifest(ctx, manifest, current.InstalledVersion.String())
+	if err != nil {
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_preflight_failed", Message: err.Error()})
+		return
+	}
+	preview.MigrationPreview = preflight
+	preview.MigrationPlanHash = preflight.PlanHash
+	preview.MigrationSnapshotRequired = preflight.UserDataSnapshotRequired
+	preview.MigrationManualRequired = preflight.ManualRequired
+	preview.MigrationIrreversible = preflight.Irreversible
+	if preflight.UserDataSnapshotRequired {
+		preview.RiskFlags = append(preview.RiskFlags, "migration_snapshot_required")
+	}
+	if preflight.ManualRequired {
+		preview.RiskFlags = append(preview.RiskFlags, "migration_manual_recovery")
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_manual_recovery_required", Message: "migration requires a controlled manual recovery workflow"})
+	}
+	if preflight.Irreversible {
+		preview.RiskFlags = append(preview.RiskFlags, "migration_irreversible")
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_migration_irreversible", Message: "irreversible migration is not allowed in the production package flow"})
+	}
+}
+
+func packageManifestHasMigrations(manifest manifest_v2.Manifest) bool {
+	if len(manifest.Extension.Metadata) == 0 {
+		return false
+	}
+	_, migrations := manifest.Extension.Metadata["migrations"]
+	_, migrationValue := manifest.Extension.Metadata["migration"]
+	return migrations || migrationValue
+}
+
+func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, extensionID string) bool {
+	if !request.AllowUnsignedDev {
+		return false
+	}
+	return r.validateUnsignedDeveloperSession(request.DeveloperSessionID, request.UserID, extensionID) == nil
+}
+
+func (r *Runtime) validateUnsignedDeveloperSession(sessionID, userID, extensionID string) error {
+	if !packageDevelopmentModeEnabled() {
+		return fmt.Errorf("kernel: developer mode is disabled")
+	}
+	if sessionID == "" || userID == "" || extensionID == "" || r.container == nil || r.container.DevModeSessions == nil || r.container.DevModeRegistry == nil {
+		return fmt.Errorf("kernel: developer session binding unavailable")
+	}
+	session, err := r.container.DevModeSessions.Validate(sessionID)
+	if err != nil {
+		return err
+	}
+	if session.UserID != userID || string(session.ExtensionID) != extensionID || session.PolicyVersion != packagePolicyVersion || session.Environment != "development" || !session.DevTrustSnapshot {
+		return fmt.Errorf("kernel: developer session binding mismatch")
+	}
+	workspace, err := r.container.DevModeRegistry.Get(session.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	if workspace.OwnerUserID != userID || string(workspace.ExtensionID) != extensionID || !workspace.DevTrust || workspace.DevTrustVersion != session.DevTrustVersion {
+		return fmt.Errorf("kernel: developer workspace trust invalid")
+	}
+	if len(session.Scopes) != 1 || session.Scopes[0] != "extensions.install.unsigned" {
+		return fmt.Errorf("kernel: developer session scope invalid")
+	}
+	return nil
 }
 
 func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *InstallPreview) {

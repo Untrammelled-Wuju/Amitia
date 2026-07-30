@@ -39,6 +39,13 @@ const (
 	ErrCodeGenerationStateConflict       = "GENERATION_STATE_CONFLICT"
 	ErrCodeGenerationTaskAlreadyRunning   = "GENERATION_TASK_ALREADY_RUNNING"
 	ErrCodeFrameNotFound                  = "FRAME_NOT_FOUND"
+
+	ErrCodeDataConflict            = "DESKTOP_PET_DATA_CONFLICT"
+	ErrCodeDuplicateIdentity       = "DESKTOP_PET_DUPLICATE_IDENTITY"
+	ErrCodeExecutionOwnershipLost  = "DESKTOP_PET_EXECUTION_OWNERSHIP_LOST"
+	ErrCodeAttemptConflict         = "DESKTOP_PET_ATTEMPT_CONFLICT"
+	ErrCodeMigrationUnresolved     = "DESKTOP_PET_MIGRATION_UNRESOLVED"
+	ErrCodeVersionAllocationConflict = "DESKTOP_PET_VERSION_ALLOCATION_CONFLICT"
 )
 
 type BusinessError struct {

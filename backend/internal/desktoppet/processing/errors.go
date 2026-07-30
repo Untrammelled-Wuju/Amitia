@@ -12,4 +12,11 @@ const (
 	ErrCodeActionFrameCountInvalid = "ACTION_FRAME_COUNT_INVALID"
 	ErrCodeLoopDiscontinuity       = "LOOP_DISCONTINUITY"
 	ErrCodeExcessiveFrameDrift     = "EXCESSIVE_FRAME_DRIFT"
+
+	ErrCodeDataConflict              = "PROCESSING_DATA_CONFLICT"
+	ErrCodeDuplicateIdentity         = "PROCESSING_DUPLICATE_IDENTITY"
+	ErrCodeExecutionOwnershipLost    = "PROCESSING_EXECUTION_OWNERSHIP_LOST"
+	ErrCodeAttemptConflict           = "PROCESSING_ATTEMPT_CONFLICT"
+	ErrCodeMigrationUnresolved       = "PROCESSING_MIGRATION_UNRESOLVED"
+	ErrCodeVersionAllocationConflict = "PROCESSING_VERSION_ALLOCATION_CONFLICT"
 )

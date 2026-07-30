@@ -15,8 +15,12 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/behavior"
+	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/quality"
+	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
@@ -91,7 +95,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx)
 		processing.RegisterProcessingRouter(apiGroup, ctx)
+		editing.RegisterEditingRouterWithService(apiGroup, services.EditingService)
+		quality.RegisterQualityRouter(apiGroup, services.QualityService)
 		installation.RegisterRoutes(apiGroup, services.InstallationService)
+		installation.RegisterReleaseRoutes(apiGroup, services.ReleaseService)
+		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
@@ -113,6 +121,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
 	}
+	runtime.RegisterInternalRoutes(r, services.DesktopPetRuntime)
+	runtime.RegisterUserRoutes(apiGroup, services.DesktopPetRuntime)
 	r.Static("/audio", "./data/tts_cache")
 	r.Static("/exports", "./data/exports")
 	r.Static("/voice", "./data/voice_msg")

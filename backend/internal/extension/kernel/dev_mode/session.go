@@ -9,14 +9,20 @@ import (
 )
 
 type DeveloperSession struct {
-	SessionID   string
-	WorkspaceID WorkspaceID
-	DeviceID    string
-	UserAgent   string
-	StartedAt   time.Time
-	ExpiresAt   time.Time
-	Revoked     bool
-	Scopes      []string
+	SessionID        string
+	WorkspaceID      WorkspaceID
+	ExtensionID      ExtensionID
+	UserID           string
+	DeviceID         string
+	UserAgent        string
+	Environment      string
+	PolicyVersion    string
+	DevTrustSnapshot bool
+	DevTrustVersion  uint64
+	StartedAt        time.Time
+	ExpiresAt        time.Time
+	Revoked          bool
+	Scopes           []string
 }
 
 type SessionManager struct {
@@ -43,18 +49,27 @@ var (
 	ErrSessionRevoked  = errors.New("dev_mode: session revoked")
 )
 
-func (m *SessionManager) Open(ctx context.Context, workspace WorkspaceID, deviceID, userAgent string, scopes []string) (*DeveloperSession, error) {
+func (m *SessionManager) Open(ctx context.Context, workspace WorkspaceID, extension ExtensionID, userID, deviceID, userAgent, policyVersion string, devTrust bool, devTrustVersion uint64) (*DeveloperSession, error) {
+	if workspace == "" || extension == "" || userID == "" || policyVersion == "" || !devTrust || devTrustVersion == 0 {
+		return nil, fmt.Errorf("dev_mode: invalid developer session binding")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := time.Now().UTC()
 	sess := &DeveloperSession{
-		SessionID:   newSessionID(workspace, now),
-		WorkspaceID: workspace,
-		DeviceID:    deviceID,
-		UserAgent:   userAgent,
-		StartedAt:   now,
-		ExpiresAt:   now.Add(m.ttl),
-		Scopes:      scopes,
+		SessionID:        newSessionID(workspace, now),
+		WorkspaceID:      workspace,
+		ExtensionID:      extension,
+		UserID:           userID,
+		DeviceID:         deviceID,
+		UserAgent:        userAgent,
+		Environment:      "development",
+		PolicyVersion:    policyVersion,
+		DevTrustSnapshot: devTrust,
+		DevTrustVersion:  devTrustVersion,
+		StartedAt:        now,
+		ExpiresAt:        now.Add(m.ttl),
+		Scopes:           []string{"extensions.install.unsigned"},
 	}
 	m.sessions[sess.SessionID] = sess
 	m.byWorkspace[workspace] = sess.SessionID
@@ -87,6 +102,20 @@ func (m *SessionManager) Revoke(sessionID string) error {
 	sess.Revoked = true
 	delete(m.byWorkspace, sess.WorkspaceID)
 	return nil
+}
+
+func (m *SessionManager) RevokeAll() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	revoked := 0
+	for _, sess := range m.sessions {
+		if !sess.Revoked {
+			sess.Revoked = true
+			revoked++
+		}
+	}
+	m.byWorkspace = make(map[WorkspaceID]string)
+	return revoked
 }
 
 func (m *SessionManager) GetByWorkspace(workspace WorkspaceID) (*DeveloperSession, error) {

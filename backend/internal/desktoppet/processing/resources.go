@@ -31,6 +31,18 @@ type ActionJSON struct {
 	Anchor          AnchorJSON  `json:"anchor"`
 	Interruptible   bool        `json:"interruptible"`
 	ReturnAction    string      `json:"returnAction"`
+	PlaybackMode    string      `json:"playbackMode"`
+	ReturnPolicy    string      `json:"returnPolicy"`
+	Priority        int         `json:"priority"`
+	CooldownMs      int         `json:"cooldownMs"`
+	MutexGroup      string      `json:"mutexGroup"`
+	QueuePolicy     string      `json:"queuePolicy"`
+	DedupWindowMs   int         `json:"dedupWindowMs"`
+	InterruptAfterMs int        `json:"interruptAfterMs"`
+	MinimumPlayMs   int         `json:"minimumPlayMs"`
+	MaximumPlayMs   int         `json:"maximumPlayMs"`
+	AnchorProfile   string      `json:"anchorProfile"`
+	ActionSpecHash  string      `json:"actionSpecHash"`
 }
 
 type AnchorJSON struct {
@@ -174,8 +186,16 @@ func BuildActionJSON(actionKey, actionName string, frameCount, fps int, anchor A
 	}
 
 	returnAction := ""
+	playbackMode := "once"
+	returnPolicy := "previous"
 	if IsLoopAction(actionKey) {
 		returnAction = "idle_normal"
+		playbackMode = "loop"
+		returnPolicy = "none"
+	}
+	if loopType == "loop" {
+		playbackMode = "loop"
+		returnPolicy = "none"
 	}
 
 	return &ActionJSON{
@@ -192,9 +212,45 @@ func BuildActionJSON(actionKey, actionName string, frameCount, fps int, anchor A
 			X:    anchor.X,
 			Y:    anchor.Y,
 		},
-		Interruptible: true,
-		ReturnAction:  returnAction,
+		Interruptible:  true,
+		ReturnAction:   returnAction,
+		PlaybackMode:   playbackMode,
+		ReturnPolicy:   returnPolicy,
+		QueuePolicy:    "replace",
+		AnchorProfile:  "feet_center",
 	}
+}
+
+func EnrichActionJSONFromSpec(a *ActionJSON, action *ProcessingAction) {
+	if a == nil || action == nil {
+		return
+	}
+	if action.PlaybackMode != "" {
+		a.PlaybackMode = action.PlaybackMode
+	}
+	if action.ReturnPolicy != "" {
+		a.ReturnPolicy = action.ReturnPolicy
+	}
+	if action.ReturnActionKey != "" {
+		a.ReturnAction = action.ReturnActionKey
+	}
+	a.Priority = action.Priority
+	a.CooldownMs = action.CooldownMS
+	a.MutexGroup = action.MutexGroup
+	if action.QueuePolicy != "" {
+		a.QueuePolicy = action.QueuePolicy
+	}
+	a.DedupWindowMs = action.DedupWindowMS
+	a.InterruptAfterMs = action.InterruptAfterMS
+	a.MinimumPlayMs = action.MinimumPlayMS
+	a.MaximumPlayMs = action.MaximumPlayMS
+	if action.AnchorProfile != "" {
+		a.AnchorProfile = action.AnchorProfile
+	}
+	if action.ActionSpecHash != "" {
+		a.ActionSpecHash = action.ActionSpecHash
+	}
+	a.Interruptible = action.Interruptible != 0
 }
 
 func DefaultFPSForAction(actionKey string) int {

@@ -52,60 +52,99 @@
                   :class="{ 'ob-field-error': fieldErrors.baseUrl }"
                 />
               </label>
-              <label v-if="modelType !== 'local'" class="ob-input-label"
-                >API Key
-                <div class="ob-input-password-wrap">
-                  <input
-                    :value="apiKey"
-                    @input="
-                      emit(
-                        'update:apiKey',
-                        ($event.target as HTMLInputElement).value,
-                      )
-                    "
-                    :type="showApiKey ? 'text' : 'password'"
-                    placeholder="sk-..."
-                    :class="{ 'ob-field-error': fieldErrors.apiKey }"
-                  />
-                  <button
-                    type="button"
-                    class="ob-password-toggle"
-                    @click="showApiKey = !showApiKey"
-                    tabindex="-1"
+              <div
+                v-if="modelType !== 'local'"
+                style="display: flex; gap: 10px; align-items: flex-start"
+              >
+                <label class="ob-input-label" style="flex: 1; min-width: 0"
+                  >API Key
+                  <div class="ob-input-password-wrap">
+                    <input
+                      :value="apiKey"
+                      @input="
+                        emit(
+                          'update:apiKey',
+                          ($event.target as HTMLInputElement).value,
+                        )
+                      "
+                      :type="showApiKey ? 'text' : 'password'"
+                      placeholder="sk-..."
+                      :class="{ 'ob-field-error': fieldErrors.apiKey }"
+                    />
+                    <button
+                      type="button"
+                      class="ob-password-toggle"
+                      @click="showApiKey = !showApiKey"
+                      tabindex="-1"
+                    >
+                      <svg
+                        v-if="!showApiKey"
+                        viewBox="0 0 24 24"
+                        width="15"
+                        height="15"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                        />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <svg
+                        v-else
+                        viewBox="0 0 24 24"
+                        width="15"
+                        height="15"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                        />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                    </button>
+                  </div>
+                </label>
+                <div
+                  v-if="modelType === 'compatible'"
+                  class="ob-input-label"
+                  style="flex: 0 0 180px"
+                >
+                  服务厂商
+                  <el-select
+                    :model-value="selectedProvider"
+                    @update:model-value="onProviderSelect"
+                    placeholder="选择厂商"
+                    class="ob-model-select"
+                    clearable
+                    style="width: 100%"
                   >
-                    <svg
-                      v-if="!showApiKey"
-                      viewBox="0 0 24 24"
-                      width="15"
-                      height="15"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
+                    <el-option
+                      v-for="p in providers"
+                      :key="p.id"
+                      :label="p.name"
+                      :value="p.id"
                     >
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    <svg
-                      v-else
-                      viewBox="0 0 24 24"
-                      width="15"
-                      height="15"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path
-                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                      />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  </button>
+                      <span>{{ p.name }}</span>
+                      <span
+                        style="
+                          float: right;
+                          font-size: 11px;
+                          color: var(--el-text-color-secondary);
+                        "
+                        >{{ p.id }}</span
+                      >
+                    </el-option>
+                  </el-select>
                 </div>
-              </label>
+              </div>
               <label
                 v-if="detectedModels.length > 0"
                 class="ob-input-label ob-model-page-wide"
@@ -209,9 +248,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onMounted } from "vue";
+import { useApi } from "../../../composables/useApi";
 
 const showApiKey = ref(false);
+const { get } = useApi();
+const providers = ref<any[]>([]);
+const selectedProvider = ref("");
+
+onMounted(async () => {
+  try {
+    providers.value = (await get<any[]>("/api/model/providers")) || [];
+  } catch {
+    providers.value = [];
+  }
+});
+
+function onProviderSelect(providerId: string) {
+  selectedProvider.value = providerId;
+  const provider = providers.value.find((p: any) => p.id === providerId);
+  if (provider) {
+    if (provider.defaultBaseUrl) {
+      emit("update:baseUrl", provider.defaultBaseUrl);
+    }
+    if (provider.defaultModel) {
+      emit("update:modelName", provider.defaultModel);
+    }
+  }
+}
+
 const props = defineProps<{
   detecting: boolean;
   modelReady: boolean;
@@ -254,6 +319,7 @@ watch(
       emit("update:baseUrl", "https://api.deepseek.com/v1");
       emit("update:apiKey", "");
     }
+    selectedProvider.value = "";
   },
 );
 </script>

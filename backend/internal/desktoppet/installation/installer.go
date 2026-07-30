@@ -192,7 +192,7 @@ func (s *installer) validateBeforeInstall(pkg *processing.Package, userId, chara
 		return NewInstallationError(ErrCodeInstallationInvalid, "资源包不属于当前用户", ErrInstallationInvalid)
 	}
 
-	if pkg.Status != "ready" {
+	if pkg.Status != "ready" && pkg.Status != "succeeded" {
 		return NewInstallationError(ErrCodePackageNotReady,
 			fmt.Sprintf("资源包状态为 %s，非 ready", pkg.Status), ErrPackageNotReady)
 	}

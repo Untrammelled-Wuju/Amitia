@@ -69,17 +69,17 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-input v-model="form.baseUrl" placeholder="http://127.0.0.1:11434" />
       </el-form-item>
 
-      <el-form-item :label="isOllama ? 'API Key (可选)' : 'API Key'" prop="apiKey">
+      <el-form-item :label="isApiKeyOptional ? 'API Key (可选)' : 'API Key'" prop="apiKey">
         <el-input
           v-model="form.apiKey"
           type="password"
           show-password
-          :placeholder="isOllama ? '本地 Ollama 无需填写' : (editingId ? '留空则保留现有 Key' : 'sk-...')"
+          :placeholder="isApiKeyOptional ? '当前类型可留空' : (editingId ? '留空则保留现有 Key' : 'sk-...')"
         />
         <div class="form-hint">
           {{
-            isOllama
-              ? 'Ollama 本地模式默认无需 API Key，如已配置鉴权可填写。'
+            isApiKeyOptional
+              ? '当前服务类型默认无需 API Key，如已配置鉴权可填写。'
               : '编辑时留空则保留现有 Key。'
           }}
         </div>
@@ -90,10 +90,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="model-detect-row">
             <el-input
               v-model="form.modelName"
-              placeholder="gpt-4o-mini / qwen2.5:7b / deepseek-chat"
+              :placeholder="modelPlaceholder"
               class="model-input"
             />
             <el-button
+              v-if="showDetect"
               type="success"
               size="small"
               :loading="detectingModels"
@@ -123,7 +124,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </el-form-item>
 
-      <el-row :gutter="12">
+      <slot name="extraFields" />
+
+      <el-row v-if="showAdvanced" :gutter="12">
         <el-col :span="12">
           <el-form-item label="温度">
             <el-input-number
@@ -201,6 +204,9 @@ const props = defineProps<{
   detectedModels: { id: string; owned_by?: string }[];
   detectError: string;
   saving: boolean;
+  showAdvanced?: boolean;
+  showDetect?: boolean;
+  modelPlaceholder?: string;
 }>();
 
 const emit = defineEmits<{
@@ -215,7 +221,13 @@ const visible = computed({
   set: (v) => emit("update:modelValue", v),
 });
 
-const isOllama = computed(() => props.form?.apiType === "ollama");
+const isApiKeyOptional = computed(() => {
+  const t = props.form?.apiType;
+  return t === "ollama" || t === "edge" || t === "cosyvoice";
+});
+const showAdvanced = computed(() => props.showAdvanced ?? true);
+const showDetect = computed(() => props.showDetect ?? true);
+const modelPlaceholder = computed(() => props.modelPlaceholder ?? "gpt-4o-mini / qwen2.5:7b / deepseek-chat");
 
 const formRef = ref<FormInstance>();
 const localDetectError = ref("");

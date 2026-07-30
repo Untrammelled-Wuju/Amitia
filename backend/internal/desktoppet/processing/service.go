@@ -3,6 +3,7 @@
 package processing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
+	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -69,24 +72,27 @@ type Service interface {
 }
 
 type service struct {
-	repo      Repository
-	db        *gorm.DB
-	ctx       *app.AppContext
-	validator *Validator
-	packager  *Packager
-	cleanup   *CleanupManager
-	dataDir   string
+	repo        Repository
+	db          *gorm.DB
+	ctx         *app.AppContext
+	validator   *Validator
+	packager    *Packager
+	cleanup     *CleanupManager
+	dataDir     string
+	stateEngine *taskstate.Engine
 }
 
 func NewService(repo Repository, db *gorm.DB, ctx *app.AppContext, dataDir string) Service {
+	stateStore := desktoppet.NewStateStore(db)
 	return &service{
-		repo:      repo,
-		db:        db,
-		ctx:       ctx,
-		dataDir:   dataDir,
-		validator: NewValidator(repo, dataDir),
-		packager:  NewPackager(repo, dataDir),
-		cleanup:   NewCleanupManager(dataDir),
+		repo:        repo,
+		db:          db,
+		ctx:         ctx,
+		dataDir:     dataDir,
+		validator:   NewValidator(repo, dataDir),
+		packager:    NewPackager(repo, dataDir),
+		cleanup:     NewCleanupManager(dataDir),
+		stateEngine: taskstate.NewEngine(stateStore),
 	}
 }
 
@@ -186,7 +192,7 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		GenerationTaskID:           req.GenerationTaskID,
 		ProcessingVersion:          processingVersion,
 		Status:                     "pending",
-		CurrentStage:               "queued",
+		CurrentStage:               "created",
 		Progress:                   0,
 		OutputWidth:                req.OutputWidth,
 		OutputHeight:               req.OutputHeight,
@@ -216,7 +222,7 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		if err != nil {
 			return nil, wrapValidationError(err)
 		}
-		actions = append(actions, ProcessingAction{
+		pa := ProcessingAction{
 			ID:                     uuid.New().String(),
 			ProcessingTaskID:       taskID,
 			GenerationTaskActionID: genAction.ID,
@@ -228,7 +234,20 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 			SourceFrameCount:       genAction.FrameCount,
 			CreatedAt:              now,
 			UpdatedAt:              now,
-		})
+			ActionSpecSchemaVersion: genAction.ActionSpecSchemaVersion,
+			ActionSpecVersion:      genAction.ActionSpecVersion,
+			ActionSpecHash:         genAction.ActionSpecHash,
+			ReturnPolicy:           genAction.ReturnPolicySnapshot,
+			ReturnActionKey:        genAction.ReturnActionKeySnapshot,
+			Interruptible:          genAction.InterruptibleSnapshot,
+			Priority:               genAction.PrioritySnapshot,
+			CooldownMS:             genAction.CooldownMSSnapshot,
+			MutexGroup:             genAction.MutexGroupSnapshot,
+			AnchorProfile:          genAction.AnchorProfileSnapshot,
+			PlaybackMode:           genAction.PlaybackModeSnapshot,
+			QueuePolicy:            "replace",
+		}
+		actions = append(actions, pa)
 	}
 
 	if len(actions) == 0 {
@@ -250,16 +269,24 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理任务失败", err)
 	}
 
-	if err := s.repo.CreateProcessingActions(tx, actions); err != nil {
+	if err := s.repo.EnsureProcessingActions(tx, actions); err != nil {
 		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理动作失败", err)
 	}
 
-	if err := s.repo.UpdateProcessingTaskStatus(tx, taskID, map[string]interface{}{
-		"status":        "queued",
-		"current_stage": "queued",
-		"updated_at":    now,
-	}); err != nil {
-		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "更新处理任务状态失败", err)
+	txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
+	txEngine := taskstate.NewEngine(txStateStore)
+	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType: contracts.EntityProcessingTask,
+		EntityID:   taskID,
+		From:       []contracts.LifecycleStatus{contracts.StatusPending},
+		To:         contracts.StatusQueued,
+		Stage:      contracts.StageQueued,
+		Reason:     contracts.ReasonProcessingTaskSubmit,
+		ActorType:  contracts.ActorService,
+		ActorID:    req.UserID,
+	})
+	if err != nil {
+		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "处理任务状态转换失败", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -286,12 +313,10 @@ func (s *service) GetProcessingTask(id string) (*GetProcessingTaskResponse, erro
 		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理动作失败", err)
 	}
 
-	latestActions := s.dedupLatestActions(actions)
+	actionInfos := make([]ActionStatusInfo, 0, len(actions))
+	summary := QualitySummary{TotalActions: len(actions)}
 
-	actionInfos := make([]ActionStatusInfo, 0, len(latestActions))
-	summary := QualitySummary{TotalActions: len(latestActions)}
-
-	for _, action := range latestActions {
+	for _, action := range actions {
 		info := ActionStatusInfo{
 			ActionKey:    action.ActionKey,
 			ActionName:   action.ActionNameSnapshot,
@@ -322,7 +347,7 @@ func (s *service) GetProcessingTask(id string) (*GetProcessingTaskResponse, erro
 		}
 	}
 
-	previewPaths := s.buildPreviewPaths(task, latestActions)
+	previewPaths := s.buildPreviewPaths(task, actions)
 
 	return &GetProcessingTaskResponse{
 		ProcessingTask: task,
@@ -333,7 +358,18 @@ func (s *service) GetProcessingTask(id string) (*GetProcessingTaskResponse, erro
 }
 
 func (s *service) CancelProcessingTask(id string) error {
-	task, err := s.repo.GetProcessingTask(id)
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "开启事务失败", tx.Error)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
+
+	task, err := s.repo.GetProcessingTaskForUpdate(tx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return NewProcessingError(ErrCodeProcessingTaskNotFound, "处理任务不存在")
@@ -341,13 +377,38 @@ func (s *service) CancelProcessingTask(id string) error {
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理任务失败", err)
 	}
 
-	if task.Status != "processing" && task.Status != "queued" {
+	if task.Status != "processing" && task.Status != "queued" && task.Status != "pending" {
 		return NewProcessingError(ErrCodeProcessingTaskStateConflict, fmt.Sprintf("任务状态 %s 不可取消", task.Status))
 	}
 
-	now := time.Now().Format(desktopPetTimeFormat)
-	if err := s.repo.SetProcessingCancelRequested(id, now); err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "设置取消标记失败", err)
+	txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
+	txEngine := taskstate.NewEngine(txStateStore)
+
+	switch task.Status {
+	case "queued", "pending":
+		_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityProcessingTask,
+			EntityID:   id,
+			From:       []contracts.LifecycleStatus{contracts.StatusQueued, contracts.StatusPending},
+			To:         contracts.StatusCancelled,
+			Stage:      contracts.StageCancelled,
+			Reason:     contracts.ReasonProcessingTaskCancelBeforeClaim,
+			ActorType:  contracts.ActorService,
+		})
+	case "processing":
+		_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityProcessingTask,
+			EntityID:   id,
+			From:       []contracts.LifecycleStatus{contracts.StatusProcessing},
+			To:         contracts.StatusCancelling,
+			Reason:     contracts.ReasonProcessingTaskCancelRequested,
+			ActorType:  contracts.ActorService,
+		})
+	default:
+		err = nil
+	}
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "取消任务状态转换失败", err)
 	}
 
 	actions, err := s.repo.ListProcessingActions(id)
@@ -355,11 +416,12 @@ func (s *service) CancelProcessingTask(id string) error {
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理动作失败", err)
 	}
 
+	now := time.Now().Format(desktopPetTimeFormat)
 	for _, action := range actions {
 		if action.Status == "pending" {
-			if err := s.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
-				"status":      "cancelled",
-				"updated_at":  now,
+			if err := s.repo.UpdateProcessingAction(tx, action.ID, map[string]interface{}{
+				"status":       "cancelled",
+				"updated_at":   now,
 				"completed_at": now,
 			}); err != nil {
 				return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "取消处理动作失败", err)
@@ -367,14 +429,10 @@ func (s *service) CancelProcessingTask(id string) error {
 		}
 	}
 
-	if err := s.repo.UpdateProcessingTaskStatusNoTx(id, map[string]interface{}{
-		"status":        "cancelled",
-		"current_stage": "cancelled",
-		"completed_at":  now,
-		"updated_at":    now,
-	}); err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "更新处理任务状态失败", err)
+	if err := tx.Commit().Error; err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "提交事务失败", err)
 	}
+	committed = true
 
 	if cleanupErr := s.cleanup.CleanupTempDir(task.GenerationTaskID); cleanupErr != nil {
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "清理临时文件失败", cleanupErr)
@@ -384,7 +442,7 @@ func (s *service) CancelProcessingTask(id string) error {
 }
 
 func (s *service) RetryProcessingAction(processingTaskID, actionKey string) error {
-	_, err := s.repo.GetProcessingTask(processingTaskID)
+	task, err := s.repo.GetProcessingTask(processingTaskID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return NewProcessingError(ErrCodeProcessingTaskNotFound, "处理任务不存在")
@@ -392,45 +450,16 @@ func (s *service) RetryProcessingAction(processingTaskID, actionKey string) erro
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理任务失败", err)
 	}
 
-	actions, err := s.repo.ListProcessingActionsOrdered(processingTaskID)
+	action, err := s.repo.GetProcessingActionByActionKey(processingTaskID, actionKey)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return NewProcessingError(ErrCodeProcessingActionNotFound, "处理动作不存在")
+		}
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理动作失败", err)
 	}
 
-	var latestAction *ProcessingAction
-	for i := len(actions) - 1; i >= 0; i-- {
-		if actions[i].ActionKey == actionKey {
-			latestAction = &actions[i]
-			break
-		}
-	}
-	if latestAction == nil {
-		return NewProcessingError(ErrCodeProcessingActionNotFound, "处理动作不存在")
-	}
-
-	if latestAction.Status != "failed" && latestAction.Status != "succeeded" {
-		return NewProcessingError(ErrCodeProcessingActionNotRetryable, fmt.Sprintf("动作状态 %s 不可重试", latestAction.Status))
-	}
-
-	now := time.Now().Format(desktopPetTimeFormat)
-	newAction := &ProcessingAction{
-		ID:                     uuid.New().String(),
-		ProcessingTaskID:       processingTaskID,
-		GenerationTaskActionID: latestAction.GenerationTaskActionID,
-		ActionKey:              latestAction.ActionKey,
-		ActionNameSnapshot:     latestAction.ActionNameSnapshot,
-		SourceAttemptNumber:    latestAction.SourceAttemptNumber,
-		Status:                 "pending",
-		Progress:               0,
-		SourceFrameCount:       latestAction.SourceFrameCount,
-		LoopType:               latestAction.LoopType,
-		FPS:                    latestAction.FPS,
-		FrameDurationMS:        latestAction.FrameDurationMS,
-		AnchorType:             latestAction.AnchorType,
-		AnchorX:                latestAction.AnchorX,
-		AnchorY:                latestAction.AnchorY,
-		CreatedAt:              now,
-		UpdatedAt:              now,
+	if action.Status != "failed" && action.Status != "succeeded" {
+		return NewProcessingError(ErrCodeProcessingActionNotRetryable, fmt.Sprintf("动作状态 %s 不可重试", action.Status))
 	}
 
 	tx := s.db.Begin()
@@ -444,18 +473,40 @@ func (s *service) RetryProcessingAction(processingTaskID, actionKey string) erro
 		}
 	}()
 
-	if err := s.repo.CreateProcessingActions(tx, []ProcessingAction{*newAction}); err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建重试动作记录失败", err)
+	_, err = s.repo.BeginProcessingActionAttempt(tx, action.ID, action.RowVersion, "", action.SourceAttemptNumber)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
 	}
 
-	if err := s.repo.UpdateProcessingTaskStatus(tx, processingTaskID, map[string]interface{}{
-		"status":        "queued",
-		"current_stage": "queued",
-		"error_code":    "",
-		"error_message": "",
-		"updated_at":    now,
-	}); err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "更新处理任务状态失败", err)
+	txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
+	txEngine := taskstate.NewEngine(txStateStore)
+
+	actionFrom := contracts.LifecycleStatus(action.Status)
+	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType: contracts.EntityProcessingAction,
+		EntityID:   action.ID,
+		From:       []contracts.LifecycleStatus{actionFrom},
+		To:         contracts.StatusQueued,
+		Stage:      contracts.StageQueued,
+		Reason:     contracts.ReasonProcessingActionRetry,
+		ActorType:  contracts.ActorRetryService,
+	})
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试动作状态转换失败", err)
+	}
+
+	taskFrom := contracts.LifecycleStatus(task.Status)
+	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType: contracts.EntityProcessingTask,
+		EntityID:   processingTaskID,
+		From:       []contracts.LifecycleStatus{taskFrom},
+		To:         contracts.StatusQueued,
+		Stage:      contracts.StageQueued,
+		Reason:     contracts.ReasonProcessingTaskRetry,
+		ActorType:  contracts.ActorRetryService,
+	})
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试任务状态转换失败", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -589,7 +640,7 @@ func (s *service) CreatePackage(req *CreatePackageRequest) (*CreatePackageRespon
 	return &CreatePackageResponse{
 		PackageID:   result.Package.ID,
 		PackageHash: result.PackageHash,
-		Status:      result.Package.Status,
+		Status:      "ready",
 	}, nil
 }
 
@@ -602,20 +653,12 @@ func (s *service) SwitchAttempt(processingTaskID, actionKey string, attemptNumbe
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理任务失败", err)
 	}
 
-	actions, err := s.repo.ListProcessingActionsOrdered(processingTaskID)
+	action, err := s.repo.GetProcessingActionByActionKey(processingTaskID, actionKey)
 	if err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理动作失败", err)
-	}
-
-	var latestAction *ProcessingAction
-	for i := len(actions) - 1; i >= 0; i-- {
-		if actions[i].ActionKey == actionKey {
-			latestAction = &actions[i]
-			break
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return NewProcessingError(ErrCodeProcessingActionNotFound, "处理动作不存在")
 		}
-	}
-	if latestAction == nil {
-		return NewProcessingError(ErrCodeProcessingActionNotFound, "处理动作不存在")
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询处理动作失败", err)
 	}
 
 	genActions, err := s.repo.ListSucceededActions(task.GenerationTaskID)
@@ -625,7 +668,7 @@ func (s *service) SwitchAttempt(processingTaskID, actionKey string, attemptNumbe
 
 	var genAction *desktoppet.GenerationTaskAction
 	for i := range genActions {
-		if genActions[i].ID == latestAction.GenerationTaskActionID {
+		if genActions[i].ID == action.GenerationTaskActionID {
 			genAction = &genActions[i]
 			break
 		}
@@ -636,10 +679,25 @@ func (s *service) SwitchAttempt(processingTaskID, actionKey string, attemptNumbe
 
 	maxAttempt := genAction.AttemptNumber
 	if maxAttempt <= 0 {
-		maxAttempt = latestAction.SourceAttemptNumber
+		maxAttempt = action.SourceAttemptNumber
 	}
 	if attemptNumber < 1 || attemptNumber > maxAttempt {
 		return NewProcessingError(ErrCodeProcessingInvalidAttempt, fmt.Sprintf("attempt %d 超出范围 [1, %d]", attemptNumber, maxAttempt))
+	}
+
+	genFrames, err := s.repo.ListFramesByAction(action.GenerationTaskActionID)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询生成帧失败", err)
+	}
+	hasCompleteFrames := false
+	for _, frame := range genFrames {
+		if frame.GenerationAttempt == attemptNumber && frame.Status == "succeeded" {
+			hasCompleteFrames = true
+			break
+		}
+	}
+	if !hasCompleteFrames {
+		return NewProcessingError(ErrCodeProcessingInvalidAttempt, fmt.Sprintf("attempt %d 没有完整成功帧", attemptNumber))
 	}
 
 	now := time.Now().Format(desktopPetTimeFormat)
@@ -654,18 +712,26 @@ func (s *service) SwitchAttempt(processingTaskID, actionKey string, attemptNumbe
 		}
 	}()
 
-	if err := s.repo.UpdateProcessingActionAttempt(tx, latestAction.ID, attemptNumber); err != nil {
+	if err := s.repo.UpdateProcessingAction(tx, action.ID, map[string]interface{}{
+		"source_attempt_number": attemptNumber,
+		"updated_at":            now,
+	}); err != nil {
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "更新源尝试编号失败", err)
 	}
 
-	if err := s.repo.UpdateProcessingAction(tx, latestAction.ID, map[string]interface{}{
-		"status":       "pending",
-		"progress":     0,
-		"error_code":   "",
+	_, err = s.repo.BeginProcessingActionAttempt(tx, action.ID, action.RowVersion, "", attemptNumber)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
+	}
+
+	if err := s.repo.UpdateProcessingAction(tx, action.ID, map[string]interface{}{
+		"status":        "pending",
+		"progress":      0,
+		"error_code":    "",
 		"error_message": "",
-		"started_at":   "",
-		"completed_at": "",
-		"updated_at":   now,
+		"started_at":    "",
+		"completed_at":  "",
+		"updated_at":    now,
 	}); err != nil {
 		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重置动作状态失败", err)
 	}
@@ -766,22 +832,6 @@ func (s *service) ExcludeAction(processingTaskID, actionKey string) error {
 	}
 
 	return nil
-}
-
-func (s *service) dedupLatestActions(actions []ProcessingAction) []ProcessingAction {
-	latestMap := make(map[string]ProcessingAction)
-	order := make([]string, 0, len(actions))
-	for _, a := range actions {
-		if _, exists := latestMap[a.ActionKey]; !exists {
-			order = append(order, a.ActionKey)
-		}
-		latestMap[a.ActionKey] = a
-	}
-	result := make([]ProcessingAction, 0, len(order))
-	for _, key := range order {
-		result = append(result, latestMap[key])
-	}
-	return result
 }
 
 func summarizeFrameQuality(frames []ProcessedFrame) (string, []string) {

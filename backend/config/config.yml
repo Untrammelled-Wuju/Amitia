@@ -54,3 +54,19 @@ surrealdb:
   username: "root"
   password: "root"
   dataPath: "data/graph.db"
+
+desktopPetRuntime:
+  enabled: true
+  path: "/internal/desktop-pet/runtime/ws"
+  loopbackOnly: true
+  allowRemote: false
+  heartbeatIntervalMs: 10000
+  heartbeatTimeoutMs: 30000
+  maxMessageBytes: 1048576
+  registerTimeoutSec: 10
+  sendQueueSize: 64
+  commandTimeoutSec: 30
+  maxRetryAttempts: 5
+  retryBaseDelayMs: 500
+  retryMaxDelayMs: 30000
+  commandRetentionHours: 24

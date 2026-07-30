@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,9 +22,21 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/behavior"
+	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
+	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
+	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
+	"github.com/u-ai/backend/internal/desktoppet/quality"
+	"github.com/u-ai/backend/internal/desktoppet/quality/bridge"
+	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
+	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
+	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -79,7 +92,13 @@ type AppServices struct {
 	OutboxWorker        *newoutbox.Worker
 	DesktopPetWorker    *worker.Worker
 	ProcessingWorker    *processingworker.Worker
+	QualityService      quality.QualityService
+	QualityWorker       *qualityworker.Worker
 	InstallationService installation.Service
+	ReleaseService     installation.ReleaseService
+	DesktopPetRuntime  *runtime.Service
+	EditingService     editing.Service
+	BehaviorService    *behavior.BehaviorService
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
 	VoiceEntry          *interaction.VoiceEntry
@@ -196,6 +215,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
+	extensionRuntime.Kernel.SetContainer(kernelContainer)
+	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
+		log.Error("package operation recovery failed: ", err)
+		panic("failed to recover package operations")
+	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
 	}
@@ -230,15 +254,31 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 			panic("failed to start schedule service")
 		}
 	}
-	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	kernelProxy := extension.NewKernelLifecycleProxy(extensionRuntime.Kernel)
 	if err := extensionRuntime.Packages.AttachKernelProxy(kernelProxy); err != nil {
 		log.Error("extension package recovery failed: ", err)
 		panic("failed to recover extension package operations")
 	}
-	if err := extensionRuntime.Packages.MigrateLegacyPackages(context.Background()); err != nil {
-		log.Error("legacy extension package migration failed: ", err)
-		panic("failed to migrate legacy extension packages")
+	legacyReport, legacyErr := extensionRuntime.Packages.DetectLegacyPackages(context.Background())
+	if legacyErr != nil {
+		log.Warn("legacy extension package detection failed: ", legacyErr)
+	} else if legacyReport.PendingManual > 0 {
+		log.Warn(fmt.Sprintf("legacy extension packages require manual migration: %d pending (total %d, completed %d)", legacyReport.PendingManual, legacyReport.Total, legacyReport.Completed))
+		for _, extID := range legacyReport.PendingExtensions {
+			log.Warn(fmt.Sprintf("legacy extension pending manual migration: %s", extID))
+		}
+	} else {
+		log.Info(fmt.Sprintf("legacy extension migration status: %d completed (total %d)", legacyReport.Completed, legacyReport.Total))
+	}
+	artifactMaintenance, err := kernel.NewPackageArtifactMaintenanceForStore(kernelContainer.PackageRepository, kernelContainer.PackageArtifactStore, kernel.DefaultPackageArtifactMaintenanceConfig())
+	if err != nil {
+		log.Error("failed to initialize package artifact maintenance: ", err)
+		panic("failed to initialize package artifact maintenance")
+	}
+	kernelContainer.ArtifactMaintenance = artifactMaintenance
+	if err := artifactMaintenance.Start(context.Background()); err != nil {
+		log.Error("failed to start package artifact maintenance: ", err)
+		panic("failed to start package artifact maintenance")
 	}
 	if extensionRuntime.Lifecycle != nil {
 		extensionRuntime.Lifecycle.AttachKernelProxy(kernelProxy)
@@ -427,11 +467,122 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
-	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir)
+
+	bgRegistry := backgroundremoval.NewRegistry()
+	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+		log.Error("register local background provider failed: ", err)
+	}
+
+	processingPipeline := application.NewPipeline(bgRegistry, processingDataDir)
+	artifactSourceAdapter := application.NewRepoArtifactSourceAdapter(processingRepo)
+	processingSourceResolver := application.NewRepoSourceResolver(processingRepo, processingDataDir, artifactSourceAdapter)
+	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver)
+
+	qualityBridge := bridge.NewProcessingBridge(ctx.DB, processingDataDir)
+	qualitySvc, err := quality.NewQualityService(quality.ServiceConfig{
+		DB:             ctx.DB,
+		DataDir:        processingDataDir,
+		MeasurementSrc: quality.NewProcessingMeasurementAdapter(qualityBridge, processingDataDir),
+		Detectors:      detectors.NewDefaultDetectors(),
+		EventPublisher: quality.NewLogEventPublisher(),
+	})
+	if err != nil {
+		log.Error("failed to create quality service: ", err)
+	}
+	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
+
+	processingWorker.SetOnActionProcessed(func(taskID, actionID, actionKey string) {
+		if qualitySvc == nil {
+			return
+		}
+		revisionID := ""
+		revision, revErr := processingRepo.GetActiveRevision(actionID)
+		if revErr != nil {
+			log.Error(fmt.Sprintf("get active revision for action %s failed: %v", actionKey, revErr))
+		} else if revision != nil {
+			revisionID = revision.ID
+		}
+		_, evalErr := qualitySvc.CreateEvaluation(context.Background(), quality.CreateEvaluationRequest{
+			ProcessingTaskID:   taskID,
+			ProcessingActionID: actionID,
+			ActionRevisionID:   revisionID,
+			ActionKey:          actionKey,
+		})
+		if evalErr != nil {
+			log.Error(fmt.Sprintf("create quality evaluation for action %s failed: %v", actionKey, evalErr))
+		}
+	})
+
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	installationInstaller := installation.NewInstaller(installationRepo, processingRepo, charRepo, processingDataDir)
 	installationUninstaller := installation.NewUninstaller(installationRepo, processingDataDir)
-	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir)
+
+	runtimeConfig := runtime.DefaultRuntimeConfig()
+	if config.AppCfg.DesktopPetRuntime.Enabled {
+		runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
+		runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
+		runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
+		runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
+		runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
+		runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
+		runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
+		runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
+		runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
+		runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
+		runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
+		runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
+	}
+
+	runtimeCmdStore := runtime.NewCommandStore(ctx.DB)
+	runtimeStateStore := runtime.NewStateStore(ctx.DB)
+	runtimeSnapshotBuilder := runtime.NewSnapshotBuilder(installationRepo, config.AppCfg.Storage.DataDir)
+	runtimeSinkHolder := &runtimeEventSinkHolder{}
+	desktopPetRuntime := runtime.NewService(runtimeConfig, runtimeCmdStore, runtimeStateStore, runtimeSnapshotBuilder, runtimeSinkHolder)
+
+	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(desktopPetRuntime.Notifier()))
+
+	editingRepo := editing.NewRepository(ctx.DB)
+	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
+	editingGenAdapter := editing.NewGenerationAdapter(ctx)
+	editingProcAdapter := editing.NewProcessingAdapter(ctx)
+	editingQualAdapter := editing.NewQualityAdapter(ctx)
+	editingSvc := editing.NewService(editingRepo, editingAssetStore, editingGenAdapter, editingProcAdapter, editingQualAdapter, ctx.DB, processingDataDir)
+	if err := editingSvc.RecoverPendingJournals(context.Background()); err != nil {
+		log.Warn("editing journal recovery warning: ", err)
+	}
+	if err := editingSvc.ExpireSessions(context.Background()); err != nil {
+		log.Warn("editing session expiry warning: ", err)
+	}
+
+	processingWorker.SetRevisionPromoter(func(processingTaskID, actionKey, userID string) error {
+		_, err := editingSvc.ImportLegacyRevision(context.Background(), processingTaskID, actionKey, userID)
+		return err
+	})
+
+	releaseStorage := installation.NewReleaseStorage(processingDataDir)
+	revisionSource := installation.NewRevisionSourceAdapter(ctx, editingRepo, editingSvc, processingDataDir)
+	releaseService := installation.NewReleaseService(installationRepo, releaseStorage, revisionSource, processingRepo, charRepo, desktopPetRuntime.Notifier(), ctx)
+	if err := releaseService.RecoverPendingOperations(); err != nil {
+		log.Warn("installation coordinator recovery warning: ", err)
+	}
+
+	var behaviorSvc *behavior.BehaviorService
+	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
+		DB:              ctx.DB,
+		RuntimeService:  desktopPetRuntime,
+		InstallRepo:     installationRepo,
+		PsycheStore:     psycheStore,
+		DataDir:         processingDataDir,
+		ShadowMode:      false,
+		RuntimeCmdOn:    true,
+	})
+	if assembleErr != nil {
+		log.Error("failed to assemble behavior engine: ", assembleErr)
+	} else {
+		behaviorSvc = behaviorAssembled.Service
+		runtimeSinkHolder.Set(NewBehaviorRuntimeEventSink(installationRepo, behaviorAssembled.Engine))
+	}
+
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -451,7 +602,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		OutboxWorker:        newOutboxWorker,
 		DesktopPetWorker:    desktopPetWorker,
 		ProcessingWorker:    processingWorker,
+		QualityService:      qualitySvc,
+		QualityWorker:       qualityWorker,
 		InstallationService: installationService,
+		ReleaseService:      releaseService,
+		DesktopPetRuntime:   desktopPetRuntime,
+		EditingService:      editingSvc,
+		BehaviorService:     behaviorSvc,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,
@@ -723,3 +880,110 @@ type noopPublisher struct{}
 func (p *noopPublisher) Publish(record newoutbox.OutboxRecord) error {
 	return nil
 }
+
+type runtimeEventSinkHolder struct {
+	mu   sync.Mutex
+	sink runtime.RuntimeEventSink
+}
+
+func (h *runtimeEventSinkHolder) OnRuntimeEvent(ctx context.Context, event runtime.RuntimeDomainEvent) error {
+	h.mu.Lock()
+	sink := h.sink
+	h.mu.Unlock()
+	if sink == nil {
+		return nil
+	}
+	return sink.OnRuntimeEvent(ctx, event)
+}
+
+func (h *runtimeEventSinkHolder) Set(sink runtime.RuntimeEventSink) {
+	h.mu.Lock()
+	h.sink = sink
+	h.mu.Unlock()
+}
+
+type BehaviorRuntimeEventSink struct {
+	installRepo installation.Repository
+	engine      *behavior.BehaviorEngine
+}
+
+func NewBehaviorRuntimeEventSink(installRepo installation.Repository, engine *behavior.BehaviorEngine) *BehaviorRuntimeEventSink {
+	return &BehaviorRuntimeEventSink{installRepo: installRepo, engine: engine}
+}
+
+func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event runtime.RuntimeDomainEvent) error {
+	if s.engine == nil {
+		return nil
+	}
+	characterID, petInstanceID := s.resolveCharacterAndPet(event)
+	now := time.Now()
+
+	switch event.EventType {
+	case "clicked", "dragged":
+		builder := events.NewEnvelope("desktop.pet."+event.EventType, behavior.OriginDesktop).
+			UserID(event.UserID).
+			CharacterID(characterID).
+			PetInstanceID(petInstanceID).
+			OccurredAt(event.Timestamp).
+			DedupKey(events.BuildDedupKey(petInstanceID, event.EventType, fmt.Sprintf("t%d", event.Timestamp.UnixNano())))
+		if len(event.Payload) > 0 {
+			builder.PayloadRaw(event.Payload)
+		}
+		return s.engine.SubmitEvent(ctx, builder.Build(now))
+
+	case "playback_completed", "playback_interrupted":
+		phase := behavior.PlaybackCompleted
+		if event.EventType == "playback_interrupted" {
+			phase = behavior.PlaybackInterrupted
+		}
+		builder := events.NewEnvelope("playback.action."+string(phase), behavior.OriginPlayback).
+			UserID(event.UserID).
+			CharacterID(characterID).
+			PetInstanceID(petInstanceID).
+			OccurredAt(event.Timestamp).
+			DedupKey(events.BuildDedupKey(event.InstallationID, string(phase), fmt.Sprintf("t%d", event.Timestamp.UnixNano())))
+		if len(event.Payload) > 0 {
+			var payload map[string]interface{}
+			if json.Unmarshal(event.Payload, &payload) == nil {
+				if v, ok := payload["commandId"].(string); ok && v != "" {
+					builder.PayloadField("commandId", v)
+				}
+				if v, ok := payload["decisionId"].(string); ok && v != "" {
+					builder.PayloadField("decisionId", v)
+				}
+				if v, ok := payload["actionKey"].(string); ok && v != "" {
+					builder.PayloadField("actionKey", v)
+				}
+			}
+		}
+		return s.engine.SubmitEvent(ctx, builder.Build(now))
+	}
+
+	return nil
+}
+
+func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeDomainEvent) (string, string) {
+	characterID := event.CharacterID
+	petInstanceID := ""
+
+	if len(event.Payload) > 0 {
+		var payload map[string]interface{}
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			if v, ok := payload["petInstanceId"].(string); ok && v != "" {
+				petInstanceID = v
+			}
+		}
+	}
+
+	if characterID == "" && event.InstallationID != "" && s.installRepo != nil {
+		inst, err := s.installRepo.GetInstallation(event.InstallationID)
+		if err == nil && inst != nil {
+			characterID = inst.CharacterID
+		}
+	}
+
+	return characterID, petInstanceID
+}
+
+var _ runtime.RuntimeEventSink = (*runtimeEventSinkHolder)(nil)
+var _ runtime.RuntimeEventSink = (*BehaviorRuntimeEventSink)(nil)

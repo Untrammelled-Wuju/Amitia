@@ -3,8 +3,8 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +13,7 @@ import (
 )
 
 func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInstallRequest) (KernelInstallResult, error) {
-	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil {
+	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil || r.container.PackageGenerationStore == nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: package services unavailable")
 	}
 	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
@@ -30,6 +30,9 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if session.Status != "ready" && session.Status != "awaiting_confirmation" {
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", session.Status)
 	}
+	if session.PolicyVersion != packagePolicyVersion || session.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return KernelInstallResult{}, fmt.Errorf("kernel: preview security policy changed")
+	}
 	if request.ExpectedExtensionID != "" && request.ExpectedExtensionID != session.ExtensionID {
 		return KernelInstallResult{}, fmt.Errorf("kernel: package id mismatch: expected %s, got %s", request.ExpectedExtensionID, session.ExtensionID)
 	}
@@ -40,12 +43,27 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if !preview.Installable {
 		return KernelInstallResult{}, fmt.Errorf("kernel: package is not installable")
 	}
+	if preview.DevOnly {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+			return KernelInstallResult{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
+		}
+	}
+	claims, err := verifyPackageConfirmation(request.ConfirmationToken)
+	if err != nil {
+		return KernelInstallResult{}, err
+	}
+	if claims.SessionID != session.SessionID || claims.ArtifactID != session.ArtifactID || claims.ArchiveHash != session.ArchiveHash ||
+		claims.ManifestHash != session.ManifestHash || claims.ContentTreeHash != session.ContentTreeHash || claims.UserID != request.UserID ||
+		claims.ScopeType != request.ScopeType || claims.ScopeID != request.ScopeID || claims.PolicyVersion != session.PolicyVersion ||
+		claims.SecurityPolicyHash != computeSecurityPolicyHash() || claims.DeveloperSessionID != preview.DeveloperSessionID || claims.MigrationPlanHash != preview.MigrationPlanHash {
+		return KernelInstallResult{}, fmt.Errorf("kernel: confirmation token binding mismatch")
+	}
 	var required []string
 	if err := json.Unmarshal([]byte(session.RequiredConfirmationsJSON), &required); err != nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: confirmation policy corrupt: %w", err)
 	}
 	for _, confirmation := range required {
-		if !request.Confirmations[confirmation] {
+		if !claims.Confirmations[confirmation] {
 			return KernelInstallResult{}, fmt.Errorf("kernel: confirmation required: %s", confirmation)
 		}
 	}
@@ -65,57 +83,87 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if len(dependencyPreview.Issues) > 0 {
 		return KernelInstallResult{}, fmt.Errorf("kernel: dependency or compatibility state changed after preview")
 	}
-	lockValue, _ := r.packageLocks.LoadOrStore(session.ExtensionID, &sync.Mutex{})
-	lock := lockValue.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
+	if request.IdempotencyKey == "" {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeIdempotencyKeyRequired, 400, ErrPackageIdempotencyKeyRequired)
+	}
+	idempotencyKey := request.IdempotencyKey
+	operationID := "package-operation-" + uuid.NewString()
+	traceID := "package-trace-" + uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	confirmationsJSON, _ := json.Marshal(claims.Confirmations)
+	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
+		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
+		TargetVersion: session.Version, OperationType: "install", Status: "created",
+		CurrentStep: "create_operation", ArtifactID: artifact.ArtifactID,
+		PreviewSessionID: session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
+		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
+			OperationType: "install", ExtensionID: session.ExtensionID, TargetVersion: session.Version,
+			ArtifactID: artifact.ArtifactID, PreviewSessionID: session.SessionID,
+			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
+		}), StartedAt: now, UpdatedAt: now}
+	existing, created, err := r.container.PackageRepository.CreateOrGetOperation(ctx, op)
+	if err != nil {
+		return KernelInstallResult{}, err
+	}
+	if !created {
+		if result, handled, handleErr := r.handleExistingPackageOperation(ctx, existing); handled {
+			return result, handleErr
+		}
+	}
+	lease, leaseErr := r.acquirePackageExtensionLease(ctx, session.ExtensionID, operationID)
+	if leaseErr != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
+		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", session.ExtensionID, leaseErr)
+	}
+	guard := packageWriteGuard(lease)
+	defer func() {
+		if releaseErr := r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID); releaseErr != nil {
+			// 记录stale lease finding，不伪装为完全成功
+		}
+	}()
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
 		return KernelInstallResult{}, err
 	}
 	if lockedSession.Status == "consumed" {
 		return r.completedPackageInstallResult(ctx, request.UserID, request.SessionID)
 	}
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", lockedSession.Status)
 	}
-	operationID := "package-operation-" + uuid.NewString()
-	traceID := "package-trace-" + uuid.NewString()
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	confirmationsJSON, _ := json.Marshal(request.Confirmations)
-	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
-		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
-		TargetVersion: session.Version, OperationType: "install", Status: "created",
-		CurrentStep: "create_operation", ArtifactID: artifact.ArtifactID,
-		PreviewSessionID: session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
-		StartedAt: now, UpdatedAt: now}
-	if current, currentErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(session.ExtensionID)); currentErr == nil {
-		op.OperationType = "update"
-		_ = current
+	if _, currentErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(session.ExtensionID)); currentErr == nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "check_already_installed", "PACKAGE_ALREADY_INSTALLED", fmt.Sprintf("extension %s is already installed", session.ExtensionID), true, guard)
+		return KernelInstallResult{}, fmt.Errorf("PACKAGE_ALREADY_INSTALLED: extension %s is already installed", session.ExtensionID)
 	}
-	if err := r.container.PackageRepository.CreateOperation(ctx, op); err != nil {
-		return KernelInstallResult{}, err
-	}
+	stableGeneration := PackageGenerationCurrent{}
+	targetGeneration := PackagePreparedGeneration{}
+	currentSwitched := false
 	step := func(order int, name, status, result, code string) error {
+		if renewErr := r.renewPackageExtensionLease(ctx, session.ExtensionID, operationID); renewErr != nil {
+			return renewErr
+		}
 		stamp := time.Now().UTC().Format(time.RFC3339Nano)
 		completed := ""
 		if status == "completed" || status == "failed" {
 			completed = stamp
 		}
-		if err := r.container.PackageRepository.PutStep(ctx, PackageOperationStep{StepID: uuid.NewString(), OperationID: operationID, StepName: name, StepOrder: order, Status: status, AttemptCount: 1, ResultJSON: result, ErrorCode: code, StartedAt: stamp, CompletedAt: completed}); err != nil {
+		if err := r.container.PackageRepository.PutStep(ctx, PackageOperationStep{StepID: uuid.NewString(), OperationID: operationID, StepName: name, StepOrder: order, Status: status, AttemptCount: 1, ResultJSON: result, ErrorCode: code, StartedAt: stamp, CompletedAt: completed, StableGeneration: stableGeneration.GenerationID, TargetGeneration: targetGeneration.Current.GenerationID, CurrentPointerJSON: packageGenerationJSON(targetGeneration.Current)}, guard); err != nil {
 			return err
 		}
-		return r.container.PackageRepository.SetOperation(ctx, operationID, statusForStep(status), name, code, "", false)
+		return r.container.PackageRepository.SetOperation(ctx, operationID, statusForStep(status), name, code, "", false, guard)
 	}
 	fail := func(name string, cause error, committedPath string) (KernelInstallResult, error) {
-		if committedPath != "" {
-			if removeErr := r.container.PackageArtifactStore.RemoveInstalled(committedPath); removeErr != nil {
-				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", removeErr.Error(), false)
-				return KernelInstallResult{}, fmt.Errorf("%w; recovery required: %v", cause, removeErr)
+		_ = committedPath
+		if targetGeneration.Current.GenerationID != "" {
+			if compensationErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, currentSwitched); compensationErr != nil {
+				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", compensationErr.Error(), false, guard)
+				return KernelInstallResult{}, errors.Join(cause, compensationErr)
 			}
 		}
 		_ = step(99, name, "failed", "{}", "PACKAGE_INSTALL_FAILED")
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", name, "PACKAGE_INSTALL_FAILED", cause.Error(), true)
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", name, "PACKAGE_INSTALL_FAILED", cause.Error(), true, guard)
 		return KernelInstallResult{}, cause
 	}
 	if err := step(1, "validate_preview_session", "completed", "{}", ""); err != nil {
@@ -154,20 +202,37 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		}
 		previousModules, _ = r.container.ModuleRepository.ListModules(ctx, definition.ID)
 		previousContributions, _ = r.container.ContributionRepository.ListContributions(ctx, definition.ID)
-		if err := r.createPackageRollbackPoint(ctx, installed, previousDefinition, previousModules, previousContributions); err != nil {
+		if _, err := r.createPackageRollbackPoint(ctx, operationID, "active", installed, previousDefinition, previousModules, previousContributions); err != nil {
 			return fail("create_rollback_point", err, "")
 		}
 	}
-	targetPath := r.container.PackageArtifactStore.InstalledPath(session.ExtensionID, session.Version, artifactHash)
-	commitResult, err := r.container.PackageSecurity.Commit(ctx, staging, targetPath, session.ExtensionID, session.Version)
-	if err != nil || commitResult == nil || !commitResult.Success {
-		if err == nil {
-			err = fmt.Errorf("kernel: installed tree commit failed")
-		}
+	targetGeneration, stableGeneration, err = r.preparePackageGeneration(ctx, operationID, artifact, staging.Path)
+	if err != nil {
 		return fail("commit_installed_tree", err, "")
 	}
-	if err := step(5, "commit_installed_tree", "completed", packageJSON(map[string]string{"path": targetPath, "artifactHash": artifactHash}), ""); err != nil {
+	if previous == nil && stableGeneration.GenerationID != "" {
+		return fail("validate_current_pointer", fmt.Errorf("kernel: current pointer exists without installation read model"), targetGeneration.GenerationPath)
+	}
+	if previous != nil {
+		stableFromDB := packageGenerationFromInstallation(*previous)
+		if stableFromDB.GenerationID != "" && stableFromDB.GenerationID != stableGeneration.GenerationID {
+			return fail("validate_current_pointer", fmt.Errorf("kernel: current pointer and installation read model differ"), targetGeneration.GenerationPath)
+		}
+	}
+	targetPath := targetGeneration.GenerationPath
+	artifactHash = targetGeneration.Current.TreeHash
+	if err := r.container.PackageRepository.SetOperationGenerationEvidence(ctx, operationID, stableGeneration.GenerationID, targetGeneration.Current.GenerationID, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
+		return fail("persist_generation_evidence", err, targetPath)
+	}
+	if err := step(5, "commit_installed_tree", "completed", packageJSON(map[string]string{"path": targetPath, "treeHash": artifactHash, "stableGeneration": stableGeneration.GenerationID, "targetGeneration": targetGeneration.Current.GenerationID}), ""); err != nil {
 		return fail("commit_installed_tree", err, targetPath)
+	}
+	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
+		return fail("switch_current_pointer", err, targetPath)
+	}
+	currentSwitched = true
+	if err := step(6, "switch_current_pointer", "completed", packageGenerationJSON(targetGeneration.Current), ""); err != nil {
+		return fail("switch_current_pointer", err, targetPath)
 	}
 	generation := int64(1)
 	installedAt := time.Now().UTC()
@@ -181,11 +246,12 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		InstalledVersion: definition.Version, PackageID: artifact.ArtifactID,
 		InstallationState: domain.InstallationStateInstalled, EnablementState: domain.EnablementDisabled,
 		InstalledAt: installedAt, UpdatedAt: time.Now().UTC(), Generation: generation,
-		Metadata: map[string]any{"installedPath": targetPath, "artifactId": artifact.ArtifactID,
+		Metadata: packageInstallationMetadata(map[string]any{"installedPath": targetPath, "artifactId": artifact.ArtifactID,
 			"archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash,
 			"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
 			"installedTreeHash": artifactHash,
-			"ownerUserId":       request.UserID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}}
+			"devOnly":           preview.DevOnly,
+			"ownerUserId":       request.UserID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := r.container.ContributionRepository.DeleteContributions(txCtx, definition.ID); err != nil {
 			return err
@@ -212,21 +278,28 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return fail("commit_kernel_repositories", err, targetPath)
 	}
 	artifact.InstalledPath = targetPath
-	if err := r.container.PackageRepository.PutArtifact(ctx, artifact); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false)
+	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, artifact.ArtifactID, targetPath, guard); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := step(6, "commit_kernel_repositories", "completed", "{}", ""); err != nil {
+	if err := step(7, "commit_kernel_repositories", "completed", packageGenerationJSON(targetGeneration.Current), ""); err != nil {
 		return KernelInstallResult{}, err
 	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, session.SessionID); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false)
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := step(7, "mark_installation_disabled", "completed", "{}", ""); err != nil {
+	if err := step(8, "mark_installation_disabled", "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
-	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true); err != nil {
+	if err := r.runPackageFinalGate(ctx, operationID); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "final_gate", "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+		return KernelInstallResult{}, err
+	}
+	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, guard); err != nil {
+		return KernelInstallResult{}, err
+	}
+	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, artifactHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
@@ -234,6 +307,58 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		ContentTreeHash: artifact.ContentTreeHash, ArtifactPath: artifact.ArchivePath,
 		InstallPath: targetPath, DefinitionHash: artifactHash, InstalledAt: time.Now().UTC(),
 		OperationID: operationID, TraceID: traceID, Operation: op.OperationType}, nil
+}
+
+func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePreviewConfirmationRequest) (PackagePreviewConfirmation, error) {
+	if r.container == nil || r.container.PackageRepository == nil {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: package services unavailable")
+	}
+	session, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	if err != nil {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session unavailable: %w", err)
+	}
+	if session.Status != "ready" && session.Status != "awaiting_confirmation" {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session status %s", session.Status)
+	}
+	if session.PolicyVersion != packagePolicyVersion || session.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview security policy changed")
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, session.ExpiresAt)
+	if err != nil || time.Now().UTC().After(expiresAt) {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session expired")
+	}
+	var required []string
+	if err := json.Unmarshal([]byte(session.RequiredConfirmationsJSON), &required); err != nil {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: confirmation policy corrupt: %w", err)
+	}
+	confirmed := make(map[string]bool, len(required))
+	for _, confirmation := range required {
+		if !request.Confirmations[confirmation] {
+			return PackagePreviewConfirmation{}, fmt.Errorf("kernel: confirmation required: %s", confirmation)
+		}
+		confirmed[confirmation] = true
+	}
+	var preview InstallPreview
+	if err := json.Unmarshal([]byte(session.PreviewResultJSON), &preview); err != nil {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: preview session corrupt: %w", err)
+	}
+	if preview.DevOnly {
+		if err := r.validateUnsignedDeveloperSession(preview.DeveloperSessionID, request.UserID, preview.ExtensionID); err != nil {
+			return PackagePreviewConfirmation{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
+		}
+	}
+	tokenExpiry := time.Now().UTC().Add(10 * time.Minute)
+	if expiresAt.Before(tokenExpiry) {
+		tokenExpiry = expiresAt
+	}
+	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
+		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
+		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
+		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash, Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
+	if err != nil {
+		return PackagePreviewConfirmation{}, err
+	}
+	return PackagePreviewConfirmation{ConfirmationToken: token, ExpiresAt: tokenExpiry}, nil
 }
 
 func (r *Runtime) completedPackageInstallResult(ctx context.Context, userID, sessionID string) (KernelInstallResult, error) {
@@ -257,37 +382,68 @@ func (r *Runtime) completedPackageInstallResult(ctx context.Context, userID, ses
 		OperationID: op.OperationID, TraceID: op.TraceID, Operation: op.OperationType}, nil
 }
 
-func (r *Runtime) createPackageRollbackPoint(ctx context.Context, installed domain.ExtensionInstallation, definition *domain.ExtensionDefinition, modules []domain.ModuleDefinition, contributions []domain.ContributionDefinition) error {
+func (r *Runtime) createPackageRollbackPoint(ctx context.Context, sourceOperationID, retentionState string, installed domain.ExtensionInstallation, definition *domain.ExtensionDefinition, modules []domain.ModuleDefinition, contributions []domain.ContributionDefinition) (PackageRollbackPoint, error) {
 	if definition == nil {
-		return fmt.Errorf("kernel: current definition missing for rollback point")
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current definition missing for rollback point")
 	}
-	definitionJSON, _ := json.Marshal(definition)
-	moduleJSON, _ := json.Marshal(modules)
-	contributionJSON, _ := json.Marshal(contributions)
+	definitionJSON, err := json.Marshal(definition)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	moduleJSON, err := json.Marshal(modules)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	contributionJSON, err := json.Marshal(contributions)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
 	requirements, err := r.container.PermissionRepository.ListRequirements(ctx, installed.ExtensionID)
 	if err != nil {
-		return err
+		return PackageRollbackPoint{}, err
 	}
 	grants, err := r.container.PermissionRepository.ListGrants(ctx, installed.ExtensionID)
 	if err != nil {
-		return err
+		return PackageRollbackPoint{}, err
 	}
 	bindings, err := r.container.ScopeRepository.ListBindings(ctx, installed.ExtensionID)
 	if err != nil {
-		return err
+		return PackageRollbackPoint{}, err
 	}
-	permissionJSON, _ := json.Marshal(map[string]any{"requirements": requirements, "grants": grants})
-	scopeJSON, _ := json.Marshal(bindings)
+	permissionJSON, err := json.Marshal(map[string]any{"requirements": requirements, "grants": grants})
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	scopeJSON, err := json.Marshal(bindings)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	configJSON, secretRefsJSON, resourceJSON, migrationJSON, userDataMigrationJSON, err := r.capturePackageStateSnapshots(ctx, installed)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
 	installedPath, _ := installed.Metadata["installedPath"].(string)
 	artifactID, _ := installed.Metadata["artifactId"].(string)
+	retentionUntil := time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano)
 	point := PackageRollbackPoint{RollbackPointID: "rollback-point-" + uuid.NewString(),
 		ExtensionID: string(installed.ExtensionID), SourceVersion: installed.InstalledVersion.String(),
 		SourceGeneration: installed.Generation, ArtifactID: artifactID,
 		DefinitionSnapshotJSON: string(definitionJSON), ModuleSnapshotJSON: string(moduleJSON),
 		ContributionSnapshotJSON: string(contributionJSON), PermissionSnapshotJSON: string(permissionJSON),
-		ScopeSnapshotJSON: string(scopeJSON), InstalledPath: installedPath,
+		ScopeSnapshotJSON: string(scopeJSON), ConfigSnapshotJSON: configJSON,
+		SecretRefsJSON: secretRefsJSON, ResourceSnapshotJSON: resourceJSON,
+		MigrationStateSnapshotJSON: migrationJSON, UserDataMigrationStateJSON: userDataMigrationJSON,
+		RetentionState: retentionState, RetentionUntil: retentionUntil, ExpiresAt: retentionUntil,
+		SourceOperationID: sourceOperationID, InstalledPath: installedPath,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	return r.container.PackageRepository.PutRollbackPoint(ctx, point)
+	point.SnapshotHash, err = computePackageSnapshotHash(point)
+	if err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	if err := r.container.PackageRepository.PutRollbackPoint(ctx, point); err != nil {
+		return PackageRollbackPoint{}, err
+	}
+	return point, nil
 }
 
 func statusForStep(status string) string {

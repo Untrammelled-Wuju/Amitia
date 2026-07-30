@@ -28,9 +28,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	sqlPath := filepath.Join("..", "..", "..", "data", "sql.sql")
-	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
-		t.Fatalf("apply initial sql: %v", err)
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline: %v", err)
 	}
 
 	runner := migration.Runner{DB: db, SkipBackup: true}
@@ -99,7 +98,7 @@ func TestListProcessingTasksByGenerationTask(t *testing.T) {
 		if err := repo.CreateProcessingTask(db, &ProcessingTask{
 			ID:                id,
 			GenerationTaskID:  "gt-shared",
-			ProcessingVersion: 1,
+			ProcessingVersion: i + 1,
 			Status:            "queued",
 		}); err != nil {
 			t.Fatalf("CreateProcessingTask[%d]: %v", i, err)
@@ -221,7 +220,7 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
 		ID:               "pt-recover",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-recover-1",
 		Status:           "processing",
 		LeaseExpiresAt:   pastStr,
 	}); err != nil {
@@ -229,7 +228,7 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 	}
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
 		ID:               "pt-active",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-active-1",
 		Status:           "processing",
 		LeaseExpiresAt:   futureStr,
 	}); err != nil {
@@ -237,7 +236,7 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 	}
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
 		ID:               "pt-queued",
-		GenerationTaskID: "gt-1",
+		GenerationTaskID: "gt-queued-1",
 		Status:           "queued",
 		LeaseExpiresAt:   pastStr,
 	}); err != nil {
@@ -261,17 +260,17 @@ func TestListQueuedProcessingTasks(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
-		ID: "pt-q1", GenerationTaskID: "gt-1", Status: "queued",
+		ID: "pt-q1", GenerationTaskID: "gt-q1", Status: "queued",
 	}); err != nil {
 		t.Fatalf("CreateProcessingTask: %v", err)
 	}
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
-		ID: "pt-q2", GenerationTaskID: "gt-1", Status: "queued",
+		ID: "pt-q2", GenerationTaskID: "gt-q2", Status: "queued",
 	}); err != nil {
 		t.Fatalf("CreateProcessingTask: %v", err)
 	}
 	if err := repo.CreateProcessingTask(db, &ProcessingTask{
-		ID: "pt-p1", GenerationTaskID: "gt-1", Status: "processing",
+		ID: "pt-p1", GenerationTaskID: "gt-p1", Status: "processing",
 	}); err != nil {
 		t.Fatalf("CreateProcessingTask: %v", err)
 	}

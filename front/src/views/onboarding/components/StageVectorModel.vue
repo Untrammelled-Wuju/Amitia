@@ -27,6 +27,13 @@
                 </button>
                 <button
                   class="ob-chip"
+                  :class="{ selected: vectorModelMode === 'compatible' }"
+                  @click="emit('update:vectorModelMode', 'compatible')"
+                >
+                  兼容服务
+                </button>
+                <button
+                  class="ob-chip"
                   :class="{ selected: vectorModelMode === 'disabled' }"
                   @click="emit('update:vectorModelMode', 'disabled')"
                 >

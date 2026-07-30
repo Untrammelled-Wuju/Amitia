@@ -92,6 +92,7 @@ func TestMapInstallationErrorCode_AllDefinedCodesCovered(t *testing.T) {
 		ErrCodeDefaultActionNotIdle,
 		ErrCodePetNotEnabled,
 		ErrCodeActionNotFound,
+		ErrCodeRevisionConflict,
 	}
 	allowed := map[int]bool{
 		response.NotFound:      true,
@@ -126,13 +127,13 @@ type stubHandlerService struct {
 	getSettingsResult *RuntimeSettings
 
 	installCalls        []installCall
-	uninstallCalls      []string
+	uninstallCalls      []actionCall
 	enableCalls         []actionCall
 	disableCalls        []actionCall
 	switchCalls         []actionCall
 	updateDefaultCalls  []updateDefaultCall
 	updateSettingsCalls []updateSettingsCall
-	recenterCalls       []string
+	recenterCalls       []actionCall
 	playCalls           []playCall
 	listCalls           []string
 	getCalls            []string
@@ -156,8 +157,9 @@ type updateDefaultCall struct {
 }
 
 type updateSettingsCall struct {
+	UserID         string
 	InstallationID string
-	Settings       map[string]interface{}
+	Settings       *UpdateRuntimeSettingsRequest
 }
 
 type playCall struct {
@@ -177,8 +179,8 @@ func (s *stubHandlerService) InstallPackage(packageId, userId, characterId strin
 	return &Installation{ID: "inst_default", UserID: userId, CharacterID: characterId, PackageID: packageId, Status: StatusInstalled}, nil
 }
 
-func (s *stubHandlerService) Uninstall(installationId string) error {
-	s.uninstallCalls = append(s.uninstallCalls, installationId)
+func (s *stubHandlerService) Uninstall(userId, installationId string) error {
+	s.uninstallCalls = append(s.uninstallCalls, actionCall{UserID: userId, InstallationID: installationId})
 	return s.uninstallErr
 }
 
@@ -202,13 +204,16 @@ func (s *stubHandlerService) UpdateDefaultAction(installationId, actionKey strin
 	return s.updateDefaultErr
 }
 
-func (s *stubHandlerService) UpdateRuntimeSettings(installationId string, settings map[string]interface{}) error {
-	s.updateSettingsCalls = append(s.updateSettingsCalls, updateSettingsCall{InstallationID: installationId, Settings: settings})
-	return s.updateSettingsErr
+func (s *stubHandlerService) UpdateRuntimeSettings(userId, installationId string, req *UpdateRuntimeSettingsRequest) (*RuntimeSettings, error) {
+	s.updateSettingsCalls = append(s.updateSettingsCalls, updateSettingsCall{UserID: userId, InstallationID: installationId, Settings: req})
+	if s.updateSettingsErr != nil {
+		return nil, s.updateSettingsErr
+	}
+	return s.getSettingsResult, nil
 }
 
-func (s *stubHandlerService) Recenter(installationId string) error {
-	s.recenterCalls = append(s.recenterCalls, installationId)
+func (s *stubHandlerService) Recenter(userId, installationId string) error {
+	s.recenterCalls = append(s.recenterCalls, actionCall{UserID: userId, InstallationID: installationId})
 	return s.recenterErr
 }
 
@@ -909,8 +914,8 @@ func TestHandler_Uninstall_Success(t *testing.T) {
 	if len(svc.uninstallCalls) != 1 {
 		t.Fatalf("期望 1 次 Uninstall 调用, 实际 %d", len(svc.uninstallCalls))
 	}
-	if svc.uninstallCalls[0] != "inst_1" {
-		t.Fatalf("Uninstall InstallationID = %s, 期望 inst_1", svc.uninstallCalls[0])
+	if svc.uninstallCalls[0].InstallationID != "inst_1" {
+		t.Fatalf("Uninstall InstallationID = %s, 期望 inst_1", svc.uninstallCalls[0].InstallationID)
 	}
 }
 

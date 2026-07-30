@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package installation
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 const (
 	ErrCodeInstallationNotFound        = "INSTALLATION_NOT_FOUND"
@@ -21,6 +24,9 @@ const (
 	ErrCodeDefaultActionNotIdle        = "DEFAULT_ACTION_NOT_IDLE"
 	ErrCodePetNotEnabled               = "PET_NOT_ENABLED"
 	ErrCodeActionNotFound              = "ACTION_NOT_FOUND"
+	ErrCodeRevisionConflict            = "REVISION_CONFLICT"
+	ErrCodeRuntimeDeliveryFailed       = "RUNTIME_DELIVERY_FAILED"
+	ErrCodePackageQualityGateBlocked   = "PACKAGE_QUALITY_GATE_BLOCKED"
 )
 
 var (
@@ -40,6 +46,8 @@ var (
 	ErrDefaultActionNotIdle        = errors.New("default action does not support idle")
 	ErrPetNotEnabled               = errors.New("pet is not enabled")
 	ErrActionNotFound              = errors.New("action not found in manifest")
+	ErrRevisionConflict            = errors.New("settings revision conflict")
+	ErrPackageQualityGateBlocked   = errors.New("package quality gate blocked")
 )
 
 type InstallationError struct {
@@ -59,4 +67,13 @@ func (e *InstallationError) Unwrap() error { return e.Err }
 
 func NewInstallationError(code, message string, err error) *InstallationError {
 	return &InstallationError{Code: code, Message: message, Err: err}
+}
+
+type RevisionConflictError struct {
+	Expected int
+	Actual   int
+}
+
+func (e *RevisionConflictError) Error() string {
+	return fmt.Sprintf("revision conflict: expected %d, actual %d", e.Expected, e.Actual)
 }

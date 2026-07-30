@@ -29,6 +29,13 @@ func IsLoopAction(actionKey string) bool {
 	return loopActionKeys[actionKey]
 }
 
+func IsLoopActionByKeyOrMode(actionKey, playbackMode string) bool {
+	if loopActionKeys[actionKey] {
+		return true
+	}
+	return playbackMode == "loop" || playbackMode == "ping_pong"
+}
+
 type LoopCheckResult struct {
 	IsLoopAction    bool
 	IsDiscontinuous bool
@@ -51,9 +58,13 @@ func NewLoopChecker() *LoopChecker {
 }
 
 func (c *LoopChecker) CheckLoop(actionKey string, imgs []image.Image, boxes []backgroundremoval.SubjectBox) LoopCheckResult {
+	return c.CheckLoopWithMode(actionKey, "", imgs, boxes)
+}
+
+func (c *LoopChecker) CheckLoopWithMode(actionKey, playbackMode string, imgs []image.Image, boxes []backgroundremoval.SubjectBox) LoopCheckResult {
 	result := LoopCheckResult{}
 
-	if !IsLoopAction(actionKey) {
+	if !IsLoopActionByKeyOrMode(actionKey, playbackMode) {
 		result.IsLoopAction = false
 		return result
 	}

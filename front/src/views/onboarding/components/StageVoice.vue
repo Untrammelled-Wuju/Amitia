@@ -205,6 +205,7 @@ const emit = defineEmits<{
 
 const voiceModelModes = [
   { label: "豆包语音", value: "volcengine" },
+  { label: "兼容服务", value: "compatible" },
   { label: "暂不启用", value: "disabled" },
 ];
 

@@ -143,9 +143,9 @@ const qqLabel = computed(() =>
   border-bottom: 1px solid var(--tp-glass-border);
   flex-shrink: 0;
   user-select: none;
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   box-shadow: none;
 }
 

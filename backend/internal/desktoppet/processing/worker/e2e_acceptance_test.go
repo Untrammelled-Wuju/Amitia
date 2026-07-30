@@ -74,7 +74,7 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir)
+	w := newTestWorkerWithPipeline(t, db, repo, dataDir)
 
 	taskID := "gt-e2e-four-actions"
 	userID := "user-e2e"
@@ -117,6 +117,25 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 		DefaultFPS:                 10,
 	}
 	createProcessingTask(t, repo, db, pt)
+
+	processingActions := make([]processing.ProcessingAction, 0, len(actionDefs))
+	for i, a := range actionDefs {
+		actionID := fmt.Sprintf("gta-e2e-%d", i+1)
+		pa := processing.ProcessingAction{
+			ID:                     fmt.Sprintf("pa-e2e-%d", i+1),
+			ProcessingTaskID:       pt.ID,
+			GenerationTaskActionID: actionID,
+			ActionKey:              a.key,
+			ActionNameSnapshot:     a.key,
+			SourceAttemptNumber:    1,
+			Status:                 "pending",
+			SourceFrameCount:       frameCount,
+		}
+		processingActions = append(processingActions, pa)
+	}
+	if err := repo.CreateProcessingActions(db, processingActions); err != nil {
+		t.Fatalf("创建处理动作失败: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -26,6 +26,8 @@ type updateDefaultActionPayload struct {
 }
 
 func (h *Handler) InstallPackage(c *gin.Context) {
+	c.Header("Deprecation", "true")
+	c.Header("Sunset", "2026-12-31")
 	packageID := c.Param("packageId")
 	if packageID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "资源包 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
@@ -132,19 +134,13 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	var payload map[string]interface{}
+	var payload UpdateRuntimeSettingsRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	if payload == nil {
-		payload = map[string]interface{}{}
-	}
-	if err := h.service.UpdateRuntimeSettings(installationID, payload); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	settings, err := h.service.GetRuntimeSettings(installationID)
+	userID := desktoppet.ResolveUserID(c)
+	settings, err := h.service.UpdateRuntimeSettings(userID, installationID, &payload)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -158,7 +154,8 @@ func (h *Handler) Recenter(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	if err := h.service.Recenter(installationID); err != nil {
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.Recenter(userID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -190,7 +187,8 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	if err := h.service.Uninstall(installationID); err != nil {
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.Uninstall(userID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -225,7 +223,9 @@ func mapInstallationErrorCode(code string) int {
 		ErrCodePetNotEnabled,
 		ErrCodeDefaultActionNotIdle,
 		ErrCodeInstallationInvalid,
-		ErrCodePurgeNotConfirmed:
+		ErrCodePurgeNotConfirmed,
+		ErrCodeRevisionConflict,
+		ErrCodePackageQualityGateBlocked:
 		return response.BusinessError
 	case ErrCodeInstallationFailed:
 		return response.InternalError

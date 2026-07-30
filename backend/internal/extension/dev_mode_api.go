@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,6 +90,10 @@ func (api *DevModeAPI) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (api *DevModeAPI) resolve(c *gin.Context) (*kernel.Container, bool) {
+	if !extensionDevelopmentModeEnabled() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "developer mode is disabled"})
+		return nil, false
+	}
 	if api.runtime == nil || api.runtime.Kernel == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return nil, false
@@ -103,6 +110,11 @@ func (api *DevModeAPI) resolve(c *gin.Context) (*kernel.Container, bool) {
 	return container, true
 }
 
+func extensionDevelopmentModeEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DEV_MODE")))
+	return err == nil && enabled
+}
+
 func generateWorkspaceID() dev_mode.WorkspaceID {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
@@ -110,11 +122,11 @@ func generateWorkspaceID() dev_mode.WorkspaceID {
 }
 
 type registerWorkspaceRequest struct {
-	ExtensionID   string `json:"extensionId"`
-	Path          string `json:"path"`
-	ManifestPath  string `json:"manifestPath"`
-	WatchEnabled  bool   `json:"watchEnabled"`
-	AutoReload    bool   `json:"autoReload"`
+	ExtensionID  string `json:"extensionId"`
+	Path         string `json:"path"`
+	ManifestPath string `json:"manifestPath"`
+	WatchEnabled bool   `json:"watchEnabled"`
+	AutoReload   bool   `json:"autoReload"`
 }
 
 func (api *DevModeAPI) registerWorkspace(c *gin.Context) {
@@ -133,12 +145,13 @@ func (api *DevModeAPI) registerWorkspace(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	ws, err := container.DevModeRegistry.Register(ctx, dev_mode.RegisterWorkspaceInput{
-		WorkspaceID:  generateWorkspaceID(),
-		ExtensionID:  dev_mode.ExtensionID(req.ExtensionID),
+		WorkspaceID:   generateWorkspaceID(),
+		ExtensionID:   dev_mode.ExtensionID(req.ExtensionID),
+		OwnerUserID:   kernelAPIUser(c),
 		PathReference: req.Path,
-		ManifestPath: req.ManifestPath,
-		WatchEnabled: req.WatchEnabled,
-		AutoReload:   req.AutoReload,
+		ManifestPath:  req.ManifestPath,
+		WatchEnabled:  req.WatchEnabled,
+		AutoReload:    req.AutoReload,
 	})
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -187,6 +200,11 @@ func (api *DevModeAPI) grantTrust(c *gin.Context) {
 		return
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
+	workspace, err := container.DevModeRegistry.Get(id)
+	if err != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		return
+	}
 	if err := container.DevModeRegistry.GrantDevTrust(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -201,6 +219,11 @@ func (api *DevModeAPI) revokeTrust(c *gin.Context) {
 		return
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
+	workspace, err := container.DevModeRegistry.Get(id)
+	if err != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		return
+	}
 	if err := container.DevModeRegistry.RevokeDevTrust(id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -489,9 +512,8 @@ func (api *DevModeAPI) removeWorkspace(c *gin.Context) {
 }
 
 type openSessionRequest struct {
-	DeviceID  string   `json:"deviceId"`
-	UserAgent string   `json:"userAgent"`
-	Scopes    []string `json:"scopes"`
+	DeviceID  string `json:"deviceId"`
+	UserAgent string `json:"userAgent"`
 }
 
 func (api *DevModeAPI) openSession(c *gin.Context) {
@@ -506,7 +528,21 @@ func (api *DevModeAPI) openSession(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	sess, err := container.DevModeSessions.Open(ctx, id, req.DeviceID, req.UserAgent, req.Scopes)
+	workspace, err := container.DevModeRegistry.Get(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	userID := kernelAPIUser(c)
+	if workspace.OwnerUserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		return
+	}
+	if !workspace.DevTrust {
+		c.JSON(http.StatusForbidden, gin.H{"error": "developer trust is required"})
+		return
+	}
+	sess, err := container.DevModeSessions.Open(ctx, id, workspace.ExtensionID, userID, req.DeviceID, req.UserAgent, kernel.CurrentPackagePolicyVersion(), workspace.DevTrust, workspace.DevTrustVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -520,6 +556,11 @@ func (api *DevModeAPI) closeSession(c *gin.Context) {
 		return
 	}
 	id := dev_mode.WorkspaceID(c.Param("id"))
+	workspace, workspaceErr := container.DevModeRegistry.Get(id)
+	if workspaceErr != nil || workspace.OwnerUserID != kernelAPIUser(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "workspace ownership mismatch"})
+		return
+	}
 	sess, err := container.DevModeSessions.GetByWorkspace(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

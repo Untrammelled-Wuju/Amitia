@@ -104,14 +104,15 @@ func seedValidatorAction(t *testing.T, db *gorm.DB, actionID, taskID, actionKey,
 func seedValidatorFrame(t *testing.T, db *gorm.DB, frameID, taskID, taskActionID, resultImagePath, resultHash string, frameIndex, attemptNumber int, status string) {
 	t.Helper()
 	if err := db.Create(&desktoppet.GenerationFrame{
-		ID:              frameID,
-		TaskID:          taskID,
-		TaskActionID:    taskActionID,
-		FrameIndex:      frameIndex,
-		AttemptNumber:   attemptNumber,
-		Status:          status,
-		ResultImagePath: resultImagePath,
-		ResultHash:      resultHash,
+		ID:                frameID,
+		TaskID:            taskID,
+		TaskActionID:      taskActionID,
+		FrameIndex:        frameIndex,
+		AttemptNumber:     attemptNumber,
+		GenerationAttempt: attemptNumber,
+		Status:            status,
+		ResultImagePath:   resultImagePath,
+		ResultHash:        resultHash,
 	}).Error; err != nil {
 		t.Fatalf("create frame %s: %v", frameID, err)
 	}

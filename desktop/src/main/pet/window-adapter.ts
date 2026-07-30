@@ -1,6 +1,7 @@
 import { app, BrowserWindow, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDevMode } from "../path-manager";
 import {
   PET_WINDOW_SCALE_DEFAULT,
   PET_WINDOW_SCALE_MAX,
@@ -17,6 +18,11 @@ import type {
 } from "./types";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
+
+const DEV_SERVER_URL =
+  process.env.VITE_DEV_SERVER_URL ||
+  process.env.AMITIA_DESKTOP_DEV_SERVER_URL ||
+  "http://127.0.0.1:5178";
 
 const VISIBLE_MARGIN = 20;
 const EDGE_OFFSET = 40;
@@ -76,7 +82,7 @@ export class DesktopPetWindowAdapter {
 
     const { width, height } = this.calculateSize();
     const initial = this.resolveInitialPosition();
-    const preloadPath = join(currentDir, "../preload/index.cjs");
+    const preloadPath = join(currentDir, "../preload/pet-combined-preload.cjs");
 
     const constructorOptions: Electron.BrowserWindowConstructorOptions = {
       width,
@@ -115,6 +121,28 @@ export class DesktopPetWindowAdapter {
     this.window.once("ready-to-show", () => {
       this.window?.show();
     });
+
+    if (isDevMode()) {
+      const petDevUrl = `${DEV_SERVER_URL}/pet.html`;
+      try {
+        await this.window.loadURL(petDevUrl);
+      } catch (err) {
+        console.error("[DesktopPetWindowAdapter] 开发模式加载 pet.html 失败:", err);
+        const petHtmlPath = join(currentDir, "../renderer/pet.html");
+        try {
+          await this.window.loadFile(petHtmlPath);
+        } catch (err2) {
+          console.error("[DesktopPetWindowAdapter] 回退加载 pet.html 也失败:", err2);
+        }
+      }
+    } else {
+      const petHtmlPath = join(currentDir, "../renderer/pet.html");
+      try {
+        await this.window.loadFile(petHtmlPath);
+      } catch (err) {
+        console.error("[DesktopPetWindowAdapter] 加载 pet.html 失败:", err);
+      }
+    }
 
     return this.window;
   }

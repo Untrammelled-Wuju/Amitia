@@ -2500,16 +2500,15 @@
     },
     "/extensions/kernel/extensions/install": {
       "post": {
-        "description": "Install kernel extension",
+        "deprecated": true,
+        "description": "Retired kernel install endpoint",
         "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
+          "410": {
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Install kernel extension",
+        "summary": "Retired kernel install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts",
         "tags": [
           "Kernel"
         ]
@@ -2534,16 +2533,15 @@
     },
     "/extensions/kernel/extensions/preview": {
       "post": {
-        "description": "Preview kernel extension install",
+        "deprecated": true,
+        "description": "Retired kernel preview endpoint",
         "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
+          "410": {
+            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Preview kernel extension install",
+        "summary": "Retired kernel preview endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts",
         "tags": [
           "Kernel"
         ]
@@ -2748,8 +2746,97 @@
         "summary": "List installed extension packages"
       }
     },
+    "/extensions/packages/artifacts": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {"format": "binary", "type": "string"},
+                  "scopeId": {"type": "string"},
+                  "scopeType": {"enum": ["global", "character"], "type": "string"}
+                },
+                "required": ["file", "scopeType"],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {"description": "Artifact stored and preview session created"},
+          "422": {"description": "Package rejected by the verification pipeline"}
+        },
+        "summary": "Upload an immutable package artifact and create its preview"
+      }
+    },
+    "/extensions/packages/previews/{sessionId}/confirm": {
+      "post": {
+        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "responses": {
+          "200": {"description": "Bound, expiring confirmation token"},
+          "422": {"description": "Preview or confirmations rejected"}
+        },
+        "summary": "Confirm a package preview"
+      }
+    },
+    "/extensions/packages/previews": {
+      "post": {
+        "responses": {"201": {"description": "Artifact stored and preview session created"}},
+        "summary": "Create a package preview from an uploaded artifact"
+      }
+    },
+    "/extensions/packages/import/sessions/{sessionId}": {
+      "get": {
+        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "Package preview session"}},
+        "summary": "Get a package preview session"
+      },
+      "delete": {
+        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "Package preview session cancelled"}},
+        "summary": "Cancel a package preview session"
+      }
+    },
+    "/extension-package-operations/{operationId}": {
+      "get": {
+        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "Package operation"}},
+        "summary": "Get a package operation compatibility view"
+      }
+    },
+    "/extensions/packages/operations/install": {
+      "post": {
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "responses": {
+          "202": {"description": "Install operation completed and journaled"},
+          "422": {"description": "Confirmation, policy, artifact, or trust validation failed"}
+        },
+        "summary": "Execute a confirmed package install operation"
+      }
+    },
+    "/extensions/packages/operations/update": {
+      "post": {
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "responses": {
+          "202": {"description": "Update operation completed and journaled"},
+          "422": {"description": "Confirmation, policy, artifact, dependency, or update validation failed"}
+        },
+        "summary": "Execute a confirmed package update operation"
+      }
+    },
+    "/extensions/packages/operations/{operationId}": {
+      "get": {
+        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "Authoritative operation journal"}, "404": {"description": "Operation not found"}},
+        "summary": "Get a package operation"
+      }
+    },
     "/extensions/packages/import/install": {
       "post": {
+        "deprecated": true,
         "requestBody": {
           "content": {
             "application/json": {
@@ -2761,18 +2848,17 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Installed"
-          },
           "410": {
-            "description": "Session expired or consumed"
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Atomically install a one-time validated import session disabled by default"
+        "summary": "Retired package install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/packages/import/preview": {
       "post": {
+        "deprecated": true,
         "requestBody": {
           "content": {
             "application/json": {
@@ -2808,25 +2894,17 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PackageImportPreview"
-                }
-              }
-            },
-            "description": "Server-validated package preview"
-          },
-          "422": {
-            "description": "Unsafe or invalid package"
+          "410": {
+            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Detect, securely validate and preview a local Amitia or AgentSkills package"
+        "summary": "Retired package preview endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/packages/install": {
       "post": {
+        "deprecated": true,
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -2847,17 +2925,12 @@
           "required": true
         },
         "responses": {
-          "201": {
-            "description": "Installed"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "422": {
-            "description": "Invalid package"
+          "410": {
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Validate and atomically install an Amitiax package"
+        "summary": "Retired package install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/packages/metrics": {
@@ -5631,6 +5704,16 @@
           }
         },
         "summary": "Preview uninstall cleanup, retained audit data and dependency blockers"
+      },
+      "post": {
+        "responses": {"200": {"description": "Uninstall preview"}},
+        "summary": "Create an uninstall preview"
+      }
+    },
+    "/extensions/{id}/uninstall": {
+      "post": {
+        "responses": {"200": {"description": "Uninstall operation"}},
+        "summary": "Uninstall an extension package"
       }
     },
     "/extensions/{id}/updates": {
@@ -5754,6 +5837,8 @@
     },
     "/extensions/{id}/upgrade": {
       "post": {
+        "deprecated": true,
+        "description": "Retired package install endpoint. Use /api/extensions/packages/artifacts.",
         "parameters": [
           {
             "in": "path",
@@ -5765,15 +5850,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Upgrade result"
+          "410": {
+            "description": "PACKAGE_INSTALL_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Atomically apply a confirmed local upgrade"
+        "summary": "Retired package install endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/{id}/upgrade/preview": {
       "post": {
+        "deprecated": true,
+        "description": "Retired package preview endpoint. Use /api/extensions/packages/artifacts.",
         "parameters": [
           {
             "in": "path",
@@ -5785,11 +5873,12 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Upgrade preview"
+          "410": {
+            "description": "PACKAGE_PREVIEW_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Preview a manual local package upgrade"
+        "summary": "Retired package preview endpoint",
+        "x-replacement-endpoint": "/api/extensions/packages/artifacts"
       }
     },
     "/extensions/{id}/versions": {

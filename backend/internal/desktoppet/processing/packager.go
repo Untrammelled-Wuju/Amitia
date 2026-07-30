@@ -164,7 +164,7 @@ func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, 
 		ProcessingTaskID: req.ProcessingTaskID,
 		Name:             req.PackageName,
 		Version:          version,
-		Status:           "ready",
+		Status:           "pending",
 		DefaultActionKey: req.DefaultAction,
 		CanvasWidth:      req.CanvasWidth,
 		CanvasHeight:     req.CanvasHeight,
@@ -190,6 +190,7 @@ func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, 
 	}
 	pkg.PackageHash = hash
 	pkg.PackagePath = p.packageDirRelPath(req.GenerationTaskID, packageID)
+	pkg.Status = "ready"
 
 	if err := p.repo.CreatePackage(pkg); err != nil {
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "写入包记录失败", Err: err}

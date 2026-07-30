@@ -5,9 +5,64 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 
-export function useModelConfig() {
+interface TestResultData {
+  success: boolean;
+  latencyMs: number;
+  message: string;
+  reply: string;
+}
+
+interface ModelConfigOptions {
+  apiBase?: string;
+  activatePath?: string;
+  withScenario?: boolean;
+  withDetect?: boolean;
+  defaultApiType?: string;
+  defaultModel?: string;
+  defaultBaseUrl?: string;
+  modelLabel?: string;
+  showAdvanced?: boolean;
+  showDetect?: boolean;
+  modelPlaceholder?: string;
+  extraFormFields?: Record<string, any>;
+  transformPayload?: (payload: any) => any;
+  transformConfig?: (config: any) => any;
+  testResultMapper?: (result: any) => TestResultData;
+  defaultIsActive?: number;
+}
+
+function defaultTestMapper(result: any): TestResultData {
+  return {
+    success:
+      result?.test?.success ?? result?.success ?? result?.status === "ok",
+    latencyMs:
+      result?.test?.latencyMs ?? result?.latencyMs ?? result?.latency ?? 0,
+    message: result?.test?.message ?? result?.message ?? "",
+    reply: result?.test?.reply ?? result?.reply ?? "",
+  };
+}
+
+export function useModelConfig(options?: ModelConfigOptions) {
   const { get, post, put, del } = useApi();
   const refreshHealth = inject<() => void>("refreshHealth", () => {});
+
+  const apiBase = options?.apiBase ?? "/api/model";
+  const activatePath = options?.activatePath ?? "/active";
+  const withScenario = options?.withScenario ?? true;
+  const withDetect = options?.withDetect ?? true;
+  const defaultApiType = options?.defaultApiType ?? "openai";
+  const defaultModel = options?.defaultModel ?? "";
+  const defaultBaseUrl = options?.defaultBaseUrl ?? "";
+  const modelLabel = options?.modelLabel ?? "模型";
+  const showAdvanced = options?.showAdvanced ?? true;
+  const showDetect = options?.showDetect ?? true;
+  const modelPlaceholder =
+    options?.modelPlaceholder ?? "gpt-4o-mini / qwen2.5:7b / deepseek-chat";
+  const extraFormFields = options?.extraFormFields;
+  const transformPayload = options?.transformPayload;
+  const transformConfig = options?.transformConfig;
+  const testResultMapper = options?.testResultMapper ?? defaultTestMapper;
+  const defaultIsActive = options?.defaultIsActive ?? 0;
 
   const configs = ref<any[]>([]);
   const providers = ref<any[]>([]);
@@ -29,23 +84,40 @@ export function useModelConfig() {
   const scenarioRoutes = ref<any[]>([]);
   const routeAssignments = ref<Record<string, number | null>>({});
 
-  const form = reactive({
+  const form = reactive<{
+    name: string;
+    apiType: string;
+    baseUrl: string;
+    apiKey: string;
+    modelName: string;
+    temperature: number;
+    maxTokens: number;
+    timeoutSeconds: number;
+    retryCount: number;
+    [key: string]: any;
+  }>({
     name: "",
-    apiType: "openai" as string,
-    baseUrl: "",
+    apiType: defaultApiType,
+    baseUrl: defaultBaseUrl,
     apiKey: "",
-    modelName: "",
+    modelName: defaultModel,
     temperature: 0.7,
     maxTokens: 4096,
     timeoutSeconds: 60,
     retryCount: 1,
   });
 
+  if (extraFormFields) {
+    for (const [key, val] of Object.entries(extraFormFields)) {
+      (form as any)[key] = val;
+    }
+  }
+
   const rules: FormRules = {
     name: [{ required: true, message: "请输入名称", trigger: "blur" }],
     apiType: [{ required: true, message: "请选择类型", trigger: "change" }],
     baseUrl: [{ required: true, message: "请输入 Base URL", trigger: "blur" }],
-    modelName: [{ required: true, message: "请输入模型名称", trigger: "blur" }],
+    modelName: [{ required: true, message: `请输入${modelLabel}名称`, trigger: "blur" }],
   };
 
   function providerName(apiType: string): string {
@@ -87,24 +159,19 @@ export function useModelConfig() {
   }
 
   async function fetchConfigs() {
-    configs.value = ((await get<any[]>("/api/model/configs")) || []).map(
-      (c) => ({ ...c, isActive: !!c.isActive }),
+    configs.value = ((await get<any[]>(`${apiBase}/configs`)) || []).map(
+      (c) => {
+        if (transformConfig) c = transformConfig(c);
+        return { ...c, isActive: !!c.isActive };
+      },
     );
   }
 
   async function loadProviders() {
     try {
-      providers.value = (await get<any[]>("/api/model/providers")) || [];
+      providers.value = (await get<any[]>(`${apiBase}/providers`)) || [];
     } catch {
-      providers.value = [
-        { id: "openai", name: "OpenAI", protocol: "openai", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
-        { id: "deepseek", name: "DeepSeek", protocol: "openai", defaultBaseUrl: "https://api.deepseek.com", defaultModel: "deepseek-chat" },
-        { id: "qwen", name: "通义千问 (Qwen)", protocol: "openai", defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus" },
-        { id: "ollama", name: "Ollama", protocol: "ollama", defaultBaseUrl: "http://127.0.0.1:11434", defaultModel: "llama3.1" },
-        { id: "anthropic", name: "Anthropic (Claude)", protocol: "anthropic", defaultBaseUrl: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-20250514" },
-        { id: "gemini", name: "Google Gemini", protocol: "gemini", defaultBaseUrl: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.0-flash" },
-        { id: "custom-http", name: "自定义 HTTP", protocol: "openai", defaultBaseUrl: "", defaultModel: "" },
-      ];
+      providers.value = [];
     }
     onProviderChange(form.apiType);
   }
@@ -116,21 +183,22 @@ export function useModelConfig() {
     detectError.value = "";
     const provider = currentProviderSchema.value as any;
     if (provider) {
-      if (provider.defaultBaseUrl && !form.baseUrl) {
+      if (provider.defaultBaseUrl) {
         form.baseUrl = provider.defaultBaseUrl;
       }
-      if (provider.defaultModel && !form.modelName) {
+      if (provider.defaultModel) {
         form.modelName = provider.defaultModel;
       }
     }
   }
 
   async function detectModels() {
+    if (!withDetect) return;
     detectError.value = "";
     detectedModels.value = [];
     detectingModels.value = true;
     try {
-      const res = await post<any>("/api/model/detect-models", {
+      const res = await post<any>(`${apiBase}/detect-models`, {
         baseUrl: form.baseUrl,
         apiKey: form.apiKey,
         apiType: form.apiType,
@@ -150,33 +218,42 @@ export function useModelConfig() {
   async function showDialog(row: any) {
     editingId.value = row?.id || null;
     showApiKey.value = false;
+    let fullConfig: any = null;
     if (row) {
-      form.name = row.name || "";
-      form.apiType = row.apiType || "openai";
-      form.baseUrl = row.baseUrl || "";
+      let cfg = row;
+      if (transformConfig) cfg = transformConfig(row);
+      form.name = cfg.name || "";
+      form.apiType = cfg.apiType || defaultApiType;
+      form.baseUrl = cfg.baseUrl || "";
       try {
-        const full = await get<any>(`/api/model/configs/${row.id}`);
-        form.apiKey = full?.apiKey || "";
-        originalApiKey.value = full?.apiKey || "";
+        fullConfig = await get<any>(`${apiBase}/configs/${row.id}`);
+        if (transformConfig) fullConfig = transformConfig(fullConfig);
+        form.apiKey = fullConfig?.apiKey || "";
+        originalApiKey.value = fullConfig?.apiKey || "";
       } catch {
         form.apiKey = "";
         originalApiKey.value = "";
       }
-      form.modelName = row.modelName || "";
-      form.temperature = row.temperature ?? 0.7;
-      form.maxTokens = row.maxTokens ?? 4096;
-      form.timeoutSeconds = row.timeoutSeconds ?? 60;
-      form.retryCount = row.retryCount ?? 1;
+      form.modelName = cfg.modelName || "";
+      form.temperature = cfg.temperature ?? 0.7;
+      form.maxTokens = cfg.maxTokens ?? 4096;
+      form.timeoutSeconds = cfg.timeoutSeconds ?? 60;
+      form.retryCount = cfg.retryCount ?? 1;
     } else {
       form.name = "";
-      form.apiType = "openai";
-      form.baseUrl = "";
+      form.apiType = defaultApiType;
+      form.baseUrl = defaultBaseUrl;
       form.apiKey = "";
-      form.modelName = "";
+      form.modelName = defaultModel;
       form.temperature = 0.7;
       form.maxTokens = 4096;
       form.timeoutSeconds = 60;
       form.retryCount = 1;
+    }
+    if (extraFormFields) {
+      for (const [key, defaultVal] of Object.entries(extraFormFields)) {
+        (form as any)[key] = fullConfig?.[key] ?? row?.[key] ?? defaultVal;
+      }
     }
     onProviderChange(form.apiType);
     dialogVisible.value = true;
@@ -189,14 +266,20 @@ export function useModelConfig() {
 
     saving.value = true;
     try {
+      let payload: any = { ...form };
+      if (transformPayload) {
+        payload = transformPayload(payload);
+      }
+      if (!payload.apiKey || payload.apiKey === originalApiKey.value) {
+        delete payload.apiKey;
+      }
       if (editingId.value) {
-        const payload: any = { ...form };
-        if (!payload.apiKey || payload.apiKey === originalApiKey.value) {
-          delete payload.apiKey;
-        }
-        await put(`/api/model/configs/${editingId.value}`, payload);
+        await put(`${apiBase}/configs/${editingId.value}`, payload);
       } else {
-        await post("/api/model/configs", { ...form });
+        if (defaultIsActive) {
+          payload.isActive = defaultIsActive;
+        }
+        await post(`${apiBase}/configs`, { ...payload });
       }
       dialogVisible.value = false;
       ElMessage.success(editingId.value ? "保存成功" : "新建成功");
@@ -210,17 +293,10 @@ export function useModelConfig() {
   async function testConfig(id: number) {
     testingId.value = id;
     try {
-      const result = await post<any>(`/api/model/configs/${id}/test`, {
+      const result = await post<any>(`${apiBase}/configs/${id}/test`, {
         configId: id,
       });
-      testResult.value = {
-        success:
-          result?.test?.success ?? result?.success ?? result?.status === "ok",
-        latencyMs:
-          result?.test?.latencyMs ?? result?.latencyMs ?? result?.latency ?? 0,
-        message: result?.test?.message ?? result?.message ?? "",
-        reply: result?.test?.reply ?? result?.reply ?? "",
-      };
+      testResult.value = testResultMapper(result);
       testResultVisible.value = true;
       await fetchConfigs();
     } catch {
@@ -238,8 +314,8 @@ export function useModelConfig() {
 
   async function setActive(id: number) {
     try {
-      await post(`/api/model/configs/${id}/active`);
-      ElMessage.success("已设为默认模型");
+      await post(`${apiBase}/configs/${id}${activatePath}`);
+      ElMessage.success("已设为默认");
       await fetchConfigs();
       refreshHealth();
     } catch {}
@@ -257,15 +333,16 @@ export function useModelConfig() {
       { type: "warning", confirmButtonText: "删除" },
     );
     try {
-      await del(`/api/model/configs/${id}`);
+      await del(`${apiBase}/configs/${id}`);
       ElMessage.success("已删除");
       await fetchConfigs();
     } catch {}
   }
 
   async function fetchRoutes() {
+    if (!withScenario) return;
     try {
-      const data = await get<any[]>("/api/model/routes");
+      const data = await get<any[]>(`${apiBase}/routes`);
       scenarioRoutes.value = Array.isArray(data)
         ? data
         : (data as any)?.data || [];
@@ -276,8 +353,9 @@ export function useModelConfig() {
   }
 
   async function assignRoute(scenario: string, modelConfigId: number | null) {
+    if (!withScenario) return;
     try {
-      await put("/api/model/routes", { routes: { [scenario]: modelConfigId } });
+      await put(`${apiBase}/routes`, { routes: { [scenario]: modelConfigId } });
       ElMessage.success("用途分配已更新");
       await fetchRoutes();
     } catch {
@@ -312,7 +390,7 @@ export function useModelConfig() {
   onMounted(async () => {
     await loadProviders();
     fetchConfigs();
-    fetchRoutes();
+    if (withScenario) fetchRoutes();
   });
 
   return {
@@ -336,6 +414,9 @@ export function useModelConfig() {
     routeAssignments,
     form,
     rules,
+    showAdvanced,
+    showDetect,
+    modelPlaceholder,
     providerName,
     capLabel,
     maskKey,

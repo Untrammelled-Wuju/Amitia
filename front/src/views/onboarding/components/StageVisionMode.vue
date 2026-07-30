@@ -193,6 +193,11 @@ const visionModes = [
     desc: "语言模型支持图片理解时使用",
     value: "inherit",
   },
+  {
+    label: "兼容服务",
+    desc: "使用 OpenAI 兼容接口",
+    value: "compatible",
+  },
   { label: "暂不启用", desc: "只处理文字和语音", value: "disabled" },
 ];
 

@@ -155,7 +155,7 @@ type mockDefaultChangedCall struct {
 
 type mockSettingsUpdatedCall struct {
 	InstallationID string
-	Settings       map[string]interface{}
+	Settings       *RuntimeSettings
 }
 
 func (m *mockNotifier) NotifyInstallationEnabled(userId, installationId string, settings *RuntimeSettings) error {
@@ -186,7 +186,7 @@ func (m *mockNotifier) NotifyDefaultActionChanged(installationId, actionKey stri
 	return nil
 }
 
-func (m *mockNotifier) NotifyRuntimeSettingsUpdated(installationId string, settings map[string]interface{}) error {
+func (m *mockNotifier) NotifyRuntimeSettingsUpdated(installationId string, settings *RuntimeSettings) error {
 	m.settingsUpdated = append(m.settingsUpdated, mockSettingsUpdatedCall{InstallationID: installationId, Settings: settings})
 	return nil
 }

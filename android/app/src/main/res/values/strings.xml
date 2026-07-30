@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Amitia</string>
-    <string name="app_name_debug">Amitia Debug</string>
-    <string name="core_service_notification_channel">Amitia 核心服务</string>
-    <string name="core_service_notification_title">Amitia 核心运行中</string>
-    <string name="core_service_notification_text">本地运行时正在维护 Amitia 核心</string>
-</resources>

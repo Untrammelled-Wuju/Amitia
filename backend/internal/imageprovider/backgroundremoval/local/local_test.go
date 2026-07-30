@@ -62,8 +62,8 @@ func newImageWithAlphaSubject(subject color.NRGBA, w, h, subW, subH int) *image.
 
 func TestLocalProvider_Name(t *testing.T) {
 	p := NewLocalProvider()
-	if p.Name() != "local" {
-		t.Errorf("Name() = %s, want local", p.Name())
+	if p.Name() != "local-color-key" {
+		t.Errorf("Name() = %s, want local-color-key", p.Name())
 	}
 }
 

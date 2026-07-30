@@ -363,7 +363,12 @@ func mapProcessingErrorCode(code string) int {
 	case ErrCodeProcessingTaskAlreadyRunning,
 		ErrCodeProcessingTaskStateConflict,
 		ErrCodeProcessingActionNotRetryable,
-		ErrCodeProcessingExcludedDefault:
+		ErrCodeProcessingExcludedDefault,
+		ErrCodeDataConflict,
+		ErrCodeDuplicateIdentity,
+		ErrCodeAttemptConflict,
+		ErrCodeExecutionOwnershipLost,
+		ErrCodeVersionAllocationConflict:
 		return response.BusinessError
 	case ErrCodeProcessingInvalidAttempt,
 		ErrCodeGenerationTaskNotReady,
@@ -376,6 +381,8 @@ func mapProcessingErrorCode(code string) int {
 		ErrCodeProcessingActionNotFound:
 		return response.NotFound
 	case ErrCodeProcessingStorageFailed:
+		return response.InternalError
+	case ErrCodeMigrationUnresolved:
 		return response.InternalError
 	case ErrCodeProcessingPackageFailed:
 		return response.OperationFailed

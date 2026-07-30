@@ -4,6 +4,9 @@ package desktoppet
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"mime/multipart"
 	"os"
@@ -16,11 +19,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
+	"github.com/u-ai/backend/internal/desktoppet/specs"
+	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/seedream"
+	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
 )
+
+func computeSHA256HexLocal(data string) string {
+	h := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(h[:])
+}
 
 type Service interface {
 	GetActionDefinitions() (*ActionDefinitionsResponse, error)
@@ -33,22 +45,41 @@ type Service interface {
 	CancelTask(taskID string) error
 	RetryAction(taskID, actionKey string) (*TaskActionResponse, error)
 	GetFrameImage(taskID, actionKey string, frameIndex int) (fullPath string, mimeType string, err error)
+	GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error)
 }
 
 type service struct {
 	repo             Repository
 	db               *gorm.DB
 	providerRegistry *imageprovider.Registry
+	stateStore       *StateStore
+	stateEngine      *taskstate.Engine
 }
 
 func NewService(repo Repository, db *gorm.DB) Service {
 	registry := NewProviderRegistry()
-	return &service{repo: repo, db: db, providerRegistry: registry}
+	stateStore := NewStateStore(db)
+	return &service{
+		repo:             repo,
+		db:               db,
+		providerRegistry: registry,
+		stateStore:       stateStore,
+		stateEngine:      taskstate.NewEngine(stateStore),
+	}
 }
 
 func NewProviderRegistry() *imageprovider.Registry {
 	registry := imageprovider.NewRegistry()
-	seedream.Register(registry)
+	for alias, canonical := range map[string]string{
+		"volcengine_seedream": "seedream",
+		"doubao_seedream":     "seedream",
+		"ark_seedream":        "seedream",
+	} {
+		registry.RegisterAlias(alias, canonical)
+	}
+	if err := seedream.Register(registry); err != nil {
+		log.Logger.Errorf("failed to register seedream provider: %v", err)
+	}
 	return registry
 }
 
@@ -81,17 +112,7 @@ func (s *service) GetActionDefinitions() (*ActionDefinitionsResponse, error) {
 			categorySort[def.CategoryKey] = def.SortOrder
 			cat.SortOrder = def.SortOrder
 		}
-		cat.Actions = append(cat.Actions, ActionItemResponse{
-			ID:                       def.ID,
-			Key:                      def.ActionKey,
-			Name:                     def.Name,
-			Description:              def.Description,
-			SupportsDefaultIdle:      def.SupportsDefaultIdle == 1,
-			Recommended:              def.Recommended == 1,
-			DefaultFrameCount:        def.DefaultFrameCount,
-			EstimatedGenerationCount: def.EstimatedGenerationCount,
-			DefinitionVersion:        def.DefinitionVersion,
-		})
+		cat.Actions = append(cat.Actions, buildActionItemResponse(def))
 	}
 
 	categories := make([]ActionCategoryResponse, 0, len(categoryOrder))
@@ -129,6 +150,35 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	}
 	if cfg.Enabled != 1 {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelDisabled, "生图模型已禁用")
+	}
+
+	providerName := imageprovider.NormalizeProviderName(cfg.ApiType)
+	if providerName == "" {
+		providerName = "seedream"
+	}
+	provider, providerOk := s.providerRegistry.Resolve(providerName)
+	if !providerOk {
+		return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图提供者不可用: "+providerName)
+	}
+
+	modelConfig := imageprovider.ImageModelConfig{
+		Name:      cfg.Name,
+		ApiType:   cfg.ApiType,
+		ApiKey:    cfg.ApiKey,
+		ModelName: cfg.ModelName,
+		BaseUrl:   cfg.BaseUrl,
+	}
+
+	var capabilitySnapshotJSON string
+	var capabilitySnapshotHash string
+	if extProvider, ok := provider.(imageprovider.ExtendedProvider); ok {
+		caps, capErr := extProvider.ExtendedCapabilities(ctx, modelConfig)
+		if capErr == nil {
+			capJSON, _ := json.Marshal(caps)
+			capabilitySnapshotJSON = string(capJSON)
+			capHash := computeSHA256HexLocal(string(capJSON))
+			capabilitySnapshotHash = capHash
+		}
 	}
 
 	dedupedKeys := dedupStrings(selectedActionKeys)
@@ -170,7 +220,8 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	taskActions := make([]GenerationTaskAction, 0, len(actions))
 	for _, a := range actions {
 		estimatedTotal += a.EstimatedGenerationCount
-		taskActions = append(taskActions, GenerationTaskAction{
+
+		ta := GenerationTaskAction{
 			ID:                        uuid.New().String(),
 			TaskID:                    taskID,
 			ActionDefinitionID:        a.ID,
@@ -188,7 +239,30 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 			Progress:                  0,
 			CreatedAt:                 now,
 			UpdatedAt:                 now,
-		})
+		}
+
+		if cs, ok := specs.CatalogGet(a.ActionKey); ok {
+			snap, err := specs.NewSnapshotter().Freeze(cs, now)
+			if err == nil {
+				ta.ActionSpecSchemaVersion = cs.SchemaVersion
+				ta.ActionSpecVersion = cs.Identity.DefinitionVersion
+				ta.ActionSpecJSON = snap.JSON
+				ta.ActionSpecHash = snap.SHA256
+				ta.PlaybackModeSnapshot = string(cs.Playback.Mode)
+				ta.DefaultFPSSnapshot = cs.Playback.DefaultFPS
+				ta.ReturnPolicySnapshot = string(cs.Playback.ReturnPolicy)
+				ta.ReturnActionKeySnapshot = cs.Playback.ReturnActionKey
+				if cs.Playback.Interruptible {
+					ta.InterruptibleSnapshot = 1
+				}
+				ta.PrioritySnapshot = cs.Playback.Priority
+				ta.CooldownMSSnapshot = cs.Playback.CooldownMS
+				ta.MutexGroupSnapshot = cs.Playback.MutexGroup
+				ta.AnchorProfileSnapshot = string(cs.Processing.AnchorProfile)
+			}
+		}
+
+		taskActions = append(taskActions, ta)
 	}
 
 	task := &GenerationTask{
@@ -213,6 +287,12 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 		Progress:                 0,
 		SelectedActionCount:      len(actions),
 		EstimatedGenerationCount: estimatedTotal,
+		GenerationPlanVersion:    1,
+		ProviderKeySnapshot:      providerName,
+		ModelNameSnapshot:        cfg.ModelName,
+		ConfigRevisionSnapshot:   cfg.UpdatedAt,
+		CapabilitySnapshotJSON:   capabilitySnapshotJSON,
+		CapabilitySnapshotHash:   capabilitySnapshotHash,
 		CreatedAt:                now,
 		UpdatedAt:                now,
 	}
@@ -248,6 +328,8 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 		SelectedActionCount:      task.SelectedActionCount,
 		EstimatedGenerationCount: task.EstimatedGenerationCount,
 		CreatedAt:                task.CreatedAt,
+		GenerationPlanVersion:    task.GenerationPlanVersion,
+		ProviderKey:              task.ProviderKeySnapshot,
 	}, nil
 }
 
@@ -308,29 +390,8 @@ func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 		case "failed":
 			failedActionCount++
 		}
-		actionResponses = append(actionResponses, TaskActionResponse{
-			ID:                       a.ID,
-			ActionKey:                a.ActionKey,
-			ActionName:               a.ActionNameSnapshot,
-			ActionDescription:        a.ActionDescriptionSnapshot,
-			CategoryKey:              a.CategoryKeySnapshot,
-			CategoryName:             a.CategoryNameSnapshot,
-			DefinitionVersion:        a.DefinitionVersion,
-			SupportsDefaultIdle:      a.SupportsDefaultIdle == 1,
-			SortOrder:                a.SortOrder,
-			FrameCount:               a.FrameCount,
-			EstimatedGenerationCount: a.EstimatedGenerationCount,
-			Status:                   a.Status,
-			Progress:                 a.Progress,
-			ErrorCode:                a.ErrorCode,
-			ErrorMessage:             a.ErrorMessage,
-			AttemptNumber:            a.AttemptNumber,
-			StartedAt:                a.StartedAt,
-			CompletedAt:              a.CompletedAt,
-			FrameSucceeded:           stat.succeeded,
-			FrameFailed:              stat.failed,
-			FrameTotal:               stat.total,
-		})
+		resp := buildTaskActionResponseWithStat(&a, stat)
+		actionResponses = append(actionResponses, *resp)
 	}
 
 	return &TaskDetailResponse{
@@ -356,6 +417,20 @@ func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 		FailedActionCount:        failedActionCount,
 		CurrentAction:            currentAction,
 		DurationSeconds:          computeTaskDurationSeconds(task.StartedAt, task.CompletedAt),
+		GenerationPlanVersion:    task.GenerationPlanVersion,
+		ProviderKey:              task.ProviderKeySnapshot,
+		ModelNameSnapshot:        task.ModelNameSnapshot,
+		CostEstimateJSON:         task.CostEstimateJSON,
+		PlannedPrimaryRequestCount:  task.PlannedPrimaryRequestCount,
+		PlannedMaxProviderCallCount: task.PlannedMaxProviderCallCount,
+		ActualProviderCallCount:  task.ActualProviderCallCount,
+		RowVersion:               task.RowVersion,
+		StatusReason:             task.StatusReason,
+		FailureStage:             task.FailureStage,
+		LastTransitionAt:         task.LastTransitionAt,
+		SubmittedAt:              task.SubmittedAt,
+		CancellingAt:             task.CancellingAt,
+		CancelledAt:              task.CancelledAt,
 	}, nil
 }
 
@@ -420,6 +495,9 @@ func (s *service) ListTasks(characterID, status string, page, pageSize int) (*Ta
 			SelectedActionCount:      t.SelectedActionCount,
 			EstimatedGenerationCount: t.EstimatedGenerationCount,
 			CreatedAt:                t.CreatedAt,
+			StatusReason:             t.StatusReason,
+			FailureStage:             t.FailureStage,
+			LastTransitionAt:         t.LastTransitionAt,
 		})
 	}
 
@@ -537,7 +615,22 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 		return nil, err
 	}
 
-	if task.Status != "pending" && task.Status != "failed" && task.Status != "partially_succeeded" {
+	currentStatus := contracts.LifecycleStatus(task.Status)
+	allowedFrom := []contracts.LifecycleStatus{
+		contracts.StatusPending,
+		contracts.StatusFailed,
+		contracts.StatusPartiallySucceeded,
+		contracts.StatusCancelled,
+		contracts.StatusSucceeded,
+	}
+	statusAllowed := false
+	for _, s := range allowedFrom {
+		if currentStatus == s {
+			statusAllowed = true
+			break
+		}
+	}
+	if !statusAllowed {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许开始生成")
 	}
 
@@ -565,35 +658,64 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考图片文件不存在")
 	}
 
-	executionID := uuid.New().String()
-	now := time.Now().Format(desktopPetTimeFormat)
-
-	taskUpdates := map[string]interface{}{
-		"status":        "queued",
-		"execution_id":  executionID,
-		"current_stage": "queued",
-		"started_at":    now,
-		"error_code":    "",
-		"error_message": "",
-		"updated_at":    now,
+	taskReason := contracts.ReasonGenerationTaskSubmit
+	switch currentStatus {
+	case contracts.StatusFailed:
+		taskReason = contracts.ReasonGenerationTaskRetry
+	case contracts.StatusPartiallySucceeded:
+		taskReason = contracts.ReasonGenerationTaskRetryFailedSubset
+	case contracts.StatusCancelled:
+		taskReason = contracts.ReasonGenerationTaskRetry
+	case contracts.StatusSucceeded:
+		taskReason = contracts.ReasonGenerationTaskRestart
 	}
-	if err := s.repo.UpdateTaskStatusNoTx(taskID, taskUpdates); err != nil {
+
+	_, err = s.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType: contracts.EntityGenerationTask,
+		EntityID:   taskID,
+		From:       []contracts.LifecycleStatus{currentStatus},
+		To:         contracts.StatusQueued,
+		Stage:      contracts.StageQueued,
+		Reason:     taskReason,
+		ActorType:  contracts.ActorService,
+		ActorID:    task.UserID,
+	})
+	if err != nil {
+		if taskstate.IsConflictError(err) {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许开始生成")
+		}
 		return nil, err
 	}
 
-	actionUpdates := map[string]interface{}{
-		"status":        "queued",
-		"progress":      0,
-		"error_code":    "",
-		"error_message": "",
-		"started_at":    "",
-		"completed_at":  "",
-		"updated_at":    now,
-	}
 	for _, a := range pendingActions {
-		if err := s.repo.UpdateActionStatusNoTx(a.ID, actionUpdates); err != nil {
-			return nil, err
+		actionStatus := contracts.LifecycleStatus(a.Status)
+		actionReason := contracts.ReasonGenerationActionSubmit
+		switch actionStatus {
+		case contracts.StatusFailed, contracts.StatusCancelled:
+			actionReason = contracts.ReasonGenerationActionRetry
 		}
+		_, aErr := s.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityGenerationAction,
+			EntityID:   a.ID,
+			From:       []contracts.LifecycleStatus{actionStatus},
+			To:         contracts.StatusQueued,
+			Stage:      contracts.StageQueued,
+			Reason:     actionReason,
+			ActorType:  contracts.ActorService,
+			ActorID:    task.UserID,
+			ParentTaskID: taskID,
+		})
+		if aErr != nil {
+			if taskstate.IsConflictError(aErr) {
+				continue
+			}
+			return nil, aErr
+		}
+		supplementaryUpdates := map[string]interface{}{
+			"progress":   0,
+			"started_at": "",
+		}
+		_ = s.repo.UpdateActionStatusNoTx(a.ID, supplementaryUpdates)
 	}
 
 	updatedTask, err := s.repo.GetTaskByID(taskID)
@@ -612,15 +734,58 @@ func (s *service) CancelTask(taskID string) error {
 		return err
 	}
 
-	if task.Status != "processing" && task.Status != "queued" {
-		return NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许取消")
+	currentStatus := contracts.LifecycleStatus(task.Status)
+
+	if currentStatus == contracts.StatusPending || currentStatus == contracts.StatusQueued {
+		_, err := s.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityGenerationTask,
+			EntityID:   taskID,
+			From:       []contracts.LifecycleStatus{currentStatus},
+			To:         contracts.StatusCancelled,
+			Stage:      contracts.StageCancelled,
+			Reason:     contracts.ReasonGenerationTaskCancelBeforeClaim,
+			ActorType:  contracts.ActorService,
+			ActorID:    task.UserID,
+		})
+		if err != nil {
+			if taskstate.IsConflictError(err) {
+				return NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许取消")
+			}
+			return err
+		}
+		return nil
 	}
 
-	now := time.Now().Format(desktopPetTimeFormat)
-	if err := s.repo.SetCancelRequested(taskID, now); err != nil {
-		return err
+	if currentStatus == contracts.StatusProcessing {
+		cancellingStage := contracts.StageGenerating
+		if task.CurrentStage != "" {
+			potentialStage := contracts.Stage(task.CurrentStage)
+			if contracts.IsAllowedStageFor(contracts.EntityGenerationTask, potentialStage) && potentialStage.IsActivityStage() {
+				cancellingStage = potentialStage
+			}
+		}
+		_, err := s.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityGenerationTask,
+			EntityID:   taskID,
+			From:       []contracts.LifecycleStatus{currentStatus},
+			To:         contracts.StatusCancelling,
+			Stage:      cancellingStage,
+			Reason:     contracts.ReasonGenerationTaskCancelRequested,
+			ActorType:  contracts.ActorService,
+			ActorID:    task.UserID,
+		})
+		if err != nil {
+			if taskstate.IsConflictError(err) {
+				return NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许取消")
+			}
+			return err
+		}
+		now := time.Now().Format(desktopPetTimeFormat)
+		_ = s.repo.SetCancelRequested(taskID, now)
+		return nil
 	}
-	return nil
+
+	return NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务当前状态不允许取消")
 }
 
 func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, error) {
@@ -660,32 +825,63 @@ func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, er
 		tx.Rollback()
 		return nil, err
 	}
-	now := time.Now().Format(desktopPetTimeFormat)
-	actionUpdates := map[string]interface{}{
-		"status":        "queued",
-		"progress":      0,
-		"error_code":    "",
-		"error_message": "",
-		"started_at":    "",
-		"completed_at":  "",
-		"updated_at":    now,
-	}
-	if err := s.repo.UpdateActionStatus(tx, target.ID, actionUpdates); err != nil {
+
+	txStateStore := s.stateStore.WithTx(tx)
+	txEngine := taskstate.NewEngine(txStateStore)
+
+	actionStatus := contracts.LifecycleStatus(target.Status)
+	_, aErr := txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType:   contracts.EntityGenerationAction,
+		EntityID:     target.ID,
+		From:         []contracts.LifecycleStatus{actionStatus},
+		To:           contracts.StatusQueued,
+		Stage:        contracts.StageQueued,
+		Reason:       contracts.ReasonGenerationActionRetry,
+		ActorType:    contracts.ActorService,
+		ActorID:      task.UserID,
+		ParentTaskID: taskID,
+	})
+	if aErr != nil {
 		tx.Rollback()
-		return nil, err
+		if taskstate.IsConflictError(aErr) {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "动作状态冲突，无法重试")
+		}
+		return nil, aErr
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
-	if task.Status != "processing" {
-		taskUpdates := map[string]interface{}{
-			"status":        "queued",
-			"current_stage": "queued",
-			"updated_at":    now,
+	supplementaryUpdates := map[string]interface{}{
+		"progress":   0,
+		"started_at": "",
+	}
+	_ = s.repo.UpdateActionStatusNoTx(target.ID, supplementaryUpdates)
+
+	taskStatus := contracts.LifecycleStatus(task.Status)
+	if taskStatus.IsTerminal() {
+		taskReason := contracts.ReasonGenerationTaskRetry
+		switch taskStatus {
+		case contracts.StatusPartiallySucceeded:
+			taskReason = contracts.ReasonGenerationTaskRetryFailedSubset
+		case contracts.StatusSucceeded:
+			taskReason = contracts.ReasonGenerationTaskRestart
 		}
-		if err := s.repo.UpdateTaskStatusNoTx(taskID, taskUpdates); err != nil {
-			return nil, err
+		_, tErr := s.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
+			EntityType: contracts.EntityGenerationTask,
+			EntityID:   taskID,
+			From:       []contracts.LifecycleStatus{taskStatus},
+			To:         contracts.StatusQueued,
+			Stage:      contracts.StageQueued,
+			Reason:     taskReason,
+			ActorType:  contracts.ActorRetryService,
+			ActorID:    task.UserID,
+		})
+		if tErr != nil {
+			if taskstate.IsConflictError(tErr) {
+				return nil, NewBusinessError(response.BusinessError, ErrCodeGenerationStateConflict, "任务状态冲突，无法重试")
+			}
+			return nil, tErr
 		}
 	}
 
@@ -720,10 +916,34 @@ func (s *service) validateModelConfigForExecution(modelConfigID int) (*imageGenC
 }
 
 func (s *service) resolveProviderName(cfg *imageGenConfigView) string {
-	if cfg != nil && strings.Contains(strings.ToLower(cfg.ModelName), seedream.ProviderName) {
-		return seedream.ProviderName
+	if cfg == nil {
+		return ""
 	}
-	return seedream.ProviderName
+	apiType := strings.TrimSpace(cfg.ApiType)
+	if apiType == "" {
+		apiType = "seedream"
+	}
+	canonical := imageprovider.NormalizeProviderName(apiType)
+	if _, ok := s.providerRegistry.Resolve(canonical); ok {
+		return canonical
+	}
+	return ""
+}
+
+func (s *service) resolveProvider(cfg *imageGenConfigView) (imageprovider.ImageGenerationProvider, string, error) {
+	if cfg == nil {
+		return nil, "", NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图模型配置为空")
+	}
+	apiType := strings.TrimSpace(cfg.ApiType)
+	if apiType == "" {
+		apiType = "seedream"
+	}
+	canonical := imageprovider.NormalizeProviderName(apiType)
+	provider, ok := s.providerRegistry.Resolve(canonical)
+	if !ok {
+		return nil, "", NewBusinessError(response.BusinessError, ErrCodeImageModelTypeUnsupported, "未知的生图模型类型: "+apiType)
+	}
+	return provider, canonical, nil
 }
 
 func (s *service) buildTaskSummary(task *GenerationTask) *TaskSummaryResponse {
@@ -738,10 +958,23 @@ func (s *service) buildTaskSummary(task *GenerationTask) *TaskSummaryResponse {
 		SelectedActionCount:      task.SelectedActionCount,
 		EstimatedGenerationCount: task.EstimatedGenerationCount,
 		CreatedAt:                task.CreatedAt,
+		GenerationPlanVersion:    task.GenerationPlanVersion,
+		ProviderKey:              task.ProviderKeySnapshot,
+		RowVersion:               task.RowVersion,
+		StatusReason:             task.StatusReason,
+		FailureStage:             task.FailureStage,
+		LastTransitionAt:         task.LastTransitionAt,
+		SubmittedAt:              task.SubmittedAt,
+		CancellingAt:             task.CancellingAt,
+		CancelledAt:              task.CancelledAt,
 	}
 }
 
 func (s *service) buildTaskActionResponse(a *GenerationTaskAction) *TaskActionResponse {
+	return buildTaskActionResponseWithStat(a, frameStat{})
+}
+
+func buildTaskActionResponseWithStat(a *GenerationTaskAction, stat frameStat) *TaskActionResponse {
 	return &TaskActionResponse{
 		ID:                       a.ID,
 		ActionKey:                a.ActionKey,
@@ -761,6 +994,57 @@ func (s *service) buildTaskActionResponse(a *GenerationTaskAction) *TaskActionRe
 		AttemptNumber:            a.AttemptNumber,
 		StartedAt:                a.StartedAt,
 		CompletedAt:              a.CompletedAt,
+		FrameSucceeded:           stat.succeeded,
+		FrameFailed:              stat.failed,
+		FrameTotal:               stat.total,
+		PlaybackModeSnapshot:     a.PlaybackModeSnapshot,
+		DefaultFPSSnapshot:       a.DefaultFPSSnapshot,
+		ReturnPolicySnapshot:     a.ReturnPolicySnapshot,
+		ReturnActionKeySnapshot:  a.ReturnActionKeySnapshot,
+		InterruptibleSnapshot:    a.InterruptibleSnapshot == 1,
+		PrioritySnapshot:         a.PrioritySnapshot,
+		CooldownMsSnapshot:       a.CooldownMSSnapshot,
+		MutexGroupSnapshot:       a.MutexGroupSnapshot,
+		AnchorProfileSnapshot:    a.AnchorProfileSnapshot,
+		ActionSpecHash:           a.ActionSpecHash,
+		GenerationMode:           a.GenerationMode,
+		ActiveAttemptID:          a.ActiveAttemptID,
+		ActiveAttemptNumber:      a.ActiveAttemptNumber,
+		PlannedSegmentCount:      a.PlannedSegmentCount,
+		RowVersion:               a.RowVersion,
+		CurrentStage:             a.CurrentStage,
+		StatusReason:             a.StatusReason,
+		FailureStage:             a.FailureStage,
+		LastTransitionAt:         a.LastTransitionAt,
+	}
+}
+
+func buildActionItemResponse(def ActionDefinition) ActionItemResponse {
+	tags := []string{}
+	if def.SemanticTagsJSON != "" && def.SemanticTagsJSON != "[]" {
+		_ = json.Unmarshal([]byte(def.SemanticTagsJSON), &tags)
+	}
+	return ActionItemResponse{
+		ID:                       def.ID,
+		Key:                      def.ActionKey,
+		Name:                     def.Name,
+		Description:              def.Description,
+		SupportsDefaultIdle:      def.SupportsDefaultIdle == 1,
+		Recommended:              def.Recommended == 1,
+		DefaultFrameCount:        def.DefaultFrameCount,
+		EstimatedGenerationCount: def.EstimatedGenerationCount,
+		DefinitionVersion:        def.DefinitionVersion,
+		PlaybackMode:             def.PlaybackMode,
+		DefaultFPS:               def.DefaultFPS,
+		ReturnPolicy:             def.ReturnPolicy,
+		ReturnActionKey:          def.ReturnActionKey,
+		Interruptible:            def.Interruptible == 1,
+		Priority:                 def.Priority,
+		CooldownMs:               def.CooldownMS,
+		MutexGroup:               def.MutexGroup,
+		QueuePolicy:              def.QueuePolicy,
+		AnchorProfile:            def.AnchorProfile,
+		Tags:                     tags,
 	}
 }
 
@@ -810,4 +1094,22 @@ func removeAllTaskDir(dir string) error {
 		}
 	}
 	return lastErr
+}
+
+func (s *service) GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error) {
+	if _, err := s.repo.GetTaskByID(taskID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
+		}
+		return nil, err
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	ctx := context.Background()
+	records, err := s.stateStore.ListAuditsByParent(ctx, taskID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
 }

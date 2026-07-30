@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS characters (
     voice_mode TEXT DEFAULT 'preset',
     emotion TEXT DEFAULT '',
     emotion_scale INTEGER DEFAULT 0,
-    silence_duration INTEGER DEFAULT 0
+    silence_duration INTEGER DEFAULT 0,
+    character_base TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS character_templates (
@@ -118,7 +119,17 @@ CREATE TABLE IF NOT EXISTS messages (
     reply_to_excerpt TEXT DEFAULT '',
     tool_call_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    emote_id TEXT NOT NULL DEFAULT '',
+    alt_text TEXT NOT NULL DEFAULT '',
+    is_animated INTEGER NOT NULL DEFAULT 0,
+    media_width INTEGER NOT NULL DEFAULT 0,
+    media_height INTEGER NOT NULL DEFAULT 0,
+    original_asset_reference TEXT NOT NULL DEFAULT '',
+    fallback_asset_reference TEXT NOT NULL DEFAULT '',
+    response_group_id TEXT NOT NULL DEFAULT '',
+    delivery_sequence INTEGER NOT NULL DEFAULT 0,
+    emote_decision_status TEXT NOT NULL DEFAULT 'none'
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
@@ -437,7 +448,14 @@ CREATE TABLE IF NOT EXISTS proactive_messages (
     error TEXT DEFAULT '',
     sent_at TEXT,
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    interaction_id TEXT DEFAULT '',
+    delivery_intent_id TEXT DEFAULT '',
+    delivery_id TEXT DEFAULT '',
+    request_id TEXT DEFAULT '',
+    delivery_status TEXT DEFAULT 'PENDING',
+    delivered_at TEXT DEFAULT '',
+    error_message TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS reminders (
@@ -476,7 +494,10 @@ CREATE TABLE IF NOT EXISTS memories (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
     use_count INTEGER DEFAULT 0,
-    last_used_at TEXT
+    last_used_at TEXT,
+    sensitivity_level TEXT DEFAULT 'internal',
+    allow_proactive_mention INTEGER DEFAULT 1,
+    requires_confirmation INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS memory_events (
@@ -509,7 +530,10 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     source_text TEXT DEFAULT '',
     conversation_id TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    sensitivity_level TEXT DEFAULT 'internal',
+    allow_proactive_mention INTEGER DEFAULT 1,
+    requires_confirmation INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
@@ -537,7 +561,9 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
     message_id_end TEXT DEFAULT '',
     source_conv_id TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    message_time_start TEXT NOT NULL DEFAULT '',
+    message_time_end TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_episodic_user_id ON episodic_memories(user_id);
@@ -706,3 +732,2468 @@ CREATE TABLE IF NOT EXISTS mcp_duplicate_tool_registrations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_dup_unresolved ON mcp_duplicate_tool_registrations(resolved, server_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT DEFAULT '',
+    category_key TEXT NOT NULL DEFAULT '',
+    category_name TEXT NOT NULL DEFAULT '',
+    supports_default_idle INTEGER NOT NULL DEFAULT 0,
+    recommended INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    definition_version INTEGER NOT NULL DEFAULT 1,
+    default_frame_count INTEGER NOT NULL DEFAULT 8,
+    estimated_generation_count INTEGER NOT NULL DEFAULT 1,
+    source_type TEXT NOT NULL DEFAULT 'builtin',
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    catalog_version INTEGER NOT NULL DEFAULT 1,
+    default_fps INTEGER NOT NULL DEFAULT 10,
+    playback_mode TEXT NOT NULL DEFAULT 'once',
+    return_policy TEXT NOT NULL DEFAULT 'previous',
+    return_action_key TEXT NOT NULL DEFAULT '',
+    interruptible INTEGER NOT NULL DEFAULT 1,
+    interrupt_after_ms INTEGER NOT NULL DEFAULT 0,
+    minimum_play_ms INTEGER NOT NULL DEFAULT 0,
+    maximum_play_ms INTEGER NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 0,
+    cooldown_ms INTEGER NOT NULL DEFAULT 0,
+    mutex_group TEXT NOT NULL DEFAULT '',
+    queue_policy TEXT NOT NULL DEFAULT 'replace',
+    dedup_window_ms INTEGER NOT NULL DEFAULT 0,
+    anchor_profile TEXT NOT NULL DEFAULT 'feet_center',
+    semantic_tags_json TEXT NOT NULL DEFAULT '[]',
+    generation_spec_version INTEGER NOT NULL DEFAULT 1,
+    spec_json TEXT NOT NULL DEFAULT '{}',
+    spec_hash TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    model_config_id INTEGER NOT NULL DEFAULT 0,
+    name TEXT NOT NULL DEFAULT '',
+    source_image_path TEXT DEFAULT '',
+    source_image_original_name TEXT DEFAULT '',
+    source_image_mime_type TEXT DEFAULT '',
+    source_image_size INTEGER DEFAULT 0,
+    source_image_width INTEGER DEFAULT 0,
+    source_image_height INTEGER DEFAULT 0,
+    source_image_hash TEXT DEFAULT '',
+    prompt TEXT DEFAULT '',
+    negative_prompt TEXT DEFAULT '',
+    output_width INTEGER DEFAULT 0,
+    output_height INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    current_stage TEXT NOT NULL DEFAULT 'queued',
+    progress INTEGER NOT NULL DEFAULT 0,
+    selected_action_count INTEGER NOT NULL DEFAULT 0,
+    estimated_generation_count INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    completed_at TEXT DEFAULT '',
+    execution_id TEXT DEFAULT '',
+    worker_id TEXT DEFAULT '',
+    lease_expires_at TEXT DEFAULT '',
+    last_heartbeat_at TEXT DEFAULT '',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    cancel_requested_at TEXT DEFAULT '',
+    row_version INTEGER NOT NULL DEFAULT 0,
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL DEFAULT '',
+    cancelling_at TEXT NOT NULL DEFAULT '',
+    cancelled_at TEXT NOT NULL DEFAULT '',
+    reference_asset_id TEXT NOT NULL DEFAULT '',
+    generation_plan_version INTEGER NOT NULL DEFAULT 0,
+    provider_key_snapshot TEXT NOT NULL DEFAULT '',
+    model_name_snapshot TEXT NOT NULL DEFAULT '',
+    config_revision_snapshot TEXT NOT NULL DEFAULT '',
+    capability_snapshot_json TEXT NOT NULL DEFAULT '{}',
+    capability_snapshot_hash TEXT NOT NULL DEFAULT '',
+    cost_estimate_json TEXT NOT NULL DEFAULT '{}',
+    planned_primary_request_count INTEGER NOT NULL DEFAULT 0,
+    planned_max_provider_call_count INTEGER NOT NULL DEFAULT 0,
+    actual_provider_call_count INTEGER NOT NULL DEFAULT 0,
+    actual_output_image_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpgt_user ON desktop_pet_generation_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpgt_char ON desktop_pet_generation_tasks(character_id);
+CREATE INDEX IF NOT EXISTS idx_dpgt_status ON desktop_pet_generation_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_dpgt_created ON desktop_pet_generation_tasks(created_at);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_generation_task_actions (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    action_definition_id INTEGER NOT NULL DEFAULT 0,
+    action_key TEXT NOT NULL DEFAULT '',
+    action_name_snapshot TEXT DEFAULT '',
+    action_description_snapshot TEXT DEFAULT '',
+    category_key_snapshot TEXT DEFAULT '',
+    category_name_snapshot TEXT DEFAULT '',
+    definition_version INTEGER NOT NULL DEFAULT 1,
+    supports_default_idle INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    frame_count INTEGER NOT NULL DEFAULT 8,
+    estimated_generation_count INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    progress INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    completed_at TEXT DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    generation_spec_version TEXT DEFAULT '',
+    current_attempt INTEGER NOT NULL DEFAULT 1,
+    row_version INTEGER NOT NULL DEFAULT 0,
+    current_stage TEXT NOT NULL DEFAULT 'created',
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    worker_id TEXT NOT NULL DEFAULT '',
+    action_spec_schema_version INTEGER NOT NULL DEFAULT 1,
+    action_spec_version INTEGER NOT NULL DEFAULT 1,
+    action_spec_json TEXT NOT NULL DEFAULT '',
+    action_spec_hash TEXT NOT NULL DEFAULT '',
+    playback_mode_snapshot TEXT NOT NULL DEFAULT '',
+    default_fps_snapshot INTEGER NOT NULL DEFAULT 0,
+    return_policy_snapshot TEXT NOT NULL DEFAULT '',
+    return_action_key_snapshot TEXT NOT NULL DEFAULT '',
+    interruptible_snapshot INTEGER NOT NULL DEFAULT 1,
+    priority_snapshot INTEGER NOT NULL DEFAULT 0,
+    cooldown_ms_snapshot INTEGER NOT NULL DEFAULT 0,
+    mutex_group_snapshot TEXT NOT NULL DEFAULT '',
+    anchor_profile_snapshot TEXT NOT NULL DEFAULT '',
+    generation_mode TEXT NOT NULL DEFAULT 'legacy_frame',
+    generation_plan_json TEXT NOT NULL DEFAULT '{}',
+    generation_plan_hash TEXT NOT NULL DEFAULT '',
+    prompt_template_version TEXT NOT NULL DEFAULT '',
+    active_attempt_id TEXT NOT NULL DEFAULT '',
+    active_attempt_number INTEGER NOT NULL DEFAULT 0,
+    planned_segment_count INTEGER NOT NULL DEFAULT 0,
+    planned_primary_request_count INTEGER NOT NULL DEFAULT 0,
+    planned_max_provider_call_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpgta_task ON desktop_pet_generation_task_actions(task_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpgta_task_action ON desktop_pet_generation_task_actions(task_id, action_key);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_generation_frames (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    task_action_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT DEFAULT '',
+    frame_index INTEGER NOT NULL DEFAULT 0,
+    frame_phase TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    generation_attempt INTEGER NOT NULL DEFAULT 0,
+    provider_attempt INTEGER NOT NULL DEFAULT 0,
+    prompt_snapshot TEXT DEFAULT '',
+    negative_prompt_snapshot TEXT DEFAULT '',
+    provider TEXT DEFAULT '',
+    model TEXT DEFAULT '',
+    provider_request_id TEXT DEFAULT '',
+    provider_operation_id TEXT DEFAULT '',
+    source_image_path TEXT DEFAULT '',
+    previous_frame_path TEXT DEFAULT '',
+    result_image_path TEXT DEFAULT '',
+    result_mime_type TEXT DEFAULT '',
+    result_width INTEGER DEFAULT 0,
+    result_height INTEGER DEFAULT 0,
+    result_size INTEGER DEFAULT 0,
+    result_hash TEXT DEFAULT '',
+    provider_seed TEXT DEFAULT '',
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    completed_at TEXT DEFAULT '',
+    row_version INTEGER NOT NULL DEFAULT 0,
+    current_stage TEXT NOT NULL DEFAULT 'created',
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpgf_task ON desktop_pet_generation_frames(task_id);
+CREATE INDEX IF NOT EXISTS idx_dpgf_action ON desktop_pet_generation_frames(task_action_id);
+CREATE INDEX IF NOT EXISTS idx_dpgf_exec ON desktop_pet_generation_frames(execution_id);
+CREATE INDEX IF NOT EXISTS idx_dpgf_status ON desktop_pet_generation_frames(status);
+ALTER TABLE desktop_pet_generation_frames ADD COLUMN generation_attempt INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_generation_frames ADD COLUMN provider_attempt INTEGER NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpgf_action_gen_frame ON desktop_pet_generation_frames(task_action_id, generation_attempt, frame_index);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    task_action_id TEXT DEFAULT '',
+    frame_id TEXT DEFAULT '',
+    execution_id TEXT DEFAULT '',
+    provider TEXT DEFAULT '',
+    model TEXT DEFAULT '',
+    provider_request_id TEXT DEFAULT '',
+    request_started_at TEXT DEFAULT '',
+    request_completed_at TEXT DEFAULT '',
+    request_status TEXT DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 0,
+    usage TEXT DEFAULT '',
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    attempt_id TEXT NOT NULL DEFAULT '',
+    artifact_id TEXT NOT NULL DEFAULT '',
+    call_type TEXT NOT NULL DEFAULT 'primary',
+    call_attempt_index INTEGER NOT NULL DEFAULT 0,
+    idempotency_key_hash TEXT NOT NULL DEFAULT '',
+    request_hash TEXT NOT NULL DEFAULT '',
+    submission_state TEXT NOT NULL DEFAULT '',
+    retry_class TEXT NOT NULL DEFAULT '',
+    http_status INTEGER NOT NULL DEFAULT 0,
+    usage_json TEXT NOT NULL DEFAULT '{}',
+    estimated_cost_json TEXT NOT NULL DEFAULT '{}',
+    actual_cost_json TEXT NOT NULL DEFAULT '{}',
+    response_receipt_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpgcl_task ON desktop_pet_generation_call_logs(task_id);
+CREATE INDEX IF NOT EXISTS idx_dpgcl_exec ON desktop_pet_generation_call_logs(execution_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
+    id TEXT PRIMARY KEY,
+    generation_task_id TEXT NOT NULL DEFAULT '',
+    processing_version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    current_stage TEXT NOT NULL DEFAULT 'queued',
+    progress INTEGER NOT NULL DEFAULT 0,
+    output_width INTEGER NOT NULL DEFAULT 512,
+    output_height INTEGER NOT NULL DEFAULT 512,
+    target_character_height_ratio REAL NOT NULL DEFAULT 0.8,
+    anchor_mode TEXT NOT NULL DEFAULT 'feet_center',
+    background_mode TEXT NOT NULL DEFAULT 'remove_background',
+    output_format TEXT NOT NULL DEFAULT 'png',
+    default_fps INTEGER NOT NULL DEFAULT 10,
+    execution_id TEXT DEFAULT '',
+    worker_id TEXT DEFAULT '',
+    lease_expires_at TEXT DEFAULT '',
+    last_heartbeat_at TEXT DEFAULT '',
+    cancel_requested_at TEXT DEFAULT '',
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    started_at TEXT DEFAULT '',
+    completed_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    row_version INTEGER NOT NULL DEFAULT 0,
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL DEFAULT '',
+    cancelling_at TEXT NOT NULL DEFAULT '',
+    cancelled_at TEXT NOT NULL DEFAULT '',
+    config_snapshot TEXT NOT NULL DEFAULT '{}',
+    config_hash TEXT NOT NULL DEFAULT '',
+    pipeline_version TEXT NOT NULL DEFAULT '',
+    active_revision_count INTEGER NOT NULL DEFAULT 0,
+    publish_state TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppt_gen_task ON desktop_pet_processing_tasks(generation_task_id);
+CREATE INDEX IF NOT EXISTS idx_dppt_status ON desktop_pet_processing_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_dppt_version ON desktop_pet_processing_tasks(processing_version);
+CREATE INDEX IF NOT EXISTS idx_dppt_exec ON desktop_pet_processing_tasks(execution_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppt_gen_version ON desktop_pet_processing_tasks(generation_task_id, processing_version);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_actions (
+    id TEXT PRIMARY KEY,
+    processing_task_id TEXT NOT NULL DEFAULT '',
+    generation_task_action_id TEXT NOT NULL DEFAULT '',
+    action_key TEXT NOT NULL DEFAULT '',
+    action_name_snapshot TEXT DEFAULT '',
+    source_attempt_number INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    progress INTEGER NOT NULL DEFAULT 0,
+    source_frame_count INTEGER NOT NULL DEFAULT 0,
+    processed_frame_count INTEGER NOT NULL DEFAULT 0,
+    loop_type TEXT DEFAULT 'once',
+    fps INTEGER NOT NULL DEFAULT 10,
+    frame_duration_ms INTEGER NOT NULL DEFAULT 100,
+    anchor_type TEXT DEFAULT 'feet_center',
+    anchor_x REAL NOT NULL DEFAULT 0.5,
+    anchor_y REAL NOT NULL DEFAULT 0.92,
+    bounding_box TEXT DEFAULT '',
+    excluded INTEGER NOT NULL DEFAULT 0,
+    processing_attempt INTEGER NOT NULL DEFAULT 1,
+    last_successful_attempt INTEGER NOT NULL DEFAULT 0,
+    active_execution_id TEXT NOT NULL DEFAULT '',
+    row_version INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    completed_at TEXT DEFAULT '',
+    current_stage TEXT NOT NULL DEFAULT 'created',
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    worker_id TEXT NOT NULL DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    action_spec_schema_version INTEGER NOT NULL DEFAULT 1,
+    action_spec_version INTEGER NOT NULL DEFAULT 1,
+    action_spec_hash TEXT NOT NULL DEFAULT '',
+    return_policy TEXT NOT NULL DEFAULT '',
+    return_action_key TEXT NOT NULL DEFAULT '',
+    interruptible INTEGER NOT NULL DEFAULT 1,
+    interrupt_after_ms INTEGER NOT NULL DEFAULT 0,
+    minimum_play_ms INTEGER NOT NULL DEFAULT 0,
+    maximum_play_ms INTEGER NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 0,
+    cooldown_ms INTEGER NOT NULL DEFAULT 0,
+    mutex_group TEXT NOT NULL DEFAULT '',
+    queue_policy TEXT NOT NULL DEFAULT 'replace',
+    dedup_window_ms INTEGER NOT NULL DEFAULT 0,
+    anchor_profile TEXT NOT NULL DEFAULT 'feet_center',
+    playback_mode TEXT NOT NULL DEFAULT '',
+    active_revision_id TEXT NOT NULL DEFAULT '',
+    next_revision_number INTEGER NOT NULL DEFAULT 1,
+    source_attempt_id TEXT NOT NULL DEFAULT '',
+    source_candidate_index INTEGER NOT NULL DEFAULT 0,
+    processing_profile_snapshot TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppa_task ON desktop_pet_processing_actions(processing_task_id);
+CREATE INDEX IF NOT EXISTS idx_dppa_action ON desktop_pet_processing_actions(action_key);
+CREATE INDEX IF NOT EXISTS idx_dppa_status ON desktop_pet_processing_actions(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppa_task_action ON desktop_pet_processing_actions(processing_task_id, action_key);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_action_attempts (
+    id TEXT PRIMARY KEY,
+    processing_action_id TEXT NOT NULL DEFAULT '',
+    processing_task_id TEXT NOT NULL DEFAULT '',
+    action_key TEXT NOT NULL DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    source_generation_attempt INTEGER NOT NULL DEFAULT 1,
+    execution_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    progress INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppaa_task ON desktop_pet_processing_action_attempts(processing_task_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppaa_action_attempt ON desktop_pet_processing_action_attempts(processing_action_id, attempt_number);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
+    id TEXT PRIMARY KEY,
+    processing_action_id TEXT NOT NULL DEFAULT '',
+    source_frame_id TEXT NOT NULL DEFAULT '',
+    frame_index INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    source_path TEXT DEFAULT '',
+    processed_path TEXT DEFAULT '',
+    width INTEGER DEFAULT 0,
+    height INTEGER DEFAULT 0,
+    content_hash TEXT DEFAULT '',
+    subject_box TEXT DEFAULT '',
+    anchor_x REAL DEFAULT 0,
+    anchor_y REAL DEFAULT 0,
+    alpha_coverage REAL DEFAULT 0,
+    quality_flags TEXT DEFAULT '',
+    processing_attempt_id TEXT NOT NULL DEFAULT '',
+    processing_attempt_number INTEGER NOT NULL DEFAULT 1,
+    execution_id TEXT NOT NULL DEFAULT '',
+    error_code TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    row_version INTEGER NOT NULL DEFAULT 0,
+    current_stage TEXT NOT NULL DEFAULT 'created',
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT '',
+    revision_id TEXT NOT NULL DEFAULT '',
+    mask_path TEXT NOT NULL DEFAULT '',
+    transform_chain_id TEXT NOT NULL DEFAULT '',
+    measurement_id TEXT NOT NULL DEFAULT '',
+    source_artifact_id TEXT NOT NULL DEFAULT '',
+    source_cell_index INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppf_action ON desktop_pet_processed_frames(processing_action_id);
+CREATE INDEX IF NOT EXISTS idx_dppf_index ON desktop_pet_processed_frames(frame_index);
+CREATE INDEX IF NOT EXISTS idx_dppf_status ON desktop_pet_processed_frames(status);
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN processing_attempt_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN processing_attempt_number INTEGER NOT NULL DEFAULT 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppf_attempt_frame ON desktop_pet_processed_frames(processing_attempt_id, frame_index);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_packages (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    generation_task_id TEXT NOT NULL DEFAULT '',
+    processing_task_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'draft',
+    default_action_key TEXT NOT NULL DEFAULT '',
+    canvas_width INTEGER NOT NULL DEFAULT 512,
+    canvas_height INTEGER NOT NULL DEFAULT 512,
+    package_path TEXT DEFAULT '',
+    manifest_path TEXT DEFAULT '',
+    preview_path TEXT DEFAULT '',
+    action_count INTEGER NOT NULL DEFAULT 0,
+    package_hash TEXT DEFAULT '',
+    included_actions TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    row_version INTEGER NOT NULL DEFAULT 0,
+    current_stage TEXT NOT NULL DEFAULT 'created',
+    status_reason TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    last_transition_at TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppkg_user ON desktop_pet_packages(user_id);
+CREATE INDEX IF NOT EXISTS idx_dppkg_gen ON desktop_pet_packages(generation_task_id);
+CREATE INDEX IF NOT EXISTS idx_dppkg_proc ON desktop_pet_packages(processing_task_id);
+CREATE INDEX IF NOT EXISTS idx_dppkg_status ON desktop_pet_packages(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dppkg_proc_version ON desktop_pet_packages(processing_task_id, version);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_installations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    package_id TEXT NOT NULL DEFAULT '',
+    package_version TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'installed',
+    is_active INTEGER NOT NULL DEFAULT 0,
+    install_path TEXT DEFAULT '',
+    manifest_path TEXT DEFAULT '',
+    preview_path TEXT DEFAULT '',
+    default_action_key TEXT DEFAULT '',
+    canvas_width INTEGER NOT NULL DEFAULT 0,
+    canvas_height INTEGER NOT NULL DEFAULT 0,
+    package_hash TEXT DEFAULT '',
+    installed_at TEXT DEFAULT (datetime('now')),
+    last_enabled_at TEXT DEFAULT '',
+    last_disabled_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    pet_id TEXT NOT NULL DEFAULT '',
+    current_release_id TEXT NOT NULL DEFAULT '',
+    lifecycle_state TEXT NOT NULL DEFAULT 'installed',
+    desired_state TEXT NOT NULL DEFAULT 'disabled',
+    runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
+    state_revision INTEGER NOT NULL DEFAULT 0,
+    install_storage_key TEXT NOT NULL DEFAULT '',
+    integrity_root TEXT NOT NULL DEFAULT '',
+    last_error_code TEXT NOT NULL DEFAULT '',
+    last_error_message TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpinst_user ON desktop_pet_installations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_character ON desktop_pet_installations(character_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_package ON desktop_pet_installations(package_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_status ON desktop_pet_installations(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinst_package_version ON desktop_pet_installations(package_id, package_version);
+CREATE INDEX IF NOT EXISTS idx_dpinst_pet ON desktop_pet_installations(pet_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_release ON desktop_pet_installations(current_release_id);
+CREATE INDEX IF NOT EXISTS idx_dpinst_lifecycle ON desktop_pet_installations(lifecycle_state);
+CREATE INDEX IF NOT EXISTS idx_dpinst_desired ON desktop_pet_installations(desired_state);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_settings (
+    id TEXT PRIMARY KEY,
+    installation_id TEXT NOT NULL DEFAULT '',
+    always_on_top INTEGER NOT NULL DEFAULT 1,
+    launch_on_startup INTEGER NOT NULL DEFAULT 0,
+    scale REAL NOT NULL DEFAULT 1.0,
+    position_x INTEGER NOT NULL DEFAULT 0,
+    position_y INTEGER NOT NULL DEFAULT 0,
+    screen_id TEXT NOT NULL DEFAULT '',
+    idle_enabled INTEGER NOT NULL DEFAULT 1,
+    idle_interval_min_seconds INTEGER NOT NULL DEFAULT 30,
+    idle_interval_max_seconds INTEGER NOT NULL DEFAULT 120,
+    click_through_mode TEXT NOT NULL DEFAULT 'off',
+    sound_enabled INTEGER NOT NULL DEFAULT 0,
+    settings_revision INTEGER NOT NULL DEFAULT 0,
+    restore_on_app_start INTEGER NOT NULL DEFAULT 1,
+    position_mode TEXT NOT NULL DEFAULT 'absolute',
+    display_fingerprint TEXT NOT NULL DEFAULT '',
+    relative_x REAL NOT NULL DEFAULT 0.5,
+    relative_y REAL NOT NULL DEFAULT 0.5,
+    last_window_width INTEGER NOT NULL DEFAULT 0,
+    last_window_height INTEGER NOT NULL DEFAULT 0,
+    position_updated_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dprts_installation ON desktop_pet_runtime_settings(installation_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
+  runtime_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  display_name TEXT NOT NULL DEFAULT '',
+  platform TEXT NOT NULL DEFAULT '',
+  arch TEXT NOT NULL DEFAULT '',
+  app_version TEXT NOT NULL DEFAULT '',
+  protocol_version TEXT NOT NULL DEFAULT '',
+  capabilities_json TEXT NOT NULL DEFAULT '[]',
+  last_process_instance_id TEXT NOT NULL DEFAULT '',
+  last_session_id TEXT NOT NULL DEFAULT '',
+  last_seen_at TEXT NOT NULL DEFAULT '',
+  last_connected_at TEXT NOT NULL DEFAULT '',
+  last_disconnected_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
+  id TEXT PRIMARY KEY,
+  runtime_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  installation_id TEXT NOT NULL DEFAULT '',
+  pet_instance_id TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  durability TEXT NOT NULL DEFAULT 'durable',
+  coalesce_key TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 5,
+  next_attempt_at TEXT NOT NULL DEFAULT '',
+  deadline_at TEXT NOT NULL DEFAULT '',
+  last_session_id TEXT NOT NULL DEFAULT '',
+  last_error_code TEXT NOT NULL DEFAULT '',
+  last_error_message TEXT NOT NULL DEFAULT '',
+  result_json TEXT NOT NULL DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  completed_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dprcmd_idempotency ON desktop_pet_runtime_commands(runtime_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_dprcmd_dispatch ON desktop_pet_runtime_commands(runtime_id, status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_dprcmd_coalesce ON desktop_pet_runtime_commands(runtime_id, coalesce_key, desired_revision);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states (
+  runtime_id TEXT NOT NULL,
+  installation_id TEXT NOT NULL DEFAULT '',
+  pet_instance_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_settings_revision INTEGER NOT NULL DEFAULT 0,
+  visible INTEGER NOT NULL DEFAULT 0,
+  current_action_key TEXT NOT NULL DEFAULT '',
+  position_x INTEGER NOT NULL DEFAULT 0,
+  position_y INTEGER NOT NULL DEFAULT 0,
+  screen_id TEXT NOT NULL DEFAULT '',
+  scale REAL NOT NULL DEFAULT 1.0,
+  health TEXT NOT NULL DEFAULT 'unknown',
+  state_json TEXT NOT NULL DEFAULT '{}',
+  observed_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY(runtime_id, installation_id)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    stable_state_json TEXT NOT NULL DEFAULT '{}',
+    transient_state_json TEXT NOT NULL DEFAULT '{}',
+    active_tools_json TEXT NOT NULL DEFAULT '{}',
+    voice_state_json TEXT NOT NULL DEFAULT '{}',
+    desired_state_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(user_id, character_id)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
+    event_id TEXT PRIMARY KEY,
+    dedup_key TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL DEFAULT '',
+    schema_version INTEGER NOT NULL DEFAULT 0,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL DEFAULT '',
+    received_at TEXT NOT NULL DEFAULT '',
+    expires_at TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL DEFAULT '',
+    causation_id TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error_code TEXT NOT NULL DEFAULT '',
+    processed_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_desktop_pet_behavior_inbox_dedup ON desktop_pet_behavior_inbox(dedup_key);
+CREATE INDEX IF NOT EXISTS idx_behavior_inbox_char ON desktop_pet_behavior_inbox(character_id, status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
+    decision_id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    context_revision INTEGER NOT NULL DEFAULT 0,
+    ruleset_version INTEGER NOT NULL DEFAULT 0,
+    semantic TEXT NOT NULL DEFAULT '',
+    action_key TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'selected',
+    reason_code TEXT NOT NULL DEFAULT '',
+    rejected_candidates_json TEXT NOT NULL DEFAULT '[]',
+    runtime_command_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_behavior_decisions_char ON desktop_pet_behavior_decisions(character_id, created_at);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_cooldowns (
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    cooldown_key TEXT NOT NULL DEFAULT '',
+    until_at TEXT NOT NULL DEFAULT '',
+    source_decision_id TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(user_id, character_id, cooldown_key)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL DEFAULT '',
+    conditions_json TEXT NOT NULL DEFAULT '{}',
+    semantic TEXT NOT NULL DEFAULT '',
+    preferred_action TEXT NOT NULL DEFAULT '',
+    priority_offset INTEGER NOT NULL DEFAULT 0,
+    cooldown_ms INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_behavior_bindings_user_char ON desktop_pet_behavior_bindings(user_id, character_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_identities (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL DEFAULT '',
+    source_character_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    slug TEXT NOT NULL DEFAULT '',
+    binding_policy TEXT NOT NULL DEFAULT 'character_locked',
+    upstream_pet_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpident_owner ON desktop_pet_identities(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_dpident_character ON desktop_pet_identities(source_character_id);
+CREATE INDEX IF NOT EXISTS idx_dpident_slug ON desktop_pet_identities(slug);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_package_releases (
+    id TEXT PRIMARY KEY,
+    pet_id TEXT NOT NULL DEFAULT '',
+    owner_user_id TEXT NOT NULL DEFAULT '',
+    version TEXT NOT NULL DEFAULT '',
+    release_sequence INTEGER NOT NULL DEFAULT 0,
+    schema_version INTEGER NOT NULL DEFAULT 2,
+    status TEXT NOT NULL DEFAULT 'draft',
+    content_root_hash TEXT NOT NULL DEFAULT '',
+    manifest_hash TEXT NOT NULL DEFAULT '',
+    storage_key TEXT NOT NULL DEFAULT '',
+    archive_storage_key TEXT NOT NULL DEFAULT '',
+    total_bytes INTEGER NOT NULL DEFAULT 0,
+    file_count INTEGER NOT NULL DEFAULT 0,
+    action_count INTEGER NOT NULL DEFAULT 0,
+    default_action_key TEXT NOT NULL DEFAULT '',
+    min_runtime_version TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'generated',
+    source_processing_task TEXT NOT NULL DEFAULT '',
+    source_generation_task TEXT NOT NULL DEFAULT '',
+    quality_gate_snapshot_id TEXT NOT NULL DEFAULT '',
+    manifest_json TEXT NOT NULL DEFAULT '{}',
+    published_at TEXT NOT NULL DEFAULT '',
+    legacy_package_id TEXT NOT NULL DEFAULT '',
+    legacy_version INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(pet_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_dprel_pet ON desktop_pet_package_releases(pet_id);
+CREATE INDEX IF NOT EXISTS idx_dprel_owner ON desktop_pet_package_releases(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_dprel_status ON desktop_pet_package_releases(status);
+CREATE INDEX IF NOT EXISTS idx_dprel_content_hash ON desktop_pet_package_releases(content_root_hash);
+CREATE INDEX IF NOT EXISTS idx_dprel_legacy ON desktop_pet_package_releases(legacy_package_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_release_files (
+    id TEXT PRIMARY KEY,
+    release_id TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL DEFAULT '',
+    sha256 TEXT NOT NULL DEFAULT '',
+    bytes INTEGER NOT NULL DEFAULT 0,
+    media_type TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '',
+    action_key TEXT NOT NULL DEFAULT '',
+    frame_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(release_id, path)
+);
+CREATE INDEX IF NOT EXISTS idx_dprf_release ON desktop_pet_release_files(release_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
+    id TEXT PRIMARY KEY,
+    operation_type TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL DEFAULT 'prepare',
+    status TEXT NOT NULL DEFAULT 'pending',
+    input_hash TEXT NOT NULL DEFAULT '',
+    staging_path_key TEXT NOT NULL DEFAULT '',
+    published_path_key TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    result_json TEXT NOT NULL DEFAULT '{}',
+    started_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(user_id, idempotency_key, operation_type)
+);
+CREATE INDEX IF NOT EXISTS idx_dppkgop_user ON desktop_pet_package_operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dppkgop_status ON desktop_pet_package_operations(status);
+CREATE INDEX IF NOT EXISTS idx_dppkgop_release ON desktop_pet_package_operations(release_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_installation_operations (
+    id TEXT PRIMARY KEY,
+    operation_type TEXT NOT NULL DEFAULT '',
+    user_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
+    target_release_id TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL DEFAULT 'prepare',
+    status TEXT NOT NULL DEFAULT 'pending',
+    staging_path_key TEXT NOT NULL DEFAULT '',
+    published_path_key TEXT NOT NULL DEFAULT '',
+    trash_path_key TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(user_id, idempotency_key, operation_type)
+);
+CREATE INDEX IF NOT EXISTS idx_dpinstop_user ON desktop_pet_installation_operations(user_id);
+CREATE INDEX IF NOT EXISTS idx_dpinstop_installation ON desktop_pet_installation_operations(installation_id);
+CREATE INDEX IF NOT EXISTS idx_dpinstop_status ON desktop_pet_installation_operations(status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
+    user_id TEXT PRIMARY KEY,
+    installation_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
+    binding_revision INTEGER NOT NULL DEFAULT 0,
+    desired_state TEXT NOT NULL DEFAULT 'disabled',
+    runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
+    desired_updated_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpab_installation ON desktop_pet_active_bindings(installation_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_installation_release_history (
+    id TEXT PRIMARY KEY,
+    installation_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    version TEXT NOT NULL DEFAULT '',
+    activated_at TEXT NOT NULL DEFAULT '',
+    deactivated_at TEXT NOT NULL DEFAULT '',
+    deactivation_reason TEXT NOT NULL DEFAULT '',
+    is_current INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpirh_installation ON desktop_pet_installation_release_history(installation_id);
+CREATE INDEX IF NOT EXISTS idx_dpirh_current ON desktop_pet_installation_release_history(installation_id, is_current);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_package_validation_reports (
+    id TEXT PRIMARY KEY,
+    release_id TEXT NOT NULL DEFAULT '',
+    operation_id TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'build',
+    verdict TEXT NOT NULL DEFAULT 'pending',
+    findings_json TEXT NOT NULL DEFAULT '[]',
+    file_count INTEGER NOT NULL DEFAULT 0,
+    error_count INTEGER NOT NULL DEFAULT 0,
+    warning_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpvr_release ON desktop_pet_package_validation_reports(release_id);
+CREATE INDEX IF NOT EXISTS idx_dpvr_operation ON desktop_pet_package_validation_reports(operation_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
+  id TEXT PRIMARY KEY,
+  processing_task_id TEXT NOT NULL DEFAULT '',
+  processing_action_id TEXT NOT NULL DEFAULT '',
+  generation_task_id TEXT NOT NULL DEFAULT '',
+  action_key TEXT NOT NULL DEFAULT '',
+  parent_revision_id TEXT NOT NULL DEFAULT '',
+  root_revision_id TEXT NOT NULL DEFAULT '',
+  revision_number INTEGER NOT NULL DEFAULT 1,
+  revision_type TEXT NOT NULL DEFAULT 'processed',
+  status TEXT NOT NULL DEFAULT 'building',
+  manifest_path TEXT NOT NULL DEFAULT '',
+  manifest_hash TEXT NOT NULL DEFAULT '',
+  frame_count INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  default_fps INTEGER NOT NULL DEFAULT 0,
+  loop_type TEXT NOT NULL DEFAULT '',
+  return_action TEXT NOT NULL DEFAULT '',
+  interruptible INTEGER NOT NULL DEFAULT 1,
+  priority_override INTEGER,
+  cooldown_ms_override INTEGER,
+  quality_evaluation_id TEXT NOT NULL DEFAULT '',
+  quality_verdict TEXT NOT NULL DEFAULT '',
+  created_by_user_id TEXT NOT NULL DEFAULT '',
+  created_from_session_id TEXT NOT NULL DEFAULT '',
+  change_summary TEXT NOT NULL DEFAULT '',
+  source_summary_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ready_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpar_task ON desktop_pet_action_revisions(processing_task_id);
+CREATE INDEX IF NOT EXISTS idx_dpar_action ON desktop_pet_action_revisions(processing_action_id);
+CREATE INDEX IF NOT EXISTS idx_dpar_parent ON desktop_pet_action_revisions(parent_revision_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpar_task_action_rev ON desktop_pet_action_revisions(processing_task_id, action_key, revision_number);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
+  processing_task_id TEXT NOT NULL DEFAULT '',
+  action_key TEXT NOT NULL DEFAULT '',
+  revision_id TEXT NOT NULL DEFAULT '',
+  binding_version INTEGER NOT NULL DEFAULT 0,
+  activated_by TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(processing_task_id, action_key)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
+  id TEXT PRIMARY KEY,
+  content_hash TEXT NOT NULL DEFAULT '',
+  storage_path TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  byte_size INTEGER NOT NULL DEFAULT 0,
+  alpha_mode TEXT NOT NULL DEFAULT '',
+  color_space TEXT NOT NULL DEFAULT '',
+  source_type TEXT NOT NULL DEFAULT '',
+  source_ref_id TEXT NOT NULL DEFAULT '',
+  original_hash TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'staging',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dfa_hash ON desktop_pet_frame_assets(content_hash, mime_type);
+CREATE INDEX IF NOT EXISTS idx_dfa_source ON desktop_pet_frame_assets(source_type, source_ref_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_frames (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL DEFAULT '',
+  frame_id TEXT NOT NULL DEFAULT '',
+  asset_id TEXT NOT NULL DEFAULT '',
+  logical_index INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 100,
+  source_frame_id TEXT NOT NULL DEFAULT '',
+  source_revision_id TEXT NOT NULL DEFAULT '',
+  source_attempt_id TEXT NOT NULL DEFAULT '',
+  anchor_x REAL NOT NULL DEFAULT 0.5,
+  anchor_y REAL NOT NULL DEFAULT 0.9,
+  anchor_space TEXT NOT NULL DEFAULT 'normalized_canvas',
+  offset_x REAL NOT NULL DEFAULT 0,
+  offset_y REAL NOT NULL DEFAULT 0,
+  mask_asset_id TEXT NOT NULL DEFAULT '',
+  transform_json TEXT NOT NULL DEFAULT '{}',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  copied_from_frame_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dparf_revision ON desktop_pet_action_revision_frames(revision_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_index ON desktop_pet_action_revision_frames(revision_id, logical_index);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_frame_id ON desktop_pet_action_revision_frames(revision_id, frame_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  processing_task_id TEXT NOT NULL DEFAULT '',
+  action_key TEXT NOT NULL DEFAULT '',
+  base_revision_id TEXT NOT NULL DEFAULT '',
+  session_version INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open',
+  cursor INTEGER NOT NULL DEFAULT 0,
+  last_operation_seq INTEGER NOT NULL DEFAULT 0,
+  checkpoint_id TEXT NOT NULL DEFAULT '',
+  client_instance_id TEXT NOT NULL DEFAULT '',
+  expires_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  committed_revision_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_des_user ON desktop_pet_edit_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_des_task_action ON desktop_pet_edit_sessions(processing_task_id, action_key);
+CREATE INDEX IF NOT EXISTS idx_des_status ON desktop_pet_edit_sessions(status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_operations (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 0,
+  operation_type TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  inverse_json TEXT NOT NULL DEFAULT '{}',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  base_version INTEGER NOT NULL DEFAULT 0,
+  result_version INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'applied',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deo_session ON desktop_pet_edit_operations(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deo_session_seq ON desktop_pet_edit_operations(session_id, sequence);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deo_idempotency ON desktop_pet_edit_operations(session_id, idempotency_key);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_checkpoints (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 0,
+  manifest_json TEXT NOT NULL DEFAULT '{}',
+  manifest_hash TEXT NOT NULL DEFAULT '',
+  frame_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dec_session ON desktop_pet_edit_checkpoints(session_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  processing_task_id TEXT NOT NULL DEFAULT '',
+  action_key TEXT NOT NULL DEFAULT '',
+  target_frame_id TEXT NOT NULL DEFAULT '',
+  job_type TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'created',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  provider_attempt_id TEXT NOT NULL DEFAULT '',
+  request_snapshot_json TEXT NOT NULL DEFAULT '{}',
+  cost_estimate_json TEXT NOT NULL DEFAULT '{}',
+  cost_actual_json TEXT NOT NULL DEFAULT '{}',
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_drj_session ON desktop_pet_regeneration_jobs(session_id);
+CREATE INDEX IF NOT EXISTS idx_drj_status ON desktop_pet_regeneration_jobs(status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drj_idempotency ON desktop_pet_regeneration_jobs(session_id, idempotency_key);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  job_id TEXT NOT NULL DEFAULT '',
+  target_frame_id TEXT NOT NULL DEFAULT '',
+  candidate_type TEXT NOT NULL DEFAULT '',
+  asset_id TEXT NOT NULL DEFAULT '',
+  candidate_revision_id TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  decided_by TEXT NOT NULL DEFAULT '',
+  decided_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dec_session_job ON desktop_pet_edit_candidates(session_id, job_id);
+CREATE INDEX IF NOT EXISTS idx_dec_status ON desktop_pet_edit_candidates(status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_mask_patches (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  frame_id TEXT NOT NULL DEFAULT '',
+  source_asset_hash TEXT NOT NULL DEFAULT '',
+  result_asset_id TEXT NOT NULL DEFAULT '',
+  patch_type TEXT NOT NULL DEFAULT '',
+  brush_data_path TEXT NOT NULL DEFAULT '',
+  brush_size INTEGER NOT NULL DEFAULT 0,
+  brush_hardness REAL NOT NULL DEFAULT 0,
+  brush_opacity REAL NOT NULL DEFAULT 1,
+  coordinate_space TEXT NOT NULL DEFAULT 'normalized_canvas',
+  canvas_width INTEGER NOT NULL DEFAULT 0,
+  canvas_height INTEGER NOT NULL DEFAULT 0,
+  algorithm_version TEXT NOT NULL DEFAULT '',
+  operation_seq INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dmp_session_frame ON desktop_pet_mask_patches(session_id, frame_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_publish_journal (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  tmp_dir_path TEXT NOT NULL DEFAULT '',
+  final_dir_path TEXT NOT NULL DEFAULT '',
+  manifest_path TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpj_revision ON desktop_pet_publish_journal(revision_id);
+CREATE INDEX IF NOT EXISTS idx_dpj_status ON desktop_pet_publish_journal(status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_idempotency (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  endpoint TEXT NOT NULL DEFAULT '',
+  result_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dei_user_session_key ON desktop_pet_edit_idempotency(user_id, session_id, idempotency_key);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_revisions (
+  id TEXT PRIMARY KEY,
+  processing_task_id TEXT NOT NULL DEFAULT '',
+  processing_action_id TEXT NOT NULL DEFAULT '',
+  revision_number INTEGER NOT NULL DEFAULT 1,
+  source_attempt_id TEXT NOT NULL DEFAULT '',
+  source_candidate_index INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'preparing',
+  config_snapshot TEXT NOT NULL DEFAULT '{}',
+  config_hash TEXT NOT NULL DEFAULT '',
+  pipeline_version TEXT NOT NULL DEFAULT '',
+  frame_count INTEGER NOT NULL DEFAULT 0,
+  root_relative_path TEXT NOT NULL DEFAULT '',
+  revision_hash TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppr_task ON desktop_pet_processing_revisions(processing_task_id);
+CREATE INDEX IF NOT EXISTS idx_dppr_action ON desktop_pet_processing_revisions(processing_action_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppr_action_revision ON desktop_pet_processing_revisions(processing_action_id, revision_number);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_artifacts (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL DEFAULT '',
+  frame_index INTEGER,
+  artifact_kind TEXT NOT NULL DEFAULT '',
+  stage TEXT NOT NULL DEFAULT '',
+  relative_path TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  byte_size INTEGER NOT NULL DEFAULT 0,
+  content_hash TEXT NOT NULL DEFAULT '',
+  source_artifact_id TEXT NOT NULL DEFAULT '',
+  source_cell_index INTEGER,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppa_revision ON desktop_pet_processing_artifacts(revision_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppa_rev_kind_frame ON desktop_pet_processing_artifacts(revision_id, artifact_kind, frame_index);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_processing_transforms (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL DEFAULT '',
+  frame_index INTEGER NOT NULL DEFAULT 0,
+  sequence_number INTEGER NOT NULL DEFAULT 0,
+  from_space TEXT NOT NULL DEFAULT '',
+  to_space TEXT NOT NULL DEFAULT '',
+  transform_type TEXT NOT NULL DEFAULT '',
+  matrix_json TEXT NOT NULL DEFAULT '[]',
+  parameters_json TEXT NOT NULL DEFAULT '{}',
+  algorithm_version TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dppt_revision ON desktop_pet_processing_transforms(revision_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dppt_rev_frame_seq ON desktop_pet_processing_transforms(revision_id, frame_index, sequence_number);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_frame_measurements (
+  id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL DEFAULT '',
+  frame_index INTEGER NOT NULL DEFAULT 0,
+  measurement_schema_version INTEGER NOT NULL DEFAULT 1,
+  subject_box_json TEXT NOT NULL DEFAULT '{}',
+  source_anchor_json TEXT NOT NULL DEFAULT '{}',
+  target_anchor_json TEXT NOT NULL DEFAULT '{}',
+  alpha_coverage REAL NOT NULL DEFAULT 0,
+  component_count INTEGER NOT NULL DEFAULT 0,
+  edge_contact_json TEXT NOT NULL DEFAULT '{}',
+  clipping_json TEXT NOT NULL DEFAULT '{}',
+  trajectory_json TEXT NOT NULL DEFAULT '{}',
+  measurement_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpfm_revision ON desktop_pet_frame_measurements(revision_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpfm_rev_frame ON desktop_pet_frame_measurements(revision_id, frame_index);
+
+ALTER TABLE desktop_pet_processing_tasks ADD COLUMN config_snapshot TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE desktop_pet_processing_tasks ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processing_tasks ADD COLUMN pipeline_version TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processing_tasks ADD COLUMN active_revision_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_processing_tasks ADD COLUMN publish_state TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE desktop_pet_processing_actions ADD COLUMN active_revision_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processing_actions ADD COLUMN next_revision_number INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE desktop_pet_processing_actions ADD COLUMN source_attempt_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processing_actions ADD COLUMN source_candidate_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_processing_actions ADD COLUMN processing_profile_snapshot TEXT NOT NULL DEFAULT '{}';
+
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN revision_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN mask_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN transform_chain_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN measurement_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN source_artifact_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_processed_frames ADD COLUMN source_cell_index INTEGER;
+
+CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
+  id TEXT PRIMARY KEY,
+  processing_task_id TEXT NOT NULL,
+  processing_action_id TEXT NOT NULL,
+  action_revision_id TEXT NOT NULL,
+  measurement_set_id TEXT NOT NULL,
+  action_key TEXT NOT NULL,
+  execution_status TEXT NOT NULL DEFAULT 'pending',
+  verdict TEXT DEFAULT '',
+  overall_score REAL,
+  overall_confidence REAL NOT NULL DEFAULT 0,
+  profile_snapshot_json TEXT NOT NULL,
+  profile_hash TEXT NOT NULL,
+  engine_version TEXT NOT NULL,
+  quality_mode TEXT DEFAULT 'balanced',
+  report_path TEXT DEFAULT '',
+  report_hash TEXT DEFAULT '',
+  supersedes_evaluation_id TEXT DEFAULT '',
+  execution_id TEXT DEFAULT '',
+  worker_id TEXT DEFAULT '',
+  lease_expires_at TEXT DEFAULT '',
+  error_code TEXT DEFAULT '',
+  error_message TEXT DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT DEFAULT '',
+  completed_at TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqe_input ON desktop_pet_quality_evaluations(action_revision_id, profile_hash, engine_version);
+CREATE INDEX IF NOT EXISTS idx_dpqe_task ON desktop_pet_quality_evaluations(processing_task_id);
+CREATE INDEX IF NOT EXISTS idx_dpqe_action ON desktop_pet_quality_evaluations(processing_action_id);
+CREATE INDEX IF NOT EXISTS idx_dpqe_status ON desktop_pet_quality_evaluations(execution_status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_quality_findings (
+  id TEXT PRIMARY KEY,
+  evaluation_id TEXT NOT NULL,
+  rule_code TEXT NOT NULL,
+  rule_version INTEGER NOT NULL,
+  dimension_key TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  hard_gate INTEGER NOT NULL DEFAULT 0,
+  frame_indexes_json TEXT NOT NULL DEFAULT '[]',
+  frame_pairs_json TEXT NOT NULL DEFAULT '[]',
+  regions_json TEXT NOT NULL DEFAULT '[]',
+  metric_name TEXT DEFAULT '',
+  observed_value REAL,
+  threshold_value REAL,
+  comparison TEXT DEFAULT '',
+  confidence REAL NOT NULL DEFAULT 0,
+  message_key TEXT NOT NULL,
+  message TEXT NOT NULL,
+  suggested_action TEXT DEFAULT '',
+  evidence_ref TEXT DEFAULT '',
+  sort_key TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpqf_eval ON desktop_pet_quality_findings(evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_dpqf_rule ON desktop_pet_quality_findings(rule_code);
+CREATE INDEX IF NOT EXISTS idx_dpqf_severity ON desktop_pet_quality_findings(severity);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_quality_dimension_scores (
+  id TEXT PRIMARY KEY,
+  evaluation_id TEXT NOT NULL,
+  dimension_key TEXT NOT NULL,
+  applicability TEXT NOT NULL,
+  score REAL,
+  confidence REAL NOT NULL DEFAULT 0,
+  weight REAL NOT NULL DEFAULT 0,
+  details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(evaluation_id, dimension_key)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
+  id TEXT PRIMARY KEY,
+  processing_task_id TEXT NOT NULL,
+  gate_status TEXT NOT NULL,
+  required_action_count INTEGER NOT NULL DEFAULT 0,
+  accepted_action_count INTEGER NOT NULL DEFAULT 0,
+  warning_action_count INTEGER NOT NULL DEFAULT 0,
+  review_action_count INTEGER NOT NULL DEFAULT 0,
+  rejected_action_count INTEGER NOT NULL DEFAULT 0,
+  failed_evaluation_count INTEGER NOT NULL DEFAULT 0,
+  snapshot_json TEXT NOT NULL,
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqg_task_snapshot ON desktop_pet_quality_gate_results(processing_task_id, snapshot_hash);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_generation_attempts (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    task_action_id TEXT NOT NULL DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    parent_attempt_id TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'sprite_sheet',
+    reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    provider TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    config_id INTEGER NOT NULL DEFAULT 0,
+    config_revision TEXT NOT NULL DEFAULT '',
+    capability_hash TEXT NOT NULL DEFAULT '',
+    reference_asset_id TEXT NOT NULL DEFAULT '',
+    plan_json TEXT NOT NULL DEFAULT '{}',
+    prompt_document_json TEXT NOT NULL DEFAULT '{}',
+    prompt_snapshot TEXT NOT NULL DEFAULT '',
+    prompt_hash TEXT NOT NULL DEFAULT '',
+    negative_prompt_snapshot TEXT NOT NULL DEFAULT '',
+    seed_policy TEXT NOT NULL DEFAULT 'auto',
+    seed_value INTEGER,
+    output_count INTEGER NOT NULL DEFAULT 1,
+    execution_id TEXT NOT NULL DEFAULT '',
+    worker_id TEXT NOT NULL DEFAULT '',
+    lease TEXT NOT NULL DEFAULT '',
+    provider_request_id TEXT NOT NULL DEFAULT '',
+    provider_operation_id TEXT NOT NULL DEFAULT '',
+    submitted_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(task_action_id, attempt_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gen_attempts_task_id ON desktop_pet_action_generation_attempts(task_id);
+CREATE INDEX IF NOT EXISTS idx_gen_attempts_action_id ON desktop_pet_action_generation_attempts(task_action_id);
+CREATE INDEX IF NOT EXISTS idx_gen_attempts_status ON desktop_pet_action_generation_attempts(status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_generation_artifacts (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    task_action_id TEXT NOT NULL DEFAULT '',
+    attempt_id TEXT NOT NULL DEFAULT '',
+    artifact_type TEXT NOT NULL DEFAULT 'sprite_sheet_raw',
+    segment_index INTEGER NOT NULL DEFAULT 0,
+    candidate_index INTEGER NOT NULL DEFAULT 0,
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    relative_path TEXT NOT NULL DEFAULT '',
+    mime TEXT NOT NULL DEFAULT '',
+    width INTEGER NOT NULL DEFAULT 0,
+    height INTEGER NOT NULL DEFAULT 0,
+    size INTEGER NOT NULL DEFAULT 0,
+    hash TEXT NOT NULL DEFAULT '',
+    provider_request_id TEXT NOT NULL DEFAULT '',
+    provider_operation_id TEXT NOT NULL DEFAULT '',
+    layout_json TEXT NOT NULL DEFAULT '{}',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(attempt_id, artifact_type, segment_index, candidate_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gen_artifacts_task_id ON desktop_pet_generation_artifacts(task_id);
+CREATE INDEX IF NOT EXISTS idx_gen_artifacts_attempt_id ON desktop_pet_generation_artifacts(attempt_id);
+CREATE INDEX IF NOT EXISTS idx_gen_artifacts_action_id ON desktop_pet_generation_artifacts(task_action_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL DEFAULT '',
+    source_path TEXT NOT NULL DEFAULT '',
+    source_hash TEXT NOT NULL DEFAULT '',
+    source_mime TEXT NOT NULL DEFAULT '',
+    source_width INTEGER NOT NULL DEFAULT 0,
+    source_height INTEGER NOT NULL DEFAULT 0,
+    normalized_path TEXT NOT NULL DEFAULT '',
+    normalized_hash TEXT NOT NULL DEFAULT '',
+    normalized_mime TEXT NOT NULL DEFAULT '',
+    normalized_width INTEGER NOT NULL DEFAULT 0,
+    normalized_height INTEGER NOT NULL DEFAULT 0,
+    config_hash TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_ref_assets_task_id ON desktop_pet_reference_assets(task_id);
+CREATE INDEX IF NOT EXISTS idx_ref_assets_source_hash ON desktop_pet_reference_assets(source_hash);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_data_repair_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    migration_version TEXT NOT NULL DEFAULT '',
+    entity_type TEXT NOT NULL DEFAULT '',
+    entity_id TEXT NOT NULL DEFAULT '',
+    group_key TEXT NOT NULL DEFAULT '',
+    decision TEXT NOT NULL DEFAULT '',
+    kept_id TEXT NOT NULL DEFAULT '',
+    removed_ids TEXT NOT NULL DEFAULT '[]',
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_state_transitions (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    parent_task_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    attempt_id TEXT NOT NULL DEFAULT '',
+    from_status TEXT NOT NULL,
+    to_status TEXT NOT NULL,
+    from_stage TEXT NOT NULL DEFAULT '',
+    to_stage TEXT NOT NULL DEFAULT '',
+    reason_code TEXT NOT NULL,
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    failure_stage TEXT NOT NULL DEFAULT '',
+    actor_type TEXT NOT NULL,
+    actor_id TEXT NOT NULL DEFAULT '',
+    previous_version INTEGER NOT NULL DEFAULT 0,
+    current_version INTEGER NOT NULL DEFAULT 0,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dp_transition_entity ON desktop_pet_state_transitions(entity_type, entity_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dp_transition_parent ON desktop_pet_state_transitions(parent_task_id, created_at);
+
+
+-- ====== 自动同步：迁移中缺失的表定义 ======
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS outbox_records (
+				id TEXT PRIMARY KEY,
+				aggregate_id TEXT DEFAULT '',
+				event_type TEXT DEFAULT '',
+				payload TEXT DEFAULT '',
+				payload_version TEXT DEFAULT '',
+				status TEXT DEFAULT '',
+				lease_owner TEXT DEFAULT '',
+				lease_token TEXT DEFAULT '',
+				leased_until TEXT DEFAULT '',
+				available_at TEXT DEFAULT '',
+				published_at TEXT DEFAULT '',
+				updated_at TEXT DEFAULT '',
+				retry_count INTEGER DEFAULT 0,
+				max_retries INTEGER DEFAULT 0,
+				next_retry_at TEXT DEFAULT '',
+				last_error TEXT DEFAULT '',
+				idempotency_key TEXT DEFAULT '',
+				created_at TEXT DEFAULT ''
+			);
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS dead_letter_records (
+				id TEXT PRIMARY KEY,
+				outbox_id TEXT UNIQUE,
+				event_type TEXT DEFAULT '',
+				payload TEXT DEFAULT '',
+				status TEXT DEFAULT '',
+				retry_count INTEGER DEFAULT 0,
+				max_retries INTEGER DEFAULT 0,
+				next_retry_at TEXT DEFAULT '',
+				last_error TEXT DEFAULT '',
+				created_at TEXT DEFAULT '',
+				updated_at TEXT DEFAULT ''
+			);
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS deletion_tombstones (
+				id TEXT PRIMARY KEY,
+				target_id TEXT DEFAULT '',
+				target_type TEXT DEFAULT '',
+				scope TEXT DEFAULT '',
+				status TEXT DEFAULT '',
+				items_count INTEGER DEFAULT 0,
+				cleaned_count INTEGER DEFAULT 0,
+				failed_count INTEGER DEFAULT 0,
+				requested_at DATETIME,
+				blocked_until DATETIME,
+				completed_at DATETIME,
+				retrieval_blocked INTEGER DEFAULT 0
+			);
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS data_lifecycle_outbox_cleanup_items (
+				id TEXT PRIMARY KEY,
+				storage TEXT DEFAULT '',
+				target_id TEXT DEFAULT '',
+				target_kind TEXT DEFAULT '',
+				status TEXT DEFAULT '',
+				attempts INTEGER DEFAULT 0,
+				max_attempts INTEGER DEFAULT 5,
+				next_retry_at DATETIME,
+				lease_owner TEXT DEFAULT '',
+				lease_token TEXT DEFAULT '',
+				leased_until DATETIME,
+				last_error TEXT DEFAULT '',
+				cleaned_at DATETIME
+			);
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS data_lifecycle_recalculation_tasks (
+				id TEXT PRIMARY KEY,
+				trigger_type TEXT DEFAULT '',
+				target_id TEXT DEFAULT '',
+				affected_zone TEXT DEFAULT '',
+				priority INTEGER DEFAULT 0,
+				created_at DATETIME,
+				status TEXT DEFAULT '',
+				description TEXT DEFAULT '',
+				attempts INTEGER DEFAULT 0,
+				max_attempts INTEGER DEFAULT 3,
+				next_retry_at DATETIME,
+				lease_owner TEXT DEFAULT '',
+				lease_token TEXT DEFAULT '',
+				leased_until DATETIME,
+				last_error TEXT DEFAULT '',
+				completed_at DATETIME
+			);
+
+-- 来源: consolidation_auto_migrate.go
+CREATE TABLE IF NOT EXISTS output_leases (
+				id TEXT PRIMARY KEY,
+				interaction_id TEXT DEFAULT '',
+				character_id TEXT DEFAULT '',
+				user_id TEXT DEFAULT '',
+				channel TEXT DEFAULT '',
+				owner_token TEXT DEFAULT '',
+				generation INTEGER DEFAULT 0,
+				status TEXT DEFAULT '',
+				acquired_at TEXT DEFAULT '',
+				expires_at TEXT DEFAULT '',
+				released_at TEXT DEFAULT '',
+				preempted_by TEXT DEFAULT ''
+			);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS emotes (
+id TEXT PRIMARY KEY,
+name TEXT NOT NULL DEFAULT '',
+meaning TEXT NOT NULL DEFAULT '',
+keywords TEXT NOT NULL DEFAULT '[]',
+original_filename TEXT NOT NULL DEFAULT '',
+file_path TEXT NOT NULL DEFAULT '',
+thumbnail_path TEXT NOT NULL DEFAULT '',
+fallback_path TEXT NOT NULL DEFAULT '',
+mime_type TEXT NOT NULL DEFAULT '',
+file_extension TEXT NOT NULL DEFAULT '',
+file_size INTEGER NOT NULL DEFAULT 0,
+width INTEGER NOT NULL DEFAULT 0,
+height INTEGER NOT NULL DEFAULT 0,
+is_animated INTEGER NOT NULL DEFAULT 0,
+duration_ms INTEGER NOT NULL DEFAULT 0,
+frame_count INTEGER NOT NULL DEFAULT 1,
+file_hash TEXT NOT NULL,
+enabled INTEGER NOT NULL DEFAULT 1,
+ai_enabled INTEGER NOT NULL DEFAULT 0,
+role_scope TEXT NOT NULL DEFAULT 'all_characters',
+vector_status TEXT NOT NULL DEFAULT 'disabled',
+vector_error TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+deleted_at TEXT
+);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS emote_groups (
+id TEXT PRIMARY KEY,
+name TEXT NOT NULL,
+cover_emote_id TEXT,
+sort_order INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+FOREIGN KEY (cover_emote_id) REFERENCES emotes(id) ON DELETE SET NULL
+);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS emote_group_items (
+group_id TEXT NOT NULL,
+emote_id TEXT NOT NULL,
+sort_order INTEGER NOT NULL DEFAULT 0,
+PRIMARY KEY (group_id, emote_id),
+FOREIGN KEY (group_id) REFERENCES emote_groups(id) ON DELETE CASCADE,
+FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE CASCADE
+);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS emote_character_bindings (
+emote_id TEXT NOT NULL,
+character_id TEXT NOT NULL,
+PRIMARY KEY (emote_id, character_id),
+FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE CASCADE,
+FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS character_emote_settings (
+character_id TEXT PRIMARY KEY,
+enabled INTEGER NOT NULL DEFAULT 1,
+base_probability REAL NOT NULL DEFAULT 0.10,
+max_probability REAL NOT NULL DEFAULT 0.30,
+max_per_hour INTEGER NOT NULL DEFAULT 5,
+min_reply_gap INTEGER NOT NULL DEFAULT 3,
+same_emote_cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+allow_emote_only INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+);
+
+-- 来源: emotes.go
+CREATE TABLE IF NOT EXISTS emote_send_records (
+id TEXT PRIMARY KEY,
+emote_id TEXT,
+character_id TEXT NOT NULL DEFAULT '',
+conversation_id TEXT NOT NULL DEFAULT '',
+message_id TEXT NOT NULL DEFAULT '',
+response_id TEXT NOT NULL DEFAULT '',
+platform TEXT NOT NULL DEFAULT '',
+trigger_type TEXT NOT NULL DEFAULT '',
+trigger_probability REAL NOT NULL DEFAULT 0,
+random_sample REAL NOT NULL DEFAULT 0,
+trigger_hit INTEGER NOT NULL DEFAULT 0,
+decision_reason TEXT NOT NULL DEFAULT '',
+send_mode TEXT NOT NULL DEFAULT '',
+delivery_key TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT '',
+failure_reason TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+sent_at TEXT,
+FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE SET NULL,
+FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
+-- 来源: extensions.go
+CREATE TABLE IF NOT EXISTS extensions (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL UNIQUE,
+kind TEXT NOT NULL DEFAULT 'Skill',
+name TEXT NOT NULL DEFAULT '',
+current_version TEXT NOT NULL DEFAULT '',
+source TEXT NOT NULL DEFAULT '',
+enabled INTEGER NOT NULL DEFAULT 0,
+manifest_json TEXT NOT NULL DEFAULT '{}',
+normalized_manifest_json TEXT NOT NULL DEFAULT '{}',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+archived_at TEXT NOT NULL DEFAULT '',
+    owner_user_id TEXT NOT NULL DEFAULT '',
+    scope_type TEXT NOT NULL DEFAULT 'global',
+    scope_id TEXT NOT NULL DEFAULT '',
+    lifecycle_status TEXT NOT NULL DEFAULT 'registered',
+    health_status TEXT NOT NULL DEFAULT 'unknown',
+    last_error_code TEXT NOT NULL DEFAULT '',
+    last_error_at TEXT NOT NULL DEFAULT '',
+    enabled_at TEXT NOT NULL DEFAULT '',
+    disabled_at TEXT NOT NULL DEFAULT ''
+);
+
+--- 来源: extensions.go
+CREATE TABLE IF NOT EXISTS extension_versions (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+version TEXT NOT NULL,
+manifest_json TEXT NOT NULL DEFAULT '{}',
+checksum TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+    artifact_id TEXT NOT NULL DEFAULT '',
+    artifact_hash TEXT NOT NULL DEFAULT '',
+    package_hash TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    signature_status TEXT NOT NULL DEFAULT 'unsigned',
+    signer_fingerprint TEXT NOT NULL DEFAULT '',
+    compatibility_status TEXT NOT NULL DEFAULT '',
+    capabilities_json TEXT NOT NULL DEFAULT '[]',
+    installed_by TEXT NOT NULL DEFAULT '',
+    validation_status TEXT NOT NULL DEFAULT '',
+    test_status TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT '',
+    package_blob BLOB,
+    artifact_status TEXT NOT NULL DEFAULT 'ready',
+    activation_status TEXT NOT NULL DEFAULT 'inactive',
+    operation_id TEXT NOT NULL DEFAULT '',
+    failure_code TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, version)
+);
+
+-- 来源: extensions.go
+CREATE TABLE IF NOT EXISTS extension_capability_grants (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+capability TEXT NOT NULL,
+decision TEXT NOT NULL DEFAULT 'deny',
+scope_type TEXT NOT NULL DEFAULT 'global',
+scope_id TEXT NOT NULL DEFAULT '',
+expires_at TEXT NOT NULL DEFAULT '',
+consumed_at TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, capability, scope_type, scope_id)
+);
+
+-- 来源: extensions.go
+CREATE TABLE IF NOT EXISTS extension_configs (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+scope_type TEXT NOT NULL DEFAULT 'global',
+scope_id TEXT NOT NULL DEFAULT '',
+config_json TEXT NOT NULL DEFAULT '{}',
+config_version INTEGER NOT NULL DEFAULT 1,
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, scope_type, scope_id)
+);
+
+-- 来源: extensions.go
+CREATE TABLE IF NOT EXISTS extension_runs (
+run_id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+extension_version TEXT NOT NULL DEFAULT '',
+skill_id TEXT NOT NULL,
+user_id TEXT NOT NULL DEFAULT '',
+character_id TEXT NOT NULL DEFAULT '',
+conversation_id TEXT NOT NULL DEFAULT '',
+channel TEXT NOT NULL DEFAULT '',
+trigger TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'pending',
+input_summary TEXT NOT NULL DEFAULT '{}',
+output_summary TEXT NOT NULL DEFAULT '{}',
+side_effects_json TEXT NOT NULL DEFAULT '[]',
+idempotency_key TEXT NOT NULL DEFAULT '',
+started_at TEXT NOT NULL DEFAULT '',
+finished_at TEXT NOT NULL DEFAULT '',
+duration_ms INTEGER NOT NULL DEFAULT 0,
+error_code TEXT NOT NULL DEFAULT '',
+error_detail TEXT NOT NULL DEFAULT '',
+trace_id TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+UNIQUE(skill_id, character_id, conversation_id, idempotency_key)
+);
+
+-- 来源: extension_agent_skills.go
+CREATE TABLE IF NOT EXISTS extension_agent_skill_metadata (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL UNIQUE,
+user_id TEXT NOT NULL,
+name TEXT NOT NULL,
+description TEXT NOT NULL,
+license TEXT NOT NULL DEFAULT '',
+compatibility TEXT NOT NULL DEFAULT '',
+metadata_json TEXT NOT NULL DEFAULT '{}',
+allowed_tools TEXT NOT NULL DEFAULT '',
+display_name TEXT NOT NULL DEFAULT '',
+short_description TEXT NOT NULL DEFAULT '',
+default_prompt TEXT NOT NULL DEFAULT '',
+openai_metadata_json TEXT NOT NULL DEFAULT '{}',
+scope_type TEXT NOT NULL,
+scope_id TEXT NOT NULL DEFAULT '',
+source TEXT NOT NULL,
+compatibility_status TEXT NOT NULL,
+compatibility_report_json TEXT NOT NULL DEFAULT '{}',
+content_hash TEXT NOT NULL,
+artifact_id TEXT NOT NULL,
+raw_frontmatter_json TEXT NOT NULL DEFAULT '{}',
+extra_frontmatter_json TEXT NOT NULL DEFAULT '{}',
+resource_index_json TEXT NOT NULL DEFAULT '[]',
+tool_mappings_json TEXT NOT NULL DEFAULT '[]',
+scripts_present INTEGER NOT NULL DEFAULT 0,
+scripts_required INTEGER NOT NULL DEFAULT 0,
+enabled INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL,
+removed_at TEXT NOT NULL DEFAULT '',
+UNIQUE(user_id, name, scope_type, scope_id)
+);
+
+-- 来源: extension_agent_skills.go
+CREATE TABLE IF NOT EXISTS extension_agent_skill_activations (
+id TEXT PRIMARY KEY,
+activation_id TEXT NOT NULL UNIQUE,
+extension_id TEXT NOT NULL,
+user_id TEXT NOT NULL,
+character_id TEXT NOT NULL DEFAULT '',
+conversation_id TEXT NOT NULL DEFAULT '',
+channel TEXT NOT NULL DEFAULT '',
+trigger_type TEXT NOT NULL,
+explicit INTEGER NOT NULL DEFAULT 0,
+status TEXT NOT NULL,
+loaded_tokens INTEGER NOT NULL DEFAULT 0,
+resource_reads INTEGER NOT NULL DEFAULT 0,
+resource_paths_json TEXT NOT NULL DEFAULT '[]',
+trace_id TEXT NOT NULL DEFAULT '',
+error_code TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL,
+agent_skill_name TEXT NOT NULL DEFAULT '',
+source TEXT NOT NULL DEFAULT '',
+scope_type TEXT NOT NULL DEFAULT '',
+compatibility_status TEXT NOT NULL DEFAULT '',
+scripts_used INTEGER NOT NULL DEFAULT 0,
+tool_mappings_json TEXT NOT NULL DEFAULT '[]',
+instruction_position TEXT NOT NULL DEFAULT '',
+token_limit_hit INTEGER NOT NULL DEFAULT 0
+);
+
+--- 来源: extension_owned_resources.go
+CREATE TABLE IF NOT EXISTS extension_owned_resources (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+extension_version TEXT NOT NULL DEFAULT '',
+resource_type TEXT NOT NULL,
+resource_id TEXT NOT NULL,
+owner_scope_type TEXT NOT NULL DEFAULT 'global',
+owner_scope_id TEXT NOT NULL DEFAULT '',
+source_run_id TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'active',
+cleanup_attempts INTEGER NOT NULL DEFAULT 0,
+last_error TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL,
+cleaned_at TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, resource_type, resource_id)
+);
+
+-- 来源: extension_packages.go
+CREATE TABLE IF NOT EXISTS extension_package_import_sessions (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL,
+scope_type TEXT NOT NULL,
+scope_id TEXT NOT NULL DEFAULT '',
+format TEXT NOT NULL,
+package_hash TEXT NOT NULL,
+status TEXT NOT NULL,
+preview_json TEXT NOT NULL DEFAULT '{}',
+package_blob BLOB NOT NULL,
+file_name TEXT NOT NULL DEFAULT '',
+expires_at TEXT NOT NULL,
+consumed_at TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL
+);
+
+-- 来源: extension_packages.go
+CREATE TABLE IF NOT EXISTS extension_package_installations (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL DEFAULT '',
+extension_version TEXT NOT NULL DEFAULT '',
+operation TEXT NOT NULL,
+source TEXT NOT NULL DEFAULT '',
+package_hash TEXT NOT NULL DEFAULT '',
+signature_status TEXT NOT NULL DEFAULT '',
+signer_fingerprint TEXT NOT NULL DEFAULT '',
+previous_version TEXT NOT NULL DEFAULT '',
+target_version TEXT NOT NULL DEFAULT '',
+user_id TEXT NOT NULL,
+scope_type TEXT NOT NULL,
+scope_id TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL,
+error_code TEXT NOT NULL DEFAULT '',
+trace_id TEXT NOT NULL,
+created_at TEXT NOT NULL,
+completed_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: extension_packages.go
+CREATE TABLE IF NOT EXISTS extension_package_signers (
+id TEXT PRIMARY KEY,
+fingerprint TEXT NOT NULL UNIQUE,
+public_key TEXT NOT NULL,
+algorithm TEXT NOT NULL,
+display_name TEXT NOT NULL DEFAULT '',
+trusted INTEGER NOT NULL DEFAULT 0,
+trusted_at TEXT NOT NULL DEFAULT '',
+revoked_at TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL
+);
+
+-- 来源: extension_packages.go
+CREATE TABLE IF NOT EXISTS extension_version_dependencies (
+extension_id TEXT NOT NULL,
+extension_version TEXT NOT NULL,
+dependency_id TEXT NOT NULL,
+version_constraint TEXT NOT NULL DEFAULT '',
+required INTEGER NOT NULL DEFAULT 1,
+created_at TEXT NOT NULL,
+UNIQUE(extension_id, extension_version, dependency_id)
+);
+
+-- 来源: extension_packages.go
+CREATE TABLE IF NOT EXISTS extension_package_exports (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL,
+extension_id TEXT NOT NULL,
+file_name TEXT NOT NULL,
+mime TEXT NOT NULL,
+package_hash TEXT NOT NULL,
+content_blob BLOB NOT NULL,
+expires_at TEXT NOT NULL,
+created_at TEXT NOT NULL,
+downloaded_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: extension_schedule_ownership_repair.go
+CREATE TABLE IF NOT EXISTS schedules (
+id TEXT PRIMARY KEY,
+title TEXT NOT NULL DEFAULT '',
+description TEXT NOT NULL DEFAULT '',
+due_time TEXT NOT NULL DEFAULT '',
+repeat_mode TEXT NOT NULL DEFAULT 'none',
+channel TEXT NOT NULL DEFAULT 'all',
+status TEXT NOT NULL DEFAULT 'pending',
+source_type TEXT NOT NULL DEFAULT 'user',
+source_extension_id TEXT NOT NULL DEFAULT '',
+source_extension_version TEXT NOT NULL DEFAULT '',
+source_run_id TEXT NOT NULL DEFAULT '',
+owner_scope_type TEXT NOT NULL DEFAULT 'global',
+owner_scope_id TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: extension_scope_bindings.go
+CREATE TABLE IF NOT EXISTS extension_scope_bindings (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+scope_type TEXT NOT NULL,
+scope_id TEXT NOT NULL DEFAULT '',
+enabled INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL,
+UNIQUE(extension_id, scope_type, scope_id)
+);
+
+-- 来源: extension_workshop.go
+CREATE TABLE IF NOT EXISTS extension_workshop_sessions (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL,
+character_id TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'draft',
+requirement TEXT NOT NULL,
+current_revision INTEGER NOT NULL DEFAULT 0,
+current_draft_id TEXT NOT NULL DEFAULT '',
+validation_summary TEXT NOT NULL DEFAULT '{}',
+risk_summary TEXT NOT NULL DEFAULT '{}',
+test_summary TEXT NOT NULL DEFAULT '{}',
+installed_skill_id TEXT NOT NULL DEFAULT '',
+installed_version TEXT NOT NULL DEFAULT '',
+permission_confirmation_json TEXT NOT NULL DEFAULT '{}',
+permission_revision INTEGER NOT NULL DEFAULT 0,
+permission_checksum TEXT NOT NULL DEFAULT '',
+test_permission_confirmation_json TEXT NOT NULL DEFAULT '{}',
+test_permission_revision INTEGER NOT NULL DEFAULT 0,
+test_permission_checksum TEXT NOT NULL DEFAULT '',
+lock_version INTEGER NOT NULL DEFAULT 1,
+created_at TEXT NOT NULL,
+updated_at TEXT NOT NULL,
+archived_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: extension_workshop.go
+CREATE TABLE IF NOT EXISTS extension_workshop_revisions (
+id TEXT PRIMARY KEY,
+session_id TEXT NOT NULL,
+revision INTEGER NOT NULL,
+raw_model_output TEXT NOT NULL DEFAULT '{}',
+plan_json TEXT NOT NULL DEFAULT '{}',
+raw_draft_json TEXT NOT NULL,
+normalized_draft_json TEXT NOT NULL,
+manifest_json TEXT NOT NULL,
+input_schema_json TEXT NOT NULL,
+output_schema_json TEXT NOT NULL,
+config_schema_json TEXT NOT NULL DEFAULT '{}',
+workflow_json TEXT NOT NULL,
+compiled_workflow_json TEXT NOT NULL,
+capability_analysis_json TEXT NOT NULL DEFAULT '{}',
+risk_analysis_json TEXT NOT NULL DEFAULT '{}',
+validation_result_json TEXT NOT NULL DEFAULT '{}',
+workflow_checksum TEXT NOT NULL,
+model_provider TEXT NOT NULL DEFAULT '',
+model_name TEXT NOT NULL DEFAULT '',
+model_input_summary_json TEXT NOT NULL DEFAULT '{}',
+model_output_summary_json TEXT NOT NULL DEFAULT '{}',
+created_at TEXT NOT NULL,
+UNIQUE(session_id, revision)
+);
+
+-- 来源: extension_workshop.go
+CREATE TABLE IF NOT EXISTS extension_workshop_test_runs (
+id TEXT PRIMARY KEY,
+test_run_id TEXT NOT NULL UNIQUE,
+user_id TEXT NOT NULL,
+character_id TEXT NOT NULL DEFAULT '',
+session_id TEXT NOT NULL,
+revision INTEGER NOT NULL,
+workflow_checksum TEXT NOT NULL,
+mode TEXT NOT NULL,
+status TEXT NOT NULL,
+input_summary TEXT NOT NULL DEFAULT '{}',
+output_summary TEXT NOT NULL DEFAULT '{}',
+step_results_json TEXT NOT NULL DEFAULT '[]',
+assertion_results_json TEXT NOT NULL DEFAULT '[]',
+side_effects_json TEXT NOT NULL DEFAULT '[]',
+capabilities_json TEXT NOT NULL DEFAULT '[]',
+warnings_json TEXT NOT NULL DEFAULT '[]',
+error_code TEXT NOT NULL DEFAULT '',
+error_detail TEXT NOT NULL DEFAULT '',
+trace_id TEXT NOT NULL DEFAULT '',
+started_at TEXT NOT NULL,
+finished_at TEXT NOT NULL,
+duration_ms INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL
+);
+
+-- 来源: extension_workshop.go
+CREATE TABLE IF NOT EXISTS extension_artifacts (
+id TEXT PRIMARY KEY,
+artifact_id TEXT NOT NULL UNIQUE,
+extension_id TEXT NOT NULL,
+extension_version TEXT NOT NULL,
+source TEXT NOT NULL DEFAULT 'workshop',
+session_id TEXT NOT NULL,
+revision INTEGER NOT NULL,
+manifest_json TEXT NOT NULL,
+workflow_json TEXT NOT NULL,
+schemas_json TEXT NOT NULL,
+compiled_workflow_json TEXT NOT NULL,
+tests_json TEXT NOT NULL DEFAULT '[]',
+readme_text TEXT NOT NULL DEFAULT '',
+checksum TEXT NOT NULL,
+size_bytes INTEGER NOT NULL,
+created_at TEXT NOT NULL,
+archived_at TEXT NOT NULL DEFAULT '',
+    artifact_kind TEXT NOT NULL DEFAULT 'workflow',
+    content_blob BLOB,
+    resource_index_json TEXT NOT NULL DEFAULT '[]',
+    artifact_status TEXT NOT NULL DEFAULT 'active',
+    operation_id TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, extension_version)
+);
+
+-- 来源: interaction_records_create.go
+CREATE TABLE IF NOT EXISTS interaction_records (
+				id TEXT PRIMARY KEY,
+				user_id TEXT,
+				character_id TEXT,
+				conversation_id TEXT,
+				channel TEXT,
+				peer_id TEXT,
+				session_id TEXT,
+				source TEXT,
+				request_id TEXT,
+				priority INTEGER,
+				path_type TEXT,
+				status TEXT,
+				status_version INTEGER NOT NULL DEFAULT 0,
+				supersedes_id TEXT,
+				superseded_by_id TEXT,
+				cancel_reason TEXT,
+				error_code TEXT,
+				error_message TEXT,
+				result_ref TEXT,
+				commit_id TEXT,
+				executor_id TEXT,
+				deadline_at DATETIME,
+				cancel_requested_at DATETIME,
+				created_at DATETIME,
+				started_at DATETIME,
+				committed_at DATETIME,
+				completed_at DATETIME,
+				updated_at DATETIME,
+				owner_instance_id TEXT DEFAULT '',
+				heartbeat_at DATETIME,
+				commit_token TEXT DEFAULT '',
+				commit_owner TEXT DEFAULT '',
+				commit_acquired_at DATETIME,
+				result_message_ids TEXT DEFAULT '',
+				delivery_intent_ids TEXT DEFAULT '',
+				correlation_id TEXT DEFAULT '',
+				causation_id TEXT DEFAULT ''
+			);
+
+-- 来源: message_plan.go
+CREATE TABLE IF NOT EXISTS delivery_intents (
+id TEXT PRIMARY KEY,
+interaction_id TEXT NOT NULL DEFAULT '',
+channel TEXT NOT NULL DEFAULT '',
+peer_id TEXT NOT NULL DEFAULT '',
+content_type TEXT NOT NULL DEFAULT '',
+payload BLOB,
+status TEXT NOT NULL DEFAULT 'pending',
+created_at TEXT NOT NULL DEFAULT '',
+sent_at TEXT NOT NULL DEFAULT '',
+delivered_at TEXT NOT NULL DEFAULT '',
+retry_count INTEGER NOT NULL DEFAULT 0,
+max_retries INTEGER NOT NULL DEFAULT 5,
+last_error TEXT NOT NULL DEFAULT '',
+lease_owner TEXT NOT NULL DEFAULT '',
+lease_token TEXT NOT NULL DEFAULT '',
+lease_until TEXT NOT NULL DEFAULT '',
+next_retry TEXT NOT NULL DEFAULT '',
+response_group_id TEXT NOT NULL DEFAULT '',
+delivery_sequence INTEGER NOT NULL DEFAULT 0
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_states (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+scope_type TEXT NOT NULL DEFAULT 'global',
+scope_id TEXT NOT NULL DEFAULT '',
+schema_version TEXT NOT NULL,
+revision INTEGER NOT NULL DEFAULT 1,
+state_json TEXT NOT NULL DEFAULT '{}',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, scope_type, scope_id)
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_state_revisions (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+scope_type TEXT NOT NULL,
+scope_id TEXT NOT NULL DEFAULT '',
+schema_version TEXT NOT NULL,
+revision INTEGER NOT NULL,
+state_json TEXT NOT NULL DEFAULT '{}',
+created_at TEXT NOT NULL DEFAULT '',
+UNIQUE(extension_id, scope_type, scope_id, revision)
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_events (
+id TEXT PRIMARY KEY,
+event_id TEXT NOT NULL UNIQUE,
+source TEXT NOT NULL,
+type TEXT NOT NULL,
+subject TEXT NOT NULL DEFAULT '',
+data_json TEXT NOT NULL DEFAULT '{}',
+trace_id TEXT NOT NULL DEFAULT '',
+correlation_id TEXT NOT NULL DEFAULT '',
+causation_id TEXT NOT NULL DEFAULT '',
+depth INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_event_deliveries (
+id TEXT PRIMARY KEY,
+event_id TEXT NOT NULL,
+plugin_id TEXT NOT NULL,
+status TEXT NOT NULL DEFAULT 'pending',
+attempts INTEGER NOT NULL DEFAULT 0,
+next_attempt_at TEXT NOT NULL DEFAULT '',
+last_error_code TEXT NOT NULL DEFAULT '',
+last_error_detail TEXT NOT NULL DEFAULT '',
+processed_at TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+UNIQUE(event_id, plugin_id)
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_schedules (
+id TEXT PRIMARY KEY,
+plugin_id TEXT NOT NULL,
+schedule_id TEXT NOT NULL,
+scope_type TEXT NOT NULL DEFAULT 'global',
+scope_id TEXT NOT NULL DEFAULT '',
+schedule_type TEXT NOT NULL,
+expression TEXT NOT NULL,
+timezone TEXT NOT NULL DEFAULT 'UTC',
+payload_json TEXT NOT NULL DEFAULT '{}',
+enabled INTEGER NOT NULL DEFAULT 1,
+next_run_at TEXT NOT NULL DEFAULT '',
+last_run_at TEXT NOT NULL DEFAULT '',
+last_status TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT '',
+UNIQUE(plugin_id, schedule_id, scope_type, scope_id)
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_plugin_runs (
+run_id TEXT PRIMARY KEY,
+plugin_id TEXT NOT NULL,
+plugin_version TEXT NOT NULL,
+hook TEXT NOT NULL,
+character_id TEXT NOT NULL DEFAULT '',
+conversation_id TEXT NOT NULL DEFAULT '',
+channel TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL,
+duration_ms INTEGER NOT NULL DEFAULT 0,
+error_code TEXT NOT NULL DEFAULT '',
+trace_id TEXT NOT NULL DEFAULT '',
+circuit_state TEXT NOT NULL DEFAULT 'closed',
+created_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: plugin_runtime.go
+CREATE TABLE IF NOT EXISTS extension_audits (
+id TEXT PRIMARY KEY,
+extension_id TEXT NOT NULL,
+action TEXT NOT NULL,
+scope_type TEXT NOT NULL DEFAULT 'global',
+scope_id TEXT NOT NULL DEFAULT '',
+detail_json TEXT NOT NULL DEFAULT '{}',
+trace_id TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: qdrant_collections.go
+CREATE TABLE IF NOT EXISTS qdrant_collection_versions (
+				collection_name TEXT PRIMARY KEY,
+				vector_dim INTEGER NOT NULL,
+				distance TEXT NOT NULL DEFAULT 'Cosine',
+				created_at TEXT DEFAULT (datetime('now'))
+			);
+
+-- 来源: runtime_queue.go
+CREATE TABLE IF NOT EXISTS runtime_queue (
+				task_id TEXT PRIMARY KEY,
+				scope TEXT NOT NULL DEFAULT '',
+				priority INTEGER NOT NULL DEFAULT 5,
+				status TEXT NOT NULL DEFAULT 'pending',
+				available_at DATETIME,
+				deadline DATETIME,
+				lease TEXT DEFAULT '',
+				attempt INTEGER DEFAULT 0,
+				payload_version INTEGER DEFAULT 1
+			);
+
+-- 来源: surreal_schema.go
+CREATE TABLE IF NOT EXISTS surreal_schema_versions (
+				schema_version TEXT PRIMARY KEY,
+				entity_types TEXT NOT NULL DEFAULT '',
+				edge_types TEXT NOT NULL DEFAULT '',
+				created_at TEXT DEFAULT (datetime('now'))
+			);
+
+-- 来源: temporal_core.go
+CREATE TABLE IF NOT EXISTS temporal_profiles (
+id TEXT PRIMARY KEY,
+owner_type TEXT NOT NULL,
+owner_id TEXT NOT NULL,
+timezone_mode TEXT NOT NULL DEFAULT 'follow_device',
+timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+locale TEXT NOT NULL DEFAULT 'zh-CN',
+calendar_system TEXT NOT NULL DEFAULT 'gregorian',
+week_start INTEGER NOT NULL DEFAULT 1,
+holiday_region TEXT NOT NULL DEFAULT '',
+hemisphere TEXT NOT NULL DEFAULT 'unknown',
+daypart_config_json TEXT NOT NULL DEFAULT '{}',
+quiet_hours_json TEXT NOT NULL DEFAULT '{}',
+auto_detect_timezone INTEGER NOT NULL DEFAULT 1,
+travel_mode INTEGER NOT NULL DEFAULT 0,
+awareness_level INTEGER NOT NULL DEFAULT 70,
+source TEXT NOT NULL DEFAULT 'fallback',
+confidence INTEGER NOT NULL DEFAULT 30,
+pending_timezone TEXT NOT NULL DEFAULT '',
+enabled INTEGER NOT NULL DEFAULT 1,
+holiday_awareness INTEGER NOT NULL DEFAULT 1,
+daypart_awareness INTEGER NOT NULL DEFAULT 1,
+anniversary_awareness INTEGER NOT NULL DEFAULT 1,
+memory_resonance INTEGER NOT NULL DEFAULT 1,
+allow_shared_date_mention INTEGER NOT NULL DEFAULT 1,
+version INTEGER NOT NULL DEFAULT 1,
+created_at_utc DATETIME NOT NULL,
+updated_at_utc DATETIME NOT NULL,
+UNIQUE(owner_type, owner_id)
+);
+
+-- 来源: temporal_core.go
+CREATE TABLE IF NOT EXISTS temporal_anchors (
+id TEXT PRIMARY KEY,
+scope_type TEXT NOT NULL DEFAULT 'user',
+user_id TEXT NOT NULL DEFAULT '',
+character_id TEXT NOT NULL DEFAULT '',
+anchor_type TEXT NOT NULL DEFAULT 'custom',
+title TEXT NOT NULL DEFAULT '',
+description TEXT NOT NULL DEFAULT '',
+time_kind TEXT NOT NULL,
+instant_at_utc DATETIME,
+end_at_utc DATETIME,
+local_date TEXT NOT NULL DEFAULT '',
+local_time TEXT NOT NULL DEFAULT '',
+timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+rrule TEXT NOT NULL DEFAULT '',
+duration_seconds INTEGER NOT NULL DEFAULT 0,
+pre_window_seconds INTEGER NOT NULL DEFAULT 0,
+post_window_seconds INTEGER NOT NULL DEFAULT 0,
+importance INTEGER NOT NULL DEFAULT 0,
+confidence INTEGER NOT NULL DEFAULT 0,
+sensitivity_level TEXT NOT NULL DEFAULT 'internal',
+allow_prompt_mention INTEGER NOT NULL DEFAULT 0,
+allow_proactive_mention INTEGER NOT NULL DEFAULT 0,
+requires_confirmation INTEGER NOT NULL DEFAULT 0,
+source TEXT NOT NULL DEFAULT 'manual',
+source_ref TEXT NOT NULL DEFAULT '',
+payload_json TEXT NOT NULL DEFAULT '{}',
+status TEXT NOT NULL DEFAULT 'active',
+next_occurrence_at_utc DATETIME,
+last_occurrence_at_utc DATETIME,
+created_at_utc DATETIME NOT NULL,
+updated_at_utc DATETIME NOT NULL
+);
+
+-- 来源: temporal_core.go
+CREATE TABLE IF NOT EXISTS temporal_events (
+id TEXT PRIMARY KEY,
+event_type TEXT NOT NULL,
+user_id TEXT NOT NULL DEFAULT '',
+character_id TEXT NOT NULL DEFAULT '',
+anchor_id TEXT NOT NULL DEFAULT '',
+occurred_at_utc DATETIME NOT NULL,
+effective_local_date TEXT NOT NULL DEFAULT '',
+timezone TEXT NOT NULL DEFAULT 'UTC',
+salience REAL NOT NULL DEFAULT 0,
+source TEXT NOT NULL DEFAULT 'temporal-runtime',
+source_event_id TEXT NOT NULL DEFAULT '',
+idempotency_key TEXT NOT NULL,
+payload_json TEXT NOT NULL DEFAULT '{}',
+created_at_utc DATETIME NOT NULL,
+UNIQUE(idempotency_key)
+);
+
+-- 来源: temporal_core.go
+CREATE TABLE IF NOT EXISTS memory_temporal_metadata (
+memory_id TEXT PRIMARY KEY,
+occurred_at_utc DATETIME,
+ended_at_utc DATETIME,
+timezone TEXT NOT NULL DEFAULT '',
+local_date TEXT NOT NULL DEFAULT '',
+daypart TEXT NOT NULL DEFAULT '',
+temporal_precision TEXT NOT NULL DEFAULT 'unknown',
+valid_from_utc DATETIME,
+valid_to_utc DATETIME,
+anchor_ids_json TEXT NOT NULL DEFAULT '[]',
+source_time_text TEXT NOT NULL DEFAULT '',
+created_at_utc DATETIME NOT NULL,
+updated_at_utc DATETIME NOT NULL
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_global_presence_states (
+user_id TEXT PRIMARY KEY,
+first_user_activity_at_utc TEXT NOT NULL DEFAULT '',
+last_observed_user_activity_at_utc TEXT NOT NULL DEFAULT '',
+last_committed_user_interaction_at_utc TEXT NOT NULL DEFAULT '',
+last_channel TEXT NOT NULL DEFAULT '',
+last_character_id TEXT NOT NULL DEFAULT '',
+interaction_count INTEGER NOT NULL DEFAULT 0,
+session_count INTEGER NOT NULL DEFAULT 0,
+state_version INTEGER NOT NULL DEFAULT 0,
+created_at_utc TEXT NOT NULL DEFAULT '',
+updated_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_relationship_presence_states (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL DEFAULT 'default',
+character_id TEXT NOT NULL DEFAULT '',
+first_interaction_at_utc TEXT NOT NULL DEFAULT '',
+last_observed_user_activity_at_utc TEXT NOT NULL DEFAULT '',
+last_committed_user_interaction_at_utc TEXT NOT NULL DEFAULT '',
+last_successful_exchange_at_utc TEXT NOT NULL DEFAULT '',
+last_assistant_contact_at_utc TEXT NOT NULL DEFAULT '',
+interaction_count INTEGER NOT NULL DEFAULT 0,
+session_count INTEGER NOT NULL DEFAULT 0,
+cadence_sample_count INTEGER NOT NULL DEFAULT 0,
+expected_gap_seconds REAL NOT NULL DEFAULT 86400,
+gap_mad_seconds REAL NOT NULL DEFAULT 0,
+continuity_score REAL NOT NULL DEFAULT 1,
+reacclimation_turns_remaining INTEGER NOT NULL DEFAULT 0,
+active_reunion_episode_id TEXT NOT NULL DEFAULT '',
+state_version INTEGER NOT NULL DEFAULT 0,
+created_at_utc TEXT NOT NULL DEFAULT '',
+updated_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_cadence_samples (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL DEFAULT 'default',
+character_id TEXT NOT NULL DEFAULT '',
+interaction_id TEXT NOT NULL DEFAULT '',
+previous_interaction_at_utc TEXT NOT NULL DEFAULT '',
+current_interaction_at_utc TEXT NOT NULL DEFAULT '',
+gap_seconds REAL NOT NULL DEFAULT 0,
+sample_kind TEXT NOT NULL DEFAULT 'relationship',
+included INTEGER NOT NULL DEFAULT 1,
+created_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_reunion_episodes (
+id TEXT PRIMARY KEY,
+user_id TEXT NOT NULL DEFAULT 'default',
+character_id TEXT NOT NULL DEFAULT '',
+reunion_kind TEXT NOT NULL DEFAULT '',
+reunion_level TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'pending',
+previous_relationship_interaction_at_utc TEXT NOT NULL DEFAULT '',
+previous_global_interaction_at_utc TEXT NOT NULL DEFAULT '',
+detected_at_utc TEXT NOT NULL DEFAULT '',
+relationship_gap_seconds REAL NOT NULL DEFAULT 0,
+global_gap_seconds REAL NOT NULL DEFAULT 0,
+expected_gap_seconds REAL NOT NULL DEFAULT 86400,
+normalized_gap REAL NOT NULL DEFAULT 0,
+deviation_score REAL NOT NULL DEFAULT 0,
+continuity_before REAL NOT NULL DEFAULT 1,
+claim_interaction_id TEXT NOT NULL DEFAULT '',
+claim_expires_at_utc TEXT NOT NULL DEFAULT '',
+handled_interaction_id TEXT NOT NULL DEFAULT '',
+handled_at_utc TEXT NOT NULL DEFAULT '',
+suppression_reason TEXT NOT NULL DEFAULT '',
+policy_json TEXT NOT NULL DEFAULT '{}',
+idempotency_key TEXT NOT NULL DEFAULT '',
+created_at_utc TEXT NOT NULL DEFAULT '',
+updated_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_interaction_receipts (
+id TEXT PRIMARY KEY,
+request_id TEXT NOT NULL DEFAULT '',
+interaction_id TEXT NOT NULL DEFAULT '',
+user_id TEXT NOT NULL DEFAULT 'default',
+character_id TEXT NOT NULL DEFAULT '',
+channel TEXT NOT NULL DEFAULT '',
+peer_id TEXT NOT NULL DEFAULT '',
+observed_at_utc TEXT NOT NULL DEFAULT '',
+previous_global_committed_at_utc TEXT NOT NULL DEFAULT '',
+previous_relationship_committed_at_utc TEXT NOT NULL DEFAULT '',
+reunion_episode_id TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'observed',
+created_at_utc TEXT NOT NULL DEFAULT '',
+updated_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_effect_ledger (
+id TEXT PRIMARY KEY,
+effect_key TEXT NOT NULL DEFAULT '',
+effect_type TEXT NOT NULL DEFAULT '',
+user_id TEXT NOT NULL DEFAULT 'default',
+character_id TEXT NOT NULL DEFAULT '',
+reunion_episode_id TEXT NOT NULL DEFAULT '',
+interaction_id TEXT NOT NULL DEFAULT '',
+payload_json TEXT NOT NULL DEFAULT '{}',
+applied_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: temporal_relationship_time.go
+CREATE TABLE IF NOT EXISTS temporal_relationship_time_settings (
+character_id TEXT PRIMARY KEY,
+enabled INTEGER NOT NULL DEFAULT 1,
+reunion_enabled INTEGER NOT NULL DEFAULT 1,
+sensitivity TEXT NOT NULL DEFAULT 'balanced',
+allow_memory_recall INTEGER NOT NULL DEFAULT 1,
+allow_relationship_age INTEGER NOT NULL DEFAULT 1,
+allow_reunion_mention INTEGER NOT NULL DEFAULT 1,
+allow_proactive_reference INTEGER NOT NULL DEFAULT 1,
+max_mention_sentences INTEGER NOT NULL DEFAULT 1,
+updated_at_utc TEXT NOT NULL DEFAULT ''
+);
+
+-- 来源: trigger_history.go
+CREATE TABLE IF NOT EXISTS trigger_histories (
+				id TEXT PRIMARY KEY,
+				trigger_id TEXT NOT NULL DEFAULT '',
+				trigger_type TEXT NOT NULL DEFAULT '',
+				title TEXT NOT NULL DEFAULT '',
+				channel TEXT NOT NULL DEFAULT 'web',
+				state TEXT NOT NULL DEFAULT 'pending',
+				priority TEXT NOT NULL DEFAULT 'normal',
+				reason TEXT NOT NULL DEFAULT '',
+				attempt_count INTEGER DEFAULT 0,
+				last_error TEXT DEFAULT '',
+				created_at TEXT DEFAULT '',
+				updated_at TEXT DEFAULT ''
+			);

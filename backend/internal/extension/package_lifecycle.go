@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"path"
 	"sort"
@@ -782,12 +783,16 @@ func (s *PackageService) RegisterSigner(ctx context.Context, fingerprint, publis
 		PublicKey: publicKey, PublisherID: publisherID, TrustSource: string(trust.TrustSourceUserDecision),
 		TrustLevel: string(trust.TrustLevelUnknown), KeyState: string(trust.KeyStateActive),
 		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano)}
-	if err := s.kernelProxy.ReadContainer().PackageTrustRepository.Put(ctx, record); err != nil {
+	container := s.kernelProxy.ReadContainer()
+	newValue, err := json.Marshal(record)
+	if err != nil {
 		return err
 	}
-	identity := trust.PublisherIdentity{PublisherID: publisherID, DisplayName: publisherID,
-		TrustLevel: trust.TrustLevelUnknown, Source: trust.TrustSourceUserDecision, Keys: []trust.PublisherKey{key}}
-	return s.kernelProxy.ReadContainer().TrustService.Store().RegisterUserDecision(identity)
+	coordinator := kernelruntime.NewPackageTrustMutationCoordinator(container)
+	_, err = coordinator.Execute(ctx, trust.PolicyMutation{Kind: trust.PolicyMutationPublisherTrust,
+		Actor: "authenticated_user", Reason: "register signer", PublisherID: publisherID, KeyID: keyID,
+		NewValue: newValue, Restrictive: true})
+	return err
 }
 
 func (s *PackageService) UntrustSigner(ctx context.Context, fingerprint string) error {
@@ -799,16 +804,60 @@ func (s *PackageService) setKernelSignerTrust(ctx context.Context, fingerprint s
 		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	container := s.kernelProxy.ReadContainer()
-	record, err := container.PackageTrustRepository.SetTrusted(ctx, fingerprint, trusted)
+	record, err := container.PackageTrustRepository.GetByFingerprint(ctx, fingerprint)
 	if err != nil {
 		return NewExtensionError(ErrPackageSignatureInvalid, "签名密钥不可用", fingerprint, false, err)
 	}
-	if trusted {
-		identity := trust.PublisherIdentity{PublisherID: record.PublisherID, DisplayName: record.PublisherID,
-			TrustLevel: trust.TrustLevelUserTrusted, Source: trust.TrustSourceUserDecision,
-			Keys: []trust.PublisherKey{{KeyID: record.KeyID, PublisherID: record.PublisherID,
-				PublicKey: record.PublicKey, Algorithm: trust.AlgorithmEd25519, State: trust.KeyStateActive, CreatedAt: time.Now().UTC()}}}
-		return container.TrustService.Store().RegisterUserDecision(identity)
+	if len(record.PublicKey) != ed25519.PublicKeySize || record.TrustSource == "legacy_fingerprint_only" {
+		return NewExtensionError(ErrPackageSignatureInvalid, "签名密钥不可用", fingerprint, false, nil)
 	}
-	return container.TrustService.Store().RevokeTrust(ctx, record.PublisherID, "user decision")
+	before := record
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if trusted {
+		record.TrustLevel = string(trust.TrustLevelUserTrusted)
+		record.KeyState = string(trust.KeyStateActive)
+		record.TrustedAt = now
+		record.RevokedAt = ""
+		record.RevocationReason = ""
+	} else {
+		record.TrustLevel = string(trust.TrustLevelRevoked)
+		record.KeyState = string(trust.KeyStateRevoked)
+		record.RevokedAt = now
+		record.RevocationReason = "user decision"
+	}
+	record.UpdatedAt = now
+	oldValue, err := json.Marshal(before)
+	if err != nil {
+		return err
+	}
+	newValue, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	reason := "user revoked signer trust"
+	if trusted {
+		reason = "user trusted signer"
+	}
+	coordinator := kernelruntime.NewPackageTrustMutationCoordinator(container)
+	_, err = coordinator.Execute(ctx, trust.PolicyMutation{Kind: trust.PolicyMutationPublisherTrust,
+		Actor: "authenticated_user", Reason: reason, PublisherID: record.PublisherID, KeyID: record.KeyID,
+		OldValue: oldValue, NewValue: newValue, Restrictive: !trusted})
+	return err
+}
+
+func (s *PackageService) PreviewRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (kernelruntime.PackageRollbackPreviewResult, error) {
+	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+		return kernelruntime.PackageRollbackPreviewResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
+		return kernelruntime.PackageRollbackPreviewResult{}, err
+	}
+	return s.kernelProxy.kernel.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+}
+
+func (s *PackageService) VerifyOperationFinalGate(ctx context.Context, operationID string) (kernelruntime.PackageFinalGateResult, error) {
+	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+		return kernelruntime.PackageFinalGateResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	return s.kernelProxy.kernel.VerifyPackageFinalGate(ctx, operationID)
 }

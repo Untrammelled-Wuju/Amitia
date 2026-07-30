@@ -95,6 +95,9 @@ func main() {
 
 	graphSvc := initGraph()
 	services := NewAppServices(ctx, graphSvc)
+	if err := services.DesktopPetRuntime.Start(appCtx); err != nil {
+		log.Logger.Errorf("main: runtime bridge start failed: %v", err)
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -183,6 +186,14 @@ func main() {
 	defer services.DesktopPetWorker.Stop()
 	services.ProcessingWorker.Start(appCtx)
 	defer services.ProcessingWorker.Stop()
+	services.QualityWorker.Start(appCtx)
+	defer services.QualityWorker.Stop()
+	if services.BehaviorService != nil {
+		if err := services.BehaviorService.Start(appCtx); err != nil {
+			log.Error("failed to start behavior service: ", err)
+		}
+		defer services.BehaviorService.Stop()
+	}
 
 	selfHeal := startSelfHealMonitor(appCtx, db)
 	defer selfHeal.Stop()
@@ -240,6 +251,9 @@ func main() {
 			log.Error("Plugin Runtime 关闭失败:", err)
 		}
 		pluginCancel()
+		if services.KernelContainer != nil && services.KernelContainer.ArtifactMaintenance != nil {
+			services.KernelContainer.ArtifactMaintenance.Stop()
+		}
 		if services.KernelContainer != nil && services.KernelContainer.ScheduleService != nil {
 			schedShutdownCtx, schedCancel := context.WithTimeout(context.Background(), 15*time.Second)
 			services.KernelContainer.ScheduleService.Shutdown(schedShutdownCtx)
@@ -253,6 +267,7 @@ func main() {
 			services.KernelContainer.TaskRuntimeService.Shutdown(taskShutdownCtx)
 			taskCancel()
 		}
+		services.DesktopPetRuntime.Close(appCtx)
 		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

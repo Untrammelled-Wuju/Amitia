@@ -1,2 +1,0 @@
--keep class com.amitia.runtime.** { *; }
--dontwarn kotlinx.datetime.**

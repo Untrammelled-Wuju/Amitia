@@ -17,8 +17,9 @@ type Config struct {
 	Chat      ChatConfig         `mapstructure:"chat"`
 	Qdrant    QdrantConfig       `mapstructure:"qdrant"`
 	Embedding EmbeddingConfig    `mapstructure:"embedding"`
-	Surreal   SurrealConfig      `mapstructure:"surrealdb"`
-	Prompt    PromptFeatureFlags `mapstructure:"prompt"`
+	Surreal          SurrealConfig          `mapstructure:"surrealdb"`
+	Prompt           PromptFeatureFlags     `mapstructure:"prompt"`
+	DesktopPetRuntime DesktopPetRuntimeConfig `mapstructure:"desktopPetRuntime"`
 }
 
 type ServerConfig struct {
@@ -167,4 +168,21 @@ func InitConfig(configPath string) {
 
 func (c *ServerConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+type DesktopPetRuntimeConfig struct {
+	Enabled               bool   `mapstructure:"enabled"`
+	Path                  string `mapstructure:"path"`
+	LoopbackOnly          bool   `mapstructure:"loopbackOnly"`
+	AllowRemote           bool   `mapstructure:"allowRemote"`
+	HeartbeatIntervalMs   int    `mapstructure:"heartbeatIntervalMs"`
+	HeartbeatTimeoutMs    int    `mapstructure:"heartbeatTimeoutMs"`
+	MaxMessageBytes       int    `mapstructure:"maxMessageBytes"`
+	RegisterTimeoutSec    int    `mapstructure:"registerTimeoutSec"`
+	SendQueueSize         int    `mapstructure:"sendQueueSize"`
+	CommandTimeoutSec     int    `mapstructure:"commandTimeoutSec"`
+	MaxRetryAttempts      int    `mapstructure:"maxRetryAttempts"`
+	RetryBaseDelayMs      int    `mapstructure:"retryBaseDelayMs"`
+	RetryMaxDelayMs       int    `mapstructure:"retryMaxDelayMs"`
+	CommandRetentionHours int    `mapstructure:"commandRetentionHours"`
 }

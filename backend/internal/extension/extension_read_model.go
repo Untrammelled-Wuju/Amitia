@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -38,17 +39,32 @@ func (s *ExtensionReadModelService) available() bool {
 	return s.proxy != nil && s.proxy.ReadContainer() != nil
 }
 
-func (s *ExtensionReadModelService) TryPreviewUninstall(ctx context.Context, extensionID string) (PackageUninstallPreview, bool, error) {
+func (s *ExtensionReadModelService) authoritativeContainer() (*kernelruntime.Container, error) {
 	if !s.available() {
-		return PackageUninstallPreview{}, false, nil
+		return nil, fmt.Errorf("readmodel: extension kernel unavailable")
 	}
 	container := s.proxy.ReadContainer()
+	if container.InstallationRepository == nil {
+		return nil, fmt.Errorf("readmodel: installation repository not injected")
+	}
+	return container, nil
+}
+
+func (s *ExtensionReadModelService) TryPreviewUninstall(ctx context.Context, extensionID string) (PackageUninstallPreview, bool, error) {
+	container, err := s.authoritativeContainer()
+	if err != nil {
+		return PackageUninstallPreview{}, false, err
+	}
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
 			return PackageUninstallPreview{}, false, nil
 		}
 		return PackageUninstallPreview{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
+	}
+	if container.DependencyResolver == nil || container.ContributionRepository == nil || container.ModuleRepository == nil ||
+		container.RuntimeSupervisor == nil || container.ScheduleRepository == nil || container.PermissionBroker == nil || container.ScopeRepository == nil {
+		return PackageUninstallPreview{}, false, fmt.Errorf("readmodel: uninstall read dependencies not injected")
 	}
 	preview := PackageUninstallPreview{
 		ExtensionID:      extensionID,
@@ -91,15 +107,18 @@ func (s *ExtensionReadModelService) TryPreviewUninstall(ctx context.Context, ext
 }
 
 func (s *ExtensionReadModelService) TryDependencies(ctx context.Context, extensionID string) (map[string]interface{}, bool, error) {
-	if !s.available() {
-		return nil, false, nil
+	container, err := s.authoritativeContainer()
+	if err != nil {
+		return nil, false, err
 	}
-	container := s.proxy.ReadContainer()
 	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
+	}
+	if container.DependencyResolver == nil || container.ModuleRepository == nil || container.DefinitionRepository == nil {
+		return nil, false, fmt.Errorf("readmodel: dependency read repositories not injected")
 	}
 	direct, err := s.readDirectDependencies(ctx, container, extensionID)
 	if err != nil {
@@ -113,10 +132,10 @@ func (s *ExtensionReadModelService) TryDependencies(ctx context.Context, extensi
 }
 
 func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensionID string) ([]PackageVersionView, bool, error) {
-	if !s.available() {
-		return nil, false, nil
+	container, err := s.authoritativeContainer()
+	if err != nil {
+		return nil, false, err
 	}
-	container := s.proxy.ReadContainer()
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
@@ -124,11 +143,21 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 		}
 		return nil, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
+	if container.DefinitionRepository == nil || container.PackageRepository == nil {
+		return nil, false, fmt.Errorf("readmodel: version read repositories not injected")
+	}
+	versionStates := map[string]string{}
+	if versionRecords, versionErr := container.PackageRepository.ListPackageVersions(ctx, extensionID); versionErr == nil {
+		for _, vr := range versionRecords {
+			versionStates[vr.Version] = vr.VersionState
+		}
+	}
 	definitions, err := container.DefinitionRepository.ListExtensions(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	views := make([]PackageVersionView, 0)
+	activeFound := false
 	for _, def := range definitions {
 		if string(def.ID) != extensionID {
 			continue
@@ -137,7 +166,26 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 		if artifactErr != nil {
 			return nil, false, fmt.Errorf("readmodel: version artifact unavailable: %w", artifactErr)
 		}
-		views = append(views, s.buildVersionView(def, installation, artifact))
+		view := s.buildVersionView(def, installation, artifact)
+		if state, ok := versionStates[def.Version.String()]; ok {
+			view.Active = state == string(kernelruntime.PackageVersionStateCurrent)
+			if view.Active {
+				view.ArtifactStatus = "active"
+				view.ActivationStatus = "active"
+				view.Archived = false
+			} else {
+				view.ArtifactStatus = "archived"
+				view.ActivationStatus = "archived"
+				view.Archived = true
+			}
+		}
+		views = append(views, view)
+		if def.Version.Compare(installation.InstalledVersion) == 0 {
+			activeFound = true
+		}
+	}
+	if len(views) == 0 || !activeFound {
+		return nil, false, fmt.Errorf("readmodel: authoritative version model incomplete")
 	}
 	sort.Slice(views, func(i, j int) bool {
 		vi, ei := domain.ParseVersion(views[i].Version)
@@ -151,15 +199,27 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 }
 
 func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, extensionID, fromVersion, toVersion string) (PackageVersionDiff, bool, error) {
-	if !s.available() {
-		return PackageVersionDiff{}, false, nil
+	container, err := s.authoritativeContainer()
+	if err != nil {
+		return PackageVersionDiff{}, false, err
 	}
-	container := s.proxy.ReadContainer()
 	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
 			return PackageVersionDiff{}, false, nil
 		}
 		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
+	}
+	if container.DefinitionRepository == nil || container.PackageRepository == nil || s.proxy.kernel == nil {
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: version comparison dependencies not injected")
+	}
+	if versionRecords, versionErr := container.PackageRepository.ListPackageVersions(ctx, extensionID); versionErr == nil && len(versionRecords) > 0 {
+		versionExists := map[string]bool{}
+		for _, vr := range versionRecords {
+			versionExists[vr.Version] = true
+		}
+		if !versionExists[fromVersion] || !versionExists[toVersion] {
+			return PackageVersionDiff{}, false, nil
+		}
 	}
 	fromVer, err := domain.ParseVersion(fromVersion)
 	if err != nil {
@@ -199,16 +259,19 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 }
 
 func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, version string, ownerScope ...string) (ExportedPackage, bool, error) {
-	if !s.available() {
-		return ExportedPackage{}, false, nil
+	container, err := s.authoritativeContainer()
+	if err != nil {
+		return ExportedPackage{}, false, err
 	}
-	container := s.proxy.ReadContainer()
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
 			return ExportedPackage{}, false, nil
 		}
 		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
+	}
+	if container.PackageRepository == nil || container.PackageArtifactStore == nil || container.PackageGenerationStore == nil || s.proxy.kernel == nil {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: export dependencies not injected")
 	}
 	owner, _ := installation.Metadata["ownerUserId"].(string)
 	storedScopeType, _ := installation.Metadata["scopeType"].(string)
@@ -223,20 +286,83 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 	if owner != userID || storedScopeType != scopeType || storedScopeID != scopeID {
 		return ExportedPackage{}, false, fmt.Errorf("readmodel: package scope mismatch")
 	}
-	if version == "" {
-		version = installation.InstalledVersion.String()
+	currentVersion := installation.InstalledVersion.String()
+	if version != "" && version != currentVersion {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: export version is not current installation")
 	}
-	artifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, version)
+	version = currentVersion
+	if currentVersionRecord, verErr := container.PackageRepository.GetCurrentPackageVersion(ctx, extensionID); verErr == nil {
+		if currentVersionRecord.Version != version {
+			return ExportedPackage{}, false, nil
+		}
+	}
+	if installation.Generation <= 0 || installation.PackageID == "" {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation identity incomplete")
+	}
+	currentGeneration, err := container.PackageGenerationStore.ReadCurrent(extensionID)
 	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := container.PackageGenerationStore.VerifyGeneration(ctx, currentGeneration); err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := validateExportInstallationGeneration(installation, currentGeneration); err != nil {
+		return ExportedPackage{}, false, err
+	}
+	artifact, err := container.PackageRepository.GetArtifact(ctx, installation.PackageID)
+	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := validateExportInstallationArtifact(installation, artifact); err != nil {
 		return ExportedPackage{}, false, err
 	}
 	pkg, err := s.proxy.kernel.VerifyStoredPackage(ctx, artifact)
 	if err != nil {
 		return ExportedPackage{}, false, err
 	}
+	preview, err := s.canonicalExportPreview(ctx, installation, artifact, userID, scopeType, scopeID)
+	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if !preview.Installable {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: canonical export preview rejected package")
+	}
+	if err := validateExportPreviewIdentity(preview, artifact, installation); err != nil {
+		return ExportedPackage{}, false, err
+	}
 	flags, err := scanPackageArchiveForExport(artifact.ArchivePath)
 	if err != nil {
 		return ExportedPackage{}, false, err
+	}
+	currentInstallation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if currentInstallation.Generation != installation.Generation || currentInstallation.PackageID != installation.PackageID || currentInstallation.InstalledVersion.Compare(installation.InstalledVersion) != 0 {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation changed during export validation")
+	}
+	validatedGeneration, err := container.PackageGenerationStore.ReadCurrent(extensionID)
+	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := container.PackageGenerationStore.VerifyGeneration(ctx, validatedGeneration); err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := validateExportInstallationGeneration(currentInstallation, validatedGeneration); err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if validatedGeneration.GenerationID != currentGeneration.GenerationID || validatedGeneration.ArtifactID != currentGeneration.ArtifactID || validatedGeneration.Version != currentGeneration.Version || validatedGeneration.TreeHash != currentGeneration.TreeHash {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: current generation changed during export validation")
+	}
+	currentArtifact, err := container.PackageRepository.GetArtifact(ctx, currentInstallation.PackageID)
+	if err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if err := validateExportInstallationArtifact(currentInstallation, currentArtifact); err != nil {
+		return ExportedPackage{}, false, err
+	}
+	if currentArtifact.ArchiveHash != artifact.ArchiveHash || currentArtifact.ManifestHash != artifact.ManifestHash || currentArtifact.ContentTreeHash != artifact.ContentTreeHash || currentArtifact.ArtifactHash != artifact.ArtifactHash {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: artifact changed during export validation")
 	}
 	name := pkg.Manifest.Extension.Name.Default
 	if name == "" {
@@ -267,6 +393,72 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 		return ExportedPackage{}, false, err
 	}
 	return exported, true, nil
+}
+
+func (s *ExtensionReadModelService) canonicalExportPreview(ctx context.Context, installation domain.ExtensionInstallation, artifact kernelruntime.PackageArtifact, userID, scopeType, scopeID string) (kernelruntime.InstallPreview, error) {
+	archive, err := os.Open(artifact.ArchivePath)
+	if err != nil {
+		return kernelruntime.InstallPreview{}, err
+	}
+	defer archive.Close()
+	devOnly, _ := installation.Metadata["devOnly"].(bool)
+	developerSessionID, _ := installation.Metadata["developerSessionId"].(string)
+	preview, err := s.proxy.kernel.PreviewPackage(ctx, kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: filepathBase(artifact.ArchivePath), AllowUnsignedDev: devOnly, DeveloperSessionID: developerSessionID}, archive)
+	if err != nil {
+		return kernelruntime.InstallPreview{}, err
+	}
+	if preview.SessionID == "" {
+		return kernelruntime.InstallPreview{}, fmt.Errorf("readmodel: canonical export preview session missing")
+	}
+	cancelErr := s.proxy.ReadContainer().PackageRepository.CancelPreview(ctx, preview.SessionID, userID, scopeType, scopeID)
+	if cancelErr != nil {
+		return kernelruntime.InstallPreview{}, fmt.Errorf("readmodel: release canonical export preview: %w", cancelErr)
+	}
+	return preview, nil
+}
+
+func validateExportInstallationArtifact(installation domain.ExtensionInstallation, artifact kernelruntime.PackageArtifact) error {
+	if artifact.ArtifactID != installation.PackageID || artifact.ExtensionID != string(installation.ExtensionID) || artifact.Version != installation.InstalledVersion.String() {
+		return fmt.Errorf("readmodel: installation artifact identity mismatch")
+	}
+	checks := map[string]string{"artifactId": artifact.ArtifactID, "archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash, "contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash}
+	for key, expected := range checks {
+		actual, ok := installation.Metadata[key].(string)
+		if !ok || actual == "" || actual != expected {
+			return fmt.Errorf("readmodel: installation %s mismatch", key)
+		}
+	}
+	return nil
+}
+
+func validateExportInstallationGeneration(installation domain.ExtensionInstallation, current kernelruntime.PackageGenerationCurrent) error {
+	generationID, generationOK := installation.Metadata["generationId"].(string)
+	installedTreeHash, treeOK := installation.Metadata["installedTreeHash"].(string)
+	if !generationOK || generationID == "" || !treeOK || installedTreeHash == "" {
+		return fmt.Errorf("readmodel: installation generation identity incomplete")
+	}
+	if current.ExtensionID != string(installation.ExtensionID) || current.ArtifactID != installation.PackageID || current.Version != installation.InstalledVersion.String() || current.GenerationID != generationID || current.TreeHash != installedTreeHash {
+		return fmt.Errorf("readmodel: installation current generation mismatch")
+	}
+	return nil
+}
+
+func validateExportPreviewIdentity(preview kernelruntime.InstallPreview, artifact kernelruntime.PackageArtifact, installation domain.ExtensionInstallation) error {
+	if preview.ArtifactID != artifact.ArtifactID || preview.ExtensionID != string(installation.ExtensionID) || preview.Version != installation.InstalledVersion.String() || preview.ArchiveHash != artifact.ArchiveHash || preview.ManifestHash != artifact.ManifestHash || preview.ContentTreeHash != artifact.ContentTreeHash || preview.ArtifactHash != artifact.ArtifactHash {
+		return fmt.Errorf("readmodel: canonical export preview identity mismatch")
+	}
+	if preview.SignatureStatus != artifact.SignatureStatus || preview.TrustDecision != artifact.TrustDecision {
+		return fmt.Errorf("readmodel: canonical export preview trust mismatch")
+	}
+	return nil
+}
+
+func filepathBase(path string) string {
+	path = strings.ReplaceAll(path, "\\", "/")
+	if index := strings.LastIndex(path, "/"); index >= 0 {
+		return path[index+1:]
+	}
+	return path
 }
 
 func scanPackageArchiveForExport(archivePath string) (map[string]bool, error) {
@@ -306,7 +498,7 @@ func scanPackageArchiveForExport(archivePath string) (map[string]bool, error) {
 
 func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageDependencyView, error) {
 	if container.DependencyResolver == nil {
-		return []PackageDependencyView{}, nil
+		return nil, fmt.Errorf("readmodel: dependency resolver not injected")
 	}
 	subjects, err := container.DependencyResolver.AffectedBy(ctx, extensionID)
 	if err != nil {
@@ -331,22 +523,22 @@ func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context,
 
 func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageDependencyView, error) {
 	if container.ModuleRepository == nil {
-		return []PackageDependencyView{}, nil
+		return nil, fmt.Errorf("readmodel: module repository not injected")
+	}
+	if container.DefinitionRepository == nil {
+		return nil, fmt.Errorf("readmodel: definition repository not injected")
 	}
 	modules, err := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
 		return nil, fmt.Errorf("readmodel: query modules: %w", err)
 	}
-	var definition domain.ExtensionDefinition
-	if container.DefinitionRepository != nil {
-		installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
-		if err != nil {
-			return nil, err
-		}
-		definition, err = container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), installation.InstalledVersion)
-		if err != nil {
-			return nil, err
-		}
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return nil, err
+	}
+	definition, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), installation.InstalledVersion)
+	if err != nil {
+		return nil, err
 	}
 	seen := map[string]bool{}
 	result := []PackageDependencyView{}
@@ -398,7 +590,7 @@ func (s *ExtensionReadModelService) readContributions(ctx context.Context, conta
 	summary := map[string]int{}
 	eventSubs := []string{}
 	if container.ContributionRepository == nil {
-		return summary, eventSubs, nil
+		return nil, nil, fmt.Errorf("readmodel: contribution repository not injected")
 	}
 	contributions, err := container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
@@ -417,7 +609,7 @@ func (s *ExtensionReadModelService) readContributions(ctx context.Context, conta
 
 func (s *ExtensionReadModelService) readRuntimeImpacts(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageRuntimeImpact, error) {
 	if container.ModuleRepository == nil || container.RuntimeSupervisor == nil {
-		return []PackageRuntimeImpact{}, nil
+		return nil, fmt.Errorf("readmodel: runtime read dependencies not injected")
 	}
 	modules, err := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
 	if err != nil {
@@ -446,7 +638,7 @@ func (s *ExtensionReadModelService) readRuntimeImpacts(ctx context.Context, cont
 
 func (s *ExtensionReadModelService) readScheduleCount(ctx context.Context, container *kernelruntime.Container, extensionID string) (int64, error) {
 	if container.ScheduleRepository == nil {
-		return 0, nil
+		return 0, fmt.Errorf("readmodel: schedule repository not injected")
 	}
 	defs, err := container.ScheduleRepository.ListDefinitions(ctx, extensionID)
 	if err != nil {
@@ -457,7 +649,7 @@ func (s *ExtensionReadModelService) readScheduleCount(ctx context.Context, conta
 
 func (s *ExtensionReadModelService) readGrants(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]string, error) {
 	if container.PermissionBroker == nil {
-		return []string{}, nil
+		return nil, fmt.Errorf("readmodel: permission broker not injected")
 	}
 	subject := permission.SubjectForExtension(extensionID)
 	grants, err := container.PermissionBroker.ListGrants(ctx, permission.PermissionGrantFilter{Subject: &subject, ActiveOnly: true})
@@ -474,7 +666,7 @@ func (s *ExtensionReadModelService) readGrants(ctx context.Context, container *k
 
 func (s *ExtensionReadModelService) readConfigPresent(ctx context.Context, container *kernelruntime.Container, extensionID string) (bool, error) {
 	if container.ScopeRepository == nil {
-		return false, nil
+		return false, fmt.Errorf("readmodel: scope repository not injected")
 	}
 	bindings, err := container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(extensionID))
 	if err != nil {

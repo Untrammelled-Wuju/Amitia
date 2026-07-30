@@ -524,6 +524,7 @@ const statusOptions = [
   { label: "等待生成", value: "pending" },
   { label: "排队中", value: "queued" },
   { label: "处理中", value: "processing" },
+  { label: "取消中", value: "cancelling" },
   { label: "已完成", value: "succeeded" },
   { label: "部分成功", value: "partially_succeeded" },
   { label: "失败", value: "failed" },
@@ -534,6 +535,7 @@ const statusMeta: Record<string, { label: string; type: string }> = {
   pending: { label: "等待生成", type: "info" },
   queued: { label: "排队中", type: "info" },
   processing: { label: "处理中", type: "warning" },
+  cancelling: { label: "取消中", type: "warning" },
   succeeded: { label: "已完成", type: "success" },
   partially_succeeded: { label: "部分成功", type: "warning" },
   failed: { label: "失败", type: "danger" },
@@ -544,8 +546,15 @@ const statusMeta: Record<string, { label: string; type: string }> = {
 };
 
 const stageMeta: Record<string, string> = {
+  created: "已创建",
   queued: "排队中",
   preparing: "准备中",
+  preparing_frames: "准备帧",
+  submitting: "提交中",
+  polling: "轮询中",
+  downloading: "下载中",
+  persisting: "持久化中",
+  generating: "生成中",
   generating_actions: "生成动作帧",
   downloading_results: "下载结果",
   finalizing: "收尾处理",
@@ -558,7 +567,9 @@ const actionStatusMeta: Record<string, { label: string; type: string }> = {
   pending: { label: "等待中", type: "info" },
   queued: { label: "排队中", type: "info" },
   processing: { label: "生成中", type: "warning" },
+  cancelling: { label: "取消中", type: "warning" },
   succeeded: { label: "已完成", type: "success" },
+  partially_succeeded: { label: "部分成功", type: "warning" },
   failed: { label: "失败", type: "danger" },
   cancelled: { label: "已取消", type: "info" },
   success: { label: "已完成", type: "success" },
@@ -599,14 +610,14 @@ function actionTagType(status?: string): any {
 }
 
 function progressStatus(status?: string): "" | "success" | "exception" {
-  if (status === "succeeded" || status === "completed") return "success";
+  if (status === "succeeded" || status === "completed" || status === "partially_succeeded") return "success";
   if (status === "failed") return "exception";
   return "";
 }
 
 function canCancel(status?: string): boolean {
   return (
-    status === "queued" || status === "processing" || status === "pending"
+    status === "queued" || status === "processing" || status === "pending" || status === "cancelling"
   );
 }
 
@@ -614,7 +625,9 @@ function canStart(status?: string): boolean {
   return (
     status === "pending" ||
     status === "failed" ||
-    status === "partially_succeeded"
+    status === "partially_succeeded" ||
+    status === "cancelled" ||
+    status === "succeeded"
   );
 }
 

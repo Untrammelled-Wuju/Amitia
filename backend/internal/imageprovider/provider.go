@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package imageprovider
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+)
 
 type ImageInput struct {
 	Path     string
@@ -11,6 +15,9 @@ type ImageInput struct {
 }
 
 type ImageGenerationRequest struct {
+	RequestID        string
+	IdempotencyKey   string
+	Mode             GenerationMode
 	Prompt           string
 	NegativePrompt   string
 	ReferenceImages  []ImageInput
@@ -70,6 +77,7 @@ type ImageGenerationSubmission struct {
 
 type ImageModelConfig struct {
 	Name      string
+	ApiType   string
 	ApiKey    string
 	ModelName string
 	BaseUrl   string
@@ -83,24 +91,90 @@ type ImageGenerationProvider interface {
 	Cancel(ctx context.Context, config ImageModelConfig, operationID string) error
 }
 
+type ExtendedProvider interface {
+	ImageGenerationProvider
+	ExtendedCapabilities(ctx context.Context, config ImageModelConfig) (ProviderCapabilities, error)
+}
+
+type ProviderDescriptor struct {
+	Name            string
+	DefaultModel    string
+	DefaultBaseURL  string
+	SupportedModes  []GenerationMode
+}
+
 type Registry struct {
-	providers map[string]ImageGenerationProvider
+	providers   map[string]ImageGenerationProvider
+	descriptors map[string]ProviderDescriptor
+	aliases     map[string]string
 }
 
 func NewRegistry() *Registry {
-	return &Registry{providers: make(map[string]ImageGenerationProvider)}
+	return &Registry{
+		providers:   make(map[string]ImageGenerationProvider),
+		descriptors: make(map[string]ProviderDescriptor),
+		aliases:     make(map[string]string),
+	}
 }
 
-func (r *Registry) Register(name string, provider ImageGenerationProvider) {
+func (r *Registry) Register(name string, provider ImageGenerationProvider) error {
 	if r.providers == nil {
 		r.providers = make(map[string]ImageGenerationProvider)
 	}
-	r.providers[name] = provider
+	if r.descriptors == nil {
+		r.descriptors = make(map[string]ProviderDescriptor)
+	}
+	canonical := NormalizeProviderName(name)
+	if _, exists := r.providers[canonical]; exists {
+		return fmt.Errorf("provider %s already registered", canonical)
+	}
+	r.providers[canonical] = provider
+	return nil
+}
+
+func (r *Registry) RegisterWithDescriptor(name string, provider ImageGenerationProvider, desc ProviderDescriptor) error {
+	canonical := NormalizeProviderName(name)
+	if err := r.Register(canonical, provider); err != nil {
+		return err
+	}
+	desc.Name = canonical
+	r.descriptors[canonical] = desc
+	return nil
+}
+
+func (r *Registry) RegisterAlias(alias, canonical string) {
+	if r.aliases == nil {
+		r.aliases = make(map[string]string)
+	}
+	r.aliases[NormalizeProviderName(alias)] = NormalizeProviderName(canonical)
+}
+
+func (r *Registry) Resolve(name string) (ImageGenerationProvider, bool) {
+	if r.providers == nil {
+		return nil, false
+	}
+	canonical := NormalizeProviderName(name)
+	if alias, ok := r.aliases[canonical]; ok {
+		canonical = alias
+	}
+	p, ok := r.providers[canonical]
+	return p, ok
+}
+
+func (r *Registry) Describe(name string) (ProviderDescriptor, bool) {
+	if r.descriptors == nil {
+		return ProviderDescriptor{}, false
+	}
+	canonical := NormalizeProviderName(name)
+	if alias, ok := r.aliases[canonical]; ok {
+		canonical = alias
+	}
+	desc, ok := r.descriptors[canonical]
+	return desc, ok
 }
 
 func (r *Registry) Get(name string) (ImageGenerationProvider, bool) {
-	p, ok := r.providers[name]
-	return p, ok
+	return r.Resolve(name)
 }
 
 func (r *Registry) Names() []string {
@@ -113,4 +187,16 @@ func (r *Registry) Names() []string {
 
 func DefaultRegistry() *Registry {
 	return NewRegistry()
+}
+
+func NormalizeProviderName(name string) string {
+	s := strings.TrimSpace(name)
+	s = strings.ToLower(s)
+	return s
+}
+
+var defaultAliases = map[string]string{
+	"volcengine_seedream": "seedream",
+	"doubao_seedream":     "seedream",
+	"ark_seedream":        "seedream",
 }

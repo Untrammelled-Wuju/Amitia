@@ -205,6 +205,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	packageSec := package_security.NewPackageSecurityServiceAtRoot(package_security.DefaultArchivePolicy(), package_security.NewSQLiteAuditWriter(db), b.extRoot)
 	packageRepo := NewPackageRepository(db)
 	packageArtifactStore := NewPackageArtifactStore(b.extRoot)
+	packageGenerationStore := NewPackageGenerationStore(b.extRoot)
 	packageTrustRepo := NewPackageTrustRepository(db)
 	trustService := trust.NewTrustService(trust.TrustServiceConfig{})
 	if err := packageTrustRepo.Restore(ctx, trustService); err != nil {
@@ -604,6 +605,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	devModePreserver := dev_mode.NewStatePreserver()
 	devModeReloader := dev_mode.NewRuntimeReloader(devModeRegistry, devModePipeline, devModePreserver)
 	devModeSessions := dev_mode.NewSessionManager(8 * time.Hour)
+	if err := restorePackageTrustMutations(ctx, packageTrustRepo, trustService, packageRepo, devModeSessions); err != nil {
+		return nil, fmt.Errorf("kernel: replay package trust mutations: %w", err)
+	}
 
 	devConsoleRepo := developer_console.NewDiagnosticRepository(2000)
 	aggregators := &developer_console.ConsoleAggregators{
@@ -673,6 +677,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PackageSecurity:        packageSec,
 		PackageRepository:      packageRepo,
 		PackageArtifactStore:   packageArtifactStore,
+		PackageGenerationStore: packageGenerationStore,
 		PackageTrustRepository: packageTrustRepo,
 		LifecycleManager:       lifecycleMgr,
 		ContributionRegistry:   contribRegistry,

@@ -286,8 +286,8 @@ defineExpose({ open, close });
   display: flex;
   justify-content: center;
   padding-top: 15vh;
-  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .search-panel {

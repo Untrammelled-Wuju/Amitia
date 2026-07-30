@@ -32,7 +32,9 @@ func (r *mockInstallationRepo) GetInstallation(_ context.Context, id domain.Exte
 func (r *mockInstallationRepo) ListInstallations(_ context.Context) ([]domain.ExtensionInstallation, error) {
 	return nil, nil
 }
-func (r *mockInstallationRepo) DeleteInstallation(_ context.Context, _ domain.ExtensionID) error { return nil }
+func (r *mockInstallationRepo) DeleteInstallation(_ context.Context, _ domain.ExtensionID) error {
+	return nil
+}
 
 type mockDefinitionRepo struct {
 	defs []domain.ExtensionDefinition
@@ -104,7 +106,9 @@ func (r *mockContributionRepo) ListContributions(_ context.Context, _ domain.Ext
 func (r *mockContributionRepo) ListContributionsByModule(_ context.Context, _ domain.ExtensionID, _ domain.ModuleID) ([]domain.ContributionDefinition, error) {
 	return nil, nil
 }
-func (r *mockContributionRepo) DeleteContributions(_ context.Context, _ domain.ExtensionID) error { return nil }
+func (r *mockContributionRepo) DeleteContributions(_ context.Context, _ domain.ExtensionID) error {
+	return nil
+}
 func (r *mockContributionRepo) DeleteContributionsByModule(_ context.Context, _ domain.ExtensionID, _ domain.ModuleID) error {
 	return nil
 }
@@ -295,8 +299,8 @@ func TestReadModel_Helper_RepositoryError_Propagates(t *testing.T) {
 
 	t.Run("ContributionRepository_fault_via_TryPreviewUninstall", func(t *testing.T) {
 		container := &kernelruntime.Container{
-			InstallationRepository:  &mockInstallationRepo{inst: validTestInstallation()},
-			ContributionRepository:  &mockContributionRepo{err: dbFaultErr},
+			InstallationRepository: &mockInstallationRepo{inst: validTestInstallation()},
+			ContributionRepository: &mockContributionRepo{err: dbFaultErr},
 		}
 		svc := buildTestReadModel(t, container)
 		_, ok, err := svc.TryPreviewUninstall(ctx, "dev.local.test/ext")
@@ -373,17 +377,14 @@ func TestReadModel_Helper_GetInstallation_DistinguishesNotFound(t *testing.T) {
 			},
 		}
 		svc := buildTestReadModel(t, container)
-		preview, ok, err := svc.TryPreviewUninstall(ctx, "dev.local.test/ext")
+		dependents, err := svc.readReverseDependencies(ctx, container, "dev.local.test/ext")
 		if err != nil {
 			t.Fatalf("dependent Not Found must not cause error, got: %v", err)
 		}
-		if !ok {
-			t.Fatal("ok must be true when all queries succeed")
+		if len(dependents) != 1 {
+			t.Fatalf("expected 1 dependent, got %d", len(dependents))
 		}
-		if len(preview.Dependents) != 1 {
-			t.Fatalf("expected 1 dependent, got %d", len(preview.Dependents))
-		}
-		if preview.Dependents[0].Installed {
+		if dependents[0].Installed {
 			t.Fatal("dependent that is Not Found must show Installed=false")
 		}
 	})

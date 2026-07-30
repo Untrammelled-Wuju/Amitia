@@ -3,120 +3,63 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="voice-config">
+  <div>
     <el-alert
-      title="隐私提示"
       type="info"
-      description="API Key 与语音配置仅存储在本地服务器，不会上传至第三方。"
+      :closable="false"
       show-icon
-      closable
-      style="margin-bottom: 16px"
+      style="margin-bottom: 14px"
+    >
+      <template #title>
+        API Key 与语音配置仅存储在本地服务器，不会上传至第三方。
+      </template>
+    </el-alert>
+
+    <div class="toolbar">
+      <el-button type="primary" :icon="Plus" @click="showDialog(null)"
+        >新增配置</el-button
+      >
+    </div>
+
+    <ConfigCardList
+      :configs="configs"
+      :testing-id="testingId"
+      :providers="providers"
+      @test="testConfig"
+      @edit="showDialog"
+      @set-active="setActive"
+      @delete="delConfig"
+      @add="showDialog(null)"
     />
 
-    <el-card class="tts-card" shadow="hover">
-      <template #header>
-        <div class="tts-header">
-          <span>语音识别/合成</span>
-          <el-tag size="small" type="success">{{ currentProviderName }}</el-tag>
-        </div>
-      </template>
-      <div class="tts-grid">
-        <div class="tts-item">
-          <span class="tts-label">服务提供方</span>
+    <ConfigEditDialog
+      ref="editDialogRef"
+      v-model="dialogVisible"
+      :editing-id="editingId"
+      :form="form"
+      :rules="rules"
+      :providers="providers"
+      :current-provider-schema="currentProviderSchema"
+      :detecting-models="detectingModels"
+      :detected-models="detectedModels"
+      :detect-error="detectError"
+      :saving="saving"
+      :show-advanced="showAdvanced"
+      :show-detect="showDetect"
+      :model-placeholder="modelPlaceholder"
+      @save="saveConfig"
+      @on-provider-change="onProviderChange"
+      @detect-models="detectModels"
+    >
+      <template #extraFields>
+        <el-form-item label="语音类型">
           <el-select
-            v-model="apiType"
-            size="small"
-            placeholder="选择服务提供方"
-            style="width: 260px"
-            @change="onProviderChange"
+            v-if="isVolcengine"
+            v-model="form.voiceType"
+            filterable
+            placeholder="选择语音"
+            style="width: 100%"
           >
-            <el-option
-              v-for="p in providers"
-              :key="p.id"
-              :label="p.name"
-              :value="p.id"
-            />
-          </el-select>
-        </div>
-        <div class="tts-item" v-if="needsApiKey">
-          <span class="tts-label">API Key</span>
-          <el-input
-            v-model="ttsApiKey"
-            size="small"
-            placeholder="API Key"
-            type="password"
-            show-password
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">{{ isVolcengine ? '语音合成大模型' : '模型名称' }}</span>
-          <el-input
-            v-model="ttsResourceId"
-            size="small"
-            :placeholder="isVolcengine ? 'seed-tts-2.0' : '模型名称'"
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item" v-if="!isVolcengine">
-          <span class="tts-label">接口地址</span>
-          <el-input
-            v-model="baseUrl"
-            size="small"
-            placeholder="接口地址"
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item" v-if="isVolcengine">
-          <span class="tts-label">复刻资源ID</span>
-          <el-input
-            v-model="cloneResourceId"
-            size="small"
-            placeholder="volc.megatts.timbre"
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item" v-if="isVolcengine">
-          <span class="tts-label">APP ID</span>
-          <el-input
-            v-model="realtimeAppId"
-            size="small"
-            placeholder="火山引擎APP ID"
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item" v-if="isVolcengine">
-          <span class="tts-label">Access Token</span>
-          <el-input
-            v-model="realtimeAccessToken"
-            size="small"
-            placeholder="火山引擎Access Token"
-            type="password"
-            show-password
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item" v-if="isVolcengine">
-          <span class="tts-label">Secret Key</span>
-          <el-input
-            v-model="realtimeSecretKey"
-            size="small"
-            placeholder="火山引擎Secret Key"
-            type="password"
-            show-password
-            style="width: 260px"
-          />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">默认语音</span>
-          <el-input
-            v-if="!isVolcengine"
-            v-model="ttsVoiceType"
-            size="small"
-            placeholder="语音名称"
-            style="width: 260px"
-          />
-          <el-select v-else v-model="ttsVoiceType" size="small" style="width: 240px">
             <el-option
               v-for="v in voicePresets"
               :key="v.name"
@@ -124,340 +67,260 @@ SPDX-License-Identifier: AGPL-3.0-only
               :value="v.name"
             />
           </el-select>
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">语速</span>
-          <el-slider
-            v-model="ttsSpeed"
-            :min="0.5"
-            :max="2.0"
-            :step="0.1"
-            size="small"
-            show-input
-            style="width: 180px"
+          <el-input
+            v-else
+            v-model="form.voiceType"
+            placeholder="语音名称"
           />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">音调(半音)</span>
-          <el-slider
-            v-model="ttsPitch"
-            :min="-12"
-            :max="12"
-            :step="1"
-            size="small"
-            show-input
-            style="width: 180px"
-          />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">音量</span>
-          <el-slider
-            v-model="ttsVolume"
-            :min="0.5"
-            :max="2.0"
-            :step="0.1"
-            size="small"
-            show-input
-            style="width: 180px"
-          />
-        </div>
-        <div class="tts-item">
-          <span class="tts-label">试听</span>
-          <el-button size="small" @click="testTts" :loading="ttsTesting"
-            >测试</el-button
-          >
-          <audio
-            v-if="ttsAudio"
-            :src="ttsAudio"
-            controls
-            style="width: 200px; height: 28px; margin-left: 8px"
-          />
-        </div>
-        <div class="tts-item" v-if="ttsTestResult">
-          <span class="tts-label">状态</span>
-          <span
-            :style="{
-              color:
-                ttsTestResult === 'ok'
-                  ? 'var(--ac-color-success)'
-                  : 'var(--ac-color-danger)',
-            }"
-            >{{ ttsTestResult === "ok" ? "连接正常" : "连接失败" }}</span
-          >
-        </div>
-      </div>
-      <div
-        v-if="isVolcengine"
-        style="
-          margin-top: 12px;
-          font-size: 12px;
-          color: var(--el-text-color-secondary);
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-        "
-      >
-        <span>快捷入口：</span>
-        <el-link
-          href="https://console.volcengine.com/speech/new/setting/apikeys?projectName=default"
-          target="_blank"
-          class="quick-link"
-          >API Key管理</el-link
-        >
-        <el-link
-          href="https://console.volcengine.com/speech/service/10035?AppID=3815252154"
-          target="_blank"
-          class="quick-link"
-          >豆包语音合成模型</el-link
-        >
-        <el-link
-          href="https://console.volcengine.com/speech/service/10036?AppID=3815252154"
-          target="_blank"
-          class="quick-link"
-          >声音复刻模型</el-link
-        >
-        <el-link
-          href="https://console.volcengine.com/speech/new/experience/clone?_vtm_=a86845.b103859.0_0.0_0.0.242_7650005566333666822"
-          target="_blank"
-          class="quick-link"
-          >声音复刻</el-link
-        >
-        <el-link
-          href="https://console.volcengine.com/speech/new/voices?_vtm_=a86845.b103859.0_0.0_0.0.242_7650005566333666822"
-          target="_blank"
-          class="quick-link"
-          >音色管理</el-link
-        >
-      </div>
-      <div style="margin-top: 12px">
-        <el-button
-          type="primary"
-          size="small"
-          @click="saveAllTts"
-          :loading="ttsSaving"
-          >保存配置</el-button
-        >
-      </div>
-    </el-card>
+        </el-form-item>
 
-    <el-empty v-if="!ttsConfig" description="暂无语音模型配置" />
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="语速">
+              <el-input-number
+                v-model="form.speed"
+                :min="0.5"
+                :max="2.0"
+                :step="0.1"
+                :precision="1"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="音调">
+              <el-input-number
+                v-model="form.pitch"
+                :min="-12"
+                :max="12"
+                :step="1"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="音量">
+              <el-input-number
+                v-model="form.volume"
+                :min="0.5"
+                :max="2.0"
+                :step="0.1"
+                :precision="1"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <template v-if="isVolcengine">
+          <el-form-item label="复刻资源ID">
+            <el-input
+              v-model="form.cloneResourceId"
+              placeholder="volc.megatts.timbre"
+            />
+          </el-form-item>
+          <el-row :gutter="12">
+            <el-col :span="8">
+              <el-form-item label="APP ID">
+                <el-input
+                  v-model="form.realtimeAppId"
+                  placeholder="火山引擎APP ID"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Access Token">
+                <el-input
+                  v-model="form.realtimeAccessToken"
+                  type="password"
+                  show-password
+                  placeholder="Access Token"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Secret Key">
+                <el-input
+                  v-model="form.realtimeSecretKey"
+                  type="password"
+                  show-password
+                  placeholder="Secret Key"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <div class="quick-links">
+            <span>快捷入口：</span>
+            <el-link
+              href="https://console.volcengine.com/speech/new/setting/apikeys?projectName=default"
+              target="_blank"
+              class="quick-link"
+              >API Key管理</el-link
+            >
+            <el-link
+              href="https://console.volcengine.com/speech/service/10035?AppID=3815252154"
+              target="_blank"
+              class="quick-link"
+              >豆包语音合成模型</el-link
+            >
+            <el-link
+              href="https://console.volcengine.com/speech/service/10036?AppID=3815252154"
+              target="_blank"
+              class="quick-link"
+              >声音复刻模型</el-link
+            >
+            <el-link
+              href="https://console.volcengine.com/speech/new/experience/clone"
+              target="_blank"
+              class="quick-link"
+              >声音复刻</el-link
+            >
+            <el-link
+              href="https://console.volcengine.com/speech/new/voices"
+              target="_blank"
+              class="quick-link"
+              >音色管理</el-link
+            >
+          </div>
+        </template>
+      </template>
+    </ConfigEditDialog>
+
+    <TestResultDialog v-model="testResultVisible" :test-result="testResult" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { ElMessage } from "element-plus";
+import { ref, computed, watch, nextTick, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
+import { useModelConfig } from "./composables/useModelConfig";
+import ConfigCardList from "./components/ConfigCardList.vue";
+import ConfigEditDialog from "./components/ConfigEditDialog.vue";
+import TestResultDialog from "./components/TestResultDialog.vue";
 
-const { get, post, put } = useApi();
+const { get } = useApi();
 
-const ttsConfig = ref<any>(null);
-const apiType = ref("volcengine");
-const ttsApiKey = ref("");
-const baseUrl = ref("https://openspeech.bytedance.com");
-const ttsVoiceType = ref("zh_female_vv_uranus_bigtts");
-const ttsResourceId = ref("seed-tts-2.0");
-const cloneResourceId = ref("volc.megatts.timbre");
-const realtimeAppId = ref("");
-const realtimeAccessToken = ref("");
-const realtimeSecretKey = ref("");
-const ttsSpeed = ref(1.0);
-const ttsPitch = ref(0);
-const ttsVolume = ref(1.0);
-const ttsAudio = ref("");
-const ttsTesting = ref(false);
-const ttsTestResult = ref("");
-const voicePresets = ref<any[]>([]);
-const ttsSaving = ref(false);
-const providers = ref<any[]>([]);
-
-const currentProvider = computed(() =>
-  providers.value.find((p) => p.id === apiType.value)
-);
-const currentProviderName = computed(
-  () => currentProvider.value?.name || "未选择"
-);
-const isVolcengine = computed(() => apiType.value === "volcengine");
-const needsApiKey = computed(() => apiType.value !== "edge" && apiType.value !== "cosyvoice");
-
-function onProviderChange() {
-  const p = currentProvider.value;
-  if (p) {
-    if (p.defaultBaseUrl) baseUrl.value = p.defaultBaseUrl;
-    if (p.defaultModel) ttsResourceId.value = p.defaultModel;
-  }
-}
-
-async function fetchProviders() {
-  try {
-    providers.value = (await get<any[]>("/api/tts/providers")) || [];
-  } catch {
-    providers.value = [
-      { id: "volcengine", name: "火山引擎", defaultBaseUrl: "https://openspeech.bytedance.com", defaultModel: "seed-tts-2.0" },
-      { id: "openai", name: "OpenAI", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "tts-1" },
-      { id: "azure", name: "Azure Speech", defaultBaseUrl: "https://tts.speech.microsoft.com", defaultModel: "azure-tts" },
-      { id: "edge", name: "Edge TTS", defaultBaseUrl: "https://speech.platform.bing.com", defaultModel: "edge-tts" },
-      { id: "elevenlabs", name: "ElevenLabs", defaultBaseUrl: "https://api.elevenlabs.io/v1", defaultModel: "eleven_multilingual_v2" },
-      { id: "minimax", name: "MiniMax", defaultBaseUrl: "https://api.minimax.chat/v1", defaultModel: "speech-01-hd" },
-      { id: "aliyun", name: "阿里云", defaultBaseUrl: "https://nls-gateway.cn-shanghai.aliyuncs.com", defaultModel: "nls-tts" },
-      { id: "cosyvoice", name: "CosyVoice", defaultBaseUrl: "http://127.0.0.1:5000", defaultModel: "cosyvoice-v2" },
-    ];
-  }
-}
-
-onMounted(async () => {
-  await fetchProviders();
-  fetchTtsConfig();
-  fetchVoices();
+const modelConfig = useModelConfig({
+  apiBase: "/api/tts",
+  activatePath: "/activate",
+  withScenario: false,
+  withDetect: false,
+  defaultApiType: "volcengine",
+  defaultModel: "seed-tts-2.0",
+  defaultBaseUrl: "https://openspeech.bytedance.com",
+  modelLabel: "语音模型",
+  showAdvanced: false,
+  showDetect: false,
+  modelPlaceholder: "seed-tts-2.0 / tts-1 / eleven_multilingual_v2",
+  defaultIsActive: 1,
+  extraFormFields: {
+    voiceType: "zh_female_vv_uranus_bigtts",
+    speed: 1.0,
+    pitch: 0,
+    volume: 1.0,
+    cloneResourceId: "volc.megatts.timbre",
+    realtimeAppId: "",
+    realtimeAccessToken: "",
+    realtimeSecretKey: "",
+  },
+  transformPayload: (payload: any) => {
+    return {
+      name: payload.name,
+      apiType: payload.apiType,
+      apiKey: payload.apiKey,
+      baseUrl: payload.baseUrl,
+      resourceId: payload.modelName,
+      voiceType: payload.voiceType,
+      speed: payload.speed,
+      pitch: payload.pitch,
+      volume: payload.volume,
+      cloneResourceId: payload.cloneResourceId,
+      realtimeAppId: payload.realtimeAppId,
+      realtimeAccessToken: payload.realtimeAccessToken,
+      realtimeSecretKey: payload.realtimeSecretKey,
+    };
+  },
+  transformConfig: (config: any) => {
+    if (!config) return config;
+    return {
+      ...config,
+      modelName: config.resourceId || config.modelName || "",
+    };
+  },
+  testResultMapper: (result: any) => ({
+    success: true,
+    latencyMs: 0,
+    message: result?.msg || "连接测试成功",
+    reply: "",
+  }),
 });
 
-async function fetchTtsConfig() {
-  try {
-    const r: any = await get("/api/tts/configs");
-    const configs = r || [];
-    const cfg = configs.find((c: any) => c.isActive) || configs[0];
-    if (cfg) {
-      ttsConfig.value = cfg;
-      ttsApiKey.value = cfg.apiKey || "";
-      apiType.value = cfg.apiType || "volcengine";
-      baseUrl.value = cfg.baseUrl || "https://openspeech.bytedance.com";
-      ttsResourceId.value = cfg.resourceId || "seed-tts-2.0";
-      cloneResourceId.value = cfg.cloneResourceId || "volc.megatts.timbre";
-      ttsVoiceType.value = cfg.voiceType || "zh_female_vv_uranus_bigtts";
-      ttsSpeed.value = cfg.speed || 1.0;
-      ttsPitch.value = cfg.pitch || 0;
-      ttsVolume.value = cfg.volume || 1.0;
-      realtimeAppId.value = cfg.realtimeAppId || "";
-      realtimeAccessToken.value = cfg.realtimeAccessToken || "";
-      realtimeSecretKey.value = cfg.realtimeSecretKey || "";
-    }
-  } catch (e: any) {
-    console.error("fetchTtsConfig failed", e);
-    ttsConfig.value = null;
-  }
-}
+const {
+  configs,
+  providers,
+  currentProviderSchema,
+  dialogVisible,
+  detectingModels,
+  detectedModels,
+  detectError,
+  editingId,
+  saving,
+  testingId,
+  testResultVisible,
+  testResult,
+  form,
+  rules,
+  showAdvanced,
+  showDetect,
+  modelPlaceholder,
+  showDialog,
+  saveConfig,
+  testConfig,
+  setActive,
+  delConfig,
+  onProviderChange,
+  detectModels,
+} = modelConfig;
 
-async function fetchVoices() {
+const isVolcengine = computed(() => form.apiType === "volcengine");
+const voicePresets = ref<any[]>([]);
+
+onMounted(async () => {
   try {
-    voicePresets.value = await get("/api/tts/voices");
+    voicePresets.value = (await get<any[]>("/api/tts/voices")) || [];
   } catch {
     voicePresets.value = [];
   }
-}
+});
 
-async function saveAllTts() {
-  ttsSaving.value = true;
-  try {
-    const payload: any = {
-      apiType: apiType.value,
-      apiKey: ttsApiKey.value,
-      baseUrl: baseUrl.value,
-      resourceId: ttsResourceId.value,
-      voiceType: ttsVoiceType.value,
-      speed: ttsSpeed.value,
-      pitch: ttsPitch.value,
-      volume: ttsVolume.value,
-    };
-    if (isVolcengine.value) {
-      payload.cloneResourceId = cloneResourceId.value;
-      payload.realtimeAppId = realtimeAppId.value;
-      payload.realtimeAccessToken = realtimeAccessToken.value;
-      payload.realtimeSecretKey = realtimeSecretKey.value;
-    }
-    if (ttsConfig.value?.id) {
-      await put("/api/tts/configs/" + ttsConfig.value.id, payload);
-    } else {
-      const r = await post("/api/tts/configs", {
-        ...payload,
-        name: "默认配置",
-        isActive: 1,
-      });
-      ttsConfig.value = r;
-    }
-    ttsTestResult.value = "";
-    ElMessage.success("语音配置保存成功");
-  } catch (err: any) {
-    ElMessage.error(err?.message || "保存失败");
-  } finally {
-    ttsSaving.value = false;
-  }
-}
+const editDialogRef = ref<InstanceType<typeof ConfigEditDialog>>();
 
-async function testTts() {
-  ttsTesting.value = true;
-  ttsAudio.value = "";
-  ttsTestResult.value = "";
-  try {
-    if (!ttsConfig.value?.id) {
-      const payload: any = {
-        apiType: apiType.value,
-        apiKey: ttsApiKey.value,
-        baseUrl: baseUrl.value,
-        resourceId: ttsResourceId.value,
-        voiceType: ttsVoiceType.value,
-        speed: ttsSpeed.value,
-        pitch: ttsPitch.value,
-        volume: ttsVolume.value,
-      };
-      if (isVolcengine.value) {
-        payload.cloneResourceId = cloneResourceId.value;
-        payload.realtimeAppId = realtimeAppId.value;
-        payload.realtimeAccessToken = realtimeAccessToken.value;
-        payload.realtimeSecretKey = realtimeSecretKey.value;
-      }
-      const r = await post("/api/tts/configs", {
-        ...payload,
-        name: "默认配置",
-        isActive: 1,
-      });
-      ttsConfig.value = r;
-      if (!ttsConfig.value?.id) {
-        return;
-      }
-    }
-    const res: any = await post("/api/tts/synthesize", {
-      voiceId: ttsConfig.value.id,
-      text: "测试",
-    });
-    ttsAudio.value = res?.audioUrl || res?.data?.audioUrl || "";
-    ttsTestResult.value = "ok";
-  } catch {
-    ttsTestResult.value = "fail";
-  } finally {
-    ttsTesting.value = false;
+watch(dialogVisible, async (v) => {
+  if (v) {
+    await nextTick();
+    modelConfig.dialogFormRef.value = editDialogRef.value?.formRef ?? null;
   }
-}
+});
 </script>
 
 <style scoped>
-.voice-config {
-  padding: 0;
-}
-.tts-card {
-  margin-bottom: 16px;
-}
-.tts-header {
+.toolbar {
   display: flex;
-  align-items: center;
   gap: 8px;
-  font-weight: 600;
-  font-size: 15px;
+  margin-bottom: 14px;
 }
-.tts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-}
-.tts-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tts-label {
-  font-size: 13px;
+.quick-links {
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
-  min-width: 70px;
-  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
 }
 .quick-link {
   color: var(--el-color-primary) !important;

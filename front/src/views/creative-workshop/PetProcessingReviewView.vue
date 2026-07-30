@@ -205,6 +205,13 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             >查看帧</el-button>
             <el-button
               size="small"
+              type="primary"
+              plain
+              :icon="Edit"
+              @click="goActionEditor(action)"
+            >编辑动作</el-button>
+            <el-button
+              size="small"
               :icon="Switch"
               :disabled="!canSwitchAttempt(action)"
               @click="openAttemptDialog(action)"
@@ -464,6 +471,7 @@ import {
   Close,
   Picture,
   Download,
+  Edit,
 } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 import { useApi } from "../../composables/useApi";
@@ -1000,6 +1008,16 @@ function confirmSwitchAttempt() {
       }
     })
     .catch(() => {});
+}
+
+function goActionEditor(action: ProcessingActionInfo) {
+  router.push({
+    name: "creativeWorkshopActionEditor",
+    params: {
+      processingTaskId: processingTaskId.value,
+      actionKey: action.actionKey,
+    },
+  });
 }
 
 async function openFrameDialog(action: ProcessingActionInfo) {

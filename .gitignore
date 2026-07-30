@@ -108,3 +108,16 @@ desktop/scripts/.publish-config.json
 
 # Backend large zip archives
 backend/pkg.zip
+
+# TRAE temp files
+.trae-html-share-packages/
+
+# Temp archives
+backend-src.zip
+backend-src.zip.tmp
+
+# Test binaries
+backend/worker.test.exe
+
+# State machine refactor acceptance temp
+state-machine-refactor-acceptance/

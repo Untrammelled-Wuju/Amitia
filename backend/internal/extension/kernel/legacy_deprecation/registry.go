@@ -3,6 +3,10 @@ package legacy_deprecation
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +14,52 @@ import (
 	"sync"
 	"time"
 )
+
+func ValidatePackageLegacyBoundary(root string) error {
+	fileSet := token.NewFileSet()
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		parsed, err := parser.ParseFile(fileSet, path, nil, parser.ImportsOnly|parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		for _, imported := range parsed.Imports {
+			if strings.Contains(imported.Path.Value, "/package_legacy_migration") && filepath.Base(filepath.Dir(path)) != "package_legacy_migration" {
+				return fmt.Errorf("legacy_deprecation: production package imports migration adapter: %s", path)
+			}
+		}
+		parsed, err = parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		var callPath string
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			identifier, ok := call.Fun.(*ast.SelectorExpr)
+			if ok && identifier.Sel.Name == "installLegacyPackage" {
+				callPath = path
+				return false
+			}
+			if name, ok := call.Fun.(*ast.Ident); ok && name.Name == "installLegacyPackage" {
+				callPath = path
+				return false
+			}
+			return true
+		})
+		if callPath != "" {
+			return fmt.Errorf("legacy_deprecation: production legacy installer call: %s", callPath)
+		}
+		return nil
+	})
+}
 
 type DeprecationStatus string
 

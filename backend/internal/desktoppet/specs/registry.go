@@ -5,17 +5,18 @@ package specs
 const specVersion = 1
 
 func GetSpec(actionKey string) (ActionGenerationSpec, bool) {
-	spec, ok := defaultSpecs[actionKey]
+	cs, ok := CatalogGet(actionKey)
 	if !ok {
 		return ActionGenerationSpec{}, false
 	}
-	return spec, true
+	return fromContracts(cs), true
 }
 
 func AllSpecs() []ActionGenerationSpec {
-	out := make([]ActionGenerationSpec, 0, len(defaultSpecs))
-	for _, spec := range defaultSpecs {
-		out = append(out, spec)
+	all := CatalogAll()
+	out := make([]ActionGenerationSpec, 0, len(all))
+	for _, cs := range all {
+		out = append(out, fromContracts(cs))
 	}
 	return out
 }

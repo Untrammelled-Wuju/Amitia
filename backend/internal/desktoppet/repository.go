@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const desktopPetTimeFormat = "2006-01-02 15:04:05"
@@ -45,16 +46,27 @@ type Repository interface {
 	UpdateActionStatusNoTx(actionID string, updates map[string]interface{}) error
 	IncrementActionAttempt(tx *gorm.DB, actionID string) error
 	CreateCallLog(log *GenerationCallLog) error
+	EnsureGenerationFrames(tx *gorm.DB, frames []GenerationFrame) error
+	UpdateTaskOwned(taskID, executionID string, updates map[string]interface{}) (bool, error)
+	RefreshLeaseOwned(taskID, executionID, leaseExpiresAt, now string) (bool, error)
+	RecoverExpiredTask(taskID, expectedExecutionID, expectedLeaseExpiresAt, now string) (bool, error)
+	UpdateActionStatusOwned(tx *gorm.DB, actionID, executionID string, updates map[string]interface{}) (bool, error)
+	GetTaskRowVersion(taskID string) (int64, error)
+	UpdateTaskStatusWithVersion(taskID string, expectedVersion int64, updates map[string]interface{}) (bool, error)
+	ResetActionToPending(actionID string) error
+	ResetRunningFramesToPending(taskID string) error
 }
 
 type imageGenConfigView struct {
 	ID        int    `gorm:"column:id"`
 	Name      string `gorm:"column:name"`
+	ApiType   string `gorm:"column:api_type"`
 	ApiKey    string `gorm:"column:api_key"`
 	ModelName string `gorm:"column:model_name"`
 	BaseUrl   string `gorm:"column:base_url"`
 	IsActive  int    `gorm:"column:is_active"`
 	Enabled   int    `gorm:"column:enabled"`
+	UpdatedAt string `gorm:"column:updated_at"`
 }
 
 func (imageGenConfigView) TableName() string { return "image_gen_configs" }
@@ -339,4 +351,107 @@ func (r *repository) IncrementActionAttempt(tx *gorm.DB, actionID string) error 
 
 func (r *repository) CreateCallLog(log *GenerationCallLog) error {
 	return r.db.Create(log).Error
+}
+
+func (r *repository) EnsureGenerationFrames(tx *gorm.DB, frames []GenerationFrame) error {
+	if len(frames) == 0 {
+		return nil
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&frames).Error
+}
+
+func (r *repository) UpdateTaskOwned(taskID, executionID string, updates map[string]interface{}) (bool, error) {
+	result := r.db.Model(&GenerationTask{}).
+		Where("id = ? AND execution_id = ? AND status = ?", taskID, executionID, "processing").
+		Updates(updates)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) RefreshLeaseOwned(taskID, executionID, leaseExpiresAt, now string) (bool, error) {
+	result := r.db.Model(&GenerationTask{}).
+		Where("id = ? AND execution_id = ? AND status = ?", taskID, executionID, "processing").
+		Updates(map[string]interface{}{
+			"lease_expires_at":  leaseExpiresAt,
+			"last_heartbeat_at": now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) RecoverExpiredTask(taskID, expectedExecutionID, expectedLeaseExpiresAt, now string) (bool, error) {
+	result := r.db.Model(&GenerationTask{}).
+		Where("id = ? AND execution_id = ? AND lease_expires_at = ? AND status = ?", taskID, expectedExecutionID, expectedLeaseExpiresAt, "processing").
+		Updates(map[string]interface{}{
+			"status":            "queued",
+			"current_stage":     "queued",
+			"worker_id":         "",
+			"execution_id":      "",
+			"lease_expires_at":  "",
+			"last_heartbeat_at": "",
+			"updated_at":        now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) UpdateActionStatusOwned(tx *gorm.DB, actionID, executionID string, updates map[string]interface{}) (bool, error) {
+	result := tx.Model(&GenerationTaskAction{}).
+		Where("id = ? AND EXISTS (SELECT 1 FROM desktop_pet_generation_tasks WHERE id = desktop_pet_generation_task_actions.task_id AND execution_id = ? AND status = ?)", actionID, executionID, "processing").
+		Updates(updates)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) GetTaskRowVersion(taskID string) (int64, error) {
+	var version int64
+	err := r.db.Model(&GenerationTask{}).Where("id = ?", taskID).
+		Select("COALESCE(row_version, 0)").Scan(&version).Error
+	return version, err
+}
+
+func (r *repository) UpdateTaskStatusWithVersion(taskID string, expectedVersion int64, updates map[string]interface{}) (bool, error) {
+	result := r.db.Model(&GenerationTask{}).
+		Where("id = ? AND row_version = ?", taskID, expectedVersion).
+		Updates(updates)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) ResetActionToPending(actionID string) error {
+	now := time.Now().Format(desktopPetTimeFormat)
+	return r.db.Model(&GenerationTaskAction{}).Where("id = ?", actionID).
+		Updates(map[string]interface{}{
+			"status":        "pending",
+			"progress":      0,
+			"error_code":    "",
+			"error_message": "",
+			"started_at":    "",
+			"completed_at":  "",
+			"updated_at":    now,
+		}).Error
+}
+
+func (r *repository) ResetRunningFramesToPending(taskID string) error {
+	now := time.Now().Format(desktopPetTimeFormat)
+	return r.db.Model(&GenerationFrame{}).
+		Where("task_id = ? AND status = ?", taskID, "running").
+		Updates(map[string]interface{}{
+			"status":        "pending",
+			"error_code":    "",
+			"error_message": "",
+			"started_at":    "",
+			"completed_at":  "",
+			"updated_at":    now,
+		}).Error
 }

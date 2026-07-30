@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 type KernelAPI struct {
@@ -182,71 +181,18 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 }
 
 func (api *KernelAPI) previewInstall(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, package_security.DefaultArchivePolicy().MaxArchiveBytes+(1<<20))
-	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": err.Error()})
-		return
-	}
-	file, header, err := c.Request.FormFile("package")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	defer file.Close()
-	preview, err := api.runtime.Kernel.PreviewPackage(c.Request.Context(), kernelruntime.PackagePreviewRequest{UserID: kernelAPIUser(c), ScopeType: kernelAPIScopeType(c), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename}, file)
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, preview)
+	retiredPackagePreviewEndpoint(c)
 }
 
 func (api *KernelAPI) install(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, package_security.DefaultArchivePolicy().MaxArchiveBytes+(1<<20))
-	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": err.Error()})
-		return
-	}
-	file, header, err := c.Request.FormFile("package")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	defer file.Close()
-	userID := kernelAPIUser(c)
-	scopeType := kernelAPIScopeType(c)
-	scopeID := c.Request.FormValue("scopeId")
-	preview, err := api.runtime.Kernel.PreviewPackage(c.Request.Context(), kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: header.Filename}, file)
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		return
-	}
-	if len(preview.RequiredConfirmations) > 0 {
-		c.Header("Deprecation", "true")
-		c.JSON(http.StatusConflict, gin.H{"sessionId": preview.SessionID, "requiredConfirmations": preview.RequiredConfirmations, "preview": preview})
-		return
-	}
-	result, err := api.runtime.Kernel.ExecutePackageInstall(c.Request.Context(), kernelruntime.PackageInstallRequest{SessionID: preview.SessionID, UserID: userID, ScopeType: scopeType, ScopeID: scopeID, Confirmations: map[string]bool{}})
-	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, result)
+	retiredPackageInstallEndpoint(c)
 }
 
 func kernelAPIUser(c *gin.Context) string {
-	if value, exists := c.Get("authenticated_user_id"); exists {
+	if value, exists := c.Get(authenticatedUserKey); exists {
 		return fmt.Sprint(value)
 	}
-	return "kernel-api"
+	return ""
 }
 
 func kernelAPIScopeType(c *gin.Context) string {
@@ -335,7 +281,8 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	}
 	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), extID, kernelAPIUser(c), scopeType, scopeID)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		status, code, msg := kernelruntime.PackageErrorResponse(err)
+		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
 	c.JSON(http.StatusOK, op)
@@ -403,7 +350,8 @@ func (api *KernelAPI) rollback(c *gin.Context) {
 	}
 	result, err := api.runtime.Kernel.ExecutePackageRollback(c.Request.Context(), extID, version, kernelAPIUser(c), scopeType, scopeID)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		status, code, msg := kernelruntime.PackageErrorResponse(err)
+		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
 	c.JSON(http.StatusOK, result)

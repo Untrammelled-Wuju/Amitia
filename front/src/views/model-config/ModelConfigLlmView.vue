@@ -52,6 +52,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       :detected-models="detectedModels"
       :detect-error="detectError"
       :saving="saving"
+      :show-advanced="showAdvanced"
+      :show-detect="showDetect"
+      :model-placeholder="modelPlaceholder"
       @save="saveConfig"
       @on-provider-change="onProviderChange"
       @detect-models="detectModels"
@@ -89,6 +92,9 @@ const {
   routeAssignments,
   form,
   rules,
+  showAdvanced,
+  showDetect,
+  modelPlaceholder,
   showDialog,
   saveConfig,
   testConfig,

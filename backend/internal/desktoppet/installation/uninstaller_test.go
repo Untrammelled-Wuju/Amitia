@@ -15,7 +15,7 @@ func TestUninstall_Success_DeletesDirAndUpdatesStatus(t *testing.T) {
 		t.Fatalf("安装目录应存在: %v", err)
 	}
 
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func TestUninstall_EnabledInstance_MarksInactiveFirst(t *testing.T) {
 	}
 
 	installDir := filepath.Join(dataDir, filepath.FromSlash(inst.InstallPath))
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestUninstall_EnabledInstance_MarksInactiveFirst(t *testing.T) {
 func TestUninstall_StateTransition_UninstallingToUninstalled(t *testing.T) {
 	svc, db, _, inst, _ := setupInstalledService(t)
 
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestUninstall_PreservesGenerationHistory(t *testing.T) {
 	processedDir := filepath.Join(genTaskDir, "processed", "version-1")
 	writeFile(t, filepath.Join(processedDir, "actions", "idle_normal", "action.json"), []byte("{}"))
 
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
@@ -106,27 +106,27 @@ func TestUninstall_PreservesGenerationHistory(t *testing.T) {
 func TestUninstall_NotFound_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.Uninstall("nonexistent_id")
+	err := svc.Uninstall(testUserID, "nonexistent_id")
 	assertInstallationError(t, err, ErrCodeInstallationNotFound)
 }
 
 func TestUninstall_EmptyID_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.Uninstall("")
+	err := svc.Uninstall(testUserID, "")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
 func TestUninstall_PathInjection_Rejected(t *testing.T) {
 	svc, _, _, _, _ := setupInstalledService(t)
 
-	err := svc.Uninstall("../escape")
+	err := svc.Uninstall(testUserID, "../escape")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 
-	err = svc.Uninstall("foo/bar")
+	err = svc.Uninstall(testUserID, "foo/bar")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 
-	err = svc.Uninstall("C:\\evil")
+	err = svc.Uninstall(testUserID, "C:\\evil")
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
@@ -134,7 +134,7 @@ func TestUninstall_AlreadyUninstalled_DirAlreadyGone(t *testing.T) {
 	svc, db, dataDir, inst, _ := setupInstalledService(t)
 
 	installDir := filepath.Join(dataDir, filepath.FromSlash(inst.InstallPath))
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("首次 Uninstall: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestUninstall_ProtectedPath_Rejected(t *testing.T) {
 	}
 
 	for _, segment := range []string{"..", "../", "..\\", "foo/bar"} {
-		err := un.Uninstall(segment)
+		err := un.Uninstall(testUserID, segment)
 		if err == nil {
 			t.Fatalf("segment=%s 期望被拒绝但得到 nil", segment)
 		}
@@ -182,7 +182,7 @@ func TestUninstall_RemovesRuntimeSettingsInDB(t *testing.T) {
 		t.Fatalf("EnableInstallation: %v", err)
 	}
 
-	if err := svc.Uninstall(inst.ID); err != nil {
+	if err := svc.Uninstall(testUserID, inst.ID); err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
 

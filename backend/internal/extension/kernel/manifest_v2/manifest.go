@@ -1,14 +1,18 @@
 package manifest_v2
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
@@ -242,11 +246,62 @@ var (
 )
 
 func Parse(data []byte) (Manifest, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := rejectDuplicateJSONKeys(decoder); err != nil {
+		return Manifest{}, fmt.Errorf("%w: %v", ErrInvalidManifest, err)
+	}
+	if token, err := decoder.Token(); err != io.EOF || token != nil {
+		return Manifest{}, fmt.Errorf("%w: trailing JSON content", ErrInvalidManifest)
+	}
 	var m Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
 		return Manifest{}, fmt.Errorf("%w: parse error: %v", ErrInvalidManifest, err)
 	}
 	return m, nil
+}
+
+func rejectDuplicateJSONKeys(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		keys := map[string]bool{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("object key is not a string")
+			}
+			if keys[key] {
+				return fmt.Errorf("duplicate JSON key %q", key)
+			}
+			keys[key] = true
+			if err := rejectDuplicateJSONKeys(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	case '[':
+		for decoder.More() {
+			if err := rejectDuplicateJSONKeys(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	default:
+		return nil
+	}
 }
 
 func (m Manifest) Validate() ValidationReport {
@@ -358,6 +413,23 @@ func (m Manifest) Validate() ValidationReport {
 			report.AddError(path+".type", "missing", "dependency type required")
 		} else if !depTypes[dep.Type] {
 			report.AddError(path+".type", "unknown_type", fmt.Sprintf("unknown dependency type: %s", dep.Type))
+		}
+		if dep.Version != "" {
+			if _, err := dependency.ParseRange(dep.Version); err != nil {
+				report.AddError(path+".version", "invalid_constraint", err.Error())
+			}
+		}
+	}
+	permissionPattern := regexp.MustCompile(`^[a-z][a-z0-9_.:-]{1,127}$`)
+	for i, permission := range m.Permissions {
+		if !permissionPattern.MatchString(permission.Name) {
+			report.AddError(fmt.Sprintf("permissions[%d].name", i), "invalid_permission", "permission name is invalid")
+		}
+	}
+	for i, resource := range m.Resources {
+		cleaned := path.Clean(strings.ReplaceAll(resource.Path, "\\", "/"))
+		if resource.Path == "" || strings.HasPrefix(cleaned, "../") || cleaned == ".." || strings.HasPrefix(cleaned, "/") {
+			report.AddError(fmt.Sprintf("resources[%d].path", i), "invalid_path", "resource path must stay inside package")
 		}
 	}
 	return report

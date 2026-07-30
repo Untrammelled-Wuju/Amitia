@@ -25,5 +25,6 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		g.POST("/generation-tasks/:taskId/actions/:actionKey/retry", handler.RetryAction)
 		g.GET("/generation-tasks/:taskId/events", handler.TaskEventsStream)
 		g.GET("/generation-tasks/:taskId/actions/:actionKey/frames/:frameIndex/image", handler.ActionFrameImage)
+		g.GET("/generation-tasks/:taskId/transitions", handler.GetTaskTransitions)
 	}
 }

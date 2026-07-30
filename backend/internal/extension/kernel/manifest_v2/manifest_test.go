@@ -217,3 +217,10 @@ func TestRoundTrip(t *testing.T) {
 		t.Errorf("expected id in output")
 	}
 }
+
+func TestParseRejectsDuplicateJSONKeys(t *testing.T) {
+	_, err := Parse([]byte(`{"manifestVersion":2,"manifestVersion":2}`))
+	if err == nil || !strings.Contains(err.Error(), "duplicate JSON key") {
+		t.Fatalf("expected duplicate key rejection, got %v", err)
+	}
+}

@@ -182,6 +182,17 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 	c.File(fullPath)
 }
 
+func (h *Handler) GetTaskTransitions(c *gin.Context) {
+	taskID := c.Param("taskId")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	records, err := h.service.GetTaskTransitions(taskID, limit)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	util.SuccessResponse(c, records)
+}
+
 func (h *Handler) TaskEventsStream(c *gin.Context) {
 	taskID := c.Param("taskId")
 	c.Header("Content-Type", "text/event-stream")

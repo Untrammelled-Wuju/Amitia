@@ -24,7 +24,7 @@ func (c *CleanupManager) CleanupTempDir(taskID string) error {
 		return fmt.Errorf("taskID is empty")
 	}
 	tmpDir := c.tempDir(taskID)
-	return removeDirWithRetry(tmpDir, 3)
+	return removeDirWithRetry(tmpDir, 5)
 }
 
 func (c *CleanupManager) CleanupProcessingVersion(taskID string, processingVersion int) error {
@@ -36,7 +36,7 @@ func (c *CleanupManager) CleanupProcessingVersion(taskID string, processingVersi
 	}
 
 	tmpDir := c.tempDir(taskID)
-	return removeDirWithRetry(tmpDir, 3)
+	return removeDirWithRetry(tmpDir, 5)
 }
 
 func (c *CleanupManager) CleanupFailedPackage(taskID, packageID string) error {
@@ -47,7 +47,7 @@ func (c *CleanupManager) CleanupFailedPackage(taskID, packageID string) error {
 		return fmt.Errorf("packageID is empty")
 	}
 	pkgDir := c.packageDir(taskID, packageID)
-	return removeDirWithRetry(pkgDir, 3)
+	return removeDirWithRetry(pkgDir, 5)
 }
 
 func (c *CleanupManager) EnsureVersionDir(taskID string, processingVersion int) (string, error) {
@@ -109,24 +109,31 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	for i := 0; i < maxAttempts; i++ {
 		if err := os.RemoveAll(dir); err != nil {
 			lastErr = err
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
+		time.Sleep(100 * time.Millisecond)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return nil
 		}
 		if runtime.GOOS == "windows" {
-			if err := exec.Command("cmd", "/c", "rmdir", "/s", "/q", dir).Run(); err == nil {
+			if err := powershellRemoveDir(dir); err == nil {
+				time.Sleep(100 * time.Millisecond)
 				if _, err := os.Stat(dir); os.IsNotExist(err) {
 					return nil
 				}
 			}
 		}
 		lastErr = fmt.Errorf("directory still exists after removal: %s", dir)
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("failed to remove directory after %d attempts: %s", maxAttempts, dir)
 	}
 	return lastErr
+}
+
+func powershellRemoveDir(dir string) error {
+	cmd := exec.Command("pwsh", "-NoProfile", "-Command", fmt.Sprintf("Remove-Item -LiteralPath '%s' -Recurse -Force", dir))
+	return cmd.Run()
 }

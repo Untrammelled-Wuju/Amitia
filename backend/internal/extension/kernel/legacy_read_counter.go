@@ -2,7 +2,9 @@ package kernel
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
+	"time"
 )
 
 type LegacyReadCounter struct {
@@ -134,6 +136,15 @@ func (c *LegacyReadCounter) PackageReadCallsFallbacks() int64 {
 }
 
 func (c *LegacyReadCounter) Total() int64 {
+	if c.store != nil {
+		return c.PreviewUninstallFallbacks() +
+			c.DependenciesFallbacks() +
+			c.ListVersionsFallbacks() +
+			c.CompareVersionsFallbacks() +
+			c.ExportFallbacks() +
+			c.DependenciesListFallbacks() +
+			c.PackageReadCallsFallbacks()
+	}
 	return c.previewUninstall.Load() +
 		c.dependencies.Load() +
 		c.listVersions.Load() +
@@ -141,6 +152,20 @@ func (c *LegacyReadCounter) Total() int64 {
 		c.export.Load() +
 		c.dependenciesList.Load() +
 		c.packageReadCalls.Load()
+}
+
+func (c *LegacyReadCounter) BeginZeroWindow(ctx context.Context) error {
+	if c == nil || c.store == nil {
+		return fmt.Errorf("legacy read counter persistence unavailable")
+	}
+	return c.store.BeginZeroWindow(ctx)
+}
+
+func (c *LegacyReadCounter) ZeroWindowProof(ctx context.Context, minimum time.Duration) (LegacyZeroWindowProof, error) {
+	if c == nil || c.store == nil {
+		return LegacyZeroWindowProof{}, fmt.Errorf("legacy read counter persistence unavailable")
+	}
+	return c.store.ZeroWindowProof(ctx, minimum)
 }
 
 func (c *LegacyReadCounter) Snapshot() map[string]int64 {

@@ -43,9 +43,8 @@ func setupWorkerTestDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	sqlPath := filepath.Join("..", "..", "..", "data", "sql.sql")
-	if err := migration.ApplyInitialSQLFile(db, sqlPath); err != nil {
-		t.Fatalf("apply initial sql: %v", err)
+	if err := migration.ApplyBaseline(db); err != nil {
+		t.Fatalf("apply baseline: %v", err)
 	}
 	runner := migration.Runner{DB: db, SkipBackup: true}
 	if err := runner.Apply(migration.DefaultMigrations()); err != nil {
@@ -206,6 +205,20 @@ func assertTaskStatus(t *testing.T, db *gorm.DB, taskID, expected string) {
 	if task.Status != expected {
 		t.Fatalf("task %s status = %q, want %q", taskID, task.Status, expected)
 	}
+}
+
+func setTaskProcessing(t *testing.T, db *gorm.DB, task *desktoppet.GenerationTask, executionID string) {
+	t.Helper()
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if err := db.Model(&desktoppet.GenerationTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+		"status":       "processing",
+		"execution_id": executionID,
+		"updated_at":   now,
+	}).Error; err != nil {
+		t.Fatalf("set task processing: %v", err)
+	}
+	task.Status = "processing"
+	task.ExecutionID = executionID
 }
 
 type mockProvider struct {
@@ -1022,6 +1035,7 @@ func TestFinalizeTask_AllSucceededReturnsSucceeded(t *testing.T) {
 	taskID := "task-finalize-ok"
 	sourceRel := writeWorkerReferenceImage(t, dataDir, taskID)
 	task := insertTask(t, db, taskID, 1, sourceRel)
+	setTaskProcessing(t, db, task, "exec-finalize-ok")
 
 	results := []actionResult{
 		{actionID: "a1", status: "succeeded"},
@@ -1051,6 +1065,7 @@ func TestFinalizeTask_AllFailedReturnsFailed(t *testing.T) {
 	taskID := "task-finalize-failed"
 	sourceRel := writeWorkerReferenceImage(t, dataDir, taskID)
 	task := insertTask(t, db, taskID, 1, sourceRel)
+	setTaskProcessing(t, db, task, "exec-finalize-failed")
 
 	results := []actionResult{
 		{actionID: "a1", status: "failed"},
@@ -1077,6 +1092,7 @@ func TestFinalizeTask_PartialSuccessReturnsPartiallySucceeded(t *testing.T) {
 	taskID := "task-finalize-partial"
 	sourceRel := writeWorkerReferenceImage(t, dataDir, taskID)
 	task := insertTask(t, db, taskID, 1, sourceRel)
+	setTaskProcessing(t, db, task, "exec-finalize-partial")
 
 	results := []actionResult{
 		{actionID: "a1", status: "succeeded"},
@@ -1096,6 +1112,7 @@ func TestFinalizeTask_AllSkippedReturnsFailed(t *testing.T) {
 	taskID := "task-finalize-skipped"
 	sourceRel := writeWorkerReferenceImage(t, dataDir, taskID)
 	task := insertTask(t, db, taskID, 1, sourceRel)
+	setTaskProcessing(t, db, task, "exec-finalize-skipped")
 
 	results := []actionResult{
 		{actionID: "a1", status: "skipped"},
@@ -1118,6 +1135,7 @@ func TestFinalizeTask_CancelledWithSuccessReturnsPartiallySucceeded(t *testing.T
 	if err := db.Model(&desktoppet.GenerationTask{}).Where("id = ?", taskID).Update("cancel_requested_at", now).Error; err != nil {
 		t.Fatalf("set cancel: %v", err)
 	}
+	setTaskProcessing(t, db, task, "exec-finalize-cancelled-ok")
 
 	results := []actionResult{
 		{actionID: "a1", status: "succeeded"},
@@ -1140,6 +1158,7 @@ func TestFinalizeTask_CancelledAllFailedReturnsCancelled(t *testing.T) {
 	if err := db.Model(&desktoppet.GenerationTask{}).Where("id = ?", taskID).Update("cancel_requested_at", now).Error; err != nil {
 		t.Fatalf("set cancel: %v", err)
 	}
+	setTaskProcessing(t, db, task, "exec-finalize-cancelled-fail")
 
 	results := []actionResult{
 		{actionID: "a1", status: "failed"},

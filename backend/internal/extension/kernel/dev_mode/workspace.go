@@ -25,6 +25,7 @@ const (
 type DevelopmentWorkspace struct {
 	WorkspaceID     WorkspaceID
 	ExtensionID     ExtensionID
+	OwnerUserID     string
 	PathReference   string
 	ManifestPath    string
 	CurrentRevision RevisionID
@@ -32,6 +33,7 @@ type DevelopmentWorkspace struct {
 	WatchEnabled    bool
 	AutoReload      bool
 	DevTrust        bool
+	DevTrustVersion uint64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	LastReloadAt    time.Time
@@ -64,6 +66,7 @@ var (
 type RegisterWorkspaceInput struct {
 	WorkspaceID   WorkspaceID
 	ExtensionID   ExtensionID
+	OwnerUserID   string
 	PathReference string
 	ManifestPath  string
 	WatchEnabled  bool
@@ -86,6 +89,7 @@ func (r *WorkspaceRegistry) Register(ctx context.Context, in RegisterWorkspaceIn
 	ws := &DevelopmentWorkspace{
 		WorkspaceID:   in.WorkspaceID,
 		ExtensionID:   in.ExtensionID,
+		OwnerUserID:   in.OwnerUserID,
 		PathReference: in.PathReference,
 		ManifestPath:  in.ManifestPath,
 		Status:        WorkspaceStatusRegistered,
@@ -169,6 +173,7 @@ func (r *WorkspaceRegistry) GrantDevTrust(id WorkspaceID) error {
 		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
 	}
 	ws.DevTrust = true
+	ws.DevTrustVersion++
 	ws.UpdatedAt = time.Now().UTC()
 	return nil
 }
@@ -181,6 +186,7 @@ func (r *WorkspaceRegistry) RevokeDevTrust(id WorkspaceID) error {
 		return fmt.Errorf("%w: %s", ErrWorkspaceNotFound, id)
 	}
 	ws.DevTrust = false
+	ws.DevTrustVersion++
 	ws.UpdatedAt = time.Now().UTC()
 	return nil
 }

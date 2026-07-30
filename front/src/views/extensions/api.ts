@@ -600,16 +600,14 @@ export async function previewExtensionPackage(
   data.append("file", file);
   data.append("scopeType", scopeType);
   data.append("scopeId", scopeId);
-  const url = extensionId
-    ? `/api/extensions/${encodeURIComponent(extensionId)}/upgrade/preview`
-    : "/api/extensions/packages/import/preview";
-  const response = await apiClient.post(url, data, {
+  if (extensionId) data.append("expectedExtensionId", extensionId);
+  const response = await apiClient.post("/api/extensions/packages/artifacts", data, {
     onUploadProgress: (event) =>
       onProgress?.(
         event.total ? Math.round((event.loaded * 100) / event.total) : 0,
       ),
   });
-  return response.data as PackageImportPreview;
+  return response.data.preview as PackageImportPreview;
 }
 
 export async function fetchLocalExtensionPackageStatus() {
@@ -626,19 +624,7 @@ export async function installLocalExtensionPackage(
   file: File,
   onProgress?: (percent: number) => void,
 ) {
-  const data = new FormData();
-  data.append("package", file);
-  const response = await apiClient.post(
-    "/api/extensions/packages/install",
-    data,
-    {
-      onUploadProgress: (event) =>
-        onProgress?.(
-          event.total ? Math.round((event.loaded * 100) / event.total) : 0,
-        ),
-    },
-  );
-  return response.data as LocalExtensionPackage;
+  return previewExtensionPackage(file, "global", "", "", onProgress);
 }
 export async function previewExtensionDirectory(
   rootName: string,
@@ -647,17 +633,12 @@ export async function previewExtensionDirectory(
   scopeId: string,
   onProgress?: (percent: number) => void,
 ) {
-  const response = await apiClient.post(
-    "/api/extensions/packages/import/preview",
-    { rootName, files, scopeType, scopeId },
-    {
-      onUploadProgress: (event) =>
-        onProgress?.(
-          event.total ? Math.round((event.loaded * 100) / event.total) : 0,
-        ),
-    },
-  );
-  return response.data as PackageImportPreview;
+  void rootName;
+  void files;
+  void scopeType;
+  void scopeId;
+  void onProgress;
+  throw new Error("扩展目录直装已退役，请先构建 Manifest v2 .amitiax 扩展包");
 }
 export async function installExtensionPackage(
   preview: PackageImportPreview,
@@ -671,21 +652,37 @@ export async function installExtensionPackage(
   },
   upgradeId = "",
 ) {
-  const payload = {
-    sessionId: preview.sessionId,
-    scopeType: preview.scopeType,
-    scopeId: preview.scopeId,
-    confirmUnsigned: confirmations.unsigned,
-    confirmScripts: confirmations.scripts,
-    confirmedCapabilities: confirmations.capabilities,
-    confirmVersionChange: confirmations.versionChange,
-    confirmSignerChange: confirmations.signerChange,
-    confirmConfigMigration: confirmations.configMigration,
-  };
-  const url = upgradeId
-    ? `/api/extensions/${encodeURIComponent(upgradeId)}/upgrade`
-    : "/api/extensions/packages/import/install";
-  const response = await apiClient.post(url, payload);
+  const confirmationMap: Record<string, boolean> = {};
+  for (const key of preview.capabilityConfirmations ?? []) {
+    confirmationMap[key] = true;
+  }
+  confirmationMap["confirm.unsigned_dev"] = confirmations.unsigned;
+  confirmationMap["confirm.scripts"] = confirmations.scripts;
+  confirmationMap["confirm.version_change"] = confirmations.versionChange;
+  confirmationMap["confirm.signer_change"] = confirmations.signerChange;
+  confirmationMap["confirm.config_migration"] = confirmations.configMigration;
+  confirmationMap["confirm.permission_escalation"] =
+    confirmations.capabilities.length > 0;
+  const confirmed = await apiClient.post(
+    `/api/extensions/packages/previews/${encodeURIComponent(preview.sessionId)}/confirm`,
+    {
+      scopeType: preview.scopeType,
+      scopeId: preview.scopeId,
+      confirmations: confirmationMap,
+    },
+  );
+  const response = await apiClient.post(
+    upgradeId
+      ? "/api/extensions/packages/operations/update"
+      : "/api/extensions/packages/operations/install",
+    {
+      sessionId: preview.sessionId,
+      scopeType: preview.scopeType,
+      scopeId: preview.scopeId,
+      confirmationToken: confirmed.data.confirmationToken,
+      expectedExtensionId: upgradeId || undefined,
+    },
+  );
   return response.data as PackageOperationResult;
 }
 export async function fetchPackageVersions(

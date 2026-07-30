@@ -172,9 +172,9 @@ function openUserProfile() {
   height: 100%;
   background: var(--tp-glass-bg-strong);
   border-right: 1px solid var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   box-shadow: none;
   display: flex;
   flex-direction: column;
@@ -187,9 +187,9 @@ function openUserProfile() {
 :global(html[data-theme="dark"]) .side-nav {
   background: var(--tp-glass-bg-strong);
   border-right-color: var(--tp-glass-border);
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
+  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
 }
 
 .side-nav.is-collapsed {
