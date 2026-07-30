@@ -7,7 +7,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
 
 class DeveloperHomePage extends ConsumerWidget {
   const DeveloperHomePage({super.key});

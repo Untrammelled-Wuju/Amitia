@@ -153,7 +153,7 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
       runSpacing: 6,
       children: [
         if (plugin.hooks.isNotEmpty)
-          _InfoChip(label: 'Hook ${plugin.hooks.length}', icon: Icons.hook, color: context.accentPrimary),
+          _InfoChip(label: 'Hook ${plugin.hooks.length}', icon: Icons.link, color: context.accentPrimary),
         if (plugin.events.isNotEmpty)
           _InfoChip(label: '事件 ${plugin.events.length}', icon: Icons.event_outlined, color: context.info),
         if (plugin.schedules.isNotEmpty)
@@ -340,7 +340,7 @@ class _PluginDetailSheet extends StatelessWidget {
           Text(plugin.description, style: AppTypography.bodySmall(context)),
           const SizedBox(height: 16),
           if (plugin.hooks.isNotEmpty) ...[
-            _SectionLabel(label: 'Hook', icon: Icons.hook),
+            _SectionLabel(label: 'Hook', icon: Icons.link),
             const SizedBox(height: 6),
             ...plugin.hooks.map((h) => _ListItem(text: h)),
           ],

@@ -118,6 +118,7 @@ class AmitiaTextField extends StatelessWidget {
   final bool readOnly;
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
+  final TextInputType? keyboardType;
 
   const AmitiaTextField({
     super.key,
@@ -131,6 +132,7 @@ class AmitiaTextField extends StatelessWidget {
     this.readOnly = false,
     this.focusNode,
     this.onChanged,
+    this.keyboardType,
   });
 
   @override
@@ -143,6 +145,7 @@ class AmitiaTextField extends StatelessWidget {
       focusNode: focusNode,
       onTap: onTap,
       onChanged: onChanged,
+      keyboardType: keyboardType,
       style: AppTypography.body(context),
       decoration: InputDecoration(
         hintText: hintText,

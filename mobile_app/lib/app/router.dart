@@ -54,8 +54,8 @@ import '../features/channels/presentation/pages/qq_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/settings/presentation/pages/model_settings_page.dart';
 import '../features/settings/presentation/pages/appearance_settings_page.dart';
-import '../features/settings/presentation/pages/runtime_page.dart';
-import '../features/settings/presentation/pages/permissions_page.dart';
+import '../features/runtime/presentation/pages/runtime_page.dart';
+import '../features/permissions/presentation/pages/permissions_page.dart';
 import '../features/settings/presentation/pages/backup_page.dart';
 import '../features/settings/presentation/pages/ai_config_page.dart';
 import '../features/settings/presentation/pages/deployment_page.dart';
@@ -129,12 +129,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/chat', builder: (context, state) => const ChatPage()),
           GoRoute(path: '/conversations', builder: (context, state) => const ConversationListPage()),
           GoRoute(path: '/dashboard', builder: (context, state) => const DashboardPage()),
-          GoRoute(path: '/channels/wechat', builder: (context, state) => const WeChatPage()),
-          GoRoute(path: '/channels/qq', builder: (context, state) => const QQPage()),
+          GoRoute(path: '/channels/wechat', builder: (context, state) => const WechatPage()),
+          GoRoute(path: '/channels/qq', builder: (context, state) => const QqPage()),
           GoRoute(path: '/agent', builder: (context, state) => const AgentPage()),
           GoRoute(path: '/agent/task/:id', builder: (context, state) => AgentTaskDetailPage(taskId: state.pathParameters['id']!)),
           GoRoute(path: '/characters', builder: (context, state) => const CharacterListPage()),
-          GoRoute(path: '/character/:id', builder: (context, state) => CharacterDetailPage(characterId: state.pathParameters['id']!)),
+          GoRoute(path: '/characters/:id', builder: (context, state) => CharacterDetailPage(characterId: state.pathParameters['id']!)),
           GoRoute(path: '/characters/:id/life-rules', builder: (context, state) => CharacterLifeRulesPage(characterId: state.pathParameters['id']!)),
           GoRoute(path: '/characters/:id/voice', builder: (context, state) => CharacterVoicePage(characterId: state.pathParameters['id']!)),
           GoRoute(path: '/characters/:id/memory', builder: (context, state) => CharacterMemoryPage(characterId: state.pathParameters['id']!)),

@@ -6,7 +6,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
-import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/mock_data/mock_data.dart';
 
 class UserSettingsPage extends ConsumerStatefulWidget {

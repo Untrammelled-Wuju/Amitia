@@ -5,6 +5,8 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import 'amitia_button.dart';
 
+export 'amitia_button.dart';
+
 enum BadgeType { success, warning, error, info, accent, neutral }
 
 class AmitiaStatusBadge extends StatelessWidget {
