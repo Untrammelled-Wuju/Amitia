@@ -116,8 +116,12 @@ type ModelConfig struct {
 }
 
 type ProviderInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Protocol       string `json:"protocol"`
+	DefaultBaseURL string `json:"defaultBaseUrl"`
+	DefaultModel   string `json:"defaultModel"`
+	DocsURL        string `json:"docsUrl"`
 }
 
 func (ModelConfig) TableName() string { return "model_configs" }

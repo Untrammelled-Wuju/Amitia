@@ -31,22 +31,24 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) getConfig() (baseURL, apiKey, modelName string) {
-	var dbURL, dbKey, dbModel string
+func (s *Service) getConfig() (baseURL, apiKey, modelName, apiType string) {
+	var dbURL, dbKey, dbModel, dbApiType string
 	err := s.db.Table("embedding_configs").
-		Select("base_url, api_key, model_name").
+		Select("base_url, api_key, model_name, api_type").
 		Where("is_active = 1").Limit(1).Row().
-		Scan(&dbURL, &dbKey, &dbModel)
+		Scan(&dbURL, &dbKey, &dbModel, &dbApiType)
 	if err == nil && dbURL != "" {
 		baseURL = dbURL
 		apiKey = dbKey
 		modelName = dbModel
+		apiType = dbApiType
 		return
 	}
 	ec := config.AppCfg.Embedding
 	modelName = ec.ModelName
 	baseURL = ec.BaseUrl
 	apiKey = ec.ApiKey
+	apiType = "volcengine"
 	return
 }
 
@@ -56,20 +58,34 @@ func (s *Service) Embed(text string) ([]float32, error) {
 }
 
 func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
-	baseURL, apiKey, modelName := s.getConfig()
+	baseURL, apiKey, modelName, apiType := s.getConfig()
 	if baseURL == "" || apiKey == "" {
 		return fallbackEmbedding(text), "", nil
 	}
 
 	baseURL = strings.TrimRight(baseURL, "/")
+	protocol := protocolForApiType(apiType)
 
-	reqBody := map[string]interface{}{
-		"model": modelName,
-		"input": []map[string]interface{}{{"type": "text", "text": text}},
+	var reqBody map[string]interface{}
+	var endpoint string
+
+	if protocol == "volcengine" {
+		reqBody = map[string]interface{}{
+			"model": modelName,
+			"input": []map[string]interface{}{{"type": "text", "text": text}},
+		}
+		endpoint = baseURL + "/embeddings/multimodal"
+	} else {
+		reqBody = map[string]interface{}{
+			"model": modelName,
+			"input": text,
+		}
+		endpoint = baseURL + "/embeddings"
 	}
+
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/embeddings/multimodal", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err.Error(), err
 	}
@@ -108,25 +124,34 @@ func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 }
 
 func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
-	baseURL, apiKey, modelName := s.getConfig()
+	baseURL, apiKey, modelName, apiType := s.getConfig()
 	if baseURL == "" || apiKey == "" {
 		return fallbackEmbeddings(texts), nil
 	}
 
 	baseURL = strings.TrimRight(baseURL, "/")
+	protocol := protocolForApiType(apiType)
 
-	inputs := make([]interface{}, len(texts))
-	for i, t := range texts {
-		inputs[i] = t
+	var reqBody map[string]interface{}
+	var endpoint string
+
+	if protocol == "volcengine" {
+		reqBody = map[string]interface{}{
+			"model": modelName,
+			"input": s.buildMultimodalInputs(texts),
+		}
+		endpoint = baseURL + "/embeddings/multimodal"
+	} else {
+		reqBody = map[string]interface{}{
+			"model": modelName,
+			"input": texts,
+		}
+		endpoint = baseURL + "/embeddings"
 	}
 
-	reqBody := map[string]interface{}{
-		"model": modelName,
-		"input": s.buildMultimodalInputs(texts),
-	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/embeddings/multimodal", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +248,15 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+func protocolForApiType(apiType string) string {
+	switch apiType {
+	case "volcengine":
+		return "volcengine"
+	default:
+		return "openai"
+	}
 }
 
 func (s *Service) buildMultimodalInputs(texts []string) []map[string]interface{} {

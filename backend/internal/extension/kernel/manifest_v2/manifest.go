@@ -498,6 +498,10 @@ func (c ContributionMeta) ToDomain(extID domain.ExtensionID, modID domain.Module
 		RequiredPermissions: c.RequiredPermissions,
 		RequiredScope:       c.RequiredScope,
 	}
+	for _, dep := range c.Dependencies {
+		cd.Dependencies = append(cd.Dependencies, domain.DependencyDefinition{Type: domain.DependencyType(dep.Type),
+			ID: dep.ID, Version: dep.Version, Optional: dep.Optional, Reason: dep.Reason})
+	}
 	if c.Exposure != nil {
 		cd.Exposure = domain.Exposure{
 			VisibleByDefault:    c.Exposure.VisibleByDefault,

@@ -31,7 +31,7 @@ export function useModelConfig() {
 
   const form = reactive({
     name: "",
-    apiType: "openai-compatible" as string,
+    apiType: "openai" as string,
     baseUrl: "",
     apiKey: "",
     modelName: "",
@@ -97,9 +97,13 @@ export function useModelConfig() {
       providers.value = (await get<any[]>("/api/model/providers")) || [];
     } catch {
       providers.value = [
-        { id: "openai-compatible", name: "OpenAI Compatible" },
-        { id: "ollama", name: "Ollama" },
-        { id: "custom-http", name: "Custom HTTP" },
+        { id: "openai", name: "OpenAI", protocol: "openai", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
+        { id: "deepseek", name: "DeepSeek", protocol: "openai", defaultBaseUrl: "https://api.deepseek.com", defaultModel: "deepseek-chat" },
+        { id: "qwen", name: "通义千问 (Qwen)", protocol: "openai", defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus" },
+        { id: "ollama", name: "Ollama", protocol: "ollama", defaultBaseUrl: "http://127.0.0.1:11434", defaultModel: "llama3.1" },
+        { id: "anthropic", name: "Anthropic (Claude)", protocol: "anthropic", defaultBaseUrl: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-20250514" },
+        { id: "gemini", name: "Google Gemini", protocol: "gemini", defaultBaseUrl: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.0-flash" },
+        { id: "custom-http", name: "自定义 HTTP", protocol: "openai", defaultBaseUrl: "", defaultModel: "" },
       ];
     }
     onProviderChange(form.apiType);
@@ -110,8 +114,14 @@ export function useModelConfig() {
       providers.value.find((p: any) => p.id === apiType) || null;
     detectedModels.value = [];
     detectError.value = "";
-    if (apiType === "ollama" && !form.baseUrl) {
-      form.baseUrl = "http://127.0.0.1:11434";
+    const provider = currentProviderSchema.value as any;
+    if (provider) {
+      if (provider.defaultBaseUrl && !form.baseUrl) {
+        form.baseUrl = provider.defaultBaseUrl;
+      }
+      if (provider.defaultModel && !form.modelName) {
+        form.modelName = provider.defaultModel;
+      }
     }
   }
 
@@ -142,7 +152,7 @@ export function useModelConfig() {
     showApiKey.value = false;
     if (row) {
       form.name = row.name || "";
-      form.apiType = row.apiType || "openai-compatible";
+      form.apiType = row.apiType || "openai";
       form.baseUrl = row.baseUrl || "";
       try {
         const full = await get<any>(`/api/model/configs/${row.id}`);
@@ -159,7 +169,7 @@ export function useModelConfig() {
       form.retryCount = row.retryCount ?? 1;
     } else {
       form.name = "";
-      form.apiType = "openai-compatible";
+      form.apiType = "openai";
       form.baseUrl = "";
       form.apiKey = "";
       form.modelName = "";

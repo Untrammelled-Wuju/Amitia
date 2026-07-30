@@ -24,10 +24,10 @@ func TestEmbedWithRawErrorPreservesProviderResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, is_active INTEGER)").Error; err != nil {
+	if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, is_active INTEGER)").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, is_active) VALUES (?, ?, ?, 1)", server.URL, "test-key", "test-model").Error; err != nil {
+	if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, api_type, is_active) VALUES (?, ?, ?, 'volcengine', 1)", server.URL, "test-key", "test-model").Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,10 +63,10 @@ func TestEmbedAcceptsProviderDataShapes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, is_active INTEGER)").Error; err != nil {
+			if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, is_active INTEGER)").Error; err != nil {
 				t.Fatal(err)
 			}
-			if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, is_active) VALUES (?, ?, ?, 1)", server.URL, "test-key", "test-model").Error; err != nil {
+			if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, api_type, is_active) VALUES (?, ?, ?, 'volcengine', 1)", server.URL, "test-key", "test-model").Error; err != nil {
 				t.Fatal(err)
 			}
 

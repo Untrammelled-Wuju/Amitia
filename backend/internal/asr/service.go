@@ -15,7 +15,9 @@ type Service interface {
 	Delete(id int) error
 	Activate(id int) (*AsrConfig, error)
 	GetActiveApiKey() (string, error)
+	GetActiveConfig() (*AsrConfig, error)
 	TestConnection(id int) error
+	ListProviders() []ProviderInfo
 }
 
 type service struct{ repo Repository }
@@ -48,12 +50,15 @@ func (s *service) Create(req *CreateAsrConfigRequest) (*AsrConfig, error) {
 	if req.Name == "" {
 		return nil, fmt.Errorf("名称不能为空")
 	}
+	if req.ApiType == "" {
+		req.ApiType = "volcengine"
+	}
 	if req.ResourceId == "" {
 		req.ResourceId = "volc.seedasr.auc"
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	cfg := &AsrConfig{
-		Name: req.Name, ApiKey: req.ApiKey, ResourceId: req.ResourceId,
+		Name: req.Name, ApiType: req.ApiType, ApiKey: req.ApiKey, BaseURL: req.BaseURL, ResourceId: req.ResourceId,
 		IsActive: req.IsActive, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.repo.Create(cfg); err != nil {
@@ -98,13 +103,28 @@ func (s *service) GetActiveApiKey() (string, error) {
 	return cfg.ApiKey, nil
 }
 
+func (s *service) GetActiveConfig() (*AsrConfig, error) {
+	cfg, err := s.repo.GetActive()
+	if err != nil {
+		return nil, fmt.Errorf("没有激活的ASR配置")
+	}
+	return cfg, nil
+}
+
 func (s *service) TestConnection(id int) error {
 	cfg, err := s.repo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("ASR配置不存在")
 	}
-	if cfg.ApiKey == "" {
+	if cfg.ApiType == "" {
+		cfg.ApiType = "volcengine"
+	}
+	if cfg.ApiKey == "" && cfg.ApiType != "edge" {
 		return fmt.Errorf("API Key未设置")
 	}
 	return nil
+}
+
+func (s *service) ListProviders() []ProviderInfo {
+	return s.repo.ListProviders()
 }

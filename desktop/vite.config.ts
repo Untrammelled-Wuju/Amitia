@@ -67,7 +67,7 @@ export default defineConfig({
           build: {
             outDir: resolve(__dirname, "dist/main"),
             rollupOptions: {
-              external: ["electron"],
+              external: ["electron", "electron-updater", "electron-log", "electron-is-dev"],
             },
           },
         },

@@ -23,36 +23,48 @@ type packageConfigMigration struct {
 }
 
 func (s *PackageService) Install(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {
+	defer func() {
+		if err != nil {
+			s.metric("package_install_failed_total")
+			return
+		}
+		s.metric("package_install_total")
+	}()
 	if s.kernelProxy == nil {
-		kernelruntime.GlobalLegacyCallCounter().IncPackageInstall()
-		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
-		return s.installLegacyPackage(ctx, request)
+		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if request.ScopeType == string(ScopeCharacter) {
 		if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.ScopeID}); err != nil {
 			return PackageOperationResult{}, err
 		}
 	}
-	session, err := s.repository.AcquirePackageImportSession(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
-	if err != nil {
-		return PackageOperationResult{}, err
-	}
-	defer func() {
-		status := "installed"
-		if err != nil {
-			status = "failed"
+	confirmations := map[string]bool{}
+	for key, value := range request.Confirmations {
+		confirmations[key] = value
+		if !strings.HasPrefix(key, "confirm.") {
+			confirmations["confirm."+key] = value
 		}
-		_ = s.repository.FinishPackageImportSession(context.Background(), session.ID, status)
-	}()
-	kernelResult, wasInstalled, err := s.kernelProxy.InstallPackage(ctx, session.PackageBlob, session.FileName, request.ExpectedExtensionID)
+	}
+	confirmations["confirm.unsigned"] = confirmations["confirm.unsigned"] || request.ConfirmUnsigned
+	if confirmations["confirm.unsigned"] {
+		s.metric("package_unsigned_confirmed_total")
+	}
+	confirmations["confirm.scripts"] = confirmations["confirm.scripts"] || request.ConfirmScripts
+	confirmations["confirm.version_change"] = confirmations["confirm.version_change"] || request.ConfirmVersionChange
+	confirmations["confirm.signer_change"] = confirmations["confirm.signer_change"] || request.ConfirmSignerChange
+	confirmations["confirm.config_migration"] = confirmations["confirm.config_migration"] || request.ConfirmConfigMigration
+	confirmations["confirm.permission_escalation"] = confirmations["confirm.permission_escalation"] || len(request.ConfirmedCapabilities) > 0
+	kernelResult, err := s.kernelProxy.InstallPreviewedPackage(ctx, kernelruntime.PackageInstallRequest{SessionID: request.SessionID,
+		UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID,
+		Confirmations: confirmations, ExpectedExtensionID: request.ExpectedExtensionID})
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageInstallFailed, "Extension Kernel 安装失败", err.Error(), false, err)
 	}
 	operation := PackageOperationInstall
-	if wasInstalled {
+	if kernelResult.Operation == "update" {
 		operation = PackageOperationUpgrade
 	}
-	return PackageOperationResult{OperationID: kernelResult.InstallationID, TraceID: kernelResult.PackageHash, Operation: operation, ExtensionID: kernelResult.ExtensionID, Version: kernelResult.Version, Enabled: false, Status: "succeeded"}, nil
+	return PackageOperationResult{OperationID: kernelResult.OperationID, TraceID: kernelResult.TraceID, Operation: operation, ExtensionID: kernelResult.ExtensionID, Version: kernelResult.Version, Enabled: false, Status: "succeeded"}, nil
 }
 
 func (s *PackageService) installLegacyPackage(ctx context.Context, request InstallPackageRequest) (result PackageOperationResult, err error) {

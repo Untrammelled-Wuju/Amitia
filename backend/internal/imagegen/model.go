@@ -5,6 +5,7 @@ package imagegen
 type ImageGenConfig struct {
 	ID        int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	Name      string `gorm:"column:name;not null" json:"name"`
+	ApiType   string `gorm:"column:api_type;default:seedream" json:"apiType"`
 	ApiKey    string `gorm:"column:api_key" json:"apiKey"`
 	ModelName string `gorm:"column:model_name;default:doubao-seedream-5-0" json:"modelName"`
 	BaseUrl   string `gorm:"column:base_url;default:https://ark.cn-beijing.volces.com/api/v3" json:"baseUrl"`
@@ -18,8 +19,16 @@ func (ImageGenConfig) TableName() string { return "image_gen_configs" }
 
 type CreateImageGenConfigRequest struct {
 	Name      string `json:"name"`
+	ApiType   string `json:"apiType"`
 	ApiKey    string `json:"apiKey"`
 	ModelName string `json:"modelName"`
 	BaseUrl   string `json:"baseUrl"`
 	IsActive  int    `json:"isActive"`
+}
+
+type ProviderInfo struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	DefaultBaseURL string `json:"defaultBaseUrl"`
+	DefaultModel   string `json:"defaultModel"`
 }

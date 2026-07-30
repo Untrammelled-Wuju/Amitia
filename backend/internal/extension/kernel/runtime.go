@@ -28,13 +28,14 @@ type InstalledExtension struct {
 }
 
 type Runtime struct {
-	mu          sync.RWMutex
-	root        string
-	installer   *amitiax.Installer
-	installed   map[string]InstalledExtension
-	container   *Container
-	enableLocks sync.Map
-	sagaRepo    *LifecycleSagaRepository
+	mu           sync.RWMutex
+	root         string
+	installer    *amitiax.Installer
+	installed    map[string]InstalledExtension
+	container    *Container
+	enableLocks  sync.Map
+	packageLocks sync.Map
+	sagaRepo     *LifecycleSagaRepository
 }
 
 func NewRuntime(root string) (*Runtime, error) {

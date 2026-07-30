@@ -137,18 +137,14 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 
 	asrRepo := asr.NewRepository(h.db)
 	activeCfg, cfgErr := asrRepo.GetActive()
-	apiKey := ""
-	if cfgErr == nil && activeCfg.ApiKey != "" {
-		apiKey = activeCfg.ApiKey
-	}
-	if apiKey == "" {
+	if cfgErr != nil || activeCfg.ApiKey == "" {
 		util.SuccessResponse(c, gin.H{"text": "", "status": "no_asr_key"})
 		return
 	}
 
 	fullAudioUrl := "http://127.0.0.1:18080" + body.AudioUrl
 
-	taskID, submitErr := asr.SubmitTask(apiKey, fullAudioUrl, "zh-CN")
+	taskID, submitErr := asr.SubmitTask(activeCfg, fullAudioUrl, "zh-CN")
 	if submitErr != nil {
 		util.SuccessResponse(c, gin.H{"text": "", "status": "asr_failed"})
 		return
@@ -156,7 +152,7 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 
 	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
-		result, queryErr := asr.QueryTask(apiKey, taskID)
+		result, queryErr := asr.QueryTask(activeCfg, taskID)
 		if queryErr != nil {
 			continue
 		}

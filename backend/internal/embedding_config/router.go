@@ -14,6 +14,7 @@ func RegisterEmbeddingConfigRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	g := r.Group("/embedding")
 	{
+		g.GET("/providers", handler.GetProviders)
 		g.GET("/configs", handler.List)
 		g.GET("/configs/:id", handler.Get)
 		g.POST("/configs", handler.Create)

@@ -27,6 +27,11 @@ func (h *Handler) List(c *gin.Context) {
 	util.SuccessResponse(c, configs)
 }
 
+func (h *Handler) ListProviders(c *gin.Context) {
+	providers := h.service.ListProviders()
+	util.SuccessResponse(c, providers)
+}
+
 func (h *Handler) Get(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	cfg, err := h.service.GetByID(id)

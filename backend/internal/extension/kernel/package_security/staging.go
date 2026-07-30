@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,7 @@ type StagingArea struct {
 type StagingManager struct {
 	baseDir  string
 	stagings map[string]*StagingArea
+	mu       sync.Mutex
 }
 
 func NewStagingManager(baseDir string) *StagingManager {
@@ -64,11 +66,15 @@ func (m *StagingManager) Create(ctx context.Context, purpose string) (*StagingAr
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 
+	m.mu.Lock()
 	m.stagings[id] = area
+	m.mu.Unlock()
 	return area, nil
 }
 
 func (m *StagingManager) Get(ctx context.Context, stagingID string) (*StagingArea, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	area, ok := m.stagings[stagingID]
 	if !ok {
 		return nil, ErrStagingNotFound
@@ -77,6 +83,8 @@ func (m *StagingManager) Get(ctx context.Context, stagingID string) (*StagingAre
 }
 
 func (m *StagingManager) Seal(ctx context.Context, stagingID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	area, ok := m.stagings[stagingID]
 	if !ok {
 		return ErrStagingNotFound
@@ -100,6 +108,8 @@ func (m *StagingManager) Seal(ctx context.Context, stagingID string) error {
 }
 
 func (m *StagingManager) Verify(ctx context.Context, stagingID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	area, ok := m.stagings[stagingID]
 	if !ok {
 		return ErrStagingNotFound
@@ -122,6 +132,8 @@ func (m *StagingManager) Verify(ctx context.Context, stagingID string) error {
 }
 
 func (m *StagingManager) Cleanup(ctx context.Context, stagingID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	area, ok := m.stagings[stagingID]
 	if !ok {
 		return nil
@@ -179,12 +191,17 @@ func robustRemoveAll(path string) error {
 func (m *StagingManager) CleanupExpired(ctx context.Context) []string {
 	var cleaned []string
 	now := time.Now()
-
+	m.mu.Lock()
+	var expired []string
 	for id, area := range m.stagings {
 		if now.After(area.ExpiresAt) {
-			if err := m.Cleanup(ctx, id); err == nil {
-				cleaned = append(cleaned, id)
-			}
+			expired = append(expired, id)
+		}
+	}
+	m.mu.Unlock()
+	for _, id := range expired {
+		if err := m.Cleanup(ctx, id); err == nil {
+			cleaned = append(cleaned, id)
 		}
 	}
 
@@ -192,6 +209,8 @@ func (m *StagingManager) CleanupExpired(ctx context.Context) []string {
 }
 
 func (m *StagingManager) MarkPopulated(ctx context.Context, stagingID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	area, ok := m.stagings[stagingID]
 	if !ok {
 		return ErrStagingNotFound

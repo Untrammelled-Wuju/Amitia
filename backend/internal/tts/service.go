@@ -22,6 +22,7 @@ type Service interface {
 	SynthesizeForCharacter(charID string, text string) (*SynthesizeResponse, error)
 	SynthesizeWithSpeaker(speakerID string, text string) (*SynthesizeResponse, error)
 	SynthesizeWithActive(text string) (*SynthesizeResponse, error)
+	ListProviders() []ProviderInfo
 }
 
 type service struct{ repo Repository }
@@ -52,6 +53,9 @@ func (s *service) Create(req *CreateTtsConfigRequest) (*TtsConfig, error) {
 	if req.Name == "" {
 		return nil, fmt.Errorf("名称不能为空")
 	}
+	if req.ApiType == "" {
+		req.ApiType = "volcengine"
+	}
 	if req.VoiceType == "" {
 		req.VoiceType = "zh_female_cancan_mars_bigtts"
 	}
@@ -69,7 +73,7 @@ func (s *service) Create(req *CreateTtsConfigRequest) (*TtsConfig, error) {
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	cfg := &TtsConfig{
-		Name: req.Name, ApiKey: req.ApiKey, ResourceId: req.ResourceId,
+		Name: req.Name, ApiType: req.ApiType, ApiKey: req.ApiKey, BaseURL: req.BaseURL, ResourceId: req.ResourceId,
 		VoiceType: req.VoiceType, Emotion: req.Emotion,
 		Speed: req.Speed, Pitch: req.Pitch, Volume: req.Volume,
 		RealtimeAppId:       req.RealtimeAppId,
@@ -156,4 +160,8 @@ func (s *service) SynthesizeForCharacter(charID string, text string) (*Synthesiz
 		return nil, fmt.Errorf("没有可用的音色配置")
 	}
 	return Synthesize(cfg, text)
+}
+
+func (s *service) ListProviders() []ProviderInfo {
+	return s.repo.ListProviders()
 }

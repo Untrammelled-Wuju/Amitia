@@ -3,9 +3,12 @@ package kernel
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
@@ -51,6 +54,16 @@ func FinalGateMetricNames() []string {
 		"orphan_sandbox_sessions",
 		"audit_incomplete_operations",
 		"lifecycle_requires_recovery",
+		"new_package_legacy_read_calls",
+		"orphan_staging_directories",
+		"orphan_installed_directories",
+		"missing_artifact_rows",
+		"artifact_hash_mismatch",
+		"incomplete_package_operations",
+		"requires_recovery_operations",
+		"installation_without_files",
+		"files_without_installation",
+		"active_contribution_for_disabled_installation",
 	}
 }
 
@@ -93,8 +106,10 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 	p.probeOrphanSandboxSessions(ctx, report)
 	p.probeLifecycleRecovery(ctx, report)
 	p.probeAuditIncomplete(ctx, report)
+	p.probePackageReleaseGate(ctx, report)
 
 	legacyMetrics := GlobalLegacyCallCounter().FinalGateMetrics()
+	report.Metrics["new_package_legacy_read_calls"] = legacyMetrics["legacy_package_read_calls"]
 	for _, name := range []string{
 		"legacy_tool_execute_calls",
 		"legacy_mcp_execute_calls",
@@ -125,6 +140,149 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 	}
 
 	return report
+}
+
+func (p *FinalGateProbe) probePackageReleaseGate(ctx context.Context, report *FinalGateReport) {
+	names := []string{"orphan_staging_directories", "orphan_installed_directories", "missing_artifact_rows", "artifact_hash_mismatch", "incomplete_package_operations", "requires_recovery_operations", "installation_without_files", "files_without_installation", "active_contribution_for_disabled_installation"}
+	if p.container == nil || p.container.Store == nil || p.container.PackageRepository == nil || p.container.PackageArtifactStore == nil || p.container.InstallationRepository == nil {
+		for _, name := range names {
+			report.Metrics[name] = -1
+		}
+		report.Errors = append(report.Errors, "package_release_gate: dependency not injected")
+		return
+	}
+	db := p.container.Store.DB()
+	queries := map[string]string{
+		"incomplete_package_operations":                 `SELECT COUNT(*) FROM extension_package_operations WHERE status IN ('created', 'in_progress')`,
+		"requires_recovery_operations":                  `SELECT COUNT(*) FROM extension_package_operations WHERE status = 'requires_recovery'`,
+		"missing_artifact_rows":                         `SELECT COUNT(*) FROM extension_installations i LEFT JOIN extension_package_artifacts a ON a.artifact_id = json_extract(i.installation_json, '$.packageId') WHERE COALESCE(json_extract(i.installation_json, '$.packageId'), '') <> '' AND a.artifact_id IS NULL`,
+		"active_contribution_for_disabled_installation": `SELECT COUNT(*) FROM extension_contributions c JOIN extension_installations i ON i.extension_id = c.extension_id WHERE c.registered = 1 AND i.enabled = 0`,
+	}
+	for name, query := range queries {
+		var count int64
+		if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
+			report.Metrics[name] = -1
+			report.Errors = append(report.Errors, fmt.Sprintf("%s: query failed: %v", name, err))
+		} else {
+			report.Metrics[name] = count
+		}
+	}
+	installations, err := p.container.InstallationRepository.ListInstallations(ctx)
+	if err != nil {
+		report.Errors = append(report.Errors, fmt.Sprintf("package_release_gate: installations query failed: %v", err))
+		return
+	}
+	installedPaths := make(map[string]bool)
+	var installationWithoutFiles int64
+	for _, installation := range installations {
+		path, _ := installation.Metadata["installedPath"].(string)
+		if path == "" {
+			continue
+		}
+		absolute, absErr := filepath.Abs(path)
+		if absErr != nil {
+			installationWithoutFiles++
+			continue
+		}
+		installedPaths[filepath.Clean(absolute)] = true
+		if info, statErr := os.Stat(absolute); statErr != nil || !info.IsDir() {
+			installationWithoutFiles++
+		}
+	}
+	rollbackRows, rollbackErr := db.QueryContext(ctx, `SELECT installed_path FROM extension_package_rollback_points WHERE installed_path <> ''`)
+	if rollbackErr != nil {
+		report.Errors = append(report.Errors, fmt.Sprintf("package_release_gate: rollback paths query failed: %v", rollbackErr))
+		return
+	}
+	for rollbackRows.Next() {
+		var path string
+		if scanErr := rollbackRows.Scan(&path); scanErr != nil {
+			rollbackRows.Close()
+			report.Errors = append(report.Errors, fmt.Sprintf("package_release_gate: rollback path scan failed: %v", scanErr))
+			return
+		}
+		if absolute, absErr := filepath.Abs(path); absErr == nil {
+			installedPaths[filepath.Clean(absolute)] = true
+		}
+	}
+	if rowsErr := rollbackRows.Err(); rowsErr != nil {
+		rollbackRows.Close()
+		report.Errors = append(report.Errors, fmt.Sprintf("package_release_gate: rollback path iterate failed: %v", rowsErr))
+		return
+	}
+	rollbackRows.Close()
+	report.Metrics["installation_without_files"] = installationWithoutFiles
+	stagingRoot := filepath.Join(p.container.PackageArtifactStore.root, "staging")
+	entries, readErr := os.ReadDir(stagingRoot)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		report.Metrics["orphan_staging_directories"] = -1
+		report.Errors = append(report.Errors, fmt.Sprintf("orphan_staging_directories: scan failed: %v", readErr))
+	} else {
+		var count int64
+		for _, entry := range entries {
+			if entry.IsDir() {
+				count++
+			}
+		}
+		report.Metrics["orphan_staging_directories"] = count
+	}
+	installedRoot := filepath.Join(p.container.PackageArtifactStore.root, "installed")
+	var filesWithoutInstallation int64
+	walkErr := filepath.WalkDir(installedRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != amitiax.ManifestFile {
+			return nil
+		}
+		parent, absErr := filepath.Abs(filepath.Dir(path))
+		if absErr != nil || !installedPaths[filepath.Clean(parent)] {
+			filesWithoutInstallation++
+		}
+		return nil
+	})
+	if walkErr != nil && !os.IsNotExist(walkErr) {
+		report.Metrics["files_without_installation"] = -1
+		report.Metrics["orphan_installed_directories"] = -1
+		report.Errors = append(report.Errors, fmt.Sprintf("files_without_installation: scan failed: %v", walkErr))
+	} else {
+		report.Metrics["files_without_installation"] = filesWithoutInstallation
+		report.Metrics["orphan_installed_directories"] = filesWithoutInstallation
+	}
+	rows, queryErr := db.QueryContext(ctx, `SELECT artifact_id FROM extension_package_artifacts WHERE quarantined_at = ''`)
+	if queryErr != nil {
+		report.Metrics["artifact_hash_mismatch"] = -1
+		report.Errors = append(report.Errors, fmt.Sprintf("artifact_hash_mismatch: query failed: %v", queryErr))
+		return
+	}
+	var artifactIDs []string
+	for rows.Next() {
+		var artifactID string
+		if scanErr := rows.Scan(&artifactID); scanErr != nil {
+			rows.Close()
+			report.Errors = append(report.Errors, fmt.Sprintf("artifact_hash_mismatch: scan failed: %v", scanErr))
+			return
+		}
+		artifactIDs = append(artifactIDs, artifactID)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		rows.Close()
+		report.Errors = append(report.Errors, fmt.Sprintf("artifact_hash_mismatch: iterate failed: %v", rowsErr))
+		return
+	}
+	rows.Close()
+	var mismatch int64
+	for _, artifactID := range artifactIDs {
+		artifact, getErr := p.container.PackageRepository.GetArtifact(ctx, artifactID)
+		if getErr != nil || p.container.PackageArtifactStore.VerifyArchive(artifact) != nil {
+			mismatch++
+		}
+	}
+	report.Metrics["artifact_hash_mismatch"] = mismatch
+}
+
+func (p *FinalGateProbe) ProbePackageReleaseGate(ctx context.Context, report *FinalGateReport) {
+	p.probePackageReleaseGate(ctx, report)
 }
 
 func (p *FinalGateProbe) probeMCPDuplicates(ctx context.Context, report *FinalGateReport) {

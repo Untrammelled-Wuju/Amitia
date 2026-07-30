@@ -73,6 +73,9 @@ type Container struct {
 	ResourceRepository     sqlite.ResourceRepository
 
 	PackageSecurity        *package_security.PackageSecurityService
+	PackageRepository      *PackageRepository
+	PackageArtifactStore   *PackageArtifactStore
+	PackageTrustRepository *PackageTrustRepository
 	LifecycleManager       *lifecycle_manager.Manager
 	ContributionRegistry   *contribution.ContributionRegistry
 	ContributionInstaller  *TypedContributionInstaller

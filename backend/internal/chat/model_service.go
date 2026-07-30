@@ -56,10 +56,16 @@ func (s *service) UpdateModelRoutes(routes []map[string]interface{}) error {
 }
 
 func (s *service) DetectModels(baseURL, apiKey, apiType string) ([]ModelDetectItem, error) {
-	if apiType == "ollama" {
+	switch protocolForApiType(apiType) {
+	case "ollama":
 		return s.detectOllamaModels(baseURL)
+	case "gemini":
+		return s.detectGeminiModels(baseURL, apiKey)
+	case "anthropic":
+		return s.detectAnthropicModels(baseURL, apiKey)
+	default:
+		return s.detectOpenAIModels(baseURL, apiKey)
 	}
-	return s.detectOpenAIModels(baseURL, apiKey)
 }
 
 func (s *service) detectOllamaModels(baseURL string) ([]ModelDetectItem, error) {
@@ -126,6 +132,50 @@ func (s *service) detectOpenAIModels(baseURL, apiKey string) ([]ModelDetectItem,
 	items := make([]ModelDetectItem, len(r.Data))
 	for i, m := range r.Data {
 		items[i] = ModelDetectItem{ID: m.ID, OwnedBy: m.OwnedBy}
+	}
+	return items, nil
+}
+
+func (s *service) detectGeminiModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
+	base := strings.TrimRight(baseURL, "/")
+	url := fmt.Sprintf("%s/v1beta/models?key=%s&pageSize=100", base, apiKey)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(rb))
+	}
+	var r struct {
+		Models []struct {
+			Name        string `json:"name"`
+			DisplayName string `json:"displayName"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(rb, &r); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	items := make([]ModelDetectItem, len(r.Models))
+	for i, m := range r.Models {
+		id := m.Name
+		if strings.HasPrefix(id, "models/") {
+			id = strings.TrimPrefix(id, "models/")
+		}
+		items[i] = ModelDetectItem{ID: id, OwnedBy: "google"}
+	}
+	return items, nil
+}
+
+func (s *service) detectAnthropicModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
+	items := []ModelDetectItem{
+		{ID: "claude-sonnet-4-20250514", OwnedBy: "anthropic"},
+		{ID: "claude-3-7-sonnet-20250219", OwnedBy: "anthropic"},
+		{ID: "claude-3-5-haiku-20241022", OwnedBy: "anthropic"},
+		{ID: "claude-3-opus-20240229", OwnedBy: "anthropic"},
 	}
 	return items, nil
 }

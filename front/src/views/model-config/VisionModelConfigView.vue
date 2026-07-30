@@ -17,16 +17,33 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <div class="vision-header">
           <span>视觉模型</span>
-          <el-tag size="small" type="warning">豆包视觉 Seed 2.0 Lite</el-tag>
+          <el-tag size="small" type="warning">{{ currentProviderName }}</el-tag>
         </div>
       </template>
       <div class="vision-grid">
+        <div class="vision-item">
+          <span class="vision-label">服务提供方</span>
+          <el-select
+            v-model="apiType"
+            size="small"
+            placeholder="选择服务提供方"
+            style="width: 260px"
+            @change="onProviderChange"
+          >
+            <el-option
+              v-for="p in providers"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+        </div>
         <div class="vision-item">
           <span class="vision-label">API Key</span>
           <el-input
             v-model="apiKey"
             size="small"
-            placeholder="火山引擎API Key"
+            placeholder="API Key"
             type="password"
             show-password
             style="width: 260px"
@@ -37,7 +54,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-input
             v-model="modelName"
             size="small"
-            disabled
             style="width: 260px"
           />
         </div>
@@ -46,7 +62,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-input
             v-model="baseUrl"
             size="small"
-            disabled
             style="width: 260px"
           />
         </div>
@@ -69,6 +84,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
       <div
+        v-if="currentProvider?.docsUrl"
         style="
           margin-top: 6px;
           font-size: 12px;
@@ -77,10 +93,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       >
         <el-link
           class="quick-link"
-          href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-seed-2-0-lite-260428"
+          :href="currentProvider.docsUrl"
           target="_blank"
         >
-          前往火山引擎控制台开通模型并获取 API Key
+          前往 {{ currentProviderName }} 获取 API Key
         </el-link>
       </div>
       <div style="margin-top: 12px">
@@ -97,19 +113,51 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "../../composables/useApi";
 
 const { get, post, put } = useApi();
 
 const apiKey = ref("");
+const apiType = ref("volcengine");
 const modelName = ref("doubao-seed-2-0-lite-260428");
 const baseUrl = ref("https://ark.cn-beijing.volces.com/api/v3");
 const saving = ref(false);
 const testing = ref(false);
 const testResult = ref("");
 const visionConfigId = ref<number | null>(null);
+const providers = ref<any[]>([]);
+
+const currentProvider = computed(() =>
+  providers.value.find((p) => p.id === apiType.value)
+);
+const currentProviderName = computed(
+  () => currentProvider.value?.name || "未选择"
+);
+
+function onProviderChange() {
+  const p = currentProvider.value;
+  if (p) {
+    if (p.defaultBaseUrl) baseUrl.value = p.defaultBaseUrl;
+    if (p.defaultModel) modelName.value = p.defaultModel;
+  }
+}
+
+async function fetchProviders() {
+  try {
+    providers.value = (await get<any[]>("/api/vision/providers")) || [];
+  } catch {
+    providers.value = [
+      { id: "volcengine", name: "火山引擎", defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3", defaultModel: "doubao-seed-2-0-lite-260428" },
+      { id: "openai", name: "OpenAI", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o" },
+      { id: "gemini", name: "Google Gemini", defaultBaseUrl: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.0-flash" },
+      { id: "qwen", name: "通义千问VL", defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-vl-plus" },
+      { id: "zhipu", name: "智谱GLM-4V", defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4", defaultModel: "glm-4v-plus" },
+      { id: "siliconflow", name: "硅基流动", defaultBaseUrl: "https://api.siliconflow.cn/v1", defaultModel: "Qwen/Qwen2-VL-72B-Instruct" },
+    ];
+  }
+}
 
 async function fetchVisionConfig() {
   try {
@@ -118,6 +166,7 @@ async function fetchVisionConfig() {
       const vision = all[0];
       visionConfigId.value = vision.id;
       if (vision.apiKey) apiKey.value = vision.apiKey;
+      apiType.value = vision.apiType || "volcengine";
       modelName.value = vision.modelName || "doubao-seed-2-0-lite-260428";
       baseUrl.value =
         vision.baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
@@ -132,7 +181,13 @@ async function saveVision() {
   }
   saving.value = true;
   try {
-    const payload = { name: "视觉模型", apiKey: apiKey.value };
+    const payload = {
+      name: "视觉模型",
+      apiType: apiType.value,
+      apiKey: apiKey.value,
+      modelName: modelName.value,
+      baseUrl: baseUrl.value,
+    };
     if (visionConfigId.value) {
       await put(`/api/vision/configs/${visionConfigId.value}`, payload);
     } else {
@@ -174,7 +229,8 @@ async function testVision() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchProviders();
   fetchVisionConfig();
 });
 </script>
@@ -206,7 +262,7 @@ onMounted(() => {
 .vision-label {
   font-size: 13px;
   color: var(--el-text-color-secondary);
-  min-width: 60px;
+  min-width: 70px;
   flex-shrink: 0;
 }
 .quick-link {

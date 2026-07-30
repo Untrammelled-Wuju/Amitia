@@ -232,7 +232,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	kernelProxy := extension.NewKernelLifecycleProxy(extensionRuntime.Kernel)
-	extensionRuntime.Packages.AttachKernelProxy(kernelProxy)
+	if err := extensionRuntime.Packages.AttachKernelProxy(kernelProxy); err != nil {
+		log.Error("extension package recovery failed: ", err)
+		panic("failed to recover extension package operations")
+	}
 	if err := extensionRuntime.Packages.MigrateLegacyPackages(context.Background()); err != nil {
 		log.Error("legacy extension package migration failed: ", err)
 		panic("failed to migrate legacy extension packages")

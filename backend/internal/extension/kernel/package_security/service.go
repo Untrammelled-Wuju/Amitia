@@ -2,6 +2,7 @@ package package_security
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,10 +26,13 @@ type PackageSecurityService struct {
 }
 
 func NewPackageSecurityService(policy ArchivePolicy, auditWriter AuditWriter) *PackageSecurityService {
-	baseDir := "."
+	return NewPackageSecurityServiceAtRoot(policy, auditWriter, ".")
+}
+
+func NewPackageSecurityServiceAtRoot(policy ArchivePolicy, auditWriter AuditWriter, baseDir string) *PackageSecurityService {
 	recoveryJournal := NewRecoveryJournal()
-	stagingMgr := NewStagingManager(baseDir + "/tmp/staging")
-	snapshotMgr := NewSnapshotManager(baseDir + "/tmp/snapshots")
+	stagingMgr := NewStagingManager(baseDir + "/staging")
+	snapshotMgr := NewSnapshotManager(baseDir + "/snapshots")
 
 	return &PackageSecurityService{
 		inspector: NewArchiveInspector(policy),
@@ -48,6 +52,69 @@ func NewPackageSecurityService(policy ArchivePolicy, auditWriter AuditWriter) *P
 	}
 }
 
+func (s *PackageSecurityService) InspectFile(ctx context.Context, archivePath string, source PackageSource) (*PackageSecurityReport, error) {
+	report := &PackageSecurityReport{ReportID: "sec_" + uuid.NewString(), SourceType: string(source.SourceType), Passed: true, CreatedAt: time.Now()}
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	report.ArchiveHash, err = s.hasher.HashReader(file)
+	file.Close()
+	if err != nil {
+		return nil, err
+	}
+	inspectionResult, err := s.inspector.InspectFile(ctx, archivePath)
+	if err != nil {
+		report.Passed = false
+		report.AddPathIssue("", err.Error(), SeverityCritical, true)
+		if auditErr := s.auditEvent(ctx, AuditPackageReject, report, err.Error()); auditErr != nil {
+			return report, auditErr
+		}
+		return report, nil
+	}
+	report.EntryCount = inspectionResult.EntryCount
+	report.TotalCompressed = inspectionResult.TotalCompressed
+	report.TotalUncompressed = inspectionResult.TotalUncompressed
+	report.CompressionRatio = inspectionResult.CompressionRatio
+	for _, collision := range inspectionResult.PathCollisions {
+		report.AddPathIssue(collision.PathA, collision.Reason, SeverityCritical, true)
+	}
+	for _, errMsg := range inspectionResult.Errors {
+		report.AddPathIssue("", errMsg, SeverityCritical, true)
+	}
+	for _, warning := range inspectionResult.Warnings {
+		report.AddWarning(warning)
+	}
+	if !inspectionResult.Passed {
+		report.Passed = false
+		if auditErr := s.auditEvent(ctx, AuditPackageReject, report, "archive inspection failed"); auditErr != nil {
+			return report, auditErr
+		}
+		return report, nil
+	}
+	if auditErr := s.auditEvent(ctx, AuditPackageInspect, report, "inspection passed"); auditErr != nil {
+		return report, auditErr
+	}
+	return report, nil
+}
+
+func (s *PackageSecurityService) ExtractFileToStaging(ctx context.Context, archivePath, purpose string) (*StagingArea, error) {
+	staging, err := s.staging.Create(ctx, purpose)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.extractor.ExtractFile(ctx, archivePath, staging.Path); err != nil {
+		s.staging.Cleanup(ctx, staging.ID)
+		return nil, err
+	}
+	s.staging.MarkPopulated(ctx, staging.ID)
+	if err := s.staging.Seal(ctx, staging.ID); err != nil {
+		s.staging.Cleanup(ctx, staging.ID)
+		return nil, err
+	}
+	return staging, nil
+}
+
 func (s *PackageSecurityService) Inspect(ctx context.Context, raw []byte, source PackageSource) (*PackageSecurityReport, error) {
 	report := &PackageSecurityReport{
 		ReportID:   "sec_" + uuid.NewString(),
@@ -62,7 +129,9 @@ func (s *PackageSecurityService) Inspect(ctx context.Context, raw []byte, source
 	if err != nil {
 		report.Passed = false
 		report.AddPathIssue("", err.Error(), SeverityCritical, true)
-		s.auditEvent(ctx, AuditPackageReject, report, err.Error())
+		if auditErr := s.auditEvent(ctx, AuditPackageReject, report, err.Error()); auditErr != nil {
+			return report, auditErr
+		}
 		return report, nil
 	}
 
@@ -84,11 +153,15 @@ func (s *PackageSecurityService) Inspect(ctx context.Context, raw []byte, source
 	}
 
 	if !inspectionResult.Passed {
-		s.auditEvent(ctx, AuditPackageReject, report, "archive inspection failed")
+		if auditErr := s.auditEvent(ctx, AuditPackageReject, report, "archive inspection failed"); auditErr != nil {
+			return report, auditErr
+		}
 		return report, nil
 	}
 
-	s.auditEvent(ctx, AuditPackageInspect, report, "inspection passed")
+	if auditErr := s.auditEvent(ctx, AuditPackageInspect, report, "inspection passed"); auditErr != nil {
+		return report, auditErr
+	}
 	return report, nil
 }
 
@@ -187,7 +260,7 @@ func (s *PackageSecurityService) GetArchiveInspector() *ArchiveInspector {
 	return s.inspector
 }
 
-func (s *PackageSecurityService) auditEvent(ctx context.Context, eventType AuditEventType, report *PackageSecurityReport, details string) {
+func (s *PackageSecurityService) auditEvent(ctx context.Context, eventType AuditEventType, report *PackageSecurityReport, details string) error {
 	event := ResourceAuditEvent{
 		EventID:   uuid.NewString(),
 		EventType: eventType,
@@ -199,5 +272,5 @@ func (s *PackageSecurityService) auditEvent(ctx context.Context, eventType Audit
 		event.ReportID = report.ReportID
 	}
 
-	_ = s.audit.WriteAuditEvent(ctx, event)
+	return s.audit.WriteAuditEvent(ctx, event)
 }

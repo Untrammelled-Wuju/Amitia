@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"gorm.io/gorm"
 )
 
@@ -32,17 +33,19 @@ type PackageService struct {
 
 func NewPackageService(repository *Repository, registry *Registry, validator *SchemaValidator, compiler *WorkflowCompiler, workflowInstaller *WorkshopInstaller, agentSkills *AgentSkillService) *PackageService {
 	service := &PackageService{repository: repository, registry: registry, validator: validator, compiler: compiler, workflowInstaller: workflowInstaller, agentSkills: agentSkills, limits: DefaultPackageLimits()}
-	for _, name := range []string{"extension_package_import_total", "extension_package_import_failure_total", "extension_package_export_total", "extension_package_upgrade_total", "extension_package_upgrade_failure_total", "extension_package_rollback_total", "extension_package_uninstall_total", "extension_package_checksum_failure_total", "extension_package_signature_invalid_total", "extension_package_secret_detected_total", "extension_package_conflict_total", "extension_package_cleanup_failure_total"} {
+	for _, name := range []string{"extension_package_import_total", "extension_package_import_failure_total", "extension_package_export_total", "extension_package_upgrade_total", "extension_package_upgrade_failure_total", "extension_package_rollback_total", "extension_package_uninstall_total", "extension_package_checksum_failure_total", "extension_package_signature_invalid_total", "extension_package_secret_detected_total", "extension_package_conflict_total", "extension_package_cleanup_failure_total", "package_preview_total", "package_preview_rejected_total", "package_install_total", "package_install_failed_total", "package_operation_requires_recovery", "package_signature_invalid_total", "package_signer_unknown_total", "package_unsigned_confirmed_total", "package_integrity_failed_total", "package_legacy_read_calls", "package_legacy_write_calls", "package_blob_bytes", "package_staging_orphans", "package_artifact_missing", "package_definition_file_mismatch"} {
 		service.metrics.Store(name, new(uint64))
 	}
 	return service
 }
 
-func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) {
+func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) error {
 	s.kernelProxy = proxy
 	if proxy != nil {
 		s.readModel = NewExtensionReadModelService(proxy, s.repository)
+		return proxy.kernel.RecoverPackageOperations(context.Background())
 	}
+	return nil
 }
 
 func (s *PackageService) Restore(ctx context.Context) error {
@@ -455,6 +458,24 @@ func (s *PackageService) Metrics() map[string]uint64 {
 		result[key.(string)] = atomic.LoadUint64(value.(*uint64))
 		return true
 	})
+	result["package_legacy_read_calls"] = uint64(kernelruntime.GlobalLegacyReadCounter().PackageReadCallsFallbacks())
+	result["package_legacy_write_calls"] = uint64(kernelruntime.GlobalLegacyCallCounter().PackageWriteCalls())
+	if s.repository != nil && s.repository.db != nil && s.repository.db.Migrator().HasTable("extension_artifacts") {
+		var blobBytes int64
+		if s.repository.db.Raw(`SELECT COALESCE(SUM(LENGTH(content_blob)), 0) FROM extension_artifacts`).Scan(&blobBytes).Error == nil && blobBytes > 0 {
+			result["package_blob_bytes"] = uint64(blobBytes)
+		}
+	}
+	if s.kernelProxy != nil && s.kernelProxy.ReadContainer() != nil {
+		report := &kernelruntime.FinalGateReport{Metrics: map[string]int64{}, Details: []kernelruntime.FinalGateIssue{}, Errors: []string{}}
+		kernelruntime.NewFinalGateProbe(s.kernelProxy.ReadContainer()).ProbePackageReleaseGate(context.Background(), report)
+		if len(report.Errors) == 0 {
+			result["package_operation_requires_recovery"] = uint64(report.Metrics["requires_recovery_operations"])
+			result["package_staging_orphans"] = uint64(report.Metrics["orphan_staging_directories"])
+			result["package_artifact_missing"] = uint64(report.Metrics["missing_artifact_rows"])
+			result["package_definition_file_mismatch"] = uint64(report.Metrics["installation_without_files"] + report.Metrics["files_without_installation"])
+		}
+	}
 	return result
 }
 

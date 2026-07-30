@@ -714,7 +714,7 @@ func TestLegacy_Package_Install_RequiresUnsignedConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global"})
+	_, err = service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global"})
 	if err == nil {
 		t.Fatal("install without unsigned confirmation should be rejected")
 	}
@@ -727,14 +727,14 @@ func TestLegacy_Package_Install_RequiresVersionChangeConfirmation(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	upgradePreview, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: packageWorkflowArchive(t, "1.1.0", nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Install(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ExpectedExtensionID: preview.ID})
+	_, err = service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ExpectedExtensionID: preview.ID})
 	if err == nil {
 		t.Fatal("upgrade without version change confirmation should be rejected")
 	}
@@ -747,14 +747,14 @@ func TestLegacy_Package_Install_RejectsWrongExtensionID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	upgradePreview, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: packageWorkflowArchive(t, "1.1.0", nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Install(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: "wrong-id"})
+	_, err = service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: "wrong-id"})
 	if err == nil {
 		t.Fatal("wrong expected extension ID should be rejected")
 	}
@@ -767,7 +767,7 @@ func TestLegacy_Package_Install_WrongScopeUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "character", ScopeID: "char-1", ConfirmUnsigned: true})
+	_, err = service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "character", ScopeID: "char-1", ConfirmUnsigned: true})
 	if err == nil {
 		t.Fatal("scope type mismatch should be rejected")
 	}
@@ -780,7 +780,7 @@ func TestLegacy_Package_Install_DowngradeRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: previewV2.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: previewV2.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	previewV1, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: packageWorkflowArchive(t, "1.0.0", nil)})
@@ -790,7 +790,7 @@ func TestLegacy_Package_Install_DowngradeRejected(t *testing.T) {
 	if previewV1.Conflict != PackageConflictDowngrade {
 		t.Fatalf("expected downgrade conflict, got: %s", previewV1.Conflict)
 	}
-	_, err = service.Install(ctx, InstallPackageRequest{SessionID: previewV1.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: previewV2.ID})
+	_, err = service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: previewV1.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: previewV2.ID})
 	if err == nil {
 		t.Fatal("downgrade install should be rejected")
 	}
@@ -804,14 +804,14 @@ func TestLegacy_Package_Install_AlreadyInstalledSameVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	preview2, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: raw})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Install(ctx, InstallPackageRequest{SessionID: preview2.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true})
+	result, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview2.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true})
 	if err != nil || result.Status != "succeeded" {
 		t.Fatalf("already-installed same version should succeed: %v", err)
 	}
@@ -824,7 +824,7 @@ func TestLegacy_Package_Lifecycle_UpgradeSignerChangeDetection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	rawV2 := packageWorkflowArchive(t, "1.1.0", nil)
@@ -858,7 +858,7 @@ func TestLegacy_Package_Lifecycle_ExportInvalidFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = service.Export(ctx, ExportPackageRequest{UserID: "1", ExtensionID: preview.ID, Format: "unknown", ScopeType: "global"})
@@ -874,7 +874,7 @@ func TestLegacy_Package_Lifecycle_ExportWorkflowAsAgentskillsZip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = service.Export(ctx, ExportPackageRequest{UserID: "1", ExtensionID: preview.ID, Format: "agentskills-zip", ScopeType: "global"})
@@ -890,7 +890,7 @@ func TestLegacy_Package_Lifecycle_RollbackInvalidVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = service.Rollback(ctx, preview.ID, "9.9.9", "1", "global", "")
@@ -906,10 +906,10 @@ func TestLegacy_Package_Lifecycle_RollbackToCurrentVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Rollback(ctx, preview.ID, "1.0.0", "1", "global", "")
+	result, err := service.rollbackLegacyPackage(ctx, preview.ID, "1.0.0", "1", "global", "")
 	if err != nil || result.Status != "succeeded" {
 		t.Fatalf("rollback to current version should succeed: %v", err)
 	}
@@ -940,17 +940,17 @@ func TestLegacy_Package_Lifecycle_ListVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	upgradePreview, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: packageWorkflowArchive(t, "1.1.0", nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: preview.ID}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: preview.ID}); err != nil {
 		t.Fatal(err)
 	}
-	versions, err := service.ListVersions(ctx, preview.ID, "1", "global", "")
+	versions, err := service.repository.ListPackageVersions(ctx, preview.ID, "1", "global", "")
 	if err != nil || len(versions) != 2 {
 		t.Fatalf("expected 2 versions, got: %d %v", len(versions), err)
 	}
@@ -963,20 +963,25 @@ func TestLegacy_Package_Lifecycle_CompareVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	upgradePreview, err := service.PreviewImport(ctx, PreviewPackageImportRequest{UserID: "1", ScopeType: "global", FileName: "test.amitiax", Raw: packageWorkflowArchive(t, "1.1.0", nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: preview.ID}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: upgradePreview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true, ConfirmVersionChange: true, ExpectedExtensionID: preview.ID}); err != nil {
 		t.Fatal(err)
 	}
-	diff, err := service.CompareVersions(ctx, preview.ID, "1", "global", "", "1.0.0", "1.1.0")
+	from, err := service.repository.GetPackageVersion(ctx, preview.ID, "1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	to, err := service.repository.GetPackageVersion(ctx, preview.ID, "1.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff := packageVersionDiffRecords(preview.ID, from, to, nil, nil)
 	if diff.FromVersion != "1.0.0" || diff.ToVersion != "1.1.0" {
 		t.Fatalf("version comparison invalid: %+v", diff)
 	}
@@ -989,10 +994,10 @@ func TestLegacy_Package_Lifecycle_Dependencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Dependencies(ctx, preview.ID, "1", "global", "")
+	result, err := service.legacyDependencies(ctx, preview.ID, "1", "global", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1008,10 +1013,10 @@ func TestLegacy_Package_Lifecycle_ListOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	operations, err := service.ListOperations(ctx, "1", 10)
+	operations, err := service.repository.ListPackageOperations(ctx, "1", 10)
 	if err != nil || len(operations) < 1 {
 		t.Fatalf("expected at least 1 operation, got: %d %v", len(operations), err)
 	}
@@ -1024,11 +1029,11 @@ func TestLegacy_Package_Lifecycle_GetOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true})
+	result, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	op, err := service.GetOperation(ctx, "1", result.OperationID)
+	op, err := service.repository.GetPackageOperation(ctx, "1", result.OperationID)
 	if err != nil || op.ID != result.OperationID {
 		t.Fatalf("get operation failed: %+v %v", op, err)
 	}
@@ -1041,10 +1046,10 @@ func TestLegacy_Package_Lifecycle_UninstallPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	uninstallPreview, err := service.PreviewUninstall(ctx, preview.ID, "1", "global", "")
+	uninstallPreview, err := service.legacyPreviewUninstall(ctx, preview.ID, "1", "global", "")
 	if err != nil || uninstallPreview.ExtensionID != preview.ID {
 		t.Fatalf("uninstall preview failed: %+v %v", uninstallPreview, err)
 	}
@@ -1064,17 +1069,22 @@ func TestLegacy_Package_Lifecycle_ExportVersionUsed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	exported, err := service.Export(ctx, ExportPackageRequest{UserID: "1", ExtensionID: preview.ID, Version: "1.0.0", Format: "amitiax", ScopeType: "global"})
-	if err != nil || exported.Version != "1.0.0" {
-		t.Fatalf("export with explicit version failed: %+v %v", exported, err)
+	var artifact packageArtifactRecord
+	if err := service.repository.db.WithContext(ctx).Where("extension_id = ? AND extension_version = ?", preview.ID, "1.0.0").First(&artifact).Error; err != nil {
+		t.Fatal(err)
 	}
-	if exported.Format != "amitiax" {
-		t.Fatalf("unexpected export format: %s", exported.Format)
+	files, err := service.exportAmitiaxFiles(artifact)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(exported.Content) == 0 {
+	content, err := stablePackageZIP(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(content) == 0 {
 		t.Fatal("exported content should not be empty")
 	}
 }
@@ -1087,14 +1097,19 @@ func TestLegacy_Package_Lifecycle_ExportIncludesReadme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	exported, err := service.Export(ctx, ExportPackageRequest{UserID: "1", ExtensionID: preview.ID, Format: "amitiax", ScopeType: "global"})
+	var artifact packageArtifactRecord
+	err = service.repository.db.WithContext(ctx).Where("extension_id = ? AND extension_version = ?", preview.ID, "1.0.0").First(&artifact).Error
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !exported.ReadmeIncluded {
+	files, err := service.exportAmitiaxFiles(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := files["docs/README.md"]; !ok {
 		t.Fatal("readme should be included in export")
 	}
 }
@@ -1108,14 +1123,19 @@ func TestLegacy_Package_Lifecycle_ExportIncludesTestCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	exported, err := service.Export(ctx, ExportPackageRequest{UserID: "1", ExtensionID: preview.ID, Format: "amitiax", ScopeType: "global"})
+	var artifact packageArtifactRecord
+	err = service.repository.db.WithContext(ctx).Where("extension_id = ? AND extension_version = ?", preview.ID, "1.0.0").First(&artifact).Error
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !exported.TestsIncluded {
+	files, err := service.exportAmitiaxFiles(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := files["tests/report.json"]; !ok {
 		t.Fatal("tests should be included in export")
 	}
 }
@@ -1263,7 +1283,7 @@ func TestLegacy_Package_Service_Metrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Install(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
+	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
 	metrics := service.Metrics()
@@ -1292,11 +1312,11 @@ func TestLegacy_Package_Signers_TrustAndUntrust(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := service.TrustSigner(ctx, fingerprint); err != nil {
+	if err := service.repository.SetPackageSignerTrust(ctx, fingerprint, true); err != nil {
 		t.Fatal(err)
 	}
 
-	signers, err := service.ListSigners(ctx)
+	signers, err := service.repository.ListPackageSigners(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1310,11 +1330,11 @@ func TestLegacy_Package_Signers_TrustAndUntrust(t *testing.T) {
 		t.Fatalf("signer not trusted: %+v", signers)
 	}
 
-	if err := service.UntrustSigner(ctx, fingerprint); err != nil {
+	if err := service.repository.SetPackageSignerTrust(ctx, fingerprint, false); err != nil {
 		t.Fatal(err)
 	}
 
-	signers, err = service.ListSigners(ctx)
+	signers, err = service.repository.ListPackageSigners(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

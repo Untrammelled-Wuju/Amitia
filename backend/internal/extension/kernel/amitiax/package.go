@@ -20,19 +20,20 @@ import (
 )
 
 const (
-	ManifestFile    = "manifest.json"
-	IntegrityDir    = "integrity/"
-	IntegrityFiles  = "integrity/files.json"
-	IntegrityTree   = "integrity/content-tree.json"
-	ModulesDir      = "modules/"
-	ResourcesDir    = "resources/"
-	AssetsDir       = "assets/"
-	MigrationsDir   = "migrations/"
-	LicensesDir     = "licenses/"
-	DocsDir         = "docs/"
-	SignaturesDir   = "signatures/"
-	SignatureFile   = "signatures/signature.json"
-	V2SignatureFile = "META-INF/amitia-signature.json"
+	ManifestFile         = "manifest.json"
+	IntegrityDir         = "integrity/"
+	IntegrityFiles       = "integrity/files.json"
+	IntegrityTree        = "integrity/content-tree.json"
+	ModulesDir           = "modules/"
+	ResourcesDir         = "resources/"
+	AssetsDir            = "assets/"
+	MigrationsDir        = "migrations/"
+	LicensesDir          = "licenses/"
+	DocsDir              = "docs/"
+	SignaturesDir        = "signatures/"
+	SignatureFile        = "signatures/signature.json"
+	V2SignatureFile      = "META-INF/amitia-signature.json"
+	maxPackageEntryBytes = int64(100 << 20)
 )
 
 var allowedRootDirs = map[string]bool{
@@ -46,6 +47,17 @@ var allowedRootDirs = map[string]bool{
 	"docs":          true,
 	"signatures":    true,
 	"META-INF":      true,
+}
+
+var CanonicalIntegrityExcludedPaths = map[string]bool{
+	IntegrityFiles:  true,
+	IntegrityTree:   true,
+	SignatureFile:   true,
+	V2SignatureFile: true,
+}
+
+func IsCanonicalIntegrityExcludedPath(filePath string) bool {
+	return CanonicalIntegrityExcludedPaths[normalizePath(filePath)]
 }
 
 type PackageLayout struct {
@@ -130,6 +142,9 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 		Modules: make(map[string]string),
 	}
 	for _, f := range reader.File {
+		if err := validateArchivePath(f.Name); err != nil {
+			return nil, err
+		}
 		name := normalizePath(f.Name)
 		if err := validatePath(name); err != nil {
 			return nil, err
@@ -271,13 +286,35 @@ func validatePath(p string) error {
 	return nil
 }
 
+func validateArchivePath(raw string) error {
+	normalized := strings.ReplaceAll(raw, "\\", "/")
+	if normalized == "" || strings.HasPrefix(normalized, "/") || len(normalized) >= 2 && normalized[1] == ':' {
+		return fmt.Errorf("%w: absolute path %s", ErrPathTraversal, raw)
+	}
+	cleaned := path.Clean(normalized)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%w: %s", ErrPathTraversal, raw)
+	}
+	return nil
+}
+
 func readZipFile(f *zip.File) ([]byte, error) {
+	if f.UncompressedSize64 > uint64(maxPackageEntryBytes) {
+		return nil, fmt.Errorf("%w: entry exceeds limit", ErrInvalidArchive)
+	}
 	rc, err := f.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(rc)
+	data, err := io.ReadAll(io.LimitReader(rc, maxPackageEntryBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxPackageEntryBytes {
+		return nil, fmt.Errorf("%w: entry exceeds limit", ErrInvalidArchive)
+	}
+	return data, nil
 }
 
 func ComputeTreeHash(files []FileEntry) string {
@@ -305,7 +342,7 @@ func VerifyIntegrity(pkg *Package) error {
 		if f.IsDir {
 			continue
 		}
-		if f.Path == IntegrityFiles || f.Path == IntegrityTree || f.Path == SignatureFile {
+		if IsCanonicalIntegrityExcludedPath(f.Path) {
 			continue
 		}
 		entry, ok := pkg.Integrity.Files[f.Path]

@@ -12,6 +12,7 @@ type Repository interface {
 	Delete(id int) error
 	Activate(id int) error
 	GetActive() (*AsrConfig, error)
+	ListProviders() []ProviderInfo
 }
 
 type repository struct{ db *gorm.DB }
@@ -52,4 +53,13 @@ func (r *repository) GetActive() (*AsrConfig, error) {
 	var cfg AsrConfig
 	err := r.db.Where("is_active = 1").First(&cfg).Error
 	return &cfg, err
+}
+
+func (r *repository) ListProviders() []ProviderInfo {
+	return []ProviderInfo{
+		{ID: "volcengine", Name: "火山引擎", DefaultBaseURL: "https://openspeech.bytedance.com", DefaultModel: "volc.seedasr.auc"},
+		{ID: "openai", Name: "OpenAI", DefaultBaseURL: "https://api.openai.com/v1", DefaultModel: "whisper-1"},
+		{ID: "azure", Name: "Azure Speech", DefaultBaseURL: "https://stt.speech.microsoft.com", DefaultModel: "azure-stt"},
+		{ID: "aliyun", Name: "阿里云", DefaultBaseURL: "https://nls-gateway.cn-shanghai.aliyuncs.com", DefaultModel: "nls-asr"},
+	}
 }

@@ -21,6 +21,7 @@ type Service interface {
 	Activate(id int) (*EmbeddingConfig, error)
 	GetActive() (*EmbeddingConfig, error)
 	TestConnection(id int) (map[string]interface{}, error)
+	ListProviders() []ProviderInfo
 }
 
 type service struct{ repo Repository }
@@ -51,6 +52,9 @@ func (s *service) Create(req *CreateEmbeddingConfigRequest) (*EmbeddingConfig, e
 	if req.Name == "" {
 		return nil, fmt.Errorf("名称不能为空")
 	}
+	if req.ApiType == "" {
+		req.ApiType = "volcengine"
+	}
 	if req.ModelName == "" {
 		req.ModelName = "doubao-embedding-vision-251215"
 	}
@@ -59,7 +63,7 @@ func (s *service) Create(req *CreateEmbeddingConfigRequest) (*EmbeddingConfig, e
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	cfg := &EmbeddingConfig{
-		Name: req.Name, ApiKey: req.ApiKey, ModelName: req.ModelName,
+		Name: req.Name, ApiType: req.ApiType, ApiKey: req.ApiKey, ModelName: req.ModelName,
 		BaseUrl: req.BaseUrl, IsActive: req.IsActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -103,6 +107,10 @@ func (s *service) GetActive() (*EmbeddingConfig, error) {
 	return cfg, nil
 }
 
+func (s *service) ListProviders() []ProviderInfo {
+	return s.repo.ListProviders()
+}
+
 func (s *service) TestConnection(id int) (map[string]interface{}, error) {
 	cfg, err := s.repo.GetByID(id)
 	if err != nil {
@@ -112,12 +120,30 @@ func (s *service) TestConnection(id int) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("API Key未配置")
 	}
 	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
-	reqBody := map[string]interface{}{
-		"model": cfg.ModelName,
-		"input": []map[string]interface{}{{"type": "text", "text": "连接测试"}},
+	apiType := cfg.ApiType
+	if apiType == "" {
+		apiType = "volcengine"
 	}
+
+	var reqBody map[string]interface{}
+	var endpoint string
+
+	if apiType == "volcengine" {
+		reqBody = map[string]interface{}{
+			"model": cfg.ModelName,
+			"input": []map[string]interface{}{{"type": "text", "text": "连接测试"}},
+		}
+		endpoint = baseUrl + "/embeddings/multimodal"
+	} else {
+		reqBody = map[string]interface{}{
+			"model": cfg.ModelName,
+			"input": "test text",
+		}
+		endpoint = baseUrl + "/embeddings"
+	}
+
 	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseUrl+"/embeddings/multimodal", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequest("POST", endpoint, bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	start := time.Now()

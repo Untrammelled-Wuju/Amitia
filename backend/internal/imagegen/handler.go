@@ -95,3 +95,8 @@ func (h *Handler) TestConnection(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, fmt.Sprint(result["message"]), result)
 	}
 }
+
+func (h *Handler) GetProviders(c *gin.Context) {
+	providers := h.service.ListProviders()
+	util.SuccessResponse(c, providers)
+}

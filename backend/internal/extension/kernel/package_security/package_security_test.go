@@ -76,6 +76,31 @@ func TestFileTypeDetector(t *testing.T) {
 	}
 }
 
+func TestArchiveInspectorRejectsExecutableMagicAndNestedArchive(t *testing.T) {
+	inspector := NewArchiveInspector(DefaultArchivePolicy())
+	for name, content := range map[string][]byte{
+		"modules/main/picture.png": {'M', 'Z', 0, 0},
+		"modules/main/payload.zip": {'P', 'K', 3, 4},
+	} {
+		raw := createTestZIP(map[string][]byte{name: content})
+		result, err := inspector.Inspect(context.Background(), raw)
+		if err != nil {
+			t.Fatalf("Inspect(%s) returned error: %v", name, err)
+		}
+		if result.Passed {
+			t.Fatalf("Inspect(%s) must reject the entry", name)
+		}
+	}
+}
+
+func TestSecureExtractorRevalidatesEntryContent(t *testing.T) {
+	extractor := NewSecureExtractor(DefaultArchivePolicy())
+	raw := createTestZIP(map[string][]byte{"modules/main/picture.png": {'M', 'Z', 0, 0}})
+	if _, err := extractor.Extract(context.Background(), raw, t.TempDir()); err == nil {
+		t.Fatal("Extract must reject executable magic")
+	}
+}
+
 func TestSafePathResolverNormalize(t *testing.T) {
 	r := NewSafePathResolver(512, 32)
 

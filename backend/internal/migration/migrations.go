@@ -99,5 +99,7 @@ func DefaultMigrations() []Migration {
 		QdrantMigration(),
 		SurrealMigration(),
 		MCPDuplicateRegistrationsMigration(),
+		ProviderApiTypeMigration(),
+		TtsAsrBaseUrlMigration(),
 	}
 }

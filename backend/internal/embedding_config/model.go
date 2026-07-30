@@ -5,6 +5,7 @@ package embedding_config
 type EmbeddingConfig struct {
 	ID        int    `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	Name      string `gorm:"column:name;not null" json:"name"`
+	ApiType   string `gorm:"column:api_type;default:volcengine" json:"apiType"`
 	ApiKey    string `gorm:"column:api_key" json:"apiKey"`
 	ModelName string `gorm:"column:model_name;default:doubao-embedding-vision-251215" json:"modelName"`
 	BaseUrl   string `gorm:"column:base_url;default:https://ark.cn-beijing.volces.com/api/v3" json:"baseUrl"`
@@ -16,8 +17,16 @@ type EmbeddingConfig struct {
 
 func (EmbeddingConfig) TableName() string { return "embedding_configs" }
 
+type ProviderInfo struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	DefaultBaseURL string `json:"defaultBaseUrl"`
+	DefaultModel   string `json:"defaultModel"`
+}
+
 type CreateEmbeddingConfigRequest struct {
 	Name      string `json:"name"`
+	ApiType   string `json:"apiType"`
 	ApiKey    string `json:"apiKey"`
 	ModelName string `json:"modelName"`
 	BaseUrl   string `json:"baseUrl"`

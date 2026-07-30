@@ -290,6 +290,16 @@ func TestBaseline_FinalGateProbe_MetricNames(t *testing.T) {
 		"orphan_sandbox_sessions",
 		"audit_incomplete_operations",
 		"lifecycle_requires_recovery",
+		"new_package_legacy_read_calls",
+		"orphan_staging_directories",
+		"orphan_installed_directories",
+		"missing_artifact_rows",
+		"artifact_hash_mismatch",
+		"incomplete_package_operations",
+		"requires_recovery_operations",
+		"installation_without_files",
+		"files_without_installation",
+		"active_contribution_for_disabled_installation",
 	}
 	if len(names) != len(required) {
 		t.Fatalf("expected %d metric names, got %d", len(required), len(names))

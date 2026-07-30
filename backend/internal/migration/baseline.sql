@@ -196,7 +196,9 @@ CREATE TABLE IF NOT EXISTS model_configs (
 CREATE TABLE IF NOT EXISTS tts_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    api_type TEXT DEFAULT 'volcengine',
     api_key TEXT DEFAULT '',
+    base_url TEXT DEFAULT '',
     resource_id TEXT DEFAULT 'seed-tts-2.0',
     voice_type TEXT DEFAULT 'zh_female_vv_uranus_bigtts',
     emotion TEXT DEFAULT '',
@@ -217,7 +219,9 @@ CREATE TABLE IF NOT EXISTS tts_configs (
 CREATE TABLE IF NOT EXISTS asr_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    api_type TEXT DEFAULT 'volcengine',
     api_key TEXT DEFAULT '',
+    base_url TEXT DEFAULT '',
     resource_id TEXT DEFAULT 'volc.seedasr.auc',
     is_active INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
@@ -227,8 +231,9 @@ CREATE TABLE IF NOT EXISTS asr_configs (
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    api_type TEXT DEFAULT 'volcengine',
     api_key TEXT DEFAULT '',
-    model_name TEXT DEFAULT 'doubaoseed2.0lite',
+    model_name TEXT DEFAULT 'doubao-seed-2-0-lite-260428',
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
@@ -668,10 +673,24 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_logs_character_created ON retrieval_log
 CREATE TABLE IF NOT EXISTS embedding_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL DEFAULT 'default',
+    api_type TEXT DEFAULT 'volcengine',
     api_key TEXT DEFAULT '',
     model_name TEXT DEFAULT 'doubao-embedding-vision-251215',
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS image_gen_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    api_type TEXT DEFAULT 'seedream',
+    api_key TEXT DEFAULT '',
+    model_name TEXT DEFAULT 'doubao-seedream-5-0',
+    base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
+    is_active INTEGER DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );

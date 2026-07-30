@@ -115,6 +115,8 @@ type PackageChecksumView struct {
 
 type PackageDependencyView struct {
 	ID                string `json:"id"`
+	Type              string `json:"type,omitempty"`
+	Source            string `json:"source,omitempty"`
 	VersionConstraint string `json:"versionConstraint,omitempty"`
 	Required          bool   `json:"required"`
 	Installed         bool   `json:"installed"`
@@ -227,17 +229,18 @@ type PreviewPackageImportRequest struct {
 }
 
 type InstallPackageRequest struct {
-	SessionID              string   `json:"sessionId"`
-	UserID                 string   `json:"-"`
-	ScopeType              string   `json:"scopeType"`
-	ScopeID                string   `json:"scopeId"`
-	ConfirmUnsigned        bool     `json:"confirmUnsigned"`
-	ConfirmedCapabilities  []string `json:"confirmedCapabilities"`
-	ConfirmScripts         bool     `json:"confirmScripts"`
-	ConfirmVersionChange   bool     `json:"confirmVersionChange"`
-	ConfirmSignerChange    bool     `json:"confirmSignerChange"`
-	ConfirmConfigMigration bool     `json:"confirmConfigMigration"`
-	ExpectedExtensionID    string   `json:"-"`
+	SessionID              string          `json:"sessionId"`
+	UserID                 string          `json:"-"`
+	ScopeType              string          `json:"scopeType"`
+	ScopeID                string          `json:"scopeId"`
+	ConfirmUnsigned        bool            `json:"confirmUnsigned"`
+	ConfirmedCapabilities  []string        `json:"confirmedCapabilities"`
+	ConfirmScripts         bool            `json:"confirmScripts"`
+	ConfirmVersionChange   bool            `json:"confirmVersionChange"`
+	ConfirmSignerChange    bool            `json:"confirmSignerChange"`
+	ConfirmConfigMigration bool            `json:"confirmConfigMigration"`
+	ExpectedExtensionID    string          `json:"-"`
+	Confirmations          map[string]bool `json:"confirmations,omitempty"`
 }
 
 type ExportPackageRequest struct {
@@ -265,6 +268,7 @@ type ExportedPackage struct {
 	SignatureStatus string    `json:"signatureStatus"`
 	ExpiresAt       time.Time `json:"expiresAt"`
 	Content         []byte    `json:"-"`
+	LocalPath       string    `json:"-"`
 }
 
 type PackageOperationResult struct {
@@ -278,22 +282,35 @@ type PackageOperationResult struct {
 }
 
 type PackageOperationView struct {
-	ID                string           `json:"id"`
-	Operation         PackageOperation `json:"operation"`
-	ExtensionID       string           `json:"extensionId"`
-	PreviousVersion   string           `json:"previousVersion,omitempty"`
-	TargetVersion     string           `json:"targetVersion,omitempty"`
-	Source            string           `json:"source"`
-	PackageHash       string           `json:"packageHash"`
-	SignatureStatus   string           `json:"signatureStatus"`
-	SignerFingerprint string           `json:"signerFingerprint,omitempty"`
-	ScopeType         string           `json:"scopeType"`
-	ScopeID           string           `json:"scopeId"`
-	Status            string           `json:"status"`
-	ErrorCode         string           `json:"errorCode,omitempty"`
-	TraceID           string           `json:"traceId"`
-	CreatedAt         string           `json:"createdAt"`
-	CompletedAt       string           `json:"completedAt,omitempty"`
+	ID                string                     `json:"id"`
+	Operation         PackageOperation           `json:"operation"`
+	ExtensionID       string                     `json:"extensionId"`
+	PreviousVersion   string                     `json:"previousVersion,omitempty"`
+	TargetVersion     string                     `json:"targetVersion,omitempty"`
+	Source            string                     `json:"source"`
+	PackageHash       string                     `json:"packageHash"`
+	SignatureStatus   string                     `json:"signatureStatus"`
+	SignerFingerprint string                     `json:"signerFingerprint,omitempty"`
+	ScopeType         string                     `json:"scopeType"`
+	ScopeID           string                     `json:"scopeId"`
+	Status            string                     `json:"status"`
+	ErrorCode         string                     `json:"errorCode,omitempty"`
+	TraceID           string                     `json:"traceId"`
+	CreatedAt         string                     `json:"createdAt"`
+	CompletedAt       string                     `json:"completedAt,omitempty"`
+	CurrentStep       string                     `json:"currentStep,omitempty"`
+	Steps             []PackageOperationStepView `json:"steps,omitempty"`
+}
+
+type PackageOperationStepView struct {
+	Name         string `json:"name"`
+	Order        int    `json:"order"`
+	Status       string `json:"status"`
+	AttemptCount int    `json:"attemptCount"`
+	ResultJSON   string `json:"resultJson,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
+	StartedAt    string `json:"startedAt,omitempty"`
+	CompletedAt  string `json:"completedAt,omitempty"`
 }
 
 type PackageVersionView struct {
@@ -302,6 +319,9 @@ type PackageVersionView struct {
 	ArtifactID          string          `json:"artifactId"`
 	ArtifactHash        string          `json:"artifactHash"`
 	PackageHash         string          `json:"packageHash"`
+	ArchiveHash         string          `json:"archiveHash"`
+	ManifestHash        string          `json:"manifestHash"`
+	ContentTreeHash     string          `json:"contentTreeHash"`
 	Source              string          `json:"source"`
 	SignatureStatus     string          `json:"signatureStatus"`
 	SignerFingerprint   string          `json:"signerFingerprint,omitempty"`
@@ -336,6 +356,7 @@ type PackageVersionDiff struct {
 	Capabilities map[string][]string    `json:"capabilities"`
 	Signature    map[string]string      `json:"signature"`
 	Scripts      map[string][]string    `json:"scripts"`
+	Files        map[string][]string    `json:"files"`
 	Dependencies map[string][]string    `json:"dependencies"`
 	Trust        map[string]string      `json:"trust"`
 	Risks        []PackageRisk          `json:"risks"`
@@ -343,9 +364,14 @@ type PackageVersionDiff struct {
 
 type PackageSignerView struct {
 	Fingerprint string `json:"fingerprint"`
+	KeyID       string `json:"keyId"`
+	PublisherID string `json:"publisherId"`
 	Algorithm   string `json:"algorithm"`
 	DisplayName string `json:"displayName"`
 	Trusted     bool   `json:"trusted"`
+	TrustSource string `json:"trustSource"`
+	TrustLevel  string `json:"trustLevel"`
+	KeyState    string `json:"keyState"`
 	TrustedAt   string `json:"trustedAt,omitempty"`
 	RevokedAt   string `json:"revokedAt,omitempty"`
 }

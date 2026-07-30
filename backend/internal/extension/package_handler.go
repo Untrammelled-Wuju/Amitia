@@ -21,26 +21,16 @@ func NewPackageHandler(service *PackageService, problems *Handler) *PackageHandl
 }
 
 func (h *PackageHandler) Preview(c *gin.Context) {
-	request, ok := h.previewRequest(c)
+	preview, ok := h.previewStream(c)
 	if !ok {
-		return
-	}
-	preview, err := h.service.PreviewImport(c.Request.Context(), request)
-	if err != nil {
-		h.problems.problem(c, err)
 		return
 	}
 	success(c, preview)
 }
 
 func (h *PackageHandler) PreviewUpgrade(c *gin.Context) {
-	request, ok := h.previewRequest(c)
+	preview, ok := h.previewStream(c)
 	if !ok {
-		return
-	}
-	preview, err := h.service.PreviewImport(c.Request.Context(), request)
-	if err != nil {
-		h.problems.problem(c, err)
 		return
 	}
 	if preview.ID != c.Param("id") || preview.Conflict != PackageConflictUpgrade {
@@ -48,6 +38,31 @@ func (h *PackageHandler) PreviewUpgrade(c *gin.Context) {
 		return
 	}
 	success(c, preview)
+}
+
+func (h *PackageHandler) previewStream(c *gin.Context) (PackageImportPreview, bool) {
+	var empty PackageImportPreview
+	if strings.Contains(c.GetHeader("Content-Type"), "application/json") {
+		h.problems.problem(c, NewExtensionError(ErrPackageFormatUnsupported, "通用扩展包接口只接受 Manifest v2 .amitiax；AgentSkills 请使用专用接口", "", false, nil))
+		return empty, false
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, DefaultPackageLimits().MaxExpandedBytes+(1<<20))
+	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
+		h.problems.problem(c, NewExtensionError(ErrPackageArchiveLimit, "上传内容超过限制或格式无效", "", false, err))
+		return empty, false
+	}
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		h.problems.problem(c, NewExtensionError(ErrPackageInvalidArchive, "缺少扩展包文件", "", false, err))
+		return empty, false
+	}
+	defer file.Close()
+	preview, err := h.service.PreviewImportStream(c.Request.Context(), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Request.FormValue("scopeType"), c.Request.FormValue("scopeId"), header.Filename, file)
+	if err != nil {
+		h.problems.problem(c, err)
+		return empty, false
+	}
+	return preview, true
 }
 
 func (h *PackageHandler) previewRequest(c *gin.Context) (PreviewPackageImportRequest, bool) {
@@ -113,6 +128,23 @@ func (h *PackageHandler) Install(c *gin.Context) {
 	h.install(c, "")
 }
 
+func (h *PackageHandler) Session(c *gin.Context) {
+	preview, err := h.service.GetImportSession(c.Request.Context(), c.Param("sessionId"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId"))
+	if err != nil {
+		h.problems.problem(c, err)
+		return
+	}
+	success(c, preview)
+}
+
+func (h *PackageHandler) CancelSession(c *gin.Context) {
+	if err := h.service.CancelImportSession(c.Request.Context(), c.Param("sessionId"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId")); err != nil {
+		h.problems.problem(c, err)
+		return
+	}
+	success(c, gin.H{"cancelled": true})
+}
+
 func (h *PackageHandler) Upgrade(c *gin.Context) {
 	h.install(c, c.Param("id"))
 }
@@ -158,7 +190,7 @@ func (h *PackageHandler) Download(c *gin.Context) {
 	c.Header("Content-Type", exported.MIME)
 	c.Header("Content-Disposition", `attachment; filename="`+safePackageFileName(exported.FileName)+`"`)
 	c.Header("X-Content-Type-Options", "nosniff")
-	c.Data(http.StatusOK, exported.MIME, exported.Content)
+	c.FileAttachment(exported.LocalPath, safePackageFileName(exported.FileName))
 }
 
 func (h *PackageHandler) Versions(c *gin.Context) {
@@ -252,6 +284,28 @@ func (h *PackageHandler) Signers(c *gin.Context) {
 }
 
 func (h *PackageHandler) TrustSigner(c *gin.Context) {
+	var request struct {
+		PublisherID string `json:"publisherId"`
+		KeyID       string `json:"keyId"`
+		PublicKey   string `json:"publicKey"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			h.problems.problem(c, NewExtensionError(ErrPackageSignatureInvalid, "发布者密钥请求无效", "", false, err))
+			return
+		}
+	}
+	if request.PublicKey != "" {
+		publicKey, err := base64.StdEncoding.DecodeString(request.PublicKey)
+		if err != nil {
+			h.problems.problem(c, NewExtensionError(ErrPackageSignatureInvalid, "发布者公钥 Base64 无效", "", false, err))
+			return
+		}
+		if err := h.service.RegisterSigner(c.Request.Context(), c.Param("fingerprint"), request.PublisherID, request.KeyID, publicKey); err != nil {
+			h.problems.problem(c, err)
+			return
+		}
+	}
 	if err := h.service.TrustSigner(c.Request.Context(), c.Param("fingerprint")); err != nil {
 		h.problems.problem(c, err)
 		return

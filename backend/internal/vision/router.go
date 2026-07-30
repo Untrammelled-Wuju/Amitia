@@ -21,5 +21,6 @@ func RegisterVisionRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		g.DELETE("/configs/:id", handler.Delete)
 		g.POST("/configs/:id/activate", handler.Activate)
 		g.POST("/configs/:id/test", handler.TestConnection)
+		g.GET("/providers", handler.GetProviders)
 	}
 }

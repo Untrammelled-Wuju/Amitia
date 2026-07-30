@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/trust"
 )
 
 func (s *PackageService) Export(ctx context.Context, request ExportPackageRequest) (ExportedPackage, error) {
@@ -20,15 +21,15 @@ func (s *PackageService) Export(ctx context.Context, request ExportPackageReques
 	}
 	versionName := request.Version
 	if s.readModel != nil && (request.Format == "" || request.Format == "amitiax") {
-		if exported, ok, err := s.readModel.TryExport(ctx, request.ExtensionID, versionName); err != nil {
+		if exported, ok, err := s.readModel.TryExport(ctx, request.ExtensionID, versionName, request.UserID, request.ScopeType, request.ScopeID); err != nil {
 			return ExportedPackage{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", request.ExtensionID, true, err)
 		} else if ok {
-			if err := s.repository.SavePackageExport(ctx, request.UserID, exported, request.ExtensionID); err != nil {
-				return ExportedPackage{}, err
-			}
 			s.metric("extension_package_export_total")
 			return exported, nil
 		}
+	}
+	if s.kernelProxy == nil || !s.kernelProxy.LegacyReadAllowed(ctx, request.ExtensionID) {
+		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "扩展不存在于 Kernel，且不处于人工迁移状态", request.ExtensionID, false, nil)
 	}
 	kernelruntime.GlobalLegacyReadCounter().IncExport()
 	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
@@ -178,7 +179,29 @@ func safePackageFileName(name string) string {
 }
 
 func (s *PackageService) GetExport(ctx context.Context, userID, extensionID, exportID string) (ExportedPackage, error) {
-	return s.repository.GetPackageExport(ctx, userID, extensionID, exportID)
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return ExportedPackage{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	container := s.kernelProxy.ReadContainer()
+	ticket, err := container.PackageRepository.GetExport(ctx, exportID, userID, extensionID)
+	if err != nil {
+		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "导出凭据不存在", exportID, false, err)
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, ticket.ExpiresAt)
+	if err != nil || time.Now().UTC().After(expiresAt) {
+		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "导出凭据已过期", exportID, false, err)
+	}
+	artifact, err := container.PackageRepository.GetArtifact(ctx, ticket.ArtifactID)
+	if err != nil {
+		return ExportedPackage{}, err
+	}
+	if _, err := s.kernelProxy.kernel.VerifyStoredPackage(ctx, artifact); err != nil {
+		return ExportedPackage{}, NewExtensionError(ErrPackageArtifactInvalid, "导出前制品复验失败", artifact.ArtifactID, false, err)
+	}
+	return ExportedPackage{ExportID: exportID, FileName: ticket.FileName, MIME: ticket.MIMEType,
+		Size: artifact.SizeBytes, Hash: artifact.ArchiveHash, Version: artifact.Version,
+		Format: "amitiax", SecretScan: "passed", SignatureStatus: artifact.SignatureStatus,
+		ExpiresAt: expiresAt, LocalPath: artifact.ArchivePath}, nil
 }
 
 func (s *PackageService) ListVersions(ctx context.Context, extensionID, userID, scopeType, scopeID string) ([]PackageVersionView, error) {
@@ -191,6 +214,9 @@ func (s *PackageService) ListVersions(ctx context.Context, extensionID, userID, 
 		} else if ok {
 			return result, nil
 		}
+	}
+	if s.kernelProxy == nil || !s.kernelProxy.LegacyReadAllowed(ctx, extensionID) {
+		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展不存在于 Kernel，且不允许 Legacy Read", extensionID, false, nil)
 	}
 	kernelruntime.GlobalLegacyReadCounter().IncListVersions()
 	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
@@ -207,6 +233,9 @@ func (s *PackageService) CompareVersions(ctx context.Context, extensionID, userI
 		} else if ok {
 			return result, nil
 		}
+	}
+	if s.kernelProxy == nil || !s.kernelProxy.LegacyReadAllowed(ctx, extensionID) {
+		return PackageVersionDiff{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展不存在于 Kernel，且不允许 Legacy Read", extensionID, false, nil)
 	}
 	kernelruntime.GlobalLegacyReadCounter().IncCompareVersions()
 	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
@@ -304,16 +333,16 @@ func stringSetDifference(left, right []string) []string {
 
 func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
 	if s.kernelProxy == nil {
-		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
-		return s.rollbackLegacyPackage(ctx, extensionID, version, userID, scopeType, scopeID)
+		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	if err := s.kernelProxy.Rollback(ctx, extensionID, version); err != nil {
+	result, err := s.kernelProxy.kernel.ExecutePackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 回滚失败", err.Error(), false, err)
 	}
-	return PackageOperationResult{OperationID: uuid.NewString(), TraceID: uuid.NewString(), Operation: PackageOperationRollback, ExtensionID: extensionID, Version: version, Status: "succeeded"}, nil
+	return PackageOperationResult{OperationID: result.OperationID, TraceID: result.TraceID, Operation: PackageOperationRollback, ExtensionID: extensionID, Version: version, Enabled: false, Status: "succeeded"}, nil
 }
 
 func (s *PackageService) rollbackLegacyPackage(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
@@ -491,6 +520,9 @@ func (s *PackageService) Dependencies(ctx context.Context, extensionID, userID, 
 			return result, nil
 		}
 	}
+	if s.kernelProxy == nil || !s.kernelProxy.LegacyReadAllowed(ctx, extensionID) {
+		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展不存在于 Kernel，且不允许 Legacy Read", extensionID, false, nil)
+	}
 	kernelruntime.GlobalLegacyReadCounter().IncDependencies()
 	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
 	return s.legacyDependencies(ctx, extensionID, userID, scopeType, scopeID)
@@ -520,16 +552,21 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageUninstallPreview{}, err
 	}
-	if s.readModel != nil {
-		if preview, ok, err := s.readModel.TryPreviewUninstall(ctx, extensionID); err != nil {
-			return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
-		} else if ok {
-			return preview, nil
-		}
+	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+		return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	kernelruntime.GlobalLegacyReadCounter().IncPreviewUninstall()
-	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
-	return s.legacyPreviewUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	preview, err := s.kernelProxy.kernel.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	if err != nil {
+		return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
+	}
+	result := PackageUninstallPreview{ExtensionID: preview.ExtensionID, CurrentVersion: preview.CurrentVersion,
+		Enabled: preview.Enabled, Dependents: []PackageDependencyView{}, ArtifactArchived: true,
+		Cleanup:   []string{"Kernel 定义", "Module", "Contribution", "Installed Tree"},
+		Preserved: []string{"Artifact", "Operation", "Rollback Point"}, ReadSource: "kernel"}
+	for _, dependent := range preview.Dependents {
+		result.Dependents = append(result.Dependents, PackageDependencyView{ID: dependent, Required: true, Installed: true})
+	}
+	return result, nil
 }
 
 func (s *PackageService) legacyPreviewUninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageUninstallPreview, error) {
@@ -561,16 +598,16 @@ func (s *PackageService) legacyPreviewUninstall(ctx context.Context, extensionID
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
 	if s.kernelProxy == nil {
-		kernelruntime.GlobalLegacyCallCounter().IncPackageWriteCalls()
-		return s.uninstallLegacyPackage(ctx, extensionID, userID, scopeType, scopeID)
+		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	if err := s.kernelProxy.NotifyUninstall(ctx, extensionID); err != nil {
+	op, err := s.kernelProxy.kernel.ExecutePackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)
 	}
-	return PackageOperationResult{OperationID: uuid.NewString(), TraceID: uuid.NewString(), Operation: PackageOperationUninstall, ExtensionID: extensionID, Status: "succeeded"}, nil
+	return PackageOperationResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: PackageOperationUninstall, ExtensionID: extensionID, Status: "succeeded"}, nil
 }
 
 func (s *PackageService) uninstallLegacyPackage(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
@@ -669,24 +706,109 @@ func (s *PackageService) validatePackageScope(ctx context.Context, userID, scope
 }
 
 func (s *PackageService) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationView, error) {
-	kernelruntime.GlobalLegacyReadCounter().IncDependenciesList()
-	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
-	return s.repository.ListPackageOperations(ctx, userID, limit)
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	records, err := s.kernelProxy.ReadContainer().PackageRepository.ListOperations(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]PackageOperationView, 0, len(records))
+	for _, record := range records {
+		result = append(result, kernelPackageOperationView(record, nil))
+	}
+	return result, nil
 }
 
 func (s *PackageService) GetOperation(ctx context.Context, userID, id string) (PackageOperationView, error) {
-	kernelruntime.GlobalLegacyReadCounter().IncPackageReadCalls()
-	return s.repository.GetPackageOperation(ctx, userID, id)
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return PackageOperationView{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	record, steps, err := s.kernelProxy.ReadContainer().PackageRepository.GetOperation(ctx, userID, id)
+	if err != nil {
+		return PackageOperationView{}, err
+	}
+	return kernelPackageOperationView(record, steps), nil
+}
+
+func kernelPackageOperationView(record kernelruntime.PackageOperationRecord, steps []kernelruntime.PackageOperationStep) PackageOperationView {
+	view := PackageOperationView{ID: record.OperationID, Operation: PackageOperation(record.OperationType),
+		ExtensionID: record.ExtensionID, TargetVersion: record.TargetVersion, Source: "kernel",
+		ScopeType: record.ScopeType, ScopeID: record.ScopeID, Status: record.Status,
+		ErrorCode: record.ErrorCode, TraceID: record.TraceID, CreatedAt: record.StartedAt,
+		CompletedAt: record.CompletedAt, CurrentStep: record.CurrentStep}
+	for _, step := range steps {
+		view.Steps = append(view.Steps, PackageOperationStepView{Name: step.StepName, Order: step.StepOrder,
+			Status: step.Status, AttemptCount: step.AttemptCount, ResultJSON: step.ResultJSON,
+			ErrorCode: step.ErrorCode, StartedAt: step.StartedAt, CompletedAt: step.CompletedAt})
+	}
+	return view
 }
 
 func (s *PackageService) ListSigners(ctx context.Context) ([]PackageSignerView, error) {
-	return s.repository.ListPackageSigners(ctx)
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	records, err := s.kernelProxy.ReadContainer().PackageTrustRepository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]PackageSignerView, 0, len(records))
+	for _, record := range records {
+		result = append(result, PackageSignerView{Fingerprint: record.Fingerprint, KeyID: record.KeyID,
+			PublisherID: record.PublisherID, Algorithm: "ed25519", DisplayName: record.PublisherID,
+			Trusted:     record.TrustLevel == "user_trusted" && record.KeyState == "active",
+			TrustSource: record.TrustSource, TrustLevel: record.TrustLevel, KeyState: record.KeyState,
+			TrustedAt: record.TrustedAt, RevokedAt: record.RevokedAt})
+	}
+	return result, nil
 }
 
 func (s *PackageService) TrustSigner(ctx context.Context, fingerprint string) error {
-	return s.repository.SetPackageSignerTrust(ctx, fingerprint, true)
+	return s.setKernelSignerTrust(ctx, fingerprint, true)
+}
+
+func (s *PackageService) RegisterSigner(ctx context.Context, fingerprint, publisherID, keyID string, publicKey []byte) error {
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	now := time.Now().UTC()
+	key := trust.PublisherKey{KeyID: keyID, PublisherID: publisherID, PublicKey: publicKey,
+		Algorithm: trust.AlgorithmEd25519, State: trust.KeyStateActive, CreatedAt: now}
+	if err := key.Validate(); err != nil || key.Fingerprint() != fingerprint {
+		return NewExtensionError(ErrPackageSignatureInvalid, "发布者密钥无效或指纹不匹配", fingerprint, false, err)
+	}
+	record := kernelruntime.PackagePublisherKeyRecord{KeyID: keyID, Fingerprint: fingerprint,
+		PublicKey: publicKey, PublisherID: publisherID, TrustSource: string(trust.TrustSourceUserDecision),
+		TrustLevel: string(trust.TrustLevelUnknown), KeyState: string(trust.KeyStateActive),
+		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano)}
+	if err := s.kernelProxy.ReadContainer().PackageTrustRepository.Put(ctx, record); err != nil {
+		return err
+	}
+	identity := trust.PublisherIdentity{PublisherID: publisherID, DisplayName: publisherID,
+		TrustLevel: trust.TrustLevelUnknown, Source: trust.TrustSourceUserDecision, Keys: []trust.PublisherKey{key}}
+	return s.kernelProxy.ReadContainer().TrustService.Store().RegisterUserDecision(identity)
 }
 
 func (s *PackageService) UntrustSigner(ctx context.Context, fingerprint string) error {
-	return s.repository.SetPackageSignerTrust(ctx, fingerprint, false)
+	return s.setKernelSignerTrust(ctx, fingerprint, false)
+}
+
+func (s *PackageService) setKernelSignerTrust(ctx context.Context, fingerprint string, trusted bool) error {
+	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	container := s.kernelProxy.ReadContainer()
+	record, err := container.PackageTrustRepository.SetTrusted(ctx, fingerprint, trusted)
+	if err != nil {
+		return NewExtensionError(ErrPackageSignatureInvalid, "签名密钥不可用", fingerprint, false, err)
+	}
+	if trusted {
+		identity := trust.PublisherIdentity{PublisherID: record.PublisherID, DisplayName: record.PublisherID,
+			TrustLevel: trust.TrustLevelUserTrusted, Source: trust.TrustSourceUserDecision,
+			Keys: []trust.PublisherKey{{KeyID: record.KeyID, PublisherID: record.PublisherID,
+				PublicKey: record.PublicKey, Algorithm: trust.AlgorithmEd25519, State: trust.KeyStateActive, CreatedAt: time.Now().UTC()}}}
+		return container.TrustService.Store().RegisterUserDecision(identity)
+	}
+	return container.TrustService.Store().RevokeTrust(ctx, record.PublisherID, "user decision")
 }

@@ -3,8 +3,7 @@ package extension
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 	"time"
 
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
@@ -46,7 +45,17 @@ func (p *KernelLifecycleProxy) legacyMigrationRecorded(ctx context.Context, exte
 		return false
 	}
 	var count int
-	return c.Store.DB().QueryRowContext(ctx, `SELECT COUNT(1) FROM kernel_legacy_package_migrations WHERE legacy_extension_id = ?`, extensionID).Scan(&count) == nil && count == 1
+	return c.Store.DB().QueryRowContext(ctx, `SELECT COUNT(1) FROM extension_package_legacy_migrations WHERE extension_id = ? AND migration_status = 'migrated'`, extensionID).Scan(&count) == nil && count == 1
+}
+
+func (p *KernelLifecycleProxy) LegacyReadAllowed(ctx context.Context, extensionID string) bool {
+	c := p.container()
+	if c == nil || c.Store == nil {
+		return false
+	}
+	var status string
+	err := c.Store.DB().QueryRowContext(ctx, `SELECT migration_status FROM extension_package_legacy_migrations WHERE extension_id = ?`, extensionID).Scan(&status)
+	return err == nil && status == "requires_manual_migration"
 }
 
 func (p *KernelLifecycleProxy) recordLegacyMigration(ctx context.Context, extensionID, version, status, reason string, migratedAt any) error {
@@ -54,11 +63,12 @@ func (p *KernelLifecycleProxy) recordLegacyMigration(ctx context.Context, extens
 	if c == nil || c.Store == nil {
 		return fmt.Errorf("extension kernel migration store unavailable")
 	}
-	_, err := c.Store.DB().ExecContext(ctx, `
-		INSERT INTO kernel_legacy_package_migrations (legacy_extension_id, legacy_version, status, reason, migrated_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(legacy_extension_id) DO UPDATE SET legacy_version = excluded.legacy_version, status = excluded.status, reason = excluded.reason, migrated_at = excluded.migrated_at, updated_at = excluded.updated_at
-	`, extensionID, version, status, reason, migratedAt, time.Now().UTC())
+	_, err := c.Store.DB().ExecContext(ctx, `INSERT INTO extension_package_legacy_migrations
+		(extension_id, migration_status, attempt_count, last_error, legacy_path, artifact_id, updated_at)
+		VALUES (?, ?, 1, ?, '', '', ?)
+		ON CONFLICT(extension_id) DO UPDATE SET migration_status=excluded.migration_status,
+		attempt_count=extension_package_legacy_migrations.attempt_count+1,
+		last_error=excluded.last_error, updated_at=excluded.updated_at`, extensionID, status, reason, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 
@@ -74,45 +84,18 @@ func (p *KernelLifecycleProxy) execute(ctx context.Context, cmd lifecycle_manage
 	return err
 }
 
-func (p *KernelLifecycleProxy) InstallPackage(ctx context.Context, raw []byte, fileName, expectedExtensionID string) (kernelruntime.KernelInstallResult, bool, error) {
+func (p *KernelLifecycleProxy) PreviewPackage(ctx context.Context, request kernelruntime.PackagePreviewRequest, reader io.Reader) (kernelruntime.InstallPreview, error) {
 	if p == nil || p.kernel == nil || p.container() == nil {
-		return kernelruntime.KernelInstallResult{}, false, fmt.Errorf("extension kernel install unavailable")
+		return kernelruntime.InstallPreview{}, fmt.Errorf("extension kernel preview unavailable")
 	}
-	temp, err := os.CreateTemp("", "amitia-kernel-*.amitiax")
-	if err != nil {
-		return kernelruntime.KernelInstallResult{}, false, err
+	return p.kernel.PreviewPackage(ctx, request, reader)
+}
+
+func (p *KernelLifecycleProxy) InstallPreviewedPackage(ctx context.Context, request kernelruntime.PackageInstallRequest) (kernelruntime.KernelInstallResult, error) {
+	if p == nil || p.kernel == nil || p.container() == nil {
+		return kernelruntime.KernelInstallResult{}, fmt.Errorf("extension kernel install unavailable")
 	}
-	path := temp.Name()
-	defer os.Remove(path)
-	if fileName != "" {
-		path = filepath.Join(filepath.Dir(path), filepath.Base(path)+"-"+filepath.Base(fileName))
-		defer os.Remove(path)
-	}
-	if _, err := temp.Write(raw); err != nil {
-		temp.Close()
-		return kernelruntime.KernelInstallResult{}, false, err
-	}
-	if err := temp.Close(); err != nil {
-		return kernelruntime.KernelInstallResult{}, false, err
-	}
-	if path != temp.Name() {
-		if err := os.Rename(temp.Name(), path); err != nil {
-			return kernelruntime.KernelInstallResult{}, false, err
-		}
-	}
-	preview, err := p.kernel.PreviewInstall(ctx, path)
-	if err != nil {
-		return kernelruntime.KernelInstallResult{}, false, err
-	}
-	if !preview.Installable {
-		return kernelruntime.KernelInstallResult{}, false, fmt.Errorf("extension kernel rejected package: %v", preview.Issues)
-	}
-	if expectedExtensionID != "" && preview.ExtensionID != expectedExtensionID {
-		return kernelruntime.KernelInstallResult{}, false, fmt.Errorf("extension kernel package id mismatch: expected %s, got %s", expectedExtensionID, preview.ExtensionID)
-	}
-	wasInstalled := p.extensionExists(ctx, preview.ExtensionID)
-	result, err := p.kernel.ExecuteInstall(ctx, path)
-	return result, wasInstalled, err
+	return p.kernel.ExecutePackageInstall(ctx, request)
 }
 
 func (p *KernelLifecycleProxy) NotifyInstall(ctx context.Context, extensionID, version string) error {

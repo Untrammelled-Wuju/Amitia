@@ -49,6 +49,29 @@ func (i *ArchiveInspector) Inspect(ctx context.Context, raw []byte) (*ArchiveIns
 	if err != nil {
 		return &ArchiveInspectionResult{Passed: false, Errors: []string{err.Error()}}, ErrInvalidArchive
 	}
+	return i.inspectReader(ctx, reader)
+}
+
+func (i *ArchiveInspector) InspectFile(ctx context.Context, archivePath string) (*ArchiveInspectionResult, error) {
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > i.policy.MaxArchiveBytes {
+		return &ArchiveInspectionResult{Passed: false, Errors: []string{"archive exceeds max size"}}, ErrSizeLimitExceeded
+	}
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return &ArchiveInspectionResult{Passed: false, Errors: []string{err.Error()}}, ErrInvalidArchive
+	}
+	defer reader.Close()
+	return i.inspectReader(ctx, &reader.Reader)
+}
+
+func (i *ArchiveInspector) inspectReader(ctx context.Context, reader *zip.Reader) (*ArchiveInspectionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if len(reader.File) > i.policy.MaxEntryCount {
 		return &ArchiveInspectionResult{
@@ -62,6 +85,9 @@ func (i *ArchiveInspector) Inspect(ctx context.Context, raw []byte) (*ArchiveIns
 	canonical := make(map[string]bool)
 
 	for _, item := range reader.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if item.NonUTF8 {
 			result.Errors = append(result.Errors, "non-UTF8 path: "+item.Name)
 			result.Passed = false
@@ -124,6 +150,29 @@ func (i *ArchiveInspector) Inspect(ctx context.Context, raw []byte) (*ArchiveIns
 			UncompressedSize: int64(item.UncompressedSize64),
 			Mode:             uint32(mode),
 			CRC32:            item.CRC32,
+		}
+		rc, openErr := item.Open()
+		if openErr != nil {
+			result.Errors = append(result.Errors, "entry open failed: "+string(normalized))
+			result.Passed = false
+			continue
+		}
+		head, readErr := io.ReadAll(io.LimitReader(rc, 4096))
+		rc.Close()
+		if readErr != nil {
+			result.Errors = append(result.Errors, "entry read failed: "+string(normalized))
+			result.Passed = false
+			continue
+		}
+		validation := i.entryValidator.Validate(entry, head)
+		for _, validationErr := range validation.Errors {
+			result.Errors = append(result.Errors, validationErr)
+		}
+		for _, warning := range validation.Warnings {
+			result.Warnings = append(result.Warnings, warning)
+		}
+		if !validation.Passed {
+			result.Passed = false
 		}
 		result.Entries = append(result.Entries, entry)
 	}

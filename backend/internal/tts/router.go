@@ -14,6 +14,7 @@ func RegisterTtsRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	ttsGroup := r.Group("/tts")
 	{
+		ttsGroup.GET("/providers", handler.ListProviders)
 		ttsGroup.GET("/configs", handler.List)
 		ttsGroup.GET("/configs/:id", handler.Get)
 		ttsGroup.POST("/configs", handler.Create)

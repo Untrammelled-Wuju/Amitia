@@ -5,7 +5,9 @@ package tts
 type TtsConfig struct {
 	ID                  int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	Name                string  `gorm:"column:name;not null" json:"name"`
+	ApiType             string  `gorm:"column:api_type;default:volcengine" json:"apiType"`
 	ApiKey              string  `gorm:"column:api_key" json:"apiKey"`
+	BaseURL             string  `gorm:"column:base_url" json:"baseUrl"`
 	ResourceId          string  `gorm:"column:resource_id;default:seed-tts-2.0" json:"resourceId"`
 	VoiceType           string  `gorm:"column:voice_type;default:zh_female_vv_uranus_bigtts" json:"voiceType"`
 	Emotion             string  `gorm:"column:emotion" json:"emotion"`
@@ -31,7 +33,9 @@ func (TtsConfig) TableName() string { return "tts_configs" }
 
 type CreateTtsConfigRequest struct {
 	Name                string  `json:"name"`
+	ApiType             string  `json:"apiType"`
 	ApiKey              string  `json:"apiKey"`
+	BaseURL             string  `json:"baseUrl"`
 	ResourceId          string  `json:"resourceId"`
 	VoiceType           string  `json:"voiceType"`
 	Emotion             string  `json:"emotion"`
@@ -91,4 +95,11 @@ type ClonedVoice struct {
 	Language  int    `json:"language"`
 	CreatedAt string `json:"createdAt"`
 	Status    string `json:"status"`
+}
+
+type ProviderInfo struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	DefaultBaseURL string `json:"defaultBaseUrl"`
+	DefaultModel   string `json:"defaultModel"`
 }

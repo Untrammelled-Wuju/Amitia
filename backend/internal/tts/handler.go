@@ -98,6 +98,11 @@ func (h *Handler) GetEmotions(c *gin.Context) {
 	util.SuccessResponse(c, emotions)
 }
 
+func (h *Handler) ListProviders(c *gin.Context) {
+	providers := h.service.ListProviders()
+	util.SuccessResponse(c, providers)
+}
+
 func (h *Handler) Test(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.Test(id); err != nil {
@@ -111,6 +116,8 @@ func (h *Handler) Test(c *gin.Context) {
 func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 	var body struct {
 		ApiKey     string `json:"apiKey"`
+		ApiType    string `json:"apiType"`
+		BaseURL    string `json:"baseUrl"`
 		ResourceId string `json:"resource"`
 		VoiceType  string `json:"voiceType"`
 	}
@@ -120,6 +127,8 @@ func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 	}
 	cfg := &TtsConfig{
 		ApiKey:     body.ApiKey,
+		ApiType:    body.ApiType,
+		BaseURL:    body.BaseURL,
 		ResourceId: body.ResourceId,
 		VoiceType:  body.VoiceType,
 	}

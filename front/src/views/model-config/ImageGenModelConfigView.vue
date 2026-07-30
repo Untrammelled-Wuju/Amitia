@@ -17,16 +17,33 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <div class="imagegen-header">
           <span>生图模型</span>
-          <el-tag size="small" type="warning">豆包 Seedream 5.0</el-tag>
+          <el-tag size="small" type="warning">{{ currentProviderName }}</el-tag>
         </div>
       </template>
       <div class="imagegen-grid">
+        <div class="imagegen-item">
+          <span class="imagegen-label">服务提供方</span>
+          <el-select
+            v-model="apiType"
+            size="small"
+            placeholder="选择服务提供方"
+            style="width: 260px"
+            @change="onProviderChange"
+          >
+            <el-option
+              v-for="p in providers"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+        </div>
         <div class="imagegen-item">
           <span class="imagegen-label">API Key</span>
           <el-input
             v-model="apiKey"
             size="small"
-            placeholder="火山引擎API Key"
+            placeholder="API Key"
             type="password"
             show-password
             style="width: 260px"
@@ -67,19 +84,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
       <div
+        v-if="currentProvider"
         style="
           margin-top: 6px;
           font-size: 12px;
           color: var(--el-text-color-secondary);
         "
       >
-        <el-link
-          class="quick-link"
-          href="https://console.volcengine.com/ark/region:cn-beijing/model/detail?name=doubao-seedream-5-0&agentMode=close"
-          target="_blank"
-        >
-          前往火山引擎控制台开通生图模型并获取 API Key
-        </el-link>
+        <span>当前提供方：{{ currentProviderName }}，默认模型：{{ currentProvider.defaultModel }}</span>
       </div>
       <div style="margin-top: 12px">
         <el-button
@@ -95,19 +107,51 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "../../composables/useApi";
 
 const { get, post, put } = useApi();
 
 const apiKey = ref("");
+const apiType = ref("seedream");
 const modelName = ref("doubao-seedream-5-0");
 const baseUrl = ref("https://ark.cn-beijing.volces.com/api/v3");
 const saving = ref(false);
 const testing = ref(false);
 const testResult = ref("");
 const configId = ref<number | null>(null);
+const providers = ref<any[]>([]);
+
+const currentProvider = computed(() =>
+  providers.value.find((p) => p.id === apiType.value)
+);
+const currentProviderName = computed(
+  () => currentProvider.value?.name || "未选择"
+);
+
+function onProviderChange() {
+  const p = currentProvider.value;
+  if (p) {
+    if (p.defaultBaseUrl) baseUrl.value = p.defaultBaseUrl;
+    if (p.defaultModel) modelName.value = p.defaultModel;
+  }
+}
+
+async function fetchProviders() {
+  try {
+    providers.value = (await get<any[]>("/api/imagegen/providers")) || [];
+  } catch {
+    providers.value = [
+      { id: "seedream", name: "火山引擎 Seedream", defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3", defaultModel: "doubao-seedream-5-0" },
+      { id: "openai", name: "OpenAI DALL-E", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "dall-e-3" },
+      { id: "stability", name: "Stability AI", defaultBaseUrl: "https://api.stability.ai/v2beta", defaultModel: "stable-image-core" },
+      { id: "tongyi", name: "阿里通义万相", defaultBaseUrl: "https://dashscope.aliyuncs.com/api/v1", defaultModel: "wanx2.1-t2i-turbo" },
+      { id: "cogview", name: "智谱 CogView", defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4", defaultModel: "cogview-3-plus" },
+      { id: "siliconflow", name: "硅基流动", defaultBaseUrl: "https://api.siliconflow.cn/v1", defaultModel: "Kwai-Kolors/Kolors" },
+    ];
+  }
+}
 
 async function fetchConfig() {
   try {
@@ -116,6 +160,7 @@ async function fetchConfig() {
       const cfg = all[0];
       configId.value = cfg.id;
       if (cfg.apiKey) apiKey.value = cfg.apiKey;
+      apiType.value = cfg.apiType || "seedream";
       modelName.value = cfg.modelName || "doubao-seedream-5-0";
       baseUrl.value =
         cfg.baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
@@ -132,6 +177,7 @@ async function saveImageGen() {
   try {
     const payload = {
       name: "生图模型",
+      apiType: apiType.value,
       apiKey: apiKey.value,
       modelName: modelName.value,
       baseUrl: baseUrl.value,
@@ -177,7 +223,8 @@ async function testImageGen() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchProviders();
   fetchConfig();
 });
 </script>
@@ -209,15 +256,7 @@ onMounted(() => {
 .imagegen-label {
   font-size: 13px;
   color: var(--el-text-color-secondary);
-  min-width: 60px;
+  min-width: 70px;
   flex-shrink: 0;
-}
-.quick-link {
-  color: var(--el-color-primary) !important;
-  text-decoration: underline !important;
-}
-.quick-link:hover {
-  color: var(--el-color-primary) !important;
-  text-decoration: underline !important;
 }
 </style>

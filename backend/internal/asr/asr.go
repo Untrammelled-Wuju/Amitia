@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -50,21 +53,138 @@ type AsrQueryResp struct {
 }
 
 var asrService Service
+var syncResults sync.Map
 
-func SubmitTask(apiKey string, audioURL string, language string) (string, error) {
-	if apiKey == "" {
+func protocolForApiType(apiType string) string {
+	switch apiType {
+	case "openai":
+		return "openai"
+	case "azure":
+		return "azure"
+	case "aliyun":
+		return "aliyun"
+	default:
+		return "volcengine"
+	}
+}
+
+func SubmitTask(cfg *AsrConfig, audioURL string, language string) (string, error) {
+	if cfg.ApiType == "" {
+		cfg.ApiType = "volcengine"
+	}
+	if cfg.ApiKey == "" {
 		return "", fmt.Errorf("API Key 未配置")
 	}
 	if audioURL == "" {
 		return "", fmt.Errorf("音频URL不能为空")
 	}
+
+	switch protocolForApiType(cfg.ApiType) {
+	case "openai":
+		return submitOpenAI(cfg, audioURL, language)
+	case "azure":
+		return submitAzure(cfg, audioURL, language)
+	case "aliyun":
+		return submitAliyun(cfg, audioURL, language)
+	default:
+		return submitVolcengine(cfg, audioURL, language)
+	}
+}
+
+func QueryTask(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
+	if cfg.ApiType == "" {
+		cfg.ApiType = "volcengine"
+	}
+	if cfg.ApiKey == "" {
+		return nil, fmt.Errorf("参数不全")
+	}
+	if taskID == "" {
+		return nil, fmt.Errorf("taskId不能为空")
+	}
+
+	if strings.HasPrefix(taskID, "sync:") {
+		val, ok := syncResults.Load(taskID)
+		if !ok {
+			return nil, fmt.Errorf("任务结果不存在")
+		}
+		text := val.(string)
+		syncResults.Delete(taskID)
+		return &AsrQueryResp{
+			Code:    3000,
+			Message: "success",
+			Status:  "success",
+			Result:  text,
+		}, nil
+	}
+
+	switch protocolForApiType(cfg.ApiType) {
+	case "aliyun":
+		return queryAliyun(cfg, taskID)
+	default:
+		return queryVolcengine(cfg, taskID)
+	}
+}
+
+func truncateStr(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n]) + "..."
+}
+
+func resolveConfig(explicitKey string) *AsrConfig {
+	if explicitKey != "" {
+		return &AsrConfig{ApiKey: explicitKey, ApiType: "volcengine", ResourceId: "volc.seedasr.auc"}
+	}
+	if asrService != nil {
+		cfg, err := asrService.GetActiveConfig()
+		if err == nil && cfg != nil {
+			return cfg
+		}
+	}
+	return &AsrConfig{ApiKey: "", ApiType: "volcengine", ResourceId: "volc.seedasr.auc"}
+}
+
+func fetchAudioData(audioURL string) ([]byte, string, error) {
+	if strings.HasPrefix(audioURL, "/api/asr/uploads/") {
+		filename := filepath.Base(audioURL)
+		filePath := filepath.Join("data", "asr_uploads", filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("读取本地音频失败: %w", err)
+		}
+		return data, filename, nil
+	}
+
+	resp, err := http.Get(audioURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("下载音频失败: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("读取音频失败: %w", err)
+	}
+	filename := filepath.Base(audioURL)
+	if filename == "" || filename == "/" {
+		filename = "audio.mp3"
+	}
+	return data, filename, nil
+}
+
+func submitVolcengine(cfg *AsrConfig, audioURL string, language string) (string, error) {
 	reqBody := AsrSubmitReq{Audio: AsrAudio{URL: audioURL, Language: language}, User: AsrUser{UID: "u-ai-user"}}
 	jsonBody, _ := json.Marshal(reqBody)
 	taskID := uuid.New().String()
 	req, _ := http.NewRequest("POST", asrSubmitUri, bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Api-Key", apiKey)
-	req.Header.Set("X-Api-Resource-Id", "volc.seedasr.auc")
+	req.Header.Set("X-Api-Key", cfg.ApiKey)
+	resourceId := cfg.ResourceId
+	if resourceId == "" {
+		resourceId = "volc.seedasr.auc"
+	}
+	req.Header.Set("X-Api-Resource-Id", resourceId)
 	req.Header.Set("X-Api-Request-Id", taskID)
 	req.Header.Set("X-Api-Sequence", "-1")
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -87,13 +207,14 @@ func SubmitTask(apiKey string, audioURL string, language string) (string, error)
 	return taskID, nil
 }
 
-func QueryTask(apiKey string, taskID string) (*AsrQueryResp, error) {
-	if apiKey == "" || taskID == "" {
-		return nil, fmt.Errorf("参数不全")
-	}
+func queryVolcengine(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
 	req, _ := http.NewRequest("GET", asrQueryUri+"?task_id="+taskID, nil)
-	req.Header.Set("X-Api-Key", apiKey)
-	req.Header.Set("X-Api-Resource-Id", "volc.seedasr.auc")
+	req.Header.Set("X-Api-Key", cfg.ApiKey)
+	resourceId := cfg.ResourceId
+	if resourceId == "" {
+		resourceId = "volc.seedasr.auc"
+	}
+	req.Header.Set("X-Api-Resource-Id", resourceId)
 	req.Header.Set("X-Api-Request-Id", taskID)
 	req.Header.Set("X-Api-Sequence", "-1")
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -116,25 +237,222 @@ func QueryTask(apiKey string, taskID string) (*AsrQueryResp, error) {
 	return &result, nil
 }
 
-func truncateStr(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
+func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, error) {
+	audioData, filename, err := fetchAudioData(audioURL)
+	if err != nil {
+		return "", err
 	}
-	return string(runes[:n]) + "..."
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	model := cfg.ResourceId
+	if model == "" {
+		model = "whisper-1"
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return "", fmt.Errorf("创建表单失败: %w", err)
+	}
+	part.Write(audioData)
+
+	writer.WriteField("model", model)
+	if language != "" {
+		writer.WriteField("language", language)
+	}
+	writer.Close()
+
+	req, err := http.NewRequest("POST", baseURL+"/audio/transcriptions", body)
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("OpenAI ASR 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		rawBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("OpenAI ASR 返回 %d: %s", resp.StatusCode, string(rawBody))
+	}
+
+	var result struct {
+		Text string `json:"text"`
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	taskID := "sync:" + uuid.New().String()
+	syncResults.Store(taskID, result.Text)
+	return taskID, nil
 }
 
-func resolveApiKey(explicitKey string) string {
-	if explicitKey != "" {
-		return explicitKey
+func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, error) {
+	audioData, _, err := fetchAudioData(audioURL)
+	if err != nil {
+		return "", err
 	}
-	if asrService != nil {
-		key, err := asrService.GetActiveApiKey()
-		if err == nil {
-			return key
-		}
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://stt.speech.microsoft.com"
 	}
-	return ""
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	lang := language
+	if lang == "" {
+		lang = "zh-CN"
+	}
+
+	url := fmt.Sprintf("%s/speech/recognition/conversation/cognitiveservices?language=%s", baseURL, lang)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(audioData))
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("Content-Type", "audio/wav; codecs=audio/pcm; samplerate=16000")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Azure ASR 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		rawBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Azure ASR 返回 %d: %s", resp.StatusCode, string(rawBody))
+	}
+
+	var result struct {
+		DisplayText string `json:"DisplayText"`
+		Text        string `json:"text"`
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	text := result.DisplayText
+	if text == "" {
+		text = result.Text
+	}
+
+	taskID := "sync:" + uuid.New().String()
+	syncResults.Store(taskID, text)
+	return taskID, nil
+}
+
+func submitAliyun(cfg *AsrConfig, audioURL string, language string) (string, error) {
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://nls-gateway.cn-shanghai.aliyuncs.com"
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	reqBody := map[string]interface{}{
+		"audio_url": audioURL,
+	}
+	if language != "" {
+		reqBody["language"] = language
+	}
+	jsonBody, _ := json.Marshal(reqBody)
+
+	url := fmt.Sprintf("%s/rest/v1/auc/submit", baseURL)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("X-NLS-Token", cfg.ApiKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("阿里云ASR 提交失败: %w", err)
+	}
+	defer resp.Body.Close()
+	rawBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("阿里云ASR 提交返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+	}
+
+	var result struct {
+		TaskID string `json:"task_id"`
+		Status int    `json:"status"`
+		ErrMsg string `json:"err_msg"`
+	}
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+	if result.TaskID == "" {
+		return "", fmt.Errorf("阿里云ASR未返回任务ID")
+	}
+	return result.TaskID, nil
+}
+
+func queryAliyun(cfg *AsrConfig, taskID string) (*AsrQueryResp, error) {
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://nls-gateway.cn-shanghai.aliyuncs.com"
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	url := fmt.Sprintf("%s/rest/v1/auc/query?task_id=%s", baseURL, taskID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("X-NLS-Token", cfg.ApiKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("查询阿里云ASR失败: %w", err)
+	}
+	defer resp.Body.Close()
+	rawBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("阿里云ASR查询返回 %d: %s", resp.StatusCode, truncateStr(string(rawBody), 300))
+	}
+
+	var raw struct {
+		Status int    `json:"status"`
+		Result string `json:"result"`
+		ErrMsg string `json:"err_msg"`
+	}
+	if err := json.Unmarshal(rawBody, &raw); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	statusStr := "processing"
+	if raw.Status == 1 || raw.Status == 2 {
+		statusStr = "success"
+	}
+
+	return &AsrQueryResp{
+		Code:    3000,
+		Message: "success",
+		Status:  statusStr,
+		Result:  raw.Result,
+	}, nil
 }
 
 func RegisterAsrRouter(r *gin.RouterGroup, ctx *app.AppContext) {
@@ -144,6 +462,7 @@ func RegisterAsrRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	asrGroup := r.Group("/asr")
 	{
+		asrGroup.GET("/providers", handler.ListProviders)
 		asrGroup.POST("/upload", handleUpload)
 		asrGroup.GET("/uploads/:file", handleServeUpload)
 		asrGroup.POST("/submit", handleSubmit)
@@ -164,8 +483,8 @@ func handleSubmit(c *gin.Context) {
 	if apiKey == "" {
 		apiKey = c.Query("apiKey")
 	}
-	apiKey = resolveApiKey(apiKey)
-	if apiKey == "" {
+	cfg := resolveConfig(apiKey)
+	if cfg.ApiKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil)
 		return
 	}
@@ -175,7 +494,7 @@ func handleSubmit(c *gin.Context) {
 		return
 	}
 	language := c.PostForm("language")
-	taskID, err := SubmitTask(apiKey, audioURL, language)
+	taskID, err := SubmitTask(cfg, audioURL, language)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -225,8 +544,8 @@ func handleQuery(c *gin.Context) {
 	if apiKey == "" {
 		apiKey = c.Query("apiKey")
 	}
-	apiKey = resolveApiKey(apiKey)
-	if apiKey == "" {
+	cfg := resolveConfig(apiKey)
+	if cfg.ApiKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "请先在模型配置中设置语音识别API Key", nil)
 		return
 	}
@@ -235,7 +554,7 @@ func handleQuery(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少taskId", nil)
 		return
 	}
-	result, err := QueryTask(apiKey, taskID)
+	result, err := QueryTask(cfg, taskID)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return

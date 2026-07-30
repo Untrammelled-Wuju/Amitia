@@ -8,14 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -134,7 +133,11 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 		if string(def.ID) != extensionID {
 			continue
 		}
-		views = append(views, s.buildVersionView(def, installation))
+		artifact, artifactErr := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, def.Version.String())
+		if artifactErr != nil {
+			return nil, false, fmt.Errorf("readmodel: version artifact unavailable: %w", artifactErr)
+		}
+		views = append(views, s.buildVersionView(def, installation, artifact))
 	}
 	sort.Slice(views, func(i, j int) bool {
 		vi, ei := domain.ParseVersion(views[i].Version)
@@ -175,66 +178,130 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	diff := s.buildVersionDiff(extensionID, fromDef, toDef)
+	fromArtifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, fromVersion)
+	if err != nil {
+		return PackageVersionDiff{}, false, err
+	}
+	toArtifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, toVersion)
+	if err != nil {
+		return PackageVersionDiff{}, false, err
+	}
+	fromPackage, err := s.proxy.kernel.VerifyStoredPackage(ctx, fromArtifact)
+	if err != nil {
+		return PackageVersionDiff{}, false, err
+	}
+	toPackage, err := s.proxy.kernel.VerifyStoredPackage(ctx, toArtifact)
+	if err != nil {
+		return PackageVersionDiff{}, false, err
+	}
+	applyPackageFileDiff(&diff, fromPackage, toPackage)
 	return diff, true, nil
 }
 
-func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, version string) (ExportedPackage, bool, error) {
+func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, version string, ownerScope ...string) (ExportedPackage, bool, error) {
 	if !s.available() {
 		return ExportedPackage{}, false, nil
 	}
 	container := s.proxy.ReadContainer()
-	if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID)); err != nil {
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
 		if errors.Is(err, domain.ErrInvalidExtensionID) {
 			return ExportedPackage{}, false, nil
 		}
 		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
-	ver, err := domain.ParseVersion(version)
+	owner, _ := installation.Metadata["ownerUserId"].(string)
+	storedScopeType, _ := installation.Metadata["scopeType"].(string)
+	storedScopeID, _ := installation.Metadata["scopeId"].(string)
+	userID, scopeType, scopeID := owner, storedScopeType, storedScopeID
+	if len(ownerScope) >= 3 {
+		userID, scopeType, scopeID = ownerScope[0], ownerScope[1], ownerScope[2]
+	}
+	if scopeType == "" {
+		scopeType = "global"
+	}
+	if owner != userID || storedScopeType != scopeType || storedScopeID != scopeID {
+		return ExportedPackage{}, false, fmt.Errorf("readmodel: package scope mismatch")
+	}
+	if version == "" {
+		version = installation.InstalledVersion.String()
+	}
+	artifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, version)
 	if err != nil {
 		return ExportedPackage{}, false, err
 	}
-	def, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), ver)
+	pkg, err := s.proxy.kernel.VerifyStoredPackage(ctx, artifact)
 	if err != nil {
 		return ExportedPackage{}, false, err
 	}
-	safeID := safeKernelDirName(extensionID)
-	artifactPath := filepath.Join(container.ExtRoot, "artifacts", safeID, version, def.Package.PackageID+".amitiax")
-	raw, err := os.ReadFile(artifactPath)
+	flags, err := scanPackageArchiveForExport(artifact.ArchivePath)
 	if err != nil {
 		return ExportedPackage{}, false, err
 	}
-	files, err := readZipFiles(raw)
-	if err != nil {
-		return ExportedPackage{}, false, err
-	}
-	if err := scanPackageExportSecrets(files); err != nil {
-		return ExportedPackage{}, false, err
-	}
-	name := def.Name.Default
+	name := pkg.Manifest.Extension.Name.Default
 	if name == "" {
 		name = extensionID
 	}
+	now := time.Now().UTC()
 	exported := ExportedPackage{
 		ExportID:        uuid.NewString(),
 		FileName:        safePackageFileName(name + "-" + version + ".amitiax"),
 		MIME:            "application/vnd.amitia.extension+zip",
-		Size:            int64(len(raw)),
-		Hash:            packageHash(raw),
+		Size:            artifact.SizeBytes,
+		Hash:            artifact.ArchiveHash,
 		Version:         version,
 		Format:          "amitiax",
 		SecretScan:      "passed",
-		SignatureStatus: def.Package.Signature.Status,
-		ExpiresAt:       time.Now().UTC().Add(15 * time.Minute),
-		Content:         raw,
+		SignatureStatus: artifact.SignatureStatus,
+		ExpiresAt:       now.Add(15 * time.Minute),
+		LocalPath:       artifact.ArchivePath,
 	}
-	for fileName := range files {
-		lower := strings.ToLower(fileName)
-		exported.TestsIncluded = exported.TestsIncluded || strings.HasPrefix(lower, "tests/") || strings.Contains(lower, "/tests/")
-		exported.ReadmeIncluded = exported.ReadmeIncluded || strings.HasSuffix(lower, "/readme.md") || lower == "readme.md"
-		exported.SBOMIncluded = exported.SBOMIncluded || strings.HasSuffix(lower, "sbom.spdx.json")
-		exported.ScriptsIncluded = exported.ScriptsIncluded || strings.Contains(lower, "/scripts/") || strings.HasPrefix(lower, "scripts/")
+	exported.TestsIncluded = flags["tests"]
+	exported.ReadmeIncluded = flags["readme"]
+	exported.SBOMIncluded = flags["sbom"]
+	exported.ScriptsIncluded = flags["scripts"]
+	if err := container.PackageRepository.PutExport(ctx, kernelruntime.PackageExportTicket{ExportID: exported.ExportID,
+		UserID: userID, ExtensionID: extensionID, ArtifactID: artifact.ArtifactID,
+		FileName: exported.FileName, MIMEType: exported.MIME, ExpiresAt: exported.ExpiresAt.Format(time.RFC3339Nano),
+		CreatedAt: now.Format(time.RFC3339Nano)}); err != nil {
+		return ExportedPackage{}, false, err
 	}
 	return exported, true, nil
+}
+
+func scanPackageArchiveForExport(archivePath string) (map[string]bool, error) {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	flags := map[string]bool{}
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		lower := strings.ToLower(file.Name)
+		flags["tests"] = flags["tests"] || strings.HasPrefix(lower, "tests/") || strings.Contains(lower, "/tests/")
+		flags["readme"] = flags["readme"] || strings.HasSuffix(lower, "/readme.md") || lower == "readme.md"
+		flags["sbom"] = flags["sbom"] || strings.HasSuffix(lower, "sbom.spdx.json")
+		flags["scripts"] = flags["scripts"] || strings.Contains(lower, "/scripts/") || strings.HasPrefix(lower, "scripts/")
+		if file.UncompressedSize64 > uint64(DefaultPackageLimits().MaxFileBytes) {
+			return nil, fmt.Errorf("readmodel: export entry exceeds limit")
+		}
+		rc, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		content, readErr := io.ReadAll(io.LimitReader(rc, DefaultPackageLimits().MaxFileBytes+1))
+		rc.Close()
+		if readErr != nil || int64(len(content)) > DefaultPackageLimits().MaxFileBytes {
+			return nil, fmt.Errorf("readmodel: export entry read failed")
+		}
+		if secretPattern.Match(content) {
+			return nil, NewExtensionError(ErrPackageSecretDetected, "导出内容包含疑似 Secret，请改用 Secret Reference", file.Name, false, nil)
+		}
+	}
+	return flags, nil
 }
 
 func (s *ExtensionReadModelService) readReverseDependencies(ctx context.Context, container *kernelruntime.Container, extensionID string) ([]PackageDependencyView, error) {
@@ -270,30 +337,57 @@ func (s *ExtensionReadModelService) readDirectDependencies(ctx context.Context, 
 	if err != nil {
 		return nil, fmt.Errorf("readmodel: query modules: %w", err)
 	}
+	var definition domain.ExtensionDefinition
+	if container.DefinitionRepository != nil {
+		installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+		if err != nil {
+			return nil, err
+		}
+		definition, err = container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), installation.InstalledVersion)
+		if err != nil {
+			return nil, err
+		}
+	}
 	seen := map[string]bool{}
 	result := []PackageDependencyView{}
+	appendDependency := func(dep domain.DependencyDefinition, source string) error {
+		key := string(dep.Type) + ":" + dep.ID + ":" + source
+		if seen[key] {
+			return nil
+		}
+		seen[key] = true
+		view := PackageDependencyView{ID: dep.ID, Type: string(dep.Type), Source: source,
+			VersionConstraint: dep.Version, Required: !dep.Optional}
+		if dep.Type == domain.DependencyTypeExtension {
+			if inst, instErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(dep.ID)); instErr == nil {
+				view.Installed = true
+				view.Version = inst.InstalledVersion.String()
+			} else if !errors.Is(instErr, domain.ErrInvalidExtensionID) {
+				return fmt.Errorf("readmodel: query dependency installation: %w", instErr)
+			}
+		} else {
+			view.Installed = true
+		}
+		result = append(result, view)
+		return nil
+	}
+	for _, dep := range definition.Dependencies {
+		if err := appendDependency(dep, "extension"); err != nil {
+			return nil, err
+		}
+	}
 	for _, mod := range modules {
 		for _, dep := range mod.Dependencies {
-			if seen[dep.ID] {
-				continue
+			if err := appendDependency(dep, "module:"+string(mod.ID)); err != nil {
+				return nil, err
 			}
-			seen[dep.ID] = true
-			view := PackageDependencyView{
-				ID:                dep.ID,
-				VersionConstraint: dep.Version,
-				Required:          !dep.Optional,
-			}
-			if dep.Type == domain.DependencyTypeExtension {
-				if inst, instErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(dep.ID)); instErr == nil {
-					view.Installed = true
-					view.Version = inst.InstalledVersion.String()
-				} else if !errors.Is(instErr, domain.ErrInvalidExtensionID) {
-					return nil, fmt.Errorf("readmodel: query dependency installation: %w", instErr)
+		}
+		for _, contribution := range mod.Contributions {
+			for _, dep := range contribution.Dependencies {
+				if err := appendDependency(dep, "contribution:"+string(contribution.ID)); err != nil {
+					return nil, err
 				}
-			} else {
-				view.Installed = true
 			}
-			result = append(result, view)
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
@@ -447,7 +541,7 @@ func safeKernelDirName(id string) string {
 	return strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(id)
 }
 
-func (s *ExtensionReadModelService) buildVersionView(def domain.ExtensionDefinition, installation domain.ExtensionInstallation) PackageVersionView {
+func (s *ExtensionReadModelService) buildVersionView(def domain.ExtensionDefinition, installation domain.ExtensionInstallation, artifact kernelruntime.PackageArtifact) PackageVersionView {
 	manifestBytes, _ := json.Marshal(def)
 	active := def.Version.Compare(installation.InstalledVersion) == 0
 	capabilities := kernelDefinitionCapabilities(def)
@@ -455,9 +549,12 @@ func (s *ExtensionReadModelService) buildVersionView(def domain.ExtensionDefinit
 	view := PackageVersionView{
 		Version:             def.Version.String(),
 		Manifest:            manifestBytes,
-		ArtifactID:          def.Package.ArtifactID,
-		ArtifactHash:        def.Package.ArchiveHash,
-		PackageHash:         def.Package.ContentTreeHash,
+		ArtifactID:          artifact.ArtifactID,
+		ArtifactHash:        artifact.ArtifactHash,
+		PackageHash:         artifact.ArchiveHash,
+		ArchiveHash:         artifact.ArchiveHash,
+		ManifestHash:        artifact.ManifestHash,
+		ContentTreeHash:     artifact.ContentTreeHash,
 		Source:              "kernel",
 		SignatureStatus:     def.Package.Signature.Status,
 		CompatibilityStatus: "compatible",
@@ -496,10 +593,10 @@ func (s *ExtensionReadModelService) buildVersionDiff(extensionID string, fromDef
 	toRuntimes := kernelRuntimeTypes(toDef)
 
 	diff := PackageVersionDiff{
-		ExtensionID:  extensionID,
-		FromVersion:  fromDef.Version.String(),
-		ToVersion:    toDef.Version.String(),
-		Manifest:     jsonObjectDiff(string(fromJSON), string(toJSON)),
+		ExtensionID: extensionID,
+		FromVersion: fromDef.Version.String(),
+		ToVersion:   toDef.Version.String(),
+		Manifest:    jsonObjectDiff(string(fromJSON), string(toJSON)),
 		Module: map[string]interface{}{
 			"added":   stringSetDifference(toModules, fromModules),
 			"removed": stringSetDifference(fromModules, toModules),
@@ -536,7 +633,8 @@ func (s *ExtensionReadModelService) buildVersionDiff(extensionID string, fromDef
 			"from": fromDef.Package.Signature.Status,
 			"to":   toDef.Package.Signature.Status,
 		},
-		Scripts:      map[string][]string{"added": {}, "removed": {}},
+		Scripts: map[string][]string{"added": {}, "removed": {}},
+		Files:   map[string][]string{"added": {}, "removed": {}, "changed": {}},
 		Dependencies: map[string][]string{
 			"added":   stringSetDifference(toDeps, fromDeps),
 			"removed": stringSetDifference(fromDeps, toDeps),
@@ -698,4 +796,64 @@ func readZipFiles(raw []byte) (map[string][]byte, error) {
 		files[f.Name] = content
 	}
 	return files, nil
+}
+
+func applyPackageFileDiff(diff *PackageVersionDiff, fromPackage, toPackage *amitiax.Package) {
+	fromFiles := map[string]string{}
+	toFiles := map[string]string{}
+	for _, file := range fromPackage.Files {
+		if !file.IsDir {
+			fromFiles[file.Path] = file.Hash
+		}
+	}
+	for _, file := range toPackage.Files {
+		if !file.IsDir {
+			toFiles[file.Path] = file.Hash
+		}
+	}
+	for path, hash := range fromFiles {
+		toHash, exists := toFiles[path]
+		if !exists {
+			diff.Files["removed"] = append(diff.Files["removed"], path)
+		} else if hash != toHash {
+			diff.Files["changed"] = append(diff.Files["changed"], path)
+		}
+	}
+	for path := range toFiles {
+		if _, exists := fromFiles[path]; !exists {
+			diff.Files["added"] = append(diff.Files["added"], path)
+		}
+	}
+	for key := range diff.Files {
+		sort.Strings(diff.Files[key])
+	}
+	diff.Schemas = classifiedPackageFileDiff(diff.Files, "schema", "schemas/")
+	diff.Workflow = classifiedPackageFileDiff(diff.Files, "workflow", "workflows/", "/workflow")
+	diff.Instructions = classifiedPackageFileDiff(diff.Files, "instructions", "instructions/", "skill.md")
+	scriptChanges := classifiedPackageFileDiff(diff.Files, "scripts", "scripts/", "/scripts/")
+	diff.Scripts = map[string][]string{"added": stringSliceValue(scriptChanges["added"]),
+		"removed": stringSliceValue(scriptChanges["removed"]), "changed": stringSliceValue(scriptChanges["changed"])}
+}
+
+func classifiedPackageFileDiff(files map[string][]string, category string, markers ...string) map[string]interface{} {
+	result := map[string]interface{}{"category": category, "added": []string{}, "removed": []string{}, "changed": []string{}}
+	for _, changeType := range []string{"added", "removed", "changed"} {
+		values := []string{}
+		for _, filePath := range files[changeType] {
+			lower := strings.ToLower(filePath)
+			for _, marker := range markers {
+				if strings.Contains(lower, marker) {
+					values = append(values, filePath)
+					break
+				}
+			}
+		}
+		result[changeType] = values
+	}
+	return result
+}
+
+func stringSliceValue(value interface{}) []string {
+	values, _ := value.([]string)
+	return values
 }

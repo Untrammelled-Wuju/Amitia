@@ -3,6 +3,7 @@ package package_security
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"sort"
 	"strings"
 )
@@ -23,6 +24,14 @@ type ContentHashResult struct {
 func (h *ContentHasher) HashArchive(raw []byte) string {
 	hash := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(hash[:])
+}
+
+func (h *ContentHasher) HashReader(reader io.Reader) (string, error) {
+	hash := sha256.New()
+	if _, err := io.Copy(hash, reader); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func (h *ContentHasher) HashEntry(content []byte) string {

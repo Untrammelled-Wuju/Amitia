@@ -382,11 +382,12 @@ type ContributionDefinition struct {
 	Description LocalizedText    `json:"description,omitempty"`
 	Version     string           `json:"version,omitempty"`
 
-	Definition          map[string]any  `json:"definition"`
-	RequiredPermissions []string        `json:"requiredPermissions,omitempty"`
-	RequiredScope       []string        `json:"requiredScope,omitempty"`
-	RuntimeBinding      *RuntimeBinding `json:"runtimeBinding,omitempty"`
-	Exposure            Exposure        `json:"exposure,omitempty"`
+	Definition          map[string]any         `json:"definition"`
+	RequiredPermissions []string               `json:"requiredPermissions,omitempty"`
+	RequiredScope       []string               `json:"requiredScope,omitempty"`
+	Dependencies        []DependencyDefinition `json:"dependencies,omitempty"`
+	RuntimeBinding      *RuntimeBinding        `json:"runtimeBinding,omitempty"`
+	Exposure            Exposure               `json:"exposure,omitempty"`
 
 	Metadata map[string]any `json:"metadata,omitempty"`
 }

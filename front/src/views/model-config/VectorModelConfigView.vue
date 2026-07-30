@@ -17,16 +17,33 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <div class="embedding-header">
           <span>向量模型</span>
-          <el-tag size="small" type="success">豆包 Embedding</el-tag>
+          <el-tag size="small" type="success">{{ currentProviderName }}</el-tag>
         </div>
       </template>
       <div class="embedding-grid">
+        <div class="embedding-item">
+          <span class="embedding-label">服务提供方</span>
+          <el-select
+            v-model="apiType"
+            size="small"
+            placeholder="选择服务提供方"
+            style="width: 260px"
+            @change="onProviderChange"
+          >
+            <el-option
+              v-for="p in providers"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+        </div>
         <div class="embedding-item">
           <span class="embedding-label">API Key</span>
           <el-input
             v-model="apiKey"
             size="small"
-            placeholder="火山引擎API Key"
+            placeholder="API Key"
             type="password"
             show-password
             style="width: 260px"
@@ -37,7 +54,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-input
             v-model="modelName"
             size="small"
-            disabled
             style="width: 260px"
           />
         </div>
@@ -46,7 +62,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-input
             v-model="baseUrl"
             size="small"
-            disabled
             style="width: 260px"
           />
         </div>
@@ -68,21 +83,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           >
         </div>
       </div>
-      <div
-        style="
-          margin-top: 6px;
-          font-size: 12px;
-          color: var(--el-text-color-secondary);
-        "
-      >
-        <el-link
-          class="quick-link"
-          href="https://console.volcengine.com/ark/region:ark+cn-beijing/model/detail?Id=doubao-embedding-vision"
-          target="_blank"
-        >
-          前往火山引擎控制台开通向量模型并获取 API Key
-        </el-link>
-      </div>
       <div style="margin-top: 12px">
         <el-button
           type="primary"
@@ -97,19 +97,51 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "../../composables/useApi";
 
 const { get, post, put } = useApi();
 
 const apiKey = ref("");
+const apiType = ref("volcengine");
 const modelName = ref("doubao-embedding-vision-251215");
 const baseUrl = ref("https://ark.cn-beijing.volces.com/api/v3");
 const saving = ref(false);
 const testing = ref(false);
 const testResult = ref("");
 const configId = ref<number | null>(null);
+const providers = ref<any[]>([]);
+
+const currentProvider = computed(() =>
+  providers.value.find((p) => p.id === apiType.value)
+);
+const currentProviderName = computed(
+  () => currentProvider.value?.name || "未选择"
+);
+
+function onProviderChange() {
+  const p = currentProvider.value;
+  if (p) {
+    if (p.defaultBaseUrl) baseUrl.value = p.defaultBaseUrl;
+    if (p.defaultModel) modelName.value = p.defaultModel;
+  }
+}
+
+async function fetchProviders() {
+  try {
+    providers.value = (await get<any[]>("/api/embedding/providers")) || [];
+  } catch {
+    providers.value = [
+      { id: "volcengine", name: "火山引擎", defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3", defaultModel: "doubao-embedding-vision-251215" },
+      { id: "openai", name: "OpenAI", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "text-embedding-3-large" },
+      { id: "qwen", name: "通义千问", defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "text-embedding-v3" },
+      { id: "zhipu", name: "智谱", defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4", defaultModel: "embedding-3" },
+      { id: "siliconflow", name: "硅基流动", defaultBaseUrl: "https://api.siliconflow.cn/v1", defaultModel: "BAAI/bge-large-zh-v1.5" },
+      { id: "jina", name: "Jina AI", defaultBaseUrl: "https://api.jina.ai/v1", defaultModel: "jina-embeddings-v3" },
+    ];
+  }
+}
 
 async function fetchConfig() {
   try {
@@ -118,6 +150,7 @@ async function fetchConfig() {
       const cfg = all[0];
       configId.value = cfg.id;
       if (cfg.apiKey) apiKey.value = cfg.apiKey;
+      apiType.value = cfg.apiType || "volcengine";
       modelName.value = cfg.modelName || "doubao-embedding-vision-251215";
       baseUrl.value = cfg.baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
     }
@@ -131,7 +164,13 @@ async function saveEmbedding() {
   }
   saving.value = true;
   try {
-    const payload = { name: "向量模型", apiKey: apiKey.value };
+    const payload = {
+      name: "向量模型",
+      apiType: apiType.value,
+      apiKey: apiKey.value,
+      modelName: modelName.value,
+      baseUrl: baseUrl.value,
+    };
     if (configId.value) {
       await put(`/api/embedding/configs/${configId.value}`, payload);
     } else {
@@ -173,7 +212,8 @@ async function testEmbedding() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchProviders();
   fetchConfig();
 });
 </script>
@@ -205,15 +245,7 @@ onMounted(() => {
 .embedding-label {
   font-size: 13px;
   color: var(--el-text-color-secondary);
-  min-width: 60px;
+  min-width: 70px;
   flex-shrink: 0;
-}
-.quick-link {
-  color: var(--el-color-primary) !important;
-  text-decoration: underline !important;
-}
-.quick-link:hover {
-  color: var(--el-color-primary) !important;
-  text-decoration: underline !important;
 }
 </style>

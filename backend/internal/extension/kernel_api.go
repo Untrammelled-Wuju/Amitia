@@ -1,12 +1,14 @@
 package extension
 
 import (
+	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 type KernelAPI struct {
@@ -184,14 +186,18 @@ func (api *KernelAPI) previewInstall(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return
 	}
-	tempPath, cleanup, err := saveUploadToTemp(c)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, package_security.DefaultArchivePolicy().MaxArchiveBytes+(1<<20))
+	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": err.Error()})
+		return
+	}
+	file, header, err := c.Request.FormFile("package")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	defer cleanup()
-
-	preview, err := api.runtime.Kernel.PreviewInstall(c.Request.Context(), tempPath)
+	defer file.Close()
+	preview, err := api.runtime.Kernel.PreviewPackage(c.Request.Context(), kernelruntime.PackagePreviewRequest{UserID: kernelAPIUser(c), ScopeType: kernelAPIScopeType(c), ScopeID: c.Request.FormValue("scopeId"), FileName: header.Filename}, file)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
@@ -204,19 +210,50 @@ func (api *KernelAPI) install(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
 		return
 	}
-	tempPath, cleanup, err := saveUploadToTemp(c)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, package_security.DefaultArchivePolicy().MaxArchiveBytes+(1<<20))
+	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": err.Error()})
+		return
+	}
+	file, header, err := c.Request.FormFile("package")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	defer cleanup()
-
-	result, err := api.runtime.Kernel.ExecuteInstall(c.Request.Context(), tempPath)
+	defer file.Close()
+	userID := kernelAPIUser(c)
+	scopeType := kernelAPIScopeType(c)
+	scopeID := c.Request.FormValue("scopeId")
+	preview, err := api.runtime.Kernel.PreviewPackage(c.Request.Context(), kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: header.Filename}, file)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	if len(preview.RequiredConfirmations) > 0 {
+		c.Header("Deprecation", "true")
+		c.JSON(http.StatusConflict, gin.H{"sessionId": preview.SessionID, "requiredConfirmations": preview.RequiredConfirmations, "preview": preview})
+		return
+	}
+	result, err := api.runtime.Kernel.ExecutePackageInstall(c.Request.Context(), kernelruntime.PackageInstallRequest{SessionID: preview.SessionID, UserID: userID, ScopeType: scopeType, ScopeID: scopeID, Confirmations: map[string]bool{}})
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, result)
+}
+
+func kernelAPIUser(c *gin.Context) string {
+	if value, exists := c.Get("authenticated_user_id"); exists {
+		return fmt.Sprint(value)
+	}
+	return "kernel-api"
+}
+
+func kernelAPIScopeType(c *gin.Context) string {
+	if value := c.Request.FormValue("scopeType"); value != "" {
+		return value
+	}
+	return "global"
 }
 
 func (api *KernelAPI) enable(c *gin.Context) {
@@ -275,48 +312,38 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 		return
 	}
 	extID := c.Query("id")
+	scopeType := c.Query("scopeType")
+	scopeID := c.Query("scopeId")
 	if extID == "" {
 		var body struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			ScopeType string `json:"scopeType"`
+			ScopeID   string `json:"scopeId"`
 		}
 		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
 			extID = body.ID
+			scopeType = body.ScopeType
+			scopeID = body.ScopeID
 		}
 	}
 	if extID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
 		return
 	}
-	if err := api.runtime.Kernel.Uninstall(c.Request.Context(), extID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if scopeType == "" {
+		scopeType = "global"
+	}
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), extID, kernelAPIUser(c), scopeType, scopeID)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "uninstalled": true})
+	c.JSON(http.StatusOK, op)
 }
 
 func (api *KernelAPI) resumeUninstall(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	extID := c.Query("id")
-	if extID == "" {
-		var body struct {
-			ID string `json:"id"`
-		}
-		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
-			extID = body.ID
-		}
-	}
-	if extID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
-		return
-	}
-	if err := api.runtime.Kernel.ResumeUninstall(c.Request.Context(), extID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "uninstalled": true})
+	c.Header("Deprecation", "true")
+	api.uninstall(c)
 }
 
 func (api *KernelAPI) pause(c *gin.Context) {
@@ -350,55 +377,34 @@ func (api *KernelAPI) rollback(c *gin.Context) {
 		return
 	}
 	extID := c.Query("id")
+	version := c.Query("version")
+	scopeType := c.Query("scopeType")
+	scopeID := c.Query("scopeId")
 	if extID == "" {
 		var body struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			Version   string `json:"version"`
+			ScopeType string `json:"scopeType"`
+			ScopeID   string `json:"scopeId"`
 		}
 		if err := c.ShouldBindJSON(&body); err == nil && body.ID != "" {
 			extID = body.ID
+			version = body.Version
+			scopeType = body.ScopeType
+			scopeID = body.ScopeID
 		}
 	}
-	if extID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+	if extID == "" || version == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id and version required"})
 		return
 	}
-	container := api.runtime.Kernel.Container()
-	if container == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "container unavailable"})
+	if scopeType == "" {
+		scopeType = "global"
+	}
+	result, err := api.runtime.Kernel.ExecutePackageRollback(c.Request.Context(), extID, version, kernelAPIUser(c), scopeType, scopeID)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := c.Request.Context()
-	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extID))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "extension not found"})
-		return
-	}
-	if inst.Generation > 1 {
-		inst.Generation--
-		inst.UpdatedAt = time.Now().UTC()
-		if err := container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "rolledBack": true})
-}
-
-func saveUploadToTemp(c *gin.Context) (string, func(), error) {
-	file, err := c.FormFile("package")
-	if err != nil {
-		return "", nil, err
-	}
-	temp, err := os.CreateTemp("", "amitiax-*.amitiax")
-	if err != nil {
-		return "", nil, err
-	}
-	path := temp.Name()
-	temp.Close()
-	if err := c.SaveUploadedFile(file, path); err != nil {
-		os.Remove(path)
-		return "", nil, err
-	}
-	cleanup := func() { os.Remove(path) }
-	return path, cleanup, nil
+	c.JSON(http.StatusOK, result)
 }

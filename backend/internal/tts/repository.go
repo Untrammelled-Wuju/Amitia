@@ -15,6 +15,7 @@ type Repository interface {
 	Activate(id int) error
 	GetActive() (*TtsConfig, error)
 	GetByCharacterID(charID string) (*TtsConfig, error)
+	ListProviders() []ProviderInfo
 }
 
 type repository struct {
@@ -132,4 +133,17 @@ func (r *repository) GetByCharacterID(charID string) (*TtsConfig, error) {
 		cfg.Volume = 1.0
 	}
 	return cfg, nil
+}
+
+func (r *repository) ListProviders() []ProviderInfo {
+	return []ProviderInfo{
+		{ID: "volcengine", Name: "火山引擎", DefaultBaseURL: "https://openspeech.bytedance.com", DefaultModel: "seed-tts-2.0"},
+		{ID: "openai", Name: "OpenAI", DefaultBaseURL: "https://api.openai.com/v1", DefaultModel: "tts-1"},
+		{ID: "azure", Name: "Azure Speech", DefaultBaseURL: "https://tts.speech.microsoft.com", DefaultModel: "azure-tts"},
+		{ID: "edge", Name: "Edge TTS", DefaultBaseURL: "https://speech.platform.bing.com", DefaultModel: "edge-tts"},
+		{ID: "elevenlabs", Name: "ElevenLabs", DefaultBaseURL: "https://api.elevenlabs.io/v1", DefaultModel: "eleven_multilingual_v2"},
+		{ID: "minimax", Name: "MiniMax", DefaultBaseURL: "https://api.minimax.chat/v1", DefaultModel: "speech-01-hd"},
+		{ID: "aliyun", Name: "阿里云", DefaultBaseURL: "https://nls-gateway.cn-shanghai.aliyuncs.com", DefaultModel: "nls-tts"},
+		{ID: "cosyvoice", Name: "CosyVoice", DefaultBaseURL: "http://127.0.0.1:5000", DefaultModel: "cosyvoice-v2"},
+	}
 }

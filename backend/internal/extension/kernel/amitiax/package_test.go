@@ -98,6 +98,26 @@ func createTestArchive(t *testing.T, path string) {
 	}
 }
 
+func TestVerifyIntegrityExcludesV2SignatureMetadata(t *testing.T) {
+	manifest := FileEntry{Path: ManifestFile, Size: 2, Hash: hashBytes([]byte("{}"))}
+	signature := FileEntry{Path: V2SignatureFile, Size: 2, Hash: hashBytes([]byte("{}"))}
+	pkg := &Package{
+		Files: []FileEntry{manifest, signature},
+		Integrity: IntegrityFilesDoc{Files: map[string]FileEntry{
+			ManifestFile: manifest,
+		}},
+		Tree: IntegrityTreeDoc{TreeHash: ComputeTreeHash([]FileEntry{manifest})},
+	}
+	if err := VerifyIntegrity(pkg); err != nil {
+		t.Fatalf("VerifyIntegrity must exclude V2 signature metadata: %v", err)
+	}
+}
+
+func hashBytes(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
 func zipDirectory(srcDir, zipPath string) error {
 	zipFile, err := os.Create(zipPath)
 	if err != nil {

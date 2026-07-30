@@ -17,31 +17,57 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <div class="tts-header">
           <span>语音识别/合成</span>
-          <el-tag size="small" type="success">火山引擎</el-tag>
+          <el-tag size="small" type="success">{{ currentProviderName }}</el-tag>
         </div>
       </template>
       <div class="tts-grid">
         <div class="tts-item">
+          <span class="tts-label">服务提供方</span>
+          <el-select
+            v-model="apiType"
+            size="small"
+            placeholder="选择服务提供方"
+            style="width: 260px"
+            @change="onProviderChange"
+          >
+            <el-option
+              v-for="p in providers"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+        </div>
+        <div class="tts-item" v-if="needsApiKey">
           <span class="tts-label">API Key</span>
           <el-input
             v-model="ttsApiKey"
             size="small"
-            placeholder="火山引擎API Key"
+            placeholder="API Key"
             type="password"
             show-password
             style="width: 260px"
           />
         </div>
         <div class="tts-item">
-          <span class="tts-label">语音合成大模型</span>
+          <span class="tts-label">{{ isVolcengine ? '语音合成大模型' : '模型名称' }}</span>
           <el-input
             v-model="ttsResourceId"
             size="small"
-            placeholder="seed-tts-2.0"
+            :placeholder="isVolcengine ? 'seed-tts-2.0' : '模型名称'"
             style="width: 260px"
           />
         </div>
-        <div class="tts-item">
+        <div class="tts-item" v-if="!isVolcengine">
+          <span class="tts-label">接口地址</span>
+          <el-input
+            v-model="baseUrl"
+            size="small"
+            placeholder="接口地址"
+            style="width: 260px"
+          />
+        </div>
+        <div class="tts-item" v-if="isVolcengine">
           <span class="tts-label">复刻资源ID</span>
           <el-input
             v-model="cloneResourceId"
@@ -50,8 +76,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             style="width: 260px"
           />
         </div>
-
-        <div class="tts-item">
+        <div class="tts-item" v-if="isVolcengine">
           <span class="tts-label">APP ID</span>
           <el-input
             v-model="realtimeAppId"
@@ -60,7 +85,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             style="width: 260px"
           />
         </div>
-        <div class="tts-item">
+        <div class="tts-item" v-if="isVolcengine">
           <span class="tts-label">Access Token</span>
           <el-input
             v-model="realtimeAccessToken"
@@ -71,7 +96,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             style="width: 260px"
           />
         </div>
-        <div class="tts-item">
+        <div class="tts-item" v-if="isVolcengine">
           <span class="tts-label">Secret Key</span>
           <el-input
             v-model="realtimeSecretKey"
@@ -84,7 +109,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div class="tts-item">
           <span class="tts-label">默认语音</span>
-          <el-select v-model="ttsVoiceType" size="small" style="width: 240px">
+          <el-input
+            v-if="!isVolcengine"
+            v-model="ttsVoiceType"
+            size="small"
+            placeholder="语音名称"
+            style="width: 260px"
+          />
+          <el-select v-else v-model="ttsVoiceType" size="small" style="width: 240px">
             <el-option
               v-for="v in voicePresets"
               :key="v.name"
@@ -155,6 +187,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
       <div
+        v-if="isVolcengine"
         style="
           margin-top: 12px;
           font-size: 12px;
@@ -212,14 +245,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "../../composables/useApi";
 
 const { get, post, put } = useApi();
 
 const ttsConfig = ref<any>(null);
+const apiType = ref("volcengine");
 const ttsApiKey = ref("");
+const baseUrl = ref("https://openspeech.bytedance.com");
 const ttsVoiceType = ref("zh_female_vv_uranus_bigtts");
 const ttsResourceId = ref("seed-tts-2.0");
 const cloneResourceId = ref("volc.megatts.timbre");
@@ -233,10 +268,45 @@ const ttsAudio = ref("");
 const ttsTesting = ref(false);
 const ttsTestResult = ref("");
 const voicePresets = ref<any[]>([]);
-
 const ttsSaving = ref(false);
+const providers = ref<any[]>([]);
+
+const currentProvider = computed(() =>
+  providers.value.find((p) => p.id === apiType.value)
+);
+const currentProviderName = computed(
+  () => currentProvider.value?.name || "未选择"
+);
+const isVolcengine = computed(() => apiType.value === "volcengine");
+const needsApiKey = computed(() => apiType.value !== "edge" && apiType.value !== "cosyvoice");
+
+function onProviderChange() {
+  const p = currentProvider.value;
+  if (p) {
+    if (p.defaultBaseUrl) baseUrl.value = p.defaultBaseUrl;
+    if (p.defaultModel) ttsResourceId.value = p.defaultModel;
+  }
+}
+
+async function fetchProviders() {
+  try {
+    providers.value = (await get<any[]>("/api/tts/providers")) || [];
+  } catch {
+    providers.value = [
+      { id: "volcengine", name: "火山引擎", defaultBaseUrl: "https://openspeech.bytedance.com", defaultModel: "seed-tts-2.0" },
+      { id: "openai", name: "OpenAI", defaultBaseUrl: "https://api.openai.com/v1", defaultModel: "tts-1" },
+      { id: "azure", name: "Azure Speech", defaultBaseUrl: "https://tts.speech.microsoft.com", defaultModel: "azure-tts" },
+      { id: "edge", name: "Edge TTS", defaultBaseUrl: "https://speech.platform.bing.com", defaultModel: "edge-tts" },
+      { id: "elevenlabs", name: "ElevenLabs", defaultBaseUrl: "https://api.elevenlabs.io/v1", defaultModel: "eleven_multilingual_v2" },
+      { id: "minimax", name: "MiniMax", defaultBaseUrl: "https://api.minimax.chat/v1", defaultModel: "speech-01-hd" },
+      { id: "aliyun", name: "阿里云", defaultBaseUrl: "https://nls-gateway.cn-shanghai.aliyuncs.com", defaultModel: "nls-tts" },
+      { id: "cosyvoice", name: "CosyVoice", defaultBaseUrl: "http://127.0.0.1:5000", defaultModel: "cosyvoice-v2" },
+    ];
+  }
+}
 
 onMounted(async () => {
+  await fetchProviders();
   fetchTtsConfig();
   fetchVoices();
 });
@@ -249,6 +319,8 @@ async function fetchTtsConfig() {
     if (cfg) {
       ttsConfig.value = cfg;
       ttsApiKey.value = cfg.apiKey || "";
+      apiType.value = cfg.apiType || "volcengine";
+      baseUrl.value = cfg.baseUrl || "https://openspeech.bytedance.com";
       ttsResourceId.value = cfg.resourceId || "seed-tts-2.0";
       cloneResourceId.value = cfg.cloneResourceId || "volc.megatts.timbre";
       ttsVoiceType.value = cfg.voiceType || "zh_female_vv_uranus_bigtts";
@@ -277,17 +349,21 @@ async function saveAllTts() {
   ttsSaving.value = true;
   try {
     const payload: any = {
+      apiType: apiType.value,
       apiKey: ttsApiKey.value,
+      baseUrl: baseUrl.value,
       resourceId: ttsResourceId.value,
-      cloneResourceId: cloneResourceId.value,
       voiceType: ttsVoiceType.value,
       speed: ttsSpeed.value,
       pitch: ttsPitch.value,
       volume: ttsVolume.value,
-      realtimeAppId: realtimeAppId.value,
-      realtimeAccessToken: realtimeAccessToken.value,
-      realtimeSecretKey: realtimeSecretKey.value,
     };
+    if (isVolcengine.value) {
+      payload.cloneResourceId = cloneResourceId.value;
+      payload.realtimeAppId = realtimeAppId.value;
+      payload.realtimeAccessToken = realtimeAccessToken.value;
+      payload.realtimeSecretKey = realtimeSecretKey.value;
+    }
     if (ttsConfig.value?.id) {
       await put("/api/tts/configs/" + ttsConfig.value.id, payload);
     } else {
@@ -314,17 +390,21 @@ async function testTts() {
   try {
     if (!ttsConfig.value?.id) {
       const payload: any = {
+        apiType: apiType.value,
         apiKey: ttsApiKey.value,
+        baseUrl: baseUrl.value,
         resourceId: ttsResourceId.value,
-        cloneResourceId: cloneResourceId.value,
         voiceType: ttsVoiceType.value,
         speed: ttsSpeed.value,
         pitch: ttsPitch.value,
         volume: ttsVolume.value,
-        realtimeAppId: realtimeAppId.value,
-        realtimeAccessToken: realtimeAccessToken.value,
-        realtimeSecretKey: realtimeSecretKey.value,
       };
+      if (isVolcengine.value) {
+        payload.cloneResourceId = cloneResourceId.value;
+        payload.realtimeAppId = realtimeAppId.value;
+        payload.realtimeAccessToken = realtimeAccessToken.value;
+        payload.realtimeSecretKey = realtimeSecretKey.value;
+      }
       const r = await post("/api/tts/configs", {
         ...payload,
         name: "默认配置",
@@ -376,12 +456,8 @@ async function testTts() {
 .tts-label {
   font-size: 13px;
   color: var(--el-text-color-secondary);
-  min-width: 60px;
+  min-width: 70px;
   flex-shrink: 0;
-}
-.tts-val {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
 }
 .quick-link {
   color: var(--el-color-primary) !important;

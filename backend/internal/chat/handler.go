@@ -307,7 +307,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 		}
 	}
 	if cfg.APIType == "" {
-		cfg.APIType = "openai-compatible"
+		cfg.APIType = "openai"
 	}
 	result, err := h.service.CreateModel(&cfg)
 	if err != nil {

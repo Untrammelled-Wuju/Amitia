@@ -10,16 +10,18 @@ import (
 )
 
 type SecureExtractor struct {
-	policy       ArchivePolicy
-	pathResolver *SafePathResolver
-	hasher       *ContentHasher
+	policy         ArchivePolicy
+	pathResolver   *SafePathResolver
+	hasher         *ContentHasher
+	entryValidator *EntryValidator
 }
 
 func NewSecureExtractor(policy ArchivePolicy) *SecureExtractor {
 	return &SecureExtractor{
-		policy:       policy,
-		pathResolver: NewSafePathResolver(policy.MaxPathLength, policy.MaxDirectoryDepth),
-		hasher:       NewContentHasher(),
+		policy:         policy,
+		pathResolver:   NewSafePathResolver(policy.MaxPathLength, policy.MaxDirectoryDepth),
+		hasher:         NewContentHasher(),
+		entryValidator: NewEntryValidator(policy),
 	}
 }
 
@@ -32,10 +34,29 @@ func (e *SecureExtractor) Extract(ctx context.Context, raw []byte, targetRoot st
 	if err != nil {
 		return nil, err
 	}
+	return e.extractReader(ctx, reader, targetRoot)
+}
+
+func (e *SecureExtractor) ExtractFile(ctx context.Context, archivePath, targetRoot string) ([]ArchiveEntryInfo, error) {
+	if err := os.MkdirAll(targetRoot, 0o700); err != nil {
+		return nil, err
+	}
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return e.extractReader(ctx, &reader.Reader, targetRoot)
+}
+
+func (e *SecureExtractor) extractReader(ctx context.Context, reader *zip.Reader, targetRoot string) ([]ArchiveEntryInfo, error) {
 
 	var entries []ArchiveEntryInfo
 
 	for _, item := range reader.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if item.NonUTF8 {
 			continue
 		}
@@ -82,6 +103,20 @@ func (e *SecureExtractor) Extract(ctx context.Context, raw []byte, targetRoot st
 			return nil, ErrSizeLimitExceeded
 		}
 
+		entry := ArchiveEntryInfo{
+			Path:             item.Name,
+			NormalizedPath:   string(normalized),
+			Kind:             EntryKindFile,
+			CompressedSize:   int64(item.CompressedSize64),
+			UncompressedSize: int64(item.UncompressedSize64),
+			Mode:             uint32(item.Mode()),
+			CRC32:            item.CRC32,
+		}
+		validation := e.entryValidator.Validate(entry, content)
+		if !validation.Passed {
+			return nil, ErrForbiddenFileType
+		}
+
 		f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
 		if err != nil {
 			return nil, err
@@ -100,16 +135,8 @@ func (e *SecureExtractor) Extract(ctx context.Context, raw []byte, targetRoot st
 
 		entryHash := e.hasher.HashEntry(content)
 
-		entries = append(entries, ArchiveEntryInfo{
-			Path:             item.Name,
-			NormalizedPath:   string(normalized),
-			Kind:             EntryKindFile,
-			CompressedSize:   int64(item.CompressedSize64),
-			UncompressedSize: int64(item.UncompressedSize64),
-			Mode:             uint32(item.Mode()),
-			Hash:             entryHash,
-			CRC32:            item.CRC32,
-		})
+		entry.Hash = entryHash
+		entries = append(entries, entry)
 	}
 
 	return entries, nil

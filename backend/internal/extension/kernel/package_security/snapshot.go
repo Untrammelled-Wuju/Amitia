@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ type RollbackSnapshot struct {
 type SnapshotManager struct {
 	baseDir   string
 	snapshots map[string]*RollbackSnapshot
+	mu        sync.Mutex
 }
 
 func NewSnapshotManager(baseDir string) *SnapshotManager {
@@ -74,11 +76,15 @@ func (m *SnapshotManager) CreateSnapshot(ctx context.Context, sourcePath, packag
 		CreatedAt:    time.Now(),
 	}
 
+	m.mu.Lock()
 	m.snapshots[id] = snapshot
+	m.mu.Unlock()
 	return snapshot, nil
 }
 
 func (m *SnapshotManager) GetSnapshot(ctx context.Context, snapshotID string) (*RollbackSnapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	snapshot, ok := m.snapshots[snapshotID]
 	if !ok {
 		return nil, ErrSnapshotNotFound
@@ -87,6 +93,8 @@ func (m *SnapshotManager) GetSnapshot(ctx context.Context, snapshotID string) (*
 }
 
 func (m *SnapshotManager) Retain(ctx context.Context, snapshotID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	snapshot, ok := m.snapshots[snapshotID]
 	if !ok {
 		return ErrSnapshotNotFound
@@ -96,6 +104,8 @@ func (m *SnapshotManager) Retain(ctx context.Context, snapshotID string) error {
 }
 
 func (m *SnapshotManager) Delete(ctx context.Context, snapshotID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	snapshot, ok := m.snapshots[snapshotID]
 	if !ok {
 		return ErrSnapshotNotFound
@@ -112,12 +122,17 @@ func (m *SnapshotManager) Delete(ctx context.Context, snapshotID string) error {
 func (m *SnapshotManager) CleanupExpired(ctx context.Context) []string {
 	var cleaned []string
 	now := time.Now()
-
+	m.mu.Lock()
+	var expired []string
 	for id, snap := range m.snapshots {
 		if snap.ExpiresAt != nil && now.After(*snap.ExpiresAt) {
-			if err := m.Delete(ctx, id); err == nil {
-				cleaned = append(cleaned, id)
-			}
+			expired = append(expired, id)
+		}
+	}
+	m.mu.Unlock()
+	for _, id := range expired {
+		if err := m.Delete(ctx, id); err == nil {
+			cleaned = append(cleaned, id)
 		}
 	}
 

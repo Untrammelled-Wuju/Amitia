@@ -202,8 +202,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		},
 	})
 
-	auditWriter := package_security.NewMemoryAuditWriter()
-	packageSec := package_security.NewPackageSecurityService(package_security.DefaultArchivePolicy(), auditWriter)
+	packageSec := package_security.NewPackageSecurityServiceAtRoot(package_security.DefaultArchivePolicy(), package_security.NewSQLiteAuditWriter(db), b.extRoot)
+	packageRepo := NewPackageRepository(db)
+	packageArtifactStore := NewPackageArtifactStore(b.extRoot)
+	packageTrustRepo := NewPackageTrustRepository(db)
+	trustService := trust.NewTrustService(trust.TrustServiceConfig{})
+	if err := packageTrustRepo.Restore(ctx, trustService); err != nil {
+		return nil, fmt.Errorf("kernel: restore package trust: %w", err)
+	}
 
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
@@ -664,16 +670,19 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionRepository:   permRepo,
 		ResourceRepository:     resourceRepo,
 
-		PackageSecurity:       packageSec,
-		LifecycleManager:      lifecycleMgr,
-		ContributionRegistry:  contribRegistry,
-		ContributionInstaller: typedInstaller,
-		DependencyResolver:    dependencyResolver,
-		RuntimeSupervisor:     supervisor,
-		ExecutionKernel:       executionKernel,
-		HostAPIGateway:        hostAPIGateway,
-		PermissionBroker:      permBroker,
-		ScopeManager:          scopeManager,
+		PackageSecurity:        packageSec,
+		PackageRepository:      packageRepo,
+		PackageArtifactStore:   packageArtifactStore,
+		PackageTrustRepository: packageTrustRepo,
+		LifecycleManager:       lifecycleMgr,
+		ContributionRegistry:   contribRegistry,
+		ContributionInstaller:  typedInstaller,
+		DependencyResolver:     dependencyResolver,
+		RuntimeSupervisor:      supervisor,
+		ExecutionKernel:        executionKernel,
+		HostAPIGateway:         hostAPIGateway,
+		PermissionBroker:       permBroker,
+		ScopeManager:           scopeManager,
 		ScopeSnapshotCreator: func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
 			invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
 			scopes := []scope.ScopeRef{
@@ -754,7 +763,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DevConsoleService: devConsoleSvc,
 		DevConsoleRepo:    devConsoleRepo,
 		DevConsoleHandler: devConsoleHandler,
-		TrustService:      trust.NewTrustService(trust.TrustServiceConfig{}),
+		TrustService:      trustService,
 		AmitiaxInstaller:  amitiaxInstaller,
 		DevModeRegistry:   devModeRegistry,
 		DevModePipeline:   devModePipeline,
