@@ -173,10 +173,11 @@ func computeFindingSummary(findings []QualityFinding) FindingSummary {
 }
 
 type EngineExecutor struct {
-	engine *Engine
-	repo   QualityRepository
-	report *ReportGenerator
-	events EventPublisher
+	engine    *Engine
+	repo      QualityRepository
+	report    *ReportGenerator
+	events    EventPublisher
+	committer QualityCommitter
 }
 
 func NewEngineExecutor(engine *Engine, repo QualityRepository, reportGen *ReportGenerator, events EventPublisher) *EngineExecutor {
@@ -186,6 +187,10 @@ func NewEngineExecutor(engine *Engine, repo QualityRepository, reportGen *Report
 		report: reportGen,
 		events: events,
 	}
+}
+
+func (ex *EngineExecutor) SetCommitter(committer QualityCommitter) {
+	ex.committer = committer
 }
 
 func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEvaluation, req EvaluateRequest) (*EvaluateResult, error) {
@@ -238,21 +243,39 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 		eval.ReportHash = reportHash
 	}
 
-	if err := ex.repo.UpdateEvaluation(ctx, eval); err != nil {
-		return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to update evaluation result", err)
+	if ex.committer != nil {
+		commitReq := CommitEvaluationRequest{
+			Evaluation:          eval,
+			Findings:            result.Findings,
+			Scores:              result.Scores,
+			Verdict:             result.Verdict,
+			OverallScore:        derefFloat64(result.Result.OverallScore),
+			OverallConfidence:   result.Result.OverallConfidence,
+			ReportPath:          reportPath,
+			ReportHash:          reportHash,
+			ProfileSnapshotJSON: eval.ProfileSnapshotJSON,
+			ProfileHash:         eval.ProfileHash,
+			ProcessingTaskID:    req.ProcessingTaskID,
+			ActionKey:           req.ActionKey,
+		}
+		_, commitErr := ex.committer.CommitEvaluation(ctx, commitReq)
+		if commitErr != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "committer failed", commitErr)
+		}
+	} else {
+		if err := ex.repo.UpdateEvaluation(ctx, eval); err != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to update evaluation result", err)
+		}
+		findingRecords := FindingsToRecords(result.Findings, eval.ID)
+		if err := ex.repo.CreateFindings(ctx, findingRecords); err != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist findings", err)
+		}
+		scoreRecords := ScoresToRecords(result.Scores, eval.ID)
+		if err := ex.repo.CreateDimensionScores(ctx, scoreRecords); err != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist dimension scores", err)
+		}
+		_ = ex.repo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, eval.ID)
 	}
-
-	findingRecords := FindingsToRecords(result.Findings, eval.ID)
-	if err := ex.repo.CreateFindings(ctx, findingRecords); err != nil {
-		return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist findings", err)
-	}
-
-	scoreRecords := ScoresToRecords(result.Scores, eval.ID)
-	if err := ex.repo.CreateDimensionScores(ctx, scoreRecords); err != nil {
-		return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist dimension scores", err)
-	}
-
-	_ = ex.repo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, eval.ID)
 
 	_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
 		JobID:            req.ExecutionID,
@@ -280,4 +303,11 @@ func ScoresToRecords(scores []DimensionScore, evaluationID string) []QualityDime
 		})
 	}
 	return records
+}
+
+func derefFloat64(v *float64) float64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }

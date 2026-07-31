@@ -1950,6 +1950,7 @@ var schemaMigrations = []string{
 		installed_at INTEGER,
 		retained_until INTEGER,
 		created_at INTEGER NOT NULL,
+		uninstalled_at TEXT NOT NULL DEFAULT '',
 		UNIQUE(extension_id, version)
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_package_versions_ext ON package_versions(extension_id)`,
@@ -1997,6 +1998,13 @@ var schemaMigrations = []string{
 	`ALTER TABLE package_versions ADD COLUMN retained_until TEXT`,
 	`UPDATE package_versions SET version_state = 'current' WHERE version_state = 'active'`,
 	`UPDATE package_versions SET version_state = 'retained' WHERE version_state = 'inactive'`,
+	`UPDATE package_versions SET version_state = 'retained' WHERE version_id NOT IN (SELECT version_id FROM package_versions pv1 WHERE pv1.version_state = 'current' AND pv1.extension_id = package_versions.extension_id ORDER BY installed_at DESC LIMIT 1) AND version_state = 'current' AND extension_id IN (SELECT extension_id FROM package_versions WHERE version_state = 'current' GROUP BY extension_id HAVING COUNT(*) > 1)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_package_versions_single_current ON package_versions(extension_id) WHERE version_state = 'current'`,
+	`ALTER TABLE extension_package_operations ADD COLUMN final_fencing_token INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE extension_package_operations ADD COLUMN completion_proof_hash TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN finalization_state TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE extension_package_operations ADD COLUMN journal_schema_version INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE package_versions ADD COLUMN uninstalled_at TEXT NOT NULL DEFAULT ''`,
 }
 
 type dbExecutor interface {

@@ -34,7 +34,15 @@ type ActiveRevisionDetail struct {
 	DefaultFPS     int
 	LoopType       string
 	ReturnAction   string
+	ReturnPolicy   string
 	Interruptible  bool
+	Priority       int
+	CooldownMs     int
+	MinimumPlayMs  int
+	MaximumPlayMs  int
+	MutexGroup     string
+	AnchorX        float64
+	AnchorY        float64
 	QualityVerdict string
 	Frames         []BuilderFrameInfo
 }

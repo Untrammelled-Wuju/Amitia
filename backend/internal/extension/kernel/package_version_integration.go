@@ -8,12 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func (r *Runtime) recordPackageVersionAfterOperation(ctx context.Context, operationID, operationType, extensionID, version, artifactID, installedPath, installedTreeHash, archiveHash, manifestHash, contentTreeHash, generationID string) error {
+func (r *Runtime) recordPackageVersionAfterOperation(ctx context.Context, operationID, operationType, extensionID, version, artifactID, installedPath, installedTreeHash, archiveHash, manifestHash, contentTreeHash, generationID string, guard PackageWriteGuard) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	record := PackageVersionRecord{
+	candidate := PackageVersionRecord{
 		VersionID:          "version-" + uuid.NewString(),
 		ExtensionID:        extensionID,
 		Version:            version,
@@ -38,14 +38,12 @@ func (r *Runtime) recordPackageVersionAfterOperation(ctx context.Context, operat
 		return fmt.Errorf("kernel: begin package version transaction: %w", err)
 	}
 	defer tx.Rollback()
-	oldVersionID, err := r.container.PackageRepository.GetCurrentPackageVersionIDTx(ctx, tx, extensionID)
+	upsertResult, err := r.container.PackageRepository.UpsertPackageVersionTx(ctx, tx, guard, candidate)
 	if err != nil {
-		return fmt.Errorf("kernel: lookup current package version: %w", err)
+		return fmt.Errorf("kernel: upsert package version record: %w", err)
 	}
-	if err := r.container.PackageRepository.PutPackageVersionTx(ctx, tx, record); err != nil {
-		return fmt.Errorf("kernel: persist package version record: %w", err)
-	}
-	if err := r.container.PackageRepository.ActivatePackageVersionTx(ctx, tx, extensionID, record.VersionID, oldVersionID); err != nil {
+	actualVersionID := upsertResult.Record.VersionID
+	if err := r.container.PackageRepository.ActivatePackageVersionTx(ctx, tx, guard, extensionID, actualVersionID, generationID); err != nil {
 		return fmt.Errorf("kernel: activate package version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -54,12 +52,24 @@ func (r *Runtime) recordPackageVersionAfterOperation(ctx context.Context, operat
 	return nil
 }
 
-func (r *Runtime) deactivatePackageVersionAfterUninstall(ctx context.Context, extensionID, version, operationID string) error {
+func (r *Runtime) deactivatePackageVersionAfterUninstall(ctx context.Context, extensionID, version, operationID string, guard PackageWriteGuard) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return nil
 	}
-	if err := r.container.PackageRepository.DeactivatePackageVersion(ctx, extensionID, version, operationID); err != nil {
+	db := r.container.PackageRepository.DB()
+	if db == nil {
+		return fmt.Errorf("kernel: package version database unavailable")
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("kernel: begin deactivate version transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if err := r.container.PackageRepository.DeactivatePackageVersionTx(ctx, tx, guard, extensionID, version, operationID); err != nil {
 		return fmt.Errorf("kernel: deactivate package version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("kernel: commit deactivate version transaction: %w", err)
 	}
 	return nil
 }

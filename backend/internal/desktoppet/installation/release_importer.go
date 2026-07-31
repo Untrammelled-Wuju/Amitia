@@ -165,8 +165,8 @@ func (im *ReleaseImporter) ImportPackage(req *ImportPackageRequest) (*ImportPack
 		SPDX: "legacy_inferred",
 	}
 	manifest.Compatibility = packageformat.ManifestCompatibility{
-		MinRuntimeVersion: "0.0.0",
-		RenderMode:         packageformat.RenderModeSprite,
+		MinRuntimeVersion: DefaultMinRuntimeVersion,
+		RenderMode:        packageformat.RenderModeSprite,
 	}
 	manifest.Binding = packageformat.ManifestBinding{
 		Policy:            packageformat.BindingPolicyInferred,
@@ -386,6 +386,18 @@ func (im *ReleaseImporter) loadExistingImportResult(op *PackageOperation) (*Impo
 	}, nil
 }
 
+type importActionConfig struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	ActionKey     string `json:"actionKey"`
+	DisplayName   string `json:"displayName"`
+	ActionName    string `json:"actionName"`
+	Fps           int    `json:"fps"`
+	DefaultFps    int    `json:"defaultFps"`
+	PlaybackMode  string `json:"playbackMode"`
+	LoopType      string `json:"loopType"`
+	FrameCount    int    `json:"frameCount"`
+}
+
 func scanImportedActions(stagingDir string, includedActions []string) ([]packageformat.ManifestActionEntry, error) {
 	actionsDir := filepath.Join(stagingDir, "actions")
 	entries, err := os.ReadDir(actionsDir)
@@ -422,16 +434,31 @@ func scanImportedActions(stagingDir string, includedActions []string) ([]package
 
 		actionJSONPath := filepath.Join(stagingDir, "actions", key, "action.json")
 		if data, rErr := os.ReadFile(actionJSONPath); rErr == nil {
-			var cfg actionConfig
+			var cfg importActionConfig
 			if jErr := json.Unmarshal(data, &cfg); jErr == nil {
-				if cfg.ActionName != "" {
-					entry.Name = cfg.ActionName
+				name := cfg.DisplayName
+				if name == "" {
+					name = cfg.ActionName
 				}
-				if cfg.LoopType != "" {
-					entry.LoopType = cfg.LoopType
+				if name != "" {
+					entry.Name = name
 				}
-				entry.FPS = cfg.DefaultFps
-				entry.FrameCount = cfg.FrameCount
+				mode := cfg.PlaybackMode
+				if mode == "" {
+					mode = cfg.LoopType
+				}
+				mode = packageformat.NormalizePlaybackMode(mode)
+				if mode != "" {
+					entry.LoopType = mode
+				}
+				fps := cfg.Fps
+				if fps == 0 {
+					fps = cfg.DefaultFps
+				}
+				entry.FPS = fps
+				if cfg.FrameCount > 0 {
+					entry.FrameCount = cfg.FrameCount
+				}
 			}
 		}
 

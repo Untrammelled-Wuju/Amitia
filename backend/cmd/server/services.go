@@ -36,6 +36,11 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/quality/bridge"
 	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
+	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
+	qualitymeasurement "github.com/u-ai/backend/internal/desktoppet/quality/measurement"
+	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
+	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
+	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
@@ -486,12 +491,33 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver)
 
 	qualityBridge := bridge.NewProcessingBridge(ctx.DB, processingDataDir)
+	qualityRepo := quality.NewRepository(ctx.DB)
+	qualityGateEvaluator := quality.NewGateEvaluator(qualityRepo)
+	qualityWritebackSvc := qualitywriteback.NewQualityWritebackService(ctx.DB)
+	qualityActiveBindingSvc := qualitywriteback.NewActiveBindingService(qualityRepo)
+	qualityCommitter := qualitywriteback.NewCommitter(qualityRepo, qualityWritebackSvc, qualityActiveBindingSvc)
+	qualityTaskGateSvc := qualitygate.NewTaskGateService(qualityRepo, qualityGateEvaluator)
+	qualityGateInvalidator := qualitygate.NewGateInvalidator(qualityRepo)
+	qualityReviewDecisionSvc := qualitygate.NewReviewDecisionService(qualityRepo)
+	qualityOutboxPublisher := qualityrecovery.NewOutboxPublisher(qualityRepo, quality.NewLogEventPublisher())
+	qualityRecoveryWorker := qualityrecovery.NewRecoveryWorker(qualityRepo)
+	qualityInputRepo := qualityinput.NewInputRepository(ctx.DB, processingDataDir)
+	qualityMeasurementEngine := qualitymeasurement.NewImageMeasurementEngine(qualityRepo)
 	qualitySvc, err := quality.NewQualityService(quality.ServiceConfig{
-		DB:             ctx.DB,
-		DataDir:        processingDataDir,
-		MeasurementSrc: quality.NewProcessingMeasurementAdapter(qualityBridge, processingDataDir),
-		Detectors:      detectors.NewDefaultDetectors(),
-		EventPublisher: quality.NewLogEventPublisher(),
+		DB:                ctx.DB,
+		DataDir:           processingDataDir,
+		MeasurementSrc:    quality.NewProcessingMeasurementAdapter(qualityBridge, processingDataDir),
+		Detectors:         detectors.NewDefaultDetectors(),
+		EventPublisher:    quality.NewLogEventPublisher(),
+		Repo:              qualityRepo,
+		Committer:         qualityCommitter,
+		TaskGateService:   qualityTaskGateSvc,
+		GateInvalidator:   qualityGateInvalidator,
+		ReviewDecisionSvc: qualityReviewDecisionSvc,
+		RecoveryWorker:    qualityRecoveryWorker,
+		OutboxPublisher:   qualityOutboxPublisher,
+		InputRepository:   qualityInputRepo,
+		MeasurementEngine: qualityMeasurementEngine,
 	})
 	if err != nil {
 		log.Error("failed to create quality service: ", err)

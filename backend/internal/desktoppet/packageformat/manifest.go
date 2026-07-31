@@ -22,12 +22,30 @@ const (
 )
 
 const (
-	LoopTypeNone   = "none"
-	LoopTypePing   = "ping-pong"
-	LoopTypeLoop   = "loop"
-	LoopTypeOnce   = "once"
-	LoopTypeHold   = "hold"
+	LoopTypeNone     = "none"
+	LoopTypePingPong = "ping_pong"
+	LoopTypeLoop     = "loop"
+	LoopTypeOnce     = "once"
+	LoopTypeHold     = "hold"
 )
+
+var validPlaybackModes = map[string]bool{
+	LoopTypeLoop:     true,
+	LoopTypeOnce:     true,
+	LoopTypeHold:     true,
+	LoopTypePingPong: true,
+}
+
+func NormalizePlaybackMode(mode string) string {
+	if mode == "ping-pong" {
+		return LoopTypePingPong
+	}
+	return mode
+}
+
+func IsValidPlaybackMode(mode string) bool {
+	return validPlaybackModes[mode]
+}
 
 const (
 	FileRolePreview     = "preview"

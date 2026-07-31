@@ -17,17 +17,6 @@ type AssistantState =
   | "assistant_finished"
   | "assistant_error";
 
-interface PetFrameUpdatePayload {
-  actionKey: string;
-  frameIndex: number;
-  dataURL: string;
-  width: number;
-  height: number;
-  loopType: string;
-  fps: number;
-  anchor?: { x: number; y: number };
-}
-
 interface PetActionSwitchPayload {
   actionKey: string;
   previousActionKey: string | null;
@@ -58,9 +47,6 @@ interface ResolveResourceUrlResult {
 }
 
 const legacyPetApi = {
-  onFrameUpdate(_callback: (payload: PetFrameUpdatePayload) => void): () => void {
-    return () => {};
-  },
   onActionSwitch(
     callback: (payload: PetActionSwitchPayload) => void,
   ): () => void {
@@ -137,6 +123,18 @@ const animationApi = {
 
   sendHover(x: number, y: number): void {
     ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendHover, { x, y });
+  },
+
+  sendRendererReady(): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.rendererReady);
+  },
+
+  sendRendererReadyAck(payload: { snapshotApplied: boolean }): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.rendererReadyAck, payload);
+  },
+
+  reportHitMask(width: number, height: number, data: Uint8Array, threshold: number): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.hitMask, { width, height, data, threshold });
   },
 
   onPlayAction(

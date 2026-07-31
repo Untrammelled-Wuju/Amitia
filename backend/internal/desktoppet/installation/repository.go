@@ -73,6 +73,27 @@ type Repository interface {
 	CreateValidationReport(report *PackageValidationReport) error
 	GetValidationReport(releaseID string) (*PackageValidationReport, error)
 
+	GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error)
+	ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error)
+
+	GetRuntimeDesiredState(installationID string) (*RuntimeDesiredState, error)
+	UpsertRuntimeDesiredState(state *RuntimeDesiredState) error
+	ListDesiredStatesByUser(userID string) ([]*RuntimeDesiredState, error)
+
+	CreateCommitJournal(journal *InstallationCommitJournal) error
+	UpdateCommitJournal(journal *InstallationCommitJournal) error
+	GetCommitJournalByOperation(operationID string) (*InstallationCommitJournal, error)
+	ListPendingCommitJournals() ([]*InstallationCommitJournal, error)
+
+	CreateSwitchJournal(journal *InstallationSwitchJournal) error
+	UpdateSwitchJournal(journal *InstallationSwitchJournal) error
+
+	CreateLegacyInstallationMapping(mapping *LegacyInstallationMapping) error
+	GetLegacyInstallationMappingByLegacyID(legacyInstallationID string) (*LegacyInstallationMapping, error)
+
+	GetActiveBindingByUserDevice(userID, deviceID string) (*ActiveBinding, error)
+	UpsertActiveBindingByUserDevice(binding *ActiveBinding) error
+
 	Transaction(fn func(tx *gorm.DB) error) error
 }
 
@@ -272,4 +293,190 @@ func (r *repository) UpdateRuntimeSettingsWithCAS(installationID string, expecte
 		return nil, err
 	}
 	return result, nil
+}
+
+func (r *repository) GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error) {
+	var inst Installation
+	query := r.db.Where("user_id = ? AND pet_id = ?", userID, petID)
+	if deviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	}
+	query = query.Where("status NOT IN ?", []string{StatusUninstalled, StatusUninstalling, StatusInvalid})
+	err := query.First(&inst).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &inst, nil
+}
+
+func (r *repository) ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error) {
+	var installations []*Installation
+	query := r.db.Where("user_id = ?", userID)
+	if deviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	}
+	err := query.Order("created_at DESC").Find(&installations).Error
+	if installations == nil {
+		installations = []*Installation{}
+	}
+	return installations, err
+}
+
+func (r *repository) GetRuntimeDesiredState(installationID string) (*RuntimeDesiredState, error) {
+	var state RuntimeDesiredState
+	err := r.db.Where("installation_id = ?", installationID).First(&state).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &state, nil
+}
+
+func (r *repository) UpsertRuntimeDesiredState(state *RuntimeDesiredState) error {
+	now := time.Now().Format(installationTimeFormat)
+	var existing RuntimeDesiredState
+	err := r.db.Where("installation_id = ?", state.InstallationID).First(&existing).Error
+	if err == nil {
+		state.ID = existing.ID
+		state.CreatedAt = existing.CreatedAt
+		state.Revision = existing.Revision + 1
+		state.UpdatedAt = now
+		return r.db.Save(state).Error
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		state.Revision = 1
+		state.UpdatedAt = now
+		if state.CreatedAt == "" {
+			state.CreatedAt = now
+		}
+		return r.db.Create(state).Error
+	}
+	return err
+}
+
+func (r *repository) ListDesiredStatesByUser(userID string) ([]*RuntimeDesiredState, error) {
+	var states []*RuntimeDesiredState
+	err := r.db.Where("user_id = ?", userID).Order("updated_at DESC").Find(&states).Error
+	if states == nil {
+		states = []*RuntimeDesiredState{}
+	}
+	return states, err
+}
+
+func (r *repository) CreateCommitJournal(journal *InstallationCommitJournal) error {
+	now := time.Now().Format(installationTimeFormat)
+	if journal.CreatedAt == "" {
+		journal.CreatedAt = now
+	}
+	journal.UpdatedAt = now
+	return r.db.Create(journal).Error
+}
+
+func (r *repository) UpdateCommitJournal(journal *InstallationCommitJournal) error {
+	journal.UpdatedAt = time.Now().Format(installationTimeFormat)
+	return r.db.Save(journal).Error
+}
+
+func (r *repository) GetCommitJournalByOperation(operationID string) (*InstallationCommitJournal, error) {
+	var journal InstallationCommitJournal
+	err := r.db.Where("operation_id = ?", operationID).First(&journal).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &journal, nil
+}
+
+func (r *repository) ListPendingCommitJournals() ([]*InstallationCommitJournal, error) {
+	var journals []*InstallationCommitJournal
+	err := r.db.Where("state NOT IN ?", []string{JournalStateCompleted, JournalStateFailed}).
+		Order("created_at ASC").Find(&journals).Error
+	if journals == nil {
+		journals = []*InstallationCommitJournal{}
+	}
+	return journals, err
+}
+
+func (r *repository) CreateSwitchJournal(journal *InstallationSwitchJournal) error {
+	now := time.Now().Format(installationTimeFormat)
+	if journal.CreatedAt == "" {
+		journal.CreatedAt = now
+	}
+	journal.UpdatedAt = now
+	return r.db.Create(journal).Error
+}
+
+func (r *repository) UpdateSwitchJournal(journal *InstallationSwitchJournal) error {
+	journal.UpdatedAt = time.Now().Format(installationTimeFormat)
+	return r.db.Save(journal).Error
+}
+
+func (r *repository) CreateLegacyInstallationMapping(mapping *LegacyInstallationMapping) error {
+	now := time.Now().Format(installationTimeFormat)
+	if mapping.CreatedAt == "" {
+		mapping.CreatedAt = now
+	}
+	mapping.UpdatedAt = now
+	return r.db.Create(mapping).Error
+}
+
+func (r *repository) GetLegacyInstallationMappingByLegacyID(legacyInstallationID string) (*LegacyInstallationMapping, error) {
+	var mapping LegacyInstallationMapping
+	err := r.db.Where("legacy_installation_id = ?", legacyInstallationID).First(&mapping).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &mapping, nil
+}
+
+func (r *repository) GetActiveBindingByUserDevice(userID, deviceID string) (*ActiveBinding, error) {
+	var binding ActiveBinding
+	query := r.db.Where("user_id = ?", userID)
+	if deviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	}
+	err := query.First(&binding).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &binding, nil
+}
+
+func (r *repository) UpsertActiveBindingByUserDevice(binding *ActiveBinding) error {
+	now := time.Now().Format(installationTimeFormat)
+	var existing ActiveBinding
+	query := r.db.Where("user_id = ?", binding.UserID)
+	if binding.DeviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", binding.DeviceID)
+	}
+	err := query.First(&existing).Error
+	if err == nil {
+		binding.UserID = existing.UserID
+		binding.CreatedAt = existing.CreatedAt
+		binding.BindingRevision = existing.BindingRevision + 1
+		binding.UpdatedAt = now
+		return r.db.Save(binding).Error
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		binding.BindingRevision = 1
+		binding.UpdatedAt = now
+		if binding.CreatedAt == "" {
+			binding.CreatedAt = now
+		}
+		return r.db.Create(binding).Error
+	}
+	return err
 }

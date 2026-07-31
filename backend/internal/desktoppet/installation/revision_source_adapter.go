@@ -9,6 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/specs"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -78,15 +79,19 @@ func (a *revisionSourceAdapter) ListProcessingActions(processingTaskID string) (
 
 	result := make([]BuilderActionInfo, 0, len(actions))
 	for _, action := range actions {
+		supportsDefaultIdle := action.ActionKey == "idle_normal"
+		if spec, ok := specs.CatalogGet(action.ActionKey); ok {
+			supportsDefaultIdle = spec.Identity.SupportsDefaultIdle
+		}
 		result = append(result, BuilderActionInfo{
 			ActionKey:           action.ActionKey,
 			ActionNameSnapshot:  action.ActionNameSnapshot,
 			Status:              action.Status,
 			Excluded:            action.Excluded == 1,
 			LoopType:            action.LoopType,
-			FPS:                  action.FPS,
+			FPS:                 action.FPS,
 			FrameDurationMS:     action.FrameDurationMS,
-			SupportsDefaultIdle: action.ActionKey == "idle_normal",
+			SupportsDefaultIdle: supportsDefaultIdle,
 		})
 	}
 	return result, nil
@@ -130,6 +135,15 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 		})
 	}
 
+	priority := 50
+	if revision.PriorityOverride != nil {
+		priority = *revision.PriorityOverride
+	}
+	cooldownMs := 0
+	if revision.CooldownMSOverride != nil {
+		cooldownMs = *revision.CooldownMSOverride
+	}
+
 	return &ActiveRevisionDetail{
 		RevisionID:     revision.ID,
 		RevisionNumber: revision.RevisionNumber,
@@ -139,7 +153,15 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 		DefaultFPS:     revision.DefaultFPS,
 		LoopType:       revision.LoopType,
 		ReturnAction:   revision.ReturnAction,
+		ReturnPolicy:   "",
 		Interruptible:  revision.Interruptible == 1,
+		Priority:       priority,
+		CooldownMs:     cooldownMs,
+		MinimumPlayMs:  0,
+		MaximumPlayMs:  0,
+		MutexGroup:     "",
+		AnchorX:        0,
+		AnchorY:        0,
 		QualityVerdict: revision.QualityVerdict,
 		Frames:         frameInfos,
 	}, nil

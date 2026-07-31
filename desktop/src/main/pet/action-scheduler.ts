@@ -1,6 +1,6 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 import { ResourceLoader } from "./resource-loader";
-import type { ActionPlayer, PlayerCallbacks, PlayerLike } from "./action-player";
+import type { DesktopPetPlayerPort, PlayerLifecyclePort } from "./player-port";
 
 export type EventSource =
   | "system"
@@ -111,13 +111,9 @@ function nowTimestamp(): number {
   return Date.now();
 }
 
-type PlayerInternal = {
-  callbacks: PlayerCallbacks;
-};
-
 export class DesktopPetActionScheduler {
   private loaded: LoadedInstallation | null = null;
-  private player: PlayerLike;
+  private player: DesktopPetPlayerPort & PlayerLifecyclePort;
   private callbacks: SchedulerCallbacks;
   private queue: DesktopPetActionRequest[] = [];
   private current: DesktopPetActionRequest | null = null;
@@ -126,15 +122,11 @@ export class DesktopPetActionScheduler {
   private sustainedState: string | null = null;
   private idleRepeatCount: Map<string, number> = new Map();
   private resourceLoader: ResourceLoader;
-  private originalPlayerCallbacks: PlayerCallbacks;
 
-  constructor(player: PlayerLike, callbacks?: SchedulerCallbacks) {
+  constructor(player: DesktopPetPlayerPort & PlayerLifecyclePort, callbacks?: SchedulerCallbacks) {
     this.player = player;
     this.callbacks = callbacks ?? {};
     this.resourceLoader = new ResourceLoader();
-    const playerRef = this.player as unknown as PlayerInternal;
-    this.originalPlayerCallbacks = playerRef.callbacks;
-    this.installPlayerHooks();
   }
 
   attachLoaded(loaded: LoadedInstallation): void {
@@ -268,36 +260,21 @@ export class DesktopPetActionScheduler {
   }
 
   dispose(): void {
-    const playerRef = this.player as unknown as PlayerInternal;
-    playerRef.callbacks = this.originalPlayerCallbacks;
     this.resetRuntimeState();
   }
 
-  private installPlayerHooks(): void {
-    const playerRef = this.player as unknown as PlayerInternal;
-    const original = this.originalPlayerCallbacks;
-    playerRef.callbacks = {
-      onFrameChange: original.onFrameChange
-        ? (key, frame) => original.onFrameChange!(key, frame)
-        : undefined,
-      onActionComplete: (key, loop) => {
-        try {
-          original.onActionComplete?.(key, loop);
-        } catch {
-          void 0;
-        }
-        this.handleActionComplete(key);
-      },
-      onActionSwitch: (newKey, oldKey) => {
-        try {
-          original.onActionSwitch?.(newKey, oldKey);
-        } catch {
-          void 0;
-        }
-        this.handleActionSwitch(newKey, oldKey);
-      },
-      onError: original.onError,
-    };
+  notifyActionCompleted(actionKey: string): void {
+    this.handleActionComplete(actionKey);
+  }
+
+  notifyActionInterrupted(actionKey: string): void {
+    if (!this.loaded) return;
+    const interruptedRequest = this.current;
+    this.current = null;
+    this.currentActionStartedAt = 0;
+    if (interruptedRequest) {
+      this.emit("action-interrupted", interruptedRequest, this.player.getCurrentAction());
+    }
   }
 
   private handleActionComplete(_actionKey: string): void {

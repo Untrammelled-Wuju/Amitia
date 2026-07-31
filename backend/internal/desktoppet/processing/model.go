@@ -100,6 +100,10 @@ type ProcessingAction struct {
 	SourceAttemptID        string  `gorm:"column:source_attempt_id;default:''" json:"sourceAttemptId"`
 	SourceCandidateIndex   int     `gorm:"column:source_candidate_index;default:0" json:"sourceCandidateIndex"`
 	ProcessingProfileSnap  string  `gorm:"column:processing_profile_snapshot;default:'{}'" json:"processingProfileSnapshot"`
+	PendingRetryRequestID  string  `gorm:"column:pending_retry_request_id;default:''" json:"pendingRetryRequestId"`
+	ProcessingWarnings     string  `gorm:"column:processing_warnings;default:''" json:"processingWarnings"`
+	WarningCount           int     `gorm:"column:warning_count;default:0" json:"warningCount"`
+	ActionSpecSnapshot     string  `gorm:"column:action_spec_snapshot;default:'{}'" json:"actionSpecSnapshot"`
 }
 
 func (ProcessingAction) TableName() string { return "desktop_pet_processing_actions" }
@@ -120,6 +124,10 @@ type ProcessingActionAttempt struct {
 	CompletedAt            string `gorm:"column:completed_at" json:"completedAt"`
 	CreatedAt              string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt              string `gorm:"column:updated_at" json:"updatedAt"`
+	LeaseOwner             string `gorm:"column:lease_owner;default:''" json:"leaseOwner"`
+	LeaseExpiresAt         string `gorm:"column:lease_expires_at;default:''" json:"leaseExpiresAt"`
+	HeartbeatAt            string `gorm:"column:heartbeat_at;default:''" json:"heartbeatAt"`
+	CommitID               string `gorm:"column:commit_id;default:''" json:"commitId"`
 }
 
 func (ProcessingActionAttempt) TableName() string { return "desktop_pet_processing_action_attempts" }

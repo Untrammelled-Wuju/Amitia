@@ -14,17 +14,6 @@ type AssistantState =
   | "assistant_finished"
   | "assistant_error";
 
-interface PetFrameUpdatePayload {
-  actionKey: string;
-  frameIndex: number;
-  dataURL: string;
-  width: number;
-  height: number;
-  loopType: string;
-  fps: number;
-  anchor?: { x: number; y: number };
-}
-
 interface PetActionSwitchPayload {
   actionKey: string;
   previousActionKey: string | null;
@@ -50,9 +39,6 @@ interface ChatStatePetPayload {
 }
 
 const petApi = {
-  onFrameUpdate(_callback: (payload: PetFrameUpdatePayload) => void): () => void {
-    return () => {};
-  },
   onActionSwitch(
     callback: (payload: PetActionSwitchPayload) => void,
   ): () => void {

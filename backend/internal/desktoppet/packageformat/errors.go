@@ -21,6 +21,14 @@ const (
 	ErrCodePackageRuntimeIncompatible ErrorCode = "PACKAGE_RUNTIME_INCOMPATIBLE"
 	ErrCodePackageQualityGateBlocked  ErrorCode = "PACKAGE_QUALITY_GATE_BLOCKED"
 	ErrCodePackageBindingNotAllowed   ErrorCode = "PACKAGE_BINDING_NOT_ALLOWED"
+	ErrCodeActionConfigMissing        ErrorCode = "ACTION_CONFIG_MISSING"
+	ErrCodeActionConfigInvalid        ErrorCode = "ACTION_CONFIG_INVALID"
+	ErrCodeActionReferenceInvalid     ErrorCode = "ACTION_REFERENCE_INVALID"
+	ErrCodeFrameMissing               ErrorCode = "FRAME_MISSING"
+	ErrCodeFrameHashMismatch          ErrorCode = "FRAME_HASH_MISMATCH"
+	ErrCodePathEscapeRejected         ErrorCode = "PATH_ESCAPE_REJECTED"
+	ErrCodeDefaultActionInvalid       ErrorCode = "DEFAULT_ACTION_INVALID"
+	ErrCodeRuntimeVersionUnsupported  ErrorCode = "RUNTIME_VERSION_UNSUPPORTED"
 )
 
 const (

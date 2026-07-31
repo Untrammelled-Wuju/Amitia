@@ -1,6 +1,7 @@
 import { DesktopPetAnimationEngine } from "../desktop-pet/animation/animation-engine";
 import type { EventListener } from "../desktop-pet/animation/animation-engine";
 import { CanvasPetVisualSurface } from "../desktop-pet/animation/surface/canvas-pet-visual-surface";
+import { AlphaHitMaskAdapter } from "../desktop-pet/animation/surface/alpha-hit-mask-adapter";
 import { DecoderRegistryImpl } from "../desktop-pet/animation/decoders/decoder-registry";
 import { ImageBitmapDecoder } from "../desktop-pet/animation/decoders/image-bitmap-decoder";
 import { HtmlImageDecoder } from "../desktop-pet/animation/decoders/html-image-decoder";
@@ -8,7 +9,14 @@ import { DecodedFrameCache } from "../desktop-pet/animation/cache/decoded-frame-
 import { FrameSequenceLoader } from "../desktop-pet/animation/loaders/frame-sequence-loader";
 import { ActionAssetRepositoryImpl } from "../desktop-pet/animation/loaders/action-asset-repository";
 import { createActionNormalizer } from "../desktop-pet/animation/loaders/action-config-normalizer";
-import type { PackagePlaybackSnapshot, PlayActionCommand, PlaybackEvent } from "../desktop-pet/animation/contracts";
+import type {
+  DecodedFrame,
+  PackagePlaybackSnapshot,
+  PlaybackEvent,
+  PlaybackEventType,
+  PlaybackSnapshot,
+  PlayActionCommand,
+} from "../desktop-pet/animation/contracts";
 import type { PetAnimationApi } from "./pet-animation-globals";
 
 function resolveResourceUrl(relativePath: string, configUrl: string): string {
@@ -23,7 +31,10 @@ function resolveResourceUrl(relativePath: string, configUrl: string): string {
   }
 }
 
-function createEngine(canvas: HTMLCanvasElement): DesktopPetAnimationEngine {
+function createEngine(canvas: HTMLCanvasElement): {
+  engine: DesktopPetAnimationEngine;
+  surface: CanvasPetVisualSurface;
+} {
   const surface = new CanvasPetVisualSurface({ canvas });
 
   const decoders = [
@@ -51,10 +62,12 @@ function createEngine(canvas: HTMLCanvasElement): DesktopPetAnimationEngine {
     resolveResourceUrl,
   });
 
-  return new DesktopPetAnimationEngine({
+  const engine = new DesktopPetAnimationEngine({
     surface,
     assetRepository,
   });
+
+  return { engine, surface };
 }
 
 function reportEventToMain(api: PetAnimationApi, event: PlaybackEvent): void {
@@ -65,55 +78,133 @@ function reportEventToMain(api: PetAnimationApi, event: PlaybackEvent): void {
   }
 }
 
-function reportSnapshotToMain(api: PetAnimationApi, engine: DesktopPetAnimationEngine): void {
+const SNAPSHOT_HEARTBEAT_MS = 15000;
+const SNAPSHOT_FRAME_MERGE_MS = 500;
+const SNAPSHOT_HIDDEN_MS = 5000;
+
+const KEY_SNAPSHOT_EVENTS: ReadonlySet<PlaybackEventType> = new Set<PlaybackEventType>([
+  "playback.action_started",
+  "playback.action_completed",
+  "playback.action_interrupted",
+  "playback.action_failed",
+  "playback.package_switched",
+]);
+
+let lastSnapshotHash = "";
+let lastSnapshotSentAt = 0;
+let frameUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+function computeSnapshotHash(snapshot: PlaybackSnapshot): string {
+  return `${snapshot.phase}:${snapshot.packageRevision}:${snapshot.currentActionKey}:${snapshot.currentCommandId}:${snapshot.frameIndex}:${snapshot.cycleIndex}:${snapshot.queueLength}`;
+}
+
+function sendSnapshotIfChanged(
+  api: PetAnimationApi,
+  engine: DesktopPetAnimationEngine,
+  force = false,
+): void {
+  const snapshot = engine.getSnapshot();
+  const hash = computeSnapshotHash(snapshot);
+  if (!force && hash === lastSnapshotHash) return;
+  lastSnapshotHash = hash;
+  lastSnapshotSentAt = Date.now();
   try {
-    const snapshot = engine.getSnapshot();
     api.reportSnapshot(snapshot);
   } catch {
     void 0;
   }
 }
 
-let snapshotReportTimer: ReturnType<typeof setInterval> | null = null;
+function scheduleFrameSnapshot(
+  api: PetAnimationApi,
+  engine: DesktopPetAnimationEngine,
+): void {
+  if (frameUpdateTimer !== null) return;
+  frameUpdateTimer = setTimeout(() => {
+    frameUpdateTimer = null;
+    if (engine.isDisposed()) return;
+    sendSnapshotIfChanged(api, engine);
+  }, SNAPSHOT_FRAME_MERGE_MS);
+}
 
-function startSnapshotReporting(api: PetAnimationApi, engine: DesktopPetAnimationEngine): void {
-  if (snapshotReportTimer !== null) return;
-  snapshotReportTimer = setInterval(() => {
-    if (engine.isDisposed()) {
-      if (snapshotReportTimer !== null) {
-        clearInterval(snapshotReportTimer);
-        snapshotReportTimer = null;
-      }
+function startSnapshotReporting(
+  api: PetAnimationApi,
+  engine: DesktopPetAnimationEngine,
+): () => void {
+  const heartbeat = setInterval(() => {
+    if (engine.isDisposed()) return;
+    const now = Date.now();
+    const interval = document.hidden ? SNAPSHOT_HIDDEN_MS : SNAPSHOT_HEARTBEAT_MS;
+    if (now - lastSnapshotSentAt >= interval) {
+      sendSnapshotIfChanged(api, engine, true);
+    }
+  }, 1000);
+
+  return () => {
+    clearInterval(heartbeat);
+    if (frameUpdateTimer !== null) {
+      clearTimeout(frameUpdateTimer);
+      frameUpdateTimer = null;
+    }
+  };
+}
+
+function attachInteractionListeners(api: PetAnimationApi): () => void {
+  let clickTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastClickX = 0;
+  let lastClickY = 0;
+  let lastHoverX = 0;
+  let lastHoverY = 0;
+  let lastHoverTime = 0;
+  let isHovering = false;
+
+  const onClick = (e: MouseEvent) => {
+    if (clickTimer !== null) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+      api.sendDoubleClick(e.offsetX, e.offsetY);
       return;
     }
-    reportSnapshotToMain(api, engine);
-  }, 1000);
-}
+    lastClickX = e.offsetX;
+    lastClickY = e.offsetY;
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      api.sendClick(lastClickX, lastClickY);
+    }, 250);
+  };
 
-function stopSnapshotReporting(): void {
-  if (snapshotReportTimer !== null) {
-    clearInterval(snapshotReportTimer);
-    snapshotReportTimer = null;
-  }
-}
-
-function attachInteractionListeners(api: PetAnimationApi): void {
-  let lastHoverTime = 0;
-
-  document.addEventListener("click", (e) => {
-    api.sendClick(e.offsetX, e.offsetY);
-  });
-
-  document.addEventListener("dblclick", (e) => {
-    api.sendDoubleClick(e.offsetX, e.offsetY);
-  });
-
-  document.addEventListener("mousemove", (e) => {
+  const onMouseMove = (e: MouseEvent) => {
     const now = Date.now();
-    if (now - lastHoverTime < 500) return;
+    const dx = e.offsetX - lastHoverX;
+    const dy = e.offsetY - lastHoverY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (isHovering && now - lastHoverTime < 100 && dist < 8) return;
+    isHovering = true;
+    lastHoverX = e.offsetX;
+    lastHoverY = e.offsetY;
     lastHoverTime = now;
     api.sendHover(e.offsetX, e.offsetY);
-  });
+  };
+
+  const onMouseLeave = () => {
+    if (!isHovering) return;
+    isHovering = false;
+    api.sendHover(-1, -1);
+  };
+
+  document.addEventListener("click", onClick);
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseleave", onMouseLeave);
+
+  return () => {
+    document.removeEventListener("click", onClick);
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseleave", onMouseLeave);
+    if (clickTimer !== null) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
+  };
 }
 
 async function main(): Promise<void> {
@@ -129,14 +220,43 @@ async function main(): Promise<void> {
     return;
   }
 
-  const engine = createEngine(canvas);
+  const { engine, surface } = createEngine(canvas);
+  const hitMaskAdapter = new AlphaHitMaskAdapter({ surface });
+  const hitMaskPlaceholderFrame: DecodedFrame = {
+    frameIndex: 0,
+    bitmap: new Image(),
+    width: 0,
+    height: 0,
+    estimatedBytes: 0,
+    sourceUrl: "",
+    decoderName: "",
+  };
 
   const eventListener: EventListener = (event: PlaybackEvent) => {
     reportEventToMain(api, event);
+    if (engine.isDisposed()) return;
+    if (KEY_SNAPSHOT_EVENTS.has(event.type)) {
+      if (frameUpdateTimer !== null) {
+        clearTimeout(frameUpdateTimer);
+        frameUpdateTimer = null;
+      }
+      sendSnapshotIfChanged(api, engine, true);
+    } else if (event.type === "playback.frame_presented") {
+      scheduleFrameSnapshot(api, engine);
+      hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
+      const mask = hitMaskAdapter.getMask();
+      if (mask.width > 0 && mask.height > 0) {
+        try {
+          api.reportHitMask(mask.width, mask.height, mask.data, mask.threshold);
+        } catch {
+          void 0;
+        }
+      }
+    }
   };
-  engine.onEvent(eventListener);
+  const unsubEvent = engine.onEvent(eventListener);
 
-  attachInteractionListeners(api);
+  const disposeListeners = attachInteractionListeners(api);
 
   const unsubPlayAction = api.onPlayAction((command: PlayActionCommand) => {
     void engine.playAction(command);
@@ -182,15 +302,19 @@ async function main(): Promise<void> {
     engine.updateDefaultAction(actionKey, null);
   });
 
-  document.addEventListener("visibilitychange", () => {
+  const onVisibilityChange = () => {
     if (document.hidden) {
       engine.onWindowHidden();
     } else {
       engine.onWindowShown();
     }
-  });
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  const disposeSnapshotReporting = startSnapshotReporting(api, engine);
 
   window.addEventListener("beforeunload", () => {
+    unsubEvent();
     unsubPlayAction();
     unsubPause();
     unsubResume();
@@ -202,22 +326,28 @@ async function main(): Promise<void> {
     unsubSystemResume();
     unsubRecovery();
     unsubUpdateDefault();
-    stopSnapshotReporting();
+    disposeListeners();
+    disposeSnapshotReporting();
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    hitMaskAdapter.dispose();
     engine.dispose();
   });
 
-  startSnapshotReporting(api, engine);
+  api.sendRendererReady();
 
   try {
     const snapshot = await api.getPackageSnapshot();
     if (snapshot) {
       await engine.initialize(snapshot);
       console.log("[PetAnimation] engine initialized successfully");
+      api.sendRendererReadyAck({ snapshotApplied: true });
     } else {
       console.warn("[PetAnimation] no package snapshot available, waiting...");
+      api.sendRendererReadyAck({ snapshotApplied: false });
     }
   } catch (error) {
     console.error("[PetAnimation] initialization failed:", error);
+    api.sendRendererReadyAck({ snapshotApplied: false });
   }
 }
 

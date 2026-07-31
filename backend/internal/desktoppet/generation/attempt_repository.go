@@ -19,11 +19,30 @@ var activeAttemptStatuses = []string{
 	string(AttemptStatusBuildingPrompt),
 	string(AttemptStatusWaitingRateLimit),
 	string(AttemptStatusSubmitting),
+	string(AttemptStatusUnknownSubmission),
+	string(AttemptStatusReconcilingSubmission),
+	string(AttemptStatusSubmitted),
 	string(AttemptStatusPolling),
 	string(AttemptStatusResultReceived),
 	string(AttemptStatusPersisting),
+	string(AttemptStatusPublishFailed),
+	string(AttemptStatusCancelRequested),
+}
+
+var nonBlockingActiveStatuses = []string{
+	string(AttemptStatusPending),
+	string(AttemptStatusPreparingReference),
+	string(AttemptStatusBuildingPrompt),
+	string(AttemptStatusWaitingRateLimit),
+	string(AttemptStatusSubmitting),
 	string(AttemptStatusUnknownSubmission),
-	string(AttemptStatusSucceeded),
+	string(AttemptStatusReconcilingSubmission),
+	string(AttemptStatusSubmitted),
+	string(AttemptStatusPolling),
+	string(AttemptStatusResultReceived),
+	string(AttemptStatusPersisting),
+	string(AttemptStatusPublishFailed),
+	string(AttemptStatusCancelRequested),
 }
 
 type AttemptRepository interface {
@@ -149,8 +168,8 @@ func (r *attemptRepository) AtomicallyCreateAttempt(tx *gorm.DB, taskActionID st
 	}
 
 	var taskAction struct {
-		AttemptNumber  int `gorm:"column:attempt_number"`
-		CurrentAttempt int `gorm:"column:current_attempt"`
+		NextAttemptNumber int `gorm:"column:next_attempt_number"`
+		CurrentAttempt    int `gorm:"column:current_attempt"`
 	}
 	err := tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
@@ -162,26 +181,22 @@ func (r *attemptRepository) AtomicallyCreateAttempt(tx *gorm.DB, taskActionID st
 		return nil, err
 	}
 
-	var existingActive ActionGenerationAttempt
-	err = tx.Where("task_action_id = ? AND status IN ?", taskActionID, activeAttemptStatuses).
-		First(&existingActive).Error
-	if err == nil {
-		return nil, NewGenerationError(ErrCodeAttemptAlreadyActive,
-			fmt.Sprintf("active attempt %s already exists for action %s", existingActive.ID, taskActionID), nil)
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
+	newAttemptNumber := taskAction.NextAttemptNumber
+	if newAttemptNumber <= 0 {
+		newAttemptNumber = 1
 	}
 
-	var count int64
-	err = tx.Model(&ActionGenerationAttempt{}).Where("task_action_id = ?", taskActionID).Count(&count).Error
-	if err != nil {
-		return nil, err
-	}
-
-	newAttemptNumber := int(count) + 1
-	if taskAction.AttemptNumber >= newAttemptNumber {
-		newAttemptNumber = taskAction.AttemptNumber + 1
+	if attempt.Mode == "" || attempt.Mode == string(AttemptModeInitial) || attempt.Mode == string(AttemptModeRetrySameSubmission) {
+		var existingActive ActionGenerationAttempt
+		err = tx.Where("task_action_id = ? AND status IN ?", taskActionID, nonBlockingActiveStatuses).
+			First(&existingActive).Error
+		if err == nil {
+			return nil, NewGenerationError(ErrCodeAttemptAlreadyActive,
+				fmt.Sprintf("active attempt %s already exists for action %s", existingActive.ID, taskActionID), nil)
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
 	}
 
 	if attempt.ID == "" {
@@ -206,12 +221,13 @@ func (r *attemptRepository) AtomicallyCreateAttempt(tx *gorm.DB, taskActionID st
 	err = tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
 		Updates(map[string]interface{}{
-			"current_attempt": newAttemptNumber,
-			"attempt_number":  newAttemptNumber,
-			"updated_at":      nowRFC3339(),
+			"current_attempt":    newAttemptNumber,
+			"attempt_number":     newAttemptNumber,
+			"next_attempt_number": newAttemptNumber + 1,
+			"updated_at":         nowRFC3339(),
 		}).Error
 	if err != nil {
-		return nil, fmt.Errorf("update task action active attempt: %w", err)
+		return nil, fmt.Errorf("update task action next attempt number: %w", err)
 	}
 
 	return attempt, nil

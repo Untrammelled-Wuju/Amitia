@@ -18,12 +18,31 @@ import (
 )
 
 type actionConfig struct {
-	ActionKey   string       `json:"actionKey"`
-	ActionName  string       `json:"actionName"`
-	FrameCount  int          `json:"frameCount"`
-	DefaultFps  int          `json:"defaultFps"`
-	LoopType    string       `json:"loopType"`
-	Frames      []frameEntry `json:"frames"`
+	SchemaVersion int          `json:"schemaVersion"`
+	ActionKey     string       `json:"actionKey"`
+	DisplayName   string       `json:"displayName"`
+	Fps           int          `json:"fps"`
+	PlaybackMode  string       `json:"playbackMode"`
+	Interruptible bool         `json:"interruptible"`
+	Priority      int          `json:"priority"`
+	CooldownMs    int          `json:"cooldownMs"`
+	MinimumPlayMs int          `json:"minimumPlayMs"`
+	MaximumPlayMs int          `json:"maximumPlayMs"`
+	MutexGroup    string       `json:"mutexGroup"`
+	ReturnTo      returnToRule `json:"returnTo"`
+	Anchor        anchorConfig `json:"anchor"`
+	Frames        []frameEntry `json:"frames"`
+}
+
+type returnToRule struct {
+	Type      string `json:"type"`
+	ActionKey string `json:"actionKey,omitempty"`
+}
+
+type anchorConfig struct {
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	CoordinateSpace string  `json:"coordinateSpace"`
 }
 
 type frameEntry struct {
@@ -33,6 +52,43 @@ type frameEntry struct {
 	DurationMs  int    `json:"durationMs"`
 	AssetID     string `json:"assetId"`
 	ContentHash string `json:"contentHash"`
+}
+
+const (
+	ActionConfigSchemaVersion   = 2
+	DefaultAnchorX              = 0.5
+	DefaultAnchorY              = 1.0
+	DefaultAnchorCoordinateSpace = "normalized_canvas"
+	DefaultMinRuntimeVersion    = "1.0.0"
+	DefaultActionPriority       = 50
+)
+
+func buildReturnToRule(returnAction, returnPolicy string) returnToRule {
+	if returnAction != "" {
+		return returnToRule{Type: "action", ActionKey: returnAction}
+	}
+	switch returnPolicy {
+	case "default_idle":
+		return returnToRule{Type: "default_idle"}
+	case "previous":
+		return returnToRule{Type: "previous"}
+	case "current_activity":
+		return returnToRule{Type: "current_activity"}
+	default:
+		return returnToRule{Type: "none"}
+	}
+}
+
+func selectDefaultAction(actionMap map[string]BuilderActionInfo, actionsToBuild []string) string {
+	for _, key := range actionsToBuild {
+		if info, ok := actionMap[key]; ok && info.SupportsDefaultIdle {
+			return key
+		}
+	}
+	if len(actionsToBuild) > 0 {
+		return actionsToBuild[0]
+	}
+	return ""
 }
 
 type ReleaseBuilder struct {
@@ -185,19 +241,34 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 			return nil, stageErr
 		}
 
+		displayName := info.ActionNameSnapshot
+		if displayName == "" {
+			displayName = actionKey
+		}
+		playbackMode := packageformat.NormalizePlaybackMode(detail.LoopType)
+		if playbackMode == "" {
+			playbackMode = packageformat.LoopTypeLoop
+		}
+
 		cfg := actionConfig{
-			ActionKey:  actionKey,
-			ActionName: info.ActionNameSnapshot,
-			FrameCount: detail.FrameCount,
-			DefaultFps: detail.DefaultFPS,
-			LoopType:   detail.LoopType,
-			Frames:     frames,
-		}
-		if cfg.ActionName == "" {
-			cfg.ActionName = actionKey
-		}
-		if cfg.LoopType == "" {
-			cfg.LoopType = packageformat.LoopTypeLoop
+			SchemaVersion: ActionConfigSchemaVersion,
+			ActionKey:     actionKey,
+			DisplayName:   displayName,
+			Fps:           detail.DefaultFPS,
+			PlaybackMode:  playbackMode,
+			Interruptible: detail.Interruptible,
+			Priority:      detail.Priority,
+			CooldownMs:    detail.CooldownMs,
+			MinimumPlayMs: detail.MinimumPlayMs,
+			MaximumPlayMs: detail.MaximumPlayMs,
+			MutexGroup:    detail.MutexGroup,
+			ReturnTo:      buildReturnToRule(detail.ReturnAction, detail.ReturnPolicy),
+			Anchor: anchorConfig{
+				X:               DefaultAnchorX,
+				Y:               DefaultAnchorY,
+				CoordinateSpace: DefaultAnchorCoordinateSpace,
+			},
+			Frames: frames,
 		}
 
 		configPath := filepath.Join(stagingDir, "actions", actionKey, "action.json")
@@ -209,11 +280,11 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 
 		manifestActions = append(manifestActions, packageformat.ManifestActionEntry{
 			Key:                 actionKey,
-			Name:                cfg.ActionName,
+			Name:                displayName,
 			Config:              fmt.Sprintf("actions/%s/action.json", actionKey),
 			RevisionID:          detail.RevisionID,
 			QualityVerdict:      detail.QualityVerdict,
-			LoopType:            detail.LoopType,
+			LoopType:            playbackMode,
 			FPS:                 detail.DefaultFPS,
 			FrameCount:          detail.FrameCount,
 			SupportsDefaultIdle: info.SupportsDefaultIdle,
@@ -250,8 +321,8 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 		SourceCharacterID: taskInfo.CharacterID,
 	}
 	manifest.DefaultAction = req.DefaultAction
-	if manifest.DefaultAction == "" && len(actionsToBuild) > 0 {
-		manifest.DefaultAction = actionsToBuild[0]
+	if manifest.DefaultAction == "" {
+		manifest.DefaultAction = selectDefaultAction(actionMap, actionsToBuild)
 	}
 	manifest.Preview = previewName
 	manifest.Actions = manifestActions
@@ -261,7 +332,7 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 		PerFrameDuration:      true,
 	}
 	manifest.Compatibility = packageformat.ManifestCompatibility{
-		MinRuntimeVersion: "0.0.0",
+		MinRuntimeVersion: DefaultMinRuntimeVersion,
 		RenderMode:        packageformat.RenderModeSprite,
 	}
 	manifest.Provenance = packageformat.ManifestProvenance{

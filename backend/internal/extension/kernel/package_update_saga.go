@@ -315,18 +315,18 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.container.PackageRepository.ConsumePreview(ctx, confirmed.session.SessionID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "consume_preview_session", err, compensation, guard)
 	}
-	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "record_version", err, compensation, guard)
 	}
 	if err := r.runPackageFinalGate(ctx, op.OperationID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "final_gate", err, compensation, guard)
 	}
+	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, guard); err != nil {
+		return KernelInstallResult{}, err
+	}
 	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
 		return KernelInstallResult{}, stopErr
-	}
-	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
-		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: "update", ExtensionID: confirmed.session.ExtensionID, Version: confirmed.session.Version, InstallationID: current.InstallationID, PackageHash: confirmed.artifact.ArchiveHash, ContentTreeHash: confirmed.artifact.ContentTreeHash, ArtifactPath: confirmed.artifact.ArchivePath, InstallPath: targetGeneration.GenerationPath, DefinitionHash: targetGeneration.Current.TreeHash, InstalledAt: current.UpdatedAt}, nil
 }

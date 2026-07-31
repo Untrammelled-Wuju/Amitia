@@ -1,5 +1,3 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package referenceasset
 
 type ReferenceAsset struct {
@@ -16,6 +14,15 @@ type ReferenceAsset struct {
 	NormalizedWidth  int    `gorm:"column:normalized_width;type:integer" json:"normalizedWidth"`
 	NormalizedHeight int    `gorm:"column:normalized_height;type:integer" json:"normalizedHeight"`
 	ConfigHash       string `gorm:"column:config_hash;type:text" json:"configHash"`
+	ContentHash      string `gorm:"column:content_hash;type:text" json:"contentHash"`
+	NormalizerVersion string `gorm:"column:normalizer_version;type:text" json:"normalizerVersion"`
+	SubjectBox       string `gorm:"column:subject_box;type:text" json:"subjectBox"`
+	Anchor           string `gorm:"column:anchor;type:text" json:"anchor"`
+	CoordinateSpace  string `gorm:"column:coordinate_space;type:text" json:"coordinateSpace"`
+	CharacterID      string `gorm:"column:character_id;type:text" json:"characterId"`
+	UserID           string `gorm:"column:user_id;type:text" json:"userId"`
+	SourceArtifactID string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
+	StoragePath      string `gorm:"column:storage_path;type:text" json:"storagePath"`
 	CreatedAt        string `gorm:"column:created_at;type:text" json:"createdAt"`
 }
 
@@ -27,4 +34,16 @@ type NormalizeConfig struct {
 	TargetMIME      string
 	MaxBytes        int64
 	BackgroundColor string
+}
+
+type Rect struct {
+	MinX int `json:"minX"`
+	MinY int `json:"minY"`
+	MaxX int `json:"maxX"`
+	MaxY int `json:"maxY"`
+}
+
+type Point struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }

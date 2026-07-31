@@ -46,6 +46,14 @@ var (
 	ErrPackageSnapshotIncomplete              = errors.New("kernel: rollback snapshot incomplete")
 	ErrPackageVersionHistoryCorrupted         = errors.New("kernel: package version history corrupted")
 	ErrPackageFinalGateFailed                 = errors.New("kernel: final gate validation failed")
+	ErrPackageVersionActivateTargetNotFound   = errors.New("kernel: package version activate target not found")
+	ErrPackageInstallationNotFound            = errors.New("kernel: package installation not found")
+	ErrPackageVersionRepositoryUnavailable     = errors.New("kernel: package version repository unavailable")
+	ErrPackageInstallationGenerationIDMissing = errors.New("kernel: package installation generation id missing")
+	ErrPackageVersionDeactivateTargetNotFound = errors.New("kernel: package version deactivate target not found")
+	ErrPackageCompensationFailed              = errors.New("kernel: package compensation failed")
+	ErrPackageMigrationSandboxViolation       = errors.New("kernel: package migration sandbox violation")
+	ErrPackageMigrationCompensationFailed     = errors.New("kernel: package migration compensation failed")
 )
 
 const (
@@ -63,6 +71,14 @@ const (
 	PackageErrCodeSnapshotIncomplete          = "PACKAGE_SNAPSHOT_INCOMPLETE"
 	PackageErrCodeVersionHistoryCorrupted    = "PACKAGE_VERSION_HISTORY_CORRUPTED"
 	PackageErrCodeFinalGateFailed            = "PACKAGE_FINAL_GATE_FAILED"
+	PackageErrCodeVersionActivateTargetNotFound   = "PACKAGE_VERSION_ACTIVATE_TARGET_NOT_FOUND"
+	PackageErrCodeInstallationNotFound            = "PACKAGE_INSTALLATION_NOT_FOUND"
+	PackageErrCodeVersionRepositoryUnavailable     = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"
+	PackageErrCodeInstallationGenerationIDMissing = "PACKAGE_INSTALLATION_GENERATION_ID_MISSING"
+	PackageErrCodeVersionDeactivateTargetNotFound = "PACKAGE_VERSION_DEACTIVATE_TARGET_NOT_FOUND"
+	PackageErrCodeCompensationFailed              = "PACKAGE_COMPENSATION_FAILED"
+	PackageErrCodeMigrationSandboxViolation       = "PACKAGE_MIGRATION_SANDBOX_VIOLATION"
+	PackageErrCodeMigrationCompensationFailed     = "PACKAGE_MIGRATION_COMPENSATION_FAILED"
 )
 
 type PackageError struct {
@@ -106,6 +122,14 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeSnapshotIncomplete:       409,
 	PackageErrCodeVersionHistoryCorrupted:  409,
 	PackageErrCodeFinalGateFailed:          409,
+	PackageErrCodeVersionActivateTargetNotFound:   409,
+	PackageErrCodeInstallationNotFound:            404,
+	PackageErrCodeVersionRepositoryUnavailable:     503,
+	PackageErrCodeInstallationGenerationIDMissing: 409,
+	PackageErrCodeVersionDeactivateTargetNotFound: 409,
+	PackageErrCodeCompensationFailed:              500,
+	PackageErrCodeMigrationSandboxViolation:       403,
+	PackageErrCodeMigrationCompensationFailed:     500,
 }
 
 func PackageErrorHTTPStatus(code string) int {

@@ -35,6 +35,7 @@ const PERSIST_THROTTLE_MS = 500;
 export class DragController {
   private readonly adapter: DesktopPetWindowAdapter;
   private readonly clickThrough: ClickThroughController;
+  private readonly getPetWindow: () => BrowserWindow | null;
   private readonly onEvent: (event: DragEvent, state: DragState) => void;
   private win: BrowserWindow | null = null;
   private dragging = false;
@@ -51,33 +52,38 @@ export class DragController {
   private closedListener: (() => void) | null = null;
 
   private readonly boundDragStart = (
-    _event: Electron.IpcMainEvent,
+    event: Electron.IpcMainEvent,
     payload: DragPayload,
   ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
     void this.handleDragStart(payload);
   };
 
   private readonly boundDragMove = (
-    _event: Electron.IpcMainEvent,
+    event: Electron.IpcMainEvent,
     payload: DragPayload,
   ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
     void this.handleDragMove(payload);
   };
 
   private readonly boundDragEnd = (
-    _event: Electron.IpcMainEvent,
+    event: Electron.IpcMainEvent,
     payload: DragPayload,
   ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
     void this.handleDragEnd(payload);
   };
 
   constructor(
     adapter: DesktopPetWindowAdapter,
     clickThrough: ClickThroughController,
+    getPetWindow: () => BrowserWindow | null,
     onEvent: (event: DragEvent, state: DragState) => void,
   ) {
     this.adapter = adapter;
     this.clickThrough = clickThrough;
+    this.getPetWindow = getPetWindow;
     this.onEvent = onEvent;
   }
 
@@ -116,10 +122,18 @@ export class DragController {
     return { ...this.state };
   }
 
+  private isCurrentPetRenderer(event: Electron.IpcMainEvent): boolean {
+    const win = this.getPetWindow();
+    return (
+      !!win && !win.isDestroyed() && event.sender.id === win.webContents.id
+    );
+  }
+
   private async handleDragStart(payload: DragPayload): Promise<void> {
     if (this.dragging) return;
     const win = this.win;
     if (!win || win.isDestroyed()) return;
+    if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
 
     const { x, y } = payload;
     const screenId = this.resolveScreenId(payload.screenId, x, y);
@@ -144,6 +158,7 @@ export class DragController {
     if (!this.dragging) return;
     const win = this.win;
     if (!win || win.isDestroyed()) return;
+    if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
 
     const { x, y } = payload;
     const display = screen.getDisplayNearestPoint({ x, y });
@@ -171,6 +186,7 @@ export class DragController {
     if (!this.dragging) return;
     const win = this.win;
     if (!win || win.isDestroyed()) return;
+    if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
 
     const { x, y } = payload;
     const display = screen.getDisplayNearestPoint({ x, y });

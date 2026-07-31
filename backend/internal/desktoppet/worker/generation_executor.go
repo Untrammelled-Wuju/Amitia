@@ -1,17 +1,16 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package worker
 
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/generation"
+	"github.com/u-ai/backend/internal/desktoppet/generation/activebinding"
+	"github.com/u-ai/backend/internal/desktoppet/generation/commit"
+	"github.com/u-ai/backend/internal/desktoppet/referenceasset"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
@@ -20,6 +19,7 @@ import (
 const (
 	generationPollTimeout  = 5 * time.Minute
 	generationPollInterval = 3 * time.Second
+	maxArtifactPixels      = int64(64 * 1024 * 1024)
 )
 
 type GenerationExecutor struct {
@@ -28,7 +28,12 @@ type GenerationExecutor struct {
 	registry          *imageprovider.Registry
 	attemptFactory    *generation.AttemptFactory
 	artifactPersister *generation.ArtifactPersister
+	artifactCommitter *commit.ArtifactCommitter
 	downloader        *desktoppet.ResultDownloader
+	refAssetRepo      referenceasset.Repository
+	receiptRepo       generation.ReceiptRepository
+	finalizer         *generation.GenerationFinalizer
+	bindingService    *activebinding.BindingService
 }
 
 func NewGenerationExecutor(
@@ -37,7 +42,12 @@ func NewGenerationExecutor(
 	registry *imageprovider.Registry,
 	attemptFactory *generation.AttemptFactory,
 	artifactPersister *generation.ArtifactPersister,
+	artifactCommitter *commit.ArtifactCommitter,
 	downloader *desktoppet.ResultDownloader,
+	refAssetRepo referenceasset.Repository,
+	receiptRepo generation.ReceiptRepository,
+	finalizer *generation.GenerationFinalizer,
+	bindingService *activebinding.BindingService,
 ) *GenerationExecutor {
 	return &GenerationExecutor{
 		db:                db,
@@ -45,7 +55,12 @@ func NewGenerationExecutor(
 		registry:          registry,
 		attemptFactory:    attemptFactory,
 		artifactPersister: artifactPersister,
+		artifactCommitter: artifactCommitter,
 		downloader:        downloader,
+		refAssetRepo:      refAssetRepo,
+		receiptRepo:       receiptRepo,
+		finalizer:         finalizer,
+		bindingService:    bindingService,
 	}
 }
 
@@ -90,8 +105,13 @@ func (e *GenerationExecutor) Execute(
 	}
 	e.updateActionProgress(task, action, string(generation.AttemptStatusPreparingReference))
 
-	sourceAbsPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
-	referenceImages := desktoppet.SelectReferenceImages(sourceAbsPath, "", false)
+	referenceImages, refErr := e.resolveReferenceImages(plan, task)
+	if refErr != nil {
+		errMsg := fmt.Sprintf("加载参考图失败: %v", refErr)
+		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationRequestInvalid, errMsg)
+		e.failAction(action, desktoppet.ErrCodeImageGenerationRequestInvalid, errMsg)
+		return fmt.Errorf("%s: %w", desktoppet.ErrCodeImageGenerationRequestInvalid, refErr)
+	}
 
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -105,6 +125,7 @@ func (e *GenerationExecutor) Execute(
 	e.updateActionProgress(task, action, string(generation.AttemptStatusSubmitting))
 
 	request := e.buildImageGenerationRequest(task, plan, referenceImages)
+	requestHash := computeRequestHash(request)
 
 	desktoppet.PublishTaskEvent(task.ID, "action.progress", map[string]interface{}{
 		"task_id":    task.ID,
@@ -135,13 +156,30 @@ func (e *GenerationExecutor) Execute(
 		return fmt.Errorf("%s", errMsg)
 	}
 
-	var result *imageprovider.ImageGenerationResult
-
-	if submission.Status == "processing" || submission.Status == "accepted" {
-		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusPolling, map[string]interface{}{
+	receiptWriteErr := e.persistProviderReceipt(attempt.ID, providerName, modelName, submission, requestHash)
+	if receiptWriteErr != nil {
+		log.Logger.Errorf("desktoppet executor persist receipt failed for attempt %s: %v", attempt.ID, receiptWriteErr)
+		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusUnknownSubmission, map[string]interface{}{
 			"provider_request_id":   submission.RequestID,
 			"provider_operation_id": submission.OperationID,
 		}); err != nil {
+			log.Logger.Warnf("desktoppet executor update attempt %s to unknown_submission failed: %v", attempt.ID, err)
+		}
+		errMsg := fmt.Sprintf("Provider Receipt 持久化失败，进入 unknown_submission 状态: %v", receiptWriteErr)
+		e.failAction(action, generation.ErrCodeProviderReceiptPersistFailed, errMsg)
+		return fmt.Errorf("%s: %w", generation.ErrCodeProviderReceiptPersistFailed, receiptWriteErr)
+	}
+
+	var result *imageprovider.ImageGenerationResult
+
+	if submission.Status == "processing" || submission.Status == "accepted" {
+		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusSubmitted, map[string]interface{}{
+			"provider_request_id":   submission.RequestID,
+			"provider_operation_id": submission.OperationID,
+		}); err != nil {
+			log.Logger.Warnf("desktoppet executor update attempt %s to submitted failed: %v", attempt.ID, err)
+		}
+		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusPolling, nil); err != nil {
 			log.Logger.Warnf("desktoppet executor update attempt %s to polling failed: %v", attempt.ID, err)
 		}
 		e.updateActionProgress(task, action, string(generation.AttemptStatusPolling))
@@ -167,9 +205,9 @@ func (e *GenerationExecutor) Execute(
 		}); err != nil {
 			log.Logger.Warnf("desktoppet executor update attempt %s to unknown_submission failed: %v", attempt.ID, err)
 		}
-		errMsg := fmt.Sprintf("未知的提交状态: %s", submission.Status)
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationProviderRejected, errMsg)
-		e.failAction(action, desktoppet.ErrCodeImageGenerationProviderRejected, errMsg)
+		e.updateActionProgress(task, action, string(generation.AttemptStatusUnknownSubmission))
+		log.Logger.Warnf("desktoppet executor attempt %s entered unknown_submission state: submission.Status=%s", attempt.ID, submission.Status)
+		errMsg := fmt.Sprintf("提交状态不确定: %s，进入 unknown_submission 等待 Recovery Worker 处理", submission.Status)
 		return fmt.Errorf("%s", errMsg)
 	}
 
@@ -219,6 +257,7 @@ func (e *GenerationExecutor) Execute(
 	e.updateActionProgress(task, action, string(generation.AttemptStatusPersisting))
 
 	genResult := convertToGenerationResult(result)
+
 	persistTx := e.db.Begin()
 	if persistTx.Error != nil {
 		errMsg := fmt.Sprintf("开启持久化事务失败: %v", persistTx.Error)
@@ -226,6 +265,7 @@ func (e *GenerationExecutor) Execute(
 		e.failAction(action, desktoppet.ErrCodeGenerationWorkerError, errMsg)
 		return fmt.Errorf("%s", errMsg)
 	}
+
 	persistResult, err := e.artifactPersister.Persist(generation.PersistInput{
 		Tx:                  persistTx,
 		TaskID:              task.ID,
@@ -245,6 +285,36 @@ func (e *GenerationExecutor) Execute(
 		e.failAction(action, generation.ErrCodeArtifactPersistFailed, errMsg)
 		return fmt.Errorf("%s", errMsg)
 	}
+
+	actualCost := 0.0
+	actualInputUnits := 0
+	actualOutputUnits := 0
+	if result.Usage != nil {
+		actualInputUnits = int(result.Usage.PromptTokens)
+		actualOutputUnits = int(result.Usage.CompletionTokens)
+	}
+
+	finalizeErr := e.finalizer.FinalizeAttempt(generation.FinalizeAttemptRequest{
+		Tx:                persistTx,
+		AttemptID:         attempt.ID,
+		TaskActionID:      action.ID,
+		TaskID:            task.ID,
+		PrimaryArtifactID: persistResult.PrimaryArtifact.ID,
+		ArtifactHash:      persistResult.PrimaryArtifact.Hash,
+		ExecutionID:       task.ExecutionID,
+		ActualCost:        actualCost,
+		ActualInputUnits:  actualInputUnits,
+		ActualOutputUnits: actualOutputUnits,
+		AutoPromote:       true,
+	})
+	if finalizeErr != nil {
+		persistTx.Rollback()
+		errMsg := fmt.Sprintf("Finalize 失败: %v", finalizeErr)
+		e.failAttempt(attempt.ID, generation.ErrCodeFinalizeFailed, errMsg)
+		e.failAction(action, generation.ErrCodeFinalizeFailed, errMsg)
+		return fmt.Errorf("%s", errMsg)
+	}
+
 	if err := persistTx.Commit().Error; err != nil {
 		errMsg := fmt.Sprintf("提交持久化事务失败: %v", err)
 		e.failAttempt(attempt.ID, desktoppet.ErrCodeGenerationWorkerError, errMsg)
@@ -252,21 +322,8 @@ func (e *GenerationExecutor) Execute(
 		return fmt.Errorf("%s", errMsg)
 	}
 
-	now := time.Now().Format(workerTimeFormat)
-	if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusSucceeded, map[string]interface{}{
-		"completed_at": now,
-	}); err != nil {
-		log.Logger.Warnf("desktoppet executor update attempt %s to succeeded failed: %v", attempt.ID, err)
-	}
-
 	successProgress := generation.CalculateActionProgressFromString(string(generation.AttemptStatusSucceeded))
 	action.Progress = successProgress
-	_ = e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
-		"status":       "succeeded",
-		"progress":     successProgress,
-		"completed_at": now,
-		"updated_at":   now,
-	})
 	desktoppet.PublishTaskEvent(task.ID, "action.completed", map[string]interface{}{
 		"task_id":        task.ID,
 		"action_id":      action.ID,

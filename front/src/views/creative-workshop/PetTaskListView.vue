@@ -678,13 +678,14 @@ async function exportPackage(row: TaskItem) {
     return;
   }
   const pkg = packages[0];
-  if (!pkg.petId || !pkg.id) {
+  const releaseId = pkg.id;
+  if (!pkg.petId || !releaseId) {
     ElMessage.warning("资源包信息不完整");
     return;
   }
   exportingId.value = row.id;
   try {
-    await installRelease(pkg.petId, pkg.id);
+    await installRelease(pkg.petId, releaseId);
     ElMessage.success("桌宠已安装");
   } catch (err: any) {
     ElMessage.error(err?.message || "安装失败");

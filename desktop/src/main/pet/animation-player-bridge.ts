@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
-import type { PlayerLike, PlayerState } from "./action-player";
-import type { AnimationIpcAdapter } from "./animation-ipc";
-import type { PlayActionCommand, LoopType, ReturnTarget } from "../../desktop-pet/animation/contracts";
+import type { DesktopPetPlayerPort, PlayerLifecyclePort, PlayerState } from "./player-port";
+import type { AnimationIpcAdapter, RendererDeliveryResult } from "./animation-ipc";
+import type { PlayActionCommand, LoopType, ReturnTarget, PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
 
 function toLoopType(loopType: string): LoopType {
   if (loopType === "loop" || loopType === "once" || loopType === "hold" || loopType === "ping_pong") {
@@ -19,15 +19,19 @@ function buildReturnTarget(action: RuntimeAction): ReturnTarget {
 }
 
 export interface AnimationPlayerBridgeCallbacks {
-  onActionSwitch?: (newActionKey: string, oldActionKey: string | null) => void;
-  onActionComplete?: (actionKey: string, loopCount: number) => void;
+  onActionSwitch?: (newActionKey: string, oldActionKey: string | null, playbackId: string) => void;
+  onActionCompleted?: (actionKey: string, loopCount: number, playbackId: string) => void;
+  onActionInterrupted?: (actionKey: string, loopCount: number, playbackId: string) => void;
+  onActionFailed?: (actionKey: string, reason?: string, playbackId?: string) => void;
   onError?: (error: Error) => void;
 }
 
-export class AnimationPlayerBridge implements PlayerLike {
+export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecyclePort {
+  private pendingAction: RuntimeAction | null = null;
   private currentAction: RuntimeAction | null = null;
   private state: PlayerState = "idle";
   private loopCount = 0;
+  private currentFrameIndex = 0;
   private loaded: LoadedInstallation | null = null;
   private readonly sustainedActionMap: Map<string, string> = new Map();
   private callbacks: AnimationPlayerBridgeCallbacks;
@@ -35,6 +39,7 @@ export class AnimationPlayerBridge implements PlayerLike {
   private installationId = "";
   private petInstanceId = "";
   private packageRevision = 0;
+  private currentPlaybackId: string | null = null;
 
   constructor(callbacks?: AnimationPlayerBridgeCallbacks) {
     this.callbacks = callbacks ?? {};
@@ -82,26 +87,28 @@ export class AnimationPlayerBridge implements PlayerLike {
     }
 
     const oldKey = this.currentAction?.key ?? null;
-    this.currentAction = action;
+    this.currentPlaybackId = randomUUID();
+    this.pendingAction = action;
     this.loopCount = 0;
-    this.state = "playing";
+    this.currentFrameIndex = 0;
+    this.state = "loading";
 
     if (oldKey !== action.key) {
-      this.callbacks.onActionSwitch?.(action.key, oldKey);
+      this.callbacks.onActionSwitch?.(action.key, oldKey, this.currentPlaybackId);
     }
 
     this.sendPlayCommand(action);
   }
 
   pause(): void {
-    if (this.state !== "playing") return;
+    if (this.state !== "playing" && this.state !== "loading") return;
     this.state = "paused";
     this.animationIpc?.sendPause();
   }
 
   resume(): void {
     if (this.state !== "paused") return;
-    if (!this.currentAction) return;
+    if (!this.currentAction && !this.pendingAction) return;
     this.state = "playing";
     this.animationIpc?.sendResume();
   }
@@ -109,24 +116,26 @@ export class AnimationPlayerBridge implements PlayerLike {
   stop(): void {
     this.state = "stopped";
     this.loopCount = 0;
+    this.currentFrameIndex = 0;
+    this.pendingAction = null;
+    this.currentPlaybackId = null;
     this.animationIpc?.sendStop();
   }
 
   switchAction(action: RuntimeAction): void {
-    const oldKey = this.currentAction?.key ?? null;
-    const newKey = action?.key ?? null;
-    if (oldKey !== newKey) {
-      this.callbacks.onActionSwitch?.(newKey ?? "", oldKey);
-    }
     this.play(action);
   }
 
   getCurrentAction(): RuntimeAction | null {
-    return this.currentAction;
+    return this.currentAction ?? this.pendingAction;
   }
 
   getCurrentFrameIndex(): number {
-    return 0;
+    return this.currentFrameIndex;
+  }
+
+  getCurrentPlaybackId(): string | null {
+    return this.currentPlaybackId;
   }
 
   getState(): PlayerState {
@@ -186,20 +195,21 @@ export class AnimationPlayerBridge implements PlayerLike {
   handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string }): void {
     switch (event.type) {
       case "playback.action_started":
-        if (event.actionKey && event.actionKey !== this.currentAction?.key) {
+        if (event.actionKey) {
           const oldKey = this.currentAction?.key ?? null;
           const loaded = this.loaded;
           const newAction = loaded?.actions.get(event.actionKey) ?? null;
           if (newAction) {
             this.currentAction = newAction;
-            this.callbacks.onActionSwitch?.(newAction.key, oldKey);
+            this.pendingAction = null;
+            this.state = "playing";
           }
         }
         break;
       case "playback.action_completed":
         this.loopCount += 1;
         if (this.currentAction) {
-          this.callbacks.onActionComplete?.(this.currentAction.key, this.loopCount);
+          this.callbacks.onActionCompleted?.(this.currentAction.key, this.loopCount, this.currentPlaybackId ?? "");
         }
         if (this.currentAction?.loopType === "once") {
           this.state = "stopped";
@@ -207,12 +217,16 @@ export class AnimationPlayerBridge implements PlayerLike {
         break;
       case "playback.action_interrupted":
         if (this.currentAction) {
-          this.callbacks.onActionComplete?.(this.currentAction.key, this.loopCount);
+          this.callbacks.onActionInterrupted?.(this.currentAction.key, this.loopCount, this.currentPlaybackId ?? "");
         }
         this.state = "stopped";
         break;
       case "playback.action_failed":
         this.state = "stopped";
+        if (this.currentAction || this.pendingAction) {
+          const key = this.currentAction?.key ?? this.pendingAction?.key ?? "";
+          this.callbacks.onActionFailed?.(key, event.reason, this.currentPlaybackId ?? undefined);
+        }
         if (event.reason) {
           this.reportError(new Error(`PLAYBACK_FAILED: ${event.reason}`));
         }
@@ -220,6 +234,19 @@ export class AnimationPlayerBridge implements PlayerLike {
       case "playback.action_holding":
         this.state = "paused";
         break;
+    }
+  }
+
+  handleSnapshotUpdate(snapshot: PlaybackSnapshot): void {
+    if (typeof snapshot.frameIndex === "number" && snapshot.frameIndex >= 0) {
+      this.currentFrameIndex = snapshot.frameIndex;
+    }
+    if (snapshot.currentActionKey && this.loaded) {
+      const action = this.loaded.actions.get(snapshot.currentActionKey);
+      if (action && action.available) {
+        this.currentAction = action;
+        this.pendingAction = null;
+      }
     }
   }
 
@@ -239,15 +266,22 @@ export class AnimationPlayerBridge implements PlayerLike {
       issuedAt: new Date().toISOString(),
       returnOverride: buildReturnTarget(action),
     };
-    this.animationIpc.sendPlayAction(command);
+    const result: RendererDeliveryResult = this.animationIpc.sendPlayAction(command);
+    if (!result.delivered) {
+      this.state = "stopped";
+      this.pendingAction = null;
+      this.reportError(
+        new Error(`DELIVERY_FAILED: ${result.reason}${result.error ? ` (${result.error})` : ""}`),
+      );
+    }
   }
 
   private reportError(error: Error): void {
     if (!this.callbacks.onError) return;
     try {
       this.callbacks.onError(error);
-    } catch {
-      void 0;
+    } catch (err) {
+      console.error("[AnimationPlayerBridge] onError callback failed", err);
     }
   }
 }

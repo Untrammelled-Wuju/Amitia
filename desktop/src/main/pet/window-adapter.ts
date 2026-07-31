@@ -44,6 +44,10 @@ export class DesktopPetWindowAdapter {
 
   private options: DesktopPetWindowOptions;
 
+  private intentionalClose = false;
+
+  private loadTimeout: ReturnType<typeof setTimeout> | null = null;
+
   private readonly onDisplayRemoved = (
     _event: Electron.Event,
     display: Electron.Display,
@@ -96,7 +100,7 @@ export class DesktopPetWindowAdapter {
       resizable: false,
       hasShadow: false,
       show: false,
-      focusable: true,
+      focusable: false,
       webPreferences: {
         preload: preloadPath,
         sandbox: false,
@@ -118,9 +122,61 @@ export class DesktopPetWindowAdapter {
     this.registerWindowEvents();
     this.registerScreenEvents();
 
+    if (this.loadTimeout) {
+      clearTimeout(this.loadTimeout);
+      this.loadTimeout = null;
+    }
+    let loadSettled = false;
+
     this.window.once("ready-to-show", () => {
-      this.window?.show();
+      if (loadSettled) return;
+      loadSettled = true;
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout);
+        this.loadTimeout = null;
+      }
+      const w = this.window;
+      if (!w || w.isDestroyed()) return;
+      w.show();
     });
+
+    this.window.webContents.on("did-finish-load", () => {
+      if (loadSettled) return;
+      loadSettled = true;
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout);
+        this.loadTimeout = null;
+      }
+      const w = this.window;
+      if (!w || w.isDestroyed()) return;
+      w.show();
+    });
+
+    this.window.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription) => {
+        if (loadSettled) return;
+        loadSettled = true;
+        if (this.loadTimeout) {
+          clearTimeout(this.loadTimeout);
+          this.loadTimeout = null;
+        }
+        console.error(
+          "[DesktopPetWindowAdapter] 窗口加载失败:",
+          errorCode,
+          errorDescription,
+        );
+      },
+    );
+
+    this.loadTimeout = setTimeout(() => {
+      if (loadSettled) return;
+      loadSettled = true;
+      this.loadTimeout = null;
+      console.error(
+        "[DesktopPetWindowAdapter] 窗口初始化超时(5s)，已进入错误状态",
+      );
+    }, 5000);
 
     if (isDevMode()) {
       const petDevUrl = `${DEV_SERVER_URL}/pet.html`;
@@ -149,12 +205,21 @@ export class DesktopPetWindowAdapter {
 
   async destroy(): Promise<void> {
     this.unregisterScreenEvents();
+    if (this.loadTimeout) {
+      clearTimeout(this.loadTimeout);
+      this.loadTimeout = null;
+    }
     const win = this.window;
     this.window = null;
     if (win && !win.isDestroyed()) {
-      win.close();
+      this.intentionalClose = true;
+      win.destroy();
     }
     this.listeners.clear();
+  }
+
+  setIntentionalClose(value: boolean): void {
+    this.intentionalClose = value;
   }
 
   async setPosition(x: number, y: number, screenId?: string): Promise<void> {
@@ -489,7 +554,9 @@ export class DesktopPetWindowAdapter {
     win.on("move", () => this.emit("move"));
     win.on("resize", () => this.emit("resize"));
     win.on("closed", () => {
-      this.emit("close");
+      if (!this.intentionalClose) {
+        this.emit("close");
+      }
       this.unregisterScreenEvents();
     });
     win.webContents.on("render-process-gone", () => this.emit("crashed"));

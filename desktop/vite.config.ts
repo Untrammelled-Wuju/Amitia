@@ -1,37 +1,20 @@
 import { resolve } from "node:path"
-import { copyFileSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs"
+import type { IncomingMessage, ServerResponse } from "node:http"
 import vue from "@vitejs/plugin-vue"
 import { defineConfig } from "vitest/config"
+import type { ViteDevServer } from "vite"
 import electron from "vite-plugin-electron/simple"
 
-function copyPetHtmlPlugin() {
-  function copyPetFiles() {
-    const srcHtml = resolve(__dirname, "src/renderer/pet.html")
-    const destDir = resolve(__dirname, "dist/renderer")
-    const destHtml = resolve(destDir, "pet.html")
-    if (existsSync(srcHtml)) {
-      if (!existsSync(destDir)) {
-        mkdirSync(destDir, { recursive: true })
-      }
-      copyFileSync(srcHtml, destHtml)
-    }
-
-    const frontDir = resolve(__dirname, "../front")
-    const frontPetHtml = resolve(frontDir, "pet.html")
-    if (existsSync(srcHtml)) {
-      let htmlContent = readFileSync(srcHtml, "utf8")
-      htmlContent = htmlContent.replace(
-        '<script type="module" src="./pet-main.ts"></script>',
-        '<script type="module" src="/@fs' + resolve(__dirname, "src/renderer/pet-main.ts") + '"></script>',
-      )
-      writeFileSync(frontPetHtml, htmlContent, "utf8")
-    }
-  }
-
+function petDevServerPlugin() {
   return {
-    name: "copy-pet-html",
-    configureServer() {
-      copyPetFiles()
+    name: "pet-dev-server",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(
+        "/pet.html",
+        (_req: IncomingMessage, _res: ServerResponse, next: () => void) => {
+          next()
+        },
+      )
     },
   }
 }
@@ -103,7 +86,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    copyPetHtmlPlugin(),
+    petDevServerPlugin(),
     electron({
       main: {
         entry: resolve(__dirname, "src/main/index.ts"),

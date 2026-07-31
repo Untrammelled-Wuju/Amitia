@@ -1,3 +1,5 @@
+export const PET_PROTOCOL_SCHEME = "amitia-pet";
+
 export const ANIMATION_IPC_CHANNELS = {
   getPackageSnapshot: "pet:animation:get-package-snapshot",
   resolveResourceUrl: "pet:animation:resolve-resource-url",
@@ -18,6 +20,9 @@ export const ANIMATION_IPC_CHANNELS = {
   systemResume: "pet:animation:system-resume",
   recovery: "pet:animation:recovery",
   updateDefaultAction: "pet:animation:update-default-action",
+  rendererReady: "pet:animation:renderer-ready",
+  rendererReadyAck: "pet:animation:renderer-ready-ack",
+  hitMask: "pet:animation:hit-mask",
 } as const;
 
 export type AnimationIpcChannel =

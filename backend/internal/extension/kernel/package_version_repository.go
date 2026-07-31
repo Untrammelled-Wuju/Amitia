@@ -125,6 +125,87 @@ func (r *PackageRepository) PutPackageVersionTx(ctx context.Context, tx *sql.Tx,
 	return r.putPackageVersion(ctx, tx, record)
 }
 
+type UpsertPackageVersionResult struct {
+	Record  PackageVersionRecord
+	Created bool
+}
+
+func (r *PackageRepository) UpsertPackageVersionTx(ctx context.Context, tx *sql.Tx, guard PackageWriteGuard, candidate PackageVersionRecord) (UpsertPackageVersionResult, error) {
+	if tx == nil {
+		return UpsertPackageVersionResult{}, errors.New("kernel: package version upsert requires transaction")
+	}
+	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
+		return UpsertPackageVersionResult{}, err
+	}
+	var existing PackageVersionRecord
+	lookupErr := tx.QueryRowContext(ctx, `SELECT `+packageVersionSelectColumns+`
+		FROM package_versions WHERE extension_id = ? AND version = ?`,
+		candidate.ExtensionID, candidate.Version).Scan(
+		&existing.VersionID, &existing.ExtensionID, &existing.Version, &existing.ArtifactID,
+		&existing.InstallOperationID, &existing.UninstallOperationID, &existing.InstalledAt, &existing.UninstalledAt,
+		&existing.VersionState, &existing.RetainedUntil, &existing.InstalledPath, &existing.InstalledTreeHash, &existing.ArchiveHash,
+		&existing.ManifestHash, &existing.ContentTreeHash, &existing.GenerationID)
+	if lookupErr == nil {
+		versionState := packageVersionStateOf(candidate)
+		if versionState == "" {
+			versionState = string(PackageVersionStatePending)
+		}
+		_, updateErr := tx.ExecContext(ctx, `UPDATE package_versions SET
+			artifact_id=?, generation_id=?, manifest_hash=?, content_tree_hash=?,
+			version_state=?, retained_until=?, installed_at=?,
+			install_operation_id=?, uninstall_operation_id=?, uninstalled_at=?,
+			installed_path=?, installed_tree_hash=?, archive_hash=?
+			WHERE version_id=? AND extension_id=?`,
+			candidate.ArtifactID, candidate.GenerationID, candidate.ManifestHash, candidate.ContentTreeHash,
+			versionState, candidate.RetainedUntil, candidate.InstalledAt,
+			candidate.InstallOperationID, candidate.UninstallOperationID, candidate.UninstalledAt,
+			candidate.InstalledPath, candidate.InstalledTreeHash, candidate.ArchiveHash,
+			existing.VersionID, candidate.ExtensionID)
+		if updateErr != nil {
+			return UpsertPackageVersionResult{}, storageOperationError("upsert package version update", updateErr)
+		}
+		existing.ArtifactID = candidate.ArtifactID
+		existing.GenerationID = candidate.GenerationID
+		existing.ManifestHash = candidate.ManifestHash
+		existing.ContentTreeHash = candidate.ContentTreeHash
+		existing.VersionState = versionState
+		existing.RetainedUntil = candidate.RetainedUntil
+		existing.InstalledAt = candidate.InstalledAt
+		existing.InstallOperationID = candidate.InstallOperationID
+		existing.UninstallOperationID = candidate.UninstallOperationID
+		existing.UninstalledAt = candidate.UninstalledAt
+		existing.InstalledPath = candidate.InstalledPath
+		existing.InstalledTreeHash = candidate.InstalledTreeHash
+		existing.ArchiveHash = candidate.ArchiveHash
+		existing.IsActive = versionState == string(PackageVersionStateCurrent)
+		return UpsertPackageVersionResult{Record: existing, Created: false}, nil
+	}
+	if !errors.Is(lookupErr, sql.ErrNoRows) {
+		return UpsertPackageVersionResult{}, storageOperationError("upsert package version lookup", lookupErr)
+	}
+	versionState := string(PackageVersionStatePending)
+	createdAt := candidate.InstalledAt
+	if createdAt == "" {
+		createdAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	_, insertErr := tx.ExecContext(ctx, `INSERT INTO package_versions (
+		version_id, extension_id, version, artifact_id, generation_id,
+		manifest_hash, content_tree_hash, version_state, retained_until, installed_at, created_at,
+		install_operation_id, uninstall_operation_id, uninstalled_at,
+		installed_path, installed_tree_hash, archive_hash
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		candidate.VersionID, candidate.ExtensionID, candidate.Version, candidate.ArtifactID, candidate.GenerationID,
+		candidate.ManifestHash, candidate.ContentTreeHash, versionState, candidate.RetainedUntil, candidate.InstalledAt, createdAt,
+		candidate.InstallOperationID, candidate.UninstallOperationID, candidate.UninstalledAt,
+		candidate.InstalledPath, candidate.InstalledTreeHash, candidate.ArchiveHash)
+	if insertErr != nil {
+		return UpsertPackageVersionResult{}, storageOperationError("upsert package version insert", insertErr)
+	}
+	candidate.VersionState = versionState
+	candidate.IsActive = versionState == string(PackageVersionStateCurrent)
+	return UpsertPackageVersionResult{Record: candidate, Created: true}, nil
+}
+
 func (r *PackageRepository) GetCurrentPackageVersionIDTx(ctx context.Context, tx *sql.Tx, extensionID string) (string, error) {
 	if tx == nil {
 		return "", errors.New("kernel: current package version lookup requires transaction")
@@ -138,24 +219,62 @@ func (r *PackageRepository) GetCurrentPackageVersionIDTx(ctx context.Context, tx
 	return versionID, err
 }
 
-func (r *PackageRepository) ActivatePackageVersionTx(ctx context.Context, tx *sql.Tx, extensionID, newVersionID, oldVersionID string) error {
+func (r *PackageRepository) ActivatePackageVersionTx(ctx context.Context, tx *sql.Tx, guard PackageWriteGuard, extensionID, actualVersionID, generationID string) error {
 	if tx == nil {
 		return errors.New("kernel: activate package version requires transaction")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if oldVersionID != "" && oldVersionID != newVersionID {
-		if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = ? WHERE extension_id = ? AND version_id = ?`,
-			string(PackageVersionStateRetained), now, extensionID, oldVersionID); err != nil {
-			return err
+	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
+		return err
+	}
+	var recordExtensionID string
+	err := tx.QueryRowContext(ctx, `SELECT extension_id FROM package_versions WHERE version_id = ?`,
+		actualVersionID).Scan(&recordExtensionID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return operationStateError(PackageErrCodeVersionActivateTargetNotFound, "activate target version not found: "+actualVersionID, nil)
 		}
+		return storageOperationError("activate version lookup", err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = '' WHERE extension_id = ? AND version_id = ?`,
-		string(PackageVersionStateCurrent), extensionID, newVersionID); err != nil {
-		return err
+	if recordExtensionID != extensionID {
+		return operationStateError(PackageErrCodeVersionActivateTargetNotFound, "activate target version extension_id mismatch", nil)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id = ? WHERE extension_id = ?`,
-		newVersionID, extensionID); err != nil {
-		return err
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = ? WHERE extension_id = ? AND version_state = ? AND version_id != ?`,
+		string(PackageVersionStateRetained), now, extensionID, string(PackageVersionStateCurrent), actualVersionID); err != nil {
+		return storageOperationError("deactivate old current versions", err)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, retained_until = '' WHERE extension_id = ? AND version_id = ?`,
+		string(PackageVersionStateCurrent), extensionID, actualVersionID)
+	if err != nil {
+		return storageOperationError("activate target version", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("activate target version rows affected", err)
+	}
+	if affected != 1 {
+		return operationStateError(PackageErrCodeVersionActivateTargetNotFound, fmt.Sprintf("activate target version affected %d rows, expected 1", affected), nil)
+	}
+	installResult, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id = ?, current_generation_id = ? WHERE extension_id = ?`,
+		actualVersionID, generationID, extensionID)
+	if err != nil {
+		return storageOperationError("update installation current version", err)
+	}
+	installAffected, err := installResult.RowsAffected()
+	if err != nil {
+		return storageOperationError("update installation current version rows affected", err)
+	}
+	if installAffected != 1 {
+		return operationStateError(PackageErrCodeInstallationNotFound, fmt.Sprintf("installation update affected %d rows, expected 1", installAffected), nil)
+	}
+	var currentCount int
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM package_versions WHERE extension_id = ? AND version_state = ?`,
+		extensionID, string(PackageVersionStateCurrent)).Scan(&currentCount)
+	if err != nil {
+		return storageOperationError("count current versions", err)
+	}
+	if currentCount != 1 {
+		return operationStateError(PackageErrCodeVersionHistoryCorrupted, fmt.Sprintf("expected 1 current version, found %d", currentCount), nil)
 	}
 	return nil
 }
@@ -238,19 +357,50 @@ func (r *PackageRepository) ListActivePackageVersions(ctx context.Context) ([]Pa
 
 func (r *PackageRepository) DeactivatePackageVersion(ctx context.Context, extensionID, version, uninstallOperationID string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, uninstall_operation_id = ?, uninstalled_at = ?, retained_until = ? WHERE extension_id = ? AND version = ?`,
+	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, uninstall_operation_id = ?, uninstalled_at = ?, retained_until = ? WHERE extension_id = ? AND version = ?`,
 		string(PackageVersionStateRetained), uninstallOperationID, now, now, extensionID, version)
-	return err
+	if err != nil {
+		return storageOperationError("deactivate package version", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("deactivate package version rows affected", err)
+	}
+	if affected == 0 {
+		return operationStateError(PackageErrCodeVersionDeactivateTargetNotFound, fmt.Sprintf("package version %s not found for deactivate", version), nil)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE extension_installations SET current_version_id = '', current_generation_id = '' WHERE extension_id = ?`,
+		extensionID); err != nil {
+		return storageOperationError("clear installation current version on deactivate", err)
+	}
+	return nil
 }
 
-func (r *PackageRepository) DeactivatePackageVersionTx(ctx context.Context, tx *sql.Tx, extensionID, version, uninstallOperationID string) error {
+func (r *PackageRepository) DeactivatePackageVersionTx(ctx context.Context, tx *sql.Tx, guard PackageWriteGuard, extensionID, version, uninstallOperationID string) error {
 	if tx == nil {
 		return errors.New("kernel: deactivate package version requires transaction")
 	}
+	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, uninstall_operation_id = ?, uninstalled_at = ?, retained_until = ? WHERE extension_id = ? AND version = ?`,
+	result, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ?, uninstall_operation_id = ?, uninstalled_at = ?, retained_until = ? WHERE extension_id = ? AND version = ?`,
 		string(PackageVersionStateRetained), uninstallOperationID, now, now, extensionID, version)
-	return err
+	if err != nil {
+		return storageOperationError("deactivate package version tx", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("deactivate package version tx rows affected", err)
+	}
+	if affected == 0 {
+		return operationStateError(PackageErrCodeVersionDeactivateTargetNotFound, fmt.Sprintf("package version %s not found for deactivate", version), nil)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id = '', current_generation_id = '' WHERE extension_id = ?`,
+		extensionID); err != nil {
+		return storageOperationError("clear installation current version on deactivate tx", err)
+	}
+	return nil
 }
 
 func (r *PackageRepository) GetLatestPackageVersion(ctx context.Context, extensionID string) (PackageVersionRecord, error) {

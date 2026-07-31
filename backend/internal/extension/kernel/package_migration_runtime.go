@@ -26,11 +26,15 @@ import (
 
 var ErrPackageMigrationTypeUnsupported = errors.New("PACKAGE_MIGRATION_TYPE_UNSUPPORTED")
 
-var forbiddenMigrationTableRegex = regexp.MustCompile(`(?i)\b(users|characters|messages|package_operations|package_installations|schema_migrations|extension_migration_definitions|extension_migration_operations|extension_migration_steps|extension_migration_checkpoints|extension_data_snapshots|extension_snapshot_entries)\b`)
+var forbiddenMigrationTableRegex = regexp.MustCompile(`(?i)\b(users|characters|messages|package_operations|package_installations|schema_migrations|extension_migration_definitions|extension_migration_operations|extension_migration_steps|extension_migration_checkpoints|extension_data_snapshots|extension_snapshot_entries|sqlite_master|sqlite_sequence|sqlite_schema)\b`)
 
-var forbiddenSQLCommandRegex = regexp.MustCompile(`(?i)\b(ATTACH|DETACH|load_extension)\b|VACUUM\s+INTO|PRAGMA\s+writable_schema`)
+var forbiddenSQLCommandRegex = regexp.MustCompile(`(?i)\b(ATTACH|DETACH|load_extension|CREATE\s+VIRTUAL\s+TABLE|CREATE\s+TRIGGER|CREATE\s+VIEW|CREATE\s+MACRO)\b|VACUUM\s+INTO|PRAGMA\s+writable_schema|PRAGMA\s+schema_version\s*=|PRAGMA\s+auto_vacuum\s*=`)
 
-var tableReferenceRegex = regexp.MustCompile(`(?i)\b(?:CREATE\s+TABLE|ALTER\s+TABLE|INSERT\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+TABLE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:["` + "`" + `\[])?([A-Za-z_][A-Za-z0-9_]*)`)
+var tableReferenceRegex = regexp.MustCompile(`(?i)\b(?:CREATE\s+TABLE|ALTER\s+TABLE|INSERT\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+TABLE|TRUNCATE\s+TABLE|REPLACE\s+INTO)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:["` + "`" + `\[])?([A-Za-z_][A-Za-z0-9_]*)`)
+
+var tableFromJoinRegex = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+(?:["` + "`" + `\[])?([A-Za-z_][A-Za-z0-9_]*)`)
+
+var systemTableRegex = regexp.MustCompile(`(?i)^(sqlite_master|sqlite_sequence|sqlite_schema|sqlite_stat\d*|sqlite_temp_master|sqlite_temp_schema)$`)
 
 type migrationQueryExecutor interface {
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
@@ -102,13 +106,22 @@ func (pmr *packageMigrationRuntime) readMigrationScript(def migration.MigrationD
 }
 
 func (pmr *packageMigrationRuntime) executeScript(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition) (json.RawMessage, error) {
-	switch def.RuntimeType {
-	case "config":
-		return pmr.executeConfigMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
-	case "resource":
-		return pmr.executeResourceMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
-	case "userdata":
-		return pmr.executeUserDataMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
+	if def.RuntimeType == "config" || def.RuntimeType == "resource" || def.RuntimeType == "userdata" {
+		var scriptContent []byte
+		if def.Entry != "" {
+			if content, err := pmr.readMigrationScript(def); err == nil {
+				scriptContent = content
+			}
+		}
+		baseEvidence := pmr.buildBaseEvidence(step, def, scriptContent)
+		switch def.RuntimeType {
+		case "config":
+			return pmr.executeConfigMigration(ctx, step, def, baseEvidence, scriptContent)
+		case "resource":
+			return pmr.executeResourceMigration(ctx, step, def, baseEvidence, scriptContent)
+		case "userdata":
+			return pmr.executeUserDataMigration(ctx, step, def, baseEvidence, scriptContent)
+		}
 	}
 	scriptContent, err := pmr.readMigrationScript(def)
 	if err != nil {
@@ -242,19 +255,24 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 		DefinitionHash:       def.DefinitionHash,
 		AllowedContributions: []javascript_main.AllowedContribution{},
 		ResourceLimits: runtime.ResourceLimits{
-			MaxMemoryMB:        128,
+			MaxMemoryMB:        64,
 			MaxConcurrentCalls: 1,
 			MaxQueueDepth:      1,
-			SingleCallTimeout:  "15s",
-			LogRatePerSecond:   10,
-			HostAPIRatePerSec:  5,
-			MaxOpenHandles:     16,
-			MaxMessageSizeKB:   256,
+			SingleCallTimeout:  "10s",
+			LogRatePerSecond:   5,
+			HostAPIRatePerSec:  3,
+			MaxOpenHandles:     8,
+			MaxMessageSizeKB:   128,
 		},
 		NetworkDisabled: true,
 		Env: []string{
 			"AMITIA_MIGRATION_SANDBOX=1",
 			"AMITIA_NETWORK_DISABLED=1",
+			"AMITIA_FS_DISABLED=1",
+			"AMITIA_MIGRATION_RUNTIME=1",
+			"AMITIA_HOST_API_ALLOWLIST=migration.*",
+			"AMITIA_PROCESS_ISOLATION=strict",
+			"NODE_OPTIONS=--no-experimental-fetch --disable-network-imports --no-experimental-global-navigator --no-experimental-global-customevent",
 		},
 	}
 	host, createErr := pmr.runtime.container.JSRuntimeFactory.Create(ctx, migrationResourceLimits)
@@ -326,17 +344,69 @@ type MigrationExecutor interface {
 }
 
 type migrationExecutorBase struct {
-	runtime     *Runtime
-	extensionID string
-	step        migration.ReversiblePlanStep
-	def         migration.MigrationDefinition
+	runtime       *Runtime
+	extensionID   string
+	step          migration.ReversiblePlanStep
+	def           migration.MigrationDefinition
+	scriptContent []byte
+}
+
+func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, error) {
+	if len(e.scriptContent) == 0 {
+		return 0, nil
+	}
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.Store == nil {
+		return 0, fmt.Errorf("kernel: migration executor: store unavailable")
+	}
+	db := e.runtime.container.Store.DB()
+	if db == nil {
+		return 0, fmt.Errorf("kernel: migration executor: database unavailable")
+	}
+	statements := splitSQLStatementsSafe(string(e.scriptContent))
+	if len(statements) == 0 {
+		return 0, nil
+	}
+	for _, stmt := range statements {
+		if match := forbiddenMigrationTableRegex.FindString(stmt); match != "" {
+			return 0, fmt.Errorf("kernel: migration executor: sql references forbidden host table %q", strings.ToLower(match))
+		}
+		if match := forbiddenSQLCommandRegex.FindString(stmt); match != "" {
+			return 0, fmt.Errorf("kernel: migration executor: sql uses forbidden command %q", strings.ToUpper(match))
+		}
+		if err := validateExtNamespace(stmt); err != nil {
+			return 0, fmt.Errorf("kernel: migration executor: sql namespace violation: %w", err)
+		}
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("kernel: migration executor: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	var executed int
+	for _, stmt := range statements {
+		if _, execErr := tx.ExecContext(ctx, stmt); execErr != nil {
+			return 0, fmt.Errorf("kernel: migration executor: execute sql: %w", execErr)
+		}
+		executed++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("kernel: migration executor: commit: %w", err)
+	}
+	committed = true
+	return executed, nil
 }
 
 type ConfigMigrationExecutor struct {
 	migrationExecutorBase
-	snapshotContributions []domain.ContributionDefinition
-	snapshotRequirements  []sqlite.PermissionRequirement
-	snapshotGrants        []sqlite.PermissionGrant
+	snapshotContributions     []domain.ContributionDefinition
+	snapshotRequirements      []sqlite.PermissionRequirement
+	snapshotGrants            []sqlite.PermissionGrant
+	scriptStatementsExecuted  int
 }
 
 func (e *ConfigMigrationExecutor) Prepare(ctx context.Context) error {
@@ -366,6 +436,11 @@ func (e *ConfigMigrationExecutor) Execute(ctx context.Context) error {
 	if e.step.Direction == migration.DirectionReverse {
 		return e.Compensate(ctx)
 	}
+	executed, err := e.executeScriptSQL(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration execute script: %w", err)
+	}
+	e.scriptStatementsExecuted = executed
 	return nil
 }
 
@@ -424,7 +499,8 @@ func (e *ConfigMigrationExecutor) Compensate(ctx context.Context) error {
 
 type ResourceMigrationExecutor struct {
 	migrationExecutorBase
-	snapshotResources []domain.ResourceOwnership
+	snapshotResources        []domain.ResourceOwnership
+	scriptStatementsExecuted int
 }
 
 func (e *ResourceMigrationExecutor) Prepare(ctx context.Context) error {
@@ -443,6 +519,11 @@ func (e *ResourceMigrationExecutor) Execute(ctx context.Context) error {
 	if e.step.Direction == migration.DirectionReverse {
 		return e.Compensate(ctx)
 	}
+	executed, err := e.executeScriptSQL(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: resource migration execute script: %w", err)
+	}
+	e.scriptStatementsExecuted = executed
 	return nil
 }
 
@@ -484,7 +565,8 @@ func (e *ResourceMigrationExecutor) Compensate(ctx context.Context) error {
 
 type UserDataMigrationExecutor struct {
 	migrationExecutorBase
-	jsonlExports map[string]string
+	jsonlExports             map[string]string
+	scriptStatementsExecuted int
 }
 
 func (e *UserDataMigrationExecutor) Prepare(ctx context.Context) error {
@@ -518,6 +600,11 @@ func (e *UserDataMigrationExecutor) Execute(ctx context.Context) error {
 	if e.step.Direction == migration.DirectionReverse {
 		return e.Compensate(ctx)
 	}
+	executed, err := e.executeScriptSQL(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: userdata migration execute script: %w", err)
+	}
+	e.scriptStatementsExecuted = executed
 	return nil
 }
 
@@ -581,16 +668,17 @@ func (e *UserDataMigrationExecutor) Compensate(ctx context.Context) error {
 	return nil
 }
 
-func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any, scriptContent []byte) (json.RawMessage, error) {
 	if pmr.runtime.container == nil || pmr.runtime.container.ContributionRepository == nil || pmr.runtime.container.PermissionRepository == nil {
 		return nil, fmt.Errorf("kernel: migration config repositories unavailable for %s", def.MigrationID)
 	}
 	executor := &ConfigMigrationExecutor{
 		migrationExecutorBase: migrationExecutorBase{
-			runtime:     pmr.runtime,
-			extensionID: pmr.extensionID,
-			step:        step,
-			def:         def,
+			runtime:       pmr.runtime,
+			extensionID:   pmr.extensionID,
+			step:          step,
+			def:           def,
+			scriptContent: scriptContent,
 		},
 	}
 	if err := executor.Prepare(ctx); err != nil {
@@ -609,6 +697,7 @@ func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, 
 	baseEvidence["snapshotContributions"] = len(executor.snapshotContributions)
 	baseEvidence["snapshotRequirements"] = len(executor.snapshotRequirements)
 	baseEvidence["snapshotGrants"] = len(executor.snapshotGrants)
+	baseEvidence["scriptStatementsExecuted"] = executor.scriptStatementsExecuted
 	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
 	if marshalErr != nil {
 		return nil, fmt.Errorf("kernel: migration config evidence marshal: %w", marshalErr)
@@ -616,16 +705,17 @@ func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, 
 	return evidenceJSON, nil
 }
 
-func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any, scriptContent []byte) (json.RawMessage, error) {
 	if pmr.runtime.container == nil || pmr.runtime.container.ResourceRepository == nil {
 		return nil, fmt.Errorf("kernel: migration resource repository unavailable for %s", def.MigrationID)
 	}
 	executor := &ResourceMigrationExecutor{
 		migrationExecutorBase: migrationExecutorBase{
-			runtime:     pmr.runtime,
-			extensionID: pmr.extensionID,
-			step:        step,
-			def:         def,
+			runtime:       pmr.runtime,
+			extensionID:   pmr.extensionID,
+			step:          step,
+			def:           def,
+			scriptContent: scriptContent,
 		},
 	}
 	if err := executor.Prepare(ctx); err != nil {
@@ -642,6 +732,7 @@ func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context
 	baseEvidence["executionMode"] = "resource_executed"
 	baseEvidence["executor_type"] = "resource"
 	baseEvidence["snapshotResources"] = len(executor.snapshotResources)
+	baseEvidence["scriptStatementsExecuted"] = executor.scriptStatementsExecuted
 	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
 	if marshalErr != nil {
 		return nil, fmt.Errorf("kernel: migration resource evidence marshal: %w", marshalErr)
@@ -649,16 +740,17 @@ func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context
 	return evidenceJSON, nil
 }
 
-func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any, scriptContent []byte) (json.RawMessage, error) {
 	if pmr.runtime.container == nil || pmr.runtime.container.Store == nil {
 		return nil, fmt.Errorf("kernel: migration userdata store unavailable for %s", def.MigrationID)
 	}
 	executor := &UserDataMigrationExecutor{
 		migrationExecutorBase: migrationExecutorBase{
-			runtime:     pmr.runtime,
-			extensionID: pmr.extensionID,
-			step:        step,
-			def:         def,
+			runtime:       pmr.runtime,
+			extensionID:   pmr.extensionID,
+			step:          step,
+			def:           def,
+			scriptContent: scriptContent,
 		},
 	}
 	if err := executor.Prepare(ctx); err != nil {
@@ -675,6 +767,7 @@ func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context
 	baseEvidence["executionMode"] = "userdata_executed"
 	baseEvidence["executor_type"] = "userdata"
 	baseEvidence["jsonlExportTables"] = len(executor.jsonlExports)
+	baseEvidence["scriptStatementsExecuted"] = executor.scriptStatementsExecuted
 	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
 	if marshalErr != nil {
 		return nil, fmt.Errorf("kernel: migration userdata evidence marshal: %w", marshalErr)
@@ -1010,10 +1103,25 @@ func sanitizeSQLForAnalysis(stmt string) string {
 func extractTableReferences(stmt string) []string {
 	sanitized := sanitizeSQLForAnalysis(stmt)
 	matches := tableReferenceRegex.FindAllStringSubmatch(sanitized, -1)
+	joinMatches := tableFromJoinRegex.FindAllStringSubmatch(sanitized, -1)
 	var refs []string
+	seen := map[string]bool{}
 	for _, m := range matches {
 		if len(m) > 1 && m[1] != "" {
-			refs = append(refs, m[1])
+			key := strings.ToLower(m[1])
+			if !seen[key] {
+				seen[key] = true
+				refs = append(refs, m[1])
+			}
+		}
+	}
+	for _, m := range joinMatches {
+		if len(m) > 1 && m[1] != "" {
+			key := strings.ToLower(m[1])
+			if !seen[key] {
+				seen[key] = true
+				refs = append(refs, m[1])
+			}
 		}
 	}
 	return refs
@@ -1022,11 +1130,23 @@ func extractTableReferences(stmt string) []string {
 func validateExtNamespace(stmt string) error {
 	refs := extractTableReferences(stmt)
 	for _, ref := range refs {
-		if !strings.HasPrefix(strings.ToLower(ref), "ext_") {
+		lower := strings.ToLower(ref)
+		if systemTableRegex.MatchString(lower) {
+			return fmt.Errorf("kernel: migration table %q is a system table", ref)
+		}
+		if !strings.HasPrefix(lower, "ext_") {
 			return fmt.Errorf("kernel: migration table %q must use ext_ prefix", ref)
 		}
 	}
 	return nil
+}
+
+func isExtNamespaceTable(name string) bool {
+	lower := strings.ToLower(name)
+	if systemTableRegex.MatchString(lower) {
+		return false
+	}
+	return strings.HasPrefix(lower, "ext_")
 }
 
 func (pmr *packageMigrationRuntime) computeExtSchemaHash(ctx context.Context, executor migrationQueryExecutor) (string, error) {

@@ -116,5 +116,13 @@ func DefaultMigrations() []Migration {
 		DesktopPetPackageReleaseMigration(),
 		DesktopPetBehaviorMigration(),
 		DesktopPetPhase8GatesMigration(),
+		DesktopPetGenerationActiveArtifactMigration(),
+		DesktopPetProcessingCommitRecoveryMigration(),
+		DesktopPetRevisionBridgeMigration(),
+		DesktopPetReleaseDomainMigration(),
+		DesktopPetQualityBridgeMigration(),
+		DesktopPetInstallationCoordinatorMigration(),
+		DesktopPetEditingV2Migration(),
+		DesktopPetRuntimeProtocolV2Migration(),
 	}
 }

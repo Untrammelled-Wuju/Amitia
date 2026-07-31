@@ -46,8 +46,8 @@ function normalizeLoopType(
   if (lt === "loop" || lt === "once" || lt === "hold" || lt === "ping_pong") {
     return lt;
   }
-  if (lt === "pingpong") {
-    warnings.push("legacy_loop_type_alias: pingpong -> ping_pong");
+  if (lt === "pingpong" || lt === "ping-pong") {
+    warnings.push("legacy_loop_type_alias: ping-pong -> ping_pong");
     return "ping_pong";
   }
   if (isNewSchema) {
@@ -62,6 +62,7 @@ function normalizeLoopType(
 }
 
 function resolveReturnTarget(
+  rawReturnTo: { type?: string; actionKey?: string } | undefined,
   rawReturnAction: string | undefined,
   actionKey: string,
   specSnapshot: ActionSpecSnapshot | undefined,
@@ -72,6 +73,31 @@ function resolveReturnTarget(
 ): ReturnTarget {
   if (specSnapshot) {
     return specSnapshot.returnTarget;
+  }
+
+  if (rawReturnTo && typeof rawReturnTo === "object" && rawReturnTo.type) {
+    const type = rawReturnTo.type;
+    if (type === "action") {
+      const targetKey = rawReturnTo.actionKey;
+      if (!targetKey) {
+        warnings.push("return_to_action_missing_key");
+        return { type: "default" };
+      }
+      if (targetKey === actionKey) {
+        warnings.push("return_action_self_reference_ignored");
+        return { type: "default" };
+      }
+      if (availableActionKeys.has(targetKey)) {
+        return { type: "action", actionKey: targetKey };
+      }
+      warnings.push(`return_to_action_not_found: ${targetKey}`);
+      return { type: "default" };
+    }
+    if (type === "default") return { type: "default" };
+    if (type === "previous") return { type: "previous" };
+    if (type === "current_activity") return { type: "current_activity" };
+    if (type === "none") return { type: "none" };
+    warnings.push(`unknown_return_to_type: ${type}`);
   }
 
   if (!rawReturnAction || rawReturnAction.trim() === "") {
@@ -156,13 +182,14 @@ function computeFrameDuration(
     return raw.frameDurationMs;
   }
 
+  const fpsValue = raw.fps ?? raw.defaultFps;
   if (
-    raw.fps !== undefined &&
-    Number.isFinite(raw.fps) &&
-    raw.fps >= FPS_MIN &&
-    raw.fps <= FPS_MAX
+    fpsValue !== undefined &&
+    Number.isFinite(fpsValue) &&
+    fpsValue >= FPS_MIN &&
+    fpsValue <= FPS_MAX
   ) {
-    return 1000 / raw.fps;
+    return 1000 / fpsValue;
   }
 
   if (isNewSchema) {
@@ -272,7 +299,12 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     });
   }
 
-  const loopType = normalizeLoopType(raw.loopType, isNewSchema, raw.actionKey, warnings);
+  const loopType = normalizeLoopType(
+    raw.playbackMode ?? raw.loopType,
+    isNewSchema,
+    raw.actionKey,
+    warnings,
+  );
 
   const anchor = resolveAnchor(
     raw,
@@ -283,6 +315,7 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
   );
 
   const returnTarget = resolveReturnTarget(
+    raw.returnTo,
     raw.returnAction,
     raw.actionKey,
     specSnapshot,
@@ -296,7 +329,7 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
   const interruptAfterMs = specSnapshot?.interruptAfterMs ?? raw.interruptAfterMs ?? 0;
   const minimumPlayMs = specSnapshot?.minimumPlayMs ?? raw.minimumPlayMs ?? 0;
   const maximumPlayMs = specSnapshot?.maximumPlayMs ?? raw.maximumPlayMs ?? null;
-  const defaultPriority = specSnapshot?.defaultPriority ?? raw.defaultPriority ?? 50;
+  const defaultPriority = specSnapshot?.defaultPriority ?? raw.priority ?? raw.defaultPriority ?? 50;
   const cooldownMs = specSnapshot?.cooldownMs ?? raw.cooldownMs ?? 0;
   const mutexGroup = specSnapshot?.mutexGroup ?? raw.mutexGroup ?? null;
   const isStableStateCandidate = specSnapshot?.isStableStateCandidate ?? (loopType === "loop");
@@ -313,7 +346,7 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     packageId: packageSnapshot.packageId,
     packageRevision: packageSnapshot.packageRevision,
     actionKey: raw.actionKey,
-    displayName: raw.displayName || raw.actionKey,
+    displayName: raw.displayName || raw.actionName || raw.actionKey,
     actionVersion: raw.version ?? 1,
     loopType,
     frames: normalizedFrames,

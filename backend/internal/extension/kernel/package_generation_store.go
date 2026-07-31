@@ -274,6 +274,9 @@ func (s *PackageGenerationStore) SwitchCurrent(extensionID, expectedGenerationID
 	if actualGenerationID != expectedGenerationID {
 		return fmt.Errorf("%w: expected %q, found %q", ErrPackageGenerationCAS, expectedGenerationID, actualGenerationID)
 	}
+	if readErr == nil && current.FencingToken > 0 && next.FencingToken > 0 && next.FencingToken < current.FencingToken {
+		return fmt.Errorf("%w: fencing token stale: current=%d, attempt=%d", ErrPackageGenerationCAS, current.FencingToken, next.FencingToken)
+	}
 	next.UpdatedAt = time.Now().UTC()
 	return s.replaceCurrentLocked(extensionID, next)
 }

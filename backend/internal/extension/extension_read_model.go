@@ -143,49 +143,45 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 		}
 		return nil, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
-	if container.DefinitionRepository == nil || container.PackageRepository == nil {
-		return nil, false, fmt.Errorf("readmodel: version read repositories not injected")
+	if container.PackageRepository == nil {
+		return nil, false, fmt.Errorf("readmodel: package version repository unavailable, fail closed")
 	}
-	versionStates := map[string]string{}
-	if versionRecords, versionErr := container.PackageRepository.ListPackageVersions(ctx, extensionID); versionErr == nil {
-		for _, vr := range versionRecords {
-			versionStates[vr.Version] = vr.VersionState
+	versionRecords, versionErr := container.PackageRepository.ListPackageVersions(ctx, extensionID)
+	if versionErr != nil {
+		return nil, false, fmt.Errorf("readmodel: package version repository unavailable: %w", versionErr)
+	}
+	if len(versionRecords) == 0 {
+		return nil, false, fmt.Errorf("readmodel: no version records found for extension, fail closed")
+	}
+	defMap := map[string]domain.ExtensionDefinition{}
+	if container.DefinitionRepository != nil {
+		definitions, defErr := container.DefinitionRepository.ListExtensions(ctx)
+		if defErr == nil {
+			for _, def := range definitions {
+				if string(def.ID) == extensionID {
+					defMap[def.Version.String()] = def
+				}
+			}
 		}
-	}
-	definitions, err := container.DefinitionRepository.ListExtensions(ctx)
-	if err != nil {
-		return nil, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
 	}
 	views := make([]PackageVersionView, 0)
-	activeFound := false
-	for _, def := range definitions {
-		if string(def.ID) != extensionID {
-			continue
-		}
-		artifact, artifactErr := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, def.Version.String())
+	for _, vr := range versionRecords {
+		artifact, artifactErr := container.PackageRepository.GetArtifact(ctx, vr.ArtifactID)
 		if artifactErr != nil {
-			return nil, false, fmt.Errorf("readmodel: version artifact unavailable: %w", artifactErr)
+			return nil, false, fmt.Errorf("readmodel: version %s artifact unavailable: %w", vr.Version, artifactErr)
 		}
-		view := s.buildVersionView(def, installation, artifact)
-		if state, ok := versionStates[def.Version.String()]; ok {
-			view.Active = state == string(kernelruntime.PackageVersionStateCurrent)
-			if view.Active {
-				view.ArtifactStatus = "active"
-				view.ActivationStatus = "active"
-				view.Archived = false
-			} else {
-				view.ArtifactStatus = "archived"
-				view.ActivationStatus = "archived"
-				view.Archived = true
+		view := s.buildVersionViewFromRecord(vr, installation, artifact)
+		if def, ok := defMap[vr.Version]; ok {
+			manifestBytes, _ := json.Marshal(def)
+			view.Manifest = manifestBytes
+			capabilities := kernelDefinitionCapabilities(def)
+			sort.Strings(capabilities)
+			view.Capabilities = capabilities
+			if def.Package.Signature.Status != "" {
+				view.SignatureStatus = def.Package.Signature.Status
 			}
 		}
 		views = append(views, view)
-		if def.Version.Compare(installation.InstalledVersion) == 0 {
-			activeFound = true
-		}
-	}
-	if len(views) == 0 || !activeFound {
-		return nil, false, fmt.Errorf("readmodel: authoritative version model incomplete")
 	}
 	sort.Slice(views, func(i, j int) bool {
 		vi, ei := domain.ParseVersion(views[i].Version)
@@ -196,6 +192,32 @@ func (s *ExtensionReadModelService) TryListVersions(ctx context.Context, extensi
 		return vi.Compare(vj) > 0
 	})
 	return views, true, nil
+}
+
+func (s *ExtensionReadModelService) buildVersionViewFromRecord(vr kernelruntime.PackageVersionRecord, installation domain.ExtensionInstallation, artifact kernelruntime.PackageArtifact) PackageVersionView {
+	active := vr.VersionState == string(kernelruntime.PackageVersionStateCurrent)
+	view := PackageVersionView{
+		Version:             vr.Version,
+		ArtifactID:          artifact.ArtifactID,
+		ArtifactHash:        artifact.ArchiveHash,
+		PackageHash:         artifact.ArchiveHash,
+		ArchiveHash:         artifact.ArchiveHash,
+		ManifestHash:        artifact.ManifestHash,
+		ContentTreeHash:     artifact.ContentTreeHash,
+		Source:              "kernel",
+		CompatibilityStatus: "compatible",
+		InstalledAt:         installation.InstalledAt.Format(time.RFC3339),
+		Active:              active,
+	}
+	if active {
+		view.ArtifactStatus = "active"
+		view.ActivationStatus = "active"
+	} else {
+		view.ArtifactStatus = "archived"
+		view.ActivationStatus = "archived"
+		view.Archived = true
+	}
+	return view
 }
 
 func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, extensionID, fromVersion, toVersion string) (PackageVersionDiff, bool, error) {

@@ -78,8 +78,8 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
           :key="item.id"
           class="installation-card"
           :class="{
-            active: isActive(item),
-            invalid: item.status === 'invalid',
+            active: runtimeStatusOf(item) === 'running',
+            invalid: runtimeStatusOf(item) === 'corrupted',
             uninstalled: isUninstalled(item),
           }"
         >
@@ -87,19 +87,9 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             <div class="card-title">
               <strong>{{ item.name || "未命名桌宠" }}</strong>
               <el-tag
-                v-if="isActive(item)"
                 size="small"
-                type="success"
-              >运行中</el-tag>
-              <el-tag
-                size="small"
-                :type="statusTagType(item.status)"
-              >{{ statusLabel(item.status) }}</el-tag>
-              <el-tag
-                v-if="item.status === 'invalid'"
-                size="small"
-                type="danger"
-              >资源损坏</el-tag>
+                :type="runtimeStatusTagType(item)"
+              >{{ runtimeStatusLabel(item) }}</el-tag>
             </div>
             <div class="card-version">v{{ item.packageVersion || "—" }}</div>
           </div>
@@ -140,16 +130,16 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
                 <span class="meta-label">最近启用</span>
                 <span class="meta-value">{{ formatTime(item.lastEnabledAt) }}</span>
               </div>
-              <div v-if="item.packageHash" class="meta-row">
-                <span class="meta-label">包哈希</span>
-                <span class="meta-value hash-value" :title="item.packageHash">
-                  {{ shortHash(item.packageHash) }}
+              <div v-if="contentHashOf(item)" class="meta-row">
+                <span class="meta-label">内容哈希</span>
+                <span class="meta-value hash-value" :title="contentHashOf(item)">
+                  {{ shortHash(contentHashOf(item)) }}
                 </span>
               </div>
             </div>
           </div>
 
-          <div v-if="item.status === 'invalid'" class="invalid-banner">
+          <div v-if="runtimeStatusOf(item) === 'corrupted'" class="invalid-banner">
             <el-alert
               title="资源校验失败，桌宠已自动停用"
               type="error"
@@ -195,6 +185,27 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
               size="small"
               @click="openDefaultActionDialog(item)"
             >更换默认待机</el-button>
+            <el-button
+              v-if="canUpgrade(item)"
+              size="small"
+              type="primary"
+              plain
+              :loading="actionTargetId === item.id"
+              @click="openUpgradeDialog(item)"
+            >升级</el-button>
+            <el-button
+              v-if="canSwitch(item)"
+              size="small"
+              :loading="actionTargetId === item.id"
+              @click="onSwitch(item)"
+            >切换</el-button>
+            <el-button
+              v-if="canRepair(item)"
+              size="small"
+              type="warning"
+              :loading="actionTargetId === item.id"
+              @click="onRepair(item)"
+            >修复</el-button>
             <el-button
               v-if="canReinstall(item)"
               size="small"
@@ -357,6 +368,44 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
   </main>
 
     <el-dialog
+      v-model="upgradeDialogVisible"
+      title="升级桌宠"
+      width="420px"
+      destroy-on-close
+    >
+      <el-form label-width="100px">
+        <el-form-item label="桌宠">
+          <span>{{ upgradeForm.name }}</span>
+        </el-form-item>
+        <el-form-item label="目标版本">
+          <el-select
+            v-model="upgradeForm.targetReleaseId"
+            placeholder="请选择目标资源包"
+            style="width: 100%"
+            filterable
+          >
+            <el-option
+              v-for="pkg in upgradeCandidates"
+              :key="pkg.id"
+              :label="`Release v${pkg.version}`"
+              :value="pkg.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="upgradeDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="actionTargetId === upgradeForm.id"
+          :disabled="!upgradeForm.targetReleaseId"
+          @click="submitUpgrade"
+          >升级</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="installDialogVisible"
       title="安装桌宠"
       width="480px"
@@ -420,6 +469,7 @@ import {
   type DesktopPetInstallation,
   type ManifestActionInfo,
   type InstallationDetail,
+  type InstallationRuntimeStatus,
 } from "../../composables/useDesktopPetInstallations";
 import { useAssetUrl } from "../../composables/useAssetUrl";
 
@@ -456,6 +506,9 @@ const {
   recenter,
   playAction,
   uninstall,
+  upgrade,
+  switchInstallation,
+  repair,
   refresh,
 } = useDesktopPetInstallations();
 
@@ -496,6 +549,14 @@ const installSubmitting = ref(false);
 const availablePackages = ref<PackageOption[]>([]);
 const installForm = reactive({ petId: "", releaseId: "", characterId: "" });
 
+const upgradeDialogVisible = ref(false);
+const upgradeForm = reactive({
+  id: "",
+  name: "",
+  currentReleaseId: "",
+  targetReleaseId: "",
+});
+
 const statusMeta: Record<string, { label: string; type: string }> = {
   installing: { label: "安装中", type: "warning" },
   installed: { label: "已安装", type: "info" },
@@ -506,6 +567,16 @@ const statusMeta: Record<string, { label: string; type: string }> = {
   uninstalled: { label: "已卸载", type: "info" },
 };
 
+const runtimeStatusMeta: Record<string, { label: string; type: string }> = {
+  installed: { label: "已安装", type: "info" },
+  pending_runtime: { label: "等待运行端", type: "warning" },
+  enabled: { label: "已启用", type: "success" },
+  running: { label: "运行中", type: "success" },
+  offline: { label: "离线", type: "info" },
+  corrupted: { label: "损坏", type: "danger" },
+  recovery_required: { label: "待修复", type: "warning" },
+};
+
 function statusLabel(status?: string): string {
   if (!status) return "—";
   return statusMeta[status]?.label || status;
@@ -513,6 +584,44 @@ function statusLabel(status?: string): string {
 
 function statusTagType(status?: string): any {
   const t = status ? statusMeta[status]?.type : "";
+  if (t === "success") return "success";
+  if (t === "warning") return "warning";
+  if (t === "danger") return "danger";
+  return "info";
+}
+
+function runtimeStatusOf(
+  item: DesktopPetInstallation,
+): InstallationRuntimeStatus {
+  if (item.integrityStatus === "corrupted" || item.status === "invalid") {
+    return "corrupted";
+  }
+  if (item.integrityStatus === "recovery_required") {
+    return "recovery_required";
+  }
+  if (item.lifecycleState === "running") {
+    return "running";
+  }
+  if (item.lifecycleState === "offline") {
+    return "offline";
+  }
+  if (item.lifecycleState === "pending_runtime") {
+    return "pending_runtime";
+  }
+  if (item.lifecycleState === "enabled" || item.status === "enabled") {
+    return "enabled";
+  }
+  return "installed";
+}
+
+function runtimeStatusLabel(item: DesktopPetInstallation): string {
+  const rs = runtimeStatusOf(item);
+  return runtimeStatusMeta[rs]?.label || String(rs);
+}
+
+function runtimeStatusTagType(item: DesktopPetInstallation): any {
+  const rs = runtimeStatusOf(item);
+  const t = runtimeStatusMeta[rs]?.type;
   if (t === "success") return "success";
   if (t === "warning") return "warning";
   if (t === "danger") return "danger";
@@ -585,6 +694,29 @@ function canUninstall(item: DesktopPetInstallation): boolean {
   );
 }
 
+function canUpgrade(item: DesktopPetInstallation): boolean {
+  if (isUninstalled(item)) return false;
+  const rs = runtimeStatusOf(item);
+  if (rs === "corrupted" || rs === "recovery_required") return false;
+  return !!item.currentReleaseId || !!item.packageId;
+}
+
+function canSwitch(item: DesktopPetInstallation): boolean {
+  if (isUninstalled(item)) return false;
+  const rs = runtimeStatusOf(item);
+  return (
+    rs === "installed" ||
+    rs === "enabled" ||
+    rs === "offline" ||
+    rs === "pending_runtime"
+  );
+}
+
+function canRepair(item: DesktopPetInstallation): boolean {
+  const rs = runtimeStatusOf(item);
+  return rs === "corrupted" || rs === "recovery_required";
+}
+
 const activeInstallation = computed(() =>
   installations.value.find((i) => isActive(i)) || null,
 );
@@ -608,6 +740,12 @@ const defaultIdleCandidates = computed(() =>
   actionsList.value.filter((a) => a.supportsDefaultIdle),
 );
 
+const upgradeCandidates = computed(() =>
+  availablePackages.value.filter(
+    (pkg) => pkg.id !== upgradeForm.currentReleaseId,
+  ),
+);
+
 function previewUrlOf(item: DesktopPetInstallation): string {
   if (previewFailedSet.has(item.id)) return "";
   if (!item.previewPath) return "";
@@ -622,6 +760,10 @@ function characterLabelOf(item: DesktopPetInstallation): string {
   if (!item.characterId) return "—";
   const c = characterMap[String(item.characterId)];
   return c?.name || String(item.characterId);
+}
+
+function contentHashOf(item: DesktopPetInstallation): string {
+  return item.installedContentHash || item.packageHash || "";
 }
 
 function shortHash(hash?: string): string {
@@ -871,10 +1013,104 @@ async function submitDefaultAction() {
   }
 }
 
+async function openUpgradeDialog(item: DesktopPetInstallation) {
+  upgradeForm.id = item.id;
+  upgradeForm.name = item.name || "未命名桌宠";
+  upgradeForm.currentReleaseId = item.currentReleaseId || "";
+  upgradeForm.targetReleaseId = "";
+  await loadAvailablePackages();
+  upgradeDialogVisible.value = true;
+}
+
+async function submitUpgrade() {
+  if (!upgradeForm.id || !upgradeForm.targetReleaseId) {
+    ElMessage.warning("请选择目标资源包");
+    return;
+  }
+  actionTargetId.value = upgradeForm.id;
+  try {
+    await upgrade(upgradeForm.id, upgradeForm.targetReleaseId);
+    upgradeDialogVisible.value = false;
+    await refresh();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "升级失败");
+  } finally {
+    actionTargetId.value = null;
+  }
+}
+
+function onSwitch(item: DesktopPetInstallation) {
+  ElMessageBox.confirm(
+    `将切换为桌宠「${item.name}」为当前运行实例,是否继续?`,
+    "确认切换桌宠",
+    {
+      confirmButtonText: "确认切换",
+      cancelButtonText: "取消",
+      type: "info",
+    },
+  )
+    .then(async () => {
+      actionTargetId.value = item.id;
+      try {
+        await switchInstallation(item.id);
+        await refresh();
+      } catch (err: any) {
+        ElMessage.error(err?.message || "切换失败");
+      } finally {
+        actionTargetId.value = null;
+      }
+    })
+    .catch(() => {});
+}
+
+function onRepair(item: DesktopPetInstallation) {
+  ElMessageBox.confirm(
+    `将尝试修复桌宠「${item.name}」的安装完整性,是否继续?`,
+    "确认修复桌宠",
+    {
+      confirmButtonText: "确认修复",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(async () => {
+      actionTargetId.value = item.id;
+      try {
+        await repair(item.id);
+        await refresh();
+      } catch (err: any) {
+        ElMessage.error(err?.message || "修复失败");
+      } finally {
+        actionTargetId.value = null;
+      }
+    })
+    .catch(() => {});
+}
+
 async function onReinstall(item: DesktopPetInstallation) {
   actionTargetId.value = item.id;
   try {
-    await install(item.packageId, item.characterId);
+    const releaseId =
+      item.currentReleaseId || item.legacyPackageId || item.packageId;
+    if (!releaseId) {
+      ElMessage.warning("缺少资源版本信息,无法重新安装");
+      return;
+    }
+    let petId = "";
+    try {
+      const data = await get<{ items: PackageOption[]; total: number }>(
+        "/api/desktop-pets/releases",
+      );
+      const rel = (data?.items || []).find((r) => r.id === releaseId);
+      petId = rel?.petId || "";
+    } catch {
+      // ignore
+    }
+    if (!petId) {
+      ElMessage.warning("无法确定桌宠信息,请使用修复功能");
+      return;
+    }
+    await install(petId, releaseId, item.characterId);
     await refresh();
   } catch (err: any) {
     ElMessage.error(err?.message || "重新安装失败");

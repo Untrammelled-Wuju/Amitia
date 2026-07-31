@@ -243,6 +243,70 @@ func (a *RepoArtifactSourceAdapter) GetTaskUserID(taskID string) (string, error)
 	return task.UserID, nil
 }
 
+func (a *RepoArtifactSourceAdapter) GetGenerationActionInfo(generationActionID string) (*source.GenerationActionValidationInfo, error) {
+	db := a.repo.DB()
+	var action struct {
+		ID        string `gorm:"column:id"`
+		ActionKey string `gorm:"column:action_key"`
+		TaskID    string `gorm:"column:task_id"`
+	}
+	err := db.Table("desktop_pet_generation_task_actions").
+		Where("id = ?", generationActionID).
+		First(&action).Error
+	if err != nil {
+		return nil, err
+	}
+	return &source.GenerationActionValidationInfo{
+		ID:        action.ID,
+		ActionKey: action.ActionKey,
+		TaskID:     action.TaskID,
+	}, nil
+}
+
+func (a *RepoArtifactSourceAdapter) GetArtifactValidationInfo(artifactID string) (*source.ArtifactValidationInfo, error) {
+	db := a.repo.DB()
+	var artifact struct {
+		ID           string `gorm:"column:id"`
+		AttemptID    string `gorm:"column:attempt_id"`
+		ArtifactRole string `gorm:"column:artifact_role"`
+		Status       string `gorm:"column:status"`
+		Hash         string `gorm:"column:hash"`
+		ContentHash  string `gorm:"column:content_hash"`
+		RelativePath string `gorm:"column:relative_path"`
+		Width        int    `gorm:"column:width"`
+		Height       int    `gorm:"column:height"`
+		IsPrimary    int    `gorm:"column:is_primary"`
+	}
+	err := db.Table("desktop_pet_generation_artifacts").
+		Where("id = ?", artifactID).
+		First(&artifact).Error
+	if err != nil {
+		return nil, err
+	}
+	role := artifact.ArtifactRole
+	if role == "" {
+		if artifact.IsPrimary == 1 {
+			role = "primary"
+		} else {
+			role = "secondary"
+		}
+	}
+	contentHash := artifact.ContentHash
+	if contentHash == "" {
+		contentHash = artifact.Hash
+	}
+	return &source.ArtifactValidationInfo{
+		ArtifactID:   artifact.ID,
+		AttemptID:    artifact.AttemptID,
+		Role:         role,
+		Status:       artifact.Status,
+		ContentHash:  contentHash,
+		RelativePath: artifact.RelativePath,
+		Width:        artifact.Width,
+		Height:       artifact.Height,
+	}, nil
+}
+
 func BuildConfigSnapshot(task *processing.ProcessingTask) *pcontracts.ProcessingConfigSnapshot {
 	return pcontracts.NewDefaultConfigSnapshot(
 		task.OutputWidth,

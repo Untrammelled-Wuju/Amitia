@@ -82,6 +82,22 @@ type Repository interface {
 	GetIdempotencyRecord(userID, sessionID, key string) (*EditIdempotencyRecord, error)
 	UpdateIdempotencyRecord(id, status string, resultJSON string) error
 
+	CreateRegenerationJournal(journal *RegenerationJournal) error
+	ListJournalsByJob(jobID string) ([]RegenerationJournal, error)
+
+	CreateCandidateRevisionMetadata(meta *CandidateRevisionMetadata) error
+	GetCandidateRevisionMetadata(candidateRevisionID string) (*CandidateRevisionMetadata, error)
+	UpdateCandidateRevisionMetadataStatus(candidateRevisionID, status string) error
+
+	CreateAuditLog(logEntry *EditAuditLog) error
+
+	CASUpdateActiveBinding(processingTaskID, actionKey string, expectedBindingVersion int64, newRevisionID, activatedBy, reason string) (bool, error)
+	UpdateJobFields(id string, fields map[string]any) error
+	UpdateCandidateFields(id string, fields map[string]any) error
+	ListJobsForRecovery(leaseDuration time.Duration) ([]RegenerationJob, error)
+	ListExpiredCandidates(retentionDays int) ([]EditCandidate, error)
+	GetCandidateByRevisionID(revisionID string) (*EditCandidate, error)
+
 	DB() *gorm.DB
 }
 
@@ -139,6 +155,38 @@ func (r *repository) UpdateActionRevisionQuality(id, evaluationID, verdict strin
 		"status":                status,
 		"updated_at":            now,
 	}).Error
+}
+
+func (r *repository) WritebackQualitySnapshotCAS(id, contentHash, evaluationID, profileID, ruleSetVersion, verdict string, score *float64, sourceContentHash string) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	updates := map[string]any{
+		"quality_evaluation_id":        evaluationID,
+		"quality_profile_id":           profileID,
+		"quality_ruleset_version":      ruleSetVersion,
+		"quality_verdict":              verdict,
+		"quality_overall_score":        score,
+		"quality_source_content_hash":  sourceContentHash,
+		"quality_evaluated_at":         now,
+		"updated_at":                   now,
+	}
+	query := r.db.Model(&ActionRevision{}).Where("id = ?", id)
+	if contentHash != "" {
+		query = query.Where("content_hash = ?", contentHash)
+	}
+	result := query.Updates(updates)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) GetActionRevisionContentHash(id string) (string, error) {
+	var rev ActionRevision
+	err := r.db.Select("content_hash").Where("id = ?", id).First(&rev).Error
+	if err != nil {
+		return "", err
+	}
+	return rev.ContentHash, nil
 }
 
 func (r *repository) UpdateActionRevisionManifest(id, path, hash string, frameCount, durationMS int) error {
@@ -439,7 +487,13 @@ func (r *repository) ListJobsBySession(sessionID string) ([]RegenerationJob, err
 
 func (r *repository) ListPendingJobs() ([]RegenerationJob, error) {
 	var jobs []RegenerationJob
-	err := r.db.Where("status IN ?", []string{JobStatusCreated, JobStatusQueued, JobStatusRunning, JobStatusProviderSucceeded, JobStatusMaterializing}).Find(&jobs).Error
+	err := r.db.Where("status IN ?", []string{
+		JobStatusCreated, JobStatusQueued,
+		JobStatusPreparing, JobStatusSubmitting, JobStatusPolling,
+		JobStatusArtifactReady, JobStatusProcessing,
+		JobStatusCandidateCommitting, JobStatusQualityPending, JobStatusQualityRunning,
+		JobStatusRunning, JobStatusProviderSucceeded, JobStatusMaterializing,
+	}).Find(&jobs).Error
 	return jobs, err
 }
 
@@ -603,4 +657,98 @@ func (r *repository) UpdateIdempotencyRecord(id, status string, resultJSON strin
 		"status":      status,
 		"result_json": resultJSON,
 	}).Error
+}
+
+func (r *repository) CreateRegenerationJournal(journal *RegenerationJournal) error {
+	return r.db.Create(journal).Error
+}
+
+func (r *repository) ListJournalsByJob(jobID string) ([]RegenerationJournal, error) {
+	var journals []RegenerationJournal
+	err := r.db.Where("job_id = ?", jobID).Order("created_at ASC").Find(&journals).Error
+	return journals, err
+}
+
+func (r *repository) CreateCandidateRevisionMetadata(meta *CandidateRevisionMetadata) error {
+	return r.db.Create(meta).Error
+}
+
+func (r *repository) GetCandidateRevisionMetadata(candidateRevisionID string) (*CandidateRevisionMetadata, error) {
+	var meta CandidateRevisionMetadata
+	err := r.db.Where("candidate_revision_id = ?", candidateRevisionID).First(&meta).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &meta, nil
+}
+
+func (r *repository) UpdateCandidateRevisionMetadataStatus(candidateRevisionID, status string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.Model(&CandidateRevisionMetadata{}).
+		Where("candidate_revision_id = ?", candidateRevisionID).
+		Updates(map[string]any{"status": status, "updated_at": now}).Error
+}
+
+func (r *repository) CreateAuditLog(logEntry *EditAuditLog) error {
+	return r.db.Create(logEntry).Error
+}
+
+func (r *repository) CASUpdateActiveBinding(processingTaskID, actionKey string, expectedBindingVersion int64, newRevisionID, activatedBy, reason string) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result := r.db.Model(&ActiveRevisionBinding{}).
+		Where("processing_task_id = ? AND action_key = ? AND binding_version = ?",
+			processingTaskID, actionKey, expectedBindingVersion).
+		Updates(map[string]any{
+			"revision_id":     newRevisionID,
+			"binding_version": expectedBindingVersion + 1,
+			"activated_by":    activatedBy,
+			"reason":          reason,
+			"updated_at":      now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) UpdateJobFields(id string, fields map[string]any) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	fields["updated_at"] = now
+	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Updates(fields).Error
+}
+
+func (r *repository) UpdateCandidateFields(id string, fields map[string]any) error {
+	return r.db.Model(&EditCandidate{}).Where("id = ?", id).Updates(fields).Error
+}
+
+func (r *repository) ListJobsForRecovery(leaseDuration time.Duration) ([]RegenerationJob, error) {
+	cutoff := time.Now().UTC().Add(-leaseDuration).Format(time.RFC3339)
+	var jobs []RegenerationJob
+	err := r.db.Where("status IN ? AND (lease_expires_at != '' AND lease_expires_at < ? OR heartbeat_at != '' AND heartbeat_at < ?)",
+		[]string{JobStatusPreparing, JobStatusSubmitting, JobStatusPolling, JobStatusArtifactReady, JobStatusProcessing, JobStatusCandidateCommitting, JobStatusQualityPending, JobStatusQualityRunning},
+		cutoff, cutoff).Find(&jobs).Error
+	return jobs, err
+}
+
+func (r *repository) ListExpiredCandidates(retentionDays int) ([]EditCandidate, error) {
+	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays).Format(time.RFC3339)
+	var candidates []EditCandidate
+	err := r.db.Where("status IN ? AND created_at < ?",
+		[]string{CandidateStatusRejected, CandidateStatusExpired, CandidateStatusArchived}, cutoff).Find(&candidates).Error
+	return candidates, err
+}
+
+func (r *repository) GetCandidateByRevisionID(revisionID string) (*EditCandidate, error) {
+	var candidate EditCandidate
+	err := r.db.Where("candidate_revision_id = ?", revisionID).First(&candidate).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &candidate, nil
 }

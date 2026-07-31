@@ -1,7 +1,12 @@
 package packageformat
 
 import (
+	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,6 +32,97 @@ type ValidationReport struct {
 	WarningCount int
 }
 
+type PackageFileSystem interface {
+	Open(path string) (io.ReadCloser, error)
+	Stat(path string) (os.FileInfo, error)
+	List() ([]string, error)
+}
+
+type DirectoryPackageFS struct {
+	root string
+}
+
+func NewDirectoryPackageFS(root string) *DirectoryPackageFS {
+	return &DirectoryPackageFS{root: root}
+}
+
+func (fs *DirectoryPackageFS) Open(path string) (io.ReadCloser, error) {
+	abs, err := SecureJoinUnderRoot(fs.root, path)
+	if err != nil {
+		return nil, err
+	}
+	return os.Open(abs)
+}
+
+func (fs *DirectoryPackageFS) Stat(path string) (os.FileInfo, error) {
+	abs, err := SecureJoinUnderRoot(fs.root, path)
+	if err != nil {
+		return nil, err
+	}
+	return os.Stat(abs)
+}
+
+func (fs *DirectoryPackageFS) List() ([]string, error) {
+	var paths []string
+	err := filepath.WalkDir(fs.root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(fs.root, path)
+		if relErr != nil {
+			return nil
+		}
+		paths = append(paths, filepath.ToSlash(rel))
+		return nil
+	})
+	return paths, err
+}
+
+type ArchivePackageFS struct {
+	reader *zip.Reader
+	files  map[string]*zip.File
+}
+
+func NewArchivePackageFS(reader *zip.Reader) *ArchivePackageFS {
+	files := make(map[string]*zip.File)
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		normalized := filepath.ToSlash(filepath.Clean(f.Name))
+		files[normalized] = f
+	}
+	return &ArchivePackageFS{reader: reader, files: files}
+}
+
+func (fs *ArchivePackageFS) Open(path string) (io.ReadCloser, error) {
+	f, ok := fs.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return f.Open()
+}
+
+func (fs *ArchivePackageFS) Stat(path string) (os.FileInfo, error) {
+	f, ok := fs.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return f.FileInfo(), nil
+}
+
+func (fs *ArchivePackageFS) List() ([]string, error) {
+	paths := make([]string, 0, len(fs.files))
+	for p := range fs.files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
 type Validator struct{}
 
 func NewValidator() *Validator {
@@ -46,12 +142,8 @@ func (v *Validator) ValidateDirectory(root string, manifest *Manifest) *Validati
 		return report
 	}
 
-	v.validateSchemaLayer(report, manifest)
-	v.validatePathLayer(report, manifest)
-
-	v.validateFileLayer(report, root, manifest)
-	v.validateActionLayer(report, manifest)
-	v.validateSecurityLayer(report, root)
+	fs := NewDirectoryPackageFS(root)
+	v.validateCore(report, fs, manifest)
 
 	count, _ := countFiles(root)
 	report.FileCount = count
@@ -63,7 +155,7 @@ func (v *Validator) ValidateArchive(path string) *ValidationReport {
 	report := &ValidationReport{Verdict: "valid"}
 
 	reader := NewArchiveReader(DefaultArchiveLimits())
-	manifest, _, err := reader.ReadArchive(path)
+	rc, manifest, err := reader.OpenArchive(path)
 	if err != nil {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageManifestInvalid,
@@ -73,6 +165,7 @@ func (v *Validator) ValidateArchive(path string) *ValidationReport {
 		report.Finalize()
 		return report
 	}
+	defer rc.Close()
 
 	if manifest == nil {
 		report.addFinding(Finding{
@@ -84,12 +177,22 @@ func (v *Validator) ValidateArchive(path string) *ValidationReport {
 		return report
 	}
 
-	v.validateSchemaLayer(report, manifest)
-	v.validatePathLayer(report, manifest)
-	v.validateActionLayer(report, manifest)
+	fs := NewArchivePackageFS(&rc.Reader)
+	v.validateCore(report, fs, manifest)
 
+	paths, _ := fs.List()
+	report.FileCount = len(paths)
 	report.Finalize()
 	return report
+}
+
+func (v *Validator) validateCore(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
+	v.validateSchemaLayer(report, m)
+	v.validatePathLayer(report, m)
+	v.validateFileLayerFS(report, fs, m)
+	v.validateActionLayer(report, m)
+	v.validateActionConfigLayer(report, fs, m)
+	v.validateSecurityLayerFS(report, fs)
 }
 
 func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
@@ -164,6 +267,15 @@ func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
 			Message:  fmt.Sprintf("unexpected integrity algorithm: %s", m.Integrity.Algorithm),
 		})
 	}
+
+	if m.Compatibility.MinRuntimeVersion != "" && !isValidRuntimeVersion(m.Compatibility.MinRuntimeVersion) {
+		report.addFinding(Finding{
+			Code:     ErrCodeRuntimeVersionUnsupported,
+			Severity: SeverityError,
+			Actual:   m.Compatibility.MinRuntimeVersion,
+			Message:  fmt.Sprintf("unsupported minRuntimeVersion: %s", m.Compatibility.MinRuntimeVersion),
+		})
+	}
 }
 
 func (v *Validator) validatePathLayer(report *ValidationReport, m *Manifest) {
@@ -215,28 +327,102 @@ func (v *Validator) validatePathLayer(report *ValidationReport, m *Manifest) {
 	}
 }
 
-func (v *Validator) validateFileLayer(report *ValidationReport, root string, m *Manifest) {
-	fileManifest := &FileManifest{Entries: m.Integrity.Files}
-	if err := ValidateAgainstManifest(root, fileManifest); err != nil {
-		if ve, ok := err.(*ValidationError); ok {
-			finding := Finding{
-				Code:     ve.Code,
-				Severity: ve.Severity,
-				Path:     ve.Path,
-				Message:  ve.Message,
-			}
-			if finding.Severity == "" {
-				finding.Severity = SeverityError
-			}
-			report.addFinding(finding)
-		} else {
+func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
+	declared := make(map[string]*FileManifestEntry, len(m.Integrity.Files))
+	for i := range m.Integrity.Files {
+		e := &m.Integrity.Files[i]
+		if existing, dup := declared[e.Path]; dup {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageDuplicateEntry,
+				Severity: SeverityError,
+				Path:     e.Path,
+				Message:  fmt.Sprintf("duplicate manifest entry: %s also declared at %s", e.Path, existing.Path),
+			})
+			continue
+		}
+		declared[e.Path] = e
+	}
+
+	actualPaths, err := fs.List()
+	if err != nil {
+		report.addFinding(Finding{
+			Code:     ErrCodePackagePathInvalid,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("failed to list package files: %v", err),
+		})
+		return
+	}
+
+	actualSet := make(map[string]bool, len(actualPaths))
+	for _, p := range actualPaths {
+		actualSet[p] = true
+		if _, ok := declared[p]; !ok {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageFileUndeclared,
+				Severity: SeverityError,
+				Path:     p,
+				Message:  fmt.Sprintf("file exists but not declared in manifest: %s", p),
+			})
+		}
+	}
+
+	for i := range m.Integrity.Files {
+		e := &m.Integrity.Files[i]
+		if !actualSet[e.Path] {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageFileMissing,
+				Severity: SeverityError,
+				Path:     e.Path,
+				Message:  fmt.Sprintf("file declared in manifest but missing: %s", e.Path),
+			})
+			continue
+		}
+
+		rc, openErr := fs.Open(e.Path)
+		if openErr != nil {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageFileMissing,
+				Severity: SeverityError,
+				Path:     e.Path,
+				Message:  fmt.Sprintf("failed to open file: %v", openErr),
+			})
+			continue
+		}
+		h := sha256.New()
+		size, copyErr := io.Copy(h, rc)
+		rc.Close()
+		if copyErr != nil {
 			report.addFinding(Finding{
 				Code:     ErrCodePackageHashMismatch,
 				Severity: SeverityError,
-				Message:  fmt.Sprintf("file validation failed: %v", err),
+				Path:     e.Path,
+				Message:  fmt.Sprintf("failed to hash file: %v", copyErr),
+			})
+			continue
+		}
+
+		actualHash := hex.EncodeToString(h.Sum(nil))
+		if actualHash != e.SHA256 {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageHashMismatch,
+				Severity: SeverityError,
+				Path:     e.Path,
+				Expected: e.SHA256,
+				Actual:   actualHash,
+				Message:  fmt.Sprintf("hash mismatch for %s", e.Path),
 			})
 		}
-		return
+
+		if size != e.Bytes {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageHashMismatch,
+				Severity: SeverityError,
+				Path:     e.Path,
+				Expected: fmt.Sprintf("bytes=%d", e.Bytes),
+				Actual:   fmt.Sprintf("bytes=%d", size),
+				Message:  fmt.Sprintf("size mismatch for %s", e.Path),
+			})
+		}
 	}
 
 	var entries []FileEntry
@@ -357,7 +543,7 @@ func (v *Validator) validateActionLayer(report *ValidationReport, m *Manifest) {
 		})
 	} else if !keys[m.DefaultAction] {
 		report.addFinding(Finding{
-			Code:      ErrCodePackageManifestInvalid,
+			Code:      ErrCodeDefaultActionInvalid,
 			Severity:  SeverityError,
 			ActionKey: m.DefaultAction,
 			Expected:  "an existing action key",
@@ -367,32 +553,237 @@ func (v *Validator) validateActionLayer(report *ValidationReport, m *Manifest) {
 	}
 }
 
-func (v *Validator) validateSecurityLayer(report *ValidationReport, root string) {
-	seenCaseFold := make(map[string]string)
+type validatedActionConfig struct {
+	SchemaVersion int                   `json:"schemaVersion"`
+	ActionKey     string                `json:"actionKey"`
+	DisplayName   string                `json:"displayName"`
+	ActionName    string                `json:"actionName"`
+	Fps           int                   `json:"fps"`
+	DefaultFps    int                   `json:"defaultFps"`
+	PlaybackMode  string                `json:"playbackMode"`
+	LoopType      string                `json:"loopType"`
+	Frames        []validatedFrameEntry `json:"frames"`
+	ReturnTo      validatedReturnTo     `json:"returnTo"`
+}
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
+type validatedFrameEntry struct {
+	Index       int    `json:"index"`
+	File        string `json:"file"`
+	DurationMs  int    `json:"durationMs"`
+	ContentHash string `json:"contentHash"`
+}
+
+type validatedReturnTo struct {
+	Type      string `json:"type"`
+	ActionKey string `json:"actionKey"`
+}
+
+func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
+	actionKeys := make(map[string]bool, len(m.Actions))
+	for _, a := range m.Actions {
+		actionKeys[a.Key] = true
+	}
+
+	for _, action := range m.Actions {
+		if action.Config == "" {
 			report.addFinding(Finding{
-				Code:     ErrCodePackagePathInvalid,
-				Severity: SeverityError,
-				Path:     path,
-				Message:  fmt.Sprintf("walk error: %v", walkErr),
+				Code:      ErrCodeActionConfigMissing,
+				Severity:  SeverityError,
+				ActionKey: action.Key,
+				Message:   "action config path is empty",
 			})
-			return nil
+			continue
 		}
 
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return nil
+		rc, err := fs.Open(action.Config)
+		if err != nil {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigMissing,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   fmt.Sprintf("failed to open action config: %v", err),
+			})
+			continue
 		}
-		if rel == "." {
-			return nil
+		data, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   fmt.Sprintf("failed to read action config: %v", readErr),
+			})
+			continue
 		}
-		relSlash := filepath.ToSlash(rel)
 
-		fi, statErr := d.Info()
+		var cfg validatedActionConfig
+		if jErr := json.Unmarshal(data, &cfg); jErr != nil {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   fmt.Sprintf("failed to parse action config: %v", jErr),
+			})
+			continue
+		}
+
+		playbackMode := cfg.PlaybackMode
+		if playbackMode == "" {
+			playbackMode = cfg.LoopType
+		}
+		playbackMode = NormalizePlaybackMode(playbackMode)
+		if playbackMode == "" {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   "playbackMode is empty",
+			})
+		} else if !IsValidPlaybackMode(playbackMode) {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  "loop/once/hold/ping_pong",
+				Actual:    playbackMode,
+				Message:   fmt.Sprintf("invalid playbackMode: %s", playbackMode),
+			})
+		}
+
+		if len(cfg.Frames) < 1 {
+			report.addFinding(Finding{
+				Code:      ErrCodeFrameMissing,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   "action config has no frames",
+			})
+		}
+
+		fps := cfg.Fps
+		if fps == 0 {
+			fps = cfg.DefaultFps
+		}
+		if fps <= 0 || fps > 120 {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  "0 < fps <= 120",
+				Actual:    fmt.Sprintf("fps=%d", fps),
+				Message:   fmt.Sprintf("invalid fps: %d", fps),
+			})
+		}
+
+		seenFiles := make(map[string]bool)
+		for idx, frame := range cfg.Frames {
+			if frame.Index != idx {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Expected:  fmt.Sprintf("index=%d", idx),
+					Actual:    fmt.Sprintf("index=%d", frame.Index),
+					Message:   fmt.Sprintf("frame index not contiguous at position %d", idx),
+				})
+			}
+			if frame.File == "" {
+				report.addFinding(Finding{
+					Code:      ErrCodeFrameMissing,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("frame %d has empty file", idx),
+				})
+			} else if seenFiles[frame.File] {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("duplicate frame file: %s", frame.File),
+				})
+			}
+			seenFiles[frame.File] = true
+
+			if frame.ContentHash == "" {
+				report.addFinding(Finding{
+					Code:      ErrCodeFrameHashMismatch,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("frame %d has empty contentHash", idx),
+				})
+			}
+
+			if frame.DurationMs != 0 && (frame.DurationMs < 8 || frame.DurationMs > 60000) {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Expected:  "8 <= durationMs <= 60000",
+					Actual:    fmt.Sprintf("durationMs=%d", frame.DurationMs),
+					Message:   fmt.Sprintf("invalid frame durationMs: %d", frame.DurationMs),
+				})
+			}
+		}
+
+		if cfg.ReturnTo.Type == "action" {
+			if cfg.ReturnTo.ActionKey == "" || !actionKeys[cfg.ReturnTo.ActionKey] {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionReferenceInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Actual:    cfg.ReturnTo.ActionKey,
+					Message:   fmt.Sprintf("returnTo action target not found: %s", cfg.ReturnTo.ActionKey),
+				})
+			}
+		}
+	}
+
+	if m.DefaultAction != "" {
+		for i := range m.Actions {
+			if m.Actions[i].Key == m.DefaultAction {
+				if !m.Actions[i].SupportsDefaultIdle {
+					report.addFinding(Finding{
+						Code:      ErrCodeDefaultActionInvalid,
+						Severity:  SeverityWarning,
+						ActionKey: m.DefaultAction,
+						Message:   fmt.Sprintf("default action %s does not support default idle", m.DefaultAction),
+					})
+				}
+				break
+			}
+		}
+	}
+}
+
+func (v *Validator) validateSecurityLayerFS(report *ValidationReport, fs PackageFileSystem) {
+	paths, err := fs.List()
+	if err != nil {
+		report.addFinding(Finding{
+			Code:     ErrCodePackagePathInvalid,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("security list failed: %v", err),
+		})
+		return
+	}
+
+	seenCaseFold := make(map[string]string)
+	for _, relSlash := range paths {
+		fi, statErr := fs.Stat(relSlash)
 		if statErr != nil {
-			return nil
+			continue
 		}
 
 		if fi.Mode()&os.ModeSymlink != 0 {
@@ -402,7 +793,7 @@ func (v *Validator) validateSecurityLayer(report *ValidationReport, root string)
 				Path:     relSlash,
 				Message:  "symlink is not allowed in package",
 			})
-			return nil
+			continue
 		}
 
 		base := filepath.Base(relSlash)
@@ -415,15 +806,13 @@ func (v *Validator) validateSecurityLayer(report *ValidationReport, root string)
 			})
 		}
 
-		if !d.IsDir() {
-			if isForbiddenExecutable(relSlash) {
-				report.addFinding(Finding{
-					Code:     ErrCodePackageExecutableForbidden,
-					Severity: SeverityError,
-					Path:     relSlash,
-					Message:  "executable file is not allowed in package",
-				})
-			}
+		if isForbiddenExecutable(relSlash) {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageExecutableForbidden,
+				Severity: SeverityError,
+				Path:     relSlash,
+				Message:  "executable file is not allowed in package",
+			})
 		}
 
 		folded := CaseFoldPath(relSlash)
@@ -437,15 +826,6 @@ func (v *Validator) validateSecurityLayer(report *ValidationReport, root string)
 		} else {
 			seenCaseFold[folded] = relSlash
 		}
-
-		return nil
-	})
-	if err != nil {
-		report.addFinding(Finding{
-			Code:     ErrCodePackagePathInvalid,
-			Severity: SeverityError,
-			Message:  fmt.Sprintf("security walk failed: %v", err),
-		})
 	}
 }
 
@@ -504,6 +884,61 @@ func countFiles(root string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+func isValidRuntimeVersion(version string) bool {
+	if version == "" {
+		return true
+	}
+	_, _, _, ok := parseSemver(version)
+	return ok
+}
+
+func parseSemver(version string) (int, int, int, bool) {
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) < 1 {
+		return 0, 0, 0, false
+	}
+	major, mOk := parseIntStr(parts[0])
+	if !mOk {
+		return 0, 0, 0, false
+	}
+	minor := 0
+	patch := 0
+	if len(parts) >= 2 {
+		minor, mOk = parseIntStr(parts[1])
+		if !mOk {
+			return 0, 0, 0, false
+		}
+	}
+	if len(parts) >= 3 {
+		patch, mOk = parseIntStr(stripPreRelease(parts[2]))
+		if !mOk {
+			return 0, 0, 0, false
+		}
+	}
+	return major, minor, patch, true
+}
+
+func parseIntStr(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n, true
+}
+
+func stripPreRelease(s string) string {
+	if idx := strings.IndexByte(s, '-'); idx >= 0 {
+		return s[:idx]
+	}
+	return s
 }
 
 var forbiddenExecutableExtensions = map[string]bool{

@@ -34,25 +34,56 @@ var allowedArtifactMIMEs = map[string]string{
 	"image/webp": ".webp",
 }
 
+type ArtifactCommitInput struct {
+	Tx                  *gorm.DB
+	TaskID              string
+	TaskActionID        string
+	AttemptID           string
+	ReferenceAssetID    string
+	PromptHash          string
+	CandidateData       []byte
+	CandidateMIME       string
+	SegmentIndex        int
+	CandidateIndex      int
+	ArtifactType        string
+	ArtifactRole        string
+	IsPrimary           bool
+	LayoutJSON          string
+	MetadataJSON        string
+	ProviderRequestID   string
+	ProviderOperationID string
+	StorageKey          string
+	DataDir             string
+}
+
+type ArtifactCommitFunc func(input ArtifactCommitInput) (*GenerationArtifact, error)
+
 type ArtifactPersister struct {
 	artifactRepo ArtifactRepository
+	commitFunc   ArtifactCommitFunc
 }
 
 func NewArtifactPersister(artifactRepo ArtifactRepository) *ArtifactPersister {
 	return &ArtifactPersister{artifactRepo: artifactRepo}
 }
 
+func (p *ArtifactPersister) WithCommitFunc(fn ArtifactCommitFunc) *ArtifactPersister {
+	p.commitFunc = fn
+	return p
+}
+
 type PersistInput struct {
-	Tx             *gorm.DB
-	TaskID         string
-	TaskActionID   string
-	AttemptID      string
-	Plan           *GenerationPlanSnapshot
-	Result         *imageprovider.GenerationResult
-	SegmentIndex   int
-	ExecutionID    string
-	ProviderRequestID  string
+	Tx                  *gorm.DB
+	TaskID              string
+	TaskActionID        string
+	AttemptID           string
+	Plan                *GenerationPlanSnapshot
+	Result              *imageprovider.GenerationResult
+	SegmentIndex        int
+	ExecutionID         string
+	ProviderRequestID   string
 	ProviderOperationID string
+	DataDir             string
 }
 
 type PersistResult struct {
@@ -71,6 +102,15 @@ func (p *ArtifactPersister) Persist(input PersistInput) (*PersistResult, error) 
 
 	result := &PersistResult{
 		Artifacts: make([]*GenerationArtifact, 0),
+	}
+
+	dataDir := input.DataDir
+	if dataDir == "" {
+		dataDir = config.AppCfg.Storage.DataDir
+	}
+
+	if p.commitFunc != nil {
+		return p.persistWithCommitter(input, dataDir, result)
 	}
 
 	artifactDir := p.buildArtifactDir(input.TaskID, input.TaskActionID, input.AttemptID)
@@ -99,6 +139,72 @@ func (p *ArtifactPersister) Persist(input PersistInput) (*PersistResult, error) 
 	}
 
 	receipt, err := p.persistReceipt(input, artifactDir)
+	if err != nil {
+		return nil, err
+	}
+	if receipt != nil {
+		result.ReceiptArtifact = receipt
+	}
+
+	return result, nil
+}
+
+func (p *ArtifactPersister) persistWithCommitter(input PersistInput, dataDir string, result *PersistResult) (*PersistResult, error) {
+	artifactType := p.resolveArtifactType(input.Plan)
+	layoutJSON := p.extractLayoutJSON(input.Plan)
+	referenceAssetID := ""
+	promptHash := ""
+	if input.Plan != nil {
+		referenceAssetID = input.Plan.ReferenceAssetID
+		promptHash = input.Plan.PromptHash
+	}
+
+	for i := range input.Result.Candidates {
+		candidate := &input.Result.Candidates[i]
+		metadata := map[string]any{
+			"candidateIndex": i,
+			"segmentIndex":   input.SegmentIndex,
+		}
+		if candidate.RemoteURL != "" {
+			metadata["remoteUrl"] = candidate.RemoteURL
+		}
+		if candidate.RemoteReceipt != nil {
+			metadata["remoteReceiptExpiresAt"] = candidate.RemoteReceipt.ExpiresAt
+		}
+		metadataJSON, _ := json.Marshal(metadata)
+
+		commitInput := ArtifactCommitInput{
+			Tx:                  input.Tx,
+			TaskID:              input.TaskID,
+			TaskActionID:        input.TaskActionID,
+			AttemptID:           input.AttemptID,
+			ReferenceAssetID:    referenceAssetID,
+			PromptHash:          promptHash,
+			CandidateData:       candidate.Bytes,
+			CandidateMIME:       candidate.MimeType,
+			SegmentIndex:        input.SegmentIndex,
+			CandidateIndex:      i,
+			ArtifactType:        string(artifactType),
+			ArtifactRole:        string(ArtifactRolePrimary),
+			IsPrimary:           i == 0,
+			LayoutJSON:          layoutJSON,
+			MetadataJSON:        string(metadataJSON),
+			ProviderRequestID:   input.ProviderRequestID,
+			ProviderOperationID: input.ProviderOperationID,
+			DataDir:             dataDir,
+		}
+
+		artifact, err := p.commitFunc(commitInput)
+		if err != nil {
+			return nil, NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("commit candidate %d failed: %v", i, err), err)
+		}
+		result.Artifacts = append(result.Artifacts, artifact)
+		if i == 0 {
+			result.PrimaryArtifact = artifact
+		}
+	}
+
+	receipt, err := p.persistReceipt(input, p.buildArtifactDir(input.TaskID, input.TaskActionID, input.AttemptID))
 	if err != nil {
 		return nil, err
 	}

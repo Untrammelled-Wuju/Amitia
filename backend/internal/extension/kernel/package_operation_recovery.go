@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,26 +31,41 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
+func (r *Runtime) finalizePackageOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard, completionNote string) error {
+	if err := r.runPackageFinalGate(ctx, operation.OperationID); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, "requires_recovery", completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+		return err
+	}
+	return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", completionNote, "", "", true, guard)
+}
+
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID)
 	if leaseErr != nil {
 		return r.requirePackageRecovery(ctx, operation, "recovery lease acquire failed", leaseErr, PackageWriteGuard{})
 	}
 	guard := packageWriteGuard(lease)
+	leaseGuard := r.newPackageLeaseGuard(operation.ExtensionID, operation.OperationID)
+	sagaCtx, startErr := leaseGuard.Start(ctx)
+	if startErr != nil {
+		_ = r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID)
+		return r.requirePackageRecovery(ctx, operation, "recovery lease guard start failed", startErr, guard)
+	}
 	defer func() {
-		if releaseErr := r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID); releaseErr != nil {
+		if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
 			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
 				FindingID:         "stale-lease-" + operation.OperationID,
 				Metric:            "stale_extension_leases",
 				Count:             1,
 				ResourceIDsJSON:   `["` + operation.OperationID + `"]`,
-				ErrorDetail:       releaseErr.Error(),
+				ErrorDetail:       stopErr.Error(),
 				RecommendedAction: "manual_lease_cleanup",
 			}); putErr != nil {
-				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operation.OperationID, errors.Join(releaseErr, putErr))
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operation.OperationID, errors.Join(stopErr, putErr))
 			}
 		}
 	}()
+	ctx = sagaCtx
 	_, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
 	if err != nil {
 		return r.requirePackageRecovery(ctx, operation, "operation journal unavailable", err, guard)
@@ -71,7 +87,10 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 					return r.requirePackageRecovery(ctx, operation, "preview completion could not be persisted", consumeErr, guard)
 				}
 			}
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "final gate failed during recovery", err, guard)
+			}
+			return nil
 		}
 		return r.requirePackageRecovery(ctx, operation, "installed package consistency could not be proven", err, guard)
 	case "update":
@@ -89,7 +108,10 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 					return r.requirePackageRecovery(ctx, operation, "update preview completion could not be persisted", consumeErr, guard)
 				}
 			}
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "update final gate failed during recovery", err, guard)
+			}
+			return nil
 		}
 		return r.requirePackageRecovery(ctx, operation, "updated package consistency could not be proven", err, guard)
 	case "rollback":
@@ -102,7 +124,10 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		}
 		err = r.proveRollbackPackageOperation(ctx, operation, completed)
 		if err == nil {
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "rollback final gate failed during recovery", err, guard)
+			}
+			return nil
 		}
 		return r.requirePackageRecovery(ctx, operation, "rollback consistency could not be proven", err, guard)
 	case "uninstall":
@@ -114,11 +139,26 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_UNINSTALL_FAILED", "uninstall quarantine restored during recovery", true, guard)
 		}
 		if outcome == "completed" {
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+			if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "uninstall artifact path reconciliation failed", err, guard)
+			}
+			if err := r.proveUninstalledPackageOperation(ctx, operation, completed); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven after completion", err, guard)
+			}
+			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "uninstall final gate failed during recovery", err, guard)
+			}
+			return nil
+		}
+		if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "uninstall artifact path reconciliation failed", err, guard)
 		}
 		err = r.proveUninstalledPackageOperation(ctx, operation, completed)
 		if err == nil {
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "uninstall final gate failed during recovery", err, guard)
+			}
+			return nil
 		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven", err, guard)
 	default:
@@ -185,6 +225,29 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	return "completed", nil
 }
 
+func (r *Runtime) reconcileUninstallArtifactPath(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
+	if operation.ArtifactID == "" {
+		return nil
+	}
+	artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("kernel: artifact unavailable for path reconciliation: %w", err)
+	}
+	if artifact.InstalledPath == "" {
+		return nil
+	}
+	if _, statErr := os.Stat(artifact.InstalledPath); statErr == nil || !os.IsNotExist(statErr) {
+		return fmt.Errorf("kernel: installed path still exists during uninstall recovery: %s", artifact.InstalledPath)
+	}
+	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, operation.ArtifactID, "", guard); err != nil {
+		return fmt.Errorf("kernel: failed to clear stale artifact installed path during recovery: %w", err)
+	}
+	return nil
+}
+
 func (r *Runtime) resolveQuarantineCurrentPath(ctx context.Context, operation PackageOperationRecord) (string, error) {
 	qm, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
 	if err != nil {
@@ -214,7 +277,7 @@ func completedPackageSteps(steps []PackageOperationStep) map[string]PackageOpera
 	result := make(map[string]PackageOperationStep, len(steps))
 	for _, step := range steps {
 		if step.Status == "completed" {
-			result[step.StepName] = step
+			result[NormalizePackageStepName(step.StepName)] = step
 		}
 	}
 	return result
@@ -338,7 +401,7 @@ func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation 
 	if artifact.ExtensionID != operation.ExtensionID || artifact.Version != operation.TargetVersion {
 		return errors.New("artifact identity mismatch")
 	}
-	if err := r.container.PackageArtifactStore.VerifyArchive(artifact); err != nil {
+	if _, err := r.VerifyStoredPackage(ctx, artifact); err != nil {
 		return fmt.Errorf("artifact verification failed: %w", err)
 	}
 	installedPath, _ := installation.Metadata["installedPath"].(string)

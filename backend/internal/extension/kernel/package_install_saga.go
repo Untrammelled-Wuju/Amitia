@@ -301,7 +301,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := step(8, StepMarkInstallationDisabled, "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
-	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, generationTreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, generationTreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
@@ -309,12 +309,12 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "final_gate", "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
+	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, guard); err != nil {
+		return KernelInstallResult{}, err
+	}
 	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
 		return KernelInstallResult{}, stopErr
-	}
-	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
-		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
 		InstallationID: installationID, PackageHash: artifact.ArchiveHash,

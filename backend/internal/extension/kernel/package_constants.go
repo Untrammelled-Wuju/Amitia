@@ -46,6 +46,24 @@ const (
 	StepRecordRestoreCompletion       = "record_restore_completion"
 )
 
+var legacyStepNameMap = map[string]string{
+	"commit_installed_tree":      StepCommitInstalledTree,
+	"commit_target_generation":   StepCommitTargetGeneration,
+	"switch_current_pointer":     StepSwitchCurrentPointer,
+	"commit_kernel_repositories": StepCommitKernelRepositories,
+	"commit_update_state":        StepCommitUpdateState,
+	"create_rollback_point":      StepCreateRollbackPoint,
+	"execute_migrations":         StepExecuteMigrations,
+	"validate_and_diff":          StepValidateAndDiff,
+}
+
+func NormalizePackageStepName(name string) string {
+	if normalized, ok := legacyStepNameMap[name]; ok {
+		return normalized
+	}
+	return name
+}
+
 const (
 	OpInstall   = "install"
 	OpUpdate    = "update"

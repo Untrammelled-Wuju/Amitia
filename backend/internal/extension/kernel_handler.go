@@ -34,11 +34,11 @@ func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
 	group.POST("/packages/operations/install", func(c *gin.Context) { executePackageInstallOperation(c, runtime) })
 	group.POST("/packages/operations/update", func(c *gin.Context) { executePackageUpdateOperation(c, runtime) })
 	group.GET("/packages/operations/:operationId", func(c *gin.Context) {
-		if runtime == nil || runtime.Packages == nil {
+		if runtime == nil || runtime.Kernel == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "extension package service unavailable"})
 			return
 		}
-		operation, err := runtime.Packages.GetOperation(c.Request.Context(), kernelAPIUser(c), c.Param("operationId"))
+		operation, err := kernelReadPackageOperation(c.Request.Context(), runtime, kernelAPIUser(c), c.Param("operationId"))
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
@@ -94,7 +94,7 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	presentation, err := runtime.Packages.GetImportSession(c.Request.Context(), preview.SessionID, request.UserID, request.ScopeType, request.ScopeID)
+	presentation, err := kernelReadImportSession(c.Request.Context(), runtime, preview.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})

@@ -16,6 +16,8 @@ type GenerationPlanSnapshot struct {
 	PromptDocumentJSON          string
 	PromptSnapshot              string
 	PromptHash                  string
+	PromptDocumentID            string
+	PromptContentHash           string
 	NegativePromptSnapshot      string
 	NegativePromptHash          string
 	SeedPolicy                  string
@@ -25,11 +27,17 @@ type GenerationPlanSnapshot struct {
 	PlannedSegmentCount         int
 	PlannedPrimaryRequestCount  int
 	PlannedMaxProviderCallCount int
+	PlannedCallCount            int
 	SheetWidth                  int
 	SheetHeight                 int
 	CellWidth                   int
 	CellHeight                  int
 	FallbackMode                string
+	ActionSpecVersion           string
+	ActionCatalogHash           string
+	ProviderConfigHash          string
+	SafetyPolicyVersion         string
+	OutputFormat                string
 	Hash                        string
 }
 

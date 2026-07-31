@@ -78,19 +78,24 @@ export interface ActionSpecSnapshot {
 export interface RawActionConfig {
   readonly actionKey: string;
   readonly displayName: string;
+  readonly actionName?: string;
   readonly version: number;
   readonly loopType: string;
+  readonly playbackMode?: string;
   readonly fps: number;
+  readonly defaultFps?: number;
   readonly frameDurationMs: number;
   readonly frameCount: number;
   readonly frames: ReadonlyArray<{ index?: number; file: string; durationMs?: number } | string>;
-  readonly anchor?: { type?: string; x?: number; y?: number };
+  readonly anchor?: { type?: string; x?: number; y?: number; coordinateSpace?: string };
   readonly interruptible?: boolean;
   readonly returnAction?: string;
+  readonly returnTo?: { type?: string; actionKey?: string };
   readonly minimumPlayMs?: number;
   readonly interruptAfterMs?: number;
   readonly maximumPlayMs?: number | null;
   readonly defaultPriority?: number;
+  readonly priority?: number;
   readonly cooldownMs?: number;
   readonly mutexGroup?: string | null;
 }

@@ -27,6 +27,13 @@ const (
 	ErrCodeRevisionConflict            = "REVISION_CONFLICT"
 	ErrCodeRuntimeDeliveryFailed       = "RUNTIME_DELIVERY_FAILED"
 	ErrCodePackageQualityGateBlocked   = "PACKAGE_QUALITY_GATE_BLOCKED"
+	ErrCodeInstallationReleaseInvalid     = "INSTALLATION_RELEASE_INVALID"
+	ErrCodeInstallationReleaseRevoked     = "INSTALLATION_RELEASE_REVOKED"
+	ErrCodeInstallationReleaseIntegrity   = "INSTALLATION_RELEASE_INTEGRITY_FAILED"
+	ErrCodeInstallationReleaseIncompatible = "INSTALLATION_RELEASE_INCOMPATIBLE"
+	ErrCodeInstallationSettingsConflict   = "INSTALLATION_SETTINGS_CONFLICT"
+	ErrCodeRuntimeApplyTimeout            = "RUNTIME_APPLY_TIMEOUT"
+	ErrCodeInstallationNotActive          = "INSTALLATION_NOT_ACTIVE"
 )
 
 var (

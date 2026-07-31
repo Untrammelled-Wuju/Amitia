@@ -6,7 +6,7 @@ import {
   screen,
   type Display,
 } from "electron";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, stat, readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import http from "node:http";
@@ -15,8 +15,8 @@ import { getAmitiaDataDir } from "../path-manager";
 import { ResourceLoader } from "./resource-loader";
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 import { ResourceCache } from "./resource-cache";
+import type { PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
-import { type PlayerLike } from "./action-player";
 import { AnimationIpcAdapter } from "./animation-ipc";
 import { AnimationPlayerBridge } from "./animation-player-bridge";
 import {
@@ -51,6 +51,12 @@ import type {
   WelcomePayload,
 } from "./runtime-bridge-client";
 import type {
+  ClickPayload,
+  DragPayload,
+  PlaybackPayload,
+  RuntimeSessionContext,
+} from "../../shared/runtime-protocol";
+import type {
   ClickThroughMode,
   DesktopPetWindowOptions,
   Position,
@@ -68,8 +74,6 @@ const HEALTH_CHECK_PATH = "/api/health";
 const DEFAULT_USER_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
 
-/** @deprecated 帧驱动已迁移到渲染进程 AnimationEngine，主进程不再发送此 channel。保留常量仅为兼容已有引用。 */
-const PET_FRAME_UPDATE_CHANNEL = "pet:frame-update";
 const PET_ACTION_SWITCH_CHANNEL = "pet:action-switch";
 const PET_LOAD_ERROR_CHANNEL = "pet:load-error";
 const PET_STATE_CHANNEL = "pet:state";
@@ -171,17 +175,6 @@ export type RecoveryReason =
   | "power-resume"
   | "display-changed"
   | "manual";
-
-export interface PetFrameUpdatePayload {
-  actionKey: string;
-  frameIndex: number;
-  dataURL: string;
-  width: number;
-  height: number;
-  loopType: string;
-  fps: number;
-  anchor?: { x: number; y: number };
-}
 
 export interface PetActionSwitchPayload {
   actionKey: string;
@@ -328,7 +321,7 @@ export class DesktopPetManager {
   private packageRevision = 0;
 
   private windowAdapter: DesktopPetWindowAdapter | null = null;
-  private actionPlayer: PlayerLike | null = null;
+  private actionPlayer: AnimationPlayerBridge | null = null;
   private animationIpc: AnimationIpcAdapter | null = null;
   private scheduler: DesktopPetActionScheduler | null = null;
   private idleController: IdleController | null = null;
@@ -342,10 +335,14 @@ export class DesktopPetManager {
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bridgeStarted = false;
   private currentActionKey: string | null = null;
+  private currentDragId: string | null = null;
+  private currentPlaybackId: string | null = null;
+  private currentCommandId: string | null = null;
 
   private recoveryHandlersAttached = false;
   private recoveryInProgress = false;
   private recoveryDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private intentionalClose = false;
   private recoveryWindowCloseListener:
     | ((...args: unknown[]) => void)
     | null = null;
@@ -882,6 +879,7 @@ export class DesktopPetManager {
     const win = await windowAdapter.create();
 
     const windowCloseListener = (): void => {
+      if (this.intentionalClose) return;
       this.petLogger.logWindowRecovered(
         RECOVERY_REASON_WINDOW_CLOSED,
         this.activeInstallationId ?? undefined,
@@ -911,16 +909,41 @@ export class DesktopPetManager {
       onDoubleClick: (x, y) => this.handleDoubleClick(x, y),
       onHover: (x, y) => this.handleHover(x, y),
       onPlayActionForwarded: (command) => {
-        this.sendBridgeEvent("play_action_forwarded", command.actionKey);
+        this.bridgeClient?.reportPlayback({
+          actionKey: command.actionKey,
+          playbackId: this.currentPlaybackId ?? "",
+          commandId: command.commandId,
+          frameIndex: 0,
+          cycleIndex: 0,
+        });
       },
+      onHitMask: (width, height, data, threshold) =>
+        this.handleHitMask(width, height, data, threshold),
+      onRendererReady: () => this.handleRendererReady(),
+      onRendererReadyAck: (payload) => this.handleRendererReadyAck(payload),
+      onDeliveryFailed: (reason, command) =>
+        this.handleDeliveryFailed(reason, command),
     });
     animationIpc.register();
 
     const actionPlayer = new AnimationPlayerBridge({
-      onActionSwitch: (newKey, oldKey) =>
-        this.handleActionSwitch(newKey, oldKey),
-      onActionComplete: (actionKey, loopCount) =>
-        this.handleActionComplete(actionKey, loopCount),
+      onActionSwitch: (newKey, oldKey, playbackId) =>
+        this.handleActionSwitch(newKey, oldKey, playbackId),
+      onActionCompleted: (actionKey, loopCount) => {
+        this.handleActionCompleted(actionKey, loopCount);
+        this.scheduler?.notifyActionCompleted(actionKey);
+      },
+      onActionInterrupted: (actionKey, loopCount) => {
+        this.handleActionInterrupted(actionKey, loopCount);
+        this.scheduler?.notifyActionInterrupted(actionKey);
+      },
+      onActionFailed: (actionKey, reason) => {
+        console.warn(
+          "[DesktopPetManager] 动作播放失败:",
+          actionKey,
+          reason,
+        );
+      },
       onError: (err) =>
         console.error("[DesktopPetManager] AnimationPlayerBridge 错误:", err),
     });
@@ -956,6 +979,7 @@ export class DesktopPetManager {
     const dragController = new DragController(
       windowAdapter,
       clickThroughController,
+      () => this.windowAdapter?.getNativeWindow() ?? null,
       (event, state) => this.handleDragEvent(event, state),
     );
     dragController.attach(win);
@@ -986,6 +1010,7 @@ export class DesktopPetManager {
   }
 
   private async stopRuntime(): Promise<void> {
+    this.intentionalClose = true;
     this.unregisterChatStateIpc();
     try {
       if (this.windowAdapter) {
@@ -1083,6 +1108,7 @@ export class DesktopPetManager {
     this.clickThroughController = null;
     this.loadedInstallation = null;
     this.currentActionKey = null;
+    this.intentionalClose = false;
   }
 
   private async disableInternal(notifyBackend: boolean): Promise<void> {
@@ -1146,14 +1172,35 @@ export class DesktopPetManager {
     switch (event.type) {
       case "playback.action_started":
         if (event.actionKey) {
-          this.sendBridgeEvent("action_started", event.actionKey);
+          this.bridgeClient?.reportPlayback({
+            actionKey: event.actionKey,
+            playbackId: this.currentPlaybackId ?? "",
+            commandId: this.currentCommandId ?? undefined,
+            frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+            cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
+            startedAt: new Date().toISOString(),
+          });
         }
         break;
       case "playback.action_completed":
-        this.sendBridgeEvent("playback_completed", event.actionKey ?? "");
+        this.bridgeClient?.reportPlayback({
+          actionKey: event.actionKey ?? "",
+          playbackId: this.currentPlaybackId ?? "",
+          commandId: this.currentCommandId ?? undefined,
+          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
+          completedAt: new Date().toISOString(),
+        });
         break;
       case "playback.action_interrupted":
-        this.sendBridgeEvent("playback_interrupted", event.actionKey ?? "");
+        this.bridgeClient?.reportPlayback({
+          actionKey: event.actionKey ?? "",
+          playbackId: this.currentPlaybackId ?? "",
+          commandId: this.currentCommandId ?? undefined,
+          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
+          interruptReason: "higher_priority_action",
+        });
         break;
       case "playback.action_failed":
         console.warn(
@@ -1161,33 +1208,113 @@ export class DesktopPetManager {
           event.actionKey,
           event.reason,
         );
+        this.bridgeClient?.reportPlayback({
+          actionKey: event.actionKey ?? "",
+          playbackId: this.currentPlaybackId ?? "",
+          commandId: this.currentCommandId ?? undefined,
+          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
+          errorCode: event.reason ?? "playback_failed",
+        });
         break;
     }
   }
 
-  private handleSnapshotUpdate(_snapshot: unknown): void {
+  private handleSnapshotUpdate(snapshot: PlaybackSnapshot): void {
+    if (this.actionPlayer) {
+      this.actionPlayer.handleSnapshotUpdate(snapshot);
+    }
   }
 
-  private handleActionComplete(actionKey: string, _loopCount: number): void {
-    this.sendBridgeEvent("action_complete", actionKey);
+  private handleActionCompleted(actionKey: string, _loopCount: number): void {
+    void actionKey;
+  }
+
+  private handleActionInterrupted(actionKey: string, _loopCount: number): void {
+    void actionKey;
+  }
+
+  private handleHitMask(
+    width: number,
+    height: number,
+    data: Uint8Array,
+    threshold: number,
+  ): void {
+    this.clickThroughController?.updateHitMask(width, height, data, threshold);
+  }
+
+  private handleRendererReady(): void {
+    this.petLogger.logWindowRecovered(
+      "renderer-ready",
+      this.activeInstallationId ?? undefined,
+    );
+  }
+
+  private handleRendererReadyAck(payload: { snapshotApplied: boolean }): void {
+    if (!payload.snapshotApplied) {
+      console.warn(
+        "[DesktopPetManager] 渲染进程 Ready ACK: snapshot 未应用",
+      );
+    }
+  }
+
+  private handleDeliveryFailed(
+    reason: string,
+    command: { actionKey?: string } | undefined,
+  ): void {
+    console.warn(
+      "[DesktopPetManager] 指令投递失败:",
+      reason,
+      command?.actionKey ?? "",
+    );
   }
 
   private handleClick(x: number, y: number): void {
-    this.sendBridgeEvent("clicked", `${x},${y}`);
+    this.bridgeClient?.reportClick({
+      button: "left",
+      clickCount: 1,
+      canvasX: x,
+      canvasY: y,
+      screenX: x,
+      screenY: y,
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      actionKey: this.currentActionKey ?? "",
+    });
   }
 
   private handleDoubleClick(x: number, y: number): void {
-    this.sendBridgeEvent("double_clicked", `${x},${y}`);
+    this.bridgeClient?.reportClick({
+      button: "left",
+      clickCount: 2,
+      canvasX: x,
+      canvasY: y,
+      screenX: x,
+      screenY: y,
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      actionKey: this.currentActionKey ?? "",
+    });
   }
 
   private handleHover(x: number, y: number): void {
-    this.sendBridgeEvent("hovered", `${x},${y}`);
+    this.bridgeClient?.reportDrag({
+      dragId: "",
+      phase: "moved",
+      startX: x,
+      startY: y,
+      currentX: x,
+      currentY: y,
+      deltaX: 0,
+      deltaY: 0,
+      displayId: "",
+    });
   }
 
-  private handleActionSwitch(newKey: string, oldKey: string | null): void {
+  private handleActionSwitch(newKey: string, oldKey: string | null, playbackId?: string): void {
     this.currentActionKey = newKey;
+    if (playbackId) {
+      this.currentPlaybackId = playbackId;
+    }
     this.petLogger.logActionSwitch(newKey, oldKey, "scheduler");
-    this.sendBridgeEvent("action_switch", newKey);
   }
 
   private handleSchedulerEvent(
@@ -1227,13 +1354,35 @@ export class DesktopPetManager {
     }
   }
 
-  private handleDragEvent(event: DragEvent, _state: DragState): void {
+  private handleDragEvent(event: DragEvent, state: DragState): void {
     if (event === "drag-start") {
+      this.currentDragId = randomUUID();
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
-      this.sendBridgeEvent("drag_start", this.activeInstallationId ?? "");
+      this.bridgeClient?.reportDrag({
+        dragId: this.currentDragId,
+        phase: "started",
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        deltaX: state.currentX - state.startX,
+        deltaY: state.currentY - state.startY,
+        displayId: state.startScreenId,
+      });
     } else if (event === "drag-end") {
       this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
-      this.sendBridgeEvent("drag_end", this.activeInstallationId ?? "");
+      this.bridgeClient?.reportDrag({
+        dragId: this.currentDragId ?? "",
+        phase: "completed",
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        deltaX: state.currentX - state.startX,
+        deltaY: state.currentY - state.startY,
+        displayId: state.currentScreenId,
+      });
+      this.currentDragId = null;
       void this.persistRuntimePosition();
     }
   }
@@ -2044,6 +2193,17 @@ export class DesktopPetManager {
           "[DesktopPetManager] runtime bridge connected session=",
           welcome.sessionId,
         );
+        if (this.bridgeClient) {
+          const ctx: RuntimeSessionContext = {
+            userId: this.userId,
+            deviceId: this.bridgeClient.getDeviceId(),
+            installationId: this.activeInstallationId ?? "",
+            petId: this.activeInstallation?.characterId ?? this.activeInstallationId ?? "",
+            releaseId: this.loadedInstallation?.packageId ?? "",
+            runtimeInstanceId: this.bridgeClient.getRuntimeId(),
+          };
+          this.bridgeClient.setSessionContext(ctx);
+        }
         this.syncBridgeState();
       },
       onDisconnected: (reason: string) => {
@@ -2182,6 +2342,7 @@ export class DesktopPetManager {
         _actionSpecHash: string,
       ): Promise<CommandResultPayload> => {
         try {
+          this.currentCommandId = msg.commandId ?? null;
           await this.playAction(actionKey);
           return {
             commandId: msg.commandId || "",
@@ -2354,19 +2515,9 @@ export class DesktopPetManager {
     const summary = this.collectPetInstanceSummary();
     this.bridgeClient.updatePetInstances(summary ? [summary] : []);
   }
-
-  private sendBridgeEvent(eventType: string, petInstanceId: string): void {
-    if (!this.bridgeClient || !this.bridgeClient.isConnected()) return;
-    this.bridgeClient.sendEvent(eventType, petInstanceId, {
-      actionKey: this.currentActionKey,
-      state: this.state,
-    });
-    this.syncBridgeState();
-  }
 }
 
 export {
-  PET_FRAME_UPDATE_CHANNEL,
   PET_ACTION_SWITCH_CHANNEL,
   PET_LOAD_ERROR_CHANNEL,
   PET_STATE_CHANNEL,

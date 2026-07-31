@@ -117,7 +117,7 @@
                     :model-value="selectedProvider"
                     @update:model-value="onProviderSelect"
                     placeholder="选择厂商"
-                    class="ob-model-select"
+                    class="ob-provider-select"
                     clearable
                     style="width: 100%"
                   >
@@ -392,3 +392,48 @@ watch(
   },
 );
 </script>
+
+<style scoped>
+.ob-provider-select :deep(.el-select__wrapper) {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 9px;
+  border: 1px solid var(--ob-line);
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ob-muted);
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+.ob-provider-select :deep(.el-select__wrapper:hover) {
+  border-color: rgba(200, 121, 91, 0.45);
+  background: var(--ob-accent-soft);
+  color: var(--ob-text);
+}
+
+.ob-provider-select :deep(.el-select__wrapper.is-focused) {
+  border-color: rgba(200, 121, 91, 0.45);
+  background: var(--ob-accent-soft);
+  color: var(--ob-text);
+  box-shadow: none;
+}
+
+.ob-provider-select :deep(.el-select__placeholder) {
+  font-size: 9px;
+  color: var(--ob-muted);
+}
+
+.ob-provider-select :deep(.el-select__selected-item) {
+  font-size: 9px;
+  color: var(--ob-text);
+}
+
+.ob-provider-select :deep(.el-select__caret) {
+  font-size: 9px;
+  color: var(--ob-muted);
+}
+</style>

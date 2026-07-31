@@ -1,5 +1,7 @@
 import { access, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
+import type { PlaybackMode, ReturnToRule } from "../../shared/package-schema";
+import { compareVersions, CURRENT_RUNTIME_VERSION } from "../../shared/package-schema";
 
 const SUPPORTED_SCHEMA_VERSIONS = [1, 2];
 const DEFAULT_SCHEMA_VERSION = 2;
@@ -21,7 +23,7 @@ export interface ManifestAction {
   frameDurationMs: number;
   frameCount: number;
   frames: string[];
-  anchor?: { x: number; y: number };
+  anchor?: { x: number; y: number; coordinateSpace?: string };
   interruptible: boolean;
   returnAction?: string;
   config?: string;
@@ -39,7 +41,7 @@ export interface Manifest {
   preview?: string;
   actions: ManifestAction[];
   binding?: { installationId?: string; petId?: string };
-  compatibility?: { minRuntimeVersion?: string };
+  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
   integrity?: { contentRootHash?: string; manifestHash?: string };
 }
 
@@ -52,12 +54,19 @@ export interface RuntimeAction {
   frameDurationMs: number;
   frameCount: number;
   frames: string[];
-  anchor?: { x: number; y: number };
+  anchor?: { x: number; y: number; coordinateSpace?: string };
   interruptible: boolean;
   returnAction?: string;
   config?: string;
   available: boolean;
   loadError?: string;
+  playbackMode?: PlaybackMode;
+  priority?: number;
+  cooldownMs?: number;
+  mutexGroup?: string;
+  minimumPlayMs?: number;
+  maximumPlayMs?: number | null;
+  returnTo?: ReturnToRule;
 }
 
 export interface LoadedInstallation {
@@ -90,7 +99,7 @@ interface ManifestFile {
   preview?: string;
   actions?: Array<{ key?: string; name?: string; config?: string }>;
   binding?: { installationId?: string; petId?: string };
-  compatibility?: { minRuntimeVersion?: string };
+  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
   integrity?: { contentRootHash?: string; manifestHash?: string };
 }
 
@@ -98,20 +107,34 @@ interface ActionFileFrame {
   index?: number;
   file?: string;
   durationMs?: number;
+  frameId?: string;
+  contentHash?: string;
 }
 
 interface ActionFile {
   key?: string;
+  actionKey?: string;
   name?: string;
+  displayName?: string;
+  actionName?: string;
   version?: number;
+  schemaVersion?: number;
   loopType?: string;
+  playbackMode?: string;
   fps?: number;
+  defaultFps?: number;
   frameDurationMs?: number;
   frameCount?: number;
   frames?: Array<ActionFileFrame | string>;
-  anchor?: { type?: string; x?: number; y?: number };
+  anchor?: { type?: string; x?: number; y?: number; coordinateSpace?: string };
   interruptible?: boolean;
   returnAction?: string;
+  returnTo?: { type?: string; actionKey?: string };
+  priority?: number;
+  cooldownMs?: number;
+  minimumPlayMs?: number;
+  maximumPlayMs?: number | null;
+  mutexGroup?: string;
 }
 
 interface ActionLoadResult {
@@ -185,6 +208,15 @@ export class ResourceLoader {
 
     if (!defaultAction) {
       throw new Error(DEFAULT_ACTION_NOT_FOUND_ERROR);
+    }
+
+    const minRuntimeVersion =
+      file.compatibility?.minRuntimeVersion ??
+      file.compatibility?.minimumRuntimeVersion;
+    if (minRuntimeVersion && !compareVersions(minRuntimeVersion, CURRENT_RUNTIME_VERSION)) {
+      throw new Error(
+        `UNSUPPORTED_RUNTIME_VERSION: required ${minRuntimeVersion}, current ${CURRENT_RUNTIME_VERSION}`,
+      );
     }
 
     const defaultRuntime = runtimeActions.get(defaultAction);
@@ -349,9 +381,9 @@ export class ResourceLoader {
       return buildFailed(`ACTION_JSON_PARSE_FAILED: ${this.errorMessage(err)}`);
     }
 
-    const loopType = this.normalizeLoopType(parsed.loopType);
+    const loopType = this.normalizePlaybackMode(parsed.playbackMode ?? parsed.loopType);
     const relFrames = this.extractFrameFiles(parsed);
-    const fps = this.normalizeNumber(parsed.fps, 0);
+    const fps = this.normalizeNumber(parsed.fps ?? parsed.defaultFps, 0);
     const frameDurationMs = this.normalizeNumber(parsed.frameDurationMs, 0);
     const frameCount = this.normalizeNumber(
       parsed.frameCount,
@@ -360,9 +392,20 @@ export class ResourceLoader {
     const anchor = this.normalizeAnchor(parsed.anchor);
     const interruptible = parsed.interruptible === true;
     const returnAction = parsed.returnAction || undefined;
-    const name = parsed.name || fallbackName;
-    const key = parsed.key || actionKey;
+    const name = parsed.displayName ?? parsed.actionName ?? parsed.name ?? fallbackName;
+    const key = parsed.actionKey ?? parsed.key ?? actionKey;
     const version = String(parsed.version ?? 1);
+    const playbackMode = loopType;
+    const priority = this.normalizeNumber(parsed.priority, 50);
+    const cooldownMs = this.normalizeNumber(parsed.cooldownMs, 0);
+    const mutexGroup = parsed.mutexGroup ?? "";
+    const minimumPlayMs = this.normalizeNumber(parsed.minimumPlayMs, 0);
+    const maximumPlayMs = parsed.maximumPlayMs ?? null;
+    const returnTo = this.normalizeReturnTo(parsed.returnTo, parsed.returnAction);
+
+    for (const relFrame of relFrames) {
+      this.validateFramePath(relFrame);
+    }
 
     const manifestAction: ManifestAction = {
       key,
@@ -379,7 +422,8 @@ export class ResourceLoader {
       config: relativeConfigPath,
     };
 
-    const absoluteFrames = relFrames.map((rel) => join(installPath, rel));
+    const actionJsonDir = dirname(actionJsonPath);
+    const absoluteFrames = relFrames.map((rel) => join(actionJsonDir, rel));
     const frameCheck = await this.checkFramesExist(absoluteFrames);
     if (!frameCheck.ok) {
       return {
@@ -399,6 +443,13 @@ export class ResourceLoader {
           config: relativeConfigPath,
           available: false,
           loadError: frameCheck.error,
+          playbackMode,
+          priority,
+          cooldownMs,
+          mutexGroup,
+          minimumPlayMs,
+          maximumPlayMs,
+          returnTo,
         },
       };
     }
@@ -419,6 +470,13 @@ export class ResourceLoader {
         returnAction,
         config: relativeConfigPath,
         available: true,
+        playbackMode,
+        priority,
+        cooldownMs,
+        mutexGroup,
+        minimumPlayMs,
+        maximumPlayMs,
+        returnTo,
       },
     };
   }
@@ -459,11 +517,58 @@ export class ResourceLoader {
     return { ok: true };
   }
 
-  private normalizeLoopType(value: string | undefined): ActionLoopType {
-    if (value === "loop" || value === "once" || value === "hold" || value === "ping_pong") {
-      return value;
+  private normalizePlaybackMode(value: string | undefined): ActionLoopType {
+    if (!value) return "loop";
+    const lt = value.toLowerCase().trim();
+    if (lt === "loop" || lt === "once" || lt === "hold" || lt === "ping_pong") {
+      return lt;
     }
-    return "loop";
+    if (lt === "ping-pong" || lt === "pingpong") {
+      return "ping_pong";
+    }
+    throw new Error(`UNKNOWN_PLAYBACK_MODE: ${value}`);
+  }
+
+  private normalizeReturnTo(
+    returnTo: ActionFile["returnTo"],
+    returnAction: string | undefined,
+  ): ReturnToRule | undefined {
+    if (returnTo && typeof returnTo === "object") {
+      const type = returnTo.type ?? "default";
+      switch (type) {
+        case "action":
+          if (returnTo.actionKey && typeof returnTo.actionKey === "string") {
+            return { type: "action", actionKey: returnTo.actionKey };
+          }
+          return { type: "default" };
+        case "default":
+          return { type: "default" };
+        case "previous":
+          return { type: "previous" };
+        case "current_activity":
+          return { type: "current_activity" };
+        case "none":
+          return { type: "none" };
+        default:
+          return { type: "default" };
+      }
+    }
+    if (returnAction && typeof returnAction === "string" && returnAction.trim()) {
+      return { type: "action", actionKey: returnAction };
+    }
+    return undefined;
+  }
+
+  private validateFramePath(framePath: string): void {
+    if (!framePath) {
+      throw new Error("FRAME_PATH_EMPTY");
+    }
+    if (isAbsolute(framePath)) {
+      throw new Error(`FRAME_PATH_ABSOLUTE: ${framePath}`);
+    }
+    if (framePath.includes("..")) {
+      throw new Error(`FRAME_PATH_TRAVERSAL: ${framePath}`);
+    }
   }
 
   private extractFrameFiles(parsed: ActionFile): string[] {
@@ -488,7 +593,7 @@ export class ResourceLoader {
 
   private normalizeAnchor(
     anchor: ActionFile["anchor"],
-  ): { x: number; y: number } | undefined {
+  ): { x: number; y: number; coordinateSpace?: string } | undefined {
     if (!anchor) {
       return undefined;
     }
@@ -498,6 +603,13 @@ export class ResourceLoader {
       typeof anchor.y === "number" ? anchor.y : Number(anchor.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return undefined;
+    }
+    const coordinateSpace =
+      anchor.coordinateSpace === "normalized_canvas"
+        ? "normalized_canvas"
+        : undefined;
+    if (coordinateSpace) {
+      return { x, y, coordinateSpace };
     }
     return { x, y };
   }

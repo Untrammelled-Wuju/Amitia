@@ -281,7 +281,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		return KernelInstallResult{}, compensateRollback("renew_lease", err)
 	}
-	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "rollback", extensionID, version, artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "rollback", extensionID, version, artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		return KernelInstallResult{}, compensateRollback("record_version", err)
 	}
 	if replacedVersion != "" && replacedVersion != version {
@@ -295,12 +295,12 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err := r.runPackageFinalGate(ctx, op.OperationID); err != nil {
 		return KernelInstallResult{}, compensateRollback("final_gate", err)
 	}
+	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, guard); err != nil {
+		return KernelInstallResult{}, compensateRollback("complete_operation", err)
+	}
 	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
 		return KernelInstallResult{}, stopErr
-	}
-	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
-		return KernelInstallResult{}, compensateRollback("complete_operation", err)
 	}
 	return KernelInstallResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: "rollback",
 		ExtensionID: extensionID, Version: version, InstallationID: current.InstallationID,
@@ -590,7 +590,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, extensionID, user
 		finalizeQM.State = "finalized"
 		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, finalizeQM, uninstallGuard)
 	}
-	if err := r.deactivatePackageVersionAfterUninstall(ctx, extensionID, initialPreview.CurrentVersion, op.OperationID); err != nil {
+	if err := r.deactivatePackageVersionAfterUninstall(ctx, extensionID, initialPreview.CurrentVersion, op.OperationID, uninstallGuard); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "deactivate_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, uninstallGuard)
 		return op, err
 	}
@@ -599,12 +599,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, extensionID, user
 		return op, err
 	}
 	_ = r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, "quarantine-"+op.OperationID, uninstallGuard)
+	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, uninstallGuard); err != nil {
+		return op, err
+	}
 	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, uninstallGuard)
 		return op, stopErr
-	}
-	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
-		return op, err
 	}
 	op.Status = "completed"
 	op.CurrentStep = "completed"

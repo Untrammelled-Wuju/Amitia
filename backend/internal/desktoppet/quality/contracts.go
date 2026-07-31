@@ -66,6 +66,159 @@ type QualityRepository interface {
 	UpsertGateResult(ctx context.Context, gate *QualityGateResultRecord) error
 	GetGateResult(ctx context.Context, processingTaskID string) (*QualityGateResultRecord, error)
 	DeleteGateResult(ctx context.Context, processingTaskID string) error
+	InvalidateGateResult(ctx context.Context, processingTaskID string) error
+	SupersedeEvaluation(ctx context.Context, evaluationID string) error
+	UpdateEvaluationStatus(ctx context.Context, evaluationID string, status EvaluationExecutionStatus, errorCode, errorMessage string) error
+	GetEvaluationByActionRevision(ctx context.Context, actionRevisionID string) (*QualityEvaluation, error)
+
+	CreateActiveQualityBinding(ctx context.Context, binding *ActiveQualityEvaluationBindingRecord) error
+	GetActiveQualityBinding(ctx context.Context, actionRevisionID, profileID string) (*ActiveQualityEvaluationBindingRecord, error)
+	UnbindActiveQualityEvaluation(ctx context.Context, actionRevisionID, profileID string) error
+
+	CreateCommitJournal(ctx context.Context, journal *QualityCommitJournalRecord) error
+
+	CreateReviewDecision(ctx context.Context, decision *QualityReviewDecisionRecord) error
+	GetReviewDecision(ctx context.Context, evaluationID string) (*QualityReviewDecisionRecord, error)
+
+	GetMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) (*QualityMeasurementCacheRecord, error)
+	CreateMeasurementCache(ctx context.Context, cache *QualityMeasurementCacheRecord) error
+
+	CreateOutboxEvent(ctx context.Context, event *QualityOutboxEventRecord) error
+	ListPendingOutboxEvents(ctx context.Context, limit int) ([]QualityOutboxEventRecord, error)
+	MarkOutboxEventPublished(ctx context.Context, eventID string) error
+}
+
+type QualityInputRepository interface {
+	LoadActionRevisionInput(ctx context.Context, userID string, actionRevisionID string) (*QualityActionInput, error)
+}
+
+type QualityActionInput struct {
+	UserID               string
+	CharacterID          string
+	ProcessingTaskID     string
+	ProcessingActionID   string
+	ActionKey            string
+	ActionRevisionID     string
+	ActionContentHash    string
+	ProcessingRevisionID string
+	PlaybackMode         string
+	FPS                  int
+	ExpectedFrameCount   int
+	Frames               []QualityFrameInput
+	InputSource          string
+}
+
+type QualityFrameInput struct {
+	FrameRevisionID  string
+	FrameArtifactID  string
+	FrameIndex       int
+	AbsolutePath     string
+	RelativePath     string
+	ContentHash      string
+	PixelHash        string
+	MimeType         string
+	Width            int
+	Height           int
+	SubjectBox       Rect
+	Anchor           Point
+	CoordinateSpace  string
+	AlphaCoverage    float64
+	TransformChain   []Transform
+	Measurements     map[string]float64
+}
+
+type Rect struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type Transform struct {
+	Type        string  `json:"type"`
+	ScaleX      float64 `json:"scaleX"`
+	ScaleY      float64 `json:"scaleY"`
+	OffsetX     float64 `json:"offsetX"`
+	OffsetY     float64 `json:"offsetY"`
+	Rotation    float64 `json:"rotation"`
+	SourceSpace string  `json:"sourceSpace"`
+	TargetSpace string  `json:"targetSpace"`
+}
+
+type ImageMeasurementEngine interface {
+	MeasureFrame(ctx context.Context, framePath string, contentHash string, frameArtifactID string) (*FrameMeasurementResult, error)
+}
+
+type FrameMeasurementResult struct {
+	Width                int
+	Height               int
+	HasAlphaChannel      bool
+	AlphaCoverage        float64
+	FullyTransparentRatio float64
+	SemiTransparentRatio  float64
+	OpaqueRatio           float64
+	Decodable             bool
+	MimeType              string
+	PixelHash             string
+	FileSize              int64
+}
+
+type QualityCommitter interface {
+	CommitEvaluation(ctx context.Context, req CommitEvaluationRequest) (*CommitEvaluationResult, error)
+}
+
+type ActiveQualityEvaluationBindingService interface {
+	BindActiveEvaluation(ctx context.Context, actionRevisionID, profileID, evaluationID string) error
+	GetActiveBinding(ctx context.Context, actionRevisionID, profileID string) (*ActiveQualityEvaluationBindingRecord, error)
+	UnbindActiveEvaluation(ctx context.Context, actionRevisionID, profileID string) error
+}
+
+type ActionRevisionQualityWriteback interface {
+	WritebackQualitySnapshot(ctx context.Context, req QualityWritebackRequest) error
+}
+
+type QualityWritebackRequest struct {
+	ActionRevisionID    string
+	ContentHash         string
+	EvaluationID        string
+	ProfileID           string
+	RuleSetVersion      string
+	Verdict             string
+	Score               *float64
+	SourceContentHash   string
+}
+
+type TaskQualityGateService interface {
+	Evaluate(ctx context.Context, req EvaluateTaskGateRequest) (*QualityGateResult, error)
+	GetValidGateForRelease(ctx context.Context, req GetValidGateForReleaseRequest) (*QualityGateResult, error)
+	GetGate(ctx context.Context, processingTaskID string) (*QualityGateResult, error)
+}
+
+type QualityGateInvalidator interface {
+	InvalidateForActionRevision(ctx context.Context, processingTaskID, actionRevisionID string) error
+	InvalidateForTask(ctx context.Context, processingTaskID string) error
+	InvalidateForRuleSetChange(ctx context.Context, processingTaskID, ruleSetVersion string) error
+}
+
+type QualityRecoveryWorker interface {
+	Start(ctx context.Context)
+	Stop()
+	RecoverStuckEvaluations(ctx context.Context) (int, error)
+}
+
+type QualityOutboxPublisher interface {
+	PublishEvent(ctx context.Context, event QualityOutboxEvent) error
+	Flush(ctx context.Context) error
+}
+
+type QualityReviewDecisionService interface {
+	CreateReviewDecision(ctx context.Context, req ReviewDecisionRequest) (*QualityReviewDecisionRecord, error)
+	GetReviewDecision(ctx context.Context, evaluationID string) (*QualityReviewDecisionRecord, error)
 }
 
 type QualityEvent struct {

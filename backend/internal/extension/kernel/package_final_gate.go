@@ -255,13 +255,24 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	} else {
 		generationID, _ := installation.Metadata["generationId"].(string)
 		if generationID == "" {
-			checkGen.Passed = true
+			checkGen.Passed = false
+			checkGen.Detail = "generation id missing from installation metadata, fail closed"
 		} else {
 			current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
 			if currentErr != nil {
 				checkGen.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
 			} else if current.GenerationID != generationID {
 				checkGen.Detail = fmt.Sprintf("generation id mismatch: %s != %s", current.GenerationID, generationID)
+			} else if current.ExtensionID != operation.ExtensionID {
+				checkGen.Detail = fmt.Sprintf("current.json extension mismatch: %s != %s", current.ExtensionID, operation.ExtensionID)
+			} else if current.ArtifactID != operation.ArtifactID {
+				checkGen.Detail = fmt.Sprintf("current.json artifact mismatch: %s != %s", current.ArtifactID, operation.ArtifactID)
+			} else if current.Version != operation.TargetVersion {
+				checkGen.Detail = fmt.Sprintf("current.json version mismatch: %s != %s", current.Version, operation.TargetVersion)
+			} else if current.OperationID != operation.OperationID {
+				checkGen.Detail = fmt.Sprintf("current.json operation mismatch: %s != %s", current.OperationID, operation.OperationID)
+			} else if current.FencingToken != operation.FencingToken {
+				checkGen.Detail = fmt.Sprintf("current.json fencing token mismatch: %d != %d", current.FencingToken, operation.FencingToken)
 			} else {
 				if verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
 					checkGen.Detail = fmt.Sprintf("generation verification failed: %v", verifyErr)
@@ -275,8 +286,11 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 
 	checkPerm := PackageFinalGateCheck{Name: "permission_and_scope_consistent"}
 	if isUninstall {
-		permClean := true
-		if r.container.PermissionRepository != nil {
+		if r.container.PermissionRepository == nil || r.container.ScopeRepository == nil {
+			checkPerm.Passed = false
+			checkPerm.Detail = "permission or scope repository unavailable for uninstall verification, fail closed"
+		} else {
+			permClean := true
 			requirements, reqErr := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
 			if reqErr == nil && len(requirements) > 0 {
 				permClean = false
@@ -287,21 +301,22 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 				permClean = false
 				checkPerm.Detail = "permission grants still exist after uninstall"
 			}
-		}
-		if r.container.ScopeRepository != nil && permClean {
 			bindings, bindErr := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
 			if bindErr == nil && len(bindings) > 0 {
 				permClean = false
 				checkPerm.Detail = "scope bindings still exist after uninstall"
 			}
-		}
-		if permClean {
-			checkPerm.Passed = true
+			if permClean {
+				checkPerm.Passed = true
+			}
 		}
 	} else {
 		if installErr != nil {
 			checkPerm.Detail = "installation unavailable, cannot verify permissions"
-		} else if r.container.PermissionRepository != nil && r.container.ScopeRepository != nil {
+		} else if r.container.PermissionRepository == nil || r.container.ScopeRepository == nil {
+			checkPerm.Passed = false
+			checkPerm.Detail = "permission or scope repository unavailable, fail closed"
+		} else {
 			_, reqErr := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
 			_, grantErr := r.container.PermissionRepository.ListGrants(ctx, domain.ExtensionID(operation.ExtensionID))
 			_, bindErr := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -310,8 +325,6 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 			} else {
 				checkPerm.Passed = true
 			}
-		} else {
-			checkPerm.Passed = true
 		}
 	}
 	result.Checks = append(result.Checks, checkPerm)
@@ -482,7 +495,10 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		checkVersion.Passed = true
 	} else if r.container.PackageRepository == nil {
 		checkVersion.Passed = false
-		checkVersion.Detail = "package repository unavailable for version record check"
+		checkVersion.Detail = "package repository unavailable for version record check, fail closed"
+	} else if installErr != nil {
+		checkVersion.Passed = false
+		checkVersion.Detail = "installation unavailable, cannot verify version record"
 	} else {
 		versionRecord, vErr := r.container.PackageRepository.GetCurrentPackageVersion(ctx, operation.ExtensionID)
 		if vErr != nil {
@@ -497,7 +513,7 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		} else if versionRecord.VersionState != "current" {
 			checkVersion.Passed = false
 			checkVersion.Detail = fmt.Sprintf("version record state is %s, expected current", versionRecord.VersionState)
-		} else if versionRecord.GenerationID != "" && operation.TargetGeneration != "" && versionRecord.GenerationID != operation.TargetGeneration {
+		} else if versionRecord.GenerationID != operation.TargetGeneration {
 			checkVersion.Passed = false
 			checkVersion.Detail = fmt.Sprintf("version record generation mismatch: %s != %s", versionRecord.GenerationID, operation.TargetGeneration)
 		} else {

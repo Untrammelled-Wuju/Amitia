@@ -317,19 +317,19 @@ describe("DesktopPetWindowAdapter", () => {
 
     await adapter.destroy();
 
-    expect(windowMock.close).toHaveBeenCalled();
+    expect(windowMock.destroy).toHaveBeenCalled();
     expect(adapter.isCreated()).toBe(false);
     expect(adapter.getNativeWindow()).toBeNull();
   });
 
-  it("destroy 已销毁的窗口不重复调用 close", async () => {
+  it("destroy 已销毁的窗口不重复调用 destroy", async () => {
     const adapter = new DesktopPetWindowAdapter(makeOptions());
     await adapter.create();
     await adapter.destroy();
 
-    windowMock.close.mockClear();
+    windowMock.destroy.mockClear();
     await adapter.destroy();
-    expect(windowMock.close).not.toHaveBeenCalled();
+    expect(windowMock.destroy).not.toHaveBeenCalled();
   });
 
   it("isCreated 在创建前为 false，创建后为 true", async () => {

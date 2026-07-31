@@ -9,6 +9,8 @@ export class ClickThroughController {
   private readonly adapter: DesktopPetWindowAdapter;
   private win: BrowserWindow | null = null;
   private isDragging = false;
+  private mode: "none" | "alpha" | "boundingBox" = "none";
+  private hitMaskThreshold = 0;
   private isIgnoring = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastProcessTime = 0;
@@ -55,6 +57,26 @@ export class ClickThroughController {
     this.tester.setFrame(width, height, alphaData);
   }
 
+  updateHitMask(
+    width: number,
+    height: number,
+    data: Uint8Array,
+    threshold: number,
+  ): void {
+    this.tester.setFrame(width, height, data);
+    this.hitMaskThreshold = threshold;
+  }
+
+  setMode(mode: "none" | "alpha" | "boundingBox"): void {
+    this.mode = mode;
+    this.lastProcessTime = 0;
+    if (mode === "none") {
+      this.setIgnoreState(false);
+      return;
+    }
+    this.processMousePosition();
+  }
+
   setDragging(dragging: boolean): void {
     this.isDragging = dragging;
     if (dragging) {
@@ -81,7 +103,8 @@ export class ClickThroughController {
     const win = this.win;
     if (!win || win.isDestroyed()) return;
     if (this.isDragging) return;
-    if (!this.tester.hasFrame()) return;
+    if (this.mode === "none") return;
+    if (this.mode === "alpha" && !this.tester.hasFrame()) return;
 
     const now = Date.now();
     if (now - this.lastProcessTime < POLL_INTERVAL_MS) return;
@@ -91,7 +114,18 @@ export class ClickThroughController {
     const [winX, winY] = win.getPosition();
     const localX = cursor.x - winX;
     const localY = cursor.y - winY;
-    const hit = this.tester.isHit(localX, localY);
+
+    let hit: boolean;
+    if (this.mode === "boundingBox") {
+      const box = this.tester.getBoundingBox();
+      hit =
+        localX >= box.minX &&
+        localX <= box.maxX &&
+        localY >= box.minY &&
+        localY <= box.maxY;
+    } else {
+      hit = this.tester.isHit(localX, localY);
+    }
     this.setIgnoreState(!hit);
   }
 

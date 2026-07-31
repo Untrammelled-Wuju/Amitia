@@ -295,6 +295,55 @@ func (r *GormRepository) DeleteGateResult(ctx context.Context, processingTaskID 
 		Delete(&QualityGateResultRecord{}).Error
 }
 
+func (r *GormRepository) InvalidateGateResult(ctx context.Context, processingTaskID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.WithContext(ctx).
+		Model(&QualityGateResultRecord{}).
+		Where("processing_task_id = ?", processingTaskID).
+		Update("invalidated_at", now).Error
+}
+
+func (r *GormRepository) SupersedeEvaluation(ctx context.Context, evaluationID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.WithContext(ctx).
+		Model(&QualityEvaluation{}).
+		Where("id = ?", evaluationID).
+		Updates(map[string]interface{}{
+			"execution_status": string(EvalSuperseded),
+			"is_active":        false,
+			"updated_at":       now,
+		}).Error
+}
+
+func (r *GormRepository) UpdateEvaluationStatus(ctx context.Context, evaluationID string, status EvaluationExecutionStatus, errorCode, errorMessage string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	updates := map[string]interface{}{
+		"execution_status": string(status),
+		"error_code":       errorCode,
+		"error_message":    errorMessage,
+		"updated_at":       now,
+	}
+	if IsTerminalStatus(status) {
+		updates["completed_at"] = now
+	}
+	return r.db.WithContext(ctx).
+		Model(&QualityEvaluation{}).
+		Where("id = ?", evaluationID).
+		Updates(updates).Error
+}
+
+func (r *GormRepository) GetEvaluationByActionRevision(ctx context.Context, actionRevisionID string) (*QualityEvaluation, error) {
+	var ev QualityEvaluation
+	err := r.db.WithContext(ctx).
+		Where("action_revision_id = ? AND execution_status = ?", actionRevisionID, string(EvalSucceeded)).
+		Order("created_at DESC").
+		First(&ev).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ev, nil
+}
+
 func FindingsToRecords(findings []QualityFinding, evaluationID string) []QualityFindingRecord {
 	records := make([]QualityFindingRecord, 0, len(findings))
 	for i, f := range findings {
@@ -407,4 +456,137 @@ func firstFrameIndex(indexes []int, pairs []FramePairRef) int {
 		return 0
 	}
 	return min
+}
+
+func (r *GormRepository) CreateActiveQualityBinding(ctx context.Context, binding *ActiveQualityEvaluationBindingRecord) error {
+	if binding.ID == "" {
+		binding.ID = uuid.NewString()
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if binding.CreatedAt == "" {
+		binding.CreatedAt = now
+	}
+	binding.UpdatedAt = now
+	return r.db.WithContext(ctx).Create(binding).Error
+}
+
+func (r *GormRepository) GetActiveQualityBinding(ctx context.Context, actionRevisionID, profileID string) (*ActiveQualityEvaluationBindingRecord, error) {
+	var binding ActiveQualityEvaluationBindingRecord
+	err := r.db.WithContext(ctx).
+		Where("action_revision_id = ? AND profile_id = ?", actionRevisionID, profileID).
+		Order("binding_revision DESC").
+		First(&binding).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &binding, nil
+}
+
+func (r *GormRepository) UnbindActiveQualityEvaluation(ctx context.Context, actionRevisionID, profileID string) error {
+	return r.db.WithContext(ctx).
+		Where("action_revision_id = ? AND profile_id = ?", actionRevisionID, profileID).
+		Delete(&ActiveQualityEvaluationBindingRecord{}).Error
+}
+
+func (r *GormRepository) CreateCommitJournal(ctx context.Context, journal *QualityCommitJournalRecord) error {
+	if journal.ID == "" {
+		journal.ID = uuid.NewString()
+	}
+	if journal.CreatedAt == "" {
+		journal.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	return r.db.WithContext(ctx).Create(journal).Error
+}
+
+func (r *GormRepository) CreateReviewDecision(ctx context.Context, decision *QualityReviewDecisionRecord) error {
+	if decision.ID == "" {
+		decision.ID = uuid.NewString()
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if decision.CreatedAt == "" {
+		decision.CreatedAt = now
+	}
+	if decision.ReviewedAt == "" {
+		decision.ReviewedAt = now
+	}
+	return r.db.WithContext(ctx).Create(decision).Error
+}
+
+func (r *GormRepository) GetReviewDecision(ctx context.Context, evaluationID string) (*QualityReviewDecisionRecord, error) {
+	var decision QualityReviewDecisionRecord
+	err := r.db.WithContext(ctx).
+		Where("evaluation_id = ?", evaluationID).
+		Order("created_at DESC").
+		First(&decision).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &decision, nil
+}
+
+func (r *GormRepository) GetMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) (*QualityMeasurementCacheRecord, error) {
+	var cache QualityMeasurementCacheRecord
+	err := r.db.WithContext(ctx).
+		Where("frame_artifact_id = ? AND content_hash = ?", frameArtifactID, contentHash).
+		First(&cache).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &cache, nil
+}
+
+func (r *GormRepository) CreateMeasurementCache(ctx context.Context, cache *QualityMeasurementCacheRecord) error {
+	if cache.ID == "" {
+		cache.ID = uuid.NewString()
+	}
+	if cache.CreatedAt == "" {
+		cache.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	return r.db.WithContext(ctx).Create(cache).Error
+}
+
+func (r *GormRepository) CreateOutboxEvent(ctx context.Context, event *QualityOutboxEventRecord) error {
+	if event.ID == "" {
+		event.ID = uuid.NewString()
+	}
+	if event.CreatedAt == "" {
+		event.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if event.Status == "" {
+		event.Status = "pending"
+	}
+	return r.db.WithContext(ctx).Create(event).Error
+}
+
+func (r *GormRepository) ListPendingOutboxEvents(ctx context.Context, limit int) ([]QualityOutboxEventRecord, error) {
+	var events []QualityOutboxEventRecord
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "pending").
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *GormRepository) MarkOutboxEventPublished(ctx context.Context, eventID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.WithContext(ctx).
+		Model(&QualityOutboxEventRecord{}).
+		Where("id = ?", eventID).
+		Updates(map[string]interface{}{
+			"status":       "published",
+			"published_at": now,
+		}).Error
 }

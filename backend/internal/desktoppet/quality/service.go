@@ -13,13 +13,21 @@ import (
 )
 
 type qualityService struct {
-	repo             QualityRepository
-	engine           *Engine
-	executor         *EngineExecutor
-	profileRegistry  *ProfileRegistry
-	gateEvaluator    *GateEvaluator
-	measurementSrc   MeasurementSource
-	events           EventPublisher
+	repo               QualityRepository
+	engine             *Engine
+	executor           *EngineExecutor
+	profileRegistry    *ProfileRegistry
+	gateEvaluator      *GateEvaluator
+	measurementSrc     MeasurementSource
+	events             EventPublisher
+	committer          QualityCommitter
+	taskGateService    TaskQualityGateService
+	gateInvalidator    QualityGateInvalidator
+	reviewDecisionSvc  QualityReviewDecisionService
+	recoveryWorker     QualityRecoveryWorker
+	outboxPublisher    QualityOutboxPublisher
+	inputRepository    QualityInputRepository
+	measurementEngine  ImageMeasurementEngine
 }
 
 type ServiceConfig struct {
@@ -28,10 +36,24 @@ type ServiceConfig struct {
 	MeasurementSrc   MeasurementSource
 	EventPublisher   EventPublisher
 	Detectors        []Detector
+	Repo               QualityRepository
+	Committer          QualityCommitter
+	TaskGateService    TaskQualityGateService
+	GateInvalidator    QualityGateInvalidator
+	ReviewDecisionSvc  QualityReviewDecisionService
+	RecoveryWorker     QualityRecoveryWorker
+	OutboxPublisher    QualityOutboxPublisher
+	InputRepository    QualityInputRepository
+	MeasurementEngine  ImageMeasurementEngine
 }
 
 func NewQualityService(cfg ServiceConfig) (QualityService, error) {
-	repo := NewRepository(cfg.DB)
+	var repo QualityRepository
+	if cfg.Repo != nil {
+		repo = cfg.Repo
+	} else {
+		repo = NewRepository(cfg.DB)
+	}
 	engine := NewEngine(EngineConfig{
 		MeasurementSource: cfg.MeasurementSrc,
 		DataDir:           cfg.DataDir,
@@ -47,16 +69,27 @@ func NewQualityService(cfg ServiceConfig) (QualityService, error) {
 	}
 
 	executor := NewEngineExecutor(engine, repo, reportGen, events)
+	if cfg.Committer != nil {
+		executor.SetCommitter(cfg.Committer)
+	}
 	gateEvaluator := NewGateEvaluator(repo)
 
 	return &qualityService{
-		repo:            repo,
-		engine:          engine,
-		executor:        executor,
-		profileRegistry: engine.ProfileRegistry(),
-		gateEvaluator:   gateEvaluator,
-		measurementSrc:  cfg.MeasurementSrc,
-		events:          events,
+		repo:              repo,
+		engine:            engine,
+		executor:          executor,
+		profileRegistry:   engine.ProfileRegistry(),
+		gateEvaluator:     gateEvaluator,
+		measurementSrc:    cfg.MeasurementSrc,
+		events:            events,
+		committer:         cfg.Committer,
+		taskGateService:   cfg.TaskGateService,
+		gateInvalidator:   cfg.GateInvalidator,
+		reviewDecisionSvc: cfg.ReviewDecisionSvc,
+		recoveryWorker:    cfg.RecoveryWorker,
+		outboxPublisher:   cfg.OutboxPublisher,
+		inputRepository:   cfg.InputRepository,
+		measurementEngine: cfg.MeasurementEngine,
 	}, nil
 }
 
@@ -331,6 +364,38 @@ func (s *qualityService) Engine() *Engine {
 
 func (s *qualityService) Repo() QualityRepository {
 	return s.repo
+}
+
+func (s *qualityService) Committer() QualityCommitter {
+	return s.committer
+}
+
+func (s *qualityService) TaskGateService() TaskQualityGateService {
+	return s.taskGateService
+}
+
+func (s *qualityService) GateInvalidator() QualityGateInvalidator {
+	return s.gateInvalidator
+}
+
+func (s *qualityService) ReviewDecisionService() QualityReviewDecisionService {
+	return s.reviewDecisionSvc
+}
+
+func (s *qualityService) RecoveryWorker() QualityRecoveryWorker {
+	return s.recoveryWorker
+}
+
+func (s *qualityService) OutboxPublisher() QualityOutboxPublisher {
+	return s.outboxPublisher
+}
+
+func (s *qualityService) InputRepository() QualityInputRepository {
+	return s.inputRepository
+}
+
+func (s *qualityService) MeasurementEngine() ImageMeasurementEngine {
+	return s.measurementEngine
 }
 
 func (s *qualityService) AcquireLease(ctx context.Context, evaluationID, executionID, workerID string, leaseDuration string) (bool, error) {

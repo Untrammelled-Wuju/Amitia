@@ -11,9 +11,10 @@ type v1Canvas struct {
 }
 
 type v1Action struct {
-	Key    string `json:"key"`
-	Name   string `json:"name"`
-	Config string `json:"config"`
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Config   string `json:"config"`
+	LoopType string `json:"loopType"`
 }
 
 type v1Capabilities struct {
@@ -88,13 +89,17 @@ func (r *V1Reader) ReadManifest(data []byte) (*Manifest, error) {
 
 	actions := make([]ManifestActionEntry, 0, len(v1.Actions))
 	for _, a := range v1.Actions {
+		loopType := NormalizePlaybackMode(a.LoopType)
+		if loopType == "" {
+			loopType = LoopTypeLoop
+		}
 		entry := ManifestActionEntry{
 			Key:            a.Key,
 			Name:           a.Name,
 			Config:         a.Config,
 			RevisionID:     "legacy_inferred",
 			QualityVerdict: QualityVerdictSkipped,
-			LoopType:       LoopTypeLoop,
+			LoopType:       loopType,
 		}
 		actions = append(actions, entry)
 	}

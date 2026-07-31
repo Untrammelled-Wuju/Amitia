@@ -23,6 +23,7 @@ type packageConfigSnapshot struct {
 	Metadata       map[string]any                       `json:"metadata"`
 	Contributions  []domain.ContributionDefinition      `json:"contributions"`
 	Permissions    packageConfigPermissionSnapshot      `json:"permissions"`
+	ScopeBindings  []sqlite.ScopeBinding                `json:"scopeBindings"`
 	SchemaVersion  string                               `json:"schemaVersion"`
 	CapturedAt     string                               `json:"capturedAt"`
 }
@@ -108,12 +109,25 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 	if err != nil {
 		return "", "", "", "", "", fmt.Errorf("kernel: capture permission grants for config snapshot: %w", err)
 	}
-	if len(contributions) == 0 && len(requirements) == 0 && len(grants) == 0 {
-		return "", "", "", "", "", fmt.Errorf("kernel: config snapshot integrity check failed: no contributions or permissions found for extension %s", installed.ExtensionID)
+	if r.container.ScopeRepository == nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: scope repository unavailable for rollback snapshot")
+	}
+	scopeBindings, err := r.container.ScopeRepository.ListBindings(ctx, installed.ExtensionID)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: capture scope bindings for config snapshot: %w", err)
+	}
+	if len(contributions) == 0 && len(requirements) == 0 && len(grants) == 0 && len(scopeBindings) == 0 {
+		return "", "", "", "", "", fmt.Errorf("kernel: config snapshot integrity check failed: no contributions, permissions, or scope bindings found for extension %s", installed.ExtensionID)
 	}
 	sort.Slice(contributions, func(i, j int) bool { return string(contributions[i].ID) < string(contributions[j].ID) })
 	sort.Slice(requirements, func(i, j int) bool { return requirements[i].PermissionName < requirements[j].PermissionName })
 	sort.Slice(grants, func(i, j int) bool { return grants[i].PermissionName < grants[j].PermissionName })
+	sort.Slice(scopeBindings, func(i, j int) bool {
+		if scopeBindings[i].ScopeType != scopeBindings[j].ScopeType {
+			return scopeBindings[i].ScopeType < scopeBindings[j].ScopeType
+		}
+		return scopeBindings[i].ScopeID < scopeBindings[j].ScopeID
+	})
 	configJSON, err := json.Marshal(packageConfigSnapshot{
 		Metadata:      metadata,
 		Contributions: contributions,
@@ -121,6 +135,7 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 			Requirements: requirements,
 			Grants:       grants,
 		},
+		ScopeBindings: scopeBindings,
 		SchemaVersion: packageConfigSnapshotSchemaVersion,
 		CapturedAt:    installed.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	})
@@ -134,37 +149,48 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 	if err != nil {
 		return "", "", "", "", "", fmt.Errorf("kernel: capture resources: %w", err)
 	}
+	var resourceJSON []byte
 	if len(resources) == 0 {
-		return "", "", "", "", "", fmt.Errorf("kernel: resource snapshot integrity check failed: no resources found for extension %s", installed.ExtensionID)
-	}
-	sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
-	resourceSnapshot := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
-	for _, resource := range resources {
-		resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
-		raw, marshalErr := json.Marshal(resource)
-		if marshalErr != nil {
-			return "", "", "", "", "", marshalErr
+		resourceJSON, err = json.Marshal(packageResourceSnapshot{Entries: []packageResourceSnapshotEntry{}})
+		if err != nil {
+			return "", "", "", "", "", err
 		}
-		logicalPath := extractResourceStringField(resource, "logicalPath")
-		if logicalPath == "" {
-			logicalPath = resource.Reference
+	} else {
+		sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
+		resourceSnapshot := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
+		for _, resource := range resources {
+			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
+			raw, marshalErr := json.Marshal(resource)
+			if marshalErr != nil {
+				return "", "", "", "", "", marshalErr
+			}
+			logicalPath := extractResourceStringField(resource, "logicalPath")
+			if logicalPath == "" {
+				logicalPath = resource.Reference
+			}
+			contentHash := extractResourceStringField(resource, "contentHash")
+			if contentHash == "" {
+				contentHash = packageSnapshotDigest(raw)
+			}
+			size := extractResourceInt64Field(resource, "size")
+			storageReference := resource.Reference
+			if storageReference == "" {
+				storageReference = resource.ResourceID
+			}
+			resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
+				Resource:         resource,
+				ResourceHash:     packageSnapshotDigest(raw),
+				RestoreStrategy:  "repository_upsert",
+				LogicalPath:      logicalPath,
+				ContentHash:      contentHash,
+				Size:             size,
+				StorageReference: storageReference,
+			})
 		}
-		contentHash := extractResourceStringField(resource, "contentHash")
-		size := extractResourceInt64Field(resource, "size")
-		storageReference := resource.Reference
-		resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
-			Resource:         resource,
-			ResourceHash:     packageSnapshotDigest(raw),
-			RestoreStrategy:  "repository_upsert",
-			LogicalPath:      logicalPath,
-			ContentHash:      contentHash,
-			Size:             size,
-			StorageReference: storageReference,
-		})
-	}
-	resourceJSON, err := json.Marshal(resourceSnapshot)
-	if err != nil {
-		return "", "", "", "", "", err
+		resourceJSON, err = json.Marshal(resourceSnapshot)
+		if err != nil {
+			return "", "", "", "", "", err
+		}
 	}
 	if r.container.MigrationRepository == nil {
 		return "", "", "", "", "", fmt.Errorf("kernel: migration repository unavailable for rollback snapshot")
@@ -209,9 +235,6 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		if operation.Status == migration.OperationStatusCompleted {
 			userState.Completed = append(userState.Completed, operation.OperationID)
 		}
-		if userState.RecordCounts != nil {
-			userState.RecordCounts[operation.OperationID] = int64(len(steps))
-		}
 	}
 	sort.Strings(userState.Snapshots)
 	sort.Strings(userState.Completed)
@@ -236,6 +259,9 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 					return "", "", "", "", "", fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
 				}
 				userState.DataExports[table] = export
+				if userState.RecordCounts != nil {
+					userState.RecordCounts[table] = int64(strings.Count(export, "\n"))
+				}
 			}
 		}
 	}
@@ -346,6 +372,50 @@ func packageSnapshotManualRecoveryReason(forward, target PackageRollbackPoint) s
 		}
 	}
 	return ""
+}
+
+type packageMigrationStateDiff struct {
+	OperationsToRollback []packageMigrationOperationSnapshot `json:"operationsToRollback"`
+	NewOperations        []packageMigrationOperationSnapshot `json:"newOperations"`
+	RequiresManual       bool                                `json:"requiresManual"`
+	ManualReason         string                              `json:"manualReason,omitempty"`
+}
+
+func diffPackageMigrationStates(forward, target PackageRollbackPoint) packageMigrationStateDiff {
+	var diff packageMigrationStateDiff
+	var forwardState packageMigrationStateSnapshot
+	var targetState packageMigrationStateSnapshot
+	if json.Unmarshal([]byte(forward.MigrationStateSnapshotJSON), &forwardState) != nil {
+		diff.RequiresManual = true
+		diff.ManualReason = "forward migration snapshot corrupt"
+		return diff
+	}
+	if json.Unmarshal([]byte(target.MigrationStateSnapshotJSON), &targetState) != nil {
+		diff.RequiresManual = true
+		diff.ManualReason = "target migration snapshot corrupt"
+		return diff
+	}
+	targetOperations := make(map[string]packageMigrationOperationSnapshot, len(targetState.Operations))
+	for _, entry := range targetState.Operations {
+		targetOperations[entry.Operation.OperationID] = entry
+	}
+	for _, entry := range forwardState.Operations {
+		if _, exists := targetOperations[entry.Operation.OperationID]; exists {
+			continue
+		}
+		diff.NewOperations = append(diff.NewOperations, entry)
+		if entry.Operation.Status == migration.OperationStatusCompleted {
+			diff.OperationsToRollback = append(diff.OperationsToRollback, entry)
+			if entry.Operation.Reversibility == migration.ReversibilityIrreversible {
+				diff.RequiresManual = true
+				if diff.ManualReason != "" {
+					diff.ManualReason += "; "
+				}
+				diff.ManualReason += "completed irreversible migration " + entry.Operation.OperationID
+			}
+		}
+	}
+	return diff
 }
 
 func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensionID domain.ExtensionID, point PackageRollbackPoint, installation *domain.ExtensionInstallation) error {

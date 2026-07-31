@@ -19,8 +19,11 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/generation"
+	"github.com/u-ai/backend/internal/desktoppet/generation/activebinding"
+	"github.com/u-ai/backend/internal/desktoppet/generation/commit"
 	"github.com/u-ai/backend/internal/desktoppet/generationlayout"
 	"github.com/u-ai/backend/internal/desktoppet/generationprompt"
+	"github.com/u-ai/backend/internal/desktoppet/referenceasset"
 	"github.com/u-ai/backend/internal/desktoppet/specs"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/internal/imageprovider"
@@ -48,6 +51,12 @@ type Worker struct {
 	artifactRepo      generation.ArtifactRepository
 	attemptFactory    *generation.AttemptFactory
 	artifactPersister *generation.ArtifactPersister
+	artifactCommitter *commit.ArtifactCommitter
+	refAssetRepo      referenceasset.Repository
+	receiptRepo       generation.ReceiptRepository
+	finalizer         *generation.GenerationFinalizer
+	bindingService    *activebinding.BindingService
+	recoveryWorker    *generation.RecoveryWorker
 	genExecutor       *GenerationExecutor
 	legacyExecutor    *LegacyFrameExecutor
 	stopCh            chan struct{}
@@ -61,6 +70,25 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 	artifactRepo := generation.NewArtifactRepository(db)
 	attemptFactory := generation.NewAttemptFactory(attemptRepo)
 	artifactPersister := generation.NewArtifactPersister(artifactRepo)
+
+	journalRepo := commit.NewJournalRepository(db)
+	artifactCommitter := commit.NewArtifactCommitter(journalRepo, artifactRepo)
+	commitFunc := makeCommitFunc(artifactCommitter)
+	artifactPersister = artifactPersister.WithCommitFunc(commitFunc)
+
+	refAssetRepo := referenceasset.NewRepository(db)
+	receiptRepo := generation.NewReceiptRepository(db)
+
+	activeBindingRepo := activebinding.NewRepository(db)
+	bindingService := activebinding.NewBindingService(activeBindingRepo)
+	finalizerRepo := NewActiveBindingFinalizerAdapter(activeBindingRepo)
+	finalizer := generation.NewGenerationFinalizer(attemptRepo, artifactRepo, finalizerRepo)
+
+	recoveryWorker := generation.NewRecoveryWorker(
+		db, attemptRepo, artifactRepo, receiptRepo,
+		generation.DefaultRecoveryWorkerConfig(),
+	)
+
 	w := &Worker{
 		db:                db,
 		repo:              repo,
@@ -72,22 +100,33 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 		artifactRepo:      artifactRepo,
 		attemptFactory:    attemptFactory,
 		artifactPersister: artifactPersister,
+		artifactCommitter: artifactCommitter,
+		refAssetRepo:      refAssetRepo,
+		receiptRepo:       receiptRepo,
+		finalizer:         finalizer,
+		bindingService:    bindingService,
+		recoveryWorker:    recoveryWorker,
 		stopCh:            make(chan struct{}),
 		sem:               make(chan struct{}, maxConcurrentTasks),
 	}
-	w.genExecutor = NewGenerationExecutor(db, repo, registry, attemptFactory, artifactPersister, w.downloader)
+	w.genExecutor = NewGenerationExecutor(
+		db, repo, registry, attemptFactory, artifactPersister, artifactCommitter,
+		w.downloader, refAssetRepo, receiptRepo, finalizer, bindingService,
+	)
 	w.legacyExecutor = NewLegacyFrameExecutor(w)
 	return w
 }
 
 func (w *Worker) Start(ctx context.Context) {
 	w.RecoverOnStartup(ctx)
+	go w.recoveryWorker.Start(ctx)
 	w.wg.Add(1)
 	go w.pollLoop(ctx)
 }
 
 func (w *Worker) Stop() {
 	close(w.stopCh)
+	w.recoveryWorker.Stop()
 	w.wg.Wait()
 }
 

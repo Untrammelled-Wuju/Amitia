@@ -14,6 +14,18 @@ export type InstallationStatus =
   | "uninstalled"
   | string;
 
+export type InstallationRuntimeStatus =
+  | "installed"
+  | "pending_runtime"
+  | "enabled"
+  | "running"
+  | "offline"
+  | "corrupted"
+  | "recovery_required"
+  | string;
+
+export type RuntimeStateSnapshot = Record<string, any>;
+
 export interface DesktopPetInstallation {
   id: string;
   userId?: string;
@@ -35,6 +47,16 @@ export interface DesktopPetInstallation {
   lastDisabledAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  deviceId?: string;
+  currentReleaseId?: string;
+  lifecycleState?: string;
+  integrityStatus?: string;
+  legacyPackageId?: string;
+  previewArtifactPath?: string;
+  defaultActionReleaseId?: string;
+  installedContentHash?: string;
+  runtimeSyncState?: string;
+  stateRevision?: number;
 }
 
 export interface RuntimeSettings {
@@ -211,7 +233,7 @@ export function useDesktopPetInstallations() {
   ): Promise<void> {
     submitting.value = true;
     try {
-      await apiClient.patch(
+      await post(
         buildInstallationsUrl(installationId, "/default-action"),
         { action_key: actionKey },
       );
@@ -256,10 +278,8 @@ export function useDesktopPetInstallations() {
     submitting.value = true;
     try {
       await post(
-        buildInstallationsUrl(
-          installationId,
-          `/actions/${encodeURIComponent(actionKey)}/play`,
-        ),
+        buildInstallationsUrl(installationId, "/play-action"),
+        { actionKey },
       );
       ElMessage.success("动作已触发");
     } finally {
@@ -274,6 +294,65 @@ export function useDesktopPetInstallations() {
       ElMessage.success("桌宠已卸载");
     } finally {
       submitting.value = false;
+    }
+  }
+
+  async function upgrade(
+    installationId: string,
+    targetReleaseId: string,
+  ): Promise<void> {
+    submitting.value = true;
+    try {
+      await post(buildInstallationsUrl(installationId, "/upgrade"), {
+        targetReleaseId,
+      });
+      ElMessage.success("升级请求已提交");
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  async function switchInstallation(
+    installationId: string,
+  ): Promise<void> {
+    submitting.value = true;
+    try {
+      await post(buildInstallationsUrl(installationId, "/switch"));
+      ElMessage.success("切换请求已提交");
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  async function repair(installationId: string): Promise<void> {
+    submitting.value = true;
+    try {
+      await post(buildInstallationsUrl(installationId, "/repair"));
+      ElMessage.success("修复请求已提交");
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  async function getDesiredState(): Promise<RuntimeStateSnapshot> {
+    loading.value = true;
+    try {
+      return await get<RuntimeStateSnapshot>(
+        "/api/desktop-pets/runtime/desired-state",
+      );
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function getActualState(): Promise<RuntimeStateSnapshot> {
+    loading.value = true;
+    try {
+      return await get<RuntimeStateSnapshot>(
+        "/api/desktop-pets/runtime/actual-state",
+      );
+    } finally {
+      loading.value = false;
     }
   }
 
@@ -297,6 +376,11 @@ export function useDesktopPetInstallations() {
     recenter,
     playAction,
     uninstall,
+    upgrade,
+    switchInstallation,
+    repair,
+    getDesiredState,
+    getActualState,
     refresh,
   };
 }

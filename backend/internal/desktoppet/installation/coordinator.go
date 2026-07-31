@@ -26,6 +26,7 @@ type Coordinator struct {
 	storage   *ReleaseStorage
 	validator *packageformat.Validator
 	notifier  RuntimeNotifier
+	dataDir   string
 }
 
 func NewCoordinator(repo Repository, storage *ReleaseStorage, notifier RuntimeNotifier) *Coordinator {
@@ -35,6 +36,11 @@ func NewCoordinator(repo Repository, storage *ReleaseStorage, notifier RuntimeNo
 		validator: packageformat.NewValidator(),
 		notifier:  notifier,
 	}
+}
+
+func (c *Coordinator) WithDataDir(dataDir string) *Coordinator {
+	c.dataDir = dataDir
+	return c
 }
 
 func (c *Coordinator) Install(userID, petID, releaseID, characterID, idempotencyKey string) (*Installation, error) {

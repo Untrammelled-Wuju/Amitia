@@ -20,6 +20,10 @@ type ProcessingRevision struct {
 	CreatedAt          string `gorm:"column:created_at" json:"createdAt"`
 	PublishedAt        string `gorm:"column:published_at" json:"publishedAt"`
 	UpdatedAt          string `gorm:"column:updated_at" json:"updatedAt"`
+	ContentRootHash    string `gorm:"column:content_root_hash;default:''" json:"contentRootHash"`
+	ActivatedAt        string `gorm:"column:activated_at;default:''" json:"activatedAt"`
+	SourceManifestID   string `gorm:"column:source_manifest_id;default:''" json:"sourceManifestId"`
+	CommitID           string `gorm:"column:commit_id;default:''" json:"commitId"`
 }
 
 func (ProcessingRevision) TableName() string { return "desktop_pet_processing_revisions" }

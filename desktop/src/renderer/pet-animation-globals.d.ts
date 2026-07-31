@@ -15,6 +15,9 @@ export interface PetAnimationApi {
   sendClick(x: number, y: number): void;
   sendDoubleClick(x: number, y: number): void;
   sendHover(x: number, y: number): void;
+  sendRendererReady(): void;
+  sendRendererReadyAck(payload: { snapshotApplied: boolean }): void;
+  reportHitMask(width: number, height: number, data: Uint8Array, threshold: number): void;
   onPlayAction(callback: (command: PlayActionCommand) => void): () => void;
   onPause(callback: () => void): () => void;
   onResume(callback: () => void): () => void;
@@ -32,7 +35,6 @@ declare global {
   interface Window {
     petAnimationApi?: PetAnimationApi;
     petApi?: {
-      onFrameUpdate(callback: (payload: unknown) => void): () => void;
       onActionSwitch(callback: (payload: unknown) => void): () => void;
       onLoadError(callback: (payload: unknown) => void): () => void;
       onState(callback: (payload: unknown) => void): () => void;
