@@ -106,6 +106,8 @@ type QualityActionInput struct {
 	ExpectedFrameCount   int
 	Frames               []QualityFrameInput
 	InputSource          string
+	InputSnapshotID      string
+	InputSnapshot        *EvaluationInputSnapshot
 }
 
 type QualityFrameInput struct {
@@ -166,6 +168,7 @@ type FrameMeasurementResult struct {
 	MimeType              string
 	PixelHash             string
 	FileSize              int64
+	FileHash              string
 }
 
 type QualityCommitter interface {

@@ -374,6 +374,8 @@ func parseCreateStatement(s *sqlTokenStream, raw string) (*SQLStatement, error) 
 			}
 			s.next()
 		}
+		bodyRefs := extractTableRefsFromStream(s)
+		refs = append(refs, bodyRefs...)
 		return &SQLStatement{Raw: raw, Type: SQLTypeCreateTrigger, Objects: refs}, nil
 	case "INDEX":
 		s.next()
@@ -535,9 +537,52 @@ func parseSelectStatement(s *sqlTokenStream, raw string) (*SQLStatement, error) 
 	return &SQLStatement{Raw: raw, Type: SQLTypeSelect, Objects: refs}, nil
 }
 
+func collectCTENames(s *sqlTokenStream) map[string]bool {
+	cteNames := map[string]bool{}
+	tokens := s.tokens
+	for i := s.pos; i < len(tokens); i++ {
+		if tokens[i].kind != tokWord {
+			continue
+		}
+		if strings.ToUpper(tokens[i].value) != "WITH" {
+			continue
+		}
+		j := i + 1
+		for j < len(tokens) {
+			if tokens[j].kind == tokWord && strings.ToUpper(tokens[j].value) == "AS" {
+				if j > 0 && tokens[j-1].kind == tokWord {
+					cteNames[strings.ToLower(tokens[j-1].value)] = true
+				}
+				j++
+				if j < len(tokens) && tokens[j].kind == tokPunct && tokens[j].value == "(" {
+					depth := 1
+					j++
+					for j < len(tokens) && depth > 0 {
+						if tokens[j].kind == tokPunct && tokens[j].value == "(" {
+							depth++
+						} else if tokens[j].kind == tokPunct && tokens[j].value == ")" {
+							depth--
+						}
+						j++
+					}
+				}
+				if j < len(tokens) && tokens[j].kind == tokPunct && tokens[j].value == "," {
+					j++
+					continue
+				}
+				break
+			}
+			j++
+		}
+		break
+	}
+	return cteNames
+}
+
 func extractTableRefsFromStream(s *sqlTokenStream) []SQLObjectRef {
 	var refs []SQLObjectRef
 	seen := map[string]bool{}
+	cteNames := collectCTENames(s)
 	addRef := func(name string) {
 		if name == "" {
 			return
@@ -546,31 +591,26 @@ func extractTableRefsFromStream(s *sqlTokenStream) []SQLObjectRef {
 		if isReservedWord(key) {
 			return
 		}
+		if cteNames[key] {
+			return
+		}
 		if !seen[key] {
 			seen[key] = true
 			refs = append(refs, SQLObjectRef{Name: name, Kind: "table"})
 		}
 	}
-	parenDepth := 0
 	for {
 		tok := s.peek()
 		if tok.kind == tokEOF {
 			break
 		}
 		if tok.kind == tokPunct {
-			if tok.value == "(" {
-				parenDepth++
-			} else if tok.value == ")" {
-				if parenDepth > 0 {
-					parenDepth--
-				}
-			}
 			s.next()
 			continue
 		}
-		if tok.kind == tokWord && parenDepth == 0 {
+		if tok.kind == tokWord {
 			w := strings.ToUpper(tok.value)
-			if w == "FROM" || w == "JOIN" {
+			if w == "FROM" || w == "JOIN" || w == "INTO" {
 				s.next()
 				name, ok := s.readObjectName()
 				if ok {
@@ -578,8 +618,25 @@ func extractTableRefsFromStream(s *sqlTokenStream) []SQLObjectRef {
 				}
 				continue
 			}
-			if w == "INTO" {
+			if w == "USING" {
 				s.next()
+				nextTok := s.peek()
+				if nextTok.kind == tokPunct && nextTok.value == "(" {
+					s.next()
+					continue
+				}
+				name, ok := s.readObjectName()
+				if ok {
+					addRef(name)
+				}
+				continue
+			}
+			if w == "UPDATE" {
+				s.next()
+				if s.peekWord() == "OR" {
+					s.next()
+					s.next()
+				}
 				name, ok := s.readObjectName()
 				if ok {
 					addRef(name)

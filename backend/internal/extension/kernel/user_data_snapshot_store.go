@@ -126,6 +126,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return err
 	}
 	cursor := int(journal.ImportedRows)
+	allRecords := records
 	if cursor > 0 && cursor < len(records) {
 		records = records[cursor:]
 	}
@@ -135,7 +136,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return err
 	}
 	totalImported := int64(cursor) + int64(imported)
-	if err := s.deleteDifferingRows(ctx, table, records); err != nil {
+	if err := s.deleteDifferingRows(ctx, table, allRecords); err != nil {
 		_ = s.updateRestoreJournalProgress(ctx, journal, totalImported)
 		_ = s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error())
 		return err

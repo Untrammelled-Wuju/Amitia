@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -209,10 +210,24 @@ func (r *PackageRepository) ReleaseQuarantineMetadata(ctx context.Context, quara
 	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', released_at=? WHERE quarantine_id=? AND state IN ('active', 'finalized')`,
+	result, err := tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', released_at=? WHERE quarantine_id=? AND state IN ('active', 'finalized', 'restored')`,
 		time.Now().UTC().Format(time.RFC3339Nano), quarantineID)
 	if err != nil {
 		return storageOperationError("release quarantine metadata", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("release quarantine metadata rows affected", err)
+	}
+	if affected != 1 {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineReleaseFailed,
+			409,
+			false,
+			true,
+			"Reload quarantine metadata and retry recovery",
+			fmt.Errorf("quarantine release affected %d rows, expected 1", affected),
+		)
 	}
 	return tx.Commit()
 }

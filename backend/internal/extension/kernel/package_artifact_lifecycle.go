@@ -115,6 +115,15 @@ func acquireArtifactReferenceTx(ctx context.Context, tx *sql.Tx, artifactID, ref
 	return reference, nil
 }
 
+func (r *PackageRepository) HasArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) (bool, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_package_artifact_references WHERE artifact_id=? AND reference_type=? AND reference_owner_id=? AND released_at=''`, artifactID, referenceType, ownerID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *PackageRepository) ReleaseArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

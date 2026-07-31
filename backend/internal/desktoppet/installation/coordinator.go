@@ -51,7 +51,7 @@ func (c *Coordinator) Install(userID, petID, releaseID, characterID, idempotency
 		idempotencyKey = uuid.New().String()
 	}
 
-	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, InstOpTypeInstall)
+	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, "", idempotencyKey, InstOpTypeInstall)
 	if err == nil && existingOp != nil {
 		if existingOp.Status == OpStatusCompleted {
 			inst, gerr := c.repo.GetInstallation(existingOp.InstallationID)
@@ -201,7 +201,7 @@ func (c *Coordinator) Upgrade(userID, installationID, targetReleaseID, idempoten
 		idempotencyKey = uuid.New().String()
 	}
 
-	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, InstOpTypeUpgrade)
+	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, "", idempotencyKey, InstOpTypeUpgrade)
 	if err == nil && existingOp != nil {
 		if existingOp.Status == OpStatusCompleted {
 			inst, gerr := c.repo.GetInstallation(existingOp.InstallationID)
@@ -321,7 +321,7 @@ func (c *Coordinator) Uninstall(userID, installationID, idempotencyKey string) e
 		idempotencyKey = uuid.New().String()
 	}
 
-	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, InstOpTypeUninstall)
+	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, "", idempotencyKey, InstOpTypeUninstall)
 	if err == nil && existingOp != nil {
 		if existingOp.Status == OpStatusCompleted {
 			return nil
@@ -402,7 +402,7 @@ func (c *Coordinator) Switch(userID, installationID, idempotencyKey string) erro
 		idempotencyKey = uuid.New().String()
 	}
 
-	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, InstOpTypeSwitch)
+	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, "", idempotencyKey, InstOpTypeSwitch)
 	if err == nil && existingOp != nil {
 		if existingOp.Status == OpStatusCompleted {
 			return nil
@@ -495,7 +495,7 @@ func (c *Coordinator) Repair(userID, installationID, idempotencyKey string) erro
 		idempotencyKey = uuid.New().String()
 	}
 
-	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, InstOpTypeRepair)
+	existingOp, err := c.repo.GetInstallationOperationByIdempotencyKey(userID, "", idempotencyKey, InstOpTypeRepair)
 	if err == nil && existingOp != nil {
 		if existingOp.Status == OpStatusCompleted {
 			return nil

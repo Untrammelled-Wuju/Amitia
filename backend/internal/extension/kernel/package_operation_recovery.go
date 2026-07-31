@@ -34,7 +34,13 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 
 func (r *Runtime) finalizePackageOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard, completionNote string) error {
 	if err := r.runPackageFinalGate(ctx, operation.OperationID, guard); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+		setErr := r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+		if setErr != nil {
+			setErr = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, PackageWriteGuard{})
+		}
+		if setErr != nil {
+			return errors.Join(err, fmt.Errorf("persist recovery state after final gate failure: %w", setErr))
+		}
 		return err
 	}
 	return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, StatusCompleted, completionNote, "", "", true, guard)
@@ -49,7 +55,19 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 	leaseGuard := r.newPackageLeaseGuard(operation.ExtensionID, operation.OperationID)
 	sagaCtx, startErr := leaseGuard.Start(ctx)
 	if startErr != nil {
-		_ = r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID)
+		releaseErr := r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID)
+		if releaseErr != nil {
+			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
+				FindingID:         "stale-lease-" + operation.OperationID,
+				Metric:            "stale_extension_leases",
+				Count:             1,
+				ResourceIDsJSON:   fmt.Sprintf(`["%s"]`, operation.OperationID),
+				ErrorDetail:       releaseErr.Error(),
+				RecommendedAction: "manual_lease_cleanup",
+			}); putErr != nil {
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operation.OperationID, errors.Join(releaseErr, putErr))
+			}
+		}
 		return r.requirePackageRecovery(ctx, operation, "recovery lease guard start failed", startErr, guard)
 	}
 	defer func() {
@@ -254,55 +272,186 @@ func (r *Runtime) reconcileUninstallArtifactPath(ctx context.Context, operation 
 
 func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
 	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-	hasQuarantineMetadata := qmErr == nil
+	if qmErr != nil {
+		kind := RepositoryErrorKindOf(qmErr)
+		switch kind {
+		case RepositoryErrorNotFound:
+			return NewPackageErrorWithRecovery(
+				PackageErrCodeQuarantineMetadataMissing,
+				409,
+				false,
+				true,
+				"Run manual recovery inspection",
+				qmErr,
+			)
+		case RepositoryErrorUnavailable:
+			return NewPackageErrorWithRecovery(
+				PackageErrCodeQuarantineMetadataUnavailable,
+				503,
+				true,
+				true,
+				"Retry operation recovery",
+				qmErr,
+			)
+		case RepositoryErrorCorrupt:
+			return NewPackageErrorWithRecovery(
+				PackageErrCodeQuarantineMetadataIncomplete,
+				409,
+				false,
+				true,
+				"Inspect persisted quarantine metadata",
+				qmErr,
+			)
+		default:
+			return qmErr
+		}
+	}
+	if err := validateQuarantineMetadataIntegrity(qm, operation, r.container.ExtRoot); err != nil {
+		return err
+	}
 	if operation.ArtifactID != "" {
 		artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
 		if err != nil {
 			if !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
 				return fmt.Errorf("kernel: artifact unavailable for compensated recovery: %w", err)
 			}
-		} else if artifact.InstalledPath == "" && hasQuarantineMetadata && qm.OriginalGenerationPath != "" {
+		} else if artifact.InstalledPath == "" && qm.OriginalGenerationPath != "" {
 			if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, operation.ArtifactID, qm.OriginalGenerationPath, guard); err != nil {
 				return fmt.Errorf("kernel: restore artifact installed path failed: %w", err)
 			}
-		} else if artifact.InstalledPath != "" && hasQuarantineMetadata && qm.OriginalGenerationPath != "" && artifact.InstalledPath != qm.OriginalGenerationPath {
+		} else if artifact.InstalledPath != "" && qm.OriginalGenerationPath != "" && artifact.InstalledPath != qm.OriginalGenerationPath {
 			return fmt.Errorf("kernel: artifact installed path conflict: current=%s expected=%s", artifact.InstalledPath, qm.OriginalGenerationPath)
 		}
-		if hasQuarantineMetadata || operation.ArtifactID != "" {
-			if _, refErr := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); refErr != nil {
-				return fmt.Errorf("kernel: restore artifact installation reference failed: %w", refErr)
-			}
+		if _, refErr := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); refErr != nil {
+			return fmt.Errorf("kernel: restore artifact installation reference failed: %w", refErr)
 		}
 	}
 	if operation.TargetVersion != "" && operation.ExtensionID != "" {
 		versionRecord, vErr := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
-		if vErr == nil && (versionRecord.VersionState == string(PackageVersionStateRetained) || versionRecord.VersionState == string(PackageVersionStateRemoved)) {
-			db := r.container.PackageRepository.DB()
-			if db == nil {
-				return errors.New("kernel: package version database unavailable for compensated recovery")
-			}
-			tx, txErr := db.BeginTx(ctx, nil)
-			if txErr != nil {
-				return fmt.Errorf("kernel: begin version state restore transaction: %w", txErr)
-			}
-			defer tx.Rollback()
-			if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state=?, retained_until='', uninstalled_at='', uninstall_operation_id='' WHERE version_id=?`,
-				string(PackageVersionStateCurrent), versionRecord.VersionID); err != nil {
-				return fmt.Errorf("kernel: restore version state failed: %w", err)
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id=?, current_generation_id=? WHERE extension_id=?`,
-				versionRecord.VersionID, versionRecord.GenerationID, operation.ExtensionID); err != nil {
-				return fmt.Errorf("kernel: restore installation current version failed: %w", err)
-			}
-			if err := tx.Commit(); err != nil {
-				return fmt.Errorf("kernel: commit version state restore: %w", err)
+		if vErr == nil {
+			if versionRecord.VersionState == string(PackageVersionStateRetained) || versionRecord.VersionState == string(PackageVersionStateRemoved) {
+				db := r.container.PackageRepository.DB()
+				if db == nil {
+					return errors.New("kernel: package version database unavailable for compensated recovery")
+				}
+				tx, txErr := db.BeginTx(ctx, nil)
+				if txErr != nil {
+					return fmt.Errorf("kernel: begin version state restore transaction: %w", txErr)
+				}
+				defer tx.Rollback()
+				if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state=?, retained_until='', uninstalled_at='', uninstall_operation_id='' WHERE version_id=?`,
+					string(PackageVersionStateCurrent), versionRecord.VersionID); err != nil {
+					return fmt.Errorf("kernel: restore version state failed: %w", err)
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id=?, current_generation_id=? WHERE extension_id=?`,
+					versionRecord.VersionID, versionRecord.GenerationID, operation.ExtensionID); err != nil {
+					return fmt.Errorf("kernel: restore installation current version failed: %w", err)
+				}
+				if err := tx.Commit(); err != nil {
+					return fmt.Errorf("kernel: commit version state restore: %w", err)
+				}
+			} else if versionRecord.VersionState == string(PackageVersionStateCurrent) {
+				if versionRecord.ArtifactID != operation.ArtifactID {
+					return NewPackageErrorWithRecovery(
+						PackageErrCodeQuarantineMetadataIncomplete,
+						409,
+						false,
+						true,
+						"Version state conflict: current version artifact mismatch",
+						fmt.Errorf("kernel: version state conflict: current version artifact %s != operation artifact %s", versionRecord.ArtifactID, operation.ArtifactID),
+					)
+				}
 			}
 		}
 	}
-	if hasQuarantineMetadata {
-		qm.State = "restored"
-		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, qm, guard); err != nil {
-			return fmt.Errorf("kernel: persist quarantine restored state failed: %w", err)
+	qm.State = "restored"
+	if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, qm, guard); err != nil {
+		return fmt.Errorf("kernel: persist quarantine restored state failed: %w", err)
+	}
+	return nil
+}
+
+func validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord, extRoot string) error {
+	var missing []string
+	if qm.QuarantineID == "" {
+		missing = append(missing, "QuarantineID")
+	}
+	if qm.OperationID == "" {
+		missing = append(missing, "OperationID")
+	}
+	if qm.ExtensionID == "" {
+		missing = append(missing, "ExtensionID")
+	}
+	if qm.TreeHash == "" {
+		missing = append(missing, "TreeHash")
+	}
+	if qm.State == "" {
+		missing = append(missing, "State")
+	}
+	if len(missing) > 0 {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineMetadataIncomplete,
+			409,
+			false,
+			true,
+			"Inspect persisted quarantine metadata",
+			fmt.Errorf("quarantine metadata missing fields: %s", strings.Join(missing, ", ")),
+		)
+	}
+	if qm.OperationID != operation.OperationID {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineMetadataIncomplete,
+			409,
+			false,
+			true,
+			"Inspect persisted quarantine metadata",
+			fmt.Errorf("quarantine metadata operation id mismatch: %s != %s", qm.OperationID, operation.OperationID),
+		)
+	}
+	if qm.ExtensionID != operation.ExtensionID {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineMetadataIncomplete,
+			409,
+			false,
+			true,
+			"Inspect persisted quarantine metadata",
+			fmt.Errorf("quarantine metadata extension id mismatch: %s != %s", qm.ExtensionID, operation.ExtensionID),
+		)
+	}
+	validStates := map[string]bool{"active": true, "finalized": true, "restored": true}
+	if !validStates[qm.State] {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineMetadataIncomplete,
+			409,
+			false,
+			true,
+			"Inspect persisted quarantine metadata",
+			fmt.Errorf("quarantine metadata state invalid for compensation: %s", qm.State),
+		)
+	}
+	if extRoot != "" {
+		paths := map[string]string{
+			"GenerationQuarantinePath": qm.GenerationQuarantinePath,
+			"CurrentQuarantinePath":    qm.CurrentQuarantinePath,
+			"OriginalGenerationPath":   qm.OriginalGenerationPath,
+			"OriginalCurrentPath":      qm.OriginalCurrentPath,
+		}
+		absExtRoot, _ := filepath.Abs(extRoot)
+		for name, p := range paths {
+			if p == "" {
+				continue
+			}
+			absPath, _ := filepath.Abs(p)
+			if !strings.HasPrefix(absPath, absExtRoot+string(filepath.Separator)) && absPath != absExtRoot {
+				return NewPackageErrorWithRecovery(
+					PackageErrCodeQuarantineMetadataIncomplete,
+					409,
+					false,
+					true,
+					"Inspect persisted quarantine metadata",
+					fmt.Errorf("quarantine metadata %s escapes package generation root: %s", name, p),
+				)
+			}
 		}
 	}
 	return nil
@@ -325,12 +474,31 @@ func (r *Runtime) reconcileUninstallCompletedState(ctx context.Context, operatio
 		}
 	}
 	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-	if qmErr == nil && qm.QuarantineID != "" {
+	if qmErr != nil {
+		kind := RepositoryErrorKindOf(qmErr)
+		if kind != RepositoryErrorNotFound {
+			return NewPackageErrorWithRecovery(
+				PackageErrCodeQuarantineMetadataUnavailable,
+				503,
+				true,
+				true,
+				"Retry quarantine metadata release",
+				qmErr,
+			)
+		}
+	} else if qm.QuarantineID != "" {
 		if err := r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, qm.QuarantineID, guard); err != nil {
 			return fmt.Errorf("kernel: release quarantine metadata failed: %w", err)
 		}
-	} else if qmErr != nil && !IsPackageOperationError(qmErr, OperationErrNotFound) {
-		return fmt.Errorf("kernel: quarantine metadata unavailable for release: %w", qmErr)
+	} else {
+		return NewPackageErrorWithRecovery(
+			PackageErrCodeQuarantineMetadataIncomplete,
+			409,
+			false,
+			true,
+			"Inspect persisted quarantine metadata",
+			fmt.Errorf("quarantine metadata missing quarantine id"),
+		)
 	}
 	return nil
 }

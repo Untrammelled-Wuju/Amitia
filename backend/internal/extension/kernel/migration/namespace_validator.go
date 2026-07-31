@@ -1,9 +1,12 @@
 package migration
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+var ErrNamespaceViolation = errors.New("PACKAGE_MIGRATION_NAMESPACE_VIOLATION")
 
 var hostTables = map[string]bool{
 	"users":                              true,
@@ -119,28 +122,28 @@ func checkForbiddenCommands(raw string) error {
 
 func ValidateStatement(stmt *SQLStatement, extensionID string) error {
 	if stmt == nil {
-		return fmt.Errorf("kernel: migration sql statement is nil")
+		return fmt.Errorf("%w: migration sql statement is nil", ErrNamespaceViolation)
 	}
 	if err := checkForbiddenCommands(stmt.Raw); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrNamespaceViolation, err)
 	}
 	if stmt.Type == SQLTypeOther {
-		return fmt.Errorf("kernel: migration sql statement type is unparseable, rejecting for safety: %s", stmt.Raw)
+		return fmt.Errorf("%w: migration sql statement type is unparseable, rejecting for safety: %s", ErrNamespaceViolation, stmt.Raw)
 	}
 	prefix := ExtensionNamespacePrefix(extensionID)
 	for _, obj := range stmt.Objects {
 		lower := strings.ToLower(obj.Name)
 		if IsSystemTable(lower) {
-			return fmt.Errorf("kernel: migration sql references system table %q", obj.Name)
+			return fmt.Errorf("%w: migration sql references system table %q", ErrNamespaceViolation, obj.Name)
 		}
 		if IsHostTable(lower) {
-			return fmt.Errorf("kernel: migration sql references host table %q", obj.Name)
+			return fmt.Errorf("%w: migration sql references host table %q", ErrNamespaceViolation, obj.Name)
 		}
 		if !strings.HasPrefix(lower, "ext_") {
-			return fmt.Errorf("kernel: migration sql object %q must use ext_ prefix", obj.Name)
+			return fmt.Errorf("%w: migration sql object %q must use ext_ prefix", ErrNamespaceViolation, obj.Name)
 		}
 		if !strings.HasPrefix(lower, prefix) {
-			return fmt.Errorf("kernel: migration sql object %q does not belong to namespace %q", obj.Name, prefix)
+			return fmt.Errorf("%w: migration sql object %q does not belong to namespace %q", ErrNamespaceViolation, obj.Name, prefix)
 		}
 	}
 	return nil
@@ -149,7 +152,7 @@ func ValidateStatement(stmt *SQLStatement, extensionID string) error {
 func ValidateRawStatements(sqlContent string, extensionID string) ([]*SQLStatement, error) {
 	stmts := splitSQLStatements(sqlContent)
 	if len(stmts) == 0 {
-		return nil, fmt.Errorf("kernel: migration sql has no executable statements")
+		return nil, fmt.Errorf("%w: migration sql has no executable statements", ErrSQLUnparseable)
 	}
 	var result []*SQLStatement
 	for _, raw := range stmts {

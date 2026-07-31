@@ -57,13 +57,15 @@ type Repository interface {
 
 	CreateInstallationOperation(op *InstallationOperation) error
 	GetInstallationOperation(id string) (*InstallationOperation, error)
-	GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, opType string) (*InstallationOperation, error)
+	GetInstallationOperationByIdempotencyKey(userID, deviceID, idempotencyKey, opType string) (*InstallationOperation, error)
 	ListPendingInstallationOperations() ([]*InstallationOperation, error)
 	UpdateInstallationOperation(op *InstallationOperation) error
 
 	GetActiveBinding(userID string) (*ActiveBinding, error)
+	GetActiveBindingForUserDevice(userID, deviceID string) (*ActiveBinding, error)
 	UpsertActiveBinding(binding *ActiveBinding) error
 	DeleteActiveBinding(userID string) error
+	UpsertActiveBindingForUserDevice(binding *ActiveBinding) error
 	UpdateActiveBindingSyncState(userID, syncState string, bindingRevision int) error
 
 	CreateReleaseHistory(history *InstallationReleaseHistory) error
@@ -93,6 +95,14 @@ type Repository interface {
 
 	GetActiveBindingByUserDevice(userID, deviceID string) (*ActiveBinding, error)
 	UpsertActiveBindingByUserDevice(binding *ActiveBinding) error
+	GetRuntimeDesiredStateByUserDevice(userID, deviceID string) (*RuntimeDesiredState, error)
+	UpsertRuntimeDesiredStateWithCAS(state *RuntimeDesiredState) error
+	AllocateDeviceDesiredRevision(userID, deviceID string) (int64, error)
+	CASUpdateCommitJournal(operationID string, expectedState string, executionID string) (*InstallationCommitJournal, error)
+	CASUpdateSwitchJournal(operationID string, expectedState string) (*InstallationSwitchJournal, error)
+	ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error)
+	CreateInstallationWithDevice(installation *Installation) error
+	GetInstallationForUserDevice(userID, deviceID, petID string) (*Installation, error)
 
 	Transaction(fn func(tx *gorm.DB) error) error
 }
@@ -112,7 +122,7 @@ func (r *repository) CreateInstallation(installation *Installation) error {
 	var existing Installation
 	err := r.db.Where("package_id = ? AND package_version = ?", installation.PackageID, installation.PackageVersion).
 		First(&existing).Error
-	if err == nil {
+	if err == nil && existing.ID != installation.ID {
 		return ErrInstallationDuplicate
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -479,4 +489,124 @@ func (r *repository) UpsertActiveBindingByUserDevice(binding *ActiveBinding) err
 		return r.db.Create(binding).Error
 	}
 	return err
+}
+
+func (r *repository) GetActiveBindingForUserDevice(userID, deviceID string) (*ActiveBinding, error) {
+	return r.GetActiveBindingByUserDevice(userID, deviceID)
+}
+
+func (r *repository) UpsertActiveBindingForUserDevice(binding *ActiveBinding) error {
+	return r.UpsertActiveBindingByUserDevice(binding)
+}
+
+func (r *repository) GetRuntimeDesiredStateByUserDevice(userID, deviceID string) (*RuntimeDesiredState, error) {
+	var state RuntimeDesiredState
+	query := r.db.Where("user_id = ?", userID)
+	if deviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	}
+	err := query.First(&state).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+	return &state, nil
+}
+
+func (r *repository) UpsertRuntimeDesiredStateWithCAS(state *RuntimeDesiredState) error {
+	now := time.Now().Format(installationTimeFormat)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var existing RuntimeDesiredState
+		query := tx.Where("user_id = ?", state.UserID)
+		if state.DeviceID != "" {
+			query = query.Where("device_id = ? OR device_id = ''", state.DeviceID)
+		}
+		if err := query.First(&existing).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				state.Revision = 1
+				state.UpdatedAt = now
+				if state.CreatedAt == "" {
+					state.CreatedAt = now
+				}
+				return tx.Create(state).Error
+			}
+			return err
+		}
+		if state.Revision != existing.Revision {
+			return ErrRevisionConflict
+		}
+		state.ID = existing.ID
+		state.CreatedAt = existing.CreatedAt
+		state.Revision = existing.Revision + 1
+		state.UpdatedAt = now
+		return tx.Save(state).Error
+	})
+}
+
+func (r *repository) CASUpdateCommitJournal(operationID string, expectedState string, executionID string) (*InstallationCommitJournal, error) {
+	var journal InstallationCommitJournal
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("operation_id = ?", operationID).First(&journal).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInstallationNotFound
+			}
+			return err
+		}
+		if journal.State != expectedState {
+			return ErrRevisionConflict
+		}
+		journal.UpdatedAt = time.Now().Format(installationTimeFormat)
+		return tx.Save(&journal).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &journal, nil
+}
+
+func (r *repository) CASUpdateSwitchJournal(operationID string, expectedState string) (*InstallationSwitchJournal, error) {
+	var journal InstallationSwitchJournal
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("operation_id = ?", operationID).First(&journal).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInstallationNotFound
+			}
+			return err
+		}
+		if journal.State != expectedState {
+			return ErrRevisionConflict
+		}
+		journal.UpdatedAt = time.Now().Format(installationTimeFormat)
+		return tx.Save(&journal).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &journal, nil
+}
+
+func (r *repository) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
+	return r.ListInstallationsByUserDevice(userID, deviceID)
+}
+
+func (r *repository) CreateInstallationWithDevice(installation *Installation) error {
+	var existing Installation
+	query := r.db.Where("user_id = ? AND pet_id = ?", installation.UserID, installation.PetID)
+	if installation.DeviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", installation.DeviceID)
+	}
+	err := query.First(&existing).Error
+	if err == nil && existing.ID != installation.ID {
+		return ErrInstallationDuplicate
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return r.db.Create(installation).Error
+}
+
+func (r *repository) GetInstallationForUserDevice(userID, deviceID, petID string) (*Installation, error) {
+	return r.GetInstallationByUserDevicePet(userID, deviceID, petID)
 }

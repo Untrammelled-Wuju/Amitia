@@ -135,6 +135,17 @@ func NewPackageError(code string, httpStatus int, cause error) *PackageError {
 	return &PackageError{Code: code, HTTPStatus: httpStatus, Cause: cause}
 }
 
+func NewPackageErrorWithRecovery(code string, httpStatus int, retryable, recoveryRequired bool, recommendedAction string, cause error) *PackageError {
+	return &PackageError{
+		Code:              code,
+		HTTPStatus:        httpStatus,
+		Retryable:         retryable,
+		RecoveryRequired:  recoveryRequired,
+		RecommendedAction: recommendedAction,
+		Cause:             cause,
+	}
+}
+
 var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeIdempotencyKeyRequired:          400,
 	PackageErrCodeIdempotencyKeyReused:            409,
@@ -264,6 +275,26 @@ func IsRepositoryErrorKind(err error, kind RepositoryErrorKind) bool {
 func IsRepositoryError(err error) bool {
 	var repoErr *RepositoryError
 	return errors.As(err, &repoErr)
+}
+
+func RepositoryErrorKindOf(err error) RepositoryErrorKind {
+	if err == nil {
+		return ""
+	}
+	var repoErr *RepositoryError
+	if errors.As(err, &repoErr) {
+		return repoErr.Kind
+	}
+	if IsPackageOperationError(err, OperationErrNotFound) {
+		return RepositoryErrorNotFound
+	}
+	if IsPackageOperationError(err, OperationErrStorageFailure) {
+		return RepositoryErrorUnavailable
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return RepositoryErrorNotFound
+	}
+	return RepositoryErrorUnavailable
 }
 
 func ClassifyRepositoryError(action string, err error) error {

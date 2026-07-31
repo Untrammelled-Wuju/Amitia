@@ -46,6 +46,21 @@ const (
 	StepRecordRestoreCompletion       = "record_restore_completion"
 )
 
+const (
+	StepUninstallRecoveryLoadQuarantineMetadata    = "uninstall_recovery.load_quarantine_metadata"
+	StepUninstallRecoveryVerifyQuarantineMetadata  = "uninstall_recovery.verify_quarantine_metadata"
+	StepUninstallRecoveryRestoreGeneration         = "uninstall_recovery.restore_generation"
+	StepUninstallRecoveryRestoreCurrent            = "uninstall_recovery.restore_current"
+	StepUninstallRecoveryRestoreInstallation       = "uninstall_recovery.restore_installation"
+	StepUninstallRecoveryRestoreVersionState       = "uninstall_recovery.restore_version_state"
+	StepUninstallRecoveryRestoreArtifactPath       = "uninstall_recovery.restore_artifact_path"
+	StepUninstallRecoveryRestoreArtifactReference  = "uninstall_recovery.restore_artifact_reference"
+	StepUninstallRecoveryVerifyRestoredState       = "uninstall_recovery.verify_restored_state"
+	StepUninstallRecoveryReleaseQuarantineMetadata = "uninstall_recovery.release_quarantine_metadata"
+	StepUninstallRecoveryFinalGate                 = "uninstall_recovery.final_gate"
+	StepUninstallRecoveryFinalize                  = "uninstall_recovery.finalize"
+)
+
 var legacyStepNameMap = map[string]string{
 	"commit_installed_tree":      StepCommitInstalledTree,
 	"commit_target_generation":   StepCommitTargetGeneration,

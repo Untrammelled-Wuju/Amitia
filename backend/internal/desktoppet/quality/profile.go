@@ -59,31 +59,31 @@ type QualityProfileSnapshot struct {
 }
 
 type MotionPolicy struct {
-	AllowHorizontalMotion bool    `json:"allowHorizontalMotion"`
-	AllowVerticalMotion   bool    `json:"allowVerticalMotion"`
-	AllowScaleChange      bool    `json:"allowScaleChange"`
-	MaxAnchorJitter       float64 `json:"maxAnchorJitter"`
-	MaxScaleJitter        float64 `json:"maxScaleJitter"`
-	MaxMotionJump         float64 `json:"maxMotionJump"`
-	AllowedEdges          []string `json:"allowedEdges"`
+	AllowHorizontalMotion bool      `json:"allowHorizontalMotion"`
+	AllowVerticalMotion   bool      `json:"allowVerticalMotion"`
+	AllowScaleChange      bool      `json:"allowScaleChange"`
+	MaxAnchorJitter       float64   `json:"maxAnchorJitter"`
+	MaxScaleJitter        float64   `json:"maxScaleJitter"`
+	MaxMotionJump         float64   `json:"maxMotionJump"`
+	AllowedEdges          []string  `json:"allowedEdges"`
 }
 
 type DetectorConfig struct {
-	Enabled     bool              `json:"enabled"`
-	Version     string            `json:"version"`
-	Parameters  map[string]float64 `json:"parameters"`
-	CanDegrade  bool              `json:"canDegrade"`
+	Enabled    bool              `json:"enabled"`
+	Version    string            `json:"version"`
+	Parameters map[string]float64 `json:"parameters"`
+	CanDegrade bool              `json:"canDegrade"`
 }
 
 type RuleConfig struct {
-	RuleVersion    int     `json:"ruleVersion"`
+	RuleVersion     int     `json:"ruleVersion"`
 	WarningThreshold  *float64 `json:"warningThreshold,omitempty"`
 	ReviewThreshold   *float64 `json:"reviewThreshold,omitempty"`
 	RejectThreshold   *float64 `json:"rejectThreshold,omitempty"`
-	Comparison     string  `json:"comparison"`
-	Severity       Severity `json:"severity"`
-	HardGate       bool    `json:"hardGate"`
-	MaxPenalty     float64 `json:"maxPenalty"`
+	Comparison      string  `json:"comparison"`
+	Severity        Severity `json:"severity"`
+	HardGate        bool    `json:"hardGate"`
+	MaxPenalty      float64 `json:"maxPenalty"`
 }
 
 type DimensionConfig struct {
@@ -94,9 +94,9 @@ type DimensionConfig struct {
 }
 
 type ActionPolicy struct {
-	GateRule       string `json:"gateRule"`
-	BlockOnRejected bool  `json:"blockOnRejected"`
-	BlockOnReview  bool   `json:"blockOnReview"`
+	GateRule        string `json:"gateRule"`
+	BlockOnRejected bool   `json:"blockOnRejected"`
+	BlockOnReview   bool   `json:"blockOnReview"`
 }
 
 func (p QualityProfileSnapshot) DetectorEnabled(key string) bool {
@@ -141,33 +141,60 @@ func (p QualityProfileSnapshot) GetDetectorConfig(key string) (DetectorConfig, b
 }
 
 func CanonicalProfileJSON(p QualityProfileSnapshot) string {
-	p.CanonicalJSON = ""
-	p.Hash = ""
-	keys := make([]string, 0, len(p.Detectors))
-	for k := range p.Detectors {
+	stable := QualityProfileSnapshot{
+		SchemaVersion:    p.SchemaVersion,
+		ProfileID:        p.ProfileID,
+		ProfileVersion:   p.ProfileVersion,
+		EngineVersion:    p.EngineVersion,
+		ActionSpecHash:   p.ActionSpecHash,
+		LoopType:         p.LoopType,
+		FrameCount:       p.FrameCount,
+		AnchorProfile:    p.AnchorProfile,
+		MotionPolicy:     p.MotionPolicy,
+		QualityMode:      p.QualityMode,
+	}
+	stable.Detectors = make(map[string]DetectorConfig, len(p.Detectors))
+	for k, v := range p.Detectors {
+		stable.Detectors[k] = v
+	}
+	stable.Rules = make(map[string]RuleConfig, len(p.Rules))
+	for k, v := range p.Rules {
+		stable.Rules[k] = v
+	}
+	stable.Dimensions = make(map[string]DimensionConfig, len(p.Dimensions))
+	for k, v := range p.Dimensions {
+		stable.Dimensions[k] = v
+	}
+	stable.HardGateRuleCodes = make([]string, len(p.HardGateRuleCodes))
+	copy(stable.HardGateRuleCodes, p.HardGateRuleCodes)
+	stable.RequiredActionPolicy = p.RequiredActionPolicy
+	stable.OptionalActionPolicy = p.OptionalActionPolicy
+
+	keys := make([]string, 0, len(stable.Detectors))
+	for k := range stable.Detectors {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	ruleKeys := make([]string, 0, len(p.Rules))
-	for k := range p.Rules {
+	ruleKeys := make([]string, 0, len(stable.Rules))
+	for k := range stable.Rules {
 		ruleKeys = append(ruleKeys, k)
 	}
 	sort.Strings(ruleKeys)
 
-	dimKeys := make([]string, 0, len(p.Dimensions))
-	for k := range p.Dimensions {
+	dimKeys := make([]string, 0, len(stable.Dimensions))
+	for k := range stable.Dimensions {
 		dimKeys = append(dimKeys, k)
 	}
 	sort.Strings(dimKeys)
 
-	hardGates := make([]string, len(p.HardGateRuleCodes))
-	copy(hardGates, p.HardGateRuleCodes)
+	hardGates := make([]string, len(stable.HardGateRuleCodes))
+	copy(hardGates, stable.HardGateRuleCodes)
 	sort.Strings(hardGates)
 
-	p.HardGateRuleCodes = hardGates
+	stable.HardGateRuleCodes = hardGates
 
-	data, _ := json.Marshal(p)
+	data, _ := json.Marshal(stable)
 	return string(data)
 }
 

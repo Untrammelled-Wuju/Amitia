@@ -158,8 +158,8 @@ END`
 			t.Fatalf("解析失败: %v", err)
 		}
 		assertStmtType(t, stmt, SQLTypeCreateTrigger)
-		assertObjectNames(t, stmt, "ext_complex_trigger", "ext_test_table")
-		assertObjectKinds(t, stmt, "trigger", "table")
+		assertObjectNames(t, stmt, "ext_complex_trigger", "ext_test_table", "ext_log")
+		assertObjectKinds(t, stmt, "trigger", "table", "table")
 	})
 }
 
@@ -425,7 +425,7 @@ func TestParseStatement_Delete(t *testing.T) {
 			t.Fatalf("解析失败: %v", err)
 		}
 		assertStmtType(t, stmt, SQLTypeDelete)
-		assertObjectNames(t, stmt, "ext_test_table")
+		assertObjectNames(t, stmt, "ext_test_table", "ext_other_table")
 	})
 }
 
@@ -474,7 +474,7 @@ func TestParseStatement_Select(t *testing.T) {
 			t.Fatalf("解析失败: %v", err)
 		}
 		assertStmtType(t, stmt, SQLTypeSelect)
-		assertObjectNames(t, stmt, "ext_test_table")
+		assertObjectNames(t, stmt, "ext_test_table", "ext_other_table")
 	})
 
 	t.Run("WITH 子句查询", func(t *testing.T) {
@@ -483,6 +483,7 @@ func TestParseStatement_Select(t *testing.T) {
 			t.Fatalf("解析失败: %v", err)
 		}
 		assertStmtType(t, stmt, SQLTypeSelect)
+		assertObjectNames(t, stmt, "ext_test_table")
 	})
 }
 

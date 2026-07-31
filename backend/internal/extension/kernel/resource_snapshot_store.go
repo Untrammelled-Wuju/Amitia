@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -100,6 +102,10 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 		snapshotIDs[entry.Resource.ResourceID] = struct{}{}
 	}
 	quarantineDir := filepath.Join(s.extRoot, "quarantine", "resources", operationID)
+	if err := os.MkdirAll(quarantineDir, 0755); err != nil {
+		return nil, fmt.Errorf("kernel: create quarantine directory: %w", err)
+	}
+	absExtRoot, _ := filepath.Abs(s.extRoot)
 	var entries []ResourceQuarantineEntry
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, resource := range currentResources {
@@ -117,6 +123,18 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 		}
 		quarantineID := "resource-quarantine-" + operationID + "-" + resource.ResourceID
 		quarantinePath := filepath.Join(quarantineDir, resource.ResourceID)
+		if storageRef != "" {
+			absStorage, _ := filepath.Abs(storageRef)
+			if strings.HasPrefix(absStorage, absExtRoot+string(filepath.Separator)) {
+				if _, statErr := os.Stat(absStorage); statErr == nil {
+					if renameErr := os.Rename(absStorage, quarantinePath); renameErr != nil {
+						if copyErr := copyResourceFile(absStorage, quarantinePath); copyErr == nil {
+							os.Remove(absStorage)
+						}
+					}
+				}
+			}
+		}
 		entry := ResourceQuarantineEntry{
 			QuarantineID:   quarantineID,
 			OperationID:    operationID,
@@ -170,10 +188,17 @@ func (s *ResourceSnapshotStore) RestoreQuarantinedResources(ctx context.Context,
 		return err
 	}
 	for _, entry := range entries {
-		if entry.QuarantinePath != "" {
+		if entry.QuarantinePath != "" && entry.StorageRef != "" {
 			if _, statErr := os.Stat(entry.QuarantinePath); statErr == nil {
-				if err := os.RemoveAll(entry.QuarantinePath); err != nil {
-					return fmt.Errorf("kernel: restore quarantined resource %s: %w", entry.ResourceID, err)
+				destDir := filepath.Dir(entry.StorageRef)
+				if mkErr := os.MkdirAll(destDir, 0755); mkErr != nil {
+					return fmt.Errorf("kernel: restore quarantined resource %s: mkdir: %w", entry.ResourceID, mkErr)
+				}
+				if renameErr := os.Rename(entry.QuarantinePath, entry.StorageRef); renameErr != nil {
+					if copyErr := copyResourceFile(entry.QuarantinePath, entry.StorageRef); copyErr != nil {
+						return fmt.Errorf("kernel: restore quarantined resource %s: %w", entry.ResourceID, copyErr)
+					}
+					os.Remove(entry.QuarantinePath)
 				}
 			}
 		}
@@ -276,4 +301,22 @@ func verifyResourceContentHash(entry packageResourceSnapshotEntry, raw []byte) b
 		}
 	}
 	return false
+}
+
+func copyResourceFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	if mkErr := os.MkdirAll(filepath.Dir(dst), 0755); mkErr != nil {
+		return mkErr
+	}
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	_, err = io.Copy(dstFile, srcFile)
+	return err
 }

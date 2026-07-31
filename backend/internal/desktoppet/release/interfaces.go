@@ -21,12 +21,31 @@ const (
 )
 
 type QualityGateResult struct {
-	GateStatus         GateStatus
-	GateID             string
-	GateHash           string
-	IncludedActionKeys []string
-	RequiredActionKeys []string
+	GateStatus            GateStatus
+	GateID                string
+	GateHash              string
+	IncludedActionKeys    []string
+	RequiredActionKeys    []string
+	ExcludedActionKeys    []string
 	ActiveRevisionSetHash string
+	EvaluationSetHash     string
+	ProfileID             string
+	RuleSetVersion        string
+	RuleSetContentHash    string
+	ActionVerdicts        []GateActionVerdict
+}
+
+type GateActionVerdict struct {
+	ActionKey         string
+	ActionName        string
+	Required          bool
+	Verdict           string
+	ExecutionStatus   string
+	OverallScore      *float64
+	FindingCount      int
+	HardGateCount     int
+	ActionRevisionID  string
+	EvaluationID      string
 }
 
 func (g GateStatus) IsAllowed() bool {
@@ -62,16 +81,19 @@ type ReleaseQualityGateReader interface {
 }
 
 type RevisionSnapshotData struct {
-	ActionKey          string
-	ActionRevisionID   string
-	ContentHash        string
-	ActionConfigHash   string
-	FrameSetHash       string
-	FrameArtifactIDs   []string
+	ActionKey           string
+	ActionRevisionID    string
+	ContentHash         string
+	ActionConfigHash    string
+	FrameSetHash        string
+	FrameArtifactIDs    []string
 	QualityEvaluationID string
-	QualityVerdict     string
-	FrameCount         int
-	Frames             []FrameSnapshotData
+	QualityVerdict      string
+	BindingRevision     int64
+	ActionConfigJSON    string
+	QualityResultHash   string
+	FrameCount          int
+	Frames              []FrameSnapshotData
 }
 
 type FrameSnapshotData struct {
@@ -96,15 +118,15 @@ type SnapshotSource interface {
 }
 
 type TaskInfo struct {
-	ID                string
-	GenerationTaskID  string
+	ID               string
+	GenerationTaskID string
 	ProcessingVersion int
-	OutputWidth       int
-	OutputHeight      int
-	DefaultFPS        int
-	CharacterID       string
-	PackageName       string
-	UserID            string
+	OutputWidth      int
+	OutputHeight     int
+	DefaultFPS       int
+	CharacterID      string
+	PackageName      string
+	UserID           string
 }
 
 type ActionInfo struct {
@@ -185,67 +207,48 @@ type ReleaseRepository interface {
 	UpdateRelease(release *ReleaseData) error
 	ListReleasesByPet(petID string) ([]*ReleaseData, error)
 	ListPublishedReleases(userID string) ([]*ReleaseData, error)
+
+	CreateReleaseFiles(files []ReleaseFileData) error
+	GetReleaseFiles(releaseID string) ([]ReleaseFileData, error)
+
+	CreateValidationReport(report *ReleaseValidationReport) error
+	GetValidationReport(releaseID string) (*ReleaseValidationReport, error)
+
+	CreateEventOutbox(event *ReleaseEventOutbox) error
+	ListPendingOutboxEvents(limit int) ([]*ReleaseEventOutbox, error)
+	UpdateOutboxEvent(event *ReleaseEventOutbox) error
+
+	CreateBuildRequestInbox(inbox *ReleaseBuildRequestInbox) error
+	GetBuildRequestInbox(requestID string) (*ReleaseBuildRequestInbox, error)
+	UpdateBuildRequestInbox(inbox *ReleaseBuildRequestInbox) error
+
+	CreateImportSnapshot(snapshot *ImportPackageSnapshot) error
+	GetImportSnapshot(stagingID string) (*ImportPackageSnapshot, error)
+	UpdateImportSnapshot(snapshot *ImportPackageSnapshot) error
+
+	AcquireLeaseCAS(op *ReleaseBuildOperation, owner, executionID string) error
+
+	CreateSnapshotTx(tx *gorm.DB, snapshot *ReleaseBuildSnapshot) error
+	CreateOperationTx(tx *gorm.DB, op *ReleaseBuildOperation) error
+	CreateReleaseTx(tx *gorm.DB, release *ReleaseData) error
+	CreateReleaseFilesTx(tx *gorm.DB, files []ReleaseFileData) error
+	CreateValidationReportTx(tx *gorm.DB, report *ReleaseValidationReport) error
+	CreateOutboxTx(tx *gorm.DB, event *ReleaseEventOutbox) error
+	UpdateOperationOwned(tx *gorm.DB, op *ReleaseBuildOperation, expectedState string) error
 }
 
 type PetIdentityData struct {
-	ID                  string
-	OwnerUserID         string
-	SourceCharacterID   string
-	Name                string
-	Slug                string
-	BindingPolicy       string
-	UpstreamPetID       string
-	DefaultActionKey    string
+	ID                string
+	OwnerUserID       string
+	SourceCharacterID string
+	Name              string
+	Slug              string
+	BindingPolicy     string
+	UpstreamPetID     string
+	DefaultActionKey  string
 	NextReleaseSequence int
-	CreatedAt           string
-	UpdatedAt           string
-}
-
-type ReleaseData struct {
-	ID                    string
-	PetID                 string
-	OwnerUserID           string
-	Version               string
-	ReleaseSequence       int
-	SchemaVersion         int
-	Lifecycle             string
-	ContentRootHash       string
-	ManifestHash          string
-	StorageKey            string
-	ArchiveStorageKey     string
-	TotalBytes            int64
-	FileCount             int
-	ActionCount           int
-	DefaultActionKey      string
-	MinRuntimeVersion     string
-	SourceType            string
-	SourceProcessingTask  string
-	SourceGenerationTask  string
-	ActiveRevisionSetHash string
-	QualityGateID         string
-	QualityGateHash       string
-	BuildSnapshotID       string
-	IntegrityStatus       string
-	CompatibilityStatus   string
-	ManifestJSON          string
-	PublishedAt           string
-	LegacyPackageID       string
-	LegacyVersion         int
-	CreatedAt             string
-	UpdatedAt             string
-}
-
-type ReleaseFileData struct {
-	ID        string
-	ReleaseID string
-	Path      string
-	SHA256    string
-	Bytes     int64
-	MediaType string
-	Role      string
-	ActionKey string
-	FrameID   string
-	CreatedAt string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type ReleaseStoragePort interface {

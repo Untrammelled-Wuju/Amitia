@@ -275,17 +275,17 @@ func (w *ReleaseRecoveryWorker) updateOp(op *ReleaseBuildOperation) {
 	w.repo.UpdateBuildOperation(op)
 }
 
-type ReleaseEventOutbox struct {
+type ReleaseEventPublisher struct {
 	repo   ReleaseRepository
 	events []ReleaseEvent
 	mu     sync.Mutex
 }
 
-func NewReleaseEventOutbox(repo ReleaseRepository) *ReleaseEventOutbox {
-	return &ReleaseEventOutbox{repo: repo}
+func NewReleaseEventPublisher(repo ReleaseRepository) *ReleaseEventPublisher {
+	return &ReleaseEventPublisher{repo: repo}
 }
 
-func (o *ReleaseEventOutbox) PublishReleaseEvent(event ReleaseEvent) error {
+func (o *ReleaseEventPublisher) PublishReleaseEvent(event ReleaseEvent) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.events = append(o.events, event)
@@ -297,7 +297,7 @@ func (o *ReleaseEventOutbox) PublishReleaseEvent(event ReleaseEvent) error {
 	return nil
 }
 
-func (o *ReleaseEventOutbox) Flush(ctx context.Context) error {
+func (o *ReleaseEventPublisher) Flush(ctx context.Context) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if len(o.events) == 0 {
@@ -314,7 +314,7 @@ func (o *ReleaseEventOutbox) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (o *ReleaseEventOutbox) PendingCount() int {
+func (o *ReleaseEventPublisher) PendingCount() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return len(o.events)

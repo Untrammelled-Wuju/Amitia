@@ -206,9 +206,13 @@ func (r *repository) GetInstallationOperation(id string) (*InstallationOperation
 	return &op, nil
 }
 
-func (r *repository) GetInstallationOperationByIdempotencyKey(userID, idempotencyKey, opType string) (*InstallationOperation, error) {
+func (r *repository) GetInstallationOperationByIdempotencyKey(userID, deviceID, idempotencyKey, opType string) (*InstallationOperation, error) {
 	var op InstallationOperation
-	err := r.db.Where("user_id = ? AND idempotency_key = ? AND operation_type = ?", userID, idempotencyKey, opType).First(&op).Error
+	query := r.db.Where("user_id = ? AND idempotency_key = ? AND operation_type = ?", userID, idempotencyKey, opType)
+	if deviceID != "" {
+		query = query.Where("device_id = ? OR device_id = ''", deviceID)
+	}
+	err := query.First(&op).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -314,4 +318,26 @@ func (r *repository) GetValidationReport(releaseID string) (*PackageValidationRe
 		return nil, err
 	}
 	return &report, nil
+}
+
+func (r *repository) AllocateDeviceDesiredRevision(userID, deviceID string) (int64, error) {
+	var nextRevision int64
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var maxRevision int64
+		query := tx.Model(&RuntimeDesiredState{}).Where("user_id = ?", userID)
+		if deviceID != "" {
+			query = query.Where("device_id = ? OR device_id = ''", deviceID)
+		} else {
+			query = query.Where("device_id = ''")
+		}
+		if err := query.Select("COALESCE(MAX(revision), 0)").Scan(&maxRevision).Error; err != nil {
+			return err
+		}
+		nextRevision = maxRevision + 1
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return nextRevision, nil
 }

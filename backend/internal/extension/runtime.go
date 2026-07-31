@@ -113,6 +113,7 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 			return nil, fmt.Errorf("plugin manager start: %w", err)
 		}
 	}
+	service.AttachPluginManager(pluginManager)
 	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages, Lifecycle: lifecycle}, nil
 }
 

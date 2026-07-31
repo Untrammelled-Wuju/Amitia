@@ -142,33 +142,47 @@ const (
 )
 
 type RollbackSnapshotRequirement struct {
-	Required          bool   `json:"required"`
-	Reason            string `json:"reason,omitempty"`
-	ConfigChanged     bool   `json:"configChanged"`
-	ResourcesChanged  bool   `json:"resourcesChanged"`
-	UserDataChanged   bool   `json:"userDataChanged"`
-	MigrationRequired bool   `json:"migrationRequired"`
-	PreviewHash       string `json:"previewHash,omitempty"`
+	Required                 bool   `json:"required"`
+	Reason                   string `json:"reason,omitempty"`
+	ConfigChanged            bool   `json:"configChanged"`
+	ResourcesChanged         bool   `json:"resourcesChanged"`
+	UserDataChanged          bool   `json:"userDataChanged"`
+	MigrationRequired        bool   `json:"migrationRequired"`
+	MigrationStateUnverified bool   `json:"migrationStateUnverified,omitempty"`
+	NoDataChange             bool   `json:"noDataChange"`
+	RequirementHash          string `json:"requirementHash,omitempty"`
+	PreviewHash              string `json:"previewHash,omitempty"`
+}
+
+type RemoveArtifactStepResult struct {
+	ArtifactID     string          `json:"artifactId"`
+	ArtifactPolicy ArtifactPolicy  `json:"artifactPolicy"`
+	Deleted        bool            `json:"deleted"`
+	RemainingRefs  int             `json:"remainingRefs"`
+	DeletedAt      time.Time       `json:"deletedAt"`
 }
 
 type packageConfirmationClaims struct {
-	SessionID          string          `json:"sessionId"`
-	ArtifactID         string          `json:"artifactId"`
-	ArchiveHash        string          `json:"archiveHash"`
-	ManifestHash       string          `json:"manifestHash"`
-	ContentTreeHash    string          `json:"contentTreeHash"`
-	UserID             string          `json:"userId"`
-	ScopeType          string          `json:"scopeType"`
-	ScopeID            string          `json:"scopeId"`
-	PolicyVersion      string          `json:"policyVersion"`
-	SecurityPolicyHash string          `json:"securityPolicyHash,omitempty"`
-	KeyID              string          `json:"kid,omitempty"`
-	DeveloperSessionID string          `json:"developerSessionId,omitempty"`
-	MigrationPlanHash  string          `json:"migrationPlanHash,omitempty"`
-	ArtifactPolicy     ArtifactPolicy `json:"artifactPolicy,omitempty"`
-	PreviewHash        string          `json:"previewHash,omitempty"`
-	Confirmations      map[string]bool `json:"confirmations"`
-	ExpiresAt          int64           `json:"expiresAt"`
+	SessionID               string          `json:"sessionId"`
+	ArtifactID              string          `json:"artifactId"`
+	ArchiveHash             string          `json:"archiveHash"`
+	ManifestHash            string          `json:"manifestHash"`
+	ContentTreeHash         string          `json:"contentTreeHash"`
+	UserID                  string          `json:"userId"`
+	ScopeType               string          `json:"scopeType"`
+	ScopeID                 string          `json:"scopeId"`
+	PolicyVersion           string          `json:"policyVersion"`
+	SecurityPolicyHash      string          `json:"securityPolicyHash,omitempty"`
+	KeyID                   string          `json:"kid,omitempty"`
+	DeveloperSessionID      string          `json:"developerSessionId,omitempty"`
+	MigrationPlanHash       string          `json:"migrationPlanHash,omitempty"`
+	ArtifactPolicy          ArtifactPolicy  `json:"artifactPolicy,omitempty"`
+	PreviewHash             string          `json:"previewHash,omitempty"`
+	CurrentVersionID        string          `json:"currentVersionId,omitempty"`
+	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
+	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
+	Confirmations           map[string]bool `json:"confirmations"`
+	ExpiresAt               int64           `json:"expiresAt"`
 }
 
 var packageConfirmationKey = func() []byte {

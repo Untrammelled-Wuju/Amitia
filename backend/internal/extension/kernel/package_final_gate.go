@@ -2,6 +2,8 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -178,22 +180,51 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 				}
 			}
 		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
-			hasDeleteEvidence := false
-			if delSteps, delStepErr := r.container.PackageRepository.ListOperationSteps(ctx, operationID); delStepErr == nil {
-				for _, step := range delSteps {
-					if step.Status == "completed" && (step.StepName == "cleanup_kernel_repositories" || step.StepName == "remove_artifact" || step.StepName == "remove_files" || step.StepName == "remove_repositories") {
-						hasDeleteEvidence = true
-						break
+			policy, policyReason := r.computeUninstallArtifactPolicy(ctx, operation.ArtifactID, operation.ExtensionID)
+			if policy != ArtifactPolicyDeleteArtifact {
+				checkArtifact.Detail = fmt.Sprintf("artifact not found but policy is %s (%s), fail closed", policy, policyReason)
+			} else {
+				hasDeleteEvidence := false
+				deleteStepArtifactID := ""
+				if delSteps, delStepErr := r.container.PackageRepository.ListOperationSteps(ctx, operationID); delStepErr == nil {
+					for _, step := range delSteps {
+						if step.Status == "completed" && (step.StepName == "cleanup_kernel_repositories" || step.StepName == "remove_artifact" || step.StepName == "remove_files" || step.StepName == "remove_repositories") {
+							hasDeleteEvidence = true
+							if step.ResultJSON != "" && step.ResultJSON != "{}" {
+								var stepResult RemoveArtifactStepResult
+								if json.Unmarshal([]byte(step.ResultJSON), &stepResult) == nil && stepResult.ArtifactID != "" {
+									deleteStepArtifactID = stepResult.ArtifactID
+								}
+							}
+							break
+						}
+					}
+				}
+				if !hasDeleteEvidence {
+					checkArtifact.Detail = "artifact not found but no deletion evidence in operation steps"
+				} else if deleteStepArtifactID != "" && deleteStepArtifactID != operation.ArtifactID {
+					checkArtifact.Detail = fmt.Sprintf("delete step artifact mismatch: %s != %s", deleteStepArtifactID, operation.ArtifactID)
+				} else {
+					refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
+					if refErr != nil {
+						if IsRepositoryErrorKind(refErr, RepositoryErrorNotFound) {
+							checkArtifact.Passed = true
+						} else {
+							checkArtifact.Detail = fmt.Sprintf("artifact reference check failed (repository unavailable): %v", refErr)
+						}
+					} else if refCount > 0 {
+						checkArtifact.Detail = fmt.Sprintf("artifact not found but still has %d active references", refCount)
+					} else {
+						checkArtifact.Passed = true
 					}
 				}
 			}
-			if hasDeleteEvidence {
-				checkArtifact.Passed = true
-			} else {
-				checkArtifact.Detail = "artifact not found but no deletion evidence in operation steps"
-			}
+		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorUnavailable) {
+			checkArtifact.Detail = fmt.Sprintf("artifact repository unavailable, fail closed: %v", artifactErr)
+		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorCorrupt) {
+			checkArtifact.Detail = fmt.Sprintf("artifact repository corrupt, fail closed: %v", artifactErr)
 		} else {
-			checkArtifact.Detail = fmt.Sprintf("artifact query failed: %v", artifactErr)
+			checkArtifact.Detail = fmt.Sprintf("artifact query failed (unknown error), fail closed: %v", artifactErr)
 		}
 		result.Checks = append(result.Checks, checkArtifact)
 	} else {
@@ -678,28 +709,61 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 	return nil
 }
 
-func isRollbackSnapshotExempt(point PackageRollbackPoint) bool {
+func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnapshotRequirement {
+	req := RollbackSnapshotRequirement{}
 	if point.MigrationStateSnapshotJSON == "" {
-		return false
+		req.MigrationStateUnverified = true
+	} else {
+		var migrationState packageMigrationStateSnapshot
+		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) != nil {
+			req.MigrationStateUnverified = true
+		} else if migrationState.Mode != "none" || len(migrationState.Definitions) > 0 || len(migrationState.Operations) > 0 {
+			req.MigrationRequired = true
+		}
 	}
-	var migrationState packageMigrationStateSnapshot
-	if err := json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState); err != nil {
-		return false
+	if point.ConfigSnapshotJSON != "" {
+		var configState map[string]interface{}
+		if json.Unmarshal([]byte(point.ConfigSnapshotJSON), &configState) == nil && len(configState) > 0 {
+			req.ConfigChanged = true
+		}
 	}
-	if migrationState.Mode != "none" {
-		return false
+	if point.ResourceSnapshotJSON != "" {
+		var resourceState packageResourceSnapshot
+		if json.Unmarshal([]byte(point.ResourceSnapshotJSON), &resourceState) == nil && len(resourceState.Entries) > 0 {
+			req.ResourcesChanged = true
+		}
 	}
 	if point.UserDataMigrationStateJSON != "" {
 		var userDataState packageUserDataMigrationState
-		if err := json.Unmarshal([]byte(point.UserDataMigrationStateJSON), &userDataState); err != nil {
-			return false
-		}
-		if userDataState.Mode != "none" {
-			return false
+		if json.Unmarshal([]byte(point.UserDataMigrationStateJSON), &userDataState) == nil {
+			if userDataState.Mode != "none" || len(userDataState.AffectedTables) > 0 || len(userDataState.DataExports) > 0 {
+				req.UserDataChanged = true
+			}
 		}
 	}
-	if len(migrationState.Definitions) > 0 || len(migrationState.Operations) > 0 {
-		return false
+	req.NoDataChange = !req.ConfigChanged && !req.ResourcesChanged && !req.UserDataChanged && !req.MigrationRequired && !req.MigrationStateUnverified
+	req.Required = !req.NoDataChange
+	if req.Required {
+		if req.MigrationStateUnverified {
+			req.Reason = "migration state unverified (empty or corrupt), fail-closed"
+		} else {
+			req.Reason = "config/resource/userData/migration changes detected"
+		}
+	} else {
+		req.Reason = "no data change detected"
 	}
-	return true
+	req.RequirementHash = computeSnapshotRequirementHash(req)
+	return req
+}
+
+func computeSnapshotRequirementHash(req RollbackSnapshotRequirement) string {
+	canonical := fmt.Sprintf(`{"required":%v,"configChanged":%v,"resourcesChanged":%v,"userDataChanged":%v,"migrationRequired":%v,"migrationStateUnverified":%v,"noDataChange":%v}`,
+		req.Required, req.ConfigChanged, req.ResourcesChanged, req.UserDataChanged, req.MigrationRequired, req.MigrationStateUnverified, req.NoDataChange)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+func isRollbackSnapshotExempt(point PackageRollbackPoint) bool {
+	req := computeRollbackSnapshotRequirement(point)
+	return req.NoDataChange
 }

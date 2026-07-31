@@ -5,7 +5,10 @@ package input
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"gorm.io/gorm"
@@ -62,6 +65,25 @@ func NewInputRepository(db *gorm.DB, dataDir string) *InputRepository {
 	return &InputRepository{db: db, dataDir: dataDir}
 }
 
+func (r *InputRepository) safePath(framePath string) (string, error) {
+	if framePath == "" {
+		return "", fmt.Errorf("frame asset missing: empty storage path")
+	}
+	cleaned := filepath.Clean(framePath)
+	if strings.HasPrefix(cleaned, "..") {
+		return "", fmt.Errorf("path escape detected: %s", framePath)
+	}
+	absDataDir, err := filepath.Abs(r.dataDir)
+	if err != nil {
+		return "", err
+	}
+	absPath := filepath.Join(absDataDir, cleaned)
+	if !strings.HasPrefix(absPath, absDataDir+string(filepath.Separator)) && absPath != absDataDir {
+		return "", fmt.Errorf("path escape detected: %s", framePath)
+	}
+	return absPath, nil
+}
+
 func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID string, actionRevisionID string) (*quality.QualityActionInput, error) {
 	var rev actionRevisionRow
 	err := r.db.WithContext(ctx).
@@ -72,6 +94,10 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 			return nil, quality.ErrActionRevisionNotFound
 		}
 		return nil, err
+	}
+
+	if rev.UserID != userID {
+		return nil, fmt.Errorf("user mismatch: action revision belongs to %s, request from %s", rev.UserID, userID)
 	}
 
 	var frameRows []actionRevisionFrameRow
@@ -106,9 +132,15 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 
 	frames := make([]quality.QualityFrameInput, 0, len(frameRows))
 	for _, f := range frameRows {
+		if f.AssetID == "" {
+			return nil, fmt.Errorf("frame asset missing: frame %d has no asset ID", f.LogicalIndex)
+		}
+
 		var transforms []quality.Transform
 		if f.TransformJSON != "" {
-			_ = json.Unmarshal([]byte(f.TransformJSON), &transforms)
+			if err := json.Unmarshal([]byte(f.TransformJSON), &transforms); err != nil {
+				return nil, fmt.Errorf("transform JSON invalid (frame %d): %w", f.LogicalIndex, err)
+			}
 		}
 		if transforms == nil {
 			transforms = []quality.Transform{}
@@ -116,16 +148,31 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 
 		var measurements map[string]float64
 		if f.MetadataJSON != "" {
-			_ = json.Unmarshal([]byte(f.MetadataJSON), &measurements)
+			if err := json.Unmarshal([]byte(f.MetadataJSON), &measurements); err != nil {
+				return nil, fmt.Errorf("metadata JSON invalid (frame %d): %w", f.LogicalIndex, err)
+			}
 		}
 		if measurements == nil {
 			measurements = map[string]float64{}
+		}
+
+		asset, ok := assetMap[f.AssetID]
+		if !ok || asset.ID == "" {
+			return nil, fmt.Errorf("frame asset not found: frame %d asset %s", f.LogicalIndex, f.AssetID)
+		}
+
+		if asset.ContentHash == "" {
+			return nil, fmt.Errorf("frame asset missing: frame %d has empty content hash", f.LogicalIndex)
 		}
 
 		frame := quality.QualityFrameInput{
 			FrameRevisionID: f.ID,
 			FrameArtifactID: f.AssetID,
 			FrameIndex:      f.LogicalIndex,
+			ContentHash:     asset.ContentHash,
+			MimeType:        asset.MimeType,
+			Width:           asset.Width,
+			Height:          asset.Height,
 			Anchor: quality.Point{
 				X: f.AnchorX,
 				Y: f.AnchorY,
@@ -136,18 +183,33 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 			SubjectBox:      quality.Rect{},
 		}
 
-		if asset, ok := assetMap[f.AssetID]; ok {
-			frame.ContentHash = asset.ContentHash
-			frame.RelativePath = asset.StoragePath
-			frame.MimeType = asset.MimeType
-			frame.Width = asset.Width
-			frame.Height = asset.Height
-			if asset.StoragePath != "" {
-				frame.AbsolutePath = filepath.Join(r.dataDir, asset.StoragePath)
+		if asset.StoragePath != "" {
+			relPath := asset.StoragePath
+			if absPath, pathErr := r.safePath(relPath); pathErr == nil {
+				frame.AbsolutePath = absPath
+				frame.RelativePath = relPath
+			} else {
+				frame.RelativePath = relPath
 			}
 		}
 
 		frames = append(frames, frame)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	snapshot := &quality.EvaluationInputSnapshot{
+		ID:                   fmt.Sprintf("is-%d", time.Now().UnixNano()),
+		UserID:               rev.UserID,
+		CharacterID:          rev.CharacterID,
+		ActionStreamID:       rev.ID,
+		ActionRevisionID:     rev.ID,
+		ActionContentHash:    rev.ContentHash,
+		ProcessingRevisionID: rev.SourceProcessingRevisionID,
+		ActionKey:            rev.ActionKey,
+		PlaybackMode:         rev.PlaybackMode,
+		FPS:                  rev.DefaultFPS,
+		ExpectedFrameCount:   rev.FrameCount,
+		CreatedAt:            now,
 	}
 
 	return &quality.QualityActionInput{
@@ -164,5 +226,7 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 		ExpectedFrameCount:   rev.FrameCount,
 		Frames:               frames,
 		InputSource:          quality.InputSourceNewBridge,
+		InputSnapshotID:      snapshot.ID,
+		InputSnapshot:        snapshot,
 	}, nil
 }
