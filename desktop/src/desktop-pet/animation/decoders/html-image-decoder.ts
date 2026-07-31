@@ -12,6 +12,7 @@ export class HtmlImageDecoder implements FrameDecoder {
     url: string;
     signal: AbortSignal;
     frameIndex?: number;
+    contentHash?: string;
   }): Promise<DecodedFrame> {
     if (input.signal.aborted) {
       throw new DOMException("Aborted", "AbortError");
@@ -53,6 +54,7 @@ export class HtmlImageDecoder implements FrameDecoder {
       estimatedBytes: width * height * 4,
       sourceUrl: input.url,
       decoderName: "html-image",
+      contentHash: input.contentHash ?? "",
     };
   }
 }

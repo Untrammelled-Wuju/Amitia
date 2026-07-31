@@ -312,6 +312,7 @@ async function main(): Promise<void> {
     estimatedBytes: 0,
     sourceUrl: "",
     decoderName: "",
+    contentHash: "",
   };
 
   const eventListener: EventListener = (event: PlaybackEvent) => {

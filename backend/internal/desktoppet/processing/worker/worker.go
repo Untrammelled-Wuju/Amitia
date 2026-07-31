@@ -4,8 +4,6 @@ package worker
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -23,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
+	"github.com/u-ai/backend/internal/desktoppet/processing/commit"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/log"
@@ -47,6 +46,7 @@ type Worker struct {
 	validator         *processing.Validator
 	pipeline          *application.Pipeline
 	sourceResolver    *application.RepoSourceResolver
+	committer         *commit.ProcessingCommitter
 	previewGenerator  *processing.PreviewGenerator
 	cleanupManager    *processing.CleanupManager
 	dataDir           string
@@ -54,12 +54,11 @@ type Worker struct {
 	wg                sync.WaitGroup
 	sem               chan struct{}
 	stateEngine       *taskstate.Engine
-	revisionPaths     map[string]string
 	onActionProcessed func(taskID, actionID, actionKey string)
 	revisionPromoter  func(processingTaskID, actionKey, userID string) error
 }
 
-func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline *application.Pipeline, sourceResolver *application.RepoSourceResolver) *Worker {
+func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline *application.Pipeline, sourceResolver *application.RepoSourceResolver, committer *commit.ProcessingCommitter) *Worker {
 	stateStore := desktoppet.NewStateStore(db)
 
 	return &Worker{
@@ -68,13 +67,13 @@ func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline
 		validator:        processing.NewValidator(repo, dataDir),
 		pipeline:         pipeline,
 		sourceResolver:   sourceResolver,
+		committer:        committer,
 		previewGenerator: processing.NewPreviewGenerator(dataDir),
 		cleanupManager:   processing.NewCleanupManager(dataDir),
 		dataDir:          dataDir,
 		stopCh:           make(chan struct{}),
 		sem:              make(chan struct{}, maxConcurrentProcessingTasks),
 		stateEngine:      taskstate.NewEngine(stateStore),
-		revisionPaths:    make(map[string]string),
 	}
 }
 
@@ -316,6 +315,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		ConfigSnapshot:     configSnapshot,
 		ProcessingTaskID:   task.ID,
 		ProcessingActionID: action.ID,
+		ProcessingAttemptID: attempt.ID,
 		ActionKey:          action.ActionKey,
 		GenerationTaskID:   task.GenerationTaskID,
 		ExecutionID:        executionID,
@@ -327,13 +327,41 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 	}
 
 	w.updateActionProgress(action, StageWriteFrames, ProgressWriteFrames)
-	if err := w.persistRevision(task, action, result, attempt, executionID); err != nil {
-		log.Logger.Errorf("persist revision for action %s failed: %v", action.ActionKey, err)
-		return fmt.Errorf("persist revision failed: %w", err)
+
+	configSnapshotJSON, err := json.Marshal(configSnapshot)
+	if err != nil {
+		return fmt.Errorf("marshal config snapshot failed: %w", err)
 	}
-	if err := w.persistProcessedFrames(task, action, sourceVal, result, attempt, executionID); err != nil {
-		log.Logger.Errorf("persist processed frames for action %s failed: %v", action.ActionKey, err)
-		return fmt.Errorf("persist processed frames failed: %w", err)
+
+	characterID := task.CharacterID
+	if characterID == "" {
+		characterID = sourceVal.Task.UserID
+	}
+
+	commitReq := &commit.CommitRequest{
+		Ctx:                        ctx,
+		UserID:                     sourceVal.Task.UserID,
+		CharacterID:                characterID,
+		ProcessingTaskID:           task.ID,
+		ProcessingActionID:         action.ID,
+		ProcessingAttemptID:        attempt.ID,
+		ActionKey:                  action.ActionKey,
+		SourceManifestID:           "",
+		SourceGenerationAttemptID:  sourceDesc.Artifact.AttemptID,
+		SourceGenerationArtifactID: sourceDesc.Artifact.ArtifactID,
+		SourceArtifactContentHash:  sourceDesc.Artifact.ContentHash,
+		ConfigSnapshot:             string(configSnapshotJSON),
+		ConfigHash:                 configSnapshot.ConfigHash,
+		PipelineVersion:            configSnapshot.PipelineVersion,
+		PipelineResult:             result,
+		ExpectedActionRowVersion:   action.RowVersion + 1,
+		ExecutionID:                executionID,
+		LeaseOwner:                 processingWorkerID,
+	}
+
+	commitResult, err := w.committer.Commit(commitReq)
+	if err != nil {
+		return fmt.Errorf("commit processing result failed: %w", err)
 	}
 
 	w.updateActionProgress(action, StageActionJSON, ProgressActionJSON)
@@ -342,7 +370,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 	}
 
 	w.updateActionProgress(action, StagePreview, ProgressPreview)
-	previewImgs, err := w.loadRevisionFrames(result.RootRelativePath)
+	previewImgs, err := w.loadRevisionFrames(commitResult.RootStorageKey)
 	if err != nil {
 		return fmt.Errorf("load revision frames for preview failed: %w", err)
 	}
@@ -350,14 +378,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		return fmt.Errorf("generate action preview failed: %w", err)
 	}
 
-	if err := w.publishFramesToActionDir(task, action, result.RootRelativePath); err != nil {
-		log.Logger.Errorf("publish frames to action dir for %s failed: %v", action.ActionKey, err)
-		return fmt.Errorf("publish frames to action dir failed: %w", err)
-	}
-
-	w.revisionPaths[action.ActionKey] = result.RootRelativePath
-
-	w.succeedAction(action)
+	w.publishActionEvent(action.ProcessingTaskID, action.ActionKey, "succeeded")
 
 	if w.onActionProcessed != nil {
 		w.onActionProcessed(task.ID, action.ID, action.ActionKey)
@@ -436,278 +457,6 @@ func (w *Worker) loadRevisionFrames(rootRelPath string) ([]image.Image, error) {
 		frames = append(frames, img)
 	}
 	return frames, nil
-}
-
-// Deprecated: 不再在生产流程中调用，Package 构建已由独立流程处理
-func (w *Worker) buildPackage(task *processing.ProcessingTask, sourceVal *processing.SourceValidationResult) error {
-	return fmt.Errorf("buildPackage 已废弃，Package 构建已由 Release Builder 处理")
-}
-
-func (w *Worker) loadProcessedFrames(actionKey string) ([]image.Image, error) {
-	rootRelPath, ok := w.revisionPaths[actionKey]
-	if !ok {
-		return nil, fmt.Errorf("revision path not found for action %s", actionKey)
-	}
-	return w.loadRevisionFrames(rootRelPath)
-}
-
-func (w *Worker) publishFramesToActionDir(task *processing.ProcessingTask, action *processing.ProcessingAction, rootRelPath string) error {
-	srcFramesDir := filepath.Join(w.dataDir, rootRelPath, "frames")
-	entries, err := os.ReadDir(srcFramesDir)
-	if err != nil {
-		return fmt.Errorf("read source frames dir: %w", err)
-	}
-
-	dstFramesDir := filepath.Join(w.dataDir, "desktop-pets", "generation-tasks", task.GenerationTaskID,
-		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion), "actions", action.ActionKey, "frames")
-	if err := os.MkdirAll(dstFramesDir, 0755); err != nil {
-		return fmt.Errorf("create dst frames dir: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		src := filepath.Join(srcFramesDir, entry.Name())
-		dst := filepath.Join(dstFramesDir, entry.Name())
-		if err := copyFileEntry(src, dst); err != nil {
-			return fmt.Errorf("copy frame %s: %w", entry.Name(), err)
-		}
-	}
-	return nil
-}
-
-func copyFileEntry(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0644)
-}
-
-func (w *Worker) persistProcessedFrames(
-	task *processing.ProcessingTask,
-	action *processing.ProcessingAction,
-	sourceVal *processing.SourceValidationResult,
-	result *application.ProcessActionResult,
-	attempt *processing.ProcessingActionAttempt,
-	executionID string,
-) error {
-	if result == nil || result.Manifest == nil || result.FrameCount == 0 {
-		return nil
-	}
-
-	frameInfos := sourceVal.FramePaths[action.ActionKey]
-
-	now := time.Now().Format(processingTimeFormat)
-	frames := make([]processing.ProcessedFrame, 0, result.FrameCount)
-
-	for i := 0; i < result.FrameCount; i++ {
-		processedPath := filepath.ToSlash(filepath.Join(
-			result.RootRelativePath, "frames", fmt.Sprintf("frame_%04d.png", i),
-		))
-
-		var sourceFrameID string
-		var sourcePath string
-		if i < len(frameInfos) {
-			sourceFrameID = frameInfos[i].Frame.ID
-			sourcePath = frameInfos[i].Frame.ResultImagePath
-		}
-
-		var contentHash string
-		if i < len(result.Manifest.Frames) {
-			contentHash = result.Manifest.Frames[i].FileHash
-		}
-
-		frames = append(frames, processing.ProcessedFrame{
-			ID:                      "pf-" + uuid.New().String(),
-			ProcessingActionID:      action.ID,
-			FrameIndex:              i,
-			SourceFrameID:           sourceFrameID,
-			SourcePath:              sourcePath,
-			ProcessedPath:           processedPath,
-			Status:                  "succeeded",
-			Width:                   task.OutputWidth,
-			Height:                  task.OutputHeight,
-			ContentHash:             contentHash,
-			ProcessingAttemptID:     attempt.ID,
-			ProcessingAttemptNumber: attempt.AttemptNumber,
-			ExecutionID:             executionID,
-			RevisionID:              result.RevisionID,
-			CreatedAt:               now,
-			UpdatedAt:               now,
-		})
-	}
-
-	if err := w.repo.CreateProcessedFrames(w.db, frames); err != nil {
-		return fmt.Errorf("create processed frames failed: %w", err)
-	}
-	return nil
-}
-
-func (w *Worker) persistRevision(
-	task *processing.ProcessingTask,
-	action *processing.ProcessingAction,
-	result *application.ProcessActionResult,
-	attempt *processing.ProcessingActionAttempt,
-	executionID string,
-) error {
-	if result == nil || result.Manifest == nil || result.FrameCount == 0 {
-		return nil
-	}
-
-	now := time.Now().Format(processingTimeFormat)
-	revisionNumber := action.NextRevisionNumber
-	if revisionNumber <= 0 {
-		revisionNumber = 1
-	}
-
-	configSnapshotJSON := ""
-	if result.SequenceMeasurement != nil {
-		if data, err := json.Marshal(result.SequenceMeasurement.ProcessingReport); err == nil {
-			configSnapshotJSON = string(data)
-		}
-	}
-
-	rev := &processing.ProcessingRevision{
-		ID:                 result.RevisionID,
-		ProcessingTaskID:   task.ID,
-		ProcessingActionID: action.ID,
-		RevisionNumber:     revisionNumber,
-		SourceAttemptID:    attempt.ID,
-		SourceCandidateIdx: 0,
-		Status:             "files_published",
-		ConfigSnapshot:     configSnapshotJSON,
-		ConfigHash:         result.Manifest.ConfigHash,
-		PipelineVersion:    result.Manifest.PipelineVersion,
-		FrameCount:         result.FrameCount,
-		RootRelativePath:   result.RootRelativePath,
-		RevisionHash:       result.Manifest.RevisionHash,
-		Active:             0,
-		CreatedAt:          now,
-		UpdatedAt:          now,
-	}
-
-	tx := w.db.Begin()
-	if tx.Error != nil {
-		return fmt.Errorf("begin revision transaction failed: %w", tx.Error)
-	}
-
-	if err := w.repo.CreateProcessingRevision(tx, rev); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("create revision record failed: %w", err)
-	}
-
-	artifactRecords := make([]processing.ProcessingArtifactRecord, 0, result.FrameCount*2)
-	for i := 0; i < result.FrameCount; i++ {
-		frameIdx := i
-		fileHash := ""
-		pixelHash := ""
-		if i < len(result.Manifest.Frames) {
-			fileHash = result.Manifest.Frames[i].FileHash
-			pixelHash = result.Manifest.Frames[i].PixelHash
-		}
-		artifactRecords = append(artifactRecords, processing.ProcessingArtifactRecord{
-			ID:           "art-" + uuid.New().String(),
-			RevisionID:   result.RevisionID,
-			FrameIndex:   &frameIdx,
-			ArtifactKind: "frame",
-			Stage:        "encode",
-			RelativePath: filepath.ToSlash(filepath.Join(result.RootRelativePath, "frames", fmt.Sprintf("frame_%04d.png", i))),
-			MimeType:     "image/png",
-			Width:        task.OutputWidth,
-			Height:       task.OutputHeight,
-			ContentHash:  fileHash,
-			MetadataJSON: fmt.Sprintf(`{"pixelHash":"%s"}`, pixelHash),
-			CreatedAt:    now,
-		})
-
-		if i < len(result.Manifest.Frames) && result.Manifest.Frames[i].Mask != "" {
-			artifactRecords = append(artifactRecords, processing.ProcessingArtifactRecord{
-				ID:           "art-" + uuid.New().String(),
-				RevisionID:   result.RevisionID,
-				FrameIndex:   &frameIdx,
-				ArtifactKind: "mask",
-				Stage:        "background",
-				RelativePath: filepath.ToSlash(filepath.Join(result.RootRelativePath, result.Manifest.Frames[i].Mask)),
-				MimeType:     "image/png",
-				Width:        task.OutputWidth,
-				Height:       task.OutputHeight,
-				CreatedAt:    now,
-			})
-		}
-	}
-
-	manifestArtifact := processing.ProcessingArtifactRecord{
-		ID:           "art-" + uuid.New().String(),
-		RevisionID:   result.RevisionID,
-		ArtifactKind: "manifest",
-		Stage:        "publish",
-		RelativePath: filepath.ToSlash(filepath.Join(result.RootRelativePath, "revision.json")),
-		MimeType:     "application/json",
-		ByteSize:     int64(len(result.Manifest.RevisionHash)),
-		ContentHash:  result.Manifest.RevisionHash,
-		CreatedAt:    now,
-	}
-	artifactRecords = append(artifactRecords, manifestArtifact)
-
-	if err := w.repo.CreateProcessingArtifacts(tx, artifactRecords); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("create artifact records failed: %w", err)
-	}
-
-	measurementRecords := make([]processing.FrameMeasurementRecord, 0, len(result.Measurements))
-	for _, m := range result.Measurements {
-		subjectBoxJSON, _ := json.Marshal(m.SubjectBox)
-		sourceAnchorJSON, _ := json.Marshal(m.SourceAnchor)
-		targetAnchorJSON, _ := json.Marshal(m.TargetAnchor)
-		edgeContactJSON, _ := json.Marshal(m.EdgeContact)
-		clippingJSON, _ := json.Marshal(m.Clipping)
-		trajectoryJSON, _ := json.Marshal(m.Trajectory)
-		fullJSON, _ := m.ToJSON()
-
-		measurementRecords = append(measurementRecords, processing.FrameMeasurementRecord{
-			ID:                       "meas-" + uuid.New().String(),
-			RevisionID:               result.RevisionID,
-			FrameIndex:               m.FrameIndex,
-			MeasurementSchemaVersion: 1,
-			SubjectBoxJSON:           string(subjectBoxJSON),
-			SourceAnchorJSON:         string(sourceAnchorJSON),
-			TargetAnchorJSON:         string(targetAnchorJSON),
-			AlphaCoverage:            m.AlphaCoverage,
-			ComponentCount:           m.ComponentCount,
-			EdgeContactJSON:          string(edgeContactJSON),
-			ClippingJSON:             string(clippingJSON),
-			TrajectoryJSON:           string(trajectoryJSON),
-			MeasurementJSON:          fullJSON,
-			CreatedAt:                now,
-			UpdatedAt:                now,
-		})
-	}
-
-	if err := w.repo.CreateFrameMeasurements(tx, measurementRecords); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("create measurement records failed: %w", err)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return fmt.Errorf("commit revision transaction failed: %w", err)
-	}
-
-	if err := w.repo.ActivateRevision(w.db, action.ID, result.RevisionID); err != nil {
-		return fmt.Errorf("activate revision failed: %w", err)
-	}
-
-	return nil
-}
-
-func computeFileSHA256(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
 }
 
 func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID string, leaseLostCancel context.CancelFunc) {
@@ -789,17 +538,6 @@ func (w *Worker) updateActionProgress(action *processing.ProcessingAction, stage
 		"updated_at": now,
 	})
 	w.publishActionProgress(action.ProcessingTaskID, action.ActionKey, stage, progress)
-}
-
-func (w *Worker) succeedAction(action *processing.ProcessingAction) {
-	now := time.Now().Format(processingTimeFormat)
-	_ = w.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
-		"status":       "succeeded",
-		"progress":     100,
-		"completed_at": now,
-		"updated_at":   now,
-	})
-	w.publishActionEvent(action.ProcessingTaskID, action.ActionKey, "succeeded")
 }
 
 func (w *Worker) failAction(action *processing.ProcessingAction, err error) {

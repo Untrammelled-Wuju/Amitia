@@ -55,6 +55,19 @@ var (
 	ErrPackageCompensationFailed              = errors.New("kernel: package compensation failed")
 	ErrPackageMigrationSandboxViolation       = errors.New("kernel: package migration sandbox violation")
 	ErrPackageMigrationCompensationFailed     = errors.New("kernel: package migration compensation failed")
+	ErrPackageQuarantineMetadataUnavailable   = errors.New("kernel: quarantine metadata repository unavailable")
+	ErrPackageQuarantineMetadataMissing       = errors.New("kernel: quarantine metadata not found for operation")
+	ErrPackageQuarantineMetadataIncomplete    = errors.New("kernel: quarantine metadata content incomplete")
+	ErrPackageQuarantineReleaseFailed         = errors.New("kernel: quarantine metadata release failed")
+	ErrPackageQuarantineStatePersistFailed    = errors.New("kernel: quarantine metadata state persistence failed")
+	ErrPackageRecoveryStepPersistFailed       = errors.New("kernel: recovery step persistence failed")
+	ErrPackageRollbackSnapshotCorrupted       = errors.New("kernel: rollback snapshot hash mismatch")
+	ErrPackageUninstallArtifactPolicyUnproven = errors.New("kernel: uninstall artifact retention policy unproven")
+	ErrPackageUninstallArtifactMissing        = errors.New("kernel: uninstall artifact unexpectedly missing")
+	ErrPackageUninstallArtifactReferenced     = errors.New("kernel: uninstall artifact still referenced")
+	ErrPackageMigrationSQLUnparseable         = errors.New("kernel: migration sql statement unparseable")
+	ErrPackageMigrationNamespaceViolation     = errors.New("kernel: migration namespace violation")
+	ErrPackageLegacyRuntimeEnabled            = errors.New("kernel: legacy runtime enabled in production")
 )
 
 const (
@@ -81,6 +94,19 @@ const (
 	PackageErrCodeCompensationFailed              = "PACKAGE_COMPENSATION_FAILED"
 	PackageErrCodeMigrationSandboxViolation       = "PACKAGE_MIGRATION_SANDBOX_VIOLATION"
 	PackageErrCodeMigrationCompensationFailed     = "PACKAGE_MIGRATION_COMPENSATION_FAILED"
+	PackageErrCodeQuarantineMetadataUnavailable   = "PACKAGE_QUARANTINE_METADATA_UNAVAILABLE"
+	PackageErrCodeQuarantineMetadataMissing       = "PACKAGE_QUARANTINE_METADATA_MISSING"
+	PackageErrCodeQuarantineMetadataIncomplete    = "PACKAGE_QUARANTINE_METADATA_INCOMPLETE"
+	PackageErrCodeQuarantineReleaseFailed         = "PACKAGE_QUARANTINE_RELEASE_FAILED"
+	PackageErrCodeQuarantineStatePersistFailed    = "PACKAGE_QUARANTINE_STATE_PERSIST_FAILED"
+	PackageErrCodeRecoveryStepPersistFailed       = "PACKAGE_RECOVERY_STEP_PERSIST_FAILED"
+	PackageErrCodeRollbackSnapshotCorrupted       = "PACKAGE_ROLLBACK_SNAPSHOT_CORRUPTED"
+	PackageErrCodeUninstallArtifactPolicyUnproven = "PACKAGE_UNINSTALL_ARTIFACT_POLICY_UNPROVEN"
+	PackageErrCodeUninstallArtifactMissing        = "PACKAGE_UNINSTALL_ARTIFACT_UNEXPECTEDLY_MISSING"
+	PackageErrCodeUninstallArtifactReferenced     = "PACKAGE_UNINSTALL_ARTIFACT_STILL_REFERENCED"
+	PackageErrCodeMigrationSQLUnparseable         = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
+	PackageErrCodeMigrationNamespaceViolation     = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
+	PackageErrCodeLegacyRuntimeEnabled            = "PACKAGE_LEGACY_RUNTIME_ENABLED"
 )
 
 type PackageError struct {
@@ -133,6 +159,19 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeCompensationFailed:              500,
 	PackageErrCodeMigrationSandboxViolation:       403,
 	PackageErrCodeMigrationCompensationFailed:     500,
+	PackageErrCodeQuarantineMetadataUnavailable:   503,
+	PackageErrCodeQuarantineMetadataMissing:       409,
+	PackageErrCodeQuarantineMetadataIncomplete:    409,
+	PackageErrCodeQuarantineReleaseFailed:         500,
+	PackageErrCodeQuarantineStatePersistFailed:    500,
+	PackageErrCodeRecoveryStepPersistFailed:       500,
+	PackageErrCodeRollbackSnapshotCorrupted:       409,
+	PackageErrCodeUninstallArtifactPolicyUnproven: 409,
+	PackageErrCodeUninstallArtifactMissing:        409,
+	PackageErrCodeUninstallArtifactReferenced:     409,
+	PackageErrCodeMigrationSQLUnparseable:         422,
+	PackageErrCodeMigrationNamespaceViolation:     403,
+	PackageErrCodeLegacyRuntimeEnabled:            403,
 }
 
 func PackageErrorHTTPStatus(code string) int {

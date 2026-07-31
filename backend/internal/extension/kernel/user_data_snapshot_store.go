@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
 const userDataRestoreBatchSize = 100
@@ -92,9 +94,23 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 }
 
 func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, operationID, table, jsonlData string) error {
+	if !migration.IsExtensionNamespaceTable(table, extensionID) {
+		return fmt.Errorf("kernel: user data table %q does not belong to extension namespace", table)
+	}
 	records, err := parseJSONL(jsonlData)
 	if err != nil {
 		return fmt.Errorf("parse jsonl: %w", err)
+	}
+	for _, record := range records {
+		if extID, ok := record["extensionID"].(string); ok && extID != "" && extID != extensionID {
+			return fmt.Errorf("kernel: user data record extensionID mismatch: got %s expected %s", extID, extensionID)
+		}
+		if ns, ok := record["namespace"].(string); ok && ns != "" {
+			expectedPrefix := migration.ExtensionNamespacePrefix(extensionID)
+			if !strings.HasPrefix(strings.ToLower(ns), expectedPrefix) {
+				return fmt.Errorf("kernel: user data record namespace %q does not belong to extension namespace", ns)
+			}
+		}
 	}
 	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, int64(len(records)))
 	if err != nil {

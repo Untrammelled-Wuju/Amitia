@@ -23,6 +23,9 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
+	"github.com/u-ai/backend/internal/desktoppet/processing/commit"
+	"github.com/u-ai/backend/internal/desktoppet/processing/events"
+	"github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/migration"
@@ -68,7 +71,15 @@ func newTestWorkerWithPipeline(t *testing.T, db *gorm.DB, repo processing.Reposi
 	}
 	pipeline := application.NewPipeline(bgRegistry, dataDir)
 	sourceResolver := application.NewRepoSourceResolver(repo, dataDir, nil)
-	return NewWorker(db, repo, dataDir, pipeline, sourceResolver)
+
+	wsManager := workspace.NewWorkspaceManager(dataDir)
+	commitJournalRepo := events.NewCommitJournalRepository(db)
+	outboxRepo := events.NewOutboxRepository(db)
+	outbox := events.NewEventOutbox(outboxRepo)
+	manifestStore := processing.NewManifestStore(db)
+	committer := commit.NewProcessingCommitter(db, repo, wsManager, commitJournalRepo, outbox, manifestStore, dataDir)
+
+	return NewWorker(db, repo, dataDir, pipeline, sourceResolver, committer)
 }
 
 func workerNowStr() string {
@@ -210,7 +221,7 @@ func TestClaimProcessingTaskAtomicity(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:                "pt-claim",
@@ -271,7 +282,7 @@ func TestHeartbeatUpdate(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-hb",
@@ -312,7 +323,7 @@ func TestListRecoverableProcessingTasks(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	now := time.Now()
 	pastStr := now.Add(-1 * time.Minute).Format("2006-01-02 15:04:05")
@@ -416,11 +427,14 @@ func TestProcessActionFlow(t *testing.T) {
 		t.Fatalf("processAction failed: %v", err)
 	}
 
-	revPath, ok := w.revisionPaths[actionKey]
-	if !ok || revPath == "" {
-		t.Fatal("revisionPaths missing entry for action")
+	activeRev, err := repo.GetActiveRevision(paLoaded.ID)
+	if err != nil {
+		t.Fatalf("get active revision: %v", err)
 	}
-	framesDir := filepath.Join(dataDir, revPath, "frames")
+	if activeRev == nil {
+		t.Fatal("active revision is nil")
+	}
+	framesDir := filepath.Join(dataDir, activeRev.RootStorageKey, "frames")
 	entries, err := os.ReadDir(framesDir)
 	if err != nil {
 		t.Fatalf("read frames dir: %v", err)
@@ -506,7 +520,7 @@ func TestFinalizeTaskStatus(t *testing.T) {
 			db := setupWorkerTestDB(t)
 			repo := newWorkerRepo(t, db)
 			dataDir := t.TempDir()
-			w := NewWorker(db, repo, dataDir, nil, nil)
+			w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 			pt := &processing.ProcessingTask{
 				ID:                "pt-finalize",
@@ -568,7 +582,7 @@ func TestCancelDetection(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pt := &processing.ProcessingTask{
 		ID:               "pt-cancel-detect",
@@ -594,7 +608,7 @@ func TestRecoverStuckTasks(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pastStr := time.Now().Add(-1 * time.Minute).Format("2006-01-02 15:04:05")
 
@@ -655,7 +669,7 @@ func TestRecoverStuckTasks_Empty(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	createProcessingTask(t, repo, db, &processing.ProcessingTask{
 		ID:               "pt-no-stuck",
@@ -678,7 +692,7 @@ func TestProcessActionLoadSourceFramesMissing(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	taskID := "gt-missing-frames"
 	seedWorkerGenerationTask(t, db, taskID, "user-1", "succeeded")
@@ -700,7 +714,7 @@ func TestFinalizeTaskCleansTempDir(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	taskID := "gt-cleanup"
 	pt := &processing.ProcessingTask{
@@ -733,7 +747,7 @@ func TestUpdateStageAndProgress(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pt := &processing.ProcessingTask{
 		ID:               "pt-stage",

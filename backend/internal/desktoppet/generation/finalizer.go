@@ -1,8 +1,10 @@
 package generation
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/desktoppet/generation/activebinding"
 	"gorm.io/gorm"
 )
 
@@ -20,22 +22,17 @@ type FinalizeAttemptRequest struct {
 	AutoPromote       bool
 }
 
-type ActiveBindingFinalizerRepo interface {
-	CASUpdate(tx *gorm.DB, actionID string, expectedRevision int, attemptID, artifactID, hash, reason string) (bool, error)
-	GetByActionID(actionID string) (revision int, exists bool, err error)
-}
-
 type GenerationFinalizer struct {
 	attemptRepo       AttemptRepository
 	artifactRepo      ArtifactRepository
-	activeBindingRepo ActiveBindingFinalizerRepo
+	bindingService    *activebinding.BindingService
 }
 
-func NewGenerationFinalizer(attemptRepo AttemptRepository, artifactRepo ArtifactRepository, activeBindingRepo ActiveBindingFinalizerRepo) *GenerationFinalizer {
+func NewGenerationFinalizer(attemptRepo AttemptRepository, artifactRepo ArtifactRepository, bindingService *activebinding.BindingService) *GenerationFinalizer {
 	return &GenerationFinalizer{
 		attemptRepo:       attemptRepo,
 		artifactRepo:      artifactRepo,
-		activeBindingRepo: activeBindingRepo,
+		bindingService:    bindingService,
 	}
 }
 
@@ -55,7 +52,7 @@ func (f *GenerationFinalizer) FinalizeAttempt(req FinalizeAttemptRequest) error 
 			return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("mark artifact persisted: %v", err), err)
 		}
 	}
-	if req.AutoPromote {
+	if req.AutoPromote && req.PrimaryArtifactID != "" {
 		if err := f.promoteActiveBinding(req); err != nil {
 			return err
 		}
@@ -115,20 +112,18 @@ func (f *GenerationFinalizer) markArtifactPersisted(tx *gorm.DB, artifactID, now
 }
 
 func (f *GenerationFinalizer) promoteActiveBinding(req FinalizeAttemptRequest) error {
-	revision, exists, err := f.activeBindingRepo.GetByActionID(req.TaskActionID)
+	err := f.bindingService.BindActiveArtifact(req.Tx, activebinding.BindRequest{
+		TaskActionID:      req.TaskActionID,
+		AttemptID:         req.AttemptID,
+		PrimaryArtifactID: req.PrimaryArtifactID,
+		ArtifactHash:      req.ArtifactHash,
+		Reason:            "finalize_promote",
+	})
 	if err != nil {
-		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("get active binding: %v", err), err)
-	}
-	if !exists {
-		revision = 0
-	}
-	reason := "finalize_promote"
-	ok, err := f.activeBindingRepo.CASUpdate(req.Tx, req.TaskActionID, revision, req.AttemptID, req.PrimaryArtifactID, req.ArtifactHash, reason)
-	if err != nil {
-		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("cas update active binding: %v", err), err)
-	}
-	if !ok {
-		return NewGenerationError(ErrCodeActiveBindingCASConflict, "active binding revision conflict", nil)
+		if errors.Is(err, activebinding.ErrBindingCASConflict) {
+			return NewGenerationError(ErrCodeActiveBindingCASConflict, "active binding revision conflict", err)
+		}
+		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("promote active binding: %v", err), err)
 	}
 	return nil
 }

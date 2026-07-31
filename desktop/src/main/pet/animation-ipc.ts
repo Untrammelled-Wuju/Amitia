@@ -1,6 +1,5 @@
 import { ipcMain, BrowserWindow, powerMonitor } from "electron";
 import { join, isAbsolute, normalize, relative } from "node:path";
-import { existsSync } from "node:fs";
 import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
 import type {
   PetDragIpcPayload,
@@ -14,21 +13,15 @@ import type {
   PlayActionCommand,
   PlaybackRecoverySnapshot,
   LoopType,
+  ReturnTarget,
 } from "../../desktop-pet/animation/contracts";
 import type { LoadedInstallation } from "./resource-loader";
 import type { InstallationInfo } from "./manager";
 import { buildPetResourceUrl } from "./resource-resolver";
-import { PetResourceProtocolRegistry } from "./resource-protocol";
-
-const MIME_MAP: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-  ".json": "application/json",
-};
+import {
+  PetResourceProtocolRegistry,
+  buildResourceIndex,
+} from "./resource-protocol";
 
 const PLAYBACK_EVENT_TYPE_WHITELIST = new Set<string>([
   "playback.command_accepted",
@@ -86,14 +79,6 @@ interface DurableState {
   packageSnapshot: PackagePlaybackSnapshot | null;
   defaultActionKey: string | null;
   windowVisible: boolean;
-}
-
-function getMimeFromPath(filePath: string): string {
-  const lower = filePath.toLowerCase();
-  for (const [ext, mime] of Object.entries(MIME_MAP)) {
-    if (lower.endsWith(ext)) return mime;
-  }
-  return "application/octet-stream";
 }
 
 function isPathSafe(basePath: string, targetPath: string): boolean {
@@ -178,11 +163,6 @@ function buildPackageSnapshot(
 
     const runtimeAction = loaded.actions.get(action.key);
 
-    const defaultPriority = runtimeAction?.priority ?? 50;
-    const cooldownMs = runtimeAction?.cooldownMs ?? 0;
-    const mutexGroup = runtimeAction?.mutexGroup ?? null;
-    const minimumPlayMs = runtimeAction?.minimumPlayMs ?? 0;
-    const maximumPlayMs = runtimeAction?.maximumPlayMs ?? null;
     const playbackMode = runtimeAction?.playbackMode;
     const loopType = (playbackMode ?? action.loopType) as LoopType;
 
@@ -206,20 +186,20 @@ function buildPackageSnapshot(
       specSnapshot: {
         actionKey: action.key,
         displayName: runtimeAction?.name ?? action.name,
-        category: "general",
+        category: runtimeAction?.category,
         version: parseInt(action.version || "1", 10) || 1,
         loopType,
-        defaultPriority,
+        defaultPriority: runtimeAction?.priority,
         interruptible: action.interruptible,
-        interruptAfterMs: 0,
-        minimumPlayMs,
-        maximumPlayMs,
-        cooldownMs,
-        mutexGroup,
+        interruptAfterMs: runtimeAction?.interruptAfterMs,
+        minimumPlayMs: runtimeAction?.minimumPlayMs,
+        maximumPlayMs: runtimeAction?.maximumPlayMs ?? null,
+        cooldownMs: runtimeAction?.cooldownMs,
+        mutexGroup: runtimeAction?.mutexGroup ?? null,
         returnTarget,
-        supportsDefaultIdle: true,
-        isStableStateCandidate: loopType === "loop",
-        isTransitionOnly: false,
+        supportsDefaultIdle: runtimeAction?.supportsDefaultIdle,
+        isStableStateCandidate: runtimeAction?.isStableStateCandidate,
+        isTransitionOnly: runtimeAction?.isTransitionOnly,
       },
     };
   });
@@ -236,7 +216,6 @@ function buildPackageSnapshot(
     defaultActionKey: loaded.manifest.defaultAction,
     actions,
     previewUrl,
-    interpolationMode: "nearest",
   };
 }
 
@@ -429,21 +408,21 @@ export class AnimationIpcAdapter {
       return { url: "", mime: "application/octet-stream" };
     }
     const installation = this.deps.getActiveInstallation();
-    if (!installation) {
+    const loaded = this.deps.getLoadedInstallation();
+    if (!installation || !loaded) {
       return { url: "", mime: "application/octet-stream" };
     }
     if (!isPathSafe(installation.installPath, relativePath)) {
       return { url: "", mime: "application/octet-stream" };
     }
-    const fullPath = normalize(
-      isAbsolute(relativePath) ? relativePath : join(installation.installPath, relativePath),
-    );
-    if (!existsSync(fullPath)) {
+    const cleanRelative = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    const resourceIndex = buildResourceIndex(loaded.manifest);
+    const indexEntry = resourceIndex.get(cleanRelative);
+    if (!indexEntry) {
       return { url: "", mime: "application/octet-stream" };
     }
-    const cleanRelative = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
     const url = buildPetResourceUrl(installation.id, cleanRelative);
-    const mime = getMimeFromPath(fullPath);
+    const mime = indexEntry.mediaType || "application/octet-stream";
     return { url, mime };
   };
 
@@ -477,6 +456,7 @@ export class AnimationIpcAdapter {
         installationId: installation.id,
         installPath: installation.installPath,
         manifest: loaded.manifest,
+        resourceIndex: buildResourceIndex(loaded.manifest),
       };
     });
 

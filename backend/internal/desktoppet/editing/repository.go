@@ -3,6 +3,7 @@ package editing
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -24,6 +25,13 @@ type Repository interface {
 	GetActiveRevisionBinding(processingTaskID, actionKey string) (*ActiveRevisionBinding, error)
 	UpsertActiveRevisionBinding(binding *ActiveRevisionBinding) error
 	ListActiveBindings(processingTaskID string) ([]ActiveRevisionBinding, error)
+
+	GetActionStreamByID(streamID string) (*ActionStream, error)
+	GetActionStreamByKey(userID, characterID, actionKey string) (*ActionStream, error)
+	GetActiveActionRevisionBindingByStream(streamID string) (*ActiveActionRevisionBinding, error)
+	GetActiveActionRevisionBindingByTask(processingTaskID, actionKey string) (*ActiveActionRevisionBinding, error)
+	ListActionRevisionsByStream(streamID string) ([]ActionRevision, error)
+	ListAllActionStreams(userID string) ([]ActionStream, error)
 
 	CreateFrameAsset(asset *FrameAsset) error
 	GetFrameAsset(id string) (*FrameAsset, error)
@@ -751,4 +759,74 @@ func (r *repository) GetCandidateByRevisionID(revisionID string) (*EditCandidate
 		return nil, err
 	}
 	return &candidate, nil
+}
+
+func (r *repository) GetActionStreamByID(streamID string) (*ActionStream, error) {
+	var stream ActionStream
+	err := r.db.Where("id = ?", streamID).First(&stream).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &stream, nil
+}
+
+func (r *repository) GetActionStreamByKey(userID, characterID, actionKey string) (*ActionStream, error) {
+	streamKey := fmt.Sprintf("%s:%s:%s", userID, characterID, actionKey)
+	var stream ActionStream
+	err := r.db.Where("stream_key = ?", streamKey).First(&stream).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &stream, nil
+}
+
+func (r *repository) GetActiveActionRevisionBindingByStream(streamID string) (*ActiveActionRevisionBinding, error) {
+	var binding ActiveActionRevisionBinding
+	err := r.db.Where("action_stream_id = ?", streamID).First(&binding).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &binding, nil
+}
+
+func (r *repository) GetActiveActionRevisionBindingByTask(processingTaskID, actionKey string) (*ActiveActionRevisionBinding, error) {
+	var binding ActiveActionRevisionBinding
+	err := r.db.Raw(`
+		SELECT b.* FROM desktop_pet_active_action_revision_bindings b
+		WHERE b.action_key = ? AND b.action_stream_id IN (
+			SELECT s.id FROM desktop_pet_action_streams s
+			WHERE s.root_processing_task_id = ?
+		)
+		LIMIT 1
+	`, actionKey, processingTaskID).Scan(&binding).Error
+	if err != nil {
+		return nil, err
+	}
+	if binding.ID == "" {
+		return nil, nil
+	}
+	return &binding, nil
+}
+
+func (r *repository) ListActionRevisionsByStream(streamID string) ([]ActionRevision, error) {
+	var revs []ActionRevision
+	err := r.db.Where("action_stream_id = ?", streamID).
+		Order("revision_number ASC").Find(&revs).Error
+	return revs, err
+}
+
+func (r *repository) ListAllActionStreams(userID string) ([]ActionStream, error) {
+	var streams []ActionStream
+	err := r.db.Where("user_id = ?", userID).
+		Order("created_at DESC").Find(&streams).Error
+	return streams, err
 }

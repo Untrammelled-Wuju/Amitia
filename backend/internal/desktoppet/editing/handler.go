@@ -564,3 +564,41 @@ func mapEditErrorCode(code string) int {
 		return response.InternalError
 	}
 }
+
+func (h *Handler) ListActionStreams(c *gin.Context) {
+	userID := desktoppet.ResolveUserID(c)
+	streams, err := h.service.ListActionStreams(c.Request.Context(), userID)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	util.SuccessResponse(c, streams)
+}
+
+func (h *Handler) ListRevisionsByStream(c *gin.Context) {
+	streamID := c.Param("streamId")
+	if streamID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少Stream ID", nil)
+		return
+	}
+	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), streamID)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	util.SuccessResponse(c, revs)
+}
+
+func (h *Handler) GetActiveRevisionByStream(c *gin.Context) {
+	streamID := c.Param("streamId")
+	if streamID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少Stream ID", nil)
+		return
+	}
+	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), streamID)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	util.SuccessResponse(c, detail)
+}

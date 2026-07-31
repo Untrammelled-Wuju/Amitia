@@ -3,6 +3,7 @@ package source
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -72,6 +73,10 @@ func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *Process
 		return fmt.Errorf("%w: source artifact id is empty", ErrSourceInvalid)
 	}
 
+	if manifest.CharacterID == "" {
+		return fmt.Errorf("%w: character id is empty", ErrSourceInvalid)
+	}
+
 	if err := v.validateOwnership(manifest, userID); err != nil {
 		return err
 	}
@@ -92,12 +97,16 @@ func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *Process
 		return err
 	}
 
+	if err := v.validateActionSpecHash(manifest); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (v *unifiedSourceValidator) validateOwnership(manifest *ProcessingSourceManifestRecord, userID string) error {
 	if userID == "" {
-		return nil
+		return fmt.Errorf("%w: user id is empty", ErrSourceInvalid)
 	}
 	ownerID, err := v.repo.GetTaskUserID(manifest.GenerationTaskID)
 	if err != nil {
@@ -111,7 +120,7 @@ func (v *unifiedSourceValidator) validateOwnership(manifest *ProcessingSourceMan
 
 func (v *unifiedSourceValidator) validateGenerationAction(manifest *ProcessingSourceManifestRecord) error {
 	if manifest.GenerationActionID == "" {
-		return nil
+		return fmt.Errorf("%w: generation action id is empty", ErrSourceInvalid)
 	}
 	action, err := v.repo.GetGenerationActionInfo(manifest.GenerationActionID)
 	if err != nil {
@@ -146,7 +155,7 @@ func (v *unifiedSourceValidator) validateArtifact(manifest *ProcessingSourceMani
 		return fmt.Errorf("%w: artifact role not primary: %s", ErrSourceInvalid, artifact.Role)
 	}
 
-	if !isArtifactPersisted(artifact.Status) {
+	if !isArtifactPersisted(artifact.Status, manifest.ArtifactKind == string(SourceLegacyFrame)) {
 		return fmt.Errorf("%w: artifact not persisted status=%s", ErrSourceInvalid, artifact.Status)
 	}
 
@@ -154,16 +163,27 @@ func (v *unifiedSourceValidator) validateArtifact(manifest *ProcessingSourceMani
 		return fmt.Errorf("%w: artifact hash mismatch expected=%s actual=%s", ErrSourceInvalid, manifest.ArtifactContentHash, artifact.ContentHash)
 	}
 
+	if manifest.ArtifactStorageKey != "" && manifest.ArtifactRelativePath != "" && manifest.ArtifactStorageKey != manifest.ArtifactRelativePath {
+		return fmt.Errorf("%w: storage key mismatch storageKey=%s relativePath=%s", ErrSourceInvalid, manifest.ArtifactStorageKey, manifest.ArtifactRelativePath)
+	}
+
+	if manifest.ArtifactStorageKey != "" && artifact.RelativePath != "" && artifact.RelativePath != manifest.ArtifactStorageKey {
+		return fmt.Errorf("%w: artifact storage key mismatch expected=%s actual=%s", ErrSourceInvalid, manifest.ArtifactStorageKey, artifact.RelativePath)
+	}
+
 	return nil
 }
 
-func isArtifactPersisted(status string) bool {
-	switch status {
-	case "verified", "saved", "persisted":
-		return true
-	default:
-		return false
+func isArtifactPersisted(status string, isLegacy bool) bool {
+	if isLegacy {
+		switch status {
+		case "verified", "saved", "persisted":
+			return true
+		default:
+			return false
+		}
 	}
+	return status == "persisted"
 }
 
 func (v *unifiedSourceValidator) validateFile(manifest *ProcessingSourceManifestRecord) error {
@@ -187,6 +207,13 @@ func (v *unifiedSourceValidator) validateFile(manifest *ProcessingSourceManifest
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("%w: read file: %v", ErrSourceInvalid, err)
+	}
+
+	if manifest.ArtifactContentHash != "" {
+		computedHash := ComputeContentHash(content)
+		if computedHash != manifest.ArtifactContentHash {
+			return fmt.Errorf("%w: file hash mismatch expected=%s actual=%s", ErrSourceInvalid, manifest.ArtifactContentHash, computedHash)
+		}
 	}
 
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(content))
@@ -264,5 +291,27 @@ func (v *unifiedSourceValidator) validateFrames(manifest *ProcessingSourceManife
 		}
 	}
 
+	return nil
+}
+
+func (v *unifiedSourceValidator) validateActionSpecHash(manifest *ProcessingSourceManifestRecord) error {
+	if manifest.ActionSpecSnapshotJSON == "" || manifest.ActionSpecSnapshotJSON == "{}" {
+		return nil
+	}
+	if manifest.ActionSpecHash == "" {
+		return fmt.Errorf("%w: action spec hash is empty", ErrSourceInvalid)
+	}
+	var snap ActionSpecSnapshot
+	if err := json.Unmarshal([]byte(manifest.ActionSpecSnapshotJSON), &snap); err != nil {
+		return fmt.Errorf("%w: unmarshal action spec snapshot: %v", ErrSourceInvalid, err)
+	}
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return fmt.Errorf("%w: marshal action spec snapshot: %v", ErrSourceInvalid, err)
+	}
+	computed := ComputeContentHash(data)
+	if computed != manifest.ActionSpecHash {
+		return fmt.Errorf("%w: action spec hash mismatch expected=%s actual=%s", ErrSourceInvalid, manifest.ActionSpecHash, computed)
+	}
 	return nil
 }

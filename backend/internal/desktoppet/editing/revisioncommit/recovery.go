@@ -8,19 +8,19 @@ import (
 )
 
 type RecoveryWorker struct {
-	bridge   RevisionBridge
-	stopCh   chan struct{}
-	interval time.Duration
+	processor *BridgeProcessor
+	stopCh    chan struct{}
+	interval  time.Duration
 }
 
-func NewRecoveryWorker(bridge RevisionBridge, interval time.Duration) *RecoveryWorker {
+func NewRecoveryWorker(processor *BridgeProcessor, interval time.Duration) *RecoveryWorker {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
 	return &RecoveryWorker{
-		bridge:   bridge,
-		stopCh:   make(chan struct{}),
-		interval: interval,
+		processor: processor,
+		stopCh:    make(chan struct{}),
+		interval:  interval,
 	}
 }
 
@@ -34,8 +34,11 @@ func (w *RecoveryWorker) Start(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
-			if err := w.bridge.RecoverPending(ctx); err != nil {
-				log.Logger.Errorf("恢复待处理桥接任务失败: %v", err)
+			if err := w.processor.ProcessPending(ctx, 50); err != nil {
+				log.Logger.Errorf("恢复待处理Inbox条目失败: %v", err)
+			}
+			if err := w.processor.PublishOutbox(ctx, 50); err != nil {
+				log.Logger.Errorf("发布待处理Outbox事件失败: %v", err)
 			}
 		}
 	}

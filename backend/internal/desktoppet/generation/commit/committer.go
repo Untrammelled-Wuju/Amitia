@@ -189,7 +189,7 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 
 	if err := c.journalRepo.Create(input.Tx, journal); err != nil {
 		_ = os.Remove(stagingPath)
-		_ = c.artifactRepo.UpdateArtifact(artifactID, map[string]interface{}{
+		_ = c.artifactRepo.UpdateArtifactTx(input.Tx, artifactID, map[string]interface{}{
 			"status":     string(generation.ArtifactStatusPublishFailed),
 			"updated_at": nowRFC3339(),
 		})
@@ -205,7 +205,7 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 		return nil, fmt.Errorf("rename to final path: %w", err)
 	}
 
-	if err := c.artifactRepo.UpdateArtifact(artifactID, map[string]interface{}{
+	if err := c.artifactRepo.UpdateArtifactTx(input.Tx, artifactID, map[string]interface{}{
 		"status":        string(generation.ArtifactStatusPersisted),
 		"relative_path": relPath,
 		"storage_key":   input.StorageKey,
@@ -234,7 +234,7 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 
 func (c *ArtifactCommitter) markRenameFailure(artifactID, journalID string, tx *gorm.DB, errMsg string) {
 	now := nowRFC3339()
-	_ = c.artifactRepo.UpdateArtifact(artifactID, map[string]interface{}{
+	_ = c.artifactRepo.UpdateArtifactTx(tx, artifactID, map[string]interface{}{
 		"status":     string(generation.ArtifactStatusPublishFailed),
 		"updated_at": now,
 	})

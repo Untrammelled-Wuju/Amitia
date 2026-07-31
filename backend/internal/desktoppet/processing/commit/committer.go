@@ -3,87 +3,91 @@ package commit
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	"github.com/u-ai/backend/internal/desktoppet/processing/contracts"
+	"github.com/u-ai/backend/internal/desktoppet/processing/events"
+	"github.com/u-ai/backend/internal/desktoppet/processing/measurement"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
 	"github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	"gorm.io/gorm"
 )
 
 var _ Committer = (*ProcessingCommitter)(nil)
-var _ CommitRepository = (*ProcessingCommitter)(nil)
 
 type CommitRequest struct {
-	Ctx                context.Context
-	ProcessingTaskID   string
-	ProcessingActionID string
-	ActionKey          string
-	AttemptID          string
-	GenerationTaskID   string
-	ProcessingVersion  int
-	SourceManifestID   string
-	ConfigSnapshot     string
-	ConfigHash         string
-	PipelineVersion    string
-	PipelineResult     *PipelineResult
-}
-
-type PipelineResult struct {
-	FrameCount       int
-	FramesDir        string
-	Frames           []FrameResult
-	RootRelativePath string
-	RevisionHash     string
-}
-
-type FrameResult struct {
-	Index     int
-	FilePath  string
-	MaskPath  string
-	FileHash  string
-	PixelHash string
-	Width     int
-	Height    int
+	Ctx                        context.Context
+	UserID                     string
+	CharacterID                string
+	ProcessingTaskID           string
+	ProcessingActionID         string
+	ProcessingAttemptID        string
+	ActionKey                  string
+	SourceManifestID           string
+	SourceGenerationAttemptID  string
+	SourceGenerationArtifactID string
+	SourceArtifactContentHash  string
+	ConfigSnapshot             string
+	ConfigHash                 string
+	PipelineVersion            string
+	PipelineResult             *application.ProcessActionResult
+	ExpectedActionRowVersion   int64
+	ExecutionID                string
+	LeaseOwner                 string
 }
 
 type CommitResult struct {
+	CommitID         string
 	RevisionID       string
 	RevisionNumber   int
-	RootRelativePath string
+	RootStorageKey   string
 	Status           string
+	ContentRootHash  string
 }
 
 type Committer interface {
 	Commit(req *CommitRequest) (*CommitResult, error)
 }
 
-type CommitRepository interface {
-	CreateRevision(ctx context.Context, revision *processing.ProcessingRevision) error
-	GetLatestRevisionNumber(ctx context.Context, processingActionID string) (int, error)
-	UpdateRevisionStatus(ctx context.Context, revisionID, status, errorMessage string) error
-}
-
 type ProcessingCommitter struct {
-	db        *gorm.DB
-	repo      processing.Repository
-	workspace *workspace.WorkspaceManager
-	dataDir   string
+	db              *gorm.DB
+	repo            processing.Repository
+	workspace       *workspace.WorkspaceManager
+	commitJournal   events.CommitJournalRepository
+	outbox          *events.EventOutbox
+	manifestStore   source.ManifestStore
+	dataDir         string
+	now             func() string
 }
 
-func NewProcessingCommitter(db *gorm.DB, repo processing.Repository, ws *workspace.WorkspaceManager, dataDir string) *ProcessingCommitter {
+func NewProcessingCommitter(
+	db *gorm.DB,
+	repo processing.Repository,
+	ws *workspace.WorkspaceManager,
+	commitJournal events.CommitJournalRepository,
+	outbox *events.EventOutbox,
+	manifestStore source.ManifestStore,
+	dataDir string,
+) *ProcessingCommitter {
 	return &ProcessingCommitter{
-		db:        db,
-		repo:      repo,
-		workspace: ws,
-		dataDir:   dataDir,
+		db:            db,
+		repo:          repo,
+		workspace:     ws,
+		commitJournal: commitJournal,
+		outbox:        outbox,
+		manifestStore: manifestStore,
+		dataDir:       dataDir,
+		now:           func() string { return time.Now().UTC().Format("2006-01-02 15:04:05") },
 	}
 }
 
@@ -100,9 +104,22 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 
 	commitID := "commit_" + uuid.NewString()
 	revisionID := "rev_" + uuid.NewString()
-	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	now := c.now()
 
-	ws, err := c.workspace.CreateWorkspace(req.ProcessingTaskID, req.ProcessingActionID, req.AttemptID, commitID)
+	journal := &events.CommitJournal{
+		ID:                  "cj_" + uuid.NewString(),
+		CommitID:            commitID,
+		ProcessingAttemptID: req.ProcessingAttemptID,
+		SourceManifestID:    req.SourceManifestID,
+		Status:              events.CommitJournalStatusCreated,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	if err := c.commitJournal.Create(c.db, journal); err != nil {
+		return nil, fmt.Errorf("commit: create journal: %w", err)
+	}
+
+	ws, err := c.workspace.CreateWorkspace(req.ProcessingTaskID, req.ProcessingActionID, req.ProcessingAttemptID, commitID)
 	if err != nil {
 		return nil, fmt.Errorf("commit: create workspace: %w", err)
 	}
@@ -110,146 +127,374 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 
 	if err := c.copyPipelineToStaging(req.PipelineResult, stagingDir); err != nil {
 		cleanupStaging(stagingDir)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
 		return nil, fmt.Errorf("commit: copy to staging: %w", err)
 	}
+
+	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusStagingPrepared, "")
+
 	if err := c.writeRevisionManifest(stagingDir, revisionID, req); err != nil {
 		cleanupStaging(stagingDir)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
 		return nil, fmt.Errorf("commit: write revision manifest: %w", err)
 	}
+
 	if err := c.writeSourceManifestRef(stagingDir, req); err != nil {
 		cleanupStaging(stagingDir)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
 		return nil, fmt.Errorf("commit: write source manifest ref: %w", err)
 	}
 
-	contentRootHash, err := c.computeContentRootHash(req.PipelineResult)
+	contentRootHash, err := c.computeContentRootHash(req.PipelineResult, stagingDir, req)
 	if err != nil {
 		cleanupStaging(stagingDir)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
 		return nil, fmt.Errorf("commit: compute content root hash: %w", err)
 	}
 
-	latestNumber, err := c.GetLatestRevisionNumber(req.Ctx, req.ProcessingActionID)
-	if err != nil {
-		cleanupStaging(stagingDir)
-		return nil, fmt.Errorf("commit: get latest revision number: %w", err)
-	}
-	revisionNumber := latestNumber + 1
-
-	rootRelative := filepath.ToSlash(filepath.Join(
-		"desktop-pets",
-		"processing-tasks",
-		req.ProcessingTaskID,
-		"revisions",
-		revisionID,
+	rootStorageKey := filepath.ToSlash(filepath.Join(
+		"desktop-pets", "processing-tasks",
+		req.ProcessingTaskID, "revisions", revisionID,
 	))
 
-	rev := &processing.ProcessingRevision{
-		ID:                 revisionID,
-		ProcessingTaskID:   req.ProcessingTaskID,
-		ProcessingActionID: req.ProcessingActionID,
-		RevisionNumber:     revisionNumber,
-		SourceAttemptID:    req.AttemptID,
-		Status:             contracts.RevisionStatusPreparing,
-		ConfigSnapshot:     req.ConfigSnapshot,
-		ConfigHash:         req.ConfigHash,
-		PipelineVersion:    req.PipelineVersion,
-		FrameCount:         req.PipelineResult.FrameCount,
-		RootRelativePath:   rootRelative,
-		RevisionHash:       req.PipelineResult.RevisionHash,
-		Active:             0,
-		ContentRootHash:    contentRootHash,
-		SourceManifestID:   req.SourceManifestID,
-		CommitID:           commitID,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+	revisionNumber, err := c.allocateRevisionNumber(req.ProcessingActionID)
+	if err != nil {
+		cleanupStaging(stagingDir)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		return nil, fmt.Errorf("commit: allocate revision number: %w", err)
 	}
 
-	if err := c.CreateRevision(req.Ctx, rev); err != nil {
+	rev := &processing.ProcessingRevision{
+		ID:                          revisionID,
+		ProcessingTaskID:            req.ProcessingTaskID,
+		ProcessingActionID:          req.ProcessingActionID,
+		ProcessingAttemptID:         req.ProcessingAttemptID,
+		RevisionNumber:              revisionNumber,
+		SourceAttemptID:             req.ProcessingAttemptID,
+		SourceManifestID:            req.SourceManifestID,
+		SourceGenerationAttemptID:   req.SourceGenerationAttemptID,
+		SourceGenerationArtifactID:  req.SourceGenerationArtifactID,
+		SourceArtifactContentHash:   req.SourceArtifactContentHash,
+		Status:                      contracts.RevisionStatusPreparing,
+		ConfigSnapshot:              req.ConfigSnapshot,
+		ConfigHash:                  req.ConfigHash,
+		PipelineVersion:             req.PipelineVersion,
+		FrameCount:                  req.PipelineResult.FrameCount,
+		RootRelativePath:            rootStorageKey,
+		RootStorageKey:              rootStorageKey,
+		RevisionHash:                req.PipelineResult.RevisionHash,
+		ContentRootHash:             contentRootHash,
+		CommitID:                    commitID,
+		Active:                      0,
+		CreatedAt:                   now,
+		UpdatedAt:                   now,
+	}
+
+	artifacts := c.buildArtifactRecords(revisionID, req)
+	measurements := c.buildMeasurementRecords(revisionID, req)
+	transforms := c.buildTransformRecords(revisionID, req)
+
+	if err := c.db.WithContext(req.Ctx).Transaction(func(tx *gorm.DB) error {
+		if err := c.repo.CreateProcessingRevision(tx, rev); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+		if len(artifacts) > 0 {
+			if err := c.repo.CreateProcessingArtifacts(tx, artifacts); err != nil {
+				return fmt.Errorf("create artifacts: %w", err)
+			}
+		}
+		if len(measurements) > 0 {
+			if err := c.repo.CreateFrameMeasurements(tx, measurements); err != nil {
+				return fmt.Errorf("create measurements: %w", err)
+			}
+		}
+		if len(transforms) > 0 {
+			if err := c.repo.CreateProcessingTransforms(tx, transforms); err != nil {
+				return fmt.Errorf("create transforms: %w", err)
+			}
+		}
+		if err := c.commitJournal.UpdateStatus(tx, commitID, events.CommitJournalStatusRevisionRecorded, ""); err != nil {
+			return fmt.Errorf("update journal: %w", err)
+		}
+		if err := c.commitJournal.UpdateRevisionID(tx, commitID, revisionID); err != nil {
+			return fmt.Errorf("update journal revision id: %w", err)
+		}
+		return nil
+	}); err != nil {
 		cleanupStaging(stagingDir)
-		return nil, fmt.Errorf("commit: create revision: %w", err)
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		return nil, fmt.Errorf("commit: db transaction: %w", err)
 	}
 
 	finalDir := c.workspace.FinalDir(req.ProcessingTaskID, req.ProcessingActionID, revisionID)
 	if err := c.workspace.AtomicPublish(stagingDir, finalDir); err != nil {
-		cleanupStaging(stagingDir)
-		c.markFailed(req.Ctx, revisionID, "atomic_publish_failed", err.Error())
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, "atomic_publish_failed: "+err.Error())
 		return nil, fmt.Errorf("commit: atomic publish: %w", err)
 	}
 
-	if err := c.UpdateRevisionStatus(req.Ctx, revisionID, contracts.RevisionStatusFilesPublished, ""); err != nil {
-		c.markFailed(req.Ctx, revisionID, "status_update_failed", err.Error())
-		return nil, fmt.Errorf("commit: update status to files_published: %w", err)
+	_ = c.commitJournal.UpdatePaths(c.db, commitID, stagingDir, finalDir, contentRootHash)
+	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFilesPublished, "")
+
+	if err := c.db.WithContext(req.Ctx).Transaction(func(tx *gorm.DB) error {
+		nowInner := c.now()
+		if err := tx.Model(&processing.ProcessingRevision{}).
+			Where("id = ?", revisionID).
+			Updates(map[string]interface{}{
+				"status":       contracts.RevisionStatusCommitted,
+				"committed_at": nowInner,
+				"updated_at":   nowInner,
+			}).Error; err != nil {
+			return fmt.Errorf("update revision to committed: %w", err)
+		}
+
+		if err := tx.Model(&processing.ProcessingActionAttempt{}).
+			Where("id = ?", req.ProcessingAttemptID).
+			Updates(map[string]interface{}{
+				"status":       "committed",
+				"commit_id":    commitID,
+				"completed_at": nowInner,
+				"updated_at":   nowInner,
+			}).Error; err != nil {
+			return fmt.Errorf("update attempt to committed: %w", err)
+		}
+
+		if _, err := c.repo.UpdateProcessingActionWithRowVersion(tx, req.ProcessingActionID, req.ExpectedActionRowVersion, map[string]interface{}{
+			"status":             "succeeded",
+			"active_revision_id": revisionID,
+			"completed_at":       nowInner,
+			"updated_at":         nowInner,
+		}); err != nil {
+			return fmt.Errorf("update action to succeeded: %w", err)
+		}
+
+		if err := c.commitJournal.UpdateStatus(tx, commitID, events.CommitJournalStatusRecordsCommitted, ""); err != nil {
+			return fmt.Errorf("update journal to records_committed: %w", err)
+		}
+
+		outboxEvent := events.ProcessingRevisionCommittedEvent{
+			UserID:                      req.UserID,
+			CharacterID:                 req.CharacterID,
+			ProcessingTaskID:            req.ProcessingTaskID,
+			ProcessingActionID:          req.ProcessingActionID,
+			ProcessingAttemptID:         req.ProcessingAttemptID,
+			ProcessingRevisionID:        revisionID,
+			RevisionNumber:              revisionNumber,
+			ActionKey:                   req.ActionKey,
+			SourceManifestID:            req.SourceManifestID,
+			SourceGenerationAttemptID:   req.SourceGenerationAttemptID,
+			SourceGenerationArtifactID:  req.SourceGenerationArtifactID,
+			SourceArtifactContentHash:   req.SourceArtifactContentHash,
+			FrameCount:                  req.PipelineResult.FrameCount,
+			RevisionHash:                req.PipelineResult.RevisionHash,
+			ContentRootHash:             contentRootHash,
+			ConfigHash:                  req.ConfigHash,
+			PipelineVersion:             req.PipelineVersion,
+			OccurredAt:                  nowInner,
+		}
+		if err := c.outbox.EmitProcessingRevisionCommitted(tx, outboxEvent); err != nil {
+			return fmt.Errorf("emit outbox event: %w", err)
+		}
+
+		if err := c.commitJournal.UpdateStatus(tx, commitID, events.CommitJournalStatusEventCommitted, ""); err != nil {
+			return fmt.Errorf("update journal to event_committed: %w", err)
+		}
+		return nil
+	}); err != nil {
+		c.markRevisionFailed(req.Ctx, revisionID, "db_final_commit_failed", err.Error())
+		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		return nil, fmt.Errorf("commit: final db transaction: %w", err)
 	}
 
-	if err := c.commitToDatabase(req.Ctx, revisionID); err != nil {
-		c.markFailed(req.Ctx, revisionID, "db_commit_failed", err.Error())
-		return nil, fmt.Errorf("commit: db commit: %w", err)
-	}
+	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusCompleted, "")
 
 	return &CommitResult{
-		RevisionID:       revisionID,
-		RevisionNumber:   revisionNumber,
-		RootRelativePath: rootRelative,
-		Status:           contracts.RevisionStatusDBCommitted,
+		CommitID:        commitID,
+		RevisionID:      revisionID,
+		RevisionNumber:  revisionNumber,
+		RootStorageKey:  rootStorageKey,
+		Status:          contracts.RevisionStatusCommitted,
+		ContentRootHash: contentRootHash,
 	}, nil
 }
 
-func (c *ProcessingCommitter) CreateRevision(ctx context.Context, revision *processing.ProcessingRevision) error {
-	if revision == nil {
-		return fmt.Errorf("commit: revision is nil")
+func (c *ProcessingCommitter) allocateRevisionNumber(processingActionID string) (int, error) {
+	var action processing.ProcessingAction
+	if err := c.db.Where("id = ?", processingActionID).First(&action).Error; err != nil {
+		return 0, fmt.Errorf("get action: %w", err)
 	}
-	return c.repo.CreateProcessingRevision(c.db.WithContext(ctx), revision)
+	nextNum := action.NextRevisionNumber
+	if nextNum <= 0 {
+		nextNum = 1
+	}
+	result := c.db.Model(&processing.ProcessingAction{}).
+		Where("id = ? AND next_revision_number = ?", processingActionID, nextNum).
+		Update("next_revision_number", nextNum+1)
+	if result.Error != nil {
+		return 0, fmt.Errorf("cas next_revision_number: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		var refreshed processing.ProcessingAction
+		if err := c.db.Where("id = ?", processingActionID).First(&refreshed).Error; err != nil {
+			return 0, fmt.Errorf("reload action after cas miss: %w", err)
+		}
+		retryNum := refreshed.NextRevisionNumber
+		if retryNum <= 0 {
+			retryNum = 1
+		}
+		retryResult := c.db.Model(&processing.ProcessingAction{}).
+			Where("id = ? AND next_revision_number = ?", processingActionID, retryNum).
+			Update("next_revision_number", retryNum+1)
+		if retryResult.Error != nil {
+			return 0, fmt.Errorf("cas retry: %w", retryResult.Error)
+		}
+		if retryResult.RowsAffected == 0 {
+			return 0, fmt.Errorf("revision number cas conflict after retry")
+		}
+		return retryNum, nil
+	}
+	return nextNum, nil
 }
 
-func (c *ProcessingCommitter) GetLatestRevisionNumber(ctx context.Context, processingActionID string) (int, error) {
-	var revs []processing.ProcessingRevision
-	err := c.db.WithContext(ctx).
-		Where("processing_action_id = ?", processingActionID).
-		Order("revision_number DESC").
-		Limit(1).
-		Find(&revs).Error
-	if err != nil {
-		return 0, err
-	}
-	if len(revs) == 0 {
-		return 0, nil
-	}
-	return revs[0].RevisionNumber, nil
-}
+func (c *ProcessingCommitter) buildArtifactRecords(revisionID string, req *CommitRequest) []processing.ProcessingArtifactRecord {
+	now := c.now()
+	records := make([]processing.ProcessingArtifactRecord, 0, len(req.PipelineResult.Frames)+len(req.PipelineResult.Masks)+2)
 
-func (c *ProcessingCommitter) UpdateRevisionStatus(ctx context.Context, revisionID, status, errorMessage string) error {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	updates := map[string]interface{}{
-		"status":     status,
-		"updated_at": now,
+	for _, f := range req.PipelineResult.Frames {
+		idx := f.Index
+		records = append(records, processing.ProcessingArtifactRecord{
+			ID:               "art_" + uuid.NewString(),
+			RevisionID:       revisionID,
+			FrameIndex:       &idx,
+			ArtifactKind:     contracts.ArtifactKindFrame,
+			Stage:            "final",
+			RelativePath:     filepath.ToSlash(filepath.Join("frames", f.FileName)),
+			MimeType:         "image/png",
+			Width:            f.Width,
+			Height:           f.Height,
+			ByteSize:         f.ByteSize,
+			ContentHash:      f.FileHash,
+			SourceArtifactID: req.SourceGenerationArtifactID,
+			CreatedAt:        now,
+		})
 	}
-	if errorMessage != "" {
-		updates["error_code"] = status
-		updates["error_message"] = errorMessage
-	} else {
-		updates["error_code"] = ""
-		updates["error_message"] = ""
-	}
-	return c.db.WithContext(ctx).
-		Model(&processing.ProcessingRevision{}).
-		Where("id = ?", revisionID).
-		Updates(updates).Error
-}
 
-func (c *ProcessingCommitter) commitToDatabase(ctx context.Context, revisionID string) error {
-	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		now := time.Now().UTC().Format("2006-01-02 15:04:05")
-		return tx.Model(&processing.ProcessingRevision{}).
-			Where("id = ?", revisionID).
-			Updates(map[string]interface{}{
-				"status":       contracts.RevisionStatusDBCommitted,
-				"published_at": now,
-				"updated_at":   now,
-			}).Error
+	for _, m := range req.PipelineResult.Masks {
+		idx := m.Index
+		records = append(records, processing.ProcessingArtifactRecord{
+			ID:               "art_" + uuid.NewString(),
+			RevisionID:       revisionID,
+			FrameIndex:       &idx,
+			ArtifactKind:     contracts.ArtifactKindMask,
+			Stage:            "final",
+			RelativePath:     filepath.ToSlash(filepath.Join("masks", m.FileName)),
+			MimeType:         "image/png",
+			Width:            m.Width,
+			Height:           m.Height,
+			ByteSize:         m.ByteSize,
+			ContentHash:      m.FileHash,
+			SourceArtifactID: req.SourceGenerationArtifactID,
+			CreatedAt:        now,
+		})
+	}
+
+	records = append(records, processing.ProcessingArtifactRecord{
+		ID:           "art_" + uuid.NewString(),
+		RevisionID:   revisionID,
+		ArtifactKind: contracts.ArtifactKindManifest,
+		Stage:        "final",
+		RelativePath: "revision.json",
+		MimeType:     "application/json",
+		ContentHash:  "",
+		CreatedAt:    now,
 	})
+
+	records = append(records, processing.ProcessingArtifactRecord{
+		ID:           "art_" + uuid.NewString(),
+		RevisionID:   revisionID,
+		ArtifactKind: "source-manifest",
+		Stage:        "final",
+		RelativePath: "source-manifest-ref.json",
+		MimeType:     "application/json",
+		ContentHash:  "",
+		CreatedAt:    now,
+	})
+
+	if req.PipelineResult.Preview != nil {
+		records = append(records, processing.ProcessingArtifactRecord{
+			ID:           "art_" + uuid.NewString(),
+			RevisionID:   revisionID,
+			ArtifactKind: "preview",
+			Stage:        "final",
+			RelativePath: filepath.ToSlash(filepath.Join("preview", req.PipelineResult.Preview.FileName)),
+			MimeType:     "image/png",
+			Width:        req.PipelineResult.Preview.Width,
+			Height:       req.PipelineResult.Preview.Height,
+			ByteSize:     req.PipelineResult.Preview.ByteSize,
+			ContentHash:  req.PipelineResult.Preview.FileHash,
+			CreatedAt:    now,
+		})
+	}
+
+	return records
 }
 
-func (c *ProcessingCommitter) markFailed(ctx context.Context, revisionID, errorCode, errorMessage string) {
-	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+func (c *ProcessingCommitter) buildMeasurementRecords(revisionID string, req *CommitRequest) []processing.FrameMeasurementRecord {
+	now := c.now()
+	records := make([]processing.FrameMeasurementRecord, 0, len(req.PipelineResult.Measurements))
+	for _, m := range req.PipelineResult.Measurements {
+		subjBox, _ := json.Marshal(measurement.SubjectBoxData{
+			MinX: m.SubjectBox.MinX, MinY: m.SubjectBox.MinY,
+			MaxX: m.SubjectBox.MaxX, MaxY: m.SubjectBox.MaxY,
+			Space: m.SubjectBox.Space,
+		})
+		srcAnchor, _ := json.Marshal(m.SourceAnchor)
+		tgtAnchor, _ := json.Marshal(m.TargetAnchor)
+		edge, _ := json.Marshal(m.EdgeContact)
+		clip, _ := json.Marshal(m.Clipping)
+		traj, _ := json.Marshal(m.Trajectory)
+		records = append(records, processing.FrameMeasurementRecord{
+			ID:                       "meas_" + uuid.NewString(),
+			RevisionID:               revisionID,
+			FrameIndex:               m.FrameIndex,
+			MeasurementSchemaVersion: 1,
+			SubjectBoxJSON:           string(subjBox),
+			SourceAnchorJSON:         string(srcAnchor),
+			TargetAnchorJSON:         string(tgtAnchor),
+			AlphaCoverage:            m.AlphaCoverage,
+			ComponentCount:           m.ComponentCount,
+			EdgeContactJSON:          string(edge),
+			ClippingJSON:             string(clip),
+			TrajectoryJSON:           string(traj),
+			CreatedAt:                now,
+			UpdatedAt:                now,
+		})
+	}
+	return records
+}
+
+func (c *ProcessingCommitter) buildTransformRecords(revisionID string, req *CommitRequest) []processing.ProcessingTransformRecord {
+	now := c.now()
+	records := make([]processing.ProcessingTransformRecord, 0, len(req.PipelineResult.Transforms))
+	for _, t := range req.PipelineResult.Transforms {
+		records = append(records, processing.ProcessingTransformRecord{
+			ID:               "tf_" + uuid.NewString(),
+			RevisionID:       revisionID,
+			FrameIndex:       t.FrameIndex,
+			SequenceNumber:   t.SequenceNumber,
+			FromSpace:        t.FromSpace,
+			ToSpace:          t.ToSpace,
+			TransformType:    t.TransformType,
+			MatrixJSON:       t.MatrixJSON,
+			ParametersJSON:   t.ParametersJSON,
+			AlgorithmVersion: t.AlgorithmVersion,
+			CreatedAt:        now,
+		})
+	}
+	return records
+}
+
+func (c *ProcessingCommitter) markRevisionFailed(ctx context.Context, revisionID, errorCode, errorMessage string) {
+	now := c.now()
 	_ = c.db.WithContext(ctx).
 		Model(&processing.ProcessingRevision{}).
 		Where("id = ?", revisionID).
@@ -261,7 +506,10 @@ func (c *ProcessingCommitter) markFailed(ctx context.Context, revisionID, errorC
 		}).Error
 }
 
-func (c *ProcessingCommitter) copyPipelineToStaging(result *PipelineResult, stagingDir string) error {
+func (c *ProcessingCommitter) copyPipelineToStaging(result *application.ProcessActionResult, stagingDir string) error {
+	if result.WorkDir == nil {
+		return fmt.Errorf("pipeline result workDir is nil")
+	}
 	framesDst := filepath.Join(stagingDir, "frames")
 	masksDst := filepath.Join(stagingDir, "masks")
 	if err := os.MkdirAll(framesDst, 0755); err != nil {
@@ -271,14 +519,29 @@ func (c *ProcessingCommitter) copyPipelineToStaging(result *PipelineResult, stag
 		return fmt.Errorf("create masks staging dir: %w", err)
 	}
 	for _, frame := range result.Frames {
-		dst := filepath.Join(framesDst, frameFileName(frame))
-		if err := copyFileVerified(frame.FilePath, dst); err != nil {
+		src := filepath.Join(result.WorkDir.FramesDir, frame.FileName)
+		dst := filepath.Join(framesDst, frame.FileName)
+		if err := copyFileVerified(src, dst); err != nil {
 			return fmt.Errorf("copy frame %d: %w", frame.Index, err)
 		}
-		if frame.MaskPath != "" {
-			maskDst := filepath.Join(masksDst, maskFileName(frame))
-			if err := copyFileVerified(frame.MaskPath, maskDst); err != nil {
-				return fmt.Errorf("copy mask %d: %w", frame.Index, err)
+	}
+	for _, mask := range result.Masks {
+		src := filepath.Join(result.WorkDir.MasksDir, mask.FileName)
+		dst := filepath.Join(masksDst, mask.FileName)
+		if err := copyFileVerified(src, dst); err != nil {
+			return fmt.Errorf("copy mask %d: %w", mask.Index, err)
+		}
+	}
+	if result.Preview != nil {
+		previewDst := filepath.Join(stagingDir, "preview")
+		if err := os.MkdirAll(previewDst, 0755); err != nil {
+			return fmt.Errorf("create preview staging dir: %w", err)
+		}
+		if result.WorkDir != nil {
+			src := filepath.Join(result.WorkDir.FramesDir, "..", "preview", result.Preview.FileName)
+			dst := filepath.Join(previewDst, result.Preview.FileName)
+			if err := copyFileVerified(src, dst); err != nil {
+				return fmt.Errorf("copy preview: %w", err)
 			}
 		}
 	}
@@ -290,12 +553,12 @@ func (c *ProcessingCommitter) writeRevisionManifest(stagingDir, revisionID strin
 	for _, f := range req.PipelineResult.Frames {
 		mf := contracts.ManifestFrame{
 			Index:     f.Index,
-			File:      filepath.Base(f.FilePath),
+			File:      f.FileName,
 			FileHash:  f.FileHash,
 			PixelHash: f.PixelHash,
 		}
-		if f.MaskPath != "" {
-			mf.Mask = filepath.Base(f.MaskPath)
+		if len(req.PipelineResult.Masks) > f.Index {
+			mf.Mask = req.PipelineResult.Masks[f.Index].FileName
 		}
 		frames = append(frames, mf)
 	}
@@ -306,7 +569,9 @@ func (c *ProcessingCommitter) writeRevisionManifest(stagingDir, revisionID strin
 		ProcessingActionID: req.ProcessingActionID,
 		ActionKey:          req.ActionKey,
 		Source: contracts.ManifestSource{
-			AttemptID: req.AttemptID,
+			AttemptID:   req.SourceGenerationAttemptID,
+			ArtifactID:  req.SourceGenerationArtifactID,
+			ContentHash: req.SourceArtifactContentHash,
 		},
 		PipelineVersion: req.PipelineVersion,
 		ConfigHash:      req.ConfigHash,
@@ -326,14 +591,11 @@ func (c *ProcessingCommitter) writeRevisionManifest(stagingDir, revisionID strin
 }
 
 func (c *ProcessingCommitter) writeSourceManifestRef(stagingDir string, req *CommitRequest) error {
-	ref := source.ProcessingSourceManifestRecord{
-		ID:                  req.SourceManifestID,
-		ProcessingTaskID:    req.ProcessingTaskID,
-		ProcessingActionID:  req.ProcessingActionID,
-		GenerationTaskID:    req.GenerationTaskID,
-		ActionKey:           req.ActionKey,
-		GenerationAttemptID: req.AttemptID,
-		CreatedAt:           time.Now().UTC().Format("2006-01-02 15:04:05"),
+	ref := map[string]string{
+		"sourceManifestId":          req.SourceManifestID,
+		"sourceGenerationAttemptId": req.SourceGenerationAttemptID,
+		"sourceGenerationArtifactId": req.SourceGenerationArtifactID,
+		"sourceArtifactContentHash":  req.SourceArtifactContentHash,
 	}
 	data, err := json.MarshalIndent(ref, "", "  ")
 	if err != nil {
@@ -346,29 +608,83 @@ func (c *ProcessingCommitter) writeSourceManifestRef(stagingDir string, req *Com
 	return nil
 }
 
-func (c *ProcessingCommitter) computeContentRootHash(result *PipelineResult) (string, error) {
-	h := sha256.New()
-	for _, frame := range result.Frames {
-		data, err := os.ReadFile(frame.FilePath)
+func (c *ProcessingCommitter) computeContentRootHash(result *application.ProcessActionResult, stagingDir string, req *CommitRequest) (string, error) {
+	type fileEntry struct {
+		relPath string
+		hash    string
+		bytes   int64
+	}
+	entries := make([]fileEntry, 0, len(result.Frames)+len(result.Masks)+4)
+
+	for _, f := range result.Frames {
+		dst := filepath.Join(stagingDir, "frames", f.FileName)
+		h, b, err := hashAndSize(dst)
 		if err != nil {
-			return "", fmt.Errorf("read frame %d: %w", frame.Index, err)
+			return "", fmt.Errorf("hash frame %d: %w", f.Index, err)
 		}
-		sum := sha256.Sum256(data)
-		h.Write(sum[:])
-		h.Write([]byte(frame.FileHash))
+		entries = append(entries, fileEntry{relPath: "frames/" + f.FileName, hash: h, bytes: b})
+	}
+	for _, m := range result.Masks {
+		dst := filepath.Join(stagingDir, "masks", m.FileName)
+		h, b, err := hashAndSize(dst)
+		if err != nil {
+			return "", fmt.Errorf("hash mask %d: %w", m.Index, err)
+		}
+		entries = append(entries, fileEntry{relPath: "masks/" + m.FileName, hash: h, bytes: b})
+	}
+
+	manifestPath := filepath.Join(stagingDir, "revision.json")
+	if h, b, err := hashAndSize(manifestPath); err == nil {
+		entries = append(entries, fileEntry{relPath: "revision.json", hash: h, bytes: b})
+	}
+	refPath := filepath.Join(stagingDir, "source-manifest-ref.json")
+	if h, b, err := hashAndSize(refPath); err == nil {
+		entries = append(entries, fileEntry{relPath: "source-manifest-ref.json", hash: h, bytes: b})
+	}
+
+	entries = append(entries, fileEntry{relPath: "config.hash", hash: req.ConfigHash, bytes: int64(len(req.ConfigHash))})
+	entries = append(entries, fileEntry{relPath: "pipeline.version", hash: req.PipelineVersion, bytes: int64(len(req.PipelineVersion))})
+
+	for _, m := range result.Measurements {
+		mJSON, _ := m.ToJSON()
+		sum := sha256.Sum256([]byte(mJSON))
+		entries = append(entries, fileEntry{
+			relPath: fmt.Sprintf("measurements/frame_%04d.json", m.FrameIndex),
+			hash:    hex.EncodeToString(sum[:]),
+			bytes:   int64(len(mJSON)),
+		})
+	}
+	for _, t := range result.Transforms {
+		tJSON := t.MatrixJSON + t.ParametersJSON
+		sum := sha256.Sum256([]byte(tJSON))
+		entries = append(entries, fileEntry{
+			relPath: fmt.Sprintf("transforms/frame_%04d_seq_%d.json", t.FrameIndex, t.SequenceNumber),
+			hash:    hex.EncodeToString(sum[:]),
+			bytes:   int64(len(tJSON)),
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].relPath < entries[j].relPath
+	})
+
+	h := sha256.New()
+	for _, e := range entries {
+		h.Write([]byte(e.relPath))
+		h.Write([]byte(e.hash))
+		var buf [8]byte
+		binary.LittleEndian.PutUint64(buf[:], uint64(e.bytes))
+		h.Write(buf[:])
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func validatePipelineResult(result *PipelineResult) error {
+func validatePipelineResult(result *application.ProcessActionResult) error {
 	if result == nil {
 		return fmt.Errorf("pipeline result is nil")
 	}
 	if result.FrameCount <= 0 {
 		return fmt.Errorf("frame count must be positive, got %d", result.FrameCount)
-	}
-	if result.FramesDir == "" {
-		return fmt.Errorf("frames dir is empty")
 	}
 	if result.RevisionHash == "" {
 		return fmt.Errorf("revision hash is empty")
@@ -379,10 +695,10 @@ func validatePipelineResult(result *PipelineResult) error {
 	if len(result.Frames) != result.FrameCount {
 		return fmt.Errorf("frame count mismatch: frames=%d frameCount=%d", len(result.Frames), result.FrameCount)
 	}
+	if result.WorkDir == nil {
+		return fmt.Errorf("workDir is nil")
+	}
 	for i, f := range result.Frames {
-		if f.FilePath == "" {
-			return fmt.Errorf("frame %d file path is empty", i)
-		}
 		if f.FileHash == "" {
 			return fmt.Errorf("frame %d file hash is empty", i)
 		}
@@ -395,19 +711,6 @@ func validatePipelineResult(result *PipelineResult) error {
 
 func cleanupStaging(stagingDir string) {
 	_ = os.RemoveAll(stagingDir)
-}
-
-func frameFileName(frame FrameResult) string {
-	ext := filepath.Ext(frame.FilePath)
-	return fmt.Sprintf("frame_%d%s", frame.Index, ext)
-}
-
-func maskFileName(frame FrameResult) string {
-	ext := filepath.Ext(frame.MaskPath)
-	if ext == "" {
-		ext = ".png"
-	}
-	return fmt.Sprintf("mask_%d%s", frame.Index, ext)
 }
 
 func copyFileVerified(src, dst string) error {
@@ -439,4 +742,17 @@ func hashFile(path string) (string, error) {
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+func hashAndSize(path string) (string, int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", 0, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", 0, err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), info.Size(), nil
 }

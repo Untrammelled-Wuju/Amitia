@@ -5,6 +5,7 @@ import {
   LoadPriority,
   LoadedAction,
   LoadedActionAssets,
+  NormalizedFrame,
   PackagePlaybackSnapshot,
   RawActionConfig,
 } from "../contracts";
@@ -99,7 +100,7 @@ export class ActionAssetRepositoryImpl implements ActionAssetRepository {
       for (let i = 0; i < action.frames.length; i++) {
         const frame = action.frames[i];
         const resolved = this.resolveResourceUrl(frame.resourceUrl, configUrl);
-        (action.frames as Array<{ index: number; resourceUrl: string; durationMs: number; cumulativeStartMs: number; cumulativeEndMs: number }>)[i] = {
+        (action.frames as unknown as NormalizedFrame[])[i] = {
           ...frame,
           resourceUrl: resolved,
         };

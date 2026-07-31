@@ -99,7 +99,7 @@ func (r *V1Reader) ReadManifest(data []byte) (*Manifest, error) {
 			Config:         a.Config,
 			RevisionID:     "legacy_inferred",
 			QualityVerdict: QualityVerdictSkipped,
-			LoopType:       loopType,
+			PlaybackMode:   loopType,
 		}
 		actions = append(actions, entry)
 	}
@@ -113,7 +113,7 @@ func (r *V1Reader) ReadManifest(data []byte) (*Manifest, error) {
 	}
 
 	manifest.Integrity = ManifestIntegrity{
-		Algorithm: TreeHashAlgorithm,
+		Algorithm: IntegrityAlgorithmV1Legacy,
 	}
 
 	manifest.Provenance = ManifestProvenance{

@@ -88,6 +88,10 @@ type Service interface {
 	ExpireSessions(ctx context.Context) error
 
 	ImportLegacyRevision(ctx context.Context, processingTaskID, actionKey, userID string) (*CommitSessionResponse, error)
+
+	ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error)
+	ListRevisionsByStream(ctx context.Context, streamID string) ([]RevisionSummary, error)
+	GetActiveRevisionByStream(ctx context.Context, streamID string) (*RevisionDetail, error)
 }
 
 type service struct {
@@ -880,14 +884,26 @@ func (s *service) ListRevisions(ctx context.Context, processingTaskID, actionKey
 	if err != nil {
 		return nil, err
 	}
-	activeBinding, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
+	activeRevisionID := ""
+
+	oldBinding, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
 	if err != nil {
 		return nil, err
 	}
-	activeRevisionID := ""
-	if activeBinding != nil {
-		activeRevisionID = activeBinding.RevisionID
+	if oldBinding != nil {
+		activeRevisionID = oldBinding.RevisionID
 	}
+
+	if activeRevisionID == "" {
+		newBinding, err := s.repo.GetActiveActionRevisionBindingByTask(processingTaskID, actionKey)
+		if err != nil {
+			return nil, err
+		}
+		if newBinding != nil {
+			activeRevisionID = newBinding.ActiveActionRevisionID
+		}
+	}
+
 	summaries := make([]RevisionSummary, 0, len(revs))
 	for _, rev := range revs {
 		summaries = append(summaries, RevisionSummary{
@@ -953,10 +969,19 @@ func (s *service) GetActiveRevision(ctx context.Context, processingTaskID, actio
 	if err != nil {
 		return nil, err
 	}
-	if binding == nil {
-		return nil, ErrRevisionNotFound
+	if binding != nil {
+		return s.GetRevision(ctx, binding.RevisionID)
 	}
-	return s.GetRevision(ctx, binding.RevisionID)
+
+	newBinding, err := s.repo.GetActiveActionRevisionBindingByTask(processingTaskID, actionKey)
+	if err != nil {
+		return nil, err
+	}
+	if newBinding != nil {
+		return s.GetRevision(ctx, newBinding.ActiveActionRevisionID)
+	}
+
+	return nil, ErrRevisionNotFound
 }
 
 func (s *service) ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, userID string) error {
@@ -2117,4 +2142,84 @@ func (s *service) ImportLegacyRevision(ctx context.Context, processingTaskID, ac
 		RevisionID: revID,
 		Status:     "ready",
 	}, nil
+}
+
+func (s *service) ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error) {
+	streams, err := s.repo.ListAllActionStreams(userID)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]ActionStreamSummary, 0, len(streams))
+	for _, stream := range streams {
+		summary := ActionStreamSummary{
+			ID:                   stream.ID,
+			UserID:               stream.UserID,
+			CharacterID:          stream.CharacterID,
+			ActionKey:            stream.ActionKey,
+			RootProcessingTaskID: stream.RootProcessingTaskID,
+			StreamKey:            stream.StreamKey,
+			NextRevisionNumber:   stream.NextRevisionNumber,
+			CreatedAt:            stream.CreatedAt,
+			UpdatedAt:            stream.UpdatedAt,
+		}
+
+		binding, err := s.repo.GetActiveActionRevisionBindingByStream(stream.ID)
+		if err == nil && binding != nil {
+			summary.ActiveRevisionID = binding.ActiveActionRevisionID
+			summary.BindingRevision = binding.BindingRevision
+		}
+
+		revs, err := s.repo.ListActionRevisionsByStream(stream.ID)
+		if err == nil {
+			summary.RevisionCount = len(revs)
+		}
+
+		summaries = append(summaries, summary)
+	}
+	return summaries, nil
+}
+
+func (s *service) ListRevisionsByStream(ctx context.Context, streamID string) ([]RevisionSummary, error) {
+	revs, err := s.repo.ListActionRevisionsByStream(streamID)
+	if err != nil {
+		return nil, err
+	}
+	activeBinding, err := s.repo.GetActiveActionRevisionBindingByStream(streamID)
+	if err != nil {
+		return nil, err
+	}
+	activeRevisionID := ""
+	if activeBinding != nil {
+		activeRevisionID = activeBinding.ActiveActionRevisionID
+	}
+	summaries := make([]RevisionSummary, 0, len(revs))
+	for _, rev := range revs {
+		summaries = append(summaries, RevisionSummary{
+			ID:               rev.ID,
+			RevisionNumber:   rev.RevisionNumber,
+			RevisionType:     rev.RevisionType,
+			Status:           rev.Status,
+			FrameCount:       rev.FrameCount,
+			DurationMS:       rev.DurationMS,
+			DefaultFPS:       rev.DefaultFPS,
+			LoopType:         rev.LoopType,
+			QualityVerdict:   rev.QualityVerdict,
+			ChangeSummary:    rev.ChangeSummary,
+			ParentRevisionID: rev.ParentRevisionID,
+			IsActive:         rev.ID == activeRevisionID,
+			CreatedAt:        rev.CreatedAt,
+		})
+	}
+	return summaries, nil
+}
+
+func (s *service) GetActiveRevisionByStream(ctx context.Context, streamID string) (*RevisionDetail, error) {
+	binding, err := s.repo.GetActiveActionRevisionBindingByStream(streamID)
+	if err != nil {
+		return nil, err
+	}
+	if binding == nil {
+		return nil, ErrRevisionNotFound
+	}
+	return s.GetRevision(ctx, binding.ActiveActionRevisionID)
 }

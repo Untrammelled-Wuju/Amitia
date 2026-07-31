@@ -6,10 +6,32 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/u-ai/backend/config"
 	"gorm.io/gorm"
 )
+
+type ProviderQueryResult struct {
+	ProviderStatus string
+	IsCompleted    bool
+	IsFailed       bool
+	RetryAfterHint int
+	RawMetadata    string
+	ImageURLs      []string
+}
+
+type ProviderQueryFunc func(ctx context.Context, attempt *ActionGenerationAttempt) (*ProviderQueryResult, error)
+
+type FileVerifyResult struct {
+	Exists   bool
+	FilePath string
+	Hash     string
+}
+
+type FileVerifyFunc func(artifact *GenerationArtifact) (*FileVerifyResult, error)
 
 type RecoveryWorkerConfig struct {
 	ScanInterval     time.Duration
@@ -18,6 +40,7 @@ type RecoveryWorkerConfig struct {
 	PollMaxInterval  time.Duration
 	MaxPollCount     int
 	LeaseDuration    time.Duration
+	DataDir          string
 }
 
 func DefaultRecoveryWorkerConfig() RecoveryWorkerConfig {
@@ -28,6 +51,7 @@ func DefaultRecoveryWorkerConfig() RecoveryWorkerConfig {
 		PollMaxInterval:  60 * time.Second,
 		MaxPollCount:     200,
 		LeaseDuration:    5 * time.Minute,
+		DataDir:          config.AppCfg.Storage.DataDir,
 	}
 }
 
@@ -37,11 +61,13 @@ type RecoveryWorker struct {
 	artifactRepo ArtifactRepository
 	receiptRepo  ReceiptRepository
 	config       RecoveryWorkerConfig
+	providerQuery ProviderQueryFunc
+	fileVerifier  FileVerifyFunc
 	stopCh       chan struct{}
 }
 
 func NewRecoveryWorker(db *gorm.DB, attemptRepo AttemptRepository, artifactRepo ArtifactRepository, receiptRepo ReceiptRepository, config RecoveryWorkerConfig) *RecoveryWorker {
-	return &RecoveryWorker{
+	w := &RecoveryWorker{
 		db:           db,
 		attemptRepo:  attemptRepo,
 		artifactRepo: artifactRepo,
@@ -49,6 +75,18 @@ func NewRecoveryWorker(db *gorm.DB, attemptRepo AttemptRepository, artifactRepo 
 		config:       config,
 		stopCh:       make(chan struct{}),
 	}
+	w.fileVerifier = w.defaultFileVerifier
+	return w
+}
+
+func (w *RecoveryWorker) WithProviderQuery(fn ProviderQueryFunc) *RecoveryWorker {
+	w.providerQuery = fn
+	return w
+}
+
+func (w *RecoveryWorker) WithFileVerifier(fn FileVerifyFunc) *RecoveryWorker {
+	w.fileVerifier = fn
+	return w
 }
 
 func (w *RecoveryWorker) Start(ctx context.Context) {
@@ -116,21 +154,21 @@ func (w *RecoveryWorker) recoverAttempt(ctx context.Context, attempt *ActionGene
 	status := AttemptStatus(attempt.Status)
 	switch status {
 	case AttemptStatusUnknownSubmission:
-		return w.handleUnknownSubmission(attempt)
+		return w.handleUnknownSubmission(ctx, attempt)
 	case AttemptStatusReconcilingSubmission:
-		return w.handleReconcilingSubmission(attempt)
+		return w.handleReconcilingSubmission(ctx, attempt)
 	case AttemptStatusSubmitted, AttemptStatusPolling:
 		return w.handlePolling(ctx, attempt)
 	case AttemptStatusResultReceived, AttemptStatusPersisting:
-		return w.handleRepersist(attempt)
+		return w.handleRepersist(ctx, attempt)
 	case AttemptStatusPublishFailed:
-		return w.handlePublishFailed(attempt)
+		return w.handlePublishFailed(ctx, attempt)
 	default:
 		return NewGenerationError(ErrCodeRecoveryStatusUnknown, fmt.Sprintf("unsupported recovery status: %s", attempt.Status), nil)
 	}
 }
 
-func (w *RecoveryWorker) handleUnknownSubmission(attempt *ActionGenerationAttempt) error {
+func (w *RecoveryWorker) handleUnknownSubmission(ctx context.Context, attempt *ActionGenerationAttempt) error {
 	err := w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
 		"status":     string(AttemptStatusReconcilingSubmission),
 		"updated_at": nowRFC3339(),
@@ -138,42 +176,29 @@ func (w *RecoveryWorker) handleUnknownSubmission(attempt *ActionGenerationAttemp
 	if err != nil {
 		return err
 	}
-	receipt, err := w.receiptRepo.GetByAttemptID(attempt.ID)
-	if err != nil {
-		if errors.Is(err, ErrProviderReceiptNotFound) {
-			return nil
-		}
-		return err
-	}
-	if receipt.ProviderStatus == "failed" || receipt.ProviderStatus == "failed_confirmed" {
-		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
-			"status":     string(AttemptStatusFailedConfirmed),
-			"updated_at": nowRFC3339(),
-		})
-	}
-	return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
-		"status":     string(AttemptStatusSubmitted),
-		"updated_at": nowRFC3339(),
-	})
-}
 
-func (w *RecoveryWorker) handleReconcilingSubmission(attempt *ActionGenerationAttempt) error {
 	receipt, err := w.receiptRepo.GetByAttemptID(attempt.ID)
 	if err != nil {
 		if errors.Is(err, ErrProviderReceiptNotFound) {
-			return nil
+			if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+				return w.queryProviderAndUpdate(ctx, attempt)
+			}
+			return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+				"status":     string(AttemptStatusFailed),
+				"error_code": "no_receipt_no_query",
+				"error_message": "no provider receipt found and no query capability",
+				"updated_at": nowRFC3339(),
+			})
 		}
 		return err
 	}
+
 	switch receipt.ProviderStatus {
-	case "submitted", "polling", "running":
-		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
-			"status":     string(AttemptStatusSubmitted),
-			"updated_at": nowRFC3339(),
-		})
 	case "failed", "failed_confirmed":
 		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
 			"status":     string(AttemptStatusFailedConfirmed),
+			"error_code": "provider_failed",
+			"error_message": fmt.Sprintf("provider status: %s", receipt.ProviderStatus),
 			"updated_at": nowRFC3339(),
 		})
 	case "succeeded", "completed":
@@ -182,8 +207,98 @@ func (w *RecoveryWorker) handleReconcilingSubmission(attempt *ActionGenerationAt
 			"updated_at": nowRFC3339(),
 		})
 	default:
+		if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+			return w.queryProviderAndUpdate(ctx, attempt)
+		}
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusSubmitted),
+			"updated_at": nowRFC3339(),
+		})
+	}
+}
+
+func (w *RecoveryWorker) handleReconcilingSubmission(ctx context.Context, attempt *ActionGenerationAttempt) error {
+	receipt, err := w.receiptRepo.GetByAttemptID(attempt.ID)
+	if err != nil {
+		if errors.Is(err, ErrProviderReceiptNotFound) {
+			if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+				return w.queryProviderAndUpdate(ctx, attempt)
+			}
+			return nil
+		}
+		return err
+	}
+
+	switch receipt.ProviderStatus {
+	case "submitted", "polling", "running", "pending":
+		if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+			return w.queryProviderAndUpdate(ctx, attempt)
+		}
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusSubmitted),
+			"updated_at": nowRFC3339(),
+		})
+	case "failed", "failed_confirmed":
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusFailedConfirmed),
+			"error_code": "provider_failed",
+			"error_message": fmt.Sprintf("provider status: %s", receipt.ProviderStatus),
+			"updated_at": nowRFC3339(),
+		})
+	case "succeeded", "completed":
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusResultReceived),
+			"updated_at": nowRFC3339(),
+		})
+	default:
+		if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+			return w.queryProviderAndUpdate(ctx, attempt)
+		}
 		return nil
 	}
+}
+
+func (w *RecoveryWorker) queryProviderAndUpdate(ctx context.Context, attempt *ActionGenerationAttempt) error {
+	result, err := w.providerQuery(ctx, attempt)
+	if err != nil {
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusSubmitted),
+			"error_message": fmt.Sprintf("provider query failed: %v", err),
+			"updated_at": nowRFC3339(),
+		})
+	}
+
+	if result.IsFailed {
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusFailedConfirmed),
+			"error_code": "provider_query_failed",
+			"error_message": fmt.Sprintf("provider query returned failed: %s", result.ProviderStatus),
+			"updated_at": nowRFC3339(),
+		})
+	}
+
+	if result.IsCompleted {
+		if result.RetryAfterHint > 0 {
+			_ = w.receiptRepo.UpdatePolled(attempt.ID, nowRFC3339(), result.ProviderStatus)
+		}
+		if result.RawMetadata != "" {
+			_ = w.receiptRepo.UpdateCompleted(attempt.ID, nowRFC3339(), "", result.ProviderStatus, result.RawMetadata)
+		}
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusResultReceived),
+			"updated_at": nowRFC3339(),
+		})
+	}
+
+	updates := map[string]interface{}{
+		"status":     string(AttemptStatusPolling),
+		"updated_at": nowRFC3339(),
+		"heartbeat_at": nowRFC3339(),
+	}
+	if result.RetryAfterHint > 0 {
+		updates["retry_after_hint"] = result.RetryAfterHint
+	}
+	return w.attemptRepo.UpdateAttemptStatus(attempt.ID, updates)
 }
 
 func (w *RecoveryWorker) handlePolling(ctx context.Context, attempt *ActionGenerationAttempt) error {
@@ -194,6 +309,11 @@ func (w *RecoveryWorker) handlePolling(ctx context.Context, attempt *ActionGener
 	if !ok {
 		return NewGenerationError(ErrCodeRecoveryLeaseConflict, "lease renew failed during polling", nil)
 	}
+
+	if w.providerQuery != nil && attempt.ProviderOperationID != "" {
+		return w.queryProviderAndUpdate(ctx, attempt)
+	}
+
 	return w.pollAttempt(ctx, attempt)
 }
 
@@ -201,6 +321,8 @@ func (w *RecoveryWorker) pollAttempt(ctx context.Context, attempt *ActionGenerat
 	if attempt.PollCount >= w.config.MaxPollCount {
 		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
 			"status":     string(AttemptStatusManualReview),
+			"error_code": "polling_exhausted",
+			"error_message": fmt.Sprintf("max poll count %d reached", w.config.MaxPollCount),
 			"updated_at": nowRFC3339(),
 		})
 	}
@@ -214,39 +336,130 @@ func (w *RecoveryWorker) pollAttempt(ctx context.Context, attempt *ActionGenerat
 	case <-time.After(interval):
 	}
 	return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
-		"poll_count":  attempt.PollCount + 1,
-		"updated_at":  nowRFC3339(),
+		"poll_count":   attempt.PollCount + 1,
+		"updated_at":   nowRFC3339(),
 		"heartbeat_at": nowRFC3339(),
 	})
 }
 
-func (w *RecoveryWorker) handleRepersist(attempt *ActionGenerationAttempt) error {
+func (w *RecoveryWorker) handleRepersist(ctx context.Context, attempt *ActionGenerationAttempt) error {
 	artifacts, err := w.artifactRepo.ListArtifactsByAttemptID(attempt.ID)
 	if err != nil {
 		return err
 	}
+
+	allPersisted := true
 	for i := range artifacts {
 		a := &artifacts[i]
 		if a.Status == string(ArtifactStatusStaging) || a.Status == string(ArtifactStatusSaved) {
+			if w.fileVerifier != nil {
+				verifyResult, verifyErr := w.fileVerifier(a)
+				if verifyErr != nil || !verifyResult.Exists {
+					allPersisted = false
+					continue
+				}
+			}
 			if err := w.artifactRepo.UpdateArtifact(a.ID, map[string]interface{}{
 				"status":     string(ArtifactStatusPersisted),
 				"updated_at": nowRFC3339(),
 			}); err != nil {
-				return err
+				allPersisted = false
+				continue
 			}
 		}
 	}
+
+	if !allPersisted {
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusPublishFailed),
+			"error_message": "some artifacts failed verification during repersist",
+			"updated_at": nowRFC3339(),
+		})
+	}
+
 	return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
 		"status":     string(AttemptStatusSucceeded),
 		"updated_at": nowRFC3339(),
 	})
 }
 
-func (w *RecoveryWorker) handlePublishFailed(attempt *ActionGenerationAttempt) error {
+func (w *RecoveryWorker) handlePublishFailed(ctx context.Context, attempt *ActionGenerationAttempt) error {
+	artifacts, err := w.artifactRepo.ListArtifactsByAttemptID(attempt.ID)
+	if err != nil {
+		return err
+	}
+
+	hasValidArtifact := false
+	for i := range artifacts {
+		a := &artifacts[i]
+		if a.Status == string(ArtifactStatusPublishFailed) || a.Status == string(ArtifactStatusStaging) {
+			if w.fileVerifier != nil {
+				verifyResult, verifyErr := w.fileVerifier(a)
+				if verifyErr == nil && verifyResult.Exists {
+					if err := w.artifactRepo.UpdateArtifact(a.ID, map[string]interface{}{
+						"status":     string(ArtifactStatusPersisted),
+						"updated_at": nowRFC3339(),
+					}); err == nil {
+						hasValidArtifact = true
+					}
+				}
+			} else {
+				if err := w.artifactRepo.UpdateArtifact(a.ID, map[string]interface{}{
+					"status":     string(ArtifactStatusPersisted),
+					"updated_at": nowRFC3339(),
+				}); err == nil {
+					hasValidArtifact = true
+				}
+			}
+		}
+	}
+
+	if hasValidArtifact {
+		return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
+			"status":     string(AttemptStatusSucceeded),
+			"updated_at": nowRFC3339(),
+		})
+	}
+
 	return w.attemptRepo.UpdateAttemptStatus(attempt.ID, map[string]interface{}{
-		"status":     string(AttemptStatusPersisting),
+		"status":     string(AttemptStatusFailed),
+		"error_code": "publish_failed_no_valid_artifact",
+		"error_message": "no valid artifact found after publish failure",
 		"updated_at": nowRFC3339(),
 	})
+}
+
+func (w *RecoveryWorker) defaultFileVerifier(artifact *GenerationArtifact) (*FileVerifyResult, error) {
+	if artifact == nil {
+		return nil, fmt.Errorf("artifact is nil")
+	}
+
+	var filePath string
+	if artifact.RelativePath != "" {
+		filePath = filepath.Join(w.config.DataDir, artifact.RelativePath)
+	} else if artifact.StorageKey != "" {
+		filePath = filepath.Join(w.config.DataDir, artifact.StorageKey)
+	} else {
+		return &FileVerifyResult{Exists: false}, nil
+	}
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &FileVerifyResult{Exists: false, FilePath: filePath}, nil
+		}
+		return nil, err
+	}
+
+	if info.IsDir() {
+		return &FileVerifyResult{Exists: false, FilePath: filePath}, nil
+	}
+
+	return &FileVerifyResult{
+		Exists:   true,
+		FilePath: filePath,
+		Hash:     artifact.Hash,
+	}, nil
 }
 
 func (w *RecoveryWorker) AcquireLease(attemptID, owner string) (bool, error) {

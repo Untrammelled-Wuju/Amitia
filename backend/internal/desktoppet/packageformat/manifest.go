@@ -2,6 +2,8 @@ package packageformat
 
 const ManifestSchemaVersion = 2
 
+const ActionConfigSchemaVersion = 2
+
 const ManifestFormatCanonical = "amitia-desktop-pet"
 
 const (
@@ -29,22 +31,61 @@ const (
 	LoopTypeHold     = "hold"
 )
 
+const (
+	PlaybackModeLoop     = "loop"
+	PlaybackModeOnce     = "once"
+	PlaybackModeHold     = "hold"
+	PlaybackModePingPong = "ping_pong"
+)
+
+const (
+	ReturnToDefault         = "default"
+	ReturnToPrevious        = "previous"
+	ReturnToCurrentActivity = "current_activity"
+	ReturnToNone            = "none"
+	ReturnToAction          = "action"
+)
+
+const (
+	IntegrityAlgorithmV2       = "amitia-package-sha256-v2"
+	IntegrityAlgorithmV1Legacy  = "amitia-tree-sha256-v1"
+)
+
+const (
+	ManifestPseudoEntryPath = "@manifest"
+)
+
 var validPlaybackModes = map[string]bool{
-	LoopTypeLoop:     true,
-	LoopTypeOnce:     true,
-	LoopTypeHold:     true,
-	LoopTypePingPong: true,
+	PlaybackModeLoop:     true,
+	PlaybackModeOnce:     true,
+	PlaybackModeHold:     true,
+	PlaybackModePingPong: true,
 }
 
 func NormalizePlaybackMode(mode string) string {
-	if mode == "ping-pong" {
-		return LoopTypePingPong
+	if mode == "ping-pong" || mode == "pingpong" {
+		return PlaybackModePingPong
 	}
 	return mode
 }
 
 func IsValidPlaybackMode(mode string) bool {
 	return validPlaybackModes[mode]
+}
+
+func IsLegacyLoopType(mode string) bool {
+	return mode == LoopTypeNone || mode == LoopTypeLoop || mode == LoopTypeOnce || mode == LoopTypeHold || mode == LoopTypePingPong
+}
+
+func MapLegacyLoopType(loopType string) string {
+	switch loopType {
+	case LoopTypeLoop, LoopTypeOnce, LoopTypeHold, LoopTypePingPong:
+		return loopType
+	case LoopTypeNone:
+		return PlaybackModeOnce
+	default:
+		return PlaybackModeLoop
+	}
 }
 
 const (
@@ -57,11 +98,33 @@ const (
 )
 
 const (
+	QualityVerdictAccepted           = "accepted"
+	QualityVerdictAcceptedWithWarning = "accepted_with_warning"
+	QualityVerdictNeedsReview        = "needs_review"
+	QualityVerdictRejected           = "rejected"
+)
+
+const (
 	QualityVerdictPass    = "pass"
 	QualityVerdictWarn    = "warning"
 	QualityVerdictFail    = "fail"
 	QualityVerdictSkipped = "skipped"
 )
+
+func MapLegacyQualityVerdict(verdict string) string {
+	switch verdict {
+	case QualityVerdictPass:
+		return QualityVerdictAccepted
+	case QualityVerdictWarn:
+		return QualityVerdictAcceptedWithWarning
+	case QualityVerdictFail:
+		return QualityVerdictRejected
+	case QualityVerdictSkipped:
+		return QualityVerdictNeedsReview
+	default:
+		return verdict
+	}
+}
 
 type ManifestAuthor struct {
 	Name string `json:"name"`
@@ -97,10 +160,12 @@ type ManifestActionEntry struct {
 	RevisionID           string `json:"revisionId"`
 	QualityEvaluationID  string `json:"qualityEvaluationId"`
 	QualityVerdict       string `json:"qualityVerdict"`
-	LoopType             string `json:"loopType"`
+	PlaybackMode         string `json:"playbackMode"`
 	FPS                  int    `json:"fps"`
 	FrameCount           int    `json:"frameCount"`
 	SupportsDefaultIdle  bool   `json:"supportsDefaultIdle"`
+	IsStableStateCandidate bool  `json:"isStableStateCandidate"`
+	IsTransitionOnly     bool   `json:"isTransitionOnly"`
 }
 
 type ManifestCapabilities struct {
@@ -121,11 +186,12 @@ type FileManifestEntry struct {
 }
 
 type ManifestIntegrity struct {
-	Algorithm      string              `json:"algorithm"`
+	Algorithm       string              `json:"algorithm"`
+	ManifestHash    string              `json:"manifestHash"`
 	ContentRootHash string              `json:"contentRootHash"`
-	FileCount      int                 `json:"fileCount"`
-	TotalBytes     int64               `json:"totalBytes"`
-	Files          []FileManifestEntry `json:"files"`
+	FileCount        int                 `json:"fileCount"`
+	TotalBytes       int64               `json:"totalBytes"`
+	Files            []FileManifestEntry `json:"files"`
 }
 
 type ManifestProvenance struct {
@@ -171,7 +237,7 @@ func NewManifest() *Manifest {
 			CoordinateSystem: CoordinateSystemTopLeft,
 		},
 		Integrity: ManifestIntegrity{
-			Algorithm: TreeHashAlgorithm,
+			Algorithm: IntegrityAlgorithmV2,
 		},
 		Capabilities: ManifestCapabilities{
 			TransparentBackground: true,

@@ -1,6 +1,7 @@
 package packageformat
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -40,6 +41,14 @@ func (r *SchemaRegistry) ReadManifest(data []byte) (*Manifest, error) {
 		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed to parse schemaVersion", err)
 	}
 
+	if probe.SchemaVersion == 0 {
+		return nil, NewPackageError(
+			ErrCodePackageSchemaMissing,
+			"schemaVersion is missing or zero",
+			nil,
+		)
+	}
+
 	reader, ok := r.readers[probe.SchemaVersion]
 	if !ok {
 		return nil, NewPackageError(
@@ -67,7 +76,9 @@ func (r *V2Reader) SchemaVersion() int { return 2 }
 
 func (r *V2Reader) ReadManifest(data []byte) (*Manifest, error) {
 	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&manifest); err != nil {
 		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed to unmarshal v2 manifest", err)
 	}
 	if manifest.SchemaVersion != ManifestSchemaVersion {

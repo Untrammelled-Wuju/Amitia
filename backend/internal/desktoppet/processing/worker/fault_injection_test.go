@@ -14,7 +14,7 @@ func TestFaultInjection_CrashDuringProcessing(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pastStr := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
 
@@ -102,7 +102,7 @@ func TestFaultInjection_HeartbeatLoss(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	staleHeartbeat := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
 	futureLease := time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05")
@@ -165,7 +165,7 @@ func TestFaultInjection_RecoveryIdempotency(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pastStr := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
 
@@ -225,7 +225,7 @@ func TestFaultInjection_PartialSuccessPreservedOnRecovery(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pastStr := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
 
@@ -319,7 +319,7 @@ func TestFaultInjection_MultipleStuckTasksRecovery(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pastStr := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
 	futureStr := time.Now().Add(10 * time.Minute).Format("2006-01-02 15:04:05")

@@ -178,7 +178,20 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 				}
 			}
 		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
-			checkArtifact.Passed = true
+			hasDeleteEvidence := false
+			if delSteps, delStepErr := r.container.PackageRepository.ListOperationSteps(ctx, operationID); delStepErr == nil {
+				for _, step := range delSteps {
+					if step.Status == "completed" && (step.StepName == "cleanup_kernel_repositories" || step.StepName == "remove_artifact" || step.StepName == "remove_files" || step.StepName == "remove_repositories") {
+						hasDeleteEvidence = true
+						break
+					}
+				}
+			}
+			if hasDeleteEvidence {
+				checkArtifact.Passed = true
+			} else {
+				checkArtifact.Detail = "artifact not found but no deletion evidence in operation steps"
+			}
 		} else {
 			checkArtifact.Detail = fmt.Sprintf("artifact query failed: %v", artifactErr)
 		}
@@ -673,5 +686,20 @@ func isRollbackSnapshotExempt(point PackageRollbackPoint) bool {
 	if err := json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState); err != nil {
 		return false
 	}
-	return migrationState.Mode == "none"
+	if migrationState.Mode != "none" {
+		return false
+	}
+	if point.UserDataMigrationStateJSON != "" {
+		var userDataState packageUserDataMigrationState
+		if err := json.Unmarshal([]byte(point.UserDataMigrationStateJSON), &userDataState); err != nil {
+			return false
+		}
+		if userDataState.Mode != "none" {
+			return false
+		}
+	}
+	if len(migrationState.Definitions) > 0 || len(migrationState.Operations) > 0 {
+		return false
+	}
+	return true
 }

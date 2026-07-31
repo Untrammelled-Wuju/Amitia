@@ -182,10 +182,9 @@ func (s *service) buildFrameHashInfos(artifacts []processing.ProcessingArtifactR
 			idx = *a.FrameIndex
 		}
 		infos = append(infos, FrameHashInfo{
-			Index:        idx,
-			ContentHash:  a.ContentHash,
-			DurationMS:   frameDurationMS,
-			RelativePath: a.RelativePath,
+			Index:       idx,
+			ContentHash: a.ContentHash,
+			DurationMS:  frameDurationMS,
 		})
 	}
 	return infos

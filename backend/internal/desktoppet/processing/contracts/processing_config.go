@@ -13,18 +13,43 @@ const (
 )
 
 type ProcessingConfigSnapshot struct {
-	SchemaVersion     int                    `json:"schemaVersion"`
-	Canvas            CanvasPolicy           `json:"canvas"`
-	Decode            DecodePolicy           `json:"decode"`
-	Split             SplitPolicy            `json:"split"`
-	Background        BackgroundPolicy       `json:"background"`
-	Subject           SubjectPolicy          `json:"subject"`
-	Scale             ScalePolicy            `json:"scale"`
-	Anchor            AnchorPolicy           `json:"anchor"`
-	Alignment         AlignmentPolicy        `json:"alignment"`
-	Encoding          EncodingPolicy         `json:"encoding"`
-	AlgorithmVersions map[string]string      `json:"algorithmVersions"`
-	ConfigHash        string                 `json:"configHash"`
+	SchemaVersion   int              `json:"schemaVersion"`
+	ProfileID       string           `json:"profileId,omitempty"`
+	ProfileVersion  string           `json:"profileVersion,omitempty"`
+	Canvas          CanvasPolicy     `json:"canvas"`
+	Decode          DecodePolicy     `json:"decode"`
+	Split           SplitPolicy      `json:"split"`
+	Background      BackgroundPolicy `json:"background"`
+	Subject         SubjectPolicy    `json:"subject"`
+	Scale           ScalePolicy      `json:"scale"`
+	Anchor          AnchorPolicy     `json:"anchor"`
+	Alignment       AlignmentPolicy  `json:"alignment"`
+	Encoding        EncodingPolicy   `json:"encoding"`
+	Measurement     MeasurementConfig `json:"measurement"`
+	Preview         PreviewConfig     `json:"preview"`
+	PipelineVersion string            `json:"pipelineVersion"`
+	AlgorithmSetHash string           `json:"algorithmSetHash,omitempty"`
+	AlgorithmVersions map[string]string `json:"algorithmVersions,omitempty"`
+	ConfigHash      string            `json:"configHash"`
+}
+
+type MeasurementConfig struct {
+	SchemaVersion      int     `json:"schemaVersion"`
+	ComputeSubjectBox  bool    `json:"computeSubjectBox"`
+	ComputeAlphaCoverage bool  `json:"computeAlphaCoverage"`
+	ComputeEdgeContact bool    `json:"computeEdgeContact"`
+	ComputeClipping    bool    `json:"computeClipping"`
+	ComputeTrajectory  bool    `json:"computeTrajectory"`
+	AlphaThreshold     int     `json:"alphaThreshold"`
+}
+
+type PreviewConfig struct {
+	Enabled       bool   `json:"enabled"`
+	Format        string `json:"format"`
+	MaxWidth      int    `json:"maxWidth"`
+	MaxHeight     int    `json:"maxHeight"`
+	CompositeFPS  int    `json:"compositeFps"`
+	CompositeFrames int  `json:"compositeFrames"`
 }
 
 type CanvasPolicy struct {
@@ -127,7 +152,8 @@ func NewDefaultConfigSnapshot(outputWidth, outputHeight int, targetHeightRatio f
 	}
 
 	cfg := &ProcessingConfigSnapshot{
-		SchemaVersion: ConfigSchemaVersion,
+		SchemaVersion:   ConfigSchemaVersion,
+		PipelineVersion: PipelineVersion,
 		Canvas: CanvasPolicy{
 			OutputWidth:                outputWidth,
 			OutputHeight:               outputHeight,
@@ -194,6 +220,23 @@ func NewDefaultConfigSnapshot(outputWidth, outputHeight int, targetHeightRatio f
 			CompressionLevel: 6,
 			ColorModel:       "rgba",
 			WriteMask:        true,
+		},
+		Measurement: MeasurementConfig{
+			SchemaVersion:        1,
+			ComputeSubjectBox:    true,
+			ComputeAlphaCoverage: true,
+			ComputeEdgeContact:   true,
+			ComputeClipping:      true,
+			ComputeTrajectory:    true,
+			AlphaThreshold:       10,
+		},
+		Preview: PreviewConfig{
+			Enabled:         true,
+			Format:          "png",
+			MaxWidth:        256,
+			MaxHeight:       256,
+			CompositeFPS:    8,
+			CompositeFrames: 4,
 		},
 		AlgorithmVersions: map[string]string{
 			"decoder":    "bounded-v1",

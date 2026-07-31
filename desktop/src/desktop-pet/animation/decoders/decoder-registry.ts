@@ -7,6 +7,7 @@ export interface FrameDecoder {
     url: string;
     signal: AbortSignal;
     frameIndex?: number;
+    contentHash?: string;
   }): Promise<DecodedFrame>;
 }
 
@@ -36,7 +37,7 @@ export class DecoderRegistryImpl implements DecoderRegistry {
   async decode(input: {
     url: string;
     signal: AbortSignal;
-    frameIndex?: number;
+    contentHash?: string;
   }): Promise<DecodedFrame> {
     const mime = inferMimeFromUrl(input.url);
     const decoder = this.decoders.find((d) => d.canHandle(mime));

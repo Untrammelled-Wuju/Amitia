@@ -26,9 +26,14 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
+	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
+	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
+	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
+	processingevents "github.com/u-ai/backend/internal/desktoppet/processing/events"
+	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
@@ -104,6 +109,7 @@ type AppServices struct {
 	DesktopPetRuntime  *runtime.Service
 	EditingService     editing.Service
 	RegenerationWorker *editing.RegenerationWorker
+	BridgeRecoveryWorker *revisioncommit.RecoveryWorker
 	BehaviorService    *behavior.BehaviorService
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
@@ -488,7 +494,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	processingPipeline := application.NewPipeline(bgRegistry, processingDataDir)
 	artifactSourceAdapter := application.NewRepoArtifactSourceAdapter(processingRepo)
 	processingSourceResolver := application.NewRepoSourceResolver(processingRepo, processingDataDir, artifactSourceAdapter)
-	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver)
+
+	processingWSManager := processingworkspace.NewWorkspaceManager(processingDataDir)
+	processingCommitJournalRepo := processingevents.NewCommitJournalRepository(ctx.DB)
+	processingOutboxRepo := processingevents.NewOutboxRepository(ctx.DB)
+	processingEventOutbox := processingevents.NewEventOutbox(processingOutboxRepo)
+	processingManifestStore := processing.NewManifestStore(ctx.DB)
+	processingCommitter := processingcommit.NewProcessingCommitter(
+		ctx.DB, processingRepo, processingWSManager,
+		processingCommitJournalRepo, processingEventOutbox,
+		processingManifestStore, processingDataDir,
+	)
+
+	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver, processingCommitter)
 
 	qualityBridge := bridge.NewProcessingBridge(ctx.DB, processingDataDir)
 	qualityRepo := quality.NewRepository(ctx.DB)
@@ -587,9 +605,66 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 
 	regenerationWorker := editing.NewRegenerationWorker(editingRepo, editingGenAdapter, editingAssetStore, editingQualAdapter, editingProcAdapter)
 
+	baselineCommitter := baseline.NewBaselineActionRevisionCommitter(ctx.DB)
+	bridgeInboxRepo := revisioncommit.NewBridgeInboxRepository(ctx.DB)
+	bridgeOutboxRepo := revisioncommit.NewOutboxRepository(ctx.DB)
+	bridgeJournalRepo := revisioncommit.NewRepository(ctx.DB)
+	procRevReader := &processingRevisionReaderAdapter{repo: processingRepo}
+	bridgeProcessor := revisioncommit.NewBridgeProcessor(
+		bridgeInboxRepo, bridgeJournalRepo, baselineCommitter, procRevReader, bridgeOutboxRepo, nil, "worker-main",
+	)
+	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
+	go bridgeRecoveryWorker.Start(context.Background())
+
 	processingWorker.SetRevisionPromoter(func(processingTaskID, actionKey, userID string) error {
-		_, err := editingSvc.ImportLegacyRevision(context.Background(), processingTaskID, actionKey, userID)
-		return err
+		task, taskErr := processingRepo.GetProcessingTask(processingTaskID)
+		if taskErr != nil {
+			return fmt.Errorf("获取ProcessingTask失败: %w", taskErr)
+		}
+		action, actErr := processingRepo.GetProcessingActionByActionKey(processingTaskID, actionKey)
+		if actErr != nil {
+			return fmt.Errorf("获取ProcessingAction失败: %w", actErr)
+		}
+		procRev, revErr := processingRepo.GetActiveRevision(action.ID)
+		if revErr != nil {
+			return fmt.Errorf("获取ActiveRevision失败: %w", revErr)
+		}
+		if procRev == nil {
+			return fmt.Errorf("ProcessingRevision不存在: actionId=%s", action.ID)
+		}
+
+		characterID := task.CharacterID
+		if characterID == "" {
+			characterID = task.UserID
+		}
+
+		anchorJSON := ""
+		if action.AnchorType != "" {
+			anchorJSON = fmt.Sprintf(`{"x":%g,"y":%g,"space":"normalized_canvas"}`, action.AnchorX, action.AnchorY)
+		}
+
+		eventID := fmt.Sprintf("prc-%s-%s", procRev.ID, actionKey)
+		payload := revisioncommit.InboxEntryPayload{
+			UserID:               userID,
+			CharacterID:          characterID,
+			ProcessingTaskID:     processingTaskID,
+			ProcessingActionID:   action.ID,
+			ProcessingAttemptID:  procRev.ProcessingAttemptID,
+			ProcessingRevisionID: procRev.ID,
+			ActionKey:            actionKey,
+			ActionConfigJSON:     procRev.ConfigSnapshot,
+			ActionConfigHash:     procRev.ConfigHash,
+			ActionSpecVersion:    "",
+			ActionSpecHash:       "",
+			PlaybackMode:         action.LoopType,
+			FPS:                  action.FPS,
+			FrameDurationMS:      action.FrameDurationMS,
+			LoopType:             action.LoopType,
+			AnchorJSON:           anchorJSON,
+			PromotionPolicy:      baseline.PromotionPolicyAlways,
+			CreatedBy:            userID,
+		}
+		return bridgeProcessor.SubmitToInbox(context.Background(), eventID, payload)
 	})
 
 	releaseStorage := installation.NewReleaseStorage(processingDataDir)
@@ -642,6 +717,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		DesktopPetRuntime:   desktopPetRuntime,
 		EditingService:      editingSvc,
 		RegenerationWorker:  regenerationWorker,
+		BridgeRecoveryWorker: bridgeRecoveryWorker,
 		BehaviorService:     behaviorSvc,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,

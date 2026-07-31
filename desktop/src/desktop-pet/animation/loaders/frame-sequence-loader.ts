@@ -45,6 +45,7 @@ export class FrameSequenceLoader {
           decoded = await this.decoderRegistry.decode({
             url: frame.resourceUrl,
             signal: internalController.signal,
+            contentHash: frame.contentHash,
           });
         } catch (error) {
           if (PlaybackError.isAbort(error)) throw error;

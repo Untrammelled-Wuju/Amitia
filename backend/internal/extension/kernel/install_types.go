@@ -132,6 +132,25 @@ type PackagePreviewConfirmation struct {
 	ExpiresAt         time.Time `json:"expiresAt"`
 }
 
+type ArtifactPolicy string
+
+const (
+	ArtifactPolicyRetainArtifact  ArtifactPolicy = "retainArtifact"
+	ArtifactPolicyDeleteArtifact  ArtifactPolicy = "deleteArtifact"
+	ArtifactPolicyRetainForRollback ArtifactPolicy = "retainForRollback"
+	ArtifactPolicyRetainForExport ArtifactPolicy = "retainForExport"
+)
+
+type RollbackSnapshotRequirement struct {
+	Required          bool   `json:"required"`
+	Reason            string `json:"reason,omitempty"`
+	ConfigChanged     bool   `json:"configChanged"`
+	ResourcesChanged  bool   `json:"resourcesChanged"`
+	UserDataChanged   bool   `json:"userDataChanged"`
+	MigrationRequired bool   `json:"migrationRequired"`
+	PreviewHash       string `json:"previewHash,omitempty"`
+}
+
 type packageConfirmationClaims struct {
 	SessionID          string          `json:"sessionId"`
 	ArtifactID         string          `json:"artifactId"`
@@ -146,6 +165,8 @@ type packageConfirmationClaims struct {
 	KeyID              string          `json:"kid,omitempty"`
 	DeveloperSessionID string          `json:"developerSessionId,omitempty"`
 	MigrationPlanHash  string          `json:"migrationPlanHash,omitempty"`
+	ArtifactPolicy     ArtifactPolicy `json:"artifactPolicy,omitempty"`
+	PreviewHash        string          `json:"previewHash,omitempty"`
 	Confirmations      map[string]bool `json:"confirmations"`
 	ExpiresAt          int64           `json:"expiresAt"`
 }

@@ -61,6 +61,25 @@ func ManifestHash(data []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
+func CanonicalManifestData(manifest *Manifest) ([]byte, error) {
+	if manifest == nil {
+		return nil, fmt.Errorf("manifest is nil")
+	}
+	clone := *manifest
+	clone.Integrity.ManifestHash = ""
+	clone.Integrity.ContentRootHash = ""
+	return CanonicalJSON(clone)
+}
+
+func CanonicalManifestHash(manifest *Manifest) (string, error) {
+	data, err := CanonicalManifestData(manifest)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:]), nil
+}
+
 type bytesReader struct {
 	data []byte
 	pos  int

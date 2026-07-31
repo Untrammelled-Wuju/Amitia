@@ -17,6 +17,7 @@ type ArtifactRepository interface {
 	ListArtifactsByAttemptID(attemptID string) ([]GenerationArtifact, error)
 	ListPrimaryArtifactsByActionID(taskActionID string) ([]GenerationArtifact, error)
 	UpdateArtifact(id string, updates map[string]interface{}) error
+	UpdateArtifactTx(tx *gorm.DB, id string, updates map[string]interface{}) error
 	HasPrimaryArtifact(attemptID string) (bool, error)
 	DeleteArtifactsByTaskID(tx *gorm.DB, taskID string) error
 }
@@ -87,6 +88,26 @@ func (r *artifactRepository) UpdateArtifact(id string, updates map[string]interf
 		updates["updated_at"] = nowRFC3339()
 	}
 	result := r.db.Model(&GenerationArtifact{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrArtifactNotFound
+	}
+	return nil
+}
+
+func (r *artifactRepository) UpdateArtifactTx(tx *gorm.DB, id string, updates map[string]interface{}) error {
+	if tx == nil {
+		tx = r.db
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	if _, ok := updates["updated_at"]; !ok {
+		updates["updated_at"] = nowRFC3339()
+	}
+	result := tx.Model(&GenerationArtifact{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}

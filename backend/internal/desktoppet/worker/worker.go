@@ -81,8 +81,7 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 
 	activeBindingRepo := activebinding.NewRepository(db)
 	bindingService := activebinding.NewBindingService(activeBindingRepo)
-	finalizerRepo := NewActiveBindingFinalizerAdapter(activeBindingRepo)
-	finalizer := generation.NewGenerationFinalizer(attemptRepo, artifactRepo, finalizerRepo)
+	finalizer := generation.NewGenerationFinalizer(attemptRepo, artifactRepo, bindingService)
 
 	recoveryWorker := generation.NewRecoveryWorker(
 		db, attemptRepo, artifactRepo, receiptRepo,

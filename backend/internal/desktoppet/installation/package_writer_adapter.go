@@ -82,9 +82,12 @@ func (a *packageWriterAdapter) StagePackage(
 		if displayName == "" {
 			displayName = actionSnap.ActionKey
 		}
-		playbackMode := packageformat.NormalizePlaybackMode(detail.LoopType)
+		playbackMode := packageformat.NormalizePlaybackMode(detail.PlaybackMode)
 		if playbackMode == "" {
-			playbackMode = packageformat.LoopTypeLoop
+			playbackMode = packageformat.NormalizePlaybackMode(detail.LoopType)
+		}
+		if playbackMode == "" {
+			playbackMode = packageformat.PlaybackModeLoop
 		}
 
 		cfg := actionConfig{
@@ -120,7 +123,7 @@ func (a *packageWriterAdapter) StagePackage(
 			Config:              fmt.Sprintf("actions/%s/action.json", actionSnap.ActionKey),
 			RevisionID:          detail.RevisionID,
 			QualityVerdict:      detail.QualityVerdict,
-			LoopType:            playbackMode,
+			PlaybackMode:        playbackMode,
 			FPS:                 detail.DefaultFPS,
 			FrameCount:          detail.FrameCount,
 			SupportsDefaultIdle: info.SupportsDefaultIdle,
@@ -295,7 +298,7 @@ func (a *packageWriterAdapter) WriteManifest(staged *relbuild.StagedPackage) err
 		return err
 	}
 
-	manifestData, err := a.writer.WriteManifest(&manifest)
+	finalizedManifest, manifestData, err := a.writer.FinalizeManifest(&manifest)
 	if err != nil {
 		return err
 	}
@@ -309,7 +312,7 @@ func (a *packageWriterAdapter) WriteManifest(staged *relbuild.StagedPackage) err
 	}
 
 	staged.ManifestData = manifestData
-	staged.ManifestHash = hashBytes(manifestData)
+	staged.ManifestHash = finalizedManifest.Integrity.ManifestHash
 	return nil
 }
 

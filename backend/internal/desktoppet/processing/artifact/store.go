@@ -290,3 +290,27 @@ func mimeFromKind(kind string) string {
 		return "image/png"
 	}
 }
+
+func isPathUnderBase(base, target string) bool {
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		return true
+	}
+	if len(rel) >= 2 && rel[:2] == ".." {
+		return false
+	}
+	return true
+}
+
+func computeFileHash(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}

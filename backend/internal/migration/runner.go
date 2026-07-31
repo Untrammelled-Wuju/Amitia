@@ -41,6 +41,10 @@ type Step struct {
 	operations []string
 }
 
+func (s *Step) DB() *gorm.DB {
+	return s.db
+}
+
 func (Record) TableName() string {
 	return "schema_migrations"
 }

@@ -54,25 +54,28 @@ export interface NormalizedFrame {
   readonly durationMs: number;
   readonly cumulativeStartMs: number;
   readonly cumulativeEndMs: number;
+  readonly frameId: string;
+  readonly assetId: string;
+  readonly contentHash: string;
 }
 
 export interface ActionSpecSnapshot {
   readonly actionKey: string;
   readonly displayName: string;
-  readonly category: string;
+  readonly category?: string;
   readonly version: number;
   readonly loopType: LoopType;
-  readonly defaultPriority: number;
+  readonly defaultPriority?: number;
   readonly interruptible: boolean;
-  readonly interruptAfterMs: number;
-  readonly minimumPlayMs: number;
-  readonly maximumPlayMs: number | null;
-  readonly cooldownMs: number;
-  readonly mutexGroup: string | null;
+  readonly interruptAfterMs?: number;
+  readonly minimumPlayMs?: number;
+  readonly maximumPlayMs?: number | null;
+  readonly cooldownMs?: number;
+  readonly mutexGroup?: string | null;
   readonly returnTarget: ReturnTarget;
-  readonly supportsDefaultIdle: boolean;
-  readonly isStableStateCandidate: boolean;
-  readonly isTransitionOnly: boolean;
+  readonly supportsDefaultIdle?: boolean;
+  readonly isStableStateCandidate?: boolean;
+  readonly isTransitionOnly?: boolean;
 }
 
 export interface RawActionConfig {
@@ -86,7 +89,7 @@ export interface RawActionConfig {
   readonly defaultFps?: number;
   readonly frameDurationMs: number;
   readonly frameCount: number;
-  readonly frames: ReadonlyArray<{ index?: number; file: string; durationMs?: number } | string>;
+  readonly frames: ReadonlyArray<{ index?: number; file: string; durationMs?: number; frameId?: string; assetId?: string; contentHash?: string } | string>;
   readonly anchor?: { type?: string; x?: number; y?: number; coordinateSpace?: string };
   readonly interruptible?: boolean;
   readonly returnAction?: string;
@@ -98,6 +101,11 @@ export interface RawActionConfig {
   readonly priority?: number;
   readonly cooldownMs?: number;
   readonly mutexGroup?: string | null;
+  readonly supportsDefaultIdle?: boolean;
+  readonly isStableStateCandidate?: boolean;
+  readonly isTransitionOnly?: boolean;
+  readonly category?: string;
+  readonly schemaVersion?: number;
 }
 
 export interface LoadedAction {
@@ -140,6 +148,7 @@ export interface DecodedFrame {
   readonly estimatedBytes: number;
   readonly sourceUrl: string;
   readonly decoderName: string;
+  readonly contentHash: string;
 }
 
 export interface PlayActionCommand {
@@ -338,6 +347,7 @@ export interface DecoderRegistry {
   decode(input: {
     url: string;
     signal: AbortSignal;
+    contentHash?: string;
   }): Promise<DecodedFrame>;
   canHandle(mime: string): boolean;
 }
@@ -391,7 +401,7 @@ export const DEFAULT_QUEUE_LIMITS = {
 export const FRAME_DURATION_MIN_MS = 16;
 export const FRAME_DURATION_MAX_MS = 10000;
 export const FPS_MIN = 1;
-export const FPS_MAX = 60;
+export const FPS_MAX = 120;
 export const LEGACY_FRAME_DURATION_MS = 100;
 
 export const CLOCK_LARGE_GAP_THRESHOLD_MS = 5000;

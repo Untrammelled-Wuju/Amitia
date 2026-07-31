@@ -18,11 +18,12 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 		Fps:           12,
 		PlaybackMode:  "loop",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 83, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 83, ContentHash: frameHash},
-			{Index: 2, File: "frames/2.png", DurationMs: 83, ContentHash: frameHash},
+			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 83, AssetID: "asset_idle_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 83, AssetID: "asset_idle_1", ContentHash: frameHash},
+			{Index: 2, FrameID: "idle_2", File: "frames/2.png", DurationMs: 83, AssetID: "asset_idle_2", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "none"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 
 	waveCfg := testActionConfig{
@@ -32,12 +33,13 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 		Fps:           15,
 		PlaybackMode:  "ping_pong",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 67, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 67, ContentHash: frameHash},
-			{Index: 2, File: "frames/2.png", DurationMs: 67, ContentHash: frameHash},
-			{Index: 3, File: "frames/3.png", DurationMs: 67, ContentHash: frameHash},
+			{Index: 0, FrameID: "wave_0", File: "frames/0.png", DurationMs: 67, AssetID: "asset_wave_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "wave_1", File: "frames/1.png", DurationMs: 67, AssetID: "asset_wave_1", ContentHash: frameHash},
+			{Index: 2, FrameID: "wave_2", File: "frames/2.png", DurationMs: 67, AssetID: "asset_wave_2", ContentHash: frameHash},
+			{Index: 3, FrameID: "wave_3", File: "frames/3.png", DurationMs: 67, AssetID: "asset_wave_3", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "action", ActionKey: "idle"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 
 	idleCfgData, err := json.MarshalIndent(idleCfg, "", "  ")
@@ -77,6 +79,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 			Key:                 "idle",
 			Name:                "Idle",
 			Config:              "actions/idle/action.json",
+			PlaybackMode:        "loop",
 			FPS:                 12,
 			FrameCount:          3,
 			SupportsDefaultIdle: true,
@@ -85,6 +88,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 			Key:                 "wave",
 			Name:                "Wave",
 			Config:              "actions/wave/action.json",
+			PlaybackMode:        "ping_pong",
 			FPS:                 15,
 			FrameCount:          4,
 			SupportsDefaultIdle: false,
@@ -153,8 +157,18 @@ func TestGoldenPackage_TreeHashDeterministic(t *testing.T) {
 		t.Errorf("tree hash differs with reversed order: %s vs %s", hash1, hash3)
 	}
 
-	if hash1 != manifest.Integrity.ContentRootHash {
-		t.Errorf("tree hash %s != manifest ContentRootHash %s", hash1, manifest.Integrity.ContentRootHash)
+	manifestHash, hashErr := CanonicalManifestHash(manifest)
+	if hashErr != nil {
+		t.Fatalf("CanonicalManifestHash: %v", hashErr)
+	}
+	canonicalData, dataErr := CanonicalManifestData(manifest)
+	if dataErr != nil {
+		t.Fatalf("CanonicalManifestData: %v", dataErr)
+	}
+	manifestBytes := int64(len(canonicalData))
+	contentRootHash := ComputeContentRootHash(entries, manifestHash, manifestBytes)
+	if contentRootHash != manifest.Integrity.ContentRootHash {
+		t.Errorf("content root hash %s != manifest ContentRootHash %s", contentRootHash, manifest.Integrity.ContentRootHash)
 	}
 
 	if len(hash1) != 64 {
@@ -207,10 +221,11 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 		Fps:           12,
 		PlaybackMode:  "loop",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 83, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 83, ContentHash: frameHash},
+			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 83, AssetID: "asset_idle_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 83, AssetID: "asset_idle_1", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "none"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 
 	waveCfg := testActionConfig{
@@ -220,10 +235,11 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 		Fps:           15,
 		PlaybackMode:  "ping_pong",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 67, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 67, ContentHash: frameHash},
+			{Index: 0, FrameID: "wave_0", File: "frames/0.png", DurationMs: 67, AssetID: "asset_wave_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "wave_1", File: "frames/1.png", DurationMs: 67, AssetID: "asset_wave_1", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "action", ActionKey: "nonexistent"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 
 	dir := t.TempDir()
@@ -258,6 +274,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 			Key:                 "idle",
 			Name:                "Idle",
 			Config:              "actions/idle/action.json",
+			PlaybackMode:        "loop",
 			FPS:                 12,
 			FrameCount:          2,
 			SupportsDefaultIdle: true,
@@ -266,6 +283,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 			Key:                 "wave",
 			Name:                "Wave",
 			Config:              "actions/wave/action.json",
+			PlaybackMode:        "ping_pong",
 			FPS:                 15,
 			FrameCount:          2,
 			SupportsDefaultIdle: false,
@@ -367,8 +385,8 @@ func TestGoldenPackage_AllFieldsValidated(t *testing.T) {
 		t.Error("Integrity.ContentRootHash is empty")
 	}
 
-	if manifest.Integrity.Algorithm != TreeHashAlgorithm {
-		t.Errorf("Integrity.Algorithm = %q, want %q", manifest.Integrity.Algorithm, TreeHashAlgorithm)
+	if manifest.Integrity.Algorithm != IntegrityAlgorithmV2 {
+		t.Errorf("Integrity.Algorithm = %q, want %q", manifest.Integrity.Algorithm, IntegrityAlgorithmV2)
 	}
 
 	fs := NewDirectoryPackageFS(dir)

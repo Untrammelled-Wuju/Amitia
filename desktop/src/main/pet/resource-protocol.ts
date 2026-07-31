@@ -2,8 +2,9 @@ import { protocol } from "electron";
 import { stat as fsStat, readFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { join, normalize, relative, isAbsolute, extname } from "node:path";
+import { createHash } from "node:crypto";
 import { PET_PROTOCOL_SCHEME } from "../../shared/animation-ipc";
-import type { Manifest } from "./resource-loader";
+import type { Manifest, IntegrityFileEntry } from "./resource-loader";
 
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
@@ -21,10 +22,15 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store, no-cache, must-revalidate",
 };
 
+export type ResourceIndexEntry = IntegrityFileEntry;
+
+export type ResourceIndex = Map<string, ResourceIndexEntry>;
+
 export interface ActiveInstallationInfo {
   installationId: string;
   installPath: string;
   manifest: Manifest;
+  resourceIndex: ResourceIndex;
 }
 
 let schemeRegistered = false;
@@ -45,9 +51,22 @@ try {
   schemeRegistered = false;
 }
 
-function getMimeFromPath(filePath: string): string {
+export function getMimeFromPath(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   return MIME_MAP[ext] ?? "application/octet-stream";
+}
+
+export function buildResourceIndex(manifest: Manifest): ResourceIndex {
+  const index: ResourceIndex = new Map();
+  const files = manifest.integrity?.files;
+  if (!files || !Array.isArray(files)) return index;
+  for (const entry of files) {
+    if (entry && typeof entry.path === "string") {
+      const normalizedPath = entry.path.replace(/\\/g, "/").replace(/^\/+/, "");
+      index.set(normalizedPath, entry);
+    }
+  }
+  return index;
 }
 
 function isUnsafeRelativePath(relativePath: string): boolean {
@@ -77,10 +96,15 @@ function isPathWithinInstall(installPath: string, fullPath: string): boolean {
   }
 }
 
+function computeSha256(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
 export class PetResourceProtocolRegistry {
   private static instance: PetResourceProtocolRegistry | null = null;
   private registered = false;
   private getActiveInstallation: (() => ActiveInstallationInfo | null) | null = null;
+  private verifiedPaths: Map<string, string> = new Map();
 
   private constructor() {}
 
@@ -95,11 +119,13 @@ export class PetResourceProtocolRegistry {
     getActiveInstallation: () => ActiveInstallationInfo | null,
   ): void {
     this.getActiveInstallation = getActiveInstallation;
+    this.verifiedPaths.clear();
     this.ensureRegistered();
   }
 
   clearActiveInstallationResolver(): void {
     this.getActiveInstallation = null;
+    this.verifiedPaths.clear();
   }
 
   private ensureRegistered(): void {
@@ -144,7 +170,17 @@ export class PetResourceProtocolRegistry {
         });
       }
 
-      const fullPath = join(active.installPath, parsed.relativePath);
+      const normalizedRelative = parsed.relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+
+      const indexEntry = active.resourceIndex.get(normalizedRelative);
+      if (!indexEntry) {
+        return new Response(JSON.stringify({ error: "resource_not_declared" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      const fullPath = join(active.installPath, normalizedRelative);
       if (!isPathWithinInstall(active.installPath, fullPath)) {
         return new Response(JSON.stringify({ error: "path_outside_install" }), {
           status: 403,
@@ -169,9 +205,39 @@ export class PetResourceProtocolRegistry {
         });
       }
 
+      if (typeof indexEntry.bytes === "number" && stats.size !== indexEntry.bytes) {
+        return new Response(JSON.stringify({
+          error: "size_mismatch",
+          declared: indexEntry.bytes,
+          actual: stats.size,
+        }), {
+          status: 403,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      const verifyKey = `${active.installationId}:${normalizedRelative}`;
+
       try {
         const content = await readFile(fullPath);
-        const mimeType = getMimeFromPath(fullPath);
+
+        const isVerified = this.verifiedPaths.get(verifyKey);
+        if (isVerified !== indexEntry.sha256) {
+          const actualHash = computeSha256(content);
+          if (actualHash !== indexEntry.sha256) {
+            return new Response(JSON.stringify({
+              error: "integrity_check_failed",
+              declared: indexEntry.sha256,
+              actual: actualHash,
+            }), {
+              status: 403,
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+            });
+          }
+          this.verifiedPaths.set(verifyKey, indexEntry.sha256);
+        }
+
+        const mimeType = indexEntry.mediaType || "application/octet-stream";
         return new Response(new Uint8Array(content), {
           status: 200,
           headers: {

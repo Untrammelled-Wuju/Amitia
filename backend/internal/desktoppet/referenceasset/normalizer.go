@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -17,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	_ "image/jpeg"
 
@@ -32,20 +35,31 @@ var (
 	ErrFileTooLarge      = errors.New("file exceeds max bytes limit")
 )
 
-func Normalize(sourcePath, outputPath string, config NormalizeConfig) (*ReferenceAsset, error) {
-	if err := validatePath(sourcePath); err != nil {
+type NormalizeInput struct {
+	SourcePath               string
+	OutputPath               string
+	Config                   NormalizeConfig
+	UserID                   string
+	CharacterID              string
+	TaskID                   string
+	NormalizerProfileID      string
+	NormalizerProfileVersion string
+}
+
+func Normalize(input NormalizeInput) (*ReferenceAsset, error) {
+	if err := validatePath(input.SourcePath); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidSourcePath, err)
 	}
-	if err := validatePath(outputPath); err != nil {
+	if err := validatePath(input.OutputPath); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidOutputPath, err)
 	}
 
-	sourceData, err := os.ReadFile(sourcePath)
+	sourceData, err := os.ReadFile(input.SourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("read source file: %w", err)
 	}
 
-	if config.MaxBytes > 0 && int64(len(sourceData)) > config.MaxBytes {
+	if input.Config.MaxBytes > 0 && int64(len(sourceData)) > input.Config.MaxBytes {
 		return nil, ErrFileTooLarge
 	}
 
@@ -68,9 +82,9 @@ func Normalize(sourcePath, outputPath string, config NormalizeConfig) (*Referenc
 
 	rgba := convertToRGBA(img)
 
-	bgColor := parseBackgroundColor(config.BackgroundColor)
+	bgColor := parseBackgroundColor(input.Config.BackgroundColor)
 
-	normalized := normalizeSize(rgba, config.TargetWidth, config.TargetHeight, bgColor)
+	normalized := normalizeSize(rgba, input.Config.TargetWidth, input.Config.TargetHeight, bgColor)
 
 	normBounds := normalized.Bounds()
 	normWidth := normBounds.Dx()
@@ -85,26 +99,54 @@ func Normalize(sourcePath, outputPath string, config NormalizeConfig) (*Referenc
 	normSum := sha256.Sum256(normalizedData)
 	normalizedHashStr := hex.EncodeToString(normSum[:])
 
-	configHash := computeConfigHash(config)
+	configHash := computeConfigHash(input.Config)
 
-	if err := WriteAtomically(outputPath, normalizedData); err != nil {
+	if err := WriteAtomically(input.OutputPath, normalizedData); err != nil {
 		return nil, fmt.Errorf("write normalized file: %w", err)
 	}
 
-	return &ReferenceAsset{
-		SourcePath:       sourcePath,
-		SourceHash:       sourceHashStr,
-		SourceMIME:       sourceMIME,
-		SourceWidth:      sourceWidth,
-		SourceHeight:     sourceHeight,
-		NormalizedPath:   outputPath,
-		NormalizedHash:   normalizedHashStr,
-		NormalizedMIME:   "image/png",
-		NormalizedWidth:  normWidth,
-		NormalizedHeight: normHeight,
-		ConfigHash:       configHash,
-		CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
-	}, nil
+	profileID := input.NormalizerProfileID
+	if profileID == "" {
+		profileID = NormalizerProfileIDDefault
+	}
+	profileVersion := input.NormalizerProfileVersion
+	if profileVersion == "" {
+		profileVersion = NormalizerProfileVersionDefault
+	}
+
+	asset := &ReferenceAsset{
+		ID:                      uuid.New().String(),
+		TaskID:                  input.TaskID,
+		UserID:                  input.UserID,
+		CharacterID:             input.CharacterID,
+		SourcePath:              input.SourcePath,
+		SourceHash:              sourceHashStr,
+		SourceMIME:              sourceMIME,
+		SourceWidth:             sourceWidth,
+		SourceHeight:            sourceHeight,
+		SourceBytes:             int64(len(sourceData)),
+		NormalizedPath:          input.OutputPath,
+		NormalizedHash:          normalizedHashStr,
+		NormalizedMIME:          "image/png",
+		NormalizedWidth:         normWidth,
+		NormalizedHeight:        normHeight,
+		NormalizedBytes:         int64(len(normalizedData)),
+		ConfigHash:              configHash,
+		NormalizerConfigHash:    configHash,
+		NormalizerVersion:       profileVersion,
+		NormalizerProfileID:     profileID,
+		NormalizerProfileVersion: profileVersion,
+		SubjectBox:              SubjectBoxStatusNotMeasured,
+		Anchor:                  AnchorSourceProfileDefault,
+		CoordinateSpace:         CoordinateSpaceDefault,
+		StoragePath:             input.OutputPath,
+		Status:                  ReferenceAssetStatusStaging,
+		CreatedAt:               time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	asset.ContentHash = computeReferenceContentHash(asset)
+
+	return asset, nil
 }
 
 func formatToMIME(format string) string {
@@ -501,5 +543,24 @@ func computeConfigHash(config NormalizeConfig) string {
 		config.BackgroundColor,
 	)
 	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:])
+}
+
+func computeReferenceContentHash(asset *ReferenceAsset) string {
+	content := map[string]string{
+		"source_hash":                asset.SourceHash,
+		"normalized_hash":            asset.NormalizedHash,
+		"normalizer_profile_id":      asset.NormalizerProfileID,
+		"normalizer_profile_version": asset.NormalizerProfileVersion,
+		"normalizer_config_hash":     asset.NormalizerConfigHash,
+		"subject_box":                asset.SubjectBox,
+		"anchor":                     asset.Anchor,
+		"coordinate_space":           asset.CoordinateSpace,
+	}
+	data, err := json.Marshal(content)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }

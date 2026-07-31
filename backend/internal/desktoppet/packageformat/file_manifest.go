@@ -33,6 +33,10 @@ func BuildFileManifestFromDir(root string) (*FileManifest, error) {
 			return walkErr
 		}
 		if d.IsDir() {
+			base := filepath.Base(path)
+			if base != filepath.Base(root) && strings.HasPrefix(base, ".") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -41,6 +45,15 @@ func BuildFileManifestFromDir(root string) (*FileManifest, error) {
 			return relErr
 		}
 		relSlash := filepath.ToSlash(rel)
+
+		if relSlash == "manifest.json" {
+			return nil
+		}
+
+		base := filepath.Base(path)
+		if strings.HasPrefix(base, ".") {
+			return nil
+		}
 
 		normalized, normErr := NormalizePackagePath(relSlash)
 		if normErr != nil {

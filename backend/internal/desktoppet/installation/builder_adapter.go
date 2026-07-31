@@ -33,6 +33,7 @@ type ActiveRevisionDetail struct {
 	DurationMS     int
 	DefaultFPS     int
 	LoopType       string
+	PlaybackMode   string
 	ReturnAction   string
 	ReturnPolicy   string
 	Interruptible  bool
@@ -43,6 +44,8 @@ type ActiveRevisionDetail struct {
 	MutexGroup     string
 	AnchorX        float64
 	AnchorY        float64
+	AnchorJSON     string
+	ContentHash    string
 	QualityVerdict string
 	Frames         []BuilderFrameInfo
 }
@@ -57,6 +60,7 @@ type BuilderFrameInfo struct {
 	Height       int
 	MimeType     string
 	StoragePath  string
+	ByteSize     int64
 }
 
 type RevisionSource interface {

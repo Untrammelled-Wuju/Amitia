@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
+	"github.com/u-ai/backend/internal/desktoppet/referenceasset"
 	"github.com/u-ai/backend/internal/desktoppet/specs"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/internal/imageprovider"
@@ -55,17 +56,23 @@ type service struct {
 	providerRegistry *imageprovider.Registry
 	stateStore       *StateStore
 	stateEngine      *taskstate.Engine
+	refAssetService  referenceasset.ReferenceAssetService
 }
 
 func NewService(repo Repository, db *gorm.DB) Service {
 	registry := NewProviderRegistry()
 	stateStore := NewStateStore(db)
+	refRepo := referenceasset.NewRepository(db)
+	refJournalRepo := referenceasset.NewJournalRepository(db)
+	refCommitter := referenceasset.NewCommitter(refRepo, refJournalRepo)
+	refAssetSvc := referenceasset.NewReferenceAssetService(refRepo, refCommitter, config.AppCfg.Storage.DataDir)
 	return &service{
 		repo:             repo,
 		db:               db,
 		providerRegistry: registry,
 		stateStore:       stateStore,
 		stateEngine:      taskstate.NewEngine(stateStore),
+		refAssetService:  refAssetSvc,
 	}
 }
 
@@ -308,6 +315,33 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 		_ = removeAllTaskDir(taskDir)
 		return nil, NewBusinessError(response.OperationFailed, ErrCodeGenerationTaskCreateFailed, "任务创建失败")
 	}
+
+	uploadAbsPath := filepath.Join(config.AppCfg.Storage.DataDir, imageInfo.Path)
+	refAsset, err := s.refAssetService.CreateForGenerationTask(ctx, tx, referenceasset.CreateReferenceAssetRequest{
+		UserID:       userID,
+		CharacterID:  characterID,
+		TaskID:       taskID,
+		UploadPath:   uploadAbsPath,
+		UploadName:   imageInfo.OriginalName,
+		UploadMIME:   imageInfo.MimeType,
+		UploadHash:   imageInfo.Hash,
+		UploadSize:   int64(imageInfo.Size),
+		UploadWidth:  imageInfo.Width,
+		UploadHeight: imageInfo.Height,
+	})
+	if err != nil {
+		tx.Rollback()
+		_ = removeAllTaskDir(taskDir)
+		return nil, NewBusinessError(response.OperationFailed, ErrCodeGenerationTaskCreateFailed, "参考资源创建失败: "+err.Error())
+	}
+
+	if err := tx.Model(&GenerationTask{}).Where("id = ?", taskID).Update("reference_asset_id", refAsset.ID).Error; err != nil {
+		tx.Rollback()
+		_ = removeAllTaskDir(taskDir)
+		return nil, NewBusinessError(response.OperationFailed, ErrCodeGenerationTaskCreateFailed, "任务创建失败")
+	}
+	task.ReferenceAssetID = refAsset.ID
+
 	if err := s.repo.CreateTaskActions(tx, taskActions); err != nil {
 		tx.Rollback()
 		_ = removeAllTaskDir(taskDir)
@@ -668,9 +702,16 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 		return nil, err
 	}
 
-	fullPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
-	if _, err := os.Stat(fullPath); err != nil {
-		return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考图片文件不存在")
+	if task.ReferenceAssetID != "" {
+		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.UserID, task.CharacterID)
+		if err != nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考资源验证失败: "+err.Error())
+		}
+	} else {
+		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
+		if _, err := os.Stat(fullPath); err != nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考图片文件不存在")
+		}
 	}
 
 	taskReason := contracts.ReasonGenerationTaskSubmit

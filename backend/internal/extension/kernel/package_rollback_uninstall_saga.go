@@ -599,20 +599,35 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, extensionID, user
 	}
 	if finalizeQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		finalizeQM.State = "finalizing"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, finalizeQM, uninstallGuard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, finalizeQM, uninstallGuard); err != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "finalize_quarantine", PackageErrCodeQuarantineStatePersistFailed, err.Error(), false, uninstallGuard)
+			return op, errors.Join(err, persistErr)
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "finalize_quarantine", PackageErrCodeQuarantineMetadataUnavailable, qmErr.Error(), false, uninstallGuard)
+		return op, errors.Join(qmErr, persistErr)
 	}
 	if err := r.completeSimplePackageStep(ctx, op.OperationID, "finalize_quarantine", 4, uninstallGuard); err != nil {
 		return op, err
 	}
 	if finalizeQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		finalizeQM.State = "finalized"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, finalizeQM, uninstallGuard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, finalizeQM, uninstallGuard); err != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "finalize_quarantine", PackageErrCodeQuarantineStatePersistFailed, err.Error(), false, uninstallGuard)
+			return op, errors.Join(err, persistErr)
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "finalize_quarantine", PackageErrCodeQuarantineMetadataUnavailable, qmErr.Error(), false, uninstallGuard)
+		return op, errors.Join(qmErr, persistErr)
 	}
 	if err := r.deactivatePackageVersionAfterUninstall(ctx, extensionID, initialPreview.CurrentVersion, op.OperationID, uninstallGuard); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "deactivate_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, uninstallGuard)
 		return op, err
 	}
-	_ = r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, "quarantine-"+op.OperationID, uninstallGuard)
+	if err := r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, "quarantine-"+op.OperationID, uninstallGuard); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "release_quarantine", PackageErrCodeQuarantineReleaseFailed, err.Error(), false, uninstallGuard)
+		return op, errors.Join(err, persistErr)
+	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, extensionID, leaseGuard, uninstallGuard); err != nil {
 		return op, err
 	}
@@ -633,9 +648,14 @@ func (r *Runtime) failPackageUninstallAfterGenerationQuarantine(ctx context.Cont
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "remove_repositories", "PACKAGE_UNINSTALL_FAILED", cause.Error(), true, guard)
 		return errors.Join(cause, persistErr)
 	}
+	var qmPersistFailed bool
 	if existingQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		existingQM.State = "restoring"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, existingQM, guard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, existingQM, guard); err != nil {
+			qmPersistFailed = true
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		qmPersistFailed = true
 	}
 	restoreErr := r.container.PackageGenerationStore.RestoreQuarantinedGeneration(ctx, current)
 	if restoreErr == nil {
@@ -661,7 +681,15 @@ func (r *Runtime) failPackageUninstallAfterGenerationQuarantine(ctx context.Cont
 	}
 	if restoredQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		restoredQM.State = "restored"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, restoredQM, guard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, restoredQM, guard); err != nil {
+			qmPersistFailed = true
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		qmPersistFailed = true
+	}
+	if qmPersistFailed {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "persist_quarantine_state", PackageErrCodeQuarantineStatePersistFailed, "quarantine metadata state persistence failed during compensation", false, guard)
+		return errors.Join(cause, persistErr)
 	}
 	persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "remove_repositories", "PACKAGE_UNINSTALL_FAILED", cause.Error(), true, guard)
 	return errors.Join(cause, persistErr)
@@ -672,9 +700,14 @@ func (r *Runtime) failPackageUninstallAfterQuarantine(ctx context.Context, op Pa
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "remove_repositories", "PACKAGE_UNINSTALL_FAILED", cause.Error(), true, guard)
 		return errors.Join(cause, persistErr)
 	}
+	var qmPersistFailed bool
 	if existingQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		existingQM.State = "restoring"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, existingQM, guard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, existingQM, guard); err != nil {
+			qmPersistFailed = true
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		qmPersistFailed = true
 	}
 	restoreErr := os.Rename(quarantinePath, preview.InstalledPath)
 	if restoreErr == nil {
@@ -700,7 +733,15 @@ func (r *Runtime) failPackageUninstallAfterQuarantine(ctx context.Context, op Pa
 	}
 	if restoredQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, op.OperationID); qmErr == nil {
 		restoredQM.State = "restored"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, restoredQM, guard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, restoredQM, guard); err != nil {
+			qmPersistFailed = true
+		}
+	} else if !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		qmPersistFailed = true
+	}
+	if qmPersistFailed {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "persist_quarantine_state", PackageErrCodeQuarantineStatePersistFailed, "quarantine metadata state persistence failed during compensation", false, guard)
+		return errors.Join(cause, persistErr)
 	}
 	persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "remove_repositories", "PACKAGE_UNINSTALL_FAILED", cause.Error(), true, guard)
 	return errors.Join(cause, persistErr)

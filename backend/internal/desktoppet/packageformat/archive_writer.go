@@ -144,8 +144,6 @@ func (w *ArchiveWriter) BuildManifestForArchive(root string, baseManifest *Manif
 		})
 	}
 
-	rootHash := ComputeTreeHash(entries)
-
 	var totalBytes int64
 	for _, e := range fileManifest.Entries {
 		totalBytes += e.Bytes
@@ -155,13 +153,28 @@ func (w *ArchiveWriter) BuildManifestForArchive(root string, baseManifest *Manif
 		baseManifest = NewManifest()
 	}
 
-	baseManifest.Integrity = ManifestIntegrity{
-		Algorithm:      TreeHashAlgorithm,
-		ContentRootHash: rootHash,
-		FileCount:      len(fileManifest.Entries),
-		TotalBytes:     totalBytes,
-		Files:          fileManifest.Entries,
+	baseManifest.Integrity.Files = fileManifest.Entries
+	baseManifest.Integrity.FileCount = len(fileManifest.Entries)
+	baseManifest.Integrity.TotalBytes = totalBytes
+	baseManifest.Integrity.Algorithm = IntegrityAlgorithmV2
+	baseManifest.Integrity.ManifestHash = ""
+	baseManifest.Integrity.ContentRootHash = ""
+
+	manifestHash, err := CanonicalManifestHash(baseManifest)
+	if err != nil {
+		return nil, err
 	}
+
+	canonicalData, err := CanonicalManifestData(baseManifest)
+	if err != nil {
+		return nil, err
+	}
+	manifestBytes := int64(len(canonicalData))
+
+	contentRootHash := ComputeContentRootHash(entries, manifestHash, manifestBytes)
+
+	baseManifest.Integrity.ManifestHash = manifestHash
+	baseManifest.Integrity.ContentRootHash = contentRootHash
 
 	return baseManifest, nil
 }

@@ -125,7 +125,7 @@ func ValidateStatement(stmt *SQLStatement, extensionID string) error {
 		return err
 	}
 	if stmt.Type == SQLTypeOther {
-		return nil
+		return fmt.Errorf("kernel: migration sql statement type is unparseable, rejecting for safety: %s", stmt.Raw)
 	}
 	prefix := ExtensionNamespacePrefix(extensionID)
 	for _, obj := range stmt.Objects {

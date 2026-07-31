@@ -45,6 +45,10 @@ const (
 	ErrCodeEditLegacyUnresolved        = "EDIT_LEGACY_UNRESOLVED"
 	ErrCodeEditOwnershipDenied         = "EDIT_OWNERSHIP_DENIED"
 	ErrCodeEditContentHashMismatch     = "EDIT_CONTENT_HASH_MISMATCH"
+	ErrCodeActionRevisionSourceInvalid   = "ACTION_REVISION_SOURCE_INVALID"
+	ErrCodeActionRevisionAnchorInvalid   = "ACTION_REVISION_ANCHOR_INVALID"
+	ErrCodeActionRevisionActiveNotFound  = "ACTION_REVISION_ACTIVE_NOT_FOUND"
+	ErrCodeActionRevisionBindingConflict = "ACTION_REVISION_BINDING_CONFLICT"
 )
 
 const (
@@ -57,12 +61,15 @@ const (
 )
 
 const (
-	RevisionStatusBuilding       = "building"
-	RevisionStatusReady          = "ready"
-	RevisionStatusQualityPending = "quality_pending"
-	RevisionStatusQualityReady  = "quality_ready"
-	RevisionStatusFailed         = "failed"
-	RevisionStatusArchived       = "archived"
+	RevisionStatusCommitting       = "committing"
+	RevisionStatusReady            = "ready"
+	RevisionStatusQualityPending   = "quality_pending"
+	RevisionStatusQualityReady     = "quality_ready"
+	RevisionStatusFailed           = "failed"
+	RevisionStatusLegacyUnresolved = "legacy_unresolved"
+	RevisionStatusArchived         = "archived"
+
+	RevisionStatusBuilding = "committing"
 )
 
 const (
@@ -259,6 +266,10 @@ var (
 	ErrLegacyUnresolved         = NewEditError(ErrCodeEditLegacyUnresolved, "Legacy数据无法解析")
 	ErrOwnershipDenied          = NewEditError(ErrCodeEditOwnershipDenied, "所有权校验失败")
 	ErrContentHashMismatch      = NewEditError(ErrCodeEditContentHashMismatch, "ContentHash不匹配")
+	ErrActionRevisionSourceInvalid   = NewEditError(ErrCodeActionRevisionSourceInvalid, "ProcessingRevision来源校验失败")
+	ErrActionRevisionAnchorInvalid   = NewEditError(ErrCodeActionRevisionAnchorInvalid, "Anchor解析失败或非法")
+	ErrActionRevisionActiveNotFound  = NewEditError(ErrCodeActionRevisionActiveNotFound, "Active Revision不存在")
+	ErrActionRevisionBindingConflict = NewEditError(ErrCodeActionRevisionBindingConflict, "Binding绑定冲突")
 )
 
 const (

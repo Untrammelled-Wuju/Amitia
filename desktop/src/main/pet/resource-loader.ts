@@ -1,113 +1,25 @@
-import { access, readFile } from "node:fs/promises";
-import { join, dirname, isAbsolute } from "node:path";
-import type { PlaybackMode, ReturnToRule } from "../../shared/package-schema";
-import { compareVersions, CURRENT_RUNTIME_VERSION } from "../../shared/package-schema";
+import { readFile } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import {
+  RuntimePackageNormalizer,
+  type PlaybackMode as SharedPlaybackMode,
+  type ReturnToRule as SharedReturnToRule,
+  type LoadInstallationRequest,
+  type RuntimeAction as SharedRuntimeAction,
+  type RuntimePetPackage,
+  type PackageReader,
+  type ActionReadResult,
+} from "../../shared/package-schema";
+import type { PackageContractError } from "../../shared/package-errors";
 
-const SUPPORTED_SCHEMA_VERSIONS = [1, 2];
-const DEFAULT_SCHEMA_VERSION = 2;
-
-const DEFAULT_ACTION_NOT_FOUND_ERROR = "DEFAULT_ACTION_NOT_FOUND";
-const DEFAULT_ACTION_INVALID_ERROR = "DEFAULT_ACTION_INVALID";
-const UNSUPPORTED_SCHEMA_VERSION_ERROR = "UNSUPPORTED_SCHEMA_VERSION";
-const MANIFEST_READ_FAILED_ERROR = "MANIFEST_READ_FAILED";
-const MANIFEST_PARSE_FAILED_ERROR = "MANIFEST_PARSE_FAILED";
-
-export type ActionLoopType = "loop" | "once" | "hold" | "ping_pong";
-
-export interface ManifestAction {
-  key: string;
-  name: string;
-  version: string;
-  loopType: ActionLoopType;
-  fps: number;
-  frameDurationMs: number;
-  frameCount: number;
-  frames: string[];
-  anchor?: { x: number; y: number; coordinateSpace?: string };
-  interruptible: boolean;
-  returnAction?: string;
-  config?: string;
-}
-
-export interface Manifest {
-  packageId: string;
-  schemaVersion: number;
-  name: string;
-  characterId: string;
-  petId?: string;
-  releaseId?: string;
-  canvas: { width: number; height: number };
-  defaultAction: string;
-  preview?: string;
-  actions: ManifestAction[];
-  binding?: { installationId?: string; petId?: string };
-  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
-  integrity?: { contentRootHash?: string; manifestHash?: string };
-}
-
-export interface RuntimeAction {
-  key: string;
-  name: string;
-  version: string;
-  loopType: ActionLoopType;
-  fps: number;
-  frameDurationMs: number;
-  frameCount: number;
-  frames: string[];
-  anchor?: { x: number; y: number; coordinateSpace?: string };
-  interruptible: boolean;
-  returnAction?: string;
-  config?: string;
-  available: boolean;
-  loadError?: string;
-  playbackMode?: PlaybackMode;
-  priority?: number;
-  cooldownMs?: number;
-  mutexGroup?: string;
-  minimumPlayMs?: number;
-  maximumPlayMs?: number | null;
-  returnTo?: ReturnToRule;
-}
-
-export interface LoadedInstallation {
-  installationId: string;
-  manifest: Manifest;
-  actions: Map<string, RuntimeAction>;
-  defaultAction: RuntimeAction | null;
-  installPath: string;
-  manifestPath: string;
-  previewPath: string;
-}
-
-export {
-  DEFAULT_ACTION_NOT_FOUND_ERROR,
-  DEFAULT_ACTION_INVALID_ERROR,
-  UNSUPPORTED_SCHEMA_VERSION_ERROR,
-  MANIFEST_READ_FAILED_ERROR,
-  MANIFEST_PARSE_FAILED_ERROR,
-};
-
-interface ManifestFile {
-  schemaVersion?: number;
-  packageId?: string;
-  name?: string;
-  characterId?: string;
-  petId?: string;
-  releaseId?: string;
-  canvas?: { width?: number; height?: number };
-  defaultAction?: string;
-  preview?: string;
-  actions?: Array<{ key?: string; name?: string; config?: string }>;
-  binding?: { installationId?: string; petId?: string };
-  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
-  integrity?: { contentRootHash?: string; manifestHash?: string };
-}
+export type { LoadInstallationRequest };
 
 interface ActionFileFrame {
   index?: number;
   file?: string;
   durationMs?: number;
   frameId?: string;
+  assetId?: string;
   contentHash?: string;
 }
 
@@ -135,116 +47,299 @@ interface ActionFile {
   minimumPlayMs?: number;
   maximumPlayMs?: number | null;
   mutexGroup?: string;
+  supportsDefaultIdle?: boolean;
+  isStableStateCandidate?: boolean;
+  isTransitionOnly?: boolean;
+  interruptAfterMs?: number;
+  category?: string;
 }
 
-interface ActionLoadResult {
-  manifestAction: ManifestAction | null;
-  runtimeAction: RuntimeAction;
+export type ActionLoopType = "loop" | "once" | "hold" | "ping_pong";
+
+export interface ManifestAction {
+  key: string;
+  name: string;
+  version: string;
+  loopType: ActionLoopType;
+  fps: number;
+  frameDurationMs: number;
+  frameCount: number;
+  frames: string[];
+  anchor?: { x: number; y: number; coordinateSpace?: string };
+  interruptible: boolean;
+  returnAction?: string;
+  config?: string;
 }
 
-interface FrameCheckResult {
-  ok: boolean;
-  error?: string;
+export interface IntegrityFileEntry {
+  path: string;
+  sha256: string;
+  bytes: number;
+  mediaType: string;
+  role: string;
+  actionKey?: string;
+  frameId?: string;
+}
+
+export interface Manifest {
+  packageId: string;
+  schemaVersion: number;
+  name: string;
+  characterId: string;
+  petId?: string;
+  releaseId?: string;
+  canvas: { width: number; height: number };
+  defaultAction: string;
+  preview?: string;
+  actions: ManifestAction[];
+  binding?: { installationId?: string; petId?: string };
+  compatibility?: { minRuntimeVersion?: string; minimumRuntimeVersion?: string };
+  integrity?: { contentRootHash?: string; manifestHash?: string; files?: IntegrityFileEntry[] };
+}
+
+export interface RuntimeAction {
+  key: string;
+  name: string;
+  version: string;
+  loopType: ActionLoopType;
+  fps: number;
+  frameDurationMs: number;
+  frameCount: number;
+  frames: string[];
+  anchor?: { x: number; y: number; coordinateSpace?: string };
+  interruptible: boolean;
+  returnAction?: string;
+  config?: string;
+  available: boolean;
+  loadError?: string;
+  playbackMode?: SharedPlaybackMode;
+  priority?: number;
+  cooldownMs?: number;
+  mutexGroup?: string;
+  minimumPlayMs?: number;
+  maximumPlayMs?: number | null;
+  returnTo?: SharedReturnToRule;
+  supportsDefaultIdle?: boolean;
+  isStableStateCandidate?: boolean;
+  isTransitionOnly?: boolean;
+  interruptAfterMs?: number;
+  category?: string;
+}
+
+export interface LoadedInstallation {
+  installationId: string;
+  manifest: Manifest;
+  actions: Map<string, RuntimeAction>;
+  defaultAction: RuntimeAction | null;
+  installPath: string;
+  manifestPath: string;
+  previewPath: string | null;
+}
+
+const DEFAULT_ACTION_NOT_FOUND_ERROR = "DEFAULT_ACTION_NOT_FOUND";
+const DEFAULT_ACTION_INVALID_ERROR = "DEFAULT_ACTION_INVALID";
+const UNSUPPORTED_SCHEMA_VERSION_ERROR = "UNSUPPORTED_SCHEMA_VERSION";
+const MANIFEST_READ_FAILED_ERROR = "MANIFEST_READ_FAILED";
+const MANIFEST_PARSE_FAILED_ERROR = "MANIFEST_PARSE_FAILED";
+const ACTION_JSON_READ_FAILED = "ACTION_JSON_READ_FAILED";
+const ACTION_JSON_PARSE_FAILED = "ACTION_JSON_PARSE_FAILED";
+
+export {
+  DEFAULT_ACTION_NOT_FOUND_ERROR,
+  DEFAULT_ACTION_INVALID_ERROR,
+  UNSUPPORTED_SCHEMA_VERSION_ERROR,
+  MANIFEST_READ_FAILED_ERROR,
+  MANIFEST_PARSE_FAILED_ERROR,
+  ACTION_JSON_READ_FAILED,
+  ACTION_JSON_PARSE_FAILED,
+};
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+}
+
+function isPackageContractError(err: unknown): err is PackageContractError {
+  return err instanceof Error && (err as PackageContractError).code !== undefined;
 }
 
 export class ResourceLoader {
-  constructor() {}
+  private readonly normalizer = new RuntimePackageNormalizer();
+  private readonly runtimeVersion: string;
+
+  constructor(runtimeVersion?: string) {
+    this.runtimeVersion = runtimeVersion ?? "1.0.0";
+  }
 
   async loadInstallation(
-    installPath: string,
-    manifestPath: string,
+    request: LoadInstallationRequest,
   ): Promise<LoadedInstallation> {
-    const file = await this.readManifestFile(manifestPath);
-
-    const schemaVersion = file.schemaVersion ?? 1;
-    if (!SUPPORTED_SCHEMA_VERSIONS.includes(schemaVersion)) {
+    let manifestRawText: string;
+    try {
+      manifestRawText = await readFile(request.manifestPath, "utf8");
+    } catch (err) {
       throw new Error(
-        `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: ${file.schemaVersion ?? "unknown"}`,
+        `${MANIFEST_READ_FAILED_ERROR}: ${errorMessage(err)}`,
       );
     }
 
+    let manifestRaw: unknown;
+    try {
+      manifestRaw = JSON.parse(manifestRawText);
+    } catch (err) {
+      throw new Error(
+        `${MANIFEST_PARSE_FAILED_ERROR}: ${errorMessage(err)}`,
+      );
+    }
+
+    if (
+      manifestRaw === null ||
+      typeof manifestRaw !== "object" ||
+      typeof (manifestRaw as { schemaVersion?: unknown }).schemaVersion !== "number"
+    ) {
+      throw new Error(
+        `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: schemaVersion missing or invalid`,
+      );
+    }
+
+    const schemaVersion = (manifestRaw as { schemaVersion: number }).schemaVersion;
+    let reader: PackageReader;
+    try {
+      reader = this.normalizer.getReader(schemaVersion);
+    } catch {
+      throw new Error(
+        `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: ${schemaVersion}`,
+      );
+    }
+
+    let manifestData;
+    try {
+      const result = reader.readManifest(manifestRaw);
+      manifestData = result.data;
+    } catch (err) {
+      throw new Error(
+        `${MANIFEST_PARSE_FAILED_ERROR}: ${errorMessage(err)}`,
+      );
+    }
+
+    if (manifestData.petId !== request.petId) {
+      throw new Error(
+        `PET_IDENTITY_CONFLICT: manifest petId=${manifestData.petId}, request petId=${request.petId}`,
+      );
+    }
+    if (manifestData.releaseId !== request.releaseId) {
+      throw new Error(
+        `RELEASE_VERSION_CONFLICT: manifest releaseId=${manifestData.releaseId}, request releaseId=${request.releaseId}`,
+      );
+    }
+    if (
+      request.expectedContentRootHash &&
+      manifestData.integrity.contentRootHash &&
+      manifestData.integrity.contentRootHash !== request.expectedContentRootHash
+    ) {
+      throw new Error(
+        `PACKAGE_HASH_MISMATCH: manifest contentRootHash=${manifestData.integrity.contentRootHash}, expected=${request.expectedContentRootHash}`,
+      );
+    }
+
+    if (!manifestData.defaultActionKey) {
+      throw new Error(DEFAULT_ACTION_NOT_FOUND_ERROR);
+    }
+
+    const actionRaws = new Map<string, unknown>();
+    for (const entry of manifestData.actionEntries) {
+      const actionJsonPath = join(request.installPath, entry.config);
+      let actionRawText: string;
+      try {
+        actionRawText = await readFile(actionJsonPath, "utf8");
+      } catch (err) {
+        throw new Error(
+          `${ACTION_JSON_READ_FAILED}: ${entry.key}: ${errorMessage(err)}`,
+        );
+      }
+      try {
+        actionRaws.set(entry.key, JSON.parse(actionRawText));
+      } catch (err) {
+        throw new Error(
+          `${ACTION_JSON_PARSE_FAILED}: ${entry.key}: ${errorMessage(err)}`,
+        );
+      }
+    }
+
+    let pkg: RuntimePetPackage;
+    try {
+      pkg = this.normalizer.normalize(
+        manifestRaw,
+        actionRaws,
+        request.installPath,
+        this.runtimeVersion,
+      );
+    } catch (err) {
+      const msg = errorMessage(err);
+      if (isPackageContractError(err)) {
+        throw new Error(`${err.code}: ${msg}`);
+      }
+      throw new Error(msg);
+    }
+
+    const actions = new Map<string, RuntimeAction>();
     const manifestActions: ManifestAction[] = [];
-    const runtimeActions = new Map<string, RuntimeAction>();
-
-    const entries = Array.isArray(file.actions) ? file.actions : [];
-    for (const entry of entries) {
-      const actionKey = entry?.key;
-      if (!actionKey) {
-        continue;
-      }
-
-      const result = await this.loadActionEntry(
-        installPath,
-        actionKey,
-        entry.name ?? actionKey,
-        entry.config,
-      );
-
-      if (result.manifestAction) {
-        manifestActions.push(result.manifestAction);
-      }
-      runtimeActions.set(actionKey, result.runtimeAction);
+    for (const [key, sharedAction] of pkg.actions) {
+      const localAction = this.mapRuntimeAction(sharedAction, request.installPath);
+      actions.set(key, localAction);
+      manifestActions.push(this.mapManifestAction(sharedAction));
     }
 
-    const defaultAction = file.defaultAction ?? "";
-    const manifest: Manifest = {
-      packageId: file.packageId ?? file.petId ?? "",
-      schemaVersion,
-      name: file.name ?? "",
-      characterId: file.characterId ?? "",
-      petId: file.petId,
-      releaseId: file.releaseId,
-      canvas: {
-        width: file.canvas?.width ?? 0,
-        height: file.canvas?.height ?? 0,
-      },
-      defaultAction,
-      preview: file.preview,
-      actions: manifestActions,
-      binding: file.binding,
-      compatibility: file.compatibility,
-      integrity: file.integrity,
-    };
-
+    const defaultAction = actions.get(pkg.defaultActionKey) ?? null;
     if (!defaultAction) {
       throw new Error(DEFAULT_ACTION_NOT_FOUND_ERROR);
     }
-
-    const minRuntimeVersion =
-      file.compatibility?.minRuntimeVersion ??
-      file.compatibility?.minimumRuntimeVersion;
-    if (minRuntimeVersion && !compareVersions(minRuntimeVersion, CURRENT_RUNTIME_VERSION)) {
+    if (!defaultAction.available) {
       throw new Error(
-        `UNSUPPORTED_RUNTIME_VERSION: required ${minRuntimeVersion}, current ${CURRENT_RUNTIME_VERSION}`,
+        `${DEFAULT_ACTION_INVALID_ERROR}: ${defaultAction.loadError ?? "unknown"}`,
       );
     }
 
-    const defaultRuntime = runtimeActions.get(defaultAction);
-    if (!defaultRuntime) {
-      throw new Error(DEFAULT_ACTION_NOT_FOUND_ERROR);
-    }
-    if (!defaultRuntime.available) {
-      const detail = defaultRuntime.loadError ?? "";
-      throw new Error(
-        detail
-          ? `${DEFAULT_ACTION_INVALID_ERROR}: ${detail}`
-          : DEFAULT_ACTION_INVALID_ERROR,
-      );
-    }
+    const rawManifestObj = manifestRaw as {
+      integrity?: {
+        files?: IntegrityFileEntry[];
+      };
+    };
+    const integrityFiles = rawManifestObj.integrity?.files ?? [];
 
-    const previewPath = manifest.preview
-      ? join(installPath, manifest.preview)
-      : join(installPath, "preview.png");
+    const manifest: Manifest = {
+      packageId: pkg.petId,
+      schemaVersion: pkg.schemaVersion,
+      name: pkg.displayName,
+      characterId: "",
+      petId: pkg.petId,
+      releaseId: pkg.releaseId,
+      canvas: { width: pkg.canvas.width, height: pkg.canvas.height },
+      defaultAction: pkg.defaultActionKey,
+      preview: pkg.preview ?? undefined,
+      actions: manifestActions,
+      binding: undefined,
+      compatibility: { minRuntimeVersion: pkg.compatibility.minRuntimeVersion },
+      integrity: {
+        contentRootHash: pkg.integrity.contentRootHash,
+        manifestHash: pkg.integrity.manifestHash,
+        files: integrityFiles,
+      },
+    };
 
-    const installationId = manifest.packageId || installPath;
+    const previewPath = pkg.preview
+      ? join(request.installPath, pkg.preview)
+      : null;
 
     return {
-      installationId,
+      installationId: request.installationId,
       manifest,
-      actions: runtimeActions,
-      defaultAction: defaultRuntime,
-      installPath,
-      manifestPath,
+      actions,
+      defaultAction,
+      installPath: request.installPath,
+      manifestPath: request.manifestPath,
       previewPath,
     };
   }
@@ -270,31 +365,46 @@ export class ResourceLoader {
       return null;
     }
 
-    const result = await this.loadActionEntry(
-      loaded.installPath,
-      actionKey,
-      manifestAction?.name ?? cached?.name ?? actionKey,
-      manifestAction?.config,
-    );
+    const configPath =
+      manifestAction?.config ?? join("actions", actionKey, "action.json");
+    const actionJsonPath = join(loaded.installPath, configPath);
 
-    if (result.manifestAction) {
-      if (manifestAction) {
-        Object.assign(manifestAction, result.manifestAction);
-      } else {
-        loaded.manifest.actions.push(result.manifestAction);
-      }
+    let raw: string;
+    try {
+      raw = await readFile(actionJsonPath, "utf8");
+    } catch (err) {
+      throw new Error(`${ACTION_JSON_READ_FAILED}: ${errorMessage(err)}`);
     }
 
-    loaded.actions.set(actionKey, result.runtimeAction);
-
-    if (
-      loaded.defaultAction?.key === actionKey &&
-      result.runtimeAction.available
-    ) {
-      loaded.defaultAction = result.runtimeAction;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`${ACTION_JSON_PARSE_FAILED}: ${errorMessage(err)}`);
     }
 
-    return result.runtimeAction;
+    let reader: PackageReader;
+    try {
+      reader = this.normalizer.getReader(loaded.manifest.schemaVersion);
+    } catch {
+      reader = this.normalizer.getReader(2);
+    }
+
+    let result: ActionReadResult;
+    try {
+      result = reader.readAction(parsed, actionKey, configPath);
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+
+    const localAction = this.mapRuntimeAction(result.action, loaded.installPath);
+    loaded.actions.set(actionKey, localAction);
+
+    if (loaded.defaultAction?.key === actionKey && localAction.available) {
+      loaded.defaultAction = localAction;
+    }
+
+    return localAction;
   }
 
   isDefaultActionAvailable(loaded: LoadedInstallation): boolean {
@@ -328,306 +438,73 @@ export class ResourceLoader {
     return null;
   }
 
-  private async readManifestFile(
-    manifestPath: string,
-  ): Promise<ManifestFile> {
-    let raw: string;
-    try {
-      raw = await readFile(manifestPath, "utf8");
-    } catch (err) {
-      throw new Error(
-        `${MANIFEST_READ_FAILED_ERROR}: ${this.errorMessage(err)}`,
-      );
-    }
-
-    try {
-      return JSON.parse(raw) as ManifestFile;
-    } catch (err) {
-      throw new Error(
-        `${MANIFEST_PARSE_FAILED_ERROR}: ${this.errorMessage(err)}`,
-      );
-    }
-  }
-
-  private async loadActionEntry(
+  private mapRuntimeAction(
+    action: SharedRuntimeAction,
     installPath: string,
-    actionKey: string,
-    fallbackName: string,
-    configPath?: string,
-  ): Promise<ActionLoadResult> {
-    const relativeConfigPath = configPath || join("actions", actionKey, "action.json");
-    const actionJsonPath = join(installPath, relativeConfigPath);
-
-    const buildFailed = (error: string): ActionLoadResult => ({
-      manifestAction: null,
-      runtimeAction: this.buildFailedRuntimeAction(
-        actionKey,
-        fallbackName,
-        error,
-      ),
-    });
-
-    let raw: string;
-    try {
-      raw = await readFile(actionJsonPath, "utf8");
-    } catch (err) {
-      return buildFailed(`ACTION_JSON_READ_FAILED: ${this.errorMessage(err)}`);
-    }
-
-    let parsed: ActionFile;
-    try {
-      parsed = JSON.parse(raw) as ActionFile;
-    } catch (err) {
-      return buildFailed(`ACTION_JSON_PARSE_FAILED: ${this.errorMessage(err)}`);
-    }
-
-    const loopType = this.normalizePlaybackMode(parsed.playbackMode ?? parsed.loopType);
-    const relFrames = this.extractFrameFiles(parsed);
-    const fps = this.normalizeNumber(parsed.fps ?? parsed.defaultFps, 0);
-    const frameDurationMs = this.normalizeNumber(parsed.frameDurationMs, 0);
-    const frameCount = this.normalizeNumber(
-      parsed.frameCount,
-      relFrames.length,
-    );
-    const anchor = this.normalizeAnchor(parsed.anchor);
-    const interruptible = parsed.interruptible === true;
-    const returnAction = parsed.returnAction || undefined;
-    const name = parsed.displayName ?? parsed.actionName ?? parsed.name ?? fallbackName;
-    const key = parsed.actionKey ?? parsed.key ?? actionKey;
-    const version = String(parsed.version ?? 1);
-    const playbackMode = loopType;
-    const priority = this.normalizeNumber(parsed.priority, 50);
-    const cooldownMs = this.normalizeNumber(parsed.cooldownMs, 0);
-    const mutexGroup = parsed.mutexGroup ?? "";
-    const minimumPlayMs = this.normalizeNumber(parsed.minimumPlayMs, 0);
-    const maximumPlayMs = parsed.maximumPlayMs ?? null;
-    const returnTo = this.normalizeReturnTo(parsed.returnTo, parsed.returnAction);
-
-    for (const relFrame of relFrames) {
-      this.validateFramePath(relFrame);
-    }
-
-    const manifestAction: ManifestAction = {
-      key,
-      name,
-      version,
-      loopType,
-      fps,
-      frameDurationMs,
-      frameCount,
-      frames: relFrames,
-      anchor,
-      interruptible,
-      returnAction,
-      config: relativeConfigPath,
-    };
-
-    const actionJsonDir = dirname(actionJsonPath);
-    const absoluteFrames = relFrames.map((rel) => join(actionJsonDir, rel));
-    const frameCheck = await this.checkFramesExist(absoluteFrames);
-    if (!frameCheck.ok) {
-      return {
-        manifestAction,
-        runtimeAction: {
-          key,
-          name,
-          version,
-          loopType,
-          fps,
-          frameDurationMs,
-          frameCount,
-          frames: absoluteFrames,
-          anchor,
-          interruptible,
-          returnAction,
-          config: relativeConfigPath,
-          available: false,
-          loadError: frameCheck.error,
-          playbackMode,
-          priority,
-          cooldownMs,
-          mutexGroup,
-          minimumPlayMs,
-          maximumPlayMs,
-          returnTo,
-        },
-      };
-    }
-
-    return {
-      manifestAction,
-      runtimeAction: {
-        key,
-        name,
-        version,
-        loopType,
-        fps,
-        frameDurationMs,
-        frameCount,
-        frames: absoluteFrames,
-        anchor,
-        interruptible,
-        returnAction,
-        config: relativeConfigPath,
-        available: true,
-        playbackMode,
-        priority,
-        cooldownMs,
-        mutexGroup,
-        minimumPlayMs,
-        maximumPlayMs,
-        returnTo,
-      },
-    };
-  }
-
-  private buildFailedRuntimeAction(
-    actionKey: string,
-    fallbackName: string,
-    error: string,
   ): RuntimeAction {
+    const configPath = action.configPath;
+    const actionConfigDir = dirname(join(installPath, configPath));
+    const frames = action.frames.map((f) => join(actionConfigDir, f.file));
+    const frameDurationMs = action.fps > 0 ? Math.round(1000 / action.fps) : 100;
+
+    const returnAction =
+      action.returnTo.type === "action" ? action.returnTo.actionKey : undefined;
+
+    const extended = action as SharedRuntimeAction & {
+      supportsDefaultIdle?: boolean;
+      isStableStateCandidate?: boolean;
+      isTransitionOnly?: boolean;
+      interruptAfterMs?: number;
+      category?: string;
+    };
+
     return {
-      key: actionKey,
-      name: fallbackName,
-      version: "1",
-      loopType: "loop",
-      fps: 0,
-      frameDurationMs: 0,
-      frameCount: 0,
-      frames: [],
-      interruptible: false,
-      available: false,
-      loadError: error,
+      key: action.actionKey,
+      name: action.displayName,
+      version: String(action.version),
+      loopType: action.playbackMode,
+      fps: action.fps,
+      frameDurationMs,
+      frameCount: action.frames.length,
+      frames,
+      anchor: action.anchor,
+      interruptible: action.interruptible,
+      returnAction,
+      config: configPath,
+      available: true,
+      playbackMode: action.playbackMode,
+      priority: action.priority,
+      cooldownMs: action.cooldownMs,
+      mutexGroup: action.mutexGroup || undefined,
+      minimumPlayMs: action.minimumPlayMs,
+      maximumPlayMs: action.maximumPlayMs || null,
+      returnTo: action.returnTo,
+      supportsDefaultIdle: extended.supportsDefaultIdle,
+      isStableStateCandidate: extended.isStableStateCandidate,
+      isTransitionOnly: extended.isTransitionOnly,
+      interruptAfterMs: extended.interruptAfterMs,
+      category: extended.category,
     };
   }
 
-  private async checkFramesExist(
-    absoluteFrames: string[],
-  ): Promise<FrameCheckResult> {
-    for (const framePath of absoluteFrames) {
-      try {
-        await access(framePath);
-      } catch (err) {
-        return {
-          ok: false,
-          error: `FRAME_MISSING: ${framePath} (${this.errorMessage(err)})`,
-        };
-      }
-    }
-    return { ok: true };
-  }
+  private mapManifestAction(action: SharedRuntimeAction): ManifestAction {
+    const frameDurationMs = action.fps > 0 ? Math.round(1000 / action.fps) : 100;
+    const returnAction =
+      action.returnTo.type === "action" ? action.returnTo.actionKey : undefined;
 
-  private normalizePlaybackMode(value: string | undefined): ActionLoopType {
-    if (!value) return "loop";
-    const lt = value.toLowerCase().trim();
-    if (lt === "loop" || lt === "once" || lt === "hold" || lt === "ping_pong") {
-      return lt;
-    }
-    if (lt === "ping-pong" || lt === "pingpong") {
-      return "ping_pong";
-    }
-    throw new Error(`UNKNOWN_PLAYBACK_MODE: ${value}`);
-  }
-
-  private normalizeReturnTo(
-    returnTo: ActionFile["returnTo"],
-    returnAction: string | undefined,
-  ): ReturnToRule | undefined {
-    if (returnTo && typeof returnTo === "object") {
-      const type = returnTo.type ?? "default";
-      switch (type) {
-        case "action":
-          if (returnTo.actionKey && typeof returnTo.actionKey === "string") {
-            return { type: "action", actionKey: returnTo.actionKey };
-          }
-          return { type: "default" };
-        case "default":
-          return { type: "default" };
-        case "previous":
-          return { type: "previous" };
-        case "current_activity":
-          return { type: "current_activity" };
-        case "none":
-          return { type: "none" };
-        default:
-          return { type: "default" };
-      }
-    }
-    if (returnAction && typeof returnAction === "string" && returnAction.trim()) {
-      return { type: "action", actionKey: returnAction };
-    }
-    return undefined;
-  }
-
-  private validateFramePath(framePath: string): void {
-    if (!framePath) {
-      throw new Error("FRAME_PATH_EMPTY");
-    }
-    if (isAbsolute(framePath)) {
-      throw new Error(`FRAME_PATH_ABSOLUTE: ${framePath}`);
-    }
-    if (framePath.includes("..")) {
-      throw new Error(`FRAME_PATH_TRAVERSAL: ${framePath}`);
-    }
-  }
-
-  private extractFrameFiles(parsed: ActionFile): string[] {
-    if (!Array.isArray(parsed.frames)) {
-      return [];
-    }
-    const result: string[] = [];
-    for (const item of parsed.frames) {
-      if (typeof item === "string") {
-        if (item) {
-          result.push(item);
-        }
-        continue;
-      }
-      const file = item?.file;
-      if (typeof file === "string" && file) {
-        result.push(file);
-      }
-    }
-    return result;
-  }
-
-  private normalizeAnchor(
-    anchor: ActionFile["anchor"],
-  ): { x: number; y: number; coordinateSpace?: string } | undefined {
-    if (!anchor) {
-      return undefined;
-    }
-    const x =
-      typeof anchor.x === "number" ? anchor.x : Number(anchor.x);
-    const y =
-      typeof anchor.y === "number" ? anchor.y : Number(anchor.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return undefined;
-    }
-    const coordinateSpace =
-      anchor.coordinateSpace === "normalized_canvas"
-        ? "normalized_canvas"
-        : undefined;
-    if (coordinateSpace) {
-      return { x, y, coordinateSpace };
-    }
-    return { x, y };
-  }
-
-  private normalizeNumber(
-    value: number | undefined,
-    fallback: number,
-  ): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      return fallback;
-    }
-    return value;
-  }
-
-  private errorMessage(err: unknown): string {
-    if (err instanceof Error) {
-      return err.message;
-    }
-    return String(err);
+    return {
+      key: action.actionKey,
+      name: action.displayName,
+      version: String(action.version),
+      loopType: action.playbackMode,
+      fps: action.fps,
+      frameDurationMs,
+      frameCount: action.frames.length,
+      frames: action.frames.map((f) => f.file),
+      anchor: action.anchor,
+      interruptible: action.interruptible,
+      returnAction,
+      config: action.configPath,
+    };
   }
 }

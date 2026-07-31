@@ -68,8 +68,8 @@ func buildReturnToRule(returnAction, returnPolicy string) returnToRule {
 		return returnToRule{Type: "action", ActionKey: returnAction}
 	}
 	switch returnPolicy {
-	case "default_idle":
-		return returnToRule{Type: "default_idle"}
+	case "default", "default_idle":
+		return returnToRule{Type: "default"}
 	case "previous":
 		return returnToRule{Type: "previous"}
 	case "current_activity":
@@ -199,8 +199,8 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 			failPackageOperation(b.repo, op, OpStageStageFiles, "QUALITY_GATE_CHECK_FAILED", dErr.Error())
 			return nil, dErr
 		}
-		verdict := detail.QualityVerdict
-		if verdict == "rejected" || verdict == "evaluation_failed" {
+		verdict := packageformat.MapLegacyQualityVerdict(detail.QualityVerdict)
+		if verdict == packageformat.QualityVerdictRejected || verdict == "evaluation_failed" {
 			b.storage.RemoveStagingDir(releaseID)
 			failPackageOperation(b.repo, op, OpStageStageFiles, ErrCodePackageQualityGateBlocked,
 				fmt.Sprintf("动作 %s 质量评估结果为 %s，无法构建 Release", a.ActionKey, verdict))
@@ -245,9 +245,12 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 		if displayName == "" {
 			displayName = actionKey
 		}
-		playbackMode := packageformat.NormalizePlaybackMode(detail.LoopType)
+		playbackMode := packageformat.NormalizePlaybackMode(detail.PlaybackMode)
 		if playbackMode == "" {
-			playbackMode = packageformat.LoopTypeLoop
+			playbackMode = packageformat.NormalizePlaybackMode(detail.LoopType)
+		}
+		if playbackMode == "" {
+			playbackMode = packageformat.PlaybackModeLoop
 		}
 
 		cfg := actionConfig{
@@ -284,7 +287,7 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 			Config:              fmt.Sprintf("actions/%s/action.json", actionKey),
 			RevisionID:          detail.RevisionID,
 			QualityVerdict:      detail.QualityVerdict,
-			LoopType:            playbackMode,
+			PlaybackMode:        playbackMode,
 			FPS:                 detail.DefaultFPS,
 			FrameCount:          detail.FrameCount,
 			SupportsDefaultIdle: info.SupportsDefaultIdle,
@@ -383,7 +386,7 @@ func (b *ReleaseBuilder) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseRe
 		failPackageOperation(b.repo, op, OpStageVerify, "WRITE_MANIFEST_FAILED", err.Error())
 		return nil, err
 	}
-	manifestHash := hashBytes(manifestData)
+	manifestHash := manifest.Integrity.ManifestHash
 	manifestPath := filepath.Join(stagingDir, "manifest.json")
 	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
 		b.storage.RemoveStagingDir(releaseID)

@@ -266,6 +266,21 @@ type RevisionDetail struct {
 	Manifest   *RevisionManifest     `json:"manifest,omitempty"`
 }
 
+type ActionStreamSummary struct {
+	ID                   string `json:"id"`
+	UserID               string `json:"userId"`
+	CharacterID          string `json:"characterId"`
+	ActionKey            string `json:"actionKey"`
+	RootProcessingTaskID string `json:"rootProcessingTaskId"`
+	StreamKey            string `json:"streamKey"`
+	NextRevisionNumber   int64  `json:"nextRevisionNumber"`
+	ActiveRevisionID     string `json:"activeRevisionId"`
+	BindingRevision      int64  `json:"bindingRevision"`
+	RevisionCount        int    `json:"revisionCount"`
+	CreatedAt            string `json:"createdAt"`
+	UpdatedAt            string `json:"updatedAt"`
+}
+
 type FrameTimelineItem struct {
 	FrameID       string `json:"frameId"`
 	LogicalIndex  int    `json:"logicalIndex"`

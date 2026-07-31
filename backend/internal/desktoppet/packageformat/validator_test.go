@@ -18,18 +18,27 @@ type testActionConfig struct {
 	PlaybackMode  string           `json:"playbackMode"`
 	Frames        []testFrameEntry `json:"frames"`
 	ReturnTo      testReturnTo     `json:"returnTo"`
+	Anchor        testAnchor       `json:"anchor"`
 }
 
 type testFrameEntry struct {
 	Index       int    `json:"index"`
+	FrameID     string `json:"frameId"`
 	File        string `json:"file"`
 	DurationMs  int    `json:"durationMs"`
+	AssetID     string `json:"assetId"`
 	ContentHash string `json:"contentHash"`
 }
 
 type testReturnTo struct {
 	Type      string `json:"type"`
 	ActionKey string `json:"actionKey"`
+}
+
+type testAnchor struct {
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	CoordinateSpace string  `json:"coordinateSpace"`
 }
 
 func pngFrameData() []byte {
@@ -78,10 +87,11 @@ func createValidTestPackage(t *testing.T) (string, *Manifest) {
 		Fps:           10,
 		PlaybackMode:  "loop",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 100, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 100, ContentHash: frameHash},
+			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "none"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 
 	cfgData, err := json.MarshalIndent(cfg, "", "  ")
@@ -105,6 +115,7 @@ func createValidTestPackage(t *testing.T) (string, *Manifest) {
 			Key:                 "idle",
 			Name:                "Idle",
 			Config:              "actions/idle/action.json",
+			PlaybackMode:        "loop",
 			FPS:                 10,
 			FrameCount:          2,
 			SupportsDefaultIdle: true,
@@ -149,6 +160,7 @@ func createTestPackageWithConfig(t *testing.T, cfg *testActionConfig) (string, *
 			Key:                 cfg.ActionKey,
 			Name:                cfg.DisplayName,
 			Config:              configRelPath,
+			PlaybackMode:        cfg.PlaybackMode,
 			FPS:                 cfg.Fps,
 			FrameCount:          len(cfg.Frames),
 			SupportsDefaultIdle: true,
@@ -284,10 +296,11 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 		Fps:           10,
 		PlaybackMode:  "unknown",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 100, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 100, ContentHash: frameHash},
+			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "none"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 	dir, manifest := createTestPackageWithConfig(t, cfg)
 	v := NewValidator()
@@ -309,6 +322,7 @@ func TestValidateDirectory_EmptyFrames(t *testing.T) {
 		PlaybackMode:  "loop",
 		Frames:        []testFrameEntry{},
 		ReturnTo:      testReturnTo{Type: "none"},
+		Anchor:        testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 	dir, manifest := createTestPackageWithConfig(t, cfg)
 	v := NewValidator()
@@ -331,10 +345,11 @@ func TestValidateDirectory_ReturnToActionInvalid(t *testing.T) {
 		Fps:           10,
 		PlaybackMode:  "loop",
 		Frames: []testFrameEntry{
-			{Index: 0, File: "frames/0.png", DurationMs: 100, ContentHash: frameHash},
-			{Index: 1, File: "frames/1.png", DurationMs: 100, ContentHash: frameHash},
+			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
+			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
 		},
 		ReturnTo: testReturnTo{Type: "action", ActionKey: "nonexistent"},
+		Anchor:   testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 	dir, manifest := createTestPackageWithConfig(t, cfg)
 	v := NewValidator()

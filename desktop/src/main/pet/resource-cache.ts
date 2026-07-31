@@ -1,5 +1,6 @@
 import { nativeImage } from "electron";
 import { access } from "node:fs/promises";
+import { relative } from "node:path";
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 
 const DEFAULT_MAX_ACTIONS = 5;
@@ -12,6 +13,7 @@ export interface CachedFrame {
   width: number;
   height: number;
   alphaData?: Uint8Array;
+  contentHash: string;
 }
 
 export interface ResourceCacheStats {
@@ -27,6 +29,7 @@ export class ResourceCache {
   private readonly lruOrder: string[] = [];
   private readonly preloadQueue: Set<string> = new Set();
   private readonly frameLru: Map<string, number[]> = new Map();
+  private currentReleaseId: string | null = null;
 
   constructor(maxActions?: number, maxFramesPerAction?: number) {
     this.maxActions = this.normalizePositiveNumber(
@@ -37,6 +40,46 @@ export class ResourceCache {
       maxFramesPerAction,
       DEFAULT_MAX_FRAMES_PER_ACTION,
     );
+  }
+
+  private getReleaseId(loaded: LoadedInstallation): string {
+    return loaded.manifest.releaseId ?? loaded.manifest.packageId ?? "default";
+  }
+
+  private getCacheKey(releaseId: string, actionKey: string): string {
+    return `${releaseId}:${actionKey}`;
+  }
+
+  private ensureReleaseId(releaseId: string): void {
+    if (this.currentReleaseId !== null && this.currentReleaseId !== releaseId) {
+      this.actionCache.clear();
+      this.frameLru.clear();
+      this.lruOrder.length = 0;
+      this.preloadQueue.clear();
+    }
+    this.currentReleaseId = releaseId;
+  }
+
+  private buildContentHashLookup(loaded: LoadedInstallation): Map<string, string> {
+    const lookup = new Map<string, string>();
+    const files = loaded.manifest.integrity?.files;
+    if (!files || !Array.isArray(files)) return lookup;
+    for (const entry of files) {
+      if (entry && typeof entry.path === "string" && typeof entry.sha256 === "string") {
+        const normalizedPath = entry.path.replace(/\\/g, "/").replace(/^\/+/, "");
+        lookup.set(normalizedPath, entry.sha256);
+      }
+    }
+    return lookup;
+  }
+
+  private resolveContentHash(
+    framePath: string,
+    installPath: string,
+    contentHashLookup: Map<string, string>,
+  ): string {
+    const relPath = relative(installPath, framePath).replace(/\\/g, "/");
+    return contentHashLookup.get(relPath) ?? "";
   }
 
   async preloadDefaultIdle(loaded: LoadedInstallation): Promise<void> {
@@ -63,20 +106,27 @@ export class ResourceCache {
     actionKey: string,
   ): Promise<void> {
     if (!actionKey) return;
-    if (this.actionCache.has(actionKey)) {
-      this.touchLRU(actionKey);
+    const releaseId = this.getReleaseId(loaded);
+    this.ensureReleaseId(releaseId);
+    const cacheKey = this.getCacheKey(releaseId, actionKey);
+
+    if (this.actionCache.has(cacheKey)) {
+      this.touchLRU(cacheKey);
       return;
     }
-    if (this.preloadQueue.has(actionKey)) return;
+    if (this.preloadQueue.has(cacheKey)) return;
 
     const action = loaded.actions.get(actionKey);
     if (!action || !action.available) return;
 
-    this.preloadQueue.add(actionKey);
+    this.preloadQueue.add(cacheKey);
     try {
+      const contentHashLookup = this.buildContentHashLookup(loaded);
       const frames = await this.loadActionFrames(
         action,
         this.maxFramesPerAction,
+        contentHashLookup,
+        loaded.installPath,
       );
       if (frames.length === 0) return;
       this.ensureActionCapacity(1);
@@ -86,11 +136,11 @@ export class ResourceCache {
         arr[frame.frameIndex] = frame;
         lru.push(frame.frameIndex);
       }
-      this.actionCache.set(actionKey, arr);
-      this.frameLru.set(actionKey, lru);
-      this.touchLRU(actionKey);
+      this.actionCache.set(cacheKey, arr);
+      this.frameLru.set(cacheKey, lru);
+      this.touchLRU(cacheKey);
     } finally {
-      this.preloadQueue.delete(actionKey);
+      this.preloadQueue.delete(cacheKey);
     }
   }
 
@@ -105,45 +155,56 @@ export class ResourceCache {
     if (!action || !action.available) return null;
     if (frameIndex >= action.frames.length) return null;
 
-    let arr = this.actionCache.get(actionKey);
+    const releaseId = this.getReleaseId(loaded);
+    this.ensureReleaseId(releaseId);
+    const cacheKey = this.getCacheKey(releaseId, actionKey);
+
+    let arr = this.actionCache.get(cacheKey);
     if (arr && arr[frameIndex]) {
-      this.touchLRU(actionKey);
-      this.touchFrameLRU(actionKey, frameIndex);
+      this.touchLRU(cacheKey);
+      this.touchFrameLRU(cacheKey, frameIndex);
       return arr[frameIndex] ?? null;
     }
 
-    const frame = await this.loadFrame(action, actionKey, frameIndex);
+    const contentHashLookup = this.buildContentHashLookup(loaded);
+    const framePath = action.frames[frameIndex];
+    const contentHash = this.resolveContentHash(framePath, loaded.installPath, contentHashLookup);
+    const frame = await this.loadFrame(action, actionKey, frameIndex, contentHash);
     if (!frame) return null;
 
     if (!arr) {
       this.ensureActionCapacity(1);
       arr = [];
-      this.actionCache.set(actionKey, arr);
-      this.frameLru.set(actionKey, []);
+      this.actionCache.set(cacheKey, arr);
+      this.frameLru.set(cacheKey, []);
     }
 
     if (!arr[frameIndex]) {
       const count = this.countFrames(arr);
       if (count >= this.maxFramesPerAction) {
-        this.evictOldestFrame(actionKey, arr);
+        this.evictOldestFrame(cacheKey, arr);
       }
     }
 
     arr[frameIndex] = frame;
-    this.touchLRU(actionKey);
-    this.touchFrameLRU(actionKey, frameIndex);
+    this.touchLRU(cacheKey);
+    this.touchFrameLRU(cacheKey, frameIndex);
     return frame;
   }
 
-  hasAction(actionKey: string): boolean {
-    return this.actionCache.has(actionKey);
+  hasAction(actionKey: string, releaseId?: string): boolean {
+    const rid = releaseId ?? this.currentReleaseId ?? "default";
+    const cacheKey = this.getCacheKey(rid, actionKey);
+    return this.actionCache.has(cacheKey);
   }
 
-  evictAction(actionKey: string): void {
+  evictAction(actionKey: string, releaseId?: string): void {
     if (!actionKey) return;
-    if (!this.actionCache.delete(actionKey)) return;
-    this.frameLru.delete(actionKey);
-    const idx = this.lruOrder.indexOf(actionKey);
+    const rid = releaseId ?? this.currentReleaseId ?? "default";
+    const cacheKey = this.getCacheKey(rid, actionKey);
+    if (!this.actionCache.delete(cacheKey)) return;
+    this.frameLru.delete(cacheKey);
+    const idx = this.lruOrder.indexOf(cacheKey);
     if (idx >= 0) this.lruOrder.splice(idx, 1);
   }
 
@@ -152,6 +213,7 @@ export class ResourceCache {
     this.frameLru.clear();
     this.lruOrder.length = 0;
     this.preloadQueue.clear();
+    this.currentReleaseId = null;
   }
 
   getStats(): ResourceCacheStats {
@@ -169,11 +231,15 @@ export class ResourceCache {
   private async loadActionFrames(
     action: RuntimeAction,
     limit: number,
+    contentHashLookup: Map<string, string>,
+    installPath: string,
   ): Promise<CachedFrame[]> {
     const total = Math.min(action.frames.length, limit);
     const result: CachedFrame[] = [];
     for (let i = 0; i < total; i++) {
-      const frame = await this.loadFrame(action, action.key, i);
+      const framePath = action.frames[i];
+      const contentHash = this.resolveContentHash(framePath, installPath, contentHashLookup);
+      const frame = await this.loadFrame(action, action.key, i, contentHash);
       if (frame) result.push(frame);
     }
     return result;
@@ -183,6 +249,7 @@ export class ResourceCache {
     action: RuntimeAction,
     actionKey: string,
     frameIndex: number,
+    contentHash: string,
   ): Promise<CachedFrame | null> {
     const framePath = action.frames[frameIndex];
     if (!framePath) return null;
@@ -208,6 +275,7 @@ export class ResourceCache {
         width: size.width,
         height: size.height,
         alphaData,
+        contentHash,
       };
     } catch {
       return null;
@@ -228,17 +296,17 @@ export class ResourceCache {
     return alpha;
   }
 
-  private touchLRU(actionKey: string): void {
-    const idx = this.lruOrder.indexOf(actionKey);
+  private touchLRU(cacheKey: string): void {
+    const idx = this.lruOrder.indexOf(cacheKey);
     if (idx >= 0) this.lruOrder.splice(idx, 1);
-    this.lruOrder.push(actionKey);
+    this.lruOrder.push(cacheKey);
   }
 
-  private touchFrameLRU(actionKey: string, frameIndex: number): void {
-    let lru = this.frameLru.get(actionKey);
+  private touchFrameLRU(cacheKey: string, frameIndex: number): void {
+    let lru = this.frameLru.get(cacheKey);
     if (!lru) {
       lru = [];
-      this.frameLru.set(actionKey, lru);
+      this.frameLru.set(cacheKey, lru);
     }
     const idx = lru.indexOf(frameIndex);
     if (idx >= 0) lru.splice(idx, 1);
@@ -258,8 +326,8 @@ export class ResourceCache {
     }
   }
 
-  private evictOldestFrame(actionKey: string, arr: CachedFrame[]): void {
-    const lru = this.frameLru.get(actionKey);
+  private evictOldestFrame(cacheKey: string, arr: CachedFrame[]): void {
+    const lru = this.frameLru.get(cacheKey);
     if (!lru || lru.length === 0) return;
     const oldest = lru.shift();
     if (typeof oldest === "number") {

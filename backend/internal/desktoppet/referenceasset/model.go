@@ -21,10 +21,33 @@ type ReferenceAsset struct {
 	CoordinateSpace  string `gorm:"column:coordinate_space;type:text" json:"coordinateSpace"`
 	CharacterID      string `gorm:"column:character_id;type:text" json:"characterId"`
 	UserID           string `gorm:"column:user_id;type:text" json:"userId"`
-	SourceArtifactID string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
-	StoragePath      string `gorm:"column:storage_path;type:text" json:"storagePath"`
-	CreatedAt        string `gorm:"column:created_at;type:text" json:"createdAt"`
+	SourceArtifactID    string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
+	StoragePath         string `gorm:"column:storage_path;type:text" json:"storagePath"`
+	Status              string `gorm:"column:status;type:text;default:'staging'" json:"status"`
+	SourceBytes         int64  `gorm:"column:source_bytes;type:integer;default:0" json:"sourceBytes"`
+	NormalizedBytes     int64  `gorm:"column:normalized_bytes;type:integer;default:0" json:"normalizedBytes"`
+	NormalizerProfileID    string `gorm:"column:normalizer_profile_id;type:text;default:''" json:"normalizerProfileId"`
+	NormalizerProfileVersion string `gorm:"column:normalizer_profile_version;type:text;default:''" json:"normalizerProfileVersion"`
+	NormalizerConfigHash  string `gorm:"column:normalizer_config_hash;type:text;default:''" json:"normalizerConfigHash"`
+	NormalizedArtifactID string `gorm:"column:normalized_artifact_id;type:text;default:''" json:"normalizedArtifactId"`
+	CreatedAt           string `gorm:"column:created_at;type:text" json:"createdAt"`
 }
+
+const (
+	ReferenceAssetStatusStaging      = "staging"
+	ReferenceAssetStatusPersisted    = "persisted"
+	ReferenceAssetStatusPublishFailed = "publish_failed"
+	ReferenceAssetStatusCorrupted    = "corrupted"
+	ReferenceAssetStatusArchived     = "archived"
+)
+
+const (
+	NormalizerProfileIDDefault       = "default"
+	NormalizerProfileVersionDefault  = "1"
+	CoordinateSpaceDefault           = "pixel"
+	SubjectBoxStatusNotMeasured      = `{"status":"not_measured"}`
+	AnchorSourceProfileDefault       = `{"source":"profile_default"}`
+)
 
 func (ReferenceAsset) TableName() string { return "desktop_pet_reference_assets" }
 

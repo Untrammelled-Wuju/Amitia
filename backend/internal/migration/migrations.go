@@ -119,10 +119,14 @@ func DefaultMigrations() []Migration {
 		DesktopPetGenerationActiveArtifactMigration(),
 		DesktopPetProcessingCommitRecoveryMigration(),
 		DesktopPetRevisionBridgeMigration(),
+		DesktopPetActionRevisionBridgeV2Migration(),
+		DesktopPetActionRevisionDataMigrateMigration(),
 		DesktopPetReleaseDomainMigration(),
 		DesktopPetQualityBridgeMigration(),
 		DesktopPetInstallationCoordinatorMigration(),
 		DesktopPetEditingV2Migration(),
 		DesktopPetRuntimeProtocolV2Migration(),
+		DesktopPetGenerationPlanTablesMigration(),
+		DesktopPetProcessingAtomicCommitMigration(),
 	}
 }

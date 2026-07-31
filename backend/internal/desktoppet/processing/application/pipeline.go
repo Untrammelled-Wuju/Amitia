@@ -24,22 +24,18 @@ import (
 )
 
 type Pipeline struct {
-	bgRegistry    backgroundremoval.Registry
-	dataDir       string
-	artifactStore *artifact.ArtifactStore
-	publisher     *artifact.RevisionPublisher
-	encoder       *encoding.PNGEncoder
-	splitter      *split.Splitter
+	bgRegistry backgroundremoval.Registry
+	dataDir    string
+	encoder    *encoding.PNGEncoder
+	splitter   *split.Splitter
 }
 
 func NewPipeline(bgRegistry backgroundremoval.Registry, dataDir string) *Pipeline {
 	return &Pipeline{
-		bgRegistry:    bgRegistry,
-		dataDir:       dataDir,
-		artifactStore: artifact.NewArtifactStore(dataDir),
-		publisher:     artifact.NewRevisionPublisher(dataDir),
-		encoder:       encoding.NewPNGEncoder(6),
-		splitter:      split.NewSplitter(),
+		bgRegistry: bgRegistry,
+		dataDir:    dataDir,
+		encoder:    encoding.NewPNGEncoder(6),
+		splitter:   split.NewSplitter(),
 	}
 }
 
@@ -49,19 +45,62 @@ type ProcessActionRequest struct {
 	ConfigSnapshot     *contracts.ProcessingConfigSnapshot
 	ProcessingTaskID   string
 	ProcessingActionID string
+	ProcessingAttemptID string
 	ActionKey          string
 	GenerationTaskID   string
 	ExecutionID        string
 	ProcessingVersion  int
 }
 
+type PipelineFrameResult struct {
+	Index      int
+	FileName   string
+	FileHash   string
+	PixelHash  string
+	Width      int
+	Height     int
+	ByteSize   int64
+}
+
+type PipelineMaskResult struct {
+	Index    int
+	FileName string
+	FileHash string
+	Width    int
+	Height   int
+	ByteSize int64
+}
+
+type PipelinePreviewResult struct {
+	FileName  string
+	FileHash  string
+	Width     int
+	Height    int
+	ByteSize  int64
+}
+
+type TransformChainData struct {
+	FrameIndex      int
+	SequenceNumber  int
+	FromSpace       string
+	ToSpace         string
+	TransformType   string
+	MatrixJSON      string
+	ParametersJSON  string
+	AlgorithmVersion string
+}
+
 type ProcessActionResult struct {
-	RevisionID          string
 	FrameCount          int
-	Manifest            *contracts.RevisionManifest
+	Frames              []PipelineFrameResult
+	Masks               []PipelineMaskResult
 	Measurements        []measurement.FrameMeasurementData
+	Transforms          []TransformChainData
 	SequenceMeasurement *measurement.SequenceMeasurement
-	RootRelativePath    string
+	Preview             *PipelinePreviewResult
+	RevisionHash        string
+	WorkDir             *artifact.WorkDirectory
+	ProcessingReport    measurement.ProcessingReport
 }
 
 func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult, error) {
@@ -74,14 +113,17 @@ func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult
 
 	startTime := time.Now()
 
-	revisionID := "rev-" + uuid.New().String()
+	workDirID := req.ProcessingAttemptID
+	if workDirID == "" {
+		workDirID = uuid.New().String()
+	}
 
-	workDir, err := artifact.NewWorkDirectory(p.dataDir, req.ProcessingTaskID, req.ExecutionID, req.ActionKey, revisionID)
+	workDir, err := artifact.NewWorkDirectory(p.dataDir, req.ProcessingTaskID, req.ExecutionID, req.ActionKey, workDirID)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline: create work directory: %w", err)
 	}
 
-	journal := artifact.NewJournal(revisionID, workDir.JournalPath)
+	journal := artifact.NewJournal(workDirID, workDir.JournalPath)
 
 	if err := journal.Record("preparing", "done", "work directory created"); err != nil {
 		return nil, fmt.Errorf("pipeline: record preparing: %w", err)
@@ -544,84 +586,108 @@ func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult
 		return nil, fmt.Errorf("pipeline: record measurement: %w", err)
 	}
 
-	manifestFrames := make([]contracts.ManifestFrame, frameCount)
+	pipelineFrames := make([]PipelineFrameResult, frameCount)
+	pipelineMasks := make([]PipelineMaskResult, 0, frameCount)
 	for i := 0; i < frameCount; i++ {
-		frameRelPath := filepath.ToSlash(filepath.Join("frames", fmt.Sprintf("frame_%04d.png", i)))
-		mf := contracts.ManifestFrame{
-			Index:     i,
-			File:      frameRelPath,
-			FileHash:  frameResults[i].FileHash,
+		frameName := fmt.Sprintf("frame_%04d.png", i)
+		pipelineFrames[i] = PipelineFrameResult{
+			Index:    i,
+			FileName: frameName,
+			FileHash: frameResults[i].FileHash,
 			PixelHash: frameResults[i].PixelHash,
+			Width:    frameResults[i].Width,
+			Height:   frameResults[i].Height,
+			ByteSize: frameResults[i].ByteSize,
 		}
 		if req.ConfigSnapshot.Encoding.WriteMask {
-			mf.Mask = filepath.ToSlash(filepath.Join("masks", fmt.Sprintf("mask_%04d.png", i)))
+			maskName := fmt.Sprintf("mask_%04d.png", i)
+			pipelineMasks = append(pipelineMasks, PipelineMaskResult{
+				Index:    i,
+				FileName: maskName,
+				FileHash: maskResults[i].FileHash,
+				Width:    maskResults[i].Width,
+				Height:   maskResults[i].Height,
+				ByteSize: maskResults[i].ByteSize,
+			})
 		}
-		mJSON, _ := measurements[i].ToJSON()
-		mf.Measurement = mJSON
-		manifestFrames[i] = mf
 	}
 
-	manifest := &contracts.RevisionManifest{
-		SchemaVersion:      contracts.RevisionManifestSchemaVersion,
-		RevisionID:         revisionID,
-		ProcessingTaskID:   req.ProcessingTaskID,
-		ProcessingActionID: req.ProcessingActionID,
-		ActionKey:          req.ActionKey,
-		Source: contracts.ManifestSource{
-			AttemptID:   req.SourceDescriptor.Artifact.AttemptID,
-			Candidate:   req.SourceDescriptor.CandidateIndex,
-			ArtifactID:  req.SourceDescriptor.Artifact.ArtifactID,
-			ContentHash: req.SourceDescriptor.Artifact.ContentHash,
-			MimeType:    req.SourceDescriptor.Artifact.MIMEType,
-			Width:       req.SourceDescriptor.Artifact.Width,
-			Height:      req.SourceDescriptor.Artifact.Height,
-		},
-		PipelineVersion: contracts.PipelineVersion,
-		ConfigHash:      req.ConfigSnapshot.ConfigHash,
-		FrameCount:      frameCount,
-		Frames:          manifestFrames,
+	transforms := make([]TransformChainData, 0, frameCount*4)
+	for i := 0; i < frameCount; i++ {
+		transforms = append(transforms, TransformChainData{
+			FrameIndex:      i,
+			SequenceNumber:  0,
+			FromSpace:       "source",
+			ToSpace:         "foreground",
+			TransformType:   "background_removal",
+			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["background"],
+		})
+		transforms = append(transforms, TransformChainData{
+			FrameIndex:      i,
+			SequenceNumber:  1,
+			FromSpace:       "foreground",
+			ToSpace:         "scaled",
+			TransformType:   "scale",
+			ParametersJSON:  fmt.Sprintf(`{"scale":%.6f}`, scaleResult.ClampedScale),
+			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["scale"],
+		})
+		transforms = append(transforms, TransformChainData{
+			FrameIndex:      i,
+			SequenceNumber:  2,
+			FromSpace:       "scaled",
+			ToSpace:         "canvas",
+			TransformType:   "canvas_mapping",
+			MatrixJSON:      fmt.Sprintf(`{"drawX":%d,"drawY":%d}`, baseDrawXs[i], baseDrawYs[i]),
+			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["canvas"],
+		})
+		transforms = append(transforms, TransformChainData{
+			FrameIndex:      i,
+			SequenceNumber:  3,
+			FromSpace:       "canvas",
+			ToSpace:         "stabilized_canvas",
+			TransformType:   "stabilization",
+			ParametersJSON:  fmt.Sprintf(`{"correctionX":%.6f,"correctionY":%.6f,"clamped":%v}`, alignments[i].CorrectionX, alignments[i].CorrectionY, alignments[i].Clamped),
+			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["alignment"],
+		})
 	}
 
 	hash := sha256.New()
-	for _, mf := range manifest.Frames {
-		hash.Write([]byte(mf.FileHash))
-		hash.Write([]byte(mf.PixelHash))
+	for _, pf := range pipelineFrames {
+		hash.Write([]byte(pf.FileHash))
+		hash.Write([]byte(pf.PixelHash))
 	}
-	hash.Write([]byte(manifest.ConfigHash))
-	hash.Write([]byte(manifest.PipelineVersion))
-	manifest.RevisionHash = hex.EncodeToString(hash.Sum(nil))
+	for _, pm := range pipelineMasks {
+		hash.Write([]byte(pm.FileHash))
+	}
+	hash.Write([]byte(req.ConfigSnapshot.ConfigHash))
+	hash.Write([]byte(contracts.PipelineVersion))
+	for _, m := range measurements {
+		mJSON, _ := m.ToJSON()
+		hash.Write([]byte(mJSON))
+	}
+	revisionHash := hex.EncodeToString(hash.Sum(nil))
 
-	if err := journal.Record("validated", "done", "manifest created and validated"); err != nil {
+	if err := journal.Record("validated", "done", "pipeline result built"); err != nil {
 		return nil, fmt.Errorf("pipeline: record validated: %w", err)
 	}
 
-	rootRelativePath, err := p.publisher.Publish(artifact.PublishRequest{
-		WorkDir:            workDir,
-		GenerationTaskID:   req.GenerationTaskID,
-		RevisionID:         revisionID,
-		ProcessingTaskID:   req.ProcessingTaskID,
-		ProcessingActionID: req.ProcessingActionID,
-		ActionKey:          req.ActionKey,
-		ProcessingVersion:  req.ProcessingVersion,
-		Manifest:           manifest,
-		Journal:            journal,
-	})
-	if err != nil {
-		_ = journal.Record("publish", "failed", err.Error())
-		return nil, fmt.Errorf("pipeline: publish stage: %w", err)
-	}
-
-	if err := journal.Record("publish", "done", fmt.Sprintf("published to %s", rootRelativePath)); err != nil {
-		return nil, fmt.Errorf("pipeline: record publish: %w", err)
-	}
-
 	return &ProcessActionResult{
-		RevisionID:          revisionID,
 		FrameCount:          frameCount,
-		Manifest:            manifest,
+		Frames:              pipelineFrames,
+		Masks:               pipelineMasks,
 		Measurements:        measurements,
+		Transforms:          transforms,
 		SequenceMeasurement: seqMeasurement,
-		RootRelativePath:    rootRelativePath,
+		RevisionHash:        revisionHash,
+		WorkDir:             workDir,
+		ProcessingReport: measurement.ProcessingReport{
+			PipelineVersion: contracts.PipelineVersion,
+			ConfigHash:      req.ConfigSnapshot.ConfigHash,
+			TotalDurationMs: time.Since(startTime).Milliseconds(),
+			ProviderUsed:    providerUsed,
+			Degraded:        providerUsed == "keep_original",
+			DegradedReason:  degradedReason,
+		},
 	}, nil
 }
 

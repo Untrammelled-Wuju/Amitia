@@ -67,7 +67,7 @@ func TestConcurrency_ConcurrentStateTransition(t *testing.T) {
 	db := setupWorkerTestDB(t)
 	repo := newWorkerRepo(t, db)
 	dataDir := t.TempDir()
-	w := NewWorker(db, repo, dataDir, nil, nil)
+	w := NewWorker(db, repo, dataDir, nil, nil, nil)
 
 	pt := &processing.ProcessingTask{
 		ID:                "pt-concurrent-transition",

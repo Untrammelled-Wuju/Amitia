@@ -196,7 +196,13 @@ func (v *Validator) validateCore(report *ValidationReport, fs PackageFileSystem,
 }
 
 func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
-	if m.SchemaVersion != ManifestSchemaVersion {
+	if m.SchemaVersion == 0 {
+		report.addFinding(Finding{
+			Code:     ErrCodePackageSchemaMissing,
+			Severity: SeverityError,
+			Message:  "schemaVersion is missing or zero",
+		})
+	} else if m.SchemaVersion != ManifestSchemaVersion {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageSchemaUnsupported,
 			Severity: SeverityError,
@@ -258,13 +264,13 @@ func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
 		})
 	}
 
-	if m.Integrity.Algorithm != TreeHashAlgorithm {
+	if m.Integrity.Algorithm != IntegrityAlgorithmV2 && m.Integrity.Algorithm != IntegrityAlgorithmV1Legacy {
 		report.addFinding(Finding{
-			Code:     ErrCodePackageManifestInvalid,
-			Severity: SeverityWarning,
-			Expected: TreeHashAlgorithm,
+			Code:     ErrCodePackageIntegrityAlgorithmUnsupported,
+			Severity: SeverityError,
+			Expected: IntegrityAlgorithmV2,
 			Actual:   m.Integrity.Algorithm,
-			Message:  fmt.Sprintf("unexpected integrity algorithm: %s", m.Integrity.Algorithm),
+			Message:  fmt.Sprintf("unsupported integrity algorithm: %s", m.Integrity.Algorithm),
 		})
 	}
 
@@ -356,6 +362,9 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 	actualSet := make(map[string]bool, len(actualPaths))
 	for _, p := range actualPaths {
 		actualSet[p] = true
+		if p == "manifest.json" {
+			continue
+		}
 		if _, ok := declared[p]; !ok {
 			report.addFinding(Finding{
 				Code:     ErrCodePackageFileUndeclared,
@@ -425,6 +434,22 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 		}
 	}
 
+	if m.Integrity.ManifestHash == "" {
+		report.addFinding(Finding{
+			Code:     ErrCodePackageManifestHashMissing,
+			Severity: SeverityError,
+			Message:  "integrity.manifestHash is empty",
+		})
+	}
+
+	if m.Integrity.ContentRootHash == "" {
+		report.addFinding(Finding{
+			Code:     ErrCodePackageIntegrityMissing,
+			Severity: SeverityError,
+			Message:  "integrity.contentRootHash is empty",
+		})
+	}
+
 	var entries []FileEntry
 	for _, f := range m.Integrity.Files {
 		entries = append(entries, FileEntry{
@@ -433,15 +458,35 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 			Bytes:  f.Bytes,
 		})
 	}
-	actualRootHash := ComputeTreeHash(entries)
-	if m.Integrity.ContentRootHash != "" && actualRootHash != m.Integrity.ContentRootHash {
-		report.addFinding(Finding{
-			Code:     ErrCodePackageHashMismatch,
-			Severity: SeverityError,
-			Expected: m.Integrity.ContentRootHash,
-			Actual:   actualRootHash,
-			Message:  "content root hash mismatch",
-		})
+
+	if m.Integrity.ManifestHash != "" {
+		recomputedManifestHash, hashErr := CanonicalManifestHash(m)
+		if hashErr == nil && recomputedManifestHash != m.Integrity.ManifestHash {
+			report.addFinding(Finding{
+				Code:     ErrCodePackageManifestHashMismatch,
+				Severity: SeverityError,
+				Expected: recomputedManifestHash,
+				Actual:   m.Integrity.ManifestHash,
+				Message:  "manifest hash mismatch",
+			})
+		}
+
+		if m.Integrity.ContentRootHash != "" && hashErr == nil {
+			canonicalData, dataErr := CanonicalManifestData(m)
+			if dataErr == nil {
+				manifestBytes := int64(len(canonicalData))
+				recomputedRootHash := ComputeContentRootHash(entries, recomputedManifestHash, manifestBytes)
+				if recomputedRootHash != m.Integrity.ContentRootHash {
+					report.addFinding(Finding{
+						Code:     ErrCodePackageHashMismatch,
+						Severity: SeverityError,
+						Expected: recomputedRootHash,
+						Actual:   m.Integrity.ContentRootHash,
+						Message:  "content root hash mismatch",
+					})
+				}
+			}
+		}
 	}
 
 	declaredCount := len(m.Integrity.Files)
@@ -564,18 +609,27 @@ type validatedActionConfig struct {
 	LoopType      string                `json:"loopType"`
 	Frames        []validatedFrameEntry `json:"frames"`
 	ReturnTo      validatedReturnTo     `json:"returnTo"`
+	Anchor        validatedAnchor       `json:"anchor"`
 }
 
 type validatedFrameEntry struct {
 	Index       int    `json:"index"`
+	FrameID     string `json:"frameId"`
 	File        string `json:"file"`
 	DurationMs  int    `json:"durationMs"`
+	AssetID     string `json:"assetId"`
 	ContentHash string `json:"contentHash"`
 }
 
 type validatedReturnTo struct {
 	Type      string `json:"type"`
 	ActionKey string `json:"actionKey"`
+}
+
+type validatedAnchor struct {
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	CoordinateSpace string  `json:"coordinateSpace"`
 }
 
 func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
@@ -631,11 +685,31 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 			continue
 		}
 
-		playbackMode := cfg.PlaybackMode
-		if playbackMode == "" {
-			playbackMode = cfg.LoopType
+		if cfg.SchemaVersion != ActionConfigSchemaVersion {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionConfigSchemaUnsupported,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  fmt.Sprintf("schemaVersion=%d", ActionConfigSchemaVersion),
+				Actual:    fmt.Sprintf("schemaVersion=%d", cfg.SchemaVersion),
+				Message:   fmt.Sprintf("action config schemaVersion must be %d, got %d", ActionConfigSchemaVersion, cfg.SchemaVersion),
+			})
 		}
-		playbackMode = NormalizePlaybackMode(playbackMode)
+
+		if cfg.ActionKey != action.Key {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionKeyMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  action.Key,
+				Actual:    cfg.ActionKey,
+				Message:   fmt.Sprintf("action key mismatch: manifest=%s, config=%s", action.Key, cfg.ActionKey),
+			})
+		}
+
+		playbackMode := cfg.PlaybackMode
 		if playbackMode == "" {
 			report.addFinding(Finding{
 				Code:      ErrCodeActionConfigInvalid,
@@ -654,6 +728,50 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 				Actual:    playbackMode,
 				Message:   fmt.Sprintf("invalid playbackMode: %s", playbackMode),
 			})
+		} else if playbackMode != action.PlaybackMode {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionSummaryMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  action.PlaybackMode,
+				Actual:    playbackMode,
+				Message:   fmt.Sprintf("playbackMode mismatch: manifest=%s, config=%s", action.PlaybackMode, playbackMode),
+			})
+		}
+
+		if cfg.Fps <= 0 || cfg.Fps > 120 {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  "0 < fps <= 120",
+				Actual:    fmt.Sprintf("fps=%d", cfg.Fps),
+				Message:   fmt.Sprintf("invalid fps: %d", cfg.Fps),
+			})
+		} else if cfg.Fps != action.FPS {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionSummaryMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  fmt.Sprintf("fps=%d", action.FPS),
+				Actual:    fmt.Sprintf("fps=%d", cfg.Fps),
+				Message:   fmt.Sprintf("fps mismatch: manifest=%d, config=%d", action.FPS, cfg.Fps),
+			})
+		}
+
+		if len(cfg.Frames) != action.FrameCount {
+			report.addFinding(Finding{
+				Code:      ErrCodePackageActionSummaryMismatch,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Expected:  fmt.Sprintf("frameCount=%d", action.FrameCount),
+				Actual:    fmt.Sprintf("frames=%d", len(cfg.Frames)),
+				Message:   fmt.Sprintf("frameCount mismatch: manifest=%d, config=%d", action.FrameCount, len(cfg.Frames)),
+			})
 		}
 
 		if len(cfg.Frames) < 1 {
@@ -666,27 +784,56 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 			})
 		}
 
-		fps := cfg.Fps
-		if fps == 0 {
-			fps = cfg.DefaultFps
-		}
-		if fps <= 0 || fps > 120 {
+		if cfg.Anchor.CoordinateSpace == "" {
 			report.addFinding(Finding{
 				Code:      ErrCodeActionConfigInvalid,
 				Severity:  SeverityError,
 				Path:      action.Config,
 				ActionKey: action.Key,
-				Expected:  "0 < fps <= 120",
-				Actual:    fmt.Sprintf("fps=%d", fps),
-				Message:   fmt.Sprintf("invalid fps: %d", fps),
+				Message:   "anchor is missing",
 			})
+		} else {
+			if cfg.Anchor.CoordinateSpace != "normalized_canvas" {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Expected:  "normalized_canvas",
+					Actual:    cfg.Anchor.CoordinateSpace,
+					Message:   fmt.Sprintf("invalid anchor coordinateSpace: %s", cfg.Anchor.CoordinateSpace),
+				})
+			}
+			if cfg.Anchor.X < 0 || cfg.Anchor.X > 1 {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Expected:  "0 <= x <= 1",
+					Actual:    fmt.Sprintf("x=%f", cfg.Anchor.X),
+					Message:   fmt.Sprintf("anchor x out of range: %f", cfg.Anchor.X),
+				})
+			}
+			if cfg.Anchor.Y < 0 || cfg.Anchor.Y > 1 {
+				report.addFinding(Finding{
+					Code:      ErrCodeActionConfigInvalid,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Expected:  "0 <= y <= 1",
+					Actual:    fmt.Sprintf("y=%f", cfg.Anchor.Y),
+					Message:   fmt.Sprintf("anchor y out of range: %f", cfg.Anchor.Y),
+				})
+			}
 		}
 
 		seenFiles := make(map[string]bool)
+		seenFrameIDs := make(map[string]bool)
 		for idx, frame := range cfg.Frames {
 			if frame.Index != idx {
 				report.addFinding(Finding{
-					Code:      ErrCodeActionConfigInvalid,
+					Code:      ErrCodePackageFrameIndexInvalid,
 					Severity:  SeverityError,
 					Path:      action.Config,
 					ActionKey: action.Key,
@@ -695,6 +842,25 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 					Message:   fmt.Sprintf("frame index not contiguous at position %d", idx),
 				})
 			}
+			if frame.FrameID == "" {
+				report.addFinding(Finding{
+					Code:      ErrCodeFrameMissing,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("frame %d has empty frameId", idx),
+				})
+			} else if seenFrameIDs[frame.FrameID] {
+				report.addFinding(Finding{
+					Code:      ErrCodePackageFrameIdDuplicate,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("duplicate frameId: %s", frame.FrameID),
+				})
+			}
+			seenFrameIDs[frame.FrameID] = true
+
 			if frame.File == "" {
 				report.addFinding(Finding{
 					Code:      ErrCodeFrameMissing,
@@ -714,6 +880,16 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 			}
 			seenFiles[frame.File] = true
 
+			if frame.AssetID == "" {
+				report.addFinding(Finding{
+					Code:      ErrCodePackageFrameAssetIdMissing,
+					Severity:  SeverityError,
+					Path:      action.Config,
+					ActionKey: action.Key,
+					Message:   fmt.Sprintf("frame %d has empty assetId", idx),
+				})
+			}
+
 			if frame.ContentHash == "" {
 				report.addFinding(Finding{
 					Code:      ErrCodeFrameHashMismatch,
@@ -724,7 +900,7 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 				})
 			}
 
-			if frame.DurationMs != 0 && (frame.DurationMs < 8 || frame.DurationMs > 60000) {
+			if frame.DurationMs < 8 || frame.DurationMs > 60000 {
 				report.addFinding(Finding{
 					Code:      ErrCodeActionConfigInvalid,
 					Severity:  SeverityError,
@@ -735,6 +911,17 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 					Message:   fmt.Sprintf("invalid frame durationMs: %d", frame.DurationMs),
 				})
 			}
+		}
+
+		if cfg.ReturnTo.Type == "default_idle" {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Actual:    cfg.ReturnTo.Type,
+				Message:   "returnTo type default_idle is rejected, use default instead",
+			})
 		}
 
 		if cfg.ReturnTo.Type == "action" {
@@ -749,6 +936,25 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 				})
 			}
 		}
+
+		if action.IsTransitionOnly && action.IsStableStateCandidate {
+			report.addFinding(Finding{
+				Code:      ErrCodeActionConfigInvalid,
+				Severity:  SeverityError,
+				Path:      action.Config,
+				ActionKey: action.Key,
+				Message:   "action cannot be both transitionOnly and stableStateCandidate",
+			})
+		}
+
+		if action.IsTransitionOnly && action.Key == m.DefaultAction {
+			report.addFinding(Finding{
+				Code:      ErrCodeDefaultActionInvalid,
+				Severity:  SeverityError,
+				ActionKey: action.Key,
+				Message:   fmt.Sprintf("transition-only action %s cannot be default action", action.Key),
+			})
+		}
 	}
 
 	if m.DefaultAction != "" {
@@ -757,7 +963,7 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 				if !m.Actions[i].SupportsDefaultIdle {
 					report.addFinding(Finding{
 						Code:      ErrCodeDefaultActionInvalid,
-						Severity:  SeverityWarning,
+						Severity:  SeverityError,
 						ActionKey: m.DefaultAction,
 						Message:   fmt.Sprintf("default action %s does not support default idle", m.DefaultAction),
 					})

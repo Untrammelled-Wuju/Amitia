@@ -98,20 +98,36 @@ func (a *revisionSourceAdapter) ListProcessingActions(processingTaskID string) (
 }
 
 func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, actionKey string) (*ActiveRevisionDetail, error) {
-	binding, err := a.editingRepo.GetActiveRevisionBinding(processingTaskID, actionKey)
+	revisionID := ""
+
+	newBinding, err := a.editingRepo.GetActiveActionRevisionBindingByTask(processingTaskID, actionKey)
 	if err != nil {
-		return nil, fmt.Errorf("get active revision binding: %w", err)
+		return nil, fmt.Errorf("get active action revision binding by task: %w", err)
 	}
-	if binding == nil {
+	if newBinding != nil {
+		revisionID = newBinding.ActiveActionRevisionID
+	}
+
+	if revisionID == "" {
+		oldBinding, err := a.editingRepo.GetActiveRevisionBinding(processingTaskID, actionKey)
+		if err != nil {
+			return nil, fmt.Errorf("get active revision binding: %w", err)
+		}
+		if oldBinding != nil {
+			revisionID = oldBinding.RevisionID
+		}
+	}
+
+	if revisionID == "" {
 		return nil, fmt.Errorf("no active revision for task=%s action=%s", processingTaskID, actionKey)
 	}
 
-	revision, err := a.editingRepo.GetActionRevision(binding.RevisionID)
+	revision, err := a.editingRepo.GetActionRevision(revisionID)
 	if err != nil {
 		return nil, fmt.Errorf("get action revision: %w", err)
 	}
 
-	frames, err := a.editingRepo.ListRevisionFrames(binding.RevisionID)
+	frames, err := a.editingRepo.ListRevisionFrames(revisionID)
 	if err != nil {
 		return nil, fmt.Errorf("list revision frames: %w", err)
 	}
@@ -132,6 +148,7 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 			Height:       asset.Height,
 			MimeType:     asset.MimeType,
 			StoragePath:  asset.StoragePath,
+			ByteSize:     asset.ByteSize,
 		})
 	}
 
@@ -144,6 +161,11 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 		cooldownMs = *revision.CooldownMSOverride
 	}
 
+	playbackMode := revision.PlaybackMode
+	if playbackMode == "" {
+		playbackMode = revision.LoopType
+	}
+
 	return &ActiveRevisionDetail{
 		RevisionID:     revision.ID,
 		RevisionNumber: revision.RevisionNumber,
@@ -152,6 +174,7 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 		DurationMS:     revision.DurationMS,
 		DefaultFPS:     revision.DefaultFPS,
 		LoopType:       revision.LoopType,
+		PlaybackMode:   playbackMode,
 		ReturnAction:   revision.ReturnAction,
 		ReturnPolicy:   "",
 		Interruptible:  revision.Interruptible == 1,
@@ -162,6 +185,8 @@ func (a *revisionSourceAdapter) GetActiveRevisionDetail(processingTaskID, action
 		MutexGroup:     "",
 		AnchorX:        0,
 		AnchorY:        0,
+		AnchorJSON:     revision.AnchorJSON,
+		ContentHash:    revision.ContentHash,
 		QualityVerdict: revision.QualityVerdict,
 		Frames:         frameInfos,
 	}, nil

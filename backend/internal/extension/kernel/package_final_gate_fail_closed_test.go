@@ -164,6 +164,17 @@ func TestFinalGateUninstallArtifactNotFoundPasses(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	guard := PackageWriteGuard{ExtensionID: extensionID, FencingToken: 1}
+	cleanupStep := PackageOperationStep{
+		StepID: "step-cleanup-" + operationID, OperationID: operationID,
+		StepName: "cleanup_kernel_repositories", StepOrder: 3,
+		Status: "completed", AttemptCount: 1, ResultJSON: "{}",
+		StartedAt: now, CompletedAt: now,
+	}
+	if err := container.PackageRepository.PutStep(ctx, cleanupStep, guard); err != nil {
+		t.Fatal(err)
+	}
+
 	nonExistentID := "artifact-nonexistent-" + extensionID
 	_, artifactErr := container.PackageRepository.GetArtifact(ctx, nonExistentID)
 	if artifactErr == nil {

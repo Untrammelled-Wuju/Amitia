@@ -2,7 +2,7 @@ package migration
 
 func DesktopPetReleaseDomainMigration() Migration {
 	return Migration{
-		Version: "202607310017",
+		Version: "202607310021",
 		Name:    "add_desktop_pet_release_domain_tables",
 		Up: func(s *Step) error {
 			if err := createReleaseBuildSnapshotsTable(s); err != nil {

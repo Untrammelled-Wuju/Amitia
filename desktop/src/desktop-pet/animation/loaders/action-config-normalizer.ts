@@ -20,6 +20,9 @@ interface RawFrameEntry {
   index?: number;
   file: string;
   durationMs?: number;
+  frameId?: string;
+  assetId?: string;
+  contentHash?: string;
 }
 
 function extractRawFrames(raw: RawActionConfig): RawFrameEntry[] {
@@ -30,7 +33,14 @@ function extractRawFrames(raw: RawActionConfig): RawFrameEntry[] {
     if (typeof item === "string") {
       result.push({ file: item });
     } else if (item && typeof item.file === "string") {
-      result.push({ index: item.index, file: item.file, durationMs: item.durationMs });
+      result.push({
+        index: item.index,
+        file: item.file,
+        durationMs: item.durationMs,
+        frameId: item.frameId,
+        assetId: item.assetId,
+        contentHash: item.contentHash,
+      });
     }
   }
   return result;
@@ -70,6 +80,7 @@ function resolveReturnTarget(
   defaultActionKey: string,
   loopType: LoopType,
   warnings: string[],
+  isNewSchema: boolean,
 ): ReturnTarget {
   if (specSnapshot) {
     return specSnapshot.returnTarget;
@@ -80,15 +91,36 @@ function resolveReturnTarget(
     if (type === "action") {
       const targetKey = rawReturnTo.actionKey;
       if (!targetKey) {
+        if (isNewSchema) {
+          throw new PlaybackError(
+            PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+            `return_to action missing actionKey: ${actionKey}`,
+            { actionKey },
+          );
+        }
         warnings.push("return_to_action_missing_key");
         return { type: "default" };
       }
       if (targetKey === actionKey) {
+        if (isNewSchema) {
+          throw new PlaybackError(
+            PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+            `return_to action self reference: ${actionKey}`,
+            { actionKey },
+          );
+        }
         warnings.push("return_action_self_reference_ignored");
         return { type: "default" };
       }
       if (availableActionKeys.has(targetKey)) {
         return { type: "action", actionKey: targetKey };
+      }
+      if (isNewSchema) {
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+          `return_to action not found: ${targetKey}`,
+          { actionKey },
+        );
       }
       warnings.push(`return_to_action_not_found: ${targetKey}`);
       return { type: "default" };
@@ -97,6 +129,13 @@ function resolveReturnTarget(
     if (type === "previous") return { type: "previous" };
     if (type === "current_activity") return { type: "current_activity" };
     if (type === "none") return { type: "none" };
+    if (isNewSchema) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `unknown returnTo type: ${type}`,
+        { actionKey },
+      );
+    }
     warnings.push(`unknown_return_to_type: ${type}`);
   }
 
@@ -108,6 +147,13 @@ function resolveReturnTarget(
   }
 
   if (rawReturnAction === actionKey) {
+    if (isNewSchema) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `return action self reference: ${actionKey}`,
+        { actionKey },
+      );
+    }
     warnings.push("return_action_self_reference_ignored");
     return { type: "default" };
   }
@@ -115,6 +161,13 @@ function resolveReturnTarget(
   if (rawReturnAction === "idle_normal") {
     if (availableActionKeys.has("idle_normal")) {
       return { type: "action", actionKey: "idle_normal" };
+    }
+    if (isNewSchema) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `return action not found: idle_normal`,
+        { actionKey },
+      );
     }
     warnings.push("return_action_idle_normal_not_found_using_default");
     return { type: "default" };
@@ -124,6 +177,13 @@ function resolveReturnTarget(
     return { type: "action", actionKey: rawReturnAction };
   }
 
+  if (isNewSchema) {
+    throw new PlaybackError(
+      PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+      `return action not found: ${rawReturnAction}`,
+      { actionKey },
+    );
+  }
   warnings.push(`return_action_not_found: ${rawReturnAction}`);
   return { type: "default" };
 }
@@ -134,13 +194,42 @@ function resolveAnchor(
   canvasHeight: number,
   specSnapshot: ActionSpecSnapshot | undefined,
   warnings: string[],
+  isNewSchema: boolean,
 ): { type: string; x: number; y: number } {
   if (specSnapshot) {
   }
 
   const ax = raw.anchor?.x;
   const ay = raw.anchor?.y;
-  const atype = raw.anchor?.type ?? "bottom_center";
+  const atype = raw.anchor?.type ?? raw.anchor?.coordinateSpace ?? "bottom_center";
+
+  if (isNewSchema) {
+    if (ax === undefined || ay === undefined) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `anchor missing x or y for action: ${raw.actionKey}`,
+        { actionKey: raw.actionKey },
+      );
+    }
+    const nx = typeof ax === "number" ? ax : Number(ax);
+    const ny = typeof ay === "number" ? ay : Number(ay);
+    if (!Number.isFinite(nx) || !Number.isFinite(ny)) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `anchor invalid x or y for action: ${raw.actionKey}`,
+        { actionKey: raw.actionKey },
+      );
+    }
+    const cs = raw.anchor?.coordinateSpace;
+    if (cs !== undefined && cs !== "normalized_canvas") {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `anchor invalid coordinateSpace: ${cs} for action: ${raw.actionKey}`,
+        { actionKey: raw.actionKey },
+      );
+    }
+    return { type: atype, x: nx, y: ny };
+  }
 
   if (ax !== undefined && ay !== undefined) {
     const nx = typeof ax === "number" ? ax : Number(ax);
@@ -209,6 +298,42 @@ export interface NormalizeActionConfigInput {
   packageSnapshot: PackagePlaybackSnapshot;
 }
 
+function resolveFrameIdentity(
+  f: RawFrameEntry,
+  fallbackIndex: number,
+  actionKey: string,
+  isNewSchema: boolean,
+): { frameId: string; assetId: string; contentHash: string } {
+  if (isNewSchema) {
+    if (!f.frameId) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `frame missing frameId: ${actionKey} frame ${fallbackIndex}`,
+        { actionKey },
+      );
+    }
+    if (!f.assetId) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `frame missing assetId: ${actionKey} frame ${fallbackIndex}`,
+        { actionKey },
+      );
+    }
+    if (!f.contentHash) {
+      throw new PlaybackError(
+        PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
+        `frame missing contentHash: ${actionKey} frame ${fallbackIndex}`,
+        { actionKey },
+      );
+    }
+  }
+  return {
+    frameId: f.frameId ?? `${actionKey}_frame_${fallbackIndex}`,
+    assetId: f.assetId ?? f.file,
+    contentHash: f.contentHash ?? "",
+  };
+}
+
 export function normalizeActionConfig(input: NormalizeActionConfigInput): LoadedAction {
   const { raw, packageSnapshot } = input;
   const warnings: string[] = [];
@@ -273,12 +398,17 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     let cumulative = 0;
     normalizedFrames = sorted.map((f, i) => {
       const durationMs = computeFrameDuration(f, raw, isNewSchema, warnings);
+      const frameIndex = f.index ?? i;
+      const identity = resolveFrameIdentity(f, frameIndex, raw.actionKey, isNewSchema);
       const frame: NormalizedFrame = {
-        index: f.index ?? i,
+        index: frameIndex,
         resourceUrl: f.file,
         durationMs,
         cumulativeStartMs: cumulative,
         cumulativeEndMs: cumulative + durationMs,
+        frameId: identity.frameId,
+        assetId: identity.assetId,
+        contentHash: identity.contentHash,
       };
       cumulative += durationMs;
       return frame;
@@ -287,12 +417,16 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     let cumulative = 0;
     normalizedFrames = rawFrames.map((f, i) => {
       const durationMs = computeFrameDuration(f, raw, isNewSchema, warnings);
+      const identity = resolveFrameIdentity(f, i, raw.actionKey, isNewSchema);
       const frame: NormalizedFrame = {
         index: i,
         resourceUrl: f.file,
         durationMs,
         cumulativeStartMs: cumulative,
         cumulativeEndMs: cumulative + durationMs,
+        frameId: identity.frameId,
+        assetId: identity.assetId,
+        contentHash: identity.contentHash,
       };
       cumulative += durationMs;
       return frame;
@@ -312,6 +446,7 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     packageSnapshot.canvas.height,
     specSnapshot,
     warnings,
+    isNewSchema,
   );
 
   const returnTarget = resolveReturnTarget(
@@ -323,6 +458,7 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
     packageSnapshot.defaultActionKey,
     loopType,
     warnings,
+    isNewSchema,
   );
 
   const interruptible = specSnapshot?.interruptible ?? raw.interruptible ?? true;
@@ -332,9 +468,9 @@ export function normalizeActionConfig(input: NormalizeActionConfigInput): Loaded
   const defaultPriority = specSnapshot?.defaultPriority ?? raw.priority ?? raw.defaultPriority ?? 50;
   const cooldownMs = specSnapshot?.cooldownMs ?? raw.cooldownMs ?? 0;
   const mutexGroup = specSnapshot?.mutexGroup ?? raw.mutexGroup ?? null;
-  const isStableStateCandidate = specSnapshot?.isStableStateCandidate ?? (loopType === "loop");
-  const isTransitionOnly = specSnapshot?.isTransitionOnly ?? false;
-  const supportsDefaultIdle = specSnapshot?.supportsDefaultIdle ?? true;
+  const isStableStateCandidate = specSnapshot?.isStableStateCandidate ?? raw.isStableStateCandidate ?? (loopType === "loop");
+  const isTransitionOnly = specSnapshot?.isTransitionOnly ?? raw.isTransitionOnly ?? false;
+  const supportsDefaultIdle = specSnapshot?.supportsDefaultIdle ?? raw.supportsDefaultIdle ?? true;
 
   const cycleDurationMs = normalizedFrames.reduce(
     (sum, f) => sum + f.durationMs,

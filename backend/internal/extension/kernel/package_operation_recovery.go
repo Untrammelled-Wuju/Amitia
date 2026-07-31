@@ -265,6 +265,8 @@ func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operat
 			if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, operation.ArtifactID, qm.OriginalGenerationPath, guard); err != nil {
 				return fmt.Errorf("kernel: restore artifact installed path failed: %w", err)
 			}
+		} else if artifact.InstalledPath != "" && hasQuarantineMetadata && qm.OriginalGenerationPath != "" && artifact.InstalledPath != qm.OriginalGenerationPath {
+			return fmt.Errorf("kernel: artifact installed path conflict: current=%s expected=%s", artifact.InstalledPath, qm.OriginalGenerationPath)
 		}
 		if hasQuarantineMetadata || operation.ArtifactID != "" {
 			if _, refErr := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); refErr != nil {
@@ -299,7 +301,9 @@ func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operat
 	}
 	if hasQuarantineMetadata {
 		qm.State = "restored"
-		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, qm, guard)
+		if err := r.container.PackageRepository.PutQuarantineMetadata(ctx, qm, guard); err != nil {
+			return fmt.Errorf("kernel: persist quarantine restored state failed: %w", err)
+		}
 	}
 	return nil
 }
@@ -322,7 +326,11 @@ func (r *Runtime) reconcileUninstallCompletedState(ctx context.Context, operatio
 	}
 	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
 	if qmErr == nil && qm.QuarantineID != "" {
-		_ = r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, qm.QuarantineID, guard)
+		if err := r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, qm.QuarantineID, guard); err != nil {
+			return fmt.Errorf("kernel: release quarantine metadata failed: %w", err)
+		}
+	} else if qmErr != nil && !IsPackageOperationError(qmErr, OperationErrNotFound) {
+		return fmt.Errorf("kernel: quarantine metadata unavailable for release: %w", qmErr)
 	}
 	return nil
 }

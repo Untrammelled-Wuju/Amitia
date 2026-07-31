@@ -259,10 +259,11 @@ func TestValidateStatement(t *testing.T) {
 			errSubstr: "ext_ prefix",
 		},
 		{
-			name:    "SQLTypeOther且无禁止命令应成功",
-			raw:     "REINDEX ext_com_example_weather_idx",
-			extID:   "com.example.weather",
-			wantErr: false,
+			name:      "SQLTypeOther且无禁止命令应拒绝",
+			raw:       "REINDEX ext_com_example_weather_idx",
+			extID:     "com.example.weather",
+			wantErr:   true,
+			errSubstr: "unparseable",
 		},
 	}
 	for _, c := range cases {

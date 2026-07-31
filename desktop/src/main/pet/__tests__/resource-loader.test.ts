@@ -3,12 +3,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ResourceLoader } from "../resource-loader";
+import type { LoadInstallationRequest } from "../resource-loader";
 import {
-  DEFAULT_ACTION_INVALID_ERROR,
   DEFAULT_ACTION_NOT_FOUND_ERROR,
   MANIFEST_PARSE_FAILED_ERROR,
   MANIFEST_READ_FAILED_ERROR,
   UNSUPPORTED_SCHEMA_VERSION_ERROR,
+  ACTION_JSON_READ_FAILED,
+  ACTION_JSON_PARSE_FAILED,
 } from "../resource-loader";
 
 interface ActionConfig {
@@ -34,7 +36,7 @@ interface ManifestConfig {
   canvas?: { width: number; height: number };
   defaultAction?: string;
   preview?: string;
-  actions?: Array<{ key: string; name?: string }>;
+  actions?: Array<{ key: string; name?: string; loopType?: string }>;
 }
 
 function buildActionJson(action: ActionConfig, frameRelPaths: string[]): string {
@@ -91,6 +93,21 @@ function setupInstallation(
   writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest));
 }
 
+function buildRequest(
+  root: string,
+  overrides: Partial<LoadInstallationRequest> = {},
+): LoadInstallationRequest {
+  return {
+    installationId: "inst-test",
+    petId: "",
+    releaseId: "",
+    installPath: root,
+    manifestPath: join(root, "manifest.json"),
+    expectedContentRootHash: "",
+    ...overrides,
+  };
+}
+
 describe("ResourceLoader", () => {
   let root: string;
   let loader: ResourceLoader;
@@ -114,7 +131,7 @@ describe("ResourceLoader", () => {
         characterId: "char-1",
         canvas: { width: 256, height: 256 },
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "wave" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
       },
       [
         {
@@ -134,11 +151,10 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-1" }),
     );
 
-    expect(loaded.installationId).toBe("pet-1");
+    expect(loaded.installationId).toBe("inst-test");
     expect(loaded.manifest.schemaVersion).toBe(1);
     expect(loaded.manifest.defaultAction).toBe("idle");
     expect(loaded.actions.size).toBe(2);
@@ -155,7 +171,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-x",
         schemaVersion: 99,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -166,72 +182,55 @@ describe("ResourceLoader", () => {
     );
 
     await expect(
-      loader.loadInstallation(root, join(root, "manifest.json")),
+      loader.loadInstallation(buildRequest(root)),
     ).rejects.toThrow(UNSUPPORTED_SCHEMA_VERSION_ERROR);
   });
 
   it("manifest 读取失败时抛出 MANIFEST_READ_FAILED_ERROR", async () => {
     await expect(
-      loader.loadInstallation(root, join(root, "missing-manifest.json")),
+      loader.loadInstallation(
+        buildRequest(root, { manifestPath: join(root, "missing-manifest.json") }),
+      ),
     ).rejects.toThrow(MANIFEST_READ_FAILED_ERROR);
   });
 
   it("manifest 解析失败时抛出 MANIFEST_PARSE_FAILED_ERROR", async () => {
     writeFileSync(join(root, "manifest.json"), "{ invalid");
     await expect(
-      loader.loadInstallation(root, join(root, "manifest.json")),
+      loader.loadInstallation(buildRequest(root)),
     ).rejects.toThrow(MANIFEST_PARSE_FAILED_ERROR);
   });
 
-  it("非默认动作损坏时仅标记该动作不可用，不阻止其他动作加载", async () => {
+  it("petId 不匹配时抛出 PET_IDENTITY_CONFLICT", async () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-2",
+        packageId: "pet-1",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "broken" }, { key: "wave" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
           key: "idle",
           frames: ["frame0.png"],
         },
-        {
-          key: "broken",
-          broken: "missing-frame",
-          frames: ["missing.png"],
-        },
-        {
-          key: "wave",
-          frames: ["wave0.png"],
-        },
       ],
     );
 
-    const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
-    );
-
-    const broken = loaded.actions.get("broken");
-    expect(broken?.available).toBe(false);
-    expect(broken?.loadError).toContain("FRAME_MISSING");
-
-    expect(loaded.actions.get("idle")?.available).toBe(true);
-    expect(loaded.actions.get("wave")?.available).toBe(true);
-    expect(loaded.defaultAction?.key).toBe("idle");
-    expect(loaded.defaultAction?.available).toBe(true);
+    await expect(
+      loader.loadInstallation(buildRequest(root, { petId: "different-pet" })),
+    ).rejects.toThrow("PET_IDENTITY_CONFLICT");
   });
 
-  it("action.json 读取失败时标记动作不可用并附带错误信息", async () => {
+  it("action.json 读取失败时整个 Package 加载失败", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-3",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "ghost" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "ghost", loopType: "loop" }],
       },
       [
         {
@@ -246,24 +245,19 @@ describe("ResourceLoader", () => {
       ],
     );
 
-    const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
-    );
-
-    const ghost = loaded.actions.get("ghost");
-    expect(ghost?.available).toBe(false);
-    expect(ghost?.loadError).toContain("ACTION_JSON_READ_FAILED");
+    await expect(
+      loader.loadInstallation(buildRequest(root, { petId: "pet-3" })),
+    ).rejects.toThrow(ACTION_JSON_READ_FAILED);
   });
 
-  it("action.json 解析失败时标记动作不可用", async () => {
+  it("action.json 解析失败时整个 Package 加载失败", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-4",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "bad" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "bad", loopType: "loop" }],
       },
       [
         {
@@ -278,30 +272,25 @@ describe("ResourceLoader", () => {
       ],
     );
 
-    const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
-    );
-
-    const bad = loaded.actions.get("bad");
-    expect(bad?.available).toBe(false);
-    expect(bad?.loadError).toContain("ACTION_JSON_PARSE_FAILED");
+    await expect(
+      loader.loadInstallation(buildRequest(root, { petId: "pet-4" })),
+    ).rejects.toThrow(ACTION_JSON_PARSE_FAILED);
   });
 
-  it("默认动作损坏时抛出 DEFAULT_ACTION_INVALID_ERROR", async () => {
+  it("默认动作的 action.json 读取失败时抛出 ACTION_JSON_READ_FAILED", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-5",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "wave" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "loop" }],
       },
       [
         {
           key: "idle",
-          broken: "missing-frame",
-          frames: ["missing.png"],
+          broken: "read",
+          frames: ["frame0.png"],
         },
         {
           key: "wave",
@@ -311,8 +300,8 @@ describe("ResourceLoader", () => {
     );
 
     await expect(
-      loader.loadInstallation(root, join(root, "manifest.json")),
-    ).rejects.toThrow(DEFAULT_ACTION_INVALID_ERROR);
+      loader.loadInstallation(buildRequest(root, { petId: "pet-5" })),
+    ).rejects.toThrow(ACTION_JSON_READ_FAILED);
   });
 
   it("默认动作不存在时抛出 DEFAULT_ACTION_NOT_FOUND_ERROR", async () => {
@@ -322,7 +311,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-6",
         schemaVersion: 1,
         defaultAction: "ghost",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -333,7 +322,7 @@ describe("ResourceLoader", () => {
     );
 
     await expect(
-      loader.loadInstallation(root, join(root, "manifest.json")),
+      loader.loadInstallation(buildRequest(root, { petId: "pet-6" })),
     ).rejects.toThrow(DEFAULT_ACTION_NOT_FOUND_ERROR);
   });
 
@@ -344,7 +333,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-7",
         schemaVersion: 1,
         defaultAction: "",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -355,7 +344,7 @@ describe("ResourceLoader", () => {
     );
 
     await expect(
-      loader.loadInstallation(root, join(root, "manifest.json")),
+      loader.loadInstallation(buildRequest(root, { petId: "pet-7" })),
     ).rejects.toThrow(DEFAULT_ACTION_NOT_FOUND_ERROR);
   });
 
@@ -366,7 +355,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-8",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -385,13 +374,13 @@ describe("ResourceLoader", () => {
         frames: ["orphan0.png"],
         frameCount: 1,
         frameDurationMs: 100,
+        loopType: "loop",
       }),
     );
     writeFileSync(join(orphanDir, "orphan0.png"), "png");
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-8" }),
     );
 
     expect(loaded.actions.has("orphan")).toBe(false);
@@ -406,7 +395,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-9",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "empty" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "empty", loopType: "loop" }],
       },
       [
         {
@@ -422,8 +411,7 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-9" }),
     );
 
     const empty = loaded.actions.get("empty");
@@ -439,7 +427,11 @@ describe("ResourceLoader", () => {
         packageId: "pet-10",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "broken" }, { key: "wave" }],
+        actions: [
+          { key: "idle", loopType: "loop" },
+          { key: "wave", loopType: "once" },
+          { key: "sleep", loopType: "loop" },
+        ],
       },
       [
         {
@@ -447,23 +439,21 @@ describe("ResourceLoader", () => {
           frames: ["frame0.png"],
         },
         {
-          key: "broken",
-          broken: "missing-frame",
-          frames: ["missing.png"],
-        },
-        {
           key: "wave",
           frames: ["wave0.png"],
+        },
+        {
+          key: "sleep",
+          frames: ["sleep0.png"],
         },
       ],
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-10" }),
     );
 
-    const found = loader.findFirstAvailableAction(loaded, ["broken", "wave", "idle"]);
+    const found = loader.findFirstAvailableAction(loaded, ["wave", "sleep", "idle"]);
     expect(found?.key).toBe("wave");
 
     const found2 = loader.findFirstAvailableAction(loaded, ["nonexistent"]);
@@ -479,17 +469,15 @@ describe("ResourceLoader", () => {
         packageId: "pet-11",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "broken" }, { key: "wave" }],
+        actions: [
+          { key: "idle", loopType: "loop" },
+          { key: "wave", loopType: "once" },
+        ],
       },
       [
         {
           key: "idle",
           frames: ["frame0.png"],
-        },
-        {
-          key: "broken",
-          broken: "missing-frame",
-          frames: ["missing.png"],
         },
         {
           key: "wave",
@@ -499,8 +487,7 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-11" }),
     );
 
     const available = loader.getAvailableActions(loaded);
@@ -515,7 +502,7 @@ describe("ResourceLoader", () => {
         packageId: "pet-12",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -526,21 +513,20 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-12" }),
     );
 
     expect(loader.isDefaultActionAvailable(loaded)).toBe(true);
   });
 
-  it("loadAction 可重新加载损坏动作并修复 available 状态", async () => {
+  it("loadAction 返回已缓存的可用动作", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-13",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }, { key: "wave" }],
+        actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
       },
       [
         {
@@ -549,23 +535,50 @@ describe("ResourceLoader", () => {
         },
         {
           key: "wave",
-          broken: "missing-frame",
           frames: ["wave0.png"],
         },
       ],
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-13" }),
     );
 
-    expect(loaded.actions.get("wave")?.available).toBe(false);
+    const cached = await loader.loadAction("idle", loaded);
+    expect(cached?.key).toBe("idle");
+    expect(cached?.available).toBe(true);
+  });
 
-    writeFileSync(join(root, "actions", "wave", "wave0.png"), "png-bytes");
+  it("loadAction 可重新加载动作", async () => {
+    setupInstallation(
+      root,
+      {
+        packageId: "pet-14",
+        schemaVersion: 1,
+        defaultAction: "idle",
+        actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],
+      },
+      [
+        {
+          key: "idle",
+          frames: ["frame0.png"],
+        },
+        {
+          key: "wave",
+          frames: ["wave0.png"],
+        },
+      ],
+    );
+
+    const loaded = await loader.loadInstallation(
+      buildRequest(root, { petId: "pet-14" }),
+    );
+
+    expect(loaded.actions.get("wave")?.available).toBe(true);
 
     const reloaded = await loader.loadAction("wave", loaded);
     expect(reloaded?.available).toBe(true);
+    expect(reloaded?.key).toBe("wave");
     expect(loaded.actions.get("wave")?.available).toBe(true);
   });
 
@@ -573,10 +586,10 @@ describe("ResourceLoader", () => {
     setupInstallation(
       root,
       {
-        packageId: "pet-14",
+        packageId: "pet-15",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -587,48 +600,22 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-15" }),
     );
 
     expect(await loader.loadAction("unknown", loaded)).toBeNull();
     expect(await loader.loadAction("", loaded)).toBeNull();
   });
 
-  it("preview 路径根据 manifest.preview 或默认 preview.png 解析", async () => {
-    setupInstallation(
-      root,
-      {
-        packageId: "pet-15",
-        schemaVersion: 1,
-        defaultAction: "idle",
-        preview: "custom-preview.png",
-        actions: [{ key: "idle" }],
-      },
-      [
-        {
-          key: "idle",
-          frames: ["frame0.png"],
-        },
-      ],
-    );
-
-    const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
-    );
-
-    expect(loaded.previewPath).toBe(join(root, "custom-preview.png"));
-  });
-
-  it("preview 路径默认指向 preview.png", async () => {
+  it("preview 路径根据 manifest.preview 解析", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-16",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        preview: "custom-preview.png",
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -639,21 +626,44 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-16" }),
     );
 
-    expect(loaded.previewPath).toBe(join(root, "preview.png"));
+    expect(loaded.previewPath).toBe(join(root, "custom-preview.png"));
   });
 
-  it("anchor 数值非法时不写入 manifestAction.anchor", async () => {
+  it("preview 为空时 previewPath 为 null（不猜测 preview.png）", async () => {
     setupInstallation(
       root,
       {
         packageId: "pet-17",
         schemaVersion: 1,
         defaultAction: "idle",
-        actions: [{ key: "idle" }],
+        actions: [{ key: "idle", loopType: "loop" }],
+      },
+      [
+        {
+          key: "idle",
+          frames: ["frame0.png"],
+        },
+      ],
+    );
+
+    const loaded = await loader.loadInstallation(
+      buildRequest(root, { petId: "pet-17" }),
+    );
+
+    expect(loaded.previewPath).toBeNull();
+  });
+
+  it("anchor 数值在 manifest 中被保留", async () => {
+    setupInstallation(
+      root,
+      {
+        packageId: "pet-18",
+        schemaVersion: 1,
+        defaultAction: "idle",
+        actions: [{ key: "idle", loopType: "loop" }],
       },
       [
         {
@@ -665,11 +675,10 @@ describe("ResourceLoader", () => {
     );
 
     const loaded = await loader.loadInstallation(
-      root,
-      join(root, "manifest.json"),
+      buildRequest(root, { petId: "pet-18" }),
     );
 
     const action = loaded.actions.get("idle");
-    expect(action?.anchor).toEqual({ x: 10, y: 20 });
+    expect(action?.anchor).toEqual({ x: 10, y: 20, coordinateSpace: "normalized_canvas" });
   });
 });

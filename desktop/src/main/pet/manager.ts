@@ -13,7 +13,11 @@ import http from "node:http";
 import { URL } from "node:url";
 import { getAmitiaDataDir } from "../path-manager";
 import { ResourceLoader } from "./resource-loader";
-import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
+import type {
+  LoadedInstallation,
+  RuntimeAction,
+  LoadInstallationRequest,
+} from "./resource-loader";
 import { ResourceCache } from "./resource-cache";
 import type { PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
@@ -136,6 +140,9 @@ export interface InstallationInfo {
   lastDisabledAt: string;
   createdAt: string;
   updatedAt: string;
+  petId: string;
+  currentReleaseId: string;
+  installedContentHash: string;
 }
 
 export interface RuntimeSettingsInfo {
@@ -161,6 +168,7 @@ export interface PetManagerDeps {
   coreHost?: string;
   corePort?: number;
   petLogger?: PetLogger;
+  runtimeVersion?: string;
 }
 
 export interface CorruptionDetectionResult {
@@ -226,6 +234,9 @@ interface InstallationApiPayload {
   lastDisabledAt: string;
   createdAt: string;
   updatedAt: string;
+  petId: string;
+  currentReleaseId: string;
+  installedContentHash: string;
 }
 
 interface RuntimeSettingsApiPayload {
@@ -282,6 +293,9 @@ function mapInstallationPayload(payload: InstallationApiPayload): InstallationIn
     lastDisabledAt: payload.lastDisabledAt,
     createdAt: payload.createdAt,
     updatedAt: payload.updatedAt,
+    petId: payload.petId ?? "",
+    currentReleaseId: payload.currentReleaseId ?? "",
+    installedContentHash: payload.installedContentHash ?? "",
   };
 }
 
@@ -359,7 +373,7 @@ export class DesktopPetManager {
     this.userId = opts.userId ?? DEFAULT_USER_ID;
     this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
     this.corePort = opts.corePort ?? CORE_BASE_PORT;
-    this.resourceLoader = opts.resourceLoader ?? new ResourceLoader();
+    this.resourceLoader = opts.resourceLoader ?? new ResourceLoader(opts.runtimeVersion);
     this.resourceCache = opts.resourceCache ?? new ResourceCache();
     this.alphaThreshold =
       typeof opts.alphaThreshold === "number"
@@ -820,10 +834,15 @@ export class DesktopPetManager {
       return null;
     }
     try {
-      const loaded = await this.resourceLoader.loadInstallation(
+      const request: LoadInstallationRequest = {
+        installationId: installation.id,
+        petId: installation.petId,
+        releaseId: installation.currentReleaseId,
         installPath,
         manifestPath,
-      );
+        expectedContentRootHash: installation.installedContentHash,
+      };
+      const loaded = await this.resourceLoader.loadInstallation(request);
       if (!loaded.defaultAction || !loaded.defaultAction.available) {
         console.error(
           "[DesktopPetManager] 默认动作不可用:",
@@ -1602,7 +1621,15 @@ export class DesktopPetManager {
 
     let loaded: LoadedInstallation | null = null;
     try {
-      loaded = await this.resourceLoader.loadInstallation(installPath, manifestPath);
+      const request: LoadInstallationRequest = {
+        installationId: installation.id,
+        petId: installation.petId,
+        releaseId: installation.currentReleaseId,
+        installPath,
+        manifestPath,
+        expectedContentRootHash: installation.installedContentHash,
+      };
+      loaded = await this.resourceLoader.loadInstallation(request);
     } catch (err) {
       const message = this.errorMessage(err);
       if (message.includes("FRAME_MISSING")) {

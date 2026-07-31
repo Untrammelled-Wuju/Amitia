@@ -10,6 +10,7 @@ export class ImageBitmapDecoder implements FrameDecoder {
     url: string;
     signal: AbortSignal;
     frameIndex?: number;
+    contentHash?: string;
   }): Promise<DecodedFrame> {
     if (typeof createImageBitmap !== "function") {
       throw new Error("createImageBitmap is not available");
@@ -35,6 +36,7 @@ export class ImageBitmapDecoder implements FrameDecoder {
       estimatedBytes: width * height * 4,
       sourceUrl: input.url,
       decoderName: "image-bitmap",
+      contentHash: input.contentHash ?? "",
     };
   }
 }

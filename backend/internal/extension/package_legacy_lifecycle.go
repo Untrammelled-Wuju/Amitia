@@ -85,6 +85,9 @@ func scanPackageExportSecrets(files map[string][]byte) error {
 }
 
 func (s *PackageService) rollbackLegacyPackage(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
+	if !isLegacyMigrationToolContext(ctx) {
+		return PackageOperationResult{}, NewExtensionError(ErrLegacyRuntimeEnabled, "legacy writer requires explicit migration mode", extensionID, false, nil)
+	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
@@ -296,6 +299,9 @@ func (s *PackageService) legacyPreviewUninstall(ctx context.Context, extensionID
 }
 
 func (s *PackageService) uninstallLegacyPackage(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+	if !isLegacyMigrationToolContext(ctx) {
+		return PackageOperationResult{}, NewExtensionError(ErrLegacyRuntimeEnabled, "legacy writer requires explicit migration mode", extensionID, false, nil)
+	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}

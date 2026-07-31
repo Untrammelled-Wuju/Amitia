@@ -3,6 +3,7 @@ package packageformat
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strconv"
 )
@@ -40,4 +41,30 @@ func ComputeTreeHash(entries []FileEntry) string {
 	}
 
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func ComputeContentRootHash(entries []FileEntry, manifestHash string, manifestBytes int64) string {
+	merged := make([]FileEntry, len(entries))
+	copy(merged, entries)
+	merged = append(merged, FileEntry{
+		Path:   ManifestPseudoEntryPath,
+		SHA256: manifestHash,
+		Bytes:  manifestBytes,
+	})
+	return ComputeTreeHash(merged)
+}
+
+func ComputeManifestHash(manifest *Manifest) (string, error) {
+	if manifest == nil {
+		return "", fmt.Errorf("manifest is nil")
+	}
+	clone := *manifest
+	clone.Integrity.ManifestHash = ""
+	clone.Integrity.ContentRootHash = ""
+	data, err := CanonicalJSON(clone)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:]), nil
 }

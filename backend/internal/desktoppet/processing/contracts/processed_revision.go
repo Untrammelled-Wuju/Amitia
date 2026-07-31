@@ -10,6 +10,14 @@ const (
 	RevisionStatusActive         = "active"
 	RevisionStatusFailed         = "failed"
 	RevisionStatusCancelled      = "cancelled"
+	RevisionStatusCommitted      = "committed"
+	RevisionStatusCorrupted      = "corrupted"
+	RevisionStatusArchived       = "archived"
+)
+
+const (
+	RevisionStatusLegacyDBCommitted = "db_committed"
+	RevisionStatusLegacyActive      = "active"
 )
 
 const (
@@ -37,25 +45,34 @@ const (
 )
 
 type ProcessedActionRevision struct {
-	ID                 string `json:"id"`
-	ProcessingTaskID   string `json:"processingTaskId"`
-	ProcessingActionID string `json:"processingActionId"`
-	RevisionNumber     int    `json:"revisionNumber"`
-	SourceAttemptID    string `json:"sourceAttemptId"`
-	SourceCandidate    int    `json:"sourceCandidate"`
-	Status             string `json:"status"`
-	ConfigSnapshot     string `json:"configSnapshot"`
-	ConfigHash         string `json:"configHash"`
-	PipelineVersion    string `json:"pipelineVersion"`
-	FrameCount         int    `json:"frameCount"`
-	RootRelativePath   string `json:"rootRelativePath"`
-	RevisionHash       string `json:"revisionHash"`
-	Active             bool   `json:"active"`
-	ErrorCode          string `json:"errorCode,omitempty"`
-	ErrorMessage       string `json:"errorMessage,omitempty"`
-	CreatedAt          string `json:"createdAt"`
-	PublishedAt        string `json:"publishedAt,omitempty"`
-	UpdatedAt          string `json:"updatedAt"`
+	ID                          string `json:"id"`
+	ProcessingTaskID            string `json:"processingTaskId"`
+	ProcessingActionID          string `json:"processingActionId"`
+	ProcessingAttemptID         string `json:"processingAttemptId,omitempty"`
+	RevisionNumber              int    `json:"revisionNumber"`
+	SourceAttemptID             string `json:"sourceAttemptId"`
+	SourceCandidate             int    `json:"sourceCandidate"`
+	SourceManifestID            string `json:"sourceManifestId,omitempty"`
+	SourceGenerationAttemptID   string `json:"sourceGenerationAttemptId,omitempty"`
+	SourceGenerationArtifactID  string `json:"sourceGenerationArtifactId,omitempty"`
+	SourceArtifactContentHash   string `json:"sourceArtifactContentHash,omitempty"`
+	Status                      string `json:"status"`
+	ConfigSnapshot              string `json:"configSnapshot"`
+	ConfigHash                  string `json:"configHash"`
+	PipelineVersion             string `json:"pipelineVersion"`
+	FrameCount                  int    `json:"frameCount"`
+	RootRelativePath            string `json:"rootRelativePath"`
+	RootStorageKey              string `json:"rootStorageKey,omitempty"`
+	RevisionHash                string `json:"revisionHash"`
+	ContentRootHash             string `json:"contentRootHash,omitempty"`
+	CommitID                    string `json:"commitId,omitempty"`
+	Active                      bool   `json:"active"`
+	ErrorCode                   string `json:"errorCode,omitempty"`
+	ErrorMessage                string `json:"errorMessage,omitempty"`
+	CreatedAt                   string `json:"createdAt"`
+	PublishedAt                 string `json:"publishedAt,omitempty"`
+	CommittedAt                 string `json:"committedAt,omitempty"`
+	UpdatedAt                   string `json:"updatedAt"`
 }
 
 type ProcessingArtifact struct {

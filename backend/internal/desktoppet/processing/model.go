@@ -5,6 +5,8 @@ package processing
 type ProcessingTask struct {
 	ID                         string  `gorm:"column:id;primaryKey" json:"id"`
 	GenerationTaskID           string  `gorm:"column:generation_task_id" json:"generationTaskId"`
+	UserID                     string  `gorm:"column:user_id;default:''" json:"userId,omitempty"`
+	CharacterID                string  `gorm:"column:character_id;default:''" json:"characterId,omitempty"`
 	ProcessingVersion          int     `gorm:"column:processing_version" json:"processingVersion"`
 	Status                     string  `gorm:"column:status" json:"status"`
 	CurrentStage               string  `gorm:"column:current_stage" json:"currentStage"`
@@ -115,6 +117,10 @@ type ProcessingActionAttempt struct {
 	ActionKey              string `gorm:"column:action_key" json:"actionKey"`
 	AttemptNumber          int    `gorm:"column:attempt_number" json:"attemptNumber"`
 	SourceGenerationAttempt int   `gorm:"column:source_generation_attempt" json:"sourceGenerationAttempt"`
+	SourceGenerationAttemptID string `gorm:"column:source_generation_attempt_id;default:''" json:"sourceGenerationAttemptId,omitempty"`
+	SourceGenerationArtifactID string `gorm:"column:source_generation_artifact_id;default:''" json:"sourceGenerationArtifactId,omitempty"`
+	SourceManifestID       string `gorm:"column:source_manifest_id;default:''" json:"sourceManifestId,omitempty"`
+	SourceArtifactContentHash string `gorm:"column:source_artifact_content_hash;default:''" json:"sourceArtifactContentHash,omitempty"`
 	ExecutionID            string `gorm:"column:execution_id" json:"executionId"`
 	Status                 string `gorm:"column:status" json:"status"`
 	Progress               int    `gorm:"column:progress" json:"progress"`

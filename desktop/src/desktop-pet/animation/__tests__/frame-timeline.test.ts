@@ -12,6 +12,9 @@ function makeFrames(count: number, durationMs: number = 100): NormalizedFrame[] 
       durationMs,
       cumulativeStartMs: cumulative,
       cumulativeEndMs: cumulative + durationMs,
+      frameId: `frame_${i}`,
+      assetId: `asset_${i}`,
+      contentHash: "0".repeat(64),
     });
     cumulative += durationMs;
   }

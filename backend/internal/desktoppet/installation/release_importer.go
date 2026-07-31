@@ -429,7 +429,7 @@ func scanImportedActions(stagingDir string, includedActions []string) ([]package
 			Config:         fmt.Sprintf("actions/%s/action.json", key),
 			RevisionID:     "legacy_inferred",
 			QualityVerdict: packageformat.QualityVerdictSkipped,
-			LoopType:       packageformat.LoopTypeLoop,
+			PlaybackMode:   packageformat.PlaybackModeLoop,
 		}
 
 		actionJSONPath := filepath.Join(stagingDir, "actions", key, "action.json")
@@ -449,7 +449,7 @@ func scanImportedActions(stagingDir string, includedActions []string) ([]package
 				}
 				mode = packageformat.NormalizePlaybackMode(mode)
 				if mode != "" {
-					entry.LoopType = mode
+					entry.PlaybackMode = mode
 				}
 				fps := cfg.Fps
 				if fps == 0 {
